@@ -187,10 +187,7 @@ def _order_values(block: TimeBlock, values: list[tuple[int, int]]) -> list[tuple
 
 
 def _has_gap(occ_day: int, n: int) -> bool:
-    for slot in range(0, SLOTS_PER_DAY - n + 1):
-        if occ_day & occupancy_mask(slot, n) == 0:
-            return True
-    return False
+    return any(occ_day & occupancy_mask(slot, n) == 0 for slot in range(SLOTS_PER_DAY - n + 1))
 
 
 def _reason_for(
