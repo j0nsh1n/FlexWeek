@@ -16,10 +16,16 @@ from pathlib import Path
 
 from PySide6.QtCore import QStandardPaths, QUrl
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
+from PySide6.QtWebEngineCore import (
+    QWebEngineDownloadRequest,
+    QWebEngineNewWindowRequest,
+    QWebEnginePage,
+    QWebEngineProfile,
+)
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
     QApplication,
+    QFileDialog,
     QLabel,
     QMainWindow,
     QMessageBox,
@@ -52,8 +58,8 @@ class ShellPage(QWebEnginePage):
         super().__init__(profile, parent)
         self._origin = origin
         self._sent_to_browser = False
-        # createWindow returns short-lived pages; holding them stops Qt freeing them mid-signal.
-        self._popups: list[QWebEnginePage] = []
+        # Handle the request before Qt creates or navigates a hidden popup page.
+        self.newWindowRequested.connect(self._open_new_window)
 
     @property
     def sent_to_browser(self) -> bool:
@@ -70,22 +76,17 @@ class ShellPage(QWebEnginePage):
         target = QUrl(url) if isinstance(url, str) else url
         if is_main_frame and not is_same_origin(target.toString(), self._origin):
             self._sent_to_browser = True
-            QDesktopServices.openUrl(target)
+            self._open_external(target)
             return False
         return super().acceptNavigationRequest(url, nav_type, is_main_frame)
 
-    def createWindow(self, _window_type: QWebEnginePage.WebWindowType) -> QWebEnginePage:  # noqa: N802
-        """target=_blank and window.open: open in the OS browser, not a second Qt window."""
-        popup = QWebEnginePage(self.profile(), self)
-        self._popups.append(popup)
-
-        def open_externally(url: QUrl) -> None:
+    @staticmethod
+    def _open_external(url: QUrl) -> None:
+        if url.isValid() and url.scheme() in {"https", "http"} and url.host():
             QDesktopServices.openUrl(url)
-            if popup in self._popups:
-                self._popups.remove(popup)
 
-        popup.urlChanged.connect(open_externally)
-        return popup
+    def _open_new_window(self, request: QWebEngineNewWindowRequest) -> None:
+        self._open_external(request.requestedUrl())
 
 
 class RetryPanel(QWidget):
@@ -119,6 +120,7 @@ class MainWindow(QMainWindow):
         self._profile = QWebEngineProfile(PROFILE_NAME, QApplication.instance())
         self._profile.setPersistentStoragePath(f"{root}/profile")
         self._profile.setCachePath(f"{root}/cache")
+        self._profile.downloadRequested.connect(self._save_download)
         self._profile.setPersistentCookiesPolicy(
             QWebEngineProfile.PersistentCookiesPolicy.AllowPersistentCookies
         )
@@ -132,6 +134,17 @@ class MainWindow(QMainWindow):
         self._stack.addWidget(self._view)
         self._stack.addWidget(RetryPanel(origin, self.reload))
         self.setCentralWidget(self._stack)
+
+    def _save_download(self, download: QWebEngineDownloadRequest) -> None:
+        name = Path(download.suggestedFileName()).name or "flexweek.json"
+        destination, _ = QFileDialog.getSaveFileName(self, "Save FlexWeek download", name)
+        if not destination:
+            download.cancel()
+            return
+        target = Path(destination)
+        download.setDownloadDirectory(str(target.parent))
+        download.setDownloadFileName(target.name)
+        download.accept()
 
     def load_app(self) -> None:
         self._stack.setCurrentIndex(0)

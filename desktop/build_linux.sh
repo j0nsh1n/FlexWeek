@@ -14,7 +14,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV="${VENV:-$ROOT/.venv}"
-OUT="$ROOT/dist"
+OUT="${FLEXWEEK_BUILD_OUTPUT:-$ROOT/dist/FlexWeek}"
 
 # Nuitka looks for patchelf on PATH, not in site-packages.
 export PATH="$VENV/bin:$PATH"
@@ -22,27 +22,39 @@ export PYTHONPATH="$ROOT"
 
 command -v patchelf >/dev/null || { echo "patchelf not found; pip install -r requirements-desktop.txt" >&2; exit 1; }
 
-rm -rf "$OUT" "$ROOT/build"
+mkdir -p "$ROOT/build"
+STAGING="$(mktemp -d "$ROOT/build/linux.XXXXXX")"
+trap 'echo "Build staging retained at $STAGING" >&2' ERR
 "$VENV/bin/python" -m nuitka "$ROOT/desktop/main.py" \
     --standalone \
     --follow-imports \
     --enable-plugin=pyside6 \
     --include-package=desktop \
     --include-package=backend \
+    --nofollow-import-to=desktop.tests,backend.tests \
     --include-data-dir="$ROOT/frontend"=frontend \
     --noinclude-data-files='frontend/tests/*' \
     --output-filename=FlexWeek \
-    --output-dir="$ROOT/build" \
+    --output-dir="$STAGING" \
     --linux-icon="$ROOT/frontend/logo.png" \
     --noinclude-dlls='*.cpp.o' \
     --noinclude-dlls='*.qsb' \
     --include-qt-plugins=networkinformation,platforminputcontexts,position,qmllint,qmltooling,vectorimageformats \
-    --assume-yes-for-downloads
+    --jobs="${FLEXWEEK_BUILD_JOBS:-4}"
 
-mkdir -p "$OUT"
-mv "$ROOT/build/main.dist" "$OUT/FlexWeek"
-rm -rf "$ROOT/build"
+mkdir -p "$(dirname "$OUT")"
+BACKUP=""
+if [[ -e "$OUT" ]]; then
+    BACKUP="$OUT.previous.$(date +%Y%m%d-%H%M%S)"
+    [[ ! -e "$BACKUP" ]] || { echo "Backup already exists: $BACKUP" >&2; exit 1; }
+    mv "$OUT" "$BACKUP"
+fi
+if ! mv "$STAGING/main.dist" "$OUT"; then
+    [[ -z "$BACKUP" ]] || mv "$BACKUP" "$OUT"
+    exit 1
+fi
 
-echo
-echo "Built: $OUT/FlexWeek/FlexWeek"
-du -sh "$OUT/FlexWeek"
+echo "Built: $OUT/FlexWeek"
+[[ -z "$BACKUP" ]] || echo "Previous build preserved: $BACKUP"
+echo "Build intermediates retained: $STAGING"
+du -sh "$OUT"

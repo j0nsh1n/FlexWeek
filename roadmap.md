@@ -65,7 +65,7 @@ The owner selected a separate desktop application plus web app. Windows/Linux
 are provisional desktop targets, matching Daily Scheduler. A shared web UI in a
 desktop shell is proposed; shell selection follows compatibility testing.
 
-## Phase 4 — Accounts and shared persistence (next)
+## Phase 4 — Accounts and shared persistence
 - Registration, sign-in, sign-out, and session restoration.
 - New accounts start with an empty week; account screens replace the demo picker.
 - Server-side, account-owned schedules replace anonymous browser persistence.
@@ -78,9 +78,9 @@ desktop shell is proposed; shell selection follows compatibility testing.
   preference; functional layout first, visual redesign later.
 - Completion target: two accounts can independently create, solve, save, and
   reload their weeks; sign-out removes the previous user's schedule from view.
-- Status: [~] Account/storage/theme implementation delivered 2026-09-07.
-  API and frontend behavior verification complete; real-browser visual and
-  interaction smoke check pending because no browser was connected.
+- Status: [x] Complete 2026-09-07. Account/editor/solve/reload/theme/sign-out
+  and two-account isolation verified in the real Qt WebEngine at 1280px and
+  390px, alongside API and frontend state tests.
 
 ## Phase 5 — Daily Scheduler interaction port and app delivery
 - Separate desktop packaging plus browser delivery, sharing the web UI and
@@ -96,8 +96,9 @@ desktop shell is proposed; shell selection follows compatibility testing.
 - Completion target: the same account's saved changes appear in both clients;
   edits preserve valid times and show save errors without discarding work.
 - Status: [~] Linux desktop shell built and running 2026-09-07
-  (`dist/FlexWeek/FlexWeek`). Windows build and the calendar interaction port
-  are still outstanding.
+  (`dist/FlexWeek/FlexWeek`), with popup/download fixes and preserved rebuilds.
+  Windows build script prepared; Windows execution and the calendar interaction
+  port are still outstanding.
 
 ## Phase 6 — Scheduling explanations, later design and hardening
 - Priority and energy controls, explanation panel, click reason to highlight.

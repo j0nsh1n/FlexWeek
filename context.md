@@ -1,25 +1,25 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-07. Branch `feat/desktop-linux-shell` off
-  `feat/desktop-packaging-recommendation`.
-- Gates: `ruff check .` clean, `mypy desktop backend` clean (19 files),
-  `pytest -q` 74 passed (60 backend + 14 desktop), `node --test` 8 passed.
-- The Linux desktop app is self-contained as of 2026-09-07: the FastAPI backend
-  runs in a background thread of the desktop process on an ephemeral loopback
-  port, so no separate server is needed. Setting FLEXWEEK_DESKTOP_ORIGIN or
-  FLEXWEEK_ORIGIN still points it at a hosted deployment instead.
-- Source mode verified with no env origin and nothing listening: the app chose
-  its own port, served itself and loaded the page.
-- Session persistence confirmed at source level: register in the window, kill the
-  process, reopen with the same profile -> `/api/auth/me` 200; an empty profile
-  -> 401.
-- Known gaps: `target=_blank` external-link path and in-page sign-out are coded
-  but untested. No Windows build. Real-browser account smoke still pending.
-  Partner tasks, CAC registration and district confirmation still open.
-- Audit findings from 2026-09-07 are still open: `explain.py` is never imported
-  so the UI shows raw reason codes; a timed-out solve reports a definite cause;
-  bare-time `earliest` resolves to the wrong day.
+- Date: 2026-09-07. Branch `feat/desktop-completion` off `feat/desktop-linux-shell`.
+- Phase 4 complete: real Qt WebEngine tests exercise register, editor save,
+  Solve, reload, theme persistence, sign-out and two-account isolation at
+  1280px/390px. Rendered layouts inspected at both widths.
+- Gates: Ruff clean, mypy desktop/backend clean (23 files), 84 Python tests and
+  8 frontend state tests passed; Python compilation and Bash syntax passed.
+- Rebuilt dist/FlexWeek/FlexWeek, preserving the old artifact as a dated sibling.
+  Packaged HTTP smoke passed: bundled server/frontend, account, save, solve,
+  reload, sign-out, with temporary data and no virtualenv/PYTHONPATH.
+- Fixed external-popup page retention and missing draft-download handling.
+  Real WebEngine tests cover both; OS browser handoff is intercepted in tests.
+- Windows build script drafted by GLM-5.3 Flash and corrected by the main
+  agent for staging/publication, explicit MSVC and environment restoration.
+  No Windows/PowerShell runtime is available; execution remains unverified.
+- Phase 5 calendar interaction work remains. The existing explanation/timeout/
+  bare-earliest findings remain for scheduled solver/explanation work; no new
+  audit was performed. Partner/CAC tasks remain outstanding.
+- spec.md drift remains: bundled-server behavior and concrete PySide6 build
+  details are not recorded there. Spec content left unchanged this session.
 
 ## Repo Landmarks
 ```
@@ -27,15 +27,18 @@ DESKTOP.md               PySide6 QWebEngineView recommendation + build status
 desktop/origin.py        origin resolution, no Qt imports (unit-tested)
 desktop/server.py        bundled uvicorn on a loopback port, no Qt imports
 desktop/main.py          Qt window, persistent profile, retry panel
-desktop/build_linux.sh   Nuitka standalone build -> dist/FlexWeek/
+desktop/build_linux.sh   staged Linux build, previous artifacts preserved
+desktop/build_windows.ps1 Windows standalone build preparation
+desktop/tests/           origin/server tests and isolated real WebEngine probes
 backend/app.py           account/session/ownership APIs and static frontend
 backend/storage.py       SQLite, scrypt, hashed sessions
 frontend/app.js          account lifecycle, editor, server saves
 ```
 
 ## Domain Model
-SQLite: users → sessions, one current week, one preference row. Desktop v1 is a
-webview of the hosted origin, not a second database.
+SQLite: users → sessions, one current week, one preference row. Default desktop
+mode uses a local per-user database; hosted mode uses the configured deployment.
+There is no automatic synchronization between those databases.
 
 ## Non-Obvious Decisions
 - The desktop app bundles the backend and runs it in-process (owner asked for
@@ -63,11 +66,13 @@ webview of the hosted origin, not a second database.
 - License file is GPL-3.0. Qt for Python is LGPLv3/GPLv2/commercial.
 
 ## Session Handoff
-- 2026-09-07, branch `feat/desktop-linux-shell`: built the Linux desktop
-  executable, then made it self-contained by bundling the backend in-process.
-  `desktop/` now holds origin.py, server.py, main.py, build_linux.sh and 20
-  tests. Nothing pushed.
-- Next: exercise external links and in-page sign-out against the built binary,
-  then the Windows build. spec.md still describes desktop delivery without the
-  bundled server and needs owner approval to update. The three audit findings
-  from 2026-09-07 are still open.
+- 2026-09-07, `feat/desktop-completion`: completed Phase 4 verification, fixed
+  desktop popup/download gaps, rebuilt Linux, prepared Windows packaging.
+- Next planned work: Windows build and execution on a Windows host; Phase 5
+  dated calendar storage/navigation, then direct editing and the other listed
+  interactions. Additional Daily Scheduler scope remains deferred per owner.
+- GLM's additional review attempt timed out; the main agent completed the
+  script review and corrections. Windows limitations are in DESKTOP.md.
+  No new dependencies were installed.
+- Temporary test apps used isolated profiles/databases; the original Linux
+  artifact was preserved. Nothing pushed.

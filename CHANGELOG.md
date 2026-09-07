@@ -5,7 +5,14 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+- Desktop new-window links no longer leave hidden browser pages running; only
+  HTTP(S) external links are sent to the system browser (2026-09-07).
+- Desktop users can save an unsaved draft through a native file dialog.
+
 ### Added
+- Windows standalone build script and isolated real-WebEngine account, link and
+  offline-draft tests (2026-09-07); Windows execution remains unverified.
 - Linux desktop app: a PySide6 web-engine window with the FlexWeek backend
   bundled in, so it runs with no separate server and no Python installed. It
   starts its own backend on a loopback port and keeps its database in your user
@@ -33,6 +40,7 @@ All notable changes to FlexWeek are documented here. Format follows
   due/course pills on flexible tasks.
 
 ### Changed
+- Linux builds preserve previous artifacts and use separate staging directories.
 - 2026-09-06: Revise the post-Phase-3 roadmap for accounts, app/web delivery,
   Daily Scheduler interactions and themes, with design and audits deferred.
 - Week grid colors follow the logo (paper gray, lime, dark teal) instead of a

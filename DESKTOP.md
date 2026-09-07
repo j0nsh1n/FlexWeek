@@ -127,8 +127,8 @@ does not dirty the tree.
 | 1 | Window opens the configured origin | Verified — page title `FlexWeek` |
 | 2 | Login survives a restart | Verified — register in-window, kill, reopen: `/api/auth/me` returns the account; an empty profile returns 401 |
 | 3 | Bad origin shows Retry | Verified — dead port switches to the native panel |
-| 4 | `target=_blank` opens the OS browser | Code in place; not yet exercised against a real link |
-| 5 | Sign-out clears the session | Not yet tested |
+| 4 | `target=_blank` opens the OS browser | Real Qt link test emits one OS handoff and retains no hidden page; OS browser availability remains a manual check |
+| 5 | Sign-out clears the session | Verified in real WebEngine: sign-out clears the grid, a second account starts empty, original account restores its week |
 | 6 | Onedir starts with no Python installed | Verified on Linux — runs under `env -i` |
 | 7 | Runs with no separate server (added 2026-09-07) | Verified — the binary itself holds the listening socket on 127.0.0.1, serves `/api/health` 200 and `<title>FlexWeek</title>`, and releases the port on exit |
 | 8 | Writes nothing into its own bundle | Verified — database and cookies land in the user data dir; no file under `dist/FlexWeek/` changed during a run |
@@ -169,3 +169,57 @@ deployment cannot quietly start serving a different, empty database.
 Security posture is unchanged: same origin checks, same CSRF header, same
 cookies. The listener is bound to `127.0.0.1`, so it is not reachable from the
 network.
+
+## 8. Desktop completion checks — 2026-09-07
+
+The account flow is now exercised automatically by `desktop/tests/test_webengine.py`
+in real Qt WebEngine processes, using temporary profiles and databases. It covers
+registration, editor save, Solve, reload, theme persistence, sign-out, second-account
+isolation, phone/desktop widths, external links and offline draft downloads.
+PySide6 is optional for the backend test environment; these tests skip explicitly
+when desktop dependencies are absent. The test processes keep the Chromium sandbox
+enabled and use offscreen rendering with GPU acceleration disabled.
+
+Two wrapper defects were reproduced and fixed: new-window links retained hidden
+pages after handoff, and requested downloads had no native handler. New windows
+now use Qt's `newWindowRequested` signal without creating another page; only
+HTTP(S) destinations are handed to the system browser. Draft downloads use a
+native Save dialog and cancel when no destination is selected.
+
+Qt API references:
+- https://doc.qt.io/qtforpython-6/PySide6/QtWebEngineCore/QWebEnginePage.html#PySide6.QtWebEngineCore.QWebEnginePage.newWindowRequested
+- https://doc.qt.io/qtforpython-6/PySide6/QtWebEngineCore/QWebEngineDownloadRequest.html
+
+The Linux build now compiles in a unique staging directory, excludes application
+test packages, and preserves the previous successful artifact under a dated
+`.previous.*` path before publishing a new one. `FLEXWEEK_BUILD_OUTPUT` can select
+a different destination and `FLEXWEEK_BUILD_JOBS` defaults to four compiler jobs.
+Build intermediates remain available for diagnosis; existing build folders are
+not deleted.
+
+## 9. Windows build preparation — 2026-09-07
+
+GLM-5.3 Flash drafted `desktop/build_windows.ps1` and made `patchelf` a Linux-only
+requirement. The main agent reviewed the draft and tightened staging, compiler
+selection, environment restoration and publication checks. The script uses Python 3.14, Nuitka and PySide6 to create a standalone
+Windows directory with the backend and frontend included. It stages builds and
+refuses to overwrite `dist/FlexWeek-Windows`.
+
+From a Windows PowerShell prompt in the repository:
+
+```powershell
+py -3.14 -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt -r requirements-desktop.txt
+.\desktop\build_windows.ps1
+.\dist\FlexWeek-Windows\FlexWeek.exe
+```
+
+A compatible Visual Studio C++ build toolchain is required. No Windows host or
+PowerShell interpreter was available in this session, so neither a Windows
+executable nor PowerShell execution has been verified. The remaining Windows
+check is build → open → register → save → restart → sign out, plus external-link
+and draft-download checks on a machine without the development virtualenv.
+
+The default self-contained desktop mode stores accounts locally. Hosted mode
+(`FLEXWEEK_DESKTOP_ORIGIN`) uses that deployment's accounts and weeks in both the
+desktop app and browser. There is no automatic local-to-hosted synchronization.
