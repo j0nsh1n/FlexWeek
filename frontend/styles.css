@@ -1,16 +1,16 @@
-/* FlexWeek Phase 1 tokens — from FlexWeek.png (lime phone, dark backing, paper gray). */
+/* Daily Scheduler Nocturne and Slate colors, adapted from theme.py. */
 :root {
-  --bg: #f0f1f0;
-  --panel: #ffffff;
-  --ink: #111111;
-  --muted: #5c5c5c;
-  --line: #d4d6d4;
-  --lime: #ade632;
-  --dark: #0f2624;
-  --locked: #0f2624;
-  --flex: #ade632;
-  --hour-h: 2.75rem;
-  --gutter: 3.5rem;
+  color-scheme: dark;
+  --bg: #0b0b0d; --panel: #141418; --ink: #f2f2f4; --muted: #a5a5af;
+  --line: #2c2c34; --lime: #0b0b0d; --dark: #e8b84a;
+  --locked: #283543; --flex: #e8b84a; --grid: #1a1a20;
+  --error: #f5a8a2; --hour-h: 2.75rem; --gutter: 3.5rem;
+}
+:root[data-theme="slate"] {
+  color-scheme: light;
+  --bg: #f0f0ee; --panel: #fafaf8; --ink: #1a1a18; --muted: #5c5c56;
+  --line: #d4d4ce; --lime: #fffbeb; --dark: #b45309;
+  --locked: #394957; --flex: #b45309; --grid: #e4e4de; --error: #991b1b;
 }
 
 * { box-sizing: border-box; }
@@ -137,8 +137,8 @@ select {
     to bottom,
     transparent,
     transparent calc(var(--hour-h) / 4 - 1px),
-    #eceeec calc(var(--hour-h) / 4 - 1px),
-    #eceeec calc(var(--hour-h) / 4)
+    var(--grid) calc(var(--hour-h) / 4 - 1px),
+    var(--grid) calc(var(--hour-h) / 4)
   );
   background-size: 100% var(--hour-h);
   box-shadow: inset 0 -1px 0 var(--line);
@@ -164,7 +164,7 @@ select {
 .block { cursor: pointer; }
 
 .flex-block {
-  background: #3d5c18;
+  background: #594720;
   color: #f7fff0;
 }
 
@@ -268,7 +268,7 @@ button.danger {
 
 .form-error {
   margin: 0;
-  color: #9b1c1c;
+  color: var(--error);
   font-size: 0.8rem;
 }
 
@@ -348,8 +348,8 @@ button:focus-visible {
 }
 
 .pill {
-  background: #eaf6c4;
-  border: 1px solid #c5de7a;
+  background: var(--panel);
+  border: 1px solid var(--line);
   border-radius: 999px;
   padding: 0.08rem 0.45rem;
   font-size: 0.7rem;
@@ -374,3 +374,18 @@ button:focus-visible {
   .top { flex-direction: column; align-items: flex-start; }
   .side { border-left: 0; border-top: 1px solid var(--line); }
 }
+
+.auth-panel { width: min(100% - 2rem, 28rem); margin: 3rem auto; padding: 1.5rem; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+.auth-panel h2 { margin-top: 0; }
+.auth-panel label { display: flex; flex-direction: column; gap: .35rem; }
+.auth-panel input { font: inherit; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: .6rem; }
+#reconnect { margin-top: 1rem; }
+.status { padding: .5rem 1.25rem; margin: 0; min-height: 2.2rem; }
+.save-actions { padding: .75rem 1.25rem; border-bottom: 1px solid var(--line); }
+.save-actions button { margin: .25rem; }
+.controls { flex-wrap: wrap; }
+.block { border-radius: 0; border-left: 3px solid #6b8cae; }
+.flex-block { border-left-color: var(--flex); }
+button:disabled { cursor: wait; opacity: .6; }
+:focus-visible { outline: 2px solid var(--dark); outline-offset: 3px; }
+@media (max-width: 1100px) { .top { flex-wrap: wrap; } .controls { flex-shrink: 1; } }

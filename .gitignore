@@ -8,3 +8,9 @@ __pycache__/
 # local-only agent notes
 notes.md
 *.bak-*
+
+# Account database and SQLite journals
+var/
+*.db
+*.db-shm
+*.db-wal

@@ -6,6 +6,12 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- 2026-09-07: Username/password accounts, expiring sessions, account-owned SQLite
+  weeks and saved Nocturne/Slate themes adapted from Daily Scheduler.
+- Save retry, revision-conflict handling, unsaved draft download and explicit
+  import of legacy browser weeks; same-account draft restoration after expiry.
+- Basic request protection, authentication throttling and bounded input.
+- Account/API and frontend state tests; a Grok desktop-packaging prompt.
 - Add / edit / delete forms for locked blocks and flexible tasks.
 - Last week saved in the browser; a corrupt save resets to a demo.
 - Constraint solver: backtracking with MRV and forward checking, 150 ms cap.
@@ -26,6 +32,8 @@ All notable changes to FlexWeek are documented here. Format follows
   start.
 
 ### Removed
+- Product demo picker/endpoints and anonymous localStorage saving. Seed schedules
+  remain test fixtures.
 - `backend/tests/test_models.py`, which still imported the pre-Pydantic
   dataclass API and broke collection.
 

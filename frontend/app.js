@@ -7,7 +7,6 @@ const STORAGE_KEY = "flexweek.week.v1";
 
 const weekEl = document.getElementById("week");
 const flexibleEl = document.getElementById("flexible");
-const demoEl = document.getElementById("demo");
 const statusEl = document.getElementById("status");
 const solveEl = document.getElementById("solve");
 const debugEl = document.getElementById("debug");
@@ -109,11 +108,151 @@ function readWeek() {
   }
 }
 
-function saveWeek() {
+let account = null;
+let revision = 0;
+let epoch = 0;
+let dirty = false;
+let conflict = false;
+let saving = false;
+let suspendedDraft = null;
+const authPanel = document.getElementById("auth-panel");
+const planner = document.getElementById("planner");
+const saveActions = document.getElementById("save-actions");
+const themeEl = document.getElementById("theme");
+const channel = typeof BroadcastChannel === "function" ? new BroadcastChannel("flexweek.session") : null;
+
+function lockEditor(locked) {
+  planner.querySelectorAll("button, input, select").forEach(el => { el.disabled = locked; });
+  solveEl.disabled = locked;
+  document.getElementById("import-week").disabled = locked;
+}
+
+function signedOut(message = "Sign in to open your week.", preserve = true) {
+  if (preserve && account && dirty) {
+    suspendedDraft = { userId: account.id, blocks: structuredClone(currentBlocks), revision };
+  }
+  epoch += 1;
+  account = null;
+  currentBlocks = [];
+  dirty = false;
+  saving = false;
+  conflict = false;
+  weekEl.replaceChildren();
+  flexibleEl.replaceChildren();
+  debugStatsEl.textContent = "";
+  debugUnplacedEl.replaceChildren();
+  formEl.reset();
+  closeForm();
+  planner.hidden = true;
+  debugEl.hidden = true;
+  authPanel.hidden = false;
+  document.getElementById("account-controls").hidden = true;
+  document.getElementById("account-name").textContent = "";
+  document.getElementById("import-panel").hidden = true;
+  saveActions.hidden = true;
+  document.documentElement.dataset.theme = "nocturne";
+  lockEditor(false);
+  setStatus(message);
+}
+
+async function api(path, options = {}, protectedRequest = true) {
+  const requestEpoch = epoch;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ blocks: currentBlocks }));
-  } catch (err) {
-    setStatus("Could not save this week");
+    const response = await fetch(path, {
+      ...options,
+      credentials: "same-origin", cache: "no-store", signal: controller.signal,
+      headers: { "Content-Type": "application/json", "X-FlexWeek-Request": "1",
+        ...(account && protectedRequest ? { "X-FlexWeek-Account": String(account.id) } : {}) },
+    });
+    if (requestEpoch !== epoch) throw new Error("Session changed. Please try again.");
+    if (response.status === 401 && protectedRequest) {
+      signedOut("Your session ended. Sign in again; unsaved edits can be restored to the same account.");
+    }
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      const error = new Error(data.detail || "Request failed. Please try again.");
+      error.status = response.status;
+      throw error;
+    }
+    return response.status === 204 ? null : await response.json();
+  } catch (error) {
+    if (error.name === "AbortError") throw new Error("Request timed out. Check your connection and retry.");
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function saveWeek() {
+  if (!account || saving) return false;
+  dirty = true;
+  saveActions.hidden = false;
+  if (conflict) {
+    setStatus("Unsaved changes. Download your draft, then reload the newer saved week.");
+    return false;
+  }
+  const saveEpoch = epoch;
+  saving = true;
+  lockEditor(true);
+  document.getElementById("retry-save").disabled = true;
+  setStatus("Saving…");
+  try {
+    const data = await api("/api/week", { method: "PUT", body: JSON.stringify({ blocks: currentBlocks, revision }) });
+    if (saveEpoch !== epoch) return false;
+    revision = data.revision;
+    dirty = false;
+    saveActions.hidden = true;
+    setStatus("Saved · " + weekSummary());
+    return true;
+  } catch (error) {
+    if (saveEpoch !== epoch) return false;
+    conflict = error.status === 409;
+    setStatus("Not saved. " + error.message);
+    return false;
+  } finally {
+    if (saveEpoch === epoch) {
+      saving = false;
+      lockEditor(false);
+      document.getElementById("retry-save").disabled = conflict;
+    }
+  }
+}
+
+async function loadAccount(identity) {
+  epoch += 1;
+  const loadEpoch = epoch;
+  account = identity;
+  try {
+    const [week, preferences] = await Promise.all([api("/api/week"), api("/api/preferences")]);
+    if (loadEpoch !== epoch) return;
+    currentBlocks = week.blocks;
+    revision = week.revision;
+    dirty = false;
+    conflict = false;
+    if (suspendedDraft && suspendedDraft.userId === account.id) {
+      currentBlocks = suspendedDraft.blocks;
+      conflict = suspendedDraft.revision !== revision;
+      dirty = true;
+    }
+    suspendedDraft = null;
+    themeEl.value = preferences.theme;
+    document.documentElement.dataset.theme = preferences.theme;
+    authPanel.hidden = true;
+    planner.hidden = false;
+    document.getElementById("account-controls").hidden = false;
+    document.getElementById("account-name").textContent = identity.username;
+    saveActions.hidden = !dirty;
+    document.getElementById("retry-save").disabled = conflict;
+    lockEditor(false);
+    renderWeek();
+    setStatus(dirty ? "Unsaved edits restored. " + (conflict ? "Download your draft and reload the newer week." : "Press Retry save.") : "Saved · " + weekSummary());
+    try {
+      document.getElementById("import-panel").hidden = !localStorage.getItem(STORAGE_KEY);
+    } catch { document.getElementById("import-panel").hidden = true; }
+  } catch (error) {
+    if (loadEpoch === epoch) signedOut("Could not open your week. " + error.message);
   }
 }
 
@@ -129,7 +268,6 @@ function weekSummary() {
 
 function renderWeek() {
   buildGrid(currentBlocks);
-  setStatus(weekSummary());
 }
 
 function buildGrid(blocks) {
@@ -312,6 +450,7 @@ function parseLatest(latest) {
 }
 
 function openForm(kind, block) {
+  if (!account || saving) return;
   const editing = Boolean(block);
   formEl.hidden = false;
   showFormError("");
@@ -350,6 +489,7 @@ function durationError(value) {
 
 formEl.addEventListener("submit", function (event) {
   event.preventDefault();
+  if (!account || saving) return;
   const kind = document.getElementById("f-kind").value;
   const title = document.getElementById("f-title").value.trim();
   const durationMsg = durationError(document.getElementById("f-duration").value);
@@ -407,6 +547,7 @@ formEl.addEventListener("submit", function (event) {
 document.getElementById("form-cancel").addEventListener("click", closeForm);
 
 formDeleteEl.addEventListener("click", function () {
+  if (!account || saving) return;
   const id = document.getElementById("f-id").value;
   currentBlocks = currentBlocks.filter(function (item) { return item.id !== id; });
   closeForm();
@@ -422,87 +563,152 @@ document.getElementById("add-flexible").addEventListener("click", function () {
   openForm("flexible", null);
 });
 document.getElementById("new-week").addEventListener("click", function () {
+  if (!account || saving || !confirm("Clear your current week? This will be saved to your account.")) return;
   currentBlocks = [];
   closeForm();
   debugEl.hidden = true;
   flexNoteEl.textContent = "Add locked school or sports, then homework as tasks.";
   saveWeek();
   renderWeek();
-  setStatus("Empty week");
 });
 
-async function loadDemo(name) {
-  setStatus("Loading…");
-  debugEl.hidden = true;
-  closeForm();
-  flexNoteEl.textContent = "Press Solve to place these around school and sports.";
-  try {
-    const res = await fetch("/api/demos/" + name);
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const data = await res.json();
-    currentBlocks = data.blocks || [];
-    saveWeek();
-    renderWeek();
-    setStatus((name || "demo") + " · " + weekSummary());
-  } catch (err) {
-    console.error(err);
-    currentBlocks = [];
-    setStatus("Failed to load demos");
-  }
-}
-
 async function solveWeek() {
+  if (!account || saving) return;
+  const solveEpoch = epoch;
+  saving = true;
+  lockEditor(true);
   setStatus("Solving…");
   try {
-    const res = await fetch("/api/solve", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ blocks: currentBlocks }),
-    });
-    if (res.status === 422) {
-      setStatus("Duration must be a multiple of 15");
-      return;
-    }
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const trace = await res.json();
+    const trace = await api("/api/solve", { method: "POST", body: JSON.stringify({ blocks: currentBlocks }) });
+    if (solveEpoch !== epoch) return;
     buildGrid(trace.placed || []);
     renderFlexible(trace.unplaced || []);
     renderDebug(trace);
-    flexNoteEl.textContent = (trace.unplaced || []).length
-      ? "Unplaced after Solve — reasons in Debug."
-      : "All flexible tasks are on the grid.";
-    const placedFlex = (trace.placed || []).filter((b) => b.kind === "flexible").length;
-    setStatus(
-      "placed " + placedFlex + " · unplaced " + (trace.unplaced || []).length + " · " + Number(trace.solve_ms).toFixed(1) + " ms"
-    );
-  } catch (err) {
-    console.error(err);
-    setStatus("Solve failed");
+    flexNoteEl.textContent = trace.unplaced.length ? "Unplaced after Solve — reasons below." : "All flexible tasks are on the grid.";
+    setStatus((dirty ? "Unsaved week · " : "Saved week · ") + trace.placed.filter(b => b.kind === "flexible").length + " tasks placed");
+  } catch (error) {
+    if (solveEpoch === epoch) setStatus("Solve failed. " + error.message);
+  } finally {
+    if (solveEpoch === epoch) { saving = false; lockEditor(false); }
   }
 }
 
-function boot() {
-  fillTimeSelect(startEl, false);
-  fillTimeSelect(dueTimeEl, true);
-  const saved = readWeek();
-  if (saved) {
-    currentBlocks = saved;
+document.getElementById("auth-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const action = event.submitter?.value || "login";
+  const authEpoch = epoch;
+  form.querySelectorAll("button").forEach(el => { el.disabled = true; });
+  document.getElementById("auth-error").textContent = "";
+  try {
+    const identity = await api("/api/auth/" + action, { method: "POST", body: JSON.stringify({
+      username: document.getElementById("username").value,
+      password: document.getElementById("password").value,
+    }) }, false);
+    document.getElementById("password").value = "";
+    channel?.postMessage("session-changed");
+    await loadAccount(identity);
+  } catch (error) {
+    if (authEpoch === epoch) document.getElementById("auth-error").textContent = error.message;
+  } finally { form.querySelectorAll("button").forEach(el => { el.disabled = false; }); }
+});
+
+document.getElementById("logout").addEventListener("click", async () => {
+  if (saving || (dirty && !confirm("Sign out and discard unsaved changes? Download the draft first if you need it."))) return;
+  const logoutEpoch = epoch;
+  try {
+    await api("/api/auth/logout", { method: "POST" });
+    suspendedDraft = null;
+    signedOut("Signed out.", false);
+    channel?.postMessage("session-changed");
+  } catch (error) { if (logoutEpoch === epoch) setStatus("Sign out failed. " + error.message); }
+});
+
+if (channel) channel.onmessage = () => signedOut("The account session changed in another window. Sign in to continue.");
+
+themeEl.addEventListener("change", async () => {
+  const oldTheme = document.documentElement.dataset.theme;
+  const themeEpoch = epoch;
+  document.documentElement.dataset.theme = themeEl.value;
+  themeEl.disabled = true;
+  try { await api("/api/preferences", { method: "PUT", body: JSON.stringify({ theme: themeEl.value }) }); }
+  catch (error) {
+    if (themeEpoch === epoch) {
+      themeEl.value = oldTheme;
+      document.documentElement.dataset.theme = oldTheme;
+      setStatus("Theme was not saved. " + error.message);
+    }
+  } finally { themeEl.disabled = false; }
+});
+
+document.getElementById("retry-save").addEventListener("click", saveWeek);
+document.getElementById("reload-week").addEventListener("click", async () => {
+  if (saving || !account || (dirty && !confirm("Discard unsaved edits and reload the saved week?"))) return;
+  const reloadEpoch = epoch;
+  saving = true;
+  lockEditor(true);
+  try {
+    const data = await api("/api/week");
+    if (reloadEpoch !== epoch) return;
+    currentBlocks = data.blocks;
+    revision = data.revision;
+    dirty = false;
+    conflict = false;
+    saveActions.hidden = true;
+    closeForm();
+    debugEl.hidden = true;
     renderWeek();
-    setStatus("Saved week · " + weekSummary());
+    setStatus("Reloaded saved week.");
+  } catch (error) { if (reloadEpoch === epoch) setStatus(error.message); }
+  finally { if (reloadEpoch === epoch) { saving = false; lockEditor(false); } }
+});
+document.getElementById("download-draft").addEventListener("click", () => {
+  if (!account) return;
+  const url = URL.createObjectURL(new Blob([JSON.stringify({ blocks: currentBlocks }, null, 2)], { type: "application/json" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "flexweek-unsaved.json";
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+document.getElementById("import-week").addEventListener("click", async () => {
+  if (!account || saving) return;
+  const blocks = readWeek();
+  const importStatus = document.getElementById("import-status");
+  if (!blocks) {
+    importStatus.textContent = "The browser week is invalid. It has been left untouched; your saved week is unchanged.";
     return;
   }
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch (err) {
-    /* ignore */
+  if (!confirm("Import this device's old week into your account, replacing the current week?")) return;
+  currentBlocks = blocks;
+  closeForm();
+  debugEl.hidden = true;
+  renderWeek();
+  if (await saveWeek()) {
+    try { localStorage.removeItem(STORAGE_KEY); } catch { /* A retry replaces the same blocks. */ }
+    document.getElementById("import-panel").hidden = true;
   }
-  loadDemo(demoEl.value || "alex");
-}
+});
 
-demoEl.addEventListener("change", function () {
-  loadDemo(demoEl.value);
+async function reconnect() {
+  if (account) return;
+  const connectionEpoch = epoch;
+  setStatus("Connecting…");
+  try { await loadAccount(await api("/api/auth/me", {}, false)); }
+  catch (error) {
+    if (connectionEpoch === epoch) signedOut(error.status === 401 ? "Sign in to open your week." : "Connection failed. " + error.message);
+  }
+}
+document.getElementById("reconnect").addEventListener("click", reconnect);
+window.addEventListener("beforeunload", event => {
+  if (dirty) { event.preventDefault(); event.returnValue = ""; }
 });
-solveEl.addEventListener("click", function () {
-  solveWeek();
+window.addEventListener("pageshow", event => { if (event.persisted) { signedOut(); reconnect(); } });
+document.addEventListener("visibilitychange", async () => {
+  if (document.hidden || !account) return;
+  try { await api("/api/auth/me"); } catch { /* Session expiry is handled by api. */ }
 });
-boot();
+solveEl.addEventListener("click", solveWeek);
+fillTimeSelect(startEl, false);
+fillTimeSelect(dueTimeEl, true);
+reconnect();

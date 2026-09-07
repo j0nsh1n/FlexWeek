@@ -10,13 +10,18 @@ or had to move. Built as a Congressional App Challenge 2026 entry. Working title
 was *Reslot*; the public name is **FlexWeek**.
 
 ## Intended Users
-High-school students, on a public URL, with no accounts and no sign-in. Demo
-data ships with the app so a first-time visitor (including a contest judge) can
-press Solve without entering anything. Secondary audience: CAC judges, who will
-open the GitHub repo.
+High-school students using individual accounts through the web app and a planned
+separate desktop app. New accounts start with an empty week; no anonymous demo
+mode or sample-data fallback. Secondary audience: CAC judges, who create an
+account and can inspect the GitHub repository.
+
+Scope revision approved 2026-09-06: accounts, shared persistence, Daily Scheduler
+Nocturne/Slate themes first; separate desktop delivery and calendar interaction
+parity next. Visual redesign and audits are deferred. The previous Oct 3 feature
+freeze is superseded by the expanded roadmap.
 
 ## Required Behavior
-Contract for the finished app (must-ship set, feature-frozen Oct 3, 2026):
+Contract for the finished app:
 
 - A week is a set of `TimeBlock`s: `locked` blocks have a fixed `start`;
   `flexible` blocks have a `duration_min` and a deadline (`latest`) and are
@@ -37,8 +42,8 @@ Contract for the finished app (must-ship set, feature-frozen Oct 3, 2026):
   returns nothing.
 - Edge cases: an unsolvable week returns `complete: false` with reasons rather
   than an error; a duration that is not a positive multiple of 15 is rejected in
-  both the browser form and the API; corrupt `localStorage` resets to a demo
-  instead of crashing; an unknown demo name returns 404.
+  both the browser form and the API. Legacy browser data is explicitly imported
+  into a signed-in account; invalid data stays untouched and never loads a demo.
 
 Conditional (Week 5, only if the must-ship set is green on Oct 4):
 - Cascade: marking a locked block as missed re-solves the remaining flexible
@@ -59,55 +64,98 @@ pip install -r requirements.txt
 uvicorn backend.app:app --reload    # then open http://127.0.0.1:8000/
 ```
 
-Current API surface:
+Current account/API contract:
 
 | Method | Path | Behavior |
 |---|---|---|
-| GET | `/api/demos` | Both seed demos as JSON |
-| GET | `/api/demos/{name}` | `alex` or `jordan`; 404 otherwise |
-| GET/POST | `/api/solve` | 501 until the solver lands |
+| POST | `/api/auth/register` | Create username/password account and session |
+| POST | `/api/auth/login` | Authenticate and rotate session |
+| POST | `/api/auth/logout` | Revoke current session |
+| GET | `/api/auth/me` | Current account; 401 when absent/expired |
+| GET/PUT | `/api/week` | Own current week with revision-checked saves |
+| GET/PUT | `/api/preferences` | Own Nocturne/Slate theme |
+| POST | `/api/solve` | Authenticated week in, SolveTrace out; no storage mutation |
+| GET | `/api/health` | Public health response |
 
-Target shape of `POST /api/solve`: a week payload in, a `SolveTrace` out
-(`placed`, `unplaced`, `moves`, `failed_constraints`, `solve_ms`, `complete`).
+The solve trace contains `placed`, `unplaced`, `moves`, `failed_constraints`,
+`solve_ms`, `complete`. Demo endpoints are removed. Test-only seed JSON remains.
+Writes require `X-FlexWeek-Request: 1`; browser origins must match
+`FLEXWEEK_ORIGIN`. Clients send `X-FlexWeek-Account` to reject requests after a
+cross-tab account change. No CORS is enabled.
+
+Registration: normalized case-insensitive ASCII username (3–32 letters, digits,
+underscores), password 12–128 characters. New accounts have an empty week and
+Nocturne theme. Duplicate usernames return 409, invalid input 422, expired or
+missing sessions 401, stale changed writes 409, throttled auth 429, oversized
+requests 413, transient database failures 503. Identical week retries return
+success without duplicate blocks or another revision increment.
+
+One current week per account initially; dated multiple weeks are a later
+migration. A week has at most 100 uniquely identified blocks; titles 1–80,
+course names at most 40, durations positive multiples of 15 up to 7140 minutes,
+and unique day indices. Explicit starts are on the visible grid and end by
+23:00. Deadlines/earliest bounds use full English weekday plus HH:MM, or HH:MM.
+API write bodies are capped at 256 KiB.
 
 ## Architecture
 - Language/runtime: **Python 3.14** — PINNED. Verified against the local
   interpreter (3.14.7) and `Github Templates/ci.yml` (`python-version: "3.14"`).
   Never downgrade.
-- Ship exactly four languages: Python, JavaScript, HTML5, CSS. TypeScript and
-  SQL are permitted only if they do real work; nothing else is added.
+- Current languages: Python, JavaScript, HTML5, CSS, and SQL for account storage.
+  Desktop-shell selection is deferred to the packaging slice.
 - Frameworks, pinned in `requirements.txt`: FastAPI 0.141.1,
-  uvicorn[standard] 0.52.4, pytest 9.1.1, httpx 0.28.1, ruff 0.16.6, mypy 2.3.1.
-- Storage: none. Demo weeks are JSON files on disk; the user's own week lives in
-  browser `localStorage`. No database.
+  uvicorn[standard] 0.52.4, pytest 9.1.1, httpx 0.28.1, ruff 0.16.6, mypy 2.3.1, Pydantic 2.13.5.
+- Storage: SQLite at `FLEXWEEK_DATABASE` (default `var/flexweek.db`), with users,
+  sessions, weeks, preferences and short-lived auth-attempt counters. Schema
+  creation is additive on startup; related writes use transactions. Browser
+  localStorage is read only for explicit legacy import, then removed on success.
 - Major components:
-  - `backend/models.py` — dataclasses (`TimeBlock`, `Move`, `SolveTrace`) and
+  - `backend/models.py` — Pydantic models (`TimeBlock`, `Move`, `SolveTrace`) and
     slot helpers. **Zero FastAPI imports.**
-  - `backend/app.py` — thin JSON door: static files, demo endpoints, `/api/solve`.
+  - `backend/app.py` — HTTP endpoints, authentication/ownership, static files, `/api/solve`.
     No placement logic.
   - `backend/solver.py` — pure synchronous CSP placement. No HTTP knowledge.
-    *(Not yet written — see context.md.)*
   - `backend/explain.py` — reason code → English string. *(Not yet written.)*
-  - `backend/data/demo_*.json` — anonymized seed weeks.
+  - `backend/storage.py` — SQLite transactions, password hashing and sessions.
+  - `backend/data/demo_*.json` — test-only anonymized seed weeks.
   - `backend/tests/` — pytest suite; the source of truth for solver behavior.
   - `frontend/` — `index.html`, `styles.css`, `app.js`. The browser owns
     interaction and explanation display and **never reimplements placement**.
-- Time model: naive local strings `YYYY-MM-DDTHH:mm`, assumed
+- Time model: local `HH:MM` strings and Mon–Sun day indices, assumed
   America/Los_Angeles. No timezone conversion math anywhere in v1.
 - Slot grid: Mon–Sun 06:00–23:00, 15-minute slots, 68/day × 7 = 476/week.
   Overlap uses half-open ranges `[start, end)`. One `overlaps()` helper — no
   duplicate date math.
 - External APIs/services: none. No OAuth, no calendar sync, no LLM at runtime.
-- Deployment: one public URL on Render. No native app, no installer, no
-  Electron. PWA manifest is optional and Week 6 only.
+- Deployment: hosted web backend plus separate desktop client (provisional
+  Windows/Linux). Desktop shell/installer implementation belongs to Phase 5.
+  Production requires HTTPS via FLEXWEEK_ORIGIN and persistent SQLite storage.
 
 ## Security & Privacy
 - No secrets in source. All credentials via environment variables. The app
-  currently needs none.
+  uses account session credentials generated at runtime.
 - Dependencies must be pinned and reproducible. Updates are manual:
   **Dependabot is deliberately not used in this repo** — do not add
   `.github/dependabot.yml` or re-enable it.
-- No accounts, no auth, no user data leaves the browser.
+- Account-owned schedules are sent to the backend and stored in SQLite.
+- Passwords use Python/OpenSSL scrypt, N=32768, r=8, p=3, random 16-byte salt,
+  32-byte derived key; comparison is constant-time. No new hash dependency.
+- Opaque random sessions expire in seven days; only SHA-256 token hashes are
+  stored. Cookies are HttpOnly, SameSite=Strict, Secure on HTTPS deployments.
+  Sign-out revokes the current session. Expired sessions are rejected on reads
+  and cleaned when new sessions are created.
+- Writes use custom-header/origin CSRF checks; endpoints derive ownership from
+  the session. Queries are parameterized. No credentials or schedule payloads
+  are logged; validation responses omit submitted input.
+- Auth attempts are bounded per username (10) and source address (30) per
+  five-minute window, persisted in SQLite and expired during auth requests.
+- Production needs HTTPS, database backups, and deployment-specific proxy setup.
+  Recovery, deletion/retention policy, advanced hardening and audits are deferred
+  to Phase 6 before public release.
+- Failed saves retain in-memory drafts with retry, download and reload controls.
+  Stale revisions never silently overwrite newer data. Session loss hides all
+  private content; a draft can restore only after the same account signs in.
+  Explicit sign-out discards drafts after confirmation.
 - Demo data is anonymized: no real student names, schools, or addresses, and no
   copyrighted syllabus PDFs in the repo.
 - License is **GPL-3.0** (`LICENSE`); the README and the page footer must agree
@@ -129,7 +177,11 @@ All three commands run from the repo root, inside `.venv`, and must exit 0:
   repo deliberately diverges, because mypy installs from `requirements.txt` with
   no Node toolchain.
 - Tests: `pytest -q` — run from the repo root so `backend` imports resolve.
-- After Phase 2, run the T1–T8 matrix (see roadmap.md) on every change.
+- Frontend behavior tests: `node --test frontend/tests/accounts.test.mjs`;
+  syntax: `node --check frontend/app.js`. Node is development-only, with no npm
+  packages or frontend build step. Browser layout needs a separate manual check.
+- Preserve existing solver fixture coverage; include account isolation, expiry,
+  CSRF, atomic saves, revision conflict and import/retry tests.
 - Solver tests are the source of truth: `solve()` stays synchronous and pure so
   pytest can exercise it without HTTP.
 
@@ -144,7 +196,11 @@ All three commands run from the repo root, inside `.venv`, and must exit 0:
 - [ ] Deadline before the only free window: unplaced with `DEADLINE_MISS` (T5).
 - [ ] A flexible block's domain excludes slots covered by a sport block (T6).
 - [ ] The packed fixture reports `solve_ms < 150` (T7).
-- [ ] Corrupt `localStorage` resets to a demo instead of crashing (T8).
+- [ ] Corrupt legacy localStorage does not replace the account week or load demos.
+- [ ] Two accounts independently create, solve, save and reload weeks.
+- [ ] Sign-out hides private data; expired sessions cannot read/write/solve.
+- [ ] Nocturne/Slate theme persists per account.
+- [ ] Failed saves preserve drafts; stale saves return a recoverable conflict.
 - [ ] No output block overlaps another, and no flexible block starts after its
       deadline (property tests).
 - [ ] A public Render URL loads the app and a judge can follow the README.

@@ -1,44 +1,51 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-06. Branch `docs/app-web-roadmap` off `feat/phase-3-usable`.
-- Phase 3 code exit is green locally: `pytest -q` 40 passed. Browser: new week
-  → add locked school + homework → Solve → refresh still shows that week.
-  Garbage in localStorage reloads Alex instead of crashing. Duration 10 is
-  rejected in the form and as HTTP 422 on `POST /api/solve`.
-- Roadmap-only validation: 40 tests passed; mypy passed (11 source files);
-  git diff --check passed. Ruff reports existing I001 in backend/app.py and
-  SIM110 in backend/solver.py. No application changes or audits performed.
-- Known gaps:
-  - Partner bug list (Phase 3), break-it cases (Phase 2), interviews (Phase 1).
-  - CAC registration and congressional district confirmation.
-  - `spec.md` still describes the dataclass / 501-stub skeleton and was not
-    edited.
-  - Existing untracked files: `agents.md`, `reslot-cac-build-plan.md`,
-    `ruff.toml`, `Github Templates/`. spec.md adopted unchanged into version control.
+- Date: 2026-09-07. Branch `feat/accounts-themes` off `docs/app-web-roadmap`.
+- Phase 3 complete per owner. Phase 4 accounts/storage/themes implemented:
+  registration/login/logout, account-owned SQLite weeks, revision conflicts,
+  legacy import, retry/download controls and saved Nocturne/Slate preferences.
+- Validation: 60 Python tests and 8 frontend state tests passed; mypy passed
+  (14 source files); Python compilation, JS syntax and diff whitespace passed.
+  Live HTTP smoke passed for two accounts, save/reload, solve, themes and logout.
+- Changed Python files pass Ruff. Full Ruff retains pre-existing SIM110 in
+  backend/solver.py:190. Existing TestClient dependency deprecation warnings remain.
+- Browser verification incomplete: CUA reported no available browser. Remaining
+  manual check: sign up, add/edit a block, refresh, change theme, sign out and
+  sign into another account at 1280px and 390px widths.
+- Known gaps: desktop packaging, calendar interaction port, later visual design
+  and security hardening/audits; partner tasks and CAC registration/district.
+- spec.md updated with approval. Existing untracked local files remain:
+  agents.md, reslot-cac-build-plan.md, ruff.toml, Github Templates/.
 
 ## Repo Landmarks
 ```
-backend/models.py        Pydantic TimeBlock; duration must be a multiple of 15
-backend/solver.py        backtracking + MRV + forward checking, 150 ms cap
-backend/app.py           GET /api/demos/{name}, POST /api/solve
-backend/tests/           slots, demos, solver, api (40 cases)
-frontend/index.html      forms: add locked, add task, new week
-frontend/app.js          editor + localStorage key flexweek.week.v1
+backend/models.py        Pydantic blocks + bounded week validation
+backend/solver.py        pure synchronous solver, existing placement unchanged
+backend/app.py           account/session/ownership APIs and static frontend
+backend/storage.py       SQLite transactions, scrypt, hashed sessions, throttles
+backend/tests/           solver fixtures + account/API and transaction tests
+frontend/app.js          account lifecycle, editor, server saves, legacy import
+frontend/tests/          Node behavior tests with a simulated document
+frontend/styles.css      Daily Scheduler Nocturne/Slate palette adaptation
 ```
 
 ## Domain Model
-No database. Demo weeks are JSON on disk. The user's week lives in
-`localStorage` as `{ blocks: TimeBlock[] }`.
+SQLite: users → sessions, one current week, one preference row. Weeks contain
+validated TimeBlock JSON and a revision for concurrent-save detection.
 
 ```
-TimeBlock
-  kind        locked | flexible
-  duration_min  positive multiple of 15
-  days        [0..6]
-  start       HH:MM for locked; solver fills flexible
-  latest      English "Friday 21:00" for flexible
+users(id, username UNIQUE, password_hash)
+  ├── sessions(token_hash, user_id, expires)
+  ├── weeks(user_id PRIMARY KEY, blocks JSON, revision)
+  └── preferences(user_id PRIMARY KEY, theme)
+auth_attempts(key hash PRIMARY KEY, count, expires)
 ```
+
+TimeBlock: locked/flexible, positive 15-minute duration, days 0–6, optional
+HH:MM start and English weekday deadline. Dated multi-week storage is future work.
+Default database: var/flexweek.db; FLEXWEEK_DATABASE overrides it. Browser legacy
+key flexweek.week.v1 is read only for explicit import; account drafts stay in memory.
 
 ## Non-Obvious Decisions
 - Solve paints a trace but does not write placements back into the saved week.
@@ -51,10 +58,13 @@ TimeBlock
 - License file is GPL-3.0. PHASES.md now links to the revised roadmap.
 
 ## Session Handoff
-- 2026-09-06, `docs/app-web-roadmap`: revised Phase 4–7 and prepared a concrete
-  account/theme first-slice proposal. Phase 3 complete per owner; audits deferred.
-- Application code and spec content unchanged. Next: approve the roadmap's
-  first-slice contract/spec update. Owner selected desktop app plus web app;
-  Windows/Linux are provisional desktop targets.
-- Daily Scheduler source found at ../Local-Schedule-Assistant; ../LitSieve has
-  no application source. Existing spec conflicts are listed in roadmap.md.
+- 2026-09-07, `feat/accounts-themes`: approved first slice implemented and tested;
+  spec, roadmap, README, architecture and changelog updated. No audits performed.
+- GLM-5.3 Flash via OpenCode contributed 16 account tests and updated 3 API tests.
+  Main agent read both files, corrected fixture annotations and reran all checks.
+  Draft isolation mutation failed as expected, then passed after restoration.
+- grok-desktop-prompt.md is ready for the independent desktop packaging decision.
+- Next: real-browser smoke check, then Phase 5 desktop shell and interaction port.
+  Owner selected separate desktop + web; Windows/Linux remain provisional.
+- Temporary smoke servers stopped; pre-existing port-8000 development server left
+  running. LitSieve source remains unavailable at ../LitSieve.

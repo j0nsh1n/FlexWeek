@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="nocturne">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -17,20 +17,41 @@
         <p class="tag">Places homework around school and sports, then explains why something moved.</p>
       </div>
     </div>
-    <div class="controls">
-      <label class="demo-pick">
-        Demo
-        <select id="demo" aria-label="Choose demo student">
-          <option value="alex">Alex</option>
-          <option value="jordan">Jordan</option>
-        </select>
-      </label>
+    <div class="controls" id="account-controls" hidden>
+      <span id="account-name"></span>
+      <label>Theme <select id="theme"><option value="nocturne">Nocturne · dark</option><option value="slate">Slate · light</option></select></label>
+      <button type="button" id="logout" class="secondary">Sign out</button>
       <button type="button" id="solve">Solve</button>
-      <span id="status" class="status" role="status"></span>
     </div>
   </header>
-
-  <main class="layout">
+  <p id="status" class="status" role="status">Connecting…</p>
+  <section id="auth-panel" class="auth-panel" aria-labelledby="auth-heading">
+    <h2 id="auth-heading">Your week, in one place</h2>
+    <p>Sign in or create an account to save your schedule.</p>
+    <form id="auth-form">
+      <label>Username <input id="username" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_]+" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+      <p class="note">3–32 letters, numbers or underscores. Usernames are not case-sensitive.</p>
+      <label>Password <input id="password" type="password" required minlength="12" maxlength="128" autocomplete="current-password"></label>
+      <p class="note">12–128 characters. Password recovery is not available yet.</p>
+      <p id="auth-error" class="form-error" role="alert"></p>
+      <div class="form-actions">
+        <button type="submit" name="action" value="login">Sign in</button>
+        <button type="submit" name="action" value="register" class="secondary">Create account</button>
+      </div>
+    </form>
+    <button type="button" id="reconnect" class="secondary">Retry connection</button>
+  </section>
+  <div id="save-actions" class="save-actions" hidden>
+    <button id="retry-save" type="button">Retry save</button>
+    <button id="reload-week" type="button" class="secondary">Reload saved week</button>
+    <button id="download-draft" type="button" class="secondary">Download unsaved week</button>
+  </div>
+  <section id="import-panel" class="save-actions" hidden>
+    <p>A week from the old browser version is available on this device. Import only if it belongs to you. This replaces your current week.</p>
+    <button id="import-week" type="button" class="secondary">Import browser week</button>
+    <span id="import-status" role="status"></span>
+  </section>
+  <main class="layout" id="planner" hidden>
     <section class="calendar" aria-label="Week calendar">
       <div class="week" id="week"></div>
     </section>

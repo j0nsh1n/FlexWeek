@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -19,17 +20,17 @@ ReasonCode = Literal[
 
 
 class TimeBlock(BaseModel):
-    id: str
-    title: str
+    id: str = Field(min_length=1, max_length=80)
+    title: str = Field(min_length=1, max_length=80)
     kind: BlockKind
-    duration_min: int
-    days: list[int] = Field(min_length=1)
+    duration_min: int = Field(le=7140)
+    days: list[int] = Field(min_length=1, max_length=7)
     priority: Priority = 3
     energy: Energy = "medium"
-    earliest: str | None = None
-    latest: str | None = None
-    start: str | None = None
-    course: str | None = None
+    earliest: str | None = Field(default=None, max_length=40)
+    latest: str | None = Field(default=None, max_length=40)
+    start: str | None = Field(default=None, max_length=5)
+    course: str | None = Field(default=None, max_length=40)
 
     @field_validator("duration_min")
     @classmethod
@@ -63,4 +64,30 @@ class SolveTrace(BaseModel):
 
 
 class WeekRequest(BaseModel):
-    blocks: list[TimeBlock]
+    blocks: list[TimeBlock] = Field(max_length=100)
+
+    @field_validator("blocks")
+    @classmethod
+    def valid_week(cls, blocks: list[TimeBlock]) -> list[TimeBlock]:
+        if len({block.id for block in blocks}) != len(blocks):
+            raise ValueError("block ids must be unique")
+        for block in blocks:
+            if not block.title.strip() or len(set(block.days)) != len(block.days):
+                raise ValueError("title and unique days required")
+            if block.kind == "locked" and not block.start:
+                raise ValueError("locked blocks need a start")
+            if block.start:
+                if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", block.start):
+                    raise ValueError("invalid start time")
+                hour, minute = map(int, block.start.split(":"))
+                start = hour * 60 + minute
+                if minute % 15 or start < 360 or start + block.duration_min > 1380:
+                    raise ValueError("block must fit the 06:00–23:00 grid")
+            for bound in (block.earliest, block.latest):
+                if bound and not re.fullmatch(
+                    r"(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday) )?"
+                    r"(?:[01]\d|2[0-3]):[0-5]\d",
+                    bound,
+                ):
+                    raise ValueError("invalid deadline or earliest time")
+        return blocks

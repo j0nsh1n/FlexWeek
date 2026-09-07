@@ -78,7 +78,9 @@ desktop shell is proposed; shell selection follows compatibility testing.
   preference; functional layout first, visual redesign later.
 - Completion target: two accounts can independently create, solve, save, and
   reload their weeks; sign-out removes the previous user's schedule from view.
-- Status: [~] Scope and first-slice proposal prepared 2026-09-06; code pending.
+- Status: [~] Account/storage/theme implementation delivered 2026-09-07.
+  API and frontend behavior verification complete; real-browser visual and
+  interaction smoke check pending because no browser was connected.
 
 ## Phase 5 — Daily Scheduler interaction port and app delivery
 - Separate desktop packaging plus browser delivery, sharing the web UI and
@@ -116,7 +118,7 @@ desktop shell is proposed; shell selection follows compatibility testing.
 - Completion target: submission on Oct 25 evening, 2026.
 - Status: [ ]
 
-## First implementation slice — proposed contract
+## First implementation slice — approved 2026-09-06
 
 ### Goal and user stories
 1. As a student, I want an account so my schedule belongs to me across clients.
@@ -151,13 +153,13 @@ desktop shell is proposed; shell selection follows compatibility testing.
     preserves unsaved edits and clearly distinguishes them from saved work.
 
 ### Data and interface impact
-- Proposed SQLite tables: users (unique normalized username, password hash),
+- SQLite tables: users (unique normalized username, password hash),
   sessions (hashed opaque token, user, expiry), weeks (user, blocks JSON,
   revision), and preferences (user, theme). Foreign keys and unique ownership
   constraints link data; writes are transactional. No database exists today.
 - Initial scope is one current week per account using the existing `TimeBlock`
   payload. Dated multi-week storage is a separate Phase 5 migration.
-- Proposed endpoints: POST `/api/auth/register`, `/api/auth/login`,
+- Endpoints: POST `/api/auth/register`, `/api/auth/login`,
   `/api/auth/logout`; GET `/api/auth/me`; GET/PUT `/api/week`;
   GET/PUT `/api/preferences`. Saves carry an expected revision.
 - POST `/api/solve` keeps its current payload/trace shape but requires a session.
@@ -166,8 +168,8 @@ desktop shell is proposed; shell selection follows compatibility testing.
 - Passwords use a maintained password-hashing implementation; sessions use
   HttpOnly, SameSite cookies with Secure in production and server revocation.
   CSRF/origin checks protect writes; SQL queries are parameterized. No password,
-  token, or schedule contents enter logs. Final dependency choice/pin follows
-  compatibility verification before implementation.
+  token, or schedule contents enter logs. Python/OpenSSL scrypt provides password
+  hashing without a new dependency; existing direct dependencies are pinned.
 - Screens: register/login, account identity/logout, empty planner, theme control,
   import prompt, loading/saving/saved/error states. No background jobs initially;
   expired sessions are rejected at request time and cleaned periodically.
@@ -195,15 +197,15 @@ desktop shell is proposed; shell selection follows compatibility testing.
   the proposed scope.
 - Confirmed: separate desktop app plus web app (owner, 2026-09-06); provisional
   Windows/Linux targets match Daily Scheduler.
-- Open decision: approve this first-slice contract and corresponding spec.md
-  update. Proposed default: username/password accounts and SQLite on the existing
-  Python/FastAPI backend, with no demo mode.
+- Approved: username/password accounts and SQLite on the existing Python/FastAPI
+  backend, with no demo mode; spec.md updated to match.
+- Desktop shell selection remains open; grok-desktop-prompt.md contains a focused
+  prompt for an independent packaging recommendation.
 
-## Existing spec drift to reconcile on approval
+## Spec reconciliation — 2026-09-07
 - Accounts, storage, installed-app delivery, demo-free onboarding and expanded
   interactions replace the old explicit exclusions.
-- Existing code uses Pydantic models and HH:MM/day indices, has a working solver,
-  and serves `/api/demos/{name}` only; the spec still describes dataclasses,
-  datetime strings, a solver stub and a demo-list endpoint.
-- requirements.txt uses version ranges despite the spec's pinned-version list;
-  dependency reconciliation is pending implementation, not silently assumed done.
+- spec.md now describes Pydantic models, HH:MM/day indices, the working solver
+  and authenticated API. Demo endpoints have been removed.
+- requirements.txt now pins the installed direct dependency versions listed
+  in spec.md, including Pydantic, Ruff and mypy.
