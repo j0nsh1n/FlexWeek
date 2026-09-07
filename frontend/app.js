@@ -1,212 +1,84 @@
-/**
- * FlexWeek Week 1 UI — fetch demos, paint locked blocks, list flexible tasks.
- * No placement / solver logic here.
- */
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const START_HOUR = 6;
+const END_HOUR = 23;
 
-(function () {
-  "use strict";
+const weekEl = document.getElementById("week");
+const flexibleEl = document.getElementById("flexible");
+const demoEl = document.getElementById("demo");
 
-  const DAY_START = 6; // 06:00
-  const DAY_END = 23; // 23:00
-  const HOURS = DAY_END - DAY_START; // 17
-  const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+function hourRange() {
+  const hours = [];
+  for (let hour = START_HOUR; hour < END_HOUR; hour += 1) hours.push(hour);
+  return hours;
+}
 
-  const els = {
-    select: document.getElementById("demo-select"),
-    status: document.getElementById("status"),
-    flexibleList: document.getElementById("flexible-list"),
-    dayHeaders: document.getElementById("day-headers"),
-    timeGutter: document.getElementById("time-gutter"),
-    weekGrid: document.getElementById("week-grid"),
-  };
+function pad(n) {
+  return String(n).padStart(2, "0");
+}
 
-  let demos = null;
+function parseStart(start) {
+  const [h, m] = start.split(":").map(Number);
+  return h * 60 + m;
+}
 
-  function setStatus(msg) {
-    els.status.textContent = msg || "";
-  }
-
-  function parseLocal(ts) {
-    // YYYY-MM-DDTHH:mm — naive local, no timezone math
-    const [date, time] = ts.split("T");
-    const [y, m, d] = date.split("-").map(Number);
-    const [hh, mm] = time.split(":").map(Number);
-    return { y, m, d, hh, mm, minutes: hh * 60 + mm };
-  }
-
-  function weekMondayDate(weekStart) {
-    // week_start is YYYY-MM-DD (Monday)
-    const [y, m, d] = weekStart.split("-").map(Number);
-    return { y, m, d };
-  }
-
-  function dayIndexFromStart(start, weekStart) {
-    const s = parseLocal(start);
-    const w = weekMondayDate(weekStart);
-    const startUtc = Date.UTC(s.y, s.m - 1, s.d);
-    const weekUtc = Date.UTC(w.y, w.m - 1, w.d);
-    return Math.round((startUtc - weekUtc) / 86400000);
-  }
-
-  function minutesFromDayStart(start) {
-    return parseLocal(start).minutes - DAY_START * 60;
-  }
-
-  function formatClock(hh) {
-    const h12 = ((hh + 11) % 12) + 1;
-    const ampm = hh < 12 ? "AM" : "PM";
-    return h12 + " " + ampm;
-  }
-
-  function buildChrome(weekStart) {
-    els.dayHeaders.innerHTML = "";
-    const corner = document.createElement("div");
-    els.dayHeaders.appendChild(corner);
-
-    const w = weekMondayDate(weekStart);
-    for (let i = 0; i < 7; i++) {
-      const dt = new Date(Date.UTC(w.y, w.m - 1, w.d + i));
-      const label = DAY_NAMES[i] + " " + (dt.getUTCMonth() + 1) + "/" + dt.getUTCDate();
-      const head = document.createElement("div");
-      head.className = "day-head";
-      head.textContent = label;
-      els.dayHeaders.appendChild(head);
-    }
-
-    els.timeGutter.innerHTML = "";
-    for (let h = DAY_START; h < DAY_END; h++) {
-      const lab = document.createElement("div");
-      lab.className = "time-label";
-      lab.textContent = formatClock(h);
-      els.timeGutter.appendChild(lab);
-    }
-
-    els.weekGrid.innerHTML = "";
-    for (let i = 0; i < 7; i++) {
-      const col = document.createElement("div");
-      col.className = "day-col";
-      col.dataset.day = String(i);
-      els.weekGrid.appendChild(col);
-    }
-  }
-
-  function paintLocked(blocks, weekStart) {
-    const cols = els.weekGrid.querySelectorAll(".day-col");
-    const hourH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--hour-h")) || 48;
-
-    blocks
-      .filter(function (b) {
-        return b.kind === "locked" && b.start;
-      })
-      .forEach(function (b) {
-        const day = dayIndexFromStart(b.start, weekStart);
-        if (day < 0 || day > 6) return;
-
-        const startMin = minutesFromDayStart(b.start);
-        const dur = b.duration_min || 0;
-        // Clip to visible window 06:00–23:00
-        const visibleStart = Math.max(0, startMin);
-        const visibleEnd = Math.min(HOURS * 60, startMin + dur);
-        if (visibleEnd <= visibleStart) return;
-
-        const top = (visibleStart / 60) * hourH;
-        const height = Math.max(18, ((visibleEnd - visibleStart) / 60) * hourH);
-
-        const el = document.createElement("div");
-        el.className = "block";
-        el.style.top = top + "px";
-        el.style.height = height + "px";
-        el.title = b.title + (b.course ? " · " + b.course : "");
-
-        const title = document.createElement("div");
-        title.className = "title";
-        title.textContent = b.title;
-        el.appendChild(title);
-
-        if (dur) {
-          const sub = document.createElement("div");
-          sub.className = "sub";
-          sub.textContent = dur + " min";
-          el.appendChild(sub);
-        }
-
-        cols[day].appendChild(el);
-      });
-  }
-
-  function renderFlexible(blocks) {
-    els.flexibleList.innerHTML = "";
-    const flex = blocks.filter(function (b) {
-      return b.kind === "flexible";
-    });
-
-    if (!flex.length) {
-      const empty = document.createElement("li");
-      empty.className = "task-card";
-      empty.textContent = "No flexible tasks in this demo.";
-      els.flexibleList.appendChild(empty);
-      return;
-    }
-
-    flex.forEach(function (b) {
-      const li = document.createElement("li");
-      li.className = "task-card";
-
-      const h = document.createElement("h3");
-      h.textContent = b.title;
-      li.appendChild(h);
-
-      const meta = document.createElement("div");
-      meta.className = "task-meta";
-
-      function pill(text) {
-        const s = document.createElement("span");
-        s.className = "pill";
-        s.textContent = text;
-        meta.appendChild(s);
-      }
-
-      pill(b.duration_min + " min");
-      pill("P" + b.priority);
-      pill(b.energy);
-      if (b.course) pill(b.course);
-      if (b.latest) pill("due " + b.latest.replace("T", " "));
-
-      li.appendChild(meta);
-      els.flexibleList.appendChild(li);
-    });
-  }
-
-  function renderDemo(key) {
-    if (!demos || !demos[key]) {
-      setStatus("Demo not found");
-      return;
-    }
-    const demo = demos[key];
-    const weekStart = demo.week_start || "2026-09-07";
-    buildChrome(weekStart);
-    paintLocked(demo.blocks || [], weekStart);
-    renderFlexible(demo.blocks || []);
-    setStatus((demo.label || key) + " · " + (demo.blocks || []).length + " blocks");
-  }
-
-  async function load() {
-    setStatus("Loading demos…");
-    try {
-      const res = await fetch("/api/demos");
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      demos = await res.json();
-      const initial = els.select.value || "alex";
-      renderDemo(initial);
-    } catch (err) {
-      console.error(err);
-      setStatus("Failed to load demos");
-    }
-  }
-
-  els.select.addEventListener("change", function () {
-    renderDemo(els.select.value);
+function buildGrid(blocks) {
+  weekEl.innerHTML = "";
+  const corner = document.createElement("div");
+  corner.className = "corner";
+  weekEl.appendChild(corner);
+  DAYS.forEach((day) => {
+    const head = document.createElement("div");
+    head.className = "day-head";
+    head.textContent = day;
+    weekEl.appendChild(head);
   });
 
-  load();
-})();
+  const hours = hourRange();
+  const cells = Array.from({ length: 7 }, () => []);
+
+  hours.forEach((hour) => {
+    const label = document.createElement("div");
+    label.className = "hour";
+    label.textContent = `${pad(hour)}:00`;
+    weekEl.appendChild(label);
+    for (let day = 0; day < 7; day += 1) {
+      const cell = document.createElement("div");
+      cell.className = "cell";
+      weekEl.appendChild(cell);
+      cells[day].push(cell);
+    }
+  });
+
+  blocks.filter((b) => b.kind === "locked" && b.start).forEach((block) => {
+    block.days.forEach((day) => {
+      const startMin = parseStart(block.start);
+      const topHour = Math.floor(startMin / 60);
+      const row = topHour - START_HOUR;
+      if (row < 0 || row >= hours.length) return;
+      const offsetMin = startMin - topHour * 60;
+      const heightPx = (block.duration_min / 60) * 2.4 * 16;
+      const el = document.createElement("div");
+      el.className = "block";
+      el.textContent = block.title;
+      el.style.top = `${(offsetMin / 60) * 2.4}rem`;
+      el.style.height = `${Math.max(heightPx / 16, 1.1)}rem`;
+      cells[day][row].appendChild(el);
+    });
+  });
+
+  flexibleEl.innerHTML = "";
+  blocks.filter((b) => b.kind === "flexible").forEach((block) => {
+    const li = document.createElement("li");
+    li.textContent = `${block.title} · ${block.duration_min} min`;
+    flexibleEl.appendChild(li);
+  });
+}
+
+async function loadDemo(name) {
+  const res = await fetch(`/api/demos/${name}`);
+  const data = await res.json();
+  buildGrid(data.blocks);
+}
+
+demoEl.addEventListener("change", () => loadDemo(demoEl.value));
+loadDemo(demoEl.value);

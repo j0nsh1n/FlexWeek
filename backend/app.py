@@ -1,63 +1,52 @@
-"""FlexWeek FastAPI app — thin JSON door + static frontend.
-
-Week 1: serve demos and UI only. No solver endpoint.
-"""
-
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+from backend.models import TimeBlock, WeekRequest
+from backend.solver import solve
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = Path(__file__).resolve().parent / "data"
-FRONTEND_DIR = ROOT / "frontend"
+FRONTEND = ROOT / "frontend"
+DATA = Path(__file__).resolve().parent / "data"
 
-app = FastAPI(title="FlexWeek", version="0.1.0")
-
-
-def _load_demo(name: str) -> dict:
-    path = DATA_DIR / f"{name}.json"
-    if not path.is_file():
-        raise FileNotFoundError(name)
-    with path.open(encoding="utf-8") as f:
-        return json.load(f)
+app = FastAPI(title="FlexWeek")
 
 
-@app.get("/api/demos")
-def get_demos() -> dict:
-    """Return both seed demos (alex + jordan)."""
-    return {
-        "alex": _load_demo("demo_alex"),
-        "jordan": _load_demo("demo_jordan"),
-    }
+def _load_demo(name: str) -> list[TimeBlock]:
+    path = DATA / f"demo_{name}.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="unknown demo")
+    raw = json.loads(path.read_text())
+    return [TimeBlock.model_validate(item) for item in raw]
+
+
+@app.get("/api/health")
+def health() -> dict[str, bool]:
+    return {"ok": True}
 
 
 @app.get("/api/demos/{name}")
 def get_demo(name: str) -> dict:
-    """Return a single demo by short name (alex | jordan)."""
-    key = name if name.startswith("demo_") else f"demo_{name}"
-    short = key.removeprefix("demo_")
-    try:
-        return _load_demo(key)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail=f"Unknown demo: {short}") from None
+    if name not in {"alex", "jordan"}:
+        raise HTTPException(status_code=404, detail="unknown demo")
+    blocks = _load_demo(name)
+    return {"name": name, "blocks": [block.model_dump() for block in blocks]}
 
 
-@app.get("/api/solve")
 @app.post("/api/solve")
-def solve_stub() -> dict:
-    """Week 1: solver not implemented."""
-    raise HTTPException(status_code=501, detail="Solver not implemented in Week 1")
+def post_solve(week: WeekRequest) -> dict:
+    trace = solve(week.blocks)
+    return trace.model_dump()
 
 
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse(FRONTEND_DIR / "index.html")
+    return FileResponse(FRONTEND / "index.html")
 
 
-if FRONTEND_DIR.is_dir():
-    app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+app.mount("/static", StaticFiles(directory=FRONTEND), name="static")

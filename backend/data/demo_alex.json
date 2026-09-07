@@ -1,256 +1,68 @@
-{
-  "id": "demo_alex",
-  "label": "Alex (anonymized)",
-  "timezone": "America/Los_Angeles",
-  "week_start": "2026-09-07",
-  "blocks": [
-    {
-      "id": "a-sleep-1",
-      "title": "Evening wind-down",
-      "kind": "locked",
-      "duration_min": 60,
-      "days": [
-        0
-      ],
-      "priority": 1,
-      "energy": "low",
-      "start": "2026-09-07T22:00",
-      "course": null
-    },
-    {
-      "id": "a-school-mon",
-      "title": "School",
-      "kind": "locked",
-      "duration_min": 390,
-      "days": [
-        0
-      ],
-      "priority": 1,
-      "energy": "medium",
-      "start": "2026-09-07T08:00",
-      "course": null
-    },
-    {
-      "id": "a-school-tue",
-      "title": "School",
-      "kind": "locked",
-      "duration_min": 390,
-      "days": [
-        1
-      ],
-      "priority": 1,
-      "energy": "medium",
-      "start": "2026-09-08T08:00",
-      "course": null
-    },
-    {
-      "id": "a-school-wed",
-      "title": "School",
-      "kind": "locked",
-      "duration_min": 390,
-      "days": [
-        2
-      ],
-      "priority": 1,
-      "energy": "medium",
-      "start": "2026-09-09T08:00",
-      "course": null
-    },
-    {
-      "id": "a-school-thu",
-      "title": "School",
-      "kind": "locked",
-      "duration_min": 390,
-      "days": [
-        3
-      ],
-      "priority": 1,
-      "energy": "medium",
-      "start": "2026-09-10T08:00",
-      "course": null
-    },
-    {
-      "id": "a-school-fri",
-      "title": "School",
-      "kind": "locked",
-      "duration_min": 390,
-      "days": [
-        4
-      ],
-      "priority": 1,
-      "energy": "medium",
-      "start": "2026-09-11T08:00",
-      "course": null
-    },
-    {
-      "id": "a-soccer-tue",
-      "title": "Soccer practice",
-      "kind": "locked",
-      "duration_min": 120,
-      "days": [
-        1
-      ],
-      "priority": 1,
-      "energy": "high",
-      "start": "2026-09-08T16:00",
-      "course": null
-    },
-    {
-      "id": "a-soccer-thu",
-      "title": "Soccer practice",
-      "kind": "locked",
-      "duration_min": 120,
-      "days": [
-        3
-      ],
-      "priority": 1,
-      "energy": "high",
-      "start": "2026-09-10T16:00",
-      "course": null
-    },
-    {
-      "id": "a-game-sat",
-      "title": "Soccer game",
-      "kind": "locked",
-      "duration_min": 150,
-      "days": [
-        5
-      ],
-      "priority": 1,
-      "energy": "high",
-      "start": "2026-09-12T10:00",
-      "course": null
-    },
-    {
-      "id": "a-math-hw",
-      "title": "Math problem set",
-      "kind": "flexible",
-      "duration_min": 60,
-      "days": [
-        0,
-        1,
-        2,
-        3,
-        4
-      ],
-      "priority": 2,
-      "energy": "high",
-      "earliest": "2026-09-07T06:00",
-      "latest": "2026-09-09T21:00",
-      "start": null,
-      "course": "Math"
-    },
-    {
-      "id": "a-chem-lab",
-      "title": "Chem lab write-up",
-      "kind": "flexible",
-      "duration_min": 90,
-      "days": [
-        0,
-        1,
-        2,
-        3,
-        4
-      ],
-      "priority": 2,
-      "energy": "high",
-      "earliest": "2026-09-07T06:00",
-      "latest": "2026-09-10T20:00",
-      "start": null,
-      "course": "Chemistry"
-    },
-    {
-      "id": "a-hist-essay",
-      "title": "History essay draft",
-      "kind": "flexible",
-      "duration_min": 120,
-      "days": [
-        0,
-        1,
-        2,
-        3,
-        4,
-        5,
-        6
-      ],
-      "priority": 1,
-      "energy": "medium",
-      "earliest": "2026-09-07T06:00",
-      "latest": "2026-09-11T22:00",
-      "start": null,
-      "course": "History"
-    },
-    {
-      "id": "a-eng-read",
-      "title": "English reading",
-      "kind": "flexible",
-      "duration_min": 45,
-      "days": [
-        0,
-        1,
-        2,
-        3,
-        4,
-        5,
-        6
-      ],
-      "priority": 4,
-      "energy": "low",
-      "earliest": "2026-09-07T06:00",
-      "latest": "2026-09-13T21:00",
-      "start": null,
-      "course": "English"
-    },
-    {
-      "id": "a-spanish",
-      "title": "Spanish vocab quiz prep",
-      "kind": "flexible",
-      "duration_min": 30,
-      "days": [
-        0,
-        1,
-        2
-      ],
-      "priority": 1,
-      "energy": "medium",
-      "earliest": "2026-09-07T06:00",
-      "latest": "2026-09-09T07:45",
-      "start": null,
-      "course": "Spanish"
-    },
-    {
-      "id": "a-bio-notes",
-      "title": "Biology notes review",
-      "kind": "flexible",
-      "duration_min": 45,
-      "days": [
-        2,
-        3,
-        4
-      ],
-      "priority": 3,
-      "energy": "medium",
-      "earliest": "2026-09-09T06:00",
-      "latest": "2026-09-11T21:00",
-      "start": null,
-      "course": "Biology"
-    },
-    {
-      "id": "a-cs-project",
-      "title": "CS coding practice",
-      "kind": "flexible",
-      "duration_min": 75,
-      "days": [
-        4,
-        5,
-        6
-      ],
-      "priority": 3,
-      "energy": "high",
-      "earliest": "2026-09-11T06:00",
-      "latest": "2026-09-13T20:00",
-      "start": null,
-      "course": "CS"
-    }
-  ]
-}
+[
+  {
+    "id": "alex-school",
+    "title": "School",
+    "kind": "locked",
+    "duration_min": 435,
+    "days": [0, 1, 2, 3, 4],
+    "priority": 1,
+    "energy": "high",
+    "start": "08:00",
+    "course": null
+  },
+  {
+    "id": "alex-soccer",
+    "title": "Soccer",
+    "kind": "locked",
+    "duration_min": 90,
+    "days": [1, 3],
+    "priority": 1,
+    "energy": "high",
+    "start": "16:00",
+    "course": null
+  },
+  {
+    "id": "alex-sleep",
+    "title": "Sleep guard",
+    "kind": "locked",
+    "duration_min": 60,
+    "days": [0, 1, 2, 3, 4, 5, 6],
+    "priority": 1,
+    "energy": "low",
+    "start": "22:00",
+    "course": null
+  },
+  {
+    "id": "alex-chem",
+    "title": "Chem test review",
+    "kind": "flexible",
+    "duration_min": 90,
+    "days": [0, 1, 2, 3],
+    "priority": 1,
+    "energy": "high",
+    "latest": "Thursday 21:00",
+    "course": "Chemistry"
+  },
+  {
+    "id": "alex-math",
+    "title": "Math homework",
+    "kind": "flexible",
+    "duration_min": 60,
+    "days": [0, 1, 2],
+    "priority": 3,
+    "energy": "medium",
+    "latest": "Wednesday 21:00",
+    "course": "Math"
+  },
+  {
+    "id": "alex-history",
+    "title": "History reading",
+    "kind": "flexible",
+    "duration_min": 45,
+    "days": [0, 1, 2, 3, 4],
+    "priority": 4,
+    "energy": "low",
+    "latest": "Friday 21:00",
+    "course": "History"
+  }
+]

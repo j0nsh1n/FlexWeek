@@ -1,47 +1,36 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>FlexWeek</title>
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
+  <header class="top">
+    <div>
       <h1>FlexWeek</h1>
-      <p class="tagline">Places homework around school and sports — then tells you why something moved.</p>
+      <p class="tag">Places homework around school and sports, then explains why something moved.</p>
     </div>
-    <div class="controls">
-      <label for="demo-select">Demo</label>
-      <select id="demo-select" aria-label="Choose demo student">
+    <label class="demo-pick">
+      Demo
+      <select id="demo">
         <option value="alex">Alex</option>
         <option value="jordan">Jordan</option>
       </select>
-      <span id="status" class="status" role="status"></span>
-    </div>
+    </label>
   </header>
 
   <main class="layout">
-    <aside class="sidebar">
-      <h2>Flexible tasks</h2>
-      <p class="hint">Not placed yet — solver arrives in a later week.</p>
-      <ul id="flexible-list" class="task-list"></ul>
-    </aside>
-
-    <section class="calendar" aria-label="Week grid">
-      <div class="calendar-header" id="day-headers"></div>
-      <div class="calendar-body">
-        <div class="time-gutter" id="time-gutter"></div>
-        <div class="grid" id="week-grid"></div>
-      </div>
+    <section class="calendar" aria-label="Week calendar">
+      <div class="week" id="week"></div>
     </section>
+    <aside class="side">
+      <h2>Flexible</h2>
+      <ul id="flexible"></ul>
+      <p class="note">Phase 1: locked blocks on the grid. Solver lands in Phase 2.</p>
+    </aside>
   </main>
-
-  <footer class="footer">
-    <span>Congressional App Challenge 2026 · GPL-3.0</span>
-  </footer>
-
   <script src="/static/app.js"></script>
 </body>
 </html>

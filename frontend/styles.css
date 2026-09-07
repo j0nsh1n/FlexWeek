@@ -1,235 +1,69 @@
 :root {
   --bg: #0f1419;
-  --panel: #1a2332;
-  --panel-2: #243044;
-  --border: #334155;
-  --text: #e8eef7;
-  --muted: #94a3b8;
-  --accent: #38bdf8;
-  --locked: #3b82f6;
-  --locked-bg: rgba(59, 130, 246, 0.85);
-  --flex: #a78bfa;
-  --danger: #f87171;
-  --width: 1280px;
-  --hour-h: 48px;
-  --gutter: 56px;
-  --header-h: 44px;
+  --panel: #1a222c;
+  --ink: #e8eef4;
+  --muted: #93a1b1;
+  --line: #2b3642;
+  --locked: #3d6ea8;
+  --flex: #c47a2c;
 }
 
 * { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.4 system-ui, sans-serif; }
 
-body {
-  margin: 0;
-  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  min-height: 100vh;
-}
-
-.topbar {
+.top {
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
-  gap: 1rem;
-  max-width: var(--width);
-  margin: 0 auto;
-  padding: 1.25rem 1.5rem 1rem;
-  border-bottom: 1px solid var(--border);
-}
-
-.brand h1 {
-  margin: 0;
-  font-size: 1.6rem;
-  letter-spacing: 0.02em;
-}
-
-.tagline {
-  margin: 0.25rem 0 0;
-  color: var(--muted);
-  font-size: 0.9rem;
-  max-width: 36rem;
-}
-
-.controls {
-  display: flex;
   align-items: center;
-  gap: 0.5rem;
-}
-
-.controls select {
-  background: var(--panel);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 0.4rem 0.6rem;
-}
-
-.status {
-  color: var(--muted);
-  font-size: 0.85rem;
-  min-width: 8rem;
-}
-
-.layout {
-  display: grid;
-  grid-template-columns: 280px 1fr;
   gap: 1rem;
-  max-width: var(--width);
-  margin: 0 auto;
-  padding: 1rem 1.5rem 2rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--line);
 }
+h1 { margin: 0; font-size: 1.25rem; }
+.tag { margin: 0.2rem 0 0; color: var(--muted); }
+.demo-pick { color: var(--muted); display: flex; gap: 0.5rem; align-items: center; }
+select { background: var(--panel); color: var(--ink); border: 1px solid var(--line); padding: 0.35rem 0.5rem; }
 
-.sidebar {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 1rem;
-  height: fit-content;
-  max-height: calc(100vh - 8rem);
-  overflow: auto;
-}
-
-.sidebar h2 {
-  margin: 0 0 0.35rem;
-  font-size: 1.05rem;
-}
-
-.hint {
-  margin: 0 0 0.75rem;
-  color: var(--muted);
-  font-size: 0.8rem;
-}
-
-.task-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.task-card {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--flex);
-  border-radius: 8px;
-  padding: 0.65rem 0.75rem;
-}
-
-.task-card h3 {
-  margin: 0 0 0.35rem;
-  font-size: 0.92rem;
-}
-
-.task-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  font-size: 0.72rem;
-  color: var(--muted);
-}
-
-.pill {
-  background: rgba(167, 139, 250, 0.15);
-  border: 1px solid rgba(167, 139, 250, 0.35);
-  border-radius: 999px;
-  padding: 0.1rem 0.45rem;
-}
-
-.calendar {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.calendar-header {
+.layout { display: grid; grid-template-columns: 1fr 16rem; min-height: calc(100vh - 4.5rem); }
+.calendar { overflow: auto; }
+.week {
   display: grid;
-  grid-template-columns: var(--gutter) repeat(7, 1fr);
-  border-bottom: 1px solid var(--border);
-  background: var(--panel-2);
-  height: var(--header-h);
+  grid-template-columns: 3.5rem repeat(7, minmax(7rem, 1fr));
+  min-width: 60rem;
 }
-
-.day-head {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.82rem;
-  font-weight: 600;
-  border-left: 1px solid var(--border);
-}
-
-.calendar-body {
-  display: grid;
-  grid-template-columns: var(--gutter) 1fr;
-  max-height: calc(100vh - 12rem);
-  overflow: auto;
-}
-
-.time-gutter {
-  position: relative;
-  background: var(--panel);
-}
-
-.time-label {
-  height: var(--hour-h);
-  font-size: 0.7rem;
+.corner, .day-head, .hour {
+  border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  padding: 0.35rem;
   color: var(--muted);
-  text-align: right;
-  padding-right: 0.4rem;
-  border-bottom: 1px solid transparent;
-  transform: translateY(-0.45rem);
+  font-size: 0.75rem;
 }
-
-.grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  position: relative;
-  min-height: calc(17 * var(--hour-h));
-}
-
-.day-col {
-  position: relative;
-  border-left: 1px solid var(--border);
-  background-image: repeating-linear-gradient(
-    to bottom,
-    transparent,
-    transparent calc(var(--hour-h) - 1px),
-    var(--border) calc(var(--hour-h) - 1px),
-    var(--border) var(--hour-h)
-  );
-  min-height: calc(17 * var(--hour-h));
-}
-
+.day-head { position: sticky; top: 0; background: var(--bg); z-index: 1; text-align: center; }
+.hour { text-align: right; }
+.cell { position: relative; height: 2.4rem; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); }
 .block {
   position: absolute;
-  left: 3px;
-  right: 3px;
-  background: var(--locked-bg);
-  border: 1px solid #60a5fa;
-  border-radius: 6px;
+  left: 2px; right: 2px; top: 1px;
+  background: var(--locked);
+  border-radius: 4px;
   padding: 0.2rem 0.35rem;
-  font-size: 0.72rem;
-  line-height: 1.2;
+  font-size: 0.7rem;
   overflow: hidden;
-  color: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  z-index: 2;
 }
 
-.block .title { font-weight: 600; }
-.block .sub { opacity: 0.85; font-size: 0.65rem; }
-
-.footer {
-  max-width: var(--width);
-  margin: 0 auto;
-  padding: 0 1.5rem 1.5rem;
-  color: var(--muted);
-  font-size: 0.8rem;
+.side { border-left: 1px solid var(--line); padding: 1rem; background: var(--panel); }
+.side h2 { margin: 0 0 0.75rem; font-size: 0.95rem; }
+.side ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.side li {
+  background: var(--bg);
+  border-left: 3px solid var(--flex);
+  padding: 0.5rem;
+  font-size: 0.85rem;
 }
+.note { color: var(--muted); font-size: 0.8rem; margin-top: 1rem; }
 
-@media (max-width: 900px) {
+@media (max-width: 800px) {
   .layout { grid-template-columns: 1fr; }
-  .topbar { flex-direction: column; align-items: flex-start; }
+  .side { border-left: 0; border-top: 1px solid var(--line); }
 }
