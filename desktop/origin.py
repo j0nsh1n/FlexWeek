@@ -10,19 +10,22 @@ from __future__ import annotations
 import os
 from urllib.parse import urlsplit
 
-DEFAULT_ORIGIN = "http://127.0.0.1:8000"
+EXAMPLE_ORIGIN = "http://127.0.0.1:8000"
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "testserver"}
 DEFAULT_PORTS = {"http": 80, "https": 443}
 
 
-def resolve_origin(env: dict[str, str] | None = None) -> str:
-    """FLEXWEEK_DESKTOP_ORIGIN, else FLEXWEEK_ORIGIN, else the local default."""
+def configured_origin(env: dict[str, str] | None = None) -> str | None:
+    """A hosted server to use, or None to run the bundled one.
+
+    FLEXWEEK_DESKTOP_ORIGIN wins over FLEXWEEK_ORIGIN. Blank counts as unset.
+    """
     source = os.environ if env is None else env
     for name in ("FLEXWEEK_DESKTOP_ORIGIN", "FLEXWEEK_ORIGIN"):
         value = (source.get(name) or "").strip()
         if value:
             return validate_origin(value)
-    return validate_origin(DEFAULT_ORIGIN)
+    return None
 
 
 def validate_origin(origin: str) -> str:
@@ -30,7 +33,7 @@ def validate_origin(origin: str) -> str:
     trimmed = origin.rstrip("/")
     parsed = urlsplit(trimmed)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.path or parsed.query:
-        raise ValueError(f"{origin!r} must be an http(s) origin without a path, e.g. {DEFAULT_ORIGIN}")
+        raise ValueError(f"{origin!r} must be an http(s) origin without a path, e.g. {EXAMPLE_ORIGIN}")
     if parsed.scheme != "https" and parsed.hostname not in LOCAL_HOSTS:
         raise ValueError(f"{origin!r} is not local, so it must use https")
     return trimmed

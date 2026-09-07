@@ -5,24 +5,29 @@ from __future__ import annotations
 
 import pytest
 
-from desktop.origin import DEFAULT_ORIGIN, is_same_origin, origin_key, resolve_origin, validate_origin
+from desktop.origin import configured_origin, is_same_origin, origin_key, validate_origin
 
 
-def test_default_origin_when_unset() -> None:
-    assert resolve_origin({}) == DEFAULT_ORIGIN
+def test_no_env_means_run_the_bundled_server() -> None:
+    assert configured_origin({}) is None
 
 
 def test_desktop_origin_wins_over_web_origin() -> None:
     env = {"FLEXWEEK_ORIGIN": "https://web.example", "FLEXWEEK_DESKTOP_ORIGIN": "https://app.example"}
-    assert resolve_origin(env) == "https://app.example"
+    assert configured_origin(env) == "https://app.example"
 
 
-def test_blank_env_falls_through_to_default() -> None:
-    assert resolve_origin({"FLEXWEEK_DESKTOP_ORIGIN": "   "}) == DEFAULT_ORIGIN
+def test_blank_env_is_treated_as_unset() -> None:
+    assert configured_origin({"FLEXWEEK_DESKTOP_ORIGIN": "   "}) is None
 
 
 def test_trailing_slash_is_stripped_so_the_origin_header_matches() -> None:
-    assert resolve_origin({"FLEXWEEK_ORIGIN": "https://app.example/"}) == "https://app.example"
+    assert configured_origin({"FLEXWEEK_ORIGIN": "https://app.example/"}) == "https://app.example"
+
+
+def test_a_bad_configured_origin_raises_rather_than_silently_going_local() -> None:
+    with pytest.raises(ValueError):
+        configured_origin({"FLEXWEEK_DESKTOP_ORIGIN": "http://app.example"})
 
 
 @pytest.mark.parametrize(

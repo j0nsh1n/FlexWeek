@@ -130,5 +130,42 @@ does not dirty the tree.
 | 4 | `target=_blank` opens the OS browser | Code in place; not yet exercised against a real link |
 | 5 | Sign-out clears the session | Not yet tested |
 | 6 | Onedir starts with no Python installed | Verified on Linux — runs under `env -i` |
+| 7 | Runs with no separate server (added 2026-09-07) | Verified — the binary itself holds the listening socket on 127.0.0.1, serves `/api/health` 200 and `<title>FlexWeek</title>`, and releases the port on exit |
+| 8 | Writes nothing into its own bundle | Verified — database and cookies land in the user data dir; no file under `dist/FlexWeek/` changed during a run |
 
 Windows is untouched. Only `build_linux.sh` and the Linux checks exist.
+
+---
+
+## 7. Bundled server — scope change 2026-09-07
+
+**This supersedes section 1's "Do not embed a second FastAPI process in v1" and
+settles the last open question in section 5.** The owner asked for an executable
+that does not depend on a server being up. Section 1's reasoning still holds for
+a *second* process; what ships instead is the same FastAPI app running in a
+background thread of the one desktop process.
+
+How it works:
+
+- `desktop/server.py` binds a loopback socket on an ephemeral port **before**
+  the app is built, because the backend pins its CSRF origin check and
+  `TrustedHostMiddleware` to one exact origin — the port has to be known first.
+  uvicorn is then handed the already-bound socket, so there is no
+  pick-a-port-and-hope race.
+- uvicorn runs with `loop="asyncio"` and `http="h11"`: uvloop and httptools are
+  optional native extras and there is no reason to depend on them surviving
+  being frozen.
+- The SQLite database lives next to the browser profile under the user data
+  directory, never inside the read-only application bundle.
+- `frontend/` ships as bundle data, because `backend/app.py` serves it from
+  `<bundle>/frontend`.
+- The window closing stops the server via `aboutToQuit`.
+
+Setting `FLEXWEEK_DESKTOP_ORIGIN` (or `FLEXWEEK_ORIGIN`) still points the window
+at a hosted deployment and skips the bundled server entirely. An invalid value
+is an error rather than a silent fall back to local, so a typo in a hosted
+deployment cannot quietly start serving a different, empty database.
+
+Security posture is unchanged: same origin checks, same CSRF header, same
+cookies. The listener is bound to `127.0.0.1`, so it is not reachable from the
+network.

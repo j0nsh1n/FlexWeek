@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Build the FlexWeek Linux desktop shell (onedir standalone).
 #
-# Produces dist/FlexWeek/FlexWeek — runs without a Python install.
+# Produces dist/FlexWeek/FlexWeek — runs without a Python install and without a
+# separate server: the FastAPI backend is bundled and started in-process.
+# frontend/ ships as data because backend/app.py serves it from <bundle>/frontend.
 # Qt WebEngine cannot be statically linked, so the Chromium libraries ship
 # alongside the binary; --onefile is deliberately not used (see DESKTOP.md).
 #
@@ -26,6 +28,9 @@ rm -rf "$OUT" "$ROOT/build"
     --follow-imports \
     --enable-plugin=pyside6 \
     --include-package=desktop \
+    --include-package=backend \
+    --include-data-dir="$ROOT/frontend"=frontend \
+    --noinclude-data-files='frontend/tests/*' \
     --output-filename=FlexWeek \
     --output-dir="$ROOT/build" \
     --linux-icon="$ROOT/frontend/logo.png" \

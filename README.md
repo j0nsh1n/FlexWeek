@@ -69,11 +69,14 @@ themes. See the [roadmap](roadmap.md) for the separate desktop app, calendar
 interaction port, later design work and contest delivery. Windows/Linux are
 provisional desktop targets; no desktop installer ships yet.
 
-A Linux desktop build exists: a PySide6 `QWebEngineView` shell around the hosted
-web origin. Build it with `pip install -r requirements-desktop.txt` then
-`./desktop/build_linux.sh`, which writes `dist/FlexWeek/FlexWeek`. Set
-`FLEXWEEK_DESKTOP_ORIGIN` to choose the server. Windows and the packaged web
-release come after this one is confirmed. See [DESKTOP.md](DESKTOP.md). Daily Scheduler's Nocturne/Slate colors are adapted from the
+A Linux desktop build exists: a PySide6 `QWebEngineView` window with the FastAPI
+backend bundled inside it. It needs no separate server and no Python install —
+run `dist/FlexWeek/FlexWeek` and it starts its own backend on a loopback port,
+keeping its database next to the browser profile in your user data directory.
+Build it with `pip install -r requirements-desktop.txt` then
+`./desktop/build_linux.sh`. Set `FLEXWEEK_DESKTOP_ORIGIN` to point the window at
+a hosted deployment instead. Windows and the packaged web release come after
+this one is confirmed. See [DESKTOP.md](DESKTOP.md). Daily Scheduler's Nocturne/Slate colors are adapted from the
 GPL-3.0 `Local-Schedule-Assistant` project. AI assistance was used in development,
 including Codex and GLM-5.3 Flash test contribution; the runtime uses no AI service.
 

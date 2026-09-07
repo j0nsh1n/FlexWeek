@@ -1,4 +1,8 @@
-"""FlexWeek desktop shell: one Qt WebEngine window pointed at the hosted app.
+"""FlexWeek desktop app: one Qt WebEngine window over the FlexWeek backend.
+
+By default the backend runs in this process on a loopback port, so the app needs
+nothing else installed or running. Set FLEXWEEK_DESKTOP_ORIGIN (or
+FLEXWEEK_ORIGIN) to use a hosted deployment instead.
 
 Deliberately thin. The page keeps its own login, CSRF headers and cookies, so
 there is no WebChannel, no injected js_api and no cookie access from native
@@ -8,6 +12,7 @@ code. See DESKTOP.md.
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 from PySide6.QtCore import QStandardPaths, QUrl
 from PySide6.QtGui import QDesktopServices
@@ -24,7 +29,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from desktop.origin import is_same_origin, resolve_origin
+from desktop.origin import configured_origin, is_same_origin
+from desktop.server import LocalServer
 
 WINDOW_SIZE = (1280, 800)
 PROFILE_NAME = "flexweek"
@@ -146,11 +152,26 @@ def main(argv: list[str] | None = None) -> int:
     app = QApplication(argv if argv is not None else sys.argv)
     # Application name drives profile_root(); set it before any profile exists.
     app.setApplicationName("FlexWeek")
+
     try:
-        origin = resolve_origin()
+        origin = configured_origin()
     except ValueError as error:
         QMessageBox.critical(None, "FlexWeek configuration", str(error))
         return 2
+
+    if origin is None:
+        # No hosted server named, so run our own. The database lives beside the
+        # browser profile, not inside the read-only application bundle.
+        database = Path(profile_root()) / "flexweek.db"
+        try:
+            database.parent.mkdir(parents=True, exist_ok=True)
+            server = LocalServer(database)
+            origin = server.start()
+        except (OSError, RuntimeError, TimeoutError) as error:
+            QMessageBox.critical(None, "FlexWeek", f"Could not start FlexWeek: {error}")
+            return 3
+        app.aboutToQuit.connect(server.stop)
+
     window = MainWindow(origin)
     window.show()
     window.load_app()

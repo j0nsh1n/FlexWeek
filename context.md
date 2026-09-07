@@ -5,9 +5,12 @@
   `feat/desktop-packaging-recommendation`.
 - Gates: `ruff check .` clean, `mypy desktop backend` clean (19 files),
   `pytest -q` 74 passed (60 backend + 14 desktop), `node --test` 8 passed.
-- The Linux desktop shell is built and runs: `dist/FlexWeek/FlexWeek`, onedir,
-  453 MB with a 33 MB launcher. Confirmed under `env -i` with no Python present:
-  it fetched `/`, the static assets, and `/api/auth/me` from a live server.
+- The Linux desktop app is self-contained as of 2026-09-07: the FastAPI backend
+  runs in a background thread of the desktop process on an ephemeral loopback
+  port, so no separate server is needed. Setting FLEXWEEK_DESKTOP_ORIGIN or
+  FLEXWEEK_ORIGIN still points it at a hosted deployment instead.
+- Source mode verified with no env origin and nothing listening: the app chose
+  its own port, served itself and loaded the page.
 - Session persistence confirmed at source level: register in the window, kill the
   process, reopen with the same profile -> `/api/auth/me` 200; an empty profile
   -> 401.
@@ -22,6 +25,7 @@
 ```
 DESKTOP.md               PySide6 QWebEngineView recommendation + build status
 desktop/origin.py        origin resolution, no Qt imports (unit-tested)
+desktop/server.py        bundled uvicorn on a loopback port, no Qt imports
 desktop/main.py          Qt window, persistent profile, retry panel
 desktop/build_linux.sh   Nuitka standalone build -> dist/FlexWeek/
 backend/app.py           account/session/ownership APIs and static frontend
@@ -34,7 +38,16 @@ SQLite: users → sessions, one current week, one preference row. Desktop v1 is 
 webview of the hosted origin, not a second database.
 
 ## Non-Obvious Decisions
-- Desktop v1 loads the hosted origin; it does not start a local FastAPI.
+- The desktop app bundles the backend and runs it in-process (owner asked for
+  this 2026-09-07). It supersedes DESKTOP.md section 1, which said not to; that
+  section's reasoning was about a *second process*, which this is not.
+- The loopback port is chosen by binding a socket before create_app is called,
+  because the backend pins its CSRF origin check and TrustedHostMiddleware to
+  one exact origin. uvicorn is handed the already-bound socket.
+- uvicorn runs with loop="asyncio" and http="h11" so the build does not depend
+  on uvloop/httptools surviving being frozen.
+- An invalid FLEXWEEK_*_ORIGIN is an error, not a silent fall back to local:
+  a typo must not quietly open a different, empty database.
 - The Qt profile is parented to the QApplication, not the window: parenting it to
   the window makes Qt warn "Release of profile requested but WebEnginePage still
   not deleted" and can crash on close.
@@ -50,10 +63,11 @@ webview of the hosted origin, not a second database.
 - License file is GPL-3.0. Qt for Python is LGPLv3/GPLv2/commercial.
 
 ## Session Handoff
-- 2026-09-07, branch `feat/desktop-linux-shell`: built the first Linux desktop
-  executable (PySide6 QWebEngineView shell + Nuitka standalone), added
-  `desktop/` with 14 unit tests, `requirements-desktop.txt`, and the build
-  script. Fixed a pre-existing ruff SIM110 so the branch passes its own gate.
-  Nothing pushed.
+- 2026-09-07, branch `feat/desktop-linux-shell`: built the Linux desktop
+  executable, then made it self-contained by bundling the backend in-process.
+  `desktop/` now holds origin.py, server.py, main.py, build_linux.sh and 20
+  tests. Nothing pushed.
 - Next: exercise external links and in-page sign-out against the built binary,
-  then the Windows build. The open audit findings are unaddressed.
+  then the Windows build. spec.md still describes desktop delivery without the
+  bundled server and needs owner approval to update. The three audit findings
+  from 2026-09-07 are still open.
