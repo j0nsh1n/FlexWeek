@@ -18,6 +18,8 @@ All notable changes to FlexWeek are documented here. Format follows
   due/course pills on flexible tasks.
 
 ### Changed
+- 2026-09-06: Revise the post-Phase-3 roadmap for accounts, app/web delivery,
+  Daily Scheduler interactions and themes, with design and audits deferred.
 - Week grid colors follow the logo (paper gray, lime, dark teal) instead of a
   generic dark dashboard.
 - Slot starts are the half-open range `[06:00, 23:00)`; `23:00` is not a legal

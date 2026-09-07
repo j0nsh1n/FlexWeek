@@ -18,16 +18,9 @@ Open http://127.0.0.1:8000
 
 ## Phases
 
-Work the checklist in [PHASES.md](PHASES.md). You are in **Phase 1** until the week grid shows both demo students and slot tests pass.
-
-| Phase | Dates | Goal |
-|---|---|---|
-| 1 Skeleton | Sep 6–12 | Models, demos, grid |
-| 2 Solver | Sep 13–19 | CSP v1 |
-| 3 App | Sep 20–26 | Add/edit + Solve |
-| 4 Must-ship | Sep 27–Oct 3 | Priority, energy, why |
-| 5 Cascade | Oct 4–10 | Miss → reshuffle |
-| 6 Contest | Oct 11–17 | Freeze, README, deploy |
-| 7 Submit | Oct 18–25 | Video + CAC form |
+Phase 3 is complete. The [revised roadmap](roadmap.md) plans account-based app
+and web delivery, Daily Scheduler interactions and dark mode. Accounts and
+installed-app delivery are planned; the current runnable version still uses
+browser storage and sample weeks.
 
 Submit by Sunday, October 25, 2026, 8:00 p.m. PDT.

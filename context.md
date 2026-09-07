@@ -1,18 +1,21 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-06. Branch `feat/phase-3-usable` off `feat/phase-2-solver`.
+- Date: 2026-09-06. Branch `docs/app-web-roadmap` off `feat/phase-3-usable`.
 - Phase 3 code exit is green locally: `pytest -q` 40 passed. Browser: new week
   → add locked school + homework → Solve → refresh still shows that week.
   Garbage in localStorage reloads Alex instead of crashing. Duration 10 is
   rejected in the form and as HTTP 422 on `POST /api/solve`.
+- Roadmap-only validation: 40 tests passed; mypy passed (11 source files);
+  git diff --check passed. Ruff reports existing I001 in backend/app.py and
+  SIM110 in backend/solver.py. No application changes or audits performed.
 - Known gaps:
   - Partner bug list (Phase 3), break-it cases (Phase 2), interviews (Phase 1).
   - CAC registration and congressional district confirmation.
   - `spec.md` still describes the dataclass / 501-stub skeleton and was not
     edited.
-  - Untracked on purpose: `agents.md`, `reslot-cac-build-plan.md`, `spec.md`,
-    `ruff.toml`, `Github Templates/`.
+  - Existing untracked files: `agents.md`, `reslot-cac-build-plan.md`,
+    `ruff.toml`, `Github Templates/`. spec.md adopted unchanged into version control.
 
 ## Repo Landmarks
 ```
@@ -45,9 +48,13 @@ TimeBlock
 - Duration 10 is stopped twice: the number input's step=15, and JS before save.
   The API still 422s if something bypasses the form.
 - `httpx` is in requirements.txt so FastAPI's TestClient can run API tests.
-- License file is GPL-3.0. PHASES.md Phase 6 still says MIT.
+- License file is GPL-3.0. PHASES.md now links to the revised roadmap.
 
 ## Session Handoff
-- 2026-09-06, branch `feat/phase-3-usable`: forms, localStorage, 422 on bad
-  duration, T8 corrupt-storage reset. 40 tests green.
-- Next: Phase 4 priority/energy explain panel, or partner unsupervised tests.
+- 2026-09-06, `docs/app-web-roadmap`: revised Phase 4–7 and prepared a concrete
+  account/theme first-slice proposal. Phase 3 complete per owner; audits deferred.
+- Application code and spec content unchanged. Next: approve the roadmap's
+  first-slice contract/spec update. Owner selected desktop app plus web app;
+  Windows/Linux are provisional desktop targets.
+- Daily Scheduler source found at ../Local-Schedule-Assistant; ../LitSieve has
+  no application source. Existing spec conflicts are listed in roadmap.md.

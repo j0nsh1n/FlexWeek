@@ -2,8 +2,7 @@
 
 Congressional App Challenge 2026. Submit **Sunday, Oct 25, 2026, 8:00 p.m. PDT**
 (hard deadline Monday, Oct 26, 9:00 a.m. PDT). Phases map to build weeks; a
-phase may span several small PRs. "Complete when" conditions are verified
-locally (tests pass, feature works).
+phase may span several implementation slices.
 
 ## Phase 1 — Skeleton (Sep 6–12, 2026)
 - Tasks:
@@ -44,83 +43,167 @@ locally (tests pass, feature works).
   - Partner: build a week from scratch; 10-row bug list; 8 realistic assignments
 - Complete when: a new user can create, solve, refresh, and still see the week
   without the author's help.
-- Status: [~] Code exit green 2026-09-06 (40 tests, create/solve/refresh and
+- Status: [x] Complete per owner 2026-09-06 (40 tests, create/solve/refresh and
   corrupt-storage reset verified in the browser). Open: partner bug list.
 
-## Phase 4 — Must-ship complete (Sep 27–Oct 3, 2026)
-- Tasks:
-  - Priority and energy on the model and in search order
-  - Explain panel: moves + failed constraints, using partner copy per reason code
-  - Click a move → highlight that block
-  - Test: last good slot, test vs. reading → reading unplaced, `PRIORITY_PREEMPT`
-  - Partner: 5 classmates test for 10 minutes unsupervised; keep 3 quotes
-- Complete when: the storyboard runs end to end — load demo → solve → click
-  unplaced → read the why. **Feature freeze Oct 3.**
+## Revised scope — 2026-09-06
+
+Phase 3 is complete per the project owner. Earlier partner tasks remain recorded
+above as outstanding non-code work. The next work expands FlexWeek into an
+account-based app and web app, with Daily Scheduler's calendar interactions and
+Nocturne dark appearance. Visual redesign and auditing are deferred.
+
+Daily Scheduler reference: `../Local-Schedule-Assistant`, specifically
+`views.py`, `dialogs.py`, `mainwindow.py`, `core.py`, and `theme.py`.
+Its Qt widgets need browser equivalents; the existing FlexWeek solver remains
+the scheduling engine. `../LitSieve` currently contains no application source,
+so an authentication comparison is unavailable.
+
+The phases below replace the old Phase 4–7 scope. Dates are planning targets;
+the larger scope makes the previous Oct 3 feature-freeze target obsolete.
+The owner selected a separate desktop application plus web app. Windows/Linux
+are provisional desktop targets, matching Daily Scheduler. A shared web UI in a
+desktop shell is proposed; shell selection follows compatibility testing.
+
+## Phase 4 — Accounts and shared persistence (next)
+- Registration, sign-in, sign-out, and session restoration.
+- New accounts start with an empty week; account screens replace the demo picker.
+- Server-side, account-owned schedules replace anonymous browser persistence.
+- Explicit import of an existing browser week into the signed-in account;
+  successful import is repeatable without duplicating blocks.
+- Basic protection: password hashing, expiring/revocable sessions, protected
+  schedule and solve endpoints, ownership checks, CSRF protection, login
+  throttling, bounded input, and secure production cookies.
+- Daily Scheduler's Nocturne palette and Slate alternative, with a saved theme
+  preference; functional layout first, visual redesign later.
+- Completion target: two accounts can independently create, solve, save, and
+  reload their weeks; sign-out removes the previous user's schedule from view.
+- Status: [~] Scope and first-slice proposal prepared 2026-09-06; code pending.
+
+## Phase 5 — Daily Scheduler interaction port and app delivery
+- Separate desktop packaging plus browser delivery, sharing the web UI and
+  account backend where practical; Windows/Linux are provisional targets.
+- Day/week/month/year navigation, previous/next and Today controls.
+- Drag empty space to create, drag to move, edge resize, click to edit,
+  context-menu actions, and equivalent form/keyboard/touch controls.
+- Colored activity categories, copy/paste, duplicate/copy day, undo/redo.
+- Recurring activities with explicit single-occurrence versus series edits.
+- Export/import and completion state, followed by reminders where supported.
+- Calendar dates and week selection added before cross-week editing; the
+  existing day-index solver receives an adapter for the selected week.
+- Completion target: the same account's saved changes appear in both clients;
+  edits preserve valid times and show save errors without discarding work.
 - Status: [ ]
 
-## Phase 5 — Cascade + slack, or polish (Oct 4–10, 2026)
-- Go / no-go Monday Oct 4: if Phase 4 is red, polish only and skip these.
-- Tasks:
-  - "I missed this block" → re-solve → list diffs
-  - Deadline slack hours with ok / tight / danger badges; sleep never stolen
-  - Partner: time the 90-second demo around the miss-and-ripple beat
-- Complete when: the video beat works — miss → ripple → reasons.
+## Phase 6 — Scheduling explanations, later design and hardening
+- Priority and energy controls, explanation panel, click reason to highlight.
+  The model already has priority/energy fields; remaining behavior is checked
+  against the actual solver when this slice begins.
+- Missed-block rescheduling, change list, and slack indicators.
+- Dedicated UI design revision after the interaction port.
+- Later security hardening, recovery flows, accessibility review and audits.
+- Deployment preparation: persistent database storage, backup/restore and
+  client compatibility checks, account-based onboarding instructions.
+- Completion target: a signed-in user creates a week, solves it, understands
+  unplaced work, and recovers from a missed block in both clients.
 - Status: [ ]
 
-## Phase 6 — Contest surface (Oct 11–17, 2026)
-- **Hard feature freeze Sunday Oct 11, 6:00 p.m.**
-- Tasks:
-  - Keyboard access, contrast, reduced-motion, empty states
-  - Deploy to Render; README a judge can follow; both names on the README;
-    disclose AI assistance
-  - Test Safari on an iPhone once
-  - Partner: final script and B-roll
-- Complete when: a public URL loads the app and the README walks a judge through it.
+## Phase 7 — Contest delivery (target Oct 18–25)
+- Release bug fixes, app distribution and hosted web URL.
+- README with account setup, both contributors and AI-assistance disclosure.
+- Contest recording using an account-created schedule, plus submission form.
+  This recording is separate from the removed product demo mode.
+- Completion target: submission on Oct 25 evening, 2026.
 - Status: [ ]
 
-## Phase 7 — Ship (Oct 18–25, 2026)
-- Tasks:
-  - Bugfixes only
-  - 90-second demo video, filmed and edited
-  - CAC submission form
-- Complete when: submitted the evening of Oct 25, 2026.
-- Status: [ ]
+## First implementation slice — proposed contract
 
-## Kill list if a week slips
-| Behind after | Cut |
-|---|---|
-| Phase 2 | Energy (keep priority only) |
-| Phase 3 | Drag-and-drop, forever |
-| Phase 4 | Phase 5 cascade + slack |
-| Phase 5 | Grade-impact overlay, TypeScript rewrite, SQL |
-| Phase 6 | All code except crash fixes |
+### Goal and user stories
+1. As a student, I want an account so my schedule belongs to me across clients.
+2. As a student, I want an empty starting week and reliable saves so I can plan
+   my own work without sample schedules replacing it.
+3. As a student, I want Daily Scheduler's dark theme so the planner feels familiar.
 
-## Test matrix (run T1–T8 on every change after Phase 2)
-| ID | Case | Expect |
-|---|---|---|
-| T1 | Only locked school | Identity schedule, 0 moves |
-| T2 | One homework, plenty of room | Placed, energy-matched if possible |
-| T3 | Test vs. reading, one slot | Test placed, reading unplaced, `PRIORITY_PREEMPT` |
-| T4 | 6h homework, 2h free | Unplaced remainder, `NO_SLOT_LEFT` |
-| T5 | Deadline before school ends | Unplaced, `DEADLINE_MISS` |
-| T6 | Sport overlaps homework | Homework domain excludes sport |
-| T7 | Packed fixture | `solve_ms < 150` |
-| T8 | Corrupt storage | Reset to demo |
-| T9 | Miss locked sport (Phase 5) | Downstream flexible moves; sleep intact |
-| T10 | Slack danger (Phase 5) | 0 float → danger |
+### Acceptance criteria
+1. Given a new visitor, when they open FlexWeek, then they see sign-in and
+   registration; protected APIs return 401 without a valid session.
+2. Given valid registration details, when registration succeeds, then the
+   student enters an empty week with clear add-block and add-task actions.
+3. Given an existing account or invalid/oversized input, when registration is
+   submitted, then a safe error is shown and no partial account is created.
+4. Given a signed-in account, when a valid week is saved and the page reloads,
+   then the same week is returned from that account's server-side storage.
+5. Given two accounts, when either reads, saves, imports, or solves a week,
+   then the other account's stored data cannot be accessed or overwritten.
+6. Given expired or revoked credentials, when a request is made, then it fails
+   with 401 and the client returns to sign-in without exposing cached data.
+7. Given a save in another tab, when a stale save arrives, then it returns 409
+   and offers reload/retry rather than silently overwriting newer work.
+8. Given an old browser week, when its owner chooses import, then it is validated
+   and saved once; retries do not duplicate blocks. Corrupt input shows a
+   recovery message and never loads a demo or overwrites a saved account week.
+9. Given the theme setting, when Nocturne or Slate is selected and reloaded,
+   then the selected theme persists for that account.
+10. Given an empty week or invalid duration, when Solve is pressed, then empty
+    input returns an empty trace and non-15-minute durations return validation
+    errors; existing overlap, sleep, deadline, and timeout behavior is retained.
+11. Given a timeout or failed save, when the response fails, then the client
+    preserves unsaved edits and clearly distinguishes them from saved work.
 
-## Backlog (unscheduled)
-- Grade-impact overlay as a priority input (stretch; only if Phase 5 finishes by
-  Oct 10)
-- PWA `manifest.json` (Phase 6 only, optional)
-- SQLite instead of JSON files (optional, only if JSON becomes painful)
-- TypeScript for the UI (optional, only if JS gets messy after Phase 3)
-- ICS import (post-contest idea; not OAuth)
-- Better duration estimates from past completions
-- CI: install `Github Templates/ci.yml` and `codeql.yml` into `.github/workflows/`
-  (needs a ruff config decision first — see context.md)
+### Data and interface impact
+- Proposed SQLite tables: users (unique normalized username, password hash),
+  sessions (hashed opaque token, user, expiry), weeks (user, blocks JSON,
+  revision), and preferences (user, theme). Foreign keys and unique ownership
+  constraints link data; writes are transactional. No database exists today.
+- Initial scope is one current week per account using the existing `TimeBlock`
+  payload. Dated multi-week storage is a separate Phase 5 migration.
+- Proposed endpoints: POST `/api/auth/register`, `/api/auth/login`,
+  `/api/auth/logout`; GET `/api/auth/me`; GET/PUT `/api/week`;
+  GET/PUT `/api/preferences`. Saves carry an expected revision.
+- POST `/api/solve` keeps its current payload/trace shape but requires a session.
+  Demo endpoints and demo-loading UI leave the product; seed JSON can remain
+  solely as test fixtures.
+- Passwords use a maintained password-hashing implementation; sessions use
+  HttpOnly, SameSite cookies with Secure in production and server revocation.
+  CSRF/origin checks protect writes; SQL queries are parameterized. No password,
+  token, or schedule contents enter logs. Final dependency choice/pin follows
+  compatibility verification before implementation.
+- Screens: register/login, account identity/logout, empty planner, theme control,
+  import prompt, loading/saving/saved/error states. No background jobs initially;
+  expired sessions are rejected at request time and cleaned periodically.
+- Production storage includes the account database and backups; account deletion
+  and retention policy are part of the later hardening scope before public release.
 
-## Out of scope (cut before Phase 1)
-LLM chat, Google Calendar OAuth, accounts, native iOS/Android, Electron or .exe,
-time-estimation learning, shared/team CRDT, payments, live AI as the product,
-Java/Swift/C++/Kotlin/PHP/Ruby, Dependabot.
+### Edge cases
+- Empty and oversized usernames/passwords/week payloads; duplicate usernames;
+  double-submit registration and import; atomic rollback on database failure.
+- Expired session during edits, logout in another tab, cross-account browser
+  reuse, stale revisions, offline/retry and server restart persistence.
+- Existing anonymous data stays local until explicit import; invalid data is
+  recoverable without sample-data fallback. Private API responses are not cached
+  by a future service worker.
+- Existing local day-index/time model stays intact for this slice. Calendar-date,
+  midnight, recurrence, and daylight-saving boundaries belong to Phase 5's
+  date-model work, before month/year navigation or cross-week drag is shipped.
+
+### Deferred scope and open decisions
+- First slice excludes desktop packaging, drag editing, recurrence, reminders,
+  advanced security, audits, visual redesign, performance rewrites and unrelated
+  refactors. These first-slice exclusions do not remove later roadmap work.
+- AI chat/Ollama and Google Calendar OAuth are not part of the proposed port;
+  native mobile store builds, payments and shared team schedules remain outside
+  the proposed scope.
+- Confirmed: separate desktop app plus web app (owner, 2026-09-06); provisional
+  Windows/Linux targets match Daily Scheduler.
+- Open decision: approve this first-slice contract and corresponding spec.md
+  update. Proposed default: username/password accounts and SQLite on the existing
+  Python/FastAPI backend, with no demo mode.
+
+## Existing spec drift to reconcile on approval
+- Accounts, storage, installed-app delivery, demo-free onboarding and expanded
+  interactions replace the old explicit exclusions.
+- Existing code uses Pydantic models and HH:MM/day indices, has a working solver,
+  and serves `/api/demos/{name}` only; the spec still describes dataclasses,
+  datetime strings, a solver stub and a demo-list endpoint.
+- requirements.txt uses version ranges despite the spec's pinned-version list;
+  dependency reconciliation is pending implementation, not silently assumed done.
