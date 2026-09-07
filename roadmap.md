@@ -199,8 +199,8 @@ desktop shell is proposed; shell selection follows compatibility testing.
   Windows/Linux targets match Daily Scheduler.
 - Approved: username/password accounts and SQLite on the existing Python/FastAPI
   backend, with no demo mode; spec.md updated to match.
-- Desktop shell selection remains open; grok-desktop-prompt.md contains a focused
-  prompt for an independent packaging recommendation.
+- Desktop shell recommendation (2026-09-07): PySide6 QWebEngineView loading the
+  hosted origin; see DESKTOP.md. Installer implementation remains Phase 5.
 
 ## Spec reconciliation — 2026-09-07
 - Accounts, storage, installed-app delivery, demo-free onboarding and expanded

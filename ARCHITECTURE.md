@@ -44,6 +44,6 @@ Dated multi-week navigation is a future data-model migration.
 
 ## Next client
 
-The planned separate desktop application will share the hosted account backend
-and, where practical, the web UI. Windows/Linux are provisional targets. Shell
-selection and installer builds are pending; there is no native bridge today.
+The planned separate desktop application is a PySide6 QWebEngineView window that
+loads the hosted origin and shares the web UI and account cookies. Windows/Linux
+are provisional targets. There is no native JavaScript bridge. See DESKTOP.md.

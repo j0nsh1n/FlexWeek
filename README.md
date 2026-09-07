@@ -69,8 +69,8 @@ themes. See the [roadmap](roadmap.md) for the separate desktop app, calendar
 interaction port, later design work and contest delivery. Windows/Linux are
 provisional desktop targets; no desktop installer ships yet.
 
-The [Grok prompt](grok-desktop-prompt.md) scopes an independent desktop packaging
-recommendation. Daily Scheduler's Nocturne/Slate colors are adapted from the
+Desktop packaging recommendation: a PySide6 `QWebEngineView` shell around the
+hosted web origin. See [DESKTOP.md](DESKTOP.md). Daily Scheduler's Nocturne/Slate colors are adapted from the
 GPL-3.0 `Local-Schedule-Assistant` project. AI assistance was used in development,
 including Codex and GLM-5.3 Flash test contribution; the runtime uses no AI service.
 
