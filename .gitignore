@@ -14,3 +14,9 @@ var/
 *.db
 *.db-shm
 *.db-wal
+
+# Desktop build output
+dist/
+desktop/deployment/
+build/
+desktop/pysidedeploy.spec

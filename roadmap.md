@@ -95,7 +95,9 @@ desktop shell is proposed; shell selection follows compatibility testing.
   existing day-index solver receives an adapter for the selected week.
 - Completion target: the same account's saved changes appear in both clients;
   edits preserve valid times and show save errors without discarding work.
-- Status: [ ]
+- Status: [~] Linux desktop shell built and running 2026-09-07
+  (`dist/FlexWeek/FlexWeek`). Windows build and the calendar interaction port
+  are still outstanding.
 
 ## Phase 6 — Scheduling explanations, later design and hardening
 - Priority and energy controls, explanation panel, click reason to highlight.

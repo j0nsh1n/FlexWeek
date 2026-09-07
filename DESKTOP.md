@@ -85,3 +85,50 @@ reopening the app restores the session until the seven-day cookie expiry.
   be a pywebview revisit, not this slice).
 - Code signing / SmartScreen and Linux package format (AppImage vs .deb).
 - Whether a future slice bundles a local server; v1 should not.
+
+---
+
+## 6. Linux build — implemented 2026-09-07
+
+The recommendation above is now built. Verified on this machine: PySide6 6.11.2
+(`cp310-abi3` wheels, so the stable ABI covers Python 3.14.7), Nuitka 4.2.1,
+patchelf 0.19.1, GCC 16.2.1.
+
+```bash
+pip install -r requirements-desktop.txt
+./desktop/build_linux.sh          # -> dist/FlexWeek/FlexWeek
+```
+
+Point it at a server with `FLEXWEEK_DESKTOP_ORIGIN`, falling back to
+`FLEXWEEK_ORIGIN`, then `http://127.0.0.1:8000`.
+
+**Layout**
+
+- `desktop/origin.py` — origin resolution and the same-origin test. No Qt
+  imports, so it is unit-tested without the 1 GB dependency.
+- `desktop/main.py` — `QApplication`, one persistent `QWebEngineProfile`, one
+  `QWebEngineView`, the native retry panel, and the external-link handling.
+- `desktop/build_linux.sh` — the build.
+
+**Deviation from section 1:** Nuitka is invoked directly rather than through
+`pyside6-deploy`. The wrapper rewrites its own `pysidedeploy.spec` with absolute
+machine paths on every run, so a committed spec does not survive. `pyside6-deploy`
+only shells out to `python -m nuitka` anyway; the script keeps the plugin list the
+wrapper computed. `pysidedeploy.spec` is gitignored so running the wrapper by hand
+does not dirty the tree.
+
+**Artifact:** onedir, ~390 MB (Chromium), with a ~33 MB launcher binary. Not
+`--onefile`, per section 2.
+
+### Checklist status (section 4)
+
+| # | Test | Status |
+|---|---|---|
+| 1 | Window opens the configured origin | Verified — page title `FlexWeek` |
+| 2 | Login survives a restart | Verified — register in-window, kill, reopen: `/api/auth/me` returns the account; an empty profile returns 401 |
+| 3 | Bad origin shows Retry | Verified — dead port switches to the native panel |
+| 4 | `target=_blank` opens the OS browser | Code in place; not yet exercised against a real link |
+| 5 | Sign-out clears the session | Not yet tested |
+| 6 | Onedir starts with no Python installed | Verified on Linux — runs under `env -i` |
+
+Windows is untouched. Only `build_linux.sh` and the Linux checks exist.

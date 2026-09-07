@@ -6,6 +6,10 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Linux desktop app: a PySide6 web-engine window around the hosted FlexWeek
+  origin, with a persistent profile so a sign-in survives restarting the app, a
+  native retry screen when the server is unreachable, and external links opening
+  in the system browser. Build with `desktop/build_linux.sh`.
 - Desktop packaging recommendation: PySide6 web-engine shell around the hosted
   app (`DESKTOP.md`).
 - 2026-09-07: Username/password accounts, expiring sessions, account-owned SQLite
