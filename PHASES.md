@@ -11,11 +11,11 @@ Do not start Phase N+1 until the exit test for Phase N is green, except as the k
 
 **You**
 
-- [ ] `backend/models.py` matches demo JSON
-- [ ] Slot helpers: 15-min grid, 6:00–23:00, `overlaps`
-- [ ] `GET /api/demos/alex` and `/jordan`
-- [ ] Week grid paints locked blocks; flexible list in the sidebar
-- [ ] `pytest` ≥10 tests on slot math
+- [x] `backend/models.py` matches demo JSON
+- [x] Slot helpers: 15-min grid, 6:00–23:00, `overlaps`
+- [x] `GET /api/demos/alex` and `/jordan`
+- [x] Week grid paints locked blocks; flexible list in the sidebar
+- [x] `pytest` ≥10 tests on slot math
 
 **Partner**
 
@@ -24,7 +24,7 @@ Do not start Phase N+1 until the exit test for Phase N is green, except as the k
 
 **Exit:** `uvicorn` shows both demos. `pytest` passes. No solver yet.
 
-**This commit already includes a skeleton.** Finish by replacing demo data with partner calendars and tightening the grid CSS.
+Code side of the exit is green (2026-09-06): partner calendars in the demo JSON, grid CSS tightened, logo in the topbar. Partner checkboxes still open.
 
 ---
 

@@ -34,6 +34,13 @@ def test_rejects_before_day_start() -> None:
         hhmm_to_slot("05:45")
 
 
+def test_rejects_day_end_as_start() -> None:
+    with pytest.raises(ValueError):
+        hhmm_to_slot("23:00")
+    with pytest.raises(ValueError):
+        slot_to_hhmm(SLOTS_PER_DAY)
+
+
 def test_rejects_bad_hhmm() -> None:
     with pytest.raises(ValueError):
         hhmm_to_minutes("8")

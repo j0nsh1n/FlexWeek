@@ -4,21 +4,29 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>FlexWeek</title>
+  <link rel="icon" href="/static/favicon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/static/logo.png">
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
   <header class="top">
-    <div>
-      <h1>FlexWeek</h1>
-      <p class="tag">Places homework around school and sports, then explains why something moved.</p>
+    <div class="brand">
+      <img class="logo" src="/static/logo.png" width="48" height="48" alt="">
+      <div>
+        <h1>FlexWeek</h1>
+        <p class="tag">Places homework around school and sports, then explains why something moved.</p>
+      </div>
     </div>
-    <label class="demo-pick">
-      Demo
-      <select id="demo">
-        <option value="alex">Alex</option>
-        <option value="jordan">Jordan</option>
-      </select>
-    </label>
+    <div class="controls">
+      <label class="demo-pick">
+        Demo
+        <select id="demo" aria-label="Choose demo student">
+          <option value="alex">Alex</option>
+          <option value="jordan">Jordan</option>
+        </select>
+      </label>
+      <span id="status" class="status" role="status"></span>
+    </div>
   </header>
 
   <main class="layout">
@@ -26,11 +34,12 @@
       <div class="week" id="week"></div>
     </section>
     <aside class="side">
-      <h2>Flexible</h2>
+      <h2>Flexible tasks</h2>
+      <p class="note">Not placed yet. The solver arrives in Phase 2.</p>
       <ul id="flexible"></ul>
-      <p class="note">Phase 1: locked blocks on the grid. Solver lands in Phase 2.</p>
     </aside>
   </main>
+  <footer class="foot">Congressional App Challenge 2026 · GPL-3.0</footer>
   <script src="/static/app.js"></script>
 </body>
 </html>

@@ -24,7 +24,8 @@ def minutes_to_hhmm(minutes: int) -> str:
 
 
 def minutes_to_slot(minutes: int) -> int:
-    if minutes < DAY_START_MIN or minutes > DAY_END_MIN:
+    # Grid is half-open [06:00, 23:00); 23:00 is the end of the last slot, not a start.
+    if minutes < DAY_START_MIN or minutes >= DAY_END_MIN:
         raise ValueError("time is outside 06:00–23:00")
     offset = minutes - DAY_START_MIN
     if offset % SLOT_MIN:
@@ -37,7 +38,7 @@ def hhmm_to_slot(hhmm: str) -> int:
 
 
 def slot_to_hhmm(slot: int) -> str:
-    if slot < 0 or slot > SLOTS_PER_DAY:
+    if slot < 0 or slot >= SLOTS_PER_DAY:
         raise ValueError("slot out of range")
     return minutes_to_hhmm(DAY_START_MIN + slot * SLOT_MIN)
 

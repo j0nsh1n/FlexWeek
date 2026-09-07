@@ -4,3 +4,7 @@ __pycache__/
 .env
 *.pyc
 .DS_Store
+
+# local-only agent notes
+notes.md
+*.bak-*
