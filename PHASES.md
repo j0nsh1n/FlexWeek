@@ -50,10 +50,10 @@ Code side of the exit is green (2026-09-06): partner calendars in the demo JSON,
 
 **You**
 
-- [ ] Add locked / add flexible forms
-- [ ] `POST /api/solve`
-- [ ] `localStorage` for last week; corrupt data resets to a demo
-- [ ] Duration must be a multiple of 15 in the form and in Pydantic
+- [x] Add locked / add flexible forms
+- [x] `POST /api/solve`
+- [x] `localStorage` for last week; corrupt data resets to a demo
+- [x] Duration must be a multiple of 15 in the form and in Pydantic
 
 **Partner**
 

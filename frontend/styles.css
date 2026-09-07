@@ -15,6 +15,9 @@
 
 * { box-sizing: border-box; }
 
+/* Author display:flex on forms wins over the hidden attribute otherwise. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   background: var(--bg);
@@ -89,7 +92,7 @@ select {
 
 .layout {
   display: grid;
-  grid-template-columns: 1fr 18rem;
+  grid-template-columns: 1fr 20rem;
   min-height: calc(100vh - 6.5rem);
 }
 
@@ -158,6 +161,7 @@ select {
 
 .block .title { font-weight: 600; }
 .block .sub { opacity: 0.8; font-size: 0.65rem; }
+.block { cursor: pointer; }
 
 .flex-block {
   background: #3d5c18;
@@ -172,6 +176,103 @@ button {
   padding: 0.4rem 0.85rem;
   font: inherit;
   font-weight: 600;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+
+button.danger {
+  background: #7a1f1f;
+  color: #fff;
+}
+
+.editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.85rem;
+}
+
+.editor-actions button {
+  padding: 0.35rem 0.55rem;
+  font-size: 0.8rem;
+}
+
+.block-form {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.block-form h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.block-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.block-form input[type="text"],
+.block-form input[type="number"],
+.block-form select {
+  font: inherit;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.35rem 0.45rem;
+}
+
+.days {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.55rem;
+}
+
+.days legend {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+
+.days label {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--ink);
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.25rem;
+}
+
+.form-error {
+  margin: 0;
+  color: #9b1c1c;
+  font-size: 0.8rem;
+}
+
+.task-card {
   cursor: pointer;
 }
 

@@ -6,6 +6,8 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Add / edit / delete forms for locked blocks and flexible tasks.
+- Last week saved in the browser; a corrupt save resets to a demo.
 - Constraint solver: backtracking with MRV and forward checking, 150 ms cap.
 - Solve button and a debug panel (`solve_ms`, placed count, unplaced titles).
 - Placed flexible tasks painted on the week grid.

@@ -35,6 +35,85 @@
       <div class="week" id="week"></div>
     </section>
     <aside class="side">
+      <div class="editor-actions">
+        <button type="button" id="add-locked">Add locked</button>
+        <button type="button" id="add-flexible">Add task</button>
+        <button type="button" id="new-week" class="secondary">New week</button>
+      </div>
+
+      <form id="block-form" class="block-form" hidden>
+        <h2 id="form-heading">Add locked</h2>
+        <p id="form-error" class="form-error" role="alert" hidden></p>
+        <input type="hidden" id="f-id" />
+        <input type="hidden" id="f-kind" />
+
+        <label>Title
+          <input id="f-title" type="text" required maxlength="80" />
+        </label>
+        <label>Course
+          <input id="f-course" type="text" maxlength="40" />
+        </label>
+        <label>Duration (minutes)
+          <input id="f-duration" type="number" min="15" step="15" required />
+        </label>
+
+        <fieldset class="days">
+          <legend>Days</legend>
+          <label><input type="checkbox" name="f-day" value="0" /> Mon</label>
+          <label><input type="checkbox" name="f-day" value="1" /> Tue</label>
+          <label><input type="checkbox" name="f-day" value="2" /> Wed</label>
+          <label><input type="checkbox" name="f-day" value="3" /> Thu</label>
+          <label><input type="checkbox" name="f-day" value="4" /> Fri</label>
+          <label><input type="checkbox" name="f-day" value="5" /> Sat</label>
+          <label><input type="checkbox" name="f-day" value="6" /> Sun</label>
+        </fieldset>
+
+        <div id="f-locked-fields">
+          <label>Start
+            <select id="f-start"></select>
+          </label>
+        </div>
+
+        <div id="f-flex-fields" hidden>
+          <label>Priority
+            <select id="f-priority">
+              <option value="1">Test</option>
+              <option value="2">Quiz</option>
+              <option value="3" selected>Homework</option>
+              <option value="4">Reading</option>
+            </select>
+          </label>
+          <label>Energy
+            <select id="f-energy">
+              <option value="high">High (morning)</option>
+              <option value="medium" selected>Medium (afternoon)</option>
+              <option value="low">Low (evening)</option>
+            </select>
+          </label>
+          <label>Due day
+            <select id="f-due-day">
+              <option value="">None</option>
+              <option value="0">Monday</option>
+              <option value="1">Tuesday</option>
+              <option value="2">Wednesday</option>
+              <option value="3">Thursday</option>
+              <option value="4">Friday</option>
+              <option value="5">Saturday</option>
+              <option value="6">Sunday</option>
+            </select>
+          </label>
+          <label>Due time
+            <select id="f-due-time"></select>
+          </label>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit">Save</button>
+          <button type="button" id="form-cancel" class="secondary">Cancel</button>
+          <button type="button" id="form-delete" class="danger" hidden>Delete</button>
+        </div>
+      </form>
+
       <h2>Flexible tasks</h2>
       <p class="note" id="flex-note">Press Solve to place these around school and sports.</p>
       <ul id="flexible"></ul>

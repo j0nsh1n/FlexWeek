@@ -44,7 +44,8 @@ locally (tests pass, feature works).
   - Partner: build a week from scratch; 10-row bug list; 8 realistic assignments
 - Complete when: a new user can create, solve, refresh, and still see the week
   without the author's help.
-- Status: [ ]
+- Status: [~] Code exit green 2026-09-06 (40 tests, create/solve/refresh and
+  corrupt-storage reset verified in the browser). Open: partner bug list.
 
 ## Phase 4 — Must-ship complete (Sep 27–Oct 3, 2026)
 - Tasks:
