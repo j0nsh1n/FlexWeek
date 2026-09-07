@@ -31,7 +31,8 @@ locally (tests pass, feature works).
   - Partner: three break-it cases on paper, then in the app
 - Complete when: 20 fixture tests green; the packed fixture solves or fails with
   `NO_SLOT_LEFT` under 150 ms and never hangs.
-- Status: [ ]
+- Status: [~] Code exit green 2026-09-06 (37 tests, packed and both demos
+  under 150 ms). Open: partner break-it cases.
 
 ## Phase 3 — Usable app (Sep 20–26, 2026)
 - Tasks:

@@ -25,6 +25,7 @@
           <option value="jordan">Jordan</option>
         </select>
       </label>
+      <button type="button" id="solve">Solve</button>
       <span id="status" class="status" role="status"></span>
     </div>
   </header>
@@ -35,8 +36,13 @@
     </section>
     <aside class="side">
       <h2>Flexible tasks</h2>
-      <p class="note">Not placed yet. The solver arrives in Phase 2.</p>
+      <p class="note" id="flex-note">Press Solve to place these around school and sports.</p>
       <ul id="flexible"></ul>
+      <section id="debug" class="debug" hidden>
+        <h2>Debug</h2>
+        <p id="debug-stats"></p>
+        <ul id="debug-unplaced"></ul>
+      </section>
     </aside>
   </main>
   <footer class="foot">Congressional App Challenge 2026 · GPL-3.0</footer>

@@ -6,6 +6,9 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Constraint solver: backtracking with MRV and forward checking, 150 ms cap.
+- Solve button and a debug panel (`solve_ms`, placed count, unplaced titles).
+- Placed flexible tasks painted on the week grid.
 - App logo and favicon, cropped from `FlexWeek.png` (lime phone + dumbbell).
 - Partner-style demo weeks: Alex and Jordan each have 4 locked blocks and 8
   flexible tasks.

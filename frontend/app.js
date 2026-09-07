@@ -7,6 +7,13 @@ const weekEl = document.getElementById("week");
 const flexibleEl = document.getElementById("flexible");
 const demoEl = document.getElementById("demo");
 const statusEl = document.getElementById("status");
+const solveEl = document.getElementById("solve");
+const debugEl = document.getElementById("debug");
+const debugStatsEl = document.getElementById("debug-stats");
+const debugUnplacedEl = document.getElementById("debug-unplaced");
+const flexNoteEl = document.getElementById("flex-note");
+
+let currentBlocks = [];
 
 function hourRange() {
   const hours = [];
@@ -65,7 +72,7 @@ function buildGrid(blocks) {
   const visibleEnd = END_HOUR * 60;
   const visibleStart = START_HOUR * 60;
 
-  blocks.filter((b) => b.kind === "locked" && b.start).forEach((block) => {
+  blocks.filter((b) => b.start).forEach((block) => {
     block.days.forEach((day) => {
       const startMin = parseStart(block.start);
       const endMin = Math.min(visibleEnd, startMin + (block.duration_min || 0));
@@ -78,7 +85,7 @@ function buildGrid(blocks) {
 
       const offsetMin = clippedStart - topHour * 60;
       const el = document.createElement("div");
-      el.className = "block";
+      el.className = "block" + (block.kind === "flexible" ? " flex-block" : "");
       el.style.top = `${(offsetMin / 60) * hourH}rem`;
       el.style.height = `${Math.max(((endMin - clippedStart) / 60) * hourH, 1.1)}rem`;
       el.title = block.title + (block.course ? " · " + block.course : "");
@@ -97,11 +104,14 @@ function buildGrid(blocks) {
     });
   });
 
+  renderFlexible(blocks.filter((b) => b.kind === "flexible" && !b.start));
+}
+
+function renderFlexible(flex) {
   flexibleEl.innerHTML = "";
-  const flex = blocks.filter((b) => b.kind === "flexible");
   if (!flex.length) {
     const empty = document.createElement("li");
-    empty.textContent = "No flexible tasks in this demo.";
+    empty.textContent = "None unplaced.";
     flexibleEl.appendChild(empty);
     return;
   }
@@ -133,22 +143,84 @@ function buildGrid(blocks) {
   });
 }
 
+function renderDebug(trace) {
+  debugEl.hidden = false;
+  const placedFlex = (trace.placed || []).filter((b) => b.kind === "flexible").length;
+  debugStatsEl.textContent =
+    "solve_ms " +
+    Number(trace.solve_ms).toFixed(1) +
+    " · placed " +
+    placedFlex +
+    " · unplaced " +
+    (trace.unplaced || []).length +
+    (trace.complete ? " · complete" : " · incomplete");
+  debugUnplacedEl.innerHTML = "";
+  const reasonById = {};
+  (trace.moves || []).forEach((move) => {
+    reasonById[move.block_id] = move.reason;
+  });
+  (trace.unplaced || []).forEach((block) => {
+    const li = document.createElement("li");
+    li.textContent = block.title + (reasonById[block.id] ? " · " + reasonById[block.id] : "");
+    debugUnplacedEl.appendChild(li);
+  });
+  if (!(trace.unplaced || []).length) {
+    const li = document.createElement("li");
+    li.textContent = "All flexible tasks placed.";
+    debugUnplacedEl.appendChild(li);
+  }
+}
+
 async function loadDemo(name) {
   setStatus("Loading…");
+  debugEl.hidden = true;
+  flexNoteEl.textContent = "Press Solve to place these around school and sports.";
   try {
     const res = await fetch(`/api/demos/${name}`);
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
-    const blocks = data.blocks || [];
-    buildGrid(blocks);
-    const locked = blocks.filter((b) => b.kind === "locked").length;
-    const flex = blocks.filter((b) => b.kind === "flexible").length;
+    currentBlocks = data.blocks || [];
+    buildGrid(currentBlocks);
+    const locked = currentBlocks.filter((b) => b.kind === "locked").length;
+    const flex = currentBlocks.filter((b) => b.kind === "flexible").length;
     setStatus(name + " · " + locked + " locked, " + flex + " flexible");
   } catch (err) {
     console.error(err);
+    currentBlocks = [];
     setStatus("Failed to load demos");
   }
 }
 
+async function solveWeek() {
+  if (!currentBlocks.length) {
+    setStatus("Load a demo first");
+    return;
+  }
+  setStatus("Solving…");
+  try {
+    const res = await fetch("/api/solve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ blocks: currentBlocks }),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const trace = await res.json();
+    buildGrid(trace.placed || []);
+    renderFlexible(trace.unplaced || []);
+    renderDebug(trace);
+    flexNoteEl.textContent = (trace.unplaced || []).length
+      ? "Unplaced after Solve — reasons in Debug."
+      : "All flexible tasks are on the grid.";
+    const placedFlex = (trace.placed || []).filter((b) => b.kind === "flexible").length;
+    setStatus(
+      "placed " + placedFlex + " · unplaced " + (trace.unplaced || []).length + " · " + Number(trace.solve_ms).toFixed(1) + " ms"
+    );
+  } catch (err) {
+    console.error(err);
+    setStatus("Solve failed");
+  }
+}
+
 demoEl.addEventListener("change", () => loadDemo(demoEl.value));
+solveEl.addEventListener("click", () => solveWeek());
 loadDemo(demoEl.value);

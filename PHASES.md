@@ -32,11 +32,11 @@ Code side of the exit is green (2026-09-06): partner calendars in the demo JSON,
 
 **You**
 
-- [ ] `solve(blocks) -> SolveTrace` in `backend/solver.py`
-- [ ] Backtracking + MRV + forward checking
-- [ ] 150 ms cap; never hang
-- [ ] Fixtures: empty, packed, impossible, paper-due-tomorrow
-- [ ] Debug panel: `solve_ms`, placed, unplaced
+- [x] `solve(blocks) -> SolveTrace` in `backend/solver.py`
+- [x] Backtracking + MRV + forward checking
+- [x] 150 ms cap; never hang
+- [x] Fixtures: empty, packed, impossible, paper-due-tomorrow
+- [x] Debug panel: `solve_ms`, placed, unplaced
 
 **Partner**
 
