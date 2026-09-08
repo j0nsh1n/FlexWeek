@@ -235,9 +235,14 @@ test('previous, next and Today open the expected Monday and render what came bac
     asked.push(path);
     return response(200, { week_start: weekOf(path), blocks: [{ ...task, id: 'lab', title: 'Science' }], revision: 4 });
   });
+  h.elements.get('debug').hidden = false;
+  h.elements.get('flex-note').textContent = 'Unplaced after Solve — reasons below.';
   await h.elements.get('week-prev').listeners.click();
   assert.equal(h.run('selectedWeek'), '2026-08-31');
   assert.equal(h.run('weekState().revision'), 4);
+  // A solve describes the week it ran on, so it must not follow the reader.
+  assert.equal(h.elements.get('debug').hidden, true);
+  assert.equal(h.elements.get('flex-note').textContent, 'Press Solve to place these around school and sports.');
   assert.equal(h.run('weekState().blocks[0].title'), 'Science');
   assert.equal(h.elements.get('week-label').textContent, 'Week of Aug 31, 2026');
   await h.elements.get('week-next').listeners.click();

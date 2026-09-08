@@ -395,7 +395,9 @@ function showWeek(weekStart) {
   selectedWeek = weekStart;
   const state = weekState();
   closeForm();
+  // The debug panel and the note under it describe the week being left.
   debugEl.hidden = true;
+  flexNoteEl.textContent = "Press Solve to place these around school and sports.";
   saveActions.hidden = !state.dirty;
   document.getElementById("retry-save").disabled = state.conflict;
   renderWeekNav();
