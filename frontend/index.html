@@ -53,6 +53,13 @@
   </section>
   <main class="layout" id="planner" hidden>
     <section class="calendar" aria-label="Week calendar">
+      <div class="week-nav">
+        <button type="button" id="week-prev" class="secondary">Previous</button>
+        <button type="button" id="week-today" class="secondary">Today</button>
+        <button type="button" id="week-next" class="secondary">Next</button>
+        <strong id="week-label" class="week-label"></strong>
+        <label>Saved weeks <select id="week-jump"></select></label>
+      </div>
       <div class="week" id="week"></div>
     </section>
     <aside class="side">
