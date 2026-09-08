@@ -33,17 +33,33 @@ CREATE TABLE weeks (
 `revision` is per week, not per account. Two weeks of the same account have
 independent revisions.
 
+Registration no longer inserts a `weeks` row. `backend/app.py` currently runs
+`INSERT INTO weeks(user_id) VALUES (?)` when an account is created; under this
+key that statement has no `week_start` and fails, breaking every registration.
+Delete it. A missing row already means an empty week, so nothing replaces it.
+The `preferences` insert beside it stays.
+
 ### Migration
 
-The old table was `weeks(user_id PRIMARY KEY, blocks, revision)`. `initialize()`
-runs on every start, so the migration must be idempotent and must never lose a
-row:
+The old table is `weeks(user_id INTEGER PRIMARY KEY REFERENCES users(id),
+blocks TEXT, revision INTEGER)`. `initialize()` runs on every start, so the
+migration must be idempotent and must never lose a row:
 
-1. If `weeks` has no `week_start` column, rename it to `weeks_legacy`.
+1. If `weeks` **exists and** has no `week_start` column, rename it to
+   `weeks_legacy`. The existence check is not optional: on a fresh database
+   `PRAGMA table_info('weeks')` returns no rows, so "has no week_start column"
+   is trivially true, and `ALTER TABLE weeks RENAME` then raises
+   `OperationalError: no such table: weeks` on every first start.
 2. Create the new `weeks`.
 3. Copy every legacy row with `week_start` = the Monday of the date the
    migration runs, preserving `blocks` and `revision`.
-4. Drop `weeks_legacy` only after the copy succeeds, in the same transaction.
+4. Drop `weeks_legacy` only after the copy succeeds.
+
+Steps 1 to 4 run as explicit statements inside one `BEGIN IMMEDIATE` ...
+`COMMIT`. They must **not** go in the existing `executescript` call:
+`executescript` issues an implicit `COMMIT` first, so it cannot hold this in one
+transaction, and a crash between the rename and the create would leave a
+database with `weeks_legacy` and no `weeks`, failing every later request.
 
 Running twice is a no-op. An account with no legacy row needs no work.
 
@@ -56,7 +72,12 @@ The server only defaults when the parameter is absent.
 |---|---|---|
 | GET | `/api/week?week_start=YYYY-MM-DD` | That week for the signed-in account |
 | GET | `/api/week` | The week containing the server's local today |
+| GET | `/api/weeks` | `{"week_start": [...]}`, ascending, the account's saved weeks |
 | PUT | `/api/week` | Save; `week_start` is required in the body |
+
+`/api/weeks` exists so the client can navigate to weeks it did not know about.
+Without it, a migrated account whose data was stamped with an earlier Monday
+would open on an empty current week with nothing pointing at the real one.
 
 A week that has never been saved is **not** a 404. `GET` returns it empty so the
 client needs no create-or-fetch dance:
@@ -82,9 +103,21 @@ Existing behavior is unchanged except where `week_start` is involved.
 | Case | Status |
 |---|---|
 | `week_start` missing on PUT, malformed, or not a Monday | 422 |
+| `week_start` on GET malformed, not a Monday, or out of range | 422 |
 | `week_start` outside 2000-01-01..2099-12-31 | 422 |
 | `revision` does not match the stored revision for that week | 409 |
 | Identical blocks re-saved | 200, revision unchanged, no new row |
+| PUT for a never-saved week with `revision` == 0 | 200, row created at revision 1 |
+| PUT for a never-saved week with any other `revision` | 409 |
+
+GET validates `week_start` the same way PUT does rather than snapping it with
+`monday_of`, for the reason below: a client and a server that disagree about
+which week is open must fail loudly.
+
+**Order matters.** The identical-blocks short-circuit runs *before* the revision
+check, which is what the code does today (`backend/app.py`) and what
+`test_account_edges.py` pins. Re-saving identical blocks with a stale revision
+returns 200, not 409. Implementing this table top to bottom would invert it.
 
 Rejecting a non-Monday is deliberate. Silently snapping to Monday would let two
 clients disagree about which week they are editing while both believe they
@@ -109,6 +142,28 @@ Qt imports, matching the existing rule that `models.py` imports no framework:
 The frontend needs the same four operations. It reimplements them in `app.js`
 because there is no build step and no shared module, so both sides must agree
 on Monday-based weeks. Frontend tests assert the same cases as the Python tests.
+
+The client's per-week state moves with the week. `app.js` today holds one global
+`revision`, plus `dirty`, `conflict` and `suspendedDraft` that all assume a
+single week. Each belongs to the week it came from, and a PUT sends the
+`week_start` of the week actually on screen. A client that keeps one global
+revision cannot hold two weeks and will save one week's edits over another.
+
+## Test impact
+
+This is a breaking API change and the existing suite records the old shape.
+Both sides update their own tests in the same change:
+
+- Backend: every exact-equality assertion on a `/api/week` response gains
+  `week_start` (`test_accounts.py` has several, including
+  `== {"blocks": [], "revision": 0}`), and every existing PUT body gains
+  `week_start` or it now 422s. `test_accounts.py` and `test_account_edges.py`
+  are both affected.
+- Frontend: `accounts.test.mjs` stubs `/api/week` responses and asserts on
+  `revision`, so its stubs gain `week_start`.
+
+Update the expected values. Do not weaken an exact-equality assertion into a
+subset check to make it pass.
 
 ## Out of scope
 
