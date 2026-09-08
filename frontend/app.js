@@ -1,5 +1,6 @@
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const DAY_FULL = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const START_HOUR = 6;
 const END_HOUR = 23;
 const PRIORITY_LABEL = { 1: "test", 2: "quiz", 3: "homework", 4: "reading" };
@@ -22,8 +23,6 @@ const flexFieldsEl = document.getElementById("f-flex-fields");
 const startEl = document.getElementById("f-start");
 const dueTimeEl = document.getElementById("f-due-time");
 
-let currentBlocks = [];
-
 function hourRange() {
   const hours = [];
   for (let hour = START_HOUR; hour < END_HOUR; hour += 1) hours.push(hour);
@@ -32,6 +31,66 @@ function hourRange() {
 
 function pad(n) {
   return String(n).padStart(2, "0");
+}
+
+// A week_start is a calendar label, not an instant. `new Date("2026-09-07")`
+// reads the string as UTC and lands on the day before west of Greenwich, so
+// every helper below builds and reads dates through explicit numeric parts.
+function parseDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value));
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return date;
+}
+
+function isoDate(date) {
+  return date.getUTCFullYear() + "-" + pad(date.getUTCMonth() + 1) + "-" + pad(date.getUTCDate());
+}
+
+function mondayOf(value) {
+  const date = parseDate(value);
+  if (!date) return "";
+  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
+  return isoDate(date);
+}
+
+function currentWeekStart() {
+  const now = new Date();
+  return mondayOf(now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate()));
+}
+
+function isWeekStart(value) {
+  const date = parseDate(value);
+  if (!date) return false;
+  const year = date.getUTCFullYear();
+  return date.getUTCDay() === 1 && year >= 2000 && year <= 2099;
+}
+
+function dateForDay(weekStart, dayIndex) {
+  const date = parseDate(weekStart);
+  if (!date || !Number.isInteger(dayIndex) || dayIndex < 0 || dayIndex > 6) return "";
+  date.setUTCDate(date.getUTCDate() + dayIndex);
+  return isoDate(date);
+}
+
+function shiftWeek(weekStart, weeksAhead) {
+  const date = parseDate(weekStart);
+  if (!date) return "";
+  date.setUTCDate(date.getUTCDate() + weeksAhead * 7);
+  return isoDate(date);
+}
+
+function shortDate(value) {
+  const date = parseDate(value);
+  return date ? MONTHS[date.getUTCMonth()] + " " + date.getUTCDate() : "";
+}
+
+function weekLabel(weekStart) {
+  return "Week of " + shortDate(weekStart) + ", " + String(weekStart).slice(0, 4);
 }
 
 function parseStart(start) {
@@ -109,16 +168,36 @@ function readWeek() {
 }
 
 let account = null;
-let revision = 0;
 let epoch = 0;
-let dirty = false;
-let conflict = false;
 let saving = false;
 let suspendedDraft = null;
+
+// One record per week, keyed by its Monday. Blocks, revision, unsaved edits and
+// a conflict all belong to the week they came from: a single global revision
+// would let a save carry one week's blocks under another week's number.
+const weeks = new Map();
+let selectedWeek = currentWeekStart();
+let savedWeeks = [];
+
+function weekState(weekStart = selectedWeek) {
+  let state = weeks.get(weekStart);
+  if (!state) {
+    state = { blocks: [], revision: 0, dirty: false, conflict: false };
+    weeks.set(weekStart, state);
+  }
+  return state;
+}
+
+function dirtyWeeks() {
+  return Array.from(weeks.keys()).filter(function (weekStart) { return weeks.get(weekStart).dirty; });
+}
+
 const authPanel = document.getElementById("auth-panel");
 const planner = document.getElementById("planner");
 const saveActions = document.getElementById("save-actions");
 const themeEl = document.getElementById("theme");
+const weekLabelEl = document.getElementById("week-label");
+const weekJumpEl = document.getElementById("week-jump");
 const channel = typeof BroadcastChannel === "function" ? new BroadcastChannel("flexweek.session") : null;
 
 function lockEditor(locked) {
@@ -128,15 +207,19 @@ function lockEditor(locked) {
 }
 
 function signedOut(message = "Sign in to open your week.", preserve = true) {
-  if (preserve && account && dirty) {
-    suspendedDraft = { userId: account.id, blocks: structuredClone(currentBlocks), revision };
+  const pending = account ? dirtyWeeks() : [];
+  if (preserve && pending.length) {
+    suspendedDraft = { userId: account.id, weeks: pending.map(function (weekStart) {
+      const state = weekState(weekStart);
+      return { weekStart: weekStart, blocks: structuredClone(state.blocks), revision: state.revision };
+    }) };
   }
   epoch += 1;
   account = null;
-  currentBlocks = [];
-  dirty = false;
+  weeks.clear();
+  savedWeeks = [];
+  selectedWeek = currentWeekStart();
   saving = false;
-  conflict = false;
   weekEl.replaceChildren();
   flexibleEl.replaceChildren();
   debugStatsEl.textContent = "";
@@ -187,9 +270,13 @@ async function api(path, options = {}, protectedRequest = true) {
 
 async function saveWeek() {
   if (!account || saving) return false;
-  dirty = true;
+  // The week on screen when the save starts owns this request, so a response
+  // that lands later cannot be applied to a different week.
+  const weekStart = selectedWeek;
+  const state = weekState(weekStart);
+  state.dirty = true;
   saveActions.hidden = false;
-  if (conflict) {
+  if (state.conflict) {
     setStatus("Unsaved changes. Download your draft, then reload the newer saved week.");
     return false;
   }
@@ -199,23 +286,26 @@ async function saveWeek() {
   document.getElementById("retry-save").disabled = true;
   setStatus("Saving…");
   try {
-    const data = await api("/api/week", { method: "PUT", body: JSON.stringify({ blocks: currentBlocks, revision }) });
+    const data = await api("/api/week", { method: "PUT", body: JSON.stringify({
+      week_start: weekStart, blocks: state.blocks, revision: state.revision,
+    }) });
     if (saveEpoch !== epoch) return false;
-    revision = data.revision;
-    dirty = false;
+    state.revision = data.revision;
+    state.dirty = false;
     saveActions.hidden = true;
+    rememberSavedWeek(weekStart);
     setStatus("Saved · " + weekSummary());
     return true;
   } catch (error) {
     if (saveEpoch !== epoch) return false;
-    conflict = error.status === 409;
+    state.conflict = error.status === 409;
     setStatus("Not saved. " + error.message);
     return false;
   } finally {
     if (saveEpoch === epoch) {
       saving = false;
       lockEditor(false);
-      document.getElementById("retry-save").disabled = conflict;
+      document.getElementById("retry-save").disabled = state.conflict;
     }
   }
 }
@@ -224,17 +314,27 @@ async function loadAccount(identity) {
   epoch += 1;
   const loadEpoch = epoch;
   account = identity;
+  const asked = currentWeekStart();
   try {
-    const [week, preferences] = await Promise.all([api("/api/week"), api("/api/preferences")]);
+    const [week, saved, preferences] = await Promise.all([
+      api("/api/week?week_start=" + asked), api("/api/weeks"), api("/api/preferences"),
+    ]);
     if (loadEpoch !== epoch) return;
-    currentBlocks = week.blocks;
-    revision = week.revision;
-    dirty = false;
-    conflict = false;
+    weeks.clear();
+    savedWeeks = Array.isArray(saved.week_start) ? saved.week_start.slice() : [];
+    selectedWeek = isWeekStart(week.week_start) ? week.week_start : asked;
+    const state = weekState();
+    state.blocks = week.blocks;
+    state.revision = week.revision;
     if (suspendedDraft && suspendedDraft.userId === account.id) {
-      currentBlocks = suspendedDraft.blocks;
-      conflict = suspendedDraft.revision !== revision;
-      dirty = true;
+      suspendedDraft.weeks.forEach(function (draft) {
+        const target = weekState(draft.weekStart);
+        target.blocks = draft.blocks;
+        // Only the week just fetched has a known server revision to compare.
+        target.conflict = draft.weekStart === selectedWeek && draft.revision !== target.revision;
+        target.revision = draft.revision;
+        target.dirty = true;
+      });
     }
     suspendedDraft = null;
     themeEl.value = preferences.theme;
@@ -243,11 +343,12 @@ async function loadAccount(identity) {
     planner.hidden = false;
     document.getElementById("account-controls").hidden = false;
     document.getElementById("account-name").textContent = identity.username;
-    saveActions.hidden = !dirty;
-    document.getElementById("retry-save").disabled = conflict;
+    saveActions.hidden = !state.dirty;
+    document.getElementById("retry-save").disabled = state.conflict;
     lockEditor(false);
+    renderWeekNav();
     renderWeek();
-    setStatus(dirty ? "Unsaved edits restored. " + (conflict ? "Download your draft and reload the newer week." : "Press Retry save.") : "Saved · " + weekSummary());
+    setStatus(state.dirty ? "Unsaved edits restored. " + (state.conflict ? "Download your draft and reload the newer week." : "Press Retry save.") : weekStatus());
     try {
       document.getElementById("import-panel").hidden = !localStorage.getItem(STORAGE_KEY);
     } catch { document.getElementById("import-panel").hidden = true; }
@@ -256,18 +357,99 @@ async function loadAccount(identity) {
   }
 }
 
+function rememberSavedWeek(weekStart) {
+  if (savedWeeks.indexOf(weekStart) !== -1) return;
+  savedWeeks = savedWeeks.concat([weekStart]).sort();
+  renderWeekNav();
+}
+
+function renderWeekNav() {
+  weekLabelEl.textContent = weekLabel(selectedWeek);
+  // A week holding unsaved edits is not saved on the server yet, so list it too
+  // or the only way back to it would be the arrows.
+  const listed = savedWeeks.concat([selectedWeek], dirtyWeeks()).filter(function (weekStart, index, all) {
+    return all.indexOf(weekStart) === index;
+  }).sort();
+  weekJumpEl.innerHTML = "";
+  listed.forEach(function (weekStart) {
+    const option = document.createElement("option");
+    option.value = weekStart;
+    option.textContent = weekLabel(weekStart);
+    weekJumpEl.appendChild(option);
+  });
+  weekJumpEl.value = selectedWeek;
+}
+
+function weekStatus() {
+  const state = weekState();
+  const stranded = dirtyWeeks().filter(function (weekStart) { return weekStart !== selectedWeek; });
+  const note = stranded.length ? " · Unsaved edits kept in " + stranded.map(shortDate).join(", ") : "";
+  if (state.dirty) return "Unsaved edits in this week. Press Retry save." + note;
+  if (!state.blocks.length && savedWeeks.length && savedWeeks.indexOf(selectedWeek) === -1) {
+    return "This week is empty. Your saved weeks are in the list." + note;
+  }
+  return "Saved · " + weekSummary() + note;
+}
+
+function showWeek(weekStart) {
+  selectedWeek = weekStart;
+  const state = weekState();
+  closeForm();
+  debugEl.hidden = true;
+  saveActions.hidden = !state.dirty;
+  document.getElementById("retry-save").disabled = state.conflict;
+  renderWeekNav();
+  renderWeek();
+  setStatus(weekStatus());
+}
+
+async function selectWeek(weekStart) {
+  if (!account || saving || weekStart === selectedWeek) return;
+  if (!isWeekStart(weekStart)) {
+    setStatus("That is not a Monday, so it cannot open as a week.");
+    return;
+  }
+  const known = weeks.get(weekStart);
+  // Refetching a week that holds unsaved edits would overwrite them.
+  if (known && known.dirty) {
+    showWeek(weekStart);
+    return;
+  }
+  const selectEpoch = epoch;
+  saving = true;
+  lockEditor(true);
+  setStatus("Opening " + weekLabel(weekStart) + "…");
+  try {
+    const data = await api("/api/week?week_start=" + weekStart);
+    if (selectEpoch !== epoch) return;
+    const opened = isWeekStart(data.week_start) ? data.week_start : weekStart;
+    const state = weekState(opened);
+    state.blocks = data.blocks;
+    state.revision = data.revision;
+    state.dirty = false;
+    state.conflict = false;
+    showWeek(opened);
+  } catch (error) {
+    // The week did not change, so put the picker back on the one still shown.
+    if (selectEpoch === epoch) { renderWeekNav(); setStatus("Could not open that week. " + error.message); }
+  } finally {
+    if (selectEpoch === epoch) { saving = false; lockEditor(false); }
+  }
+}
+
 function newId() {
   return "b-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6);
 }
 
 function weekSummary() {
-  const locked = currentBlocks.filter(function (b) { return b.kind === "locked"; }).length;
-  const flex = currentBlocks.filter(function (b) { return b.kind === "flexible"; }).length;
+  const blocks = weekState().blocks;
+  const locked = blocks.filter(function (b) { return b.kind === "locked"; }).length;
+  const flex = blocks.filter(function (b) { return b.kind === "flexible"; }).length;
   return locked + " locked, " + flex + " flexible";
 }
 
 function renderWeek() {
-  buildGrid(currentBlocks);
+  buildGrid(weekState().blocks);
 }
 
 function buildGrid(blocks) {
@@ -275,10 +457,16 @@ function buildGrid(blocks) {
   const corner = document.createElement("div");
   corner.className = "corner";
   weekEl.appendChild(corner);
-  DAYS.forEach((day) => {
+  DAYS.forEach((day, index) => {
     const head = document.createElement("div");
     head.className = "day-head";
-    head.textContent = day;
+    const name = document.createElement("span");
+    name.textContent = day;
+    head.appendChild(name);
+    const date = document.createElement("span");
+    date.className = "day-date";
+    date.textContent = shortDate(dateForDay(selectedWeek, index));
+    head.appendChild(date);
     weekEl.appendChild(head);
   });
 
@@ -333,7 +521,7 @@ function buildGrid(blocks) {
 
       el.addEventListener("click", function (event) {
         event.stopPropagation();
-        const source = currentBlocks.find(function (item) { return item.id === block.id; });
+        const source = weekState().blocks.find(function (item) { return item.id === block.id; });
         if (source) openForm(source.kind, source);
       });
 
@@ -379,7 +567,7 @@ function renderFlexible(flex) {
 
     li.appendChild(pills);
     li.addEventListener("click", function () {
-      const source = currentBlocks.find(function (item) { return item.id === block.id; });
+      const source = weekState().blocks.find(function (item) { return item.id === block.id; });
       if (source) openForm(source.kind, source);
     });
     flexibleEl.appendChild(li);
@@ -512,7 +700,8 @@ formEl.addEventListener("submit", function (event) {
   }
 
   const id = document.getElementById("f-id").value || newId();
-  const existing = currentBlocks.findIndex(function (item) { return item.id === id; });
+  const blocks = weekState().blocks;
+  const existing = blocks.findIndex(function (item) { return item.id === id; });
   const block = {
     id: id,
     title: title,
@@ -534,8 +723,8 @@ formEl.addEventListener("submit", function (event) {
     }
   }
 
-  if (existing >= 0) currentBlocks[existing] = block;
-  else currentBlocks.push(block);
+  if (existing >= 0) blocks[existing] = block;
+  else blocks.push(block);
 
   closeForm();
   debugEl.hidden = true;
@@ -549,7 +738,8 @@ document.getElementById("form-cancel").addEventListener("click", closeForm);
 formDeleteEl.addEventListener("click", function () {
   if (!account || saving) return;
   const id = document.getElementById("f-id").value;
-  currentBlocks = currentBlocks.filter(function (item) { return item.id !== id; });
+  const state = weekState();
+  state.blocks = state.blocks.filter(function (item) { return item.id !== id; });
   closeForm();
   debugEl.hidden = true;
   saveWeek();
@@ -563,8 +753,8 @@ document.getElementById("add-flexible").addEventListener("click", function () {
   openForm("flexible", null);
 });
 document.getElementById("new-week").addEventListener("click", function () {
-  if (!account || saving || !confirm("Clear your current week? This will be saved to your account.")) return;
-  currentBlocks = [];
+  if (!account || saving || !confirm("Clear " + weekLabel(selectedWeek) + "? This will be saved to your account.")) return;
+  weekState().blocks = [];
   closeForm();
   debugEl.hidden = true;
   flexNoteEl.textContent = "Add locked school or sports, then homework as tasks.";
@@ -579,13 +769,13 @@ async function solveWeek() {
   lockEditor(true);
   setStatus("Solving…");
   try {
-    const trace = await api("/api/solve", { method: "POST", body: JSON.stringify({ blocks: currentBlocks }) });
+    const trace = await api("/api/solve", { method: "POST", body: JSON.stringify({ blocks: weekState().blocks }) });
     if (solveEpoch !== epoch) return;
     buildGrid(trace.placed || []);
     renderFlexible(trace.unplaced || []);
     renderDebug(trace);
     flexNoteEl.textContent = trace.unplaced.length ? "Unplaced after Solve — reasons below." : "All flexible tasks are on the grid.";
-    setStatus((dirty ? "Unsaved week · " : "Saved week · ") + trace.placed.filter(b => b.kind === "flexible").length + " tasks placed");
+    setStatus((weekState().dirty ? "Unsaved week · " : "Saved week · ") + trace.placed.filter(b => b.kind === "flexible").length + " tasks placed");
   } catch (error) {
     if (solveEpoch === epoch) setStatus("Solve failed. " + error.message);
   } finally {
@@ -614,7 +804,7 @@ document.getElementById("auth-form").addEventListener("submit", async event => {
 });
 
 document.getElementById("logout").addEventListener("click", async () => {
-  if (saving || (dirty && !confirm("Sign out and discard unsaved changes? Download the draft first if you need it."))) return;
+  if (saving || (dirtyWeeks().length && !confirm("Sign out and discard unsaved changes? Download the draft first if you need it."))) return;
   const logoutEpoch = epoch;
   try {
     await api("/api/auth/logout", { method: "POST" });
@@ -643,17 +833,19 @@ themeEl.addEventListener("change", async () => {
 
 document.getElementById("retry-save").addEventListener("click", saveWeek);
 document.getElementById("reload-week").addEventListener("click", async () => {
-  if (saving || !account || (dirty && !confirm("Discard unsaved edits and reload the saved week?"))) return;
+  if (saving || !account || (weekState().dirty && !confirm("Discard unsaved edits and reload the saved week?"))) return;
   const reloadEpoch = epoch;
+  const weekStart = selectedWeek;
   saving = true;
   lockEditor(true);
   try {
-    const data = await api("/api/week");
+    const data = await api("/api/week?week_start=" + weekStart);
     if (reloadEpoch !== epoch) return;
-    currentBlocks = data.blocks;
-    revision = data.revision;
-    dirty = false;
-    conflict = false;
+    const state = weekState(weekStart);
+    state.blocks = data.blocks;
+    state.revision = data.revision;
+    state.dirty = false;
+    state.conflict = false;
     saveActions.hidden = true;
     closeForm();
     debugEl.hidden = true;
@@ -664,10 +856,11 @@ document.getElementById("reload-week").addEventListener("click", async () => {
 });
 document.getElementById("download-draft").addEventListener("click", () => {
   if (!account) return;
-  const url = URL.createObjectURL(new Blob([JSON.stringify({ blocks: currentBlocks }, null, 2)], { type: "application/json" }));
+  const draft = { week_start: selectedWeek, blocks: weekState().blocks };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(draft, null, 2)], { type: "application/json" }));
   const link = document.createElement("a");
   link.href = url;
-  link.download = "flexweek-unsaved.json";
+  link.download = "flexweek-unsaved-" + selectedWeek + ".json";
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
@@ -679,8 +872,8 @@ document.getElementById("import-week").addEventListener("click", async () => {
     importStatus.textContent = "The browser week is invalid. It has been left untouched; your saved week is unchanged.";
     return;
   }
-  if (!confirm("Import this device's old week into your account, replacing the current week?")) return;
-  currentBlocks = blocks;
+  if (!confirm("Import this device's old week into your account, replacing " + weekLabel(selectedWeek) + "?")) return;
+  weekState().blocks = blocks;
   closeForm();
   debugEl.hidden = true;
   renderWeek();
@@ -701,7 +894,7 @@ async function reconnect() {
 }
 document.getElementById("reconnect").addEventListener("click", reconnect);
 window.addEventListener("beforeunload", event => {
-  if (dirty) { event.preventDefault(); event.returnValue = ""; }
+  if (dirtyWeeks().length) { event.preventDefault(); event.returnValue = ""; }
 });
 window.addEventListener("pageshow", event => { if (event.persisted) { signedOut(); reconnect(); } });
 document.addEventListener("visibilitychange", async () => {
@@ -709,6 +902,10 @@ document.addEventListener("visibilitychange", async () => {
   try { await api("/api/auth/me"); } catch { /* Session expiry is handled by api. */ }
 });
 solveEl.addEventListener("click", solveWeek);
+document.getElementById("week-prev").addEventListener("click", () => selectWeek(shiftWeek(selectedWeek, -1)));
+document.getElementById("week-next").addEventListener("click", () => selectWeek(shiftWeek(selectedWeek, 1)));
+document.getElementById("week-today").addEventListener("click", () => selectWeek(currentWeekStart()));
+weekJumpEl.addEventListener("change", () => selectWeek(weekJumpEl.value));
 fillTimeSelect(startEl, false);
 fillTimeSelect(dueTimeEl, true);
 reconnect();
