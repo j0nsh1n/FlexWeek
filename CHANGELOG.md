@@ -11,6 +11,13 @@ All notable changes to FlexWeek are documented here. Format follows
 - Desktop users can save an unsaved draft through a native file dialog.
 
 ### Added
+- Dated weeks. Your schedule is now kept per calendar week instead of as one
+  rolling week, with Previous, Next and Today controls, the date shown on each
+  day header, and a picker listing the weeks you have saved. Each week keeps
+  its own unsaved edits, so moving between weeks never loses work and never
+  copies one week's blocks into another.
+- `GET /api/weeks` lists the weeks an account has saved, so a week you did not
+  know about is still reachable.
 - Windows standalone build script and isolated real-WebEngine account, link and
   offline-draft tests (2026-09-07); Windows execution remains unverified.
 - Linux desktop app: a PySide6 web-engine window with the FlexWeek backend
@@ -40,6 +47,12 @@ All notable changes to FlexWeek are documented here. Format follows
   due/course pills on flexible tasks.
 
 ### Changed
+- Existing accounts are migrated on first start: the one saved week becomes the
+  week containing that day, keeping its blocks and its revision.
+- An unsaved-draft download is now named for its week and carries the week in
+  its JSON, so drafts from two weeks are no longer indistinguishable files.
+- "New week" and the legacy-import confirmation now name the week on screen
+  instead of saying "your current week".
 - Linux builds preserve previous artifacts and use separate staging directories.
 - 2026-09-06: Revise the post-Phase-3 roadmap for accounts, app/web delivery,
   Daily Scheduler interactions and themes, with design and audits deferred.
