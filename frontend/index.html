@@ -139,6 +139,7 @@
           <button type="submit">Save</button>
           <button type="button" id="form-cancel" class="secondary">Cancel</button>
           <button type="button" id="form-delete" class="danger" hidden>Delete</button>
+          <button type="button" id="form-missed" class="danger" hidden>Mark missed</button>
         </div>
       </form>
 
@@ -146,9 +147,13 @@
       <p class="note" id="flex-note">Press Solve to place these around school and sports.</p>
       <ul id="flexible"></ul>
       <section id="debug" class="debug" hidden>
-        <h2>Debug</h2>
+        <h2>Schedule details</h2>
         <p id="debug-stats"></p>
         <ul id="debug-unplaced"></ul>
+        <div id="debug-changes" hidden>
+          <h3>Missed blocks and schedule changes</h3>
+          <ul id="debug-moves"></ul>
+        </div>
       </section>
     </aside>
   </main>

@@ -27,18 +27,44 @@ class FixedDate extends Date {
 
 function harness() {
   const elements = new Map();
+  const allElements = [];
+  function connectedElements() {
+    const found = [];
+    const seen = new Set();
+    function visit(el) {
+      if (seen.has(el)) return;
+      seen.add(el);
+      found.push(el);
+      el.children.forEach(visit);
+    }
+    elements.forEach(visit);
+    return found;
+  }
   function element() {
-    return {
+    const classes = new Set();
+    const el = {
       value: '', textContent: '', hidden: false, disabled: false, dataset: {}, style: {},
       children: [], listeners: {},
+      get className() { return Array.from(classes).join(' '); },
+      set className(value) {
+        classes.clear();
+        String(value).split(/\s+/).filter(Boolean).forEach(name => classes.add(name));
+      },
+      classList: {
+        add: name => classes.add(name),
+        remove: name => classes.delete(name),
+        contains: name => classes.has(name),
+      },
       // The app only ever assigns "", which clears a real element's children.
       set innerHTML(value) { this.children = []; },
       get innerHTML() { return ''; },
       addEventListener(name, handler) { this.listeners[name] = handler; },
       appendChild(child) { this.children.push(child); },
       replaceChildren() { this.children = []; },
-      querySelectorAll() { return []; }, reset() {}, focus() {}, click() {},
+      querySelectorAll() { return []; }, reset() {}, focus() {}, click() {}, scrollIntoView() {},
     };
+    allElements.push(el);
+    return el;
   }
   for (const match of html.matchAll(/id="([^"]+)"/g)) elements.set(match[1], element());
   const local = new Map();
@@ -49,6 +75,8 @@ function harness() {
       getElementById: id => { assert.ok(elements.has(id), `Missing HTML element ${id}`); return elements.get(id); },
       documentElement: { dataset: { theme: 'nocturne' } },
       createElement: element, addEventListener() {},
+      querySelectorAll: selector => connectedElements().filter(el =>
+        selector.split(',').some(part => el.classList.contains(part.trim().replace(/^\./, '')))),
     },
     window: { addEventListener() {} },
     localStorage: { getItem: key => local.get(key), removeItem: key => local.delete(key) },
@@ -59,7 +87,7 @@ function harness() {
   });
   vm.runInContext(source, context);
   return {
-    elements, local, requests,
+    elements, local, requests, allElements,
     run: code => vm.runInContext(code, context),
     handle: fn => { handler = fn; },
     dayHeads: () => elements.get('week').children
@@ -76,6 +104,81 @@ function harness() {
     },
   };
 }
+
+test('solve renders student-facing explanations, slack, and click-to-highlight', async () => {
+  const h = harness();
+  await h.login(1, [task]);
+  h.handle(async path => {
+    assert.equal(path, '/api/solve');
+    return response(200, {
+      placed: [{ ...task, days: [0], start: '06:00' }], unplaced: [], moves: [],
+      explanations: [{
+        block_id: 'homework', message: 'Limited room: scheduled to finish 2h before the deadline.',
+        reason: null, slack_min: 120, slack_status: 'tight',
+      }], failed_constraints: [], solve_ms: 1, complete: true,
+    });
+  });
+
+  await h.run('solveWeek()');
+
+  const block = h.allElements.findLast(el => el.classList.contains('block') && el.dataset.id === 'homework');
+  assert.ok(block);
+  assert.ok(block.children.some(child => child.textContent === 'tight slack'));
+  const detail = h.elements.get('debug-unplaced').children[0].children[0];
+  detail.listeners.click();
+  assert.equal(block.classList.contains('is-highlighted'), true);
+  assert.match(detail.textContent, /Limited room/);
+});
+
+test('miss recovery sends the prior placement, saves one missed day, and lists a day-changing move', async () => {
+  const h = harness();
+  const school = {
+    id: 'school', kind: 'locked', title: 'School', duration_min: 1020,
+    days: [0], start: '06:00', priority: 1, energy: 'medium',
+  };
+  const homework = { ...task, days: [0, 1], energy: 'high', priority: 3 };
+  await h.login(1, [school, homework]);
+  const previous = [school, { ...homework, days: [1], start: '06:00' }];
+  h.run(`weekState().trace = ${JSON.stringify({ placed: previous })}`);
+  let resolveSave;
+  h.handle(async (path, options) => {
+    const payload = JSON.parse(options.body);
+    if (path === '/api/solve') {
+      assert.deepEqual(payload.recover.previous_placed, previous);
+      assert.equal(payload.recover.missed_block_id, 'school');
+      assert.equal(payload.recover.missed_day, 0);
+      return response(200, {
+        placed: [{ ...homework, days: [0], start: '06:00' }], unplaced: [],
+        moves: [{ block_id: 'homework', reason: 'RESHUFFLE_AFTER_MISS', from_day: 1,
+          from_start: '06:00', to_day: 0, to_start: '06:00' }],
+        explanations: [{ block_id: 'homework', reason: 'RESHUFFLE_AFTER_MISS',
+          message: 'Moved after a missed block so the rest of the week still fits.' }],
+        failed_constraints: [], solve_ms: 1, complete: true,
+      });
+    }
+    assert.equal(path, '/api/week');
+    assert.deepEqual(payload.blocks[0].missed_days, [0]);
+    return new Promise(done => {
+      resolveSave = () => done(response(200, { week_start: MONDAY, blocks: payload.blocks, revision: 1 }));
+    });
+  });
+
+  const recovering = h.run("recoverMissedOccurrence('school', 0)");
+  await tick();
+  await tick();
+
+  assert.equal(h.run('JSON.stringify(weekState().blocks[0].missed_days)'), '[0]');
+  assert.equal(h.run('weekState().dirty'), true);
+  assert.doesNotMatch(h.elements.get('status').textContent, /^Saved/);
+  assert.equal(h.elements.get('debug-changes').hidden, false);
+  assert.ok(h.allElements.findLast(el =>
+    el.classList.contains('missed-block') && el.dataset.id === 'school'));
+  const changes = h.elements.get('debug-moves').children.map(li => li.children[0].textContent);
+  assert.ok(changes.some(text => text.includes('Tue 06:00 → Mon 06:00')));
+  resolveSave();
+  await recovering;
+  assert.equal(h.run('weekState().dirty'), false);
+});
 
 test('boot requires sign-in and never fetches a demo or exposes legacy data', async () => {
   const h = harness();

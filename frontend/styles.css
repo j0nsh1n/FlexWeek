@@ -163,10 +163,37 @@ select {
 .block .sub { opacity: 0.8; font-size: 0.65rem; }
 .block { cursor: pointer; }
 
+.block.is-highlighted,
+.task-card.is-highlighted {
+  outline: 3px solid #f7d774;
+  outline-offset: 2px;
+}
+
+.missed-block {
+  opacity: 0.55;
+  text-decoration: line-through;
+  z-index: 1;
+}
+
 .flex-block {
   background: #594720;
   color: #f7fff0;
 }
+
+.slack-badge {
+  display: inline-block;
+  margin-top: 0.2rem;
+  border-radius: 999px;
+  padding: 0.05rem 0.3rem;
+  color: #111;
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.slack-ok { background: #8bd5a0; }
+.slack-tight { background: #f7d774; }
+.slack-danger { background: #f49a92; }
 
 button {
   background: var(--dark);
@@ -289,6 +316,8 @@ button:focus-visible {
 
 .debug h2 { margin: 0 0 0.35rem; font-size: 0.95rem; }
 
+.debug h3 { margin: 0.85rem 0 0.35rem; font-size: 0.82rem; }
+
 .debug p {
   margin: 0 0 0.5rem;
   font-size: 0.8rem;
@@ -305,6 +334,18 @@ button:focus-visible {
   flex-direction: column;
   gap: 0.25rem;
 }
+
+.detail-button {
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font-size: inherit;
+  font-weight: 400;
+}
+
+.detail-button:hover { color: var(--ink); }
 
 .side {
   border-left: 1px solid var(--line);

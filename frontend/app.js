@@ -13,11 +13,14 @@ const solveEl = document.getElementById("solve");
 const debugEl = document.getElementById("debug");
 const debugStatsEl = document.getElementById("debug-stats");
 const debugUnplacedEl = document.getElementById("debug-unplaced");
+const debugChangesEl = document.getElementById("debug-changes");
+const debugMovesEl = document.getElementById("debug-moves");
 const flexNoteEl = document.getElementById("flex-note");
 const formEl = document.getElementById("block-form");
 const formErrorEl = document.getElementById("form-error");
 const formHeadingEl = document.getElementById("form-heading");
 const formDeleteEl = document.getElementById("form-delete");
+const formMissedEl = document.getElementById("form-missed");
 const lockedFieldsEl = document.getElementById("f-locked-fields");
 const flexFieldsEl = document.getElementById("f-flex-fields");
 const startEl = document.getElementById("f-start");
@@ -171,6 +174,7 @@ let account = null;
 let epoch = 0;
 let saving = false;
 let suspendedDraft = null;
+let editingOccurrenceDay = null;
 
 // One record per week, keyed by its Monday. Blocks, revision, unsaved edits and
 // a conflict all belong to the week they came from: a single global revision
@@ -182,7 +186,7 @@ let savedWeeks = [];
 function weekState(weekStart = selectedWeek) {
   let state = weeks.get(weekStart);
   if (!state) {
-    state = { blocks: [], revision: 0, dirty: false, conflict: false };
+    state = { blocks: [], revision: 0, dirty: false, conflict: false, trace: null };
     weeks.set(weekStart, state);
   }
   return state;
@@ -224,6 +228,7 @@ function signedOut(message = "Sign in to open your week.", preserve = true) {
   flexibleEl.replaceChildren();
   debugStatsEl.textContent = "";
   debugUnplacedEl.replaceChildren();
+  debugMovesEl.replaceChildren();
   formEl.reset();
   closeForm();
   planner.hidden = true;
@@ -394,6 +399,7 @@ function weekStatus() {
 function showWeek(weekStart) {
   selectedWeek = weekStart;
   const state = weekState();
+  state.trace = null;
   closeForm();
   // The debug panel and the note under it describe the week being left.
   debugEl.hidden = true;
@@ -454,7 +460,21 @@ function renderWeek() {
   buildGrid(weekState().blocks);
 }
 
-function buildGrid(blocks) {
+function clearSolveResult(note = "Press Solve to place these around school and sports.") {
+  weekState().trace = null;
+  debugEl.hidden = true;
+  debugChangesEl.hidden = true;
+  debugMovesEl.replaceChildren();
+  flexNoteEl.textContent = note;
+}
+
+function insightFor(explanations, blockId) {
+  return (explanations || []).find(function (item) {
+    return item.block_id === blockId && item.slack_status;
+  });
+}
+
+function buildGrid(blocks, explanations = []) {
   weekEl.innerHTML = "";
   const corner = document.createElement("div");
   corner.className = "corner";
@@ -505,11 +525,14 @@ function buildGrid(blocks) {
 
       const offsetMin = clippedStart - topHour * 60;
       const el = document.createElement("div");
-      el.className = "block" + (block.kind === "flexible" ? " flex-block" : "");
+      const missed = block.kind === "locked" && (block.missed_days || []).indexOf(day) !== -1;
+      el.className = "block" + (block.kind === "flexible" ? " flex-block" : "") +
+        (missed ? " missed-block" : "");
       el.dataset.id = block.id;
       el.style.top = `${(offsetMin / 60) * hourH}rem`;
       el.style.height = `${Math.max(((endMin - clippedStart) / 60) * hourH, 1.1)}rem`;
-      el.title = block.title + (block.course ? " · " + block.course : "") + " (click to edit)";
+      el.title = block.title + (block.course ? " · " + block.course : "") +
+        (missed ? " · missed" : "") + " (click to edit)";
 
       const title = document.createElement("div");
       title.className = "title";
@@ -518,13 +541,22 @@ function buildGrid(blocks) {
 
       const sub = document.createElement("div");
       sub.className = "sub";
-      sub.textContent = block.duration_min + " min";
+      sub.textContent = block.duration_min + " min" + (missed ? " · missed" : "");
       el.appendChild(sub);
+
+      const insight = insightFor(explanations, block.id);
+      if (insight) {
+        const slack = document.createElement("span");
+        slack.className = "slack-badge slack-" + insight.slack_status;
+        slack.textContent = insight.slack_status + " slack";
+        slack.title = insight.message;
+        el.appendChild(slack);
+      }
 
       el.addEventListener("click", function (event) {
         event.stopPropagation();
         const source = weekState().blocks.find(function (item) { return item.id === block.id; });
-        if (source) openForm(source.kind, source);
+        if (source) openForm(source.kind, source, day);
       });
 
       cells[day][row].appendChild(el);
@@ -576,6 +608,45 @@ function renderFlexible(flex) {
   });
 }
 
+function formatPlacement(day, start) {
+  if (day === null || day === undefined || !start) return "unplaced";
+  return DAYS[day] + " " + start;
+}
+
+function blockTitle(blockId) {
+  const block = weekState().blocks.find(function (item) { return item.id === blockId; });
+  return block ? block.title : blockId;
+}
+
+function highlightBlock(blockId) {
+  let target = null;
+  document.querySelectorAll(".block, .task-card").forEach(function (element) {
+    element.classList.remove("is-highlighted");
+    if (!target && element.dataset.id === blockId) target = element;
+  });
+  if (target) {
+    target.classList.add("is-highlighted");
+    if (typeof target.scrollIntoView === "function") target.scrollIntoView({ block: "nearest" });
+  }
+}
+
+function detailButton(text, blockId, day = null) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "detail-button";
+  button.textContent = text;
+  button.dataset.id = blockId;
+  button.addEventListener("click", function () {
+    if (day === null) {
+      highlightBlock(blockId);
+      return;
+    }
+    const source = weekState().blocks.find(function (item) { return item.id === blockId; });
+    if (source) openForm(source.kind, source, day);
+  });
+  return button;
+}
+
 function renderDebug(trace) {
   debugEl.hidden = false;
   const placedFlex = (trace.placed || []).filter((b) => b.kind === "flexible").length;
@@ -588,20 +659,47 @@ function renderDebug(trace) {
     (trace.unplaced || []).length +
     (trace.complete ? " · complete" : " · incomplete");
   debugUnplacedEl.innerHTML = "";
-  const reasonById = {};
-  (trace.moves || []).forEach((move) => {
-    reasonById[move.block_id] = move.reason;
-  });
-  (trace.unplaced || []).forEach((block) => {
+  (trace.explanations || []).forEach((item) => {
     const li = document.createElement("li");
-    li.textContent = block.title + (reasonById[block.id] ? " · " + reasonById[block.id] : "");
+    li.appendChild(detailButton(blockTitle(item.block_id) + " — " + item.message, item.block_id));
     debugUnplacedEl.appendChild(li);
   });
-  if (!(trace.unplaced || []).length) {
+  if (!(trace.explanations || []).length) {
     const li = document.createElement("li");
-    li.textContent = "All flexible tasks placed.";
+    li.textContent = "All tasks fit their requested windows.";
     debugUnplacedEl.appendChild(li);
   }
+
+  debugMovesEl.innerHTML = "";
+  const missedOccurrences = [];
+  weekState().blocks.filter(function (block) { return block.kind === "locked"; }).forEach(function (block) {
+    (block.missed_days || []).forEach(function (day) {
+      missedOccurrences.push({ blockId: block.id, day: day });
+    });
+  });
+  const changedMoves = (trace.moves || []).filter(function (move) {
+    return move.from_day !== null || move.to_day !== null;
+  });
+  debugChangesEl.hidden = !missedOccurrences.length && !changedMoves.length;
+  missedOccurrences.forEach(function (missed) {
+    const li = document.createElement("li");
+    li.appendChild(detailButton(
+      DAYS[missed.day] + " " + blockTitle(missed.blockId) + " marked missed. Click to open restore.",
+      missed.blockId,
+      missed.day,
+    ));
+    debugMovesEl.appendChild(li);
+  });
+  changedMoves.forEach(function (move) {
+    const li = document.createElement("li");
+    li.appendChild(detailButton(
+      blockTitle(move.block_id) + " · " +
+        formatPlacement(move.from_day, move.from_start) + " → " +
+        formatPlacement(move.to_day, move.to_start),
+      move.block_id,
+    ));
+    debugMovesEl.appendChild(li);
+  });
 }
 
 function showFormError(msg) {
@@ -639,15 +737,23 @@ function parseLatest(latest) {
   return { day: "", time: parts[0] || "" };
 }
 
-function openForm(kind, block) {
+function openForm(kind, block, occurrenceDay = null) {
   if (!account || saving) return;
   const editing = Boolean(block);
+  editingOccurrenceDay = Number.isInteger(occurrenceDay) ? occurrenceDay : null;
   formEl.hidden = false;
   showFormError("");
   document.getElementById("f-kind").value = kind;
   document.getElementById("f-id").value = editing ? block.id : "";
   formHeadingEl.textContent = (editing ? "Edit " : "Add ") + (kind === "locked" ? "locked" : "task");
   formDeleteEl.hidden = !editing;
+  const canChangeMissed = editing && kind === "locked" && editingOccurrenceDay !== null;
+  formMissedEl.hidden = !canChangeMissed || (!(block.missed_days || []).includes(editingOccurrenceDay) && !weekState().trace);
+  if (canChangeMissed) {
+    const isMissed = (block.missed_days || []).includes(editingOccurrenceDay);
+    formMissedEl.textContent = isMissed ? "Restore " + DAYS[editingOccurrenceDay] : "Mark " + DAYS[editingOccurrenceDay] + " missed";
+    formMissedEl.className = isMissed ? "secondary" : "danger";
+  }
   lockedFieldsEl.hidden = kind !== "locked";
   flexFieldsEl.hidden = kind !== "flexible";
 
@@ -666,6 +772,7 @@ function openForm(kind, block) {
 
 function closeForm() {
   formEl.hidden = true;
+  editingOccurrenceDay = null;
   showFormError("");
 }
 
@@ -704,6 +811,7 @@ formEl.addEventListener("submit", function (event) {
   const id = document.getElementById("f-id").value || newId();
   const blocks = weekState().blocks;
   const existing = blocks.findIndex(function (item) { return item.id === id; });
+  const prior = existing >= 0 ? blocks[existing] : null;
   const block = {
     id: id,
     title: title,
@@ -716,6 +824,9 @@ formEl.addEventListener("submit", function (event) {
     earliest: null,
     latest: null,
     start: kind === "locked" ? startEl.value : null,
+    missed_days: kind === "locked" && prior ? (prior.missed_days || []).filter(function (day) {
+      return days.includes(day);
+    }) : [],
   };
   if (kind === "flexible") {
     const dueDay = document.getElementById("f-due-day").value;
@@ -729,13 +840,29 @@ formEl.addEventListener("submit", function (event) {
   else blocks.push(block);
 
   closeForm();
-  debugEl.hidden = true;
-  flexNoteEl.textContent = "Press Solve to place these around school and sports.";
+  clearSolveResult();
   saveWeek();
   renderWeek();
 });
 
 document.getElementById("form-cancel").addEventListener("click", closeForm);
+
+formMissedEl.addEventListener("click", async function () {
+  if (!account || saving || editingOccurrenceDay === null) return;
+  const id = document.getElementById("f-id").value;
+  const block = weekState().blocks.find(function (item) { return item.id === id; });
+  if (!block || block.kind !== "locked") return;
+  const isMissed = (block.missed_days || []).includes(editingOccurrenceDay);
+  if (!isMissed) {
+    await recoverMissedOccurrence(id, editingOccurrenceDay);
+    return;
+  }
+  block.missed_days = block.missed_days.filter(function (day) { return day !== editingOccurrenceDay; });
+  closeForm();
+  clearSolveResult();
+  renderWeek();
+  await saveWeek();
+});
 
 formDeleteEl.addEventListener("click", function () {
   if (!account || saving) return;
@@ -743,7 +870,7 @@ formDeleteEl.addEventListener("click", function () {
   const state = weekState();
   state.blocks = state.blocks.filter(function (item) { return item.id !== id; });
   closeForm();
-  debugEl.hidden = true;
+  clearSolveResult();
   saveWeek();
   renderWeek();
 });
@@ -758,11 +885,30 @@ document.getElementById("new-week").addEventListener("click", function () {
   if (!account || saving || !confirm("Clear " + weekLabel(selectedWeek) + "? This will be saved to your account.")) return;
   weekState().blocks = [];
   closeForm();
-  debugEl.hidden = true;
-  flexNoteEl.textContent = "Add locked school or sports, then homework as tasks.";
+  clearSolveResult("Add locked school or sports, then homework as tasks.");
   saveWeek();
   renderWeek();
 });
+
+function missedHistoryBlocks() {
+  return weekState().blocks.filter(function (block) {
+    return block.kind === "locked" && (block.missed_days || []).length;
+  }).map(function (block) {
+    return { ...block, days: block.missed_days.slice() };
+  });
+}
+
+function showTrace(trace) {
+  weekState().trace = trace;
+  buildGrid((trace.placed || []).concat(missedHistoryBlocks()), trace.explanations || []);
+  renderFlexible(trace.unplaced || []);
+  renderDebug(trace);
+  flexNoteEl.textContent = trace.unplaced.length ?
+    "Some tasks could not be placed. Select a reason below to find the task." :
+    "All flexible tasks are on the grid.";
+  setStatus((weekState().dirty ? "Unsaved week · " : "Saved week · ") +
+    trace.placed.filter(b => b.kind === "flexible").length + " tasks placed");
+}
 
 async function solveWeek() {
   if (!account || saving) return;
@@ -773,16 +919,42 @@ async function solveWeek() {
   try {
     const trace = await api("/api/solve", { method: "POST", body: JSON.stringify({ blocks: weekState().blocks }) });
     if (solveEpoch !== epoch) return;
-    buildGrid(trace.placed || []);
-    renderFlexible(trace.unplaced || []);
-    renderDebug(trace);
-    flexNoteEl.textContent = trace.unplaced.length ? "Unplaced after Solve — reasons below." : "All flexible tasks are on the grid.";
-    setStatus((weekState().dirty ? "Unsaved week · " : "Saved week · ") + trace.placed.filter(b => b.kind === "flexible").length + " tasks placed");
+    showTrace(trace);
   } catch (error) {
     if (solveEpoch === epoch) setStatus("Solve failed. " + error.message);
   } finally {
     if (solveEpoch === epoch) { saving = false; lockEditor(false); }
   }
+}
+
+async function recoverMissedOccurrence(blockId, day) {
+  const state = weekState();
+  if (!account || saving || !state.trace) return;
+  const recoverEpoch = epoch;
+  const previous = state.trace.placed || [];
+  let recovered = false;
+  saving = true;
+  lockEditor(true);
+  setStatus("Replanning after the miss…");
+  try {
+    const trace = await api("/api/solve", { method: "POST", body: JSON.stringify({
+      blocks: state.blocks,
+      recover: { missed_block_id: blockId, missed_day: day, previous_placed: previous },
+    }) });
+    if (recoverEpoch !== epoch) return;
+    const block = state.blocks.find(function (item) { return item.id === blockId; });
+    if (!block) return;
+    block.missed_days = Array.from(new Set([...(block.missed_days || []), day])).sort();
+    state.dirty = true;
+    closeForm();
+    showTrace(trace);
+    recovered = true;
+  } catch (error) {
+    if (recoverEpoch === epoch) setStatus("Could not replan. " + error.message);
+  } finally {
+    if (recoverEpoch === epoch) { saving = false; lockEditor(false); }
+  }
+  if (recovered && recoverEpoch === epoch) await saveWeek();
 }
 
 document.getElementById("auth-form").addEventListener("submit", async event => {
@@ -850,7 +1022,7 @@ document.getElementById("reload-week").addEventListener("click", async () => {
     state.conflict = false;
     saveActions.hidden = true;
     closeForm();
-    debugEl.hidden = true;
+    clearSolveResult();
     renderWeek();
     setStatus("Reloaded saved week.");
   } catch (error) { if (reloadEpoch === epoch) setStatus(error.message); }
@@ -877,7 +1049,7 @@ document.getElementById("import-week").addEventListener("click", async () => {
   if (!confirm("Import this device's old week into your account, replacing " + weekLabel(selectedWeek) + "?")) return;
   weekState().blocks = blocks;
   closeForm();
-  debugEl.hidden = true;
+  clearSolveResult();
   renderWeek();
   if (await saveWeek()) {
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* A retry replaces the same blocks. */ }

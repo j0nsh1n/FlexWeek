@@ -110,6 +110,57 @@ def run(case: str, root: Path) -> None:
             print(
                 "PASS: register, editor save, solve, refresh, theme, logout, second-account isolation, widths"
             )
+        elif case == "phase6":
+            submit_identity("phase6_student", "register")
+            evaluate("""document.getElementById('add-locked').click();
+                document.getElementById('f-title').value='School';
+                document.getElementById('f-duration').value='1020';
+                document.querySelector('input[name=f-day][value="0"]').checked=true;
+                document.getElementById('f-start').value='06:00';
+                document.querySelector('#block-form button[type=submit]').click();""")
+            wait_for("document.getElementById('status').textContent.startsWith('Saved')")
+            evaluate("""document.getElementById('add-flexible').click();
+                document.getElementById('f-title').value='Homework';
+                document.querySelector('input[name=f-day][value="0"]').checked=true;
+                document.querySelector('input[name=f-day][value="1"]').checked=true;
+                document.getElementById('f-energy').value='high';
+                document.getElementById('f-due-day').value='1';
+                document.getElementById('f-due-time').value='09:00';
+                document.querySelector('#block-form button[type=submit]').click();""")
+            wait_for("document.getElementById('status').textContent.startsWith('Saved')")
+            evaluate("document.getElementById('solve').click()")
+            wait_for("document.querySelector('.slack-tight')")
+            evaluate("document.querySelector('.block:not(.flex-block)').click()")
+            assert evaluate("!document.getElementById('form-missed').hidden")
+            evaluate("document.getElementById('form-missed').click()")
+            wait_for("!document.getElementById('debug-changes').hidden")
+            wait_for("document.getElementById('status').textContent.startsWith('Saved')")
+            changes = evaluate("document.getElementById('debug-moves').textContent")
+            assert "Tue 06:00 → Mon 06:00" in changes, changes
+            assert evaluate("Boolean(document.querySelector('.slack-ok'))")
+            evaluate("window.__beforeMissReload=true")
+            window.reload()
+            wait_for(
+                "typeof window.__beforeMissReload === 'undefined' && document.getElementById('planner') && "
+                "!document.getElementById('planner').hidden"
+            )
+            assert evaluate("document.querySelectorAll('.missed-block').length") == 1
+            evaluate("document.getElementById('solve').click()")
+            wait_for("!document.getElementById('debug-changes').hidden")
+            evaluate("document.querySelector('#debug-moves .detail-button').click()")
+            assert evaluate("document.getElementById('form-missed').textContent === 'Restore Mon'")
+            evaluate("document.getElementById('form-missed').click()")
+            wait_for("document.getElementById('status').textContent.startsWith('Saved')")
+            evaluate("window.__beforeRestoreReload=true")
+            window.reload()
+            wait_for(
+                "typeof window.__beforeRestoreReload === 'undefined' && "
+                "document.getElementById('planner') && "
+                "!document.getElementById('planner').hidden"
+            )
+            assert evaluate("document.querySelectorAll('.missed-block').length") == 0
+            assert evaluate("document.querySelectorAll('.block:not(.flex-block)').length") == 1
+            print("PASS: explanations, slack, one-day miss recovery, move list and restore in desktop")
         elif case == "download":
             submit_identity("draft_student", "register")
             server.stop()
