@@ -81,6 +81,9 @@
         <label>Course
           <input id="f-course" type="text" maxlength="40" />
         </label>
+        <label>Category
+          <select id="f-category"></select>
+        </label>
         <label>Duration (minutes)
           <input id="f-duration" type="number" min="15" step="15" required />
         </label>
@@ -159,5 +162,9 @@
   </main>
   <footer class="foot">Congressional App Challenge 2026 · GPL-3.0</footer>
   <script src="/static/app.js"></script>
+  <div id="block-context-menu" class="context-menu" hidden role="menu">
+    <button type="button" data-action="edit">Edit</button>
+    <button type="button" data-action="delete">Delete</button>
+  </div>
 </body>
 </html>

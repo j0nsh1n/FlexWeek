@@ -5,6 +5,14 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- Week grid drag interactions: empty drag creates a locked block on the 15-minute
+  grid, click-empty creates a 60-minute block clipped to the next block, drag body
+  moves, edge resize, click selects, double-click opens the editor, and a context
+  menu offers Edit/Delete. Changes use the existing dirty/save path.
+- Optional activity category with a thin color palette (School, Study, Homework,
+  Sports, Activity, Meals, Free); older weeks without a category still load.
+
 ### Fixed
 - Desktop new-window links no longer leave hidden browser pages running; only
   HTTP(S) external links are sent to the system browser (2026-09-07).

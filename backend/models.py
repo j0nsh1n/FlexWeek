@@ -32,6 +32,11 @@ class TimeBlock(BaseModel):
     latest: str | None = Field(default=None, max_length=40)
     start: str | None = Field(default=None, max_length=5)
     course: str | None = Field(default=None, max_length=40)
+    category: str | None = Field(
+        default=None,
+        max_length=32,
+        exclude_if=lambda value: value is None,
+    )
     missed_days: list[int] = Field(
         default_factory=list,
         max_length=7,

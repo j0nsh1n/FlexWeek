@@ -99,9 +99,10 @@ desktop shell is proposed; shell selection follows compatibility testing.
   (`dist/FlexWeek/FlexWeek`), with popup/download fixes and preserved rebuilds.
   Dated weeks landed 2026-09-08: weeks keyed by calendar Monday, navigation,
   per-week client state, and a migration verified against the real desktop
-  database. Windows execution and the drag/resize/context-menu, category,
-  copy-paste, undo-redo, recurring, export-import and reminder interactions are
-  still outstanding.
+  database. Slice A calendar interactions landed 2026-09-08: 15-minute snap
+  create/move/resize, select, double-click edit, context Edit/Delete, and a thin
+  optional category color palette. Windows execution and copy-paste, undo-redo,
+  recurring, export-import and reminder interactions are still outstanding.
 
 ## Phase 6 — Scheduling explanations, later design and hardening
 - Priority and energy controls, explanation panel, click reason to highlight.

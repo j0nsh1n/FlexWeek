@@ -4,6 +4,78 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 const START_HOUR = 6;
 const END_HOUR = 23;
 const PRIORITY_LABEL = { 1: "test", 2: "quiz", 3: "homework", 4: "reading" };
+const SNAP_MIN = 15;
+const DAY_START_MIN = START_HOUR * 60;
+const DAY_END_MIN = END_HOUR * 60;
+const EDGE_PX = 8;
+const CATEGORIES = [
+  { id: "class", label: "School", color: "#3b82f6" },
+  { id: "study", label: "Study", color: "#8b5cf6" },
+  { id: "assignments", label: "Homework", color: "#ef4444" },
+  { id: "exercise", label: "Sports", color: "#10b981" },
+  { id: "extra", label: "Activity", color: "#ec4899" },
+  { id: "meals", label: "Meals", color: "#f97316" },
+  { id: "free", label: "Free", color: "#94a3b8" },
+];
+
+function snapMinute(minute) {
+  const m = Math.round(Number(minute) / SNAP_MIN) * SNAP_MIN;
+  return Math.max(DAY_START_MIN, Math.min(DAY_END_MIN, m));
+}
+
+function formatMinute(minute) {
+  const clamped = Math.max(DAY_START_MIN, Math.min(DAY_END_MIN, minute));
+  return pad(Math.floor(clamped / 60)) + ":" + pad(clamped % 60);
+}
+
+function createDragRange(a, b) {
+  let startMin = snapMinute(Math.min(a, b));
+  let endMin = snapMinute(Math.max(a, b));
+  if (endMin - startMin < SNAP_MIN) endMin = Math.min(DAY_END_MIN, startMin + SNAP_MIN);
+  if (endMin - startMin < SNAP_MIN) return null;
+  return { startMin: startMin, endMin: endMin };
+}
+
+function createClickRange(startMin, occupied) {
+  const start = snapMinute(startMin);
+  let end = Math.min(start + 60, DAY_END_MIN);
+  const slots = (occupied || []).slice().sort(function (x, y) { return x.startMin - y.startMin; });
+  for (let i = 0; i < slots.length; i += 1) {
+    if (slots[i].startMin >= start && slots[i].startMin < end) {
+      end = slots[i].startMin;
+      break;
+    }
+  }
+  if (end - start < SNAP_MIN) return null;
+  return { startMin: start, endMin: end };
+}
+
+function moveRange(startMin, endMin, deltaMin) {
+  const dur = endMin - startMin;
+  let next = snapMinute(startMin + deltaMin);
+  next = Math.max(DAY_START_MIN, Math.min(next, DAY_END_MIN - dur));
+  return { startMin: next, endMin: next + dur };
+}
+
+function resizeTopRange(startMin, endMin, deltaMin) {
+  let next = snapMinute(startMin + deltaMin);
+  next = Math.max(DAY_START_MIN, Math.min(next, endMin - SNAP_MIN));
+  return { startMin: next, endMin: endMin };
+}
+
+function resizeBottomRange(startMin, endMin, deltaMin) {
+  let next = snapMinute(endMin + deltaMin);
+  next = Math.min(DAY_END_MIN, Math.max(next, startMin + SNAP_MIN));
+  return { startMin: startMin, endMin: next };
+}
+
+function categoryColor(category) {
+  for (let i = 0; i < CATEGORIES.length; i += 1) {
+    if (CATEGORIES[i].id === category) return CATEGORIES[i].color;
+  }
+  return null;
+}
+
 const STORAGE_KEY = "flexweek.week.v1";
 
 const weekEl = document.getElementById("week");
@@ -181,6 +253,9 @@ let editingOccurrenceDay = null;
 // would let a save carry one week's blocks under another week's number.
 const weeks = new Map();
 let selectedWeek = currentWeekStart();
+let selectedBlockId = null;
+let selectedOccurrenceDay = null;
+let gridGesture = null;
 let savedWeeks = [];
 
 function weekState(weekStart = selectedWeek) {
@@ -474,8 +549,260 @@ function insightFor(explanations, blockId) {
   });
 }
 
+function occupiedIntervalsForDay(blocks, day) {
+  return blocks.filter(function (block) {
+    return block.start && block.days.indexOf(day) !== -1;
+  }).map(function (block) {
+    const startMin = parseStart(block.start);
+    return { startMin: startMin, endMin: startMin + (block.duration_min || 0), id: block.id };
+  }).sort(function (a, b) { return a.startMin - b.startMin; });
+}
+
+function selectBlock(blockId, day) {
+  selectedBlockId = blockId || null;
+  selectedOccurrenceDay = Number.isInteger(day) ? day : null;
+  document.querySelectorAll(".block").forEach(function (el) {
+    const on = selectedBlockId && el.dataset.id === selectedBlockId &&
+      String(el.dataset.day) === String(selectedOccurrenceDay);
+    if (on) el.classList.add("is-selected");
+    else el.classList.remove("is-selected");
+  });
+}
+
+function applyCreateLocked(day, startMin, endMin) {
+  if (!account || saving) return null;
+  const range = createDragRange(startMin, endMin);
+  if (!range) return null;
+  const block = {
+    id: newId(),
+    title: "New block",
+    kind: "locked",
+    duration_min: range.endMin - range.startMin,
+    days: [day],
+    priority: 3,
+    energy: "medium",
+    course: null,
+    earliest: null,
+    latest: null,
+    start: formatMinute(range.startMin),
+    missed_days: [],
+    category: null,
+  };
+  weekState().blocks.push(block);
+  clearSolveResult();
+  selectBlock(block.id, day);
+  saveWeek();
+  renderWeek();
+  return block;
+}
+
+function applyCreateClick(day, startMin) {
+  const occupied = occupiedIntervalsForDay(weekState().blocks, day);
+  const range = createClickRange(startMin, occupied);
+  if (!range) return null;
+  return applyCreateLocked(day, range.startMin, range.endMin);
+}
+
+function applyBlockTimes(blockId, startMin, endMin) {
+  if (!account || saving) return false;
+  const block = weekState().blocks.find(function (item) { return item.id === blockId; });
+  if (!block || !block.start) return false;
+  const dur = endMin - startMin;
+  if (dur < SNAP_MIN || startMin < DAY_START_MIN || endMin > DAY_END_MIN) return false;
+  block.start = formatMinute(startMin);
+  block.duration_min = dur;
+  clearSolveResult();
+  saveWeek();
+  renderWeek();
+  return true;
+}
+
+function deleteBlockById(blockId) {
+  if (!account || saving || !blockId) return false;
+  const state = weekState();
+  const before = state.blocks.length;
+  state.blocks = state.blocks.filter(function (item) { return item.id !== blockId; });
+  if (state.blocks.length === before) return false;
+  if (selectedBlockId === blockId) selectBlock(null, null);
+  closeForm();
+  clearSolveResult();
+  saveWeek();
+  renderWeek();
+  return true;
+}
+
+function hideContextMenu() {
+  const menu = document.getElementById("block-context-menu");
+  if (menu) menu.hidden = true;
+}
+
+function showContextMenu(clientX, clientY, blockId, day) {
+  const menu = document.getElementById("block-context-menu");
+  if (!menu) return;
+  menu.hidden = false;
+  menu.style.left = clientX + "px";
+  menu.style.top = clientY + "px";
+  menu.dataset.id = blockId;
+  menu.dataset.day = String(day);
+}
+
+function yToMinute(lane, clientY) {
+  const rect = lane.getBoundingClientRect();
+  const hourH = hourHeightRem();
+  // rem → px via the same computed --hour-h used for layout
+  const hourPx = rect.height / ((DAY_END_MIN - DAY_START_MIN) / 60);
+  const y = clientY - rect.top;
+  return DAY_START_MIN + (y / hourPx) * 60;
+}
+
+function editModeForBlock(el, clientY) {
+  const rect = el.getBoundingClientRect();
+  if (rect.height >= 2 * EDGE_PX + 6) {
+    if (clientY - rect.top <= EDGE_PX) return "resize_top";
+    if (rect.bottom - clientY <= EDGE_PX) return "resize_bottom";
+  }
+  return "move";
+}
+
+function ensureGhost(lane) {
+  let ghost = lane.querySelector(".drag-ghost");
+  if (!ghost) {
+    ghost = document.createElement("div");
+    ghost.className = "drag-ghost";
+    lane.appendChild(ghost);
+  }
+  return ghost;
+}
+
+function placeGhost(lane, startMin, endMin) {
+  const ghost = ensureGhost(lane);
+  const hourH = hourHeightRem();
+  ghost.hidden = false;
+  ghost.style.top = ((startMin - DAY_START_MIN) / 60) * hourH + "rem";
+  ghost.style.height = Math.max(((endMin - startMin) / 60) * hourH, 0.4) + "rem";
+}
+
+function clearGhost(lane) {
+  const ghost = lane && lane.querySelector(".drag-ghost");
+  if (ghost) ghost.hidden = true;
+}
+
+function bindDayLane(lane, day) {
+  lane.addEventListener("pointerdown", function (event) {
+    if (!account || saving || event.button !== 0) return;
+    hideContextMenu();
+    const blockEl = event.target.closest ? event.target.closest(".block") : null;
+    const pressMin = yToMinute(lane, event.clientY);
+    if (blockEl && lane.contains(blockEl)) {
+      const blockId = blockEl.dataset.id;
+      const source = weekState().blocks.find(function (item) { return item.id === blockId; });
+      if (!source || !source.start) return;
+      const startMin = parseStart(source.start);
+      const endMin = startMin + (source.duration_min || 0);
+      const mode = editModeForBlock(blockEl, event.clientY);
+      selectBlock(blockId, day);
+      gridGesture = {
+        type: mode,
+        day: day,
+        lane: lane,
+        blockId: blockId,
+        originStart: startMin,
+        originEnd: endMin,
+        pressMin: pressMin,
+        moved: false,
+        pointerId: event.pointerId,
+      };
+      try { lane.setPointerCapture(event.pointerId); } catch (err) { /* harness */ }
+      event.preventDefault();
+      return;
+    }
+    selectBlock(null, null);
+    gridGesture = {
+      type: "create",
+      day: day,
+      lane: lane,
+      startMin: snapMinute(pressMin),
+      curMin: snapMinute(pressMin),
+      moved: false,
+      pointerId: event.pointerId,
+    };
+    placeGhost(lane, gridGesture.startMin, Math.min(gridGesture.startMin + SNAP_MIN, DAY_END_MIN));
+    try { lane.setPointerCapture(event.pointerId); } catch (err) { /* harness */ }
+    event.preventDefault();
+  });
+
+  lane.addEventListener("pointermove", function (event) {
+    if (!gridGesture || gridGesture.lane !== lane) return;
+    const cur = yToMinute(lane, event.clientY);
+    if (gridGesture.type === "create") {
+      gridGesture.curMin = snapMinute(cur);
+      if (Math.abs(gridGesture.curMin - gridGesture.startMin) >= SNAP_MIN) gridGesture.moved = true;
+      const range = createDragRange(gridGesture.startMin, gridGesture.curMin);
+      if (range) placeGhost(lane, range.startMin, range.endMin);
+      return;
+    }
+    const delta = cur - gridGesture.pressMin;
+    let range;
+    if (gridGesture.type === "move") range = moveRange(gridGesture.originStart, gridGesture.originEnd, delta);
+    else if (gridGesture.type === "resize_top") range = resizeTopRange(gridGesture.originStart, gridGesture.originEnd, delta);
+    else range = resizeBottomRange(gridGesture.originStart, gridGesture.originEnd, delta);
+    if (range.startMin !== gridGesture.originStart || range.endMin !== gridGesture.originEnd) gridGesture.moved = true;
+    placeGhost(lane, range.startMin, range.endMin);
+    gridGesture.preview = range;
+  });
+
+  function finishGesture(event) {
+    if (!gridGesture || gridGesture.lane !== lane) return;
+    const gesture = gridGesture;
+    gridGesture = null;
+    clearGhost(lane);
+    try { lane.releasePointerCapture(gesture.pointerId); } catch (err) { /* harness */ }
+    if (gesture.type === "create") {
+      if (gesture.moved) {
+        const range = createDragRange(gesture.startMin, gesture.curMin);
+        if (range) applyCreateLocked(gesture.day, range.startMin, range.endMin);
+      } else {
+        applyCreateClick(gesture.day, gesture.startMin);
+      }
+      return;
+    }
+    if (gesture.moved && gesture.preview) {
+      applyBlockTimes(gesture.blockId, gesture.preview.startMin, gesture.preview.endMin);
+      selectBlock(gesture.blockId, gesture.day);
+      return;
+    }
+    selectBlock(gesture.blockId, gesture.day);
+  }
+
+  lane.addEventListener("pointerup", finishGesture);
+  lane.addEventListener("pointercancel", finishGesture);
+
+  lane.addEventListener("dblclick", function (event) {
+    const blockEl = event.target.closest ? event.target.closest(".block") : null;
+    if (!blockEl || !lane.contains(blockEl)) return;
+    event.preventDefault();
+    gridGesture = null;
+    clearGhost(lane);
+    const source = weekState().blocks.find(function (item) { return item.id === blockEl.dataset.id; });
+    if (source) {
+      selectBlock(source.id, day);
+      openForm(source.kind, source, day);
+    }
+  });
+
+  lane.addEventListener("contextmenu", function (event) {
+    const blockEl = event.target.closest ? event.target.closest(".block") : null;
+    if (!blockEl || !lane.contains(blockEl)) return;
+    event.preventDefault();
+    const blockId = blockEl.dataset.id;
+    selectBlock(blockId, day);
+    showContextMenu(event.clientX, event.clientY, blockId, day);
+  });
+}
+
 function buildGrid(blocks, explanations = []) {
   weekEl.innerHTML = "";
+  hideContextMenu();
   const corner = document.createElement("div");
   corner.className = "corner";
   weekEl.appendChild(corner);
@@ -494,20 +821,26 @@ function buildGrid(blocks, explanations = []) {
 
   const hours = hourRange();
   const hourH = hourHeightRem();
-  const cells = Array.from({ length: 7 }, () => []);
-
+  const gutter = document.createElement("div");
+  gutter.className = "hours";
   hours.forEach((hour) => {
     const label = document.createElement("div");
     label.className = "hour";
-    label.textContent = `${pad(hour)}:00`;
-    weekEl.appendChild(label);
-    for (let day = 0; day < 7; day += 1) {
-      const cell = document.createElement("div");
-      cell.className = "cell";
-      weekEl.appendChild(cell);
-      cells[day].push(cell);
-    }
+    label.textContent = pad(hour) + ":00";
+    gutter.appendChild(label);
   });
+  weekEl.appendChild(gutter);
+
+  const lanes = [];
+  for (let day = 0; day < 7; day += 1) {
+    const lane = document.createElement("div");
+    lane.className = "day-lane";
+    lane.dataset.day = String(day);
+    lane.style.height = (hours.length * hourH) + "rem";
+    weekEl.appendChild(lane);
+    lanes.push(lane);
+    bindDayLane(lane, day);
+  }
 
   const visibleEnd = END_HOUR * 60;
   const visibleStart = START_HOUR * 60;
@@ -518,21 +851,20 @@ function buildGrid(blocks, explanations = []) {
       const endMin = Math.min(visibleEnd, startMin + (block.duration_min || 0));
       const clippedStart = Math.max(visibleStart, startMin);
       if (endMin <= clippedStart) return;
+      if (day < 0 || day > 6) return;
 
-      const topHour = Math.floor(clippedStart / 60);
-      const row = topHour - START_HOUR;
-      if (row < 0 || row >= hours.length) return;
-
-      const offsetMin = clippedStart - topHour * 60;
       const el = document.createElement("div");
       const missed = block.kind === "locked" && (block.missed_days || []).indexOf(day) !== -1;
       el.className = "block" + (block.kind === "flexible" ? " flex-block" : "") +
         (missed ? " missed-block" : "");
       el.dataset.id = block.id;
-      el.style.top = `${(offsetMin / 60) * hourH}rem`;
-      el.style.height = `${Math.max(((endMin - clippedStart) / 60) * hourH, 1.1)}rem`;
+      el.dataset.day = String(day);
+      el.style.top = ((clippedStart - visibleStart) / 60) * hourH + "rem";
+      el.style.height = Math.max(((endMin - clippedStart) / 60) * hourH, 1.1) + "rem";
+      const color = categoryColor(block.category);
+      if (color) el.style.borderLeftColor = color;
       el.title = block.title + (block.course ? " · " + block.course : "") +
-        (missed ? " · missed" : "") + " (click to edit)";
+        (missed ? " · missed" : "") + " (double-click to edit)";
 
       const title = document.createElement("div");
       title.className = "title";
@@ -553,13 +885,11 @@ function buildGrid(blocks, explanations = []) {
         el.appendChild(slack);
       }
 
-      el.addEventListener("click", function (event) {
-        event.stopPropagation();
-        const source = weekState().blocks.find(function (item) { return item.id === block.id; });
-        if (source) openForm(source.kind, source, day);
-      });
+      if (selectedBlockId === block.id && selectedOccurrenceDay === day) {
+        el.classList.add("is-selected");
+      }
 
-      cells[day][row].appendChild(el);
+      lanes[day].appendChild(el);
     });
   });
 
@@ -737,6 +1067,23 @@ function parseLatest(latest) {
   return { day: "", time: parts[0] || "" };
 }
 
+function ensureCategoryOptions() {
+  const select = document.getElementById("f-category");
+  if (!select || select.dataset.ready === "1") return;
+  select.innerHTML = "";
+  const blank = document.createElement("option");
+  blank.value = "";
+  blank.textContent = "None";
+  select.appendChild(blank);
+  CATEGORIES.forEach(function (cat) {
+    const opt = document.createElement("option");
+    opt.value = cat.id;
+    opt.textContent = cat.label;
+    select.appendChild(opt);
+  });
+  select.dataset.ready = "1";
+}
+
 function openForm(kind, block, occurrenceDay = null) {
   if (!account || saving) return;
   const editing = Boolean(block);
@@ -757,8 +1104,10 @@ function openForm(kind, block, occurrenceDay = null) {
   lockedFieldsEl.hidden = kind !== "locked";
   flexFieldsEl.hidden = kind !== "flexible";
 
+  ensureCategoryOptions();
   document.getElementById("f-title").value = editing ? block.title : "";
   document.getElementById("f-course").value = editing && block.course ? block.course : "";
+  document.getElementById("f-category").value = editing && block.category ? block.category : "";
   document.getElementById("f-duration").value = editing ? String(block.duration_min) : "60";
   setSelectedDays(editing ? block.days : []);
   startEl.value = editing && block.start ? block.start : "16:00";
@@ -821,6 +1170,7 @@ formEl.addEventListener("submit", function (event) {
     priority: Number(document.getElementById("f-priority").value) || 3,
     energy: document.getElementById("f-energy").value || "medium",
     course: document.getElementById("f-course").value.trim() || null,
+    category: document.getElementById("f-category").value || null,
     earliest: null,
     latest: null,
     start: kind === "locked" ? startEl.value : null,
@@ -1075,6 +1425,29 @@ document.addEventListener("visibilitychange", async () => {
   if (document.hidden || !account) return;
   try { await api("/api/auth/me"); } catch { /* Session expiry is handled by api. */ }
 });
+const contextMenuEl = document.getElementById("block-context-menu");
+if (contextMenuEl) {
+  contextMenuEl.addEventListener("click", function (event) {
+    const button = event.target.closest ? event.target.closest("button[data-action]") : null;
+    if (!button) return;
+    const blockId = contextMenuEl.dataset.id;
+    const day = Number(contextMenuEl.dataset.day);
+    hideContextMenu();
+    if (button.dataset.action === "edit") {
+      const source = weekState().blocks.find(function (item) { return item.id === blockId; });
+      if (source) openForm(source.kind, source, Number.isInteger(day) ? day : null);
+      return;
+    }
+    if (button.dataset.action === "delete") deleteBlockById(blockId);
+  });
+}
+document.addEventListener("pointerdown", function (event) {
+  const menu = document.getElementById("block-context-menu");
+  if (!menu || menu.hidden) return;
+  if (menu.contains(event.target)) return;
+  hideContextMenu();
+});
+
 solveEl.addEventListener("click", solveWeek);
 document.getElementById("week-prev").addEventListener("click", () => selectWeek(shiftWeek(selectedWeek, -1)));
 document.getElementById("week-next").addEventListener("click", () => selectWeek(shiftWeek(selectedWeek, 1)));

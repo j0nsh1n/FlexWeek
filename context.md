@@ -1,12 +1,12 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-08. Branch `feat/phase6-scheduling-explanations`.
+- Date: 2026-09-08. Branch `feat/phase5-calendar-interactions`.
 - Phase 6 scheduling behavior is implemented: backend-authored explanations,
   deadline slack badges, click-to-highlight, and per-occurrence missed-lock
   recovery with cross-day move details and restore.
-- Gates green: Ruff, mypy over 27 source files, 112 Python tests, 17 frontend
-  behavior tests and JavaScript syntax. The new real-WebEngine case covers
+- Gates green: 107 Python tests (+5 skipped), 23 frontend behavior tests and
+  JavaScript syntax. The new real-WebEngine case covers
   solve, slack, miss, cross-day replan, save, reload and restore.
 - A missed occurrence is stored as one day in a locked block's `missed_days`.
   It is excluded from solver occupancy without deleting the block or its other
@@ -20,9 +20,10 @@
   byte-identical at revision 4 under week_start 2026-09-07, running
   `initialize()` twice changed nothing, and the app then served that week,
   created a second week, and left the first untouched.
-- The rest of Phase 5 is not started: drag to create, drag to move, edge
-  resize, click to edit, context menus, categories, copy/paste, duplicate day,
-  undo/redo, recurring activities, export/import, completion state, reminders.
+- Phase 5 slice A is in: drag create/move/resize, select, double-click edit,
+  context Edit/Delete, thin category colors. Still open: copy/paste, duplicate
+  day, undo/redo, recurring activities, export/import, completion state,
+  reminders, Windows build execution.
 - Windows build remains prepared but unexecuted; no Windows host here.
 - `dist/FlexWeek` was rebuilt 2026-09-08 against the merged code and verified:
   the packaged binary registers an account, reads and writes dated weeks, lists
@@ -97,17 +98,13 @@ There is no automatic synchronization between those databases.
 - License file is GPL-3.0. Qt for Python is LGPLv3/GPLv2/commercial.
 
 ## Session Handoff
-- 2026-09-08, `feat/phase6-scheduling-explanations`: delivered the first Phase
-  6 slice across the shared web UI and PySide6 desktop shell. GLM-5.3 Flash
-  reviewed the contract and final diff; the main agent implemented and verified
-  it. Nothing pushed.
-- Next: continue Phase 6 with deployment persistence/backup preparation after
-  the owner chooses to resume it; visual redesign, hardening and audits remain
-  deferred. Phase 5's remaining Daily Scheduler interactions are still open.
-- Settled 2026-09-08 by the owner: spec.md updated for dated weeks and the
-  desktop build; roadmap Phase 7 (pomodoro, alarms, Spotify) committed with
-  contest delivery moved to Phase 8; agents.md now tracked. The built app is
-  distributed as a release asset, not committed, because one bundled Qt library
-  is 194 MB against GitHub's 100 MB per-file limit.
+- 2026-09-08, `feat/phase5-calendar-interactions`: Phase 5 slice A — week-grid
+  drag create/move/resize (15-min snap, 06:00–23:00 clamp), click select,
+  double-click openForm, context Edit/Delete, thin optional category→color.
+  Frontend tests cover snap/create/move/resize; pytest green. Nothing pushed.
+- Next: Phase 5 slices D/F/B/E (copy-paste/duplicate day, undo-redo, recurring
+  series UX, export/import/reminders) or resume Phase 6 deployment persistence.
+- Settled 2026-09-08 by the owner: dated weeks + desktop build in spec; Phase 7
+  committed; agents.md tracked. Built app is a release asset, not committed.
 - Still undecided: whether `Github Templates/` and `reslot-cac-build-plan.md`
   get committed.
