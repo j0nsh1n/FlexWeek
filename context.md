@@ -1,10 +1,17 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-08. Branch `feat/phase5-dated-weeks`, integrating two worktree
-  branches: `grok/phase5-dated-backend` and `agent/phase5-dated-frontend`.
-- Gates green: Ruff clean, mypy clean over 27 files, 102 Python tests, 15
-  frontend tests, `node --check` clean.
+- Date: 2026-09-08. Branch `feat/phase6-scheduling-explanations`.
+- Phase 6 scheduling behavior is implemented: backend-authored explanations,
+  deadline slack badges, click-to-highlight, and per-occurrence missed-lock
+  recovery with cross-day move details and restore.
+- Gates green: Ruff, mypy over 27 source files, 112 Python tests, 17 frontend
+  behavior tests and JavaScript syntax. The new real-WebEngine case covers
+  solve, slack, miss, cross-day replan, save, reload and restore.
+- A missed occurrence is stored as one day in a locked block's `missed_days`.
+  It is excluded from solver occupancy without deleting the block or its other
+  weekday occurrences. Recovery uses the existing `/api/solve` endpoint and
+  saves through the normal revision-checked week write.
 - Dated weeks are done. Weeks are keyed `(user_id, week_start)` where
   week_start is a naive local ISO Monday. Blocks keep their day index and
   derive their date, so no block data moved and the solver is untouched.
@@ -90,13 +97,13 @@ There is no automatic synchronization between those databases.
 - License file is GPL-3.0. Qt for Python is LGPLv3/GPLv2/commercial.
 
 ## Session Handoff
-- 2026-09-08, `feat/phase5-dated-weeks`: delivered the dated-weeks slice of
-  Phase 5. Contract in docs/dated-weeks.md written first, reviewed by GLM-5.3
-  Flash, then amended for four defects it found. Backend and frontend built in
-  parallel in separate worktrees; GLM drafted the backend tests. Everything
-  reviewed and merged by the main agent. Nothing pushed.
-- Next: the rest of Phase 5, starting with click-to-edit and drag interactions
-  now that the grid is dated. Then the Windows build on a Windows host.
+- 2026-09-08, `feat/phase6-scheduling-explanations`: delivered the first Phase
+  6 slice across the shared web UI and PySide6 desktop shell. GLM-5.3 Flash
+  reviewed the contract and final diff; the main agent implemented and verified
+  it. Nothing pushed.
+- Next: continue Phase 6 with deployment persistence/backup preparation after
+  the owner chooses to resume it; visual redesign, hardening and audits remain
+  deferred. Phase 5's remaining Daily Scheduler interactions are still open.
 - Settled 2026-09-08 by the owner: spec.md updated for dated weeks and the
   desktop build; roadmap Phase 7 (pomodoro, alarms, Spotify) committed with
   contest delivery moved to Phase 8; agents.md now tracked. The built app is

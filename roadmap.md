@@ -114,7 +114,9 @@ desktop shell is proposed; shell selection follows compatibility testing.
   client compatibility checks, account-based onboarding instructions.
 - Completion target: a signed-in user creates a week, solves it, understands
   unplaced work, and recovers from a missed block in both clients.
-- Status: [ ]
+- Status: [~] Scheduling explanations, slack indicators and per-occurrence
+  missed-block recovery completed 2026-09-08. Design, hardening, recovery-flow
+  expansion, audits and deployment preparation remain.
 
 ## Phase 7 — Pomodoro timers, alarms, Spotify and Daily Scheduler features
 - Pomodoro focus timer attached to placed blocks: configurable work/break

@@ -11,6 +11,11 @@ All notable changes to FlexWeek are documented here. Format follows
 - Desktop users can save an unsaved draft through a native file dialog.
 
 ### Added
+- Scheduling explanations now use student-facing messages, can highlight the
+  affected task, and show ok/tight/danger deadline slack on placed tasks.
+- A solved week can recover from one missed weekday occurrence of a locked
+  block. FlexWeek keeps the missed occurrence in the saved week, re-solves the
+  remaining tasks, lists time and day changes, and lets the user restore it.
 - Dated weeks. Your schedule is now kept per calendar week instead of as one
   rolling week, with Previous, Next and Today controls, the date shown on each
   day header, and a picker listing the weeks you have saved. Each week keeps
