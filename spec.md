@@ -72,7 +72,8 @@ Current account/API contract:
 | POST | `/api/auth/login` | Authenticate and rotate session |
 | POST | `/api/auth/logout` | Revoke current session |
 | GET | `/api/auth/me` | Current account; 401 when absent/expired |
-| GET/PUT | `/api/week` | Own current week with revision-checked saves |
+| GET/PUT | `/api/week` | One dated week of the account, with revision-checked saves |
+| GET | `/api/weeks` | The `week_start` dates this account has saved, ascending |
 | GET/PUT | `/api/preferences` | Own Nocturne/Slate theme |
 | POST | `/api/solve` | Authenticated week in, SolveTrace out; no storage mutation |
 | GET | `/api/health` | Public health response |
@@ -90,8 +91,15 @@ missing sessions 401, stale changed writes 409, throttled auth 429, oversized
 requests 413, transient database failures 503. Identical week retries return
 success without duplicate blocks or another revision increment.
 
-One current week per account initially; dated multiple weeks are a later
-migration. A week has at most 100 uniquely identified blocks; titles 1–80,
+A week is identified by `(account, week_start)`, where `week_start` is a naive
+local ISO date that is always a Monday. An account holds as many dated weeks as
+it saves, each with its own revision. A never-saved week reads as empty at
+revision 0 rather than 404, and a `week_start` that is malformed, out of
+2000-01-01..2099-12-31, or not a Monday is rejected with 422 rather than snapped
+to the nearest Monday, so a client and the server cannot disagree about which
+week is open while both believe they succeeded. Blocks keep their `days` index
+and derive their calendar date, so the solver stays day-index pure.
+A week has at most 100 uniquely identified blocks; titles 1–80,
 course names at most 40, durations positive multiples of 15 up to 7140 minutes,
 and unique day indices. Explicit starts are on the visible grid and end by
 23:00. Deadlines/earliest bounds use full English weekday plus HH:MM, or HH:MM.
@@ -102,12 +110,15 @@ API write bodies are capped at 256 KiB.
   interpreter (3.14.7) and `Github Templates/ci.yml` (`python-version: "3.14"`).
   Never downgrade.
 - Current languages: Python, JavaScript, HTML5, CSS, and SQL for account storage.
-  Desktop-shell selection is deferred to the packaging slice.
+  The desktop shell is PySide6 (Qt WebEngine); see DESKTOP.md.
 - Frameworks, pinned in `requirements.txt`: FastAPI 0.141.1,
   uvicorn[standard] 0.52.4, pytest 9.1.1, httpx 0.28.1, ruff 0.16.6, mypy 2.3.1, Pydantic 2.13.5.
 - Storage: SQLite at `FLEXWEEK_DATABASE` (default `var/flexweek.db`), with users,
-  sessions, weeks, preferences and short-lived auth-attempt counters. Schema
-  creation is additive on startup; related writes use transactions. Browser
+  sessions, weeks keyed `(user_id, week_start)`, preferences and short-lived
+  auth-attempt counters. Schema creation is additive on startup; related writes
+  use transactions. The pre-dated single-week table migrates on first start
+  inside one explicit transaction, stamping the existing row with the Monday of
+  that day; it is idempotent and never drops a row. Browser
   localStorage is read only for explicit legacy import, then removed on success.
 - Major components:
   - `backend/models.py` — Pydantic models (`TimeBlock`, `Move`, `SolveTrace`) and
@@ -127,9 +138,14 @@ API write bodies are capped at 256 KiB.
   Overlap uses half-open ranges `[start, end)`. One `overlaps()` helper — no
   duplicate date math.
 - External APIs/services: none. No OAuth, no calendar sync, no LLM at runtime.
-- Deployment: hosted web backend plus separate desktop client (provisional
-  Windows/Linux). Desktop shell/installer implementation belongs to Phase 5.
-  Production requires HTTPS via FLEXWEEK_ORIGIN and persistent SQLite storage.
+- Deployment: hosted web backend plus a separate desktop client. The Linux
+  desktop build ships as a PySide6 Qt WebEngine window that runs the FastAPI
+  backend in-process on a loopback port, so it needs no separate server and no
+  Python install; its database sits beside the browser profile in the user data
+  directory. `FLEXWEEK_DESKTOP_ORIGIN` (or `FLEXWEEK_ORIGIN`) points that window
+  at a hosted deployment instead, and an invalid value is an error rather than a
+  silent fall back to local. Windows is prepared but unverified. Production
+  requires HTTPS via FLEXWEEK_ORIGIN and persistent SQLite storage.
 
 ## Security & Privacy
 - No secrets in source. All credentials via environment variables. The app
@@ -177,7 +193,8 @@ All three commands run from the repo root, inside `.venv`, and must exit 0:
   repo deliberately diverges, because mypy installs from `requirements.txt` with
   no Node toolchain.
 - Tests: `pytest -q` — run from the repo root so `backend` imports resolve.
-- Frontend behavior tests: `node --test frontend/tests/accounts.test.mjs`;
+- Frontend behavior tests: `node --test frontend/tests/*.test.mjs` (the shell
+  glob; the directory form is broken on Node 24);
   syntax: `node --check frontend/app.js`. Node is development-only, with no npm
   packages or frontend build step. Browser layout needs a separate manual check.
 - Preserve existing solver fixture coverage; include account isolation, expiry,
