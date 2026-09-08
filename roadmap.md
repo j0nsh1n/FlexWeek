@@ -116,7 +116,38 @@ desktop shell is proposed; shell selection follows compatibility testing.
   unplaced work, and recovers from a missed block in both clients.
 - Status: [ ]
 
-## Phase 7 — Contest delivery (target Oct 18–25)
+## Phase 7 — Pomodoro timers, alarms, Spotify and Daily Scheduler features
+- Pomodoro focus timer attached to placed blocks: configurable work/break
+  lengths, long-break cadence, pause/skip/reset, and alerts on phase changes;
+  timer state stays client-side per session.
+- Split long blocks into pomodoro work chunks with break blocks on the grid,
+  as a manual action and optional solver pass (Daily Scheduler's split-block
+  behavior without the AI chat).
+- Focus session counts per task in the sidebar, rolling into the existing
+  completion state.
+- Spotify links on tasks and blocks that open in Spotify, with optional
+  embedded playback where the platform allows it; playback control needs a
+  Spotify Premium account and is best-effort per platform.
+- Built-in alarms independent of schedule blocks: named alarm times with a
+  popup that must be dismissed or snoozed. Web alarms fire only while the
+  app is open; the desktop shell can alert in the background where the
+  platform allows.
+- Alarm sound selector: Daily Scheduler's built-in tones (chime, soft,
+  bright, low, glass) or a linked Spotify track/playlist as the alarm sound;
+  if Spotify is unreachable at fire time, fall back to the built-in tone.
+- Live "Now / Next" status line and a current-time line in the day grid.
+- Block-start notifications with lead time, sound toggle and Do Not Disturb
+  override; system tray with quick-open on supported platforms, building on
+  the Phase 5 reminders work.
+- Free-gap visualization highlighting openings for unplaced work.
+- Settings dialog consolidating theme, notifications, alarms, timer defaults,
+  Spotify links and account actions.
+- Completion target: a student starts a pomodoro from a placed block, sets an
+  alarm that plays a linked Spotify playlist (tone fallback when Spotify is
+  unreachable), and split chunks survive save/reload in both clients.
+- Status: [ ]
+
+## Phase 8 — Contest delivery (target Oct 18–25)
 - Release bug fixes, app distribution and hosted web URL.
 - README with account setup, both contributors and AI-assistance disclosure.
 - Contest recording using an account-created schedule, plus submission form.
