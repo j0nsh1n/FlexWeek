@@ -69,3 +69,117 @@ def test_solve_accepts_aligned_duration(account: TestClient) -> None:
     assert "placed" in body
     assert "unplaced" in body
     assert "solve_ms" in body
+
+
+def test_reschedule_marks_one_locked_occurrence_and_reports_changed_placements(
+    account: TestClient,
+) -> None:
+    school = {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 1020,
+        "days": [0],
+        "priority": 1,
+        "energy": "medium",
+        "start": "06:00",
+    }
+    homework = {**VALID_FLEX, "days": [0, 1], "energy": "high"}
+    solved = account.post("/api/solve", json={"blocks": [school, homework]}, headers=WRITE)
+    assert solved.status_code == 200
+
+    response = account.post(
+        "/api/solve",
+        json={
+            "blocks": [school, homework],
+            "recover": {
+                "missed_block_id": "school",
+                "missed_day": 0,
+                "previous_placed": solved.json()["placed"],
+            },
+        },
+        headers=WRITE,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    move = next(item for item in body["moves"] if item["reason"] == "RESHUFFLE_AFTER_MISS")
+    assert move == {
+        "block_id": "hw",
+        "reason": "RESHUFFLE_AFTER_MISS",
+        "from_day": 1,
+        "from_start": "06:00",
+        "to_day": 0,
+        "to_start": "06:00",
+    }
+
+
+def test_reschedule_rejects_a_non_occurrence_without_solving(account: TestClient) -> None:
+    response = account.post(
+        "/api/solve",
+        json={
+            "blocks": [VALID_FLEX],
+            "recover": {
+                "missed_block_id": "hw",
+                "missed_day": 0,
+                "previous_placed": [],
+            },
+        },
+        headers=WRITE,
+    )
+    assert response.status_code == 422
+
+
+def test_saved_week_round_trips_a_missed_locked_occurrence(account: TestClient) -> None:
+    school = {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [0, 1],
+        "start": "08:00",
+        "missed_days": [0],
+    }
+    saved = account.put(
+        "/api/week",
+        json={"week_start": "2026-09-07", "blocks": [school], "revision": 0},
+        headers=WRITE,
+    )
+    assert saved.status_code == 200
+    loaded = account.get("/api/week?week_start=2026-09-07")
+    assert loaded.status_code == 200
+    assert loaded.json()["blocks"][0]["missed_days"] == [0]
+
+
+def test_flexible_task_cannot_be_marked_missed(account: TestClient) -> None:
+    response = account.post(
+        "/api/solve",
+        json={"blocks": [{**VALID_FLEX, "missed_days": [0]}]},
+        headers=WRITE,
+    )
+    assert response.status_code == 422
+
+
+def test_recovery_rejects_an_occurrence_that_is_already_missed(account: TestClient) -> None:
+    school = {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [0],
+        "start": "08:00",
+        "missed_days": [0],
+    }
+    response = account.post(
+        "/api/solve",
+        json={
+            "blocks": [school],
+            "recover": {
+                "missed_block_id": "school",
+                "missed_day": 0,
+                "previous_placed": [],
+            },
+        },
+        headers=WRITE,
+    )
+    assert response.status_code == 422

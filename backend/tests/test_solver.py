@@ -7,7 +7,7 @@ from pathlib import Path
 
 from backend.models import TimeBlock
 from backend.slots import hhmm_to_minutes, overlaps
-from backend.solver import SOLVE_BUDGET_MS, solve
+from backend.solver import SOLVE_BUDGET_MS, reschedule_after_miss, solve
 
 DATA = Path(__file__).resolve().parent.parent / "data"
 
@@ -305,3 +305,58 @@ def test_moves_record_unplaced_reasons() -> None:
     quiz = _flex("quiz", "Quiz", 75, [0], latest="Monday 07:00")
     trace = solve([quiz])
     assert any(move.block_id == "quiz" and move.reason == "DEADLINE_MISS" for move in trace.moves)
+    assert any(
+        item.block_id == "quiz"
+        and item.reason == "DEADLINE_MISS"
+        and item.message == "There is no slot left before this deadline."
+        for item in trace.explanations
+    )
+
+
+def test_deadline_slack_is_classified_from_the_placed_block_end() -> None:
+    cases = [
+        ("Monday 07:00", 0, "danger"),
+        ("Monday 09:00", 120, "tight"),
+        ("Monday 12:00", 300, "ok"),
+    ]
+    for latest, expected_minutes, expected_status in cases:
+        trace = solve([_flex("task", "Task", 60, [0], energy="high", latest=latest)])
+        item = next(explanation for explanation in trace.explanations if explanation.slack_min is not None)
+        assert item.slack_min == expected_minutes
+        assert item.slack_status == expected_status
+
+
+def test_placed_task_explains_an_energy_mismatch() -> None:
+    trace = solve([_flex("task", "Task", 60, [0], energy="low", latest="Monday 07:00")])
+    assert any(
+        item.block_id == "task" and item.reason == "ENERGY_MISMATCH"
+        for item in trace.explanations
+    )
+
+
+def test_reschedule_after_one_missed_occurrence_records_a_cross_day_move() -> None:
+    school = _locked("school", "School", "06:00", 1020, [0])
+    homework = _flex("homework", "Homework", 60, [0, 1], energy="high")
+    blocks = [school, homework]
+    before = solve(blocks)
+    assert _by_id(before.placed)["homework"].days == [1]
+
+    after = reschedule_after_miss(blocks, "school", 0, before.placed)
+
+    assert school.missed_days == []
+    assert "school" not in _by_id(after.placed)
+    assert _by_id(after.placed)["homework"].days == [0]
+    move = next(item for item in after.moves if item.reason == "RESHUFFLE_AFTER_MISS")
+    assert (move.block_id, move.from_day, move.from_start) == ("homework", 1, "06:00")
+    assert (move.to_day, move.to_start) == (0, "06:00")
+    assert any(
+        item.block_id == "homework" and item.reason == "RESHUFFLE_AFTER_MISS"
+        for item in after.explanations
+    )
+
+
+def test_missing_one_day_of_a_repeating_lock_keeps_its_other_occurrences() -> None:
+    school = _locked("school", "School", "08:00", 60, [0, 1, 2])
+    school.missed_days = [1]
+    trace = solve([school])
+    assert _by_id(trace.placed)["school"].days == [0, 2]

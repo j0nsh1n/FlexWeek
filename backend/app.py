@@ -14,8 +14,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from backend.models import WeekRequest
-from backend.solver import solve
+from backend.models import SolveRequest, WeekRequest
+from backend.solver import reschedule_after_miss, solve
 from backend.storage import (
     SESSION_SECONDS,
     connect,
@@ -258,7 +258,14 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         return preferences.model_dump()
 
     @app.post("/api/solve")
-    def post_solve(week: WeekRequest, account: Annotated[dict, Depends(user)]) -> dict:
+    def post_solve(week: SolveRequest, account: Annotated[dict, Depends(user)]) -> dict:
+        if week.recover is not None:
+            return reschedule_after_miss(
+                week.blocks,
+                week.recover.missed_block_id,
+                week.recover.missed_day,
+                week.recover.previous_placed,
+            ).model_dump()
         return solve(week.blocks).model_dump()
 
     @app.get("/api/health")

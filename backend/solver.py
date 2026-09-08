@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import time
 
-from backend.models import Move, ReasonCode, SolveTrace, TimeBlock
+from backend.explain import sentence, slack_sentence
+from backend.models import Explanation, Move, ReasonCode, SlackStatus, SolveTrace, TimeBlock
 from backend.slots import (
     DAY_END_MIN,
     DAY_START_MIN,
@@ -22,12 +23,14 @@ ENERGY_WINDOW = {
     "medium": (12 * 60, 17 * 60),
     "low": (17 * 60, 23 * 60),
 }
+TIGHT_SLACK_MIN = 3 * 60
+DANGER_SLACK_MIN = 60
 
 
 def solve(blocks: list[TimeBlock]) -> SolveTrace:
     """Place flexible blocks around locked ones. Pure and synchronous."""
     started = time.perf_counter()
-    locked = [block.model_copy() for block in blocks if block.kind == "locked"]
+    locked = _active_locked(blocks)
     flexible = [block.model_copy() for block in blocks if block.kind == "flexible"]
 
     occ_locked = _locked_occupancy(locked)
@@ -111,6 +114,7 @@ def solve(blocks: list[TimeBlock]) -> SolveTrace:
 
     unplaced: list[TimeBlock] = []
     moves: list[Move] = []
+    explanations: list[Explanation] = []
     failed: list[ReasonCode] = []
     for block in flexible:
         if block.id in best:
@@ -118,17 +122,124 @@ def solve(blocks: list[TimeBlock]) -> SolveTrace:
         reason = _reason_for(block, occ_locked, best, flex_by_id, deadlines, earliest)
         unplaced.append(block.model_copy())
         moves.append(Move(block_id=block.id, reason=reason))
+        explanations.append(Explanation(block_id=block.id, reason=reason, message=sentence(reason)))
         if reason not in failed:
             failed.append(reason)
+
+    for block in placed_flex:
+        assert block.start is not None
+        start_min = hhmm_to_minutes(block.start)
+        low, high = ENERGY_WINDOW[block.energy]
+        if not low <= start_min < high:
+            energy_reason: ReasonCode = "ENERGY_MISMATCH"
+            explanations.append(
+                Explanation(block_id=block.id, reason=energy_reason, message=sentence(energy_reason))
+            )
+        deadline = deadlines[block.id]
+        if deadline is not None:
+            day = block.days[0]
+            slack_min = (deadline[0] - day) * 24 * 60 + deadline[1] - start_min - block.duration_min
+            status = _slack_status(slack_min)
+            explanations.append(
+                Explanation(
+                    block_id=block.id,
+                    message=slack_sentence(slack_min, status),
+                    slack_min=slack_min,
+                    slack_status=status,
+                )
+            )
 
     return SolveTrace(
         placed=locked + placed_flex,
         unplaced=unplaced,
         moves=moves,
+        explanations=explanations,
         failed_constraints=failed,
         solve_ms=(time.perf_counter() - started) * 1000,
         complete=len(unplaced) == 0,
     )
+
+
+def reschedule_after_miss(
+    blocks: list[TimeBlock],
+    missed_block_id: str,
+    missed_day: int,
+    previous_placed: list[TimeBlock],
+) -> SolveTrace:
+    """Mark one locked occurrence missed, solve again, and describe changed flexible placements."""
+    updated: list[TimeBlock] = []
+    found = False
+    for block in blocks:
+        copy = block.model_copy(deep=True)
+        if copy.id == missed_block_id and copy.kind == "locked" and missed_day in copy.days:
+            found = True
+            if missed_day not in copy.missed_days:
+                copy.missed_days = sorted([*copy.missed_days, missed_day])
+        updated.append(copy)
+    if not found:
+        raise ValueError("missed occurrence must identify a locked block on that day")
+
+    trace = solve(updated)
+    before = _flex_positions(previous_placed)
+    after = _flex_positions(trace.placed)
+    changes: list[Move] = []
+    unplaced_moves = {move.block_id: move for move in trace.moves}
+    for block in blocks:
+        if block.kind != "flexible" or before.get(block.id) == after.get(block.id):
+            continue
+        old = before.get(block.id)
+        new = after.get(block.id)
+        if new is None and block.id in unplaced_moves:
+            unplaced_moves[block.id].from_day = old[0] if old else None
+            unplaced_moves[block.id].from_start = old[1] if old else None
+        else:
+            changes.append(
+                Move(
+                    block_id=block.id,
+                    reason="RESHUFFLE_AFTER_MISS",
+                    from_day=old[0] if old else None,
+                    from_start=old[1] if old else None,
+                    to_day=new[0] if new else None,
+                    to_start=new[1] if new else None,
+                )
+            )
+        if new is not None:
+            trace.explanations.append(
+                Explanation(
+                    block_id=block.id,
+                    reason="RESHUFFLE_AFTER_MISS",
+                    message=sentence("RESHUFFLE_AFTER_MISS"),
+                )
+            )
+    trace.moves = changes + trace.moves
+    return trace
+
+
+def _active_locked(blocks: list[TimeBlock]) -> list[TimeBlock]:
+    active: list[TimeBlock] = []
+    for block in blocks:
+        if block.kind != "locked":
+            continue
+        days = [day for day in block.days if day not in block.missed_days]
+        if days:
+            active.append(block.model_copy(update={"days": days, "missed_days": []}))
+    return active
+
+
+def _flex_positions(blocks: list[TimeBlock]) -> dict[str, tuple[int, str]]:
+    return {
+        block.id: (block.days[0], block.start)
+        for block in blocks
+        if block.kind == "flexible" and block.start is not None and len(block.days) == 1
+    }
+
+
+def _slack_status(slack_min: int) -> SlackStatus:
+    if slack_min <= DANGER_SLACK_MIN:
+        return "danger"
+    if slack_min <= TIGHT_SLACK_MIN:
+        return "tight"
+    return "ok"
 
 
 def _locked_occupancy(locked: list[TimeBlock]) -> list[int]:
