@@ -1,6 +1,5 @@
-from backend.models import ReasonCode
+from backend.models import ReasonCode, SlackStatus
 
-# Partner replaces these with student-facing sentences in Phase 4.
 REASON_COPY: dict[ReasonCode, str] = {
     "LOCKED_OVERLAP": "That time is already taken by school, sports, or sleep.",
     "DEADLINE_MISS": "There is no slot left before this deadline.",
@@ -14,3 +13,12 @@ REASON_COPY: dict[ReasonCode, str] = {
 
 def sentence(code: ReasonCode) -> str:
     return REASON_COPY[code]
+
+
+def slack_sentence(slack_min: int, status: SlackStatus) -> str:
+    if slack_min == 0:
+        return "Scheduled to finish exactly at the deadline."
+    hours, minutes = divmod(slack_min, 60)
+    amount = f"{hours}h" if minutes == 0 else f"{hours}h {minutes}m" if hours else f"{minutes}m"
+    lead = {"danger": "Very little room", "tight": "Limited room", "ok": "Room"}[status]
+    return f"{lead}: scheduled to finish {amount} before the deadline."

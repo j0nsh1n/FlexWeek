@@ -1,0 +1,8 @@
+# Desktop shell only. The hosted web backend must NOT install these.
+# Runtime:
+PySide6==6.11.2
+
+# Build-time (pyside6-deploy runs Nuitka; patchelf is only needed on Linux,
+# where Nuitka uses it to relink ELF binaries):
+Nuitka==4.2.1
+patchelf==0.19.1; sys_platform == "linux"

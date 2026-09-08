@@ -4,3 +4,19 @@ __pycache__/
 .env
 *.pyc
 .DS_Store
+
+# local-only agent notes
+notes.md
+*.bak-*
+
+# Account database and SQLite journals
+var/
+*.db
+*.db-shm
+*.db-wal
+
+# Desktop build output
+dist/
+desktop/deployment/
+build/
+desktop/pysidedeploy.spec

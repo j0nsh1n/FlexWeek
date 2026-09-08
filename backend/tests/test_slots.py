@@ -8,9 +8,9 @@ from backend.slots import (
     hhmm_to_slot,
     minutes_to_hhmm,
     overlaps,
+    parse_deadline,
     slot_to_hhmm,
 )
-from backend.solver import solve
 
 
 def test_slots_per_day_is_68() -> None:
@@ -32,6 +32,13 @@ def test_rejects_off_grid_time() -> None:
 def test_rejects_before_day_start() -> None:
     with pytest.raises(ValueError):
         hhmm_to_slot("05:45")
+
+
+def test_rejects_day_end_as_start() -> None:
+    with pytest.raises(ValueError):
+        hhmm_to_slot("23:00")
+    with pytest.raises(ValueError):
+        slot_to_hhmm(SLOTS_PER_DAY)
 
 
 def test_rejects_bad_hhmm() -> None:
@@ -70,30 +77,19 @@ def test_days_must_be_in_week() -> None:
         )
 
 
-def test_stub_solver_keeps_locked_unplaces_flexible() -> None:
-    locked = TimeBlock(
-        id="school",
-        title="School",
-        kind="locked",
-        duration_min=60,
-        days=[0],
-        start="08:00",
-    )
-    flexible = TimeBlock(
-        id="hw",
-        title="HW",
-        kind="flexible",
-        duration_min=30,
-        days=[0],
-    )
-    trace = solve([locked, flexible])
-    assert [block.id for block in trace.placed] == ["school"]
-    assert [block.id for block in trace.unplaced] == ["hw"]
-    assert trace.complete is False
+def test_parse_deadline_english_weekday() -> None:
+    assert parse_deadline("Thursday 21:00", [0, 1, 2, 3, 4]) == (3, 21 * 60)
+    assert parse_deadline("Wednesday 07:45", [0, 1, 2]) == (2, 7 * 60 + 45)
 
 
-def test_empty_week_is_complete() -> None:
-    trace = solve([])
-    assert trace.complete is True
-    assert trace.placed == []
-    assert trace.unplaced == []
+def test_parse_deadline_iso_timestamp_uses_time_only() -> None:
+    assert parse_deadline("2026-09-10T21:00", [0, 1, 2, 3]) == (3, 21 * 60)
+
+
+def test_parse_deadline_bare_time_uses_last_day() -> None:
+    assert parse_deadline("21:00", [0, 1, 4]) == (4, 21 * 60)
+
+
+def test_parse_deadline_none() -> None:
+    assert parse_deadline(None, [0]) is None
+    assert parse_deadline("", [0]) is None

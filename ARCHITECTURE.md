@@ -1,42 +1,49 @@
-# FlexWeek Architecture (Week 1)
+# FlexWeek architecture
 
-## Ownership
+| Layer | Role |
+|---|---|
+| Browser | Account screens, week editor, theme, save/retry state and solver result display |
+| FastAPI | Session/ownership checks, bounded validated requests, account APIs and static files |
+| SQLite | Users, hashed sessions, account-owned weeks/revisions, preferences and auth counters |
+| Python solver | Pure synchronous constraint placement on the existing 15-minute grid |
 
-| Layer | Owner | Role |
-|-------|--------|------|
-| Browser | UI | Week grid, sidebar, demo switcher. Fetches JSON; paints locked blocks; lists flexible tasks. **No placement solver in JS.** |
-| FastAPI | Thin JSON door | Serves `frontend/` as static files and returns demo JSON. Later: accept a week payload and return a `SolveTrace`. |
-| Python engine (later) | Pure / sync | Constraint placement over 15-minute slots. Must stay importable without FastAPI. Models live in `backend/models.py` with **zero** FastAPI imports. |
+The browser sends weeks to the Python solver; it does not implement placement.
+A solver result is a preview. Editor saves persist the student's entered blocks.
 
-## Why this split
+## Data flow
 
-- The browser owns interaction and explanation display.
-- The solver stays a pure, synchronous Python function so it is easy to unit-test and reason about.
-- FastAPI is only the door: HTTP in, JSON out. It must not embed placement logic.
+```text
+Register/login → expiring HttpOnly cookie → authenticated account
+                                             |
+Editor → PUT /api/week + revision → account-owned SQLite row
+          | 409 conflict                      |
+          └→ retain draft + reload       GET /api/week → editor
 
-## Slot grid
-
-- Monday–Sunday, 06:00–23:00 local
-- 15-minute slots → 68 slots/day × 7 = **476** slots/week
-- Durations must be positive multiples of 15
-- Overlap helper uses half-open ranges `[start, end)`
-
-## Week 1 deliberately omits
-
-- `/api/solve` implementation (501 stub only)
-- Any greedy/backtracking/OR-Tools/etc. placement in `frontend/app.js`
-- Database / SQL
-
-## Data flow (current)
-
-```
-demo_*.json → GET /api/demos → browser paints locked + lists flexible
+Entered blocks → POST /api/solve → SolveTrace → grid + results
+Theme setting → PUT /api/preferences → account preference
 ```
 
-## Data flow (later)
+Every private query derives its owner from the session. The browser sends an
+expected account ID to detect cookie changes in another tab. Writes carry a
+custom header and same-origin checks; no CORS is enabled. Password hashes use
+scrypt; SQLite stores hashes of random session tokens, not the cookie values.
 
-```
-week payload → POST /api/solve → SolveTrace { placed, unplaced, moves, failed_constraints, … }
-                                    ↓
-                              browser explains moves
-```
+Week writes use transactions and optimistic revisions. A repeated identical
+payload is a no-op; stale differing writes return 409. Failures preserve the
+browser's unsaved in-memory draft. Session loss hides account content; only the
+same account can restore that draft. Explicit sign-out clears it.
+
+Legacy localStorage is available solely for an explicit validated import.
+Demo JSON remains test-only; no product endpoint exposes sample weeks.
+
+## Time model
+
+Monday–Sunday day indices, local HH:MM strings, 06:00–23:00, 15-minute slots:
+68 per day and 476 per week. Overlap uses half-open ranges `[start, end)`.
+Dated multi-week navigation is a future data-model migration.
+
+## Next client
+
+The planned separate desktop application is a PySide6 QWebEngineView window that
+loads the hosted origin and shares the web UI and account cookies. Windows/Linux
+are provisional targets. There is no native JavaScript bridge. See DESKTOP.md.

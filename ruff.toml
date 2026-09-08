@@ -1,0 +1,14 @@
+# Lint config for FlexWeek. Kept explicit so local runs and CI agree.
+target-version = "py314"
+line-length = 110
+
+[lint]
+# DTZ (flake8-datetimez) is deliberately NOT selected: FlexWeek stores wall-clock
+# times as naive "YYYY-MM-DDTHH:mm" strings in one assumed zone
+# (America/Los_Angeles) and does no timezone math. See spec.md, "Time model".
+# Making these datetimes aware to satisfy DTZ would contradict the design.
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[lint.per-file-ignores]
+# Tests read better with long, literal timestamp assertions on one line.
+"backend/tests/*" = ["E501"]
