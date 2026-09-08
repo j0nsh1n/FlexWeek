@@ -26,11 +26,13 @@ from backend.storage import (
     password_matches,
     throttle,
 )
+from backend.weeks import current_week_start, is_week_start
 
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
 COOKIE = "flexweek_session"
 MAX_BODY = 256 * 1024
+WEEK_START_RULE = "week_start must be a Monday date between 2000-01-01 and 2099-12-31"
 
 
 class Credentials(BaseModel):
@@ -46,7 +48,15 @@ class Credentials(BaseModel):
 
 class SavedWeek(WeekRequest):
     model_config = ConfigDict(extra="forbid")
+    week_start: str
     revision: int = Field(ge=0, le=2**53 - 1)
+
+    @field_validator("week_start")
+    @classmethod
+    def week_start_is_a_monday(cls, value: str) -> str:
+        if not is_week_start(value):
+            raise ValueError(WEEK_START_RULE)
+        return value
 
 
 class Preferences(BaseModel):
@@ -145,7 +155,6 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                         "INSERT INTO users(username, password_hash) VALUES (?, ?)", (data.username, encoded)
                     )
                     user_id = int(cursor.lastrowid or 0)
-                    db.execute("INSERT INTO weeks(user_id) VALUES (?)", (user_id,))
                     db.execute("INSERT INTO preferences(user_id) VALUES (?)", (user_id,))
                     token = create_session(db, user_id)
             except sqlite3.IntegrityError as exc:
@@ -190,12 +199,26 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         response.delete_cookie(COOKIE, path="/", httponly=True, secure=secure, samesite="strict")
 
     @app.get("/api/week")
-    def get_week(account: Annotated[dict, Depends(user)]) -> dict:
+    def get_week(account: Annotated[dict, Depends(user)], week_start: str | None = None) -> dict:
+        start = week_start if week_start is not None else current_week_start()
+        if not is_week_start(start):
+            raise HTTPException(422, WEEK_START_RULE)
         with connect(path) as db:
             row = db.execute(
-                "SELECT blocks, revision FROM weeks WHERE user_id = ?", (account["id"],)
+                "SELECT blocks, revision FROM weeks WHERE user_id = ? AND week_start = ?",
+                (account["id"], start),
             ).fetchone()
-        return {"blocks": json.loads(row["blocks"]), "revision": row["revision"]}
+        # A week nobody has saved yet is empty, not missing: the client needs no create-then-fetch.
+        blocks = json.loads(row["blocks"]) if row else []
+        return {"week_start": start, "blocks": blocks, "revision": row["revision"] if row else 0}
+
+    @app.get("/api/weeks")
+    def get_weeks(account: Annotated[dict, Depends(user)]) -> dict:
+        with connect(path) as db:
+            rows = db.execute(
+                "SELECT week_start FROM weeks WHERE user_id = ? ORDER BY week_start", (account["id"],)
+            ).fetchall()
+        return {"week_start": [row["week_start"] for row in rows]}
 
     @app.put("/api/week")
     def put_week(week: SavedWeek, account: Annotated[dict, Depends(user)]) -> dict:
@@ -204,17 +227,21 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         with connect(path) as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute(
-                "SELECT blocks, revision FROM weeks WHERE user_id = ?", (account["id"],)
+                "SELECT blocks, revision FROM weeks WHERE user_id = ? AND week_start = ?",
+                (account["id"], week.week_start),
             ).fetchone()
-            if encoded == row["blocks"]:
-                return {"blocks": blocks, "revision": row["revision"]}
-            if week.revision != row["revision"]:
+            stored, revision = (row["blocks"], row["revision"]) if row else ("[]", 0)
+            if encoded == stored:
+                return {"week_start": week.week_start, "blocks": blocks, "revision": revision}
+            if week.revision != revision:
                 raise HTTPException(409, "This week changed in another window. Reload before saving.")
             db.execute(
-                "UPDATE weeks SET blocks = ?, revision = revision + 1 WHERE user_id = ?",
-                (encoded, account["id"]),
+                """INSERT INTO weeks(user_id, week_start, blocks, revision) VALUES (?, ?, ?, 1)
+                ON CONFLICT(user_id, week_start)
+                DO UPDATE SET blocks = excluded.blocks, revision = revision + 1""",
+                (account["id"], week.week_start, encoded),
             )
-        return {"blocks": blocks, "revision": week.revision + 1}
+        return {"week_start": week.week_start, "blocks": blocks, "revision": week.revision + 1}
 
     @app.get("/api/preferences")
     def get_preferences(account: Annotated[dict, Depends(user)]) -> dict:
