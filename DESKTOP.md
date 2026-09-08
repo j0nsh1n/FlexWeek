@@ -223,3 +223,37 @@ and draft-download checks on a machine without the development virtualenv.
 The default self-contained desktop mode stores accounts locally. Hosted mode
 (`FLEXWEEK_DESKTOP_ORIGIN`) uses that deployment's accounts and weeks in both the
 desktop app and browser. There is no automatic local-to-hosted synchronization.
+
+---
+
+## 8. Releasing the Linux build
+
+The built app is **not** committed. `dist/` is gitignored, and it has to stay
+that way: `libQt6WebEngineCore.so.6` alone is 194 MB against GitHub's hard
+100 MB per-file limit, so a plain `git add dist/` produces a repository that
+cannot be pushed. It would also take `.git` from under a megabyte to over half
+a gigabyte, permanently, and every judge cloning the repo would pay for it.
+
+Distribute it as a release asset instead. GitHub Releases allow 2 GB per file.
+
+```bash
+./desktop/build_linux.sh                       # -> dist/FlexWeek/
+cd dist && tar -czf FlexWeek-linux-x86_64-$(date +%Y%m%d).tar.gz FlexWeek
+sha256sum FlexWeek-linux-x86_64-*.tar.gz | tee FlexWeek-linux-x86_64-*.tar.gz.sha256
+```
+
+528 MB on disk compresses to about 205 MB. Attach the tarball and its `.sha256`
+to a GitHub Release; users extract it and run `FlexWeek/FlexWeek`, with no
+Python and no separate server.
+
+Verify a release candidate by extracting it somewhere clean and starting it with
+an empty profile, rather than trusting the tree it was built from:
+
+```bash
+tar -xzf FlexWeek-linux-x86_64-*.tar.gz -C /tmp/check
+XDG_DATA_HOME=/tmp/check-profile /tmp/check/FlexWeek/FlexWeek
+```
+
+**Housekeeping.** `build_linux.sh` preserves each previous build as
+`dist/FlexWeek.previous.<timestamp>` and never prunes them, so `dist/` grows by
+about 528 MB per rebuild. Delete the ones you do not need.

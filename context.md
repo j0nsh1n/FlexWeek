@@ -17,8 +17,13 @@
   resize, click to edit, context menus, categories, copy/paste, duplicate day,
   undo/redo, recurring activities, export/import, completion state, reminders.
 - Windows build remains prepared but unexecuted; no Windows host here.
-- `dist/FlexWeek` is a frozen binary holding the pre-dated backend. It needs a
-  rebuild before the desktop app sees dated weeks.
+- `dist/FlexWeek` was rebuilt 2026-09-08 against the merged code and verified:
+  the packaged binary registers an account, reads and writes dated weeks, lists
+  them via /api/weeks, and 422s a non-Monday. Released as
+  `dist/FlexWeek-linux-x86_64-20260908.tar.gz` (205 MB compressed) with a
+  .sha256 beside it; both are gitignored on purpose. See DESKTOP.md section 8.
+- `dist/` grows by roughly 528 MB per rebuild because build_linux.sh preserves
+  each previous build and never prunes. It holds three copies as of today.
 - Databases carrying the old schema were backed up to
   /tmp/fw-db-backup-20260908-081624 before any migration ran.
 
@@ -92,7 +97,10 @@ There is no automatic synchronization between those databases.
   reviewed and merged by the main agent. Nothing pushed.
 - Next: the rest of Phase 5, starting with click-to-edit and drag interactions
   now that the grid is dated. Then the Windows build on a Windows host.
-- Owner decisions waiting: spec.md drift (lines 75, 93 and 109 still describe
-  one current week per account); the uncommitted roadmap.md edit adding a
-  Phase 7 for pomodoro, alarms and Spotify; whether `agents.md` and
-  `reslot-cac-build-plan.md` get committed.
+- Settled 2026-09-08 by the owner: spec.md updated for dated weeks and the
+  desktop build; roadmap Phase 7 (pomodoro, alarms, Spotify) committed with
+  contest delivery moved to Phase 8; agents.md now tracked. The built app is
+  distributed as a release asset, not committed, because one bundled Qt library
+  is 194 MB against GitHub's 100 MB per-file limit.
+- Still undecided: whether `Github Templates/` and `reslot-cac-build-plan.md`
+  get committed.

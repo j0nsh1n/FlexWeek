@@ -75,7 +75,9 @@ backend bundled inside it. It needs no separate server and no Python install —
 run `dist/FlexWeek/FlexWeek` and it starts its own backend on a loopback port,
 keeping its database next to the browser profile in your user data directory.
 Build it with `pip install -r requirements-desktop.txt` then
-`./desktop/build_linux.sh`. Set `FLEXWEEK_DESKTOP_ORIGIN` to point the window at
+`./desktop/build_linux.sh`. Releases ship as a tarball attached to a GitHub
+Release rather than committed to the repository, because the bundled Qt
+WebEngine library exceeds GitHub's per-file limit; see [DESKTOP.md](DESKTOP.md). Set `FLEXWEEK_DESKTOP_ORIGIN` to point the window at
 a hosted deployment instead; local and hosted accounts are separate, without
 automatic synchronization. Linux rebuilds preserve the previous artifact.
 
