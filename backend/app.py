@@ -218,7 +218,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             rows = db.execute(
                 "SELECT week_start FROM weeks WHERE user_id = ? ORDER BY week_start", (account["id"],)
             ).fetchall()
-        return {"week_start": [row["week_start"] for row in rows]}
+        return {"weeks": [row["week_start"] for row in rows]}
 
     @app.put("/api/week")
     def put_week(week: SavedWeek, account: Annotated[dict, Depends(user)]) -> dict:

@@ -321,7 +321,7 @@ async function loadAccount(identity) {
     ]);
     if (loadEpoch !== epoch) return;
     weeks.clear();
-    savedWeeks = Array.isArray(saved.week_start) ? saved.week_start.slice() : [];
+    savedWeeks = Array.isArray(saved.weeks) ? saved.weeks.slice() : [];
     selectedWeek = isWeekStart(week.week_start) ? week.week_start : asked;
     const state = weekState();
     state.blocks = week.blocks;

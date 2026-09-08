@@ -87,7 +87,7 @@ def test_put_rejects_a_non_monday_week_start_and_changes_nothing(account: TestCl
 
     saved_one = account.get(f"/api/week?week_start={WEEK_ONE}")
     assert saved_one.json() == {"week_start": WEEK_ONE, "blocks": [math], "revision": 1}
-    assert account.get("/api/weeks").json() == {"week_start": [WEEK_ONE]}
+    assert account.get("/api/weeks").json() == {"weeks": [WEEK_ONE]}
 
 
 def test_get_rejects_non_monday_and_malformed_week_starts(account: TestClient) -> None:
@@ -101,7 +101,7 @@ def test_out_of_range_week_starts_are_rejected(account: TestClient) -> None:
     assert account.get("/api/week?week_start=1999-12-27").status_code == 422
     assert account.get("/api/week?week_start=2100-01-04").status_code == 422
     assert save(account, "1999-12-27", [], 0).status_code == 422
-    assert account.get("/api/weeks").json() == {"week_start": []}
+    assert account.get("/api/weeks").json() == {"weeks": []}
 
 
 def test_never_saved_week_reads_empty_then_is_created_by_put(account: TestClient) -> None:
@@ -133,7 +133,7 @@ def test_re_saving_identical_blocks_leaves_revision_unchanged(account: TestClien
 
     saved = account.get(f"/api/week?week_start={WEEK_ONE}")
     assert saved.json() == {"week_start": WEEK_ONE, "blocks": [math], "revision": 1}
-    assert account.get("/api/weeks").json() == {"week_start": [WEEK_ONE]}
+    assert account.get("/api/weeks").json() == {"weeks": [WEEK_ONE]}
 
 
 def test_stale_revision_conflicts_on_one_week_without_touching_the_other(account: TestClient) -> None:
@@ -157,13 +157,13 @@ def test_weeks_listing_is_ascending_and_per_account(app: FastAPI, account: TestC
     # Save the later week first, so ascending order is not the insertion order.
     assert save(account, WEEK_TWO, [reading], 0).status_code == 200
     assert save(account, WEEK_ONE, [math], 0).status_code == 200
-    assert account.get("/api/weeks").json() == {"week_start": [WEEK_ONE, WEEK_TWO]}
+    assert account.get("/api/weeks").json() == {"weeks": [WEEK_ONE, WEEK_TWO]}
 
     with TestClient(app) as bob:
         assert (
             bob.post("/api/auth/register", json={"username": "bob", "password": PASSWORD}, headers=WRITE).status_code
             == 201
         )
-        assert bob.get("/api/weeks").json() == {"week_start": []}
+        assert bob.get("/api/weeks").json() == {"weeks": []}
         saved = bob.get(f"/api/week?week_start={WEEK_ONE}")
         assert saved.json() == {"week_start": WEEK_ONE, "blocks": [], "revision": 0}

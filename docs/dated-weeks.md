@@ -72,7 +72,7 @@ The server only defaults when the parameter is absent.
 |---|---|---|
 | GET | `/api/week?week_start=YYYY-MM-DD` | That week for the signed-in account |
 | GET | `/api/week` | The week containing the server's local today |
-| GET | `/api/weeks` | `{"week_start": [...]}`, ascending, the account's saved weeks |
+| GET | `/api/weeks` | `{"weeks": [...]}`, ascending, the account's saved weeks |
 | PUT | `/api/week` | Save; `week_start` is required in the body |
 
 `/api/weeks` exists so the client can navigate to weeks it did not know about.

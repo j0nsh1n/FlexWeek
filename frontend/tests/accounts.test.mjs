@@ -68,7 +68,7 @@ function harness() {
     async login(id = 1, blocks = [], saved = []) {
       await tick();
       handler = async path => {
-        if (path.startsWith('/api/weeks')) return response(200, { week_start: saved });
+        if (path.startsWith('/api/weeks')) return response(200, { weeks: saved });
         if (path.startsWith('/api/week')) return response(200, { week_start: weekOf(path), blocks, revision: 0 });
         return response(200, { theme: 'nocturne' });
       };
