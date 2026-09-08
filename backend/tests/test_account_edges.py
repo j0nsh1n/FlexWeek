@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date, timedelta
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -8,6 +9,9 @@ from backend.storage import connect
 
 HEADERS = {"X-FlexWeek-Request": "1"}
 PASSWORD = "temporary-test-password"
+# The week a parameterless /api/week uses, worked out here rather than from the code under test.
+TODAY = date.today()
+WEEK = (TODAY - timedelta(days=TODAY.weekday())).isoformat()
 
 
 def test_registration_rolls_back_every_row_on_partial_failure(tmp_path: Path) -> None:
@@ -31,7 +35,10 @@ def test_stale_browser_identity_cannot_read_write_or_logout_new_account(tmp_path
         second = client.post("/api/auth/register", json={"username": "second", "password": PASSWORD}).json()
         client.headers["X-FlexWeek-Account"] = str(first["id"])
         assert client.get("/api/week").status_code == 401
-        assert client.put("/api/week", json={"blocks": [], "revision": 0}).status_code == 401
+        assert (
+            client.put("/api/week", json={"week_start": WEEK, "blocks": [], "revision": 0}).status_code
+            == 401
+        )
         assert client.post("/api/auth/logout").status_code == 401
         del client.headers["X-FlexWeek-Account"]
         assert client.get("/api/auth/me").json()["id"] == second["id"]
@@ -47,7 +54,7 @@ def test_concurrent_differing_saves_do_not_lose_a_committed_write(tmp_path: Path
 
         def save(title: str) -> tuple[int, str]:
             block = {"id": "task", "title": title, "kind": "flexible", "duration_min": 60, "days": [0]}
-            result = client.put("/api/week", json={"blocks": [block], "revision": 0})
+            result = client.put("/api/week", json={"week_start": WEEK, "blocks": [block], "revision": 0})
             return result.status_code, title
 
         with ThreadPoolExecutor(max_workers=2) as pool:
@@ -66,7 +73,7 @@ def test_identical_save_retry_is_idempotent_and_invalid_input_never_replaces_it(
             == 201
         )
         block = {"id": "task", "title": "Math", "kind": "flexible", "duration_min": 60, "days": [0]}
-        week = {"blocks": [block], "revision": 0}
+        week = {"week_start": WEEK, "blocks": [block], "revision": 0}
         assert client.put("/api/week", json=week).json()["revision"] == 1
         assert client.put("/api/week", json=week).json()["revision"] == 1
         invalid = [
@@ -78,7 +85,10 @@ def test_identical_save_retry_is_idempotent_and_invalid_input_never_replaces_it(
             [{**block, "id": str(index)} for index in range(101)],
         ]
         for blocks in invalid:
-            assert client.put("/api/week", json={"blocks": blocks, "revision": 1}).status_code == 422
+            assert (
+                client.put("/api/week", json={"week_start": WEEK, "blocks": blocks, "revision": 1}).status_code
+                == 422
+            )
         assert client.put("/api/week", content=b"x" * (256 * 1024 + 1)).status_code == 413
         saved = client.get("/api/week").json()
         assert saved["revision"] == 1

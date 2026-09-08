@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Iterator
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,9 @@ from backend.app import create_app
 
 PASSWORD = "a-long-test-password"
 WRITE = {"X-FlexWeek-Request": "1", "Origin": "http://testserver"}
+# The week a parameterless /api/week uses, worked out here rather than from the code under test.
+TODAY = date.today()
+WEEK = (TODAY - timedelta(days=TODAY.weekday())).isoformat()
 
 
 @pytest.fixture()
@@ -83,7 +87,7 @@ def user_count(database: Path) -> int:
 
 
 def test_registration_starts_with_empty_week(alice: TestClient) -> None:
-    assert alice.get("/api/week").json() == {"blocks": [], "revision": 0}
+    assert alice.get("/api/week").json() == {"week_start": WEEK, "blocks": [], "revision": 0}
     me = alice.get("/api/auth/me").json()
     assert set(me) == {"id", "username"}
     assert me["username"] == "alice"
@@ -167,7 +171,8 @@ def test_protected_endpoints_require_session(client: TestClient) -> None:
     assert client.get("/api/week").status_code == 401
     assert client.get("/api/preferences").status_code == 401
     assert client.post("/api/solve", json={"blocks": []}, headers=WRITE).status_code == 401
-    assert client.put("/api/week", json={"blocks": [], "revision": 0}, headers=WRITE).status_code == 401
+    unsaved = {"week_start": WEEK, "blocks": [], "revision": 0}
+    assert client.put("/api/week", json=unsaved, headers=WRITE).status_code == 401
     assert client.put("/api/preferences", json={"theme": "slate"}, headers=WRITE).status_code == 401
     forged = {"Cookie": "flexweek_session=forged-token"}
     assert client.get("/api/auth/me", headers=forged).status_code == 401
@@ -181,33 +186,38 @@ def test_private_responses_are_not_cached(alice: TestClient) -> None:
 
 def test_two_accounts_are_isolated(app: FastAPI, alice: TestClient) -> None:
     mine = flex("a-hw", title="Alice homework")
-    first = alice.put("/api/week", json={"blocks": [mine], "revision": 0}, headers=WRITE)
+    first = alice.put("/api/week", json={"week_start": WEEK, "blocks": [mine], "revision": 0}, headers=WRITE)
     assert first.status_code == 200
     assert first.json()["revision"] == 1
 
     with TestClient(app) as bob:
         assert register(bob, "bob").status_code == 201
-        assert bob.get("/api/week").json() == {"blocks": [], "revision": 0}
+        assert bob.get("/api/week").json() == {"week_start": WEEK, "blocks": [], "revision": 0}
         theirs = flex("b-hw", title="Bob homework", duration_min=30, days=[1])
         assert (
-            bob.put("/api/week", json={"blocks": [theirs], "revision": 0}, headers=WRITE).status_code == 200
+            bob.put(
+                "/api/week", json={"week_start": WEEK, "blocks": [theirs], "revision": 0}, headers=WRITE
+            ).status_code
+            == 200
         )
 
         stale = alice.put(
             "/api/week",
-            json={"blocks": [flex("a-x")], "revision": 0},
+            json={"week_start": WEEK, "blocks": [flex("a-x")], "revision": 0},
             headers=WRITE,
         )
         assert stale.status_code == 409
-        assert alice.get("/api/week").json() == {"blocks": [mine], "revision": 1}
-        assert bob.get("/api/week").json() == {"blocks": [theirs], "revision": 1}
+        assert alice.get("/api/week").json() == {"week_start": WEEK, "blocks": [mine], "revision": 1}
+        assert bob.get("/api/week").json() == {"week_start": WEEK, "blocks": [theirs], "revision": 1}
 
         assert alice.put("/api/preferences", json={"theme": "slate"}, headers=WRITE).status_code == 200
         assert alice.get("/api/preferences").json() == {"theme": "slate"}
         assert bob.get("/api/preferences").json() == {"theme": "nocturne"}
 
         extra = flex("a-second", duration_min=30, days=[2])
-        advance = alice.put("/api/week", json={"blocks": [mine, extra], "revision": 1}, headers=WRITE)
+        advance = alice.put(
+            "/api/week", json={"week_start": WEEK, "blocks": [mine, extra], "revision": 1}, headers=WRITE
+        )
         assert advance.status_code == 200
         assert advance.json()["revision"] == 2
         assert bob.get("/api/week").json()["blocks"] == [theirs]
@@ -287,7 +297,10 @@ def test_accounts_and_weeks_survive_restart(tmp_path: Path) -> None:
     with TestClient(app_one) as first:
         assert register(first, "alice").status_code == 201
         assert (
-            first.put("/api/week", json={"blocks": blocks, "revision": 0}, headers=WRITE).status_code == 200
+            first.put(
+                "/api/week", json={"week_start": WEEK, "blocks": blocks, "revision": 0}, headers=WRITE
+            ).status_code
+            == 200
         )
         token = first.cookies.get("flexweek_session")
         assert token is not None
@@ -299,6 +312,7 @@ def test_accounts_and_weeks_survive_restart(tmp_path: Path) -> None:
         assert resumed.status_code == 200
         assert resumed.json()["username"] == "alice"
         assert second.get("/api/week", headers=session_header).json() == {
+            "week_start": WEEK,
             "blocks": blocks,
             "revision": 1,
         }

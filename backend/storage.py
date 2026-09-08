@@ -9,7 +9,16 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from backend.weeks import current_week_start
+
 SESSION_SECONDS = 7 * 24 * 60 * 60
+WEEKS_TABLE = """
+    CREATE TABLE IF NOT EXISTS weeks (
+        user_id INTEGER NOT NULL REFERENCES users(id), week_start TEXT NOT NULL,
+        blocks TEXT NOT NULL DEFAULT '[]', revision INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (user_id, week_start)
+    )
+"""
 
 
 def digest(value: str) -> str:
@@ -40,12 +49,33 @@ def connect(path: Path) -> Iterator[sqlite3.Connection]:
         db.close()
 
 
+def date_legacy_weeks(db: sqlite3.Connection) -> None:
+    """Give pre-dated week rows the current week. Runs on every start, so it must be a no-op twice."""
+    tables = {row["name"] for row in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    if "weeks" not in tables:
+        return
+    columns = {row["name"] for row in db.execute("PRAGMA table_info('weeks')")}
+    if "week_start" in columns:
+        return
+    # One transaction: a crash between the rename and the create would leave no weeks table at all.
+    db.execute("BEGIN IMMEDIATE")
+    db.execute("ALTER TABLE weeks RENAME TO weeks_legacy")
+    db.execute(WEEKS_TABLE)
+    db.execute(
+        """INSERT INTO weeks(user_id, week_start, blocks, revision)
+        SELECT user_id, ?, blocks, revision FROM weeks_legacy""",
+        (current_week_start(),),
+    )
+    db.execute("DROP TABLE weeks_legacy")
+    db.execute("COMMIT")
+
+
 def initialize(path: Path) -> None:
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     path.touch(mode=0o600, exist_ok=True)
     path.chmod(0o600)
     with connect(path) as db:
-        db.executescript("""
+        db.executescript(f"""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL
@@ -54,10 +84,7 @@ def initialize(path: Path) -> None:
                 token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id),
                 expires INTEGER NOT NULL
             );
-            CREATE TABLE IF NOT EXISTS weeks (
-                user_id INTEGER PRIMARY KEY REFERENCES users(id),
-                blocks TEXT NOT NULL DEFAULT '[]', revision INTEGER NOT NULL DEFAULT 0
-            );
+            {WEEKS_TABLE};
             CREATE TABLE IF NOT EXISTS preferences (
                 user_id INTEGER PRIMARY KEY REFERENCES users(id),
                 theme TEXT NOT NULL DEFAULT 'nocturne' CHECK(theme IN ('nocturne', 'slate'))
@@ -66,6 +93,7 @@ def initialize(path: Path) -> None:
                 key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL
             );
         """)
+        date_legacy_weeks(db)
 
 
 def create_session(db: sqlite3.Connection, user_id: int) -> str:
