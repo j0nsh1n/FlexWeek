@@ -36,7 +36,14 @@ def solve(blocks: list[TimeBlock]) -> SolveTrace:
     # that time, so it stays on the grid and nothing new is booked over it; one
     # with no slot needs none and is not reported unplaced. Locked blocks are
     # untouched by this, so a completed lesson keeps its place in the week.
-    spent = [block for block in every_flexible if block.completed and block.start is not None]
+    # Only a real placement is spent time: one day, one start. A finished task
+    # still listed on several candidate days was done once, and nobody knows on
+    # which, so it holds no slot rather than blocking that hour on every day.
+    spent = [
+        block
+        for block in every_flexible
+        if block.completed and block.start is not None and len(block.days) == 1
+    ]
     flexible = [block for block in every_flexible if not block.completed]
 
     occ_locked = _locked_occupancy(locked + spent)

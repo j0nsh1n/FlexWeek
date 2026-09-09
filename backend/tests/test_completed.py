@@ -184,3 +184,43 @@ def test_a_finished_task_is_not_reported_as_reshuffled_after_a_miss() -> None:
     trace = reschedule_after_miss(now, "practice", 0, previously_placed)
     assert [move.block_id for move in trace.moves] == []
     assert [block.id for block in trace.unplaced] == []
+
+
+def test_a_finished_task_on_several_candidate_days_holds_no_slot() -> None:
+    # One piece of work, done once, still listed on the three days it could have
+    # been done on. Occupying that hour on all three would block three real
+    # tasks over work that happened once.
+    done = _flex("done", "Reading", 60, [0, 1, 2], completed=True, start="09:00")
+    names = ("Monday", "Tuesday", "Wednesday")
+    wants = [
+        _flex(f"w{day}", f"Task {day}", 60, [day], earliest=f"{names[day]} 09:00", latest=f"{names[day]} 10:00")
+        for day in (0, 1, 2)
+    ]
+    trace = solve([done, *wants])
+    assert [block.id for block in trace.placed] == ["w0", "w1", "w2"]
+    assert [block.start for block in trace.placed] == ["09:00", "09:00", "09:00"]
+    assert trace.unplaced == []
+    assert trace.complete is True
+
+
+def test_a_finished_task_placed_on_one_day_still_holds_that_slot() -> None:
+    done = _flex("done", "Reading", 60, [0], completed=True, start="09:00")
+    wants = _flex("wants", "Maths", 60, [0], earliest="Monday 09:00", latest="Monday 10:00")
+    trace = solve([done, wants])
+    assert [block.id for block in trace.placed] == ["done"]
+    assert [block.id for block in trace.unplaced] == ["wants"]
+    assert trace.complete is False
+
+
+def test_a_collision_with_finished_work_does_not_blame_school_sports_or_sleep() -> None:
+    # The only thing occupying the week is a task the student already finished,
+    # so an explanation naming fixed commitments would be untrue.
+    done = _flex("done", "Essay", 60, [0], completed=True, start="09:00")
+    wants = _flex("wants", "Maths", 60, [0], earliest="Monday 09:00", latest="Monday 10:00")
+    trace = solve([done, wants])
+    messages = [explanation.message for explanation in trace.explanations]
+    assert [explanation.reason for explanation in trace.explanations] == ["LOCKED_OVERLAP"]
+    assert len(messages) == 1
+    for blamed in ("school", "sports", "sleep"):
+        assert blamed not in messages[0].lower()
+    assert "finished" in messages[0].lower()
