@@ -1,7 +1,7 @@
 from backend.models import ReasonCode, SlackStatus
 
 REASON_COPY: dict[ReasonCode, str] = {
-    "LOCKED_OVERLAP": "That time is already taken by school, sports, or sleep.",
+    "LOCKED_OVERLAP": "That time is already taken by a fixed block or by work you have finished.",
     "DEADLINE_MISS": "There is no slot left before this deadline.",
     "NO_SLOT_LEFT": "The week is too full to place this task.",
     "PRIORITY_PREEMPT": "A higher-priority task took the last usable slot.",
