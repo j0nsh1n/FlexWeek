@@ -6,6 +6,9 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Linux desktop release archive rebuilt from `f12ea5c`, with the extracted
+  executable verified against its bundled health endpoint and web UI
+  (2026-09-09).
 - Repeatable full-source verification command, web CI workflow, a feature
   coverage guide, generated solver invariants and real calendar/completion
   WebEngine regression checks (2026-09-08).

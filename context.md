@@ -23,10 +23,11 @@
   preserve and can restore the candidate set.
   Completed tasks without a placement stay outside scheduling; locked blocks
   retain their existing occupancy semantics.
-- The previous Linux artifact was rebuilt by Claude on September 8. It predates
-  this verification branch's fixes and has not been rebuilt in this pass.
-  Packaged behavior, Windows execution, Safari/iPhone and physical touch remain
-  unverified here. Desktop tray reminders are deferred.
+- GLM rebuilt the Linux artifact from `f12ea5c` on September 9. The extracted
+  archive served `/api/health` with HTTP 200 and the bundled FlexWeek page from
+  a fresh profile. Full packaged account/interaction flows, Windows execution,
+  Safari/iPhone and physical touch remain unverified. Desktop tray reminders
+  are deferred.
 - Default desktop mode uses a local database. Hosted mode uses the configured
   server; there is no automatic synchronization between them.
 
@@ -103,6 +104,9 @@ There is no automatic synchronization between those databases.
   untouched. `spec.md` is unchanged; its individual validation commands still
   apply. It does not yet document the persisted `completed_day` field; that
   contract update needs a separate approved spec edit.
-- The CI workflow is unrun until pushed. The existing Linux package predates
-  these changes; Windows, Safari/iPhone, physical touch, packaged behavior and
-  OS notification delivery still need release-platform checks.
+- The CI workflow is unrun until pushed. Windows, Safari/iPhone, physical touch,
+  full packaged flows and OS notification delivery still need release-platform
+  checks.
+- GLM produced `dist/FlexWeek-linux-x86_64-20260909.tar.gz` from `f12ea5c`.
+  SHA-256 is `57d559c0525291f8065cea60f72592a70ed69851cd0b3cf04ab9cc151ba0713d`;
+  the prior build is preserved at `dist/FlexWeek.previous.20260909-163020`.
