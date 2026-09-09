@@ -15,8 +15,186 @@ const CATEGORIES = [
   { id: "exercise", label: "Sports", color: "#10b981" },
   { id: "extra", label: "Activity", color: "#ec4899" },
   { id: "meals", label: "Meals", color: "#f97316" },
+  { id: "sleep", label: "Sleep", color: "#6366f1" },
   { id: "free", label: "Free", color: "#94a3b8" },
 ];
+
+const EXPORT_FORMAT = "flexweek-week";
+const EXPORT_VERSION = 1;
+const REMINDER_WINDOW_MIN = 2;
+const REMINDER_POLL_MS = 30000;
+
+function isSeries(block) {
+  return Boolean(block && Array.isArray(block.days) && block.days.length > 1);
+}
+
+function cloneBlock(block) {
+  return JSON.parse(JSON.stringify(block));
+}
+
+function removeOccurrence(block, day) {
+  if (!block || !Number.isInteger(day)) return block || null;
+  const days = (block.days || []).filter(function (d) { return d !== day; });
+  if (!days.length) return null;
+  const next = cloneBlock(block);
+  next.days = days;
+  next.missed_days = (next.missed_days || []).filter(function (d) {
+    return d !== day && days.indexOf(d) !== -1;
+  });
+  return next;
+}
+
+function applyBlockPatch(block, patch) {
+  const next = cloneBlock(block);
+  const keys = Object.keys(patch || {});
+  for (let i = 0; i < keys.length; i += 1) {
+    const key = keys[i];
+    if (key === "id" || key === "kind") continue;
+    next[key] = patch[key];
+  }
+  if (Array.isArray(next.days)) {
+    next.days = Array.from(new Set(next.days)).filter(function (d) {
+      return Number.isInteger(d) && d >= 0 && d <= 6;
+    }).sort();
+  }
+  next.missed_days = (next.missed_days || []).filter(function (d) {
+    return (next.days || []).indexOf(d) !== -1;
+  });
+  return next;
+}
+
+/** Edit one weekday of a multi-day locked block. Field changes split a new one-day block. */
+function editOccurrence(block, day, patch) {
+  if (!block || !Number.isInteger(day) || (block.days || []).indexOf(day) === -1) {
+    return { series: block, split: null };
+  }
+  const patchObj = patch || {};
+  const onlyMembership = Object.keys(patchObj).length === 0;
+  if (onlyMembership) {
+    return { series: removeOccurrence(block, day), split: null };
+  }
+  const series = removeOccurrence(block, day);
+  const split = applyBlockPatch(block, patchObj);
+  split.id = typeof newId === "function" ? newId() : ("occ-" + day + "-" + String(block.id));
+  split.days = [day];
+  split.missed_days = (block.missed_days || []).indexOf(day) !== -1 ? [day] : [];
+  split.kind = block.kind;
+  return { series: series, split: split };
+}
+
+function editSeries(block, patch) {
+  return applyBlockPatch(block, patch || {});
+}
+
+function startAlertDue(startMin, nowMin, lead, windowMin) {
+  const fireAt = Math.max(0, Number(startMin) - Math.max(0, Number(lead) || 0));
+  const now = Number(nowMin);
+  const window = Math.max(0, Number(windowMin) || 0);
+  return now - window <= fireAt && fireAt <= now;
+}
+
+function reminderKey(weekStart, blockId, day, start) {
+  return [weekStart, blockId, day, start].join("|");
+}
+
+function categoryLabel(category) {
+  for (let i = 0; i < CATEGORIES.length; i += 1) {
+    if (CATEGORIES[i].id === category) return CATEGORIES[i].label;
+  }
+  return "";
+}
+
+function exportWeekPayload(weekStart, blocks) {
+  return {
+    format: EXPORT_FORMAT,
+    version: EXPORT_VERSION,
+    week_start: weekStart,
+    blocks: (blocks || []).map(function (block) { return cloneBlock(block); }),
+  };
+}
+
+function exportDayPayload(weekStart, day, blocks) {
+  const date = dateForDay(weekStart, day);
+  const dayBlocks = (blocks || []).filter(function (block) {
+    return (block.days || []).indexOf(day) !== -1;
+  }).map(function (block) {
+    const copy = cloneBlock(block);
+    copy.days = [day];
+    if (copy.missed_days) {
+      copy.missed_days = copy.missed_days.filter(function (d) { return d === day; });
+    }
+    return copy;
+  });
+  return {
+    format: "flexweek-day",
+    version: EXPORT_VERSION,
+    week_start: weekStart,
+    date: date,
+    day: day,
+    blocks: dayBlocks,
+  };
+}
+
+function formatWeekExportText(weekStart, blocks) {
+  const lines = ["FlexWeek — " + weekLabel(weekStart), ""];
+  for (let day = 0; day < 7; day += 1) {
+    const onDay = (blocks || []).filter(function (b) {
+      return b.start && (b.days || []).indexOf(day) !== -1;
+    }).slice().sort(function (a, b) {
+      return parseStart(a.start) - parseStart(b.start);
+    });
+    lines.push(DAYS[day] + " " + shortDate(dateForDay(weekStart, day)));
+    if (!onDay.length) lines.push("  (empty)");
+    onDay.forEach(function (block) {
+      const end = formatMinute(parseStart(block.start) + block.duration_min);
+      const done = block.completed ? " [done]" : "";
+      const cat = block.category ? " [" + block.category + "]" : "";
+      lines.push("  " + block.start + "-" + end + "  " + block.title + cat + done);
+    });
+    lines.push("");
+  }
+  const flex = (blocks || []).filter(function (b) { return b.kind === "flexible" && !b.start; });
+  if (flex.length) {
+    lines.push("Unplaced tasks");
+    flex.forEach(function (block) {
+      lines.push("  " + block.title + " (" + block.duration_min + " min)" + (block.completed ? " [done]" : ""));
+    });
+  }
+  return lines.join("\n").trim() + "\n";
+}
+
+function parseImportPayload(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return { error: "Empty file." };
+  let data;
+  try { data = JSON.parse(text); }
+  catch (err) { return { error: "Not valid JSON. Plain-text import is export-only." }; }
+  if (!data || typeof data !== "object") return { error: "Invalid FlexWeek export." };
+  if (data.format !== EXPORT_FORMAT && data.format !== "flexweek-day") {
+    return { error: "Unrecognized export format." };
+  }
+  if (!Array.isArray(data.blocks)) return { error: "Export is missing blocks." };
+  const weekStart = data.week_start;
+  if (weekStart && !isWeekStart(weekStart)) return { error: "Export week_start must be a Monday." };
+  return {
+    format: data.format,
+    week_start: weekStart || null,
+    day: Number.isInteger(data.day) ? data.day : null,
+    blocks: data.blocks,
+  };
+}
+
+function mergeImportedBlocks(existing, incoming, mode) {
+  // mode: "replace" replaces all; "merge" upserts by id without dropping others
+  if (mode === "replace") return (incoming || []).map(cloneBlock);
+  const byId = {};
+  (existing || []).forEach(function (block) { byId[block.id] = cloneBlock(block); });
+  (incoming || []).forEach(function (block) {
+    if (!block || !block.id) return;
+    byId[block.id] = cloneBlock(block);
+  });
+  return Object.keys(byId).map(function (id) { return byId[id]; });
+}
 
 function snapMinute(minute) {
   const m = Math.round(Number(minute) / SNAP_MIN) * SNAP_MIN;
@@ -247,6 +425,15 @@ let epoch = 0;
 let saving = false;
 let suspendedDraft = null;
 let editingOccurrenceDay = null;
+let editingScope = "series";
+let prefs = {
+  theme: "nocturne",
+  reminders_enabled: false,
+  reminder_lead_min: 5,
+  reminder_sound: true,
+};
+const firedReminders = new Set();
+let reminderTimer = null;
 
 // One record per week, keyed by its Monday. Blocks, revision, unsaved edits and
 // a conflict all belong to the week they came from: a single global revision
@@ -417,8 +604,7 @@ async function loadAccount(identity) {
       });
     }
     suspendedDraft = null;
-    themeEl.value = preferences.theme;
-    document.documentElement.dataset.theme = preferences.theme;
+    applyPreferences(preferences);
     authPanel.hidden = true;
     planner.hidden = false;
     document.getElementById("account-controls").hidden = false;
@@ -587,6 +773,7 @@ function applyCreateLocked(day, startMin, endMin) {
     start: formatMinute(range.startMin),
     missed_days: [],
     category: null,
+    completed: false,
   };
   weekState().blocks.push(block);
   clearSolveResult();
@@ -639,6 +826,17 @@ function hideContextMenu() {
 function showContextMenu(clientX, clientY, blockId, day) {
   const menu = document.getElementById("block-context-menu");
   if (!menu) return;
+  const source = weekState().blocks.find(function (item) { return item.id === blockId; });
+  const series = source && isSeries(source) && source.kind === "locked";
+  menu.querySelectorAll("button[data-action]").forEach(function (btn) {
+    const action = btn.dataset.action;
+    if (action === "edit") btn.hidden = Boolean(series);
+    else if (action === "edit-occurrence" || action === "edit-series" || action === "delete-occurrence") {
+      btn.hidden = !series;
+    } else {
+      btn.hidden = false;
+    }
+  });
   menu.hidden = false;
   menu.style.left = clientX + "px";
   menu.style.top = clientY + "px";
@@ -856,13 +1054,16 @@ function buildGrid(blocks, explanations = []) {
       const el = document.createElement("div");
       const missed = block.kind === "locked" && (block.missed_days || []).indexOf(day) !== -1;
       el.className = "block" + (block.kind === "flexible" ? " flex-block" : "") +
-        (missed ? " missed-block" : "");
+        (missed ? " missed-block" : "") + (block.completed ? " is-completed" : "");
       el.dataset.id = block.id;
       el.dataset.day = String(day);
       el.style.top = ((clippedStart - visibleStart) / 60) * hourH + "rem";
       el.style.height = Math.max(((endMin - clippedStart) / 60) * hourH, 1.1) + "rem";
       const color = categoryColor(block.category);
-      if (color) el.style.borderLeftColor = color;
+      if (color) {
+        el.style.borderLeftColor = color;
+        el.style.borderLeftWidth = "4px";
+      }
       el.title = block.title + (block.course ? " · " + block.course : "") +
         (missed ? " · missed" : "") + " (double-click to edit)";
 
@@ -907,8 +1108,10 @@ function renderFlexible(flex) {
 
   flex.forEach((block) => {
     const li = document.createElement("li");
-    li.className = "task-card";
+    li.className = "task-card" + (block.completed ? " is-completed" : "");
     li.dataset.id = block.id;
+    const color = categoryColor(block.category);
+    if (color) li.style.borderLeftColor = color;
     const name = document.createElement("strong");
     name.textContent = block.title;
     li.appendChild(name);
@@ -927,7 +1130,9 @@ function renderFlexible(flex) {
     pill(PRIORITY_LABEL[block.priority] || "P" + block.priority);
     if (block.energy) pill(block.energy);
     if (block.course) pill(block.course);
+    if (block.category) pill(categoryLabel(block.category) || block.category);
     if (block.latest) pill("due " + block.latest);
+    if (block.completed) pill("done");
 
     li.appendChild(pills);
     li.addEventListener("click", function () {
@@ -1069,22 +1274,284 @@ function parseLatest(latest) {
 
 function ensureCategoryOptions() {
   const select = document.getElementById("f-category");
-  if (!select || select.dataset.ready === "1") return;
-  select.innerHTML = "";
-  const blank = document.createElement("option");
-  blank.value = "";
-  blank.textContent = "None";
-  select.appendChild(blank);
-  CATEGORIES.forEach(function (cat) {
-    const opt = document.createElement("option");
-    opt.value = cat.id;
-    opt.textContent = cat.label;
-    select.appendChild(opt);
-  });
-  select.dataset.ready = "1";
+  if (!select) return;
+  if (select.dataset.ready !== "1") {
+    select.innerHTML = "";
+    const blank = document.createElement("option");
+    blank.value = "";
+    blank.textContent = "None";
+    select.appendChild(blank);
+    CATEGORIES.forEach(function (cat) {
+      const opt = document.createElement("option");
+      opt.value = cat.id;
+      opt.textContent = cat.label;
+      select.appendChild(opt);
+    });
+    select.dataset.ready = "1";
+  }
+  renderCategoryChips(document.getElementById("category-chips"), select.value || "", true);
+  renderCategoryChips(document.getElementById("category-legend"), "", false);
 }
 
-function openForm(kind, block, occurrenceDay = null) {
+function renderCategoryChips(container, selected, interactive) {
+  if (!container) return;
+  container.innerHTML = "";
+  if (interactive) {
+    const none = document.createElement("button");
+    none.type = "button";
+    none.className = "category-chip" + (!selected ? " is-selected" : "");
+    none.textContent = "None";
+    none.addEventListener("click", function () {
+      document.getElementById("f-category").value = "";
+      renderCategoryChips(container, "", true);
+    });
+    container.appendChild(none);
+  }
+  CATEGORIES.forEach(function (cat) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "category-chip" + (selected === cat.id ? " is-selected" : "");
+    if (btn.style && typeof btn.style.setProperty === "function") {
+      btn.style.setProperty("--chip-color", cat.color);
+    } else if (btn.style) {
+      btn.style.borderLeftColor = cat.color;
+    }
+    btn.textContent = cat.label;
+    btn.dataset.category = cat.id;
+    if (interactive) {
+      btn.addEventListener("click", function () {
+        document.getElementById("f-category").value = cat.id;
+        renderCategoryChips(container, cat.id, true);
+      });
+    } else {
+      btn.disabled = true;
+    }
+    container.appendChild(btn);
+  });
+}
+
+function selectedEditScope() {
+  const checked = formEl.querySelector('input[name="f-scope"]:checked');
+  return checked ? checked.value : "series";
+}
+
+function setEditScope(scope) {
+  editingScope = scope === "occurrence" ? "occurrence" : "series";
+  formEl.querySelectorAll('input[name="f-scope"]').forEach(function (el) {
+    el.checked = el.value === editingScope;
+  });
+  const daysField = formEl.querySelector("fieldset.days");
+  if (daysField) {
+    const lockDays = editingScope === "occurrence" && editingOccurrenceDay !== null;
+    daysField.querySelectorAll('input[name="f-day"]').forEach(function (el) {
+      el.disabled = lockDays;
+      if (lockDays) el.checked = Number(el.value) === editingOccurrenceDay;
+    });
+  }
+}
+
+function applyPreferences(preferences) {
+  prefs = {
+    theme: preferences.theme || "nocturne",
+    reminders_enabled: Boolean(preferences.reminders_enabled),
+    reminder_lead_min: Number.isFinite(Number(preferences.reminder_lead_min))
+      ? Number(preferences.reminder_lead_min) : 5,
+    reminder_sound: preferences.reminder_sound !== false,
+  };
+  themeEl.value = prefs.theme;
+  document.documentElement.dataset.theme = prefs.theme;
+  const enabled = document.getElementById("pref-reminders-enabled");
+  const lead = document.getElementById("pref-reminder-lead");
+  const sound = document.getElementById("pref-reminder-sound");
+  if (enabled) enabled.checked = prefs.reminders_enabled;
+  if (lead) lead.value = String(prefs.reminder_lead_min);
+  if (sound) sound.checked = prefs.reminder_sound;
+  syncReminderLoop();
+}
+
+function preferencesPayload() {
+  return {
+    theme: themeEl.value,
+    reminders_enabled: prefs.reminders_enabled,
+    reminder_lead_min: prefs.reminder_lead_min,
+    reminder_sound: prefs.reminder_sound,
+  };
+}
+
+function toggleCompleted(blockId) {
+  if (!account || saving || !blockId) return false;
+  const block = weekState().blocks.find(function (item) { return item.id === blockId; });
+  if (!block) return false;
+  block.completed = !block.completed;
+  clearSolveResult();
+  saveWeek();
+  renderWeek();
+  return true;
+}
+
+function deleteOccurrenceById(blockId, day) {
+  if (!account || saving || !blockId || !Number.isInteger(day)) return false;
+  const state = weekState();
+  const index = state.blocks.findIndex(function (item) { return item.id === blockId; });
+  if (index < 0) return false;
+  const updated = removeOccurrence(state.blocks[index], day);
+  if (updated) state.blocks[index] = updated;
+  else state.blocks.splice(index, 1);
+  if (selectedBlockId === blockId) selectBlock(null, null);
+  closeForm();
+  clearSolveResult();
+  saveWeek();
+  renderWeek();
+  return true;
+}
+
+function downloadText(filename, body, mime) {
+  const url = URL.createObjectURL(new Blob([body], { type: mime || "text/plain" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+}
+
+function exportCurrentWeek(asText) {
+  if (!account) return;
+  const blocks = weekState().blocks;
+  if (asText) {
+    downloadText("flexweek-" + selectedWeek + ".txt", formatWeekExportText(selectedWeek, blocks), "text/plain");
+    return;
+  }
+  downloadText(
+    "flexweek-" + selectedWeek + ".json",
+    JSON.stringify(exportWeekPayload(selectedWeek, blocks), null, 2),
+    "application/json",
+  );
+}
+
+function exportDay(day, asText) {
+  if (!account || !Number.isInteger(day)) return;
+  const payload = exportDayPayload(selectedWeek, day, weekState().blocks);
+  if (asText) {
+    const lines = ["FlexWeek day — " + DAYS[day] + " " + (payload.date || ""), ""];
+    payload.blocks.forEach(function (block) {
+      if (!block.start) {
+        lines.push(block.title + " (unplaced, " + block.duration_min + " min)");
+        return;
+      }
+      lines.push(block.start + "  " + block.title + (block.completed ? " [done]" : ""));
+    });
+    downloadText("flexweek-day-" + (payload.date || day) + ".txt", lines.join("\n") + "\n", "text/plain");
+    return;
+  }
+  downloadText(
+    "flexweek-day-" + (payload.date || day) + ".json",
+    JSON.stringify(payload, null, 2),
+    "application/json",
+  );
+}
+
+async function importPayloadIntoWeek(parsed, mode) {
+  if (!parsed || parsed.error) {
+    setStatus(parsed && parsed.error ? parsed.error : "Import failed.");
+    return false;
+  }
+  const targetWeek = parsed.week_start && isWeekStart(parsed.week_start) ? parsed.week_start : selectedWeek;
+  if (targetWeek !== selectedWeek) {
+    const ok = confirm(
+      "This file is for " + weekLabel(targetWeek) + ". Open that week and import without changing other weeks?"
+    );
+    if (!ok) return false;
+    await selectWeek(targetWeek);
+  }
+  const state = weekState();
+  const mergeMode = mode || (parsed.format === "flexweek-day" ? "merge" : "replace");
+  if (mergeMode === "replace" && state.blocks.length) {
+    if (!confirm("Replace blocks in " + weekLabel(selectedWeek) + " with the import? Other weeks stay untouched.")) {
+      return false;
+    }
+  }
+  state.blocks = mergeImportedBlocks(state.blocks, parsed.blocks, mergeMode);
+  closeForm();
+  clearSolveResult();
+  renderWeek();
+  return saveWeek();
+}
+
+function showReminderToast(message) {
+  const toast = document.getElementById("reminder-toast");
+  if (!toast) return;
+  toast.hidden = false;
+  toast.textContent = message;
+  clearTimeout(showReminderToast._timer);
+  showReminderToast._timer = setTimeout(function () { toast.hidden = true; }, 8000);
+}
+
+function playReminderSound() {
+  if (!prefs.reminder_sound) return;
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = playReminderSound._ctx || new Ctx();
+    playReminderSound._ctx = ctx;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = 880;
+    gain.gain.value = 0.04;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.18);
+  } catch (err) { /* best-effort */ }
+}
+
+function maybeNotify(title, body) {
+  showReminderToast(title + (body ? " — " + body : ""));
+  playReminderSound();
+  if (typeof Notification !== "function") return;
+  if (Notification.permission === "granted") {
+    try { new Notification(title, { body: body || "", silent: true }); } catch (err) { /* ignore */ }
+    return;
+  }
+  if (Notification.permission === "default") {
+    Notification.requestPermission().catch(function () {});
+  }
+}
+
+function checkReminders(nowDate) {
+  if (!account || !prefs.reminders_enabled) return;
+  const now = nowDate || new Date();
+  const todayIso = now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate());
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const lead = prefs.reminder_lead_min;
+  weekState().blocks.forEach(function (block) {
+    if (!block.start || block.completed) return;
+    (block.days || []).forEach(function (day) {
+      if ((block.missed_days || []).indexOf(day) !== -1) return;
+      const date = dateForDay(selectedWeek, day);
+      if (date !== todayIso) return;
+      const startMin = parseStart(block.start);
+      if (!startAlertDue(startMin, nowMin, lead, REMINDER_WINDOW_MIN)) return;
+      const key = reminderKey(selectedWeek, block.id, day, block.start);
+      if (firedReminders.has(key)) return;
+      firedReminders.add(key);
+      maybeNotify(block.title + " starts soon", block.start + " · " + DAYS[day]);
+    });
+  });
+}
+
+function syncReminderLoop() {
+  if (reminderTimer) {
+    clearInterval(reminderTimer);
+    reminderTimer = null;
+  }
+  if (!account || !prefs.reminders_enabled) return;
+  checkReminders();
+  reminderTimer = setInterval(function () { checkReminders(); }, REMINDER_POLL_MS);
+  if (reminderTimer && typeof reminderTimer.unref === "function") reminderTimer.unref();
+}
+
+function openForm(kind, block, occurrenceDay = null, scope = null) {
   if (!account || saving) return;
   const editing = Boolean(block);
   editingOccurrenceDay = Number.isInteger(occurrenceDay) ? occurrenceDay : null;
@@ -1104,24 +1571,40 @@ function openForm(kind, block, occurrenceDay = null) {
   lockedFieldsEl.hidden = kind !== "locked";
   flexFieldsEl.hidden = kind !== "flexible";
 
+  const scopeEl = document.getElementById("edit-scope");
+  const showScope = editing && kind === "locked" && isSeries(block) && editingOccurrenceDay !== null;
+  if (scopeEl) scopeEl.hidden = !showScope;
+  if (showScope) {
+    setEditScope(scope === "series" ? "series" : "occurrence");
+  } else {
+    setEditScope("series");
+    formEl.querySelectorAll('input[name="f-day"]').forEach(function (el) { el.disabled = false; });
+  }
+
   ensureCategoryOptions();
   document.getElementById("f-title").value = editing ? block.title : "";
   document.getElementById("f-course").value = editing && block.course ? block.course : "";
   document.getElementById("f-category").value = editing && block.category ? block.category : "";
+  document.getElementById("f-completed").checked = Boolean(editing && block.completed);
   document.getElementById("f-duration").value = editing ? String(block.duration_min) : "60";
-  setSelectedDays(editing ? block.days : []);
+  setSelectedDays(editing ? (showScope && editingScope === "occurrence" ? [editingOccurrenceDay] : block.days) : []);
   startEl.value = editing && block.start ? block.start : "16:00";
   document.getElementById("f-priority").value = editing && block.priority ? String(block.priority) : "3";
   document.getElementById("f-energy").value = editing && block.energy ? block.energy : "medium";
   const latest = parseLatest(editing ? block.latest : "");
   document.getElementById("f-due-day").value = latest.day;
   dueTimeEl.value = latest.time || "21:00";
+  renderCategoryChips(document.getElementById("category-chips"), document.getElementById("f-category").value || "", true);
+  if (showScope) setEditScope(editingScope);
+  formDeleteEl.textContent = showScope && editingScope === "occurrence" ? "Remove this day" : "Delete";
   document.getElementById("f-title").focus();
 }
 
 function closeForm() {
   formEl.hidden = true;
   editingOccurrenceDay = null;
+  editingScope = "series";
+  formEl.querySelectorAll('input[name="f-day"]').forEach(function (el) { el.disabled = false; });
   showFormError("");
 }
 
@@ -1139,7 +1622,10 @@ formEl.addEventListener("submit", function (event) {
   const kind = document.getElementById("f-kind").value;
   const title = document.getElementById("f-title").value.trim();
   const durationMsg = durationError(document.getElementById("f-duration").value);
-  const days = selectedDays();
+  const scope = selectedEditScope();
+  const days = (scope === "occurrence" && editingOccurrenceDay !== null)
+    ? [editingOccurrenceDay]
+    : selectedDays();
   if (!title) {
     showFormError("Give this block a title.");
     return;
@@ -1161,33 +1647,55 @@ formEl.addEventListener("submit", function (event) {
   const blocks = weekState().blocks;
   const existing = blocks.findIndex(function (item) { return item.id === id; });
   const prior = existing >= 0 ? blocks[existing] : null;
-  const block = {
-    id: id,
+  const patch = {
     title: title,
-    kind: kind,
     duration_min: Number(document.getElementById("f-duration").value),
     days: days,
     priority: Number(document.getElementById("f-priority").value) || 3,
     energy: document.getElementById("f-energy").value || "medium",
     course: document.getElementById("f-course").value.trim() || null,
     category: document.getElementById("f-category").value || null,
+    completed: document.getElementById("f-completed").checked,
     earliest: null,
     latest: null,
     start: kind === "locked" ? startEl.value : null,
-    missed_days: kind === "locked" && prior ? (prior.missed_days || []).filter(function (day) {
-      return days.includes(day);
-    }) : [],
   };
   if (kind === "flexible") {
     const dueDay = document.getElementById("f-due-day").value;
     const dueTime = dueTimeEl.value;
     if (dueDay !== "" && dueTime) {
-      block.latest = DAY_FULL[Number(dueDay)] + " " + dueTime;
+      patch.latest = DAY_FULL[Number(dueDay)] + " " + dueTime;
     }
   }
 
-  if (existing >= 0) blocks[existing] = block;
-  else blocks.push(block);
+  if (prior && kind === "locked" && isSeries(prior) && scope === "occurrence" && editingOccurrenceDay !== null) {
+    const result = editOccurrence(prior, editingOccurrenceDay, {
+      title: patch.title,
+      duration_min: patch.duration_min,
+      priority: patch.priority,
+      energy: patch.energy,
+      course: patch.course,
+      category: patch.category,
+      completed: patch.completed,
+      start: patch.start,
+      earliest: null,
+      latest: null,
+    });
+    if (result.series) blocks[existing] = result.series;
+    else blocks.splice(existing, 1);
+    if (result.split) blocks.push(result.split);
+  } else {
+    const block = {
+      id: id,
+      kind: kind,
+      missed_days: kind === "locked" && prior ? (prior.missed_days || []).filter(function (day) {
+        return days.includes(day);
+      }) : [],
+      ...patch,
+    };
+    if (existing >= 0) blocks[existing] = block;
+    else blocks.push(block);
+  }
 
   closeForm();
   clearSolveResult();
@@ -1217,12 +1725,12 @@ formMissedEl.addEventListener("click", async function () {
 formDeleteEl.addEventListener("click", function () {
   if (!account || saving) return;
   const id = document.getElementById("f-id").value;
-  const state = weekState();
-  state.blocks = state.blocks.filter(function (item) { return item.id !== id; });
-  closeForm();
-  clearSolveResult();
-  saveWeek();
-  renderWeek();
+  const prior = weekState().blocks.find(function (item) { return item.id === id; });
+  if (prior && isSeries(prior) && selectedEditScope() === "occurrence" && editingOccurrenceDay !== null) {
+    deleteOccurrenceById(id, editingOccurrenceDay);
+    return;
+  }
+  deleteBlockById(id);
 });
 
 document.getElementById("add-locked").addEventListener("click", function () {
@@ -1344,11 +1852,13 @@ themeEl.addEventListener("change", async () => {
   const oldTheme = document.documentElement.dataset.theme;
   const themeEpoch = epoch;
   document.documentElement.dataset.theme = themeEl.value;
+  prefs.theme = themeEl.value;
   themeEl.disabled = true;
-  try { await api("/api/preferences", { method: "PUT", body: JSON.stringify({ theme: themeEl.value }) }); }
+  try { await api("/api/preferences", { method: "PUT", body: JSON.stringify(preferencesPayload()) }); }
   catch (error) {
     if (themeEpoch === epoch) {
       themeEl.value = oldTheme;
+      prefs.theme = oldTheme;
       document.documentElement.dataset.theme = oldTheme;
       setStatus("Theme was not saved. " + error.message);
     }
@@ -1433,12 +1943,29 @@ if (contextMenuEl) {
     const blockId = contextMenuEl.dataset.id;
     const day = Number(contextMenuEl.dataset.day);
     hideContextMenu();
-    if (button.dataset.action === "edit") {
-      const source = weekState().blocks.find(function (item) { return item.id === blockId; });
-      if (source) openForm(source.kind, source, Number.isInteger(day) ? day : null);
+    const source = weekState().blocks.find(function (item) { return item.id === blockId; });
+    const action = button.dataset.action;
+    if (action === "edit" || action === "edit-occurrence") {
+      if (source) openForm(source.kind, source, Number.isInteger(day) ? day : null, "occurrence");
       return;
     }
-    if (button.dataset.action === "delete") deleteBlockById(blockId);
+    if (action === "edit-series") {
+      if (source) openForm(source.kind, source, Number.isInteger(day) ? day : null, "series");
+      return;
+    }
+    if (action === "delete-occurrence") {
+      deleteOccurrenceById(blockId, day);
+      return;
+    }
+    if (action === "toggle-completed") {
+      toggleCompleted(blockId);
+      return;
+    }
+    if (action === "export-day") {
+      exportDay(day, false);
+      return;
+    }
+    if (action === "delete") deleteBlockById(blockId);
   });
 }
 document.addEventListener("pointerdown", function (event) {
@@ -1453,6 +1980,89 @@ document.getElementById("week-prev").addEventListener("click", () => selectWeek(
 document.getElementById("week-next").addEventListener("click", () => selectWeek(shiftWeek(selectedWeek, 1)));
 document.getElementById("week-today").addEventListener("click", () => selectWeek(currentWeekStart()));
 weekJumpEl.addEventListener("change", () => selectWeek(weekJumpEl.value));
+
+const prefsOpen = document.getElementById("prefs-open");
+const prefsDialog = document.getElementById("prefs-dialog");
+const prefsForm = document.getElementById("prefs-form");
+if (prefsOpen && prefsDialog) {
+  prefsOpen.addEventListener("click", function () {
+    applyPreferences(prefs);
+    if (typeof prefsDialog.showModal === "function") prefsDialog.showModal();
+    else prefsDialog.setAttribute("open", "open");
+  });
+}
+if (prefsForm) {
+  prefsForm.addEventListener("submit", async function (event) {
+    const submitter = event.submitter;
+    const value = submitter ? submitter.value : "cancel";
+    if (value !== "save") return;
+    event.preventDefault();
+    const enabledEl = document.getElementById("pref-reminders-enabled");
+    const leadEl = document.getElementById("pref-reminder-lead");
+    const soundEl = document.getElementById("pref-reminder-sound");
+    const next = {
+      theme: themeEl.value,
+      reminders_enabled: Boolean(enabledEl && enabledEl.checked),
+      reminder_lead_min: Math.max(0, Math.min(120, Number(leadEl && leadEl.value) || 0)),
+      reminder_sound: Boolean(soundEl && soundEl.checked),
+    };
+    const err = document.getElementById("prefs-error");
+    try {
+      const saved = await api("/api/preferences", { method: "PUT", body: JSON.stringify(next) });
+      applyPreferences(saved);
+      if (err) { err.hidden = true; err.textContent = ""; }
+      if (prefsDialog && typeof prefsDialog.close === "function") prefsDialog.close();
+      else if (prefsDialog) prefsDialog.removeAttribute("open");
+      setStatus(next.reminders_enabled ? "Reminders on · " + next.reminder_lead_min + " min lead." : "Reminders off.");
+      if (next.reminders_enabled && typeof Notification === "function" && Notification.permission === "default") {
+        Notification.requestPermission().catch(function () {});
+      }
+    } catch (error) {
+      if (err) { err.hidden = false; err.textContent = error.message; }
+      else setStatus("Reminders were not saved. " + error.message);
+    }
+  });
+}
+
+const exportWeekBtn = document.getElementById("export-week");
+if (exportWeekBtn) {
+  exportWeekBtn.addEventListener("click", function (event) {
+    const asText = Boolean(event && event.shiftKey);
+    exportCurrentWeek(asText);
+    setStatus(asText ? "Exported week as text." : "Exported week as JSON. Shift-click for text.");
+  });
+}
+const importFileBtn = document.getElementById("import-file");
+const importFileInput = document.getElementById("import-file-input");
+if (importFileBtn && importFileInput) {
+  importFileBtn.addEventListener("click", function () { importFileInput.click(); });
+  importFileInput.addEventListener("change", async function () {
+    const file = importFileInput.files && importFileInput.files[0];
+    importFileInput.value = "";
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = parseImportPayload(text);
+      const ok = await importPayloadIntoWeek(parsed);
+      if (ok) setStatus("Imported into " + weekLabel(selectedWeek) + ".");
+    } catch (error) {
+      setStatus("Import failed. " + error.message);
+    }
+  });
+}
+
+formEl.querySelectorAll('input[name="f-scope"]').forEach(function (el) {
+  el.addEventListener("change", function () {
+    setEditScope(selectedEditScope());
+    formDeleteEl.textContent = selectedEditScope() === "occurrence" ? "Remove this day" : "Delete";
+  });
+});
+
+document.addEventListener("visibilitychange", function () {
+  if (!document.hidden) checkReminders();
+});
+
 fillTimeSelect(startEl, false);
 fillTimeSelect(dueTimeEl, true);
+ensureCategoryOptions();
 reconnect();

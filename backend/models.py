@@ -37,6 +37,10 @@ class TimeBlock(BaseModel):
         max_length=32,
         exclude_if=lambda value: value is None,
     )
+    completed: bool = Field(
+        default=False,
+        exclude_if=lambda value: value is False,
+    )
     missed_days: list[int] = Field(
         default_factory=list,
         max_length=7,

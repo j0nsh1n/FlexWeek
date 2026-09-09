@@ -490,3 +490,100 @@ button:disabled { cursor: wait; opacity: .6; }
 .week-nav label { color: var(--muted); font-size: .8rem; }
 .week-label { font-size: .9rem; }
 .day-date { margin-left: .35rem; color: var(--muted); font-weight: 400; }
+
+
+.category-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.35rem 0 0.75rem;
+}
+
+.category-chip {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--chip-color, var(--line));
+  background: var(--bg);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.category-chip.is-selected {
+  outline: 2px solid var(--accent, #84cc16);
+  outline-offset: 1px;
+}
+
+.category-legend h2 {
+  margin-top: 0.75rem;
+}
+
+.picker-label {
+  display: block;
+  font-size: 0.8rem;
+  margin-bottom: 0.2rem;
+}
+
+.completed-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  margin: 0.4rem 0;
+}
+
+.edit-scope {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  margin: 0.5rem 0;
+}
+
+.edit-scope label {
+  display: block;
+  margin: 0.2rem 0;
+  font-size: 0.85rem;
+}
+
+.block.is-completed,
+.side li.is-completed {
+  opacity: 0.62;
+}
+
+.block.is-completed .title,
+.side li.is-completed strong {
+  text-decoration: line-through;
+}
+
+.reminder-toast {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 40;
+  max-width: 22rem;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-left: 4px solid #84cc16;
+  border-radius: 8px;
+  padding: 0.75rem 0.9rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.prefs-dialog {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  background: var(--panel);
+  color: var(--ink);
+  max-width: 22rem;
+}
+
+.prefs-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.context-menu button[hidden] {
+  display: none;
+}
