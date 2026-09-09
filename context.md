@@ -16,13 +16,16 @@
   explanations; a malformed or newer-version import is refused before any week
   state is mutated, rendered or saved; and a drag on a multi-day locked block is
   refused with a route to the occurrence/series actions.
-- Gates green: 122 Python tests, 38 frontend behavior tests and JavaScript
+- Gates green: 121 Python tests, 38 frontend behavior tests and JavaScript
   syntax. The real-WebEngine case covers
   solve, slack, miss, cross-day replan, save, reload and restore.
-- Completion is a flexible-task idea in the solver. A completed flexible task
-  with a start keeps its slot occupied, because that time was really spent; one
-  without a start leaves the solver entirely. Completed locked blocks are
-  unaffected and still occupy their time.
+- Completion is a flexible-task idea in the solver. Spent time means a real
+  placement: completed, one start, exactly one day, the same shape the solver
+  produces and the same test _flex_positions applies. A completed task with no
+  start, or with several candidate days and so no identifiable placement, leaves
+  the solver entirely. Completed locked blocks are unaffected.
+- Occupied time is locked blocks plus spent flexible work, so the LOCKED_OVERLAP
+  sentence names both. It must not name only school, sports and sleep.
 - Series semantics belong to locked blocks only. A flexible task listed on
   several days has candidate days, not repeated events, so it still drags.
   `isSeries` alone is not enough; callers pair it with `kind === "locked"`, as
@@ -42,12 +45,16 @@
 - Phase 5 slices A/D/F/B/E are in. Still open: copy/paste, duplicate day,
   undo/redo, Windows build execution, desktop tray reminders.
 - Windows build remains prepared but unexecuted; no Windows host here.
-- `dist/FlexWeek` was rebuilt 2026-09-08 before the Phase 5 interaction branch:
-  that build registers an account, reads and writes dated weeks, lists them via
-  /api/weeks, and 422s a non-Monday, but needs another rebuild after Phase 5.
-  The earlier build was released as
-  `dist/FlexWeek-linux-x86_64-20260908.tar.gz` (205 MB compressed) with a
-  .sha256 beside it; both are gitignored on purpose. See DESKTOP.md section 8.
+- `dist/FlexWeek` was rebuilt 2026-09-08 after the Phase 5 interaction work and
+  the audit fixes. Verified through the packaged binary itself, not the source
+  tree: a finished task no longer steals the last slot, and a collision with
+  finished work no longer blames school. Released as
+  `dist/FlexWeek-linux-x86_64-20260908.tar.gz` (204 MB compressed, sha256
+  57ccb3a4...) with a .sha256 beside it; both gitignored on purpose. The
+  extracted copy was started from a clean profile and served /api/health.
+  This replaced the earlier same-day tarball, which predated Phase 5; the older
+  build directories under dist/ can be repackaged if that one is wanted back.
+  See DESKTOP.md section 8.
 - `dist/` grows by roughly 528 MB per rebuild because build_linux.sh preserves
   each previous build and never prunes. It holds three copies as of today.
 - Databases carrying the old schema were backed up to
@@ -89,8 +96,6 @@ There is no automatic synchronization between those databases.
   server cannot disagree about which week is open while both think they won.
 - The identical-blocks short-circuit deliberately runs before the revision
   check, preserving what the pre-dated code and tests already did.
-- `date_for_day` in weeks.py has no Python caller. It is kept as the tested
-  reference the JS mirror in app.js is checked against.
 - The desktop app bundles the backend and runs it in-process (owner asked for
   this 2026-09-07). It supersedes DESKTOP.md section 1, which said not to; that
   section's reasoning was about a *second process*, which this is not.

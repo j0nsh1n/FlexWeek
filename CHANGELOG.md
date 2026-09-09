@@ -28,6 +28,12 @@ All notable changes to FlexWeek are documented here. Format follows
   Sports, Activity, Meals, Free); older weeks without a category still load.
 
 ### Fixed
+- A task you finished but left listed on several possible days no longer blocks
+  that hour on every one of them. It was one piece of work done once, and it
+  could push three real tasks off the week. A finished task that was actually
+  placed on a day still holds that time, because you really did use it.
+- When finished work is what fills a slot, FlexWeek says so instead of telling
+  you the time is taken by school, sports or sleep.
 - A task you have ticked off no longer competes for a slot. Finished work used
   to be scheduled again, so a completed essay could take the last free hour and
   FlexWeek would tell you your real homework did not fit because a
