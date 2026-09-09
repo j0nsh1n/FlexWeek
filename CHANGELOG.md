@@ -6,6 +6,9 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Repeatable full-source verification command, web CI workflow, a feature
+  coverage guide, generated solver invariants and real calendar/completion
+  WebEngine regression checks (2026-09-08).
 - Multi-day locked blocks open with Edit this day vs Entire series: occurrence
   edits can remove one weekday or split a changed day into its own block; series
   edits still change every weekday together. Context menu mirrors those choices.
@@ -28,6 +31,26 @@ All notable changes to FlexWeek are documented here. Format follows
   Sports, Activity, Meals, Free); older weeks without a category still load.
 
 ### Fixed
+- Cancelled calendar gestures no longer save, and secondary pointers cannot
+  finish another pointer's gesture (2026-09-08).
+- Signing out clears private reminder alerts. Delayed preference responses and
+  file reads cannot change the next account. Today's loaded reminders continue
+  while browsing a different week (2026-09-08).
+- Signing out also closes live browser notifications, solved flexible tasks can
+  trigger reminders, and suspended drafts remain isolated by account (2026-09-09).
+- Legacy and day imports validate starts and scheduling bounds before changing
+  the week, including the resulting merged size and occurrence-ID collisions.
+  Valid unusual IDs survive import, and downloaded drafts use the importable
+  export format (2026-09-08).
+- Saving an unchanged occurrence keeps its recurring series intact (2026-09-08).
+- Completing through the menu or editor retains the task's solved placement
+  as spent time without losing its candidate days. Day and text exports follow
+  the visible solved placement, and ambiguous day imports cannot duplicate a
+  multi-day flexible assignment (2026-09-09).
+- Exam preparation wins contested capacity even when a lower-priority reading
+  task has fewer possible placements. The solver first looks for a complete
+  schedule before exploring optional omissions, avoiding a reproduced timeout
+  on a feasible energy-sensitive week (2026-09-09).
 - A task you finished but left listed on several possible days no longer blocks
   that hour on every one of them. It was one piece of work done once, and it
   could push three real tasks off the week. A finished task that was actually

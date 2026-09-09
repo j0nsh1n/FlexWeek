@@ -50,17 +50,14 @@ backup API or with the app stopped; protect backups as private account data.
 ## Checks
 
 ```bash
-.venv/bin/python -m compileall -q backend
-.venv/bin/ruff check .
-.venv/bin/mypy backend
-.venv/bin/pytest -q
-node --check frontend/app.js
-node --test frontend/tests/accounts.test.mjs
+.venv/bin/python scripts/verify.py
 ```
 
-Node is used only for development tests, not to build or run the web app. The
-frontend tests exercise account/save state with a simulated document; they do
-not replace checking the real browser layout.
+This runs all frontend, backend and desktop source checks. For a web-only
+environment, use `--web-only`; desktop is then explicitly unverified. See the
+[coverage map and feature verification guide](docs/verification.md) for focused
+checks and release limitations. Node is development-only, with no npm packages
+or frontend build step.
 
 ## Progress
 

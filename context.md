@@ -1,64 +1,34 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-08. Branch `feat/phase5-calendar-interactions`.
-- Phase 6 scheduling behavior is implemented: backend-authored explanations,
-  deadline slack badges, click-to-highlight, and per-occurrence missed-lock
-  recovery with cross-day move details and restore.
-- Phase 5 slices D/F/B/E are in: occurrence vs series locked edits, reminder
-  preferences with web/in-app alerts, category chips (incl. sleep), week/day
-  export-import, and per-block completed. Desktop tray reminders deferred.
-- The critical Phase 5 audit blockers are fixed locally: failed target-week
-  imports abort without writes, repeated day imports preserve recurring
-  series, and the desktop probe follows the double-click edit contract.
-- The three high-severity audit findings are fixed 2026-09-08: completed
-  flexible tasks no longer consume solver capacity or generate unplaced
-  explanations; a malformed or newer-version import is refused before any week
-  state is mutated, rendered or saved; and a drag on a multi-day locked block is
-  refused with a route to the occurrence/series actions.
-- Gates green: 121 Python tests, 38 frontend behavior tests and JavaScript
-  syntax. The real-WebEngine case covers
-  solve, slack, miss, cross-day replan, save, reload and restore.
-- Completion is a flexible-task idea in the solver. Spent time means a real
-  placement: completed, one start, exactly one day, the same shape the solver
-  produces and the same test _flex_positions applies. A completed task with no
-  start, or with several candidate days and so no identifiable placement, leaves
-  the solver entirely. Completed locked blocks are unaffected.
-- Occupied time is locked blocks plus spent flexible work, so the LOCKED_OVERLAP
-  sentence names both. It must not name only school, sports and sleep.
-- Series semantics belong to locked blocks only. A flexible task listed on
-  several days has candidate days, not repeated events, so it still drags.
-  `isSeries` alone is not enough; callers pair it with `kind === "locked"`, as
-  the context menu and edit form already did.
-- A missed occurrence is stored as one day in a locked block's `missed_days`.
-  It is excluded from solver occupancy without deleting the block or its other
-  weekday occurrences. Recovery uses the existing `/api/solve` endpoint and
-  saves through the normal revision-checked week write.
-- Dated weeks are done. Weeks are keyed `(user_id, week_start)` where
-  week_start is a naive local ISO Monday. Blocks keep their day index and
-  derive their date, so no block data moved and the solver is untouched.
-- The migration was proven against the real desktop database, not a fixture: a
-  copy of `~/.local/share/FlexWeek/flexweek.db` kept its "School" block
-  byte-identical at revision 4 under week_start 2026-09-07, running
-  `initialize()` twice changed nothing, and the app then served that week,
-  created a second week, and left the first untouched.
-- Phase 5 slices A/D/F/B/E are in. Still open: copy/paste, duplicate day,
-  undo/redo, Windows build execution, desktop tray reminders.
-- Windows build remains prepared but unexecuted; no Windows host here.
-- `dist/FlexWeek` was rebuilt 2026-09-08 after the Phase 5 interaction work and
-  the audit fixes. Verified through the packaged binary itself, not the source
-  tree: a finished task no longer steals the last slot, and a collision with
-  finished work no longer blames school. Released as
-  `dist/FlexWeek-linux-x86_64-20260908.tar.gz` (204 MB compressed, sha256
-  57ccb3a4...) with a .sha256 beside it; both gitignored on purpose. The
-  extracted copy was started from a clean profile and served /api/health.
-  This replaced the earlier same-day tarball, which predated Phase 5; the older
-  build directories under dist/ can be repackaged if that one is wanted back.
-  See DESKTOP.md section 8.
-- `dist/` grows by roughly 528 MB per rebuild because build_linux.sh preserves
-  each previous build and never prunes. It holds three copies as of today.
-- Databases carrying the old schema were backed up to
-  /tmp/fw-db-backup-20260908-081624 before any migration ran.
+- Date: 2026-09-09. Branch `test/deeper-verification`, based on
+  `feat/phase5-calendar-interactions` at `147687c`.
+- Phase 5 calendar interactions and Phase 6 scheduling recovery are implemented.
+  Accounts, Monday-keyed weeks, 15-minute placement and per-day `missed_days`
+  recovery remain the product model.
+- The deeper verification pass reproduced and fixed cancelled gesture writes,
+  private reminder state surviving sign-out, stale account responses/file reads,
+  invalid legacy/day imports, merged-week overflow, occurrence-ID collisions,
+  unusable draft downloads, multi-day task duplication, per-account draft loss,
+  completion losing candidate days, reminder leaks/gaps and priority inversion.
+- Today's loaded week and solved flexible placements produce reminders while
+  another week is selected. Sign-out closes both in-page and browser alerts.
+- Source verification now has one runner, `scripts/verify.py`, a feature coverage
+  map in `docs/verification.md`, and a web-only GitHub Actions workflow. The
+  workflow has not run remotely; nothing has been pushed.
+- Baseline was 121 Python and 40 frontend tests. The final full source gate ran
+  153 Python and 61 frontend tests with no skips.
+- Completed flexible work keeps its original candidate `days`; `completed_day`
+  records the one occurrence whose `start` is spent. Both UI completion actions
+  preserve and can restore the candidate set.
+  Completed tasks without a placement stay outside scheduling; locked blocks
+  retain their existing occupancy semantics.
+- The previous Linux artifact was rebuilt by Claude on September 8. It predates
+  this verification branch's fixes and has not been rebuilt in this pass.
+  Packaged behavior, Windows execution, Safari/iPhone and physical touch remain
+  unverified here. Desktop tray reminders are deferred.
+- Default desktop mode uses a local database. Hosted mode uses the configured
+  server; there is no automatic synchronization between them.
 
 ## Repo Landmarks
 ```
@@ -121,19 +91,18 @@ There is no automatic synchronization between those databases.
 - License file is GPL-3.0. Qt for Python is LGPLv3/GPLv2/commercial.
 
 ## Session Handoff
-- 2026-09-08, `feat/phase5-calendar-interactions`: the three remaining
-  high-severity audit findings are fixed in four local commits, each with
-  behaviour tests that were confirmed to fail with the fix removed. Gates: 122
-  Python tests, 38 frontend tests, Ruff, mypy, JS syntax and `git diff --check`
-  all clean. Nothing pushed.
-- GLM-5.3 Flash (OpenRouter) drafted the solver tests. Gemini 3.8 Flash
-  (Antigravity) reviewed the diff and found two real defects in my own fixes: a
-  finished task reported as reshuffled to nowhere, and a drag refusal that also
-  caught multi-day flexible tasks and stranded them. Both fixed. Its third
-  finding, that completed blocks would generate slack and energy explanations,
-  was wrong; they never reach that loop.
-- Next: rebuild the Linux desktop artifact, which still predates all Phase 5
-  interaction work. Windows execution remains unavailable.
-- Still open in Phase 5: copy/paste, duplicate day, undo/redo, desktop tray
-  reminders. Still undecided: whether `Github Templates/` and
-  `reslot-cac-build-plan.md` get committed.
+- 2026-09-09, `test/deeper-verification`: full local verification passed with
+  153 Python and 61 frontend tests, Ruff, mypy, JavaScript syntax, and all diff
+  checks. GLM and two Codex reviewers found the solver, completion, import,
+  draft, reminder and export regressions now covered by focused tests. Gemini
+  timed out twice through Antigravity and was not counted as review evidence.
+- The two-stage solver finds ordinary complete schedules before considering
+  optional task skips. This preserves the priority result for infeasible weeks
+  and completes the reproduced energy-sensitive ten-task week within budget.
+- The untracked `Github Templates/` and `reslot-cac-build-plan.md` remain
+  untouched. `spec.md` is unchanged; its individual validation commands still
+  apply. It does not yet document the persisted `completed_day` field; that
+  contract update needs a separate approved spec edit.
+- The CI workflow is unrun until pushed. The existing Linux package predates
+  these changes; Windows, Safari/iPhone, physical touch, packaged behavior and
+  OS notification delivery still need release-platform checks.
