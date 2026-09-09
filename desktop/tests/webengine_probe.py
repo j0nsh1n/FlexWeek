@@ -130,7 +130,10 @@ def run(case: str, root: Path) -> None:
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")
             evaluate("document.getElementById('solve').click()")
             wait_for("document.querySelector('.slack-tight')")
-            evaluate("document.querySelector('.block:not(.flex-block)').click()")
+            evaluate(
+                "document.querySelector('.block:not(.flex-block)')"
+                ".dispatchEvent(new MouseEvent('dblclick', {bubbles: true}))"
+            )
             assert evaluate("!document.getElementById('form-missed').hidden")
             evaluate("document.getElementById('form-missed').click()")
             wait_for("!document.getElementById('debug-changes').hidden")

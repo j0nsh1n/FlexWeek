@@ -269,3 +269,77 @@ test('E: completed flag toggles and survives saveWeek', async () => {
   assert.equal(saved.completed, true);
   assert.equal(h.run('weekState().blocks[0].completed'), true);
 });
+
+test('E: import aborts without mutating or saving the current week when the switch fails', async () => {
+  const h = harness();
+  const homework = {
+    id: 'hw', kind: 'flexible', title: 'Essay', duration_min: 60, days: [0],
+    priority: 3, energy: 'medium',
+  };
+  await h.login(1, [homework], [MONDAY]);
+  const payload = {
+    format: 'flexweek-week', version: 1, week_start: '2026-08-31',
+    blocks: [{ id: 'other', kind: 'locked', title: 'Other week', duration_min: 30, days: [0], start: '09:00' }],
+  };
+  const parsed = h.run(`parseImportPayload(${JSON.stringify(JSON.stringify(payload))})`);
+  assert.equal(parsed.error, undefined);
+
+  let putCount = 0;
+  h.handle(async (path, options) => {
+    if (path === '/api/week') {
+      putCount += 1;
+      return response(200, { week_start: MONDAY, blocks: JSON.parse(options.body).blocks, revision: 1 });
+    }
+    if (path.startsWith('/api/week?')) return response(500, { detail: 'Server down' });
+    return response(200, { weeks: [MONDAY] });
+  });
+  assert.equal(await h.run(`importPayloadIntoWeek(${JSON.stringify(parsed)})`), false);
+  await tick();
+  assert.equal(putCount, 0);
+  assert.equal(h.run('selectedWeek'), MONDAY);
+  same(h.run('weekState().blocks'), [homework]);
+});
+
+test('E: day import updates one occurrence and keeps the rest of the series', async () => {
+  const h = harness();
+  const school = {
+    id: 'school', kind: 'locked', title: 'School', duration_min: 60,
+    days: [1, 2], start: '08:00', priority: 1, energy: 'medium', missed_days: [1],
+  };
+  const sport = {
+    id: 'sport', kind: 'locked', title: 'Soccer', duration_min: 90,
+    days: [4], start: '16:00', priority: 1, energy: 'high',
+  };
+  await h.login(1, [school, sport]);
+  const payload = h.run(`exportDayPayload("${MONDAY}", 2, weekState().blocks)`);
+  assert.equal(payload.format, 'flexweek-day');
+  same(payload.blocks.map(b => b.days), [[2]]);
+
+  const parsed = h.run(`parseImportPayload(${JSON.stringify(JSON.stringify(payload))})`);
+  assert.equal(parsed.error, undefined);
+
+  let putBlocks = null;
+  h.handle(async (_path, options) => {
+    putBlocks = JSON.parse(options.body).blocks;
+    return response(200, { week_start: MONDAY, blocks: putBlocks, revision: 1 });
+  });
+  assert.equal(await h.run(`importPayloadIntoWeek(${JSON.stringify(parsed)})`), true);
+  await tick();
+  assert.equal(putBlocks.length, 3);
+  const series = putBlocks.find(b => b.id === 'school');
+  same(series.days, [1]);
+  same(series.missed_days, [1]);
+  assert.equal(series.start, '08:00');
+  const wednesday = putBlocks.find(b => b.id === 'occ-2-school');
+  assert.ok(wednesday, 'Wednesday occurrence kept as its own block');
+  same(wednesday.days, [2]);
+  assert.equal(wednesday.title, 'School');
+  assert.equal(wednesday.start, '08:00');
+  same(putBlocks.find(b => b.id === 'sport').days, [4]);
+
+  assert.equal(await h.run(`importPayloadIntoWeek(${JSON.stringify(parsed)})`), true);
+  await tick();
+  assert.equal(putBlocks.length, 3);
+  same(putBlocks.find(b => b.id === 'school').days, [1]);
+  same(putBlocks.find(b => b.id === 'occ-2-school').days, [2]);
+});

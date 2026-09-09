@@ -263,4 +263,3 @@ about 528 MB per rebuild. Delete the ones you do not need.
 Start reminders ship in the shared web UI (preferences, in-app toast, Notification
 API while the window is open). A native system-tray alert path was deferred to
 avoid a large new desktop dependency; revisit with Phase 7 tray work if needed.
-

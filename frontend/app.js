@@ -184,13 +184,37 @@ function parseImportPayload(raw) {
   };
 }
 
-function mergeImportedBlocks(existing, incoming, mode) {
+function mergeImportedBlocks(existing, incoming, mode, day) {
   // mode: "replace" replaces all; "merge" upserts by id without dropping others
   if (mode === "replace") return (incoming || []).map(cloneBlock);
   const byId = {};
   (existing || []).forEach(function (block) { byId[block.id] = cloneBlock(block); });
   (incoming || []).forEach(function (block) {
     if (!block || !block.id) return;
+    const current = byId[block.id];
+    const splitId = "occ-" + day + "-" + String(block.id);
+    const priorSplit = byId[splitId];
+    // A day import refreshes one occurrence of a same-ID series; the other
+    // weekdays of that series must survive the upsert.
+    const importsOneDay = Number.isInteger(day)
+      && (block.days || []).length === 1 && block.days[0] === day;
+    if (current && importsOneDay && isSeries(current) && current.days.includes(day)) {
+      const kept = removeOccurrence(current, day);
+      const split = cloneBlock(block);
+      split.id = splitId;
+      split.days = [day];
+      split.missed_days = (split.missed_days || []).filter(function (d) { return d === day; });
+      if (kept) byId[current.id] = kept; else delete byId[current.id];
+      byId[split.id] = split;
+      return;
+    }
+    if (current && importsOneDay && !current.days.includes(day) && priorSplit
+      && (priorSplit.days || []).length === 1 && priorSplit.days[0] === day) {
+      const split = cloneBlock(block);
+      split.id = splitId;
+      byId[splitId] = split;
+      return;
+    }
     byId[block.id] = cloneBlock(block);
   });
   return Object.keys(byId).map(function (id) { return byId[id]; });
@@ -673,16 +697,16 @@ function showWeek(weekStart) {
 }
 
 async function selectWeek(weekStart) {
-  if (!account || saving || weekStart === selectedWeek) return;
+  if (!account || saving || weekStart === selectedWeek) return false;
   if (!isWeekStart(weekStart)) {
     setStatus("That is not a Monday, so it cannot open as a week.");
-    return;
+    return false;
   }
   const known = weeks.get(weekStart);
   // Refetching a week that holds unsaved edits would overwrite them.
   if (known && known.dirty) {
     showWeek(weekStart);
-    return;
+    return true;
   }
   const selectEpoch = epoch;
   saving = true;
@@ -690,7 +714,7 @@ async function selectWeek(weekStart) {
   setStatus("Opening " + weekLabel(weekStart) + "…");
   try {
     const data = await api("/api/week?week_start=" + weekStart);
-    if (selectEpoch !== epoch) return;
+    if (selectEpoch !== epoch) return false;
     const opened = isWeekStart(data.week_start) ? data.week_start : weekStart;
     const state = weekState(opened);
     state.blocks = data.blocks;
@@ -698,9 +722,11 @@ async function selectWeek(weekStart) {
     state.dirty = false;
     state.conflict = false;
     showWeek(opened);
+    return true;
   } catch (error) {
     // The week did not change, so put the picker back on the one still shown.
     if (selectEpoch === epoch) { renderWeekNav(); setStatus("Could not open that week. " + error.message); }
+    return false;
   } finally {
     if (selectEpoch === epoch) { saving = false; lockEditor(false); }
   }
@@ -1461,7 +1487,13 @@ async function importPayloadIntoWeek(parsed, mode) {
       "This file is for " + weekLabel(targetWeek) + ". Open that week and import without changing other weeks?"
     );
     if (!ok) return false;
-    await selectWeek(targetWeek);
+    // If the switch fails, the week on screen is unchanged; importing there
+    // would overwrite the wrong week, so abort before touching any blocks.
+    const opened = await selectWeek(targetWeek);
+    if (!opened || selectedWeek !== targetWeek) {
+      setStatus("Could not open " + weekLabel(targetWeek) + ". Import cancelled.");
+      return false;
+    }
   }
   const state = weekState();
   const mergeMode = mode || (parsed.format === "flexweek-day" ? "merge" : "replace");
@@ -1470,7 +1502,7 @@ async function importPayloadIntoWeek(parsed, mode) {
       return false;
     }
   }
-  state.blocks = mergeImportedBlocks(state.blocks, parsed.blocks, mergeMode);
+  state.blocks = mergeImportedBlocks(state.blocks, parsed.blocks, mergeMode, parsed.day);
   closeForm();
   clearSolveResult();
   renderWeek();

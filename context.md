@@ -8,8 +8,11 @@
 - Phase 5 slices D/F/B/E are in: occurrence vs series locked edits, reminder
   preferences with web/in-app alerts, category chips (incl. sleep), week/day
   export-import, and per-block completed. Desktop tray reminders deferred.
-- Gates green: 110 Python tests (+5 skipped), 31 frontend behavior tests and
-  JavaScript syntax. The real-WebEngine case covers
+- The critical Phase 5 audit blockers are fixed locally: failed target-week
+  imports abort without writes, repeated day imports preserve recurring
+  series, and the desktop probe follows the double-click edit contract.
+- Gates green: 115 Python tests, 33 frontend behavior tests and JavaScript
+  syntax. The real-WebEngine case covers
   solve, slack, miss, cross-day replan, save, reload and restore.
 - A missed occurrence is stored as one day in a locked block's `missed_days`.
   It is excluded from solver occupancy without deleting the block or its other
@@ -26,9 +29,10 @@
 - Phase 5 slices A/D/F/B/E are in. Still open: copy/paste, duplicate day,
   undo/redo, Windows build execution, desktop tray reminders.
 - Windows build remains prepared but unexecuted; no Windows host here.
-- `dist/FlexWeek` was rebuilt 2026-09-08 against the merged code and verified:
-  the packaged binary registers an account, reads and writes dated weeks, lists
-  them via /api/weeks, and 422s a non-Monday. Released as
+- `dist/FlexWeek` was rebuilt 2026-09-08 before the Phase 5 interaction branch:
+  that build registers an account, reads and writes dated weeks, lists them via
+  /api/weeks, and 422s a non-Monday, but needs another rebuild after Phase 5.
+  The earlier build was released as
   `dist/FlexWeek-linux-x86_64-20260908.tar.gz` (205 MB compressed) with a
   .sha256 beside it; both are gitignored on purpose. See DESKTOP.md section 8.
 - `dist/` grows by roughly 528 MB per rebuild because build_linux.sh preserves
@@ -99,12 +103,12 @@ There is no automatic synchronization between those databases.
 - License file is GPL-3.0. Qt for Python is LGPLv3/GPLv2/commercial.
 
 ## Session Handoff
-- 2026-09-08, `feat/phase5-calendar-interactions`: Phase 5 slices D→F→B→E on top
-  of slice A. Occurrence/series locked edits, reminder prefs + web/in-app alerts,
-  category chips, export/import, completed flag. 110 pytest (+5 skip), 31
-  frontend tests, `node --check` clean. Pushed to origin feature branch.
-- Next: Phase 5 leftovers (copy/paste, duplicate day, undo/redo, Windows build,
-  optional tray) or Phase 6 deployment persistence.
+- 2026-09-08, `feat/phase5-calendar-interactions`: the three critical audit
+  blockers are fixed locally with GLM-assisted import tests. Full verification:
+  115 pytest and 33 frontend tests pass; JavaScript syntax, Ruff and mypy are
+  clean. These fixes have not been pushed.
+- Next: address the remaining high-severity audit findings, then rebuild the
+  Linux desktop artifact. Windows execution remains unavailable.
 - Settled 2026-09-08 by the owner: dated weeks + desktop build in spec; Phase 7
   committed; agents.md tracked. Built app is a release asset, not committed.
 - Still undecided: whether `Github Templates/` and `reslot-cac-build-plan.md`

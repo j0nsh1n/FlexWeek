@@ -28,6 +28,9 @@ All notable changes to FlexWeek are documented here. Format follows
   Sports, Activity, Meals, Free); older weeks without a category still load.
 
 ### Fixed
+- Importing a week now stops without changing the open week when the target
+  week cannot be loaded. Day-file imports preserve the other occurrences of a
+  repeating block, including when the same file is imported again.
 - Desktop new-window links no longer leave hidden browser pages running; only
   HTTP(S) external links are sent to the system browser (2026-09-07).
 - Desktop users can save an unsaved draft through a native file dialog.
