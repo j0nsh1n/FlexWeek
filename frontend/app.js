@@ -903,7 +903,7 @@ function applyBlockTimes(blockId, startMin, endMin) {
   if (!block || !block.start) return false;
   // Enforced here as well as in the gesture: retiming a whole series from one
   // day's drag would change days the student never touched.
-  if (isSeries(block)) return false;
+  if (block.kind === "locked" && isSeries(block)) return false;
   const dur = endMin - startMin;
   if (dur < SNAP_MIN || startMin < DAY_START_MIN || endMin > DAY_END_MIN) return false;
   block.start = formatMinute(startMin);
@@ -1008,7 +1008,7 @@ function bindDayLane(lane, day) {
       // Dragging one day of a repeating block is ambiguous: it could move that
       // occurrence or the whole series. The app already asks that question
       // everywhere else, so refuse the gesture rather than silently pick one.
-      if (isSeries(source)) {
+      if (source.kind === "locked" && isSeries(source)) {
         selectBlock(blockId, day);
         setStatus(
           source.title + " repeats on " + source.days.length +

@@ -256,3 +256,21 @@ test('a one-day occurrence split off a series can still be dragged', async () =>
   assert.equal(h.run('weekState().blocks[0].start'), '10:30');
   assert.equal(h.run('weekState().blocks[0].duration_min'), 75);
 });
+
+test('a flexible task with several candidate days still drags: series is a locked idea', async () => {
+  const h = harness();
+  // Candidate days, not repeated events. The context menu only offers occurrence
+  // and series actions for locked blocks, so refusing this drag would strand it.
+  const essay = {
+    id: 'essay', kind: 'flexible', title: 'Essay', duration_min: 60,
+    days: [1, 3], start: '10:00', priority: 3, energy: 'medium',
+  };
+  await h.login(1, [essay]);
+  h.handle(async (_path, options) =>
+    response(200, { week_start: MONDAY, blocks: JSON.parse(options.body).blocks, revision: 1 }));
+
+  assert.equal(h.run('applyBlockTimes("essay", 630, 690)'), true);
+  await tick();
+  assert.equal(h.run('weekState().blocks[0].start'), '10:30');
+  same(h.run('weekState().blocks[0].days'), [1, 3]);
+});
