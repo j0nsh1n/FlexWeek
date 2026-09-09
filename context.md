@@ -5,8 +5,11 @@
 - Phase 6 scheduling behavior is implemented: backend-authored explanations,
   deadline slack badges, click-to-highlight, and per-occurrence missed-lock
   recovery with cross-day move details and restore.
-- Gates green: 107 Python tests (+5 skipped), 23 frontend behavior tests and
-  JavaScript syntax. The new real-WebEngine case covers
+- Phase 5 slices D/F/B/E are in: occurrence vs series locked edits, reminder
+  preferences with web/in-app alerts, category chips (incl. sleep), week/day
+  export-import, and per-block completed. Desktop tray reminders deferred.
+- Gates green: 110 Python tests (+5 skipped), 31 frontend behavior tests and
+  JavaScript syntax. The real-WebEngine case covers
   solve, slack, miss, cross-day replan, save, reload and restore.
 - A missed occurrence is stored as one day in a locked block's `missed_days`.
   It is excluded from solver occupancy without deleting the block or its other
@@ -20,10 +23,8 @@
   byte-identical at revision 4 under week_start 2026-09-07, running
   `initialize()` twice changed nothing, and the app then served that week,
   created a second week, and left the first untouched.
-- Phase 5 slice A is in: drag create/move/resize, select, double-click edit,
-  context Edit/Delete, thin category colors. Still open: copy/paste, duplicate
-  day, undo/redo, recurring activities, export/import, completion state,
-  reminders, Windows build execution.
+- Phase 5 slices A/D/F/B/E are in. Still open: copy/paste, duplicate day,
+  undo/redo, Windows build execution, desktop tray reminders.
 - Windows build remains prepared but unexecuted; no Windows host here.
 - `dist/FlexWeek` was rebuilt 2026-09-08 against the merged code and verified:
   the packaged binary registers an account, reads and writes dated weeks, lists
@@ -98,12 +99,12 @@ There is no automatic synchronization between those databases.
 - License file is GPL-3.0. Qt for Python is LGPLv3/GPLv2/commercial.
 
 ## Session Handoff
-- 2026-09-08, `feat/phase5-calendar-interactions`: Phase 5 slice A — week-grid
-  drag create/move/resize (15-min snap, 06:00–23:00 clamp), click select,
-  double-click openForm, context Edit/Delete, thin optional category→color.
-  Frontend tests cover snap/create/move/resize; pytest green. Nothing pushed.
-- Next: Phase 5 slices D/F/B/E (copy-paste/duplicate day, undo-redo, recurring
-  series UX, export/import/reminders) or resume Phase 6 deployment persistence.
+- 2026-09-08, `feat/phase5-calendar-interactions`: Phase 5 slices D→F→B→E on top
+  of slice A. Occurrence/series locked edits, reminder prefs + web/in-app alerts,
+  category chips, export/import, completed flag. 110 pytest (+5 skip), 31
+  frontend tests, `node --check` clean. Pushed to origin feature branch.
+- Next: Phase 5 leftovers (copy/paste, duplicate day, undo/redo, Windows build,
+  optional tray) or Phase 6 deployment persistence.
 - Settled 2026-09-08 by the owner: dated weeks + desktop build in spec; Phase 7
   committed; agents.md tracked. Built app is a release asset, not committed.
 - Still undecided: whether `Github Templates/` and `reslot-cac-build-plan.md`

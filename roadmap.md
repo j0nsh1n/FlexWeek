@@ -107,10 +107,10 @@ desktop shell is proposed; shell selection follows compatibility testing.
   database. Slice A calendar interactions landed 2026-09-08 on
   `feat/phase5-calendar-interactions` (15-minute snap drag create/move/resize,
   select, double-click edit, context Edit/Delete, thin category colors).
-  Next: D recurring occurrence vs series, then F reminders, B categories,
-  E export/import and completion. Clipboard, duplicate-day, and undo/redo
-  remain deferred. Windows build still unexecuted.
-
+  Slices D/F/B/E landed 2026-09-08: occurrence vs series edits, start reminders
+  (web Notification + in-app toast; tray deferred), full category chips,
+  export/import and completion. Still open: Windows execution, copy-paste,
+  duplicate day, undo/redo.
 
 ## Phase 6 — Scheduling explanations, later design and hardening
 - Priority and energy controls, explanation panel, click reason to highlight.

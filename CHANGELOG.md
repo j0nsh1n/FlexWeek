@@ -6,6 +6,20 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Multi-day locked blocks open with Edit this day vs Entire series: occurrence
+  edits can remove one weekday or split a changed day into its own block; series
+  edits still change every weekday together. Context menu mirrors those choices.
+- Start reminders: preferences for enable, lead minutes and sound. While the tab
+  is open, FlexWeek polls due starts (Daily Scheduler start-alert math), shows an
+  in-app toast, and uses the Notification API when permitted. Desktop system-tray
+  alerts are deferred (no new tray dependency in this slice).
+- Category chips in the editor and a sidebar legend (School, Study, Homework,
+  Sports, Activity, Meals, Sleep, Free) with stronger grid colors.
+- Per-block completed flag with form checkbox and context toggle; survives
+  save/reload.
+- Export current week as JSON (Shift-click for plain text) and import a
+  FlexWeek JSON week/day file into the matching week without touching other
+  weeks. Context menu can export one day as JSON.
 - Week grid drag interactions: empty drag creates a locked block on the 15-minute
   grid, click-empty creates a 60-minute block clipped to the next block, drag body
   moves, edge resize, click selects, double-click opens the editor, and a context
