@@ -97,6 +97,8 @@ def test_completed_flag_round_trips_on_week(tmp_path: Path) -> None:
             "priority": 3,
             "energy": "medium",
             "completed": True,
+            "completed_day": 0,
+            "start": "09:00",
             "category": "assignments",
         }
         put = client.put(
@@ -107,4 +109,5 @@ def test_completed_flag_round_trips_on_week(tmp_path: Path) -> None:
         assert put.status_code == 200
         loaded = client.get(f"/api/week?week_start={WEEK}").json()["blocks"][0]
         assert loaded["completed"] is True
+        assert loaded["completed_day"] == 0
         assert loaded["category"] == "assignments"

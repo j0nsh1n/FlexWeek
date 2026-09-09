@@ -32,6 +32,33 @@ function cloneBlock(block) {
   return JSON.parse(JSON.stringify(block));
 }
 
+function occurrenceDays(block) {
+  if (block && block.kind === "flexible" && block.completed) {
+    if (Number.isInteger(block.completed_day)) return [block.completed_day];
+    if (Array.isArray(block.days) && block.days.length > 1) return [];
+  }
+  return block && Array.isArray(block.days) ? block.days : [];
+}
+
+function textLength(value) {
+  return Array.from(value).length;
+}
+
+function occurrenceImportId(day, blockId) {
+  const prefix = "occ-" + day + "-";
+  const id = String(blockId);
+  const legacy = prefix + id;
+  if (textLength(legacy) <= 80) return legacy;
+  let hash = 2166136261;
+  for (const character of id) {
+    hash ^= character.codePointAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  const suffix = "-" + (hash >>> 0).toString(16).padStart(8, "0");
+  const available = 80 - textLength(prefix + suffix);
+  return prefix + Array.from(id).slice(0, available).join("") + suffix;
+}
+
 function removeOccurrence(block, day) {
   if (!block || !Number.isInteger(day)) return block || null;
   const days = (block.days || []).filter(function (d) { return d !== day; });
@@ -73,6 +100,11 @@ function editOccurrence(block, day, patch) {
   if (onlyMembership) {
     return { series: removeOccurrence(block, day), split: null };
   }
+  const current = { priority: 3, energy: "medium", course: null, category: null,
+    completed: false, earliest: null, latest: null, ...block };
+  if (Object.keys(patchObj).every(key => JSON.stringify(patchObj[key]) === JSON.stringify(current[key]))) {
+    return { series: cloneBlock(block), split: null };
+  }
   const series = removeOccurrence(block, day);
   const split = applyBlockPatch(block, patchObj);
   split.id = typeof newId === "function" ? newId() : ("occ-" + day + "-" + String(block.id));
@@ -113,10 +145,20 @@ function exportWeekPayload(weekStart, blocks) {
   };
 }
 
+function presentationBlocks(state) {
+  if (!state || !state.trace) return state ? state.blocks : [];
+  const missed = state.blocks.filter(function (block) {
+    return block.kind === "locked" && (block.missed_days || []).length;
+  }).map(function (block) {
+    return { ...block, days: block.missed_days.slice() };
+  });
+  return (state.trace.placed || []).concat(missed, state.trace.unplaced || []);
+}
+
 function exportDayPayload(weekStart, day, blocks) {
   const date = dateForDay(weekStart, day);
   const dayBlocks = (blocks || []).filter(function (block) {
-    return (block.days || []).indexOf(day) !== -1;
+    return occurrenceDays(block).indexOf(day) !== -1;
   }).map(function (block) {
     const copy = cloneBlock(block);
     copy.days = [day];
@@ -139,7 +181,7 @@ function formatWeekExportText(weekStart, blocks) {
   const lines = ["FlexWeek — " + weekLabel(weekStart), ""];
   for (let day = 0; day < 7; day += 1) {
     const onDay = (blocks || []).filter(function (b) {
-      return b.start && (b.days || []).indexOf(day) !== -1;
+      return b.start && occurrenceDays(b).indexOf(day) !== -1;
     }).slice().sort(function (a, b) {
       return parseStart(a.start) - parseStart(b.start);
     });
@@ -172,8 +214,8 @@ const ENERGIES = ["high", "medium", "low"];
 function importBlockError(block, index) {
   const at = "Block " + (index + 1);
   if (!block || typeof block !== "object" || Array.isArray(block)) return at + " is not a block.";
-  if (typeof block.id !== "string" || !block.id || block.id.length > 80) return at + " has a bad id.";
-  if (typeof block.title !== "string" || !block.title.trim() || block.title.length > 80) {
+  if (typeof block.id !== "string" || !block.id || textLength(block.id) > 80) return at + " has a bad id.";
+  if (typeof block.title !== "string" || !block.title.trim() || textLength(block.title) > 80) {
     return at + " has a bad title.";
   }
   if (block.kind !== "locked" && block.kind !== "flexible") return at + " has an unknown kind.";
@@ -205,10 +247,23 @@ function importBlockError(block, index) {
   for (let i = 0; i < texts.length; i += 1) {
     const value = block[texts[i][0]];
     if (value === undefined || value === null) continue;
-    if (typeof value !== "string" || value.length > texts[i][1]) return at + " has a bad " + texts[i][0] + ".";
+    if (typeof value !== "string" || textLength(value) > texts[i][1]) {
+      return at + " has a bad " + texts[i][0] + ".";
+    }
+  }
+  const boundPattern = /^(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday) )?(?:[01]\d|2[0-3]):[0-5]\d$/;
+  if ([block.earliest, block.latest].some(value => value != null && !boundPattern.test(value))) {
+    return at + " has a bad deadline or earliest time.";
   }
   if (block.completed !== undefined && typeof block.completed !== "boolean") {
     return at + " has a bad completed flag.";
+  }
+  if (block.completed_day !== undefined && block.completed_day !== null) {
+    if (!Number.isInteger(block.completed_day) || block.completed_day < 0 || block.completed_day > 6
+      || block.kind !== "flexible" || block.completed !== true || !block.start
+      || block.days.indexOf(block.completed_day) === -1) {
+      return at + " has a completed day without a finished placement.";
+    }
   }
   if (block.missed_days !== undefined) {
     const missed = block.missed_days;
@@ -227,12 +282,12 @@ function importBlockError(block, index) {
 
 function importBlocksError(blocks) {
   if (blocks.length > MAX_IMPORT_BLOCKS) return "Export has more than " + MAX_IMPORT_BLOCKS + " blocks.";
-  const seen = {};
+  const seen = new Set();
   for (let i = 0; i < blocks.length; i += 1) {
     const problem = importBlockError(blocks[i], i);
     if (problem) return problem;
-    if (seen[blocks[i].id]) return "Export repeats the id " + blocks[i].id + ".";
-    seen[blocks[i].id] = true;
+    if (seen.has(blocks[i].id)) return "Export repeats the id " + blocks[i].id + ".";
+    seen.add(blocks[i].id);
   }
   return null;
 }
@@ -257,6 +312,10 @@ function parseImportPayload(raw) {
   // Validate every block before returning, so a bad file never reaches week state.
   const blockProblem = importBlocksError(data.blocks);
   if (blockProblem) return { error: blockProblem + " Nothing was imported." };
+  if (data.format === "flexweek-day" && (
+    !Number.isInteger(data.day) || data.day < 0 || data.day > 6
+    || data.blocks.some(block => block.days.length !== 1 || block.days[0] !== data.day)
+  )) return { error: "Day export must contain only its day in 0..6. Nothing was imported." };
   return {
     format: data.format,
     week_start: weekStart || null,
@@ -268,18 +327,23 @@ function parseImportPayload(raw) {
 function mergeImportedBlocks(existing, incoming, mode, day) {
   // mode: "replace" replaces all; "merge" upserts by id without dropping others
   if (mode === "replace") return (incoming || []).map(cloneBlock);
-  const byId = {};
+  const byId = Object.create(null);
   (existing || []).forEach(function (block) { byId[block.id] = cloneBlock(block); });
   (incoming || []).forEach(function (block) {
     if (!block || !block.id) return;
     const current = byId[block.id];
-    const splitId = "occ-" + day + "-" + String(block.id);
+    const splitId = occurrenceImportId(day, block.id);
     const priorSplit = byId[splitId];
     // A day import refreshes one occurrence of a same-ID series; the other
     // weekdays of that series must survive the upsert.
     const importsOneDay = Number.isInteger(day)
       && (block.days || []).length === 1 && block.days[0] === day;
-    if (current && importsOneDay && isSeries(current) && current.days.includes(day)) {
+    if (current && importsOneDay && current.kind === "flexible" && isSeries(current)) {
+      throw new Error("Day import cannot merge multi-day task " + block.id + ". Import the full week instead.");
+    }
+    if (current && block.kind === "locked" && current.kind === "locked"
+      && importsOneDay && isSeries(current) && current.days.includes(day)) {
+      if (priorSplit) throw new Error("Import would overwrite existing block " + splitId + ".");
       const kept = removeOccurrence(current, day);
       const split = cloneBlock(block);
       split.id = splitId;
@@ -289,7 +353,8 @@ function mergeImportedBlocks(existing, incoming, mode, day) {
       byId[split.id] = split;
       return;
     }
-    if (current && importsOneDay && !current.days.includes(day) && priorSplit
+    if (current && block.kind === "locked" && current.kind === "locked"
+      && importsOneDay && !current.days.includes(day) && priorSplit
       && (priorSplit.days || []).length === 1 && priorSplit.days[0] === day) {
       const split = cloneBlock(block);
       split.id = splitId;
@@ -492,20 +557,7 @@ function fillTimeSelect(select, includeBlank) {
 
 function isValidWeek(data) {
   if (!data || typeof data !== "object" || !Array.isArray(data.blocks)) return false;
-  return data.blocks.every(function (block) {
-    if (!block || typeof block !== "object") return false;
-    if (block.kind !== "locked" && block.kind !== "flexible") return false;
-    if (typeof block.title !== "string" || !block.title.trim()) return false;
-    if (typeof block.duration_min !== "number" || block.duration_min <= 0 || block.duration_min % 15 !== 0) {
-      return false;
-    }
-    if (!Array.isArray(block.days) || !block.days.length) return false;
-    if (block.days.some(function (day) { return day < 0 || day > 6; })) return false;
-    if (block.kind === "locked") {
-      if (typeof block.start !== "string" || !/^\d{2}:\d{2}$/.test(block.start)) return false;
-    }
-    return true;
-  });
+  return importBlocksError(data.blocks) === null;
 }
 
 function readWeek() {
@@ -528,7 +580,7 @@ function readWeek() {
 let account = null;
 let epoch = 0;
 let saving = false;
-let suspendedDraft = null;
+const suspendedDrafts = new Map();
 let editingOccurrenceDay = null;
 let editingScope = "series";
 let prefs = {
@@ -538,6 +590,7 @@ let prefs = {
   reminder_sound: true,
 };
 const firedReminders = new Set();
+const activeNotifications = new Set();
 let reminderTimer = null;
 
 // One record per week, keyed by its Monday. Blocks, revision, unsaved edits and
@@ -580,13 +633,27 @@ function lockEditor(locked) {
 function signedOut(message = "Sign in to open your week.", preserve = true) {
   const pending = account ? dirtyWeeks() : [];
   if (preserve && pending.length) {
-    suspendedDraft = { userId: account.id, weeks: pending.map(function (weekStart) {
+    suspendedDrafts.set(account.id, pending.map(function (weekStart) {
       const state = weekState(weekStart);
       return { weekStart: weekStart, blocks: structuredClone(state.blocks), revision: state.revision };
-    }) };
+    }));
   }
   epoch += 1;
   account = null;
+  syncReminderLoop();
+  firedReminders.clear();
+  activeNotifications.forEach(function (notification) {
+    try { notification.close(); } catch (err) { /* ignore */ }
+  });
+  activeNotifications.clear();
+  clearTimeout(showReminderToast._timer);
+  const toast = document.getElementById("reminder-toast");
+  if (toast) { toast.hidden = true; toast.textContent = ""; }
+  const preferencesDialog = document.getElementById("prefs-dialog");
+  if (preferencesDialog && typeof preferencesDialog.close === "function") preferencesDialog.close();
+  hideContextMenu();
+  if (gridGesture) clearGhost(gridGesture.lane);
+  gridGesture = null;
   weeks.clear();
   savedWeeks = [];
   selectedWeek = currentWeekStart();
@@ -631,7 +698,9 @@ async function api(path, options = {}, protectedRequest = true) {
       error.status = response.status;
       throw error;
     }
-    return response.status === 204 ? null : await response.json();
+    const data = response.status === 204 ? null : await response.json();
+    if (requestEpoch !== epoch) throw new Error("Session changed. Please try again.");
+    return data;
   } catch (error) {
     if (error.name === "AbortError") throw new Error("Request timed out. Check your connection and retry.");
     throw error;
@@ -698,8 +767,9 @@ async function loadAccount(identity) {
     const state = weekState();
     state.blocks = week.blocks;
     state.revision = week.revision;
-    if (suspendedDraft && suspendedDraft.userId === account.id) {
-      suspendedDraft.weeks.forEach(function (draft) {
+    const suspendedDraft = suspendedDrafts.get(account.id);
+    if (suspendedDraft) {
+      suspendedDraft.forEach(function (draft) {
         const target = weekState(draft.weekStart);
         target.blocks = draft.blocks;
         // Only the week just fetched has a known server revision to compare.
@@ -707,8 +777,8 @@ async function loadAccount(identity) {
         target.revision = draft.revision;
         target.dirty = true;
       });
+      suspendedDrafts.delete(account.id);
     }
-    suspendedDraft = null;
     applyPreferences(preferences);
     authPanel.hidden = true;
     planner.hidden = false;
@@ -844,7 +914,7 @@ function insightFor(explanations, blockId) {
 
 function occupiedIntervalsForDay(blocks, day) {
   return blocks.filter(function (block) {
-    return block.start && block.days.indexOf(day) !== -1;
+    return block.start && occurrenceDays(block).indexOf(day) !== -1;
   }).map(function (block) {
     const startMin = parseStart(block.start);
     return { startMin: startMin, endMin: startMin + (block.duration_min || 0), id: block.id };
@@ -997,7 +1067,7 @@ function clearGhost(lane) {
 
 function bindDayLane(lane, day) {
   lane.addEventListener("pointerdown", function (event) {
-    if (!account || saving || event.button !== 0) return;
+    if (!account || saving || gridGesture || event.button !== 0) return;
     hideContextMenu();
     const blockEl = event.target.closest ? event.target.closest(".block") : null;
     const pressMin = yToMinute(lane, event.clientY);
@@ -1051,7 +1121,7 @@ function bindDayLane(lane, day) {
   });
 
   lane.addEventListener("pointermove", function (event) {
-    if (!gridGesture || gridGesture.lane !== lane) return;
+    if (!gridGesture || gridGesture.lane !== lane || gridGesture.pointerId !== event.pointerId) return;
     const cur = yToMinute(lane, event.clientY);
     if (gridGesture.type === "create") {
       gridGesture.curMin = snapMinute(cur);
@@ -1071,11 +1141,12 @@ function bindDayLane(lane, day) {
   });
 
   function finishGesture(event) {
-    if (!gridGesture || gridGesture.lane !== lane) return;
+    if (!gridGesture || gridGesture.lane !== lane || gridGesture.pointerId !== event.pointerId) return;
     const gesture = gridGesture;
     gridGesture = null;
     clearGhost(lane);
     try { lane.releasePointerCapture(gesture.pointerId); } catch (err) { /* harness */ }
+    if (event.type === "pointercancel") return;
     if (gesture.type === "create") {
       if (gesture.moved) {
         const range = createDragRange(gesture.startMin, gesture.curMin);
@@ -1165,7 +1236,8 @@ function buildGrid(blocks, explanations = []) {
   const visibleStart = START_HOUR * 60;
 
   blocks.filter((b) => b.start).forEach((block) => {
-    block.days.forEach((day) => {
+    const renderedDays = occurrenceDays(block);
+    renderedDays.forEach((day) => {
       const startMin = parseStart(block.start);
       const endMin = Math.min(visibleEnd, startMin + (block.duration_min || 0));
       const clippedStart = Math.max(visibleStart, startMin);
@@ -1504,6 +1576,18 @@ function toggleCompleted(blockId) {
   const block = weekState().blocks.find(function (item) { return item.id === blockId; });
   if (!block) return false;
   block.completed = !block.completed;
+  if (block.completed && block.kind === "flexible") {
+    const placed = weekState().trace?.placed.find(item => item.id === blockId);
+    if (placed && placed.start && placed.days.length === 1) {
+      block.start = placed.start;
+      block.completed_day = placed.days[0];
+    } else if (!Number.isInteger(block.completed_day)) {
+      block.start = null;
+    }
+  } else if (block.kind === "flexible") {
+    block.start = null;
+    delete block.completed_day;
+  }
   clearSolveResult();
   saveWeek();
   renderWeek();
@@ -1537,9 +1621,11 @@ function downloadText(filename, body, mime) {
 
 function exportCurrentWeek(asText) {
   if (!account) return;
-  const blocks = weekState().blocks;
+  const state = weekState();
+  const blocks = state.blocks;
   if (asText) {
-    downloadText("flexweek-" + selectedWeek + ".txt", formatWeekExportText(selectedWeek, blocks), "text/plain");
+    downloadText("flexweek-" + selectedWeek + ".txt",
+      formatWeekExportText(selectedWeek, presentationBlocks(state)), "text/plain");
     return;
   }
   downloadText(
@@ -1551,7 +1637,7 @@ function exportCurrentWeek(asText) {
 
 function exportDay(day, asText) {
   if (!account || !Number.isInteger(day)) return;
-  const payload = exportDayPayload(selectedWeek, day, weekState().blocks);
+  const payload = exportDayPayload(selectedWeek, day, presentationBlocks(weekState()));
   if (asText) {
     const lines = ["FlexWeek day — " + DAYS[day] + " " + (payload.date || ""), ""];
     payload.blocks.forEach(function (block) {
@@ -1572,6 +1658,7 @@ function exportDay(day, asText) {
 }
 
 async function importPayloadIntoWeek(parsed, mode) {
+  if (!account || saving) return false;
   if (!parsed || parsed.error) {
     setStatus(parsed && parsed.error ? parsed.error : "Import failed.");
     return false;
@@ -1597,7 +1684,12 @@ async function importPayloadIntoWeek(parsed, mode) {
       return false;
     }
   }
-  state.blocks = mergeImportedBlocks(state.blocks, parsed.blocks, mergeMode, parsed.day);
+  let merged;
+  try { merged = mergeImportedBlocks(state.blocks, parsed.blocks, mergeMode, parsed.day); }
+  catch (error) { setStatus(error.message + " Nothing was imported."); return false; }
+  const problem = importBlocksError(merged);
+  if (problem) { setStatus(problem + " Nothing was imported."); return false; }
+  state.blocks = merged;
   closeForm();
   clearSolveResult();
   renderWeek();
@@ -1637,7 +1729,13 @@ function maybeNotify(title, body) {
   playReminderSound();
   if (typeof Notification !== "function") return;
   if (Notification.permission === "granted") {
-    try { new Notification(title, { body: body || "", silent: true }); } catch (err) { /* ignore */ }
+    try {
+      const notification = new Notification(title, { body: body || "", silent: true });
+      activeNotifications.add(notification);
+      const remove = function () { activeNotifications.delete(notification); };
+      notification.onclose = remove;
+      notification.onerror = remove;
+    } catch (err) { /* ignore */ }
     return;
   }
   if (Notification.permission === "default") {
@@ -1651,15 +1749,28 @@ function checkReminders(nowDate) {
   const todayIso = now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate());
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const lead = prefs.reminder_lead_min;
-  weekState().blocks.forEach(function (block) {
+  const reminderWeek = mondayOf(todayIso);
+  const state = weeks.get(reminderWeek);
+  if (!state) return;
+  const sources = new Map(state.blocks.map(function (block) { return [block.id, block]; }));
+  const reminderBlocks = state.trace ? state.blocks.filter(function (block) {
+    return block.kind === "locked";
+  }).concat((state.trace.placed || []).filter(function (block) {
+    return block.kind === "flexible";
+  }).map(function (placed) {
+    const source = sources.get(placed.id);
+    return source ? { ...placed, completed: source.completed,
+      missed_days: source.missed_days || [] } : placed;
+  })) : state.blocks;
+  reminderBlocks.forEach(function (block) {
     if (!block.start || block.completed) return;
-    (block.days || []).forEach(function (day) {
+    occurrenceDays(block).forEach(function (day) {
       if ((block.missed_days || []).indexOf(day) !== -1) return;
-      const date = dateForDay(selectedWeek, day);
+      const date = dateForDay(reminderWeek, day);
       if (date !== todayIso) return;
       const startMin = parseStart(block.start);
       if (!startAlertDue(startMin, nowMin, lead, REMINDER_WINDOW_MIN)) return;
-      const key = reminderKey(selectedWeek, block.id, day, block.start);
+      const key = reminderKey(reminderWeek, block.id, day, block.start);
       if (firedReminders.has(key)) return;
       firedReminders.add(key);
       maybeNotify(block.title + " starts soon", block.start + " · " + DAYS[day]);
@@ -1792,6 +1903,19 @@ formEl.addEventListener("submit", function (event) {
     const dueTime = dueTimeEl.value;
     if (dueDay !== "" && dueTime) {
       patch.latest = DAY_FULL[Number(dueDay)] + " " + dueTime;
+    }
+    if (patch.completed && prior) {
+      const placed = weekState().trace?.placed.find(item => item.id === id) || prior;
+      const completedDay = Number.isInteger(placed.completed_day)
+        ? placed.completed_day
+        : (placed.days.length === 1 ? placed.days[0] : null);
+      if (placed.start && completedDay !== null && days.includes(completedDay)) {
+        patch.start = placed.start;
+        patch.completed_day = completedDay;
+      }
+    } else {
+      patch.start = null;
+      patch.completed_day = null;
     }
   }
 
@@ -1967,7 +2091,7 @@ document.getElementById("logout").addEventListener("click", async () => {
   const logoutEpoch = epoch;
   try {
     await api("/api/auth/logout", { method: "POST" });
-    suspendedDraft = null;
+    if (account) suspendedDrafts.delete(account.id);
     signedOut("Signed out.", false);
     channel?.postMessage("session-changed");
   } catch (error) { if (logoutEpoch === epoch) setStatus("Sign out failed. " + error.message); }
@@ -2017,7 +2141,7 @@ document.getElementById("reload-week").addEventListener("click", async () => {
 });
 document.getElementById("download-draft").addEventListener("click", () => {
   if (!account) return;
-  const draft = { week_start: selectedWeek, blocks: weekState().blocks };
+  const draft = exportWeekPayload(selectedWeek, weekState().blocks);
   const url = URL.createObjectURL(new Blob([JSON.stringify(draft, null, 2)], { type: "application/json" }));
   const link = document.createElement("a");
   link.href = url;
@@ -2124,6 +2248,8 @@ if (prefsForm) {
     const value = submitter ? submitter.value : "cancel";
     if (value !== "save") return;
     event.preventDefault();
+    if (!account) return;
+    const preferenceEpoch = epoch;
     const enabledEl = document.getElementById("pref-reminders-enabled");
     const leadEl = document.getElementById("pref-reminder-lead");
     const soundEl = document.getElementById("pref-reminder-sound");
@@ -2136,6 +2262,7 @@ if (prefsForm) {
     const err = document.getElementById("prefs-error");
     try {
       const saved = await api("/api/preferences", { method: "PUT", body: JSON.stringify(next) });
+      if (preferenceEpoch !== epoch) return;
       applyPreferences(saved);
       if (err) { err.hidden = true; err.textContent = ""; }
       if (prefsDialog && typeof prefsDialog.close === "function") prefsDialog.close();
@@ -2145,6 +2272,7 @@ if (prefsForm) {
         Notification.requestPermission().catch(function () {});
       }
     } catch (error) {
+      if (preferenceEpoch !== epoch) return;
       if (err) { err.hidden = false; err.textContent = error.message; }
       else setStatus("Reminders were not saved. " + error.message);
     }
@@ -2164,15 +2292,20 @@ const importFileInput = document.getElementById("import-file-input");
 if (importFileBtn && importFileInput) {
   importFileBtn.addEventListener("click", function () { importFileInput.click(); });
   importFileInput.addEventListener("change", async function () {
+    if (!account || saving) return;
+    const importEpoch = epoch;
+    const importWeek = selectedWeek;
     const file = importFileInput.files && importFileInput.files[0];
     importFileInput.value = "";
     if (!file) return;
     try {
       const text = await file.text();
+      if (importEpoch !== epoch || importWeek !== selectedWeek) return;
       const parsed = parseImportPayload(text);
       const ok = await importPayloadIntoWeek(parsed);
       if (ok) setStatus("Imported into " + weekLabel(selectedWeek) + ".");
     } catch (error) {
+      if (importEpoch !== epoch || importWeek !== selectedWeek) return;
       setStatus("Import failed. " + error.message);
     }
   });

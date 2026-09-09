@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import copy
 
+import pytest
+from pydantic import ValidationError
+
 from backend.models import TimeBlock
 from backend.slots import hhmm_to_minutes, overlaps
 from backend.solver import solve
@@ -44,6 +47,7 @@ def _flex(
     earliest: str | None = None,
     start: str | None = None,
     completed: bool = False,
+    completed_day: int | None = None,
 ) -> TimeBlock:
     return TimeBlock(
         id=id,
@@ -57,6 +61,7 @@ def _flex(
         earliest=earliest,
         start=start,
         completed=completed,
+        completed_day=completed_day,
     )
 
 
@@ -201,6 +206,58 @@ def test_a_finished_task_on_several_candidate_days_holds_no_slot() -> None:
     assert [block.start for block in trace.placed] == ["09:00", "09:00", "09:00"]
     assert trace.unplaced == []
     assert trace.complete is True
+
+
+def test_completed_day_keeps_candidate_days_but_occupies_only_the_finished_slot() -> None:
+    done = _flex(
+        "done", "Reading", 60, [0, 1, 2], completed=True, start="09:00", completed_day=1
+    )
+    names = ("Monday", "Tuesday", "Wednesday")
+    wants = [
+        _flex(
+            f"w{day}",
+            f"Task {day}",
+            60,
+            [day],
+            earliest=f"{names[day]} 09:00",
+            latest=f"{names[day]} 10:00",
+        )
+        for day in (0, 1, 2)
+    ]
+    trace = solve([done, *wants])
+    placed = _by_id(trace.placed)
+    assert placed["done"].days == [1]
+    assert placed["done"].completed_day == 1
+    assert {block.id for block in trace.placed} == {"done", "w0", "w2"}
+    assert [block.id for block in trace.unplaced] == ["w1"]
+    assert done.days == [0, 1, 2]
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"kind": "locked"},
+        {"completed": False},
+        {"start": None},
+        {"completed_day": 3},
+    ],
+)
+def test_completed_day_requires_a_matching_finished_flexible_placement(
+    changes: dict[str, object],
+) -> None:
+    values: dict[str, object] = {
+        "id": "done",
+        "title": "Done",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [0, 1, 2],
+        "start": "09:00",
+        "completed": True,
+        "completed_day": 1,
+    }
+    values.update(changes)
+    with pytest.raises(ValidationError, match="completed_day"):
+        TimeBlock.model_validate(values)
 
 
 def test_a_finished_task_placed_on_one_day_still_holds_that_slot() -> None:
