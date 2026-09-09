@@ -901,6 +901,9 @@ function applyBlockTimes(blockId, startMin, endMin) {
   if (!account || saving) return false;
   const block = weekState().blocks.find(function (item) { return item.id === blockId; });
   if (!block || !block.start) return false;
+  // Enforced here as well as in the gesture: retiming a whole series from one
+  // day's drag would change days the student never touched.
+  if (isSeries(block)) return false;
   const dur = endMin - startMin;
   if (dur < SNAP_MIN || startMin < DAY_START_MIN || endMin > DAY_END_MIN) return false;
   block.start = formatMinute(startMin);
@@ -1002,6 +1005,17 @@ function bindDayLane(lane, day) {
       const blockId = blockEl.dataset.id;
       const source = weekState().blocks.find(function (item) { return item.id === blockId; });
       if (!source || !source.start) return;
+      // Dragging one day of a repeating block is ambiguous: it could move that
+      // occurrence or the whole series. The app already asks that question
+      // everywhere else, so refuse the gesture rather than silently pick one.
+      if (isSeries(source)) {
+        selectBlock(blockId, day);
+        setStatus(
+          source.title + " repeats on " + source.days.length +
+          " days, so dragging it is ambiguous. Right-click for Edit occurrence or Edit series."
+        );
+        return;
+      }
       const startMin = parseStart(source.start);
       const endMin = startMin + (source.duration_min || 0);
       const mode = editModeForBlock(blockEl, event.clientY);

@@ -219,3 +219,40 @@ test('categoryColor maps thin palette and optional category persists', async () 
   assert.equal(savedCategory, 'study');
   assert.equal(h.run('weekState().blocks[0].category'), 'study');
 });
+
+test('dragging one day of a repeating locked block is refused, not applied to the series', async () => {
+  const h = harness();
+  const school = {
+    id: 'school', kind: 'locked', title: 'School', duration_min: 60,
+    days: [0, 1, 2], start: '10:00', priority: 1, energy: 'medium',
+  };
+  await h.login(1, [school]);
+  let putCount = 0;
+  h.handle(async (_path, options) => {
+    putCount += 1;
+    return response(200, { week_start: MONDAY, blocks: JSON.parse(options.body).blocks, revision: 1 });
+  });
+
+  assert.equal(h.run('applyBlockTimes("school", 630, 705)'), false);
+  await tick();
+  assert.equal(putCount, 0);
+  assert.equal(h.run('weekState().blocks[0].start'), '10:00');
+  assert.equal(h.run('weekState().blocks[0].duration_min'), 60);
+  same(h.run('weekState().blocks[0].days'), [0, 1, 2]);
+});
+
+test('a one-day occurrence split off a series can still be dragged', async () => {
+  const h = harness();
+  const single = {
+    id: 'occ-1-school', kind: 'locked', title: 'School', duration_min: 60,
+    days: [1], start: '10:00', priority: 1, energy: 'medium',
+  };
+  await h.login(1, [single]);
+  h.handle(async (_path, options) =>
+    response(200, { week_start: MONDAY, blocks: JSON.parse(options.body).blocks, revision: 1 }));
+
+  assert.equal(h.run('applyBlockTimes("occ-1-school", 630, 705)'), true);
+  await tick();
+  assert.equal(h.run('weekState().blocks[0].start'), '10:30');
+  assert.equal(h.run('weekState().blocks[0].duration_min'), 75);
+});
