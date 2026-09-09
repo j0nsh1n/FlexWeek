@@ -11,9 +11,22 @@
 - The critical Phase 5 audit blockers are fixed locally: failed target-week
   imports abort without writes, repeated day imports preserve recurring
   series, and the desktop probe follows the double-click edit contract.
-- Gates green: 115 Python tests, 33 frontend behavior tests and JavaScript
+- The three high-severity audit findings are fixed 2026-09-08: completed
+  flexible tasks no longer consume solver capacity or generate unplaced
+  explanations; a malformed or newer-version import is refused before any week
+  state is mutated, rendered or saved; and a drag on a multi-day locked block is
+  refused with a route to the occurrence/series actions.
+- Gates green: 122 Python tests, 38 frontend behavior tests and JavaScript
   syntax. The real-WebEngine case covers
   solve, slack, miss, cross-day replan, save, reload and restore.
+- Completion is a flexible-task idea in the solver. A completed flexible task
+  with a start keeps its slot occupied, because that time was really spent; one
+  without a start leaves the solver entirely. Completed locked blocks are
+  unaffected and still occupy their time.
+- Series semantics belong to locked blocks only. A flexible task listed on
+  several days has candidate days, not repeated events, so it still drags.
+  `isSeries` alone is not enough; callers pair it with `kind === "locked"`, as
+  the context menu and edit form already did.
 - A missed occurrence is stored as one day in a locked block's `missed_days`.
   It is excluded from solver occupancy without deleting the block or its other
   weekday occurrences. Recovery uses the existing `/api/solve` endpoint and
@@ -103,13 +116,19 @@ There is no automatic synchronization between those databases.
 - License file is GPL-3.0. Qt for Python is LGPLv3/GPLv2/commercial.
 
 ## Session Handoff
-- 2026-09-08, `feat/phase5-calendar-interactions`: the three critical audit
-  blockers are fixed locally with GLM-assisted import tests. Full verification:
-  115 pytest and 33 frontend tests pass; JavaScript syntax, Ruff and mypy are
-  clean. These fixes have not been pushed.
-- Next: address the remaining high-severity audit findings, then rebuild the
-  Linux desktop artifact. Windows execution remains unavailable.
-- Settled 2026-09-08 by the owner: dated weeks + desktop build in spec; Phase 7
-  committed; agents.md tracked. Built app is a release asset, not committed.
-- Still undecided: whether `Github Templates/` and `reslot-cac-build-plan.md`
-  get committed.
+- 2026-09-08, `feat/phase5-calendar-interactions`: the three remaining
+  high-severity audit findings are fixed in four local commits, each with
+  behaviour tests that were confirmed to fail with the fix removed. Gates: 122
+  Python tests, 38 frontend tests, Ruff, mypy, JS syntax and `git diff --check`
+  all clean. Nothing pushed.
+- GLM-5.3 Flash (OpenRouter) drafted the solver tests. Gemini 3.8 Flash
+  (Antigravity) reviewed the diff and found two real defects in my own fixes: a
+  finished task reported as reshuffled to nowhere, and a drag refusal that also
+  caught multi-day flexible tasks and stranded them. Both fixed. Its third
+  finding, that completed blocks would generate slack and energy explanations,
+  was wrong; they never reach that loop.
+- Next: rebuild the Linux desktop artifact, which still predates all Phase 5
+  interaction work. Windows execution remains unavailable.
+- Still open in Phase 5: copy/paste, duplicate day, undo/redo, desktop tray
+  reminders. Still undecided: whether `Github Templates/` and
+  `reslot-cac-build-plan.md` get committed.

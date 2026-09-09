@@ -28,6 +28,19 @@ All notable changes to FlexWeek are documented here. Format follows
   Sports, Activity, Meals, Free); older weeks without a category still load.
 
 ### Fixed
+- A task you have ticked off no longer competes for a slot. Finished work used
+  to be scheduled again, so a completed essay could take the last free hour and
+  FlexWeek would tell you your real homework did not fit because a
+  higher-priority task took the slot. A finished task that already had a time
+  keeps it; one that never had a time is simply left alone.
+- A damaged or unrecognised export file is refused with a reason, and the week
+  on screen is left exactly as it was. Previously the file was written into your
+  week and drawn on the grid before the save failed, so a bad file could wipe
+  what was there. Files from a newer version of FlexWeek are refused too.
+- Dragging a single day of a repeating block no longer silently retimes every
+  other day of it. The drag is refused and FlexWeek points you at Edit
+  occurrence or Edit series, which is how every other change to a repeating
+  block already works. One-off blocks still drag and resize normally.
 - Importing a week now stops without changing the open week when the target
   week cannot be loaded. Day-file imports preserve the other occurrences of a
   repeating block, including when the same file is imported again.
