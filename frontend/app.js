@@ -163,6 +163,80 @@ function formatWeekExportText(weekStart, blocks) {
   return lines.join("\n").trim() + "\n";
 }
 
+const MAX_IMPORT_BLOCKS = 100;
+const ENERGIES = ["high", "medium", "low"];
+
+/** Reject an import the server would reject, before any week state is touched.
+    Mirrors the TimeBlock contract in backend/models.py; a payload that passes
+    here must not come back 422. */
+function importBlockError(block, index) {
+  const at = "Block " + (index + 1);
+  if (!block || typeof block !== "object" || Array.isArray(block)) return at + " is not a block.";
+  if (typeof block.id !== "string" || !block.id || block.id.length > 80) return at + " has a bad id.";
+  if (typeof block.title !== "string" || !block.title.trim() || block.title.length > 80) {
+    return at + " has a bad title.";
+  }
+  if (block.kind !== "locked" && block.kind !== "flexible") return at + " has an unknown kind.";
+  if (!Number.isInteger(block.duration_min) || block.duration_min <= 0
+      || block.duration_min > 7140 || block.duration_min % SNAP_MIN !== 0) {
+    return at + " needs a duration in whole 15-minute steps.";
+  }
+  if (!Array.isArray(block.days) || !block.days.length || block.days.length > 7) return at + " has bad days.";
+  if (block.days.some(function (day) { return !Number.isInteger(day) || day < 0 || day > 6; })) {
+    return at + " has bad days.";
+  }
+  if (new Set(block.days).size !== block.days.length) return at + " repeats a day.";
+  if (block.priority !== undefined && [1, 2, 3, 4].indexOf(block.priority) === -1) {
+    return at + " has a bad priority.";
+  }
+  if (block.energy !== undefined && ENERGIES.indexOf(block.energy) === -1) return at + " has a bad energy.";
+  if (block.kind === "locked" && typeof block.start !== "string") return at + " is locked but has no start.";
+  if (block.start !== undefined && block.start !== null) {
+    if (typeof block.start !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(block.start)) {
+      return at + " has a bad start time.";
+    }
+    const startMin = parseStart(block.start);
+    if (startMin % SNAP_MIN !== 0) return at + " must start on a 15-minute slot.";
+    if (startMin < DAY_START_MIN || startMin + block.duration_min > DAY_END_MIN) {
+      return at + " does not fit the visible day.";
+    }
+  }
+  const texts = [["earliest", 40], ["latest", 40], ["course", 40], ["category", 32]];
+  for (let i = 0; i < texts.length; i += 1) {
+    const value = block[texts[i][0]];
+    if (value === undefined || value === null) continue;
+    if (typeof value !== "string" || value.length > texts[i][1]) return at + " has a bad " + texts[i][0] + ".";
+  }
+  if (block.completed !== undefined && typeof block.completed !== "boolean") {
+    return at + " has a bad completed flag.";
+  }
+  if (block.missed_days !== undefined) {
+    const missed = block.missed_days;
+    if (!Array.isArray(missed) || missed.length > 7) return at + " has bad missed days.";
+    if (missed.some(function (day) { return !Number.isInteger(day) || day < 0 || day > 6; })) {
+      return at + " has bad missed days.";
+    }
+    if (new Set(missed).size !== missed.length) return at + " repeats a missed day.";
+    if (missed.length && block.kind !== "locked") return at + " marks missed days on a flexible task.";
+    if (missed.some(function (day) { return block.days.indexOf(day) === -1; })) {
+      return at + " misses a day it does not run on.";
+    }
+  }
+  return null;
+}
+
+function importBlocksError(blocks) {
+  if (blocks.length > MAX_IMPORT_BLOCKS) return "Export has more than " + MAX_IMPORT_BLOCKS + " blocks.";
+  const seen = {};
+  for (let i = 0; i < blocks.length; i += 1) {
+    const problem = importBlockError(blocks[i], i);
+    if (problem) return problem;
+    if (seen[blocks[i].id]) return "Export repeats the id " + blocks[i].id + ".";
+    seen[blocks[i].id] = true;
+  }
+  return null;
+}
+
 function parseImportPayload(raw) {
   const text = String(raw || "").trim();
   if (!text) return { error: "Empty file." };
@@ -173,9 +247,16 @@ function parseImportPayload(raw) {
   if (data.format !== EXPORT_FORMAT && data.format !== "flexweek-day") {
     return { error: "Unrecognized export format." };
   }
+  if (!Number.isInteger(data.version) || data.version < 1) return { error: "Export has no version." };
+  if (data.version > EXPORT_VERSION) {
+    return { error: "Export came from a newer FlexWeek (version " + data.version + ")." };
+  }
   if (!Array.isArray(data.blocks)) return { error: "Export is missing blocks." };
   const weekStart = data.week_start;
   if (weekStart && !isWeekStart(weekStart)) return { error: "Export week_start must be a Monday." };
+  // Validate every block before returning, so a bad file never reaches week state.
+  const blockProblem = importBlocksError(data.blocks);
+  if (blockProblem) return { error: blockProblem + " Nothing was imported." };
   return {
     format: data.format,
     week_start: weekStart || null,

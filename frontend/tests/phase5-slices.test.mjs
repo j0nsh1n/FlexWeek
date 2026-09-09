@@ -343,3 +343,75 @@ test('E: day import updates one occurrence and keeps the rest of the series', as
   same(putBlocks.find(b => b.id === 'school').days, [1]);
   same(putBlocks.find(b => b.id === 'occ-2-school').days, [2]);
 });
+
+test('E: a malformed import is refused before the week is touched or saved', async () => {
+  const h = harness();
+  const homework = {
+    id: 'hw', kind: 'flexible', title: 'Essay', duration_min: 60, days: [0],
+    priority: 3, energy: 'medium',
+  };
+  await h.login(1, [homework], [MONDAY]);
+  let putCount = 0;
+  h.handle(async (path, options) => {
+    if (path === '/api/week') {
+      putCount += 1;
+      return response(200, { week_start: MONDAY, blocks: JSON.parse(options.body).blocks, revision: 1 });
+    }
+    return response(200, { weeks: [MONDAY] });
+  });
+
+  const bad = {
+    'a duration off the 15-minute grid': { duration_min: 10 },
+    'a weekday outside 0..6': { days: [9] },
+    'a locked block with no start': { start: undefined },
+    'a start that runs past 23:00': { start: '22:30', duration_min: 120 },
+    'missed days on a flexible task': { kind: 'flexible', missed_days: [0] },
+  };
+  for (const [why, patch] of Object.entries(bad)) {
+    const block = Object.assign(
+      { id: 'x', kind: 'locked', title: 'Bad', duration_min: 60, days: [0], start: '09:00' },
+      patch,
+    );
+    if (patch.start === undefined && 'start' in patch) delete block.start;
+    const payload = { format: 'flexweek-week', version: 1, week_start: MONDAY, blocks: [block] };
+    const parsed = h.run(`parseImportPayload(${JSON.stringify(JSON.stringify(payload))})`);
+    assert.ok(parsed.error, `expected ${why} to be refused`);
+    assert.equal(await h.run(`importPayloadIntoWeek(${JSON.stringify(parsed)})`), false);
+  }
+
+  await tick();
+  assert.equal(putCount, 0);
+  same(h.run('weekState().blocks'), [homework]);
+});
+
+test('E: an export from a newer FlexWeek is refused rather than half-read', async () => {
+  const h = harness();
+  const homework = {
+    id: 'hw', kind: 'flexible', title: 'Essay', duration_min: 60, days: [0],
+    priority: 3, energy: 'medium',
+  };
+  await h.login(1, [homework], [MONDAY]);
+  let putCount = 0;
+  h.handle(async (path, options) => {
+    if (path === '/api/week') {
+      putCount += 1;
+      return response(200, { week_start: MONDAY, blocks: JSON.parse(options.body).blocks, revision: 1 });
+    }
+    return response(200, { weeks: [MONDAY] });
+  });
+
+  const future = {
+    format: 'flexweek-week', version: 99, week_start: MONDAY,
+    blocks: [{ id: 'n', kind: 'locked', title: 'New', duration_min: 60, days: [0], start: '09:00' }],
+  };
+  const parsed = h.run(`parseImportPayload(${JSON.stringify(JSON.stringify(future))})`);
+  assert.match(parsed.error, /newer FlexWeek/);
+  assert.equal(await h.run(`importPayloadIntoWeek(${JSON.stringify(parsed)})`), false);
+
+  const versionless = { format: 'flexweek-week', week_start: MONDAY, blocks: [] };
+  assert.ok(h.run(`parseImportPayload(${JSON.stringify(JSON.stringify(versionless))})`).error);
+
+  await tick();
+  assert.equal(putCount, 0);
+  same(h.run('weekState().blocks'), [homework]);
+});
