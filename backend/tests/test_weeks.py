@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.weeks import date_for_day, is_week_start, monday_of
+from backend.weeks import is_week_start, monday_of
 
 
 def test_monday_of_maps_every_day_of_one_week_to_its_monday() -> None:
@@ -41,28 +41,6 @@ def test_is_week_start_is_true_only_for_an_in_range_monday() -> None:
         "2100-01-04",
     ):
         assert is_week_start(value) is False
-
-
-def test_date_for_day_maps_the_day_indices_onto_one_week() -> None:
-    expected = ("2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-12", "2026-09-13")
-    for day_index, calendar_date in enumerate(expected):
-        assert date_for_day("2026-09-07", day_index) == calendar_date
-
-
-def test_date_for_day_rejects_out_of_range_day_indices() -> None:
-    for day_index in (-1, 7):
-        with pytest.raises(ValueError):
-            date_for_day("2026-09-07", day_index)
-
-
-def test_date_for_day_requires_a_monday_week_start() -> None:
-    with pytest.raises(ValueError):
-        date_for_day("2026-09-08", 0)
-
-
-def test_date_for_day_crosses_month_and_year_boundaries() -> None:
-    assert date_for_day("2026-09-28", 6) == "2026-10-04"
-    assert date_for_day("2026-12-28", 6) == "2027-01-03"
 
 
 def test_monday_of_crosses_month_and_year_boundaries() -> None:

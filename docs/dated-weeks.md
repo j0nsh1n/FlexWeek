@@ -137,7 +137,10 @@ Qt imports, matching the existing rule that `models.py` imports no framework:
 - `monday_of(date_str) -> str` — the Monday of that date's week
 - `current_week_start() -> str` — Monday of the server's local today
 - `is_week_start(value) -> bool` — well-formed, in range, and a Monday
-- `date_for_day(week_start, day_index) -> str` — the block's calendar date
+
+Mapping a day index to a calendar date is a client-side operation only. The
+server stores and returns day indices and never needs the date, so there is no
+Python counterpart; `app.js` owns `dateForDay` for display.
 
 The frontend needs the same four operations. It reimplements them in `app.js`
 because there is no build step and no shared module, so both sides must agree
