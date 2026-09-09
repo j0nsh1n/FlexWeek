@@ -31,9 +31,15 @@ def solve(blocks: list[TimeBlock]) -> SolveTrace:
     """Place flexible blocks around locked ones. Pure and synchronous."""
     started = time.perf_counter()
     locked = _active_locked(blocks)
-    flexible = [block.model_copy() for block in blocks if block.kind == "flexible"]
+    every_flexible = [block.model_copy() for block in blocks if block.kind == "flexible"]
+    # Finished work is never scheduled again. One that already has a slot spent
+    # that time, so it stays on the grid and nothing new is booked over it; one
+    # with no slot needs none and is not reported unplaced. Locked blocks are
+    # untouched by this, so a completed lesson keeps its place in the week.
+    spent = [block for block in every_flexible if block.completed and block.start is not None]
+    flexible = [block for block in every_flexible if not block.completed]
 
-    occ_locked = _locked_occupancy(locked)
+    occ_locked = _locked_occupancy(locked + spent)
     flex_by_id = {block.id: block for block in flexible}
     ids = [block.id for block in flexible]
     deadlines = {block.id: parse_deadline(block.latest, block.days) for block in flexible}
@@ -150,7 +156,7 @@ def solve(blocks: list[TimeBlock]) -> SolveTrace:
             )
 
     return SolveTrace(
-        placed=locked + placed_flex,
+        placed=locked + spent + placed_flex,
         unplaced=unplaced,
         moves=moves,
         explanations=explanations,
@@ -185,7 +191,9 @@ def reschedule_after_miss(
     changes: list[Move] = []
     unplaced_moves = {move.block_id: move for move in trace.moves}
     for block in blocks:
-        if block.kind != "flexible" or before.get(block.id) == after.get(block.id):
+        # Finished work is out of the solver, so its slot disappearing is not a
+        # reshuffle. Without this it is reported as moved to nowhere.
+        if block.kind != "flexible" or block.completed or before.get(block.id) == after.get(block.id):
             continue
         old = before.get(block.id)
         new = after.get(block.id)
