@@ -1,33 +1,23 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-09. Branch `test/deeper-verification`, based on
-  `feat/phase5-calendar-interactions` at `147687c`.
-- Phase 5 calendar interactions and Phase 6 scheduling recovery are implemented.
-  Accounts, Monday-keyed weeks, 15-minute placement and per-day `missed_days`
-  recovery remain the product model.
-- The deeper verification pass reproduced and fixed cancelled gesture writes,
-  private reminder state surviving sign-out, stale account responses/file reads,
-  invalid legacy/day imports, merged-week overflow, occurrence-ID collisions,
-  unusable draft downloads, multi-day task duplication, per-account draft loss,
-  completion losing candidate days, reminder leaks/gaps and priority inversion.
-- Today's loaded week and solved flexible placements produce reminders while
-  another week is selected. Sign-out closes both in-page and browser alerts.
-- Source verification now has one runner, `scripts/verify.py`, a feature coverage
-  map in `docs/verification.md`, and a web-only GitHub Actions workflow. The
-  workflow has not run remotely; nothing has been pushed.
-- Baseline was 121 Python and 40 frontend tests. The final full source gate ran
-  153 Python and 61 frontend tests with no skips.
-- Completed flexible work keeps its original candidate `days`; `completed_day`
-  records the one occurrence whose `start` is spent. Both UI completion actions
-  preserve and can restore the candidate set.
-  Completed tasks without a placement stay outside scheduling; locked blocks
-  retain their existing occupancy semantics.
-- GLM rebuilt the Linux artifact from `f12ea5c` on September 9. The extracted
-  archive served `/api/health` with HTTP 200 and the bundled FlexWeek page from
-  a fresh profile. Full packaged account/interaction flows, Windows execution,
-  Safari/iPhone and physical touch remain unverified. Desktop tray reminders
-  are deferred.
+- Date: 2026-09-09. Branch `feat/phase7-focus-tools`, based on `bfb8edf`.
+- Phase 7 focus tools are in: pomodoro timers on placed tasks, standalone
+  alarms with a dismiss/snooze dialog, Spotify share links on blocks and
+  alarms, a Now / Next line, timer and do-not-disturb preferences, and desktop
+  tray notifications. Started by ChatGPT, finished and verified here.
+- Gates green: Ruff, mypy over 31 files, 159 Python tests and 67 frontend
+  tests, JavaScript syntax.
+- Phase 7 is verified in a real browser, not only in the DOM stub. The
+  `phase7` WebEngine case starts a focus session and checks the panel counts,
+  that pause stops the countdown, that skip changes phase and reset closes it,
+  then adds an alarm through the preferences dialog.
+- Phase 5 calendar interactions and Phase 6 scheduling recovery remain in
+  place. Accounts, Monday-keyed weeks, 15-minute placement and per-day
+  `missed_days` recovery are still the product model.
+- Windows execution, Safari/iPhone, physical touch, full packaged flows and OS
+  notification delivery remain unverified. Desktop tray reminders beyond the
+  notification bridge are deferred.
 - Default desktop mode uses a local database. Hosted mode uses the configured
   server; there is no automatic synchronization between them.
 
@@ -92,21 +82,19 @@ There is no automatic synchronization between those databases.
 - License file is GPL-3.0. Qt for Python is LGPLv3/GPLv2/commercial.
 
 ## Session Handoff
-- 2026-09-09, `test/deeper-verification`: full local verification passed with
-  153 Python and 61 frontend tests, Ruff, mypy, JavaScript syntax, and all diff
-  checks. GLM and two Codex reviewers found the solver, completion, import,
-  draft, reminder and export regressions now covered by focused tests. Gemini
-  timed out twice through Antigravity and was not counted as review evidence.
-- The two-stage solver finds ordinary complete schedules before considering
-  optional task skips. This preserves the priority result for infeasible weeks
-  and completes the reproduced energy-sensitive ten-task week within budget.
-- The untracked `Github Templates/` and `reslot-cac-build-plan.md` remain
-  untouched. `spec.md` is unchanged; its individual validation commands still
-  apply. It does not yet document the persisted `completed_day` field; that
+- 2026-09-09, `feat/phase7-focus-tools`: picked up ChatGPT's uncommitted Phase 7
+  work, fixed the two regressions blocking the gate (a try/except/pass in
+  desktop/main.py and six mypy errors the new probe introduced), added a real
+  browser case for the focus timer and alarms, and committed the lot in two
+  commits. Nothing pushed.
+- The editor disables every control while a save is in flight, so a click
+  during that window is a visible no-op rather than a bug. A probe that does
+  not wait for the save to settle will wrongly report the Add task button as
+  dead; wait for `saving === false` or for the status to start with "Saved".
+- Next: the remaining Phase 7 items in roadmap.md that are not yet built,
+  notably splitting long blocks into pomodoro chunks on the grid, free-gap
+  visualization and the block-start notification lead time.
+- `spec.md` still does not document `completed_day` or any Phase 7 field. That
   contract update needs a separate approved spec edit.
-- The CI workflow is unrun until pushed. Windows, Safari/iPhone, physical touch,
-  full packaged flows and OS notification delivery still need release-platform
-  checks.
-- GLM produced `dist/FlexWeek-linux-x86_64-20260909.tar.gz` from `f12ea5c`.
-  SHA-256 is `57d559c0525291f8065cea60f72592a70ed69851cd0b3cf04ab9cc151ba0713d`;
-  the prior build is preserved at `dist/FlexWeek.previous.20260909-163020`.
+- The untracked `Github Templates/` and `reslot-cac-build-plan.md` remain
+  untouched.

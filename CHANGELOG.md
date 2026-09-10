@@ -6,6 +6,12 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Focus timers. Start a pomodoro on a task the solver has placed, then pause,
+  skip or reset it. Sessions and minutes are kept on the task and survive a save.
+- Alarms you set yourself, separate from your schedule. They live in
+  preferences and pop up until you dismiss or snooze them.
+- Spotify share links on blocks and alarms, and a Now / Next line showing what
+  is running and what comes after it.
 - Linux desktop release archive rebuilt from `f12ea5c`, with the extracted
   executable verified against its bundled health endpoint and web UI
   (2026-09-09).
