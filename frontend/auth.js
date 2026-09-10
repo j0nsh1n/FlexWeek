@@ -1,4 +1,18 @@
-function signedOut(message = "Sign in to open your week.", preserve = true) {
+const AUTH_SCREENS = {
+  register: { screen: "register-screen", form: "register-form", error: "register-error" },
+  login: { screen: "login-screen", form: "login-form", error: "login-error" },
+};
+
+/** Show one auth screen. Page load opens register; returning after a session opens login. */
+function showAuthScreen(name) {
+  Object.keys(AUTH_SCREENS).forEach(function (key) {
+    const ids = AUTH_SCREENS[key];
+    document.getElementById(ids.screen).hidden = key !== name;
+    document.getElementById(ids.error).textContent = "";
+  });
+}
+
+function signedOut(message = "Log in to open your week.", preserve = true, screen = "login") {
   const pending = account ? dirtyWeeks() : [];
   if (preserve && pending.length) {
     suspendedDrafts.set(account.id, pending.map(function (weekStart) {
@@ -47,6 +61,8 @@ function signedOut(message = "Sign in to open your week.", preserve = true) {
   planner.hidden = true;
   debugEl.hidden = true;
   authPanel.hidden = false;
+  showAuthScreen(screen);
+  document.getElementById("reconnect").hidden = true;
   document.getElementById("account-controls").hidden = true;
   document.getElementById("account-name").textContent = "";
   document.getElementById("import-panel").hidden = true;
@@ -103,38 +119,55 @@ async function loadAccount(identity) {
   }
 }
 
-document.getElementById("auth-form").addEventListener("submit", async event => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const action = event.submitter?.value || "login";
+async function submitAuth(action) {
+  const ids = AUTH_SCREENS[action];
+  const username = document.getElementById(action + "-username");
+  const password = document.getElementById(action + "-password");
+  const form = document.getElementById(ids.form);
   const authEpoch = epoch;
   form.querySelectorAll("button").forEach(el => { el.disabled = true; });
-  document.getElementById("auth-error").textContent = "";
+  document.getElementById(ids.error).textContent = "";
   try {
     const identity = await api("/api/auth/" + action, { method: "POST", body: JSON.stringify({
-      username: document.getElementById("username").value,
-      password: document.getElementById("password").value,
+      username: username.value, password: password.value,
     }) }, false);
-    document.getElementById("password").value = "";
+    password.value = "";
     channel?.postMessage("session-changed");
     await loadAccount(identity);
   } catch (error) {
-    if (authEpoch === epoch) document.getElementById("auth-error").textContent = error.message;
+    if (authEpoch === epoch) document.getElementById(ids.error).textContent = error.message;
   } finally { form.querySelectorAll("button").forEach(el => { el.disabled = false; }); }
+}
+
+Object.keys(AUTH_SCREENS).forEach(function (action) {
+  document.getElementById(AUTH_SCREENS[action].form).addEventListener("submit", function (event) {
+    event.preventDefault();
+    return submitAuth(action);
+  });
 });
 
+function switchAuthScreen(from, to) {
+  const typed = document.getElementById(from + "-username").value;
+  const target = document.getElementById(to + "-username");
+  if (typed && !target.value) target.value = typed;
+  showAuthScreen(to);
+  if (typeof target.focus === "function") target.focus();
+}
+document.getElementById("show-login").addEventListener("click", () => switchAuthScreen("register", "login"));
+document.getElementById("show-register").addEventListener("click", () => switchAuthScreen("login", "register"));
+
 document.getElementById("logout").addEventListener("click", async () => {
-  if (saving || (dirtyWeeks().length && !confirm("Sign out and discard unsaved changes? Download the draft first if you need it."))) return;
+  if (saving || (dirtyWeeks().length && !confirm("Log out and discard unsaved changes? Download the draft first if you need it."))) return;
   const logoutEpoch = epoch;
   try {
     await api("/api/auth/logout", { method: "POST" });
     if (account) suspendedDrafts.delete(account.id);
-    signedOut("Signed out.", false);
+    signedOut("Logged out.", false);
     channel?.postMessage("session-changed");
-  } catch (error) { if (logoutEpoch === epoch) setStatus("Sign out failed. " + error.message); }
+  } catch (error) { if (logoutEpoch === epoch) setStatus("Log out failed. " + error.message); }
 });
 
-if (channel) channel.onmessage = () => signedOut("The account session changed in another window. Sign in to continue.");
+if (channel) channel.onmessage = () => signedOut("The account changed in another window. Log in to continue.");
 
 async function reconnect() {
   if (account) return;
@@ -142,7 +175,10 @@ async function reconnect() {
   setStatus("Connecting…");
   try { await loadAccount(await api("/api/auth/me", {}, false)); }
   catch (error) {
-    if (connectionEpoch === epoch) signedOut(error.status === 401 ? "Sign in to open your week." : "Connection failed. " + error.message);
+    if (connectionEpoch !== epoch) return;
+    const offline = error.status !== 401;
+    signedOut(offline ? "Could not reach FlexWeek. " + error.message : "Create an account to start planning.", true, "register");
+    document.getElementById("reconnect").hidden = !offline;
   }
 }
 document.getElementById("reconnect").addEventListener("click", reconnect);

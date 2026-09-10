@@ -21,26 +21,37 @@
       <span id="account-name"></span>
       <label>Theme <select id="theme"><option value="nocturne">Nocturne · dark</option><option value="slate">Slate · light</option></select></label>
       <button type="button" id="prefs-open" class="secondary">Settings</button>
-      <button type="button" id="logout" class="secondary">Sign out</button>
+      <button type="button" id="logout" class="secondary">Log out</button>
       <button type="button" id="solve">Solve</button>
     </div>
   </header>
   <p id="status" class="status" role="status">Connecting…</p>
-  <section id="auth-panel" class="auth-panel" aria-labelledby="auth-heading">
-    <h2 id="auth-heading">Your week, in one place</h2>
-    <p>Sign in or create an account to save your schedule.</p>
-    <form id="auth-form">
-      <label>Username <input id="username" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_]+" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
-      <p class="note">3–32 letters, numbers or underscores. Usernames are not case-sensitive.</p>
-      <label>Password <input id="password" type="password" required minlength="12" maxlength="128" autocomplete="current-password"></label>
-      <p class="note">12–128 characters. Password recovery is not available yet.</p>
-      <p id="auth-error" class="form-error" role="alert"></p>
-      <div class="form-actions">
-        <button type="submit" name="action" value="login">Sign in</button>
-        <button type="submit" name="action" value="register" class="secondary">Create account</button>
-      </div>
-    </form>
-    <button type="button" id="reconnect" class="secondary">Retry connection</button>
+  <section id="auth-panel" class="auth-panel">
+    <div id="register-screen" aria-labelledby="register-heading">
+      <h2 id="register-heading">Create your account</h2>
+      <p>FlexWeek fits homework around school and sports. Your week is saved to your account.</p>
+      <form id="register-form" data-action="register">
+        <label>Username <input id="register-username" name="username" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_]+" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+        <p class="note">3–32 letters, numbers or underscores. Capital letters do not matter.</p>
+        <label>Password <input id="register-password" name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label>
+        <p class="note">At least 12 characters. There is no password reset yet, so keep it somewhere safe.</p>
+        <p id="register-error" class="form-error" role="alert"></p>
+        <div class="form-actions"><button type="submit">Create account</button></div>
+      </form>
+      <p class="auth-switch">Already have an account? <button type="button" id="show-login" class="link-button">Log in</button></p>
+    </div>
+    <div id="login-screen" aria-labelledby="login-heading" hidden>
+      <h2 id="login-heading">Log in</h2>
+      <p>Welcome back. Log in to open your week.</p>
+      <form id="login-form" data-action="login">
+        <label>Username <input id="login-username" name="username" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_]+" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+        <label>Password <input id="login-password" name="password" type="password" required minlength="12" maxlength="128" autocomplete="current-password"></label>
+        <p id="login-error" class="form-error" role="alert"></p>
+        <div class="form-actions"><button type="submit">Log in</button></div>
+      </form>
+      <p class="auth-switch">New to FlexWeek? <button type="button" id="show-register" class="link-button">Create an account</button></p>
+    </div>
+    <button type="button" id="reconnect" class="secondary" hidden>Retry connection</button>
   </section>
   <div id="save-actions" class="save-actions" hidden>
     <button id="retry-save" type="button">Retry save</button>
@@ -220,7 +231,7 @@
         <label>Theme
           <select id="pref-theme"><option value="nocturne">Nocturne · dark</option><option value="slate">Slate · light</option></select>
         </label>
-        <button type="button" id="prefs-sign-out" class="secondary">Sign out</button>
+        <button type="button" id="prefs-sign-out" class="secondary">Log out</button>
       </fieldset>
       <fieldset>
         <legend>Focus timer</legend>

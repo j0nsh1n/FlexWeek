@@ -631,3 +631,8 @@ button:disabled { cursor: wait; opacity: .6; }
 .alarm-dialog::backdrop { background: rgba(0, 0, 0, 0.65); }
 
 @media (max-width: 540px) { .settings-grid { grid-template-columns: 1fr; } }
+
+.auth-panel form { display: flex; flex-direction: column; gap: .5rem; }
+.auth-panel .note { margin: -.25rem 0 .25rem; }
+.auth-switch { margin: 1rem 0 0; color: var(--muted); }
+.link-button { background: none; border: 0; padding: 0; color: var(--dark); text-decoration: underline; text-underline-offset: 2px; font-weight: 600; }

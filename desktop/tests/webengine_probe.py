@@ -56,9 +56,11 @@ def run(case: str, root: Path) -> None:
         raise AssertionError(f"Condition not reached: {code}")
 
     def submit_identity(name: str, action: str) -> None:
-        evaluate(f"""document.getElementById('username').value={json.dumps(name)};
-            document.getElementById('password').value='temporary-test-password';
-            document.querySelector('button[value={action}]').click();""")
+        evaluate(f"""if (document.getElementById('{action}-screen').hidden)
+                document.getElementById('show-{action}').click();
+            document.getElementById('{action}-username').value={json.dumps(name)};
+            document.getElementById('{action}-password').value='temporary-test-password';
+            document.querySelector('#{action}-form button[type=submit]').click();""")
         wait_for(f"document.getElementById('account-name').textContent === {json.dumps(name)}")
         wait_for("!document.getElementById('planner').hidden")
 
@@ -66,8 +68,10 @@ def run(case: str, root: Path) -> None:
         window.load_app()
         wait_for(
             "document.getElementById('status') && "
-            "document.getElementById('status').textContent.includes('Sign in')"
+            "document.getElementById('status').textContent.includes('Create an account')"
         )
+        assert evaluate("!document.getElementById('register-screen').hidden"), "First screen is not sign-up"
+        assert evaluate("document.getElementById('login-screen').hidden"), "Log in shown on first launch"
         if case == "accounts":
             submit_identity("first_student", "register")
             evaluate("""document.getElementById('add-locked').click();
@@ -99,6 +103,7 @@ def run(case: str, root: Path) -> None:
             assert evaluate("document.documentElement.dataset.theme") == "nocturne"
             evaluate("document.getElementById('logout').click()")
             wait_for("document.getElementById('planner').hidden")
+            assert evaluate("!document.getElementById('login-screen').hidden"), "Log out did not open Log in"
             submit_identity("first_student", "login")
             assert evaluate("document.querySelectorAll('.block').length") == 1
             for width in (1280, 390):

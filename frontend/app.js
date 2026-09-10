@@ -767,7 +767,7 @@ async function api(path, options = {}, protectedRequest = true) {
     });
     if (requestEpoch !== epoch) throw new Error("Session changed. Please try again.");
     if (response.status === 401 && protectedRequest) {
-      signedOut("Your session ended. Sign in again; unsaved edits can be restored to the same account.");
+      signedOut("Your session ended. Log in again; unsaved edits come back when you log in to the same account.");
     }
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));

@@ -431,3 +431,85 @@ test('a save sends the week_start of the week on screen, not a stale one', async
   // Only the week that was actually saved joins the list of saved weeks.
   assert.deepEqual(h.elements.get('week-jump').children.map(option => option.value), ['2026-09-14']);
 });
+
+test('a visitor with no session first sees Create account, and Log in is a separate screen', async () => {
+  const h = harness();
+  await tick();
+  assert.equal(h.elements.get('register-screen').hidden, false);
+  assert.equal(h.elements.get('login-screen').hidden, true);
+  assert.equal(h.elements.get('reconnect').hidden, true);
+  assert.equal(h.elements.get('planner').hidden, true);
+
+  h.elements.get('register-username').value = 'returning_student';
+  h.elements.get('show-login').listeners.click();
+  assert.equal(h.elements.get('register-screen').hidden, true);
+  assert.equal(h.elements.get('login-screen').hidden, false);
+  assert.equal(h.elements.get('login-username').value, 'returning_student');
+
+  const posts = [];
+  h.handle(async (path, options) => {
+    if (path.startsWith('/api/auth/')) {
+      posts.push({ path, body: JSON.parse(options.body) });
+      return response(200, { id: 7, username: 'returning_student' });
+    }
+    if (path.startsWith('/api/weeks')) return response(200, { weeks: [] });
+    if (path.startsWith('/api/week')) return response(200, { week_start: weekOf(path), blocks: [task], revision: 1 });
+    return response(200, { theme: 'nocturne' });
+  });
+  h.elements.get('login-password').value = 'correct horse battery';
+  await h.elements.get('login-form').listeners.submit({ preventDefault() {} });
+  assert.deepEqual(posts, [{
+    path: '/api/auth/login', body: { username: 'returning_student', password: 'correct horse battery' },
+  }]);
+  assert.equal(h.elements.get('login-password').value, '');
+  assert.equal(h.elements.get('planner').hidden, false);
+  assert.equal(h.elements.get('account-name').textContent, 'returning_student');
+});
+
+test('Create account posts to register, and logging out returns to the Log in screen', async () => {
+  const h = harness();
+  await tick();
+  const posted = [];
+  h.handle(async (path, options) => {
+    if (path.startsWith('/api/auth/')) {
+      posted.push(path);
+      return path.endsWith('/logout') ? response(204) : response(200, { id: 3, username: 'new_student' });
+    }
+    if (path.startsWith('/api/weeks')) return response(200, { weeks: [] });
+    if (path.startsWith('/api/week')) return response(200, { week_start: weekOf(path), blocks: [], revision: 0 });
+    return response(200, { theme: 'nocturne' });
+  });
+  h.elements.get('register-username').value = 'new_student';
+  h.elements.get('register-password').value = 'a long enough password';
+  await h.elements.get('register-form').listeners.submit({ preventDefault() {} });
+  assert.deepEqual(posted, ['/api/auth/register']);
+  assert.equal(h.elements.get('planner').hidden, false);
+
+  await h.elements.get('logout').listeners.click();
+  assert.deepEqual(posted, ['/api/auth/register', '/api/auth/logout']);
+  assert.equal(h.elements.get('planner').hidden, true);
+  assert.equal(h.elements.get('login-screen').hidden, false);
+  assert.equal(h.elements.get('register-screen').hidden, true);
+});
+
+test('a failed login shows its error on the Log in screen without leaving it', async () => {
+  const h = harness();
+  await tick();
+  h.elements.get('show-login').listeners.click();
+  h.handle(async () => response(401, { detail: 'Username or password is incorrect.' }));
+  await h.elements.get('login-form').listeners.submit({ preventDefault() {} });
+  assert.equal(h.elements.get('login-error').textContent, 'Username or password is incorrect.');
+  assert.equal(h.elements.get('login-screen').hidden, false);
+  assert.equal(h.elements.get('planner').hidden, true);
+});
+
+test('when the server cannot be reached, the first screen offers Retry connection', async () => {
+  const h = harness();
+  h.handle(async () => { throw new Error('Offline'); });
+  h.run('reconnect()');
+  await tick();
+  await tick();
+  assert.equal(h.elements.get('reconnect').hidden, false);
+  assert.equal(h.elements.get('register-screen').hidden, false);
+  assert.match(h.elements.get('status').textContent, /Could not reach FlexWeek/);
+});
