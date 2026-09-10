@@ -45,9 +45,8 @@ jobs:
         shell: pwsh
 
       - name: Smoke-test package layout and first screen
-        # --windows-console-mode=disable freezes have no console; assert the
-        # freeze layout is complete, then start like a student would (offscreen).
-        # The WebEngine core DLL is Qt6-prefixed on Windows.
+        # GUI-subsystem freezes do not set $LASTEXITCODE under `&`. Start-Process
+        # -Wait reads the process exit code. The WebEngine core DLL is Qt6-prefixed.
         env:
           QT_QPA_PLATFORM: offscreen
           QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
@@ -64,9 +63,12 @@ jobs:
           if (-not (Get-ChildItem -Path $root -Recurse -Filter "QtWebEngineProcess.exe" -ErrorAction SilentlyContinue)) {
             throw "QtWebEngineProcess.exe missing under $root"
           }
-          & $exe --smoke-test dist\windows-smoke.json
-          if ($LASTEXITCODE -ne 0) { throw "FlexWeek --smoke-test failed with $LASTEXITCODE" }
-          Get-Content dist\windows-smoke.json
+          $report = Join-Path (Get-Location) "dist\windows-smoke.json"
+          $proc = Start-Process -FilePath $exe -ArgumentList "--smoke-test",$report -WorkingDirectory $root -PassThru -Wait
+          if ($null -eq $proc.ExitCode -or $proc.ExitCode -ne 0) {
+            throw "FlexWeek --smoke-test failed with $($proc.ExitCode)"
+          }
+          Get-Content $report
         shell: pwsh
 
       - name: Zip the bundle
@@ -105,7 +107,8 @@ jobs:
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             patchelf binutils libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
-            libxcb-keysyms1 libxcb-render-util0 libxcb-util1 xvfb
+            libxcb-keysyms1 libxcb-render-util0 libxcb-util1 xvfb \
+            libegl1 libgl1 libopengl0 libglx0 libgles2 libgl1-mesa-dri
 
       - name: Create venv and install build + runtime deps
         run: |
@@ -122,6 +125,7 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
+          LD_LIBRARY_PATH: ""
         run: |
           xvfb-run -a -s "-screen 0 1280x800x24" dist/FlexWeek/FlexWeek --smoke-test dist/linux-smoke.json
           python -c 'import json,sys; r=json.load(open("dist/linux-smoke.json")); print(r); sys.exit(0 if r.get("ok") else 1)'
