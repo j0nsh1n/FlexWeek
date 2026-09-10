@@ -126,6 +126,36 @@ def run(case: str, root: Path) -> None:
             print(
                 "PASS: register, editor save, solve, refresh, theme, logout, second-account isolation, widths"
             )
+        elif case == "rookie":
+            submit_identity("rookie_student", "register")
+            wait_for("document.getElementById('setup-dialog').open")
+            assert evaluate("document.getElementById('setup-progress').textContent") == "Step 1 of 4"
+            evaluate("document.getElementById('setup-next').click()")
+            evaluate("""document.getElementById('setup-sports-title').value='Soccer';
+                document.getElementById('setup-sports-day-1').checked=true;
+                document.getElementById('setup-next').click();""")
+            evaluate("""document.getElementById('setup-homework-title').value='Math worksheet';
+                document.getElementById('setup-homework-due-day').value='6';
+                document.getElementById('setup-next').click();""")
+            assert "Math worksheet" in evaluate("document.getElementById('setup-summary').textContent")
+            evaluate("document.getElementById('setup-next').click()")
+            wait_for("!document.getElementById('debug').hidden")
+            assert not evaluate("document.getElementById('setup-dialog').open")
+            assert evaluate("document.getElementById('empty-week').hidden")
+            assert evaluate("document.querySelectorAll('.block:not(.flex-block)').length") == 6
+            assert evaluate("document.querySelectorAll('.flex-block').length") == 1, "Homework was not placed"
+            stats = evaluate("document.getElementById('debug-stats').textContent")
+            assert stats == "Placed 1 of 1 task.", stats
+            assert not evaluate("Array.from(document.querySelectorAll('.slack-badge'))"
+                                ".some(b => /slack/i.test(b.textContent))"), "Raw slack jargon on the grid"
+            assert not evaluate("document.getElementById('focus-section').hidden")
+            window.grab().save(str(root / "rookie-solved.png"))
+            evaluate("document.getElementById('logout').click()")
+            wait_for("!document.getElementById('login-screen').hidden")
+            submit_identity("rookie_student", "login")
+            assert not evaluate("document.getElementById('setup-dialog').open"), "Setup reopened on login"
+            assert evaluate("document.querySelectorAll('.block').length") == 6
+            print("PASS: register, setup, Solve with plain results, log out and log back in")
         elif case == "calendar":
             submit_identity("calendar_student", "register")
             evaluate("""window.__point = (type, minute, onBlock=false, pointerId=1) => {

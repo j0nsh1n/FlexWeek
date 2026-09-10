@@ -19,7 +19,7 @@ pytestmark = pytest.mark.skipif(
     "case",
     [
         "accounts", "calendar", "completion", "phase6", "phase7", "popup", "navigation", "download",
-        "tray", "no_icon", "instance",
+        "tray", "no_icon", "instance", "rookie",
     ],
 )
 def test_webengine(case: str, tmp_path: Path) -> None:

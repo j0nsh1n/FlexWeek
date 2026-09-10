@@ -58,6 +58,7 @@ function signedOut(message = "Log in to open your week.", preserve = true, scree
   debugMovesEl.replaceChildren();
   formEl.reset();
   closeForm();
+  closeSetup();
   planner.hidden = true;
   debugEl.hidden = true;
   authPanel.hidden = false;
@@ -134,6 +135,8 @@ async function submitAuth(action) {
     password.value = "";
     channel?.postMessage("session-changed");
     await loadAccount(identity);
+    // A new account starts empty, so walk it through its first week instead of a blank grid.
+    if (action === "register" && account && !weekState().blocks.length) openSetup();
   } catch (error) {
     if (authEpoch === epoch) document.getElementById(ids.error).textContent = error.message;
   } finally { form.querySelectorAll("button").forEach(el => { el.disabled = false; }); }

@@ -929,6 +929,7 @@ function weekSummary() {
 }
 
 function renderWeek() {
+  document.getElementById("empty-week").hidden = weekState().blocks.length > 0;
   buildGrid(weekState().blocks);
 }
 
@@ -1288,7 +1289,7 @@ function buildGrid(blocks, explanations = []) {
 
       const sub = document.createElement("div");
       sub.className = "sub";
-      sub.textContent = block.duration_min + " min" + (missed ? " · missed" : "") +
+      sub.textContent = formatDuration(block.duration_min) + (missed ? " · missed" : "") +
         (block.focus_sessions ? " · " + block.focus_sessions + " focus" : "");
       el.appendChild(sub);
 
@@ -1332,11 +1333,11 @@ function buildGrid(blocks, explanations = []) {
 function renderFlexible(flex) {
   flexibleEl.innerHTML = "";
   if (!flex.length) {
+    // After Solve the note above the list already says every task was placed.
+    if (weekState().trace) return;
     const empty = document.createElement("li");
     empty.className = "empty-note";
-    empty.textContent = weekState().trace
-      ? "Every task has a time on the calendar."
-      : "No tasks yet. Pick Homework above, then drag on a day you can work on it.";
+    empty.textContent = "No tasks yet. Pick Homework above, then drag on a day you can work on it.";
     flexibleEl.appendChild(empty);
     return;
   }
@@ -2105,9 +2106,9 @@ function showTrace(trace) {
   renderDebug(trace);
   flexNoteEl.textContent = trace.unplaced.length ?
     "Some tasks could not be placed. Select a reason below to find the task." :
-    "All flexible tasks are on the grid.";
-  setStatus((weekState().dirty ? "Unsaved week · " : "Saved week · ") +
-    trace.placed.filter(b => b.kind === "flexible").length + " tasks placed");
+    "Every task has a time on the calendar.";
+  const placed = trace.placed.filter(b => b.kind === "flexible").length;
+  setStatus((weekState().dirty ? "Unsaved week · " : "Saved week · ") + placed + (placed === 1 ? " task placed" : " tasks placed"));
 }
 
 async function solveWeek() {

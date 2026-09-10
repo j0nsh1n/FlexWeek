@@ -264,15 +264,18 @@ test('Add without dragging starts from the type preset, not a blank 16:00 block'
   same(h.run('weekState().blocks.map(b => [b.title, b.days, b.start, b.duration_min])'),
     [['School', [0, 1, 2, 3, 4], '08:00', 390]]);
 
+  // The harness clock is Thursday of the week on screen, so Monday to Wednesday are already over.
   chip(h, 'type-chips', 'assignments').listeners.click();
   h.elements.get('add-block').listeners.click();
   assert.equal(h.elements.get('f-duration').value, '60');
-  h.elements.get('f-due-day').value = '2';
+  same([0, 1, 2, 3, 4, 5, 6].map(day => h.elements.get(`f-day-${day}`).checked),
+    [false, false, false, true, true, true, true]);
+  h.elements.get('f-due-day').value = '5';
   h.elements.get('f-due-day').listeners.change();
   same([0, 1, 2, 3, 4, 5, 6].map(day => h.elements.get(`f-day-${day}`).checked),
-    [true, true, true, false, false, false, false]);
+    [false, false, false, true, true, true, false]);
   assert.equal(h.elements.get('f-flex-summary').textContent,
-    'Solve will find 1 h for it on Monday, Tuesday or Wednesday. It is due Wednesday at 21:00.');
+    'Solve will find 1 h for it on Thursday, Friday or Saturday. It is due Saturday at 21:00.');
 });
 
 test('move and resize update start/duration and keep 15-min grid', async () => {

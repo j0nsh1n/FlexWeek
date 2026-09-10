@@ -20,17 +20,26 @@ const DURATION_CHOICES = [15, 30, 45, 60, 90, 120, 150, 180, 240, 300, 360];
 let editingOccurrenceDay = null;
 let editingScope = "series";
 let editingExisting = false;
-// Flexible days follow the due day until the student picks days themselves.
-let flexDaysTouched = false;
+// Days of a task added without dragging follow its due day until the student
+// picks days themselves. A dragged or existing task keeps the days it has.
+let flexDaysTouched = true;
 let addType = "assignments";
 
 function field(id) {
   return document.getElementById(id);
 }
 
-function daysThrough(dueDay) {
+/** Days from `firstDay` through the due day, or the whole rest of the week without one. */
+function daysThrough(dueDay, firstDay = 0) {
   const last = Number.isInteger(dueDay) ? dueDay : 6;
-  return DAYS.map(function (_name, day) { return day; }).filter(function (day) { return day <= last; });
+  if (last < firstDay) return [last];
+  return DAYS.map(function (_name, day) { return day; }).filter(function (day) { return day >= firstDay && day <= last; });
+}
+
+/** Today in the week on screen, or Monday for any other week. Earlier days are already over. */
+function firstPlannableDay(weekStart, now) {
+  const info = currentDateInfo(now);
+  return weekStart === info.week ? info.day : 0;
 }
 
 function dayList(days) {
@@ -53,12 +62,11 @@ function newDraft(category, day, startMin, endMin) {
 /** A draft for "Add without dragging": the type's preset, on today when this week is open. */
 function presetDraft(category, weekStart, now) {
   const type = categoryById(category) || CATEGORIES[0];
-  const info = currentDateInfo(now);
-  const day = weekStart === info.week ? info.day : 0;
+  const day = firstPlannableDay(weekStart, now);
   const preset = type.preset || {};
   if (type.kind === "flexible") {
     const draft = newDraft(type.id, day, DAY_START_MIN, DAY_START_MIN + (preset.duration_min || 60));
-    draft.days = daysThrough(null);
+    draft.days = daysThrough(null, day);
     return draft;
   }
   const draft = newDraft(type.id, day, parseStart(preset.start), parseStart(preset.end));
@@ -362,7 +370,7 @@ function openEditor(draft, block, occurrenceDay = null, scope = null) {
   if (!account || saving) return false;
   editingExisting = Boolean(block);
   editingOccurrenceDay = Number.isInteger(occurrenceDay) ? occurrenceDay : null;
-  flexDaysTouched = editingExisting || draft.days.length < 7;
+  flexDaysTouched = true;
   showFormError(null);
   writeDraft(draft);
   const type = categoryById(draft.category);
@@ -504,7 +512,7 @@ formDeleteEl.addEventListener("click", function () {
 });
 
 field("add-block").addEventListener("click", function () {
-  openEditor(presetDraft(addType, selectedWeek), null);
+  if (openEditor(presetDraft(addType, selectedWeek), null)) flexDaysTouched = false;
 });
 
 ["f-kind-locked", "f-kind-flexible"].forEach(function (id) {
@@ -528,7 +536,7 @@ field("f-when-day").addEventListener("change", function () {
 field("f-due-day").addEventListener("change", function () {
   if (!flexDaysTouched) {
     const due = field("f-due-day").value;
-    setSelectedDays(daysThrough(due === "" ? null : Number(due)));
+    setSelectedDays(daysThrough(due === "" ? null : Number(due), firstPlannableDay(selectedWeek)));
   }
   syncEditor();
 });

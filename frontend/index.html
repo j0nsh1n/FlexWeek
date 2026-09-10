@@ -76,6 +76,13 @@
         <input id="import-file-input" type="file" accept=".json,.txt,application/json,text/plain" hidden>
         <span id="now-next" class="now-next" aria-live="polite" hidden></span>
       </div>
+      <div id="empty-week" class="empty-week" hidden>
+        <div>
+          <h2>This week is empty</h2>
+          <p>Set up school, practice and your first homework in four short steps. Or pick a type on the right and drag on the calendar.</p>
+        </div>
+        <button type="button" id="setup-open">Set up my week</button>
+      </div>
       <div class="week" id="week"></div>
     </section>
     <aside class="side">
@@ -122,6 +129,7 @@
   <script src="/static/app.js" defer></script>
   <script src="/static/focus.js" defer></script>
   <script src="/static/editor.js" defer></script>
+  <script src="/static/setup.js" defer></script>
   <script src="/static/auth.js" defer></script>
   <div id="block-context-menu" class="context-menu" hidden role="menu">
     <button type="button" data-action="edit">Edit</button>
@@ -229,6 +237,69 @@
         <button type="button" id="form-cancel" class="secondary">Cancel</button>
         <button type="button" id="form-delete" class="danger" hidden>Delete</button>
         <button type="button" id="form-missed" class="danger" hidden>Mark missed</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="setup-dialog" class="prefs-dialog setup-dialog" aria-labelledby="setup-title">
+    <form id="setup-form" novalidate>
+      <p id="setup-progress" class="note">Step 1 of 4</p>
+      <h2 id="setup-title" class="visually-hidden">Set up your week</h2>
+      <section id="setup-school">
+        <h3>When is school?</h3>
+        <p class="note">Solve keeps homework out of these hours.</p>
+        <fieldset class="days"><legend>School days</legend>
+          <label><input type="checkbox" id="setup-school-day-0" value="0" checked /> Mon</label>
+          <label><input type="checkbox" id="setup-school-day-1" value="1" checked /> Tue</label>
+          <label><input type="checkbox" id="setup-school-day-2" value="2" checked /> Wed</label>
+          <label><input type="checkbox" id="setup-school-day-3" value="3" checked /> Thu</label>
+          <label><input type="checkbox" id="setup-school-day-4" value="4" checked /> Fri</label>
+          <label><input type="checkbox" id="setup-school-day-5" value="5" /> Sat</label>
+          <label><input type="checkbox" id="setup-school-day-6" value="6" /> Sun</label>
+        </fieldset>
+        <div class="field-row">
+          <label>Starts <select id="setup-school-start"></select></label>
+          <label>Ends <select id="setup-school-end"></select></label>
+        </div>
+      </section>
+      <section id="setup-sports" hidden>
+        <h3>Do you have a sport or practice?</h3>
+        <p class="note">Add one regular activity now. You can add more later.</p>
+        <label>Name <input id="setup-sports-title" type="text" maxlength="80" placeholder="Sports" /></label>
+        <fieldset class="days"><legend>Days</legend>
+          <label><input type="checkbox" id="setup-sports-day-0" value="0" /> Mon</label>
+          <label><input type="checkbox" id="setup-sports-day-1" value="1" /> Tue</label>
+          <label><input type="checkbox" id="setup-sports-day-2" value="2" /> Wed</label>
+          <label><input type="checkbox" id="setup-sports-day-3" value="3" /> Thu</label>
+          <label><input type="checkbox" id="setup-sports-day-4" value="4" /> Fri</label>
+          <label><input type="checkbox" id="setup-sports-day-5" value="5" /> Sat</label>
+          <label><input type="checkbox" id="setup-sports-day-6" value="6" /> Sun</label>
+        </fieldset>
+        <div class="field-row">
+          <label>Starts <select id="setup-sports-start"></select></label>
+          <label>Ends <select id="setup-sports-end"></select></label>
+        </div>
+      </section>
+      <section id="setup-homework" hidden>
+        <h3>What homework is due first?</h3>
+        <label>Assignment <input id="setup-homework-title" type="text" maxlength="80" placeholder="Math worksheet" /></label>
+        <div class="field-row">
+          <label>Time needed <select id="setup-homework-duration"></select></label>
+          <label>Due day <select id="setup-homework-due-day"></select></label>
+          <label>Due time <select id="setup-homework-due-time"></select></label>
+        </div>
+        <p class="note">Solve can place it on any day from today up to the due day.</p>
+      </section>
+      <section id="setup-solve" hidden>
+        <h3>Ready to plan your week</h3>
+        <ul id="setup-summary" class="setup-summary"></ul>
+        <p class="note">Solve puts your homework in the free time around school and practice. You can change anything afterwards.</p>
+      </section>
+      <p id="setup-error" class="form-error" role="alert" hidden></p>
+      <div class="form-actions">
+        <button type="submit" id="setup-next">Next</button>
+        <button type="button" id="setup-skip" class="secondary">Skip this step</button>
+        <button type="button" id="setup-back" class="secondary" hidden>Back</button>
+        <button type="button" id="setup-close" class="secondary">Set up later</button>
       </div>
     </form>
   </dialog>

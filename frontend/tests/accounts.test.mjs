@@ -563,3 +563,91 @@ test('Now / Next reads as one Daily Scheduler line and is empty when the day is 
     'Next: Practice at 17:30 (in 1 h 30 min)');
   assert.equal(h.run('nowNextLine({ current: null, next: null }, 1200)'), '');
 });
+
+test('a new account walks through school, sports and first homework, then Solve runs', async () => {
+  const h = harness();
+  await tick();
+  const saves = [];
+  const solves = [];
+  h.handle(async (path, options) => {
+    if (path === '/api/auth/register') return response(200, { id: 9, username: 'rookie' });
+    if (path.startsWith('/api/weeks')) return response(200, { weeks: [] });
+    if (path === '/api/week' && options.method === 'PUT') {
+      const body = JSON.parse(options.body);
+      saves.push(body);
+      return response(200, { week_start: body.week_start, blocks: body.blocks, revision: saves.length });
+    }
+    if (path.startsWith('/api/week')) return response(200, { week_start: weekOf(path), blocks: [], revision: 0 });
+    if (path === '/api/solve') {
+      const body = JSON.parse(options.body);
+      solves.push(body);
+      return response(200, { placed: body.blocks.filter(b => b.kind === 'locked'), unplaced: [], moves: [],
+        explanations: [], failed_constraints: [], solve_ms: 1, complete: true });
+    }
+    return response(200, { theme: 'nocturne' });
+  });
+  const next = () => h.elements.get('setup-form').listeners.submit({ preventDefault() {} });
+  h.elements.get('register-username').value = 'rookie';
+  h.elements.get('register-password').value = 'a long enough password';
+  await h.elements.get('register-form').listeners.submit({ preventDefault() {} });
+
+  assert.equal(h.elements.get('setup-dialog').open, true);
+  assert.equal(h.elements.get('setup-progress').textContent, 'Step 1 of 4');
+  assert.equal(h.elements.get('setup-school-start').value, '08:00');
+  assert.equal(h.elements.get('setup-school-end').value, '14:30');
+  assert.equal(next(), true);
+
+  assert.equal(next(), false);
+  assert.equal(h.elements.get('setup-error').textContent, 'Pick the days you practice, or choose Skip this step.');
+  h.elements.get('setup-sports-title').value = 'Soccer';
+  h.elements.get('setup-sports-day-1').checked = true;
+  h.elements.get('setup-sports-day-3').checked = true;
+  assert.equal(next(), true);
+
+  assert.equal(next(), false);
+  assert.equal(h.elements.get('setup-error').textContent, 'Name the assignment, or choose Skip this step.');
+  h.elements.get('setup-homework-title').value = 'Math worksheet';
+  assert.equal(h.elements.get('setup-homework-due-day').value, '4');
+  assert.equal(next(), true);
+
+  assert.deepEqual(h.elements.get('setup-summary').children.map(item => item.textContent), [
+    'School: Mon, Tue, Wed, Thu, Fri, 08:00–14:30',
+    'Soccer: Tue, Thu, 15:30–17:00',
+    'Math worksheet: 1 h, due Friday at 21:00',
+  ]);
+  assert.equal(h.elements.get('setup-next').textContent, 'Add to my week and Solve');
+  assert.equal(await next(), true);
+
+  assert.equal(h.elements.get('setup-dialog').open, false);
+  assert.equal(saves.length, 1);
+  assert.deepEqual(saves[0].blocks.map(b => [b.title, b.kind, b.category, b.days, b.start, b.duration_min, b.latest]), [
+    ['School', 'locked', 'class', [0, 1, 2, 3, 4], '08:00', 390, null],
+    ['Soccer', 'locked', 'exercise', [1, 3], '15:30', 90, null],
+    ['Math worksheet', 'flexible', 'assignments', [3, 4], null, 60, 'Friday 21:00'],
+  ]);
+  assert.equal(solves.length, 1);
+  assert.equal(h.elements.get('debug').hidden, false);
+  assert.equal(h.elements.get('empty-week').hidden, true);
+});
+
+test('an empty week says so and setup can be skipped without adding anything', async () => {
+  const h = harness();
+  await h.login(1, []);
+  assert.equal(h.elements.get('empty-week').hidden, false);
+  assert.equal(Boolean(h.elements.get('setup-dialog').open), false, 'setup opens only for a new account or on request');
+
+  h.elements.get('setup-open').listeners.click();
+  assert.equal(h.elements.get('setup-dialog').open, true);
+  let requests = 0;
+  h.handle(async () => { requests += 1; return response(500, {}); });
+  h.elements.get('setup-skip').listeners.click();
+  h.elements.get('setup-back').listeners.click();
+  assert.equal(h.elements.get('setup-progress').textContent, 'Step 1 of 4');
+  for (let step = 0; step < 3; step += 1) h.elements.get('setup-skip').listeners.click();
+  assert.equal(h.elements.get('setup-next').textContent, 'Finish');
+  assert.equal(await h.elements.get('setup-form').listeners.submit({ preventDefault() {} }), false);
+  assert.equal(requests, 0);
+  assert.equal(h.run('weekState().blocks.length'), 0);
+  assert.equal(h.elements.get('empty-week').hidden, false);
+  assert.match(h.elements.get('status').textContent, /Setup skipped/);
+});
