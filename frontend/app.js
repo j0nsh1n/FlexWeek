@@ -8,16 +8,21 @@ const SNAP_MIN = 15;
 const DAY_START_MIN = START_HOUR * 60;
 const DAY_END_MIN = END_HOUR * 60;
 const EDGE_PX = 8;
+const WEEKDAYS = [0, 1, 2, 3, 4];
+// One table drives the sidebar chips, the editor, setup and the grid colors.
+// `kind` is what a new item of that type starts as; `preset` is the time it
+// starts with when it is added without dragging a range on the calendar.
 const CATEGORIES = [
-  { id: "class", label: "School", color: "#3b82f6" },
-  { id: "study", label: "Study", color: "#8b5cf6" },
-  { id: "assignments", label: "Homework", color: "#ef4444" },
-  { id: "exercise", label: "Sports", color: "#10b981" },
-  { id: "extra", label: "Activity", color: "#ec4899" },
-  { id: "meals", label: "Meals", color: "#f97316" },
-  { id: "sleep", label: "Sleep", color: "#6366f1" },
-  { id: "free", label: "Free", color: "#94a3b8" },
+  { id: "class", label: "School", color: "#3b82f6", kind: "locked", preset: { start: "08:00", end: "14:30", days: WEEKDAYS } },
+  { id: "assignments", label: "Homework", color: "#ef4444", kind: "flexible", preset: { duration_min: 60 } },
+  { id: "study", label: "Study", color: "#8b5cf6", kind: "flexible", preset: { duration_min: 60 } },
+  { id: "exercise", label: "Sports", color: "#10b981", kind: "locked", preset: { start: "15:30", end: "17:00" } },
+  { id: "extra", label: "Activity", color: "#ec4899", kind: "locked", preset: { start: "17:00", end: "18:00" } },
+  { id: "meals", label: "Meals", color: "#f97316", kind: "locked", preset: { start: "18:00", end: "18:30" } },
+  { id: "sleep", label: "Sleep", color: "#6366f1", kind: "locked", preset: { start: "22:00", end: "23:00" } },
+  { id: "free", label: "Free", color: "#94a3b8", kind: "locked", preset: { start: "19:00", end: "20:00" } },
 ];
+const KIND_LABEL = { locked: "Fixed time", flexible: "Flexible" };
 
 const EXPORT_FORMAT = "flexweek-week";
 const EXPORT_VERSION = 1;
@@ -208,11 +213,13 @@ function alarmKey(date, alarm) {
   return [date, alarm.id, alarm.time].join("|");
 }
 
+function categoryById(category) {
+  return CATEGORIES.find(function (item) { return item.id === category; }) || null;
+}
+
 function categoryLabel(category) {
-  for (let i = 0; i < CATEGORIES.length; i += 1) {
-    if (CATEGORIES[i].id === category) return CATEGORIES[i].label;
-  }
-  return "";
+  const found = categoryById(category);
+  return found ? found.label : "";
 }
 
 function exportWeekPayload(weekStart, blocks) {
@@ -521,10 +528,8 @@ function resizeBottomRange(startMin, endMin, deltaMin) {
 }
 
 function categoryColor(category) {
-  for (let i = 0; i < CATEGORIES.length; i += 1) {
-    if (CATEGORIES[i].id === category) return CATEGORIES[i].color;
-  }
-  return null;
+  const found = categoryById(category);
+  return found ? found.color : null;
 }
 
 const STORAGE_KEY = "flexweek.week.v1";
@@ -539,15 +544,6 @@ const debugUnplacedEl = document.getElementById("debug-unplaced");
 const debugChangesEl = document.getElementById("debug-changes");
 const debugMovesEl = document.getElementById("debug-moves");
 const flexNoteEl = document.getElementById("flex-note");
-const formEl = document.getElementById("block-form");
-const formErrorEl = document.getElementById("form-error");
-const formHeadingEl = document.getElementById("form-heading");
-const formDeleteEl = document.getElementById("form-delete");
-const formMissedEl = document.getElementById("form-missed");
-const lockedFieldsEl = document.getElementById("f-locked-fields");
-const flexFieldsEl = document.getElementById("f-flex-fields");
-const startEl = document.getElementById("f-start");
-const dueTimeEl = document.getElementById("f-due-time");
 
 function hourRange() {
   const hours = [];
@@ -684,8 +680,6 @@ let account = null;
 let epoch = 0;
 let saving = false;
 const suspendedDrafts = new Map();
-let editingOccurrenceDay = null;
-let editingScope = "series";
 let prefs = {
   theme: "nocturne",
   reminders_enabled: false,
@@ -920,9 +914,9 @@ function newId() {
 
 function weekSummary() {
   const blocks = weekState().blocks;
-  const locked = blocks.filter(function (b) { return b.kind === "locked"; }).length;
+  const fixed = blocks.filter(function (b) { return b.kind === "locked"; }).length;
   const flex = blocks.filter(function (b) { return b.kind === "flexible"; }).length;
-  return locked + " locked, " + flex + " flexible";
+  return fixed + " fixed, " + flex + " flexible";
 }
 
 function renderWeek() {
@@ -935,6 +929,14 @@ function clearSolveResult(note = "Press Solve to place these around school and s
   debugChangesEl.hidden = true;
   debugMovesEl.replaceChildren();
   flexNoteEl.textContent = note;
+}
+
+/** The one refresh path after the week's blocks change: drop the stale solve, save, redraw. */
+function commitWeek(note) {
+  clearSolveResult(note);
+  const saved = saveWeek();
+  renderWeek();
+  return saved;
 }
 
 function insightFor(explanations, blockId) {
@@ -963,39 +965,16 @@ function selectBlock(blockId, day) {
   });
 }
 
-function applyCreateLocked(day, startMin, endMin) {
-  if (!account || saving) return null;
+/** A drag across empty grid opens the editor on that range. Nothing is added until it is saved. */
+function requestCreate(day, startMin, endMin) {
+  if (!account || saving) return false;
   const range = createDragRange(startMin, endMin);
-  if (!range) return null;
-  const block = {
-    id: newId(),
-    title: "New block",
-    kind: "locked",
-    duration_min: range.endMin - range.startMin,
-    days: [day],
-    priority: 3,
-    energy: "medium",
-    course: null,
-    earliest: null,
-    latest: null,
-    start: formatMinute(range.startMin),
-    missed_days: [],
-    category: null,
-    completed: false,
-  };
-  weekState().blocks.push(block);
-  clearSolveResult();
-  selectBlock(block.id, day);
-  saveWeek();
-  renderWeek();
-  return block;
+  return range ? openCreateDialog(day, range.startMin, range.endMin) : false;
 }
 
-function applyCreateClick(day, startMin) {
-  const occupied = occupiedIntervalsForDay(weekState().blocks, day);
-  const range = createClickRange(startMin, occupied);
-  if (!range) return null;
-  return applyCreateLocked(day, range.startMin, range.endMin);
+function requestCreateAt(day, startMin) {
+  const range = createClickRange(startMin, occupiedIntervalsForDay(weekState().blocks, day));
+  return range ? requestCreate(day, range.startMin, range.endMin) : false;
 }
 
 function applyBlockTimes(blockId, startMin, endMin) {
@@ -1009,9 +988,7 @@ function applyBlockTimes(blockId, startMin, endMin) {
   if (dur < SNAP_MIN || startMin < DAY_START_MIN || endMin > DAY_END_MIN) return false;
   block.start = formatMinute(startMin);
   block.duration_min = dur;
-  clearSolveResult();
-  saveWeek();
-  renderWeek();
+  commitWeek();
   return true;
 }
 
@@ -1023,9 +1000,7 @@ function deleteBlockById(blockId) {
   if (state.blocks.length === before) return false;
   if (selectedBlockId === blockId) selectBlock(null, null);
   closeForm();
-  clearSolveResult();
-  saveWeek();
-  renderWeek();
+  commitWeek();
   return true;
 }
 
@@ -1188,12 +1163,8 @@ function bindDayLane(lane, day) {
     try { lane.releasePointerCapture(gesture.pointerId); } catch (err) { /* harness */ }
     if (event.type === "pointercancel") return;
     if (gesture.type === "create") {
-      if (gesture.moved) {
-        const range = createDragRange(gesture.startMin, gesture.curMin);
-        if (range) applyCreateLocked(gesture.day, range.startMin, range.endMin);
-      } else {
-        applyCreateClick(gesture.day, gesture.startMin);
-      }
+      if (gesture.moved) requestCreate(gesture.day, gesture.startMin, gesture.curMin);
+      else requestCreateAt(gesture.day, gesture.startMin);
       return;
     }
     if (gesture.moved && gesture.preview) {
@@ -1216,7 +1187,7 @@ function bindDayLane(lane, day) {
     const source = weekState().blocks.find(function (item) { return item.id === blockEl.dataset.id; });
     if (source) {
       selectBlock(source.id, day);
-      openForm(source.kind, source, day);
+      openBlockEditor(source, day);
     }
   });
 
@@ -1298,8 +1269,8 @@ function buildGrid(blocks, explanations = []) {
         el.style.borderLeftColor = color;
         el.style.borderLeftWidth = "4px";
       }
-      el.title = block.title + (block.course ? " · " + block.course : "") +
-        (missed ? " · missed" : "") + " (double-click to edit)";
+      el.title = block.title + " · " + KIND_LABEL[block.kind] + (block.course ? " · " + block.course : "") +
+        (missed ? " · missed" : "") + " · double-click to edit";
 
       const title = document.createElement("div");
       title.className = "title";
@@ -1401,7 +1372,7 @@ function renderFlexible(flex) {
     }
     li.addEventListener("click", function () {
       const source = weekState().blocks.find(function (item) { return item.id === block.id; });
-      if (source) openForm(source.kind, source);
+      if (source) openBlockEditor(source);
     });
     flexibleEl.appendChild(li);
   });
@@ -1441,7 +1412,7 @@ function detailButton(text, blockId, day = null) {
       return;
     }
     const source = weekState().blocks.find(function (item) { return item.id === blockId; });
-    if (source) openForm(source.kind, source, day);
+    if (source) openBlockEditor(source, day);
   });
   return button;
 }
@@ -1582,9 +1553,7 @@ function toggleCompleted(blockId) {
     block.start = null;
     delete block.completed_day;
   }
-  clearSolveResult();
-  saveWeek();
-  renderWeek();
+  commitWeek();
   return true;
 }
 
@@ -1598,9 +1567,7 @@ function deleteOccurrenceById(blockId, day) {
   else state.blocks.splice(index, 1);
   if (selectedBlockId === blockId) selectBlock(null, null);
   closeForm();
-  clearSolveResult();
-  saveWeek();
-  renderWeek();
+  commitWeek();
   return true;
 }
 
@@ -1685,9 +1652,7 @@ async function importPayloadIntoWeek(parsed, mode) {
   if (problem) { setStatus(problem + " Nothing was imported."); return false; }
   state.blocks = merged;
   closeForm();
-  clearSolveResult();
-  renderWeek();
-  return saveWeek();
+  return commitWeek();
 }
 
 function showReminderToast(message) {
@@ -2041,9 +2006,7 @@ function splitBlockIntoPomodoros(blockId, day) {
     return false;
   }
   state.blocks.splice(index, 1, ...children);
-  clearSolveResult("Focus chunks and breaks are saved on the grid.");
-  renderWeek();
-  saveWeek();
+  commitWeek("Focus chunks and breaks are saved on the grid.");
   return true;
 }
 
@@ -2108,9 +2071,7 @@ document.getElementById("new-week").addEventListener("click", function () {
   if (!account || saving || !confirm("Clear " + weekLabel(selectedWeek) + "? This will be saved to your account.")) return;
   weekState().blocks = [];
   closeForm();
-  clearSolveResult("Add locked school or sports, then homework as tasks.");
-  saveWeek();
-  renderWeek();
+  commitWeek("Add school or sports as fixed times, then homework as flexible tasks.");
 });
 
 function missedHistoryBlocks() {
@@ -2253,9 +2214,7 @@ document.getElementById("import-week").addEventListener("click", async () => {
   if (!confirm("Import this device's old week into your account, replacing " + weekLabel(selectedWeek) + "?")) return;
   weekState().blocks = blocks;
   closeForm();
-  clearSolveResult();
-  renderWeek();
-  if (await saveWeek()) {
+  if (await commitWeek()) {
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* A retry replaces the same blocks. */ }
     document.getElementById("import-panel").hidden = true;
   }
@@ -2272,11 +2231,11 @@ if (contextMenuEl) {
     const source = weekState().blocks.find(function (item) { return item.id === blockId; });
     const action = button.dataset.action;
     if (action === "edit" || action === "edit-occurrence") {
-      if (source) openForm(source.kind, source, Number.isInteger(day) ? day : null, "occurrence");
+      if (source) openBlockEditor(source, Number.isInteger(day) ? day : null, "occurrence");
       return;
     }
     if (action === "edit-series") {
-      if (source) openForm(source.kind, source, Number.isInteger(day) ? day : null, "series");
+      if (source) openBlockEditor(source, Number.isInteger(day) ? day : null, "series");
       return;
     }
     if (action === "delete-occurrence") {

@@ -210,10 +210,9 @@ test('B: category on create/edit persists through week save', async () => {
     savedCategory = payload.blocks[0].category;
     return response(200, { week_start: MONDAY, blocks: payload.blocks, revision: 1 });
   });
-  h.run('applyCreateLocked(0, 720, 780)');
+  h.run('addType = "class"; requestCreate(0, 720, 780)');
+  assert.equal(h.elements.get('block-form').listeners.submit({ preventDefault() {} }), true);
   await tick();
-  h.run('weekState().blocks[0].category = "class"');
-  assert.equal(await h.run('saveWeek()'), true);
   assert.equal(savedCategory, 'class');
 });
 

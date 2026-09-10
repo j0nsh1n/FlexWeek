@@ -383,7 +383,7 @@ test('an account whose data sits in an earlier week can still reach it', async (
   await h.elements.get('week-jump').listeners.change();
   assert.equal(h.run('selectedWeek'), '2026-08-24');
   assert.equal(h.run('weekState().blocks[0].title'), 'Math');
-  assert.equal(h.elements.get('status').textContent, 'Saved · 0 locked, 1 flexible');
+  assert.equal(h.elements.get('status').textContent, 'Saved · 0 fixed, 1 flexible');
 });
 
 test('switching weeks keeps unsaved edits in the week they belong to', async () => {

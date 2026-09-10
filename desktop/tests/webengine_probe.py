@@ -64,6 +64,18 @@ def run(case: str, root: Path) -> None:
         wait_for(f"document.getElementById('account-name').textContent === {json.dumps(name)}")
         wait_for("!document.getElementById('planner').hidden")
 
+    def add_item(category: str, fields: str, days: list[int] | None = None) -> None:
+        """Pick a type chip, open Add without dragging, fill the dialog and save it."""
+        only_days = "" if days is None else (
+            f"document.getElementById('f-when-day').value='{days[0]}';"
+            f"[0,1,2,3,4,5,6].forEach(d => document.getElementById('f-day-'+d).checked = "
+            f"{json.dumps(days)}.includes(d));"
+        )
+        evaluate(f"""document.querySelector('#type-chips [data-category={category}]').click();
+            document.getElementById('add-block').click();
+            {fields} {only_days}
+            document.querySelector('#block-form button[type=submit]').click();""")
+
     try:
         window.load_app()
         wait_for(
@@ -74,10 +86,7 @@ def run(case: str, root: Path) -> None:
         assert evaluate("document.getElementById('login-screen').hidden"), "Log in shown on first launch"
         if case == "accounts":
             submit_identity("first_student", "register")
-            evaluate("""document.getElementById('add-locked').click();
-                document.getElementById('f-title').value='School';
-                document.querySelector('input[name=f-day][value="0"]').checked=true;
-                document.querySelector('#block-form button[type=submit]').click();""")
+            add_item("class", "document.getElementById('f-title').value='School';", days=[0])
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")
             assert evaluate("document.querySelectorAll('.block').length") == 1
             evaluate("document.getElementById('solve').click()")
@@ -136,20 +145,29 @@ def run(case: str, root: Path) -> None:
                 evaluate("document.querySelector('.block').dispatchEvent("
                          "new MouseEvent('dblclick', {bubbles:true}))")
 
+            evaluate("document.querySelector('#type-chips [data-category=class]').click()")
             gesture(600, 660, cancel=True)
             QTest.qWait(100)
             assert evaluate("document.querySelectorAll('.block').length") == 0, "Cancelled create"
+            assert not evaluate("document.getElementById('block-dialog').open"), "Cancel opened editor"
             assert evaluate("document.querySelector('.drag-ghost').hidden")
             evaluate("__point('pointerdown', 600); __point('pointermove', 643, false, 2); "
                      "__point('pointerup', 643, false, 2)")
             assert evaluate("document.querySelectorAll('.block').length") == 0, "Second pointer committed"
             evaluate("__point('pointercancel', 600)")
             gesture(600, 643)
+            wait_for("document.getElementById('block-dialog').open")
+            assert evaluate("document.querySelectorAll('.block').length") == 0, "Added before Save"
+            assert evaluate("document.getElementById('f-start').value") == "10:00"
+            assert evaluate("document.getElementById('f-end').value") == "10:45"
+            evaluate("document.querySelector('#block-form button[type=submit]').click()")
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")
+            assert not evaluate("document.getElementById('block-dialog').open")
             assert evaluate("document.querySelectorAll('.block').length") == 1
+            assert evaluate("document.querySelector('.block .title').textContent") == "School"
             edit_card()
             assert evaluate("document.getElementById('f-start').value") == "10:00"
-            assert evaluate("document.getElementById('f-duration').value") == "45"
+            assert evaluate("document.getElementById('f-end').value") == "10:45"
             evaluate("document.getElementById('form-cancel').click()")
             gesture(622, 652, block=True, cancel=True)
             edit_card()
@@ -168,16 +186,13 @@ def run(case: str, root: Path) -> None:
                      "document.querySelector('.block')")
             edit_card()
             assert evaluate("document.getElementById('f-start').value") == "10:30"
-            assert evaluate("document.getElementById('f-duration').value") == "75"
+            assert evaluate("document.getElementById('f-end').value") == "11:45"
             assert evaluate("document.querySelectorAll('.block').length") == 1
             print("PASS: DOM create, cancel, pointer ownership, move, resize, edit, context and reload")
         elif case == "completion":
             submit_identity("completion_student", "register")
-            evaluate("""document.getElementById('add-flexible').click();
-                document.getElementById('f-title').value='Essay';
-                document.querySelector('input[name=f-day][value="0"]').checked=true;
-                document.getElementById('f-energy').value='high';
-                document.querySelector('#block-form button[type=submit]').click();""")
+            add_item("assignments", "document.getElementById('f-title').value='Essay';"
+                     "document.getElementById('f-energy').value='high';", days=[0])
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")
             evaluate("document.getElementById('solve').click()")
             wait_for("document.querySelector('.flex-block')")
@@ -199,21 +214,14 @@ def run(case: str, root: Path) -> None:
             print("PASS: completing through the editor preserves spent work through save, reload and solve")
         elif case == "phase6":
             submit_identity("phase6_student", "register")
-            evaluate("""document.getElementById('add-locked').click();
-                document.getElementById('f-title').value='School';
-                document.getElementById('f-duration').value='1020';
-                document.querySelector('input[name=f-day][value="0"]').checked=true;
-                document.getElementById('f-start').value='06:00';
-                document.querySelector('#block-form button[type=submit]').click();""")
+            add_item("class", "document.getElementById('f-title').value='School';"
+                     "document.getElementById('f-start').value='06:00';"
+                     "document.getElementById('f-end').value='23:00';", days=[0])
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")
-            evaluate("""document.getElementById('add-flexible').click();
-                document.getElementById('f-title').value='Homework';
-                document.querySelector('input[name=f-day][value="0"]').checked=true;
-                document.querySelector('input[name=f-day][value="1"]').checked=true;
-                document.getElementById('f-energy').value='high';
-                document.getElementById('f-due-day').value='1';
-                document.getElementById('f-due-time').value='09:00';
-                document.querySelector('#block-form button[type=submit]').click();""")
+            add_item("assignments", "document.getElementById('f-title').value='Homework';"
+                     "document.getElementById('f-energy').value='high';"
+                     "document.getElementById('f-due-day').value='1';"
+                     "document.getElementById('f-due-time').value='09:00';", days=[0, 1])
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")
             evaluate("document.getElementById('solve').click()")
             wait_for("document.querySelector('.slack-tight')")
@@ -253,11 +261,8 @@ def run(case: str, root: Path) -> None:
             print("PASS: explanations, slack, one-day miss recovery, move list and restore in desktop")
         elif case == "phase7":
             submit_identity("focus_student", "register")
-            evaluate("""document.getElementById('add-flexible').click();
-                document.getElementById('f-title').value='Maths';
-                document.getElementById('f-duration').value='60';
-                document.querySelector('input[name=f-day][value="0"]').checked=true;
-                document.querySelector('#block-form button[type=submit]').click();""")
+            add_item("assignments", "document.getElementById('f-title').value='Maths';"
+                     "document.getElementById('f-duration').value='60';", days=[0])
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")
             evaluate("document.getElementById('solve').click()")
             wait_for("document.querySelector('.flex-block')")
@@ -321,10 +326,7 @@ def run(case: str, root: Path) -> None:
         elif case == "download":
             submit_identity("draft_student", "register")
             server.stop()
-            evaluate("""document.getElementById('add-flexible').click();
-                document.getElementById('f-title').value='Offline draft';
-                document.querySelector('input[name=f-day][value="0"]').checked=true;
-                document.querySelector('#block-form button[type=submit]').click();""")
+            add_item("assignments", "document.getElementById('f-title').value='Offline draft';", days=[0])
             wait_for("document.getElementById('status').textContent.startsWith('Not saved')")
             destination = root / "draft.json"
             with patch("PySide6.QtWidgets.QFileDialog.getSaveFileName", return_value=(str(destination), "")):
