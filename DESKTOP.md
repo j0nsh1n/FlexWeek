@@ -274,5 +274,24 @@ about 528 MB per rebuild. Delete the ones you do not need.
 ## Reminders (Phase 5)
 
 Start reminders ship in the shared web UI (preferences, in-app toast, Notification
-API while the window is open). A native system-tray alert path was deferred to
-avoid a large new desktop dependency; revisit with Phase 7 tray work if needed.
+API while the window is open). Phase 7 added the tray presenter described below.
+
+## Window, tray and quitting (2026-09-10)
+
+- Launching FlexWeek always shows its window.
+- When the desktop has a system tray, FlexWeek puts its logo there. Closing the
+  window hides it to the tray, so reminders and alarms keep firing. The first
+  close shows a tray message that says so.
+- Click the tray icon, or choose **Open FlexWeek** from its menu, to bring the
+  window back. Choose **Quit** from the tray menu to stop FlexWeek.
+- Without a tray, or when the tray icon cannot load, closing the window quits.
+  FlexWeek never keeps running with no window and no tray icon.
+- Launching FlexWeek again while it runs brings the existing window forward
+  instead of starting a second copy on the same database. One copy runs per
+  user data directory.
+
+The tray icon is loaded from `frontend/logo.png` next to the bundled backend.
+Before this fix the path was taken from `desktop/main.py`. Nuitka places that file
+at the bundle root, so the path pointed one directory above the bundle. Qt logged
+`QSystemTrayIcon::setVisible: No Icon set`, the tray entry was invisible, and a
+closed window left the process running with no visible way back.

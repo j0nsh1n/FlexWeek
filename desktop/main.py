@@ -12,11 +12,13 @@ code. See DESKTOP.md.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import sys
 from pathlib import Path
 
 from PySide6.QtCore import QStandardPaths, QTimer, QUrl
 from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QIcon
+from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWebEngineCore import (
     QWebEngineDownloadRequest,
     QWebEngineNewWindowRequest,
@@ -40,6 +42,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+import backend
 from desktop.origin import configured_origin, is_same_origin
 from desktop.server import LocalServer
 
@@ -47,6 +50,35 @@ WINDOW_SIZE = (1280, 800)
 PROFILE_NAME = "flexweek"
 NOTIFICATION_TIMEOUT_MS = 10_000
 NOTIFY_STAY_TAG = "flexweek-stay"
+TRAY_HINT_MS = 6_000
+INSTANCE_WAIT_MS = 500
+
+
+def app_icon_path() -> Path:
+    """logo.png from the frontend the backend serves.
+
+    Anchored on the backend package, not this file: Nuitka compiles this file as
+    the bundle's __main__ at the bundle root, so a path relative to it points one
+    directory above the bundle and the tray silently gets no icon.
+    """
+    return Path(backend.__file__).resolve().parents[1] / "frontend" / "logo.png"
+
+
+def instance_name(root: str) -> str:
+    """One running app per data directory, so two copies never share a database."""
+    return "flexweek-" + hashlib.sha256(root.encode()).hexdigest()[:16]
+
+
+def show_running_instance(name: str) -> bool:
+    """Ask an already running FlexWeek to show its window. True if one answered."""
+    socket = QLocalSocket()
+    socket.connectToServer(name)
+    if not socket.waitForConnected(INSTANCE_WAIT_MS):
+        return False
+    socket.write(b"show")
+    socket.waitForBytesWritten(INSTANCE_WAIT_MS)
+    socket.disconnectFromServer()
+    return True
 
 
 def notification_timeout_ms(tag: str) -> int:
@@ -137,7 +169,11 @@ class MainWindow(QMainWindow):
         self._notification: QWebEngineNotification | None = None
         self._tray_icon: QSystemTrayIcon | None = None
         self._tray_menu: QMenu | None = None
+        self._tray_hinted = False
+        self._instance_server: QLocalServer | None = None
+        self._icon = QIcon(str(app_icon_path()))
         self.setWindowTitle("FlexWeek")
+        self.setWindowIcon(self._icon)
         self.resize(*WINDOW_SIZE)
 
         root = profile_root()
@@ -164,13 +200,33 @@ class MainWindow(QMainWindow):
 
         if tray_enabled is None:
             tray_enabled = QSystemTrayIcon.isSystemTrayAvailable()
-        if tray_enabled:
+        # Without an icon the tray entry is invisible, and a window hidden into it
+        # would leave a running app with no way back.
+        if tray_enabled and not self._icon.isNull():
             self._install_tray()
 
-    def _install_tray(self) -> None:
-        icon = QIcon(str(Path(__file__).resolve().parents[1] / "frontend" / "logo.png"))
-        self.setWindowIcon(icon)
+    def listen_for_instances(self, name: str) -> bool:
+        """Show this window when a second launch knocks, instead of starting another app."""
+        server = QLocalServer(self)
+        if not server.listen(name):
+            # A crashed run can leave a stale socket file behind on Linux.
+            QLocalServer.removeServer(name)
+            if not server.listen(name):
+                return False
+        server.newConnection.connect(self._on_instance_knock)
+        self._instance_server = server
+        return True
 
+    def _on_instance_knock(self) -> None:
+        server = self._instance_server
+        while server is not None and server.hasPendingConnections():
+            connection = server.nextPendingConnection()
+            connection.disconnected.connect(connection.deleteLater)
+            connection.disconnectFromServer()
+        self.restore_window()
+
+    def _install_tray(self) -> None:
+        icon = self._icon
         menu = QMenu(self)
         open_action = QAction("Open FlexWeek", self)
         open_action.triggered.connect(self.restore_window)
@@ -264,10 +320,24 @@ class MainWindow(QMainWindow):
             self._tray_icon.hide()
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt virtual
-        if self._tray_icon is not None and not self._quitting:
+        # Closing keeps FlexWeek in the tray so reminders and alarms still fire,
+        # but only while the tray icon is actually on screen to bring it back.
+        tray = self._tray_icon
+        if tray is not None and tray.isVisible() and not self._quitting:
             self.hide()
             event.ignore()
+            if not self._tray_hinted:
+                self._tray_hinted = True
+                tray.showMessage(
+                    "FlexWeek is still running",
+                    "It stays in the tray so reminders and alarms still work. "
+                    "Right-click the tray icon and choose Quit to close it.",
+                    QSystemTrayIcon.MessageIcon.Information,
+                    TRAY_HINT_MS,
+                )
             return
+        if tray is not None:
+            QApplication.quit()
         super().closeEvent(event)
 
     def _save_download(self, download: QWebEngineDownloadRequest) -> None:
@@ -307,6 +377,10 @@ def main(argv: list[str] | None = None) -> int:
         QMessageBox.critical(None, "FlexWeek configuration", str(error))
         return 2
 
+    instance = instance_name(profile_root())
+    if show_running_instance(instance):
+        return 0
+
     if origin is None:
         # No hosted server named, so run our own. The database lives beside the
         # browser profile, not inside the read-only application bundle.
@@ -321,6 +395,7 @@ def main(argv: list[str] | None = None) -> int:
         app.aboutToQuit.connect(server.stop)
 
     window = MainWindow(origin)
+    window.listen_for_instances(instance)
     window.show()
     window.load_app()
     return app.exec()

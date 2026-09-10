@@ -15,7 +15,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWebEngineCore import QWebEnginePage, QWebEnginePermission
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
-from desktop.main import MainWindow
+from desktop.main import MainWindow, instance_name, show_running_instance
 from desktop.server import LocalServer
 
 
@@ -367,6 +367,7 @@ def run(case: str, root: Path) -> None:
             print("PASS: web external links handed off, unsupported protocols blocked")
         elif case == "tray":
             assert window._tray_icon is not None
+            assert not window._tray_icon.icon().isNull(), "Tray icon is blank, so the tray entry is invisible"
             assert window._tray_menu is not None
             assert [action.text() for action in window._tray_menu.actions() if not action.isSeparator()] == [
                 "Open FlexWeek",
@@ -435,6 +436,10 @@ def run(case: str, root: Path) -> None:
             window.closeEvent(close_event)
             assert not close_event.isAccepted()
             assert window.isHidden(), "Closing with a tray did not hide the window"
+            assert messages[-1][0] == "FlexWeek is still running", messages
+            window.restore_window()
+            window.closeEvent(QCloseEvent())
+            assert [title for title, _body, _ms in messages].count("FlexWeek is still running") == 1, messages
             window._on_notification_clicked()
             assert window.isVisible(), "Clicking a notification did not restore the window"
             assert window._notification is None
@@ -443,6 +448,27 @@ def run(case: str, root: Path) -> None:
             window.closeEvent(quit_event)
             assert quit_event.isAccepted(), "Explicit Quit was intercepted as close-to-tray"
             print("PASS: notification permission, tray presentation, quick-open, close and quit")
+        elif case == "no_icon":
+            with patch("desktop.main.app_icon_path", return_value=root / "missing.png"):
+                iconless = MainWindow(origin, tray_enabled=True)
+            assert iconless._tray_icon is None, "Installed a tray entry that cannot be seen"
+            iconless.show()
+            close_event = QCloseEvent()
+            iconless.closeEvent(close_event)
+            assert close_event.isAccepted(), "Close hid the window with no visible tray to restore it"
+            iconless.deleteLater()
+            print("PASS: without a usable tray icon, closing the window closes the app")
+        elif case == "instance":
+            name = instance_name(str(root))
+            assert not show_running_instance(name), "Found a running instance before one started"
+            assert window.listen_for_instances(name)
+            window.hide()
+            assert show_running_instance(name), "Second launch could not reach the running app"
+            until = time.monotonic() + 5
+            while not window.isVisible() and time.monotonic() < until:
+                QTest.qWait(50)
+            assert window.isVisible(), "Second launch did not bring back the hidden window"
+            print("PASS: a second launch shows the running window instead of starting another app")
         else:
             raise AssertionError(case)
     finally:
