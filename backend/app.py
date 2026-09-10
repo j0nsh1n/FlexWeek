@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from backend.models import SolveRequest, WeekRequest
+from backend.models import SolveRequest, WeekRequest, valid_spotify_url
 from backend.solver import reschedule_after_miss, solve
 from backend.storage import (
     SESSION_SECONDS,
@@ -59,12 +59,42 @@ class SavedWeek(WeekRequest):
         return value
 
 
+class AlarmPreference(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, max_length=80)
+    name: str = Field(min_length=1, max_length=80)
+    time: str = Field(pattern=r"(?:[01]\d|2[0-3]):[0-5]\d")
+    days: list[int] = Field(min_length=1, max_length=7)
+    enabled: bool = True
+    sound: Literal["chime", "soft", "bright", "low", "glass", "spotify"] = "chime"
+    spotify_url: str | None = Field(default=None, max_length=500)
+
+    @field_validator("days")
+    @classmethod
+    def valid_days(cls, value: list[int]) -> list[int]:
+        if len(set(value)) != len(value) or any(day < 0 or day > 6 for day in value):
+            raise ValueError("alarm days must be unique values in 0..6")
+        return sorted(value)
+
+    _spotify_url = field_validator("spotify_url")(valid_spotify_url)
+
+
 class Preferences(BaseModel):
     model_config = ConfigDict(extra="forbid")
     theme: Literal["nocturne", "slate"]
     reminders_enabled: bool = False
     reminder_lead_min: int = Field(default=5, ge=0, le=120)
     reminder_sound: bool = True
+    reminder_dnd_override: bool = False
+    timer_work_min: int = Field(default=30, ge=1, le=180)
+    timer_break_min: int = Field(default=15, ge=1, le=60)
+    timer_long_break_min: int = Field(default=30, ge=1, le=120)
+    timer_long_break_every: int = Field(default=4, ge=2, le=12)
+    auto_split_pomodoro: bool = False
+    default_spotify_url: str | None = Field(default=None, max_length=500)
+    alarms: list[AlarmPreference] = Field(default_factory=list, max_length=20)
+
+    _spotify_url = field_validator("default_spotify_url")(valid_spotify_url)
 
 
 def create_app(database: Path | None = None, origin: str | None = None) -> FastAPI:
@@ -250,7 +280,10 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
     def get_preferences(account: Annotated[dict, Depends(user)]) -> dict:
         with connect(path) as db:
             row = db.execute(
-                """SELECT theme, reminders_enabled, reminder_lead_min, reminder_sound
+                """SELECT theme, reminders_enabled, reminder_lead_min, reminder_sound,
+                    reminder_dnd_override, timer_work_min, timer_break_min,
+                    timer_long_break_min, timer_long_break_every, auto_split_pomodoro,
+                    default_spotify_url, alarms_json
                 FROM preferences WHERE user_id = ?""",
                 (account["id"],),
             ).fetchone()
@@ -259,6 +292,14 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             "reminders_enabled": bool(row["reminders_enabled"]),
             "reminder_lead_min": int(row["reminder_lead_min"]),
             "reminder_sound": bool(row["reminder_sound"]),
+            "reminder_dnd_override": bool(row["reminder_dnd_override"]),
+            "timer_work_min": int(row["timer_work_min"]),
+            "timer_break_min": int(row["timer_break_min"]),
+            "timer_long_break_min": int(row["timer_long_break_min"]),
+            "timer_long_break_every": int(row["timer_long_break_every"]),
+            "auto_split_pomodoro": bool(row["auto_split_pomodoro"]),
+            "default_spotify_url": row["default_spotify_url"],
+            "alarms": json.loads(row["alarms_json"]),
         }
 
     @app.put("/api/preferences")
@@ -266,13 +307,24 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         with connect(path) as db:
             db.execute(
                 """UPDATE preferences
-                SET theme = ?, reminders_enabled = ?, reminder_lead_min = ?, reminder_sound = ?
+                SET theme = ?, reminders_enabled = ?, reminder_lead_min = ?, reminder_sound = ?,
+                    reminder_dnd_override = ?, timer_work_min = ?, timer_break_min = ?,
+                    timer_long_break_min = ?, timer_long_break_every = ?, auto_split_pomodoro = ?,
+                    default_spotify_url = ?, alarms_json = ?
                 WHERE user_id = ?""",
                 (
                     preferences.theme,
                     int(preferences.reminders_enabled),
                     preferences.reminder_lead_min,
                     int(preferences.reminder_sound),
+                    int(preferences.reminder_dnd_override),
+                    preferences.timer_work_min,
+                    preferences.timer_break_min,
+                    preferences.timer_long_break_min,
+                    preferences.timer_long_break_every,
+                    int(preferences.auto_split_pomodoro),
+                    preferences.default_spotify_url,
+                    json.dumps([alarm.model_dump() for alarm in preferences.alarms], separators=(",", ":")),
                     account["id"],
                 ),
             )

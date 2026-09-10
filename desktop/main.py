@@ -11,15 +11,18 @@ code. See DESKTOP.md.
 
 from __future__ import annotations
 
+import contextlib
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QStandardPaths, QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import QStandardPaths, QTimer, QUrl
+from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QIcon
 from PySide6.QtWebEngineCore import (
     QWebEngineDownloadRequest,
     QWebEngineNewWindowRequest,
+    QWebEngineNotification,
     QWebEnginePage,
+    QWebEnginePermission,
     QWebEngineProfile,
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -28,9 +31,11 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QStackedWidget,
+    QSystemTrayIcon,
     QVBoxLayout,
     QWidget,
 )
@@ -40,6 +45,13 @@ from desktop.server import LocalServer
 
 WINDOW_SIZE = (1280, 800)
 PROFILE_NAME = "flexweek"
+NOTIFICATION_TIMEOUT_MS = 10_000
+NOTIFY_STAY_TAG = "flexweek-stay"
+
+
+def notification_timeout_ms(tag: str) -> int:
+    # Qt does not expose requireInteraction; the page puts flexweek-stay in the tag instead.
+    return 0 if tag == NOTIFY_STAY_TAG else NOTIFICATION_TIMEOUT_MS
 
 
 def profile_root() -> str:
@@ -60,6 +72,7 @@ class ShellPage(QWebEnginePage):
         self._sent_to_browser = False
         # Handle the request before Qt creates or navigates a hidden popup page.
         self.newWindowRequested.connect(self._open_new_window)
+        self.permissionRequested.connect(self._handle_permission)
 
     @property
     def sent_to_browser(self) -> bool:
@@ -88,6 +101,16 @@ class ShellPage(QWebEnginePage):
     def _open_new_window(self, request: QWebEngineNewWindowRequest) -> None:
         self._open_external(request.requestedUrl())
 
+    def _handle_permission(self, permission: QWebEnginePermission) -> None:
+        same_origin_notification = (
+            permission.permissionType() == QWebEnginePermission.PermissionType.Notifications
+            and is_same_origin(permission.origin().toString(), self._origin)
+        )
+        if same_origin_notification:
+            permission.grant()
+        else:
+            permission.deny()
+
 
 class RetryPanel(QWidget):
     """Native offline screen. No HTML, so it works when nothing loaded at all."""
@@ -107,9 +130,13 @@ class RetryPanel(QWidget):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, origin: str) -> None:
+    def __init__(self, origin: str, tray_enabled: bool | None = None) -> None:
         super().__init__()
         self._origin = origin
+        self._quitting = False
+        self._notification: QWebEngineNotification | None = None
+        self._tray_icon: QSystemTrayIcon | None = None
+        self._tray_menu: QMenu | None = None
         self.setWindowTitle("FlexWeek")
         self.resize(*WINDOW_SIZE)
 
@@ -134,6 +161,114 @@ class MainWindow(QMainWindow):
         self._stack.addWidget(self._view)
         self._stack.addWidget(RetryPanel(origin, self.reload))
         self.setCentralWidget(self._stack)
+
+        if tray_enabled is None:
+            tray_enabled = QSystemTrayIcon.isSystemTrayAvailable()
+        if tray_enabled:
+            self._install_tray()
+
+    def _install_tray(self) -> None:
+        icon = QIcon(str(Path(__file__).resolve().parents[1] / "frontend" / "logo.png"))
+        self.setWindowIcon(icon)
+
+        menu = QMenu(self)
+        open_action = QAction("Open FlexWeek", self)
+        open_action.triggered.connect(self.restore_window)
+        menu.addAction(open_action)
+        menu.addSeparator()
+        quit_action = QAction("Quit", self)
+        quit_action.triggered.connect(self.quit_app)
+        menu.addAction(quit_action)
+
+        tray = QSystemTrayIcon(icon, self)
+        tray.setToolTip("FlexWeek")
+        tray.setContextMenu(menu)
+        tray.activated.connect(self._on_tray_activated)
+        tray.messageClicked.connect(self._on_notification_clicked)
+        tray.show()
+
+        self._tray_menu = menu
+        self._tray_icon = tray
+        self._profile.setNotificationPresenter(self._present_notification)
+        QApplication.setQuitOnLastWindowClosed(False)
+        application = QApplication.instance()
+        if application is not None:
+            application.aboutToQuit.connect(self._shutdown_tray)
+
+    def _present_notification(self, notification: QWebEngineNotification) -> None:
+        if self._notification is not None:
+            self._close_notification(self._notification)
+        self._notification = notification
+        notification.closed.connect(lambda: self._forget_notification(notification))
+        notification.show()
+        timeout_ms = notification_timeout_ms(notification.tag())
+        if self._tray_icon is not None and self._tray_icon.supportsMessages():
+            self._tray_icon.showMessage(
+                notification.title(),
+                notification.message(),
+                QSystemTrayIcon.MessageIcon.Information,
+                timeout_ms,
+            )
+        if timeout_ms:
+            QTimer.singleShot(
+                timeout_ms,
+                lambda: self._close_notification(notification),
+            )
+
+    def _forget_notification(self, notification: QWebEngineNotification) -> None:
+        if self._notification is notification:
+            self._notification = None
+
+    def _close_notification(self, notification: QWebEngineNotification) -> None:
+        if self._notification is not notification:
+            return
+        self._notification = None
+        # Qt may already have destroyed the C++ side when the page closed it first.
+        with contextlib.suppress(RuntimeError):
+            notification.close()
+
+    def _on_notification_clicked(self) -> None:
+        notification = self._notification
+        if notification is not None:
+            self._notification = None
+            try:
+                notification.click()
+                notification.close()
+            except RuntimeError:
+                pass
+        self.restore_window()
+
+    def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        if reason in {
+            QSystemTrayIcon.ActivationReason.Trigger,
+            QSystemTrayIcon.ActivationReason.DoubleClick,
+        }:
+            self.restore_window()
+
+    def restore_window(self) -> None:
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def quit_app(self) -> None:
+        self._quitting = True
+        application = QApplication.instance()
+        if application is not None:
+            application.quit()
+
+    def _shutdown_tray(self) -> None:
+        self._quitting = True
+        if self._notification is not None:
+            self._close_notification(self._notification)
+        if self._tray_icon is not None:
+            self._tray_icon.hide()
+
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt virtual
+        if self._tray_icon is not None and not self._quitting:
+            self.hide()
+            event.ignore()
+            return
+        super().closeEvent(event)
 
     def _save_download(self, download: QWebEngineDownloadRequest) -> None:
         name = Path(download.suggestedFileName()).name or "flexweek.json"

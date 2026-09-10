@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -18,6 +19,29 @@ ReasonCode = Literal[
     "SLEEP_GUARD",
     "RESHUFFLE_AFTER_MISS",
 ]
+PomodoroRole = Literal["work", "break"]
+
+
+# Kept in step with safeSpotifyUrl in frontend/app.js; the two must agree.
+SPOTIFY_SHARE = re.compile(
+    r"https://open\.spotify\.com/(track|playlist|album|episode|show)/[A-Za-z0-9]+/?(?:[?#].*)?"
+)
+
+
+def valid_spotify_url(value: str | None) -> str | None:
+    """Accept only share links that the desktop shell can safely open externally."""
+    if value is None or value == "":
+        return None
+    # Matched against the raw string, not urlsplit's normalised view. urlsplit
+    # lowercases the scheme and host and tolerates a doubled slash, so it would
+    # accept forms the browser's own check rejects; the client would then null
+    # the value and the next save would quietly wipe a link the user stored.
+    if not SPOTIFY_SHARE.fullmatch(value):
+        raise ValueError("spotify_url must be an open.spotify.com share link")
+    parsed = urlsplit(value)
+    if parsed.username is not None or parsed.password is not None or parsed.port is not None:
+        raise ValueError("spotify_url must be an open.spotify.com share link")
+    return value
 
 
 class TimeBlock(BaseModel):
@@ -52,6 +76,16 @@ class TimeBlock(BaseModel):
         max_length=7,
         exclude_if=lambda value: not value,
     )
+    spotify_url: str | None = Field(default=None, max_length=500, exclude_if=lambda value: value is None)
+    focus_sessions: int = Field(default=0, ge=0, le=9999, exclude_if=lambda value: value == 0)
+    focus_minutes: int = Field(default=0, ge=0, le=71400, exclude_if=lambda value: value == 0)
+    pomodoro_parent_id: str | None = Field(
+        default=None, min_length=1, max_length=80, exclude_if=lambda value: value is None
+    )
+    pomodoro_role: PomodoroRole | None = Field(default=None, exclude_if=lambda value: value is None)
+    pomodoro_index: int | None = Field(default=None, ge=1, le=999, exclude_if=lambda value: value is None)
+
+    _spotify_url = field_validator("spotify_url")(valid_spotify_url)
 
     @field_validator("duration_min")
     @classmethod
@@ -125,7 +159,8 @@ class WeekRequest(BaseModel):
     @field_validator("blocks")
     @classmethod
     def valid_week(cls, blocks: list[TimeBlock]) -> list[TimeBlock]:
-        if len({block.id for block in blocks}) != len(blocks):
+        ids = {block.id for block in blocks}
+        if len(ids) != len(blocks):
             raise ValueError("block ids must be unique")
         for block in blocks:
             if not block.title.strip() or len(set(block.days)) != len(block.days):
@@ -146,6 +181,8 @@ class WeekRequest(BaseModel):
                     bound,
                 ):
                     raise ValueError("invalid deadline or earliest time")
+        if any(block.pomodoro_parent_id in ids for block in blocks if block.pomodoro_parent_id):
+            raise ValueError("a pomodoro parent cannot be stored with the chunks split from it")
         return blocks
 
 
