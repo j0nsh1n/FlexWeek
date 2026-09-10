@@ -123,7 +123,7 @@ test('solve renders student-facing explanations, slack, and click-to-highlight',
 
   const block = h.allElements.findLast(el => el.classList.contains('block') && el.dataset.id === 'homework');
   assert.ok(block);
-  assert.ok(block.children.some(child => child.textContent === 'tight slack'));
+  assert.ok(block.children.some(child => child.textContent === 'Tight fit'));
   const detail = h.elements.get('debug-unplaced').children[0].children[0];
   detail.listeners.click();
   assert.equal(block.classList.contains('is-highlighted'), true);
@@ -512,4 +512,54 @@ test('when the server cannot be reached, the first screen offers Retry connectio
   assert.equal(h.elements.get('reconnect').hidden, false);
   assert.equal(h.elements.get('register-screen').hidden, false);
   assert.match(h.elements.get('status').textContent, /Could not reach FlexWeek/);
+});
+
+test('after Solve the chrome speaks plainly: results sentence, no badge for room to spare', async () => {
+  const h = harness();
+  const school = { id: 'school', kind: 'locked', title: 'School', duration_min: 390, days: [0], start: '08:00', priority: 1, energy: 'medium' };
+  const essay = { ...task, id: 'essay', title: 'Essay', latest: 'Monday 21:00' };
+  const quiz = { ...task, id: 'quiz', title: 'Quiz prep' };
+  const lab = { ...task, id: 'lab', title: 'Lab report' };
+  await h.login(1, [school, essay, quiz, lab]);
+  h.handle(async () => response(200, {
+    placed: [school, { ...essay, start: '15:00' }, { ...quiz, start: '16:00' }],
+    unplaced: [lab], moves: [],
+    explanations: [
+      { block_id: 'essay', message: 'Room: scheduled to finish 5h before the deadline.', reason: null, slack_min: 300, slack_status: 'ok' },
+      { block_id: 'quiz', message: 'Very little room: scheduled to finish 15m before the deadline.', reason: null, slack_min: 15, slack_status: 'danger' },
+      { block_id: 'lab', message: 'The week is too full to place this task.', reason: 'NO_SLOT_LEFT' },
+    ],
+    failed_constraints: [], solve_ms: 3.25, complete: false,
+  }));
+  await h.run('solveWeek()');
+
+  const badges = h.allElements.filter(el => el.classList.contains('slack-badge')).map(el => el.textContent);
+  assert.deepEqual(badges, ['At risk']);
+  assert.equal(h.elements.get('debug-stats').textContent,
+    'Placed 2 of 3 tasks. 1 still needs a time. The reasons are below.');
+  assert.equal(h.elements.get('debug-stats').title, 'Solved in 3.3 ms');
+
+  const focusItems = h.elements.get('focus-tasks').children;
+  assert.deepEqual(focusItems.map(item => item.children[0].textContent), ['Essay', 'Quiz prep']);
+  assert.deepEqual(focusItems.map(item => item.children[1].textContent), ['Mon 15:00', 'Mon 16:00']);
+  assert.equal(h.elements.get('focus-section').hidden, false);
+});
+
+test('the Focus section stays hidden until a task has a time', async () => {
+  const h = harness();
+  const school = { id: 'school', kind: 'locked', title: 'School', duration_min: 390, days: [0], start: '08:00', priority: 1, energy: 'medium' };
+  await h.login(1, [school, task]);
+  assert.equal(h.elements.get('focus-tasks').children.length, 0);
+  assert.equal(h.elements.get('focus-section').hidden, true);
+});
+
+test('Now / Next reads as one Daily Scheduler line and is empty when the day is done', () => {
+  const h = harness();
+  const physics = { id: 'p', title: 'Physics', kind: 'flexible', duration_min: 60, days: [3], start: '16:00' };
+  const practice = { id: 's', title: 'Practice', kind: 'locked', duration_min: 90, days: [3], start: '17:30' };
+  assert.equal(h.run(`nowNextLine(${JSON.stringify({ current: physics, next: practice })}, 985)`),
+    'Now: Physics · 35 min left  →  Next: Practice at 17:30');
+  assert.equal(h.run(`nowNextLine(${JSON.stringify({ current: null, next: practice })}, 960)`),
+    'Next: Practice at 17:30 (in 1 h 30 min)');
+  assert.equal(h.run('nowNextLine({ current: null, next: null }, 1200)'), '');
 });

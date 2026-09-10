@@ -28,13 +28,6 @@ function field(id) {
   return document.getElementById(id);
 }
 
-function formatDuration(minutes) {
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  if (!hours) return rest + " min";
-  return hours + " h" + (rest ? " " + rest + " min" : "");
-}
-
 function daysThrough(dueDay) {
   const last = Number.isInteger(dueDay) ? dueDay : 6;
   return DAYS.map(function (_name, day) { return day; }).filter(function (day) { return day <= last; });

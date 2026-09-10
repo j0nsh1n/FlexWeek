@@ -1,14 +1,31 @@
+/** Daily Scheduler's one-line Now / Next status. Empty when nothing is on now or later today. */
+function nowNextLine(result, minute) {
+  const parts = [];
+  if (result.current) {
+    const end = parseStart(result.current.start) + result.current.duration_min;
+    parts.push("Now: " + result.current.title + " · " + formatDuration(end - minute) + " left");
+  }
+  if (result.next) {
+    const wait = parseStart(result.next.start) - minute;
+    parts.push("Next: " + result.next.title + " at " + result.next.start + (result.current ? "" : " (in " + formatDuration(wait) + ")"));
+  }
+  return parts.join("  →  ");
+}
+
+function syncFocusSection() {
+  const list = document.getElementById("focus-tasks");
+  document.getElementById("focus-section").hidden = !focusState && !list.children.length;
+}
+
 function updateLiveDisplay(nowDate) {
   const target = document.getElementById("now-next");
   if (!target) return;
   const now = nowDate || new Date();
   const info = currentDateInfo(now);
   const state = weeks.get(info.week);
-  const result = nowAndNext(scheduledBlocksForState(state), info.day, info.minute);
-  const currentText = result.current ? "Now: " + result.current.title + " until " +
-    formatMinute(parseStart(result.current.start) + result.current.duration_min) : "Now: Free";
-  const nextText = result.next ? "Next: " + result.next.title + " at " + result.next.start : "Next: Nothing scheduled";
-  target.textContent = currentText + "\n" + nextText;
+  const status = nowNextLine(nowAndNext(scheduledBlocksForState(state), info.day, info.minute), info.minute);
+  target.textContent = status;
+  target.hidden = !status;
   document.querySelectorAll(".current-time-line").forEach(function (line) {
     if (typeof line.remove === "function") line.remove();
     else line.hidden = true;
@@ -40,6 +57,7 @@ function renderFocusPanel(nowMs) {
   const panel = document.getElementById("focus-panel");
   if (!panel) return;
   panel.hidden = !focusState;
+  syncFocusSection();
   if (!focusState) return;
   document.getElementById("focus-task").textContent = focusState.title;
   document.getElementById("focus-phase").textContent = focusState.phase === "work" ? "Focus session" :
@@ -55,6 +73,7 @@ function resetFocusTimer(hide) {
   focusState = null;
   const panel = document.getElementById("focus-panel");
   if (panel && hide !== false) panel.hidden = true;
+  syncFocusSection();
 }
 
 function resolveFocusPlacement(blockId, day) {
@@ -165,18 +184,22 @@ function renderFocusTasks() {
   list.replaceChildren();
   const scheduled = scheduledBlocksForState(weekState());
   const placementById = new Map(scheduled.map(function (block) { return [block.id, block]; }));
+  // Only work that has a time and is not done can be focused; school and breaks cannot.
   weekState().blocks.filter(function (block) {
-    return block.pomodoro_role !== "break";
+    return (block.kind === "flexible" || block.pomodoro_role === "work") && !block.completed &&
+      placementById.has(block.id);
   }).forEach(function (block) {
+    const placement = placementById.get(block.id);
     const item = document.createElement("li");
     const name = document.createElement("strong");
     name.textContent = block.title;
     const count = document.createElement("small");
-    count.textContent = (block.focus_sessions || 0) + " sessions · " + (block.focus_minutes || 0) + " min";
+    count.textContent = DAYS[placement.days[0]] + " " + placement.start + (block.focus_sessions
+      ? " · " + block.focus_sessions + (block.focus_sessions === 1 ? " session, " : " sessions, ") + formatDuration(block.focus_minutes || 0)
+      : "");
     const start = document.createElement("button");
     start.type = "button";
-    start.textContent = "Focus";
-    start.disabled = block.completed || !placementById.has(block.id);
+    start.textContent = "Start";
     start.addEventListener("click", function () {
       const placed = placementById.get(block.id);
       startFocus(block.id, placed && placed.days[0]);
@@ -186,6 +209,7 @@ function renderFocusTasks() {
     item.appendChild(start);
     list.appendChild(item);
   });
+  syncFocusSection();
 }
 
 document.getElementById("focus-pause").addEventListener("click", toggleFocusPause);

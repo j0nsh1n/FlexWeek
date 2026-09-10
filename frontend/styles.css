@@ -241,9 +241,8 @@ select {
   border-radius: 999px;
   padding: 0.05rem 0.3rem;
   color: #111;
-  font-size: 0.58rem;
+  font-size: 0.6rem;
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .slack-ok { background: #8bd5a0; }
@@ -619,7 +618,8 @@ button:disabled { cursor: wait; opacity: .6; }
 .focus-tasks li { display: grid; grid-template-columns: 1fr auto; gap: 0.2rem 0.5rem; align-items: center; }
 .focus-tasks small { color: var(--muted); }
 .focus-tasks button { grid-column: 2; grid-row: 1 / span 2; padding: 0.25rem 0.5rem; }
-.now-next { color: var(--muted); font-size: 0.8rem; white-space: pre-line; }
+.week-nav .now-next { margin-left: auto; border: 0; background: none; padding: 0; margin-bottom: 0; color: var(--ink); font-size: .8rem; }
+.side li.empty-note { border-left-color: var(--line); color: var(--muted); }
 
 .current-time-line { position: absolute; left: 0; right: 0; height: 2px; background: #ef4444; z-index: 6; pointer-events: none; }
 .current-time-line::before { content: ""; position: absolute; left: -3px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: #ef4444; }

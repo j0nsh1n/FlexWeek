@@ -23,6 +23,8 @@ const CATEGORIES = [
   { id: "free", label: "Free", color: "#94a3b8", kind: "locked", preset: { start: "19:00", end: "20:00" } },
 ];
 const KIND_LABEL = { locked: "Fixed time", flexible: "Flexible" };
+// An "ok" slack needs no badge; its sentence still appears in the Solve results.
+const SLACK_BADGE = { tight: "Tight fit", danger: "At risk" };
 
 const EXPORT_FORMAT = "flexweek-week";
 const EXPORT_VERSION = 1;
@@ -479,6 +481,13 @@ function mergeImportedBlocks(existing, incoming, mode, day) {
 function snapMinute(minute) {
   const m = Math.round(Number(minute) / SNAP_MIN) * SNAP_MIN;
   return Math.max(DAY_START_MIN, Math.min(DAY_END_MIN, m));
+}
+
+function formatDuration(minutes) {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (!hours) return rest + " min";
+  return hours + " h" + (rest ? " " + rest + " min" : "");
 }
 
 function formatMinute(minute) {
@@ -1297,10 +1306,10 @@ function buildGrid(blocks, explanations = []) {
       }
 
       const insight = insightFor(explanations, block.id);
-      if (insight) {
+      if (insight && SLACK_BADGE[insight.slack_status]) {
         const slack = document.createElement("span");
         slack.className = "slack-badge slack-" + insight.slack_status;
-        slack.textContent = insight.slack_status + " slack";
+        slack.textContent = SLACK_BADGE[insight.slack_status];
         slack.title = insight.message;
         el.appendChild(slack);
       }
@@ -1324,7 +1333,10 @@ function renderFlexible(flex) {
   flexibleEl.innerHTML = "";
   if (!flex.length) {
     const empty = document.createElement("li");
-    empty.textContent = "None unplaced.";
+    empty.className = "empty-note";
+    empty.textContent = weekState().trace
+      ? "Every task has a time on the calendar."
+      : "No tasks yet. Pick Homework above, then drag on a day you can work on it.";
     flexibleEl.appendChild(empty);
     return;
   }
@@ -1349,12 +1361,13 @@ function renderFlexible(flex) {
       pills.appendChild(span);
     }
 
-    pill(block.duration_min + " min");
-    pill(PRIORITY_LABEL[block.priority] || "P" + block.priority);
-    if (block.energy) pill(block.energy);
-    if (block.course) pill(block.course);
-    if (block.category) pill(categoryLabel(block.category) || block.category);
+    pill(formatDuration(block.duration_min));
     if (block.latest) pill("due " + block.latest);
+    if (block.category) pill(categoryLabel(block.category) || block.category);
+    if (block.course) pill(block.course);
+    // Homework priority and medium energy are the defaults, so only a change is worth a pill.
+    if (block.priority && block.priority !== 3) pill(PRIORITY_LABEL[block.priority] || "P" + block.priority);
+    if (block.energy && block.energy !== "medium") pill(block.energy + " energy");
     if (block.completed) pill("done");
     if (block.focus_sessions) pill(block.focus_sessions + " focus");
 
@@ -1417,17 +1430,20 @@ function detailButton(text, blockId, day = null) {
   return button;
 }
 
+function solveSummary(trace) {
+  const placed = (trace.placed || []).filter(function (block) { return block.kind === "flexible"; }).length;
+  const waiting = (trace.unplaced || []).length;
+  const total = placed + waiting;
+  if (!total) return "No flexible tasks to place yet. Fixed times stay where they are.";
+  const head = "Placed " + placed + " of " + total + (total === 1 ? " task." : " tasks.");
+  if (!waiting) return head;
+  return head + " " + waiting + (waiting === 1 ? " still needs" : " still need") + " a time. The reasons are below.";
+}
+
 function renderDebug(trace) {
   debugEl.hidden = false;
-  const placedFlex = (trace.placed || []).filter((b) => b.kind === "flexible").length;
-  debugStatsEl.textContent =
-    "solve_ms " +
-    Number(trace.solve_ms).toFixed(1) +
-    " · placed " +
-    placedFlex +
-    " · unplaced " +
-    (trace.unplaced || []).length +
-    (trace.complete ? " · complete" : " · incomplete");
+  debugStatsEl.textContent = solveSummary(trace);
+  debugStatsEl.title = "Solved in " + Number(trace.solve_ms).toFixed(1) + " ms";
   debugUnplacedEl.innerHTML = "";
   (trace.explanations || []).forEach((item) => {
     const li = document.createElement("li");
@@ -1436,7 +1452,7 @@ function renderDebug(trace) {
   });
   if (!(trace.explanations || []).length) {
     const li = document.createElement("li");
-    li.textContent = "All tasks fit their requested windows.";
+    li.textContent = "Every task fits before its deadline.";
     debugUnplacedEl.appendChild(li);
   }
 

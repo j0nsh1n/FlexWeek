@@ -74,6 +74,7 @@
         <button type="button" id="export-week" class="secondary">Export week</button>
         <button type="button" id="import-file" class="secondary">Import file</button>
         <input id="import-file-input" type="file" accept=".json,.txt,application/json,text/plain" hidden>
+        <span id="now-next" class="now-next" aria-live="polite" hidden></span>
       </div>
       <div class="week" id="week"></div>
     </section>
@@ -91,9 +92,9 @@
       <h2>Tasks to place</h2>
       <p class="note" id="flex-note">Press Solve to place these around school and sports.</p>
       <ul id="flexible"></ul>
-      <section class="focus-dashboard" aria-labelledby="focus-heading">
-        <h2 id="focus-heading">Focus</h2>
-        <div id="now-next" class="now-next" aria-live="polite">Nothing scheduled now.</div>
+      <section id="focus-section" class="focus-dashboard" aria-labelledby="focus-heading" hidden>
+        <h2 id="focus-heading">Focus timer</h2>
+        <p class="note">Start a timer on a task Solve has placed.</p>
         <div id="focus-panel" class="focus-panel" hidden>
           <strong id="focus-task"></strong>
           <span id="focus-phase"></span>
@@ -107,7 +108,7 @@
         <ul id="focus-tasks" class="focus-tasks"></ul>
       </section>
       <section id="debug" class="debug" hidden>
-        <h2>Schedule details</h2>
+        <h2>What Solve did</h2>
         <p id="debug-stats"></p>
         <ul id="debug-unplaced"></ul>
         <div id="debug-changes" hidden>

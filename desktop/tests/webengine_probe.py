@@ -235,7 +235,9 @@ def run(case: str, root: Path) -> None:
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")
             changes = evaluate("document.getElementById('debug-moves').textContent")
             assert "Tue 06:00 → Mon 06:00" in changes, changes
-            assert evaluate("Boolean(document.querySelector('.slack-ok'))")
+            # Room to spare gets no badge on the grid; its sentence stays in the Solve results.
+            assert not evaluate("Boolean(document.querySelector('.slack-badge'))")
+            assert evaluate("document.getElementById('debug-unplaced').textContent.includes('Room:')")
             evaluate("window.__beforeMissReload=true")
             window.reload()
             wait_for(
@@ -317,9 +319,10 @@ def run(case: str, root: Path) -> None:
                 document.getElementById('alarm-time').value='07:30';
                 document.getElementById('alarm-add').click();""")
             wait_for("document.querySelectorAll('#alarm-list li').length === 1")
-            assert evaluate("document.getElementById('now-next').textContent.trim().length") > 0, (
-                "Now / Next line rendered empty"
-            )
+            assert evaluate(
+                "document.getElementById('now-next').hidden === "
+                "(document.getElementById('now-next').textContent === '')"
+            ), "Now / Next is shown empty or hidden with text"
             evaluate("document.getElementById('prefs-dialog').close()")
 
             print("PASS: focus timer, alarms and the preferences dialog work in a real browser")
