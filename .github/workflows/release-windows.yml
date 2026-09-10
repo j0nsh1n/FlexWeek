@@ -72,10 +72,25 @@ jobs:
         shell: pwsh
 
       - name: Zip the bundle
+        # Top level holds only what a human touches: the FlexWeek.lnk shortcut,
+        # README.txt, LICENSE.txt, flexweek.png. The compiled payload (exe, Qt
+        # DLLs, Python extensions, frontend) lives in app\.
         run: |
-          New-Item -ItemType Directory -Path dist\zip-stage | Out-Null
-          Copy-Item -LiteralPath dist\FlexWeek-Windows -Destination dist\zip-stage\FlexWeek -Recurse
-          Compress-Archive -Path dist\zip-stage\FlexWeek `
+          New-Item -ItemType Directory -Path dist\zip-stage\FlexWeek | Out-Null
+          Move-Item -LiteralPath dist\FlexWeek-Windows -Destination dist\zip-stage\FlexWeek\app
+          $root = "dist\zip-stage\FlexWeek"
+          foreach ($name in @("README.txt", "LICENSE.txt", "flexweek.png")) {
+            Copy-Item -LiteralPath (Join-Path $root "app\$name") -Destination (Join-Path $root $name)
+          }
+          $shell = New-Object -ComObject WScript.Shell
+          $shortcut = $shell.CreateShortcut((Join-Path $root "FlexWeek.lnk"))
+          $shortcut.TargetPath = Join-Path $root "app\FlexWeek.exe"
+          $shortcut.WorkingDirectory = Join-Path $root "app"
+          $shortcut.Save()
+          if (-not (Test-Path (Join-Path $root "FlexWeek.lnk"))) {
+            throw "FlexWeek.lnk was not created"
+          }
+          Compress-Archive -Path $root `
             -DestinationPath dist\FlexWeek-Windows-x64.zip -Force
           $hash = (Get-FileHash dist\FlexWeek-Windows-x64.zip -Algorithm SHA256).Hash.ToLower()
           "$hash  FlexWeek-Windows-x64.zip" | Set-Content -NoNewline dist\FlexWeek-Windows-x64.zip.sha256
@@ -120,6 +135,19 @@ jobs:
         run: |
           ./desktop/build_linux.sh
           ./desktop/package_linux.sh dist/FlexWeek dist/release
+
+      - name: Smoke the packaged archive
+        # Prove the download itself starts: extract the tarball a user gets and
+        # run the root launcher, not the raw onedir.
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
+          LD_LIBRARY_PATH: ""
+        run: |
+          mkdir dist/stage
+          tar -xzf dist/release/FlexWeek-Linux-x86_64.tar.gz -C dist/stage
+          xvfb-run -a -s "-screen 0 1280x800x24" dist/stage/FlexWeek/FlexWeek --smoke-test dist/packaged-smoke.json
+          python -c 'import json,sys; r=json.load(open("dist/packaged-smoke.json")); print(r); sys.exit(0 if r.get("ok") else 1)'
 
       - name: Smoke-test first screen
         env:

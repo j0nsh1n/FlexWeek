@@ -10,15 +10,17 @@ Start FlexWeek
 --------------
 1. Extract the zip first. Right-click FlexWeek-Windows-x64.zip, choose
    Extract All, then open the FlexWeek folder it creates.
-   Running FlexWeek.exe from inside the zip without extracting does not work.
-2. Double-click FlexWeek.exe.
+   Running the app from inside the zip without extracting does not work.
+2. Double-click FlexWeek — the shortcut at the top of the folder. It starts
+   the real program, which lives in the app folder next to it, together with
+   everything FlexWeek needs.
 3. If Windows shows "Windows protected your PC", choose More info, then
    Run anyway. See "Why Windows warns you" below.
 4. A window opens. Choose Create account. A new account starts with a short
    setup: school hours, a sport, then your first homework.
 
-Tip: right-click FlexWeek.exe and choose Show more options, then Send to,
-then Desktop (create shortcut) to get a desktop icon.
+Tip: right-click FlexWeek and choose Show more options, then Send to, then
+Desktop (create shortcut) to get a desktop icon.
 
 
 Why Windows warns you
