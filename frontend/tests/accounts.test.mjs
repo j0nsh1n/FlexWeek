@@ -6,8 +6,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import vm from 'node:vm';
+import { runAppScripts } from './app-scripts.mjs';
 
-const source = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const task = { id: 'homework', kind: 'flexible', title: 'Math', duration_min: 60, days: [0] };
 const response = (status, data) => ({ status, ok: status < 400, json: async () => data });
@@ -85,7 +85,7 @@ function harness() {
     setTimeout, clearTimeout, AbortController, structuredClone, console,
     confirm: () => true, Date: FixedDate,
   });
-  vm.runInContext(source, context);
+  runAppScripts(vm, context);
   return {
     elements, local, requests, allElements,
     run: code => vm.runInContext(code, context),
@@ -123,7 +123,7 @@ test('solve renders student-facing explanations, slack, and click-to-highlight',
 
   const block = h.allElements.findLast(el => el.classList.contains('block') && el.dataset.id === 'homework');
   assert.ok(block);
-  assert.ok(block.children.some(child => child.textContent === 'tight slack'));
+  assert.ok(block.children.some(child => child.textContent === 'Tight fit'));
   const detail = h.elements.get('debug-unplaced').children[0].children[0];
   detail.listeners.click();
   assert.equal(block.classList.contains('is-highlighted'), true);
@@ -383,7 +383,7 @@ test('an account whose data sits in an earlier week can still reach it', async (
   await h.elements.get('week-jump').listeners.change();
   assert.equal(h.run('selectedWeek'), '2026-08-24');
   assert.equal(h.run('weekState().blocks[0].title'), 'Math');
-  assert.equal(h.elements.get('status').textContent, 'Saved · 0 locked, 1 flexible');
+  assert.equal(h.elements.get('status').textContent, 'Saved · 0 fixed, 1 flexible');
 });
 
 test('switching weeks keeps unsaved edits in the week they belong to', async () => {
@@ -430,4 +430,224 @@ test('a save sends the week_start of the week on screen, not a stale one', async
   assert.deepEqual(h.run('weekState("2026-09-07").blocks.map(b => b.title)'), ['Math']);
   // Only the week that was actually saved joins the list of saved weeks.
   assert.deepEqual(h.elements.get('week-jump').children.map(option => option.value), ['2026-09-14']);
+});
+
+test('a visitor with no session first sees Create account, and Log in is a separate screen', async () => {
+  const h = harness();
+  await tick();
+  assert.equal(h.elements.get('register-screen').hidden, false);
+  assert.equal(h.elements.get('login-screen').hidden, true);
+  assert.equal(h.elements.get('reconnect').hidden, true);
+  assert.equal(h.elements.get('planner').hidden, true);
+
+  h.elements.get('register-username').value = 'returning_student';
+  h.elements.get('show-login').listeners.click();
+  assert.equal(h.elements.get('register-screen').hidden, true);
+  assert.equal(h.elements.get('login-screen').hidden, false);
+  assert.equal(h.elements.get('login-username').value, 'returning_student');
+
+  const posts = [];
+  h.handle(async (path, options) => {
+    if (path.startsWith('/api/auth/')) {
+      posts.push({ path, body: JSON.parse(options.body) });
+      return response(200, { id: 7, username: 'returning_student' });
+    }
+    if (path.startsWith('/api/weeks')) return response(200, { weeks: [] });
+    if (path.startsWith('/api/week')) return response(200, { week_start: weekOf(path), blocks: [task], revision: 1 });
+    return response(200, { theme: 'nocturne' });
+  });
+  h.elements.get('login-password').value = 'correct horse battery';
+  await h.elements.get('login-form').listeners.submit({ preventDefault() {} });
+  assert.deepEqual(posts, [{
+    path: '/api/auth/login', body: { username: 'returning_student', password: 'correct horse battery' },
+  }]);
+  assert.equal(h.elements.get('login-password').value, '');
+  assert.equal(h.elements.get('planner').hidden, false);
+  assert.equal(h.elements.get('account-name').textContent, 'returning_student');
+});
+
+test('Create account posts to register, and logging out returns to the Log in screen', async () => {
+  const h = harness();
+  await tick();
+  const posted = [];
+  h.handle(async (path, options) => {
+    if (path.startsWith('/api/auth/')) {
+      posted.push(path);
+      return path.endsWith('/logout') ? response(204) : response(200, { id: 3, username: 'new_student' });
+    }
+    if (path.startsWith('/api/weeks')) return response(200, { weeks: [] });
+    if (path.startsWith('/api/week')) return response(200, { week_start: weekOf(path), blocks: [], revision: 0 });
+    return response(200, { theme: 'nocturne' });
+  });
+  h.elements.get('register-username').value = 'new_student';
+  h.elements.get('register-password').value = 'a long enough password';
+  await h.elements.get('register-form').listeners.submit({ preventDefault() {} });
+  assert.deepEqual(posted, ['/api/auth/register']);
+  assert.equal(h.elements.get('planner').hidden, false);
+
+  await h.elements.get('logout').listeners.click();
+  assert.deepEqual(posted, ['/api/auth/register', '/api/auth/logout']);
+  assert.equal(h.elements.get('planner').hidden, true);
+  assert.equal(h.elements.get('login-screen').hidden, false);
+  assert.equal(h.elements.get('register-screen').hidden, true);
+});
+
+test('a failed login shows its error on the Log in screen without leaving it', async () => {
+  const h = harness();
+  await tick();
+  h.elements.get('show-login').listeners.click();
+  h.handle(async () => response(401, { detail: 'Username or password is incorrect.' }));
+  await h.elements.get('login-form').listeners.submit({ preventDefault() {} });
+  assert.equal(h.elements.get('login-error').textContent, 'Username or password is incorrect.');
+  assert.equal(h.elements.get('login-screen').hidden, false);
+  assert.equal(h.elements.get('planner').hidden, true);
+});
+
+test('when the server cannot be reached, the first screen offers Retry connection', async () => {
+  const h = harness();
+  h.handle(async () => { throw new Error('Offline'); });
+  h.run('reconnect()');
+  await tick();
+  await tick();
+  assert.equal(h.elements.get('reconnect').hidden, false);
+  assert.equal(h.elements.get('register-screen').hidden, false);
+  assert.match(h.elements.get('status').textContent, /Could not reach FlexWeek/);
+});
+
+test('after Solve the chrome speaks plainly: results sentence, no badge for room to spare', async () => {
+  const h = harness();
+  const school = { id: 'school', kind: 'locked', title: 'School', duration_min: 390, days: [0], start: '08:00', priority: 1, energy: 'medium' };
+  const essay = { ...task, id: 'essay', title: 'Essay', latest: 'Monday 21:00' };
+  const quiz = { ...task, id: 'quiz', title: 'Quiz prep' };
+  const lab = { ...task, id: 'lab', title: 'Lab report' };
+  await h.login(1, [school, essay, quiz, lab]);
+  h.handle(async () => response(200, {
+    placed: [school, { ...essay, start: '15:00' }, { ...quiz, start: '16:00' }],
+    unplaced: [lab], moves: [],
+    explanations: [
+      { block_id: 'essay', message: 'Room: scheduled to finish 5h before the deadline.', reason: null, slack_min: 300, slack_status: 'ok' },
+      { block_id: 'quiz', message: 'Very little room: scheduled to finish 15m before the deadline.', reason: null, slack_min: 15, slack_status: 'danger' },
+      { block_id: 'lab', message: 'The week is too full to place this task.', reason: 'NO_SLOT_LEFT' },
+    ],
+    failed_constraints: [], solve_ms: 3.25, complete: false,
+  }));
+  await h.run('solveWeek()');
+
+  const badges = h.allElements.filter(el => el.classList.contains('slack-badge')).map(el => el.textContent);
+  assert.deepEqual(badges, ['At risk']);
+  assert.equal(h.elements.get('debug-stats').textContent,
+    'Placed 2 of 3 tasks. 1 still needs a time. The reasons are below.');
+  assert.equal(h.elements.get('debug-stats').title, 'Solved in 3.3 ms');
+
+  const focusItems = h.elements.get('focus-tasks').children;
+  assert.deepEqual(focusItems.map(item => item.children[0].textContent), ['Essay', 'Quiz prep']);
+  assert.deepEqual(focusItems.map(item => item.children[1].textContent), ['Mon 15:00', 'Mon 16:00']);
+  assert.equal(h.elements.get('focus-section').hidden, false);
+});
+
+test('the Focus section stays hidden until a task has a time', async () => {
+  const h = harness();
+  const school = { id: 'school', kind: 'locked', title: 'School', duration_min: 390, days: [0], start: '08:00', priority: 1, energy: 'medium' };
+  await h.login(1, [school, task]);
+  assert.equal(h.elements.get('focus-tasks').children.length, 0);
+  assert.equal(h.elements.get('focus-section').hidden, true);
+});
+
+test('Now / Next reads as one Daily Scheduler line and is empty when the day is done', () => {
+  const h = harness();
+  const physics = { id: 'p', title: 'Physics', kind: 'flexible', duration_min: 60, days: [3], start: '16:00' };
+  const practice = { id: 's', title: 'Practice', kind: 'locked', duration_min: 90, days: [3], start: '17:30' };
+  assert.equal(h.run(`nowNextLine(${JSON.stringify({ current: physics, next: practice })}, 985)`),
+    'Now: Physics · 35 min left  →  Next: Practice at 17:30');
+  assert.equal(h.run(`nowNextLine(${JSON.stringify({ current: null, next: practice })}, 960)`),
+    'Next: Practice at 17:30 (in 1 h 30 min)');
+  assert.equal(h.run('nowNextLine({ current: null, next: null }, 1200)'), '');
+});
+
+test('a new account walks through school, sports and first homework, then Solve runs', async () => {
+  const h = harness();
+  await tick();
+  const saves = [];
+  const solves = [];
+  h.handle(async (path, options) => {
+    if (path === '/api/auth/register') return response(200, { id: 9, username: 'rookie' });
+    if (path.startsWith('/api/weeks')) return response(200, { weeks: [] });
+    if (path === '/api/week' && options.method === 'PUT') {
+      const body = JSON.parse(options.body);
+      saves.push(body);
+      return response(200, { week_start: body.week_start, blocks: body.blocks, revision: saves.length });
+    }
+    if (path.startsWith('/api/week')) return response(200, { week_start: weekOf(path), blocks: [], revision: 0 });
+    if (path === '/api/solve') {
+      const body = JSON.parse(options.body);
+      solves.push(body);
+      return response(200, { placed: body.blocks.filter(b => b.kind === 'locked'), unplaced: [], moves: [],
+        explanations: [], failed_constraints: [], solve_ms: 1, complete: true });
+    }
+    return response(200, { theme: 'nocturne' });
+  });
+  const next = () => h.elements.get('setup-form').listeners.submit({ preventDefault() {} });
+  h.elements.get('register-username').value = 'rookie';
+  h.elements.get('register-password').value = 'a long enough password';
+  await h.elements.get('register-form').listeners.submit({ preventDefault() {} });
+
+  assert.equal(h.elements.get('setup-dialog').open, true);
+  assert.equal(h.elements.get('setup-progress').textContent, 'Step 1 of 4');
+  assert.equal(h.elements.get('setup-school-start').value, '08:00');
+  assert.equal(h.elements.get('setup-school-end').value, '14:30');
+  assert.equal(next(), true);
+
+  assert.equal(next(), false);
+  assert.equal(h.elements.get('setup-error').textContent, 'Pick the days you practice, or choose Skip this step.');
+  h.elements.get('setup-sports-title').value = 'Soccer';
+  h.elements.get('setup-sports-day-1').checked = true;
+  h.elements.get('setup-sports-day-3').checked = true;
+  assert.equal(next(), true);
+
+  assert.equal(next(), false);
+  assert.equal(h.elements.get('setup-error').textContent, 'Name the assignment, or choose Skip this step.');
+  h.elements.get('setup-homework-title').value = 'Math worksheet';
+  assert.equal(h.elements.get('setup-homework-due-day').value, '4');
+  assert.equal(next(), true);
+
+  assert.deepEqual(h.elements.get('setup-summary').children.map(item => item.textContent), [
+    'School: Mon, Tue, Wed, Thu, Fri, 08:00–14:30',
+    'Soccer: Tue, Thu, 15:30–17:00',
+    'Math worksheet: 1 h, due Friday at 21:00',
+  ]);
+  assert.equal(h.elements.get('setup-next').textContent, 'Add to my week and Solve');
+  assert.equal(await next(), true);
+
+  assert.equal(h.elements.get('setup-dialog').open, false);
+  assert.equal(saves.length, 1);
+  assert.deepEqual(saves[0].blocks.map(b => [b.title, b.kind, b.category, b.days, b.start, b.duration_min, b.latest]), [
+    ['School', 'locked', 'class', [0, 1, 2, 3, 4], '08:00', 390, null],
+    ['Soccer', 'locked', 'exercise', [1, 3], '15:30', 90, null],
+    ['Math worksheet', 'flexible', 'assignments', [3, 4], null, 60, 'Friday 21:00'],
+  ]);
+  assert.equal(solves.length, 1);
+  assert.equal(h.elements.get('debug').hidden, false);
+  assert.equal(h.elements.get('empty-week').hidden, true);
+});
+
+test('an empty week says so and setup can be skipped without adding anything', async () => {
+  const h = harness();
+  await h.login(1, []);
+  assert.equal(h.elements.get('empty-week').hidden, false);
+  assert.equal(Boolean(h.elements.get('setup-dialog').open), false, 'setup opens only for a new account or on request');
+
+  h.elements.get('setup-open').listeners.click();
+  assert.equal(h.elements.get('setup-dialog').open, true);
+  let requests = 0;
+  h.handle(async () => { requests += 1; return response(500, {}); });
+  h.elements.get('setup-skip').listeners.click();
+  h.elements.get('setup-back').listeners.click();
+  assert.equal(h.elements.get('setup-progress').textContent, 'Step 1 of 4');
+  for (let step = 0; step < 3; step += 1) h.elements.get('setup-skip').listeners.click();
+  assert.equal(h.elements.get('setup-next').textContent, 'Finish');
+  assert.equal(await h.elements.get('setup-form').listeners.submit({ preventDefault() {} }), false);
+  assert.equal(requests, 0);
+  assert.equal(h.run('weekState().blocks.length'), 0);
+  assert.equal(h.elements.get('empty-week').hidden, false);
+  assert.match(h.elements.get('status').textContent, /Setup skipped/);
 });

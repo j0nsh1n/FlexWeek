@@ -2,7 +2,8 @@
 
 Congressional App Challenge 2026. Submit **Sunday, Oct 25, 2026, 8:00 p.m. PDT**
 (hard deadline Monday, Oct 26, 9:00 a.m. PDT). Phases map to build weeks; a
-phase may span several implementation slices.
+phase may span several implementation slices. The original Sep 6 contest brief
+(working title Reslot) is archived in [docs/cac-build-plan.md](docs/cac-build-plan.md).
 
 ## Phase 1 — Skeleton (Sep 6–12, 2026)
 - Tasks:
@@ -172,7 +173,11 @@ desktop shell is proposed; shell selection follows compatibility testing.
 - Contest recording using an account-created schedule, plus submission form.
   This recording is separate from the removed product demo mode.
 - Completion target: submission on Oct 25 evening, 2026.
-- Status: [ ]
+- Status: [~] Normie first-open slice landed 2026-09-10 on
+  `feat/normie-first-open`: Download for Windows / Linux labels, Linux tar.gz
+  with README/icon/desktop entry and vendored libxcb-cursor, Windows zip with
+  SmartScreen note, Create account first, first-week setup. Hosted web URL
+  and a hand check of the Windows zip on a real PC remain.
 
 ## First implementation slice — approved 2026-09-06
 

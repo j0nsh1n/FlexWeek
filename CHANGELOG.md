@@ -6,6 +6,22 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- First-open downloads (2026-09-10). GitHub Releases and the README lead with
+  Download for Windows and Download for Linux. Each archive includes a README
+  that names glibc 2.38, a normal desktop with OpenGL or EGL, and SmartScreen
+  on Windows. Checksums sit next to the downloads. Chromebooks are pointed at
+  the web version when it exists.
+- Linux archive extras: README, icon, `.desktop` file, menu-entry script, and
+  vendored libxcb-cursor. Unused Qt translations are dropped.
+- First-week setup (2026-09-10). A new account is asked for school days and
+  hours, one sport or practice, and the first homework, then Solve runs. Every
+  step can be skipped. An empty week shows a Set up my week banner.
+- Add dialog (2026-09-10). Dragging or clicking empty calendar space opens a
+  dialog on that time range instead of adding a block at once. The sidebar now
+  holds type chips (School, Homework, Study, Sports and more) with a hint for
+  the chosen type, plus Add without dragging.
+- Desktop: launching FlexWeek again while it runs brings the open window
+  forward instead of starting a second copy (2026-09-10).
 - Focus timers. Start a pomodoro on a task the solver has placed, then pause,
   skip or reset it. Sessions and minutes are kept on the task and survive a save.
 - Alarms you set yourself, separate from your schedule. They live in
@@ -39,7 +55,30 @@ All notable changes to FlexWeek are documented here. Format follows
 - Optional activity category with a thin color palette (School, Study, Homework,
   Sports, Activity, Meals, Free); older weeks without a category still load.
 
+### Changed
+- Create account and Log in are separate screens (2026-09-10). Create account
+  is shown first; logging out opens Log in. The app says Log in and Log out.
+- Locked and flexible are labeled Fixed time and Flexible, each with a one-line
+  explanation (2026-09-10). Repeat days, priority, energy, course, Spotify and
+  Completed are under More options. A flexible task states which days Solve
+  may use and when it is due.
+- School starts at 08:00–14:30 Monday to Friday and homework at 1 hour when
+  added without dragging. Time needed is chosen from a list instead of typed
+  in minutes (2026-09-10).
+- For the current week, a new flexible task may use today onward, not days
+  that are already over (2026-09-10).
+- After Solve, badges read Tight fit or At risk, and tasks with room to spare
+  get none. Results open with a sentence such as "Placed 2 of 3 tasks." The
+  Focus timer section appears only once a task has a time. Now / Next is one
+  line in the week bar (2026-09-10).
+
 ### Fixed
+- The editor no longer saves a task with no days, or a task due before every
+  day it may use. It keeps the dialog open and names the problem (2026-09-10).
+- Desktop: the tray icon was missing from the packaged app, so closing the
+  window left FlexWeek running with no window and no way back. The icon now
+  loads, the first close explains that FlexWeek is still in the tray, and
+  closing quits when no tray icon is visible (2026-09-10).
 - The Keep alerts visible until handled setting now keeps desktop tray alerts
   until you click them. Unchecked alerts still disappear after ten seconds.
 - Skip, pause, or a second complete during a focus-session save no longer

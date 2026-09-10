@@ -60,7 +60,8 @@ def main() -> int:
             print(f"FAILED: {error}", file=sys.stderr)
             return 1
         steps = [
-            ("JavaScript syntax", [node, "--check", "frontend/app.js"]),
+            *((f"JavaScript syntax {script.name}", [node, "--check", str(script.relative_to(ROOT))])
+              for script in sorted((ROOT / "frontend").glob("*.js"))),
             ("Frontend behavior", [node, "--test", "--test-reporter=tap", *tests]),
             ("Python lint", [sys.executable, "-m", "ruff", "check", "."]),
             ("Backend types", [sys.executable, "-m", "mypy", "backend"]),

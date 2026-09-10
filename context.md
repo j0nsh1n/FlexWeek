@@ -1,42 +1,44 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-09. Branch `feat/phase7-focus-tools`.
-- Phase 7 focus tools are in: pomodoro timers on placed tasks, standalone
-  alarms with a dismiss/snooze dialog, Spotify share links on blocks and
-  alarms, a Now / Next line, timer and do-not-disturb preferences, and desktop
-  tray notifications. Three GLM leftovers from that slice are now fixed:
-  desktop DND linger, non-reentrant focus skip during save, and import of a
-  pomodoro parent with its chunks.
-- Gates green: Ruff, mypy over 22 files, 160 Python tests and 71 frontend
-  tests, JavaScript syntax. The tray WebEngine case checks that a
-  `flexweek-stay` notification is presented with timeout 0.
-- Phase 7 is verified in a real browser, not only in the DOM stub. The
-  `phase7` WebEngine case starts a focus session and checks the panel counts,
-  that pause stops the countdown, that skip changes phase and reset closes it,
-  then adds an alarm through the preferences dialog.
-- Phase 5 calendar interactions and Phase 6 scheduling recovery remain in
-  place. Accounts, Monday-keyed weeks, 15-minute placement and per-day
-  `missed_days` recovery are still the product model.
-- Windows execution, Safari/iPhone, physical touch, full packaged flows and OS
-  notification delivery remain unverified. Desktop tray reminders beyond the
-  notification bridge are deferred.
+- Date: 2026-09-10. Branch `feat/normie-first-open` (off `main` 652a92b via
+  `feat/rookie-ux-slice`), not merged.
+- Rookie UX is in: Create account and Log in are separate screens, Create
+  account shows first, a new account gets a four-step setup, dragging or
+  clicking the grid opens an Add dialog, and Solve results use plain words.
+- First-open packaging is in: Linux tar.gz with README, icon, `.desktop` and
+  vendored libxcb-cursor; Windows zip with SmartScreen note and README; GitHub
+  release text leads with Download for Windows / Linux. Checksums are extra
+  files. Chromebooks are pointed at a hosted web URL when one exists.
+- Gates green 2026-09-10: ruff, mypy over 22 files, 183 Python tests and 86
+  frontend tests, including the real WebEngine register probe.
+- Windows execution on a real PC, Safari/iPhone, physical touch and OS
+  notification delivery remain unverified. Hosted web URL is not online.
 - Default desktop mode uses a local database. Hosted mode uses the configured
   server; there is no automatic synchronization between them.
 
 ## Repo Landmarks
 ```
+docs/cac-build-plan.md   original Sep 6 contest brief (working title Reslot)
+.github/workflows/       verify.yml (mypy), codeql.yml, release packages
 DESKTOP.md               PySide6 QWebEngineView recommendation + build status
 desktop/origin.py        origin resolution, no Qt imports (unit-tested)
 desktop/server.py        bundled uvicorn on a loopback port, no Qt imports
 desktop/main.py          Qt window, persistent profile, retry panel
 desktop/build_linux.sh   staged Linux build, previous artifacts preserved
+desktop/package_linux.sh release tar.gz with README, icon and .desktop
+desktop/check_bundle.py  glibc and missing-library check, no Qt imports
 desktop/build_windows.ps1 Windows standalone build preparation
 desktop/tests/           origin/server tests and isolated real WebEngine probes
 backend/weeks.py         week-date helpers, no framework import
 backend/app.py           account/session/ownership APIs and static frontend
 backend/storage.py       SQLite, scrypt, hashed sessions
-frontend/app.js          account lifecycle, editor, server saves
+frontend/app.js          week state, grid, saves, solve, alarms, CATEGORIES table
+frontend/editor.js       Add/Edit dialog: draft -> draftProblem -> draftPatch
+frontend/setup.js        first-week setup, built on editor drafts
+frontend/focus.js        focus timer, Now / Next line
+frontend/auth.js         Create account / Log in screens, session start (loads last)
+frontend/tests/app-scripts.mjs  loads index.html's scripts in order for DOM-stub tests
 ```
 
 ## Domain Model
@@ -83,21 +85,35 @@ There is no automatic synchronization between those databases.
 - Qt WebEngine cannot be statically linked; onedir Chromium libs are expected.
 - No Qt WebChannel / pywebview js_api in v1 (cookies and CSRF stay on the page).
 - License file is GPL-3.0. Qt for Python is LGPLv3/GPLv2/commercial.
+- Frontend scripts are classic deferred scripts sharing one global scope, not
+  modules, so there is still no build step. A script's top-level code can only
+  reach scripts loaded before it. The tests run them in index.html order.
+- The tray icon path is anchored on the `backend` package, because Nuitka puts
+  `desktop/main.py` at the bundle root as `__main__`.
+- A new flexible task in the week on screen may use today onward. The solver
+  does not know today's date, so without this it placed new homework on days
+  already over.
+- The dialog offers Fixed or Flexible only for a new item; editing keeps the
+  existing kind, because converting needs completed_day and start cleanup that
+  no flow asks for yet.
+- Windows ICU (icuuc/icuin) is a system DLL since 1703. Copying it out of
+  System32 would redistribute Microsoft's files; the bundle check requires the
+  import to be satisfied by Windows 10 1809+ instead.
+- Linux ships a tar.gz rather than an AppImage so the executable bit survives
+  and no extra runtime is required. Unused Qt `.qm` files are dropped; the
+  Chromium en-US locale pack stays.
 
 ## Session Handoff
-- 2026-09-09, `feat/phase7-focus-tools`: fixed the three GLM leftovers Claude
-  left. Desktop DND now lingers via the `flexweek-stay` tag (non-DND still
-  closes at 10s). Focus skip/pause cannot re-enter a completion save.
-  Import and PUT /api/week reject a parent stored with its split chunks.
-  Gates re-run green on 2026-09-09; Linux artifact rebuilt.
-- The editor disables every control while a save is in flight, so a click
-  during that window is a visible no-op rather than a bug. A probe that does
-  not wait for the save to settle will wrongly report the Add task button as
-  dead; wait for `saving === false` or for the status to start with "Saved".
-- Next: the remaining Phase 7 items in roadmap.md that are not yet built,
-  notably splitting long blocks into pomodoro chunks on the grid, free-gap
-  visualization and the block-start notification lead time.
-- `spec.md` still does not document `completed_day` or any Phase 7 field. That
-  contract update needs a separate approved spec edit.
-- The untracked `Github Templates/` and `reslot-cac-build-plan.md` remain
-  untouched.
+- 2026-09-10, `feat/normie-first-open`: GitHub kit and contest brief organized.
+  CodeQL lives at `.github/workflows/codeql.yml`. Generic kit CI was not
+  installed (pyright, `tests/` at repo root). Original Sep 6 plan archived as
+  `docs/cac-build-plan.md`. `spec.md` now matches the shipped product (desktop,
+  cascade/slack, frontend split, mypy/verify.py, Phase 7 fields, first-open).
+  Packaging work from this branch is still in the working tree. Nothing pushed.
+- A copy of dist/FlexWeek was finished in /tmp/fw-finish-test: libxcb-cursor
+  and friends were vendored. The glibc 2.38 check still fails on this Fedora
+  Python (GLIBC_ABI_GNU2_TLS). The Linux release tarball has to be built on
+  Ubuntu 24.04 (the CI `linux` job). Container smoke was not run against a
+  shippable archive.
+- Open: hosted web URL, a hand check of close-to-tray and of the Windows zip
+  on a real PC.

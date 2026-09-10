@@ -83,12 +83,17 @@ $NuitkaArgs = @(
     '--include-package=desktop',
     '--include-package=backend',
     '--nofollow-import-to=desktop.tests,backend.tests',
+    # Type-checking tools and uvicorn extras desktop/server.py never enables;
+    # the same list as build_linux.sh.
+    '--nofollow-import-to=mypy,pydantic.mypy,uvloop,httptools,watchfiles,websockets,yaml',
     '--msvc=latest',
     "--include-data-dir=$(Join-Path $Root 'frontend')=frontend",
     '--noinclude-data-files=frontend/tests/*',
     '--noinclude-dlls=*.cpp.o',
     '--noinclude-dlls=*.qsb',
     '--include-qt-plugins=networkinformation,platforminputcontexts,position,qmllint,qmltooling,vectorimageformats',
+    '--noinclude-qt-plugins=printsupport',
+    '--include-windows-runtime-dlls=yes',
     '--output-filename=FlexWeek.exe',
     "--output-dir=$Stage",
     "--windows-icon-from-ico=$(Join-Path $Root 'frontend\logo.png')",
@@ -127,6 +132,28 @@ if (-not (Test-Path -LiteralPath $BuiltExe -PathType Leaf)) {
     Fail "Nuitka exited 0 but $BuiltExe is missing. Nothing published; staging kept at $Stage"
 }
 
+# Same trimming as desktop/finish_linux_bundle.sh: Qt tool translations are never
+# loaded, Chromium needs only its en-US locale pack, DevTools resources serve
+# DevTools only, and .debug.pak files belong to debug builds of Qt.
+Get-ChildItem -LiteralPath $Built -Recurse -File -Filter '*.qm' | Remove-Item
+Get-ChildItem -LiteralPath $Built -Recurse -File -Filter '*.pak' |
+    Where-Object { $_.Directory.Name -eq 'qtwebengine_locales' -and $_.Name -ne 'en-US.pak' } | Remove-Item
+Get-ChildItem -LiteralPath $Built -Recurse -File -Filter '*.debug.pak' | Remove-Item
+Get-ChildItem -LiteralPath $Built -Recurse -File -Filter 'qtwebengine_devtools_resources*.pak' | Remove-Item
+
+# Every imported DLL must be in the bundle or part of Windows 10 1809+. System
+# DLLs such as icuuc.dll are checked for, never copied (see check_bundle.py).
+try {
+    $env:PYTHONPATH = $Root
+    & $VenvPython -m desktop.check_bundle windows $Built
+    $CheckExitCode = $LASTEXITCODE
+} finally {
+    $env:PYTHONPATH = $PreviousPythonPath
+}
+if ($CheckExitCode -ne 0) {
+    Fail "Bundle check failed. Nothing published; staging kept at $Stage" $CheckExitCode
+}
+
 # Directory.Move refuses an existing destination, including one created after
 # the check above; Move-Item could instead nest the bundle into that directory.
 try {
@@ -135,6 +162,17 @@ try {
     Fail "Could not publish the bundle: $($_.Exception.Message). Staging kept at $Stage"
 }
 $Exe = Join-Path $Destination 'FlexWeek.exe'
+Copy-Item -LiteralPath (Join-Path $Root 'LICENSE') -Destination (Join-Path $Destination 'LICENSE.txt')
+Copy-Item -LiteralPath (Join-Path $Root 'frontend\logo.png') -Destination (Join-Path $Destination 'flexweek.png')
+try {
+    $env:PYTHONPATH = $Root
+    & $VenvPython -m desktop.readme (Join-Path $Root 'desktop\windows\README.txt') (Join-Path $Destination 'README.txt')
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Could not write README.txt into the bundle" $LASTEXITCODE
+    }
+} finally {
+    $env:PYTHONPATH = $PreviousPythonPath
+}
 
 Write-Host ''
 Write-Host "Built: $Exe"

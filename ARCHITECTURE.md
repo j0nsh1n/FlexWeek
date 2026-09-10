@@ -9,6 +9,8 @@
 
 The browser sends weeks to the Python solver; it does not implement placement.
 A solver result is a preview. Editor saves persist the student's entered blocks.
+The original Sep 6 contest brief (working title Reslot) is archived in
+[docs/cac-build-plan.md](docs/cac-build-plan.md).
 
 ## Data flow
 
@@ -40,10 +42,11 @@ Demo JSON remains test-only; no product endpoint exposes sample weeks.
 
 Monday–Sunday day indices, local HH:MM strings, 06:00–23:00, 15-minute slots:
 68 per day and 476 per week. Overlap uses half-open ranges `[start, end)`.
-Dated multi-week navigation is a future data-model migration.
+Weeks are keyed by the Monday of that week. See `spec.md`.
 
-## Next client
+## Desktop client
 
-The planned separate desktop application is a PySide6 QWebEngineView window that
-loads the hosted origin and shares the web UI and account cookies. Windows/Linux
-are provisional targets. There is no native JavaScript bridge. See DESKTOP.md.
+The desktop application is a PySide6 QWebEngineView window that runs the FastAPI
+backend in-process on a loopback port, or loads a hosted origin when
+`FLEXWEEK_DESKTOP_ORIGIN` is set. Windows and Linux are the download targets.
+There is no native JavaScript bridge. See DESKTOP.md.

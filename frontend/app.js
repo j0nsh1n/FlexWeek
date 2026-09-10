@@ -8,16 +8,23 @@ const SNAP_MIN = 15;
 const DAY_START_MIN = START_HOUR * 60;
 const DAY_END_MIN = END_HOUR * 60;
 const EDGE_PX = 8;
+const WEEKDAYS = [0, 1, 2, 3, 4];
+// One table drives the sidebar chips, the editor, setup and the grid colors.
+// `kind` is what a new item of that type starts as; `preset` is the time it
+// starts with when it is added without dragging a range on the calendar.
 const CATEGORIES = [
-  { id: "class", label: "School", color: "#3b82f6" },
-  { id: "study", label: "Study", color: "#8b5cf6" },
-  { id: "assignments", label: "Homework", color: "#ef4444" },
-  { id: "exercise", label: "Sports", color: "#10b981" },
-  { id: "extra", label: "Activity", color: "#ec4899" },
-  { id: "meals", label: "Meals", color: "#f97316" },
-  { id: "sleep", label: "Sleep", color: "#6366f1" },
-  { id: "free", label: "Free", color: "#94a3b8" },
+  { id: "class", label: "School", color: "#3b82f6", kind: "locked", preset: { start: "08:00", end: "14:30", days: WEEKDAYS } },
+  { id: "assignments", label: "Homework", color: "#ef4444", kind: "flexible", preset: { duration_min: 60 } },
+  { id: "study", label: "Study", color: "#8b5cf6", kind: "flexible", preset: { duration_min: 60 } },
+  { id: "exercise", label: "Sports", color: "#10b981", kind: "locked", preset: { start: "15:30", end: "17:00" } },
+  { id: "extra", label: "Activity", color: "#ec4899", kind: "locked", preset: { start: "17:00", end: "18:00" } },
+  { id: "meals", label: "Meals", color: "#f97316", kind: "locked", preset: { start: "18:00", end: "18:30" } },
+  { id: "sleep", label: "Sleep", color: "#6366f1", kind: "locked", preset: { start: "22:00", end: "23:00" } },
+  { id: "free", label: "Free", color: "#94a3b8", kind: "locked", preset: { start: "19:00", end: "20:00" } },
 ];
+const KIND_LABEL = { locked: "Fixed time", flexible: "Flexible" };
+// An "ok" slack needs no badge; its sentence still appears in the Solve results.
+const SLACK_BADGE = { tight: "Tight fit", danger: "At risk" };
 
 const EXPORT_FORMAT = "flexweek-week";
 const EXPORT_VERSION = 1;
@@ -208,11 +215,13 @@ function alarmKey(date, alarm) {
   return [date, alarm.id, alarm.time].join("|");
 }
 
+function categoryById(category) {
+  return CATEGORIES.find(function (item) { return item.id === category; }) || null;
+}
+
 function categoryLabel(category) {
-  for (let i = 0; i < CATEGORIES.length; i += 1) {
-    if (CATEGORIES[i].id === category) return CATEGORIES[i].label;
-  }
-  return "";
+  const found = categoryById(category);
+  return found ? found.label : "";
 }
 
 function exportWeekPayload(weekStart, blocks) {
@@ -474,6 +483,13 @@ function snapMinute(minute) {
   return Math.max(DAY_START_MIN, Math.min(DAY_END_MIN, m));
 }
 
+function formatDuration(minutes) {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (!hours) return rest + " min";
+  return hours + " h" + (rest ? " " + rest + " min" : "");
+}
+
 function formatMinute(minute) {
   const clamped = Math.max(DAY_START_MIN, Math.min(DAY_END_MIN, minute));
   return pad(Math.floor(clamped / 60)) + ":" + pad(clamped % 60);
@@ -521,10 +537,8 @@ function resizeBottomRange(startMin, endMin, deltaMin) {
 }
 
 function categoryColor(category) {
-  for (let i = 0; i < CATEGORIES.length; i += 1) {
-    if (CATEGORIES[i].id === category) return CATEGORIES[i].color;
-  }
-  return null;
+  const found = categoryById(category);
+  return found ? found.color : null;
 }
 
 const STORAGE_KEY = "flexweek.week.v1";
@@ -539,15 +553,6 @@ const debugUnplacedEl = document.getElementById("debug-unplaced");
 const debugChangesEl = document.getElementById("debug-changes");
 const debugMovesEl = document.getElementById("debug-moves");
 const flexNoteEl = document.getElementById("flex-note");
-const formEl = document.getElementById("block-form");
-const formErrorEl = document.getElementById("form-error");
-const formHeadingEl = document.getElementById("form-heading");
-const formDeleteEl = document.getElementById("form-delete");
-const formMissedEl = document.getElementById("form-missed");
-const lockedFieldsEl = document.getElementById("f-locked-fields");
-const flexFieldsEl = document.getElementById("f-flex-fields");
-const startEl = document.getElementById("f-start");
-const dueTimeEl = document.getElementById("f-due-time");
 
 function hourRange() {
   const hours = [];
@@ -642,22 +647,6 @@ function slotTimes() {
   return times;
 }
 
-function fillTimeSelect(select, includeBlank) {
-  select.innerHTML = "";
-  if (includeBlank) {
-    const blank = document.createElement("option");
-    blank.value = "";
-    blank.textContent = "—";
-    select.appendChild(blank);
-  }
-  slotTimes().forEach((time) => {
-    const opt = document.createElement("option");
-    opt.value = time;
-    opt.textContent = time;
-    select.appendChild(opt);
-  });
-}
-
 function isValidWeek(data) {
   if (!data || typeof data !== "object" || !Array.isArray(data.blocks)) return false;
   return importBlocksError(data.blocks) === null;
@@ -684,8 +673,6 @@ let account = null;
 let epoch = 0;
 let saving = false;
 const suspendedDrafts = new Map();
-let editingOccurrenceDay = null;
-let editingScope = "series";
 let prefs = {
   theme: "nocturne",
   reminders_enabled: false,
@@ -754,64 +741,6 @@ function lockEditor(locked) {
   document.getElementById("import-week").disabled = locked;
 }
 
-function signedOut(message = "Sign in to open your week.", preserve = true) {
-  const pending = account ? dirtyWeeks() : [];
-  if (preserve && pending.length) {
-    suspendedDrafts.set(account.id, pending.map(function (weekStart) {
-      const state = weekState(weekStart);
-      return { weekStart: weekStart, blocks: structuredClone(state.blocks), revision: state.revision };
-    }));
-  }
-  epoch += 1;
-  account = null;
-  syncReminderLoop();
-  stopPhase7Loops();
-  resetFocusTimer(false);
-  firedReminders.clear();
-  firedAlarms.clear();
-  snoozedAlarms.clear();
-  pendingAlarms = [];
-  alarmQueue = [];
-  activeAlarm = null;
-  stopTone();
-  activeNotifications.forEach(function (notification) {
-    try { notification.close(); } catch (err) { /* ignore */ }
-  });
-  activeNotifications.clear();
-  clearTimeout(showReminderToast._timer);
-  const toast = document.getElementById("reminder-toast");
-  if (toast) { toast.hidden = true; toast.textContent = ""; }
-  const preferencesDialog = document.getElementById("prefs-dialog");
-  if (preferencesDialog && typeof preferencesDialog.close === "function") preferencesDialog.close();
-  const alarmDialog = document.getElementById("alarm-dialog");
-  if (alarmDialog && typeof alarmDialog.close === "function") alarmDialog.close();
-  hideContextMenu();
-  if (gridGesture) clearGhost(gridGesture.lane);
-  gridGesture = null;
-  weeks.clear();
-  savedWeeks = [];
-  selectedWeek = currentWeekStart();
-  saving = false;
-  focusBusy = false;
-  weekEl.replaceChildren();
-  flexibleEl.replaceChildren();
-  debugStatsEl.textContent = "";
-  debugUnplacedEl.replaceChildren();
-  debugMovesEl.replaceChildren();
-  formEl.reset();
-  closeForm();
-  planner.hidden = true;
-  debugEl.hidden = true;
-  authPanel.hidden = false;
-  document.getElementById("account-controls").hidden = true;
-  document.getElementById("account-name").textContent = "";
-  document.getElementById("import-panel").hidden = true;
-  saveActions.hidden = true;
-  document.documentElement.dataset.theme = "nocturne";
-  lockEditor(false);
-  setStatus(message);
-}
-
 async function api(path, options = {}, protectedRequest = true) {
   const requestEpoch = epoch;
   const controller = new AbortController();
@@ -825,7 +754,7 @@ async function api(path, options = {}, protectedRequest = true) {
     });
     if (requestEpoch !== epoch) throw new Error("Session changed. Please try again.");
     if (response.status === 401 && protectedRequest) {
-      signedOut("Your session ended. Sign in again; unsaved edits can be restored to the same account.");
+      signedOut("Your session ended. Log in again; unsaved edits come back when you log in to the same account.");
     }
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
@@ -883,53 +812,6 @@ async function saveWeek() {
       lockEditor(false);
       document.getElementById("retry-save").disabled = state.conflict;
     }
-  }
-}
-
-async function loadAccount(identity) {
-  epoch += 1;
-  const loadEpoch = epoch;
-  account = identity;
-  const asked = currentWeekStart();
-  try {
-    const [week, saved, preferences] = await Promise.all([
-      api("/api/week?week_start=" + asked), api("/api/weeks"), api("/api/preferences"),
-    ]);
-    if (loadEpoch !== epoch) return;
-    weeks.clear();
-    savedWeeks = Array.isArray(saved.weeks) ? saved.weeks.slice() : [];
-    selectedWeek = isWeekStart(week.week_start) ? week.week_start : asked;
-    const state = weekState();
-    state.blocks = week.blocks;
-    state.revision = week.revision;
-    const suspendedDraft = suspendedDrafts.get(account.id);
-    if (suspendedDraft) {
-      suspendedDraft.forEach(function (draft) {
-        const target = weekState(draft.weekStart);
-        target.blocks = draft.blocks;
-        // Only the week just fetched has a known server revision to compare.
-        target.conflict = draft.weekStart === selectedWeek && draft.revision !== target.revision;
-        target.revision = draft.revision;
-        target.dirty = true;
-      });
-      suspendedDrafts.delete(account.id);
-    }
-    applyPreferences(preferences);
-    authPanel.hidden = true;
-    planner.hidden = false;
-    document.getElementById("account-controls").hidden = false;
-    document.getElementById("account-name").textContent = identity.username;
-    saveActions.hidden = !state.dirty;
-    document.getElementById("retry-save").disabled = state.conflict;
-    lockEditor(false);
-    renderWeekNav();
-    renderWeek();
-    setStatus(state.dirty ? "Unsaved edits restored. " + (state.conflict ? "Download your draft and reload the newer week." : "Press Retry save.") : weekStatus());
-    try {
-      document.getElementById("import-panel").hidden = !localStorage.getItem(STORAGE_KEY);
-    } catch { document.getElementById("import-panel").hidden = true; }
-  } catch (error) {
-    if (loadEpoch === epoch) signedOut("Could not open your week. " + error.message);
   }
 }
 
@@ -1025,12 +907,13 @@ function newId() {
 
 function weekSummary() {
   const blocks = weekState().blocks;
-  const locked = blocks.filter(function (b) { return b.kind === "locked"; }).length;
+  const fixed = blocks.filter(function (b) { return b.kind === "locked"; }).length;
   const flex = blocks.filter(function (b) { return b.kind === "flexible"; }).length;
-  return locked + " locked, " + flex + " flexible";
+  return fixed + " fixed, " + flex + " flexible";
 }
 
 function renderWeek() {
+  document.getElementById("empty-week").hidden = weekState().blocks.length > 0;
   buildGrid(weekState().blocks);
 }
 
@@ -1040,6 +923,14 @@ function clearSolveResult(note = "Press Solve to place these around school and s
   debugChangesEl.hidden = true;
   debugMovesEl.replaceChildren();
   flexNoteEl.textContent = note;
+}
+
+/** The one refresh path after the week's blocks change: drop the stale solve, save, redraw. */
+function commitWeek(note) {
+  clearSolveResult(note);
+  const saved = saveWeek();
+  renderWeek();
+  return saved;
 }
 
 function insightFor(explanations, blockId) {
@@ -1068,39 +959,16 @@ function selectBlock(blockId, day) {
   });
 }
 
-function applyCreateLocked(day, startMin, endMin) {
-  if (!account || saving) return null;
+/** A drag across empty grid opens the editor on that range. Nothing is added until it is saved. */
+function requestCreate(day, startMin, endMin) {
+  if (!account || saving) return false;
   const range = createDragRange(startMin, endMin);
-  if (!range) return null;
-  const block = {
-    id: newId(),
-    title: "New block",
-    kind: "locked",
-    duration_min: range.endMin - range.startMin,
-    days: [day],
-    priority: 3,
-    energy: "medium",
-    course: null,
-    earliest: null,
-    latest: null,
-    start: formatMinute(range.startMin),
-    missed_days: [],
-    category: null,
-    completed: false,
-  };
-  weekState().blocks.push(block);
-  clearSolveResult();
-  selectBlock(block.id, day);
-  saveWeek();
-  renderWeek();
-  return block;
+  return range ? openCreateDialog(day, range.startMin, range.endMin) : false;
 }
 
-function applyCreateClick(day, startMin) {
-  const occupied = occupiedIntervalsForDay(weekState().blocks, day);
-  const range = createClickRange(startMin, occupied);
-  if (!range) return null;
-  return applyCreateLocked(day, range.startMin, range.endMin);
+function requestCreateAt(day, startMin) {
+  const range = createClickRange(startMin, occupiedIntervalsForDay(weekState().blocks, day));
+  return range ? requestCreate(day, range.startMin, range.endMin) : false;
 }
 
 function applyBlockTimes(blockId, startMin, endMin) {
@@ -1114,9 +982,7 @@ function applyBlockTimes(blockId, startMin, endMin) {
   if (dur < SNAP_MIN || startMin < DAY_START_MIN || endMin > DAY_END_MIN) return false;
   block.start = formatMinute(startMin);
   block.duration_min = dur;
-  clearSolveResult();
-  saveWeek();
-  renderWeek();
+  commitWeek();
   return true;
 }
 
@@ -1128,9 +994,7 @@ function deleteBlockById(blockId) {
   if (state.blocks.length === before) return false;
   if (selectedBlockId === blockId) selectBlock(null, null);
   closeForm();
-  clearSolveResult();
-  saveWeek();
-  renderWeek();
+  commitWeek();
   return true;
 }
 
@@ -1293,12 +1157,8 @@ function bindDayLane(lane, day) {
     try { lane.releasePointerCapture(gesture.pointerId); } catch (err) { /* harness */ }
     if (event.type === "pointercancel") return;
     if (gesture.type === "create") {
-      if (gesture.moved) {
-        const range = createDragRange(gesture.startMin, gesture.curMin);
-        if (range) applyCreateLocked(gesture.day, range.startMin, range.endMin);
-      } else {
-        applyCreateClick(gesture.day, gesture.startMin);
-      }
+      if (gesture.moved) requestCreate(gesture.day, gesture.startMin, gesture.curMin);
+      else requestCreateAt(gesture.day, gesture.startMin);
       return;
     }
     if (gesture.moved && gesture.preview) {
@@ -1321,7 +1181,7 @@ function bindDayLane(lane, day) {
     const source = weekState().blocks.find(function (item) { return item.id === blockEl.dataset.id; });
     if (source) {
       selectBlock(source.id, day);
-      openForm(source.kind, source, day);
+      openBlockEditor(source, day);
     }
   });
 
@@ -1403,8 +1263,8 @@ function buildGrid(blocks, explanations = []) {
         el.style.borderLeftColor = color;
         el.style.borderLeftWidth = "4px";
       }
-      el.title = block.title + (block.course ? " · " + block.course : "") +
-        (missed ? " · missed" : "") + " (double-click to edit)";
+      el.title = block.title + " · " + KIND_LABEL[block.kind] + (block.course ? " · " + block.course : "") +
+        (missed ? " · missed" : "") + " · double-click to edit";
 
       const title = document.createElement("div");
       title.className = "title";
@@ -1413,7 +1273,7 @@ function buildGrid(blocks, explanations = []) {
 
       const sub = document.createElement("div");
       sub.className = "sub";
-      sub.textContent = block.duration_min + " min" + (missed ? " · missed" : "") +
+      sub.textContent = formatDuration(block.duration_min) + (missed ? " · missed" : "") +
         (block.focus_sessions ? " · " + block.focus_sessions + " focus" : "");
       el.appendChild(sub);
 
@@ -1431,10 +1291,10 @@ function buildGrid(blocks, explanations = []) {
       }
 
       const insight = insightFor(explanations, block.id);
-      if (insight) {
+      if (insight && SLACK_BADGE[insight.slack_status]) {
         const slack = document.createElement("span");
         slack.className = "slack-badge slack-" + insight.slack_status;
-        slack.textContent = insight.slack_status + " slack";
+        slack.textContent = SLACK_BADGE[insight.slack_status];
         slack.title = insight.message;
         el.appendChild(slack);
       }
@@ -1457,8 +1317,11 @@ function buildGrid(blocks, explanations = []) {
 function renderFlexible(flex) {
   flexibleEl.innerHTML = "";
   if (!flex.length) {
+    // After Solve the note above the list already says every task was placed.
+    if (weekState().trace) return;
     const empty = document.createElement("li");
-    empty.textContent = "None unplaced.";
+    empty.className = "empty-note";
+    empty.textContent = "No tasks yet. Pick Homework above, then drag on a day you can work on it.";
     flexibleEl.appendChild(empty);
     return;
   }
@@ -1483,12 +1346,13 @@ function renderFlexible(flex) {
       pills.appendChild(span);
     }
 
-    pill(block.duration_min + " min");
-    pill(PRIORITY_LABEL[block.priority] || "P" + block.priority);
-    if (block.energy) pill(block.energy);
-    if (block.course) pill(block.course);
-    if (block.category) pill(categoryLabel(block.category) || block.category);
+    pill(formatDuration(block.duration_min));
     if (block.latest) pill("due " + block.latest);
+    if (block.category) pill(categoryLabel(block.category) || block.category);
+    if (block.course) pill(block.course);
+    // Homework priority and medium energy are the defaults, so only a change is worth a pill.
+    if (block.priority && block.priority !== 3) pill(PRIORITY_LABEL[block.priority] || "P" + block.priority);
+    if (block.energy && block.energy !== "medium") pill(block.energy + " energy");
     if (block.completed) pill("done");
     if (block.focus_sessions) pill(block.focus_sessions + " focus");
 
@@ -1506,7 +1370,7 @@ function renderFlexible(flex) {
     }
     li.addEventListener("click", function () {
       const source = weekState().blocks.find(function (item) { return item.id === block.id; });
-      if (source) openForm(source.kind, source);
+      if (source) openBlockEditor(source);
     });
     flexibleEl.appendChild(li);
   });
@@ -1546,22 +1410,25 @@ function detailButton(text, blockId, day = null) {
       return;
     }
     const source = weekState().blocks.find(function (item) { return item.id === blockId; });
-    if (source) openForm(source.kind, source, day);
+    if (source) openBlockEditor(source, day);
   });
   return button;
 }
 
+function solveSummary(trace) {
+  const placed = (trace.placed || []).filter(function (block) { return block.kind === "flexible"; }).length;
+  const waiting = (trace.unplaced || []).length;
+  const total = placed + waiting;
+  if (!total) return "No flexible tasks to place yet. Fixed times stay where they are.";
+  const head = "Placed " + placed + " of " + total + (total === 1 ? " task." : " tasks.");
+  if (!waiting) return head;
+  return head + " " + waiting + (waiting === 1 ? " still needs" : " still need") + " a time. The reasons are below.";
+}
+
 function renderDebug(trace) {
   debugEl.hidden = false;
-  const placedFlex = (trace.placed || []).filter((b) => b.kind === "flexible").length;
-  debugStatsEl.textContent =
-    "solve_ms " +
-    Number(trace.solve_ms).toFixed(1) +
-    " · placed " +
-    placedFlex +
-    " · unplaced " +
-    (trace.unplaced || []).length +
-    (trace.complete ? " · complete" : " · incomplete");
+  debugStatsEl.textContent = solveSummary(trace);
+  debugStatsEl.title = "Solved in " + Number(trace.solve_ms).toFixed(1) + " ms";
   debugUnplacedEl.innerHTML = "";
   (trace.explanations || []).forEach((item) => {
     const li = document.createElement("li");
@@ -1570,7 +1437,7 @@ function renderDebug(trace) {
   });
   if (!(trace.explanations || []).length) {
     const li = document.createElement("li");
-    li.textContent = "All tasks fit their requested windows.";
+    li.textContent = "Every task fits before its deadline.";
     debugUnplacedEl.appendChild(li);
   }
 
@@ -1604,119 +1471,6 @@ function renderDebug(trace) {
     ));
     debugMovesEl.appendChild(li);
   });
-}
-
-function showFormError(msg) {
-  if (!msg) {
-    formErrorEl.hidden = true;
-    formErrorEl.textContent = "";
-    return;
-  }
-  formErrorEl.hidden = false;
-  formErrorEl.textContent = msg;
-}
-
-function selectedDays() {
-  return Array.from(formEl.querySelectorAll('input[name="f-day"]:checked')).map(function (el) {
-    return Number(el.value);
-  });
-}
-
-function setSelectedDays(days) {
-  formEl.querySelectorAll('input[name="f-day"]').forEach(function (el) {
-    el.checked = days.indexOf(Number(el.value)) !== -1;
-  });
-}
-
-function parseLatest(latest) {
-  if (!latest) return { day: "", time: "" };
-  const parts = latest.trim().split(/\s+/);
-  if (parts.length >= 2) {
-    const name = parts[0].toLowerCase();
-    const idx = DAY_FULL.findIndex(function (day) {
-      return day.toLowerCase() === name || day.slice(0, 3).toLowerCase() === name.slice(0, 3);
-    });
-    return { day: idx >= 0 ? String(idx) : "", time: parts[parts.length - 1] };
-  }
-  return { day: "", time: parts[0] || "" };
-}
-
-function ensureCategoryOptions() {
-  const select = document.getElementById("f-category");
-  if (!select) return;
-  if (select.dataset.ready !== "1") {
-    select.innerHTML = "";
-    const blank = document.createElement("option");
-    blank.value = "";
-    blank.textContent = "None";
-    select.appendChild(blank);
-    CATEGORIES.forEach(function (cat) {
-      const opt = document.createElement("option");
-      opt.value = cat.id;
-      opt.textContent = cat.label;
-      select.appendChild(opt);
-    });
-    select.dataset.ready = "1";
-  }
-  renderCategoryChips(document.getElementById("category-chips"), select.value || "", true);
-  renderCategoryChips(document.getElementById("category-legend"), "", false);
-}
-
-function renderCategoryChips(container, selected, interactive) {
-  if (!container) return;
-  container.innerHTML = "";
-  if (interactive) {
-    const none = document.createElement("button");
-    none.type = "button";
-    none.className = "category-chip" + (!selected ? " is-selected" : "");
-    none.textContent = "None";
-    none.addEventListener("click", function () {
-      document.getElementById("f-category").value = "";
-      renderCategoryChips(container, "", true);
-    });
-    container.appendChild(none);
-  }
-  CATEGORIES.forEach(function (cat) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "category-chip" + (selected === cat.id ? " is-selected" : "");
-    if (btn.style && typeof btn.style.setProperty === "function") {
-      btn.style.setProperty("--chip-color", cat.color);
-    } else if (btn.style) {
-      btn.style.borderLeftColor = cat.color;
-    }
-    btn.textContent = cat.label;
-    btn.dataset.category = cat.id;
-    if (interactive) {
-      btn.addEventListener("click", function () {
-        document.getElementById("f-category").value = cat.id;
-        renderCategoryChips(container, cat.id, true);
-      });
-    } else {
-      btn.disabled = true;
-    }
-    container.appendChild(btn);
-  });
-}
-
-function selectedEditScope() {
-  const checked = formEl.querySelector('input[name="f-scope"]:checked');
-  return checked ? checked.value : "series";
-}
-
-function setEditScope(scope) {
-  editingScope = scope === "occurrence" ? "occurrence" : "series";
-  formEl.querySelectorAll('input[name="f-scope"]').forEach(function (el) {
-    el.checked = el.value === editingScope;
-  });
-  const daysField = formEl.querySelector("fieldset.days");
-  if (daysField) {
-    const lockDays = editingScope === "occurrence" && editingOccurrenceDay !== null;
-    daysField.querySelectorAll('input[name="f-day"]').forEach(function (el) {
-      el.disabled = lockDays;
-      if (lockDays) el.checked = Number(el.value) === editingOccurrenceDay;
-    });
-  }
 }
 
 function applyPreferences(preferences) {
@@ -1800,9 +1554,7 @@ function toggleCompleted(blockId) {
     block.start = null;
     delete block.completed_day;
   }
-  clearSolveResult();
-  saveWeek();
-  renderWeek();
+  commitWeek();
   return true;
 }
 
@@ -1816,9 +1568,7 @@ function deleteOccurrenceById(blockId, day) {
   else state.blocks.splice(index, 1);
   if (selectedBlockId === blockId) selectBlock(null, null);
   closeForm();
-  clearSolveResult();
-  saveWeek();
-  renderWeek();
+  commitWeek();
   return true;
 }
 
@@ -1903,9 +1653,7 @@ async function importPayloadIntoWeek(parsed, mode) {
   if (problem) { setStatus(problem + " Nothing was imported."); return false; }
   state.blocks = merged;
   closeForm();
-  clearSolveResult();
-  renderWeek();
-  return saveWeek();
+  return commitWeek();
 }
 
 function showReminderToast(message) {
@@ -2040,33 +1788,6 @@ function currentDateInfo(now) {
   };
 }
 
-function updateLiveDisplay(nowDate) {
-  const target = document.getElementById("now-next");
-  if (!target) return;
-  const now = nowDate || new Date();
-  const info = currentDateInfo(now);
-  const state = weeks.get(info.week);
-  const result = nowAndNext(scheduledBlocksForState(state), info.day, info.minute);
-  const currentText = result.current ? "Now: " + result.current.title + " until " +
-    formatMinute(parseStart(result.current.start) + result.current.duration_min) : "Now: Free";
-  const nextText = result.next ? "Next: " + result.next.title + " at " + result.next.start : "Next: Nothing scheduled";
-  target.textContent = currentText + "\n" + nextText;
-  document.querySelectorAll(".current-time-line").forEach(function (line) {
-    if (typeof line.remove === "function") line.remove();
-    else line.hidden = true;
-  });
-  if (selectedWeek !== info.week || info.minute < DAY_START_MIN || info.minute >= DAY_END_MIN) return;
-  const lane = Array.from(weekEl.children).find(function (child) {
-    return child.classList && child.classList.contains("day-lane") && Number(child.dataset.day) === info.day;
-  });
-  if (!lane) return;
-  const line = document.createElement("div");
-  line.className = "current-time-line";
-  line.style.top = ((info.minute - DAY_START_MIN) / 60) * hourHeightRem() + "rem";
-  line.title = "Current time " + formatMinute(info.minute);
-  lane.appendChild(line);
-}
-
 function soundOnce(tone) {
   try {
     const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -2196,169 +1917,6 @@ function renderAlarmList() {
   });
 }
 
-function phaseDurationMs(phase) {
-  const minutes = phase === "work" ? prefs.timer_work_min :
-    (phase === "long_break" ? prefs.timer_long_break_min : prefs.timer_break_min);
-  return minutes * 60000;
-}
-
-function formatCountdown(milliseconds) {
-  const seconds = Math.max(0, Math.ceil(milliseconds / 1000));
-  return String(Math.floor(seconds / 60)).padStart(2, "0") + ":" + String(seconds % 60).padStart(2, "0");
-}
-
-function renderFocusPanel(nowMs) {
-  const panel = document.getElementById("focus-panel");
-  if (!panel) return;
-  panel.hidden = !focusState;
-  if (!focusState) return;
-  document.getElementById("focus-task").textContent = focusState.title;
-  document.getElementById("focus-phase").textContent = focusState.phase === "work" ? "Focus session" :
-    (focusState.phase === "long_break" ? "Long break" : "Break");
-  const left = focusState.running ? focusState.endsAt - (nowMs || Date.now()) : focusState.remainingMs;
-  document.getElementById("focus-time").textContent = formatCountdown(left);
-  document.getElementById("focus-pause").textContent = focusState.running ? "Pause" : "Resume";
-}
-
-function resetFocusTimer(hide) {
-  if (focusTimer) clearInterval(focusTimer);
-  focusTimer = null;
-  focusState = null;
-  const panel = document.getElementById("focus-panel");
-  if (panel && hide !== false) panel.hidden = true;
-}
-
-function resolveFocusPlacement(blockId, day) {
-  const state = weekState();
-  const source = state.blocks.find(function (block) { return block.id === blockId; });
-  if (!source) return null;
-  const placed = source.start ? source : state.trace && state.trace.placed.find(function (block) {
-    return block.id === blockId && (day === undefined || block.days.indexOf(day) !== -1);
-  });
-  return placed && placed.start ? { source: source, placed: placed, day: placed.days[0] } : null;
-}
-
-function startFocus(blockId, day) {
-  if (!account || saving || focusBusy) return false;
-  const found = resolveFocusPlacement(blockId, day);
-  if (!found || found.source.completed || found.source.pomodoro_role === "break") {
-    setStatus("Place an unfinished work block before starting focus.");
-    return false;
-  }
-  resetFocusTimer();
-  focusState = {
-    weekStart: selectedWeek,
-    blockId: blockId,
-    day: found.day,
-    start: found.placed.start,
-    title: found.source.title,
-    phase: "work",
-    cycles: 0,
-    running: true,
-    remainingMs: phaseDurationMs("work"),
-    endsAt: Date.now() + phaseDurationMs("work"),
-  };
-  renderFocusPanel();
-  focusTimer = setInterval(function () { focusTick(); }, 500);
-  if (focusTimer && typeof focusTimer.unref === "function") focusTimer.unref();
-  return true;
-}
-
-async function creditFocusSession() {
-  if (!focusState || focusState.weekStart !== selectedWeek) return;
-  const block = weekState().blocks.find(function (item) { return item.id === focusState.blockId; });
-  if (!block) return;
-  block.focus_sessions = Math.min(9999, (block.focus_sessions || 0) + 1);
-  block.focus_minutes = Math.min(71400, (block.focus_minutes || 0) + prefs.timer_work_min);
-  if (block.focus_minutes >= block.duration_min) {
-    block.completed = true;
-    if (block.kind === "flexible") {
-      block.start = focusState.start;
-      block.completed_day = focusState.day;
-    }
-  }
-  await saveWeek();
-  renderWeek();
-}
-
-async function advanceFocusPhase(completed) {
-  if (!focusState || focusBusy) return;
-  focusBusy = true;
-  try {
-    const oldPhase = focusState.phase;
-    if (oldPhase === "work") {
-      if (completed) await creditFocusSession();
-      if (!focusState) return;
-      focusState.cycles += completed ? 1 : 0;
-      focusState.phase = focusState.cycles > 0 && focusState.cycles % prefs.timer_long_break_every === 0
-        ? "long_break" : "break";
-    } else {
-      focusState.phase = "work";
-    }
-    focusState.running = true;
-    focusState.remainingMs = phaseDurationMs(focusState.phase);
-    focusState.endsAt = Date.now() + focusState.remainingMs;
-    const label = focusState.phase === "work" ? "Focus session" :
-      (focusState.phase === "long_break" ? "Long break" : "Break");
-    maybeNotify(label, focusState.title, true, focusState.phase === "work" ? "bright" : "soft");
-    renderFocusPanel();
-  } finally {
-    focusBusy = false;
-  }
-}
-
-function focusTick(nowMs) {
-  if (!focusState || !focusState.running) return;
-  const now = nowMs || Date.now();
-  if (focusState.endsAt <= now) {
-    focusState.running = false;
-    focusState.remainingMs = 0;
-    advanceFocusPhase(true);
-  }
-  renderFocusPanel(now);
-}
-
-function toggleFocusPause() {
-  if (!focusState || focusBusy || saving) return;
-  if (focusState.running) {
-    focusState.remainingMs = Math.max(0, focusState.endsAt - Date.now());
-    focusState.running = false;
-  } else {
-    focusState.running = true;
-    focusState.endsAt = Date.now() + focusState.remainingMs;
-  }
-  renderFocusPanel();
-}
-
-function renderFocusTasks() {
-  const list = document.getElementById("focus-tasks");
-  if (!list) return;
-  list.replaceChildren();
-  const scheduled = scheduledBlocksForState(weekState());
-  const placementById = new Map(scheduled.map(function (block) { return [block.id, block]; }));
-  weekState().blocks.filter(function (block) {
-    return block.pomodoro_role !== "break";
-  }).forEach(function (block) {
-    const item = document.createElement("li");
-    const name = document.createElement("strong");
-    name.textContent = block.title;
-    const count = document.createElement("small");
-    count.textContent = (block.focus_sessions || 0) + " sessions · " + (block.focus_minutes || 0) + " min";
-    const start = document.createElement("button");
-    start.type = "button";
-    start.textContent = "Focus";
-    start.disabled = block.completed || !placementById.has(block.id);
-    start.addEventListener("click", function () {
-      const placed = placementById.get(block.id);
-      startFocus(block.id, placed && placed.days[0]);
-    });
-    item.appendChild(name);
-    item.appendChild(count);
-    item.appendChild(start);
-    list.appendChild(item);
-  });
-}
-
 const TITLE_MAX = 80;
 
 /** Keep a split child inside the same title limit the server enforces.
@@ -2449,9 +2007,7 @@ function splitBlockIntoPomodoros(blockId, day) {
     return false;
   }
   state.blocks.splice(index, 1, ...children);
-  clearSolveResult("Focus chunks and breaks are saved on the grid.");
-  renderWeek();
-  saveWeek();
+  commitWeek("Focus chunks and breaks are saved on the grid.");
   return true;
 }
 
@@ -2512,222 +2068,11 @@ function syncPhase7Loops() {
   }
 }
 
-function openForm(kind, block, occurrenceDay = null, scope = null) {
-  if (!account || saving) return;
-  const editing = Boolean(block);
-  editingOccurrenceDay = Number.isInteger(occurrenceDay) ? occurrenceDay : null;
-  formEl.hidden = false;
-  showFormError("");
-  document.getElementById("f-kind").value = kind;
-  document.getElementById("f-id").value = editing ? block.id : "";
-  formHeadingEl.textContent = (editing ? "Edit " : "Add ") + (kind === "locked" ? "locked" : "task");
-  formDeleteEl.hidden = !editing;
-  const canChangeMissed = editing && kind === "locked" && editingOccurrenceDay !== null;
-  formMissedEl.hidden = !canChangeMissed || (!(block.missed_days || []).includes(editingOccurrenceDay) && !weekState().trace);
-  if (canChangeMissed) {
-    const isMissed = (block.missed_days || []).includes(editingOccurrenceDay);
-    formMissedEl.textContent = isMissed ? "Restore " + DAYS[editingOccurrenceDay] : "Mark " + DAYS[editingOccurrenceDay] + " missed";
-    formMissedEl.className = isMissed ? "secondary" : "danger";
-  }
-  lockedFieldsEl.hidden = kind !== "locked";
-  flexFieldsEl.hidden = kind !== "flexible";
-
-  const scopeEl = document.getElementById("edit-scope");
-  const showScope = editing && kind === "locked" && isSeries(block) && editingOccurrenceDay !== null;
-  if (scopeEl) scopeEl.hidden = !showScope;
-  if (showScope) {
-    setEditScope(scope === "series" ? "series" : "occurrence");
-  } else {
-    setEditScope("series");
-    formEl.querySelectorAll('input[name="f-day"]').forEach(function (el) { el.disabled = false; });
-  }
-
-  ensureCategoryOptions();
-  document.getElementById("f-title").value = editing ? block.title : "";
-  document.getElementById("f-course").value = editing && block.course ? block.course : "";
-  document.getElementById("f-category").value = editing && block.category ? block.category : "";
-  document.getElementById("f-completed").checked = Boolean(editing && block.completed);
-  document.getElementById("f-spotify").value = editing && block.spotify_url ? block.spotify_url : "";
-  document.getElementById("f-duration").value = editing ? String(block.duration_min) : "60";
-  setSelectedDays(editing ? (showScope && editingScope === "occurrence" ? [editingOccurrenceDay] : block.days) : []);
-  startEl.value = editing && block.start ? block.start : "16:00";
-  document.getElementById("f-priority").value = editing && block.priority ? String(block.priority) : "3";
-  document.getElementById("f-energy").value = editing && block.energy ? block.energy : "medium";
-  const latest = parseLatest(editing ? block.latest : "");
-  document.getElementById("f-due-day").value = latest.day;
-  dueTimeEl.value = latest.time || "21:00";
-  renderCategoryChips(document.getElementById("category-chips"), document.getElementById("f-category").value || "", true);
-  if (showScope) setEditScope(editingScope);
-  formDeleteEl.textContent = showScope && editingScope === "occurrence" ? "Remove this day" : "Delete";
-  document.getElementById("f-title").focus();
-}
-
-function closeForm() {
-  formEl.hidden = true;
-  editingOccurrenceDay = null;
-  editingScope = "series";
-  formEl.querySelectorAll('input[name="f-day"]').forEach(function (el) { el.disabled = false; });
-  showFormError("");
-}
-
-function durationError(value) {
-  const n = Number(value);
-  if (!Number.isInteger(n) || n <= 0 || n % 15 !== 0) {
-    return "Duration must be a positive multiple of 15 minutes.";
-  }
-  return "";
-}
-
-formEl.addEventListener("submit", function (event) {
-  event.preventDefault();
-  if (!account || saving) return;
-  const kind = document.getElementById("f-kind").value;
-  const title = document.getElementById("f-title").value.trim();
-  const durationMsg = durationError(document.getElementById("f-duration").value);
-  const scope = selectedEditScope();
-  const days = (scope === "occurrence" && editingOccurrenceDay !== null)
-    ? [editingOccurrenceDay]
-    : selectedDays();
-  if (!title) {
-    showFormError("Give this block a title.");
-    return;
-  }
-  if (durationMsg) {
-    showFormError(durationMsg);
-    return;
-  }
-  if (!days.length) {
-    showFormError("Pick at least one day.");
-    return;
-  }
-  if (kind === "locked" && !startEl.value) {
-    showFormError("Locked blocks need a start time.");
-    return;
-  }
-  const spotify = document.getElementById("f-spotify").value.trim();
-  if (spotify && !safeSpotifyUrl(spotify)) {
-    showFormError("Use an https://open.spotify.com share link.");
-    return;
-  }
-
-  const id = document.getElementById("f-id").value || newId();
-  const blocks = weekState().blocks;
-  const existing = blocks.findIndex(function (item) { return item.id === id; });
-  const prior = existing >= 0 ? blocks[existing] : null;
-  const patch = {
-    title: title,
-    duration_min: Number(document.getElementById("f-duration").value),
-    days: days,
-    priority: Number(document.getElementById("f-priority").value) || 3,
-    energy: document.getElementById("f-energy").value || "medium",
-    course: document.getElementById("f-course").value.trim() || null,
-    category: document.getElementById("f-category").value || null,
-    completed: document.getElementById("f-completed").checked,
-    spotify_url: spotify || null,
-    earliest: null,
-    latest: null,
-    start: kind === "locked" ? startEl.value : null,
-  };
-  if (kind === "flexible") {
-    const dueDay = document.getElementById("f-due-day").value;
-    const dueTime = dueTimeEl.value;
-    if (dueDay !== "" && dueTime) {
-      patch.latest = DAY_FULL[Number(dueDay)] + " " + dueTime;
-    }
-    if (patch.completed && prior) {
-      const placed = weekState().trace?.placed.find(item => item.id === id) || prior;
-      const completedDay = Number.isInteger(placed.completed_day)
-        ? placed.completed_day
-        : (placed.days.length === 1 ? placed.days[0] : null);
-      if (placed.start && completedDay !== null && days.includes(completedDay)) {
-        patch.start = placed.start;
-        patch.completed_day = completedDay;
-      }
-    } else {
-      patch.start = null;
-      patch.completed_day = null;
-    }
-  }
-
-  if (prior && kind === "locked" && isSeries(prior) && scope === "occurrence" && editingOccurrenceDay !== null) {
-    const result = editOccurrence(prior, editingOccurrenceDay, {
-      title: patch.title,
-      duration_min: patch.duration_min,
-      priority: patch.priority,
-      energy: patch.energy,
-      course: patch.course,
-      category: patch.category,
-      completed: patch.completed,
-      start: patch.start,
-      earliest: null,
-      latest: null,
-    });
-    if (result.series) blocks[existing] = result.series;
-    else blocks.splice(existing, 1);
-    if (result.split) blocks.push(result.split);
-  } else {
-    const block = {
-      ...(prior || {}),
-      id: id,
-      kind: kind,
-      missed_days: kind === "locked" && prior ? (prior.missed_days || []).filter(function (day) {
-        return days.includes(day);
-      }) : [],
-      ...patch,
-    };
-    if (existing >= 0) blocks[existing] = block;
-    else blocks.push(block);
-  }
-
-  closeForm();
-  clearSolveResult();
-  saveWeek();
-  renderWeek();
-});
-
-document.getElementById("form-cancel").addEventListener("click", closeForm);
-
-formMissedEl.addEventListener("click", async function () {
-  if (!account || saving || editingOccurrenceDay === null) return;
-  const id = document.getElementById("f-id").value;
-  const block = weekState().blocks.find(function (item) { return item.id === id; });
-  if (!block || block.kind !== "locked") return;
-  const isMissed = (block.missed_days || []).includes(editingOccurrenceDay);
-  if (!isMissed) {
-    await recoverMissedOccurrence(id, editingOccurrenceDay);
-    return;
-  }
-  block.missed_days = block.missed_days.filter(function (day) { return day !== editingOccurrenceDay; });
-  closeForm();
-  clearSolveResult();
-  renderWeek();
-  await saveWeek();
-});
-
-formDeleteEl.addEventListener("click", function () {
-  if (!account || saving) return;
-  const id = document.getElementById("f-id").value;
-  const prior = weekState().blocks.find(function (item) { return item.id === id; });
-  if (prior && isSeries(prior) && selectedEditScope() === "occurrence" && editingOccurrenceDay !== null) {
-    deleteOccurrenceById(id, editingOccurrenceDay);
-    return;
-  }
-  deleteBlockById(id);
-});
-
-document.getElementById("add-locked").addEventListener("click", function () {
-  openForm("locked", null);
-});
-document.getElementById("add-flexible").addEventListener("click", function () {
-  openForm("flexible", null);
-});
 document.getElementById("new-week").addEventListener("click", function () {
   if (!account || saving || !confirm("Clear " + weekLabel(selectedWeek) + "? This will be saved to your account.")) return;
   weekState().blocks = [];
   closeForm();
-  clearSolveResult("Add locked school or sports, then homework as tasks.");
-  saveWeek();
-  renderWeek();
+  commitWeek("Add school or sports as fixed times, then homework as flexible tasks.");
 });
 
 function missedHistoryBlocks() {
@@ -2745,9 +2090,9 @@ function showTrace(trace) {
   renderDebug(trace);
   flexNoteEl.textContent = trace.unplaced.length ?
     "Some tasks could not be placed. Select a reason below to find the task." :
-    "All flexible tasks are on the grid.";
-  setStatus((weekState().dirty ? "Unsaved week · " : "Saved week · ") +
-    trace.placed.filter(b => b.kind === "flexible").length + " tasks placed");
+    "Every task has a time on the calendar.";
+  const placed = trace.placed.filter(b => b.kind === "flexible").length;
+  setStatus((weekState().dirty ? "Unsaved week · " : "Saved week · ") + placed + (placed === 1 ? " task placed" : " tasks placed"));
 }
 
 async function solveWeek() {
@@ -2808,39 +2153,6 @@ async function recoverMissedOccurrence(blockId, day) {
   }
   if (recovered && recoverEpoch === epoch) await saveWeek();
 }
-
-document.getElementById("auth-form").addEventListener("submit", async event => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const action = event.submitter?.value || "login";
-  const authEpoch = epoch;
-  form.querySelectorAll("button").forEach(el => { el.disabled = true; });
-  document.getElementById("auth-error").textContent = "";
-  try {
-    const identity = await api("/api/auth/" + action, { method: "POST", body: JSON.stringify({
-      username: document.getElementById("username").value,
-      password: document.getElementById("password").value,
-    }) }, false);
-    document.getElementById("password").value = "";
-    channel?.postMessage("session-changed");
-    await loadAccount(identity);
-  } catch (error) {
-    if (authEpoch === epoch) document.getElementById("auth-error").textContent = error.message;
-  } finally { form.querySelectorAll("button").forEach(el => { el.disabled = false; }); }
-});
-
-document.getElementById("logout").addEventListener("click", async () => {
-  if (saving || (dirtyWeeks().length && !confirm("Sign out and discard unsaved changes? Download the draft first if you need it."))) return;
-  const logoutEpoch = epoch;
-  try {
-    await api("/api/auth/logout", { method: "POST" });
-    if (account) suspendedDrafts.delete(account.id);
-    signedOut("Signed out.", false);
-    channel?.postMessage("session-changed");
-  } catch (error) { if (logoutEpoch === epoch) setStatus("Sign out failed. " + error.message); }
-});
-
-if (channel) channel.onmessage = () => signedOut("The account session changed in another window. Sign in to continue.");
 
 themeEl.addEventListener("change", async () => {
   const oldTheme = document.documentElement.dataset.theme;
@@ -2903,32 +2215,12 @@ document.getElementById("import-week").addEventListener("click", async () => {
   if (!confirm("Import this device's old week into your account, replacing " + weekLabel(selectedWeek) + "?")) return;
   weekState().blocks = blocks;
   closeForm();
-  clearSolveResult();
-  renderWeek();
-  if (await saveWeek()) {
+  if (await commitWeek()) {
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* A retry replaces the same blocks. */ }
     document.getElementById("import-panel").hidden = true;
   }
 });
 
-async function reconnect() {
-  if (account) return;
-  const connectionEpoch = epoch;
-  setStatus("Connecting…");
-  try { await loadAccount(await api("/api/auth/me", {}, false)); }
-  catch (error) {
-    if (connectionEpoch === epoch) signedOut(error.status === 401 ? "Sign in to open your week." : "Connection failed. " + error.message);
-  }
-}
-document.getElementById("reconnect").addEventListener("click", reconnect);
-window.addEventListener("beforeunload", event => {
-  if (dirtyWeeks().length) { event.preventDefault(); event.returnValue = ""; }
-});
-window.addEventListener("pageshow", event => { if (event.persisted) { signedOut(); reconnect(); } });
-document.addEventListener("visibilitychange", async () => {
-  if (document.hidden || !account) return;
-  try { await api("/api/auth/me"); } catch { /* Session expiry is handled by api. */ }
-});
 const contextMenuEl = document.getElementById("block-context-menu");
 if (contextMenuEl) {
   contextMenuEl.addEventListener("click", function (event) {
@@ -2940,11 +2232,11 @@ if (contextMenuEl) {
     const source = weekState().blocks.find(function (item) { return item.id === blockId; });
     const action = button.dataset.action;
     if (action === "edit" || action === "edit-occurrence") {
-      if (source) openForm(source.kind, source, Number.isInteger(day) ? day : null, "occurrence");
+      if (source) openBlockEditor(source, Number.isInteger(day) ? day : null, "occurrence");
       return;
     }
     if (action === "edit-series") {
-      if (source) openForm(source.kind, source, Number.isInteger(day) ? day : null, "series");
+      if (source) openBlockEditor(source, Number.isInteger(day) ? day : null, "series");
       return;
     }
     if (action === "delete-occurrence") {
@@ -3096,12 +2388,6 @@ if (prefsSignOut) prefsSignOut.addEventListener("click", function () {
   document.getElementById("logout").click();
 });
 
-document.getElementById("focus-pause").addEventListener("click", toggleFocusPause);
-document.getElementById("focus-skip").addEventListener("click", function () {
-  if (saving || focusBusy) return;
-  advanceFocusPhase(false);
-});
-document.getElementById("focus-reset").addEventListener("click", function () { resetFocusTimer(); });
 document.getElementById("alarm-dismiss").addEventListener("click", function () { finishAlarm(false); });
 document.getElementById("alarm-snooze").addEventListener("click", function () { finishAlarm(true); });
 document.getElementById("alarm-open-spotify").addEventListener("click", function (event) {
@@ -3142,18 +2428,6 @@ if (importFileBtn && importFileInput) {
   });
 }
 
-formEl.querySelectorAll('input[name="f-scope"]').forEach(function (el) {
-  el.addEventListener("change", function () {
-    setEditScope(selectedEditScope());
-    formDeleteEl.textContent = selectedEditScope() === "occurrence" ? "Remove this day" : "Delete";
-  });
-});
-
 document.addEventListener("visibilitychange", function () {
   if (!document.hidden) checkReminders();
 });
-
-fillTimeSelect(startEl, false);
-fillTimeSelect(dueTimeEl, true);
-ensureCategoryOptions();
-reconnect();

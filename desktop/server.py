@@ -46,6 +46,9 @@ class LocalServer:
             # native extras that need not survive being frozen into a bundle.
             loop="asyncio",
             http="h11",
+            # FlexWeek serves no WebSockets, and the desktop build leaves the
+            # websockets package out.
+            ws="none",
         )
         self._server = uvicorn.Server(config)
         self._thread: threading.Thread | None = None

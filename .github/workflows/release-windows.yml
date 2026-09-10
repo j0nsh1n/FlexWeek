@@ -1,18 +1,18 @@
-name: Release — Windows package
+name: Release packages
 
-# Builds the Windows onedir package (Nuitka can only build for the OS it runs
-# on) and attaches a zip to the GitHub release. Fires automatically when a
-# release is published; also runnable by hand against an existing tag.
+# Builds the Windows and Linux onedir packages (Nuitka can only build for the
+# OS it runs on) and attaches them to the GitHub release. Fires when a release
+# is published; also runnable by hand against an existing tag.
 #
-# onedir (not onefile): Qt WebEngine cannot be statically linked, so the
-# bundle ships as a zip of the whole folder — see DESKTOP.md.
+# onedir (not onefile): Qt WebEngine cannot be statically linked, so each
+# bundle ships as a folder inside a zip or tar.gz — see DESKTOP.md.
 on:
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing release tag to attach the Windows zip to (e.g. v0.7.0)"
+        description: "Existing release tag to attach packages to (e.g. v0.7.0)"
         required: true
 
 permissions:
@@ -44,33 +44,39 @@ jobs:
         run: ./desktop/build_windows.ps1 -AssumeYesForDownloads
         shell: pwsh
 
-      - name: Smoke-test package layout
+      - name: Smoke-test package layout and first screen
         # --windows-console-mode=disable freezes have no console; assert the
-        # freeze layout is complete. The WebEngine core DLL is Qt6-prefixed on
-        # Windows (libQt6WebEngineCore.so.6 on Linux), so match a wildcard.
+        # freeze layout is complete, then start like a student would (offscreen).
+        # The WebEngine core DLL is Qt6-prefixed on Windows.
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
         run: |
           $root = "dist\FlexWeek-Windows"
           $exe = Join-Path $root "FlexWeek.exe"
           if (-not (Test-Path $exe)) { throw "FlexWeek.exe missing after build" }
-          Write-Host "Built: $exe"
-          Get-ChildItem $root | Select-Object Name, Length
-          if (-not (Test-Path (Join-Path $root "frontend\index.html"))) {
-            throw "frontend data dir missing under $root — bundled UI would not load"
+          foreach ($name in @("README.txt", "LICENSE.txt", "flexweek.png", "frontend\index.html")) {
+            if (-not (Test-Path (Join-Path $root $name))) { throw "$name missing under $root" }
           }
           if (-not (Get-ChildItem -Path $root -Recurse -Filter "*WebEngineCore*.dll" -ErrorAction SilentlyContinue)) {
-            throw "WebEngine core DLL missing under $root — WebEngine will not start"
+            throw "WebEngine core DLL missing under $root"
           }
           if (-not (Get-ChildItem -Path $root -Recurse -Filter "QtWebEngineProcess.exe" -ErrorAction SilentlyContinue)) {
-            throw "QtWebEngineProcess.exe missing under $root — WebEngine renderer will not start"
+            throw "QtWebEngineProcess.exe missing under $root"
           }
-          Write-Host "Smoke layout OK"
+          & $exe --smoke-test dist\windows-smoke.json
+          if ($LASTEXITCODE -ne 0) { throw "FlexWeek --smoke-test failed with $LASTEXITCODE" }
+          Get-Content dist\windows-smoke.json
+        shell: pwsh
 
       - name: Zip the bundle
         run: |
-          Compress-Archive -Path dist\FlexWeek-Windows `
-            -DestinationPath dist\FlexWeek-win64.zip -Force
-          $hash = (Get-FileHash dist\FlexWeek-win64.zip -Algorithm SHA256).Hash.ToLower()
-          "$hash  FlexWeek-win64.zip" | Set-Content -NoNewline dist\FlexWeek-win64.zip.sha256
+          New-Item -ItemType Directory -Path dist\zip-stage | Out-Null
+          Copy-Item -LiteralPath dist\FlexWeek-Windows -Destination dist\zip-stage\FlexWeek -Recurse
+          Compress-Archive -Path dist\zip-stage\FlexWeek `
+            -DestinationPath dist\FlexWeek-Windows-x64.zip -Force
+          $hash = (Get-FileHash dist\FlexWeek-Windows-x64.zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  FlexWeek-Windows-x64.zip" | Set-Content -NoNewline dist\FlexWeek-Windows-x64.zip.sha256
           Write-Host "SHA256: $hash"
 
       - name: Attach to the release
@@ -79,6 +85,53 @@ jobs:
           TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
           gh release upload "$env:TAG" `
-            dist\FlexWeek-win64.zip `
-            dist\FlexWeek-win64.zip.sha256 `
+            dist\FlexWeek-Windows-x64.zip `
+            dist\FlexWeek-Windows-x64.zip.sha256 `
+            --clobber
+
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install bundle tools and xcb helpers to vendor
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            patchelf binutils libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+            libxcb-keysyms1 libxcb-render-util0 libxcb-util1 xvfb
+
+      - name: Create venv and install build + runtime deps
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -r requirements.txt -r requirements-desktop.txt
+
+      - name: Build and package Linux onedir
+        run: |
+          ./desktop/build_linux.sh
+          ./desktop/package_linux.sh dist/FlexWeek dist/release
+
+      - name: Smoke-test first screen
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
+        run: |
+          xvfb-run -a -s "-screen 0 1280x800x24" dist/FlexWeek/FlexWeek --smoke-test dist/linux-smoke.json
+          python -c 'import json,sys; r=json.load(open("dist/linux-smoke.json")); print(r); sys.exit(0 if r.get("ok") else 1)'
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          gh release upload "$TAG" \
+            dist/release/FlexWeek-Linux-x86_64.tar.gz \
+            dist/release/FlexWeek-Linux-x86_64.tar.gz.sha256 \
             --clobber

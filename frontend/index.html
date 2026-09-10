@@ -21,26 +21,37 @@
       <span id="account-name"></span>
       <label>Theme <select id="theme"><option value="nocturne">Nocturne · dark</option><option value="slate">Slate · light</option></select></label>
       <button type="button" id="prefs-open" class="secondary">Settings</button>
-      <button type="button" id="logout" class="secondary">Sign out</button>
+      <button type="button" id="logout" class="secondary">Log out</button>
       <button type="button" id="solve">Solve</button>
     </div>
   </header>
   <p id="status" class="status" role="status">Connecting…</p>
-  <section id="auth-panel" class="auth-panel" aria-labelledby="auth-heading">
-    <h2 id="auth-heading">Your week, in one place</h2>
-    <p>Sign in or create an account to save your schedule.</p>
-    <form id="auth-form">
-      <label>Username <input id="username" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_]+" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
-      <p class="note">3–32 letters, numbers or underscores. Usernames are not case-sensitive.</p>
-      <label>Password <input id="password" type="password" required minlength="12" maxlength="128" autocomplete="current-password"></label>
-      <p class="note">12–128 characters. Password recovery is not available yet.</p>
-      <p id="auth-error" class="form-error" role="alert"></p>
-      <div class="form-actions">
-        <button type="submit" name="action" value="login">Sign in</button>
-        <button type="submit" name="action" value="register" class="secondary">Create account</button>
-      </div>
-    </form>
-    <button type="button" id="reconnect" class="secondary">Retry connection</button>
+  <section id="auth-panel" class="auth-panel">
+    <div id="register-screen" aria-labelledby="register-heading">
+      <h2 id="register-heading">Create your account</h2>
+      <p>FlexWeek fits homework around school and sports. Your week is saved to your account.</p>
+      <form id="register-form" data-action="register">
+        <label>Username <input id="register-username" name="username" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_]+" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+        <p class="note">3–32 letters, numbers or underscores. Capital letters do not matter.</p>
+        <label>Password <input id="register-password" name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label>
+        <p class="note">At least 12 characters. There is no password reset yet, so keep it somewhere safe.</p>
+        <p id="register-error" class="form-error" role="alert"></p>
+        <div class="form-actions"><button type="submit">Create account</button></div>
+      </form>
+      <p class="auth-switch">Already have an account? <button type="button" id="show-login" class="link-button">Log in</button></p>
+    </div>
+    <div id="login-screen" aria-labelledby="login-heading" hidden>
+      <h2 id="login-heading">Log in</h2>
+      <p>Welcome back. Log in to open your week.</p>
+      <form id="login-form" data-action="login">
+        <label>Username <input id="login-username" name="username" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_]+" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+        <label>Password <input id="login-password" name="password" type="password" required minlength="12" maxlength="128" autocomplete="current-password"></label>
+        <p id="login-error" class="form-error" role="alert"></p>
+        <div class="form-actions"><button type="submit">Log in</button></div>
+      </form>
+      <p class="auth-switch">New to FlexWeek? <button type="button" id="show-register" class="link-button">Create an account</button></p>
+    </div>
+    <button type="button" id="reconnect" class="secondary" hidden>Retry connection</button>
   </section>
   <div id="save-actions" class="save-actions" hidden>
     <button id="retry-save" type="button">Retry save</button>
@@ -63,68 +74,138 @@
         <button type="button" id="export-week" class="secondary">Export week</button>
         <button type="button" id="import-file" class="secondary">Import file</button>
         <input id="import-file-input" type="file" accept=".json,.txt,application/json,text/plain" hidden>
+        <span id="now-next" class="now-next" aria-live="polite" hidden></span>
+      </div>
+      <div id="empty-week" class="empty-week" hidden>
+        <div>
+          <h2>This week is empty</h2>
+          <p>Set up school, practice and your first homework in four short steps. Or pick a type on the right and drag on the calendar.</p>
+        </div>
+        <button type="button" id="setup-open">Set up my week</button>
       </div>
       <div class="week" id="week"></div>
     </section>
     <aside class="side">
-      <div class="editor-actions">
-        <button type="button" id="add-locked">Add locked</button>
-        <button type="button" id="add-flexible">Add task</button>
-        <button type="button" id="new-week" class="secondary">New week</button>
-      </div>
-      <div class="category-legend" aria-label="Categories">
-        <h2>Categories</h2>
-        <div id="category-legend" class="category-chips"></div>
-      </div>
-
-      <form id="block-form" class="block-form" hidden>
-        <h2 id="form-heading">Add locked</h2>
-        <p id="form-error" class="form-error" role="alert" hidden></p>
-        <input type="hidden" id="f-id" />
-        <input type="hidden" id="f-kind" />
-
-        <label>Title
-          <input id="f-title" type="text" required maxlength="80" />
-        </label>
-        <label>Course
-          <input id="f-course" type="text" maxlength="40" />
-        </label>
-        <div class="category-picker">
-          <span class="picker-label">Category</span>
-          <div id="category-chips" class="category-chips" role="listbox" aria-label="Category"></div>
-          <select id="f-category" hidden></select>
+      <section class="add-panel" aria-labelledby="add-heading">
+        <h2 id="add-heading">Add to your week</h2>
+        <div id="type-chips" class="category-chips" role="group" aria-label="Type to add"></div>
+        <p id="type-hint" class="note" aria-live="polite"></p>
+        <div class="editor-actions">
+          <button type="button" id="add-block" class="secondary">Add without dragging</button>
+          <button type="button" id="new-week" class="secondary">Clear week</button>
         </div>
-        <label class="completed-toggle"><input type="checkbox" id="f-completed" /> Completed</label>
-        <label>Spotify link
-          <input id="f-spotify" type="url" maxlength="500" placeholder="https://open.spotify.com/playlist/…" />
-        </label>
-        <fieldset id="edit-scope" class="edit-scope" hidden>
-          <legend>Edit scope</legend>
-          <label><input type="radio" name="f-scope" value="occurrence" checked /> This day only</label>
-          <label><input type="radio" name="f-scope" value="series" /> Entire series</label>
-        </fieldset>
-        <label>Duration (minutes)
-          <input id="f-duration" type="number" min="15" step="15" required />
-        </label>
+      </section>
 
-        <fieldset class="days">
-          <legend>Days</legend>
-          <label><input type="checkbox" name="f-day" value="0" /> Mon</label>
-          <label><input type="checkbox" name="f-day" value="1" /> Tue</label>
-          <label><input type="checkbox" name="f-day" value="2" /> Wed</label>
-          <label><input type="checkbox" name="f-day" value="3" /> Thu</label>
-          <label><input type="checkbox" name="f-day" value="4" /> Fri</label>
-          <label><input type="checkbox" name="f-day" value="5" /> Sat</label>
-          <label><input type="checkbox" name="f-day" value="6" /> Sun</label>
-        </fieldset>
+      <h2>Tasks to place</h2>
+      <p class="note" id="flex-note">Press Solve to place these around school and sports.</p>
+      <ul id="flexible"></ul>
+      <section id="focus-section" class="focus-dashboard" aria-labelledby="focus-heading" hidden>
+        <h2 id="focus-heading">Focus timer</h2>
+        <p class="note">Start a timer on a task Solve has placed.</p>
+        <div id="focus-panel" class="focus-panel" hidden>
+          <strong id="focus-task"></strong>
+          <span id="focus-phase"></span>
+          <output id="focus-time">00:00</output>
+          <div class="form-actions">
+            <button type="button" id="focus-pause">Pause</button>
+            <button type="button" id="focus-skip" class="secondary">Skip</button>
+            <button type="button" id="focus-reset" class="secondary">Reset</button>
+          </div>
+        </div>
+        <ul id="focus-tasks" class="focus-tasks"></ul>
+      </section>
+      <section id="debug" class="debug" hidden>
+        <h2>What Solve did</h2>
+        <p id="debug-stats"></p>
+        <ul id="debug-unplaced"></ul>
+        <div id="debug-changes" hidden>
+          <h3>Missed blocks and schedule changes</h3>
+          <ul id="debug-moves"></ul>
+        </div>
+      </section>
+    </aside>
+  </main>
+  <footer class="foot">Congressional App Challenge 2026 · GPL-3.0</footer>
+  <script src="/static/app.js" defer></script>
+  <script src="/static/focus.js" defer></script>
+  <script src="/static/editor.js" defer></script>
+  <script src="/static/setup.js" defer></script>
+  <script src="/static/auth.js" defer></script>
+  <div id="block-context-menu" class="context-menu" hidden role="menu">
+    <button type="button" data-action="edit">Edit</button>
+    <button type="button" data-action="edit-occurrence">Edit this day</button>
+    <button type="button" data-action="edit-series">Edit series</button>
+    <button type="button" data-action="delete-occurrence">Remove this day</button>
+    <button type="button" data-action="delete">Delete</button>
+    <button type="button" data-action="toggle-completed">Toggle completed</button>
+    <button type="button" data-action="start-focus">Start focus</button>
+    <button type="button" data-action="split-pomodoros">Split into focus blocks</button>
+    <button type="button" data-action="open-spotify">Open Spotify</button>
+    <button type="button" data-action="export-day">Export this day</button>
+  </div>
+  <dialog id="block-dialog" class="prefs-dialog block-dialog" aria-labelledby="form-heading">
+    <form id="block-form" class="block-form" novalidate>
+      <h2 id="form-heading">Add to your week</h2>
+      <input type="hidden" id="f-id" />
+      <div class="category-picker">
+        <span class="picker-label">Type</span>
+        <div id="category-chips" class="category-chips" role="group" aria-label="Type"></div>
+        <select id="f-category" hidden></select>
+      </div>
+      <label>Title
+        <input id="f-title" type="text" maxlength="80" />
+      </label>
+      <fieldset id="f-kind" class="kind-choice">
+        <legend>When does it happen?</legend>
+        <label title="Solve never moves it."><input type="radio" name="f-kind" id="f-kind-locked" value="locked" /> <span><strong>Fixed time</strong> <small>At a set time, like school or practice. Solve never moves it.</small></span></label>
+        <label title="Solve picks a free time before it is due."><input type="radio" name="f-kind" id="f-kind-flexible" value="flexible" /> <span><strong>Flexible</strong> <small>Needs time before a deadline, like homework. Solve picks a free time.</small></span></label>
+      </fieldset>
+      <fieldset id="edit-scope" class="edit-scope" hidden>
+        <legend>Change which days?</legend>
+        <label><input type="radio" name="f-scope" id="f-scope-occurrence" value="occurrence" checked /> This day only</label>
+        <label><input type="radio" name="f-scope" id="f-scope-series" value="series" /> Every day it repeats</label>
+      </fieldset>
 
-        <div id="f-locked-fields">
-          <label>Start
-            <select id="f-start"></select>
+      <div id="f-locked-fields" class="field-row">
+        <label>Day <select id="f-when-day"></select></label>
+        <label>Start <select id="f-start"></select></label>
+        <label>End <select id="f-end"></select></label>
+      </div>
+
+      <div id="f-flex-fields" hidden>
+        <label>Time needed <select id="f-duration"></select></label>
+        <div class="field-row">
+          <label>Due day
+            <select id="f-due-day">
+              <option value="">No due day</option>
+              <option value="0">Monday</option>
+              <option value="1">Tuesday</option>
+              <option value="2">Wednesday</option>
+              <option value="3">Thursday</option>
+              <option value="4">Friday</option>
+              <option value="5">Saturday</option>
+              <option value="6">Sunday</option>
+            </select>
           </label>
+          <label>Due time <select id="f-due-time"></select></label>
         </div>
+        <p id="f-flex-summary" class="note" aria-live="polite"></p>
+      </div>
 
-        <div id="f-flex-fields" hidden>
+      <details id="f-advanced" class="advanced">
+        <summary>More options</summary>
+        <fieldset id="f-days" class="days">
+          <legend id="f-days-legend">Also repeats on</legend>
+          <label><input type="checkbox" name="f-day" id="f-day-0" value="0" /> Mon</label>
+          <label><input type="checkbox" name="f-day" id="f-day-1" value="1" /> Tue</label>
+          <label><input type="checkbox" name="f-day" id="f-day-2" value="2" /> Wed</label>
+          <label><input type="checkbox" name="f-day" id="f-day-3" value="3" /> Thu</label>
+          <label><input type="checkbox" name="f-day" id="f-day-4" value="4" /> Fri</label>
+          <label><input type="checkbox" name="f-day" id="f-day-5" value="5" /> Sat</label>
+          <label><input type="checkbox" name="f-day" id="f-day-6" value="6" /> Sun</label>
+        </fieldset>
+        <p id="f-days-help" class="note"></p>
+        <div id="f-flex-advanced" class="field-row" hidden>
           <label>Priority
             <select id="f-priority">
               <option value="1">Test</option>
@@ -140,74 +221,88 @@
               <option value="low">Low (evening)</option>
             </select>
           </label>
-          <label>Due day
-            <select id="f-due-day">
-              <option value="">None</option>
-              <option value="0">Monday</option>
-              <option value="1">Tuesday</option>
-              <option value="2">Wednesday</option>
-              <option value="3">Thursday</option>
-              <option value="4">Friday</option>
-              <option value="5">Saturday</option>
-              <option value="6">Sunday</option>
-            </select>
-          </label>
-          <label>Due time
-            <select id="f-due-time"></select>
-          </label>
         </div>
+        <label>Course
+          <input id="f-course" type="text" maxlength="40" />
+        </label>
+        <label>Spotify link
+          <input id="f-spotify" type="url" maxlength="500" placeholder="https://open.spotify.com/playlist/…" />
+        </label>
+        <label class="completed-toggle"><input type="checkbox" id="f-completed" /> Completed</label>
+      </details>
 
-        <div class="form-actions">
-          <button type="submit">Save</button>
-          <button type="button" id="form-cancel" class="secondary">Cancel</button>
-          <button type="button" id="form-delete" class="danger" hidden>Delete</button>
-          <button type="button" id="form-missed" class="danger" hidden>Mark missed</button>
-        </div>
-      </form>
-
-      <h2>Flexible tasks</h2>
-      <p class="note" id="flex-note">Press Solve to place these around school and sports.</p>
-      <ul id="flexible"></ul>
-      <section class="focus-dashboard" aria-labelledby="focus-heading">
-        <h2 id="focus-heading">Focus</h2>
-        <div id="now-next" class="now-next" aria-live="polite">Nothing scheduled now.</div>
-        <div id="focus-panel" class="focus-panel" hidden>
-          <strong id="focus-task"></strong>
-          <span id="focus-phase"></span>
-          <output id="focus-time">00:00</output>
-          <div class="form-actions">
-            <button type="button" id="focus-pause">Pause</button>
-            <button type="button" id="focus-skip" class="secondary">Skip</button>
-            <button type="button" id="focus-reset" class="secondary">Reset</button>
-          </div>
-        </div>
-        <ul id="focus-tasks" class="focus-tasks"></ul>
-      </section>
-      <section id="debug" class="debug" hidden>
-        <h2>Schedule details</h2>
-        <p id="debug-stats"></p>
-        <ul id="debug-unplaced"></ul>
-        <div id="debug-changes" hidden>
-          <h3>Missed blocks and schedule changes</h3>
-          <ul id="debug-moves"></ul>
+      <p id="form-error" class="form-error" role="alert" hidden></p>
+      <div class="form-actions">
+        <button type="submit" id="form-save">Add to week</button>
+        <button type="button" id="form-cancel" class="secondary">Cancel</button>
+        <button type="button" id="form-delete" class="danger" hidden>Delete</button>
+        <button type="button" id="form-missed" class="danger" hidden>Mark missed</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="setup-dialog" class="prefs-dialog setup-dialog" aria-labelledby="setup-title">
+    <form id="setup-form" novalidate>
+      <p id="setup-progress" class="note">Step 1 of 4</p>
+      <h2 id="setup-title" class="visually-hidden">Set up your week</h2>
+      <section id="setup-school">
+        <h3>When is school?</h3>
+        <p class="note">Solve keeps homework out of these hours.</p>
+        <fieldset class="days"><legend>School days</legend>
+          <label><input type="checkbox" id="setup-school-day-0" value="0" checked /> Mon</label>
+          <label><input type="checkbox" id="setup-school-day-1" value="1" checked /> Tue</label>
+          <label><input type="checkbox" id="setup-school-day-2" value="2" checked /> Wed</label>
+          <label><input type="checkbox" id="setup-school-day-3" value="3" checked /> Thu</label>
+          <label><input type="checkbox" id="setup-school-day-4" value="4" checked /> Fri</label>
+          <label><input type="checkbox" id="setup-school-day-5" value="5" /> Sat</label>
+          <label><input type="checkbox" id="setup-school-day-6" value="6" /> Sun</label>
+        </fieldset>
+        <div class="field-row">
+          <label>Starts <select id="setup-school-start"></select></label>
+          <label>Ends <select id="setup-school-end"></select></label>
         </div>
       </section>
-    </aside>
-  </main>
-  <footer class="foot">Congressional App Challenge 2026 · GPL-3.0</footer>
-  <script src="/static/app.js" defer></script>
-  <div id="block-context-menu" class="context-menu" hidden role="menu">
-    <button type="button" data-action="edit">Edit</button>
-    <button type="button" data-action="edit-occurrence">Edit this day</button>
-    <button type="button" data-action="edit-series">Edit series</button>
-    <button type="button" data-action="delete-occurrence">Remove this day</button>
-    <button type="button" data-action="delete">Delete</button>
-    <button type="button" data-action="toggle-completed">Toggle completed</button>
-    <button type="button" data-action="start-focus">Start focus</button>
-    <button type="button" data-action="split-pomodoros">Split into focus blocks</button>
-    <button type="button" data-action="open-spotify">Open Spotify</button>
-    <button type="button" data-action="export-day">Export this day</button>
-  </div>
+      <section id="setup-sports" hidden>
+        <h3>Do you have a sport or practice?</h3>
+        <p class="note">Add one regular activity now. You can add more later.</p>
+        <label>Name <input id="setup-sports-title" type="text" maxlength="80" placeholder="Sports" /></label>
+        <fieldset class="days"><legend>Days</legend>
+          <label><input type="checkbox" id="setup-sports-day-0" value="0" /> Mon</label>
+          <label><input type="checkbox" id="setup-sports-day-1" value="1" /> Tue</label>
+          <label><input type="checkbox" id="setup-sports-day-2" value="2" /> Wed</label>
+          <label><input type="checkbox" id="setup-sports-day-3" value="3" /> Thu</label>
+          <label><input type="checkbox" id="setup-sports-day-4" value="4" /> Fri</label>
+          <label><input type="checkbox" id="setup-sports-day-5" value="5" /> Sat</label>
+          <label><input type="checkbox" id="setup-sports-day-6" value="6" /> Sun</label>
+        </fieldset>
+        <div class="field-row">
+          <label>Starts <select id="setup-sports-start"></select></label>
+          <label>Ends <select id="setup-sports-end"></select></label>
+        </div>
+      </section>
+      <section id="setup-homework" hidden>
+        <h3>What homework is due first?</h3>
+        <label>Assignment <input id="setup-homework-title" type="text" maxlength="80" placeholder="Math worksheet" /></label>
+        <div class="field-row">
+          <label>Time needed <select id="setup-homework-duration"></select></label>
+          <label>Due day <select id="setup-homework-due-day"></select></label>
+          <label>Due time <select id="setup-homework-due-time"></select></label>
+        </div>
+        <p class="note">Solve can place it on any day from today up to the due day.</p>
+      </section>
+      <section id="setup-solve" hidden>
+        <h3>Ready to plan your week</h3>
+        <ul id="setup-summary" class="setup-summary"></ul>
+        <p class="note">Solve puts your homework in the free time around school and practice. You can change anything afterwards.</p>
+      </section>
+      <p id="setup-error" class="form-error" role="alert" hidden></p>
+      <div class="form-actions">
+        <button type="submit" id="setup-next">Next</button>
+        <button type="button" id="setup-skip" class="secondary">Skip this step</button>
+        <button type="button" id="setup-back" class="secondary" hidden>Back</button>
+        <button type="button" id="setup-close" class="secondary">Set up later</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="prefs-dialog" class="prefs-dialog">
     <form method="dialog" id="prefs-form">
       <h2>Settings</h2>
@@ -217,7 +312,7 @@
         <label>Theme
           <select id="pref-theme"><option value="nocturne">Nocturne · dark</option><option value="slate">Slate · light</option></select>
         </label>
-        <button type="button" id="prefs-sign-out" class="secondary">Sign out</button>
+        <button type="button" id="prefs-sign-out" class="secondary">Log out</button>
       </fieldset>
       <fieldset>
         <legend>Focus timer</legend>

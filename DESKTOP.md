@@ -83,7 +83,9 @@ reopening the app restores the session until the seven-day cookie expiry.
   ever target localhost.
 - Windows WebEngine onedir size vs asking users to install WebView2 (that would
   be a pywebview revisit, not this slice).
-- Code signing / SmartScreen and Linux package format (AppImage vs .deb).
+- Code signing / SmartScreen: Windows README tells a student to use More info,
+  then Run anyway. Linux ships a tar.gz (not AppImage) so the executable bit
+  survives; `.desktop` + icon go in the archive.
 - Whether a future slice bundles a local server; v1 should not.
 
 ---
@@ -232,10 +234,12 @@ Nuitka cannot cross-compile: the Windows package is built on a GitHub Actions
 release is published (or by hand against an existing tag), installs both
 requirements files into a fresh Python 3.14, runs `desktop/build_windows.ps1`
 (MSVC is preinstalled on the runner), smoke-checks the freeze layout
-(`FlexWeek.exe`, `frontend/index.html`, `QtWebEngineCore.dll`), zips
-`dist\FlexWeek-Windows` to `FlexWeek-win64.zip` with a `.sha256`, and uploads
-both to the release. The first CI run is also the first real execution of
-`build_windows.ps1`; if it fails, the workflow log is the diagnosis.
+(`FlexWeek.exe`, `frontend/index.html`, `QtWebEngineCore.dll`), copies
+`README.txt`, `LICENSE.txt` and `flexweek.png` into the folder, zips that
+folder as `FlexWeek-Windows-x64.zip` with a `.sha256`, and uploads both to
+the release. ICU (`icuuc.dll` / `icuin.dll`) is treated as a Windows 10 1809+
+system library and is not copied out of System32. The paste-ready release
+text is `docs/github-release.md`.
 
 ---
 
@@ -251,21 +255,37 @@ Distribute it as a release asset instead. GitHub Releases allow 2 GB per file.
 
 ```bash
 ./desktop/build_linux.sh                       # -> dist/FlexWeek/
-cd dist && tar -czf FlexWeek-linux-x86_64-$(date +%Y%m%d).tar.gz FlexWeek
-sha256sum FlexWeek-linux-x86_64-*.tar.gz | tee FlexWeek-linux-x86_64-*.tar.gz.sha256
+./desktop/package_linux.sh                  # -> dist/release/FlexWeek-Linux-x86_64.tar.gz
 ```
 
-528 MB on disk compresses to about 205 MB. Attach the tarball and its `.sha256`
-to a GitHub Release; users extract it and run `FlexWeek/FlexWeek`, with no
-Python and no separate server.
+This machine's Fedora Python needs glibc 2.42 (`GLIBC_ABI_GNU2_TLS`). A
+release Linux build has to be made on Ubuntu 24.04 (the GitHub Actions
+`linux` job), not on this host. `desktop/check_bundle.py` fails the Fedora
+bundle on purpose.
+
+The archive holds one `FlexWeek/` folder with the app, `README.txt`,
+`flexweek.png`, `flexweek.desktop`, `install-menu-entry.sh` and `LICENSE.txt`.
+`finish_linux_bundle.sh` vendors `libxcb-cursor` (and the other X11 cursor
+helpers) into the bundle, drops unused Qt `.qm` files, and fails the build if
+anything needs a newer glibc than 2.38. A tar.gz keeps the executable bit that
+a zip would lose. Attach the tarball and its `.sha256` to a GitHub Release
+using the body in `docs/github-release.md`. The README's "Download for Linux"
+link expects this exact filename.
+
+528 MB on disk compresses to about 205 MB. Users extract it and run
+`FlexWeek/FlexWeek`, with no Python and no separate server.
 
 Verify a release candidate by extracting it somewhere clean and starting it with
 an empty profile, rather than trusting the tree it was built from:
 
 ```bash
-tar -xzf FlexWeek-linux-x86_64-*.tar.gz -C /tmp/check
+tar -xzf FlexWeek-Linux-x86_64.tar.gz -C /tmp/check
 XDG_DATA_HOME=/tmp/check-profile /tmp/check/FlexWeek/FlexWeek
 ```
+
+Or `FlexWeek --smoke-test report.json`, which exits 0 once Create account is on
+screen. `desktop/smoke_linux_containers.sh` does that inside stock Ubuntu 24.04
+and Debian 13 containers.
 
 **Housekeeping.** `build_linux.sh` preserves each previous build as
 `dist/FlexWeek.previous.<timestamp>` and never prunes them, so `dist/` grows by
@@ -274,5 +294,25 @@ about 528 MB per rebuild. Delete the ones you do not need.
 ## Reminders (Phase 5)
 
 Start reminders ship in the shared web UI (preferences, in-app toast, Notification
-API while the window is open). A native system-tray alert path was deferred to
-avoid a large new desktop dependency; revisit with Phase 7 tray work if needed.
+API while the window is open). Phase 7 added the tray presenter described below.
+
+## Window, tray and quitting (2026-09-10)
+
+- Launching FlexWeek shows its window. If it is already running, the existing
+  window comes forward instead (see the last point).
+- When the desktop has a system tray, FlexWeek puts its logo there. Closing the
+  window hides it to the tray, so reminders and alarms keep firing. The first
+  close shows a tray message that says so.
+- Click the tray icon, or choose **Open FlexWeek** from its menu, to bring the
+  window back. Choose **Quit** from the tray menu to stop FlexWeek.
+- Without a tray, or when the tray icon cannot load, closing the window quits.
+  FlexWeek never keeps running with no window and no tray icon.
+- Launching FlexWeek again while it runs brings the existing window forward
+  instead of starting a second copy on the same database. One copy runs per
+  user data directory.
+
+The tray icon is loaded from `frontend/logo.png` next to the bundled backend.
+Before this fix the path was taken from `desktop/main.py`. Nuitka places that file
+at the bundle root, so the path pointed one directory above the bundle. Qt logged
+`QSystemTrayIcon::setVisible: No Icon set`, the tray entry was invisible, and a
+closed window left the process running with no visible way back.

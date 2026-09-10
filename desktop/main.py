@@ -12,11 +12,15 @@ code. See DESKTOP.md.
 from __future__ import annotations
 
 import contextlib
+import hashlib
+import json
+import os
 import sys
 from pathlib import Path
 
 from PySide6.QtCore import QStandardPaths, QTimer, QUrl
 from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QIcon
+from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWebEngineCore import (
     QWebEngineDownloadRequest,
     QWebEngineNewWindowRequest,
@@ -40,13 +44,53 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+import backend
 from desktop.origin import configured_origin, is_same_origin
+from desktop.sandbox import disable_sandbox_if_blocked
 from desktop.server import LocalServer
 
 WINDOW_SIZE = (1280, 800)
 PROFILE_NAME = "flexweek"
 NOTIFICATION_TIMEOUT_MS = 10_000
 NOTIFY_STAY_TAG = "flexweek-stay"
+TRAY_HINT_MS = 6_000
+INSTANCE_WAIT_MS = 500
+DESKTOP_FILE_NAME = "flexweek"
+SMOKE_FLAG = "--smoke-test"
+SMOKE_TIMEOUT_MS = 90_000
+SMOKE_POLL_MS = 250
+# The first screen only reads this once app.js and auth.js have run against the server.
+SMOKE_READY_JS = (
+    "Boolean(document.getElementById('status') && "
+    "document.getElementById('status').textContent.includes('Create an account'))"
+)
+
+
+def app_icon_path() -> Path:
+    """logo.png from the frontend the backend serves.
+
+    Anchored on the backend package, not this file: Nuitka compiles this file as
+    the bundle's __main__ at the bundle root, so a path relative to it points one
+    directory above the bundle and the tray silently gets no icon.
+    """
+    return Path(backend.__file__).resolve().parents[1] / "frontend" / "logo.png"
+
+
+def instance_name(root: str) -> str:
+    """One running app per data directory, so two copies never share a database."""
+    return "flexweek-" + hashlib.sha256(root.encode()).hexdigest()[:16]
+
+
+def show_running_instance(name: str) -> bool:
+    """Ask an already running FlexWeek to show its window. True if one answered."""
+    socket = QLocalSocket()
+    socket.connectToServer(name)
+    if not socket.waitForConnected(INSTANCE_WAIT_MS):
+        return False
+    socket.write(b"show")
+    socket.waitForBytesWritten(INSTANCE_WAIT_MS)
+    socket.disconnectFromServer()
+    return True
 
 
 def notification_timeout_ms(tag: str) -> int:
@@ -137,7 +181,11 @@ class MainWindow(QMainWindow):
         self._notification: QWebEngineNotification | None = None
         self._tray_icon: QSystemTrayIcon | None = None
         self._tray_menu: QMenu | None = None
+        self._tray_hinted = False
+        self._instance_server: QLocalServer | None = None
+        self._icon = QIcon(str(app_icon_path()))
         self.setWindowTitle("FlexWeek")
+        self.setWindowIcon(self._icon)
         self.resize(*WINDOW_SIZE)
 
         root = profile_root()
@@ -164,13 +212,33 @@ class MainWindow(QMainWindow):
 
         if tray_enabled is None:
             tray_enabled = QSystemTrayIcon.isSystemTrayAvailable()
-        if tray_enabled:
+        # Without an icon the tray entry is invisible, and a window hidden into it
+        # would leave a running app with no way back.
+        if tray_enabled and not self._icon.isNull():
             self._install_tray()
 
-    def _install_tray(self) -> None:
-        icon = QIcon(str(Path(__file__).resolve().parents[1] / "frontend" / "logo.png"))
-        self.setWindowIcon(icon)
+    def listen_for_instances(self, name: str) -> bool:
+        """Show this window when a second launch knocks, instead of starting another app."""
+        server = QLocalServer(self)
+        if not server.listen(name):
+            # A crashed run can leave a stale socket file behind on Linux.
+            QLocalServer.removeServer(name)
+            if not server.listen(name):
+                return False
+        server.newConnection.connect(self._on_instance_knock)
+        self._instance_server = server
+        return True
 
+    def _on_instance_knock(self) -> None:
+        server = self._instance_server
+        while server is not None and server.hasPendingConnections():
+            connection = server.nextPendingConnection()
+            connection.disconnected.connect(connection.deleteLater)
+            connection.disconnectFromServer()
+        self.restore_window()
+
+    def _install_tray(self) -> None:
+        icon = self._icon
         menu = QMenu(self)
         open_action = QAction("Open FlexWeek", self)
         open_action.triggered.connect(self.restore_window)
@@ -264,10 +332,24 @@ class MainWindow(QMainWindow):
             self._tray_icon.hide()
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt virtual
-        if self._tray_icon is not None and not self._quitting:
+        # Closing keeps FlexWeek in the tray so reminders and alarms still fire,
+        # but only while the tray icon is actually on screen to bring it back.
+        tray = self._tray_icon
+        if tray is not None and tray.isVisible() and not self._quitting:
             self.hide()
             event.ignore()
+            if not self._tray_hinted:
+                self._tray_hinted = True
+                tray.showMessage(
+                    "FlexWeek is still running",
+                    "It stays in the tray so reminders and alarms still work. "
+                    "Right-click the tray icon and choose Quit to close it.",
+                    QSystemTrayIcon.MessageIcon.Information,
+                    TRAY_HINT_MS,
+                )
             return
+        if tray is not None:
+            QApplication.quit()
         super().closeEvent(event)
 
     def _save_download(self, download: QWebEngineDownloadRequest) -> None:
@@ -296,16 +378,98 @@ class MainWindow(QMainWindow):
         self._stack.setCurrentIndex(0 if ok else 1)
 
 
+def smoke_report_path(argv: list[str]) -> Path | None:
+    """Where `--smoke-test PATH` asks for a startup report, or None for a normal launch."""
+    if SMOKE_FLAG not in argv:
+        return None
+    index = argv.index(SMOKE_FLAG)
+    if index + 1 >= len(argv):
+        raise SystemExit(f"{SMOKE_FLAG} needs a file path for the report")
+    return Path(argv[index + 1])
+
+
+class SmokeTest:
+    """Proves a packaged build starts on a fresh machine, then quits.
+
+    Passes once the window is visible and the page has run far enough to show
+    the Create account status line. A crashed renderer or a timeout fails it.
+    Release checks run this on fresh Linux containers and the Windows runner.
+    """
+
+    def __init__(self, window: MainWindow, report: Path, sandbox_reason: str | None) -> None:
+        self._window = window
+        self._report = report
+        self._facts: dict[str, object] = {
+            "sandbox_disabled_by": sandbox_reason,
+            "qt_platform": QApplication.platformName(),
+        }
+        self._done = False
+        self._poll = QTimer(window)
+        self._poll.setInterval(SMOKE_POLL_MS)
+        self._poll.timeout.connect(self._check)
+        window._view.loadFinished.connect(self._on_load)
+        window._page.renderProcessTerminated.connect(self._on_renderer_gone)
+        QTimer.singleShot(SMOKE_TIMEOUT_MS, lambda: self._finish(False, "timed out before the first screen"))
+
+    def _on_load(self, ok: bool) -> None:
+        if not ok:
+            self._finish(False, "page failed to load")
+            return
+        self._poll.start()
+
+    def _on_renderer_gone(self, status: object, exit_code: int) -> None:
+        self._finish(False, f"renderer stopped ({status}, exit {exit_code})")
+
+    def _check(self) -> None:
+        self._window._page.runJavaScript(SMOKE_READY_JS, self._on_ready)
+
+    def _on_ready(self, ready: object) -> None:
+        if ready and self._window.isVisible():
+            self._finish(True, "first screen shown")
+
+    def _finish(self, ok: bool, stage: str) -> None:
+        if self._done:
+            return
+        self._done = True
+        self._poll.stop()
+        window = self._window
+        self._facts.update({
+            "ok": ok,
+            "stage": stage,
+            "window_visible": window.isVisible(),
+            "window_icon_loaded": not window._icon.isNull(),
+            "tray_icon_installed": window._tray_icon is not None,
+        })
+        self._report.write_text(json.dumps(self._facts, indent=2) + "\n")
+        window.quit_app()
+        application = QApplication.instance()
+        if application is not None:
+            application.exit(0 if ok else 1)
+
+
 def main(argv: list[str] | None = None) -> int:
-    app = QApplication(argv if argv is not None else sys.argv)
+    arguments = list(argv if argv is not None else sys.argv)
+    report = smoke_report_path(arguments)
+    # Chromium reads this while QApplication starts, so it has to be decided first.
+    sandbox_reason = disable_sandbox_if_blocked(os.environ)
+    if sandbox_reason is not None:
+        print(f"FlexWeek: Chromium sandbox unavailable ({sandbox_reason}); running without it.",
+              file=sys.stderr)
+    app = QApplication(arguments)
     # Application name drives profile_root(); set it before any profile exists.
     app.setApplicationName("FlexWeek")
+    # Matches flexweek.desktop, so Linux docks show the FlexWeek icon for this window.
+    app.setDesktopFileName(DESKTOP_FILE_NAME)
 
     try:
         origin = configured_origin()
     except ValueError as error:
         QMessageBox.critical(None, "FlexWeek configuration", str(error))
         return 2
+
+    instance = instance_name(profile_root())
+    if show_running_instance(instance):
+        return 0
 
     if origin is None:
         # No hosted server named, so run our own. The database lives beside the
@@ -321,9 +485,13 @@ def main(argv: list[str] | None = None) -> int:
         app.aboutToQuit.connect(server.stop)
 
     window = MainWindow(origin)
+    window.listen_for_instances(instance)
+    smoke = SmokeTest(window, report, sandbox_reason) if report is not None else None
     window.show()
     window.load_app()
-    return app.exec()
+    status = app.exec()
+    del smoke
+    return status
 
 
 if __name__ == "__main__":
