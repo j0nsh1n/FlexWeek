@@ -1,10 +1,27 @@
 # FlexWeek
 
-Constraint scheduler for a student week. Places homework around school and sports, then explains why something moved.
+Places homework around school and sports, then explains why something moved.
 
-Congressional App Challenge 2026. Python solver, HTML/CSS/JS interface, individual accounts and saved weeks. No chatbot or product demo mode.
+Congressional App Challenge 2026. No chatbot. No product demo mode.
 
-## Run
+## Download
+
+From the [latest GitHub Release](https://github.com/j0nsh1n/FlexWeek/releases/latest):
+
+- **Download for Windows.** `FlexWeek-Windows-x64.zip`
+- **Download for Linux.** `FlexWeek-Linux-x86_64.tar.gz`
+
+Checksum files (`.sha256`) sit next to those downloads if you want to confirm the file is complete. You can ignore them and still open FlexWeek.
+
+**Windows.** Extract the zip first. Running FlexWeek.exe from inside the zip does not work. Open FlexWeek.exe. If Windows shows "Windows protected your PC", choose More info, then Run anyway. FlexWeek is not code-signed yet; the warning is SmartScreen not recognizing a new publisher, not a virus finding.
+
+**Linux.** Extract the archive and open the file named FlexWeek. You need a 64-bit Linux desktop (GNOME, KDE Plasma, Cinnamon, Xfce), glibc 2.38 or newer (Ubuntu 24.04, Linux Mint 22, Debian 13, Fedora 39 or newer), and working graphics (OpenGL or EGL). A remote or headless session without a display will not work. The X11 cursor helper (libxcb-cursor) is inside the download.
+
+**Chromebooks.** Use the web version when it is online. It is not online yet. From this source tree you can run the web app locally (see below).
+
+Open FlexWeek, choose Create account, and follow the short first-week setup (school hours, a sport, then homework). You can skip any step.
+
+## Run from source
 
 Requires Python 3.14.
 
@@ -69,25 +86,34 @@ or frontend build step.
 Phases 3 and 4 are complete: accounts, saved weeks and Daily Scheduler themes
 are verified in the real desktop web engine. See the [roadmap](roadmap.md) for
 the separate desktop app, calendar interaction port, later design work and
-contest delivery. Windows/Linux are
-desktop targets; the Windows executable still needs to be built and tested.
+contest delivery. Windows/Linux are desktop targets. Windows packages are
+built on GitHub Actions when a release is published; a Windows machine still
+needs a person to extract the zip and click through SmartScreen.
 
 A Linux desktop build exists: a PySide6 `QWebEngineView` window with the FastAPI
-backend bundled inside it. It needs no separate server and no Python install —
-run `dist/FlexWeek/FlexWeek` and it starts its own backend on a loopback port,
-keeping its database next to the browser profile in your user data directory.
+backend bundled inside it. It needs no separate server and no Python install.
 Build it with `pip install -r requirements-desktop.txt` then
-`./desktop/build_linux.sh`. Releases ship as a tarball attached to a GitHub
-Release rather than committed to the repository, because the bundled Qt
-WebEngine library exceeds GitHub's per-file limit; see [DESKTOP.md](DESKTOP.md). Set `FLEXWEEK_DESKTOP_ORIGIN` to point the window at
-a hosted deployment instead; local and hosted accounts are separate, without
-automatic synchronization. Linux rebuilds preserve the previous artifact.
+`./desktop/build_linux.sh`. Package the download with
+`./desktop/package_linux.sh` to get `FlexWeek-Linux-x86_64.tar.gz` (and a
+`.sha256`) containing README, icon, `.desktop` file and the app. Releases
+attach that archive rather than committing `dist/`, because the bundled Qt
+WebEngine library exceeds GitHub's per-file limit; see [DESKTOP.md](DESKTOP.md).
+The paste-ready GitHub release text is in [docs/github-release.md](docs/github-release.md).
+Set `FLEXWEEK_DESKTOP_ORIGIN` to point the window at a hosted deployment instead;
+local and hosted accounts are separate, without automatic synchronization.
 
-Windows build preparation is in `desktop/build_windows.ps1`, with setup and
-remaining platform checks in [DESKTOP.md](DESKTOP.md). No Windows executable has
-been verified yet. Daily Scheduler's Nocturne/Slate colors are adapted from the
-GPL-3.0 `Local-Schedule-Assistant` project. AI assistance was used in development,
-including Codex and GLM-5.3 Flash test contribution; the runtime uses no AI service.
+Windows packages are built on GitHub Actions when a release is published
+(`desktop/build_windows.ps1`) and attached as `FlexWeek-Windows-x64.zip`.
+ICU (`icuuc`/`icuin`) is part of Windows 10 1809+; the bundle check requires
+those imports to be satisfied without copying Microsoft's DLLs. Daily
+Scheduler's Nocturne/Slate colors are adapted from the GPL-3.0
+`Local-Schedule-Assistant` project. AI assistance was used in development,
+including Codex and GLM-5.3 Flash test contribution; the runtime uses no AI
+service.
+
+The original Sep 6 contest brief (working title Reslot) is in
+[docs/cac-build-plan.md](docs/cac-build-plan.md). The living schedule is the
+[roadmap](roadmap.md).
 
 Submit by Sunday, October 25, 2026, 8:00 p.m. PDT.
 

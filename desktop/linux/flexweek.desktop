@@ -1,0 +1,12 @@
+# install-menu-entry.sh copies this file into your app menu with the full path to FlexWeek.
+[Desktop Entry]
+Type=Application
+Name=FlexWeek
+GenericName=Homework planner
+Comment=Plan homework around school and sports
+Exec=FlexWeek
+Icon=flexweek
+Terminal=false
+Categories=Office;Calendar;Education;
+StartupNotify=true
+StartupWMClass=FlexWeek

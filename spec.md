@@ -1,4 +1,4 @@
-# spec.md — FlexWeek
+# FlexWeek
 
 ## Problem
 Students plan by guilt, not by constraints: a to-do list has no idea that school
@@ -7,18 +7,21 @@ tomorrow. FlexWeek takes a student's fixed week (school, sport, commute, sleep)
 plus their assignments, places the assignments in the gaps with a constraint
 solver, and explains in plain English every time something could not be placed
 or had to move. Built as a Congressional App Challenge 2026 entry. Working title
-was *Reslot*; the public name is **FlexWeek**.
+was *Reslot*; the public name is **FlexWeek**. The original Sep 6 contest brief
+is archived in `docs/cac-build-plan.md`. Living schedule and remaining work live
+in `roadmap.md`.
 
 ## Intended Users
-High-school students using individual accounts through the web app and a planned
+High-school students using individual accounts through the web app and the
 separate desktop app. New accounts start with an empty week; no anonymous demo
 mode or sample-data fallback. Secondary audience: CAC judges, who create an
 account and can inspect the GitHub repository.
 
 Scope revision approved 2026-09-06: accounts, shared persistence, Daily Scheduler
-Nocturne/Slate themes first; separate desktop delivery and calendar interaction
-parity next. Visual redesign and audits are deferred. The previous Oct 3 feature
-freeze is superseded by the expanded roadmap.
+Nocturne/Slate themes first. Desktop delivery, calendar interaction, cascade,
+slack, focus timers and alarms later shipped under that approval. Visual
+redesign and audits remain deferred. The previous Oct 3 feature freeze is
+superseded by the expanded roadmap.
 
 ## Required Behavior
 Contract for the finished app:
@@ -26,6 +29,15 @@ Contract for the finished app:
 - A week is a set of `TimeBlock`s: `locked` blocks have a fixed `start`;
   `flexible` blocks have a `duration_min` and a deadline (`latest`) and are
   placed by the solver.
+- Optional block fields the API and storage already keep: `category`,
+  `completed`, `completed_day`, `missed_days`, `spotify_url`, `focus_sessions`,
+  `focus_minutes`, and pomodoro split fields (`pomodoro_parent_id`,
+  `pomodoro_role`, `pomodoro_index`). `completed_day` is only valid on a
+  completed flexible block that has a `start` on one of its candidate days.
+  `missed_days` is only valid on a locked block, and every missed day must be one
+  of that block's `days`.
+- A week has unique block ids. A pomodoro parent cannot be stored in the same
+  week as the chunks split from it.
 - The solver places every flexible block on the 15-minute grid (Mon–Sun,
   06:00–23:00) without overlapping any locked block or any other placed block.
 - Search order respects priority (1 = test, 2 = quiz, 3 = homework,
@@ -38,23 +50,39 @@ Contract for the finished app:
   `RESHUFFLE_AFTER_MISS`.
 - Sleep (23:00–06:00) is a guard the solver never places into and never steals.
 - Solving is capped at 150 ms. On timeout the app returns the best partial
-  placement plus reasons for what is unplaced — it never hangs and never
+  placement plus reasons for what is unplaced. It never hangs and never
   returns nothing.
+- Cascade: marking a locked occurrence as missed re-solves remaining flexible
+  blocks and lists the resulting diffs as moves. Sleep stays intact. Details
+  live in `docs/scheduling-recovery.md`.
+- Deadline slack is shown as ok / tight / danger.
 - Edge cases: an unsolvable week returns `complete: false` with reasons rather
   than an error; a duration that is not a positive multiple of 15 is rejected in
   both the browser form and the API. Legacy browser data is explicitly imported
   into a signed-in account; invalid data stays untouched and never loads a demo.
 
-Conditional (Week 5, only if the must-ship set is green on Oct 4):
-- Cascade: marking a locked block as missed re-solves the remaining flexible
-  blocks and lists the resulting diffs as moves.
-- Deadline slack shown as ok / tight / danger badges.
-
 ## User Experience
 Web app, one page, desktop-first (designed at 1280px) and usable on a phone at
-390px. Vanilla JavaScript, HTML5 and CSS — **no npm, no build step, no
+390px. Vanilla JavaScript, HTML5 and CSS. **No npm, no build step, no
 framework**. FastAPI serves `frontend/` as static files, so there is one origin
 and no CORS.
+
+First paint with no session is Create account. Log in is a separate screen.
+A new account is offered a short first-week setup (school hours, one sport,
+then homework). Every step can be skipped. Dragging or clicking empty grid
+space opens an Add dialog for that range.
+
+Downloads from GitHub Releases:
+
+- **Download for Windows.** `FlexWeek-Windows-x64.zip`
+- **Download for Linux.** `FlexWeek-Linux-x86_64.tar.gz`
+
+Windows: extract the zip first; running from inside the zip does not work.
+Until the app is code-signed, SmartScreen is More info, then Run anyway.
+Linux: 64-bit desktop (GNOME, KDE Plasma, Cinnamon, Xfce), glibc 2.38 or
+newer, OpenGL or EGL. The X11 cursor helper is inside the archive. A shippable
+Linux tarball is built on Ubuntu 24.04, not on a newer-glibc Fedora host.
+Chromebooks use the web app when a hosted URL exists.
 
 Run locally:
 
@@ -74,12 +102,14 @@ Current account/API contract:
 | GET | `/api/auth/me` | Current account; 401 when absent/expired |
 | GET/PUT | `/api/week` | One dated week of the account, with revision-checked saves |
 | GET | `/api/weeks` | The `week_start` dates this account has saved, ascending |
-| GET/PUT | `/api/preferences` | Own Nocturne/Slate theme |
+| GET/PUT | `/api/preferences` | Theme, reminders, timers, alarms, Spotify default |
 | POST | `/api/solve` | Authenticated week in, SolveTrace out; no storage mutation |
 | GET | `/api/health` | Public health response |
 
-The solve trace contains `placed`, `unplaced`, `moves`, `failed_constraints`,
-`solve_ms`, `complete`. Demo endpoints are removed. Test-only seed JSON remains.
+`POST /api/solve` accepts `{ "blocks": [...] }` and an optional `recover`
+object for a missed locked occurrence. The solve trace contains `placed`,
+`unplaced`, `moves`, `explanations`, `failed_constraints`, `solve_ms`,
+`complete`. Demo endpoints are removed. Test-only seed JSON remains.
 Writes require `X-FlexWeek-Request: 1`; browser origins must match
 `FLEXWEEK_ORIGIN`. Clients send `X-FlexWeek-Account` to reject requests after a
 cross-tab account change. No CORS is enabled.
@@ -105,9 +135,16 @@ and unique day indices. Explicit starts are on the visible grid and end by
 23:00. Deadlines/earliest bounds use full English weekday plus HH:MM, or HH:MM.
 API write bodies are capped at 256 KiB.
 
+Preferences store `theme` (`nocturne` or `slate`), reminder enable/lead/sound,
+`reminder_dnd_override`, pomodoro lengths, `auto_split_pomodoro`,
+`default_spotify_url`, and a list of alarms. On desktop, `reminder_dnd_override`
+tags the Notification `flexweek-stay` so the tray presenter skips the 10-second
+auto-close. Unchecked alerts still close at 10 seconds. Qt has no
+`requireInteraction`.
+
 ## Architecture
-- Language/runtime: **Python 3.14** — PINNED. Verified against the local
-  interpreter (3.14.7) and `Github Templates/ci.yml` (`python-version: "3.14"`).
+- Language/runtime: **Python 3.14**. PINNED. Verified against the local
+  interpreter (3.14.7) and `.github/workflows/verify.yml` (`python-version: '3.14'`).
   Never downgrade.
 - Current languages: Python, JavaScript, HTML5, CSS, and SQL for account storage.
   The desktop shell is PySide6 (Qt WebEngine); see DESKTOP.md.
@@ -121,22 +158,27 @@ API write bodies are capped at 256 KiB.
   that day; it is idempotent and never drops a row. Browser
   localStorage is read only for explicit legacy import, then removed on success.
 - Major components:
-  - `backend/models.py` — Pydantic models (`TimeBlock`, `Move`, `SolveTrace`) and
-    slot helpers. **Zero FastAPI imports.**
-  - `backend/app.py` — HTTP endpoints, authentication/ownership, static files, `/api/solve`.
+  - `backend/models.py`. Pydantic models (`TimeBlock`, `Move`, `SolveTrace`,
+    `Explanation`) and slot helpers. **Zero FastAPI imports.**
+  - `backend/app.py`. HTTP endpoints, authentication/ownership, static files, `/api/solve`.
     No placement logic.
-  - `backend/solver.py` — pure synchronous CSP placement. No HTTP knowledge.
-  - `backend/explain.py` — reason code → English string. *(Not yet written.)*
-  - `backend/storage.py` — SQLite transactions, password hashing and sessions.
-  - `backend/data/demo_*.json` — test-only anonymized seed weeks.
-  - `backend/tests/` — pytest suite; the source of truth for solver behavior.
-  - `frontend/` — `index.html`, `styles.css`, `app.js`. The browser owns
+  - `backend/solver.py`. Pure synchronous CSP placement. No HTTP knowledge.
+  - `backend/explain.py`. Reason code and slack status to English string.
+  - `backend/storage.py`. SQLite transactions, password hashing and sessions.
+  - `backend/data/demo_*.json`. Test-only anonymized seed weeks.
+  - `backend/tests/`. Pytest suite; the source of truth for solver behavior.
+  - `frontend/`. `index.html`, `styles.css`, and deferred scripts sharing one
+    global scope: `app.js` (week state, grid, saves, solve, alarms), `auth.js`
+    (Create account / Log in), `editor.js` (Add/Edit dialog), `setup.js`
+    (first-week setup), `focus.js` (timer and Now / Next). The browser owns
     interaction and explanation display and **never reimplements placement**.
+  - `desktop/`. PySide6 window, bundled uvicorn, packaging scripts, and
+    isolated WebEngine probes.
 - Time model: local `HH:MM` strings and Mon–Sun day indices, assumed
   America/Los_Angeles. No timezone conversion math anywhere in v1.
 - Slot grid: Mon–Sun 06:00–23:00, 15-minute slots, 68/day × 7 = 476/week.
-  Overlap uses half-open ranges `[start, end)`. One `overlaps()` helper — no
-  duplicate date math.
+  Overlap uses half-open ranges `[start, end)`. One `overlaps()` helper. There
+  is no duplicate date math.
 - External APIs/services: none. No OAuth, no calendar sync, no LLM at runtime.
 - Deployment: hosted web backend plus a separate desktop client. The Linux
   desktop build ships as a PySide6 Qt WebEngine window that runs the FastAPI
@@ -144,14 +186,20 @@ API write bodies are capped at 256 KiB.
   Python install; its database sits beside the browser profile in the user data
   directory. `FLEXWEEK_DESKTOP_ORIGIN` (or `FLEXWEEK_ORIGIN`) points that window
   at a hosted deployment instead, and an invalid value is an error rather than a
-  silent fall back to local. Windows is prepared but unverified. Production
-  requires HTTPS via FLEXWEEK_ORIGIN and persistent SQLite storage.
+  silent fall back to local. Windows zip is built on GitHub Actions
+  (`.github/workflows/release-windows.yml`); extracting and running it on a
+  real PC is unverified here. Production requires HTTPS via FLEXWEEK_ORIGIN and
+  persistent SQLite storage.
+- GitHub Actions: `.github/workflows/verify.yml` is the source gate (mypy, not
+  pyright). `.github/workflows/codeql.yml` runs CodeQL on Python and JavaScript.
+  The generic kit `ci.yml` is not installed: it ran pyright and looked for
+  `tests/` at the repo root. Dependabot stays off.
 
 ## Security & Privacy
 - No secrets in source. All credentials via environment variables. The app
   uses account session credentials generated at runtime.
 - Dependencies must be pinned and reproducible. Updates are manual:
-  **Dependabot is deliberately not used in this repo** — do not add
+  **Dependabot is deliberately not used in this repo**. Do not add
   `.github/dependabot.yml` or re-enable it.
 - Account-owned schedules are sent to the backend and stored in SQLite.
 - Passwords use Python/OpenSSL scrypt, N=32768, r=8, p=3, random 16-byte salt,
@@ -182,21 +230,32 @@ API write bodies are capped at 256 KiB.
   handwritten.
 
 ## Validation & Tooling
-All three commands run from the repo root, inside `.venv`, and must exit 0:
+The full source gate from the repo root, inside `.venv`, is:
 
-- Lint: `ruff check .` — configured in `ruff.toml` (target `py314`, line length
+```
+.venv/bin/python scripts/verify.py
+```
+
+`--web-only` omits desktop tests and reports desktop as unverified.
+`.github/workflows/verify.yml` runs that variant on every push and pull
+request (Python 3.14, Node 24, `contents: read`). It installs nothing and does
+not build a binary.
+
+The commands it runs, each of which must exit 0:
+
+- Lint: `ruff check .`. Configured in `ruff.toml` (target `py314`, line length
   110). The `DTZ` (timezone-aware datetime) rules are deliberately not selected
   because of the naive-local-time model above; the reason is written into
   `ruff.toml`. Do not add timezone math to satisfy a linter.
-- Types: `mypy backend` — mypy is this repo's type checker. `Github
-  Templates/ci.yml` names `pyright` instead; that template is generic and this
-  repo deliberately diverges, because mypy installs from `requirements.txt` with
-  no Node toolchain.
-- Tests: `pytest -q` — run from the repo root so `backend` imports resolve.
+- Types: `mypy backend`. This repo's type checker is mypy. Do not install
+  pyright.
+- Tests: `pytest -q`. Run from the repo root so `backend` imports resolve.
+  `--web-only` limits pytest to `backend/tests`.
 - Frontend behavior tests: `node --test frontend/tests/*.test.mjs` (the shell
   glob; the directory form is broken on Node 24);
-  syntax: `node --check frontend/app.js`. Node is development-only, with no npm
-  packages or frontend build step. Browser layout needs a separate manual check.
+  syntax: `node --check` on every `frontend/*.js` file. Node is development-only,
+  with no npm packages or frontend build step. Browser layout needs a separate
+  manual check.
 - Preserve existing solver fixture coverage; include account isolation, expiry,
   CSRF, atomic saves, revision conflict and import/retry tests.
 - Solver tests are the source of truth: `solve()` stays synchronous and pure so
@@ -220,6 +279,13 @@ All three commands run from the repo root, inside `.venv`, and must exit 0:
 - [ ] Failed saves preserve drafts; stale saves return a recoverable conflict.
 - [ ] No output block overlaps another, and no flexible block starts after its
       deadline (property tests).
+- [ ] First paint with no session is Create account, not Log in.
+- [ ] A pomodoro parent cannot be stored with the chunks split from it.
+- [ ] Marking a locked occurrence missed reshuffles remaining flexible work and
+      leaves sleep intact.
+- [ ] Download names are `FlexWeek-Windows-x64.zip` and
+      `FlexWeek-Linux-x86_64.tar.gz`.
 - [ ] A public Render URL loads the app and a judge can follow the README.
-- [ ] `ruff check .`, `mypy backend`, and `pytest -q` all exit 0.
+- [ ] `scripts/verify.py` exits 0 (`ruff check .`, `mypy backend`, and
+      `pytest -q` included).
 - [ ] CHANGELOG.md updated for user-visible changes.

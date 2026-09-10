@@ -24,6 +24,8 @@ This runs the frontend and backend checks and explicitly reports desktop as
 unverified. `.github/workflows/verify.yml` runs this variant on pushes and pull
 requests using Python 3.14 and Node 24. The workflow has read-only repository
 permissions. Its hosted execution is unverified until the branch is pushed.
+`.github/workflows/codeql.yml` scans Python and JavaScript; it does not replace
+this gate. The generic kit CI that ran pyright is not used.
 
 ## Coverage map
 

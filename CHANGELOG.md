@@ -6,6 +6,13 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- First-open downloads (2026-09-10). GitHub Releases and the README lead with
+  Download for Windows and Download for Linux. Each archive includes a README
+  that names glibc 2.38, a normal desktop with OpenGL or EGL, and SmartScreen
+  on Windows. Checksums sit next to the downloads. Chromebooks are pointed at
+  the web version when it exists.
+- Linux archive extras: README, icon, `.desktop` file, menu-entry script, and
+  vendored libxcb-cursor. Unused Qt translations are dropped.
 - First-week setup (2026-09-10). A new account is asked for school days and
   hours, one sport or practice, and the first homework, then Solve runs. Every
   step can be skipped. An empty week shows a Set up my week banner.

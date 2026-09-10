@@ -1,33 +1,33 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-10. Branch `feat/rookie-ux-slice` (off `main` 652a92b), not merged.
-- Rookie UX slice is in. Create account and Log in are separate screens, and
-  Create account shows first. A new account gets a four-step setup (school,
-  sport, first homework, Solve). Dragging or clicking the grid opens an Add
-  dialog. The sidebar holds type chips. A bad day choice keeps the dialog open
-  with the reason shown, basic fields come first with More options below, and
-  Solve results use plain words.
-- Desktop tray icon now loads in the Nuitka bundle. Close hides to the tray
-  only while the icon is visible, and a second launch shows the running window.
-- Gates green 2026-09-10 via `scripts/verify.py`: ruff, mypy over 22 files,
-  163 Python tests (12 real WebEngine probe cases) and 86 frontend tests.
-- The packaged Linux build was rebuilt to `/tmp/fw-build` (not `dist/`). With a
-  throwaway profile, Plasma's StatusNotifierWatcher listed a FlexWeek item with
-  22x22 icon pixmaps, and a second launch handed off and exited 0 in 0.22 s.
-- Windows execution, Safari/iPhone, physical touch and OS notification
-  delivery remain unverified. Close-to-tray was not clicked by hand in the
-  packaged build; the probes cover it in source.
+- Date: 2026-09-10. Branch `feat/normie-first-open` (off `main` 652a92b via
+  `feat/rookie-ux-slice`), not merged.
+- Rookie UX is in: Create account and Log in are separate screens, Create
+  account shows first, a new account gets a four-step setup, dragging or
+  clicking the grid opens an Add dialog, and Solve results use plain words.
+- First-open packaging is in: Linux tar.gz with README, icon, `.desktop` and
+  vendored libxcb-cursor; Windows zip with SmartScreen note and README; GitHub
+  release text leads with Download for Windows / Linux. Checksums are extra
+  files. Chromebooks are pointed at a hosted web URL when one exists.
+- Gates green 2026-09-10: ruff, mypy over 22 files, 183 Python tests and 86
+  frontend tests, including the real WebEngine register probe.
+- Windows execution on a real PC, Safari/iPhone, physical touch and OS
+  notification delivery remain unverified. Hosted web URL is not online.
 - Default desktop mode uses a local database. Hosted mode uses the configured
   server; there is no automatic synchronization between them.
 
 ## Repo Landmarks
 ```
+docs/cac-build-plan.md   original Sep 6 contest brief (working title Reslot)
+.github/workflows/       verify.yml (mypy), codeql.yml, release packages
 DESKTOP.md               PySide6 QWebEngineView recommendation + build status
 desktop/origin.py        origin resolution, no Qt imports (unit-tested)
 desktop/server.py        bundled uvicorn on a loopback port, no Qt imports
 desktop/main.py          Qt window, persistent profile, retry panel
 desktop/build_linux.sh   staged Linux build, previous artifacts preserved
+desktop/package_linux.sh release tar.gz with README, icon and .desktop
+desktop/check_bundle.py  glibc and missing-library check, no Qt imports
 desktop/build_windows.ps1 Windows standalone build preparation
 desktop/tests/           origin/server tests and isolated real WebEngine probes
 backend/weeks.py         week-date helpers, no framework import
@@ -96,17 +96,24 @@ There is no automatic synchronization between those databases.
 - The dialog offers Fixed or Flexible only for a new item; editing keeps the
   existing kind, because converting needs completed_day and start cleanup that
   no flow asks for yet.
+- Windows ICU (icuuc/icuin) is a system DLL since 1703. Copying it out of
+  System32 would redistribute Microsoft's files; the bundle check requires the
+  import to be satisfied by Windows 10 1809+ instead.
+- Linux ships a tar.gz rather than an AppImage so the executable bit survives
+  and no extra runtime is required. Unused Qt `.qm` files are dropped; the
+  Chromium en-US locale pack stays.
 
 ## Session Handoff
-- 2026-09-10, `feat/rookie-ux-slice`: rookie UX slice built in eight commits
-  (split, tray, auth, editor, Solve chrome, setup, docs). Nothing pushed.
-- Next: owner review of the branch and a hand check of close-to-tray in the
-  packaged build. Then decide on the open items below.
-- Open: preferences still repeat their defaults in three places in app.js (not
-  folded into a schema this slice). `spec.md` names only `frontend/app.js` and
-  its syntax command, and still does not document `completed_day` or Phase 7
-  fields; both need an approved spec edit.
-- Two old `dist/FlexWeek` processes (started 2026-09-09) and one from
-  `~/Downloads/flexweek-rookie` are still running hidden with blank tray icons.
-  They were left alone. The untracked `Github Templates/` and
-  `reslot-cac-build-plan.md` are untouched.
+- 2026-09-10, `feat/normie-first-open`: GitHub kit and contest brief organized.
+  CodeQL lives at `.github/workflows/codeql.yml`. Generic kit CI was not
+  installed (pyright, `tests/` at repo root). Original Sep 6 plan archived as
+  `docs/cac-build-plan.md`. `spec.md` now matches the shipped product (desktop,
+  cascade/slack, frontend split, mypy/verify.py, Phase 7 fields, first-open).
+  Packaging work from this branch is still in the working tree. Nothing pushed.
+- A copy of dist/FlexWeek was finished in /tmp/fw-finish-test: libxcb-cursor
+  and friends were vendored. The glibc 2.38 check still fails on this Fedora
+  Python (GLIBC_ABI_GNU2_TLS). The Linux release tarball has to be built on
+  Ubuntu 24.04 (the CI `linux` job). Container smoke was not run against a
+  shippable archive.
+- Open: hosted web URL, a hand check of close-to-tray and of the Windows zip
+  on a real PC.
