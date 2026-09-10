@@ -22,8 +22,8 @@ from pathlib import Path
 
 # Libraries every desktop Linux with a GUI session already has. The glibc and
 # GCC runtime set, the X11 and Wayland client stack, GL/EGL from the graphics
-# driver, fonts (FreeType pulls in Brotli), D-Bus, sound and NSS, which
-# Chromium's networking needs.
+# driver, fonts (FreeType pulls in Brotli), D-Bus, sound, NSS, Expat (WebEngine
+# XML), and util-linux uuid.
 LINUX_SYSTEM_LIBS = frozenset({
     "ld-linux-x86-64.so.2", "libc.so.6", "libm.so.6", "libdl.so.2", "libpthread.so.0", "librt.so.1",
     "libresolv.so.2", "libutil.so.1", "libstdc++.so.6", "libgcc_s.so.1", "libz.so.1",
@@ -38,20 +38,22 @@ LINUX_SYSTEM_LIBS = frozenset({
     "libglib-2.0.so.0", "libgobject-2.0.so.0", "libgthread-2.0.so.0", "libasound.so.2",
     "libnss3.so", "libnssutil3.so", "libsmime3.so", "libnspr4.so", "libplc4.so", "libplds4.so",
     "libudev.so.1", "libgssapi_krb5.so.2", "libxcb-dri3.so.0", "libxcb-present.so.0",
-    "libbrotlidec.so.1", "libbrotlicommon.so.1",
+    "libbrotlidec.so.1", "libbrotlicommon.so.1", "libexpat.so.1", "libuuid.so.1",
 })
 
 # DLLs that are part of Windows 10 1809 and later. icuuc/icuin have been system
 # DLLs since 1703, so Qt6Core's import of icuuc.dll is satisfied by Windows.
 WINDOWS_SYSTEM_DLLS = frozenset({
-    "advapi32.dll", "authz.dll", "bcrypt.dll", "bthprops.cpl", "cfgmgr32.dll", "comctl32.dll",
+    "advapi32.dll", "authz.dll", "bcrypt.dll", "bcryptprimitives.dll", "bthprops.cpl",
+    "cfgmgr32.dll", "comctl32.dll",
     "comdlg32.dll", "crypt32.dll", "d3d9.dll", "d3d11.dll", "d3d12.dll", "dbghelp.dll", "dcomp.dll",
     "dhcpcsvc.dll", "dnsapi.dll", "dwmapi.dll", "dwrite.dll", "dxgi.dll", "fontsub.dll", "gdi32.dll",
     "hid.dll", "icu.dll", "icuin.dll", "icuuc.dll", "imm32.dll", "iphlpapi.dll", "kernel32.dll",
     "mmdevapi.dll", "mpr.dll", "msimg32.dll", "ncrypt.dll", "netapi32.dll", "ntdll.dll", "ole32.dll",
     "oleacc.dll", "oleaut32.dll", "opengl32.dll", "pdh.dll", "powrprof.dll", "propsys.dll",
     "psapi.dll", "rpcrt4.dll", "secur32.dll", "setupapi.dll", "shcore.dll", "shell32.dll",
-    "shlwapi.dll", "urlmon.dll", "user32.dll", "userenv.dll", "uxtheme.dll", "version.dll",
+    "shlwapi.dll", "uiautomationcore.dll", "urlmon.dll", "user32.dll", "userenv.dll",
+    "uxtheme.dll", "version.dll",
     "winhttp.dll", "winmm.dll", "winspool.drv", "winusb.dll", "wintrust.dll", "wldap32.dll",
     "ws2_32.dll", "wtsapi32.dll", "d2d1.dll", "windowscodecs.dll", "normaliz.dll", "credui.dll",
 })

@@ -67,6 +67,7 @@ def test_vendoring_the_helper_and_optional_plugins_pass() -> None:
     binaries = {
         "libQt6XcbQpa.so.6": ({"libxcb-cursor.so.0", "libxcb.so.1"}, ((2, 34), "GLIBC_2.34")),
         "PySide6/qt-plugins/platformthemes/libqgtk3.so": ({"libgtk-3.so.0"}, ((2, 36), "GLIBC_ABI_DT_RELR")),
+        "libQt6WebEngineCore.so.6": ({"libexpat.so.1", "libuuid.so.1", "libc.so.6"}, ((2, 34), "GLIBC_2.34")),
     }
     assert linux_problems(binaries, {"libxcb-cursor.so.0", "libQt6XcbQpa.so.6"}, (2, 38)) == []
 
@@ -78,6 +79,15 @@ def test_windows_bundle_needs_the_vc_runtime_but_not_system_icu() -> None:
         "Qt6Core.dll imports msvcp140.dll, which is neither bundled nor part of Windows",
     ]
     assert windows_problems(binaries, {"qt6core.dll", "msvcp140.dll"}) == []
+
+
+def test_windows_qt_and_pydantic_use_system_dlls() -> None:
+    binaries = {
+        "PySide6/qt-plugins/platforms/qwindows.dll": ["USER32.dll", "uiautomationcore.dll"],
+        "PySide6/qt-plugins/platforms/qdirect2d.dll": ["uiautomationcore.dll"],
+        "pydantic_core/_pydantic_core.pyd": ["KERNEL32.dll", "bcryptprimitives.dll"],
+    }
+    assert windows_problems(binaries, set()) == []
 
 
 def minimal_pe(dll_names: list[str]) -> bytes:
