@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import json
+import os
 import sys
 from pathlib import Path
 
@@ -44,6 +46,7 @@ from PySide6.QtWidgets import (
 
 import backend
 from desktop.origin import configured_origin, is_same_origin
+from desktop.sandbox import disable_sandbox_if_blocked
 from desktop.server import LocalServer
 
 WINDOW_SIZE = (1280, 800)
@@ -52,6 +55,15 @@ NOTIFICATION_TIMEOUT_MS = 10_000
 NOTIFY_STAY_TAG = "flexweek-stay"
 TRAY_HINT_MS = 6_000
 INSTANCE_WAIT_MS = 500
+DESKTOP_FILE_NAME = "flexweek"
+SMOKE_FLAG = "--smoke-test"
+SMOKE_TIMEOUT_MS = 90_000
+SMOKE_POLL_MS = 250
+# The first screen only reads this once app.js and auth.js have run against the server.
+SMOKE_READY_JS = (
+    "Boolean(document.getElementById('status') && "
+    "document.getElementById('status').textContent.includes('Create an account'))"
+)
 
 
 def app_icon_path() -> Path:
@@ -366,10 +378,88 @@ class MainWindow(QMainWindow):
         self._stack.setCurrentIndex(0 if ok else 1)
 
 
+def smoke_report_path(argv: list[str]) -> Path | None:
+    """Where `--smoke-test PATH` asks for a startup report, or None for a normal launch."""
+    if SMOKE_FLAG not in argv:
+        return None
+    index = argv.index(SMOKE_FLAG)
+    if index + 1 >= len(argv):
+        raise SystemExit(f"{SMOKE_FLAG} needs a file path for the report")
+    return Path(argv[index + 1])
+
+
+class SmokeTest:
+    """Proves a packaged build starts on a fresh machine, then quits.
+
+    Passes once the window is visible and the page has run far enough to show
+    the Create account status line. A crashed renderer or a timeout fails it.
+    Release checks run this on fresh Linux containers and the Windows runner.
+    """
+
+    def __init__(self, window: MainWindow, report: Path, sandbox_reason: str | None) -> None:
+        self._window = window
+        self._report = report
+        self._facts: dict[str, object] = {
+            "sandbox_disabled_by": sandbox_reason,
+            "qt_platform": QApplication.platformName(),
+        }
+        self._done = False
+        self._poll = QTimer(window)
+        self._poll.setInterval(SMOKE_POLL_MS)
+        self._poll.timeout.connect(self._check)
+        window._view.loadFinished.connect(self._on_load)
+        window._page.renderProcessTerminated.connect(self._on_renderer_gone)
+        QTimer.singleShot(SMOKE_TIMEOUT_MS, lambda: self._finish(False, "timed out before the first screen"))
+
+    def _on_load(self, ok: bool) -> None:
+        if not ok:
+            self._finish(False, "page failed to load")
+            return
+        self._poll.start()
+
+    def _on_renderer_gone(self, status: object, exit_code: int) -> None:
+        self._finish(False, f"renderer stopped ({status}, exit {exit_code})")
+
+    def _check(self) -> None:
+        self._window._page.runJavaScript(SMOKE_READY_JS, self._on_ready)
+
+    def _on_ready(self, ready: object) -> None:
+        if ready and self._window.isVisible():
+            self._finish(True, "first screen shown")
+
+    def _finish(self, ok: bool, stage: str) -> None:
+        if self._done:
+            return
+        self._done = True
+        self._poll.stop()
+        window = self._window
+        self._facts.update({
+            "ok": ok,
+            "stage": stage,
+            "window_visible": window.isVisible(),
+            "window_icon_loaded": not window._icon.isNull(),
+            "tray_icon_installed": window._tray_icon is not None,
+        })
+        self._report.write_text(json.dumps(self._facts, indent=2) + "\n")
+        window.quit_app()
+        application = QApplication.instance()
+        if application is not None:
+            application.exit(0 if ok else 1)
+
+
 def main(argv: list[str] | None = None) -> int:
-    app = QApplication(argv if argv is not None else sys.argv)
+    arguments = list(argv if argv is not None else sys.argv)
+    report = smoke_report_path(arguments)
+    # Chromium reads this while QApplication starts, so it has to be decided first.
+    sandbox_reason = disable_sandbox_if_blocked(os.environ)
+    if sandbox_reason is not None:
+        print(f"FlexWeek: Chromium sandbox unavailable ({sandbox_reason}); running without it.",
+              file=sys.stderr)
+    app = QApplication(arguments)
     # Application name drives profile_root(); set it before any profile exists.
     app.setApplicationName("FlexWeek")
+    # Matches flexweek.desktop, so Linux docks show the FlexWeek icon for this window.
+    app.setDesktopFileName(DESKTOP_FILE_NAME)
 
     try:
         origin = configured_origin()
@@ -396,9 +486,12 @@ def main(argv: list[str] | None = None) -> int:
 
     window = MainWindow(origin)
     window.listen_for_instances(instance)
+    smoke = SmokeTest(window, report, sandbox_reason) if report is not None else None
     window.show()
     window.load_app()
-    return app.exec()
+    status = app.exec()
+    del smoke
+    return status
 
 
 if __name__ == "__main__":
