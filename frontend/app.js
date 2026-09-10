@@ -647,22 +647,6 @@ function slotTimes() {
   return times;
 }
 
-function fillTimeSelect(select, includeBlank) {
-  select.innerHTML = "";
-  if (includeBlank) {
-    const blank = document.createElement("option");
-    blank.value = "";
-    blank.textContent = "—";
-    select.appendChild(blank);
-  }
-  slotTimes().forEach((time) => {
-    const opt = document.createElement("option");
-    opt.value = time;
-    opt.textContent = time;
-    select.appendChild(opt);
-  });
-}
-
 function isValidWeek(data) {
   if (!data || typeof data !== "object" || !Array.isArray(data.blocks)) return false;
   return importBlocksError(data.blocks) === null;

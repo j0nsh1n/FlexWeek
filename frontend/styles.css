@@ -515,10 +515,6 @@ button:disabled { cursor: wait; opacity: .6; }
   outline-offset: 1px;
 }
 
-.category-legend h2 {
-  margin-top: 0.75rem;
-}
-
 .picker-label {
   display: block;
   font-size: 0.8rem;

@@ -15,10 +15,15 @@ pip install -r requirements.txt
 uvicorn backend.app:app --reload
 ```
 
-Open **http://127.0.0.1:8000** and create an account. Usernames use 3–32 letters,
-numbers or underscores; passwords use 12–128 characters. Accounts start with an
-empty week. Add school/sports as locked blocks, add homework as flexible tasks,
-and press Solve. Every editor save goes to your account; Solve previews placement
+Open **http://127.0.0.1:8000**. The first screen is Create account; returning
+users choose Log in. Usernames use 3–32 letters, numbers or underscores;
+passwords use 12–128 characters. A new account opens a short setup for school
+hours, one sport and the first homework, then runs Solve. You can skip it.
+
+To add more, pick a type in the sidebar and drag on the calendar, or click for a
+1-hour block. The dialog asks whether the item is a **Fixed time** (school,
+practice: Solve never moves it) or **Flexible** (homework: Solve picks a free
+time before it is due). Every save goes to your account; Solve previews placement
 without replacing your entered blocks.
 
 Choose Nocturne (dark) or Slate (light) from Theme. The choice is saved to your
@@ -26,7 +31,7 @@ account. If a save fails, keep the page open and use Retry save. A conflicting
 save from another window offers a draft download and reload of the saved week.
 Password recovery is planned for the later hardening phase.
 
-Existing browser-only weeks can be explicitly imported after sign-in. Import
+Existing browser-only weeks can be explicitly imported after logging in. Import
 replaces the account's current week after confirmation; invalid legacy data is
 left untouched. Private account weeks are not stored in localStorage.
 

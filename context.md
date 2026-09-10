@@ -1,26 +1,23 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-09. Branch `feat/phase7-focus-tools`.
-- Phase 7 focus tools are in: pomodoro timers on placed tasks, standalone
-  alarms with a dismiss/snooze dialog, Spotify share links on blocks and
-  alarms, a Now / Next line, timer and do-not-disturb preferences, and desktop
-  tray notifications. Three GLM leftovers from that slice are now fixed:
-  desktop DND linger, non-reentrant focus skip during save, and import of a
-  pomodoro parent with its chunks.
-- Gates green: Ruff, mypy over 22 files, 160 Python tests and 71 frontend
-  tests, JavaScript syntax. The tray WebEngine case checks that a
-  `flexweek-stay` notification is presented with timeout 0.
-- Phase 7 is verified in a real browser, not only in the DOM stub. The
-  `phase7` WebEngine case starts a focus session and checks the panel counts,
-  that pause stops the countdown, that skip changes phase and reset closes it,
-  then adds an alarm through the preferences dialog.
-- Phase 5 calendar interactions and Phase 6 scheduling recovery remain in
-  place. Accounts, Monday-keyed weeks, 15-minute placement and per-day
-  `missed_days` recovery are still the product model.
-- Windows execution, Safari/iPhone, physical touch, full packaged flows and OS
-  notification delivery remain unverified. Desktop tray reminders beyond the
-  notification bridge are deferred.
+- Date: 2026-09-10. Branch `feat/rookie-ux-slice` (off `main` 652a92b), not merged.
+- Rookie UX slice is in. Create account and Log in are separate screens, and
+  Create account shows first. A new account gets a four-step setup (school,
+  sport, first homework, Solve). Dragging or clicking the grid opens an Add
+  dialog. The sidebar holds type chips. A bad day choice keeps the dialog open
+  with the reason shown, basic fields come first with More options below, and
+  Solve results use plain words.
+- Desktop tray icon now loads in the Nuitka bundle. Close hides to the tray
+  only while the icon is visible, and a second launch shows the running window.
+- Gates green 2026-09-10 via `scripts/verify.py`: ruff, mypy over 22 files,
+  163 Python tests (12 real WebEngine probe cases) and 86 frontend tests.
+- The packaged Linux build was rebuilt to `/tmp/fw-build` (not `dist/`). With a
+  throwaway profile, Plasma's StatusNotifierWatcher listed a FlexWeek item with
+  22x22 icon pixmaps, and a second launch handed off and exited 0 in 0.22 s.
+- Windows execution, Safari/iPhone, physical touch and OS notification
+  delivery remain unverified. Close-to-tray was not clicked by hand in the
+  packaged build; the probes cover it in source.
 - Default desktop mode uses a local database. Hosted mode uses the configured
   server; there is no automatic synchronization between them.
 
@@ -36,7 +33,12 @@ desktop/tests/           origin/server tests and isolated real WebEngine probes
 backend/weeks.py         week-date helpers, no framework import
 backend/app.py           account/session/ownership APIs and static frontend
 backend/storage.py       SQLite, scrypt, hashed sessions
-frontend/app.js          account lifecycle, editor, server saves
+frontend/app.js          week state, grid, saves, solve, alarms, CATEGORIES table
+frontend/editor.js       Add/Edit dialog: draft -> draftProblem -> draftPatch
+frontend/setup.js        first-week setup, built on editor drafts
+frontend/focus.js        focus timer, Now / Next line
+frontend/auth.js         Create account / Log in screens, session start (loads last)
+frontend/tests/app-scripts.mjs  loads index.html's scripts in order for DOM-stub tests
 ```
 
 ## Domain Model
@@ -83,21 +85,28 @@ There is no automatic synchronization between those databases.
 - Qt WebEngine cannot be statically linked; onedir Chromium libs are expected.
 - No Qt WebChannel / pywebview js_api in v1 (cookies and CSRF stay on the page).
 - License file is GPL-3.0. Qt for Python is LGPLv3/GPLv2/commercial.
+- Frontend scripts are classic deferred scripts sharing one global scope, not
+  modules, so there is still no build step. A script's top-level code can only
+  reach scripts loaded before it. The tests run them in index.html order.
+- The tray icon path is anchored on the `backend` package, because Nuitka puts
+  `desktop/main.py` at the bundle root as `__main__`.
+- A new flexible task in the week on screen may use today onward. The solver
+  does not know today's date, so without this it placed new homework on days
+  already over.
+- The dialog offers Fixed or Flexible only for a new item; editing keeps the
+  existing kind, because converting needs completed_day and start cleanup that
+  no flow asks for yet.
 
 ## Session Handoff
-- 2026-09-09, `feat/phase7-focus-tools`: fixed the three GLM leftovers Claude
-  left. Desktop DND now lingers via the `flexweek-stay` tag (non-DND still
-  closes at 10s). Focus skip/pause cannot re-enter a completion save.
-  Import and PUT /api/week reject a parent stored with its split chunks.
-  Gates re-run green on 2026-09-09; Linux artifact rebuilt.
-- The editor disables every control while a save is in flight, so a click
-  during that window is a visible no-op rather than a bug. A probe that does
-  not wait for the save to settle will wrongly report the Add task button as
-  dead; wait for `saving === false` or for the status to start with "Saved".
-- Next: the remaining Phase 7 items in roadmap.md that are not yet built,
-  notably splitting long blocks into pomodoro chunks on the grid, free-gap
-  visualization and the block-start notification lead time.
-- `spec.md` still does not document `completed_day` or any Phase 7 field. That
-  contract update needs a separate approved spec edit.
-- The untracked `Github Templates/` and `reslot-cac-build-plan.md` remain
-  untouched.
+- 2026-09-10, `feat/rookie-ux-slice`: rookie UX slice built in eight commits
+  (split, tray, auth, editor, Solve chrome, setup, docs). Nothing pushed.
+- Next: owner review of the branch and a hand check of close-to-tray in the
+  packaged build. Then decide on the open items below.
+- Open: preferences still repeat their defaults in three places in app.js (not
+  folded into a schema this slice). `spec.md` names only `frontend/app.js` and
+  its syntax command, and still does not document `completed_day` or Phase 7
+  fields; both need an approved spec edit.
+- Two old `dist/FlexWeek` processes (started 2026-09-09) and one from
+  `~/Downloads/flexweek-rookie` are still running hidden with blank tray icons.
+  They were left alone. The untracked `Github Templates/` and
+  `reslot-cac-build-plan.md` are untouched.

@@ -74,7 +74,8 @@ needs the same create/save/reload and recovery paths exercised through the
 packaged executable in a fresh profile. `DESKTOP.md` describes the build and
 artifact checks. Windows execution, Safari/iPhone, physical touch, keyboard
 accessibility, notification permission/sound and visual contrast remain separate
-checks. Tray reminders are deferred.
+checks. The WebEngine probes cover close-to-tray in a source checkout, but the tray icon path
+is only proven in the packaged build, because that bug never occurred in a source checkout.
 
 No hosted security audit or production configuration check runs here. Existing
 account tests prove their particular isolation/CSRF/revision cases, not the

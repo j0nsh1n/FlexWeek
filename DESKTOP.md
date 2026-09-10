@@ -278,7 +278,8 @@ API while the window is open). Phase 7 added the tray presenter described below.
 
 ## Window, tray and quitting (2026-09-10)
 
-- Launching FlexWeek always shows its window.
+- Launching FlexWeek shows its window. If it is already running, the existing
+  window comes forward instead (see the last point).
 - When the desktop has a system tray, FlexWeek puts its logo there. Closing the
   window hides it to the tray, so reminders and alarms keep firing. The first
   close shows a tray message that says so.
