@@ -70,6 +70,23 @@ def date_legacy_weeks(db: sqlite3.Connection) -> None:
     db.execute("COMMIT")
 
 
+def migrate_preferences(db: sqlite3.Connection) -> None:
+    """Add reminder columns to preferences created before Phase 5 slice F."""
+    cols = {row[1] for row in db.execute("PRAGMA table_info(preferences)").fetchall()}
+    if "reminders_enabled" not in cols:
+        db.execute(
+            "ALTER TABLE preferences ADD COLUMN reminders_enabled INTEGER NOT NULL DEFAULT 0"
+        )
+    if "reminder_lead_min" not in cols:
+        db.execute(
+            "ALTER TABLE preferences ADD COLUMN reminder_lead_min INTEGER NOT NULL DEFAULT 5"
+        )
+    if "reminder_sound" not in cols:
+        db.execute(
+            "ALTER TABLE preferences ADD COLUMN reminder_sound INTEGER NOT NULL DEFAULT 1"
+        )
+
+
 def initialize(path: Path) -> None:
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     path.touch(mode=0o600, exist_ok=True)
@@ -87,13 +104,20 @@ def initialize(path: Path) -> None:
             {WEEKS_TABLE};
             CREATE TABLE IF NOT EXISTS preferences (
                 user_id INTEGER PRIMARY KEY REFERENCES users(id),
-                theme TEXT NOT NULL DEFAULT 'nocturne' CHECK(theme IN ('nocturne', 'slate'))
+                theme TEXT NOT NULL DEFAULT 'nocturne' CHECK(theme IN ('nocturne', 'slate')),
+                reminders_enabled INTEGER NOT NULL DEFAULT 0
+                    CHECK(reminders_enabled IN (0, 1)),
+                reminder_lead_min INTEGER NOT NULL DEFAULT 5
+                    CHECK(reminder_lead_min >= 0 AND reminder_lead_min <= 120),
+                reminder_sound INTEGER NOT NULL DEFAULT 1
+                    CHECK(reminder_sound IN (0, 1))
             );
             CREATE TABLE IF NOT EXISTS auth_attempts (
                 key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL
             );
         """)
         date_legacy_weeks(db)
+        migrate_preferences(db)
 
 
 def create_session(db: sqlite3.Connection, user_id: int) -> str:

@@ -38,12 +38,3 @@ def is_week_start(value: str) -> bool:
         return _parse(value).weekday() == 0
     except ValueError:
         return False
-
-
-def date_for_day(week_start: str, day_index: int) -> str:
-    """The calendar date of a block's day index, where 0 is Monday."""
-    if not is_week_start(week_start):
-        raise ValueError("week_start must be a Monday between 2000-01-01 and 2099-12-31")
-    if not 0 <= day_index <= 6:
-        raise ValueError("day_index must be in 0..6 (Mon..Sun)")
-    return (date.fromisoformat(week_start) + timedelta(days=day_index)).isoformat()

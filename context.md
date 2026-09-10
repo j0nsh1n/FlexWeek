@@ -1,38 +1,35 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-08. Branch `feat/phase6-scheduling-explanations`.
-- Phase 6 scheduling behavior is implemented: backend-authored explanations,
-  deadline slack badges, click-to-highlight, and per-occurrence missed-lock
-  recovery with cross-day move details and restore.
-- Gates green: Ruff, mypy over 27 source files, 112 Python tests, 17 frontend
-  behavior tests and JavaScript syntax. The new real-WebEngine case covers
-  solve, slack, miss, cross-day replan, save, reload and restore.
-- A missed occurrence is stored as one day in a locked block's `missed_days`.
-  It is excluded from solver occupancy without deleting the block or its other
-  weekday occurrences. Recovery uses the existing `/api/solve` endpoint and
-  saves through the normal revision-checked week write.
-- Dated weeks are done. Weeks are keyed `(user_id, week_start)` where
-  week_start is a naive local ISO Monday. Blocks keep their day index and
-  derive their date, so no block data moved and the solver is untouched.
-- The migration was proven against the real desktop database, not a fixture: a
-  copy of `~/.local/share/FlexWeek/flexweek.db` kept its "School" block
-  byte-identical at revision 4 under week_start 2026-09-07, running
-  `initialize()` twice changed nothing, and the app then served that week,
-  created a second week, and left the first untouched.
-- The rest of Phase 5 is not started: drag to create, drag to move, edge
-  resize, click to edit, context menus, categories, copy/paste, duplicate day,
-  undo/redo, recurring activities, export/import, completion state, reminders.
-- Windows build remains prepared but unexecuted; no Windows host here.
-- `dist/FlexWeek` was rebuilt 2026-09-08 against the merged code and verified:
-  the packaged binary registers an account, reads and writes dated weeks, lists
-  them via /api/weeks, and 422s a non-Monday. Released as
-  `dist/FlexWeek-linux-x86_64-20260908.tar.gz` (205 MB compressed) with a
-  .sha256 beside it; both are gitignored on purpose. See DESKTOP.md section 8.
-- `dist/` grows by roughly 528 MB per rebuild because build_linux.sh preserves
-  each previous build and never prunes. It holds three copies as of today.
-- Databases carrying the old schema were backed up to
-  /tmp/fw-db-backup-20260908-081624 before any migration ran.
+- Date: 2026-09-09. Branch `test/deeper-verification`, based on
+  `feat/phase5-calendar-interactions` at `147687c`.
+- Phase 5 calendar interactions and Phase 6 scheduling recovery are implemented.
+  Accounts, Monday-keyed weeks, 15-minute placement and per-day `missed_days`
+  recovery remain the product model.
+- The deeper verification pass reproduced and fixed cancelled gesture writes,
+  private reminder state surviving sign-out, stale account responses/file reads,
+  invalid legacy/day imports, merged-week overflow, occurrence-ID collisions,
+  unusable draft downloads, multi-day task duplication, per-account draft loss,
+  completion losing candidate days, reminder leaks/gaps and priority inversion.
+- Today's loaded week and solved flexible placements produce reminders while
+  another week is selected. Sign-out closes both in-page and browser alerts.
+- Source verification now has one runner, `scripts/verify.py`, a feature coverage
+  map in `docs/verification.md`, and a web-only GitHub Actions workflow. The
+  workflow has not run remotely; nothing has been pushed.
+- Baseline was 121 Python and 40 frontend tests. The final full source gate ran
+  153 Python and 61 frontend tests with no skips.
+- Completed flexible work keeps its original candidate `days`; `completed_day`
+  records the one occurrence whose `start` is spent. Both UI completion actions
+  preserve and can restore the candidate set.
+  Completed tasks without a placement stay outside scheduling; locked blocks
+  retain their existing occupancy semantics.
+- GLM rebuilt the Linux artifact from `f12ea5c` on September 9. The extracted
+  archive served `/api/health` with HTTP 200 and the bundled FlexWeek page from
+  a fresh profile. Full packaged account/interaction flows, Windows execution,
+  Safari/iPhone and physical touch remain unverified. Desktop tray reminders
+  are deferred.
+- Default desktop mode uses a local database. Hosted mode uses the configured
+  server; there is no automatic synchronization between them.
 
 ## Repo Landmarks
 ```
@@ -70,8 +67,6 @@ There is no automatic synchronization between those databases.
   server cannot disagree about which week is open while both think they won.
 - The identical-blocks short-circuit deliberately runs before the revision
   check, preserving what the pre-dated code and tests already did.
-- `date_for_day` in weeks.py has no Python caller. It is kept as the tested
-  reference the JS mirror in app.js is checked against.
 - The desktop app bundles the backend and runs it in-process (owner asked for
   this 2026-09-07). It supersedes DESKTOP.md section 1, which said not to; that
   section's reasoning was about a *second process*, which this is not.
@@ -97,17 +92,21 @@ There is no automatic synchronization between those databases.
 - License file is GPL-3.0. Qt for Python is LGPLv3/GPLv2/commercial.
 
 ## Session Handoff
-- 2026-09-08, `feat/phase6-scheduling-explanations`: delivered the first Phase
-  6 slice across the shared web UI and PySide6 desktop shell. GLM-5.3 Flash
-  reviewed the contract and final diff; the main agent implemented and verified
-  it. Nothing pushed.
-- Next: continue Phase 6 with deployment persistence/backup preparation after
-  the owner chooses to resume it; visual redesign, hardening and audits remain
-  deferred. Phase 5's remaining Daily Scheduler interactions are still open.
-- Settled 2026-09-08 by the owner: spec.md updated for dated weeks and the
-  desktop build; roadmap Phase 7 (pomodoro, alarms, Spotify) committed with
-  contest delivery moved to Phase 8; agents.md now tracked. The built app is
-  distributed as a release asset, not committed, because one bundled Qt library
-  is 194 MB against GitHub's 100 MB per-file limit.
-- Still undecided: whether `Github Templates/` and `reslot-cac-build-plan.md`
-  get committed.
+- 2026-09-09, `test/deeper-verification`: full local verification passed with
+  153 Python and 61 frontend tests, Ruff, mypy, JavaScript syntax, and all diff
+  checks. GLM and two Codex reviewers found the solver, completion, import,
+  draft, reminder and export regressions now covered by focused tests. Gemini
+  timed out twice through Antigravity and was not counted as review evidence.
+- The two-stage solver finds ordinary complete schedules before considering
+  optional task skips. This preserves the priority result for infeasible weeks
+  and completes the reproduced energy-sensitive ten-task week within budget.
+- The untracked `Github Templates/` and `reslot-cac-build-plan.md` remain
+  untouched. `spec.md` is unchanged; its individual validation commands still
+  apply. It does not yet document the persisted `completed_day` field; that
+  contract update needs a separate approved spec edit.
+- The CI workflow is unrun until pushed. Windows, Safari/iPhone, physical touch,
+  full packaged flows and OS notification delivery still need release-platform
+  checks.
+- GLM produced `dist/FlexWeek-linux-x86_64-20260909.tar.gz` from `f12ea5c`.
+  SHA-256 is `57d559c0525291f8065cea60f72592a70ed69851cd0b3cf04ab9cc151ba0713d`;
+  the prior build is preserved at `dist/FlexWeek.previous.20260909-163020`.

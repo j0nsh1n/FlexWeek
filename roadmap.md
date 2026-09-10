@@ -95,13 +95,22 @@ desktop shell is proposed; shell selection follows compatibility testing.
   existing day-index solver receives an adapter for the selected week.
 - Completion target: the same account's saved changes appear in both clients;
   edits preserve valid times and show save errors without discarding work.
+- Build order for the remaining interaction port (2026-09-08): A calendar
+  drag/resize/create/context menus (15-minute snap) → D recurring occurrence
+  vs series edit → F reminders → B categories → E export/import and
+  completion. Clipboard, duplicate-day, and undo/redo stay deferred. Do not
+  port Daily Scheduler AI chat, Google Calendar OAuth, or Qt custom painting.
 - Status: [~] Linux desktop shell built and running 2026-09-07
   (`dist/FlexWeek/FlexWeek`), with popup/download fixes and preserved rebuilds.
   Dated weeks landed 2026-09-08: weeks keyed by calendar Monday, navigation,
   per-week client state, and a migration verified against the real desktop
-  database. Windows execution and the drag/resize/context-menu, category,
-  copy-paste, undo-redo, recurring, export-import and reminder interactions are
-  still outstanding.
+  database. Slice A calendar interactions landed 2026-09-08 on
+  `feat/phase5-calendar-interactions` (15-minute snap drag create/move/resize,
+  select, double-click edit, context Edit/Delete, thin category colors).
+  Slices D/F/B/E landed 2026-09-08: occurrence vs series edits, start reminders
+  (web Notification + in-app toast; tray deferred), full category chips,
+  export/import and completion. Still open: Windows execution, copy-paste,
+  duplicate day, undo/redo.
 
 ## Phase 6 — Scheduling explanations, later design and hardening
 - Priority and energy controls, explanation panel, click reason to highlight.
@@ -148,6 +157,14 @@ desktop shell is proposed; shell selection follows compatibility testing.
   alarm that plays a linked Spotify playlist (tone fallback when Spotify is
   unreachable), and split chunks survive save/reload in both clients.
 - Status: [ ]
+
+## Later (post-contest or only if Phase 5–7 are green)
+- Stronger deadline-cluster insight on top of existing slack ok/tight/danger
+  badges (no mental-health or IEP product claims).
+- Simple assignment list or ICS file import — not live Canvas / Blackboard /
+  Google Classroom OAuth, and not syllabus-photo ML for the contest demo.
+- Rejected for CAC scope: syllabus OCR, LLM auto-reschedule chat, LMS API
+  bridges, offline-first AI mobile shell.
 
 ## Phase 8 — Contest delivery (target Oct 18–25)
 - Release bug fixes, app distribution and hosted web URL.

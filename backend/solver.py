@@ -31,9 +31,26 @@ def solve(blocks: list[TimeBlock]) -> SolveTrace:
     """Place flexible blocks around locked ones. Pure and synchronous."""
     started = time.perf_counter()
     locked = _active_locked(blocks)
-    flexible = [block.model_copy() for block in blocks if block.kind == "flexible"]
+    every_flexible = [block.model_copy() for block in blocks if block.kind == "flexible"]
+    # Finished work is never scheduled again. One that already has a slot spent
+    # that time, so it stays on the grid and nothing new is booked over it; one
+    # with no slot needs none and is not reported unplaced. Locked blocks are
+    # untouched by this, so a completed lesson keeps its place in the week.
+    # Only a real placement is spent time: one day, one start. A finished task
+    # still listed on several candidate days was done once, and nobody knows on
+    # which, so it holds no slot rather than blocking that hour on every day.
+    spent: list[TimeBlock] = []
+    for block in every_flexible:
+        if not block.completed or block.start is None:
+            continue
+        completed_day = block.completed_day
+        if completed_day is None and len(block.days) == 1:
+            completed_day = block.days[0]
+        if completed_day is not None:
+            spent.append(block.model_copy(update={"days": [completed_day]}))
+    flexible = [block for block in every_flexible if not block.completed]
 
-    occ_locked = _locked_occupancy(locked)
+    occ_locked = _locked_occupancy(locked + spent)
     flex_by_id = {block.id: block for block in flexible}
     ids = [block.id for block in flexible]
     deadlines = {block.id: parse_deadline(block.latest, block.days) for block in flexible}
@@ -45,7 +62,7 @@ def solve(blocks: list[TimeBlock]) -> SolveTrace:
     }
 
     best: dict[str, tuple[int, int]] = {}
-    best_score = (-1, 0)
+    best_score: tuple[int, int, int, int] = (-1, -1, -1, -1)
     timed_out = False
 
     def remaining_ms() -> float:
@@ -55,12 +72,18 @@ def solve(blocks: list[TimeBlock]) -> SolveTrace:
         occ: list[int],
         domains: dict[str, list[tuple[int, int]]],
         assigned: dict[str, tuple[int, int]],
+        allow_skips: bool,
     ) -> None:
         nonlocal best, best_score, timed_out
         if remaining_ms() <= 0:
             timed_out = True
             return
-        score = (len(assigned), -sum(flex_by_id[item].priority for item in assigned))
+        score = (
+            sum(flex_by_id[item].priority == 1 for item in assigned),
+            sum(flex_by_id[item].priority == 2 for item in assigned),
+            sum(flex_by_id[item].priority == 3 for item in assigned),
+            sum(flex_by_id[item].priority == 4 for item in assigned),
+        )
         if score > best_score:
             best_score = score
             best = dict(assigned)
@@ -97,11 +120,22 @@ def solve(blocks: list[TimeBlock]) -> SolveTrace:
                     for other_day, other_slot in vals
                     if other_day != day or (occupancy_mask(other_slot, other_n) & mask) == 0
                 ]
-            search(new_occ, new_domains, {**assigned, var: (day, slot)})
+            search(new_occ, new_domains, {**assigned, var: (day, slot)}, allow_skips)
             if timed_out or len(best) == len(ids):
                 return
 
-    search(occ_locked, {key: list(vals) for key, vals in domains0.items()}, {})
+        # The selected task may be the reason a higher-priority task cannot fit.
+        # Compare the best schedule without it before choosing the partial result.
+        if allow_skips:
+            skipped_domains = {key: list(vals) for key, vals in domains.items()}
+            skipped_domains[var] = []
+            search(occ, skipped_domains, assigned, allow_skips)
+
+    # Find an ordinary complete schedule first. Optional-task branches are only
+    # useful for an infeasible week and can otherwise consume the whole budget.
+    search(occ_locked, {key: list(vals) for key, vals in domains0.items()}, {}, False)
+    if len(best) != len(ids) and not timed_out:
+        search(occ_locked, {key: list(vals) for key, vals in domains0.items()}, {}, True)
 
     placed_flex: list[TimeBlock] = []
     occ_final = occ_locked.copy()
@@ -150,7 +184,7 @@ def solve(blocks: list[TimeBlock]) -> SolveTrace:
             )
 
     return SolveTrace(
-        placed=locked + placed_flex,
+        placed=locked + spent + placed_flex,
         unplaced=unplaced,
         moves=moves,
         explanations=explanations,
@@ -185,7 +219,9 @@ def reschedule_after_miss(
     changes: list[Move] = []
     unplaced_moves = {move.block_id: move for move in trace.moves}
     for block in blocks:
-        if block.kind != "flexible" or before.get(block.id) == after.get(block.id):
+        # Finished work is out of the solver, so its slot disappearing is not a
+        # reshuffle. Without this it is reported as moved to nowhere.
+        if block.kind != "flexible" or block.completed or before.get(block.id) == after.get(block.id):
             continue
         old = before.get(block.id)
         new = after.get(block.id)

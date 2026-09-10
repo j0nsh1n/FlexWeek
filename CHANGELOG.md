@@ -5,7 +5,77 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- Linux desktop release archive rebuilt from `f12ea5c`, with the extracted
+  executable verified against its bundled health endpoint and web UI
+  (2026-09-09).
+- Repeatable full-source verification command, web CI workflow, a feature
+  coverage guide, generated solver invariants and real calendar/completion
+  WebEngine regression checks (2026-09-08).
+- Multi-day locked blocks open with Edit this day vs Entire series: occurrence
+  edits can remove one weekday or split a changed day into its own block; series
+  edits still change every weekday together. Context menu mirrors those choices.
+- Start reminders: preferences for enable, lead minutes and sound. While the tab
+  is open, FlexWeek polls due starts (Daily Scheduler start-alert math), shows an
+  in-app toast, and uses the Notification API when permitted. Desktop system-tray
+  alerts are deferred (no new tray dependency in this slice).
+- Category chips in the editor and a sidebar legend (School, Study, Homework,
+  Sports, Activity, Meals, Sleep, Free) with stronger grid colors.
+- Per-block completed flag with form checkbox and context toggle; survives
+  save/reload.
+- Export current week as JSON (Shift-click for plain text) and import a
+  FlexWeek JSON week/day file into the matching week without touching other
+  weeks. Context menu can export one day as JSON.
+- Week grid drag interactions: empty drag creates a locked block on the 15-minute
+  grid, click-empty creates a 60-minute block clipped to the next block, drag body
+  moves, edge resize, click selects, double-click opens the editor, and a context
+  menu offers Edit/Delete. Changes use the existing dirty/save path.
+- Optional activity category with a thin color palette (School, Study, Homework,
+  Sports, Activity, Meals, Free); older weeks without a category still load.
+
 ### Fixed
+- Cancelled calendar gestures no longer save, and secondary pointers cannot
+  finish another pointer's gesture (2026-09-08).
+- Signing out clears private reminder alerts. Delayed preference responses and
+  file reads cannot change the next account. Today's loaded reminders continue
+  while browsing a different week (2026-09-08).
+- Signing out also closes live browser notifications, solved flexible tasks can
+  trigger reminders, and suspended drafts remain isolated by account (2026-09-09).
+- Legacy and day imports validate starts and scheduling bounds before changing
+  the week, including the resulting merged size and occurrence-ID collisions.
+  Valid unusual IDs survive import, and downloaded drafts use the importable
+  export format (2026-09-08).
+- Saving an unchanged occurrence keeps its recurring series intact (2026-09-08).
+- Completing through the menu or editor retains the task's solved placement
+  as spent time without losing its candidate days. Day and text exports follow
+  the visible solved placement, and ambiguous day imports cannot duplicate a
+  multi-day flexible assignment (2026-09-09).
+- Exam preparation wins contested capacity even when a lower-priority reading
+  task has fewer possible placements. The solver first looks for a complete
+  schedule before exploring optional omissions, avoiding a reproduced timeout
+  on a feasible energy-sensitive week (2026-09-09).
+- A task you finished but left listed on several possible days no longer blocks
+  that hour on every one of them. It was one piece of work done once, and it
+  could push three real tasks off the week. A finished task that was actually
+  placed on a day still holds that time, because you really did use it.
+- When finished work is what fills a slot, FlexWeek says so instead of telling
+  you the time is taken by school, sports or sleep.
+- A task you have ticked off no longer competes for a slot. Finished work used
+  to be scheduled again, so a completed essay could take the last free hour and
+  FlexWeek would tell you your real homework did not fit because a
+  higher-priority task took the slot. A finished task that already had a time
+  keeps it; one that never had a time is simply left alone.
+- A damaged or unrecognised export file is refused with a reason, and the week
+  on screen is left exactly as it was. Previously the file was written into your
+  week and drawn on the grid before the save failed, so a bad file could wipe
+  what was there. Files from a newer version of FlexWeek are refused too.
+- Dragging a single day of a repeating block no longer silently retimes every
+  other day of it. The drag is refused and FlexWeek points you at Edit
+  occurrence or Edit series, which is how every other change to a repeating
+  block already works. One-off blocks still drag and resize normally.
+- Importing a week now stops without changing the open week when the target
+  week cannot be loaded. Day-file imports preserve the other occurrences of a
+  repeating block, including when the same file is imported again.
 - Desktop new-window links no longer leave hidden browser pages running; only
   HTTP(S) external links are sent to the system browser (2026-09-07).
 - Desktop users can save an unsaved draft through a native file dialog.

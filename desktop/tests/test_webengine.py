@@ -15,7 +15,9 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.mark.parametrize("case", ["accounts", "phase6", "popup", "navigation", "download"])
+@pytest.mark.parametrize(
+    "case", ["accounts", "calendar", "completion", "phase6", "popup", "navigation", "download"]
+)
 def test_webengine(case: str, tmp_path: Path) -> None:
     env = {
         **os.environ,

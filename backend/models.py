@@ -32,6 +32,21 @@ class TimeBlock(BaseModel):
     latest: str | None = Field(default=None, max_length=40)
     start: str | None = Field(default=None, max_length=5)
     course: str | None = Field(default=None, max_length=40)
+    category: str | None = Field(
+        default=None,
+        max_length=32,
+        exclude_if=lambda value: value is None,
+    )
+    completed: bool = Field(
+        default=False,
+        exclude_if=lambda value: value is False,
+    )
+    completed_day: int | None = Field(
+        default=None,
+        ge=0,
+        le=6,
+        exclude_if=lambda value: value is None,
+    )
     missed_days: list[int] = Field(
         default_factory=list,
         max_length=7,
@@ -60,11 +75,20 @@ class TimeBlock(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def missed_occurrences_belong_to_locked_block(self) -> TimeBlock:
+    def block_state_is_consistent(self) -> TimeBlock:
         if self.missed_days and self.kind != "locked":
             raise ValueError("only locked blocks can have missed days")
         if not set(self.missed_days).issubset(self.days):
             raise ValueError("missed days must be occurrences of the block")
+        if self.completed_day is not None and (
+            self.kind != "flexible"
+            or not self.completed
+            or self.start is None
+            or self.completed_day not in self.days
+        ):
+            raise ValueError(
+                "completed_day requires a completed flexible block with a start on a candidate day"
+            )
         return self
 
 

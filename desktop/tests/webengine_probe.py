@@ -110,6 +110,86 @@ def run(case: str, root: Path) -> None:
             print(
                 "PASS: register, editor save, solve, refresh, theme, logout, second-account isolation, widths"
             )
+        elif case == "calendar":
+            submit_identity("calendar_student", "register")
+            evaluate("""window.__point = (type, minute, onBlock=false, pointerId=1) => {
+                const lane = document.querySelector('.day-lane');
+                const rect = lane.getBoundingClientRect();
+                const target = onBlock ? lane.querySelector('.block') : lane;
+                target.dispatchEvent(new PointerEvent(type, {bubbles:true, cancelable:true,
+                    pointerId, button:0, clientX:rect.left+20,
+                    clientY:rect.top + (minute-360)/1020*rect.height}));
+            };""")
+            def gesture(start: int, end: int, *, block: bool = False, cancel: bool = False) -> None:
+                event = "pointercancel" if cancel else "pointerup"
+                evaluate(f"__point('pointerdown', {start}, {json.dumps(block)}); "
+                         f"__point('pointermove', {end}); __point('{event}', {end})")
+
+            def edit_card() -> None:
+                evaluate("document.querySelector('.block').dispatchEvent("
+                         "new MouseEvent('dblclick', {bubbles:true}))")
+
+            gesture(600, 660, cancel=True)
+            QTest.qWait(100)
+            assert evaluate("document.querySelectorAll('.block').length") == 0, "Cancelled create"
+            assert evaluate("document.querySelector('.drag-ghost').hidden")
+            evaluate("__point('pointerdown', 600); __point('pointermove', 643, false, 2); "
+                     "__point('pointerup', 643, false, 2)")
+            assert evaluate("document.querySelectorAll('.block').length") == 0, "Second pointer committed"
+            evaluate("__point('pointercancel', 600)")
+            gesture(600, 643)
+            wait_for("document.getElementById('status').textContent.startsWith('Saved')")
+            assert evaluate("document.querySelectorAll('.block').length") == 1
+            edit_card()
+            assert evaluate("document.getElementById('f-start').value") == "10:00"
+            assert evaluate("document.getElementById('f-duration').value") == "45"
+            evaluate("document.getElementById('form-cancel').click()")
+            gesture(622, 652, block=True, cancel=True)
+            edit_card()
+            assert evaluate("document.getElementById('f-start').value") == "10:00", "Cancelled move"
+            evaluate("document.getElementById('form-cancel').click()")
+            gesture(622, 652, block=True)
+            wait_for("document.getElementById('status').textContent.startsWith('Saved')")
+            gesture(674, 704, block=True)
+            wait_for("document.getElementById('status').textContent.startsWith('Saved')")
+            evaluate("document.querySelector('.block').dispatchEvent(new MouseEvent('contextmenu', "
+                     "{bubbles:true, clientX:100, clientY:100}))")
+            assert evaluate("!document.getElementById('block-context-menu').hidden")
+            evaluate("window.__beforeCalendarReload=true")
+            window.reload()
+            wait_for("typeof window.__beforeCalendarReload === 'undefined' && "
+                     "document.querySelector('.block')")
+            edit_card()
+            assert evaluate("document.getElementById('f-start').value") == "10:30"
+            assert evaluate("document.getElementById('f-duration').value") == "75"
+            assert evaluate("document.querySelectorAll('.block').length") == 1
+            print("PASS: DOM create, cancel, pointer ownership, move, resize, edit, context and reload")
+        elif case == "completion":
+            submit_identity("completion_student", "register")
+            evaluate("""document.getElementById('add-flexible').click();
+                document.getElementById('f-title').value='Essay';
+                document.querySelector('input[name=f-day][value="0"]').checked=true;
+                document.getElementById('f-energy').value='high';
+                document.querySelector('#block-form button[type=submit]').click();""")
+            wait_for("document.getElementById('status').textContent.startsWith('Saved')")
+            evaluate("document.getElementById('solve').click()")
+            wait_for("document.querySelector('.flex-block')")
+            evaluate("document.querySelector('.flex-block').dispatchEvent("
+                     "new MouseEvent('dblclick', {bubbles:true}))")
+            evaluate("""document.getElementById('f-completed').checked=true;
+                document.querySelector('#block-form button[type=submit]').click();""")
+            wait_for("document.getElementById('status').textContent.startsWith('Saved')")
+            evaluate("window.__beforeCompletionReload=true")
+            window.reload()
+            wait_for("typeof window.__beforeCompletionReload === 'undefined' && "
+                     "document.getElementById('planner') && !document.getElementById('planner').hidden")
+            assert evaluate("document.querySelectorAll('.flex-block').length") == 1, "Completed slot was lost"
+            evaluate("document.getElementById('solve').click()")
+            wait_for("!document.getElementById('debug').hidden")
+            assert evaluate("document.querySelectorAll('.flex-block').length") == 1
+            assert evaluate("document.querySelector('.flex-block').style.top") == "0rem"
+            assert evaluate("document.querySelector('.flex-block').classList.contains('is-completed')")
+            print("PASS: completing through the editor preserves spent work through save, reload and solve")
         elif case == "phase6":
             submit_identity("phase6_student", "register")
             evaluate("""document.getElementById('add-locked').click();
@@ -130,7 +210,10 @@ def run(case: str, root: Path) -> None:
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")
             evaluate("document.getElementById('solve').click()")
             wait_for("document.querySelector('.slack-tight')")
-            evaluate("document.querySelector('.block:not(.flex-block)').click()")
+            evaluate(
+                "document.querySelector('.block:not(.flex-block)')"
+                ".dispatchEvent(new MouseEvent('dblclick', {bubbles: true}))"
+            )
             assert evaluate("!document.getElementById('form-missed').hidden")
             evaluate("document.getElementById('form-missed').click()")
             wait_for("!document.getElementById('debug-changes').hidden")

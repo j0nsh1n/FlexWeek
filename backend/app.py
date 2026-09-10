@@ -62,6 +62,9 @@ class SavedWeek(WeekRequest):
 class Preferences(BaseModel):
     model_config = ConfigDict(extra="forbid")
     theme: Literal["nocturne", "slate"]
+    reminders_enabled: bool = False
+    reminder_lead_min: int = Field(default=5, ge=0, le=120)
+    reminder_sound: bool = True
 
 
 def create_app(database: Path | None = None, origin: str | None = None) -> FastAPI:
@@ -246,14 +249,32 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
     @app.get("/api/preferences")
     def get_preferences(account: Annotated[dict, Depends(user)]) -> dict:
         with connect(path) as db:
-            row = db.execute("SELECT theme FROM preferences WHERE user_id = ?", (account["id"],)).fetchone()
-        return dict(row)
+            row = db.execute(
+                """SELECT theme, reminders_enabled, reminder_lead_min, reminder_sound
+                FROM preferences WHERE user_id = ?""",
+                (account["id"],),
+            ).fetchone()
+        return {
+            "theme": row["theme"],
+            "reminders_enabled": bool(row["reminders_enabled"]),
+            "reminder_lead_min": int(row["reminder_lead_min"]),
+            "reminder_sound": bool(row["reminder_sound"]),
+        }
 
     @app.put("/api/preferences")
     def put_preferences(preferences: Preferences, account: Annotated[dict, Depends(user)]) -> dict:
         with connect(path) as db:
             db.execute(
-                "UPDATE preferences SET theme = ? WHERE user_id = ?", (preferences.theme, account["id"])
+                """UPDATE preferences
+                SET theme = ?, reminders_enabled = ?, reminder_lead_min = ?, reminder_sound = ?
+                WHERE user_id = ?""",
+                (
+                    preferences.theme,
+                    int(preferences.reminders_enabled),
+                    preferences.reminder_lead_min,
+                    int(preferences.reminder_sound),
+                    account["id"],
+                ),
             )
         return preferences.model_dump()
 

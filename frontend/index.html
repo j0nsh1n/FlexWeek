@@ -20,6 +20,7 @@
     <div class="controls" id="account-controls" hidden>
       <span id="account-name"></span>
       <label>Theme <select id="theme"><option value="nocturne">Nocturne · dark</option><option value="slate">Slate · light</option></select></label>
+      <button type="button" id="prefs-open" class="secondary">Reminders</button>
       <button type="button" id="logout" class="secondary">Sign out</button>
       <button type="button" id="solve">Solve</button>
     </div>
@@ -59,6 +60,9 @@
         <button type="button" id="week-next" class="secondary">Next</button>
         <strong id="week-label" class="week-label"></strong>
         <label>Saved weeks <select id="week-jump"></select></label>
+        <button type="button" id="export-week" class="secondary">Export week</button>
+        <button type="button" id="import-file" class="secondary">Import file</button>
+        <input id="import-file-input" type="file" accept=".json,.txt,application/json,text/plain" hidden>
       </div>
       <div class="week" id="week"></div>
     </section>
@@ -67,6 +71,10 @@
         <button type="button" id="add-locked">Add locked</button>
         <button type="button" id="add-flexible">Add task</button>
         <button type="button" id="new-week" class="secondary">New week</button>
+      </div>
+      <div class="category-legend" aria-label="Categories">
+        <h2>Categories</h2>
+        <div id="category-legend" class="category-chips"></div>
       </div>
 
       <form id="block-form" class="block-form" hidden>
@@ -81,6 +89,17 @@
         <label>Course
           <input id="f-course" type="text" maxlength="40" />
         </label>
+        <div class="category-picker">
+          <span class="picker-label">Category</span>
+          <div id="category-chips" class="category-chips" role="listbox" aria-label="Category"></div>
+          <select id="f-category" hidden></select>
+        </div>
+        <label class="completed-toggle"><input type="checkbox" id="f-completed" /> Completed</label>
+        <fieldset id="edit-scope" class="edit-scope" hidden>
+          <legend>Edit scope</legend>
+          <label><input type="radio" name="f-scope" value="occurrence" checked /> This day only</label>
+          <label><input type="radio" name="f-scope" value="series" /> Entire series</label>
+        </fieldset>
         <label>Duration (minutes)
           <input id="f-duration" type="number" min="15" step="15" required />
         </label>
@@ -158,6 +177,32 @@
     </aside>
   </main>
   <footer class="foot">Congressional App Challenge 2026 · GPL-3.0</footer>
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js" defer></script>
+  <div id="block-context-menu" class="context-menu" hidden role="menu">
+    <button type="button" data-action="edit">Edit</button>
+    <button type="button" data-action="edit-occurrence">Edit this day</button>
+    <button type="button" data-action="edit-series">Edit series</button>
+    <button type="button" data-action="delete-occurrence">Remove this day</button>
+    <button type="button" data-action="delete">Delete</button>
+    <button type="button" data-action="toggle-completed">Toggle completed</button>
+    <button type="button" data-action="export-day">Export this day</button>
+  </div>
+  <dialog id="prefs-dialog" class="prefs-dialog">
+    <form method="dialog" id="prefs-form">
+      <h2>Reminders</h2>
+      <p class="note">Alerts fire while this tab is open. Desktop tray alerts are not packaged yet.</p>
+      <label class="completed-toggle"><input type="checkbox" id="pref-reminders-enabled" /> Enable start reminders</label>
+      <label>Lead minutes
+        <input id="pref-reminder-lead" type="number" min="0" max="120" step="1" value="5" />
+      </label>
+      <label class="completed-toggle"><input type="checkbox" id="pref-reminder-sound" checked /> Play sound</label>
+      <p id="prefs-error" class="form-error" role="alert" hidden></p>
+      <div class="form-actions">
+        <button type="submit" value="save" id="prefs-save">Save</button>
+        <button type="submit" value="cancel" class="secondary">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+  <div id="reminder-toast" class="reminder-toast" hidden role="status" aria-live="polite"></div>
 </body>
 </html>

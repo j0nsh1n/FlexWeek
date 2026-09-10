@@ -257,3 +257,9 @@ XDG_DATA_HOME=/tmp/check-profile /tmp/check/FlexWeek/FlexWeek
 **Housekeeping.** `build_linux.sh` preserves each previous build as
 `dist/FlexWeek.previous.<timestamp>` and never prunes them, so `dist/` grows by
 about 528 MB per rebuild. Delete the ones you do not need.
+
+## Reminders (Phase 5)
+
+Start reminders ship in the shared web UI (preferences, in-app toast, Notification
+API while the window is open). A native system-tray alert path was deferred to
+avoid a large new desktop dependency; revisit with Phase 7 tray work if needed.
