@@ -6,12 +6,14 @@ import json
 import sys
 import time
 from pathlib import Path
+from typing import cast
 from unittest.mock import patch
 
 from PySide6.QtCore import QEventLoop, QTimer, QUrl
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtTest import QTest
-from PySide6.QtWebEngineCore import QWebEnginePage
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWebEngineCore import QWebEnginePage, QWebEnginePermission
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 from desktop.main import MainWindow
 from desktop.server import LocalServer
@@ -22,7 +24,7 @@ def run(case: str, root: Path) -> None:
     app.setApplicationName("FlexWeek-test")
     server = LocalServer(root / "account.db")
     origin = server.start()
-    window = MainWindow(origin)
+    window = MainWindow(origin, tray_enabled=case == "tray")
     window.show()
     page = window._page
     opened: list[str] = []
@@ -244,6 +246,51 @@ def run(case: str, root: Path) -> None:
             assert evaluate("document.querySelectorAll('.missed-block').length") == 0
             assert evaluate("document.querySelectorAll('.block:not(.flex-block)').length") == 1
             print("PASS: explanations, slack, one-day miss recovery, move list and restore in desktop")
+        elif case == "phase7":
+            submit_identity("focus_student", "register")
+            evaluate("""document.getElementById('add-flexible').click();
+                document.getElementById('f-title').value='Maths';
+                document.getElementById('f-duration').value='60';
+                document.querySelector('input[name=f-day][value="0"]').checked=true;
+                document.querySelector('#block-form button[type=submit]').click();""")
+            wait_for("document.getElementById('status').textContent.startsWith('Saved')")
+            evaluate("document.getElementById('solve').click()")
+            wait_for("document.querySelector('.flex-block')")
+
+            # A task only becomes focusable once the solver has given it a slot.
+            wait_for("document.querySelector('#focus-tasks li button')")
+            assert not evaluate("document.querySelector('#focus-tasks li button').disabled"), (
+                "Focus stayed disabled for a placed task"
+            )
+            evaluate("document.querySelector('#focus-tasks li button').click()")
+            wait_for("!document.getElementById('focus-panel').hidden")
+            assert evaluate("document.getElementById('focus-time').textContent") != "00:00", (
+                "Focus timer never started counting"
+            )
+
+            evaluate("document.getElementById('focus-pause').click()")
+            paused = evaluate("document.getElementById('focus-time').textContent")
+            QTest.qWait(1500)
+            assert evaluate("document.getElementById('focus-time').textContent") == paused, (
+                "Paused focus timer kept counting down"
+            )
+
+            phase = evaluate("document.getElementById('focus-phase').textContent")
+            evaluate("document.getElementById('focus-skip').click()")
+            wait_for(f"document.getElementById('focus-phase').textContent !== {json.dumps(phase)}")
+            evaluate("document.getElementById('focus-reset').click()")
+            wait_for("document.getElementById('focus-panel').hidden")
+
+            evaluate("document.getElementById('prefs-open').click()")
+            wait_for("document.getElementById('prefs-dialog').open")
+            evaluate("""document.getElementById('alarm-name').value='Morning review';
+                document.getElementById('alarm-time').value='07:30';
+                document.getElementById('alarm-add').click();""")
+            wait_for("document.querySelectorAll('#alarm-list li').length === 1")
+            assert evaluate("document.getElementById('now-next').textContent.trim().length") > 0, (
+                "Now / Next line rendered empty"
+            )
+            print("PASS: focus timer, alarms and the preferences dialog work in a real browser")
         elif case == "download":
             submit_identity("draft_student", "register")
             server.stop()
@@ -296,6 +343,75 @@ def run(case: str, root: Path) -> None:
                 )
                 assert opened == ["https://example.com/help"]
             print("PASS: web external links handed off, unsupported protocols blocked")
+        elif case == "tray":
+            assert window._tray_icon is not None
+            assert window._tray_menu is not None
+            assert [action.text() for action in window._tray_menu.actions() if not action.isSeparator()] == [
+                "Open FlexWeek",
+                "Quit",
+            ]
+
+            class FakePermission:
+                def __init__(self, permission_type, permission_origin: str) -> None:
+                    self._permission_type = permission_type
+                    self._origin = QUrl(permission_origin)
+                    self.granted = False
+                    self.denied = False
+
+                def permissionType(self):
+                    return self._permission_type
+
+                def origin(self):
+                    return self._origin
+
+                def grant(self) -> None:
+                    self.granted = True
+
+                def deny(self) -> None:
+                    self.denied = True
+
+            same_origin = FakePermission(QWebEnginePermission.PermissionType.Notifications, origin)
+            page._handle_permission(cast(QWebEnginePermission, same_origin))
+            assert same_origin.granted and not same_origin.denied
+            foreign = FakePermission(
+                QWebEnginePermission.PermissionType.Notifications, "https://example.com"
+            )
+            page._handle_permission(cast(QWebEnginePermission, foreign))
+            assert foreign.denied and not foreign.granted
+            unrelated = FakePermission(QWebEnginePermission.PermissionType.Geolocation, origin)
+            page._handle_permission(cast(QWebEnginePermission, unrelated))
+            assert unrelated.denied and not unrelated.granted
+
+            messages: list[tuple[str, str]] = []
+            # Captured rather than mocked: the real tray call would need a live desktop.
+            window._tray_icon.supportsMessages = lambda: True  # type: ignore[method-assign]
+            window._tray_icon.showMessage = (  # type: ignore[method-assign]
+                lambda title, body, *_: messages.append((title, body))
+            )
+            evaluate("Notification.requestPermission(); true")
+            wait_for("Notification.permission === 'granted'")
+            evaluate("window.__notice = new Notification('Focus finished', {body: 'Take a break'});")
+            until = time.monotonic() + 5
+            while not messages and time.monotonic() < until:
+                QTest.qWait(50)
+            assert messages == [("Focus finished", "Take a break")], messages
+            assert window._notification is not None
+
+            window.hide()
+            window._on_tray_activated(QSystemTrayIcon.ActivationReason.Trigger)
+            assert window.isVisible(), "Tray activation did not restore the window"
+            close_event = QCloseEvent()
+            window.closeEvent(close_event)
+            assert not close_event.isAccepted()
+            assert window.isHidden(), "Closing with a tray did not hide the window"
+            window._on_notification_clicked()
+            assert window.isVisible(), "Clicking a notification did not restore the window"
+            assert window._notification is None
+            window.quit_app()
+            quit_event = QCloseEvent()
+            window.closeEvent(quit_event)
+            assert quit_event.isAccepted(), "Explicit Quit was intercepted as close-to-tray"
+            print("PASS: notification permission, tray presentation, quick-open, close and quit")
         else:
             raise AssertionError(case)
     finally:
