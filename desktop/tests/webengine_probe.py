@@ -404,11 +404,11 @@ def run(case: str, root: Path) -> None:
             page._handle_permission(cast(QWebEnginePermission, unrelated))
             assert unrelated.denied and not unrelated.granted
 
-            messages: list[tuple[str, str]] = []
+            messages: list[tuple[str, str, int]] = []
             # Captured rather than mocked: the real tray call would need a live desktop.
             window._tray_icon.supportsMessages = lambda: True  # type: ignore[method-assign]
             window._tray_icon.showMessage = (  # type: ignore[method-assign]
-                lambda title, body, *_: messages.append((title, body))
+                lambda title, body, _icon=None, msecs=0: messages.append((title, body, msecs))
             )
             evaluate("Notification.requestPermission(); true")
             wait_for("Notification.permission === 'granted'")
@@ -416,8 +416,17 @@ def run(case: str, root: Path) -> None:
             until = time.monotonic() + 5
             while not messages and time.monotonic() < until:
                 QTest.qWait(50)
-            assert messages == [("Focus finished", "Take a break")], messages
+            assert messages == [("Focus finished", "Take a break", 10_000)], messages
             assert window._notification is not None
+            evaluate(
+                "window.__stay = new Notification('Stay', {body: 'Until handled', tag: 'flexweek-stay'});"
+            )
+            until = time.monotonic() + 5
+            while len(messages) < 2 and time.monotonic() < until:
+                QTest.qWait(50)
+            assert messages[-1] == ("Stay", "Until handled", 0), messages
+            assert window._notification is not None
+            assert window._notification.tag() == "flexweek-stay"
 
             window.hide()
             window._on_tray_activated(QSystemTrayIcon.ActivationReason.Trigger)

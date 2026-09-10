@@ -159,7 +159,8 @@ class WeekRequest(BaseModel):
     @field_validator("blocks")
     @classmethod
     def valid_week(cls, blocks: list[TimeBlock]) -> list[TimeBlock]:
-        if len({block.id for block in blocks}) != len(blocks):
+        ids = {block.id for block in blocks}
+        if len(ids) != len(blocks):
             raise ValueError("block ids must be unique")
         for block in blocks:
             if not block.title.strip() or len(set(block.days)) != len(block.days):
@@ -180,6 +181,8 @@ class WeekRequest(BaseModel):
                     bound,
                 ):
                     raise ValueError("invalid deadline or earliest time")
+        if any(block.pomodoro_parent_id in ids for block in blocks if block.pomodoro_parent_id):
+            raise ValueError("a pomodoro parent cannot be stored with the chunks split from it")
         return blocks
 
 

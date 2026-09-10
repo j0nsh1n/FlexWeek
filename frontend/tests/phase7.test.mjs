@@ -24,10 +24,20 @@ const defaultPrefs = {
   default_spotify_url: null, alarms: [],
 };
 
-function harness() {
+function harness(options = {}) {
   const elements = new Map();
   const all = [];
   const opened = [];
+  const notices = [];
+  function FakeNotification(title, opts = {}) {
+    this.title = title;
+    this.requireInteraction = Boolean(opts.requireInteraction);
+    this.tag = opts.tag || '';
+    this.close = function () {};
+    notices.push(this);
+  }
+  FakeNotification.permission = options.notificationPermission || 'denied';
+  FakeNotification.requestPermission = async () => FakeNotification.permission;
   function connected() {
     const found = [];
     const seen = new Set();
@@ -80,12 +90,13 @@ function harness() {
     fetch: async (path, options) => { requests.push({ path, options }); return handler(path, options); },
     getComputedStyle: () => ({ getPropertyValue: () => '2.75rem' }),
     setTimeout, clearTimeout, setInterval, clearInterval, AbortController, structuredClone, console,
-    confirm: () => true, Date: FixedDate, Notification: undefined, Blob,
+    confirm: () => true, Date: FixedDate,
+    Notification: options.captureNotifications ? FakeNotification : undefined, Blob,
     URL: { createObjectURL: () => 'blob:test', revokeObjectURL() {} },
   });
   vm.runInContext(source, context);
   return {
-    elements, opened, requests, run: code => vm.runInContext(code, context),
+    elements, opened, notices, requests, run: code => vm.runInContext(code, context),
     handle: fn => { handler = fn; },
     async login(blocks = [], preferences = defaultPrefs) {
       await tick();
@@ -157,6 +168,43 @@ test('focus completion credits once, persists the count, and completes the block
   assert.equal(h.run('focusState.phase'), 'break');
 });
 
+test('skip and a second complete during the completion save do not double-count', async () => {
+  const block = { id: 'focus', title: 'Focus', kind: 'locked', duration_min: 30, days: [3], start: '12:00', priority: 3, energy: 'medium' };
+  const h = harness();
+  await h.login([block]);
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  let puts = 0;
+  h.handle(async (_path, options) => {
+    puts += 1;
+    await held;
+    const saved = JSON.parse(options.body);
+    return response(200, { ...saved, revision: puts });
+  });
+  assert.equal(h.run('startFocus("focus", 3)'), true);
+  const finishing = h.run('advanceFocusPhase(true)');
+  await tick();
+  try {
+    assert.equal(h.run('saving'), true);
+    assert.equal(h.run('focusState.phase'), 'work');
+    h.run('advanceFocusPhase(true)');
+    h.run('advanceFocusPhase(false)');
+    h.run('toggleFocusPause()');
+    assert.equal(h.run('weekState().blocks[0].focus_sessions'), 1);
+    assert.equal(h.run('focusState.phase'), 'work');
+    assert.equal(h.run('focusState.running'), true);
+  } finally {
+    release();
+  }
+  await finishing;
+  assert.equal(h.run('weekState().blocks[0].focus_sessions'), 1);
+  assert.equal(h.run('weekState().blocks[0].focus_minutes'), 30);
+  assert.equal(h.run('focusState.cycles'), 1);
+  assert.equal(h.run('focusState.phase'), 'break');
+  assert.equal(h.run('focusState.running'), true);
+  assert.equal(puts, 1);
+});
+
 test('Now/Next uses half-open boundaries and gaps merge overlaps', () => {
   const h = harness();
   const blocks = [
@@ -196,6 +244,34 @@ test('Spotify links accept only official HTTPS shares and imports validate Phase
   const block = { id: 'x', title: 'X', kind: 'locked', duration_min: 30, days: [0], start: '08:00', focus_sessions: 2, focus_minutes: 60, pomodoro_role: 'work', pomodoro_index: 1, pomodoro_parent_id: 'parent' };
   assert.equal(h.run(`importBlockError(${JSON.stringify(block)}, 0)`), null);
   assert.match(h.run(`importBlockError(${JSON.stringify({ ...block, focus_sessions: -1 })}, 0)`), /focus_sessions/);
+});
+
+test('do-not-disturb alerts ask the desktop to keep them until handled', async () => {
+  const h = harness({ captureNotifications: true, notificationPermission: 'granted' });
+  await h.login([], { ...defaultPrefs, reminder_dnd_override: true });
+  h.run('maybeNotify("Stay", "Until handled")');
+  assert.equal(h.notices.length, 1);
+  assert.equal(h.notices[0].requireInteraction, true);
+  assert.equal(h.notices[0].tag, 'flexweek-stay');
+  h.run('prefs.reminder_dnd_override = false');
+  h.run('maybeNotify("Go", "Auto close")');
+  assert.equal(h.notices[1].requireInteraction, false);
+  assert.equal(h.notices[1].tag, 'flexweek');
+});
+
+test('import rejects a pomodoro parent together with the chunks split from it', async () => {
+  const h = harness();
+  const parent = { id: 'essay', title: 'Essay', kind: 'flexible', duration_min: 60, days: [0] };
+  const child = { id: 'chunk', title: 'Essay · focus 1/2', kind: 'locked', duration_min: 30, days: [0], start: '16:00', pomodoro_parent_id: 'essay', pomodoro_role: 'work', pomodoro_index: 1 };
+  assert.match(h.run(`importBlocksError(${JSON.stringify([parent, child])})`), /focus chunks/);
+  assert.equal(h.run(`importBlocksError(${JSON.stringify([child])})`), null);
+  const payload = { format: 'flexweek-week', version: 1, week_start: MONDAY, blocks: [parent, child] };
+  assert.match(h.run(`parseImportPayload(${JSON.stringify(JSON.stringify(payload))}).error`), /focus chunks/);
+  await h.login([parent]);
+  const merge = { format: 'flexweek-week', version: 1, week_start: MONDAY, blocks: [child] };
+  assert.equal(await h.run(`importPayloadIntoWeek(parseImportPayload(${JSON.stringify(JSON.stringify(merge))}), "merge")`), false);
+  assert.equal(h.run('weekState().blocks.length'), 1);
+  assert.equal(h.run('weekState().blocks[0].id'), 'essay');
 });
 
 test('a split child title stays inside the 80-character limit the server enforces', () => {

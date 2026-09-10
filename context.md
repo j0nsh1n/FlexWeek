@@ -1,13 +1,16 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-09. Branch `feat/phase7-focus-tools`, based on `bfb8edf`.
+- Date: 2026-09-09. Branch `feat/phase7-focus-tools`.
 - Phase 7 focus tools are in: pomodoro timers on placed tasks, standalone
   alarms with a dismiss/snooze dialog, Spotify share links on blocks and
   alarms, a Now / Next line, timer and do-not-disturb preferences, and desktop
-  tray notifications. Started by ChatGPT, finished and verified here.
-- Gates green: Ruff, mypy over 31 files, 159 Python tests and 67 frontend
-  tests, JavaScript syntax.
+  tray notifications. Three GLM leftovers from that slice are now fixed:
+  desktop DND linger, non-reentrant focus skip during save, and import of a
+  pomodoro parent with its chunks.
+- Gates green: Ruff, mypy over 22 files, 160 Python tests and 71 frontend
+  tests, JavaScript syntax. The tray WebEngine case checks that a
+  `flexweek-stay` notification is presented with timeout 0.
 - Phase 7 is verified in a real browser, not only in the DOM stub. The
   `phase7` WebEngine case starts a focus session and checks the panel counts,
   that pause stops the countdown, that skip changes phase and reset closes it,
@@ -82,11 +85,11 @@ There is no automatic synchronization between those databases.
 - License file is GPL-3.0. Qt for Python is LGPLv3/GPLv2/commercial.
 
 ## Session Handoff
-- 2026-09-09, `feat/phase7-focus-tools`: picked up ChatGPT's uncommitted Phase 7
-  work, fixed the two regressions blocking the gate (a try/except/pass in
-  desktop/main.py and six mypy errors the new probe introduced), added a real
-  browser case for the focus timer and alarms, and committed the lot in two
-  commits. Nothing pushed.
+- 2026-09-09, `feat/phase7-focus-tools`: fixed the three GLM leftovers Claude
+  left. Desktop DND now lingers via the `flexweek-stay` tag (non-DND still
+  closes at 10s). Focus skip/pause cannot re-enter a completion save.
+  Import and PUT /api/week reject a parent stored with its split chunks.
+  Gates re-run green on 2026-09-09; Linux artifact rebuilt.
 - The editor disables every control while a save is in flight, so a click
   during that window is a visible no-op rather than a bug. A probe that does
   not wait for the save to settle will wrongly report the Add task button as

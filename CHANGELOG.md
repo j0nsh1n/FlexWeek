@@ -40,6 +40,12 @@ All notable changes to FlexWeek are documented here. Format follows
   Sports, Activity, Meals, Free); older weeks without a category still load.
 
 ### Fixed
+- The Keep alerts visible until handled setting now keeps desktop tray alerts
+  until you click them. Unchecked alerts still disappear after ten seconds.
+- Skip, pause, or a second complete during a focus-session save no longer
+  double-counts that cycle.
+- Import and week save refuse a pomodoro parent together with the chunks split
+  from it, so the same hours cannot hold both the original task and its pieces.
 - Cancelled calendar gestures no longer save, and secondary pointers cannot
   finish another pointer's gesture (2026-09-08).
 - Signing out clears private reminder alerts. Delayed preference responses and

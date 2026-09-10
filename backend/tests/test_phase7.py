@@ -117,6 +117,22 @@ def test_focus_and_pomodoro_fields_survive_week_save(tmp_path: Path) -> None:
             json={"week_start": WEEK, "blocks": [unsafe], "revision": 1},
             headers=WRITE,
         ).status_code == 422
+        parent = {
+            "id": "essay",
+            "title": "Essay",
+            "kind": "flexible",
+            "duration_min": 60,
+            "days": [0],
+            "priority": 3,
+            "energy": "medium",
+        }
+        overlap = client.put(
+            "/api/week",
+            json={"week_start": WEEK, "blocks": [parent, block], "revision": 1},
+            headers=WRITE,
+        )
+        assert overlap.status_code == 422
+        assert client.get(f"/api/week?week_start={WEEK}").json()["blocks"][0]["id"] == "essay-focus-1"
 
 
 def test_phase7_preference_migration_is_idempotent(tmp_path: Path) -> None:

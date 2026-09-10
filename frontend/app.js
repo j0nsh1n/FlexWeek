@@ -386,6 +386,12 @@ function importBlocksError(blocks) {
     if (seen.has(blocks[i].id)) return "Export repeats the id " + blocks[i].id + ".";
     seen.add(blocks[i].id);
   }
+  for (let i = 0; i < blocks.length; i += 1) {
+    const parentId = blocks[i].pomodoro_parent_id;
+    if (parentId && seen.has(parentId)) {
+      return "Export includes a task together with the focus chunks split from it.";
+    }
+  }
   return null;
 }
 
@@ -707,6 +713,7 @@ let activeAlarm = null;
 let activeTone = null;
 let focusTimer = null;
 let focusState = null;
+let focusBusy = false;
 let pendingAlarms = [];
 let alarmQueue = [];
 
@@ -785,6 +792,7 @@ function signedOut(message = "Sign in to open your week.", preserve = true) {
   savedWeeks = [];
   selectedWeek = currentWeekStart();
   saving = false;
+  focusBusy = false;
   weekEl.replaceChildren();
   flexibleEl.replaceChildren();
   debugStatsEl.textContent = "";
@@ -1923,8 +1931,10 @@ function maybeNotify(title, body, soundEnabled = prefs.reminder_sound, tone = "c
   if (typeof Notification !== "function") return;
   if (Notification.permission === "granted") {
     try {
+      const stay = prefs.reminder_dnd_override;
       const notification = new Notification(title, {
-        body: body || "", silent: true, requireInteraction: prefs.reminder_dnd_override,
+        body: body || "", silent: true, requireInteraction: stay,
+        tag: stay ? "flexweek-stay" : "flexweek",
       });
       activeNotifications.add(notification);
       const remove = function () { activeNotifications.delete(notification); };
@@ -2229,7 +2239,7 @@ function resolveFocusPlacement(blockId, day) {
 }
 
 function startFocus(blockId, day) {
-  if (!account || saving) return false;
+  if (!account || saving || focusBusy) return false;
   const found = resolveFocusPlacement(blockId, day);
   if (!found || found.source.completed || found.source.pomodoro_role === "break") {
     setStatus("Place an unfinished work block before starting focus.");
@@ -2272,24 +2282,29 @@ async function creditFocusSession() {
 }
 
 async function advanceFocusPhase(completed) {
-  if (!focusState) return;
-  const oldPhase = focusState.phase;
-  if (oldPhase === "work") {
-    if (completed) await creditFocusSession();
-    if (!focusState) return;
-    focusState.cycles += completed ? 1 : 0;
-    focusState.phase = focusState.cycles > 0 && focusState.cycles % prefs.timer_long_break_every === 0
-      ? "long_break" : "break";
-  } else {
-    focusState.phase = "work";
+  if (!focusState || focusBusy) return;
+  focusBusy = true;
+  try {
+    const oldPhase = focusState.phase;
+    if (oldPhase === "work") {
+      if (completed) await creditFocusSession();
+      if (!focusState) return;
+      focusState.cycles += completed ? 1 : 0;
+      focusState.phase = focusState.cycles > 0 && focusState.cycles % prefs.timer_long_break_every === 0
+        ? "long_break" : "break";
+    } else {
+      focusState.phase = "work";
+    }
+    focusState.running = true;
+    focusState.remainingMs = phaseDurationMs(focusState.phase);
+    focusState.endsAt = Date.now() + focusState.remainingMs;
+    const label = focusState.phase === "work" ? "Focus session" :
+      (focusState.phase === "long_break" ? "Long break" : "Break");
+    maybeNotify(label, focusState.title, true, focusState.phase === "work" ? "bright" : "soft");
+    renderFocusPanel();
+  } finally {
+    focusBusy = false;
   }
-  focusState.running = true;
-  focusState.remainingMs = phaseDurationMs(focusState.phase);
-  focusState.endsAt = Date.now() + focusState.remainingMs;
-  const label = focusState.phase === "work" ? "Focus session" :
-    (focusState.phase === "long_break" ? "Long break" : "Break");
-  maybeNotify(label, focusState.title, true, focusState.phase === "work" ? "bright" : "soft");
-  renderFocusPanel();
 }
 
 function focusTick(nowMs) {
@@ -2304,7 +2319,7 @@ function focusTick(nowMs) {
 }
 
 function toggleFocusPause() {
-  if (!focusState) return;
+  if (!focusState || focusBusy || saving) return;
   if (focusState.running) {
     focusState.remainingMs = Math.max(0, focusState.endsAt - Date.now());
     focusState.running = false;
@@ -3082,7 +3097,10 @@ if (prefsSignOut) prefsSignOut.addEventListener("click", function () {
 });
 
 document.getElementById("focus-pause").addEventListener("click", toggleFocusPause);
-document.getElementById("focus-skip").addEventListener("click", function () { advanceFocusPhase(false); });
+document.getElementById("focus-skip").addEventListener("click", function () {
+  if (saving || focusBusy) return;
+  advanceFocusPhase(false);
+});
 document.getElementById("focus-reset").addEventListener("click", function () { resetFocusTimer(); });
 document.getElementById("alarm-dismiss").addEventListener("click", function () { finishAlarm(false); });
 document.getElementById("alarm-snooze").addEventListener("click", function () { finishAlarm(true); });

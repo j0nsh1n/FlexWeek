@@ -46,6 +46,12 @@ from desktop.server import LocalServer
 WINDOW_SIZE = (1280, 800)
 PROFILE_NAME = "flexweek"
 NOTIFICATION_TIMEOUT_MS = 10_000
+NOTIFY_STAY_TAG = "flexweek-stay"
+
+
+def notification_timeout_ms(tag: str) -> int:
+    # Qt does not expose requireInteraction; the page puts flexweek-stay in the tag instead.
+    return 0 if tag == NOTIFY_STAY_TAG else NOTIFICATION_TIMEOUT_MS
 
 
 def profile_root() -> str:
@@ -195,17 +201,19 @@ class MainWindow(QMainWindow):
         self._notification = notification
         notification.closed.connect(lambda: self._forget_notification(notification))
         notification.show()
+        timeout_ms = notification_timeout_ms(notification.tag())
         if self._tray_icon is not None and self._tray_icon.supportsMessages():
             self._tray_icon.showMessage(
                 notification.title(),
                 notification.message(),
                 QSystemTrayIcon.MessageIcon.Information,
-                NOTIFICATION_TIMEOUT_MS,
+                timeout_ms,
             )
-        QTimer.singleShot(
-            NOTIFICATION_TIMEOUT_MS,
-            lambda: self._close_notification(notification),
-        )
+        if timeout_ms:
+            QTimer.singleShot(
+                timeout_ms,
+                lambda: self._close_notification(notification),
+            )
 
     def _forget_notification(self, notification: QWebEngineNotification) -> None:
         if self._notification is notification:
