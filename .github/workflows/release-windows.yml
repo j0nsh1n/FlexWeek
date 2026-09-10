@@ -130,6 +130,22 @@ jobs:
           xvfb-run -a -s "-screen 0 1280x800x24" dist/FlexWeek/FlexWeek --smoke-test dist/linux-smoke.json
           python -c 'import json,sys; r=json.load(open("dist/linux-smoke.json")); print(r); sys.exit(0 if r.get("ok") else 1)'
 
+      - name: Build AppImage
+        # Wraps the same onedir the tarball ships (LSA's packaging method).
+        # appimagetool needs desktop-file-validate and mksquashfs; extract-and-
+        # run mode avoids needing FUSE on the runner.
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            desktop-file-utils squashfs-tools
+          chmod +x packaging/make-appimage.sh
+          packaging/make-appimage.sh dist/FlexWeek dist/release/FlexWeek-x86_64.AppImage
+          test -x dist/release/FlexWeek-x86_64.AppImage
+          size=$(stat -c%s dist/release/FlexWeek-x86_64.AppImage)
+          echo "AppImage $size bytes"
+          test "$size" -gt 1000000
+
       - name: Attach to the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -138,4 +154,6 @@ jobs:
           gh release upload "$TAG" \
             dist/release/FlexWeek-Linux-x86_64.tar.gz \
             dist/release/FlexWeek-Linux-x86_64.tar.gz.sha256 \
+            dist/release/FlexWeek-x86_64.AppImage \
+            dist/release/FlexWeek-x86_64.AppImage.sha256 \
             --clobber

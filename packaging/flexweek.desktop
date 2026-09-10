@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=FlexWeek
+Comment=Plan a school week and let the solver place your work
+Exec=FlexWeek
+Icon=flexweek
+Terminal=false
+Categories=Office;Calendar;Qt;
+StartupNotify=true
+StartupWMClass=flexweek
