@@ -11,9 +11,16 @@
 # moved to dist\FlexWeek-Windows when that path does not exist yet. On failure
 # the staging folder is kept and its location is printed.
 #
-# No silent downloads: --assume-yes-for-downloads is not passed, so Nuitka
-# asks before fetching anything. For Python 3.13+ the compiler must be MSVC;
-# Nuitka's MinGW64 download does not support those versions.
+# No silent downloads by default: --assume-yes-for-downloads is not passed, so
+# Nuitka asks before fetching anything (e.g. dependency walker, which Windows
+# standalone mode requires). Pass -AssumeYesForDownloads to approve those
+# prompts non-interactively — intended for CI, where a prompt would hang. For
+# Python 3.13+ the compiler must be MSVC; Nuitka's MinGW64 download does not
+# support those versions.
+
+param(
+    [switch]$AssumeYesForDownloads
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -87,6 +94,9 @@ $NuitkaArgs = @(
     "--windows-icon-from-ico=$(Join-Path $Root 'frontend\logo.png')",
     '--windows-console-mode=disable'
 )
+if ($AssumeYesForDownloads) {
+    $NuitkaArgs += '--assume-yes-for-downloads'
+}
 
 Write-Host "Compiling into $Stage (Qt WebEngine makes this a long build)..."
 try {

@@ -39,7 +39,9 @@ jobs:
           .venv\Scripts\python -m pip install -r requirements.txt -r requirements-desktop.txt
 
       - name: Build Windows onedir package
-        run: ./desktop/build_windows.ps1
+        # -AssumeYesForDownloads lets Nuitka fetch dependency walker (required
+        # for Windows standalone mode); a prompt would hang the runner.
+        run: ./desktop/build_windows.ps1 -AssumeYesForDownloads
         shell: pwsh
 
       - name: Smoke-test package layout
