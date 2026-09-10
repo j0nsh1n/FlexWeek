@@ -224,6 +224,19 @@ The default self-contained desktop mode stores accounts locally. Hosted mode
 (`FLEXWEEK_DESKTOP_ORIGIN`) uses that deployment's accounts and weeks in both the
 desktop app and browser. There is no automatic local-to-hosted synchronization.
 
+### Windows release build — CI, same method as Daily Scheduler (2026-09-09)
+
+Nuitka cannot cross-compile: the Windows package is built on a GitHub Actions
+`windows-latest` runner, mirroring Local-Schedule-Assistant's
+`release-windows.yml`. `.github/workflows/release-windows.yml` fires when a
+release is published (or by hand against an existing tag), installs both
+requirements files into a fresh Python 3.14, runs `desktop/build_windows.ps1`
+(MSVC is preinstalled on the runner), smoke-checks the freeze layout
+(`FlexWeek.exe`, `frontend/index.html`, `QtWebEngineCore.dll`), zips
+`dist\FlexWeek-Windows` to `FlexWeek-win64.zip` with a `.sha256`, and uploads
+both to the release. The first CI run is also the first real execution of
+`build_windows.ps1`; if it fails, the workflow log is the diagnosis.
+
 ---
 
 ## 8. Releasing the Linux build
