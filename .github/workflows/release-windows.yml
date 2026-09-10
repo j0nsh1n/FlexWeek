@@ -46,21 +46,24 @@ jobs:
 
       - name: Smoke-test package layout
         # --windows-console-mode=disable freezes have no console; assert the
-        # freeze layout is complete. A missing frontend data dir means the
-        # --include-data-dir flag was dropped and the window would show only
-        # the native retry panel.
+        # freeze layout is complete. The WebEngine core DLL is Qt6-prefixed on
+        # Windows (libQt6WebEngineCore.so.6 on Linux), so match a wildcard.
         run: |
           $root = "dist\FlexWeek-Windows"
           $exe = Join-Path $root "FlexWeek.exe"
           if (-not (Test-Path $exe)) { throw "FlexWeek.exe missing after build" }
+          Write-Host "Built: $exe"
+          Get-ChildItem $root | Select-Object Name, Length
           if (-not (Test-Path (Join-Path $root "frontend\index.html"))) {
             throw "frontend data dir missing under $root — bundled UI would not load"
           }
-          if (-not (Get-ChildItem -Path $root -Recurse -Filter "QtWebEngineCore.dll" -ErrorAction SilentlyContinue)) {
-            throw "QtWebEngineCore.dll missing under $root — WebEngine will not start"
+          if (-not (Get-ChildItem -Path $root -Recurse -Filter "*WebEngineCore*.dll" -ErrorAction SilentlyContinue)) {
+            throw "WebEngine core DLL missing under $root — WebEngine will not start"
           }
-          Write-Host "Built: $exe"
-          Get-ChildItem $root | Select-Object Name, Length
+          if (-not (Get-ChildItem -Path $root -Recurse -Filter "QtWebEngineProcess.exe" -ErrorAction SilentlyContinue)) {
+            throw "QtWebEngineProcess.exe missing under $root — WebEngine renderer will not start"
+          }
+          Write-Host "Smoke layout OK"
 
       - name: Zip the bundle
         run: |
