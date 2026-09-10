@@ -6,8 +6,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import vm from 'node:vm';
+import { runAppScripts } from './app-scripts.mjs';
 
-const source = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const task = { id: 'homework', kind: 'flexible', title: 'Math', duration_min: 60, days: [0] };
 const response = (status, data) => ({ status, ok: status < 400, json: async () => data });
@@ -85,7 +85,7 @@ function harness() {
     setTimeout, clearTimeout, AbortController, structuredClone, console,
     confirm: () => true, Date: FixedDate,
   });
-  vm.runInContext(source, context);
+  runAppScripts(vm, context);
   return {
     elements, local, requests, allElements,
     run: code => vm.runInContext(code, context),
