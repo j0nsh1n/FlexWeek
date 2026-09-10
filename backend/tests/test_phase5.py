@@ -12,6 +12,19 @@ WRITE = {"X-FlexWeek-Request": "1"}
 WEEK = "2026-09-07"
 
 
+def phase7_defaults() -> dict:
+    return {
+        "reminder_dnd_override": False,
+        "timer_work_min": 30,
+        "timer_break_min": 15,
+        "timer_long_break_min": 30,
+        "timer_long_break_every": 4,
+        "auto_split_pomodoro": False,
+        "default_spotify_url": None,
+        "alarms": [],
+    }
+
+
 def make_client(tmp_path: Path) -> TestClient:
     db = tmp_path / "phase5.db"
     app = create_app(database=db, origin="http://testserver")
@@ -36,12 +49,14 @@ def test_reminder_preferences_persist(tmp_path: Path) -> None:
             "reminders_enabled": False,
             "reminder_lead_min": 5,
             "reminder_sound": True,
+            **phase7_defaults(),
         }
         payload = {
             "theme": "slate",
             "reminders_enabled": True,
             "reminder_lead_min": 15,
             "reminder_sound": False,
+            **phase7_defaults(),
         }
         assert client.put("/api/preferences", json=payload, headers=WRITE).status_code == 200
         assert client.get("/api/preferences").json() == payload

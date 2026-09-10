@@ -71,7 +71,7 @@ def date_legacy_weeks(db: sqlite3.Connection) -> None:
 
 
 def migrate_preferences(db: sqlite3.Connection) -> None:
-    """Add reminder columns to preferences created before Phase 5 slice F."""
+    """Add preference columns introduced after the original account schema."""
     cols = {row[1] for row in db.execute("PRAGMA table_info(preferences)").fetchall()}
     if "reminders_enabled" not in cols:
         db.execute(
@@ -85,6 +85,19 @@ def migrate_preferences(db: sqlite3.Connection) -> None:
         db.execute(
             "ALTER TABLE preferences ADD COLUMN reminder_sound INTEGER NOT NULL DEFAULT 1"
         )
+    phase7_columns = {
+        "reminder_dnd_override": "INTEGER NOT NULL DEFAULT 0",
+        "timer_work_min": "INTEGER NOT NULL DEFAULT 30",
+        "timer_break_min": "INTEGER NOT NULL DEFAULT 15",
+        "timer_long_break_min": "INTEGER NOT NULL DEFAULT 30",
+        "timer_long_break_every": "INTEGER NOT NULL DEFAULT 4",
+        "auto_split_pomodoro": "INTEGER NOT NULL DEFAULT 0",
+        "default_spotify_url": "TEXT",
+        "alarms_json": "TEXT NOT NULL DEFAULT '[]'",
+    }
+    for name, declaration in phase7_columns.items():
+        if name not in cols:
+            db.execute(f"ALTER TABLE preferences ADD COLUMN {name} {declaration}")
 
 
 def initialize(path: Path) -> None:
@@ -110,7 +123,17 @@ def initialize(path: Path) -> None:
                 reminder_lead_min INTEGER NOT NULL DEFAULT 5
                     CHECK(reminder_lead_min >= 0 AND reminder_lead_min <= 120),
                 reminder_sound INTEGER NOT NULL DEFAULT 1
-                    CHECK(reminder_sound IN (0, 1))
+                    CHECK(reminder_sound IN (0, 1)),
+                reminder_dnd_override INTEGER NOT NULL DEFAULT 0
+                    CHECK(reminder_dnd_override IN (0, 1)),
+                timer_work_min INTEGER NOT NULL DEFAULT 30,
+                timer_break_min INTEGER NOT NULL DEFAULT 15,
+                timer_long_break_min INTEGER NOT NULL DEFAULT 30,
+                timer_long_break_every INTEGER NOT NULL DEFAULT 4,
+                auto_split_pomodoro INTEGER NOT NULL DEFAULT 0
+                    CHECK(auto_split_pomodoro IN (0, 1)),
+                default_spotify_url TEXT,
+                alarms_json TEXT NOT NULL DEFAULT '[]'
             );
             CREATE TABLE IF NOT EXISTS auth_attempts (
                 key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL

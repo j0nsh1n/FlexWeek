@@ -23,6 +23,9 @@ const EXPORT_FORMAT = "flexweek-week";
 const EXPORT_VERSION = 1;
 const REMINDER_WINDOW_MIN = 2;
 const REMINDER_POLL_MS = 30000;
+const LIVE_POLL_MS = 30000;
+const ALARM_SNOOZE_MIN = 5;
+const ALARM_SOUNDS = ["chime", "soft", "bright", "low", "glass", "spotify"];
 
 function isSeries(block) {
   return Boolean(block && Array.isArray(block.days) && block.days.length > 1);
@@ -129,6 +132,82 @@ function reminderKey(weekStart, blockId, day, start) {
   return [weekStart, blockId, day, start].join("|");
 }
 
+function safeSpotifyUrl(value) {
+  const text = String(value || "").trim();
+  if (!/^https:\/\/open\.spotify\.com\/(track|playlist|album|episode|show)\/[A-Za-z0-9]+\/?(?:[?#].*)?$/.test(text)) {
+    return "";
+  }
+  return text;
+}
+
+function pomodoroPlan(durationMin, workMin, breakMin, longBreakMin, cadence) {
+  const values = [durationMin, workMin, breakMin, longBreakMin];
+  if (values.some(function (value) {
+    return !Number.isInteger(value) || value <= 0 || value % SNAP_MIN !== 0;
+  })) return { error: "Grid splitting needs positive 15-minute work and break lengths." };
+  const every = Math.max(2, Math.min(12, Number(cadence) || 4));
+  let remaining = durationMin;
+  let workIndex = 0;
+  const segments = [];
+  while (remaining > 0) {
+    workIndex += 1;
+    const length = Math.min(workMin, remaining);
+    segments.push({ role: "work", duration_min: length, index: workIndex });
+    remaining -= length;
+    if (remaining > 0) {
+      const long = workIndex % every === 0;
+      segments.push({ role: "break", duration_min: long ? longBreakMin : breakMin, index: workIndex });
+    }
+  }
+  return {
+    segments: segments,
+    total_min: segments.reduce(function (total, item) { return total + item.duration_min; }, 0),
+  };
+}
+
+function freeIntervals(blocks, day) {
+  const active = (blocks || []).filter(function (block) {
+    return (block.missed_days || []).indexOf(day) === -1;
+  });
+  const intervals = occupiedIntervalsForDay(active, day).map(function (item) {
+    return { startMin: Math.max(DAY_START_MIN, item.startMin), endMin: Math.min(DAY_END_MIN, item.endMin) };
+  }).filter(function (item) { return item.endMin > item.startMin; });
+  const merged = [];
+  intervals.forEach(function (item) {
+    const last = merged[merged.length - 1];
+    if (last && item.startMin <= last.endMin) last.endMin = Math.max(last.endMin, item.endMin);
+    else merged.push({ ...item });
+  });
+  const gaps = [];
+  let cursor = DAY_START_MIN;
+  merged.forEach(function (item) {
+    if (item.startMin > cursor) gaps.push({ startMin: cursor, endMin: item.startMin });
+    cursor = Math.max(cursor, item.endMin);
+  });
+  if (cursor < DAY_END_MIN) gaps.push({ startMin: cursor, endMin: DAY_END_MIN });
+  return gaps;
+}
+
+function nowAndNext(blocks, day, minute) {
+  const active = (blocks || []).filter(function (block) {
+    return block.start && !block.completed && (block.missed_days || []).indexOf(day) === -1
+      && occurrenceDays(block).indexOf(day) !== -1;
+  }).slice().sort(function (a, b) { return parseStart(a.start) - parseStart(b.start); });
+  let current = null;
+  let next = null;
+  active.forEach(function (block) {
+    const start = parseStart(block.start);
+    const end = start + block.duration_min;
+    if (!current && start <= minute && minute < end) current = block;
+    if (!next && start > minute) next = block;
+  });
+  return { current: current, next: next };
+}
+
+function alarmKey(date, alarm) {
+  return [date, alarm.id, alarm.time].join("|");
+}
+
 function categoryLabel(category) {
   for (let i = 0; i < CATEGORIES.length; i += 1) {
     if (CATEGORIES[i].id === category) return CATEGORIES[i].label;
@@ -214,6 +293,10 @@ const ENERGIES = ["high", "medium", "low"];
 function importBlockError(block, index) {
   const at = "Block " + (index + 1);
   if (!block || typeof block !== "object" || Array.isArray(block)) return at + " is not a block.";
+  const allowed = new Set(["id", "title", "kind", "duration_min", "days", "priority", "energy",
+    "earliest", "latest", "start", "course", "category", "completed", "completed_day", "missed_days",
+    "spotify_url", "focus_sessions", "focus_minutes", "pomodoro_parent_id", "pomodoro_role", "pomodoro_index"]);
+  if (Object.keys(block).some(function (key) { return !allowed.has(key); })) return at + " has an unknown field.";
   if (typeof block.id !== "string" || !block.id || textLength(block.id) > 80) return at + " has a bad id.";
   if (typeof block.title !== "string" || !block.title.trim() || textLength(block.title) > 80) {
     return at + " has a bad title.";
@@ -243,7 +326,8 @@ function importBlockError(block, index) {
       return at + " does not fit the visible day.";
     }
   }
-  const texts = [["earliest", 40], ["latest", 40], ["course", 40], ["category", 32]];
+  const texts = [["earliest", 40], ["latest", 40], ["course", 40], ["category", 32],
+    ["spotify_url", 500], ["pomodoro_parent_id", 80]];
   for (let i = 0; i < texts.length; i += 1) {
     const value = block[texts[i][0]];
     if (value === undefined || value === null) continue;
@@ -255,6 +339,19 @@ function importBlockError(block, index) {
   if ([block.earliest, block.latest].some(value => value != null && !boundPattern.test(value))) {
     return at + " has a bad deadline or earliest time.";
   }
+  if (block.spotify_url != null && !safeSpotifyUrl(block.spotify_url)) return at + " has a bad Spotify link.";
+  for (const field of ["focus_sessions", "focus_minutes"]) {
+    if (block[field] !== undefined && (!Number.isInteger(block[field]) || block[field] < 0)) {
+      return at + " has a bad " + field + ".";
+    }
+  }
+  if (block.focus_sessions > 9999 || block.focus_minutes > 71400) return at + " has excessive focus history.";
+  if (block.pomodoro_role !== undefined && block.pomodoro_role !== "work" && block.pomodoro_role !== "break") {
+    return at + " has a bad pomodoro role.";
+  }
+  if (block.pomodoro_index !== undefined && (
+    !Number.isInteger(block.pomodoro_index) || block.pomodoro_index < 1 || block.pomodoro_index > 999
+  )) return at + " has a bad pomodoro index.";
   if (block.completed !== undefined && typeof block.completed !== "boolean") {
     return at + " has a bad completed flag.";
   }
@@ -588,10 +685,30 @@ let prefs = {
   reminders_enabled: false,
   reminder_lead_min: 5,
   reminder_sound: true,
+  reminder_dnd_override: false,
+  timer_work_min: 30,
+  timer_break_min: 15,
+  timer_long_break_min: 30,
+  timer_long_break_every: 4,
+  auto_split_pomodoro: false,
+  default_spotify_url: null,
+  alarms: [],
 };
 const firedReminders = new Set();
 const activeNotifications = new Set();
 let reminderTimer = null;
+let lastReminderCheck = null;
+const firedAlarms = new Set();
+const snoozedAlarms = new Map();
+let alarmTimer = null;
+let liveTimer = null;
+let lastAlarmCheck = null;
+let activeAlarm = null;
+let activeTone = null;
+let focusTimer = null;
+let focusState = null;
+let pendingAlarms = [];
+let alarmQueue = [];
 
 // One record per week, keyed by its Monday. Blocks, revision, unsaved edits and
 // a conflict all belong to the week they came from: a single global revision
@@ -641,7 +758,15 @@ function signedOut(message = "Sign in to open your week.", preserve = true) {
   epoch += 1;
   account = null;
   syncReminderLoop();
+  stopPhase7Loops();
+  resetFocusTimer(false);
   firedReminders.clear();
+  firedAlarms.clear();
+  snoozedAlarms.clear();
+  pendingAlarms = [];
+  alarmQueue = [];
+  activeAlarm = null;
+  stopTone();
   activeNotifications.forEach(function (notification) {
     try { notification.close(); } catch (err) { /* ignore */ }
   });
@@ -651,6 +776,8 @@ function signedOut(message = "Sign in to open your week.", preserve = true) {
   if (toast) { toast.hidden = true; toast.textContent = ""; }
   const preferencesDialog = document.getElementById("prefs-dialog");
   if (preferencesDialog && typeof preferencesDialog.close === "function") preferencesDialog.close();
+  const alarmDialog = document.getElementById("alarm-dialog");
+  if (alarmDialog && typeof alarmDialog.close === "function") alarmDialog.close();
   hideContextMenu();
   if (gridGesture) clearGhost(gridGesture.lane);
   gridGesture = null;
@@ -833,6 +960,7 @@ function weekStatus() {
 }
 
 function showWeek(weekStart) {
+  if (focusState && focusState.weekStart !== weekStart) resetFocusTimer();
   selectedWeek = weekStart;
   const state = weekState();
   state.trace = null;
@@ -1013,6 +1141,13 @@ function showContextMenu(clientX, clientY, blockId, day) {
     if (action === "edit") btn.hidden = Boolean(series);
     else if (action === "edit-occurrence" || action === "edit-series" || action === "delete-occurrence") {
       btn.hidden = !series;
+    } else if (action === "start-focus") {
+      btn.hidden = !source || source.completed || source.pomodoro_role === "break" || !resolveFocusPlacement(blockId, day);
+    } else if (action === "split-pomodoros") {
+      btn.hidden = !source || source.completed || Boolean(source.pomodoro_role) ||
+        (source.kind === "locked" && isSeries(source)) || !resolveFocusPlacement(blockId, day);
+    } else if (action === "open-spotify") {
+      btn.hidden = !source || !safeSpotifyUrl(source.spotify_url);
     } else {
       btn.hidden = false;
     }
@@ -1247,7 +1382,8 @@ function buildGrid(blocks, explanations = []) {
       const el = document.createElement("div");
       const missed = block.kind === "locked" && (block.missed_days || []).indexOf(day) !== -1;
       el.className = "block" + (block.kind === "flexible" ? " flex-block" : "") +
-        (missed ? " missed-block" : "") + (block.completed ? " is-completed" : "");
+        (missed ? " missed-block" : "") + (block.completed ? " is-completed" : "") +
+        (block.pomodoro_role === "break" ? " pomodoro-break" : "");
       el.dataset.id = block.id;
       el.dataset.day = String(day);
       el.style.top = ((clippedStart - visibleStart) / 60) * hourH + "rem";
@@ -1267,8 +1403,22 @@ function buildGrid(blocks, explanations = []) {
 
       const sub = document.createElement("div");
       sub.className = "sub";
-      sub.textContent = block.duration_min + " min" + (missed ? " · missed" : "");
+      sub.textContent = block.duration_min + " min" + (missed ? " · missed" : "") +
+        (block.focus_sessions ? " · " + block.focus_sessions + " focus" : "");
       el.appendChild(sub);
+
+      const spotify = safeSpotifyUrl(block.spotify_url);
+      if (spotify) {
+        const link = document.createElement("a");
+        link.className = "spotify-link";
+        link.href = spotify;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = "Spotify";
+        link.addEventListener("pointerdown", function (event) { event.stopPropagation(); });
+        link.addEventListener("click", function (event) { event.stopPropagation(); });
+        el.appendChild(link);
+      }
 
       const insight = insightFor(explanations, block.id);
       if (insight) {
@@ -1287,7 +1437,11 @@ function buildGrid(blocks, explanations = []) {
     });
   });
 
+  renderFreeGapOverlays(lanes, blocks);
+  updateLiveDisplay();
+
   renderFlexible(blocks.filter((b) => b.kind === "flexible" && !b.start));
+  renderFocusTasks();
 }
 
 function renderFlexible(flex) {
@@ -1326,8 +1480,20 @@ function renderFlexible(flex) {
     if (block.category) pill(categoryLabel(block.category) || block.category);
     if (block.latest) pill("due " + block.latest);
     if (block.completed) pill("done");
+    if (block.focus_sessions) pill(block.focus_sessions + " focus");
 
     li.appendChild(pills);
+    const spotify = safeSpotifyUrl(block.spotify_url);
+    if (spotify) {
+      const link = document.createElement("a");
+      link.className = "spotify-link";
+      link.href = spotify;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = "Open Spotify";
+      link.addEventListener("click", function (event) { event.stopPropagation(); });
+      li.appendChild(link);
+    }
     li.addEventListener("click", function () {
       const source = weekState().blocks.find(function (item) { return item.id === block.id; });
       if (source) openForm(source.kind, source);
@@ -1550,16 +1716,44 @@ function applyPreferences(preferences) {
     reminder_lead_min: Number.isFinite(Number(preferences.reminder_lead_min))
       ? Number(preferences.reminder_lead_min) : 5,
     reminder_sound: preferences.reminder_sound !== false,
+    reminder_dnd_override: Boolean(preferences.reminder_dnd_override),
+    timer_work_min: Number(preferences.timer_work_min) || 30,
+    timer_break_min: Number(preferences.timer_break_min) || 15,
+    timer_long_break_min: Number(preferences.timer_long_break_min) || 30,
+    timer_long_break_every: Number(preferences.timer_long_break_every) || 4,
+    auto_split_pomodoro: Boolean(preferences.auto_split_pomodoro),
+    default_spotify_url: safeSpotifyUrl(preferences.default_spotify_url) || null,
+    alarms: Array.isArray(preferences.alarms) ? preferences.alarms.map(function (alarm) {
+      return { ...alarm, spotify_url: safeSpotifyUrl(alarm.spotify_url) || null };
+    }) : [],
   };
   themeEl.value = prefs.theme;
   document.documentElement.dataset.theme = prefs.theme;
   const enabled = document.getElementById("pref-reminders-enabled");
   const lead = document.getElementById("pref-reminder-lead");
   const sound = document.getElementById("pref-reminder-sound");
+  const dnd = document.getElementById("pref-dnd-override");
   if (enabled) enabled.checked = prefs.reminders_enabled;
   if (lead) lead.value = String(prefs.reminder_lead_min);
   if (sound) sound.checked = prefs.reminder_sound;
+  if (dnd) dnd.checked = prefs.reminder_dnd_override;
+  const values = {
+    "pref-theme": prefs.theme,
+    "pref-timer-work": prefs.timer_work_min,
+    "pref-timer-break": prefs.timer_break_min,
+    "pref-timer-long-break": prefs.timer_long_break_min,
+    "pref-timer-cadence": prefs.timer_long_break_every,
+    "pref-spotify": prefs.default_spotify_url || "",
+  };
+  Object.keys(values).forEach(function (id) {
+    const element = document.getElementById(id);
+    if (element) element.value = String(values[id]);
+  });
+  const autoSplit = document.getElementById("pref-auto-split");
+  if (autoSplit) autoSplit.checked = prefs.auto_split_pomodoro;
+  renderAlarmList();
   syncReminderLoop();
+  syncPhase7Loops();
 }
 
 function preferencesPayload() {
@@ -1568,6 +1762,14 @@ function preferencesPayload() {
     reminders_enabled: prefs.reminders_enabled,
     reminder_lead_min: prefs.reminder_lead_min,
     reminder_sound: prefs.reminder_sound,
+    reminder_dnd_override: prefs.reminder_dnd_override,
+    timer_work_min: prefs.timer_work_min,
+    timer_break_min: prefs.timer_break_min,
+    timer_long_break_min: prefs.timer_long_break_min,
+    timer_long_break_every: prefs.timer_long_break_every,
+    auto_split_pomodoro: prefs.auto_split_pomodoro,
+    default_spotify_url: prefs.default_spotify_url,
+    alarms: prefs.alarms.map(function (alarm) { return { ...alarm }; }),
   };
 }
 
@@ -1703,34 +1905,25 @@ function showReminderToast(message) {
   toast.textContent = message;
   clearTimeout(showReminderToast._timer);
   showReminderToast._timer = setTimeout(function () { toast.hidden = true; }, 8000);
+  if (showReminderToast._timer && typeof showReminderToast._timer.unref === "function") {
+    showReminderToast._timer.unref();
+  }
 }
 
 function playReminderSound() {
   if (!prefs.reminder_sound) return;
-  try {
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = playReminderSound._ctx || new Ctx();
-    playReminderSound._ctx = ctx;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.value = 880;
-    gain.gain.value = 0.04;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.18);
-  } catch (err) { /* best-effort */ }
+  soundOnce("chime");
 }
 
-function maybeNotify(title, body) {
+function maybeNotify(title, body, soundEnabled = prefs.reminder_sound, tone = "chime") {
   showReminderToast(title + (body ? " — " + body : ""));
-  playReminderSound();
+  if (soundEnabled) soundOnce(tone);
   if (typeof Notification !== "function") return;
   if (Notification.permission === "granted") {
     try {
-      const notification = new Notification(title, { body: body || "", silent: true });
+      const notification = new Notification(title, {
+        body: body || "", silent: true, requireInteraction: prefs.reminder_dnd_override,
+      });
       activeNotifications.add(notification);
       const remove = function () { activeNotifications.delete(notification); };
       notification.onclose = remove;
@@ -1789,6 +1982,505 @@ function syncReminderLoop() {
   if (reminderTimer && typeof reminderTimer.unref === "function") reminderTimer.unref();
 }
 
+function scheduledBlocksForState(state) {
+  if (!state) return [];
+  if (!state.trace) return state.blocks.filter(function (block) {
+    return block.kind === "locked" || (block.kind === "flexible" && block.start);
+  });
+  const sources = new Map(state.blocks.map(function (block) { return [block.id, block]; }));
+  return (state.trace.placed || []).map(function (placed) {
+    const source = sources.get(placed.id);
+    return source ? { ...placed, ...source, days: placed.days, start: placed.start } : placed;
+  });
+}
+
+function renderFreeGapOverlays(lanes, displayedBlocks) {
+  const unplaced = weekState().trace && weekState().trace.unplaced || [];
+  if (!unplaced.length) return;
+  const hourH = hourHeightRem();
+  for (let day = 0; day < 7; day += 1) {
+    const needs = unplaced.filter(function (block) {
+      return !block.completed && block.days.indexOf(day) !== -1;
+    });
+    if (!needs.length) continue;
+    const shortest = Math.min(...needs.map(function (block) { return block.duration_min; }));
+    freeIntervals(displayedBlocks, day).forEach(function (gap) {
+      const length = gap.endMin - gap.startMin;
+      if (length < shortest) return;
+      const element = document.createElement("div");
+      element.className = "free-gap";
+      element.style.top = ((gap.startMin - DAY_START_MIN) / 60) * hourH + "rem";
+      element.style.height = (length / 60) * hourH + "rem";
+      element.textContent = "Free " + length + " min";
+      lanes[day].appendChild(element);
+    });
+  }
+}
+
+function currentDateInfo(now) {
+  const date = now || new Date();
+  const iso = date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate());
+  return {
+    iso: iso,
+    week: mondayOf(iso),
+    day: (date.getDay() + 6) % 7,
+    minute: date.getHours() * 60 + date.getMinutes(),
+  };
+}
+
+function updateLiveDisplay(nowDate) {
+  const target = document.getElementById("now-next");
+  if (!target) return;
+  const now = nowDate || new Date();
+  const info = currentDateInfo(now);
+  const state = weeks.get(info.week);
+  const result = nowAndNext(scheduledBlocksForState(state), info.day, info.minute);
+  const currentText = result.current ? "Now: " + result.current.title + " until " +
+    formatMinute(parseStart(result.current.start) + result.current.duration_min) : "Now: Free";
+  const nextText = result.next ? "Next: " + result.next.title + " at " + result.next.start : "Next: Nothing scheduled";
+  target.textContent = currentText + "\n" + nextText;
+  document.querySelectorAll(".current-time-line").forEach(function (line) {
+    if (typeof line.remove === "function") line.remove();
+    else line.hidden = true;
+  });
+  if (selectedWeek !== info.week || info.minute < DAY_START_MIN || info.minute >= DAY_END_MIN) return;
+  const lane = Array.from(weekEl.children).find(function (child) {
+    return child.classList && child.classList.contains("day-lane") && Number(child.dataset.day) === info.day;
+  });
+  if (!lane) return;
+  const line = document.createElement("div");
+  line.className = "current-time-line";
+  line.style.top = ((info.minute - DAY_START_MIN) / 60) * hourHeightRem() + "rem";
+  line.title = "Current time " + formatMinute(info.minute);
+  lane.appendChild(line);
+}
+
+function soundOnce(tone) {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = soundOnce._ctx || new Ctx();
+    soundOnce._ctx = ctx;
+    const recipes = {
+      chime: [660, 880], soft: [440], bright: [880, 1175], low: [220, 330], glass: [1047, 1568],
+    };
+    const notes = recipes[tone] || recipes.chime;
+    notes.forEach(function (frequency, index) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = tone === "soft" ? "sine" : "triangle";
+      osc.frequency.value = frequency;
+      gain.gain.value = tone === "soft" ? 0.025 : 0.04;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      const start = ctx.currentTime + index * 0.14;
+      osc.start(start);
+      osc.stop(start + 0.22);
+    });
+  } catch (err) { /* Audio is best-effort. */ }
+}
+
+function stopTone() {
+  if (activeTone) clearInterval(activeTone);
+  activeTone = null;
+}
+
+function openSpotify(value) {
+  const url = safeSpotifyUrl(value);
+  if (!url || typeof window.open !== "function") return false;
+  try { return Boolean(window.open(url, "_blank", "noopener,noreferrer")); }
+  catch (err) { return false; }
+}
+
+function startAlarmSound(alarm) {
+  stopTone();
+  const linked = alarm.sound === "spotify" && openSpotify(alarm.spotify_url || prefs.default_spotify_url);
+  if (linked) return;
+  const tone = alarm.sound === "spotify" ? "chime" : alarm.sound;
+  soundOnce(tone);
+  activeTone = setInterval(function () { soundOnce(tone); }, 2500);
+  if (activeTone && typeof activeTone.unref === "function") activeTone.unref();
+}
+
+function presentNextAlarm() {
+  if (activeAlarm || !alarmQueue.length) return;
+  activeAlarm = alarmQueue.shift();
+  const dialog = document.getElementById("alarm-dialog");
+  document.getElementById("alarm-title").textContent = activeAlarm.name;
+  document.getElementById("alarm-detail").textContent = activeAlarm.time + " · Alarm is ringing";
+  const spotify = document.getElementById("alarm-open-spotify");
+  const url = safeSpotifyUrl(activeAlarm.spotify_url || prefs.default_spotify_url);
+  spotify.hidden = !url;
+  spotify.dataset.url = url;
+  startAlarmSound(activeAlarm);
+  maybeNotify(activeAlarm.name, "Alarm · " + activeAlarm.time, false, activeAlarm.sound);
+  if (dialog && typeof dialog.showModal === "function") dialog.showModal();
+  else if (dialog) dialog.setAttribute("open", "open");
+}
+
+function queueAlarm(alarm) {
+  if (activeAlarm && activeAlarm.id === alarm.id) return;
+  if (alarmQueue.some(function (item) { return item.id === alarm.id; })) return;
+  alarmQueue.push({ ...alarm });
+  presentNextAlarm();
+}
+
+function finishAlarm(snooze) {
+  if (!activeAlarm) return;
+  if (snooze) snoozedAlarms.set(activeAlarm.id, Date.now() + ALARM_SNOOZE_MIN * 60000);
+  stopTone();
+  const dialog = document.getElementById("alarm-dialog");
+  if (dialog && typeof dialog.close === "function") dialog.close();
+  else if (dialog) dialog.removeAttribute("open");
+  activeAlarm = null;
+  presentNextAlarm();
+}
+
+function checkAlarms(nowDate) {
+  if (!account) return;
+  const now = nowDate || new Date();
+  const nowMs = now.getTime();
+  const startMs = lastAlarmCheck === null ? nowMs - REMINDER_WINDOW_MIN * 60000 : lastAlarmCheck;
+  const info = currentDateInfo(now);
+  prefs.alarms.forEach(function (alarm) {
+    if (!alarm.enabled || alarm.days.indexOf(info.day) === -1) return;
+    const parts = alarm.time.split(":").map(Number);
+    const due = new Date(now.getFullYear(), now.getMonth(), now.getDate(), parts[0], parts[1]).getTime();
+    const key = alarmKey(info.iso, alarm);
+    if (startMs < due && due <= nowMs && !firedAlarms.has(key)) {
+      firedAlarms.add(key);
+      queueAlarm(alarm);
+    }
+  });
+  snoozedAlarms.forEach(function (due, id) {
+    if (!(startMs < due && due <= nowMs)) return;
+    snoozedAlarms.delete(id);
+    const alarm = prefs.alarms.find(function (item) { return item.id === id; });
+    if (alarm && alarm.enabled) queueAlarm(alarm);
+  });
+  lastAlarmCheck = nowMs;
+}
+
+function renderAlarmList() {
+  const list = document.getElementById("alarm-list");
+  if (!list) return;
+  list.replaceChildren();
+  if (!pendingAlarms.length && prefs.alarms.length) pendingAlarms = prefs.alarms.map(function (alarm) { return { ...alarm }; });
+  pendingAlarms.forEach(function (alarm) {
+    const item = document.createElement("li");
+    const text = document.createElement("span");
+    text.textContent = alarm.name + " · " + alarm.time + " · " + alarm.days.map(function (day) { return DAYS[day]; }).join("/");
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "secondary";
+    remove.textContent = "Remove";
+    remove.addEventListener("click", function () {
+      pendingAlarms = pendingAlarms.filter(function (item) { return item.id !== alarm.id; });
+      renderAlarmList();
+    });
+    item.appendChild(text);
+    item.appendChild(remove);
+    list.appendChild(item);
+  });
+}
+
+function phaseDurationMs(phase) {
+  const minutes = phase === "work" ? prefs.timer_work_min :
+    (phase === "long_break" ? prefs.timer_long_break_min : prefs.timer_break_min);
+  return minutes * 60000;
+}
+
+function formatCountdown(milliseconds) {
+  const seconds = Math.max(0, Math.ceil(milliseconds / 1000));
+  return String(Math.floor(seconds / 60)).padStart(2, "0") + ":" + String(seconds % 60).padStart(2, "0");
+}
+
+function renderFocusPanel(nowMs) {
+  const panel = document.getElementById("focus-panel");
+  if (!panel) return;
+  panel.hidden = !focusState;
+  if (!focusState) return;
+  document.getElementById("focus-task").textContent = focusState.title;
+  document.getElementById("focus-phase").textContent = focusState.phase === "work" ? "Focus session" :
+    (focusState.phase === "long_break" ? "Long break" : "Break");
+  const left = focusState.running ? focusState.endsAt - (nowMs || Date.now()) : focusState.remainingMs;
+  document.getElementById("focus-time").textContent = formatCountdown(left);
+  document.getElementById("focus-pause").textContent = focusState.running ? "Pause" : "Resume";
+}
+
+function resetFocusTimer(hide) {
+  if (focusTimer) clearInterval(focusTimer);
+  focusTimer = null;
+  focusState = null;
+  const panel = document.getElementById("focus-panel");
+  if (panel && hide !== false) panel.hidden = true;
+}
+
+function resolveFocusPlacement(blockId, day) {
+  const state = weekState();
+  const source = state.blocks.find(function (block) { return block.id === blockId; });
+  if (!source) return null;
+  const placed = source.start ? source : state.trace && state.trace.placed.find(function (block) {
+    return block.id === blockId && (day === undefined || block.days.indexOf(day) !== -1);
+  });
+  return placed && placed.start ? { source: source, placed: placed, day: placed.days[0] } : null;
+}
+
+function startFocus(blockId, day) {
+  if (!account || saving) return false;
+  const found = resolveFocusPlacement(blockId, day);
+  if (!found || found.source.completed || found.source.pomodoro_role === "break") {
+    setStatus("Place an unfinished work block before starting focus.");
+    return false;
+  }
+  resetFocusTimer();
+  focusState = {
+    weekStart: selectedWeek,
+    blockId: blockId,
+    day: found.day,
+    start: found.placed.start,
+    title: found.source.title,
+    phase: "work",
+    cycles: 0,
+    running: true,
+    remainingMs: phaseDurationMs("work"),
+    endsAt: Date.now() + phaseDurationMs("work"),
+  };
+  renderFocusPanel();
+  focusTimer = setInterval(function () { focusTick(); }, 500);
+  if (focusTimer && typeof focusTimer.unref === "function") focusTimer.unref();
+  return true;
+}
+
+async function creditFocusSession() {
+  if (!focusState || focusState.weekStart !== selectedWeek) return;
+  const block = weekState().blocks.find(function (item) { return item.id === focusState.blockId; });
+  if (!block) return;
+  block.focus_sessions = Math.min(9999, (block.focus_sessions || 0) + 1);
+  block.focus_minutes = Math.min(71400, (block.focus_minutes || 0) + prefs.timer_work_min);
+  if (block.focus_minutes >= block.duration_min) {
+    block.completed = true;
+    if (block.kind === "flexible") {
+      block.start = focusState.start;
+      block.completed_day = focusState.day;
+    }
+  }
+  await saveWeek();
+  renderWeek();
+}
+
+async function advanceFocusPhase(completed) {
+  if (!focusState) return;
+  const oldPhase = focusState.phase;
+  if (oldPhase === "work") {
+    if (completed) await creditFocusSession();
+    if (!focusState) return;
+    focusState.cycles += completed ? 1 : 0;
+    focusState.phase = focusState.cycles > 0 && focusState.cycles % prefs.timer_long_break_every === 0
+      ? "long_break" : "break";
+  } else {
+    focusState.phase = "work";
+  }
+  focusState.running = true;
+  focusState.remainingMs = phaseDurationMs(focusState.phase);
+  focusState.endsAt = Date.now() + focusState.remainingMs;
+  const label = focusState.phase === "work" ? "Focus session" :
+    (focusState.phase === "long_break" ? "Long break" : "Break");
+  maybeNotify(label, focusState.title, true, focusState.phase === "work" ? "bright" : "soft");
+  renderFocusPanel();
+}
+
+function focusTick(nowMs) {
+  if (!focusState || !focusState.running) return;
+  const now = nowMs || Date.now();
+  if (focusState.endsAt <= now) {
+    focusState.running = false;
+    focusState.remainingMs = 0;
+    advanceFocusPhase(true);
+  }
+  renderFocusPanel(now);
+}
+
+function toggleFocusPause() {
+  if (!focusState) return;
+  if (focusState.running) {
+    focusState.remainingMs = Math.max(0, focusState.endsAt - Date.now());
+    focusState.running = false;
+  } else {
+    focusState.running = true;
+    focusState.endsAt = Date.now() + focusState.remainingMs;
+  }
+  renderFocusPanel();
+}
+
+function renderFocusTasks() {
+  const list = document.getElementById("focus-tasks");
+  if (!list) return;
+  list.replaceChildren();
+  const scheduled = scheduledBlocksForState(weekState());
+  const placementById = new Map(scheduled.map(function (block) { return [block.id, block]; }));
+  weekState().blocks.filter(function (block) {
+    return block.pomodoro_role !== "break";
+  }).forEach(function (block) {
+    const item = document.createElement("li");
+    const name = document.createElement("strong");
+    name.textContent = block.title;
+    const count = document.createElement("small");
+    count.textContent = (block.focus_sessions || 0) + " sessions · " + (block.focus_minutes || 0) + " min";
+    const start = document.createElement("button");
+    start.type = "button";
+    start.textContent = "Focus";
+    start.disabled = block.completed || !placementById.has(block.id);
+    start.addEventListener("click", function () {
+      const placed = placementById.get(block.id);
+      startFocus(block.id, placed && placed.days[0]);
+    });
+    item.appendChild(name);
+    item.appendChild(count);
+    item.appendChild(start);
+    list.appendChild(item);
+  });
+}
+
+function buildPomodoroBlocks(source, placed, plan) {
+  const parentId = source.pomodoro_parent_id || source.id;
+  let cursor = parseStart(placed.start);
+  let firstWork = true;
+  const totalWork = plan.segments.filter(function (segment) { return segment.role === "work"; }).length;
+  return plan.segments.map(function (segment) {
+    const carryHistory = segment.role === "work" && firstWork;
+    const child = {
+      ...cloneBlock(source),
+      id: newId(),
+      title: segment.role === "work" ? source.title + " · focus " + segment.index + "/" + totalWork : "Pomodoro break",
+      kind: "locked",
+      days: [placed.days[0]],
+      start: formatMinute(cursor),
+      duration_min: segment.duration_min,
+      completed: false,
+      missed_days: [],
+      focus_sessions: carryHistory ? (source.focus_sessions || 0) : 0,
+      focus_minutes: carryHistory ? (source.focus_minutes || 0) : 0,
+      pomodoro_parent_id: parentId,
+      pomodoro_role: segment.role,
+      pomodoro_index: segment.index,
+      category: segment.role === "break" ? "free" : source.category,
+      course: segment.role === "break" ? null : source.course,
+      spotify_url: segment.role === "break" ? null : source.spotify_url,
+      earliest: null,
+      latest: null,
+    };
+    if (segment.role === "work") firstWork = false;
+    delete child.completed_day;
+    cursor += segment.duration_min;
+    return child;
+  });
+}
+
+function splitPlanForBlock(block) {
+  return pomodoroPlan(
+    block.duration_min,
+    prefs.timer_work_min,
+    prefs.timer_break_min,
+    prefs.timer_long_break_min,
+    prefs.timer_long_break_every,
+  );
+}
+
+function canPlaceEnvelope(state, source, placed, totalMin) {
+  const start = parseStart(placed.start);
+  if (start + totalMin > DAY_END_MIN) return false;
+  const scheduled = scheduledBlocksForState(state).filter(function (block) { return block.id !== source.id; });
+  return occupiedIntervalsForDay(scheduled, placed.days[0]).every(function (item) {
+    return start + totalMin <= item.startMin || start >= item.endMin;
+  });
+}
+
+function splitBlockIntoPomodoros(blockId, day) {
+  if (!account || saving) return false;
+  const state = weekState();
+  const index = state.blocks.findIndex(function (block) { return block.id === blockId; });
+  const source = index >= 0 ? state.blocks[index] : null;
+  const found = resolveFocusPlacement(blockId, day);
+  if (!source || !found || source.completed || source.pomodoro_role || (source.kind === "locked" && isSeries(source))) {
+    setStatus("Choose one placed, unfinished block to split.");
+    return false;
+  }
+  const plan = splitPlanForBlock(source);
+  if (plan.error) { setStatus(plan.error); return false; }
+  const children = buildPomodoroBlocks(source, found.placed, plan);
+  if (state.blocks.length - 1 + children.length > MAX_IMPORT_BLOCKS) {
+    setStatus("Split would exceed the 100-block week limit.");
+    return false;
+  }
+  if (!canPlaceEnvelope(state, source, found.placed, plan.total_min)) {
+    setStatus("The focus chunks and breaks do not fit beside existing blocks.");
+    return false;
+  }
+  state.blocks.splice(index, 1, ...children);
+  clearSolveResult("Focus chunks and breaks are saved on the grid.");
+  renderWeek();
+  saveWeek();
+  return true;
+}
+
+function autoSplitSolvedBlocks(trace) {
+  const state = weekState();
+  const replacements = new Map();
+  let finalCount = state.blocks.length;
+  state.blocks.forEach(function (source) {
+    if (source.kind !== "flexible" || source.completed || source.pomodoro_role || source.duration_min <= prefs.timer_work_min) return;
+    const placed = (trace.placed || []).find(function (item) { return item.id === source.id; });
+    if (!placed || !placed.start) return;
+    const plan = splitPlanForBlock(source);
+    if (plan.error) return;
+    const children = buildPomodoroBlocks(source, placed, plan);
+    finalCount += children.length - 1;
+    replacements.set(source.id, children);
+  });
+  if (!replacements.size) return 0;
+  if (finalCount > MAX_IMPORT_BLOCKS) {
+    setStatus("Automatic split skipped because it would exceed the 100-block week limit.");
+    return 0;
+  }
+  state.blocks = state.blocks.flatMap(function (block) { return replacements.get(block.id) || [block]; });
+  clearSolveResult("Automatic focus chunks are ready.");
+  return replacements.size;
+}
+
+function solveInputBlocks(blocks) {
+  if (!prefs.auto_split_pomodoro) return blocks;
+  return blocks.map(function (block) {
+    if (block.kind !== "flexible" || block.completed || block.pomodoro_role || block.duration_min <= prefs.timer_work_min) {
+      return block;
+    }
+    const plan = splitPlanForBlock(block);
+    if (plan.error) return block;
+    return { ...block, duration_min: plan.total_min };
+  });
+}
+
+function stopPhase7Loops() {
+  if (alarmTimer) clearInterval(alarmTimer);
+  if (liveTimer) clearInterval(liveTimer);
+  alarmTimer = null;
+  liveTimer = null;
+  lastAlarmCheck = null;
+}
+
+function syncPhase7Loops() {
+  stopPhase7Loops();
+  if (!account) return;
+  checkAlarms();
+  updateLiveDisplay();
+  if (typeof setInterval !== "function") return;
+  alarmTimer = setInterval(function () { checkAlarms(); }, REMINDER_POLL_MS);
+  liveTimer = setInterval(function () { updateLiveDisplay(); }, LIVE_POLL_MS);
+  for (const timer of [alarmTimer, liveTimer]) {
+    if (timer && typeof timer.unref === "function") timer.unref();
+  }
+}
+
 function openForm(kind, block, occurrenceDay = null, scope = null) {
   if (!account || saving) return;
   const editing = Boolean(block);
@@ -1824,6 +2516,7 @@ function openForm(kind, block, occurrenceDay = null, scope = null) {
   document.getElementById("f-course").value = editing && block.course ? block.course : "";
   document.getElementById("f-category").value = editing && block.category ? block.category : "";
   document.getElementById("f-completed").checked = Boolean(editing && block.completed);
+  document.getElementById("f-spotify").value = editing && block.spotify_url ? block.spotify_url : "";
   document.getElementById("f-duration").value = editing ? String(block.duration_min) : "60";
   setSelectedDays(editing ? (showScope && editingScope === "occurrence" ? [editingOccurrenceDay] : block.days) : []);
   startEl.value = editing && block.start ? block.start : "16:00";
@@ -1880,6 +2573,11 @@ formEl.addEventListener("submit", function (event) {
     showFormError("Locked blocks need a start time.");
     return;
   }
+  const spotify = document.getElementById("f-spotify").value.trim();
+  if (spotify && !safeSpotifyUrl(spotify)) {
+    showFormError("Use an https://open.spotify.com share link.");
+    return;
+  }
 
   const id = document.getElementById("f-id").value || newId();
   const blocks = weekState().blocks;
@@ -1894,6 +2592,7 @@ formEl.addEventListener("submit", function (event) {
     course: document.getElementById("f-course").value.trim() || null,
     category: document.getElementById("f-category").value || null,
     completed: document.getElementById("f-completed").checked,
+    spotify_url: spotify || null,
     earliest: null,
     latest: null,
     start: kind === "locked" ? startEl.value : null,
@@ -1937,6 +2636,7 @@ formEl.addEventListener("submit", function (event) {
     if (result.split) blocks.push(result.split);
   } else {
     const block = {
+      ...(prior || {}),
       id: id,
       kind: kind,
       missed_days: kind === "locked" && prior ? (prior.missed_days || []).filter(function (day) {
@@ -2026,8 +2726,20 @@ async function solveWeek() {
   lockEditor(true);
   setStatus("Solving…");
   try {
-    const trace = await api("/api/solve", { method: "POST", body: JSON.stringify({ blocks: weekState().blocks }) });
+    let trace = await api("/api/solve", { method: "POST", body: JSON.stringify({
+      blocks: solveInputBlocks(weekState().blocks),
+    }) });
     if (solveEpoch !== epoch) return;
+    const splitCount = prefs.auto_split_pomodoro ? autoSplitSolvedBlocks(trace) : 0;
+    if (splitCount) {
+      saving = false;
+      lockEditor(false);
+      if (!await saveWeek() || solveEpoch !== epoch) return;
+      saving = true;
+      lockEditor(true);
+      trace = await api("/api/solve", { method: "POST", body: JSON.stringify({ blocks: weekState().blocks }) });
+      if (solveEpoch !== epoch) return;
+    }
     showTrace(trace);
   } catch (error) {
     if (solveEpoch === epoch) setStatus("Solve failed. " + error.message);
@@ -2212,6 +2924,18 @@ if (contextMenuEl) {
       toggleCompleted(blockId);
       return;
     }
+    if (action === "start-focus") {
+      startFocus(blockId, day);
+      return;
+    }
+    if (action === "split-pomodoros") {
+      splitBlockIntoPomodoros(blockId, day);
+      return;
+    }
+    if (action === "open-spotify") {
+      if (source) openSpotify(source.spotify_url);
+      return;
+    }
     if (action === "export-day") {
       exportDay(day, false);
       return;
@@ -2237,7 +2961,10 @@ const prefsDialog = document.getElementById("prefs-dialog");
 const prefsForm = document.getElementById("prefs-form");
 if (prefsOpen && prefsDialog) {
   prefsOpen.addEventListener("click", function () {
+    pendingAlarms = prefs.alarms.map(function (alarm) { return { ...alarm }; });
     applyPreferences(prefs);
+    const accountText = document.getElementById("prefs-account");
+    if (accountText) accountText.textContent = account ? "Signed in as " + account.username : "Signed out";
     if (typeof prefsDialog.showModal === "function") prefsDialog.showModal();
     else prefsDialog.setAttribute("open", "open");
   });
@@ -2253,17 +2980,33 @@ if (prefsForm) {
     const enabledEl = document.getElementById("pref-reminders-enabled");
     const leadEl = document.getElementById("pref-reminder-lead");
     const soundEl = document.getElementById("pref-reminder-sound");
+    const spotify = document.getElementById("pref-spotify").value.trim();
+    if (spotify && !safeSpotifyUrl(spotify)) {
+      const invalid = document.getElementById("prefs-error");
+      invalid.hidden = false;
+      invalid.textContent = "Use an https://open.spotify.com share link.";
+      return;
+    }
     const next = {
-      theme: themeEl.value,
+      theme: document.getElementById("pref-theme").value,
       reminders_enabled: Boolean(enabledEl && enabledEl.checked),
       reminder_lead_min: Math.max(0, Math.min(120, Number(leadEl && leadEl.value) || 0)),
       reminder_sound: Boolean(soundEl && soundEl.checked),
+      reminder_dnd_override: Boolean(document.getElementById("pref-dnd-override").checked),
+      timer_work_min: Math.max(1, Math.min(180, Number(document.getElementById("pref-timer-work").value) || 30)),
+      timer_break_min: Math.max(1, Math.min(60, Number(document.getElementById("pref-timer-break").value) || 15)),
+      timer_long_break_min: Math.max(1, Math.min(120, Number(document.getElementById("pref-timer-long-break").value) || 30)),
+      timer_long_break_every: Math.max(2, Math.min(12, Number(document.getElementById("pref-timer-cadence").value) || 4)),
+      auto_split_pomodoro: Boolean(document.getElementById("pref-auto-split").checked),
+      default_spotify_url: spotify || null,
+      alarms: pendingAlarms.map(function (alarm) { return { ...alarm }; }),
     };
     const err = document.getElementById("prefs-error");
     try {
       const saved = await api("/api/preferences", { method: "PUT", body: JSON.stringify(next) });
       if (preferenceEpoch !== epoch) return;
       applyPreferences(saved);
+      themeEl.value = saved.theme;
       if (err) { err.hidden = true; err.textContent = ""; }
       if (prefsDialog && typeof prefsDialog.close === "function") prefsDialog.close();
       else if (prefsDialog) prefsDialog.removeAttribute("open");
@@ -2278,6 +3021,60 @@ if (prefsForm) {
     }
   });
 }
+
+const alarmAdd = document.getElementById("alarm-add");
+if (alarmAdd) {
+  alarmAdd.addEventListener("click", function () {
+    const name = document.getElementById("alarm-name").value.trim();
+    const time = document.getElementById("alarm-time").value;
+    const sound = document.getElementById("alarm-sound").value;
+    const spotify = document.getElementById("alarm-spotify").value.trim();
+    const days = Array.from(document.querySelectorAll('input[name="alarm-day"]')).filter(function (item) {
+      return item.checked;
+    }).map(function (item) { return Number(item.value); });
+    const error = document.getElementById("prefs-error");
+    if (!name || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time) || !days.length) {
+      error.hidden = false;
+      error.textContent = "Give the alarm a name, time, and at least one day.";
+      return;
+    }
+    if (ALARM_SOUNDS.indexOf(sound) === -1 || (spotify && !safeSpotifyUrl(spotify))) {
+      error.hidden = false;
+      error.textContent = "Choose a built-in tone or a valid open.spotify.com link.";
+      return;
+    }
+    if (pendingAlarms.length >= 20) {
+      error.hidden = false;
+      error.textContent = "You can save up to 20 alarms.";
+      return;
+    }
+    pendingAlarms.push({
+      id: newId(), name: name, time: time, days: days, enabled: true,
+      sound: sound, spotify_url: spotify || null,
+    });
+    error.hidden = true;
+    error.textContent = "";
+    document.getElementById("alarm-name").value = "";
+    renderAlarmList();
+  });
+}
+
+const prefsSignOut = document.getElementById("prefs-sign-out");
+if (prefsSignOut) prefsSignOut.addEventListener("click", function () {
+  if (prefsDialog && typeof prefsDialog.close === "function") prefsDialog.close();
+  document.getElementById("logout").click();
+});
+
+document.getElementById("focus-pause").addEventListener("click", toggleFocusPause);
+document.getElementById("focus-skip").addEventListener("click", function () { advanceFocusPhase(false); });
+document.getElementById("focus-reset").addEventListener("click", function () { resetFocusTimer(); });
+document.getElementById("alarm-dismiss").addEventListener("click", function () { finishAlarm(false); });
+document.getElementById("alarm-snooze").addEventListener("click", function () { finishAlarm(true); });
+document.getElementById("alarm-open-spotify").addEventListener("click", function (event) {
+  openSpotify(event.currentTarget.dataset.url);
+});
+const alarmDialog = document.getElementById("alarm-dialog");
+if (alarmDialog) alarmDialog.addEventListener("cancel", function (event) { event.preventDefault(); });
 
 const exportWeekBtn = document.getElementById("export-week");
 if (exportWeekBtn) {

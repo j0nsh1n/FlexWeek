@@ -20,6 +20,23 @@ TODAY = date.today()
 WEEK = (TODAY - timedelta(days=TODAY.weekday())).isoformat()
 
 
+def preferences(theme: str = "nocturne") -> dict:
+    return {
+        "theme": theme,
+        "reminders_enabled": False,
+        "reminder_lead_min": 5,
+        "reminder_sound": True,
+        "reminder_dnd_override": False,
+        "timer_work_min": 30,
+        "timer_break_min": 15,
+        "timer_long_break_min": 30,
+        "timer_long_break_every": 4,
+        "auto_split_pomodoro": False,
+        "default_spotify_url": None,
+        "alarms": [],
+    }
+
+
 @pytest.fixture()
 def database(tmp_path: Path) -> Path:
     return tmp_path / "test.db"
@@ -91,7 +108,7 @@ def test_registration_starts_with_empty_week(alice: TestClient) -> None:
     me = alice.get("/api/auth/me").json()
     assert set(me) == {"id", "username"}
     assert me["username"] == "alice"
-    assert alice.get("/api/preferences").json() == {"theme": "nocturne", "reminders_enabled": False, "reminder_lead_min": 5, "reminder_sound": True}
+    assert alice.get("/api/preferences").json() == preferences()
 
 
 def test_usernames_are_normalized_and_unique(alice: TestClient, database: Path) -> None:
@@ -173,7 +190,7 @@ def test_protected_endpoints_require_session(client: TestClient) -> None:
     assert client.post("/api/solve", json={"blocks": []}, headers=WRITE).status_code == 401
     unsaved = {"week_start": WEEK, "blocks": [], "revision": 0}
     assert client.put("/api/week", json=unsaved, headers=WRITE).status_code == 401
-    assert client.put("/api/preferences", json={"theme": "slate", "reminders_enabled": False, "reminder_lead_min": 5, "reminder_sound": True}, headers=WRITE).status_code == 401
+    assert client.put("/api/preferences", json=preferences("slate"), headers=WRITE).status_code == 401
     forged = {"Cookie": "flexweek_session=forged-token"}
     assert client.get("/api/auth/me", headers=forged).status_code == 401
 
@@ -210,9 +227,9 @@ def test_two_accounts_are_isolated(app: FastAPI, alice: TestClient) -> None:
         assert alice.get("/api/week").json() == {"week_start": WEEK, "blocks": [mine], "revision": 1}
         assert bob.get("/api/week").json() == {"week_start": WEEK, "blocks": [theirs], "revision": 1}
 
-        assert alice.put("/api/preferences", json={"theme": "slate", "reminders_enabled": False, "reminder_lead_min": 5, "reminder_sound": True}, headers=WRITE).status_code == 200
-        assert alice.get("/api/preferences").json() == {"theme": "slate", "reminders_enabled": False, "reminder_lead_min": 5, "reminder_sound": True}
-        assert bob.get("/api/preferences").json() == {"theme": "nocturne", "reminders_enabled": False, "reminder_lead_min": 5, "reminder_sound": True}
+        assert alice.put("/api/preferences", json=preferences("slate"), headers=WRITE).status_code == 200
+        assert alice.get("/api/preferences").json() == preferences("slate")
+        assert bob.get("/api/preferences").json() == preferences()
 
         extra = flex("a-second", duration_min=30, days=[2])
         advance = alice.put(
@@ -256,7 +273,7 @@ def test_expired_session_is_rejected(client: TestClient, database: Path) -> None
 
 def test_write_requests_reject_spoofed_origins(alice: TestClient) -> None:
     url = "/api/preferences"
-    payload = {"theme": "slate", "reminders_enabled": False, "reminder_lead_min": 5, "reminder_sound": True}
+    payload = preferences("slate")
     missing = alice.put(url, json=payload, headers={"Origin": "http://testserver"})
     assert missing.status_code == 403
     wrong_token = alice.put(
@@ -270,7 +287,7 @@ def test_write_requests_reject_spoofed_origins(alice: TestClient) -> None:
 
     same = alice.put(url, json=payload, headers={"X-FlexWeek-Request": "1", "sec-fetch-site": "same-origin"})
     assert same.status_code == 200
-    assert alice.get(url).json() == {"theme": "slate", "reminders_enabled": False, "reminder_lead_min": 5, "reminder_sound": True}
+    assert alice.get(url).json() == preferences("slate")
     assert alice.put(url, json=payload, headers=WRITE).status_code == 200
     cross_get = alice.get("/api/week", headers={"sec-fetch-site": "cross-site"})
     assert cross_get.status_code == 200

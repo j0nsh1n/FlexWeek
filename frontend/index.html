@@ -20,7 +20,7 @@
     <div class="controls" id="account-controls" hidden>
       <span id="account-name"></span>
       <label>Theme <select id="theme"><option value="nocturne">Nocturne · dark</option><option value="slate">Slate · light</option></select></label>
-      <button type="button" id="prefs-open" class="secondary">Reminders</button>
+      <button type="button" id="prefs-open" class="secondary">Settings</button>
       <button type="button" id="logout" class="secondary">Sign out</button>
       <button type="button" id="solve">Solve</button>
     </div>
@@ -95,6 +95,9 @@
           <select id="f-category" hidden></select>
         </div>
         <label class="completed-toggle"><input type="checkbox" id="f-completed" /> Completed</label>
+        <label>Spotify link
+          <input id="f-spotify" type="url" maxlength="500" placeholder="https://open.spotify.com/playlist/…" />
+        </label>
         <fieldset id="edit-scope" class="edit-scope" hidden>
           <legend>Edit scope</legend>
           <label><input type="radio" name="f-scope" value="occurrence" checked /> This day only</label>
@@ -165,6 +168,21 @@
       <h2>Flexible tasks</h2>
       <p class="note" id="flex-note">Press Solve to place these around school and sports.</p>
       <ul id="flexible"></ul>
+      <section class="focus-dashboard" aria-labelledby="focus-heading">
+        <h2 id="focus-heading">Focus</h2>
+        <div id="now-next" class="now-next" aria-live="polite">Nothing scheduled now.</div>
+        <div id="focus-panel" class="focus-panel" hidden>
+          <strong id="focus-task"></strong>
+          <span id="focus-phase"></span>
+          <output id="focus-time">00:00</output>
+          <div class="form-actions">
+            <button type="button" id="focus-pause">Pause</button>
+            <button type="button" id="focus-skip" class="secondary">Skip</button>
+            <button type="button" id="focus-reset" class="secondary">Reset</button>
+          </div>
+        </div>
+        <ul id="focus-tasks" class="focus-tasks"></ul>
+      </section>
       <section id="debug" class="debug" hidden>
         <h2>Schedule details</h2>
         <p id="debug-stats"></p>
@@ -185,23 +203,85 @@
     <button type="button" data-action="delete-occurrence">Remove this day</button>
     <button type="button" data-action="delete">Delete</button>
     <button type="button" data-action="toggle-completed">Toggle completed</button>
+    <button type="button" data-action="start-focus">Start focus</button>
+    <button type="button" data-action="split-pomodoros">Split into focus blocks</button>
+    <button type="button" data-action="open-spotify">Open Spotify</button>
     <button type="button" data-action="export-day">Export this day</button>
   </div>
   <dialog id="prefs-dialog" class="prefs-dialog">
     <form method="dialog" id="prefs-form">
-      <h2>Reminders</h2>
-      <p class="note">Alerts fire while this tab is open. Desktop tray alerts are not packaged yet.</p>
-      <label class="completed-toggle"><input type="checkbox" id="pref-reminders-enabled" /> Enable start reminders</label>
-      <label>Lead minutes
-        <input id="pref-reminder-lead" type="number" min="0" max="120" step="1" value="5" />
-      </label>
-      <label class="completed-toggle"><input type="checkbox" id="pref-reminder-sound" checked /> Play sound</label>
+      <h2>Settings</h2>
+      <fieldset>
+        <legend>Account and appearance</legend>
+        <p id="prefs-account" class="note"></p>
+        <label>Theme
+          <select id="pref-theme"><option value="nocturne">Nocturne · dark</option><option value="slate">Slate · light</option></select>
+        </label>
+        <button type="button" id="prefs-sign-out" class="secondary">Sign out</button>
+      </fieldset>
+      <fieldset>
+        <legend>Focus timer</legend>
+        <div class="settings-grid">
+          <label>Work minutes <input id="pref-timer-work" type="number" min="1" max="180" step="1" value="30" /></label>
+          <label>Break minutes <input id="pref-timer-break" type="number" min="1" max="60" step="1" value="15" /></label>
+          <label>Long break <input id="pref-timer-long-break" type="number" min="1" max="120" step="1" value="30" /></label>
+          <label>Long break every <input id="pref-timer-cadence" type="number" min="2" max="12" step="1" value="4" /></label>
+        </div>
+        <label class="completed-toggle"><input type="checkbox" id="pref-auto-split" /> Split long tasks during Solve</label>
+        <p class="note">Grid splitting requires work and break lengths in 15-minute steps.</p>
+      </fieldset>
+      <fieldset>
+        <legend>Notifications</legend>
+        <p class="note">Web alerts fire while this tab is open. The desktop app can remain active in its system tray.</p>
+        <label class="completed-toggle"><input type="checkbox" id="pref-reminders-enabled" /> Enable start reminders</label>
+        <label>Lead minutes <input id="pref-reminder-lead" type="number" min="0" max="120" step="1" value="5" /></label>
+        <label class="completed-toggle"><input type="checkbox" id="pref-reminder-sound" checked /> Play sound</label>
+        <label class="completed-toggle"><input type="checkbox" id="pref-dnd-override" /> Keep alerts visible until handled</label>
+      </fieldset>
+      <fieldset>
+        <legend>Spotify and alarms</legend>
+        <label>Default Spotify link
+          <input id="pref-spotify" type="url" maxlength="500" placeholder="https://open.spotify.com/playlist/…" />
+        </label>
+        <div class="alarm-editor">
+          <label>Name <input id="alarm-name" maxlength="80" placeholder="Morning review" /></label>
+          <label>Time <input id="alarm-time" type="time" step="60" value="08:00" /></label>
+          <label>Sound
+            <select id="alarm-sound">
+              <option value="chime">Chime</option><option value="soft">Soft</option>
+              <option value="bright">Bright</option><option value="low">Low</option>
+              <option value="glass">Glass</option><option value="spotify">Spotify link</option>
+            </select>
+          </label>
+          <label>Spotify link <input id="alarm-spotify" type="url" maxlength="500" /></label>
+          <fieldset id="alarm-days" class="days"><legend>Days</legend>
+            <label><input type="checkbox" name="alarm-day" value="0" checked /> Mon</label>
+            <label><input type="checkbox" name="alarm-day" value="1" checked /> Tue</label>
+            <label><input type="checkbox" name="alarm-day" value="2" checked /> Wed</label>
+            <label><input type="checkbox" name="alarm-day" value="3" checked /> Thu</label>
+            <label><input type="checkbox" name="alarm-day" value="4" checked /> Fri</label>
+            <label><input type="checkbox" name="alarm-day" value="5" /> Sat</label>
+            <label><input type="checkbox" name="alarm-day" value="6" /> Sun</label>
+          </fieldset>
+          <button type="button" id="alarm-add" class="secondary">Add alarm</button>
+        </div>
+        <ul id="alarm-list" class="alarm-list"></ul>
+      </fieldset>
       <p id="prefs-error" class="form-error" role="alert" hidden></p>
       <div class="form-actions">
         <button type="submit" value="save" id="prefs-save">Save</button>
         <button type="submit" value="cancel" class="secondary">Cancel</button>
       </div>
     </form>
+  </dialog>
+  <dialog id="alarm-dialog" class="alarm-dialog">
+    <h2 id="alarm-title">Alarm</h2>
+    <p id="alarm-detail"></p>
+    <div class="form-actions">
+      <button type="button" id="alarm-dismiss">Dismiss</button>
+      <button type="button" id="alarm-snooze" class="secondary">Snooze 5 minutes</button>
+      <button type="button" id="alarm-open-spotify" class="secondary" hidden>Open Spotify</button>
+    </div>
   </dialog>
   <div id="reminder-toast" class="reminder-toast" hidden role="status" aria-live="polite"></div>
 </body>

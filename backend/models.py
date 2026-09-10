@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -18,6 +19,27 @@ ReasonCode = Literal[
     "SLEEP_GUARD",
     "RESHUFFLE_AFTER_MISS",
 ]
+PomodoroRole = Literal["work", "break"]
+
+
+def valid_spotify_url(value: str | None) -> str | None:
+    """Accept only share links that the desktop shell can safely open externally."""
+    if value is None or value == "":
+        return None
+    parsed = urlsplit(value)
+    parts = [part for part in parsed.path.split("/") if part]
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "open.spotify.com"
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.port is not None
+        or len(parts) != 2
+        or parts[0] not in {"track", "playlist", "album", "episode", "show"}
+        or not re.fullmatch(r"[A-Za-z0-9]+", parts[1])
+    ):
+        raise ValueError("spotify_url must be an open.spotify.com share link")
+    return value
 
 
 class TimeBlock(BaseModel):
@@ -52,6 +74,16 @@ class TimeBlock(BaseModel):
         max_length=7,
         exclude_if=lambda value: not value,
     )
+    spotify_url: str | None = Field(default=None, max_length=500, exclude_if=lambda value: value is None)
+    focus_sessions: int = Field(default=0, ge=0, le=9999, exclude_if=lambda value: value == 0)
+    focus_minutes: int = Field(default=0, ge=0, le=71400, exclude_if=lambda value: value == 0)
+    pomodoro_parent_id: str | None = Field(
+        default=None, min_length=1, max_length=80, exclude_if=lambda value: value is None
+    )
+    pomodoro_role: PomodoroRole | None = Field(default=None, exclude_if=lambda value: value is None)
+    pomodoro_index: int | None = Field(default=None, ge=1, le=999, exclude_if=lambda value: value is None)
+
+    _spotify_url = field_validator("spotify_url")(valid_spotify_url)
 
     @field_validator("duration_min")
     @classmethod
