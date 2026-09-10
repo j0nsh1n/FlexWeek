@@ -1144,8 +1144,10 @@ function showContextMenu(clientX, clientY, blockId, day) {
     } else if (action === "start-focus") {
       btn.hidden = !source || source.completed || source.pomodoro_role === "break" || !resolveFocusPlacement(blockId, day);
     } else if (action === "split-pomodoros") {
+      // A task offered on several days would lose the others: the split writes
+      // children on one day and replaces the source.
       btn.hidden = !source || source.completed || Boolean(source.pomodoro_role) ||
-        (source.kind === "locked" && isSeries(source)) || !resolveFocusPlacement(blockId, day);
+        isSeries(source) || !resolveFocusPlacement(blockId, day);
     } else if (action === "open-spotify") {
       btn.hidden = !source || !safeSpotifyUrl(source.spotify_url);
     } else {
@@ -2342,6 +2344,18 @@ function renderFocusTasks() {
   });
 }
 
+const TITLE_MAX = 80;
+
+/** Keep a split child inside the same title limit the server enforces.
+    A source at the limit would otherwise build a title the save rejects, and
+    the split mutates the week before it saves, so the week could never save. */
+function focusChildTitle(title, index, total) {
+  const suffix = " · focus " + index + "/" + total;
+  const room = TITLE_MAX - suffix.length;
+  const head = Array.from(String(title));
+  return (head.length > room ? head.slice(0, room).join("") : String(title)) + suffix;
+}
+
 function buildPomodoroBlocks(source, placed, plan) {
   const parentId = source.pomodoro_parent_id || source.id;
   let cursor = parseStart(placed.start);
@@ -2352,7 +2366,9 @@ function buildPomodoroBlocks(source, placed, plan) {
     const child = {
       ...cloneBlock(source),
       id: newId(),
-      title: segment.role === "work" ? source.title + " · focus " + segment.index + "/" + totalWork : "Pomodoro break",
+      title: segment.role === "work"
+        ? focusChildTitle(source.title, segment.index, totalWork)
+        : "Pomodoro break",
       kind: "locked",
       days: [placed.days[0]],
       start: formatMinute(cursor),

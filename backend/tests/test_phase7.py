@@ -3,9 +3,11 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from backend.app import create_app
+from backend.models import valid_spotify_url
 from backend.storage import initialize
 
 WRITE = {"X-FlexWeek-Request": "1"}
@@ -137,3 +139,30 @@ def test_phase7_preference_migration_is_idempotent(tmp_path: Path) -> None:
     with sqlite3.connect(database) as db:
         columns = {row[1] for row in db.execute("PRAGMA table_info(preferences)")}
     assert {"timer_work_min", "alarms_json", "default_spotify_url"} <= columns
+
+
+def test_spotify_validation_matches_the_browser_exactly() -> None:
+    # The two validators must agree. urlsplit lowercases the scheme and host and
+    # tolerates a doubled slash, so a value the server accepted but the browser
+    # rejected was coerced to null and the next save wiped a link the user had
+    # stored. These are the exact forms safeSpotifyUrl in app.js accepts.
+    for good in (
+        "https://open.spotify.com/track/abc123",
+        "https://open.spotify.com/playlist/xyz789/",
+        "https://open.spotify.com/episode/aZ09?si=token",
+    ):
+        assert valid_spotify_url(good) == good
+
+    for bad in (
+        "HTTPS://OPEN.SPOTIFY.COM/track/abc123",
+        "https://OPEN.spotify.com/track/abc123",
+        "https://open.spotify.com//track/abc123",
+        "https://open.spotify.com/track/abc 123",
+        "https://user:pw@open.spotify.com/track/abc123",
+        "https://open.spotify.com:443/track/abc123",
+        "https://open.spotify.com/podcast/abc123",
+        "http://open.spotify.com/track/abc123",
+        "https://evil.example/track/abc123",
+    ):
+        with pytest.raises(ValueError):
+            valid_spotify_url(bad)

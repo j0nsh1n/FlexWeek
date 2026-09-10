@@ -22,22 +22,24 @@ ReasonCode = Literal[
 PomodoroRole = Literal["work", "break"]
 
 
+# Kept in step with safeSpotifyUrl in frontend/app.js; the two must agree.
+SPOTIFY_SHARE = re.compile(
+    r"https://open\.spotify\.com/(track|playlist|album|episode|show)/[A-Za-z0-9]+/?(?:[?#].*)?"
+)
+
+
 def valid_spotify_url(value: str | None) -> str | None:
     """Accept only share links that the desktop shell can safely open externally."""
     if value is None or value == "":
         return None
+    # Matched against the raw string, not urlsplit's normalised view. urlsplit
+    # lowercases the scheme and host and tolerates a doubled slash, so it would
+    # accept forms the browser's own check rejects; the client would then null
+    # the value and the next save would quietly wipe a link the user stored.
+    if not SPOTIFY_SHARE.fullmatch(value):
+        raise ValueError("spotify_url must be an open.spotify.com share link")
     parsed = urlsplit(value)
-    parts = [part for part in parsed.path.split("/") if part]
-    if (
-        parsed.scheme != "https"
-        or parsed.hostname != "open.spotify.com"
-        or parsed.username is not None
-        or parsed.password is not None
-        or parsed.port is not None
-        or len(parts) != 2
-        or parts[0] not in {"track", "playlist", "album", "episode", "show"}
-        or not re.fullmatch(r"[A-Za-z0-9]+", parts[1])
-    ):
+    if parsed.username is not None or parsed.password is not None or parsed.port is not None:
         raise ValueError("spotify_url must be an open.spotify.com share link")
     return value
 

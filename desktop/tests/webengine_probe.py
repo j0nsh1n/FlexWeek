@@ -257,6 +257,26 @@ def run(case: str, root: Path) -> None:
             evaluate("document.getElementById('solve').click()")
             wait_for("document.querySelector('.flex-block')")
 
+            # Splitting writes children on one day and replaces the source, so a
+            # task offered on several days must not be offered the split at all.
+            # Use the task the solver actually placed, and change only its days.
+            def split_hidden(days: str) -> object:
+                return evaluate(
+                    "(function(){var b=weekState().blocks.find(function(x)"
+                    "{return x.kind==='flexible';});"
+                    f"b.days={days};"
+                    "showContextMenu(0, 0, b.id, b.days[0]);"
+                    "var s=document.querySelector"
+                    "('#block-context-menu button[data-action=split-pomodoros]');"
+                    "return s ? s.hidden : 'missing';})()"
+                )
+
+            observed = split_hidden("[0]")
+            assert observed is False, f"Split not offered for the placed one-day task (got {observed!r})"
+            assert split_hidden("[0,2,4]") is True, (
+                "Split offered for a task on several candidate days, which would drop the rest"
+            )
+
             # A task only becomes focusable once the solver has given it a slot.
             wait_for("document.querySelector('#focus-tasks li button')")
             assert not evaluate("document.querySelector('#focus-tasks li button').disabled"), (
@@ -290,6 +310,8 @@ def run(case: str, root: Path) -> None:
             assert evaluate("document.getElementById('now-next').textContent.trim().length") > 0, (
                 "Now / Next line rendered empty"
             )
+            evaluate("document.getElementById('prefs-dialog').close()")
+
             print("PASS: focus timer, alarms and the preferences dialog work in a real browser")
         elif case == "download":
             submit_identity("draft_student", "register")

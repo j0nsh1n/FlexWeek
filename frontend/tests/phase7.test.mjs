@@ -197,3 +197,14 @@ test('Spotify links accept only official HTTPS shares and imports validate Phase
   assert.equal(h.run(`importBlockError(${JSON.stringify(block)}, 0)`), null);
   assert.match(h.run(`importBlockError(${JSON.stringify({ ...block, focus_sessions: -1 })}, 0)`), /focus_sessions/);
 });
+
+test('a split child title stays inside the 80-character limit the server enforces', () => {
+  const h = harness();
+  // A source at the limit used to build a 92-character child. The split mutates
+  // the week before it saves, so the save failed and kept failing.
+  const long = 'x'.repeat(80);
+  const child = h.run(`focusChildTitle(${JSON.stringify(long)}, 1, 2)`);
+  assert.equal(child.length, 80);
+  assert.ok(child.endsWith(' · focus 1/2'), child);
+  assert.equal(h.run('focusChildTitle("Essay", 2, 3)'), 'Essay · focus 2/3');
+});
