@@ -3,6 +3,8 @@
 PySide6==6.11.2
 
 # Build-time (pyside6-deploy runs Nuitka; patchelf is only needed on Linux,
-# where Nuitka uses it to relink ELF binaries):
+# where Nuitka uses it to relink ELF binaries; imageio is only needed on
+# Windows, where Nuitka converts the PNG logo to a native icon):
 Nuitka==4.2.1
 patchelf==0.19.1; sys_platform == "linux"
+imageio==2.37.4; sys_platform == "win32"
