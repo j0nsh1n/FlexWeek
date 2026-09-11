@@ -10,9 +10,11 @@ Checksum files are listed after the downloads on purpose.
 Places homework around school and sports. Download, open a window, create an account.
 
 ## Download for Windows
-`FlexWeek-Windows-x64.zip`
+`FlexWeek-Windows-x64-Setup.exe`
 
-Extract the zip, then double-click FlexWeek (the shortcut), not files inside app/. If Windows shows "Windows protected your PC", choose More info, then Run anyway. FlexWeek is not code-signed yet. Unicode text support (ICU) is part of Windows 10 version 1809 and later.
+Run it to install FlexWeek for your Windows account (no administrator needed), then open FlexWeek from the Start menu. If Windows shows "Windows protected your PC", choose More info, then Run anyway. FlexWeek is not code-signed yet. Unicode text support (ICU) is part of Windows 10 version 1809 and later.
+
+Schools and IT: `FlexWeek-Windows-x64.msi` installs FlexWeek for every account on the PC and needs an administrator. Use one installer or the other.
 
 ## Download for Linux
 `FlexWeek-Linux-x86_64.tar.gz`
@@ -25,7 +27,7 @@ Extract, then open the file named FlexWeek. Needs a 64-bit Linux desktop (GNOME,
 A hosted web version is not online yet. From the source tree: `uvicorn backend.app:app --reload` then open http://127.0.0.1:8000.
 
 ## Checksums
-Optional. `FlexWeek-Windows-x64.zip.sha256`, `FlexWeek-Linux-x86_64.tar.gz.sha256` and `FlexWeek-x86_64.AppImage.sha256` on this page. Each names only its file, so `sha256sum -c` works in the folder you downloaded to.
+Optional. `FlexWeek-Windows-x64-Setup.exe.sha256`, `FlexWeek-Windows-x64.msi.sha256`, `FlexWeek-Linux-x86_64.tar.gz.sha256` and `FlexWeek-x86_64.AppImage.sha256` on this page. Each names only its file, so `sha256sum -c` works in the folder you downloaded to.
 
 ## First open
 Choose Create account. A short setup asks for school hours, a sport, and the first homework, then runs Solve. You can skip any step.
