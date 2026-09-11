@@ -235,11 +235,39 @@ release is published (or by hand against an existing tag), installs both
 requirements files into a fresh Python 3.14, runs `desktop/build_windows.ps1`
 (MSVC is preinstalled on the runner), smoke-checks the freeze layout
 (`FlexWeek.exe`, `frontend/index.html`, `QtWebEngineCore.dll`), copies
-`README.txt`, `LICENSE.txt` and `flexweek.png` into the folder, zips that
-folder as `FlexWeek-Windows-x64.zip` with a `.sha256`, and uploads both to
-the release. ICU (`icuuc.dll` / `icuin.dll`) is treated as a Windows 10 1809+
+`README.txt`, `LICENSE.txt` and `flexweek.png` into the folder, and uploads the
+installers to the release (see "Windows installers" below). ICU (`icuuc.dll` / `icuin.dll`) is treated as a Windows 10 1809+
 system library and is not copied out of System32. The paste-ready release
 text is `docs/github-release.md`.
+
+### Windows installers (0.9.2)
+
+0.9.0 and 0.9.1 shipped a zip with a `FlexWeek.lnk` at the top. The workflow made
+that shortcut with a relative path, and Windows stored it as
+`C:\dist\zip-stage\FlexWeek\app\FlexWeek.exe` on the build machine, so the
+shortcut opened nothing on anyone else's PC. The zip is gone; the release ships
+two installers built from the same `dist\FlexWeek-Windows` folder:
+
+- `FlexWeek-Windows-x64-Setup.exe` from `packaging/windows/flexweek.iss`
+  (Inno Setup 7.1.0, downloaded from its GitHub release and checked against
+  the SHA-256 listed there). It installs for the current account in
+  `%LOCALAPPDATA%\Programs\FlexWeek` without an administrator, adds a Start
+  menu shortcut (desktop shortcut optional) and an uninstaller. The setup
+  dialog can still switch to every account.
+- `FlexWeek-Windows-x64.msi` from `packaging/windows/flexweek.wxs` (WiX 6.0.2;
+  v7 blocks every command until its EULA is accepted). It installs for every
+  account in Program Files with an administrator, for school and IT tools.
+
+Shortcuts use installer constants (`{app}`, `[INSTALLFOLDER]`) resolved on the
+user's PC. Never change the Inno `AppId` or the MSI `UpgradeCode`; upgrades find
+the installed copy by them. The version comes from the `vX.Y.Z` release tag.
+
+Before attaching anything, the workflow silently installs each installer on the
+runner, checks that the Start menu shortcut opens the installed `FlexWeek.exe`
+from its folder, runs `--smoke-test` through that shortcut's target, then
+uninstalls and checks the app is gone. Pull requests that touch packaging run
+the same build and tests without uploading, and keep the installers as run
+artifacts for seven days.
 
 ---
 

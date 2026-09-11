@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FlexWeek Windows Installer package (WiX Toolset v6). The release workflow builds it
+  from the Nuitka folder that desktop/build_windows.ps1 makes:
+
+    wix build packaging\windows\flexweek.wxs -arch x64 -d Version=0.9.2 -bindpath app=<repo>\dist\FlexWeek-Windows -o dist\FlexWeek-Windows-x64.msi
+
+  It installs for every account on the PC (Program Files, needs an administrator),
+  which is what school and IT deployment tools expect; FlexWeek-Windows-x64-Setup.exe
+  is the per-account installer. Never change UpgradeCode: a newer MSI replaces the
+  installed one by it.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="FlexWeek" Manufacturer="FlexWeek" Version="$(var.Version)"
+           UpgradeCode="8BF59E0D-5BB2-4D33-9510-C48E3E4B4F46" Scope="perMachine" Compressed="yes">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of FlexWeek is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="FlexWeekIcon" SourceFile="!(bindpath.app)\FlexWeek.exe" />
+    <Property Id="ARPPRODUCTICON" Value="FlexWeekIcon" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/j0nsh1n/FlexWeek/issues" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="FlexWeek">
+        <Files Include="!(bindpath.app)\**" />
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut">
+        <Shortcut Id="FlexWeekShortcut" Name="FlexWeek" Target="[INSTALLFOLDER]FlexWeek.exe"
+                  WorkingDirectory="INSTALLFOLDER" Icon="FlexWeekIcon" />
+        <RegistryValue Root="HKLM" Key="Software\FlexWeek" Name="StartMenuShortcut" Type="integer" Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+  </Package>
+</Wix>

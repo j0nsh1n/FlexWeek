@@ -2,27 +2,26 @@ FlexWeek for Windows
 ====================
 
 FlexWeek plans your homework around school and sports, then tells you why
-something moved. Everything it needs is inside this folder. You do not need
+something moved. Everything it needs is installed with it. You do not need
 Python, a server or an internet connection.
 
 
-Start FlexWeek
---------------
-Double-click FlexWeek (the shortcut), not files inside app/.
-
-1. Extract the zip first. Right-click FlexWeek-Windows-x64.zip, choose
-   Extract All, then open the FlexWeek folder it creates.
-   Running the app from inside the zip without extracting does not work.
-2. Double-click FlexWeek — the shortcut at the top of the folder. It starts
-   the real program, which lives in the app folder next to it, together with
-   everything FlexWeek needs.
-3. If Windows shows "Windows protected your PC", choose More info, then
+Install and start FlexWeek
+--------------------------
+1. Run FlexWeek-Windows-x64-Setup.exe. It installs FlexWeek for your Windows
+   account and does not need an administrator. Tick "Create a desktop
+   shortcut" if you want one.
+2. If Windows shows "Windows protected your PC", choose More info, then
    Run anyway. See "Why Windows warns you" below.
-4. A window opens. Choose Create account. A new account starts with a short
-   setup: school hours, a sport, then your first homework.
+3. Open FlexWeek from the Start menu. Choose Create account. A new account
+   starts with a short setup: school hours, a sport, then your first homework.
 
-Tip: right-click FlexWeek and choose Show more options, then Send to, then
-Desktop (create shortcut) to get a desktop icon.
+Schools and IT: FlexWeek-Windows-x64.msi installs FlexWeek for every account on
+the PC, in Program Files, and needs an administrator. Use one installer or the
+other, not both.
+
+To remove FlexWeek, open Settings, then Apps, then Installed apps, and
+uninstall FlexWeek.
 
 
 Why Windows warns you
@@ -30,8 +29,8 @@ Why Windows warns you
 FlexWeek is not signed with a paid code-signing certificate yet, so Windows
 SmartScreen does not recognize the publisher and warns about any new download.
 The warning does not mean something harmful was found. The source code is public
-on GitHub, and the release page lists a SHA-256 checksum for this zip if you
-want to confirm the download is complete.
+on GitHub, and the release page lists a SHA-256 checksum for each installer if
+you want to confirm the download is complete.
 
 
 Closing FlexWeek
@@ -60,7 +59,7 @@ Your accounts and weeks are saved on this computer in:
 
     %APPDATA%\FlexWeek
 
-Deleting or replacing this FlexWeek folder does not delete them.
+Uninstalling or reinstalling FlexWeek does not delete them.
 
 
 License
