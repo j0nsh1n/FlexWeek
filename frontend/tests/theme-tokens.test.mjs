@@ -124,13 +124,15 @@ test('text stays readable with frost composited straight over the page, no blur'
   }
 });
 
-test('signed-out HTML starts light and theme menus keep the API values', () => {
+test('the page resolves the theme in <head> and menus offer System, Light and Dark', () => {
   assert.match(html, /<html lang="en" data-theme="slate">/);
+  assert.ok(html.indexOf('<script src="/static/theme.js"></script>') < html.indexOf('</head>'),
+    'theme.js must run before the body paints');
   for (const id of ['theme', 'pref-theme']) {
     const select = new RegExp(`<select id="${id}">(.*?)</select>`).exec(html);
     assert.ok(select, `no #${id} select`);
     assert.deepEqual(Array.from(select[1].matchAll(/<option value="([a-z]+)">([^<]+)<\/option>/g), m => [m[1], m[2]]),
-      [['slate', 'Light'], ['nocturne', 'Dark']]);
+      [['system', 'System'], ['slate', 'Light'], ['nocturne', 'Dark']]);
   }
 });
 

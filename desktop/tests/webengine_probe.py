@@ -64,6 +64,12 @@ def run(case: str, root: Path) -> None:
         wait_for(f"document.getElementById('account-name').textContent === {json.dumps(name)}")
         wait_for("!document.getElementById('planner').hidden")
 
+    def page_theme() -> object:
+        return evaluate("document.documentElement.dataset.theme")
+
+    def theme_menu() -> object:
+        return evaluate("document.getElementById('theme').value")
+
     def add_item(category: str, fields: str, days: list[int] | None = None) -> None:
         """Pick a type chip, open Add without dragging, fill the dialog and save it."""
         only_days = "" if days is None else (
@@ -83,7 +89,8 @@ def run(case: str, root: Path) -> None:
             "document.getElementById('status').textContent.includes('Create an account')"
         )
         assert evaluate("!document.getElementById('register-screen').hidden"), "First screen is not sign-up"
-        assert evaluate("document.documentElement.dataset.theme") == "slate", "Signed-out screen is not light"
+        device_theme = evaluate("matchMedia('(prefers-color-scheme: dark)').matches ? 'nocturne' : 'slate'")
+        assert page_theme() == device_theme, "Signed-out screen ignores device"
         assert evaluate("document.getElementById('login-screen').hidden"), "Log in shown on first launch"
         if case == "accounts":
             # The vendored Figtree face must actually load, not fall back to a system font.
@@ -95,8 +102,9 @@ def run(case: str, root: Path) -> None:
             assert evaluate("document.querySelectorAll('.block').length") == 1
             evaluate("document.getElementById('solve').click()")
             wait_for("!document.getElementById('debug').hidden")
+            assert theme_menu() == "system", "New account is not on System"
             evaluate(
-                "document.getElementById('theme').value='slate'; "
+                "document.getElementById('theme').value='nocturne'; "
                 "document.getElementById('theme').dispatchEvent(new Event('change'))"
             )
             wait_for("!document.getElementById('theme').disabled")
@@ -106,14 +114,15 @@ def run(case: str, root: Path) -> None:
                 "typeof window.__beforeReload === 'undefined' && document.getElementById('planner') && "
                 "!document.getElementById('planner').hidden"
             )
-            assert evaluate("document.documentElement.dataset.theme") == "slate"
+            assert page_theme() == "nocturne", "Chosen Dark did not persist"
             assert evaluate("document.querySelectorAll('.block').length") == 1
             evaluate("document.getElementById('logout').click()")
             wait_for("document.getElementById('planner').hidden")
             assert evaluate("document.querySelectorAll('.block').length") == 0
             submit_identity("second_student", "register")
             assert evaluate("document.querySelectorAll('.block').length") == 0
-            assert evaluate("document.documentElement.dataset.theme") == "nocturne"
+            assert theme_menu() == "system"
+            assert page_theme() == device_theme, "New account ignores device"
             evaluate("document.getElementById('logout').click()")
             wait_for("document.getElementById('planner').hidden")
             assert evaluate("!document.getElementById('login-screen').hidden"), "Log out did not open Log in"
@@ -130,6 +139,26 @@ def run(case: str, root: Path) -> None:
             print(
                 "PASS: register, editor save, solve, refresh, theme, logout, second-account isolation, widths"
             )
+        elif case == "system_dark":
+            # Launched with Chromium told the device prefers dark (see test_webengine.py).
+            assert device_theme == "nocturne", "The dark device preference did not reach the page"
+            submit_identity("night_student", "register")
+            assert theme_menu() == "system"
+            assert page_theme() == "nocturne"
+            evaluate("document.getElementById('setup-close').click()")
+            evaluate(
+                "document.getElementById('theme').value='slate'; "
+                "document.getElementById('theme').dispatchEvent(new Event('change'))"
+            )
+            wait_for("!document.getElementById('theme').disabled")
+            evaluate("window.__beforeReload=true")
+            window.reload()
+            wait_for(
+                "typeof window.__beforeReload === 'undefined' && document.getElementById('planner') && "
+                "!document.getElementById('planner').hidden"
+            )
+            assert page_theme() == "slate", "Chosen Light lost to the dark device"
+            print("PASS: a dark device starts dark, and a chosen Light theme persists over it")
         elif case == "rookie":
             submit_identity("rookie_student", "register")
             wait_for("document.getElementById('setup-dialog').open")

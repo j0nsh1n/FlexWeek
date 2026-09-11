@@ -674,7 +674,7 @@ let epoch = 0;
 let saving = false;
 const suspendedDrafts = new Map();
 let prefs = {
-  theme: "nocturne",
+  theme: "system",
   reminders_enabled: false,
   reminder_lead_min: 5,
   reminder_sound: true,
@@ -1475,7 +1475,7 @@ function renderDebug(trace) {
 
 function applyPreferences(preferences) {
   prefs = {
-    theme: preferences.theme || "nocturne",
+    theme: preferences.theme || "system",
     reminders_enabled: Boolean(preferences.reminders_enabled),
     reminder_lead_min: Number.isFinite(Number(preferences.reminder_lead_min))
       ? Number(preferences.reminder_lead_min) : 5,
@@ -1492,7 +1492,7 @@ function applyPreferences(preferences) {
     }) : [],
   };
   themeEl.value = prefs.theme;
-  document.documentElement.dataset.theme = prefs.theme;
+  applyTheme(prefs.theme);
   const enabled = document.getElementById("pref-reminders-enabled");
   const lead = document.getElementById("pref-reminder-lead");
   const sound = document.getElementById("pref-reminder-sound");
@@ -2155,9 +2155,9 @@ async function recoverMissedOccurrence(blockId, day) {
 }
 
 themeEl.addEventListener("change", async () => {
-  const oldTheme = document.documentElement.dataset.theme;
+  const oldTheme = prefs.theme;
   const themeEpoch = epoch;
-  document.documentElement.dataset.theme = themeEl.value;
+  applyTheme(themeEl.value);
   prefs.theme = themeEl.value;
   themeEl.disabled = true;
   try { await api("/api/preferences", { method: "PUT", body: JSON.stringify(preferencesPayload()) }); }
@@ -2165,7 +2165,7 @@ themeEl.addEventListener("change", async () => {
     if (themeEpoch === epoch) {
       themeEl.value = oldTheme;
       prefs.theme = oldTheme;
-      document.documentElement.dataset.theme = oldTheme;
+      applyTheme(oldTheme);
       setStatus("Theme was not saved. " + error.message);
     }
   } finally { themeEl.disabled = false; }

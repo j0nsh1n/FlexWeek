@@ -8,12 +8,14 @@ import { test } from 'node:test';
 import { appScripts, scriptTags } from './app-scripts.mjs';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const headEnd = html.indexOf('</head>');
 
 const isDeferred = tag => /\bdefer\b/.test(tag) || /\btype="module"\b/.test(tag);
+const codeOf = name => appScripts.find(script => script.name === name).code;
 
-/** Ids declared after the first script tag, which may not exist while scripts run. */
-function idsDeclaredAfterTheScripts() {
-  const after = html.slice(html.indexOf(scriptTags[0][0]));
+/** Ids declared after a script tag, which do not exist yet if that script runs immediately. */
+function idsDeclaredAfter(tag) {
+  const after = html.slice(tag.index + tag[0].length);
   return new Set(Array.from(after.matchAll(/\bid="([^"]+)"/g), match => match[1]));
 }
 
@@ -39,15 +41,20 @@ test('index.html loads app.js and every script it loads exists', () => {
 });
 
 test('every element a script looks up at load exists by the time it runs', () => {
-  if (scriptTags.every(match => isDeferred(match[0]))) return; // deferred scripts run after parsing
-  const late = idsDeclaredAfterTheScripts();
-  const dead = appScripts.flatMap(script => Array.from(idsLookedUpAtLoad(script.code)))
-    .filter(id => late.has(id)).sort();
-  assert.deepEqual(dead, [], `these resolve to null in a real browser: ${dead.join(', ')}`);
+  for (const tag of scriptTags.filter(match => !isDeferred(match[0]))) {
+    const late = idsDeclaredAfter(tag);
+    const dead = Array.from(idsLookedUpAtLoad(codeOf(tag[1]))).filter(id => late.has(id)).sort();
+    assert.deepEqual(dead, [], `${tag[1]} resolves these to null in a real browser: ${dead.join(', ')}`);
+  }
 });
 
-test('every frontend script is deferred, so markup may be declared in any order', () => {
-  for (const match of scriptTags) {
-    assert.ok(isDeferred(match[0]), `${match[1]} must be deferred; without it, controls declared below it are dead`);
+test('scripts in <head> touch no page elements, and every script in <body> is deferred', () => {
+  for (const tag of scriptTags) {
+    if (tag.index < headEnd) {
+      assert.doesNotMatch(codeOf(tag[1]), /getElementById|querySelector/,
+        `${tag[1]} runs before the body exists, so it may only touch <html>`);
+    } else {
+      assert.ok(isDeferred(tag[0]), `${tag[1]} must be deferred; without it, controls declared below it are dead`);
+    }
   }
 });

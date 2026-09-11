@@ -20,7 +20,7 @@ TODAY = date.today()
 WEEK = (TODAY - timedelta(days=TODAY.weekday())).isoformat()
 
 
-def preferences(theme: str = "nocturne") -> dict:
+def preferences(theme: str = "system") -> dict:
     return {
         "theme": theme,
         "reminders_enabled": False,
@@ -334,3 +334,12 @@ def test_accounts_and_weeks_survive_restart(tmp_path: Path) -> None:
             "revision": 1,
         }
         assert login(second, "alice").status_code == 200
+
+
+def test_theme_is_system_by_default_and_only_system_light_or_dark(alice: TestClient) -> None:
+    assert alice.get("/api/preferences").json()["theme"] == "system"
+    for theme in ("slate", "nocturne", "system"):
+        assert alice.put("/api/preferences", json=preferences(theme), headers=WRITE).status_code == 200
+        assert alice.get("/api/preferences").json()["theme"] == theme
+    for label in ("light", "dark", ""):
+        assert alice.put("/api/preferences", json=preferences(label), headers=WRITE).status_code == 422

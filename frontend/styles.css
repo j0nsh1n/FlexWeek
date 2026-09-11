@@ -1,6 +1,7 @@
-/* Hybrid frost: one token map per theme. :root is Nocturne (dark); Slate
-   (light) overrides it. Signed-out pages start on Slate. Components only read
-   tokens, so a new theme is a new map, never a second stylesheet. */
+/* Hybrid frost: one token map per theme. :root is Dark (nocturne); Light
+   (slate) overrides it. theme.js resolves the System choice to one of the two.
+   Components only read tokens, so a new theme is a new map, never a second
+   stylesheet. */
 @font-face {
   font-family: "Figtree";
   src: url("fonts/Figtree-Variable.ttf") format("truetype");

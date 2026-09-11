@@ -7,6 +7,7 @@
   <link rel="icon" href="/static/favicon.png" type="image/png">
   <link rel="apple-touch-icon" href="/static/logo.png">
   <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/theme.js"></script>
 </head>
 <body>
   <!-- Duotone icons: the outline follows the text color, the fill reads --icon-secondary. -->
@@ -35,7 +36,7 @@
     </div>
     <div class="controls" id="account-controls" hidden>
       <span id="account-name"></span>
-      <label>Theme <select id="theme"><option value="slate">Light</option><option value="nocturne">Dark</option></select></label>
+      <label>Theme <select id="theme"><option value="system">System</option><option value="slate">Light</option><option value="nocturne">Dark</option></select></label>
       <button type="button" id="prefs-open" class="secondary"><svg class="icon" aria-hidden="true"><use href="#i-gear"/></svg>Settings</button>
       <button type="button" id="logout" class="secondary"><svg class="icon" aria-hidden="true"><use href="#i-logout"/></svg>Log out</button>
       <button type="button" id="solve"><svg class="icon" aria-hidden="true"><use href="#i-solve"/></svg>Solve</button>
@@ -326,7 +327,7 @@
         <legend>Account and appearance</legend>
         <p id="prefs-account" class="note"></p>
         <label>Theme
-          <select id="pref-theme"><option value="slate">Light</option><option value="nocturne">Dark</option></select>
+          <select id="pref-theme"><option value="system">System</option><option value="slate">Light</option><option value="nocturne">Dark</option></select>
         </label>
         <button type="button" id="prefs-sign-out" class="secondary">Log out</button>
       </fieldset>
