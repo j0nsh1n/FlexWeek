@@ -65,6 +65,14 @@ All notable changes to FlexWeek are documented here. Format follows
   Sports, Activity, Meals, Free); older weeks without a category still load.
 
 ### Changed
+- Windows downloads are installers, 0.9.2 (2026-09-11). The zip is gone.
+  `FlexWeek-Windows-x64-Setup.exe` (Inno Setup) installs for the current
+  account without an administrator, with a Start menu shortcut, an optional
+  desktop shortcut and an uninstaller. `FlexWeek-Windows-x64.msi` (WiX)
+  installs for every account in Program Files, for schools and IT. The release
+  workflow installs each one, opens the app through its Start menu shortcut
+  with the setup-Solve smoke test, and uninstalls it before attaching the files.
+  Pull requests that touch packaging run the same build and tests.
 - Theme now defaults to System (2026-09-10): FlexWeek follows the device's
   light or dark setting and switches when that setting changes. Choosing Light
   or Dark in the header or Settings keeps that theme. New accounts and
@@ -93,6 +101,10 @@ All notable changes to FlexWeek are documented here. Format follows
   line in the week bar (2026-09-10).
 
 ### Fixed
+- Windows, 0.9.2 (2026-09-11): the `FlexWeek.lnk` shortcut in the 0.9.0 and
+  0.9.1 zip pointed at `C:\dist\zip-stage\FlexWeek\app\FlexWeek.exe`, a folder
+  on the build machine, because the workflow created it with a relative path.
+  The installers replace it with shortcuts made on the user's PC.
 - Desktop, 0.9.1 (2026-09-11): after first-week setup, "Add to my week and
   Solve" could leave a blank white window with no message and no way back.
   That is what Qt shows when the page's renderer process stops, and the window

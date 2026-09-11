@@ -1,14 +1,19 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-11. Branch `fix/0.9.1` off `main` 3f19d33 (v0.9.0, hybrid
-  frost via PR #7). Not pushed, no tag yet. `feat/frost-reference-look`
-  (5ca38b7, restyle after the owner's reference dashboards) is parked and not in
-  0.9.1.
-- 0.9.1 fixes: a page renderer that stops now reopens solved and solid instead
-  of a blank window; `--smoke-test` walks setup to its Solve with a pixel check;
-  the AppImage `.sha256` names only the file; AppImage FUSE and Windows shortcut
-  lines in the docs.
+- Date: 2026-09-11. v0.9.1 is released (PR #8, tag at b06f897). Branch
+  `feat/windows-installers` off that merge, for v0.9.2.
+  `feat/frost-reference-look` (5ca38b7, restyle after the owner's reference
+  dashboards) is parked and in neither release.
+- 0.9.1 shipped: a page renderer that stops reopens solved and solid instead of
+  a blank window; `--smoke-test` walks setup to its Solve with a pixel check;
+  the AppImage `.sha256` names only the file; AppImage FUSE doc tip.
+- 0.9.2 in progress: Windows installers (`FlexWeek-Windows-x64-Setup.exe`,
+  `FlexWeek-Windows-x64.msi`) replace the zip, whose shortcut pointed at the
+  build machine. Installers are only built and run on the GitHub Windows runner.
+- The owner sees flicker in the setup dialog on Windows and is investigating
+  that directly. On the owner's Linux PC (KDE Wayland, RX 9070, Mesa 26.2.2) blur on,
+  blur off and GPU off all looked the same, with no flicker.
 - Hybrid frost visual system is in: one token map per theme in
   `frontend/styles.css` (`:root` = nocturne/dark, `[data-theme="slate"]` =
   light), frosted chrome with a solid fallback, near-opaque week grid, soft blue
@@ -104,6 +109,12 @@ There is no automatic synchronization between those databases.
 - The dialog offers Fixed or Flexible only for a new item; editing keeps the
   existing kind, because converting needs completed_day and start cleanup that
   no flow asks for yet.
+- Windows installers: the Inno `AppId` and the MSI `UpgradeCode` are fixed
+  forever, since upgrades find the installed copy by them. The .exe is per
+  account (`PrivilegesRequired=lowest`) for students; the .msi is per machine
+  for school IT. Inno Setup is not on windows-latest, so CI downloads 7.1.0 and
+  checks its SHA-256. WiX is pinned to 6.0.2 because v7 blocks every command
+  until someone accepts its EULA.
 - Windows ICU (icuuc/icuin) is a system DLL since 1703. Copying it out of
   System32 would redistribute Microsoft's files; the bundle check requires the
   import to be satisfied by Windows 10 1809+ instead.
@@ -145,14 +156,19 @@ There is no automatic synchronization between those databases.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-11, `feat/windows-installers`: Inno Setup and WiX scripts in
+  `packaging/windows/`, workflow builds, installs, shortcut-checks, smokes and
+  uninstalls both; pull requests touching packaging run it without uploading.
+  Docs and `desktop/tests/test_windows_installers.py` updated. Release notes in
+  `docs/release-notes-v0.9.2.md`.
+- Open: spec.md still names `FlexWeek-Windows-x64.zip` (downloads list and the
+  Definition of Done); owner approval needed to change it.
 - 2026-09-11, `fix/0.9.1`: renderer recovery (shell reload with
   `?recovered=1`, solid panels, re-Solve, native panel on a repeat), extended
   smoke with pixel check and throwaway data, WebEngine `recovery` probe,
   basename AppImage checksum plus workflow check, AppImage FUSE and Windows
   shortcut doc lines, release notes in `docs/release-notes-v0.9.1.md`.
-- Next: owner confirms push, PR to main, then a v0.9.1 release (the workflow
-  builds from the tag and must pass the new smoke before it attaches files).
-  Ask the tester for OS, package and VM, and to retry 0.9.1.
+- v0.9.1 released and marked latest after CI smoke passed on all three builds.
 - 2026-09-10, `feat/hybrid-frost`: token maps, frosted chrome, grid tokens,
   Light/Dark labels, slate signed-out default, Figtree, duotone icons, theme
   token tests and CHANGELOG. Before/after screenshots were taken offscreen in
