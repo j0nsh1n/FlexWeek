@@ -1,19 +1,29 @@
 name: Release packages
 
-# Builds the Windows and Linux onedir packages (Nuitka can only build for the
-# OS it runs on) and attaches them to the GitHub release. Fires when a release
-# is published; also runnable by hand against an existing tag.
+# Builds the Windows installers and the Linux downloads (Nuitka can only build
+# for the OS it runs on) and attaches them to the GitHub release. Fires when a
+# release is published; runnable by hand against an existing tag. Pull requests
+# that touch packaging, and a hand run without a tag, build and test everything
+# but upload nothing to a release; the Windows installers are kept as run artifacts.
 #
 # onedir (not onefile): Qt WebEngine cannot be statically linked, so each
-# bundle ships as a folder inside a zip or tar.gz — see DESKTOP.md.
+# bundle ships as a folder, installed on Windows and inside a tar.gz or
+# AppImage on Linux — see DESKTOP.md.
 on:
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing release tag to attach packages to (e.g. v0.7.0)"
-        required: true
+        description: "Existing release tag to attach packages to (e.g. v0.9.2). Leave empty to build this branch without uploading."
+        required: false
+  pull_request:
+    paths:
+      - "packaging/**"
+      - "desktop/build_windows.ps1"
+      - "desktop/build_linux.sh"
+      - "desktop/package_linux.sh"
+      - ".github/workflows/release-windows.yml"
 
 permissions:
   contents: write
@@ -77,39 +87,124 @@ jobs:
           }
         shell: pwsh
 
-      - name: Zip the bundle
-        # Top level holds only what a human touches: the FlexWeek.lnk shortcut,
-        # README.txt, LICENSE.txt, flexweek.png. The compiled payload (exe, Qt
-        # DLLs, Python extensions, frontend) lives in app\.
+      - name: Install the installer tools
+        # Inno Setup is not on windows-latest (Server 2025), so fetch the pinned
+        # release and check it against the SHA-256 GitHub lists for it. WiX stays
+        # on v6: v7 blocks every command until its EULA is accepted.
+        env:
+          INNO_URL: https://github.com/jrsoftware/issrc/releases/download/is-7_1_0/innosetup-7.1.0-x64.exe
+          INNO_SHA256: 0362a383ed217d4c4239b5933866dd96d3eb2102737da92f80f6057a4b40df2f
         run: |
-          New-Item -ItemType Directory -Path dist\zip-stage\FlexWeek | Out-Null
-          Move-Item -LiteralPath dist\FlexWeek-Windows -Destination dist\zip-stage\FlexWeek\app
-          $root = "dist\zip-stage\FlexWeek"
-          foreach ($name in @("README.txt", "LICENSE.txt", "flexweek.png")) {
-            Copy-Item -LiteralPath (Join-Path $root "app\$name") -Destination (Join-Path $root $name)
+          $installer = Join-Path $env:RUNNER_TEMP "innosetup.exe"
+          Invoke-WebRequest -Uri $env:INNO_URL -OutFile $installer
+          $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne $env:INNO_SHA256) { throw "Inno Setup download has SHA-256 $hash, expected $env:INNO_SHA256" }
+          $dir = Join-Path $env:RUNNER_TEMP "innosetup"
+          $proc = Start-Process -FilePath $installer -Wait -PassThru `
+            -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/CURRENTUSER", "/DIR=$dir"
+          if ($proc.ExitCode -ne 0) { throw "Inno Setup install failed with $($proc.ExitCode)" }
+          $iscc = Join-Path $dir "ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe missing under $dir" }
+          "ISCC=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          dotnet tool install --global wix --version 6.0.2
+          if ($LASTEXITCODE -ne 0) { throw "Could not install WiX 6.0.2" }
+          wix --version
+        shell: pwsh
+
+      - name: Build the installers
+        # The version comes from a vX.Y.Z tag; builds without one get 0.0.<run>.
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          $version = if ($env:TAG -match '^v(\d+\.\d+\.\d+)$') { $Matches[1] } else { "0.0.${{ github.run_number }}" }
+          $app = (Resolve-Path dist\FlexWeek-Windows).Path
+          $out = (Resolve-Path dist).Path
+          & $env:ISCC "/DAppVersion=$version" "/DSourceDir=$app" "/DOutputDir=$out" packaging\windows\flexweek.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with $LASTEXITCODE" }
+          wix build packaging\windows\flexweek.wxs -arch x64 -d "Version=$version" -bindpath "app=$app" `
+            -o dist\FlexWeek-Windows-x64.msi
+          if ($LASTEXITCODE -ne 0) { throw "wix build failed with $LASTEXITCODE" }
+          foreach ($name in @("FlexWeek-Windows-x64-Setup.exe", "FlexWeek-Windows-x64.msi")) {
+            $hash = (Get-FileHash "dist\$name" -Algorithm SHA256).Hash.ToLower()
+            "$hash  $name" | Set-Content -NoNewline "dist\$name.sha256"
+            Write-Host "$name version $version, $((Get-Item "dist\$name").Length) bytes, SHA-256 $hash"
           }
-          $shell = New-Object -ComObject WScript.Shell
-          $shortcut = $shell.CreateShortcut((Join-Path $root "FlexWeek.lnk"))
-          $shortcut.TargetPath = Join-Path $root "app\FlexWeek.exe"
-          $shortcut.WorkingDirectory = Join-Path $root "app"
-          $shortcut.Save()
-          if (-not (Test-Path (Join-Path $root "FlexWeek.lnk"))) {
-            throw "FlexWeek.lnk was not created"
+        shell: pwsh
+
+      - name: Install, open and uninstall each installer
+        # 0.9.0 and 0.9.1 shipped a zip whose shortcut pointed at the build
+        # machine's folder. Each installer must put a Start menu shortcut that
+        # opens the installed FlexWeek.exe, the installed app must pass the
+        # setup-Solve smoke test, and uninstall must remove it.
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
+        run: |
+          function Invoke-Checked([string] $file, [string[]] $arguments, [string] $what) {
+            $proc = Start-Process -FilePath $file -ArgumentList $arguments -Wait -PassThru
+            if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) { throw "$what failed with $($proc.ExitCode)" }
           }
-          Compress-Archive -Path $root `
-            -DestinationPath dist\FlexWeek-Windows-x64.zip -Force
-          $hash = (Get-FileHash dist\FlexWeek-Windows-x64.zip -Algorithm SHA256).Hash.ToLower()
-          "$hash  FlexWeek-Windows-x64.zip" | Set-Content -NoNewline dist\FlexWeek-Windows-x64.zip.sha256
-          Write-Host "SHA256: $hash"
+          function Test-Installed([string] $exe, [string] $shortcut, [string] $name) {
+            if (-not (Test-Path $exe)) { throw "$name did not install $exe" }
+            if (-not (Test-Path $shortcut)) { throw "$name did not create $shortcut" }
+            $link = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcut)
+            if ($link.TargetPath -ne $exe) { throw "$name shortcut opens '$($link.TargetPath)', not '$exe'" }
+            # Windows Installer resolves a directory with a trailing backslash; Inno does not.
+            if ($link.WorkingDirectory.TrimEnd('\') -ne (Split-Path $exe)) {
+              throw "$name shortcut starts in '$($link.WorkingDirectory)', not '$(Split-Path $exe)'"
+            }
+            $report = Join-Path $env:RUNNER_TEMP "$name-smoke.json"
+            $proc = Start-Process -FilePath $link.TargetPath -ArgumentList "--smoke-test", $report `
+              -WorkingDirectory $link.WorkingDirectory -Wait -PassThru
+            if (Test-Path $report) { Get-Content $report }
+            $result = if (Test-Path $report) { Get-Content $report -Raw | ConvertFrom-Json } else { $null }
+            if ($proc.ExitCode -ne 0 -or -not $result.ok -or $result.stage -ne "week shown after setup Solve") {
+              throw "$name installed app failed its smoke test (exit $($proc.ExitCode), stage $($result.stage))"
+            }
+          }
+          function Wait-Removed([string] $path, [string] $name) {
+            foreach ($i in 1..60) { if (-not (Test-Path $path)) { return }; Start-Sleep -Seconds 1 }
+            throw "$name uninstall left $path behind"
+          }
+
+          $setup = Resolve-Path dist\FlexWeek-Windows-x64-Setup.exe
+          Invoke-Checked $setup @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER") "Setup.exe install"
+          $exe = Join-Path $env:LOCALAPPDATA "Programs\FlexWeek\FlexWeek.exe"
+          Test-Installed $exe (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\FlexWeek.lnk") "Setup.exe"
+          Invoke-Checked (Join-Path (Split-Path $exe) "unins000.exe") @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART") "Setup.exe uninstall"
+          Wait-Removed $exe "Setup.exe"
+
+          $msi = (Resolve-Path dist\FlexWeek-Windows-x64.msi).Path
+          Invoke-Checked "msiexec.exe" @("/i", "`"$msi`"", "/qn", "/norestart") ".msi install"
+          $exe = Join-Path $env:ProgramFiles "FlexWeek\FlexWeek.exe"
+          Test-Installed $exe (Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs\FlexWeek.lnk") "msi"
+          Invoke-Checked "msiexec.exe" @("/x", "`"$msi`"", "/qn", "/norestart") ".msi uninstall"
+          Wait-Removed $exe "msi"
+        shell: pwsh
+
+      - name: Keep the installers from this run
+        if: github.event_name != 'release' && !inputs.tag
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlexWeek-Windows-installers
+          path: |
+            dist/FlexWeek-Windows-x64-Setup.exe
+            dist/FlexWeek-Windows-x64-Setup.exe.sha256
+            dist/FlexWeek-Windows-x64.msi
+            dist/FlexWeek-Windows-x64.msi.sha256
+          retention-days: 7
 
       - name: Attach to the release
+        if: github.event_name == 'release' || inputs.tag
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
           gh release upload "$env:TAG" `
-            dist\FlexWeek-Windows-x64.zip `
-            dist\FlexWeek-Windows-x64.zip.sha256 `
+            dist\FlexWeek-Windows-x64-Setup.exe `
+            dist\FlexWeek-Windows-x64-Setup.exe.sha256 `
+            dist\FlexWeek-Windows-x64.msi `
+            dist\FlexWeek-Windows-x64.msi.sha256 `
             --clobber
 
   linux:
@@ -195,6 +290,7 @@ jobs:
           sha256sum -c FlexWeek-Linux-x86_64.tar.gz.sha256 FlexWeek-x86_64.AppImage.sha256
 
       - name: Attach to the release
+        if: github.event_name == 'release' || inputs.tag
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name || inputs.tag }}
