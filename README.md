@@ -43,7 +43,8 @@ practice: Solve never moves it) or **Flexible** (homework: Solve picks a free
 time before it is due). Every save goes to your account; Solve previews placement
 without replacing your entered blocks.
 
-Choose Light or Dark from Theme. The choice is saved to your
+Theme starts on System, which follows your device's light or dark setting.
+Choose Light or Dark from Theme to keep one. The choice is saved to your
 account. If a save fails, keep the page open and use Retry save. A conflicting
 save from another window offers a draft download and reload of the saved week.
 Password recovery is planned for the later hardening phase.

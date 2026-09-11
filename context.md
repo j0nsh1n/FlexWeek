@@ -39,6 +39,7 @@ frontend/auth.js         Create account / Log in screens, session start (loads l
 frontend/tests/app-scripts.mjs  loads index.html's scripts in order for DOM-stub tests
 frontend/styles.css      both theme token maps, then components that only read tokens
 frontend/fonts/          Figtree variable font + OFL license, served from /static
+frontend/theme.js        System/Light/Dark choice -> data-theme, loaded in <head>
 frontend/tests/theme-tokens.test.mjs  token parity, no raw colors, no-blur contrast, accent vs categories
 ```
 
@@ -100,9 +101,16 @@ There is no automatic synchronization between those databases.
 - Windows ICU (icuuc/icuin) is a system DLL since 1703. Copying it out of
   System32 would redistribute Microsoft's files; the bundle check requires the
   import to be satisfied by Windows 10 1809+ instead.
-- Theme stays the `nocturne|slate` API enum; menus only relabel it Dark/Light.
-  Signed-out HTML and `signedOut()` use slate; the saved theme applies after
-  login, and new accounts still default to nocturne per spec.md.
+- `theme` is `system|slate|nocturne` (default `system`, owner decision
+  2026-09-10). CSS only knows slate and nocturne on `<html data-theme>`;
+  `frontend/theme.js` runs in `<head>` so first paint already matches the
+  device, and re-resolves on device changes only while the choice is system.
+  Signed-out screens always follow the device.
+- SQLite cannot alter a CHECK, so `allow_system_theme()` rebuilds an older
+  preferences table once in one transaction; stored slate/nocturne are kept.
+- Offscreen Qt ignores `setColorScheme`; the `system_dark` probe forces a dark
+  device with `--blink-settings=preferredColorScheme=0`. A real KDE dark
+  session does reach `prefers-color-scheme: dark`.
 - Frost alphas are chosen so text passes WCAG AA composited straight over the
   page gradient with no blur; that is the case Qt WebEngine hits when blur is
   not drawn. The theme-tokens test computes it, so do not lower an alpha without
@@ -120,7 +128,8 @@ There is no automatic synchronization between those databases.
   Light/Dark labels, slate signed-out default, Figtree, duotone icons, theme
   token tests and CHANGELOG. Before/after screenshots were taken offscreen in
   /tmp/fw-frost (not committed). Nothing pushed.
-- Next: owner review of both themes on a real screen, then decide whether new
-  accounts should default to light (needs a spec.md change).
+- Theme defaults to System per the owner's spec change (same day): API,
+  storage migration, theme.js, menus and probes updated.
+- Next: owner review of both themes on a real screen.
 - Open: hosted web URL, a hand check of close-to-tray and of the Windows zip
   on a real PC.

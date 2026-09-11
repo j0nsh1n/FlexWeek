@@ -65,10 +65,12 @@ All notable changes to FlexWeek are documented here. Format follows
   Sports, Activity, Meals, Free); older weeks without a category still load.
 
 ### Changed
-- The theme menus say Light and Dark (2026-09-10). Saved values are still
-  `slate` and `nocturne`, so existing accounts keep their choice.
-- Signed-out screens (Create account, Log in) start in the light theme. An
-  account's saved theme applies right after logging in (2026-09-10).
+- Theme now defaults to System (2026-09-10): FlexWeek follows the device's
+  light or dark setting and switches when that setting changes. Choosing Light
+  or Dark in the header or Settings keeps that theme. New accounts and
+  signed-out screens start on System. The menus say System, Light and Dark;
+  saved values `slate` and `nocturne` are unchanged, so existing accounts keep
+  their choice, and older databases upgrade automatically on start.
 - Selection outlines, the Now / Next line, Focus timer controls, slack badges
   and the reminder toast use theme colors instead of fixed yellow, lime and
   amber (2026-09-10).
