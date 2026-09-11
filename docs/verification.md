@@ -39,6 +39,7 @@ this gate. The generic kit CI that ran pyright is not used.
 | Imports, exports, drafts, categories and completion | `frontend/tests/phase5-slices.test.mjs`; `backend/tests/test_phase5.py` | Invalid input, repeat import, maximum merged size, unusual/maximum Unicode IDs, multi-day flexible tasks, completed placement round trip and exported draft reimport |
 | Reminder preferences and session cleanup | Phase 5 frontend/backend tests | Lead window, solved flexible work, completed/missed filtering, account transition, browser notification closure and alert cleanup |
 | Desktop navigation, downloads and layout | `desktop/tests/test_origin.py`, `test_server.py`, `test_webengine.py` | External popup/navigation, offline draft download, 1280px/390px overflow |
+| A painted week after setup, and a page process that stops | WebEngine `rookie` and `recovery` cases; `--smoke-test` tests in `test_webengine.py`; `frontend/tests/accounts.test.mjs` | Window grab colors after the setup Solve, killed renderer reopening solved and solid, a second stop showing the native panel |
 
 The generated solver cases use 20 fixed seeds and independent integer-minute
 arithmetic. They check purity, candidate days, grid/deadline bounds, occupied

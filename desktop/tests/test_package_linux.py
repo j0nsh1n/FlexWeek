@@ -39,3 +39,25 @@ def test_package_linux_ships_readme_icon_and_checksum(tmp_path: Path) -> None:
     assert "https://example.test/flexweek" in text
     assert "@WEB_VERSION@" not in text
     assert member.mode & 0o111
+
+
+def test_appimage_checksum_names_only_the_file(tmp_path: Path) -> None:
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "FlexWeek").write_text("#!/bin/sh\n", encoding="utf-8")
+    (bundle / "FlexWeek").chmod(0o755)
+    # Stands in for appimagetool, which make-appimage.sh uses from PATH before downloading it.
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    (tools / "appimagetool").write_text('#!/bin/sh\nprintf "appimage" > "$2"\n', encoding="utf-8")
+    (tools / "appimagetool").chmod(0o755)
+    output = tmp_path / "deep" / "release" / "FlexWeek-x86_64.AppImage"
+    env = {**os.environ, "PATH": f"{tools}{os.pathsep}{os.environ['PATH']}"}
+    subprocess.run(
+        ["bash", str(ROOT / "packaging/make-appimage.sh"), str(bundle), str(output)],
+        cwd=ROOT, env=env, check=True, capture_output=True, text=True,
+    )
+    checksum = output.with_name("FlexWeek-x86_64.AppImage.sha256")
+    assert checksum.read_text(encoding="utf-8").split()[1] == "FlexWeek-x86_64.AppImage"
+    assert "/" not in checksum.read_text(encoding="utf-8")
+    subprocess.run(["sha256sum", "-c", checksum.name], cwd=output.parent, check=True, capture_output=True)

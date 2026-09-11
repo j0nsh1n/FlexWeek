@@ -195,4 +195,15 @@ document.addEventListener("visibilitychange", async () => {
   try { await api("/api/auth/me"); } catch { /* Session expiry is handled by api. */ }
 });
 
-reconnect();
+/** After the desktop app reopened a page that stopped, put the week and its Solve result back. */
+async function finishRecovery() {
+  // A later reload is an ordinary one.
+  if (typeof history !== "undefined") history.replaceState(null, "", location.pathname);
+  await reconnect();
+  if (!account) return;
+  if (weekState().blocks.some(function (block) { return block.kind === "flexible"; })) await solveWeek();
+  setStatus("FlexWeek reopened after a display problem. " + statusEl.textContent);
+}
+
+if (pageRecovered) finishRecovery();
+else reconnect();

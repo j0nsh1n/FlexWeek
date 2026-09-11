@@ -1,8 +1,14 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-10. Branch `feat/hybrid-frost` off `main` 3a8d3a6 (v0.8.0
-  first-open packaging merged via PRs #4-#6). Not pushed.
+- Date: 2026-09-11. Branch `fix/0.9.1` off `main` 3f19d33 (v0.9.0, hybrid
+  frost via PR #7). Not pushed, no tag yet. `feat/frost-reference-look`
+  (5ca38b7, restyle after the owner's reference dashboards) is parked and not in
+  0.9.1.
+- 0.9.1 fixes: a page renderer that stops now reopens solved and solid instead
+  of a blank window; `--smoke-test` walks setup to its Solve with a pixel check;
+  the AppImage `.sha256` names only the file; AppImage FUSE and Windows shortcut
+  lines in the docs.
 - Hybrid frost visual system is in: one token map per theme in
   `frontend/styles.css` (`:root` = nocturne/dark, `[data-theme="slate"]` =
   light), frosted chrome with a solid fallback, near-opaque week grid, soft blue
@@ -119,11 +125,34 @@ There is no automatic synchronization between those databases.
   (School blue is the near miss), enforced by the same test.
 - Icons are an inline `<symbol>` sprite, not a file: `<use>` inherits
   `--icon-secondary` into the symbol only when the sprite is in the page.
-- Linux ships a tar.gz rather than an AppImage so the executable bit survives
-  and no extra runtime is required. Unused Qt `.qm` files are dropped; the
-  Chromium en-US locale pack stays.
+- Linux leads with a tar.gz so the executable bit survives and no extra runtime
+  is required. The AppImage ships too, but needs FUSE (libfuse2); without it
+  the docs say `--appimage-extract` then `squashfs-root/AppRun`, or the tarball.
+  Unused Qt `.qm` files are dropped; the Chromium en-US locale pack stays.
+- A dead page renderer leaves Qt's view one flat near-white color, and a lost
+  GPU context leaves it the page background color; neither reaches the page or
+  shows a dialog. A GPU-process crash kills the whole app instead (Qt runs GPU
+  in-process). Hence `renderProcessTerminated` recovery in `desktop/main.py` and
+  the smoke's window-grab color count (a blank page is 1 color, the bare page
+  gradient under 100, a solved week 400 or more on an 8 px grid).
+- The 0.9.0 blank window was not reproduced on: source offscreen, the published
+  v0.9.0 Linux build on Xvfb/llvmpipe with GPU compositing, tray and
+  notifications on, accessibility on, or eight clock times across the week.
+  Trigger still unknown; likely GPU/driver specific (0.9.0 added the only
+  backdrop-filter rules) or Windows.
+- Smoke runs use a temporary data folder. WebEngine writes profile files until
+  its page and profile are destroyed, so `MainWindow.discard()` runs before the
+  folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-11, `fix/0.9.1`: renderer recovery (shell reload with
+  `?recovered=1`, solid panels, re-Solve, native panel on a repeat), extended
+  smoke with pixel check and throwaway data, WebEngine `recovery` probe,
+  basename AppImage checksum plus workflow check, AppImage FUSE and Windows
+  shortcut doc lines, release notes in `docs/release-notes-v0.9.1.md`.
+- Next: owner confirms push, PR to main, then a v0.9.1 release (the workflow
+  builds from the tag and must pass the new smoke before it attaches files).
+  Ask the tester for OS, package and VM, and to retry 0.9.1.
 - 2026-09-10, `feat/hybrid-frost`: token maps, frosted chrome, grid tokens,
   Light/Dark labels, slate signed-out default, Figtree, duotone icons, theme
   token tests and CHANGELOG. Before/after screenshots were taken offscreen in

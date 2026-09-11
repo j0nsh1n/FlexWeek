@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
+import signal
 import sys
 import time
 from pathlib import Path
@@ -15,7 +18,15 @@ from PySide6.QtTest import QTest
 from PySide6.QtWebEngineCore import QWebEnginePage, QWebEnginePermission
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
-from desktop.main import MainWindow, instance_name, show_running_instance
+from desktop.main import (
+    OFFLINE_HEADING,
+    PAGE_STOPPED_HEADING,
+    PAINTED_MIN_COLORS,
+    MainWindow,
+    instance_name,
+    painted_colors,
+    show_running_instance,
+)
 from desktop.server import LocalServer
 
 
@@ -63,6 +74,36 @@ def run(case: str, root: Path) -> None:
             document.querySelector('#{action}-form button[type=submit]').click();""")
         wait_for(f"document.getElementById('account-name').textContent === {json.dumps(name)}")
         wait_for("!document.getElementById('planner').hidden")
+
+    def wait_through_reload(code: str, timeout: float = 20.0) -> None:
+        """wait_for across a page that is gone or reloading, when scripts cannot answer."""
+        until = time.monotonic() + timeout
+        while time.monotonic() < until:
+            with contextlib.suppress(AssertionError):
+                if evaluate(f"Boolean({code})"):
+                    return
+            QTest.qWait(100)
+        raise AssertionError(f"Condition not reached: {code}")
+
+    def assert_painted(label: str) -> None:
+        QTest.qWait(300)
+        colors = painted_colors(window.grab().toImage())
+        assert colors >= PAINTED_MIN_COLORS, f"{label}: the window is blank ({colors} colors)"
+
+    def finish_setup_with_homework() -> None:
+        """Setup as a rookie leaves it: school defaults, no sport, one homework, then Solve."""
+        wait_for("document.getElementById('setup-dialog').open")
+        evaluate("document.getElementById('setup-next').click()")
+        evaluate("document.getElementById('setup-skip').click()")
+        evaluate("""document.getElementById('setup-homework-title').value='Math worksheet';
+            document.getElementById('setup-next').click();""")
+        assert evaluate("document.getElementById('setup-next').textContent") == "Add to my week and Solve"
+        evaluate("document.getElementById('setup-next').click()")
+
+    solved_week = (
+        "!document.getElementById('setup-dialog').open && !document.getElementById('debug').hidden && "
+        "document.querySelectorAll('.flex-block').length === 1"
+    )
 
     def page_theme() -> object:
         return evaluate("document.documentElement.dataset.theme")
@@ -183,12 +224,47 @@ def run(case: str, root: Path) -> None:
                                 ".some(b => /slack/i.test(b.textContent))"), "Raw slack jargon on the grid"
             assert not evaluate("document.getElementById('focus-section').hidden")
             window.grab().save(str(root / "rookie-solved.png"))
+            assert_painted("After the setup Solve")
             evaluate("document.getElementById('logout').click()")
             wait_for("!document.getElementById('login-screen').hidden")
             submit_identity("rookie_student", "login")
             assert not evaluate("document.getElementById('setup-dialog').open"), "Setup reopened on login"
             assert evaluate("document.querySelectorAll('.block').length") == 6
             print("PASS: register, setup, Solve with plain results, log out and log back in")
+        elif case == "recovery":
+            submit_identity("crash_student", "register")
+            finish_setup_with_homework()
+            wait_for(solved_week)
+            assert_painted("After the setup Solve")
+            assert evaluate("getComputedStyle(document.querySelector('.side')).backdropFilter") != "none"
+            # The page process dies, as it did for v0.9.0 testers: the window must come back by itself.
+            os.kill(page.renderProcessPid(), signal.SIGKILL)
+            wait_through_reload(
+                f"location.search === '' && document.documentElement.dataset.frost === 'off' && {solved_week}"
+            )
+            assert window._stack.currentIndex() == 0
+            status = evaluate("document.getElementById('status').textContent")
+            assert status.startswith("FlexWeek reopened after a display problem. Saved week"), status
+            assert evaluate("getComputedStyle(document.querySelector('.side')).backdropFilter") == "none"
+            assert evaluate("document.getElementById('debug-stats').textContent") == "Placed 1 of 1 task."
+            assert_painted("After recovering the page")
+            # Stopping again right away gets a native message instead of a reload loop.
+            os.kill(page.renderProcessPid(), signal.SIGKILL)
+            until = time.monotonic() + 10
+            while window._stack.currentIndex() != 1 and time.monotonic() < until:
+                QTest.qWait(50)
+            assert window._stack.currentIndex() == 1, "A second stop did not show the native panel"
+            assert window._retry.heading.text() == PAGE_STOPPED_HEADING
+            window._retry.button.click()
+            wait_through_reload(solved_week)
+            assert window._stack.currentIndex() == 0
+            # A later failed load shows the offline panel, whose Reload is an ordinary load again.
+            window._on_load_finished(False)
+            assert window._retry.heading.text() == OFFLINE_HEADING
+            with patch.object(window, "load_app") as ordinary_load:
+                window._retry.button.click()
+            ordinary_load.assert_called_once_with()
+            print("PASS: setup Solve paints, a stopped page reopens solved, a second stop shows a panel")
         elif case == "calendar":
             submit_identity("calendar_student", "register")
             evaluate("""window.__point = (type, minute, onBlock=false, pointerId=1) => {

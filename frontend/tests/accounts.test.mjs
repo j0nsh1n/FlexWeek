@@ -68,7 +68,7 @@ function harness(options = {}) {
   }
   for (const match of html.matchAll(/id="([^"]+)"/g)) elements.set(match[1], element());
   const local = new Map();
-  let handler = async () => response(401, { detail: 'Please sign in' });
+  let handler = options.handler || (async () => response(401, { detail: 'Please sign in' }));
   const requests = [];
   const context = vm.createContext({
     document: {
@@ -84,6 +84,7 @@ function harness(options = {}) {
     getComputedStyle: () => ({ getPropertyValue: () => '2.75rem' }),
     setTimeout, clearTimeout, AbortController, structuredClone, console,
     confirm: () => true, Date: FixedDate, matchMedia: options.matchMedia,
+    location: options.location, history: options.history,
   });
   runAppScripts(vm, context);
   return {
@@ -187,6 +188,50 @@ test('boot requires sign-in and never fetches a demo or exposes legacy data', as
   assert.equal(h.elements.get('planner').hidden, true);
   assert.equal(h.run('weekState().blocks.length'), 0);
   assert.deepEqual(h.requests.map(r => r.path), ['/api/auth/me']);
+});
+
+function signedInServer(extra = async () => undefined) {
+  return async (path, options) => {
+    const answer = await extra(path, options);
+    if (answer) return answer;
+    if (path === '/api/auth/me') return response(200, { id: 4, username: 'crash_student' });
+    if (path.startsWith('/api/weeks')) return response(200, { weeks: [MONDAY] });
+    if (path.startsWith('/api/week')) return response(200, { week_start: weekOf(path), blocks: [task], revision: 1 });
+    return response(200, { theme: 'slate' });
+  };
+}
+
+async function settled(done) {
+  for (let i = 0; i < 30 && !done(); i++) await tick();
+}
+
+test('a page the desktop app reopened after it stopped turns solid and is solved again', async () => {
+  const replaced = [];
+  const h = harness({
+    location: { search: '?recovered=1', pathname: '/' },
+    history: { replaceState: (_state, _title, url) => replaced.push(url) },
+    handler: signedInServer(async path => path === '/api/solve' ? response(200, {
+      placed: [{ ...task, start: '15:00' }], unplaced: [], moves: [], explanations: [],
+      failed_constraints: [], solve_ms: 1, complete: true,
+    }) : undefined),
+  });
+  await settled(() => h.elements.get('status').textContent.startsWith('FlexWeek reopened'));
+
+  assert.equal(h.run('document.documentElement.dataset.frost'), 'off');
+  assert.deepEqual(replaced, ['/'], 'the recovery marker was not removed from the address');
+  assert.equal(h.requests.filter(r => r.path === '/api/solve').length, 1);
+  assert.equal(h.elements.get('planner').hidden, false);
+  assert.equal(h.elements.get('status').textContent,
+    'FlexWeek reopened after a display problem. Saved week · 1 task placed');
+});
+
+test('an ordinary page load keeps the frosted look and does not solve by itself', async () => {
+  const h = harness({ location: { search: '', pathname: '/' }, handler: signedInServer() });
+  await settled(() => h.elements.get('account-name').textContent === 'crash_student');
+
+  assert.equal(h.elements.get('planner').hidden, false);
+  assert.equal(h.run('document.documentElement.dataset.frost'), undefined);
+  assert.equal(h.requests.some(r => r.path === '/api/solve'), false);
 });
 
 test('failed save retains the draft and a retry commits the same week', async () => {
