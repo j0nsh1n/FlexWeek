@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from desktop.readme import OFFLINE, ONLINE, render
@@ -28,6 +29,16 @@ def test_windows_readme_covers_smartscreen_and_icu_by_the_os() -> None:
     assert "icuuc" in text
     assert "Create account" in text
     assert "@WEB_VERSION@" in text
+
+
+def test_readme_screenshots_exist_and_none_sit_unused() -> None:
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    shown = re.findall(r"!\[[^\]]+\]\((docs/images/[^)]+)\)", text)
+    assert shown, "README shows no screenshots"
+    missing = [path for path in shown if not (ROOT / path).is_file()]
+    assert missing == []
+    on_disk = sorted(path.relative_to(ROOT).as_posix() for path in (ROOT / "docs/images").iterdir())
+    assert sorted(set(shown)) == on_disk
 
 
 def test_render_inserts_the_hosted_url_or_says_none_is_online() -> None:

@@ -4,6 +4,8 @@ Places homework around school and sports, then explains why something moved.
 
 Congressional App Challenge 2026. No chatbot. No product demo mode.
 
+![FlexWeek's week view after Solve: school, soccer practice and a piano lesson are fixed, and four homework and study tasks are placed around them](docs/images/week-light.png)
+
 ## Download
 
 From the [latest GitHub Release](https://github.com/j0nsh1n/FlexWeek/releases/latest):
@@ -22,6 +24,12 @@ Checksum files (`.sha256`) sit next to those downloads if you want to confirm th
 **Chromebooks.** Use the web version when it is online. It is not online yet. From this source tree you can run the web app locally (see below).
 
 Open FlexWeek, choose Create account, and follow the short first-week setup (school hours, a sport, then homework). You can skip any step.
+
+## Screenshots
+
+| First-week setup | Dark theme |
+| --- | --- |
+| ![The first-week setup asks what homework is due first, how long it takes and when it is due](docs/images/setup.png) | ![The same solved week in the dark theme](docs/images/week-dark.png) |
 
 ## Run from source
 

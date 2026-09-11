@@ -65,6 +65,9 @@ All notable changes to FlexWeek are documented here. Format follows
   Sports, Activity, Meals, Free); older weeks without a category still load.
 
 ### Changed
+- The README shows the app (2026-09-11): a solved week in light at the top, and
+  the first-week setup and the dark theme under Screenshots. The images in
+  `docs/images/` are captured from the real app with a demo week.
 - Windows downloads are installers, 0.9.2 (2026-09-11). The zip is gone.
   `FlexWeek-Windows-x64-Setup.exe` (Inno Setup) installs for the current
   account without an administrator, with a Start menu shortcut, an optional

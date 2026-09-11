@@ -156,6 +156,12 @@ There is no automatic synchronization between those databases.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-11, `docs/readme-screenshots`: README screenshots in `docs/images/`
+  (week light, week dark, setup), taken offscreen at 1.5x from the real app with
+  a demo week and a Wednesday 16:20 clock; a readme test keeps every shown image
+  present and none unused. v0.9.2 released with the Windows installers.
+- Open: the owner is diagnosing the Windows setup-dialog flicker with a separate
+  prompt (GPU/ANGLE/Qt renderer switches, then DevTools CSS toggles).
 - 2026-09-11, `feat/windows-installers`: Inno Setup and WiX scripts in
   `packaging/windows/`, workflow builds, installs, shortcut-checks, smokes and
   uninstalls both; pull requests touching packaging run it without uploading.
