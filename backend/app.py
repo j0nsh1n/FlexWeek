@@ -81,7 +81,8 @@ class AlarmPreference(BaseModel):
 
 class Preferences(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    theme: Literal["nocturne", "slate"]
+    # "system" follows the device light/dark setting; slate is Light and nocturne is Dark.
+    theme: Literal["system", "slate", "nocturne"]
     reminders_enabled: bool = False
     reminder_lead_min: int = Field(default=5, ge=0, le=120)
     reminder_sound: bool = True

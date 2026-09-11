@@ -20,7 +20,7 @@ pytestmark = pytest.mark.skipif(
     "case",
     [
         "accounts", "calendar", "completion", "phase6", "phase7", "popup", "navigation", "download",
-        "tray", "no_icon", "instance", "rookie",
+        "tray", "no_icon", "instance", "rookie", "system_dark",
     ],
 )
 def test_webengine(case: str, tmp_path: Path) -> None:
@@ -29,7 +29,9 @@ def test_webengine(case: str, tmp_path: Path) -> None:
         "XDG_DATA_HOME": str(tmp_path / "data"),
         "XDG_CACHE_HOME": str(tmp_path / "cache"),
         "QT_QPA_PLATFORM": "offscreen",
-        "QTWEBENGINE_CHROMIUM_FLAGS": "--disable-gpu",
+        # preferredColorScheme=0 makes prefers-color-scheme report dark offscreen.
+        "QTWEBENGINE_CHROMIUM_FLAGS": "--disable-gpu"
+        + (" --blink-settings=preferredColorScheme=0" if case == "system_dark" else ""),
     }
     env.pop("FLEXWEEK_ORIGIN", None)
     env.pop("FLEXWEEK_DESKTOP_ORIGIN", None)

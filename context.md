@@ -1,17 +1,15 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-10. Branch `feat/normie-first-open` (off `main` 652a92b via
-  `feat/rookie-ux-slice`), not merged.
-- Rookie UX is in: Create account and Log in are separate screens, Create
-  account shows first, a new account gets a four-step setup, dragging or
-  clicking the grid opens an Add dialog, and Solve results use plain words.
-- First-open packaging is in: Linux tar.gz with README, icon, `.desktop` and
-  vendored libxcb-cursor; Windows zip with SmartScreen note and README; GitHub
-  release text leads with Download for Windows / Linux. Checksums are extra
-  files. Chromebooks are pointed at a hosted web URL when one exists.
-- Gates green 2026-09-10: ruff, mypy over 22 files, 183 Python tests and 86
-  frontend tests, including the real WebEngine register probe.
+- Date: 2026-09-10. Branch `feat/hybrid-frost` off `main` 3a8d3a6 (v0.8.0
+  first-open packaging merged via PRs #4-#6). Not pushed.
+- Hybrid frost visual system is in: one token map per theme in
+  `frontend/styles.css` (`:root` = nocturne/dark, `[data-theme="slate"]` =
+  light), frosted chrome with a solid fallback, near-opaque week grid, soft blue
+  accent, Figtree font and a duotone SVG icon sprite in `index.html`.
+- Gates green 2026-09-10 via `scripts/verify.py`: ruff, mypy over 22 files,
+  184 Python tests (real WebEngine probes, now checking the Figtree face loads
+  and signed-out pages start light) and 95 frontend tests.
 - Windows execution on a real PC, Safari/iPhone, physical touch and OS
   notification delivery remain unverified. Hosted web URL is not online.
 - Default desktop mode uses a local database. Hosted mode uses the configured
@@ -39,6 +37,10 @@ frontend/setup.js        first-week setup, built on editor drafts
 frontend/focus.js        focus timer, Now / Next line
 frontend/auth.js         Create account / Log in screens, session start (loads last)
 frontend/tests/app-scripts.mjs  loads index.html's scripts in order for DOM-stub tests
+frontend/styles.css      both theme token maps, then components that only read tokens
+frontend/fonts/          Figtree variable font + OFL license, served from /static
+frontend/theme.js        System/Light/Dark choice -> data-theme, loaded in <head>
+frontend/tests/theme-tokens.test.mjs  token parity, no raw colors, no-blur contrast, accent vs categories
 ```
 
 ## Domain Model
@@ -99,21 +101,35 @@ There is no automatic synchronization between those databases.
 - Windows ICU (icuuc/icuin) is a system DLL since 1703. Copying it out of
   System32 would redistribute Microsoft's files; the bundle check requires the
   import to be satisfied by Windows 10 1809+ instead.
+- `theme` is `system|slate|nocturne` (default `system`, owner decision
+  2026-09-10). CSS only knows slate and nocturne on `<html data-theme>`;
+  `frontend/theme.js` runs in `<head>` so first paint already matches the
+  device, and re-resolves on device changes only while the choice is system.
+  Signed-out screens always follow the device.
+- SQLite cannot alter a CHECK, so `allow_system_theme()` rebuilds an older
+  preferences table once in one transaction; stored slate/nocturne are kept.
+- Offscreen Qt ignores `setColorScheme`; the `system_dark` probe forces a dark
+  device with `--blink-settings=preferredColorScheme=0`. A real KDE dark
+  session does reach `prefers-color-scheme: dark`.
+- Frost alphas are chosen so text passes WCAG AA composited straight over the
+  page gradient with no blur; that is the case Qt WebEngine hits when blur is
+  not drawn. The theme-tokens test computes it, so do not lower an alpha without
+  rerunning it.
+- The accent must stay at least CIE76 distance 15 from every category color
+  (School blue is the near miss), enforced by the same test.
+- Icons are an inline `<symbol>` sprite, not a file: `<use>` inherits
+  `--icon-secondary` into the symbol only when the sprite is in the page.
 - Linux ships a tar.gz rather than an AppImage so the executable bit survives
   and no extra runtime is required. Unused Qt `.qm` files are dropped; the
   Chromium en-US locale pack stays.
 
 ## Session Handoff
-- 2026-09-10, `feat/normie-first-open`: GitHub kit and contest brief organized.
-  CodeQL lives at `.github/workflows/codeql.yml`. Generic kit CI was not
-  installed (pyright, `tests/` at repo root). Original Sep 6 plan archived as
-  `docs/cac-build-plan.md`. `spec.md` now matches the shipped product (desktop,
-  cascade/slack, frontend split, mypy/verify.py, Phase 7 fields, first-open).
-  Packaging work from this branch is still in the working tree. Nothing pushed.
-- A copy of dist/FlexWeek was finished in /tmp/fw-finish-test: libxcb-cursor
-  and friends were vendored. The glibc 2.38 check still fails on this Fedora
-  Python (GLIBC_ABI_GNU2_TLS). The Linux release tarball has to be built on
-  Ubuntu 24.04 (the CI `linux` job). Container smoke was not run against a
-  shippable archive.
+- 2026-09-10, `feat/hybrid-frost`: token maps, frosted chrome, grid tokens,
+  Light/Dark labels, slate signed-out default, Figtree, duotone icons, theme
+  token tests and CHANGELOG. Before/after screenshots were taken offscreen in
+  /tmp/fw-frost (not committed). Nothing pushed.
+- Theme defaults to System per the owner's spec change (same day): API,
+  storage migration, theme.js, menus and probes updated.
+- Next: owner review of both themes on a real screen.
 - Open: hosted web URL, a hand check of close-to-tray and of the Windows zip
   on a real PC.

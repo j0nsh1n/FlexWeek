@@ -25,7 +25,7 @@ class FixedDate extends Date {
   static now() { return NOW.getTime(); }
 }
 
-function harness() {
+function harness(options = {}) {
   const elements = new Map();
   const allElements = [];
   function connectedElements() {
@@ -83,7 +83,7 @@ function harness() {
     fetch: async (path, options) => { requests.push({ path, options }); return handler(path, options); },
     getComputedStyle: () => ({ getPropertyValue: () => '2.75rem' }),
     setTimeout, clearTimeout, AbortController, structuredClone, console,
-    confirm: () => true, Date: FixedDate,
+    confirm: () => true, Date: FixedDate, matchMedia: options.matchMedia,
   });
   runAppScripts(vm, context);
   return {
@@ -650,4 +650,55 @@ test('an empty week says so and setup can be skipped without adding anything', a
   assert.equal(h.run('weekState().blocks.length'), 0);
   assert.equal(h.elements.get('empty-week').hidden, false);
   assert.match(h.elements.get('status').textContent, /Setup skipped/);
+});
+
+function deviceScheme(dark) {
+  const listeners = [];
+  const query = { matches: dark, addEventListener: (type, listener) => listeners.push(listener) };
+  return {
+    matchMedia: text => { assert.equal(text, '(prefers-color-scheme: dark)'); return query; },
+    set(value) { query.matches = value; listeners.forEach(listener => listener({ matches: value })); },
+  };
+}
+
+test('signed out, the theme follows the device and switches when the device does', async () => {
+  const device = deviceScheme(true);
+  const h = harness({ matchMedia: device.matchMedia });
+  await tick();
+  assert.equal(h.run('document.documentElement.dataset.theme'), 'nocturne');
+  device.set(false);
+  assert.equal(h.run('document.documentElement.dataset.theme'), 'slate');
+});
+
+test('an account on System follows the device until Light or Dark is chosen', async () => {
+  const device = deviceScheme(false);
+  const h = harness({ matchMedia: device.matchMedia });
+  await tick();
+  h.handle(async (path, options) => {
+    if (path.startsWith('/api/weeks')) return response(200, { weeks: [] });
+    if (path.startsWith('/api/week')) return response(200, { week_start: weekOf(path), blocks: [], revision: 0 });
+    return response(200, options && options.method === 'PUT' ? JSON.parse(options.body) : { theme: 'system' });
+  });
+  await h.run("loadAccount({id:4,username:'student4'})");
+  assert.equal(h.elements.get('theme').value, 'system');
+  assert.equal(h.run('document.documentElement.dataset.theme'), 'slate');
+  device.set(true);
+  assert.equal(h.run('document.documentElement.dataset.theme'), 'nocturne');
+
+  h.elements.get('theme').value = 'slate';
+  await h.elements.get('theme').listeners.change();
+  assert.equal(h.run('prefs.theme'), 'slate');
+  assert.equal(h.run('document.documentElement.dataset.theme'), 'slate');
+  device.set(false);
+  device.set(true);
+  assert.equal(h.run('document.documentElement.dataset.theme'), 'slate', 'a chosen theme must ignore the device');
+
+  h.run('signedOut()');
+  assert.equal(h.run('document.documentElement.dataset.theme'), 'nocturne', 'signing out follows the device again');
+});
+
+test('without a device preference the System theme is light', async () => {
+  const h = harness();
+  await tick();
+  assert.equal(h.run('document.documentElement.dataset.theme'), 'slate');
 });

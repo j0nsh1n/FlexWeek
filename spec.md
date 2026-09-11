@@ -17,8 +17,8 @@ separate desktop app. New accounts start with an empty week; no anonymous demo
 mode or sample-data fallback. Secondary audience: CAC judges, who create an
 account and can inspect the GitHub repository.
 
-Scope revision approved 2026-09-06: accounts, shared persistence, Daily Scheduler
-Nocturne/Slate themes first. Desktop delivery, calendar interaction, cascade,
+Scope revision approved 2026-09-06: accounts, shared persistence, and light and
+dark themes first. Desktop delivery, calendar interaction, cascade,
 slack, focus timers and alarms later shipped under that approval. Visual
 redesign and audits remain deferred. The previous Oct 3 feature freeze is
 superseded by the expanded roadmap.
@@ -115,11 +115,12 @@ Writes require `X-FlexWeek-Request: 1`; browser origins must match
 cross-tab account change. No CORS is enabled.
 
 Registration: normalized case-insensitive ASCII username (3–32 letters, digits,
-underscores), password 12–128 characters. New accounts have an empty week and
-Nocturne theme. Duplicate usernames return 409, invalid input 422, expired or
-missing sessions 401, stale changed writes 409, throttled auth 429, oversized
-requests 413, transient database failures 503. Identical week retries return
-success without duplicate blocks or another revision increment.
+underscores), password 12–128 characters. New accounts have an empty week, and
+their theme follows the device's light or dark setting. Duplicate usernames
+return 409, invalid input 422, expired or missing sessions 401, stale changed
+writes 409, throttled auth 429, oversized requests 413, transient database
+failures 503. Identical week retries return success without duplicate blocks or
+another revision increment.
 
 A week is identified by `(account, week_start)`, where `week_start` is a naive
 local ISO date that is always a Monday. An account holds as many dated weeks as
@@ -135,8 +136,14 @@ and unique day indices. Explicit starts are on the visible grid and end by
 23:00. Deadlines/earliest bounds use full English weekday plus HH:MM, or HH:MM.
 API write bodies are capped at 256 KiB.
 
-Preferences store `theme` (`nocturne` or `slate`), reminder enable/lead/sound,
-`reminder_dnd_override`, pomodoro lengths, `auto_split_pomodoro`,
+Preferences store `theme` as `system`, `slate` or `nocturne`; the menus label
+them System, Light and Dark, so Light is stored as `slate` and Dark as
+`nocturne`. `system` is the default: the app follows the device's light or dark
+setting, uses Light when the device reports none, and switches when that
+setting changes. Choosing Light or Dark keeps that theme until the student
+chooses again. Signed-out screens follow the device setting; signing out does
+not change an account's saved choice. Preferences also store reminder
+enable/lead/sound, `reminder_dnd_override`, pomodoro lengths, `auto_split_pomodoro`,
 `default_spotify_url`, and a list of alarms. On desktop, `reminder_dnd_override`
 tags the Notification `flexweek-stay` so the tray presenter skips the 10-second
 auto-close. Unchecked alerts still close at 10 seconds. Qt has no
@@ -155,7 +162,9 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
   auth-attempt counters. Schema creation is additive on startup; related writes
   use transactions. The pre-dated single-week table migrates on first start
   inside one explicit transaction, stamping the existing row with the Monday of
-  that day; it is idempotent and never drops a row. Browser
+  that day; it is idempotent and never drops a row. A preferences table from
+  before the System theme is rebuilt once on start in one transaction: stored
+  `slate` and `nocturne` are kept and any other value becomes `system`. Browser
   localStorage is read only for explicit legacy import, then removed on success.
 - Major components:
   - `backend/models.py`. Pydantic models (`TimeBlock`, `Move`, `SolveTrace`,
@@ -275,7 +284,8 @@ The commands it runs, each of which must exit 0:
 - [ ] Corrupt legacy localStorage does not replace the account week or load demos.
 - [ ] Two accounts independently create, solve, save and reload weeks.
 - [ ] Sign-out hides private data; expired sessions cannot read/write/solve.
-- [ ] Nocturne/Slate theme persists per account.
+- [ ] A new account follows the device's light or dark setting, and a chosen
+      Light or Dark theme is saved per account and returns after logging in.
 - [ ] Failed saves preserve drafts; stale saves return a recoverable conflict.
 - [ ] No output block overlaps another, and no flexible block starts after its
       deadline (property tests).

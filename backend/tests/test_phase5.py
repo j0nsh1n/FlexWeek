@@ -45,7 +45,7 @@ def test_reminder_preferences_persist(tmp_path: Path) -> None:
     with make_client(tmp_path) as client:
         register(client)
         assert client.get("/api/preferences").json() == {
-            "theme": "nocturne",
+            "theme": "system",
             "reminders_enabled": False,
             "reminder_lead_min": 5,
             "reminder_sound": True,

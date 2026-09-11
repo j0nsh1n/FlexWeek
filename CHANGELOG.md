@@ -6,6 +6,15 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Hybrid frost look (2026-09-10) in light and dark. The page sits on a soft
+  gradient; the header, week bar, sidebar, sign-in card and dialogs are frosted
+  glass with hairline borders; task cards and forms are more solid; the week
+  grid and its blocks stay nearly opaque so they remain easy to scan. Buttons
+  and focus rings use a soft blue that is kept apart from the category colors.
+- Figtree, a friendly geometric typeface, ships with the app (SIL Open Font
+  License, `frontend/fonts/`), so the desktop app needs no internet for fonts.
+- Small duotone icons on Settings, Log out, Solve, week navigation, export and
+  import, and the sidebar headings.
 - First-open downloads (2026-09-10). GitHub Releases and the README lead with
   Download for Windows and Download for Linux. Each archive includes a README
   that names glibc 2.38, a normal desktop with OpenGL or EGL, and SmartScreen
@@ -56,6 +65,17 @@ All notable changes to FlexWeek are documented here. Format follows
   Sports, Activity, Meals, Free); older weeks without a category still load.
 
 ### Changed
+- Theme now defaults to System (2026-09-10): FlexWeek follows the device's
+  light or dark setting and switches when that setting changes. Choosing Light
+  or Dark in the header or Settings keeps that theme. New accounts and
+  signed-out screens start on System. The menus say System, Light and Dark;
+  saved values `slate` and `nocturne` are unchanged, so existing accounts keep
+  their choice, and older databases upgrade automatically on start.
+- Selection outlines, the Now / Next line, Focus timer controls, slack badges
+  and the reminder toast use theme colors instead of fixed yellow, lime and
+  amber (2026-09-10).
+- When the system asks for reduced transparency or more contrast, or blur is
+  unavailable, frosted panels turn solid instead (2026-09-10).
 - Create account and Log in are separate screens (2026-09-10). Create account
   is shown first; logging out opens Log in. The app says Log in and Log out.
 - Locked and flexible are labeled Fixed time and Flexible, each with a one-line

@@ -12,6 +12,28 @@ from pathlib import Path
 from backend.weeks import current_week_start
 
 SESSION_SECONDS = 7 * 24 * 60 * 60
+PREFERENCES_TABLE = """
+    CREATE TABLE IF NOT EXISTS preferences (
+        user_id INTEGER PRIMARY KEY REFERENCES users(id),
+        theme TEXT NOT NULL DEFAULT 'system' CHECK(theme IN ('system', 'slate', 'nocturne')),
+        reminders_enabled INTEGER NOT NULL DEFAULT 0
+            CHECK(reminders_enabled IN (0, 1)),
+        reminder_lead_min INTEGER NOT NULL DEFAULT 5
+            CHECK(reminder_lead_min >= 0 AND reminder_lead_min <= 120),
+        reminder_sound INTEGER NOT NULL DEFAULT 1
+            CHECK(reminder_sound IN (0, 1)),
+        reminder_dnd_override INTEGER NOT NULL DEFAULT 0
+            CHECK(reminder_dnd_override IN (0, 1)),
+        timer_work_min INTEGER NOT NULL DEFAULT 30,
+        timer_break_min INTEGER NOT NULL DEFAULT 15,
+        timer_long_break_min INTEGER NOT NULL DEFAULT 30,
+        timer_long_break_every INTEGER NOT NULL DEFAULT 4,
+        auto_split_pomodoro INTEGER NOT NULL DEFAULT 0
+            CHECK(auto_split_pomodoro IN (0, 1)),
+        default_spotify_url TEXT,
+        alarms_json TEXT NOT NULL DEFAULT '[]'
+    )
+"""
 WEEKS_TABLE = """
     CREATE TABLE IF NOT EXISTS weeks (
         user_id INTEGER NOT NULL REFERENCES users(id), week_start TEXT NOT NULL,
@@ -100,6 +122,32 @@ def migrate_preferences(db: sqlite3.Connection) -> None:
             db.execute(f"ALTER TABLE preferences ADD COLUMN {name} {declaration}")
 
 
+def allow_system_theme(db: sqlite3.Connection) -> None:
+    """Rebuild a preferences table whose CHECK predates the system theme. A no-op once rebuilt.
+
+    SQLite cannot alter a CHECK constraint in place. Themes already chosen are
+    kept; anything the old unconstrained schema allowed that is not a theme now
+    becomes system.
+    """
+    row = db.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'preferences'").fetchone()
+    if row is None or "'system'" in row["sql"]:
+        return
+    kept = [name for name in (column["name"] for column in db.execute("PRAGMA table_info('preferences')"))
+            if name != "theme"]
+    columns = ", ".join(kept)
+    # One transaction: a crash between the rename and the copy would leave no preferences table.
+    db.execute("BEGIN IMMEDIATE")
+    db.execute("ALTER TABLE preferences RENAME TO preferences_legacy")
+    db.execute(PREFERENCES_TABLE)
+    db.execute(
+        f"""INSERT INTO preferences(theme, {columns})
+        SELECT CASE WHEN theme IN ('slate', 'nocturne') THEN theme ELSE 'system' END, {columns}
+        FROM preferences_legacy"""
+    )
+    db.execute("DROP TABLE preferences_legacy")
+    db.execute("COMMIT")
+
+
 def initialize(path: Path) -> None:
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     path.touch(mode=0o600, exist_ok=True)
@@ -115,32 +163,14 @@ def initialize(path: Path) -> None:
                 expires INTEGER NOT NULL
             );
             {WEEKS_TABLE};
-            CREATE TABLE IF NOT EXISTS preferences (
-                user_id INTEGER PRIMARY KEY REFERENCES users(id),
-                theme TEXT NOT NULL DEFAULT 'nocturne' CHECK(theme IN ('nocturne', 'slate')),
-                reminders_enabled INTEGER NOT NULL DEFAULT 0
-                    CHECK(reminders_enabled IN (0, 1)),
-                reminder_lead_min INTEGER NOT NULL DEFAULT 5
-                    CHECK(reminder_lead_min >= 0 AND reminder_lead_min <= 120),
-                reminder_sound INTEGER NOT NULL DEFAULT 1
-                    CHECK(reminder_sound IN (0, 1)),
-                reminder_dnd_override INTEGER NOT NULL DEFAULT 0
-                    CHECK(reminder_dnd_override IN (0, 1)),
-                timer_work_min INTEGER NOT NULL DEFAULT 30,
-                timer_break_min INTEGER NOT NULL DEFAULT 15,
-                timer_long_break_min INTEGER NOT NULL DEFAULT 30,
-                timer_long_break_every INTEGER NOT NULL DEFAULT 4,
-                auto_split_pomodoro INTEGER NOT NULL DEFAULT 0
-                    CHECK(auto_split_pomodoro IN (0, 1)),
-                default_spotify_url TEXT,
-                alarms_json TEXT NOT NULL DEFAULT '[]'
-            );
+            {PREFERENCES_TABLE};
             CREATE TABLE IF NOT EXISTS auth_attempts (
                 key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL
             );
         """)
         date_legacy_weeks(db)
         migrate_preferences(db)
+        allow_system_theme(db)
 
 
 def create_session(db: sqlite3.Connection, user_id: int) -> str:

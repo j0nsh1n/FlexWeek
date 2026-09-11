@@ -43,7 +43,8 @@ practice: Solve never moves it) or **Flexible** (homework: Solve picks a free
 time before it is due). Every save goes to your account; Solve previews placement
 without replacing your entered blocks.
 
-Choose Nocturne (dark) or Slate (light) from Theme. The choice is saved to your
+Theme starts on System, which follows your device's light or dark setting.
+Choose Light or Dark from Theme to keep one. The choice is saved to your
 account. If a save fails, keep the page open and use Retry save. A conflicting
 save from another window offers a draft download and reload of the saved week.
 Password recovery is planned for the later hardening phase.
@@ -105,9 +106,11 @@ local and hosted accounts are separate, without automatic synchronization.
 Windows packages are built on GitHub Actions when a release is published
 (`desktop/build_windows.ps1`) and attached as `FlexWeek-Windows-x64.zip`.
 ICU (`icuuc`/`icuin`) is part of Windows 10 1809+; the bundle check requires
-those imports to be satisfied without copying Microsoft's DLLs. Daily
-Scheduler's Nocturne/Slate colors are adapted from the GPL-3.0
-`Local-Schedule-Assistant` project. AI assistance was used in development,
+those imports to be satisfied without copying Microsoft's DLLs. The saved
+theme names `nocturne` and `slate` come from Daily Scheduler (the GPL-3.0
+`Local-Schedule-Assistant` project); the hybrid frost colors replaced its
+palette in September 2026. The Figtree typeface in `frontend/fonts/` is under
+the SIL Open Font License (`Figtree-OFL.txt`). AI assistance was used in development,
 including Codex and GLM-5.3 Flash test contribution; the runtime uses no AI
 service.
 

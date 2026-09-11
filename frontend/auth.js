@@ -68,7 +68,8 @@ function signedOut(message = "Log in to open your week.", preserve = true, scree
   document.getElementById("account-name").textContent = "";
   document.getElementById("import-panel").hidden = true;
   saveActions.hidden = true;
-  document.documentElement.dataset.theme = "nocturne";
+  // Signed-out screens follow the device; an account's saved choice applies after login.
+  applyTheme("system");
   lockEditor(false);
   setStatus(message);
 }
