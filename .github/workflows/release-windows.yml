@@ -44,9 +44,11 @@ jobs:
         run: ./desktop/build_windows.ps1 -AssumeYesForDownloads
         shell: pwsh
 
-      - name: Smoke-test package layout and first screen
+      - name: Smoke-test package layout and the setup Solve
         # GUI-subsystem freezes do not set $LASTEXITCODE under `&`. Start-Process
         # -Wait reads the process exit code. The WebEngine core DLL is Qt6-prefixed.
+        # --smoke-test walks a new account through setup to its first Solve and
+        # fails on a blank window, which is how 0.9.0 broke for testers.
         env:
           QT_QPA_PLATFORM: offscreen
           QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
@@ -65,10 +67,14 @@ jobs:
           }
           $report = Join-Path (Get-Location) "dist\windows-smoke.json"
           $proc = Start-Process -FilePath $exe -ArgumentList "--smoke-test",$report -WorkingDirectory $root -PassThru -Wait
+          if (Test-Path $report) { Get-Content $report }
           if ($null -eq $proc.ExitCode -or $proc.ExitCode -ne 0) {
             throw "FlexWeek --smoke-test failed with $($proc.ExitCode)"
           }
-          Get-Content $report
+          $result = Get-Content $report -Raw | ConvertFrom-Json
+          if (-not $result.ok -or $result.stage -ne "week shown after setup Solve") {
+            throw "FlexWeek --smoke-test stopped at: $($result.stage)"
+          }
         shell: pwsh
 
       - name: Zip the bundle
@@ -138,7 +144,8 @@ jobs:
 
       - name: Smoke the packaged archive
         # Prove the download itself starts: extract the tarball a user gets and
-        # run the root launcher, not the raw onedir.
+        # run the root launcher, not the raw onedir. --smoke-test walks a new
+        # account through setup to its first Solve and fails on a blank window.
         env:
           QT_QPA_PLATFORM: offscreen
           QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
@@ -147,16 +154,16 @@ jobs:
           mkdir dist/stage
           tar -xzf dist/release/FlexWeek-Linux-x86_64.tar.gz -C dist/stage
           xvfb-run -a -s "-screen 0 1280x800x24" dist/stage/FlexWeek/FlexWeek --smoke-test dist/packaged-smoke.json
-          python -c 'import json,sys; r=json.load(open("dist/packaged-smoke.json")); print(r); sys.exit(0 if r.get("ok") else 1)'
+          python -c 'import json,sys; r=json.load(open("dist/packaged-smoke.json")); print(r); sys.exit(0 if r.get("ok") and r.get("stage") == "week shown after setup Solve" else 1)'
 
-      - name: Smoke-test first screen
+      - name: Smoke-test the setup Solve
         env:
           QT_QPA_PLATFORM: offscreen
           QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
           LD_LIBRARY_PATH: ""
         run: |
           xvfb-run -a -s "-screen 0 1280x800x24" dist/FlexWeek/FlexWeek --smoke-test dist/linux-smoke.json
-          python -c 'import json,sys; r=json.load(open("dist/linux-smoke.json")); print(r); sys.exit(0 if r.get("ok") else 1)'
+          python -c 'import json,sys; r=json.load(open("dist/linux-smoke.json")); print(r); sys.exit(0 if r.get("ok") and r.get("stage") == "week shown after setup Solve" else 1)'
 
       - name: Build AppImage
         # Wraps the same onedir the tarball ships (LSA's packaging method).
@@ -173,6 +180,19 @@ jobs:
           size=$(stat -c%s dist/release/FlexWeek-x86_64.AppImage)
           echo "AppImage $size bytes"
           test "$size" -gt 1000000
+
+      - name: Check the checksum files
+        # Each .sha256 names only its file, so `sha256sum -c` works in whatever
+        # folder the user downloaded to. 0.9.0's AppImage checksum held the
+        # runner's /home/runner/work/... path instead.
+        working-directory: dist/release
+        run: |
+          cat FlexWeek-Linux-x86_64.tar.gz.sha256 FlexWeek-x86_64.AppImage.sha256
+          if grep -q "/" FlexWeek-Linux-x86_64.tar.gz.sha256 FlexWeek-x86_64.AppImage.sha256; then
+            echo "A checksum file names a directory (such as /home/runner), not just the file." >&2
+            exit 1
+          fi
+          sha256sum -c FlexWeek-Linux-x86_64.tar.gz.sha256 FlexWeek-x86_64.AppImage.sha256
 
       - name: Attach to the release
         env:

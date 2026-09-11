@@ -94,5 +94,6 @@ echo "Building AppImage → $OUT"
 
 chmod +x "$OUT"
 ls -lh "$OUT"
-sha256sum "$OUT" | tee "${OUT}.sha256"
+# Name only, like the tarball's checksum, so `sha256sum -c` works next to the download.
+(cd "$(dirname "$OUT")" && sha256sum "$(basename "$OUT")") | tee "${OUT}.sha256"
 echo "Built: $OUT"
