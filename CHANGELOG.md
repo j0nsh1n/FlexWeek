@@ -93,6 +93,27 @@ All notable changes to FlexWeek are documented here. Format follows
   line in the week bar (2026-09-10).
 
 ### Fixed
+- Desktop, 0.9.1 (2026-09-11): after first-week setup, "Add to my week and
+  Solve" could leave a blank white window with no message and no way back.
+  That is what Qt shows when the page's renderer process stops, and the window
+  did not handle it. FlexWeek now reopens the page with solid panels instead of
+  frosted glass, signs back in and runs Solve again, so the placed homework and
+  What Solve did return with a status line saying so. If the page stops again
+  within a minute, a native panel offers Reload instead of reloading in a loop.
+  The exact trigger on the testers' machines was not reproduced here.
+- Release checks, 0.9.1 (2026-09-11): `FlexWeek --smoke-test` now walks a
+  throwaway account through setup to its first Solve and fails when the window
+  grab is blank, on the Linux tarball, the Linux onedir and the Windows build.
+  It used to stop at the Create account screen.
+- The AppImage checksum named the build machine's path
+  (`/home/runner/work/...`), so `sha256sum -c` failed next to the download. It
+  now names only the file, like the tarball's, and the release workflow checks
+  both (2026-09-11).
+- Download notes (2026-09-11): the README and release text say what to do when
+  the AppImage will not start for lack of FUSE (`--appimage-extract`, then
+  `squashfs-root/AppRun`, or use the tarball). The Windows README, README and
+  release text say to double-click the FlexWeek shortcut, not files inside
+  `app/`; the old text still said to open FlexWeek.exe.
 - The editor no longer saves a task with no days, or a task due before every
   day it may use. It keeps the dialog open and names the problem (2026-09-10).
 - Desktop: the tray icon was missing from the packaged app, so closing the
