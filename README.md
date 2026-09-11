@@ -13,9 +13,11 @@ From the [latest GitHub Release](https://github.com/j0nsh1n/FlexWeek/releases/la
 
 Checksum files (`.sha256`) sit next to those downloads if you want to confirm the file is complete. You can ignore them and still open FlexWeek.
 
-**Windows.** Extract the zip first. Running FlexWeek.exe from inside the zip does not work. Open FlexWeek.exe. If Windows shows "Windows protected your PC", choose More info, then Run anyway. FlexWeek is not code-signed yet; the warning is SmartScreen not recognizing a new publisher, not a virus finding.
+**Windows.** Extract the zip first. Running FlexWeek from inside the zip does not work. **Double-click FlexWeek (the shortcut), not files inside app/.** If Windows shows "Windows protected your PC", choose More info, then Run anyway. FlexWeek is not code-signed yet; the warning is SmartScreen not recognizing a new publisher, not a virus finding.
 
 **Linux.** Extract the archive and open the file named FlexWeek. You need a 64-bit Linux desktop (GNOME, KDE Plasma, Cinnamon, Xfce), glibc 2.38 or newer (Ubuntu 24.04, Linux Mint 22, Debian 13, Fedora 39 or newer), and working graphics (OpenGL or EGL). A remote or headless session without a display will not work. The X11 cursor helper (libxcb-cursor) is inside the download.
+
+**Linux AppImage.** If `FlexWeek-x86_64.AppImage` won't start (missing FUSE), run `chmod +x FlexWeek-x86_64.AppImage && ./FlexWeek-x86_64.AppImage --appimage-extract`, which unpacks a `squashfs-root` folder, then run `./squashfs-root/AppRun`. Without FUSE, the tarball above is the reliable choice.
 
 **Chromebooks.** Use the web version when it is online. It is not online yet. From this source tree you can run the web app locally (see below).
 

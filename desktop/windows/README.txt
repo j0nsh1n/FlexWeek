@@ -8,6 +8,8 @@ Python, a server or an internet connection.
 
 Start FlexWeek
 --------------
+Double-click FlexWeek (the shortcut), not files inside app/.
+
 1. Extract the zip first. Right-click FlexWeek-Windows-x64.zip, choose
    Extract All, then open the FlexWeek folder it creates.
    Running the app from inside the zip without extracting does not work.
