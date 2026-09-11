@@ -83,8 +83,12 @@ def run(case: str, root: Path) -> None:
             "document.getElementById('status').textContent.includes('Create an account')"
         )
         assert evaluate("!document.getElementById('register-screen').hidden"), "First screen is not sign-up"
+        assert evaluate("document.documentElement.dataset.theme") == "slate", "Signed-out screen is not light"
         assert evaluate("document.getElementById('login-screen').hidden"), "Log in shown on first launch"
         if case == "accounts":
+            # The vendored Figtree face must actually load, not fall back to a system font.
+            wait_for("Array.from(document.fonts).some(face => face.family.replace(/\"/g, '') === 'Figtree' "
+                     "&& face.status === 'loaded')")
             submit_identity("first_student", "register")
             add_item("class", "document.getElementById('f-title').value='School';", days=[0])
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")

@@ -651,3 +651,14 @@ test('an empty week says so and setup can be skipped without adding anything', a
   assert.equal(h.elements.get('empty-week').hidden, false);
   assert.match(h.elements.get('status').textContent, /Setup skipped/);
 });
+
+test('signed-out screens use the light theme and an account brings back its saved theme', async () => {
+  const h = harness();
+  await tick();
+  assert.equal(h.run('document.documentElement.dataset.theme'), 'slate');
+  await h.login(1);
+  assert.equal(h.run('document.documentElement.dataset.theme'), 'nocturne');
+  assert.equal(h.elements.get('theme').value, 'nocturne');
+  h.run('signedOut()');
+  assert.equal(h.run('document.documentElement.dataset.theme'), 'slate');
+});
