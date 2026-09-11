@@ -96,6 +96,15 @@
     backdrop-filter: none;
   }
 }
+/* The same solid panels for a page the desktop app reopened after it stopped (theme.js). */
+:root[data-frost="off"], :root[data-frost="off"][data-theme="slate"] {
+  --surface: var(--surface-solid); --surface-elevated: var(--surface-solid); --surface-card: var(--surface-solid);
+}
+:root[data-frost="off"] :is(.top, .week-nav, .side, .auth-panel, .save-actions, .empty-week, .prefs-dialog,
+  .context-menu, .reminder-toast), :root[data-frost="off"] .prefs-dialog::backdrop {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
 
 * { box-sizing: border-box; }
 

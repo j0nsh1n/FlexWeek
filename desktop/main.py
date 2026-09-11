@@ -15,11 +15,16 @@ import contextlib
 import hashlib
 import json
 import os
+import secrets
+import shutil
 import sys
+import tempfile
+import time
+from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QStandardPaths, QTimer, QUrl
-from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QIcon
+from PySide6.QtCore import QEvent, QStandardPaths, QTimer, QUrl
+from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QIcon, QImage
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWebEngineCore import (
     QWebEngineDownloadRequest,
@@ -59,11 +64,22 @@ DESKTOP_FILE_NAME = "flexweek"
 SMOKE_FLAG = "--smoke-test"
 SMOKE_TIMEOUT_MS = 90_000
 SMOKE_POLL_MS = 250
+SMOKE_PAINT_MS = 1_000
+SMOKE_PASSED = "week shown after setup Solve"
 # The first screen only reads this once app.js and auth.js have run against the server.
 SMOKE_READY_JS = (
     "Boolean(document.getElementById('status') && "
     "document.getElementById('status').textContent.includes('Create an account'))"
 )
+# A reloaded page within this long of the last one stopping gets the native panel instead.
+PAGE_RETRY_WINDOW_S = 60.0
+RECOVERED_QUERY = "recovered=1"
+# Colors on an 8 px grid. The solved week shows 400 or more; a dead page is one flat color
+# and the bare page gradient under 100.
+PAINTED_MIN_COLORS = 200
+OFFLINE_HEADING = "FlexWeek is not responding"
+PAGE_STOPPED_HEADING = "FlexWeek stopped showing your week"
+PAGE_STOPPED_DETAIL = "Your saved week is safe. Choose Reload to open it again."
 
 
 def app_icon_path() -> Path:
@@ -91,6 +107,13 @@ def show_running_instance(name: str) -> bool:
     socket.waitForBytesWritten(INSTANCE_WAIT_MS)
     socket.disconnectFromServer()
     return True
+
+
+def painted_colors(image: QImage, step: int = 8) -> int:
+    """Distinct colors on a sparse grid of a window grab, to tell a painted page from a blank one."""
+    return len({
+        image.pixel(x, y) for x in range(0, image.width(), step) for y in range(0, image.height(), step)
+    })
 
 
 def notification_timeout_ms(tag: str) -> int:
@@ -157,24 +180,38 @@ class ShellPage(QWebEnginePage):
 
 
 class RetryPanel(QWidget):
-    """Native offline screen. No HTML, so it works when nothing loaded at all."""
+    """Native offline or page-stopped screen. No HTML, so it works when nothing loaded at all."""
 
-    def __init__(self, origin: str, on_retry) -> None:
+    def __init__(self, origin: str, on_offline_retry: Callable[[], None]) -> None:
         super().__init__()
+        self._offline_detail = f"Could not reach {origin}.\nCheck that the server is running, then reload."
+        self._on_offline_retry = on_offline_retry
+        self._on_retry = on_offline_retry
         layout = QVBoxLayout(self)
         layout.addStretch()
-        heading = QLabel("FlexWeek is not responding")
-        heading.setStyleSheet("font-size: 20px; font-weight: 600;")
-        detail = QLabel(f"Could not reach {origin}.\nCheck that the server is running, then reload.")
+        self.heading = QLabel()
+        self.heading.setStyleSheet("font-size: 20px; font-weight: 600;")
+        self.detail = QLabel()
         self.button = QPushButton("Reload")
-        self.button.clicked.connect(on_retry)
-        for widget in (heading, detail, self.button):
+        self.button.clicked.connect(lambda: self._on_retry())
+        for widget in (self.heading, self.detail, self.button):
             layout.addWidget(widget)
         layout.addStretch()
+        self.show_offline()
+
+    def show_offline(self) -> None:
+        self.heading.setText(OFFLINE_HEADING)
+        self.detail.setText(self._offline_detail)
+        self._on_retry = self._on_offline_retry
+
+    def show_page_stopped(self, on_retry: Callable[[], None]) -> None:
+        self.heading.setText(PAGE_STOPPED_HEADING)
+        self.detail.setText(PAGE_STOPPED_DETAIL)
+        self._on_retry = on_retry
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, origin: str, tray_enabled: bool | None = None) -> None:
+    def __init__(self, origin: str, tray_enabled: bool | None = None, root: str | None = None) -> None:
         super().__init__()
         self._origin = origin
         self._quitting = False
@@ -183,12 +220,13 @@ class MainWindow(QMainWindow):
         self._tray_menu: QMenu | None = None
         self._tray_hinted = False
         self._instance_server: QLocalServer | None = None
+        self._page_stopped_at: float | None = None
         self._icon = QIcon(str(app_icon_path()))
         self.setWindowTitle("FlexWeek")
         self.setWindowIcon(self._icon)
         self.resize(*WINDOW_SIZE)
 
-        root = profile_root()
+        root = root or profile_root()
         # Named profile + explicit paths: the session cookie survives a restart.
         # Parented to the application, not this window: Qt warns and can crash if
         # the profile is released while a page using it is still alive.
@@ -204,10 +242,12 @@ class MainWindow(QMainWindow):
         self._page = ShellPage(self._profile, origin, self._view)
         self._view.setPage(self._page)
         self._view.loadFinished.connect(self._on_load_finished)
+        self._page.renderProcessTerminated.connect(self._on_page_stopped)
 
         self._stack = QStackedWidget(self)
         self._stack.addWidget(self._view)
-        self._stack.addWidget(RetryPanel(origin, self.reload))
+        self._retry = RetryPanel(origin, self.reload)
+        self._stack.addWidget(self._retry)
         self.setCentralWidget(self._stack)
 
         if tray_enabled is None:
@@ -363,6 +403,14 @@ class MainWindow(QMainWindow):
         download.setDownloadFileName(target.name)
         download.accept()
 
+    def discard(self) -> None:
+        """Destroy the window, page and profile now; WebEngine writes profile files until then."""
+        self._view.setPage(None)  # type: ignore[arg-type]
+        self._page.deleteLater()
+        self._profile.deleteLater()
+        self.deleteLater()
+        QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
     def load_app(self) -> None:
         self._stack.setCurrentIndex(0)
         self._view.load(QUrl(self._origin))
@@ -370,11 +418,34 @@ class MainWindow(QMainWindow):
     def reload(self) -> None:
         self.load_app()
 
+    def recover_page(self) -> None:
+        """Reopen the page in recovery mode: solid panels, and the week solved again (see auth.js)."""
+        self._stack.setCurrentIndex(0)
+        self._view.load(QUrl(f"{self._origin}/?{RECOVERED_QUERY}"))
+
+    def _on_page_stopped(self, status: QWebEnginePage.RenderProcessTerminationStatus, exit_code: int) -> None:
+        # Qt shows a blank window and no message when the page process dies, so reopen the page
+        # once; if it stops again soon after, say so instead of reloading forever.
+        if status == QWebEnginePage.RenderProcessTerminationStatus.NormalTerminationStatus:
+            return
+        print(f"FlexWeek: the page stopped ({status.name}, exit code {exit_code}).", file=sys.stderr)
+        now = time.monotonic()
+        again = self._page_stopped_at is not None and now - self._page_stopped_at < PAGE_RETRY_WINDOW_S
+        self._page_stopped_at = now
+        if again:
+            self._retry.show_page_stopped(self.recover_page)
+            self._stack.setCurrentIndex(1)
+            return
+        # Qt is still tearing the dead process down while this signal runs.
+        QTimer.singleShot(0, self.recover_page)
+
     def _on_load_finished(self, ok: bool) -> None:
         if self._page.sent_to_browser:
             # A blocked external link also reports failure; the window is fine.
             self._page.clear_external_flag()
             return
+        if not ok:
+            self._retry.show_offline()
         self._stack.setCurrentIndex(0 if ok else 1)
 
 
@@ -388,15 +459,42 @@ def smoke_report_path(argv: list[str]) -> Path | None:
     return Path(argv[index + 1])
 
 
-class SmokeTest:
-    """Proves a packaged build starts on a fresh machine, then quits.
+def smoke_flow(username: str) -> list[tuple[str, str, str | None]]:
+    """(stage, condition that shows it was reached, JavaScript that moves on) for a new account."""
+    return [
+        ("first screen", SMOKE_READY_JS,
+         f"document.getElementById('register-username').value = {json.dumps(username)};"
+         f"document.getElementById('register-password').value = {json.dumps(secrets.token_urlsafe(18))};"
+         "document.querySelector('#register-form button[type=submit]').click();"),
+        ("setup school step", "document.getElementById('setup-dialog').open && "
+         "!document.getElementById('setup-school').hidden",
+         "document.getElementById('setup-next').click();"),
+        ("setup sports step", "!document.getElementById('setup-sports').hidden",
+         "document.getElementById('setup-skip').click();"),
+        ("setup homework step", "!document.getElementById('setup-homework').hidden",
+         "document.getElementById('setup-homework-title').value = 'Math worksheet';"
+         "document.getElementById('setup-next').click();"),
+        ("setup summary", "document.getElementById('setup-next').textContent === 'Add to my week and Solve'",
+         "document.getElementById('setup-next').click();"),
+        ("setup Solve", "!document.getElementById('setup-dialog').open && "
+         "!document.getElementById('debug').hidden && Boolean(document.querySelector('.flex-block'))", None),
+    ]
 
-    Passes once the window is visible and the page has run far enough to show
-    the Create account status line. A crashed renderer or a timeout fails it.
-    Release checks run this on fresh Linux containers and the Windows runner.
+
+class SmokeTest:
+    """Proves a packaged build starts on a fresh machine and paints the week, then quits.
+
+    Past the Create account screen it registers a throwaway account (main() gives
+    smoke runs their own data directory), walks setup to "Add to my week and
+    Solve", and grabs the window: a blank or dead page fails, not just a missing
+    element. With a hosted origin it stops at the first screen instead of making
+    accounts there. A crashed renderer or a timeout fails it. Release checks run
+    this on fresh Linux containers and the Windows runner.
     """
 
-    def __init__(self, window: MainWindow, report: Path, sandbox_reason: str | None) -> None:
+    def __init__(
+        self, window: MainWindow, report: Path, sandbox_reason: str | None, walk_setup: bool = True
+    ) -> None:
         self._window = window
         self._report = report
         self._facts: dict[str, object] = {
@@ -404,12 +502,16 @@ class SmokeTest:
             "qt_platform": QApplication.platformName(),
         }
         self._done = False
+        self._flow = smoke_flow("smoke_" + secrets.token_hex(6)) if walk_setup else [
+            ("first screen", SMOKE_READY_JS, None)
+        ]
+        self._busy = False
         self._poll = QTimer(window)
         self._poll.setInterval(SMOKE_POLL_MS)
         self._poll.timeout.connect(self._check)
         window._view.loadFinished.connect(self._on_load)
         window._page.renderProcessTerminated.connect(self._on_renderer_gone)
-        QTimer.singleShot(SMOKE_TIMEOUT_MS, lambda: self._finish(False, "timed out before the first screen"))
+        QTimer.singleShot(SMOKE_TIMEOUT_MS, self._time_out)
 
     def _on_load(self, ok: bool) -> None:
         if not ok:
@@ -420,12 +522,39 @@ class SmokeTest:
     def _on_renderer_gone(self, status: object, exit_code: int) -> None:
         self._finish(False, f"renderer stopped ({status}, exit {exit_code})")
 
+    def _time_out(self) -> None:
+        waiting = self._flow[0][0] if self._flow else "the painted week"
+        self._finish(False, f"timed out waiting for {waiting}")
+
     def _check(self) -> None:
-        self._window._page.runJavaScript(SMOKE_READY_JS, self._on_ready)
+        if self._busy or not self._flow:
+            return
+        self._busy = True
+        self._window._page.runJavaScript(f"Boolean({self._flow[0][1]})", self._on_ready)
 
     def _on_ready(self, ready: object) -> None:
-        if ready and self._window.isVisible():
+        self._busy = False
+        if self._done or not ready or not self._window.isVisible():
+            return
+        stage, _condition, action = self._flow.pop(0)
+        if action is not None:
+            self._window._page.runJavaScript(action)
+        if self._flow:
+            return
+        self._poll.stop()
+        if stage == "first screen":
             self._finish(True, "first screen shown")
+            return
+        # Let the solved week reach the screen before looking at it.
+        QTimer.singleShot(SMOKE_PAINT_MS, self._check_painted)
+
+    def _check_painted(self) -> None:
+        colors = painted_colors(self._window.grab().toImage())
+        self._facts["painted_colors"] = colors
+        if colors >= PAINTED_MIN_COLORS:
+            self._finish(True, SMOKE_PASSED)
+        else:
+            self._finish(False, f"window blank after setup Solve ({colors} colors)")
 
     def _finish(self, ok: bool, stage: str) -> None:
         if self._done:
@@ -467,14 +596,17 @@ def main(argv: list[str] | None = None) -> int:
         QMessageBox.critical(None, "FlexWeek configuration", str(error))
         return 2
 
-    instance = instance_name(profile_root())
+    # A smoke run makes an account, so it gets a throwaway data directory, never the real one.
+    root = tempfile.mkdtemp(prefix="flexweek-smoke-") if report is not None else profile_root()
+    instance = instance_name(root)
     if show_running_instance(instance):
         return 0
 
+    hosted = origin is not None
     if origin is None:
         # No hosted server named, so run our own. The database lives beside the
         # browser profile, not inside the read-only application bundle.
-        database = Path(profile_root()) / "flexweek.db"
+        database = Path(root) / "flexweek.db"
         try:
             database.parent.mkdir(parents=True, exist_ok=True)
             server = LocalServer(database)
@@ -484,13 +616,16 @@ def main(argv: list[str] | None = None) -> int:
             return 3
         app.aboutToQuit.connect(server.stop)
 
-    window = MainWindow(origin)
+    window = MainWindow(origin, root=root)
     window.listen_for_instances(instance)
-    smoke = SmokeTest(window, report, sandbox_reason) if report is not None else None
+    smoke = SmokeTest(window, report, sandbox_reason, walk_setup=not hosted) if report is not None else None
     window.show()
     window.load_app()
     status = app.exec()
     del smoke
+    if report is not None:
+        window.discard()
+        shutil.rmtree(root, ignore_errors=True)
     return status
 
 

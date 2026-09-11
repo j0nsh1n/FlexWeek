@@ -92,6 +92,15 @@ test('every frosted panel turns solid when blur is unavailable or unwanted', () 
   assert.match(css, /@supports not \(\(backdrop-filter: blur\(1px\)\) or \(-webkit-backdrop-filter: blur\(1px\)\)\)/);
 });
 
+test('a page the desktop app reopened after it stopped gets the same solid panels', () => {
+  const frosted = /\n([^{}@]+)\{\s*-webkit-backdrop-filter: blur\(var\(--frost\)\)/.exec(css)[1]
+    .split(',').map(item => item.trim()).filter(Boolean);
+  assert.match(css, /:root\[data-frost="off"\], :root\[data-frost="off"\]\[data-theme="slate"\] \{\s*--surface: var\(--surface-solid\); --surface-elevated: var\(--surface-solid\); --surface-card: var\(--surface-solid\);/);
+  const cleared = /:root\[data-frost="off"\] :is\(([^)]*)\), :root\[data-frost="off"\] \.prefs-dialog::backdrop \{\s*-webkit-backdrop-filter: none;\s*backdrop-filter: none;/.exec(css);
+  assert.ok(cleared, 'recovery mode does not remove backdrop filters');
+  assert.deepEqual(cleared[1].split(',').map(item => item.trim()).sort(), [...frosted].sort());
+});
+
 test('the accent is clearly different from every category color in both themes', () => {
   const categories = Array.from(appJs.matchAll(/id: "([a-z]+)", label: "[^"]+", color: "(#[0-9a-f]{6})"/g));
   assert.equal(categories.length, 8);

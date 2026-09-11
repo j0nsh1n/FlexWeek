@@ -283,9 +283,25 @@ tar -xzf FlexWeek-Linux-x86_64.tar.gz -C /tmp/check
 XDG_DATA_HOME=/tmp/check-profile /tmp/check/FlexWeek/FlexWeek
 ```
 
-Or `FlexWeek --smoke-test report.json`, which exits 0 once Create account is on
-screen. `desktop/smoke_linux_containers.sh` does that inside stock Ubuntu 24.04
-and Debian 13 containers.
+Or `FlexWeek --smoke-test report.json`. It creates a throwaway account in a
+temporary data folder (removed afterwards, never the real profile), walks the
+first-week setup to "Add to my week and Solve", and exits 0 only when the solved
+week is on screen: the window grab must show at least 200 colors on an 8 px
+grid. A dead or blank page is one flat color, which is how 0.9.0 failed for
+testers after that button. With `FLEXWEEK_DESKTOP_ORIGIN` set it stops at the
+Create account screen instead of making accounts on that server.
+`desktop/smoke_linux_containers.sh` runs it inside stock Ubuntu 24.04 and
+Debian 13 containers; the release workflow runs it on the Linux tarball, the raw
+Linux onedir and the Windows build.
+
+**A page process that stops (0.9.1).** Qt leaves a blank window with no message
+when the page's renderer process dies. The window now reloads the page once with
+`?recovered=1`: `theme.js` swaps the frosted glass for the solid panels for that
+session, and `auth.js` signs back in and runs Solve again so the placed work and
+"What Solve did" return, with a status line saying so. If the page stops again
+within a minute, the native panel says "FlexWeek stopped showing your week" with
+a Reload button instead of reloading in a loop. The stop reason and exit code go
+to stderr. The WebEngine `recovery` probe kills the renderer to cover this.
 
 **Housekeeping.** `build_linux.sh` preserves each previous build as
 `dist/FlexWeek.previous.<timestamp>` and never prunes them, so `dist/` grows by
