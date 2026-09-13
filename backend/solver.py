@@ -27,7 +27,12 @@ TIGHT_SLACK_MIN = 3 * 60
 DANGER_SLACK_MIN = 60
 
 
-def solve(blocks: list[TimeBlock]) -> SolveTrace:
+def solve(
+    blocks: list[TimeBlock],
+    *,
+    deadlines: dict[str, tuple[int, int] | None] | None = None,
+    slack_deadlines: dict[str, tuple[int, int]] | None = None,
+) -> SolveTrace:
     """Place flexible blocks around locked ones. Pure and synchronous."""
     started = time.perf_counter()
     locked = _active_locked(blocks)
@@ -53,11 +58,16 @@ def solve(blocks: list[TimeBlock]) -> SolveTrace:
     occ_locked = _locked_occupancy(locked + spent)
     flex_by_id = {block.id: block for block in flexible}
     ids = [block.id for block in flexible]
-    deadlines = {block.id: parse_deadline(block.latest, block.days) for block in flexible}
+    parsed_deadlines = {block.id: parse_deadline(block.latest, block.days) for block in flexible}
+    if deadlines:
+        parsed_deadlines.update(deadlines)
+    slack_points = dict(parsed_deadlines)
+    if slack_deadlines:
+        slack_points.update(slack_deadlines)
     earliest = {block.id: parse_deadline(block.earliest, block.days) for block in flexible}
     lengths = {block.id: duration_to_slots(block.duration_min) for block in flexible}
     domains0 = {
-        block.id: _domain(block, occ_locked, deadlines[block.id], earliest[block.id])
+        block.id: _domain(block, occ_locked, parsed_deadlines[block.id], earliest[block.id])
         for block in flexible
     }
 
@@ -97,7 +107,7 @@ def solve(blocks: list[TimeBlock]) -> SolveTrace:
             key=lambda item: (
                 len(domains[item]),
                 flex_by_id[item].priority,
-                deadlines[item] if deadlines[item] is not None else (7, 0),
+                parsed_deadlines[item] if parsed_deadlines[item] is not None else (7, 0),
                 item,
             ),
         )
@@ -153,7 +163,7 @@ def solve(blocks: list[TimeBlock]) -> SolveTrace:
     for block in flexible:
         if block.id in best:
             continue
-        reason = _reason_for(block, occ_locked, best, flex_by_id, deadlines, earliest)
+        reason = _reason_for(block, occ_locked, best, flex_by_id, parsed_deadlines, earliest)
         unplaced.append(block.model_copy())
         moves.append(Move(block_id=block.id, reason=reason))
         explanations.append(Explanation(block_id=block.id, reason=reason, message=sentence(reason)))
@@ -169,7 +179,7 @@ def solve(blocks: list[TimeBlock]) -> SolveTrace:
             explanations.append(
                 Explanation(block_id=block.id, reason=energy_reason, message=sentence(energy_reason))
             )
-        deadline = deadlines[block.id]
+        deadline = slack_points[block.id]
         if deadline is not None:
             day = block.days[0]
             slack_min = (deadline[0] - day) * 24 * 60 + deadline[1] - start_min - block.duration_min
@@ -199,6 +209,9 @@ def reschedule_after_miss(
     missed_block_id: str,
     missed_day: int,
     previous_placed: list[TimeBlock],
+    *,
+    deadlines: dict[str, tuple[int, int] | None] | None = None,
+    slack_deadlines: dict[str, tuple[int, int]] | None = None,
 ) -> SolveTrace:
     """Mark one locked occurrence missed, solve again, and describe changed flexible placements."""
     updated: list[TimeBlock] = []
@@ -213,7 +226,7 @@ def reschedule_after_miss(
     if not found:
         raise ValueError("missed occurrence must identify a locked block on that day")
 
-    trace = solve(updated)
+    trace = solve(updated, deadlines=deadlines, slack_deadlines=slack_deadlines)
     before = _flex_positions(previous_placed)
     after = _flex_positions(trace.placed)
     changes: list[Move] = []

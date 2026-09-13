@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from backend.assignments import planned_minutes, rewrite_session, unplanned_minutes
+from backend.assignments import planned_minutes, prepare_solve, rewrite_session, unplanned_minutes
 from backend.models import (
     Assignment,
     AssignmentContent,
@@ -600,14 +600,26 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     @app.post("/api/solve")
     def post_solve(week: SolveRequest, account: Annotated[dict, Depends(user)]) -> dict:
+        ids = assignment_ids_of(week.blocks)
+        with connect(path) as db:
+            owned = require_own_assignments(db, account["id"], ids) if ids else {}
+        blocks = week.blocks
+        extra_deadlines = None
+        extra_slack = None
+        if ids:
+            if week.week_start is None:
+                raise HTTPException(422, "week_start is required when a block has assignment_id")
+            blocks, extra_deadlines, extra_slack = prepare_solve(week.blocks, week.week_start, owned)
         if week.recover is not None:
             return reschedule_after_miss(
-                week.blocks,
+                blocks,
                 week.recover.missed_block_id,
                 week.recover.missed_day,
                 week.recover.previous_placed,
+                deadlines=extra_deadlines,
+                slack_deadlines=extra_slack,
             ).model_dump()
-        return solve(week.blocks).model_dump()
+        return solve(blocks, deadlines=extra_deadlines, slack_deadlines=extra_slack).model_dump()
 
     @app.get("/api/health")
     def health() -> dict[str, bool]:

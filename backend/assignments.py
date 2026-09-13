@@ -6,7 +6,7 @@ import copy
 import hashlib
 from datetime import date, timedelta
 
-from backend.models import TimeBlock
+from backend.models import TimeBlock, parse_naive_stamp
 from backend.slots import hhmm_to_minutes, minutes_to_hhmm, parse_deadline
 
 
@@ -70,6 +70,44 @@ def _as_session(block: dict, assignment_id: str) -> None:
     block.pop("latest", None)
     block.pop("focus_minutes", None)
     block.pop("focus_sessions", None)
+
+
+def due_placement_bound(week_start: str, due: str) -> tuple[int, int] | None:
+    monday = date.fromisoformat(week_start)
+    due_day, minutes = parse_naive_stamp(due)
+    if due_day > monday + timedelta(days=6):
+        return None
+    if due_day < monday:
+        return (0, 0)
+    return ((due_day - monday).days, minutes)
+
+
+def due_slack_point(week_start: str, due: str) -> tuple[int, int]:
+    monday = date.fromisoformat(week_start)
+    due_day, minutes = parse_naive_stamp(due)
+    return ((due_day - monday).days, minutes)
+
+
+def prepare_solve(
+    blocks: list[TimeBlock],
+    week_start: str,
+    assignments: dict[str, dict],
+) -> tuple[list[TimeBlock], dict[str, tuple[int, int] | None], dict[str, tuple[int, int]]]:
+    keep: list[TimeBlock] = []
+    deadlines: dict[str, tuple[int, int] | None] = {}
+    slack: dict[str, tuple[int, int]] = {}
+    for block in blocks:
+        aid = block.assignment_id
+        if not aid:
+            keep.append(block)
+            continue
+        body = assignments[aid]
+        if body["completed"] and not block.completed:
+            continue
+        keep.append(block)
+        deadlines[block.id] = due_placement_bound(week_start, body["due"])
+        slack[block.id] = due_slack_point(week_start, body["due"])
+    return keep, deadlines, slack
 
 
 def rewrite_session(block: TimeBlock, assignment: dict) -> TimeBlock:

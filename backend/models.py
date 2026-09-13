@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from backend.weeks import FIRST_DAY, LAST_DAY
+from backend.weeks import FIRST_DAY, LAST_DAY, is_week_start
 
 BlockKind = Literal["locked", "flexible"]
 Priority = Literal[1, 2, 3, 4]
@@ -33,13 +33,19 @@ SPOTIFY_SHARE = re.compile(
 NAIVE_STAMP = re.compile(r"(\d{4}-\d{2}-\d{2})T((?:[01]\d|2[0-3]):[0-5]\d)\Z")
 
 
-def valid_naive_stamp(value: str) -> str:
+def parse_naive_stamp(value: str) -> tuple[date, int]:
     match = NAIVE_STAMP.fullmatch(value)
     if not match:
         raise ValueError("must be YYYY-MM-DDTHH:MM with no seconds or timezone")
     day = date.fromisoformat(match.group(1))
     if not FIRST_DAY <= day <= LAST_DAY:
         raise ValueError("date must be between 2000-01-01 and 2099-12-31")
+    hour, minute = map(int, match.group(2).split(":"))
+    return day, hour * 60 + minute
+
+
+def valid_naive_stamp(value: str) -> str:
+    parse_naive_stamp(value)
     return value
 
 
@@ -282,9 +288,19 @@ class RecoveryRequest(BaseModel):
 
 class SolveRequest(WeekRequest):
     recover: RecoveryRequest | None = None
+    week_start: str | None = None
+
+    @field_validator("week_start")
+    @classmethod
+    def week_start_is_a_monday(cls, value: str | None) -> str | None:
+        if value is not None and not is_week_start(value):
+            raise ValueError("week_start must be a Monday date between 2000-01-01 and 2099-12-31")
+        return value
 
     @model_validator(mode="after")
     def missed_occurrence_exists(self) -> SolveRequest:
+        if self.week_start is None and any(block.assignment_id for block in self.blocks):
+            raise ValueError("week_start is required when a block has assignment_id")
         if self.recover is None:
             return self
         matches = [block for block in self.blocks if block.id == self.recover.missed_block_id]
