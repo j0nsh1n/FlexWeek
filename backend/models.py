@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import re
+from datetime import date
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from backend.weeks import FIRST_DAY, LAST_DAY
 
 BlockKind = Literal["locked", "flexible"]
 Priority = Literal[1, 2, 3, 4]
@@ -26,6 +29,18 @@ PomodoroRole = Literal["work", "break"]
 SPOTIFY_SHARE = re.compile(
     r"https://open\.spotify\.com/(track|playlist|album|episode|show)/[A-Za-z0-9]+/?(?:[?#].*)?"
 )
+# Naive local stamp: date, T, hour:minute. No seconds, no timezone, any minute.
+NAIVE_STAMP = re.compile(r"(\d{4}-\d{2}-\d{2})T((?:[01]\d|2[0-3]):[0-5]\d)\Z")
+
+
+def valid_naive_stamp(value: str) -> str:
+    match = NAIVE_STAMP.fullmatch(value)
+    if not match:
+        raise ValueError("must be YYYY-MM-DDTHH:MM with no seconds or timezone")
+    day = date.fromisoformat(match.group(1))
+    if not FIRST_DAY <= day <= LAST_DAY:
+        raise ValueError("date must be between 2000-01-01 and 2099-12-31")
+    return value
 
 
 def valid_spotify_url(value: str | None) -> str | None:
@@ -84,6 +99,9 @@ class TimeBlock(BaseModel):
     )
     pomodoro_role: PomodoroRole | None = Field(default=None, exclude_if=lambda value: value is None)
     pomodoro_index: int | None = Field(default=None, ge=1, le=999, exclude_if=lambda value: value is None)
+    assignment_id: str | None = Field(
+        default=None, min_length=1, max_length=80, exclude_if=lambda value: value is None
+    )
 
     _spotify_url = field_validator("spotify_url")(valid_spotify_url)
 
@@ -123,6 +141,66 @@ class TimeBlock(BaseModel):
             raise ValueError(
                 "completed_day requires a completed flexible block with a start on a candidate day"
             )
+        if self.assignment_id is not None:
+            if self.latest is not None:
+                raise ValueError("a session cannot carry latest")
+            if self.focus_minutes or self.focus_sessions:
+                raise ValueError("session focus must be 0")
+            if self.kind == "flexible":
+                return self
+            if self.kind == "locked" and self.pomodoro_role == "work":
+                return self
+            raise ValueError("assignment_id is only valid on a work session or a pomodoro work chunk")
+        return self
+
+
+class Assignment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, max_length=80)
+    title: str = Field(min_length=1, max_length=80)
+    course: str | None = Field(default=None, max_length=40)
+    category: str | None = Field(default=None, max_length=32)
+    priority: Priority = 3
+    energy: Energy = "medium"
+    spotify_url: str | None = Field(default=None, max_length=500)
+    due: str
+    estimate_min: int = Field(le=7140)
+    focus_minutes: int = Field(default=0, ge=0, le=71400)
+    focus_sessions: int = Field(default=0, ge=0, le=9999)
+    completed: bool = False
+    completed_at: str | None = None
+    revision: int = Field(ge=0, le=2**53 - 1)
+
+    _spotify_url = field_validator("spotify_url")(valid_spotify_url)
+    _due = field_validator("due")(valid_naive_stamp)
+
+    @field_validator("completed_at")
+    @classmethod
+    def completed_at_stamp(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return valid_naive_stamp(value)
+
+    @field_validator("title")
+    @classmethod
+    def title_is_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("title required")
+        return value
+
+    @field_validator("estimate_min")
+    @classmethod
+    def estimate_is_slot_aligned(cls, value: int) -> int:
+        if value <= 0 or value % 15 != 0:
+            raise ValueError("estimate_min must be a positive multiple of 15")
+        return value
+
+    @model_validator(mode="after")
+    def completed_at_matches_completed(self) -> Assignment:
+        if self.completed and self.completed_at is None:
+            raise ValueError("completed_at is required when completed")
+        if not self.completed and self.completed_at is not None:
+            raise ValueError("completed_at must be null when not completed")
         return self
 
 
