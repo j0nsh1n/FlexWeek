@@ -179,6 +179,11 @@ def test_week_put_rewrites_session_copies_and_rejects_another_accounts_assignmen
         "blocks": [rewritten],
         "revision": 1,
     }
+    renamed = put_assignment(alice, assignment(title="Renamed essay", revision=1))
+    assert renamed.status_code == 200, renamed.text
+    loaded = alice.get(f"/api/week?week_start={WEEK_ONE}").json()
+    assert loaded["revision"] == 1
+    assert loaded["blocks"][0]["title"] == "Renamed essay"
     with TestClient(app) as bob:
         register(bob, "bob")
         stolen = save_week(bob, WEEK_ONE, [session("w1", "hw-essay")], 0)

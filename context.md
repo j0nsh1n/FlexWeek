@@ -1,6 +1,11 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-13. Stage 1 backend is on local branch
+  `grok/stage1-assignments-backend` (off `docs/stage1-contract` at 7fd40c4).
+  Assignments table, migration, assignment APIs, `/api/changes`, week copy
+  rewrite, solve `week_start` adapter and leftover `latest` on save. Frontend
+  Stage 1 is Claude's parallel branch. Nothing pushed.
 - Date: 2026-09-11. v0.9.1 is released (PR #8, tag at b06f897). Branch
   `feat/windows-installers` off that merge, for v0.9.2.
   `feat/frost-reference-look` (5ca38b7, restyle after the owner's reference
@@ -59,6 +64,8 @@ SQLite: users → sessions, many dated weeks keyed (user_id, week_start), one
 preference row. Default desktop
 mode uses a local per-user database; hosted mode uses the configured deployment.
 There is no automatic synchronization between those databases.
+Assignments are keyed (user_id, id) with a JSON body and revision. A
+flexible block with `assignment_id` is a work session of that assignment.
 
 ## Non-Obvious Decisions
 - A week's identity is its Monday. Blocks store a day index and derive their
@@ -156,6 +163,9 @@ There is no automatic synchronization between those databases.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-13, `grok/stage1-assignments-backend`: Stage 1 backend against the
+  approved contract. Next: Claude reviews this branch (PASS / FIX-PASS /
+  BLOCKED); owner merges. Do not push or open a PR without the owner.
 - 2026-09-11, `docs/readme-screenshots`: README screenshots in `docs/images/`
   (week light, week dark, setup), taken offscreen at 1.5x from the real app with
   a demo week and a Wednesday 16:20 clock; a readme test keeps every shown image

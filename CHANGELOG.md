@@ -6,6 +6,12 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Assignments (2026-09-13, backend). Homework is account-owned, with an exact
+  local due time, a total estimate, focus progress and its own revision. A
+  week holds work sessions that point at an assignment. GET/PUT/DELETE
+  `/api/assignments` and POST `/api/changes` land with the week save rules in
+  `docs/stage1-contract.md`. Old weekday `latest` values migrate on start and
+  are still accepted on saves.
 - Hybrid frost look (2026-09-10) in light and dark. The page sits on a soft
   gradient; the header, week bar, sidebar, sign-in card and dialogs are frosted
   glass with hairline borders; task cards and forms are more solid; the week
