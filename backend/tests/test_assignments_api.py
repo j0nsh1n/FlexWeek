@@ -266,6 +266,124 @@ def test_changes_with_one_stale_revision_stores_nothing(alice: TestClient) -> No
     assert titles == {"hw-essay": "Essay", "other": "Other"}
 
 
+def test_changes_that_delete_an_assignment_and_keep_its_session_stores_nothing(alice: TestClient) -> None:
+    assert put_assignment(alice, assignment()).status_code == 200
+    assert save_week(alice, WEEK_ONE, [session("w1", "hw-essay", days=[6])], 0).status_code == 200
+    response = alice.post(
+        "/api/changes",
+        json={
+            "weeks": [
+                {
+                    "week_start": WEEK_ONE,
+                    "blocks": [session("w1", "hw-essay", days=[6])],
+                    "revision": 1,
+                }
+            ],
+            "assignments": [{"id": "hw-essay", "assignment": None, "revision": 1}],
+        },
+        headers=WRITE,
+    )
+    assert response.status_code == 422
+    assert alice.get(f"/api/assignments?week_start={WEEK_ONE}").json()["assignments"][0]["id"] == "hw-essay"
+    saved = alice.get(f"/api/week?week_start={WEEK_ONE}").json()
+    assert saved["revision"] == 1
+    assert saved["blocks"][0]["id"] == "w1"
+    assert saved["blocks"][0]["assignment_id"] == "hw-essay"
+
+
+def test_resaving_the_week_get_returned_after_delete_keeps_the_revision(alice: TestClient) -> None:
+    school = {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 390,
+        "days": [0, 1, 2, 3, 4],
+        "priority": 1,
+        "energy": "medium",
+        "start": "08:00",
+    }
+    assert put_assignment(alice, assignment()).status_code == 200
+    assert save_week(alice, WEEK_ONE, [school, session("w1", "hw-essay", days=[6])], 0).status_code == 200
+    deleted = alice.delete("/api/assignments/hw-essay?revision=1", headers=WRITE)
+    assert deleted.status_code == 200, deleted.text
+    loaded = alice.get(f"/api/week?week_start={WEEK_ONE}").json()
+    assert loaded["revision"] == 2
+    assert [block["id"] for block in loaded["blocks"]] == ["school"]
+    repeat = save_week(alice, WEEK_ONE, loaded["blocks"], loaded["revision"])
+    assert repeat.status_code == 200, repeat.text
+    assert repeat.json()["revision"] == 2
+    assert alice.get(f"/api/week?week_start={WEEK_ONE}").json()["revision"] == 2
+
+
+def test_changes_with_a_valid_assignment_write_and_stale_week_stores_neither(alice: TestClient) -> None:
+    assert put_assignment(alice, assignment()).status_code == 200
+    assert save_week(alice, WEEK_ONE, [session("w1", "hw-essay", days=[6])], 0).status_code == 200
+    moved = assignment(title="Moved")
+    moved.pop("revision")
+    response = alice.post(
+        "/api/changes",
+        json={
+            "weeks": [
+                {
+                    "week_start": WEEK_ONE,
+                    "blocks": [session("w1", "hw-essay", days=[0])],
+                    "revision": 0,
+                }
+            ],
+            "assignments": [{"id": "hw-essay", "assignment": moved, "revision": 1}],
+        },
+        headers=WRITE,
+    )
+    assert response.status_code == 409
+    assert alice.get(f"/api/assignments?week_start={WEEK_ONE}").json()["assignments"][0]["title"] == "Essay"
+    saved = alice.get(f"/api/week?week_start={WEEK_ONE}").json()
+    assert saved["revision"] == 1
+    assert saved["blocks"][0]["days"] == [6]
+
+
+def test_changes_restores_every_removed_session_after_assignment_delete(alice: TestClient) -> None:
+    assert put_assignment(alice, assignment()).status_code == 200
+    assert save_week(alice, WEEK_ONE, [session("w1", "hw-essay", days=[6])], 0).status_code == 200
+    assert save_week(alice, WEEK_TWO, [session("w2", "hw-essay", days=[0])], 0).status_code == 200
+    deleted = alice.delete("/api/assignments/hw-essay?revision=1", headers=WRITE)
+    assert deleted.status_code == 200, deleted.text
+    body = deleted.json()
+    restored = assignment()
+    restored.pop("revision")
+    weeks = [
+        {
+            "week_start": item["week_start"],
+            "blocks": body["removed_sessions"][item["week_start"]],
+            "revision": item["revision"],
+        }
+        for item in body["changed_weeks"]
+    ]
+    response = alice.post(
+        "/api/changes",
+        json={
+            "weeks": weeks,
+            "assignments": [{"id": "hw-essay", "assignment": restored, "revision": 0}],
+        },
+        headers=WRITE,
+    )
+    assert response.status_code == 200, response.text
+    one = alice.get(f"/api/week?week_start={WEEK_ONE}").json()
+    two = alice.get(f"/api/week?week_start={WEEK_TWO}").json()
+    assert [block["id"] for block in one["blocks"]] == ["w1"]
+    assert [block["id"] for block in two["blocks"]] == ["w2"]
+    assert one["blocks"][0]["assignment_id"] == "hw-essay"
+    assert two["blocks"][0]["assignment_id"] == "hw-essay"
+    listed = alice.get(f"/api/assignments?week_start={WEEK_ONE}").json()["assignments"]
+    assert listed[0]["id"] == "hw-essay"
+    assert listed[0]["revision"] == 1
+
+
+def test_delete_without_the_custom_request_header_is_403(alice: TestClient) -> None:
+    assert put_assignment(alice, assignment()).status_code == 200
+    assert alice.delete("/api/assignments/hw-essay?revision=1").status_code == 403
+    assert alice.get(f"/api/assignments?week_start={WEEK_ONE}").json()["assignments"][0]["id"] == "hw-essay"
+
+
 def test_one_thousand_assignments_is_the_limit(alice: TestClient, database: Path) -> None:
     assert put_assignment(alice, assignment()).status_code == 200
     user_id = alice.get("/api/auth/me").json()["id"]

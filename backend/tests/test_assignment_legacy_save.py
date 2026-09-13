@@ -108,6 +108,26 @@ def test_a_later_latest_save_does_not_change_an_existing_assignment(client: Test
     assert body["revision"] == 1
 
 
+def test_a_stale_latest_save_leaves_no_new_assignment(client: TestClient) -> None:
+    school = {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 390,
+        "days": [0],
+        "start": "08:00",
+    }
+    first = save(client, [school], 0)
+    assert first.status_code == 200, first.text
+    assert first.json()["revision"] == 1
+    stale = save(client, [flex_with_latest()], 0)
+    assert stale.status_code == 409
+    assert client.get(f"/api/assignments?week_start={WEEK}").json() == {"assignments": []}
+    saved = client.get(f"/api/week?week_start={WEEK}").json()
+    assert saved["revision"] == 1
+    assert [block["id"] for block in saved["blocks"]] == ["school"]
+
+
 def test_assignment_id_and_latest_together_are_rejected(client: TestClient) -> None:
     response = save(client, [flex_with_latest(assignment_id=AID)], 0)
     assert response.status_code == 422

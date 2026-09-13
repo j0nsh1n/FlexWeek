@@ -164,8 +164,9 @@ flexible block with `assignment_id` is a work session of that assignment.
 
 ## Session Handoff
 - 2026-09-13, `grok/stage1-assignments-backend`: Stage 1 backend against the
-  approved contract. Next: Claude reviews this branch (PASS / FIX-PASS /
-  BLOCKED); owner merges. Do not push or open a PR without the owner.
+  approved contract. Claude reviewed 3dee825 FIX-PASS: deletes before week
+  writes in /api/changes, canonical week JSON on delete/migrate, one-pass
+  planned minutes. Next: Claude re-reviews. Do not push without the owner.
 - 2026-09-11, `docs/readme-screenshots`: README screenshots in `docs/images/`
   (week light, week dark, setup), taken offscreen at 1.5x from the real app with
   a demo week and a Wednesday 16:20 clock; a readme test keeps every shown image

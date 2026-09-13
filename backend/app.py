@@ -16,7 +16,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from backend.assignments import (
     legacy_session,
-    planned_minutes,
+    planned_minutes_by_id,
     prepare_solve,
     rewrite_session,
     unplanned_minutes,
@@ -205,7 +205,12 @@ def delete_assignment(db: sqlite3.Connection, user_id: int, assignment_id: str, 
         new_revision = week["revision"] + 1
         db.execute(
             "UPDATE weeks SET blocks = ?, revision = ? WHERE user_id = ? AND week_start = ?",
-            (json.dumps(kept), new_revision, user_id, week["week_start"]),
+            (
+                json.dumps(kept, sort_keys=True, separators=(",", ":")),
+                new_revision,
+                user_id,
+                week["week_start"],
+            ),
         )
         changed_weeks.append({"week_start": week["week_start"], "revision": new_revision})
         removed_sessions[week["week_start"]] = removed
@@ -505,13 +510,13 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 "SELECT id, body, revision FROM assignments WHERE user_id = ?", (account["id"],)
             ).fetchall()
             weeks = list_account_weeks(db, account["id"])
+        planned_by_id = planned_minutes_by_id(weeks, week_start)
         items = []
         for row in rows:
             body = json.loads(row["body"])
             if body["completed"] and not include_completed:
                 continue
-            planned = planned_minutes(row["id"], weeks, week_start)
-            items.append(assignment_view(body, row["revision"], planned))
+            items.append(assignment_view(body, row["revision"], planned_by_id.get(row["id"], 0)))
         items.sort(key=lambda item: (item["due"], item["id"]))
         return {"assignments": items}
 
@@ -556,17 +561,6 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                         "assignment": {key: value for key, value in saved.items() if key != "revision"},
                     }
                 )
-            week_results: list[dict] = []
-            for week in batch.weeks:
-                incoming = adopt_legacy_deadlines(db, account["id"], week.week_start, week.blocks)
-                owned = require_own_assignments(db, account["id"], assignment_ids_of(incoming))
-                blocks = dump_blocks(rewrite_blocks(incoming, owned))
-                stored_blocks, revision = save_week_row(
-                    db, account["id"], week.week_start, blocks, week.revision
-                )
-                week_results.append(
-                    {"week_start": week.week_start, "blocks": stored_blocks, "revision": revision}
-                )
             for change in deletes:
                 deleted = delete_assignment(db, account["id"], change.id, change.revision)
                 assignment_results.append(
@@ -577,6 +571,17 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                         "changed_weeks": deleted["changed_weeks"],
                         "removed_sessions": deleted["removed_sessions"],
                     }
+                )
+            week_results: list[dict] = []
+            for week in batch.weeks:
+                incoming = adopt_legacy_deadlines(db, account["id"], week.week_start, week.blocks)
+                owned = require_own_assignments(db, account["id"], assignment_ids_of(incoming))
+                blocks = dump_blocks(rewrite_blocks(incoming, owned))
+                stored_blocks, revision = save_week_row(
+                    db, account["id"], week.week_start, blocks, week.revision
+                )
+                week_results.append(
+                    {"week_start": week.week_start, "blocks": stored_blocks, "revision": revision}
                 )
         return {"weeks": week_results, "assignments": assignment_results}
 

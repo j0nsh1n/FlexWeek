@@ -176,7 +176,11 @@ def migrate_assignments(db: sqlite3.Connection) -> None:
         if updated != blocks:
             db.execute(
                 "UPDATE weeks SET blocks = ? WHERE user_id = ? AND week_start = ?",
-                (json.dumps(updated), row["user_id"], row["week_start"]),
+                (
+                    json.dumps(updated, sort_keys=True, separators=(",", ":")),
+                    row["user_id"],
+                    row["week_start"],
+                ),
             )
     db.execute("COMMIT")
 

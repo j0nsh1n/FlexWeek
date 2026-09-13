@@ -142,15 +142,17 @@ def rewrite_session(block: TimeBlock, assignment: dict) -> TimeBlock:
     )
 
 
-def planned_minutes(assignment_id: str, weeks: list[tuple[str, list[dict]]], from_week: str) -> int:
-    total = 0
+def planned_minutes_by_id(weeks: list[tuple[str, list[dict]]], from_week: str) -> dict[str, int]:
+    totals: dict[str, int] = {}
     for week_start, blocks in weeks:
         if week_start < from_week:
             continue
         for block in blocks:
-            if block.get("assignment_id") == assignment_id and not block.get("completed"):
-                total += int(block["duration_min"])
-    return total
+            aid = block.get("assignment_id")
+            if not aid or block.get("completed"):
+                continue
+            totals[aid] = totals.get(aid, 0) + int(block["duration_min"])
+    return totals
 
 
 def unplanned_minutes(estimate_min: int, focus_minutes: int, planned: int) -> int:
