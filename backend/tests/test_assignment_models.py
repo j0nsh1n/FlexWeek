@@ -143,7 +143,7 @@ def test_flexible_session_and_pomodoro_work_chunk_may_carry_assignment_id() -> N
 
 def test_models_module_does_not_import_fastapi() -> None:
     tree = ast.parse((ROOT / "backend" / "models.py").read_text())
-    imported = []
+    imported: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             imported.extend(alias.name.split(".", 1)[0] for alias in node.names)

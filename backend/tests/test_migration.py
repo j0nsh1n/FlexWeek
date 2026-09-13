@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -57,10 +58,53 @@ def test_initialize_twice_migrates_a_legacy_week_without_losing_it(tmp_path: Pat
         legacy = db.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'weeks_legacy'"
         ).fetchall()
+        stored = db.execute("SELECT id, body, revision FROM assignments WHERE user_id = 1").fetchall()
 
     assert len(rows) == 1
     user_id, week_start, blocks, revision = rows[0]
-    assert (user_id, blocks, revision) == (1, LEGACY_JSON, 4)
+    aid = "a-" + hashlib.sha256(f"{week_start}:hw-tuesday".encode()).hexdigest()[:32]
+    due_day = date.fromisoformat(week_start) + timedelta(days=1)
+    assert (user_id, revision) == (1, 4)
+    assert json.loads(blocks) == [
+        {
+            "id": "hw-tuesday",
+            "title": "History essay",
+            "kind": "flexible",
+            "duration_min": 45,
+            "days": [1],
+            "priority": 2,
+            "energy": "low",
+            "earliest": None,
+            "start": None,
+            "course": "History",
+            "assignment_id": aid,
+        }
+    ]
+    assert stored == [
+        (
+            aid,
+            json.dumps(
+                {
+                    "category": None,
+                    "completed": False,
+                    "completed_at": None,
+                    "course": "History",
+                    "due": f"{due_day.isoformat()}T20:00",
+                    "energy": "low",
+                    "estimate_min": 45,
+                    "focus_minutes": 0,
+                    "focus_sessions": 0,
+                    "id": aid,
+                    "priority": 2,
+                    "spotify_url": None,
+                    "title": "History essay",
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+            1,
+        )
+    ]
     assert date.fromisoformat(week_start).weekday() == 0
     assert legacy == []
 

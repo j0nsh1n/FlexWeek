@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 from collections.abc import Iterator
 from datetime import date, timedelta
@@ -86,6 +87,14 @@ def flex(block_id: str, **overrides) -> dict:
     }
     block.update(overrides)
     return block
+
+
+def migrated_session(block: dict, week_start: str = WEEK) -> dict:
+    body = {key: value for key, value in block.items() if key != "latest"}
+    body["assignment_id"] = "a-" + hashlib.sha256(f"{week_start}:{block['id']}".encode()).hexdigest()[:32]
+    body.pop("focus_minutes", None)
+    body.pop("focus_sessions", None)
+    return body
 
 
 def cookie_attrs(response) -> dict[str, str]:
@@ -224,7 +233,11 @@ def test_two_accounts_are_isolated(app: FastAPI, alice: TestClient) -> None:
             headers=WRITE,
         )
         assert stale.status_code == 409
-        assert alice.get("/api/week").json() == {"week_start": WEEK, "blocks": [mine], "revision": 1}
+        assert alice.get("/api/week").json() == {
+            "week_start": WEEK,
+            "blocks": [migrated_session(mine)],
+            "revision": 1,
+        }
         assert bob.get("/api/week").json() == {"week_start": WEEK, "blocks": [theirs], "revision": 1}
 
         assert alice.put("/api/preferences", json=preferences("slate"), headers=WRITE).status_code == 200
@@ -330,7 +343,7 @@ def test_accounts_and_weeks_survive_restart(tmp_path: Path) -> None:
         assert resumed.json()["username"] == "alice"
         assert second.get("/api/week", headers=session_header).json() == {
             "week_start": WEEK,
-            "blocks": blocks,
+            "blocks": [migrated_session(flex("a"))],
             "revision": 1,
         }
         assert login(second, "alice").status_code == 200

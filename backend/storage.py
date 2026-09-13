@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import secrets
 import sqlite3
 import time
@@ -9,6 +10,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from backend.assignments import migrate_blocks
 from backend.weeks import current_week_start
 
 SESSION_SECONDS = 7 * 24 * 60 * 60
@@ -39,6 +41,13 @@ WEEKS_TABLE = """
         user_id INTEGER NOT NULL REFERENCES users(id), week_start TEXT NOT NULL,
         blocks TEXT NOT NULL DEFAULT '[]', revision INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (user_id, week_start)
+    )
+"""
+ASSIGNMENTS_TABLE = """
+    CREATE TABLE IF NOT EXISTS assignments (
+        user_id INTEGER NOT NULL REFERENCES users(id), id TEXT NOT NULL,
+        body TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (user_id, id)
     )
 """
 
@@ -148,6 +157,30 @@ def allow_system_theme(db: sqlite3.Connection) -> None:
     db.execute("COMMIT")
 
 
+def migrate_assignments(db: sqlite3.Connection) -> None:
+    """Turn leftover flexible blocks and pomodoro groups into assignments. A no-op on a second start."""
+    tables = {row["name"] for row in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    if "weeks" not in tables:
+        return
+    db.execute("BEGIN IMMEDIATE")
+    rows = db.execute("SELECT user_id, week_start, blocks FROM weeks").fetchall()
+    for row in rows:
+        blocks = json.loads(row["blocks"])
+        updated, created = migrate_blocks(row["week_start"], blocks)
+        for body in created:
+            db.execute(
+                """INSERT INTO assignments(user_id, id, body, revision) VALUES (?, ?, ?, 1)
+                ON CONFLICT(user_id, id) DO NOTHING""",
+                (row["user_id"], body["id"], json.dumps(body, sort_keys=True, separators=(",", ":"))),
+            )
+        if updated != blocks:
+            db.execute(
+                "UPDATE weeks SET blocks = ? WHERE user_id = ? AND week_start = ?",
+                (json.dumps(updated), row["user_id"], row["week_start"]),
+            )
+    db.execute("COMMIT")
+
+
 def initialize(path: Path) -> None:
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     path.touch(mode=0o600, exist_ok=True)
@@ -163,6 +196,7 @@ def initialize(path: Path) -> None:
                 expires INTEGER NOT NULL
             );
             {WEEKS_TABLE};
+            {ASSIGNMENTS_TABLE};
             {PREFERENCES_TABLE};
             CREATE TABLE IF NOT EXISTS auth_attempts (
                 key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL
@@ -171,6 +205,7 @@ def initialize(path: Path) -> None:
         date_legacy_weeks(db)
         migrate_preferences(db)
         allow_system_theme(db)
+        migrate_assignments(db)
 
 
 def create_session(db: sqlite3.Connection, user_id: int) -> str:
