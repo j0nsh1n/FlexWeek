@@ -1,9 +1,7 @@
 # Contract: Stage 1 — assignments across weeks, exact deadlines, focus completion, timer lifetime, undo
 
-Status: proposed 2026-09-13 for roadmap Stage 1 of the student experience
-revision, with the owner's decisions below recorded. The design needs the
-owner's approval. On approval, the spec.md changes listed at the end land in
-the same change.
+Status: approved by the owner 2026-09-13 for roadmap Stage 1 of the student
+experience revision. spec.md is updated to match in the same change.
 
 Grok builds the backend parts and Claude builds the frontend parts against this
 file at the same time. Neither side changes it alone.
@@ -110,7 +108,7 @@ backend converts each session's assignment `due` against the week being solved:
 
 | Method | Path | Behavior |
 |---|---|---|
-| GET | `/api/assignments?week_start=YYYY-MM-DD` | `{"assignments": [...]}`: every assignment not completed, plus those completed in the last 28 days, ordered by `due`. Each also carries `planned_min` and `unplanned_min` for that week. `week_start` follows the Monday rule. |
+| GET | `/api/assignments?week_start=YYYY-MM-DD` | `{"assignments": [...]}`: every assignment not completed, ordered by `due`; `include_completed=true` adds every completed one. Each also carries `planned_min` and `unplanned_min` for that week. `week_start` follows the Monday rule. |
 | PUT | `/api/assignments/{id}` | A body with `revision` 0 creates it, stored at revision 1; otherwise it updates with a revision check (409 on mismatch). An identical body returns 200 with the revision unchanged, checked before the revision, as for weeks. |
 | DELETE | `/api/assignments/{id}?revision=N` | 409 on a stale revision, 404 when unknown. Removes the assignment's sessions from every week of the account in the same transaction. Returns `changed_weeks` with their new revisions, and `removed_sessions` by `week_start` so undo can put them back. |
 | PUT | `/api/week` | Every `assignment_id` must name an assignment of this account (422, without revealing whether the id exists elsewhere). Session copies are rewritten from the assignment before the identical-save comparison, and the rewritten blocks are what is stored and returned. |
@@ -308,10 +306,12 @@ All client-side, using the endpoints above.
   `FlexWeek-Windows-x64-Setup.exe`, with `FlexWeek-Windows-x64.msi` for schools
   (spec.md "Downloads", the Deployment note, and the download-names criterion).
 
-## Details proposed for the owner to confirm
+## Details confirmed by the owner (2026-09-13)
 
 - **Finished** leaves later sessions stored but unplaced, rather than deleting
   them.
 - Deleting an assignment deletes its sessions in every week.
 - A save that still uses old `latest` never changes an existing assignment.
-- Assignments completed more than 28 days ago are left out of the list.
+- Hiding assignments completed more than 28 days ago was not accepted. The list
+  leaves out completed assignments unless the client asks with
+  `include_completed=true`, which returns all of them.

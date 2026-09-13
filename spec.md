@@ -27,9 +27,25 @@ superseded by the expanded roadmap.
 Contract for the finished app:
 
 - A week is a set of `TimeBlock`s: `locked` blocks have a fixed `start`;
-  `flexible` blocks have a `duration_min` and a deadline (`latest`) and are
-  placed by the solver.
-- Optional block fields the API and storage already keep: `category`,
+  `flexible` blocks are work sessions with a `duration_min` that the solver
+  places.
+- Homework is an account-owned assignment that outlives any one week: `title`,
+  an exact `due` (naive local `YYYY-MM-DDTHH:MM`, any minute), `estimate_min`,
+  progress (`focus_minutes`, `focus_sessions`) and completion (`completed`,
+  `completed_at`), with its own revision. A work session points at its
+  assignment with `assignment_id` and takes its title, deadline, priority,
+  energy, course, category and Spotify link from it. One assignment can have
+  sessions in several weeks. Details live in `docs/stage1-contract.md`.
+- The solver stays day-index pure. Before solving, the backend turns an
+  assignment's `due` into the week's bound: a due time inside the week bounds
+  that day, a due date after the week adds no bound, and a due date before the
+  week leaves the session unplaced with `DEADLINE_MISS`.
+- Focus minutes never complete anything. Finishing an assignment, or adding time
+  to it, is the student's explicit choice when a session ends.
+- Old weekday deadlines (`latest`, `"Thursday 21:00"` or `"21:00"`) migrate once
+  into assignments on start and are still accepted on saves. A save that uses
+  them never changes an existing assignment.
+- Optional block fields the API and storage keep: `assignment_id`, `category`,
   `completed`, `completed_day`, `missed_days`, `spotify_url`, `focus_sessions`,
   `focus_minutes`, and pomodoro split fields (`pomodoro_parent_id`,
   `pomodoro_role`, `pomodoro_index`). `completed_day` is only valid on a
@@ -74,11 +90,13 @@ space opens an Add dialog for that range.
 
 Downloads from GitHub Releases:
 
-- **Download for Windows.** `FlexWeek-Windows-x64.zip`
+- **Download for Windows.** `FlexWeek-Windows-x64-Setup.exe`
 - **Download for Linux.** `FlexWeek-Linux-x86_64.tar.gz`
 
-Windows: extract the zip first; running from inside the zip does not work.
-Until the app is code-signed, SmartScreen is More info, then Run anyway.
+Windows: `FlexWeek-Windows-x64-Setup.exe` installs for the student's account
+without an administrator; `FlexWeek-Windows-x64.msi` installs for every account
+on a PC, for schools and IT. Until the app is code-signed, SmartScreen is More
+info, then Run anyway.
 Linux: 64-bit desktop (GNOME, KDE Plasma, Cinnamon, Xfce), glibc 2.38 or
 newer, OpenGL or EGL. The X11 cursor helper is inside the archive. A shippable
 Linux tarball is built on Ubuntu 24.04, not on a newer-glibc Fedora host.
@@ -102,12 +120,16 @@ Current account/API contract:
 | GET | `/api/auth/me` | Current account; 401 when absent/expired |
 | GET/PUT | `/api/week` | One dated week of the account, with revision-checked saves |
 | GET | `/api/weeks` | The `week_start` dates this account has saved, ascending |
+| GET | `/api/assignments` | Open assignments with planned and unplanned minutes for a `week_start`; completed ones only when asked |
+| PUT/DELETE | `/api/assignments/{id}` | Revision-checked create, update and delete; delete removes its sessions from every week |
+| POST | `/api/changes` | Several week and assignment writes, all or nothing |
 | GET/PUT | `/api/preferences` | Theme, reminders, timers, alarms, Spotify default |
-| POST | `/api/solve` | Authenticated week in, SolveTrace out; no storage mutation |
+| POST | `/api/solve` | Authenticated week and its `week_start` in, SolveTrace out; no storage mutation |
 | GET | `/api/health` | Public health response |
 
-`POST /api/solve` accepts `{ "blocks": [...] }` and an optional `recover`
-object for a missed locked occurrence. The solve trace contains `placed`,
+`POST /api/solve` accepts `{ "blocks": [...], "week_start": "YYYY-MM-DD" }` and
+an optional `recover` object for a missed locked occurrence. `week_start` is
+required when any block carries `assignment_id`. The solve trace contains `placed`,
 `unplaced`, `moves`, `explanations`, `failed_constraints`, `solve_ms`,
 `complete`. Demo endpoints are removed. Test-only seed JSON remains.
 Writes require `X-FlexWeek-Request: 1`; browser origins must match
@@ -133,8 +155,10 @@ and derive their calendar date, so the solver stays day-index pure.
 A week has at most 100 uniquely identified blocks; titles 1–80,
 course names at most 40, durations positive multiples of 15 up to 7140 minutes,
 and unique day indices. Explicit starts are on the visible grid and end by
-23:00. Deadlines/earliest bounds use full English weekday plus HH:MM, or HH:MM.
-API write bodies are capped at 256 KiB.
+23:00. An assignment's `due` is a naive local `YYYY-MM-DDTHH:MM` between
+2000-01-01 and 2099-12-31; `earliest` bounds and legacy `latest` values use a
+full English weekday plus HH:MM, or HH:MM. An account holds at most 1000
+assignments. API write bodies are capped at 256 KiB.
 
 Preferences store `theme` as `system`, `slate` or `nocturne`; the menus label
 them System, Light and Dark, so Light is stored as `slate` and Dark as
@@ -158,13 +182,16 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
 - Frameworks, pinned in `requirements.txt`: FastAPI 0.141.1,
   uvicorn[standard] 0.52.4, pytest 9.1.1, httpx 0.28.1, ruff 0.16.6, mypy 2.3.1, Pydantic 2.13.5.
 - Storage: SQLite at `FLEXWEEK_DATABASE` (default `var/flexweek.db`), with users,
-  sessions, weeks keyed `(user_id, week_start)`, preferences and short-lived
-  auth-attempt counters. Schema creation is additive on startup; related writes
+  sessions, weeks keyed `(user_id, week_start)`, assignments keyed
+  `(user_id, id)`, preferences and short-lived auth-attempt counters. Schema creation is additive on startup; related writes
   use transactions. The pre-dated single-week table migrates on first start
   inside one explicit transaction, stamping the existing row with the Monday of
   that day; it is idempotent and never drops a row. A preferences table from
   before the System theme is rebuilt once on start in one transaction: stored
-  `slate` and `nocturne` are kept and any other value becomes `system`. Browser
+  `slate` and `nocturne` are kept and any other value becomes `system`. Flexible
+  blocks without `assignment_id`, and pomodoro chunk groups, migrate once on
+  start into assignments with deterministic ids, inside one transaction and
+  without changing week revisions (`docs/stage1-contract.md`). Browser
   localStorage is read only for explicit legacy import, then removed on success.
 - Major components:
   - `backend/models.py`. Pydantic models (`TimeBlock`, `Move`, `SolveTrace`,
@@ -183,8 +210,9 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
     interaction and explanation display and **never reimplements placement**.
   - `desktop/`. PySide6 window, bundled uvicorn, packaging scripts, and
     isolated WebEngine probes.
-- Time model: local `HH:MM` strings and Mon–Sun day indices, assumed
-  America/Los_Angeles. No timezone conversion math anywhere in v1.
+- Time model: local `HH:MM` strings and Mon–Sun day indices, plus naive local
+  `YYYY-MM-DDTHH:MM` assignment deadlines, assumed America/Los_Angeles. No
+  timezone conversion math anywhere in v1.
 - Slot grid: Mon–Sun 06:00–23:00, 15-minute slots, 68/day × 7 = 476/week.
   Overlap uses half-open ranges `[start, end)`. One `overlaps()` helper. There
   is no duplicate date math.
@@ -195,9 +223,9 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
   Python install; its database sits beside the browser profile in the user data
   directory. `FLEXWEEK_DESKTOP_ORIGIN` (or `FLEXWEEK_ORIGIN`) points that window
   at a hosted deployment instead, and an invalid value is an error rather than a
-  silent fall back to local. Windows zip is built on GitHub Actions
-  (`.github/workflows/release-windows.yml`); extracting and running it on a
-  real PC is unverified here. Production requires HTTPS via FLEXWEEK_ORIGIN and
+  silent fall back to local. The Windows installers are built on GitHub
+  Actions (`.github/workflows/release-windows.yml`), which installs, opens and
+  uninstalls each one; running them on a real PC is unverified here. Production requires HTTPS via FLEXWEEK_ORIGIN and
   persistent SQLite storage.
 - GitHub Actions: `.github/workflows/verify.yml` is the source gate (mypy, not
   pyright). `.github/workflows/codeql.yml` runs CodeQL on Python and JavaScript.
@@ -228,7 +256,10 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
 - Failed saves retain in-memory drafts with retry, download and reload controls.
   Stale revisions never silently overwrite newer data. Session loss hides all
   private content; a draft can restore only after the same account signs in.
-  Explicit sign-out discards drafts after confirmation.
+  Explicit sign-out discards drafts after confirmation. A running focus timer is
+  kept in `sessionStorage` per account with ids and times only, never assignment
+  text; undo history lives in page memory and clears on sign-out or account
+  change.
 - Demo data is anonymized: no real student names, schools, or addresses, and no
   copyrighted syllabus PDFs in the repo.
 - License is **GPL-3.0** (`LICENSE`); the README and the page footer must agree
@@ -293,7 +324,11 @@ The commands it runs, each of which must exit 0:
 - [ ] A pomodoro parent cannot be stored with the chunks split from it.
 - [ ] Marking a locked occurrence missed reshuffles remaining flexible work and
       leaves sleep intact.
-- [ ] Download names are `FlexWeek-Windows-x64.zip` and
+- [ ] A student enters homework due next Tuesday at 11:59 p.m., works on it
+      this week and next, ends a focus session without completing it, switches
+      weeks without losing the timer, and undoes an accidental delete or replan.
+- [ ] Download names are `FlexWeek-Windows-x64-Setup.exe` (with
+      `FlexWeek-Windows-x64.msi` for schools) and
       `FlexWeek-Linux-x86_64.tar.gz`.
 - [ ] A public Render URL loads the app and a judge can follow the README.
 - [ ] `scripts/verify.py` exits 0 (`ruff check .`, `mypy backend`, and
