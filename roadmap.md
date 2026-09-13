@@ -183,8 +183,12 @@ desktop shell is proposed; shell selection follows compatibility testing.
 - Status: [~] Normie first-open slice landed 2026-09-10 on
   `feat/normie-first-open`: Download for Windows / Linux labels, Linux tar.gz
   with README/icon/desktop entry and vendored libxcb-cursor, Windows zip with
-  SmartScreen note, Create account first, first-week setup. Hosted web URL
-  and a hand check of the Windows zip on a real PC remain.
+  SmartScreen note, Create account first, first-week setup. v0.9.1
+  (2026-09-11) reopens a page that stopped and fixed the AppImage checksum.
+  v0.9.2 (2026-09-11) replaced the Windows zip, whose shortcut pointed at the
+  build machine, with installers (Setup.exe per account, .msi for every
+  account) that CI installs, opens and uninstalls. Hosted web URL and a hand
+  check of the installers on a real PC remain.
 
 ## Student experience revision (2026-09-12)
 
