@@ -6,6 +6,7 @@ import copy
 import hashlib
 from datetime import date, timedelta
 
+from backend.models import TimeBlock
 from backend.slots import hhmm_to_minutes, minutes_to_hhmm, parse_deadline
 
 
@@ -69,6 +70,35 @@ def _as_session(block: dict, assignment_id: str) -> None:
     block.pop("latest", None)
     block.pop("focus_minutes", None)
     block.pop("focus_sessions", None)
+
+
+def rewrite_session(block: TimeBlock, assignment: dict) -> TimeBlock:
+    return block.model_copy(
+        update={
+            "title": assignment["title"],
+            "priority": assignment["priority"],
+            "energy": assignment["energy"],
+            "course": assignment["course"],
+            "category": assignment["category"],
+            "spotify_url": assignment["spotify_url"],
+        }
+    )
+
+
+def planned_minutes(assignment_id: str, weeks: list[tuple[str, list[dict]]], from_week: str) -> int:
+    total = 0
+    for week_start, blocks in weeks:
+        if week_start < from_week:
+            continue
+        for block in blocks:
+            if block.get("assignment_id") == assignment_id and not block.get("completed"):
+                total += int(block["duration_min"])
+    return total
+
+
+def unplanned_minutes(estimate_min: int, focus_minutes: int, planned: int) -> int:
+    remaining = max(0, estimate_min - focus_minutes)
+    return max(0, remaining - planned)
 
 
 def migrate_blocks(week_start: str, blocks: list[dict]) -> tuple[list[dict], list[dict]]:

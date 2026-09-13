@@ -90,7 +90,8 @@ def flex(block_id: str, **overrides) -> dict:
 
 
 def migrated_session(block: dict, week_start: str = WEEK) -> dict:
-    body = {key: value for key, value in block.items() if key != "latest"}
+    body = dict(block)
+    body["latest"] = None
     body["assignment_id"] = "a-" + hashlib.sha256(f"{week_start}:{block['id']}".encode()).hexdigest()[:32]
     body.pop("focus_minutes", None)
     body.pop("focus_sessions", None)
@@ -195,10 +196,14 @@ def test_session_cookie_is_secure_over_https(tmp_path: Path) -> None:
 def test_protected_endpoints_require_session(client: TestClient) -> None:
     assert client.get("/api/auth/me").status_code == 401
     assert client.get("/api/week").status_code == 401
+    assert client.get("/api/assignments?week_start=" + WEEK).status_code == 401
     assert client.get("/api/preferences").status_code == 401
     assert client.post("/api/solve", json={"blocks": []}, headers=WRITE).status_code == 401
     unsaved = {"week_start": WEEK, "blocks": [], "revision": 0}
     assert client.put("/api/week", json=unsaved, headers=WRITE).status_code == 401
+    assert client.put("/api/assignments/hw-essay", json={"id": "hw-essay", "title": "Essay", "due": "2026-09-15T23:59", "estimate_min": 60, "revision": 0}, headers=WRITE).status_code == 401
+    assert client.delete("/api/assignments/hw-essay?revision=1", headers=WRITE).status_code == 401
+    assert client.post("/api/changes", json={"weeks": [], "assignments": []}, headers=WRITE).status_code == 401
     assert client.put("/api/preferences", json=preferences("slate"), headers=WRITE).status_code == 401
     forged = {"Cookie": "flexweek_session=forged-token"}
     assert client.get("/api/auth/me", headers=forged).status_code == 401

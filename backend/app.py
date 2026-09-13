@@ -14,7 +14,15 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from backend.models import SolveRequest, WeekRequest, valid_spotify_url
+from backend.assignments import planned_minutes, rewrite_session, unplanned_minutes
+from backend.models import (
+    Assignment,
+    AssignmentContent,
+    SolveRequest,
+    TimeBlock,
+    WeekRequest,
+    valid_spotify_url,
+)
 from backend.solver import reschedule_after_miss, solve
 from backend.storage import (
     SESSION_SECONDS,
@@ -33,6 +41,168 @@ FRONTEND = ROOT / "frontend"
 COOKIE = "flexweek_session"
 MAX_BODY = 256 * 1024
 WEEK_START_RULE = "week_start must be a Monday date between 2000-01-01 and 2099-12-31"
+ASSIGNMENT_UNKNOWN = "assignment_id must name an assignment of this account"
+ASSIGNMENT_CONFLICT = "This assignment changed in another window. Reload before saving."
+ASSIGNMENT_LIMIT = "An account holds at most 1000 assignments"
+WEEK_CONFLICT = "This week changed in another window. Reload before saving."
+MAX_ASSIGNMENTS = 1000
+
+
+def encode_assignment(content: AssignmentContent) -> str:
+    return json.dumps(content.model_dump(), sort_keys=True, separators=(",", ":"))
+
+
+def assignment_ids_of(blocks: list[TimeBlock]) -> set[str]:
+    return {block.assignment_id for block in blocks if block.assignment_id}
+
+
+def load_assignment_rows(
+    db: sqlite3.Connection, user_id: int, ids: set[str]
+) -> dict[str, tuple[str, int]]:
+    if not ids:
+        return {}
+    placeholders = ",".join("?" * len(ids))
+    rows = db.execute(
+        f"SELECT id, body, revision FROM assignments WHERE user_id = ? AND id IN ({placeholders})",
+        (user_id, *ids),
+    ).fetchall()
+    return {row["id"]: (row["body"], row["revision"]) for row in rows}
+
+
+def load_assignment_bodies(db: sqlite3.Connection, user_id: int, ids: set[str]) -> dict[str, dict]:
+    loaded = load_assignment_rows(db, user_id, ids)
+    return {key: json.loads(body) for key, (body, _revision) in loaded.items()}
+
+
+def require_own_assignments(db: sqlite3.Connection, user_id: int, ids: set[str]) -> dict[str, dict]:
+    found = load_assignment_bodies(db, user_id, ids)
+    if found.keys() != ids:
+        raise HTTPException(422, ASSIGNMENT_UNKNOWN)
+    return found
+
+
+def rewrite_blocks(blocks: list[TimeBlock], assignments: dict[str, dict]) -> list[TimeBlock]:
+    rewritten: list[TimeBlock] = []
+    for block in blocks:
+        if block.assignment_id:
+            rewritten.append(rewrite_session(block, assignments[block.assignment_id]))
+        else:
+            rewritten.append(block)
+    return rewritten
+
+
+def rewrite_stored_blocks(blocks: list[dict], assignments: dict[str, dict]) -> list[dict]:
+    rewritten: list[dict] = []
+    for raw in blocks:
+        aid = raw.get("assignment_id")
+        if not aid or aid not in assignments:
+            rewritten.append(raw)
+            continue
+        rewritten.append(rewrite_session(TimeBlock.model_validate(raw), assignments[aid]).model_dump())
+    return rewritten
+
+
+def dump_blocks(blocks: list[TimeBlock]) -> list[dict]:
+    return [block.model_dump() for block in blocks]
+
+
+def list_account_weeks(db: sqlite3.Connection, user_id: int) -> list[tuple[str, list[dict]]]:
+    rows = db.execute("SELECT week_start, blocks FROM weeks WHERE user_id = ?", (user_id,)).fetchall()
+    return [(row["week_start"], json.loads(row["blocks"])) for row in rows]
+
+
+def assignment_view(body: dict, revision: int, planned: int) -> dict:
+    return {
+        **body,
+        "revision": revision,
+        "planned_min": planned,
+        "unplanned_min": unplanned_minutes(int(body["estimate_min"]), int(body["focus_minutes"]), planned),
+    }
+
+
+def upsert_assignment(
+    db: sqlite3.Connection, user_id: int, content: AssignmentContent, revision: int
+) -> dict:
+    encoded = encode_assignment(content)
+    row = db.execute(
+        "SELECT body, revision FROM assignments WHERE user_id = ? AND id = ?", (user_id, content.id)
+    ).fetchone()
+    stored, stored_revision = (row["body"], row["revision"]) if row else (None, 0)
+    if stored == encoded:
+        return {**content.model_dump(), "revision": stored_revision}
+    if revision != stored_revision:
+        raise HTTPException(409, ASSIGNMENT_CONFLICT)
+    if stored is None:
+        count = db.execute("SELECT COUNT(*) AS n FROM assignments WHERE user_id = ?", (user_id,)).fetchone()
+        if int(count["n"]) >= MAX_ASSIGNMENTS:
+            raise HTTPException(422, ASSIGNMENT_LIMIT)
+        db.execute(
+            "INSERT INTO assignments(user_id, id, body, revision) VALUES (?, ?, ?, 1)",
+            (user_id, content.id, encoded),
+        )
+        return {**content.model_dump(), "revision": 1}
+    db.execute(
+        "UPDATE assignments SET body = ?, revision = revision + 1 WHERE user_id = ? AND id = ?",
+        (encoded, user_id, content.id),
+    )
+    return {**content.model_dump(), "revision": revision + 1}
+
+
+def delete_assignment(db: sqlite3.Connection, user_id: int, assignment_id: str, revision: int) -> dict:
+    row = db.execute(
+        "SELECT revision FROM assignments WHERE user_id = ? AND id = ?", (user_id, assignment_id)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(404, "Assignment not found")
+    if revision != row["revision"]:
+        raise HTTPException(409, ASSIGNMENT_CONFLICT)
+    weeks = db.execute(
+        "SELECT week_start, blocks, revision FROM weeks WHERE user_id = ? ORDER BY week_start",
+        (user_id,),
+    ).fetchall()
+    changed_weeks: list[dict] = []
+    removed_sessions: dict[str, list[dict]] = {}
+    for week in weeks:
+        blocks = json.loads(week["blocks"])
+        kept = [block for block in blocks if block.get("assignment_id") != assignment_id]
+        removed = [block for block in blocks if block.get("assignment_id") == assignment_id]
+        if not removed:
+            continue
+        new_revision = week["revision"] + 1
+        db.execute(
+            "UPDATE weeks SET blocks = ?, revision = ? WHERE user_id = ? AND week_start = ?",
+            (json.dumps(kept), new_revision, user_id, week["week_start"]),
+        )
+        changed_weeks.append({"week_start": week["week_start"], "revision": new_revision})
+        removed_sessions[week["week_start"]] = removed
+    db.execute("DELETE FROM assignments WHERE user_id = ? AND id = ?", (user_id, assignment_id))
+    return {"changed_weeks": changed_weeks, "removed_sessions": removed_sessions}
+
+
+def save_week_row(
+    db: sqlite3.Connection,
+    user_id: int,
+    week_start: str,
+    blocks: list[dict],
+    revision: int,
+) -> tuple[list[dict], int]:
+    encoded = json.dumps(blocks, sort_keys=True, separators=(",", ":"))
+    row = db.execute(
+        "SELECT blocks, revision FROM weeks WHERE user_id = ? AND week_start = ?",
+        (user_id, week_start),
+    ).fetchone()
+    stored, stored_revision = (row["blocks"], row["revision"]) if row else ("[]", 0)
+    if encoded == stored:
+        return blocks, stored_revision
+    if revision != stored_revision:
+        raise HTTPException(409, WEEK_CONFLICT)
+    db.execute(
+        """INSERT INTO weeks(user_id, week_start, blocks, revision) VALUES (?, ?, ?, 1)
+        ON CONFLICT(user_id, week_start)
+        DO UPDATE SET blocks = excluded.blocks, revision = revision + 1""",
+        (user_id, week_start, encoded),
+    )
+    return blocks, revision + 1
 
 
 class Credentials(BaseModel):
@@ -57,6 +227,19 @@ class SavedWeek(WeekRequest):
         if not is_week_start(value):
             raise ValueError(WEEK_START_RULE)
         return value
+
+
+class AssignmentChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, max_length=80)
+    assignment: AssignmentContent | None
+    revision: int = Field(ge=0, le=2**53 - 1)
+
+
+class ChangesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    weeks: list[SavedWeek] = Field(default_factory=list)
+    assignments: list[AssignmentChange] = Field(default_factory=list)
 
 
 class AlarmPreference(BaseModel):
@@ -242,9 +425,18 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 "SELECT blocks, revision FROM weeks WHERE user_id = ? AND week_start = ?",
                 (account["id"], start),
             ).fetchone()
+            blocks = json.loads(row["blocks"]) if row else []
+            owned = load_assignment_bodies(
+                db,
+                account["id"],
+                {block["assignment_id"] for block in blocks if block.get("assignment_id")},
+            )
         # A week nobody has saved yet is empty, not missing: the client needs no create-then-fetch.
-        blocks = json.loads(row["blocks"]) if row else []
-        return {"week_start": start, "blocks": blocks, "revision": row["revision"] if row else 0}
+        return {
+            "week_start": start,
+            "blocks": rewrite_stored_blocks(blocks, owned),
+            "revision": row["revision"] if row else 0,
+        }
 
     @app.get("/api/weeks")
     def get_weeks(account: Annotated[dict, Depends(user)]) -> dict:
@@ -256,26 +448,101 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     @app.put("/api/week")
     def put_week(week: SavedWeek, account: Annotated[dict, Depends(user)]) -> dict:
-        blocks = [block.model_dump() for block in week.blocks]
-        encoded = json.dumps(blocks, sort_keys=True, separators=(",", ":"))
         with connect(path) as db:
             db.execute("BEGIN IMMEDIATE")
-            row = db.execute(
-                "SELECT blocks, revision FROM weeks WHERE user_id = ? AND week_start = ?",
-                (account["id"], week.week_start),
-            ).fetchone()
-            stored, revision = (row["blocks"], row["revision"]) if row else ("[]", 0)
-            if encoded == stored:
-                return {"week_start": week.week_start, "blocks": blocks, "revision": revision}
-            if week.revision != revision:
-                raise HTTPException(409, "This week changed in another window. Reload before saving.")
-            db.execute(
-                """INSERT INTO weeks(user_id, week_start, blocks, revision) VALUES (?, ?, ?, 1)
-                ON CONFLICT(user_id, week_start)
-                DO UPDATE SET blocks = excluded.blocks, revision = revision + 1""",
-                (account["id"], week.week_start, encoded),
+            owned = require_own_assignments(db, account["id"], assignment_ids_of(week.blocks))
+            blocks = dump_blocks(rewrite_blocks(week.blocks, owned))
+            stored_blocks, revision = save_week_row(
+                db, account["id"], week.week_start, blocks, week.revision
             )
-        return {"week_start": week.week_start, "blocks": blocks, "revision": week.revision + 1}
+        return {"week_start": week.week_start, "blocks": stored_blocks, "revision": revision}
+
+    @app.get("/api/assignments")
+    def get_assignments(
+        account: Annotated[dict, Depends(user)],
+        week_start: str | None = None,
+        include_completed: bool = False,
+    ) -> dict:
+        if week_start is None or not is_week_start(week_start):
+            raise HTTPException(422, WEEK_START_RULE)
+        with connect(path) as db:
+            rows = db.execute(
+                "SELECT id, body, revision FROM assignments WHERE user_id = ?", (account["id"],)
+            ).fetchall()
+            weeks = list_account_weeks(db, account["id"])
+        items = []
+        for row in rows:
+            body = json.loads(row["body"])
+            if body["completed"] and not include_completed:
+                continue
+            planned = planned_minutes(row["id"], weeks, week_start)
+            items.append(assignment_view(body, row["revision"], planned))
+        items.sort(key=lambda item: (item["due"], item["id"]))
+        return {"assignments": items}
+
+    @app.put("/api/assignments/{assignment_id}")
+    def put_assignment(
+        assignment_id: str, payload: Assignment, account: Annotated[dict, Depends(user)]
+    ) -> dict:
+        if payload.id != assignment_id:
+            raise HTTPException(422, "assignment id in the path and body must match")
+        content = AssignmentContent.model_validate(payload.model_dump(exclude={"revision"}))
+        with connect(path) as db:
+            db.execute("BEGIN IMMEDIATE")
+            return upsert_assignment(db, account["id"], content, payload.revision)
+
+    @app.delete("/api/assignments/{assignment_id}")
+    def remove_assignment(
+        assignment_id: str, account: Annotated[dict, Depends(user)], revision: int | None = None
+    ) -> dict:
+        if revision is None:
+            raise HTTPException(422, "revision is required")
+        with connect(path) as db:
+            db.execute("BEGIN IMMEDIATE")
+            return delete_assignment(db, account["id"], assignment_id, revision)
+
+    @app.post("/api/changes")
+    def post_changes(batch: ChangesRequest, account: Annotated[dict, Depends(user)]) -> dict:
+        with connect(path) as db:
+            db.execute("BEGIN IMMEDIATE")
+            assignment_results: list[dict] = []
+            deletes: list[AssignmentChange] = []
+            for change in batch.assignments:
+                if change.assignment is None:
+                    deletes.append(change)
+                    continue
+                if change.assignment.id != change.id:
+                    raise HTTPException(422, "assignment id in the path and body must match")
+                saved = upsert_assignment(db, account["id"], change.assignment, change.revision)
+                assignment_results.append(
+                    {
+                        "id": change.id,
+                        "revision": saved["revision"],
+                        "assignment": {key: value for key, value in saved.items() if key != "revision"},
+                    }
+                )
+            week_results: list[dict] = []
+            for week in batch.weeks:
+                owned = require_own_assignments(db, account["id"], assignment_ids_of(week.blocks))
+                blocks = dump_blocks(rewrite_blocks(week.blocks, owned))
+                stored_blocks, revision = save_week_row(
+                    db, account["id"], week.week_start, blocks, week.revision
+                )
+                week_results.append(
+                    {"week_start": week.week_start, "blocks": stored_blocks, "revision": revision}
+                )
+            for change in deletes:
+                deleted = delete_assignment(db, account["id"], change.id, change.revision)
+                assignment_results.append(
+                    {
+                        "id": change.id,
+                        "revision": change.revision,
+                        "assignment": None,
+                        "changed_weeks": deleted["changed_weeks"],
+                        "removed_sessions": deleted["removed_sessions"],
+                    }
+                )
+        return {"weeks": week_results, "assignments": assignment_results}
 
     @app.get("/api/preferences")
     def get_preferences(account: Annotated[dict, Depends(user)]) -> dict:

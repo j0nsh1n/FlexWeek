@@ -154,7 +154,7 @@ class TimeBlock(BaseModel):
         return self
 
 
-class Assignment(BaseModel):
+class AssignmentContent(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str = Field(min_length=1, max_length=80)
     title: str = Field(min_length=1, max_length=80)
@@ -169,7 +169,6 @@ class Assignment(BaseModel):
     focus_sessions: int = Field(default=0, ge=0, le=9999)
     completed: bool = False
     completed_at: str | None = None
-    revision: int = Field(ge=0, le=2**53 - 1)
 
     _spotify_url = field_validator("spotify_url")(valid_spotify_url)
     _due = field_validator("due")(valid_naive_stamp)
@@ -196,12 +195,16 @@ class Assignment(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def completed_at_matches_completed(self) -> Assignment:
+    def completed_at_matches_completed(self) -> AssignmentContent:
         if self.completed and self.completed_at is None:
             raise ValueError("completed_at is required when completed")
         if not self.completed and self.completed_at is not None:
             raise ValueError("completed_at must be null when not completed")
         return self
+
+
+class Assignment(AssignmentContent):
+    revision: int = Field(ge=0, le=2**53 - 1)
 
 
 class Move(BaseModel):
