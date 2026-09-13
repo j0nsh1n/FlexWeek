@@ -14,7 +14,13 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from backend.assignments import planned_minutes, prepare_solve, rewrite_session, unplanned_minutes
+from backend.assignments import (
+    legacy_session,
+    planned_minutes,
+    prepare_solve,
+    rewrite_session,
+    unplanned_minutes,
+)
 from backend.models import (
     Assignment,
     AssignmentContent,
@@ -79,6 +85,34 @@ def require_own_assignments(db: sqlite3.Connection, user_id: int, ids: set[str])
     if found.keys() != ids:
         raise HTTPException(422, ASSIGNMENT_UNKNOWN)
     return found
+
+
+def adopt_legacy_deadlines(
+    db: sqlite3.Connection, user_id: int, week_start: str, blocks: list[TimeBlock]
+) -> list[TimeBlock]:
+    adopted: list[TimeBlock] = []
+    created: list[dict] = []
+    for block in blocks:
+        if block.kind != "flexible" or block.assignment_id or not block.latest:
+            adopted.append(block)
+            continue
+        session, body = legacy_session(week_start, block)
+        exists = db.execute(
+            "SELECT 1 FROM assignments WHERE user_id = ? AND id = ?", (user_id, body["id"])
+        ).fetchone()
+        if exists is None:
+            created.append(body)
+        adopted.append(session)
+    if created:
+        count = db.execute("SELECT COUNT(*) AS n FROM assignments WHERE user_id = ?", (user_id,)).fetchone()
+        if int(count["n"]) + len(created) > MAX_ASSIGNMENTS:
+            raise HTTPException(422, ASSIGNMENT_LIMIT)
+        for body in created:
+            db.execute(
+                "INSERT INTO assignments(user_id, id, body, revision) VALUES (?, ?, ?, 1)",
+                (user_id, body["id"], encode_assignment(AssignmentContent.model_validate(body))),
+            )
+    return adopted
 
 
 def rewrite_blocks(blocks: list[TimeBlock], assignments: dict[str, dict]) -> list[TimeBlock]:
@@ -450,8 +484,9 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
     def put_week(week: SavedWeek, account: Annotated[dict, Depends(user)]) -> dict:
         with connect(path) as db:
             db.execute("BEGIN IMMEDIATE")
-            owned = require_own_assignments(db, account["id"], assignment_ids_of(week.blocks))
-            blocks = dump_blocks(rewrite_blocks(week.blocks, owned))
+            incoming = adopt_legacy_deadlines(db, account["id"], week.week_start, week.blocks)
+            owned = require_own_assignments(db, account["id"], assignment_ids_of(incoming))
+            blocks = dump_blocks(rewrite_blocks(incoming, owned))
             stored_blocks, revision = save_week_row(
                 db, account["id"], week.week_start, blocks, week.revision
             )
@@ -523,8 +558,9 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 )
             week_results: list[dict] = []
             for week in batch.weeks:
-                owned = require_own_assignments(db, account["id"], assignment_ids_of(week.blocks))
-                blocks = dump_blocks(rewrite_blocks(week.blocks, owned))
+                incoming = adopt_legacy_deadlines(db, account["id"], week.week_start, week.blocks)
+                owned = require_own_assignments(db, account["id"], assignment_ids_of(incoming))
+                blocks = dump_blocks(rewrite_blocks(incoming, owned))
                 stored_blocks, revision = save_week_row(
                     db, account["id"], week.week_start, blocks, week.revision
                 )

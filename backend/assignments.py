@@ -110,6 +110,25 @@ def prepare_solve(
     return keep, deadlines, slack
 
 
+def legacy_session(week_start: str, block: TimeBlock) -> tuple[TimeBlock, dict]:
+    raw = block.model_dump()
+    aid = migrated_assignment_id(week_start, block.id)
+    body = _assignment_body(
+        aid,
+        raw,
+        due=due_from_latest(week_start, block.latest, list(block.days)),
+        estimate_min=block.duration_min,
+        focus_minutes=block.focus_minutes,
+        focus_sessions=block.focus_sessions,
+        completed=block.completed,
+        completed_at=completed_at_for_block(week_start, raw) if block.completed else None,
+    )
+    session = block.model_copy(
+        update={"assignment_id": aid, "latest": None, "focus_minutes": 0, "focus_sessions": 0}
+    )
+    return session, body
+
+
 def rewrite_session(block: TimeBlock, assignment: dict) -> TimeBlock:
     return block.model_copy(
         update={
