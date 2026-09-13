@@ -1,6 +1,9 @@
 # context.md — FlexWeek
 
 ## Current State
+- 2026-09-12: roadmap revised with seven student-experience stages combining
+  the outsider review and Daily Scheduler comparison. Planning only; runtime
+  behavior and prior test results are unchanged.
 - Date: 2026-09-11. v0.9.1 is released (PR #8, tag at b06f897). Branch
   `feat/windows-installers` off that merge, for v0.9.2.
   `feat/frost-reference-look` (5ca38b7, restyle after the owner's reference
@@ -156,6 +159,10 @@ There is no automatic synchronization between those databases.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-12, `docs/student-experience-roadmap`: staged deadlines/focus/undo,
+  Today/mobile UX, routines/restore, adaptive planning, reminder/settings polish,
+  account/delivery readiness and student verification in roadmap.md. Next work
+  begins with Stage 1 contract reconciliation; spec.md is unchanged.
 - 2026-09-11, `docs/readme-screenshots`: README screenshots in `docs/images/`
   (week light, week dark, setup), taken offscreen at 1.5x from the real app with
   a demo week and a Wednesday 16:20 clock; a readme test keeps every shown image
