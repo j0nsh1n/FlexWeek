@@ -1,9 +1,10 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-13. Stage 2 contract is proposed on `docs/stage2-contract`
-  (`docs/stage2-contract.md`). Not approved. Do not implement until the owner
-  confirms the six decisions in that file.
+- Date: 2026-09-13. Stage 2 backend `GET /api/day` is on
+  `grok/stage2-day-backend`, using the six defaults in
+  `docs/stage2-contract.md`. Frontend Stage 2 is still unbuilt. spec.md does
+  not list `/api/day` yet.
 - Date: 2026-09-13. Student-experience Stage 1 is complete locally on
   `feat/stage1-student-experience`. The branch combines the seven-stage roadmap,
   approved contract, reviewed backend and finished frontend: exact assignment
@@ -171,10 +172,12 @@ flexible block with `assignment_id` is a work session of that assignment.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-13, `grok/stage2-day-backend`: Grok's Stage 2 slice, `GET /api/day`.
+  Claude still owns Day/Week UI, Add homework and Plan my homework copy.
+  spec.md drift: the day endpoint is not in the public API table until the
+  contract is approved. Nothing pushed.
 - 2026-09-13, `docs/stage2-contract`: proposed Stage 2 contract in
-  `docs/stage2-contract.md` (day agenda, Add homework, Plan my homework,
-  GET /api/day). Not approved. Do not implement until the owner confirms the
-  six decisions in that file. Base is `feat/stage1-student-experience` at
+  `docs/stage2-contract.md`. Base is `feat/stage1-student-experience` at
   130ee99.
 - 2026-09-13, `feat/stage1-student-experience`: locally integrates the staged
   student-experience roadmap with the approved Stage 1 contract, reviewed

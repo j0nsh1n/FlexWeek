@@ -38,3 +38,12 @@ def is_week_start(value: str) -> bool:
         return _parse(value).weekday() == 0
     except ValueError:
         return False
+
+
+def is_calendar_date(value: str) -> bool:
+    """True when value is a well-formed date in 2000-01-01..2099-12-31."""
+    try:
+        _parse(value)
+        return True
+    except ValueError:
+        return False

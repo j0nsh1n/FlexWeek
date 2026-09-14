@@ -6,6 +6,9 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Day agenda API (2026-09-13, backend). `GET /api/day?date=` returns due-soon
+  homework, that day's sessions and fixed blocks, one next action, and
+  scheduled / focus / available minutes. Rules are in `docs/stage2-contract.md`.
 - Assignments (2026-09-13, backend). Homework is account-owned, with an exact
   local due time, a total estimate, focus progress and its own revision. A
   week holds work sessions that point at an assignment. GET/PUT/DELETE

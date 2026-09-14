@@ -197,6 +197,7 @@ def test_protected_endpoints_require_session(client: TestClient) -> None:
     assert client.get("/api/auth/me").status_code == 401
     assert client.get("/api/week").status_code == 401
     assert client.get("/api/assignments?week_start=" + WEEK).status_code == 401
+    assert client.get("/api/day?date=" + WEEK).status_code == 401
     assert client.get("/api/preferences").status_code == 401
     assert client.post("/api/solve", json={"blocks": []}, headers=WRITE).status_code == 401
     unsaved = {"week_start": WEEK, "blocks": [], "revision": 0}

@@ -21,6 +21,7 @@ from backend.assignments import (
     rewrite_session,
     unplanned_minutes,
 )
+from backend.day import build_day
 from backend.models import (
     Assignment,
     AssignmentContent,
@@ -40,13 +41,14 @@ from backend.storage import (
     password_matches,
     throttle,
 )
-from backend.weeks import current_week_start, is_week_start
+from backend.weeks import current_week_start, is_calendar_date, is_week_start, monday_of
 
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
 COOKIE = "flexweek_session"
 MAX_BODY = 256 * 1024
 WEEK_START_RULE = "week_start must be a Monday date between 2000-01-01 and 2099-12-31"
+DATE_RULE = "date must be YYYY-MM-DD between 2000-01-01 and 2099-12-31"
 ASSIGNMENT_UNKNOWN = "assignment_id must name an assignment of this account"
 ASSIGNMENT_CONFLICT = "This assignment changed in another window. Reload before saving."
 ASSIGNMENT_LIMIT = "An account holds at most 1000 assignments"
@@ -484,6 +486,31 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 "SELECT week_start FROM weeks WHERE user_id = ? ORDER BY week_start", (account["id"],)
             ).fetchall()
         return {"weeks": [row["week_start"] for row in rows]}
+
+    @app.get("/api/day")
+    def get_day(account: Annotated[dict, Depends(user)], date: str | None = None) -> dict:
+        if date is None or not is_calendar_date(date):
+            raise HTTPException(422, DATE_RULE)
+        week_start = monday_of(date)
+        with connect(path) as db:
+            row = db.execute(
+                "SELECT blocks FROM weeks WHERE user_id = ? AND week_start = ?",
+                (account["id"], week_start),
+            ).fetchone()
+            blocks = json.loads(row["blocks"]) if row else []
+            owned = load_assignment_bodies(
+                db,
+                account["id"],
+                {block["assignment_id"] for block in blocks if block.get("assignment_id")},
+            )
+            assignment_rows = [
+                (json.loads(item["body"]), int(item["revision"]))
+                for item in db.execute(
+                    "SELECT body, revision FROM assignments WHERE user_id = ?", (account["id"],)
+                ).fetchall()
+            ]
+            weeks = list_account_weeks(db, account["id"])
+        return build_day(date, week_start, rewrite_stored_blocks(blocks, owned), assignment_rows, weeks)
 
     @app.put("/api/week")
     def put_week(week: SavedWeek, account: Annotated[dict, Depends(user)]) -> dict:
