@@ -99,6 +99,14 @@
         <button type="button" id="add-homework" class="add-homework"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>Add homework</button>
         <span id="now-next" class="now-next" aria-live="polite" hidden></span>
       </div>
+      <section id="unfinished-review" class="unfinished-review" aria-labelledby="unfinished-heading" hidden>
+        <div>
+          <h2 id="unfinished-heading">Unfinished homework</h2>
+          <p class="note">Keep the same homework, deadline and progress while you plan this week.</p>
+        </div>
+        <ul id="unfinished-list" class="unfinished-list"></ul>
+        <button type="button" id="unfinished-dismiss" class="secondary">Done</button>
+      </section>
       <div id="empty-week" class="empty-week" hidden>
         <div>
           <h2>This week is empty</h2>
@@ -119,6 +127,12 @@
           <details id="week-menu" class="week-menu">
             <summary>More</summary>
             <div class="week-menu-items">
+              <p id="clipboard-summary" class="menu-note">Nothing copied</p>
+              <button type="button" id="copy-day" class="secondary">Copy this day</button>
+              <button type="button" id="paste-day" class="secondary" disabled>Paste into this day</button>
+              <button type="button" id="routine-save-open" class="secondary">Save week as routine</button>
+              <button type="button" id="routine-apply-open" class="secondary">Apply routine…</button>
+              <button type="button" id="unfinished-open" class="secondary">Review unfinished homework</button>
               <button type="button" id="new-week" class="secondary">Clear week</button>
             </div>
           </details>
@@ -176,12 +190,22 @@
   <script src="/static/focus.js" defer></script>
   <script src="/static/editor.js" defer></script>
   <script src="/static/day.js" defer></script>
+  <script src="/static/reuse.js" defer></script>
+  <script src="/static/routines.js" defer></script>
+  <script src="/static/restore.js" defer></script>
   <script src="/static/setup.js" defer></script>
   <script src="/static/auth.js" defer></script>
   <div id="block-context-menu" class="context-menu" hidden role="menu">
     <button type="button" data-action="edit">Edit</button>
     <button type="button" data-action="edit-occurrence">Edit this day</button>
     <button type="button" data-action="edit-series">Edit series</button>
+    <button type="button" data-action="copy">Copy</button>
+    <button type="button" data-action="copy-occurrence">Copy this day</button>
+    <button type="button" data-action="copy-series">Copy all days</button>
+    <button type="button" data-action="paste">Paste here</button>
+    <button type="button" data-action="duplicate">Duplicate</button>
+    <button type="button" data-action="duplicate-occurrence">Duplicate this day</button>
+    <button type="button" data-action="duplicate-series">Duplicate all days</button>
     <button type="button" data-action="delete-occurrence">Remove this day</button>
     <button type="button" data-action="delete">Delete</button>
     <button type="button" data-action="toggle-completed">Toggle completed</button>
@@ -422,6 +446,21 @@
         <button type="button" id="import-file" class="secondary"><svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg>Import file</button>
         <input id="import-file-input" type="file" accept=".json,.txt,application/json,text/plain" hidden>
       </fieldset>
+      <fieldset>
+        <legend>Weekly routines</legend>
+        <p class="note">Reuse school, practice and other fixed commitments without copying homework history.</p>
+        <button type="button" id="prefs-routines" class="secondary">Manage routines</button>
+      </fieldset>
+      <fieldset>
+        <legend>Restore points</legend>
+        <p id="storage-location" class="note">Checking where backups are stored…</p>
+        <div class="restore-create">
+          <label>Name <input id="restore-label" type="text" maxlength="80" placeholder="Before finals week" /></label>
+          <button type="button" id="restore-create" class="secondary">Save restore point</button>
+        </div>
+        <p id="restore-error" class="form-error" role="alert" hidden></p>
+        <ul id="restore-list" class="restore-list"></ul>
+      </fieldset>
       <p id="prefs-error" class="form-error" role="alert" hidden></p>
       <div class="form-actions">
         <button type="submit" value="save" id="prefs-save">Save</button>
@@ -445,6 +484,52 @@
       <button type="button" id="delete-session" class="danger">Remove this session</button>
       <button type="button" id="delete-assignment" class="danger">Delete the whole homework</button>
       <button type="button" id="delete-cancel" class="secondary">Cancel</button>
+    </div>
+  </dialog>
+  <dialog id="stage3-preview-dialog" class="prefs-dialog stage3-dialog" aria-labelledby="stage3-preview-title">
+    <h2 id="stage3-preview-title">Preview changes</h2>
+    <p id="stage3-preview-summary" class="note"></p>
+    <ul id="stage3-preview-list" class="preview-list"></ul>
+    <p id="stage3-preview-error" class="form-error" role="alert" hidden></p>
+    <div class="form-actions">
+      <button type="button" id="stage3-preview-confirm">Save changes</button>
+      <button type="button" id="stage3-preview-cancel" class="secondary">Cancel</button>
+    </div>
+  </dialog>
+  <dialog id="routine-dialog" class="prefs-dialog stage3-dialog" aria-labelledby="routine-title">
+    <h2 id="routine-title">Weekly routines</h2>
+    <p class="note">Routines contain fixed commitments only. Changes in an apply preview affect that week only.</p>
+    <section class="routine-create" aria-labelledby="routine-create-title">
+      <h3 id="routine-create-title">Save this week</h3>
+      <label>Name <input id="routine-name" type="text" maxlength="80" placeholder="School week" /></label>
+      <ul id="routine-blocks" class="choice-list"></ul>
+      <button type="button" id="routine-save">Save selected fixed times</button>
+    </section>
+    <section aria-labelledby="saved-routines-title">
+      <h3 id="saved-routines-title">Saved routines</h3>
+      <label>Destination week <input id="routine-destination" type="date" min="2000-01-01" max="2099-12-31" /></label>
+      <fieldset id="routine-days" class="days"><legend>Days to copy</legend>
+        <label><input id="routine-day-0" type="checkbox" value="0" checked /> Mon</label>
+        <label><input id="routine-day-1" type="checkbox" value="1" checked /> Tue</label>
+        <label><input id="routine-day-2" type="checkbox" value="2" checked /> Wed</label>
+        <label><input id="routine-day-3" type="checkbox" value="3" checked /> Thu</label>
+        <label><input id="routine-day-4" type="checkbox" value="4" checked /> Fri</label>
+        <label><input id="routine-day-5" type="checkbox" value="5" checked /> Sat</label>
+        <label><input id="routine-day-6" type="checkbox" value="6" checked /> Sun</label>
+      </fieldset>
+      <ul id="routine-list" class="routine-list"></ul>
+    </section>
+    <p id="routine-error" class="form-error" role="alert" hidden></p>
+    <div class="form-actions"><button type="button" id="routine-close" class="secondary">Close</button></div>
+  </dialog>
+  <dialog id="restore-preview-dialog" class="prefs-dialog stage3-dialog" aria-labelledby="restore-preview-title">
+    <h2 id="restore-preview-title">Restore preview</h2>
+    <p id="restore-preview-summary"></p>
+    <div id="restore-preview-detail"></div>
+    <p id="restore-preview-error" class="form-error" role="alert" hidden></p>
+    <div class="form-actions">
+      <button type="button" id="restore-confirm" class="danger">Restore this schedule</button>
+      <button type="button" id="restore-cancel" class="secondary">Cancel</button>
     </div>
   </dialog>
   <div id="reminder-toast" class="reminder-toast" hidden role="status" aria-live="polite"></div>

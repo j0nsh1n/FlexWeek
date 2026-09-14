@@ -47,6 +47,7 @@ function signedOut(message = "Log in to open your week.", preserve = true, scree
   if (preferencesDialog && typeof preferencesDialog.close === "function") preferencesDialog.close();
   const alarmDialog = document.getElementById("alarm-dialog");
   if (alarmDialog && typeof alarmDialog.close === "function") alarmDialog.close();
+  if (typeof clearStage3State === "function") clearStage3State();
   hideContextMenu();
   if (gridGesture) clearGhost(gridGesture.lane);
   gridGesture = null;
@@ -139,6 +140,7 @@ async function loadAccount(identity) {
     setStatus(state.dirty ? "Unsaved edits restored. " + (state.conflict ? "Download your draft and reload the newer week." : "Press Retry save.") : weekStatus());
     restoreFocus();
     refreshDayData();
+    if (typeof prepareStage3Account === "function") prepareStage3Account();
     try {
       document.getElementById("import-panel").hidden = !localStorage.getItem(STORAGE_KEY);
     } catch { document.getElementById("import-panel").hidden = true; }

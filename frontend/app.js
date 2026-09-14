@@ -1070,6 +1070,7 @@ function showWeek(weekStart) {
   renderWeek();
   setStatus(weekStatus());
   refreshDayData();
+  if (typeof maybeShowUnfinishedReview === "function") maybeShowUnfinishedReview();
 }
 
 async function selectWeek(weekStart) {
@@ -1206,6 +1207,7 @@ function selectBlock(blockId, day) {
     if (on) el.classList.add("is-selected");
     else el.classList.remove("is-selected");
   });
+  if (typeof refreshClipboardUI === "function") refreshClipboardUI();
 }
 
 /** A drag across empty grid opens the editor on that range. Nothing is added until it is saved. */
@@ -1327,6 +1329,7 @@ function showContextMenu(clientX, clientY, blockId, day) {
   menu.style.top = clientY + "px";
   menu.dataset.id = blockId;
   menu.dataset.day = String(day);
+  if (typeof syncReuseContextMenu === "function") syncReuseContextMenu(source, series, day);
 }
 
 function yToMinute(lane, clientY) {
@@ -2545,6 +2548,10 @@ function syncPhase7Loops() {
 
 document.getElementById("new-week").addEventListener("click", function () {
   document.getElementById("week-menu").open = false;
+  if (typeof clearWeekWithRestore === "function") {
+    clearWeekWithRestore();
+    return;
+  }
   if (!account || saving || !confirm("Clear " + weekLabel(selectedWeek) + "? Undo can bring it back.")) return;
   weekState().blocks = [];
   closeForm();
