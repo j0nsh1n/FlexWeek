@@ -53,12 +53,15 @@ function signedOut(message = "Log in to open your week.", preserve = true, scree
   weeks.clear();
   assignments.clear();
   dirtyAssignments.clear();
+  plannedLater.clear();
   savedWeeks = [];
   selectedWeek = currentWeekStart();
   saving = false;
   focusBusy = false;
   weekEl.replaceChildren();
   flexibleEl.replaceChildren();
+  document.getElementById("continuing").replaceChildren();
+  document.getElementById("continuing-section").hidden = true;
   debugStatsEl.textContent = "";
   debugUnplacedEl.replaceChildren();
   debugMovesEl.replaceChildren();
@@ -94,16 +97,17 @@ async function loadAccount(identity) {
     weeks.clear();
     assignments.clear();
     dirtyAssignments.clear();
-    (owned && Array.isArray(owned.assignments) ? owned.assignments : []).forEach(function (item) {
-      assignments.set(item.id, item);
-    });
-    (suspendedAssignments.get(account.id) || []).forEach(putAssignment);
-    suspendedAssignments.delete(account.id);
+    plannedLater.clear();
+    const ownedItems = owned && Array.isArray(owned.assignments) ? owned.assignments : [];
+    ownedItems.forEach(function (item) { assignments.set(item.id, item); });
     savedWeeks = Array.isArray(saved.weeks) ? saved.weeks.slice() : [];
     selectedWeek = isWeekStart(week.week_start) ? week.week_start : asked;
     const state = weekState();
     state.blocks = week.blocks;
     state.revision = week.revision;
+    rememberPlannedLater(selectedWeek, ownedItems, week.blocks);
+    (suspendedAssignments.get(account.id) || []).forEach(putAssignment);
+    suspendedAssignments.delete(account.id);
     const suspendedDraft = suspendedDrafts.get(account.id);
     if (suspendedDraft) {
       suspendedDraft.forEach(function (draft) {

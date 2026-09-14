@@ -762,9 +762,17 @@ function assignmentBody(item) {
   };
 }
 
+// For each loaded week, the minutes each assignment has planned in later weeks: the
+// server's planned_min for that week minus the week's saved sessions, taken when the
+// week loads. Continuing adds the week's current sessions, so unsaved edits count at once.
+const plannedLater = new Map();
+
 function putAssignment(item) {
-  const prior = assignments.get(item.id) || { revision: 0, planned_min: 0, unplanned_min: 0 };
-  assignments.set(item.id, { ...prior, ...item });
+  const prior = assignments.get(item.id);
+  // New homework has no sessions in any later week yet.
+  const later = plannedLater.get(selectedWeek);
+  if (!prior && later) later.set(item.id, 0);
+  assignments.set(item.id, { ...(prior || { revision: 0, planned_min: 0, unplanned_min: 0 }), ...item });
   dirtyAssignments.add(item.id);
 }
 
@@ -774,10 +782,30 @@ function assignmentOf(block) {
 
 async function loadAssignments(weekStart) {
   const data = await api("/api/assignments?week_start=" + weekStart + "&include_completed=true");
-  (data && Array.isArray(data.assignments) ? data.assignments : []).forEach(function (item) {
+  const items = data && Array.isArray(data.assignments) ? data.assignments : [];
+  items.forEach(function (item) {
     // An unsaved local edit wins until it is saved.
     if (!dirtyAssignments.has(item.id)) assignments.set(item.id, item);
   });
+  return items;
+}
+
+/** Minutes of unfinished work per assignment in these blocks, counted as the server counts planned time. */
+function sessionMinutes(blocks) {
+  const totals = new Map();
+  blocks.forEach(function (block) {
+    if (block.assignment_id && !block.completed) {
+      totals.set(block.assignment_id, (totals.get(block.assignment_id) || 0) + block.duration_min);
+    }
+  });
+  return totals;
+}
+
+function rememberPlannedLater(weekStart, items, savedBlocks) {
+  const here = sessionMinutes(savedBlocks);
+  plannedLater.set(weekStart, new Map(items.map(function (item) {
+    return [item.id, Math.max(0, (item.planned_min || 0) - (here.get(item.id) || 0))];
+  })));
 }
 
 function weekState(weekStart = selectedWeek) {
@@ -964,11 +992,12 @@ async function selectWeek(weekStart) {
   lockEditor(true);
   setStatus("Opening " + weekLabel(weekStart) + "…");
   try {
-    const [data] = await Promise.all([api("/api/week?week_start=" + weekStart), loadAssignments(weekStart)]);
+    const [data, owned] = await Promise.all([api("/api/week?week_start=" + weekStart), loadAssignments(weekStart)]);
     if (selectEpoch !== epoch) return false;
     const opened = isWeekStart(data.week_start) ? data.week_start : weekStart;
     const state = weekState(opened);
     state.blocks = data.blocks;
+    rememberPlannedLater(opened, owned, data.blocks);
     state.revision = data.revision;
     state.dirty = false;
     state.conflict = false;
@@ -1395,6 +1424,7 @@ function buildGrid(blocks, explanations = []) {
 
   renderFlexible(blocks.filter((b) => b.kind === "flexible" && !b.start));
   renderFocusTasks();
+  renderContinuing();
 }
 
 function renderFlexible(flex) {
@@ -1459,6 +1489,79 @@ function renderFlexible(flex) {
     });
     flexibleEl.appendChild(li);
   });
+}
+
+function byDue(a, b) {
+  if (a.due !== b.due) return a.due < b.due ? -1 : 1;
+  return a.id < b.id ? -1 : (a.id > b.id ? 1 : 0);
+}
+
+/**
+ * Open homework due during or after a week that still has time no session covers, as
+ * { assignment, minutes } on the 15-minute grid. A week before the current one lists
+ * nothing, and neither does homework that is already past due.
+ */
+function continuingAssignments(weekStart = selectedWeek) {
+  const later = plannedLater.get(weekStart);
+  if (!later || weekStart < currentWeekStart()) return [];
+  const here = sessionMinutes(weekState(weekStart).blocks);
+  const now = localStamp();
+  return Array.from(assignments.values()).filter(function (item) {
+    return !item.completed && later.has(item.id) && item.due >= weekStart + "T00:00" && item.due > now;
+  }).sort(byDue).map(function (item) {
+    const remaining = Math.max(0, item.estimate_min - (item.focus_minutes || 0));
+    const unplanned = Math.max(0, remaining - later.get(item.id) - (here.get(item.id) || 0));
+    return { assignment: item, minutes: Math.ceil(unplanned / SNAP_MIN) * SNAP_MIN };
+  }).filter(function (entry) { return entry.minutes > 0; });
+}
+
+function renderContinuing() {
+  const entries = continuingAssignments();
+  const list = document.getElementById("continuing");
+  list.replaceChildren();
+  document.getElementById("continuing-section").hidden = !entries.length;
+  entries.forEach(function (entry) {
+    const item = document.createElement("li");
+    const color = categoryColor(entry.assignment.category);
+    if (color) item.style.borderLeftColor = color;
+    const name = document.createElement("strong");
+    name.textContent = entry.assignment.title;
+    const detail = document.createElement("small");
+    detail.textContent = formatDuration(entry.minutes) + " not planned yet · due " + dueLabel(entry.assignment.due);
+    const plan = document.createElement("button");
+    plan.type = "button";
+    plan.className = "secondary";
+    plan.textContent = "Plan the rest here";
+    plan.ariaLabel = "Plan the rest of " + entry.assignment.title + " here";
+    plan.disabled = saving;
+    plan.addEventListener("click", function () { planRestHere(entry.assignment.id); });
+    item.appendChild(name);
+    item.appendChild(detail);
+    item.appendChild(plan);
+    list.appendChild(item);
+  });
+}
+
+/** Add a work session this week for the time a Continuing assignment still needs. Solve places it. */
+function planRestHere(assignmentId) {
+  if (!account || saving) return false;
+  const entry = continuingAssignments().find(function (candidate) { return candidate.assignment.id === assignmentId; });
+  if (!entry) return false;
+  const state = weekState();
+  if (state.blocks.length >= MAX_IMPORT_BLOCKS) {
+    setStatus("This week already has 100 blocks. Remove one before planning more here.");
+    return false;
+  }
+  const item = entry.assignment;
+  state.blocks.push({
+    id: newId(), title: item.title, kind: "flexible", duration_min: entry.minutes,
+    days: daysThrough(dueDayInWeek(item.due.slice(0, 10)), firstPlannableDay(selectedWeek)),
+    priority: item.priority || 3, energy: item.energy || "medium", course: item.course || null,
+    category: item.category || null, spotify_url: item.spotify_url || null,
+    earliest: null, latest: null, start: null, completed: false, missed_days: [], assignment_id: item.id,
+  });
+  commitWeek("Added " + formatDuration(entry.minutes) + " for " + item.title + ". Press Solve to place it.");
+  return true;
 }
 
 function formatPlacement(day, start) {

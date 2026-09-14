@@ -94,9 +94,10 @@ function harness(options = {}) {
     dayHeads: () => elements.get('week').children
       .filter(child => child.className === 'day-head')
       .map(head => head.children.map(part => part.textContent).join(' ')),
-    async login(id = 1, blocks = [], saved = []) {
+    async login(id = 1, blocks = [], saved = [], owned = []) {
       await tick();
       handler = async path => {
+        if (path.startsWith('/api/assignments')) return response(200, { assignments: owned });
         if (path.startsWith('/api/weeks')) return response(200, { weeks: saved });
         if (path.startsWith('/api/week')) return response(200, { week_start: weekOf(path), blocks, revision: 0 });
         return response(200, { theme: 'nocturne' });
@@ -862,4 +863,101 @@ test('an expired session keeps unsaved assignment edits, for the same account on
   await h.login(1, [session]);
   assert.equal(h.run("assignments.get('hw-math').title"), 'Algebra');
   assert.equal(h.run("dirtyAssignments.has('hw-math')"), true);
+});
+
+// Stage 1: Continuing lists homework that still needs time no session covers.
+const openAssignment = (id, fields) => ({
+  id, title: id, course: null, category: 'assignments', priority: 3, energy: 'medium', spotify_url: null,
+  estimate_min: 60, focus_minutes: 0, focus_sessions: 0, completed: false, completed_at: null, revision: 1,
+  planned_min: 0, unplanned_min: 0, ...fields,
+});
+const workSession = (id, minutes) => ({ id: 's-' + id, kind: 'flexible', title: id, duration_min: minutes, days: [3, 4], assignment_id: id });
+const continuing = h => JSON.parse(h.run('JSON.stringify(continuingAssignments().map(entry => [entry.assignment.id, entry.minutes]))'));
+
+test('Continuing lists homework that still needs time, counting sessions this week and in later weeks', async () => {
+  const h = harness();
+  const owned = [
+    openAssignment('Quiz', { due: '2026-09-11T09:00', estimate_min: 60, planned_min: 60 }),
+    openAssignment('Essay', { due: '2026-09-16T21:00', estimate_min: 180, focus_minutes: 30, planned_min: 60 }),
+    openAssignment('Project', { due: '2026-09-20T23:59', estimate_min: 120, planned_min: 120 }),
+    openAssignment('Lab', { due: '2026-09-08T21:00', estimate_min: 60 }),
+    openAssignment('Poem', { due: '2026-09-18T12:00', completed: true, completed_at: '2026-09-09T10:00' }),
+  ];
+  await h.login(1, [workSession('Essay', 60), workSession('Quiz', 60)], [], owned);
+  // Essay: 180 minus 30 focused minus the 60-minute session. Quiz is covered here, Project next
+  // week, Lab was due Tuesday and Poem is finished.
+  assert.deepEqual(continuing(h), [['Essay', 90]]);
+  assert.equal(h.elements.get('continuing-section').hidden, false);
+  const card = h.elements.get('continuing').children[0];
+  assert.equal(card.children[0].textContent, 'Essay');
+  assert.equal(card.children[1].textContent, h.run('formatDuration(90)') + ' not planned yet · due Wed Sep 16, 21:00');
+
+  h.run('weekState().blocks[1].duration_min = 30');
+  assert.deepEqual(continuing(h), [['Quiz', 30], ['Essay', 90]], 'a shorter session counts before it is saved');
+});
+
+test('Plan the rest here adds a session for the missing time on the days up to the due date', async () => {
+  const h = harness();
+  await h.login(1, [workSession('Essay', 60)], [], [
+    openAssignment('Essay', { due: '2026-09-12T21:00', estimate_min: 150, planned_min: 60 }),
+  ]);
+  let saved;
+  h.handle(async (path, options) => {
+    assert.equal(path, '/api/week', 'no assignment changed, so the week saves alone');
+    saved = JSON.parse(options.body);
+    return response(200, { ...saved, revision: 1 });
+  });
+  h.elements.get('continuing').children[0].children[2].listeners.click();
+  await tick();
+  const added = saved.blocks[1];
+  assert.deepEqual([added.kind, added.title, added.duration_min, added.days, added.assignment_id, added.latest],
+    ['flexible', 'Essay', 90, [3, 4, 5], 'Essay', null]);
+  assert.equal(h.elements.get('continuing-section').hidden, true);
+  assert.deepEqual(continuing(h), []);
+});
+
+test('a later week lists the homework with days from Monday to the due day, and an earlier week lists nothing', async () => {
+  const h = harness();
+  await h.login(1, [], [], [openAssignment('Essay', { due: '2026-09-16T21:00', estimate_min: 120 })]);
+  assert.deepEqual(continuing(h), [['Essay', 120]]);
+  assert.equal(await h.run("selectWeek('2026-08-31')"), true);
+  assert.deepEqual(continuing(h), []);
+  assert.equal(h.elements.get('continuing-section').hidden, true);
+  assert.equal(await h.run("selectWeek('2026-09-14')"), true);
+  assert.deepEqual(continuing(h), [['Essay', 120]]);
+
+  let saved;
+  h.handle(async (_path, options) => {
+    saved = JSON.parse(options.body);
+    return response(200, { ...saved, revision: 1 });
+  });
+  assert.equal(h.run("planRestHere('Essay')"), true);
+  await tick();
+  assert.equal(saved.week_start, '2026-09-14');
+  assert.deepEqual(saved.blocks.map(block => [block.duration_min, block.days]), [[120, [0, 1, 2]]]);
+});
+
+test('Plan the rest here refuses a week that already holds 100 blocks and sends nothing', async () => {
+  const h = harness();
+  const full = Array.from({ length: 100 }, (_, i) => ({
+    id: 'b' + i, kind: 'locked', title: 'Block', duration_min: 15, days: [0], start: '06:00',
+  }));
+  await h.login(1, full, [], [openAssignment('Essay', { due: '2026-09-16T21:00', estimate_min: 120 })]);
+  const sent = h.requests.length;
+  assert.equal(h.run("planRestHere('Essay')"), false);
+  assert.equal(h.requests.length, sent);
+  assert.equal(h.run('weekState().blocks.length'), 100);
+  assert.equal(h.run('statusEl.textContent'), 'This week already has 100 blocks. Remove one before planning more here.');
+});
+
+test('homework added this week joins Continuing only when it needs more time than its sessions', async () => {
+  const h = harness();
+  await h.login(1, [], [], []);
+  h.run(`weekState().blocks.push(attachAssignment(
+    { id: 's1', kind: 'flexible', title: 'Essay', duration_min: 60, days: [3, 4] },
+    { assignmentId: null, dueDate: '2026-09-12', dueTime: '21:00' }))`);
+  const id = h.run('weekState().blocks[0].assignment_id');
+  assert.deepEqual(continuing(h), []);
+  h.run(`putAssignment({ ...assignments.get(${JSON.stringify(id)}), estimate_min: 90 })`);
+  assert.deepEqual(continuing(h), [[id, 30]]);
 });

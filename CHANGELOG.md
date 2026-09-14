@@ -18,6 +18,11 @@ All notable changes to FlexWeek are documented here. Format follows
   week, and the card shows the full due date. Focus sessions add their minutes
   to the homework and never mark it done; marking the session done finishes
   the homework. Solve sends the week on screen so due dates become bounds.
+- Continuing (2026-09-13, frontend). The sidebar lists homework due this week
+  or later that still needs time no session covers, with its due date. Plan
+  the rest here adds a session for that time on the days up to the due date,
+  and a week that already holds 100 blocks refuses with a plain message.
+  Weeks before this one and homework already past due list nothing.
 - Hybrid frost look (2026-09-10) in light and dark. The page sits on a soft
   gradient; the header, week bar, sidebar, sign-in card and dialogs are frosted
   glass with hairline borders; task cards and forms are more solid; the week
