@@ -98,7 +98,7 @@ def run(case: str, root: Path) -> None:
         evaluate("document.getElementById('setup-skip').click()")
         evaluate("""document.getElementById('setup-homework-title').value='Math worksheet';
             document.getElementById('setup-next').click();""")
-        assert evaluate("document.getElementById('setup-next').textContent") == "Add to my week and Solve"
+        assert evaluate("document.getElementById('setup-next').textContent") == "Add to my week and plan"
         evaluate("document.getElementById('setup-next').click()")
 
     solved_week = (
@@ -220,7 +220,7 @@ def run(case: str, root: Path) -> None:
             assert evaluate("document.querySelectorAll('.block:not(.flex-block)').length") == 6
             assert evaluate("document.querySelectorAll('.flex-block').length") == 1, "Homework was not placed"
             stats = evaluate("document.getElementById('debug-stats').textContent")
-            assert stats == "Placed 1 of 1 task.", stats
+            assert stats == "1 task fits.", stats
             assert not evaluate("Array.from(document.querySelectorAll('.slack-badge'))"
                                 ".some(b => /slack/i.test(b.textContent))"), "Raw slack jargon on the grid"
             assert not evaluate("document.getElementById('focus-section').hidden")
@@ -247,7 +247,7 @@ def run(case: str, root: Path) -> None:
             status = evaluate("document.getElementById('status').textContent")
             assert status.startswith("FlexWeek reopened after a display problem. Saved week"), status
             assert evaluate("getComputedStyle(document.querySelector('.side')).backdropFilter") == "none"
-            assert evaluate("document.getElementById('debug-stats').textContent") == "Placed 1 of 1 task."
+            assert evaluate("document.getElementById('debug-stats').textContent") == "1 task fits."
             assert_painted("After recovering the page")
             # Stopping again right away gets a native message instead of a reload loop.
             os.kill(page.renderProcessPid(), signal.SIGKILL)
@@ -429,7 +429,7 @@ def run(case: str, root: Path) -> None:
             evaluate("document.getElementById('solve').click()")
             wait_for("!document.getElementById('debug').hidden")
             stats = evaluate("document.getElementById('debug-stats').textContent")
-            assert stats == "Placed 1 of 1 task.", stats
+            assert stats == "1 task fits.", stats
 
             evaluate(f"deleteBlockById({json.dumps(session['id'])})")
             wait_for("document.getElementById('delete-dialog').open")
@@ -472,6 +472,60 @@ def run(case: str, root: Path) -> None:
             assert [block["assignment_id"] for block in imported] == [copy_id], imported
             print("PASS: homework saves as an assignment, Solve, whole-homework delete and undo, "
                   "undo and redo of adding it, and a format 2 import into another week")
+        elif case == "stage2":
+            # At 390px the day agenda comes first and the whole path runs without a context menu.
+            window.resize(390, 800)
+            QTest.qWait(100)
+            submit_identity("stage2_student", "register")
+            evaluate("document.getElementById('setup-close').click()")
+            assert evaluate("plannerView") == "day", "A 390px window did not start on the day agenda"
+            assert not evaluate("document.getElementById('day-agenda').hidden")
+            add_rect = "document.getElementById('add-homework').getBoundingClientRect()"
+            on_screen = evaluate(f"{add_rect}.width > 0 && {add_rect}.right <= window.innerWidth")
+            assert on_screen, "Add homework is off screen"
+
+            def click_agenda(label: str) -> None:
+                evaluate("Array.from(document.querySelectorAll('#day-agenda .agenda-row button'))"
+                         f".find(b => b.textContent === {json.dumps(label)}).click()")
+
+            tomorrow = evaluate("addDaysIso(currentDateInfo().iso, 1)")
+            evaluate("document.getElementById('add-homework').click()")
+            wait_for("document.getElementById('homework-dialog').open")
+            evaluate(f"""document.getElementById('hw-title').value='Essay';
+                document.getElementById('hw-due-date').value={json.dumps(tomorrow)};
+                document.getElementById('hw-due-time').value='23:59';
+                document.getElementById('hw-estimate').value='60';
+                document.querySelector('#homework-form button[type=submit]').click();""")
+            wait_for("document.getElementById('status').textContent.startsWith('Added Essay')")
+            due_soon = (
+                "Array.from(document.querySelectorAll('#day-agenda .agenda-section')).some(s => "
+                "s.querySelector('h3').textContent === 'Due soon' && s.textContent.includes('Essay'))"
+            )
+            wait_for(due_soon)
+            evaluate("document.getElementById('solve').click()")
+            wait_for("!document.getElementById('debug').hidden")
+            assert evaluate("document.getElementById('solve-label').textContent") == "Update my plan"
+            click_agenda("Start focus")
+            wait_for("!document.getElementById('focus-panel').hidden")
+            evaluate("document.getElementById('focus-reset').click()")
+            click_agenda("Finished")
+            wait_for("document.getElementById('status').textContent.startsWith('Finished Essay')")
+            evaluate("window.__done = undefined; "
+                     "api('/api/assignments?week_start=' + selectedWeek + '&include_completed=true')"
+                     ".then(data => { window.__done = data.assignments.map(a => a.completed); })")
+            wait_for("Array.isArray(window.__done)")
+            assert evaluate("window.__done") == [True], evaluate("window.__done")
+
+            # At 1280px Week still shows seven days, one control away, with Add homework on screen.
+            window.resize(1280, 800)
+            QTest.qWait(100)
+            evaluate("document.getElementById('view-week').click()")
+            wait_for("!document.getElementById('week').hidden")
+            assert evaluate("document.querySelectorAll('.day-head').length") == 7
+            assert evaluate("document.getElementById('add-homework').getBoundingClientRect().width > 0")
+            assert evaluate("document.querySelector('.week-nav #export-week') === null")
+            print("PASS: 390px day agenda, Add homework, plan, start focus and finish without "
+                  "a context menu; 1280px week of seven days")
         elif case == "phase7":
             submit_identity("focus_student", "register")
             add_item("assignments", "document.getElementById('f-title').value='Maths';"

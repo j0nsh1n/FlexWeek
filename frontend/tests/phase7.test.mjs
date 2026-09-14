@@ -426,7 +426,7 @@ test('Need more time adds the chosen amount to the homework, keeps it open and s
   assert.equal(h.run('focusState.phase'), 'break');
   assert.equal(h.elements.get('focus-more-form').hidden, true);
   assert.equal(h.run('statusEl.textContent'),
-    'Added ' + h.run('formatDuration(30)') + ' to Essay. Plan it under Continuing, then press Solve.');
+    'Added ' + h.run('formatDuration(30)') + ' to Essay. Plan it under Continuing, then press Plan my homework.');
 });
 
 test('Take a break starts the break, stores nothing and leaves the homework open', async () => {

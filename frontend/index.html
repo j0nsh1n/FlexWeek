@@ -39,7 +39,7 @@
       <label>Theme <select id="theme"><option value="system">System</option><option value="slate">Light</option><option value="nocturne">Dark</option></select></label>
       <button type="button" id="prefs-open" class="secondary"><svg class="icon" aria-hidden="true"><use href="#i-gear"/></svg>Settings</button>
       <button type="button" id="logout" class="secondary"><svg class="icon" aria-hidden="true"><use href="#i-logout"/></svg>Log out</button>
-      <button type="button" id="solve"><svg class="icon" aria-hidden="true"><use href="#i-solve"/></svg>Solve</button>
+      <button type="button" id="solve"><svg class="icon" aria-hidden="true"><use href="#i-solve"/></svg><span id="solve-label">Plan my homework</span></button>
     </div>
   </header>
   <div class="status-row">
@@ -87,14 +87,16 @@
   <main class="layout" id="planner" hidden>
     <section class="calendar" aria-label="Week calendar">
       <div class="week-nav">
+        <div class="view-switch" role="group" aria-label="View">
+          <button type="button" id="view-day" class="secondary" aria-pressed="false">Day</button>
+          <button type="button" id="view-week" class="secondary" aria-pressed="true">Week</button>
+        </div>
         <button type="button" id="week-prev" class="secondary"><svg class="icon" aria-hidden="true"><use href="#i-chevron-left"/></svg>Previous</button>
         <button type="button" id="week-today" class="secondary"><svg class="icon" aria-hidden="true"><use href="#i-today"/></svg>Today</button>
         <button type="button" id="week-next" class="secondary">Next<svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
         <strong id="week-label" class="week-label"></strong>
-        <label>Saved weeks <select id="week-jump"></select></label>
-        <button type="button" id="export-week" class="secondary"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>Export week</button>
-        <button type="button" id="import-file" class="secondary"><svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg>Import file</button>
-        <input id="import-file-input" type="file" accept=".json,.txt,application/json,text/plain" hidden>
+        <label id="week-jump-label">Saved weeks <select id="week-jump"></select></label>
+        <button type="button" id="add-homework"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>Add homework</button>
         <span id="now-next" class="now-next" aria-live="polite" hidden></span>
       </div>
       <div id="empty-week" class="empty-week" hidden>
@@ -105,6 +107,7 @@
         <button type="button" id="setup-open"><svg class="icon" aria-hidden="true"><use href="#i-calendar-plus"/></svg>Set up my week</button>
       </div>
       <div class="week" id="week"></div>
+      <div id="day-agenda" class="day-agenda" hidden></div>
     </section>
     <aside class="side">
       <section class="add-panel" aria-labelledby="add-heading">
@@ -123,7 +126,7 @@
       </section>
 
       <h2><svg class="icon" aria-hidden="true"><use href="#i-tasks"/></svg>Tasks to place</h2>
-      <p class="note" id="flex-note">Press Solve to place these around school and sports.</p>
+      <p class="note" id="flex-note">Press Plan my homework to place these around school and sports.</p>
       <ul id="flexible"></ul>
       <section id="continuing-section" class="continuing" aria-labelledby="continuing-heading" hidden>
         <h2 id="continuing-heading"><svg class="icon" aria-hidden="true"><use href="#i-calendar-plus"/></svg>Continuing</h2>
@@ -132,7 +135,7 @@
       </section>
       <section id="focus-section" class="focus-dashboard" aria-labelledby="focus-heading" hidden>
         <h2 id="focus-heading"><svg class="icon" aria-hidden="true"><use href="#i-timer"/></svg>Focus timer</h2>
-        <p class="note">Start a timer on a task Solve has placed, or use Quick focus for anything else.</p>
+        <p class="note">Start a timer on a task your plan has placed, or use Quick focus for anything else.</p>
         <div id="focus-panel" class="focus-panel" hidden>
           <strong id="focus-task"></strong>
           <span id="focus-phase"></span>
@@ -157,7 +160,7 @@
         <button type="button" id="focus-quick" class="secondary">Quick focus</button>
       </section>
       <section id="debug" class="debug" hidden>
-        <h2><svg class="icon" aria-hidden="true"><use href="#i-results"/></svg>What Solve did</h2>
+        <h2><svg class="icon" aria-hidden="true"><use href="#i-results"/></svg>Your plan</h2>
         <p id="debug-stats"></p>
         <ul id="debug-unplaced"></ul>
         <div id="debug-changes" hidden>
@@ -172,6 +175,7 @@
   <script src="/static/history.js" defer></script>
   <script src="/static/focus.js" defer></script>
   <script src="/static/editor.js" defer></script>
+  <script src="/static/day.js" defer></script>
   <script src="/static/setup.js" defer></script>
   <script src="/static/auth.js" defer></script>
   <div id="block-context-menu" class="context-menu" hidden role="menu">
@@ -200,8 +204,8 @@
       </label>
       <fieldset id="f-kind" class="kind-choice">
         <legend>When does it happen?</legend>
-        <label title="Solve never moves it."><input type="radio" name="f-kind" id="f-kind-locked" value="locked" /> <span><strong>Fixed time</strong> <small>At a set time, like school or practice. Solve never moves it.</small></span></label>
-        <label title="Solve picks a free time before it is due."><input type="radio" name="f-kind" id="f-kind-flexible" value="flexible" /> <span><strong>Flexible</strong> <small>Needs time before a deadline, like homework. Solve picks a free time.</small></span></label>
+        <label title="Planning never moves it."><input type="radio" name="f-kind" id="f-kind-locked" value="locked" /> <span><strong>Fixed time</strong> <small>At a set time, like school or practice. Planning never moves it.</small></span></label>
+        <label title="Planning picks a free time before it is due."><input type="radio" name="f-kind" id="f-kind-flexible" value="flexible" /> <span><strong>Flexible</strong> <small>Needs time before a deadline, like homework. Planning picks a free time.</small></span></label>
       </fieldset>
       <fieldset id="edit-scope" class="edit-scope" hidden>
         <legend>Change which days?</legend>
@@ -272,13 +276,30 @@
       </div>
     </form>
   </dialog>
+  <dialog id="homework-dialog" class="prefs-dialog homework-dialog" aria-labelledby="homework-heading">
+    <form id="homework-form" novalidate>
+      <h2 id="homework-heading">Add homework</h2>
+      <label>Title <input id="hw-title" type="text" maxlength="80" placeholder="Math worksheet" /></label>
+      <div class="field-row">
+        <label>Due date <input id="hw-due-date" type="date" min="2000-01-01" max="2099-12-31" /></label>
+        <label>Due time <select id="hw-due-time"></select></label>
+      </div>
+      <label>Estimated time <select id="hw-estimate"></select></label>
+      <p id="hw-error" class="form-error" role="alert" hidden></p>
+      <div class="form-actions">
+        <button type="submit" id="hw-save">Add homework</button>
+        <button type="button" id="hw-cancel" class="secondary">Cancel</button>
+        <button type="button" id="hw-custom" class="link-button">Choose a time myself</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="setup-dialog" class="prefs-dialog setup-dialog" aria-labelledby="setup-title">
     <form id="setup-form" novalidate>
       <p id="setup-progress" class="note">Step 1 of 4</p>
       <h2 id="setup-title" class="visually-hidden">Set up your week</h2>
       <section id="setup-school">
         <h3>When is school?</h3>
-        <p class="note">Solve keeps homework out of these hours.</p>
+        <p class="note">Your plan keeps homework out of these hours.</p>
         <fieldset class="days"><legend>School days</legend>
           <label><input type="checkbox" id="setup-school-day-0" value="0" checked /> Mon</label>
           <label><input type="checkbox" id="setup-school-day-1" value="1" checked /> Tue</label>
@@ -319,12 +340,12 @@
           <label>Due date <input id="setup-homework-due-date" type="date" min="2000-01-01" max="2099-12-31" /></label>
           <label>Due time <select id="setup-homework-due-time"></select></label>
         </div>
-        <p class="note">Solve can place it on any day from today up to the due date.</p>
+        <p class="note">Your plan can place it on any day from today up to the due date.</p>
       </section>
       <section id="setup-solve" hidden>
         <h3>Ready to plan your week</h3>
         <ul id="setup-summary" class="setup-summary"></ul>
-        <p class="note">Solve puts your homework in the free time around school and practice. You can change anything afterwards.</p>
+        <p class="note">Planning puts your homework in the free time around school and practice. You can change anything afterwards.</p>
       </section>
       <p id="setup-error" class="form-error" role="alert" hidden></p>
       <div class="form-actions">
@@ -354,7 +375,7 @@
           <label>Long break <input id="pref-timer-long-break" type="number" min="1" max="120" step="1" value="30" /></label>
           <label>Long break every <input id="pref-timer-cadence" type="number" min="2" max="12" step="1" value="4" /></label>
         </div>
-        <label class="completed-toggle"><input type="checkbox" id="pref-auto-split" /> Split long tasks during Solve</label>
+        <label class="completed-toggle"><input type="checkbox" id="pref-auto-split" /> Split long tasks when planning</label>
         <p class="note">Grid splitting requires work and break lengths in 15-minute steps.</p>
       </fieldset>
       <fieldset>
@@ -393,6 +414,13 @@
           <button type="button" id="alarm-add" class="secondary">Add alarm</button>
         </div>
         <ul id="alarm-list" class="alarm-list"></ul>
+      </fieldset>
+      <fieldset>
+        <legend>Export and import</legend>
+        <p class="note">Save the week on screen as a file, or bring a week back from one.</p>
+        <button type="button" id="export-week" class="secondary"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>Export week</button>
+        <button type="button" id="import-file" class="secondary"><svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg>Import file</button>
+        <input id="import-file-input" type="file" accept=".json,.txt,application/json,text/plain" hidden>
       </fieldset>
       <p id="prefs-error" class="form-error" role="alert" hidden></p>
       <div class="form-actions">

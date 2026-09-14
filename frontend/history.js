@@ -208,6 +208,7 @@ async function travel(from, to, side) {
     renderWeek();
     renderHistoryButtons();
     setStatus((side === "before" ? "Undid " : "Redid ") + step.label + ".");
+    refreshDayData();
     return true;
   } catch (error) {
     if (travelEpoch !== epoch) return false;
@@ -264,6 +265,7 @@ async function deleteAssignmentEverywhere(assignmentId) {
     clearSolveResult();
     renderWeek();
     setStatus("Deleted " + item.title + " and its sessions in every week. Undo brings them back.");
+    refreshDayData();
     return true;
   } catch (error) {
     if (deleteEpoch === epoch) setStatus("Not deleted. " + error.message);

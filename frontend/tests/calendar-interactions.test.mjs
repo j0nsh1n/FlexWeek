@@ -219,7 +219,7 @@ test('a flexible type dragged on a day becomes a task Solve may place on that da
   assert.equal(h.elements.get('f-duration').value, '90');
   // With no due date picked, it is due at the end of the week on screen.
   assert.equal(h.elements.get('f-flex-summary').textContent,
-    'Solve will find 1 h 30 min for it on Wednesday. It is due Sun Sep 13, 23:59.');
+    'Your plan will find 1 h 30 min for it on Wednesday. It is due Sun Sep 13, 23:59.');
   h.elements.get('f-title').value = 'Chemistry lab report';
   submitEditor(h);
   await tick();
@@ -286,7 +286,7 @@ test('Add without dragging starts from the type preset, not a blank 16:00 block'
   same([0, 1, 2, 3, 4, 5, 6].map(day => h.elements.get(`f-day-${day}`).checked),
     [false, false, false, true, true, true, false]);
   assert.equal(h.elements.get('f-flex-summary').textContent,
-    'Solve will find 1 h for it on Thursday, Friday or Saturday. It is due Sat Sep 12, 23:59.');
+    'Your plan will find 1 h for it on Thursday, Friday or Saturday. It is due Sat Sep 12, 23:59.');
 });
 
 test('move and resize update start/duration and keep 15-min grid', async () => {

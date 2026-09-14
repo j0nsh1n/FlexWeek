@@ -610,6 +610,31 @@ button.danger {
   .side { border-left: 0; border-top: 1px solid var(--hairline); }
 }
 
+.view-switch { display: inline-flex; gap: 0.2rem; }
+.view-switch button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); font-weight: 700; }
+.week[hidden], .day-agenda[hidden] { display: none; }
+.day-agenda { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3) 1.1rem var(--space-4); }
+.day-title { margin: 0; font-size: 1.15rem; }
+.workload p { margin: 0; color: var(--muted); font-size: 0.85rem; }
+.workload-categories { list-style: none; display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.35rem 0 0; padding: 0; }
+.agenda-empty { margin: 0; color: var(--muted); }
+.agenda-section h3 { margin: 0 0 0.35rem; font-size: 0.9rem; }
+.agenda-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.agenda-row { display: grid; grid-template-columns: 1fr auto; gap: 0.15rem 0.6rem; align-items: center; background: var(--surface-card); border: 1px solid var(--hairline); border-left: 3px solid var(--flex); border-radius: var(--radius); padding: 0.5rem 0.6rem; box-shadow: var(--shadow); }
+.agenda-row small { color: var(--muted); }
+.agenda-actions { grid-column: 2; grid-row: 1 / span 2; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.3rem; }
+.agenda-actions button { padding: 0.28rem 0.55rem; font-size: 0.8rem; }
+.agenda-next { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 0.5rem 0.6rem; border: 1px dashed var(--hairline-strong); border-radius: var(--radius); }
+.fit-details { list-style: none; }
+.fit-details summary { cursor: pointer; color: var(--muted); }
+
+@media (max-width: 800px) {
+  .agenda-row { grid-template-columns: 1fr; }
+  .agenda-actions { grid-column: 1; grid-row: auto; justify-content: flex-start; }
+  /* Touch targets stay at least 44px tall on phones. */
+  .agenda-actions button, .agenda-next button, .view-switch button, #add-homework { min-height: 2.75rem; }
+}
+
 .auth-panel {
   width: min(100% - 2rem, 27rem);
   margin: 2.5rem auto;

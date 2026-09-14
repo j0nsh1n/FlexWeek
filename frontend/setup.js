@@ -85,7 +85,7 @@ function renderSetupStep() {
   field("setup-skip").hidden = step === "solve";
   const drafts = setupDrafts();
   const lines = setupSummary(drafts);
-  field("setup-next").textContent = step !== "solve" ? "Next" : (lines.length ? "Add to my week and Solve" : "Finish");
+  field("setup-next").textContent = step !== "solve" ? "Next" : (lines.length ? "Add to my week and plan" : "Finish");
   if (step === "solve") {
     const list = field("setup-summary");
     list.replaceChildren();

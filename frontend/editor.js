@@ -176,7 +176,7 @@ function draftPatch(draft) {
 function flexSummary(draft) {
   if (!draft.days.length) return "Pick at least one day under More options.";
   const due = draft.dueDate ? " It is due " + dueLabel(draft.dueDate + "T" + draft.dueTime) + "." : " Choose when it is due.";
-  return "Solve will find " + formatDuration(draft.duration_min) + " for it on " + dayList(draft.days) + "." + due;
+  return "Your plan will find " + formatDuration(draft.duration_min) + " for it on " + dayList(draft.days) + "." + due;
 }
 
 function parseLatest(latest) {

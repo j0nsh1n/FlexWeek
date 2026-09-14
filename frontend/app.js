@@ -828,6 +828,12 @@ let selectedBlockId = null;
 let selectedOccurrenceDay = null;
 let gridGesture = null;
 let savedWeeks = [];
+// Day or Week view for this signed-in session, and the date the Day view shows (frontend/day.js).
+let plannerView = "week";
+let selectedDay = null;
+// The last GET /api/day reply, and a counter so a late reply for another day is ignored.
+let dayData = null;
+let dayRequest = 0;
 // Homework is an assignment that outlives any one week. A week's flexible blocks
 // are work sessions pointing at one with assignment_id (docs/stage1-contract.md).
 // Local edits stay in dirtyAssignments until a save sends them with the week.
@@ -995,6 +1001,7 @@ async function saveWeek() {
     saveActions.hidden = true;
     rememberSavedWeek(weekStart);
     setStatus("Saved · " + weekSummary());
+    refreshDayData();
     return true;
   } catch (error) {
     if (saveEpoch !== epoch) return false;
@@ -1017,7 +1024,7 @@ function rememberSavedWeek(weekStart) {
 }
 
 function renderWeekNav() {
-  weekLabelEl.textContent = weekLabel(selectedWeek);
+  weekLabelEl.textContent = plannerView === "day" && selectedDay ? dayTitle(selectedDay) : weekLabel(selectedWeek);
   // A week holding unsaved edits is not saved on the server yet, so list it too
   // or the only way back to it would be the arrows.
   const listed = savedWeeks.concat([selectedWeek], dirtyWeeks()).filter(function (weekStart, index, all) {
@@ -1046,17 +1053,23 @@ function weekStatus() {
 
 function showWeek(weekStart) {
   selectedWeek = weekStart;
+  // The Day view stays inside the week on screen: today in this week, Monday in any other.
+  if (!selectedDay || mondayOf(selectedDay) !== weekStart) {
+    selectedDay = weekStart === currentWeekStart() ? currentDateInfo().iso : weekStart;
+  }
+  dayData = null;
   const state = weekState();
   state.trace = null;
   closeForm();
   // The debug panel and the note under it describe the week being left.
   debugEl.hidden = true;
-  flexNoteEl.textContent = "Press Solve to place these around school and sports.";
+  flexNoteEl.textContent = planNote();
   saveActions.hidden = !state.dirty;
   document.getElementById("retry-save").disabled = state.conflict;
   renderWeekNav();
   renderWeek();
   setStatus(weekStatus());
+  refreshDayData();
 }
 
 async function selectWeek(weekStart) {
@@ -1110,16 +1123,37 @@ function weekSummary() {
 }
 
 function renderWeek() {
-  document.getElementById("empty-week").hidden = weekState().blocks.length > 0;
+  const dayView = plannerView === "day";
+  document.getElementById("empty-week").hidden = dayView || weekState().blocks.length > 0;
+  weekEl.hidden = dayView;
+  document.getElementById("day-agenda").hidden = !dayView;
+  document.getElementById("week-jump-label").hidden = dayView;
+  document.getElementById("view-day").ariaPressed = String(dayView);
+  document.getElementById("view-week").ariaPressed = String(!dayView);
   buildGrid(weekState().blocks);
+  renderPlanButton();
+  renderDayAgenda();
 }
 
-function clearSolveResult(note = "Press Solve to place these around school and sports.") {
+/** The plan button reads Plan my homework, or Update my plan once this week has had a plan. */
+function planButtonLabel() {
+  return weekState().planned ? "Update my plan" : "Plan my homework";
+}
+
+function planNote() {
+  return "Press " + planButtonLabel() + " to place these around school and sports.";
+}
+
+function renderPlanButton() {
+  document.getElementById("solve-label").textContent = planButtonLabel();
+}
+
+function clearSolveResult(note) {
   weekState().trace = null;
   debugEl.hidden = true;
   debugChangesEl.hidden = true;
   debugMovesEl.replaceChildren();
-  flexNoteEl.textContent = note;
+  flexNoteEl.textContent = note === undefined ? planNote() : note;
 }
 
 /** The one refresh path after the week's blocks change: drop the stale solve, record the undo step, save, redraw. */
@@ -1135,6 +1169,23 @@ function insightFor(explanations, blockId) {
   return (explanations || []).find(function (item) {
     return item.block_id === blockId && item.slack_status;
   });
+}
+
+/**
+ * A deadline at risk in words read at a glance: "due today", "due tomorrow", "due Tuesday" or
+ * "9 days left". Blank for a task with no due date, which keeps its plain badge.
+ */
+function slackDueText(blockId) {
+  const block = weekState().blocks.find(function (item) { return item.id === blockId; });
+  if (!block || block.kind !== "flexible" || !(assignmentOf(block) || block.latest)) return "";
+  const due = blockDue(block);
+  const days = dayOffset(currentDateInfo().iso, due.date);
+  if (days === null) return "";
+  if (days < 0) return "overdue";
+  if (days === 0) return "due today";
+  if (days === 1) return "due tomorrow";
+  if (days < 7) return "due " + DAY_FULL[(parseDate(due.date).getUTCDay() + 6) % 7];
+  return days + " days left";
 }
 
 function occupiedIntervalsForDay(blocks, day) {
@@ -1540,7 +1591,7 @@ function buildGrid(blocks, explanations = []) {
       if (insight && SLACK_BADGE[insight.slack_status]) {
         const slack = document.createElement("span");
         slack.className = "slack-badge slack-" + insight.slack_status;
-        slack.textContent = SLACK_BADGE[insight.slack_status];
+        slack.textContent = slackDueText(block.id) || SLACK_BADGE[insight.slack_status];
         slack.title = insight.message;
         el.appendChild(slack);
       }
@@ -1653,7 +1704,8 @@ function renderContinuing() {
   const entries = continuingAssignments();
   const list = document.getElementById("continuing");
   list.replaceChildren();
-  document.getElementById("continuing-section").hidden = !entries.length;
+  // The Day view already lists due-soon homework, so Continuing stays on the Week view.
+  document.getElementById("continuing-section").hidden = plannerView === "day" || !entries.length;
   entries.forEach(function (entry) {
     const item = document.createElement("li");
     const color = categoryColor(entry.assignment.category);
@@ -1694,7 +1746,8 @@ function planRestHere(assignmentId) {
     category: item.category || null, spotify_url: item.spotify_url || null,
     earliest: null, latest: null, start: null, completed: false, missed_days: [], assignment_id: item.id,
   });
-  commitWeek("Added " + formatDuration(entry.minutes) + " for " + item.title + ". Press Solve to place it.");
+  const note = "Added " + formatDuration(entry.minutes) + " for " + item.title + ". Press " + planButtonLabel() + " to place it.";
+  noticeAfterSave(commitWeek(note), note);
   return true;
 }
 
@@ -1737,29 +1790,50 @@ function detailButton(text, blockId, day = null) {
   return button;
 }
 
+/** Unplaced work first, then one line for everything that fits. */
 function solveSummary(trace) {
   const placed = (trace.placed || []).filter(function (block) { return block.kind === "flexible"; }).length;
   const waiting = (trace.unplaced || []).length;
-  const total = placed + waiting;
-  if (!total) return "No flexible tasks to place yet. Fixed times stay where they are.";
-  const head = "Placed " + placed + " of " + total + (total === 1 ? " task." : " tasks.");
-  if (!waiting) return head;
-  return head + " " + waiting + (waiting === 1 ? " still needs" : " still need") + " a time. The reasons are below.";
+  if (!placed && !waiting) return "No homework to plan yet. Fixed times stay where they are.";
+  const fit = placed ? placed + (placed === 1 ? " task fits." : " tasks fit.") : "";
+  if (!waiting) return fit;
+  return waiting + (waiting === 1 ? " task still needs a time." : " tasks still need a time.") + (fit ? " " + fit : "");
 }
 
 function renderDebug(trace) {
   debugEl.hidden = false;
   debugStatsEl.textContent = solveSummary(trace);
-  debugStatsEl.title = "Solved in " + Number(trace.solve_ms).toFixed(1) + " ms";
+  debugStatsEl.title = "Planned in " + Number(trace.solve_ms).toFixed(1) + " ms";
   debugUnplacedEl.innerHTML = "";
-  (trace.explanations || []).forEach((item) => {
+  const unplaced = new Set((trace.unplaced || []).map(function (block) { return block.id; }));
+  const explanations = trace.explanations || [];
+  // Unplaced work and deadlines at risk stay in the open; what simply fits folds away.
+  const open = explanations.filter(function (item) { return unplaced.has(item.block_id) || SLACK_BADGE[item.slack_status]; });
+  const fits = explanations.filter(function (item) { return open.indexOf(item) === -1; });
+  open.forEach(function (item) {
     const li = document.createElement("li");
-    li.appendChild(detailButton(blockTitle(item.block_id) + " — " + item.message, item.block_id));
+    const due = !unplaced.has(item.block_id) ? slackDueText(item.block_id) : "";
+    const button = detailButton(blockTitle(item.block_id) + " — " +
+      (due ? SLACK_BADGE[item.slack_status] + ", " + due : item.message), item.block_id);
+    button.title = item.message;
+    li.appendChild(button);
     debugUnplacedEl.appendChild(li);
   });
-  if (!(trace.explanations || []).length) {
+  if (fits.length) {
     const li = document.createElement("li");
-    li.textContent = "Every task fits before its deadline.";
+    li.className = "fit-details";
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = "Why the rest fit";
+    const list = document.createElement("ul");
+    fits.forEach(function (item) {
+      const entry = document.createElement("li");
+      entry.appendChild(detailButton(blockTitle(item.block_id) + " — " + item.message, item.block_id));
+      list.appendChild(entry);
+    });
+    details.appendChild(summary);
+    details.appendChild(list);
+    li.appendChild(details);
     debugUnplacedEl.appendChild(li);
   }
 
@@ -2488,6 +2562,7 @@ function missedHistoryBlocks() {
 
 function showTrace(trace) {
   weekState().trace = trace;
+  weekState().planned = true;
   buildGrid((trace.placed || []).concat(missedHistoryBlocks()), trace.explanations || []);
   renderFlexible(trace.unplaced || []);
   renderDebug(trace);
@@ -2496,6 +2571,8 @@ function showTrace(trace) {
     "Every task has a time on the calendar.";
   const placed = trace.placed.filter(b => b.kind === "flexible").length;
   setStatus((weekState().dirty ? "Unsaved week · " : "Saved week · ") + placed + (placed === 1 ? " task placed" : " tasks placed"));
+  renderPlanButton();
+  renderDayAgenda();
 }
 
 async function solveWeek() {
@@ -2503,7 +2580,7 @@ async function solveWeek() {
   const solveEpoch = epoch;
   saving = true;
   lockEditor(true);
-  setStatus("Solving…");
+  setStatus("Planning your homework…");
   try {
     let trace = await api("/api/solve", { method: "POST", body: JSON.stringify({
       week_start: selectedWeek, blocks: solveInputBlocks(weekState().blocks),
@@ -2524,7 +2601,7 @@ async function solveWeek() {
     }
     showTrace(trace);
   } catch (error) {
-    if (solveEpoch === epoch) setStatus("Solve failed. " + error.message);
+    if (solveEpoch === epoch) setStatus("Could not plan. " + error.message);
   } finally {
     if (solveEpoch === epoch) { saving = false; lockEditor(false); }
   }
@@ -2686,9 +2763,13 @@ document.addEventListener("pointerdown", function (event) {
 });
 
 solveEl.addEventListener("click", solveWeek);
-document.getElementById("week-prev").addEventListener("click", () => selectWeek(shiftWeek(selectedWeek, -1)));
-document.getElementById("week-next").addEventListener("click", () => selectWeek(shiftWeek(selectedWeek, 1)));
-document.getElementById("week-today").addEventListener("click", () => selectWeek(currentWeekStart()));
+// On the Day view the arrows move one day, crossing into the next or previous week as needed.
+document.getElementById("week-prev").addEventListener("click", () =>
+  plannerView === "day" ? openDay(addDaysIso(selectedDay, -1)) : selectWeek(shiftWeek(selectedWeek, -1)));
+document.getElementById("week-next").addEventListener("click", () =>
+  plannerView === "day" ? openDay(addDaysIso(selectedDay, 1)) : selectWeek(shiftWeek(selectedWeek, 1)));
+document.getElementById("week-today").addEventListener("click", () =>
+  plannerView === "day" ? openDay(currentDateInfo().iso) : selectWeek(currentWeekStart()));
 weekJumpEl.addEventListener("change", () => selectWeek(weekJumpEl.value));
 
 const prefsOpen = document.getElementById("prefs-open");
@@ -2827,6 +2908,8 @@ if (importFileBtn && importFileInput) {
     const file = importFileInput.files && importFileInput.files[0];
     importFileInput.value = "";
     if (!file) return;
+    // The file was picked from Settings; close it so the import's questions and result are in view.
+    if (prefsDialog && prefsDialog.open && typeof prefsDialog.close === "function") prefsDialog.close();
     try {
       const text = await file.text();
       if (importEpoch !== epoch || importWeek !== selectedWeek) return;

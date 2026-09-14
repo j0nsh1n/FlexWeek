@@ -133,10 +133,12 @@ async function loadAccount(identity) {
     saveActions.hidden = !state.dirty;
     document.getElementById("retry-save").disabled = state.conflict;
     lockEditor(false);
+    resetPlannerView();
     renderWeekNav();
     renderWeek();
     setStatus(state.dirty ? "Unsaved edits restored. " + (state.conflict ? "Download your draft and reload the newer week." : "Press Retry save.") : weekStatus());
     restoreFocus();
+    refreshDayData();
     try {
       document.getElementById("import-panel").hidden = !localStorage.getItem(STORAGE_KEY);
     } catch { document.getElementById("import-panel").hidden = true; }

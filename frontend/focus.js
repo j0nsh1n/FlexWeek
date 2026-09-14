@@ -322,7 +322,8 @@ async function addFocusTime(minutes) {
   const saved = await saveWeek();
   renderWeek();
   if (saved) {
-    setStatus("Added " + formatDuration(minutes) + " to " + assignment.title + ". Plan it under Continuing, then press Solve.");
+    setStatus("Added " + formatDuration(minutes) + " to " + assignment.title + ". Plan it under Continuing, then press " +
+      planButtonLabel() + ".");
   }
   return saved;
 }

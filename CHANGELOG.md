@@ -6,6 +6,17 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Day agenda and quick Add homework (2026-09-14, frontend). A Day view sits
+  beside Week: Due soon (due today, tomorrow or overdue), Homework today, Fixed
+  time and one Next action, with no headings for empty lists and Edit, Finished
+  and Start focus in each row. At 800px and narrower Day comes first; wider
+  windows start on Week. Add homework asks only for title, due date and time,
+  and estimated time, with Choose a time myself for the full editor. The Day
+  view shows the day's scheduled, focus and free time from `GET /api/day`. Solve
+  is now Plan my homework, or Update my plan once the week has a plan. Results
+  list unplaced work first and fold what fits into one line, deadlines at risk
+  read "due Tuesday" or "9 days left", and Export and Import moved into
+  Settings.
 - Day agenda API (2026-09-13, backend). `GET /api/day?date=` returns due-soon
   homework, that day's sessions and fixed blocks, one next action, and
   scheduled / focus / available minutes. Rules are in `docs/stage2-contract.md`.
