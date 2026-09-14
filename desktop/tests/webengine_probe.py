@@ -9,7 +9,7 @@ import signal
 import sys
 import time
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from unittest.mock import patch
 
 from PySide6.QtCore import QEventLoop, QTimer, QUrl
@@ -18,6 +18,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWebEngineCore import QWebEnginePage, QWebEnginePermission
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
+from backend.assignments import migrated_assignment_id
 from desktop.main import (
     OFFLINE_HEADING,
     PAGE_STOPPED_HEADING,
@@ -400,6 +401,77 @@ def run(case: str, root: Path) -> None:
             assert evaluate("document.querySelectorAll('.missed-block').length") == 0
             assert evaluate("document.querySelectorAll('.block:not(.flex-block)').length") == 1
             print("PASS: explanations, slack, one-day miss recovery, move list and restore in desktop")
+        elif case == "stage1":
+            submit_identity("stage1_student", "register")
+            evaluate("document.getElementById('setup-close').click()")
+
+            def fetch_json(path: str) -> Any:
+                evaluate(f"window.__reply = undefined; api({json.dumps(path)})"
+                         ".then(data => { window.__reply = JSON.stringify(data); })")
+                wait_for("typeof window.__reply === 'string'")
+                return json.loads(evaluate("window.__reply"))
+
+            this_week = evaluate("selectedWeek")
+            next_week = evaluate("shiftWeek(selectedWeek, 1)")
+            homework_path = f"/api/assignments?week_start={this_week}&include_completed=true"
+            week_path = f"/api/week?week_start={this_week}"
+            due = evaluate("dateForDay(shiftWeek(selectedWeek, 1), 2)") + "T21:00"
+            add_item("assignments", "document.getElementById('f-title').value='Essay';"
+                     f"document.getElementById('f-due-date').value={json.dumps(due[:10])};"
+                     "document.getElementById('f-due-time').value='21:00';", days=[0])
+            wait_for("document.getElementById('status').textContent.startsWith('Saved')")
+            homework = fetch_json(homework_path)["assignments"]
+            assert [(item["title"], item["due"]) for item in homework] == [("Essay", due)], homework
+            assignment_id = homework[0]["id"]
+            session = fetch_json(week_path)["blocks"][0]
+            assert session["assignment_id"] == assignment_id and session.get("latest") is None, session
+
+            evaluate("document.getElementById('solve').click()")
+            wait_for("!document.getElementById('debug').hidden")
+            stats = evaluate("document.getElementById('debug-stats').textContent")
+            assert stats == "Placed 1 of 1 task.", stats
+
+            evaluate(f"deleteBlockById({json.dumps(session['id'])})")
+            wait_for("document.getElementById('delete-dialog').open")
+            evaluate("document.getElementById('delete-assignment').click()")
+            wait_for("document.getElementById('status').textContent.startsWith('Deleted Essay')")
+            assert fetch_json(homework_path)["assignments"] == []
+            assert fetch_json(week_path)["blocks"] == []
+            evaluate("document.getElementById('undo').click()")
+            wait_for("document.getElementById('status').textContent === 'Undid deleting Essay.'")
+            assert [item["id"] for item in fetch_json(homework_path)["assignments"]] == [assignment_id]
+            assert [block["id"] for block in fetch_json(week_path)["blocks"]] == [session["id"]]
+
+            evaluate("document.getElementById('undo').click()")
+            wait_for("document.getElementById('status').textContent === 'Undid your last change.'")
+            assert fetch_json(homework_path)["assignments"] == []
+            assert fetch_json(week_path)["blocks"] == []
+            evaluate("document.getElementById('redo').click()")
+            wait_for("document.getElementById('status').textContent === 'Redid your last change.'")
+            assert [item["id"] for item in fetch_json(homework_path)["assignments"]] == [assignment_id]
+
+            evaluate("window.__file = exportWeekPayload(selectedWeek, weekState().blocks)")
+            assert evaluate("window.__file.version") == 2
+            evaluate(f"selectWeek({json.dumps(next_week)})")
+            wait_for(f"selectedWeek === {json.dumps(next_week)} && !saving")
+            evaluate(f"""window.__imported = undefined;
+                window.__file.week_start = {json.dumps(next_week)};
+                window.__file.assignments[0].title = 'Essay copy';
+                importPayloadIntoWeek(parseImportPayload(JSON.stringify(window.__file)))
+                    .then(ok => {{ window.__imported = ok; }});""")
+            wait_for("window.__imported !== undefined")
+            status = evaluate("document.getElementById('status').textContent")
+            assert evaluate("window.__imported") is True, status
+            copy_id = migrated_assignment_id(next_week, assignment_id)
+            assignment_path = f"/api/assignments?week_start={next_week}&include_completed=true"
+            stored = fetch_json(assignment_path)["assignments"]
+            assert sorted((item["id"], item["title"]) for item in stored) == sorted(
+                [(assignment_id, "Essay"), (copy_id, "Essay copy")]
+            ), stored
+            imported = fetch_json(f"/api/week?week_start={next_week}")["blocks"]
+            assert [block["assignment_id"] for block in imported] == [copy_id], imported
+            print("PASS: homework saves as an assignment, Solve, whole-homework delete and undo, "
+                  "undo and redo of adding it, and a format 2 import into another week")
         elif case == "phase7":
             submit_identity("focus_student", "register")
             add_item("assignments", "document.getElementById('f-title').value='Maths';"
