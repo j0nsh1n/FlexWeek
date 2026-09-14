@@ -198,6 +198,9 @@ def test_protected_endpoints_require_session(client: TestClient) -> None:
     assert client.get("/api/week").status_code == 401
     assert client.get("/api/assignments?week_start=" + WEEK).status_code == 401
     assert client.get("/api/day?date=" + WEEK).status_code == 401
+    assert client.get("/api/routines").status_code == 401
+    assert client.get("/api/restore-points").status_code == 401
+    assert client.get("/api/storage-info").status_code == 401
     assert client.get("/api/preferences").status_code == 401
     assert client.post("/api/solve", json={"blocks": []}, headers=WRITE).status_code == 401
     unsaved = {"week_start": WEEK, "blocks": [], "revision": 0}
@@ -205,6 +208,9 @@ def test_protected_endpoints_require_session(client: TestClient) -> None:
     assert client.put("/api/assignments/hw-essay", json={"id": "hw-essay", "title": "Essay", "due": "2026-09-15T23:59", "estimate_min": 60, "revision": 0}, headers=WRITE).status_code == 401
     assert client.delete("/api/assignments/hw-essay?revision=1", headers=WRITE).status_code == 401
     assert client.post("/api/changes", json={"weeks": [], "assignments": []}, headers=WRITE).status_code == 401
+    assert client.put("/api/routines/r-1", json={"id": "r-1", "name": "School week", "blocks": [], "revision": 0}, headers=WRITE).status_code == 401
+    assert client.delete("/api/routines/r-1?revision=1", headers=WRITE).status_code == 401
+    assert client.post("/api/restore-points", json={"label": "Before", "operation_id": "op-1"}, headers=WRITE).status_code == 401
     assert client.put("/api/preferences", json=preferences("slate"), headers=WRITE).status_code == 401
     forged = {"Cookie": "flexweek_session=forged-token"}
     assert client.get("/api/auth/me", headers=forged).status_code == 401

@@ -213,6 +213,95 @@ class Assignment(AssignmentContent):
     revision: int = Field(ge=0, le=2**53 - 1)
 
 
+class RoutineBlock(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    template_id: str = Field(min_length=1, max_length=80)
+    title: str = Field(min_length=1, max_length=80)
+    days: list[int] = Field(min_length=1, max_length=7)
+    start: str
+    duration_min: int = Field(le=7140)
+    category: str | None = Field(default=None, max_length=32)
+    course: str | None = Field(default=None, max_length=40)
+    priority: Priority = 3
+    energy: Energy = "medium"
+    spotify_url: str | None = Field(default=None, max_length=500)
+
+    _spotify_url = field_validator("spotify_url")(valid_spotify_url)
+
+    @field_validator("title")
+    @classmethod
+    def title_is_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("title required")
+        return value
+
+    @field_validator("days")
+    @classmethod
+    def days_in_week(cls, value: list[int]) -> list[int]:
+        if len(set(value)) != len(value) or any(day < 0 or day > 6 for day in value):
+            raise ValueError("days must be unique values in 0..6")
+        return value
+
+    @field_validator("duration_min")
+    @classmethod
+    def duration_is_slot_aligned(cls, value: int) -> int:
+        if value <= 0 or value % 15 != 0:
+            raise ValueError("duration_min must be a positive multiple of 15")
+        return value
+
+    @field_validator("start")
+    @classmethod
+    def start_is_hhmm(cls, value: str) -> str:
+        if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value):
+            raise ValueError("invalid start time")
+        return value
+
+    @model_validator(mode="after")
+    def block_fits_the_grid(self) -> RoutineBlock:
+        hour, minute = map(int, self.start.split(":"))
+        start = hour * 60 + minute
+        if minute % 15 or start < 360 or start + self.duration_min > 1380:
+            raise ValueError("block must fit the 06:00–23:00 grid")
+        return self
+
+
+class Routine(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, max_length=80)
+    name: str = Field(min_length=1, max_length=80)
+    blocks: list[RoutineBlock] = Field(max_length=100)
+    revision: int = Field(ge=0, le=2**53 - 1)
+
+    @field_validator("name")
+    @classmethod
+    def name_is_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("name required")
+        return value
+
+    @field_validator("blocks")
+    @classmethod
+    def template_ids_are_unique(cls, blocks: list[RoutineBlock]) -> list[RoutineBlock]:
+        if len({block.template_id for block in blocks}) != len(blocks):
+            raise ValueError("template ids must be unique")
+        return blocks
+
+    @model_validator(mode="after")
+    def occurrences_do_not_overlap(self) -> Routine:
+        for day in range(7):
+            intervals: list[tuple[int, int]] = []
+            for block in self.blocks:
+                if day not in block.days:
+                    continue
+                hour, minute = map(int, block.start.split(":"))
+                start = hour * 60 + minute
+                end = start + block.duration_min
+                if any(start < other_end and other_start < end for other_start, other_end in intervals):
+                    raise ValueError("routine blocks overlap")
+                intervals.append((start, end))
+        return self
+
+
 class Move(BaseModel):
     block_id: str
     reason: ReasonCode

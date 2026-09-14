@@ -1,5 +1,7 @@
+import hashlib
 import json
 import os
+import secrets
 import sqlite3
 import time
 from contextlib import asynccontextmanager
@@ -25,11 +27,13 @@ from backend.day import build_day
 from backend.models import (
     Assignment,
     AssignmentContent,
+    Routine,
     SolveRequest,
     TimeBlock,
     WeekRequest,
     valid_spotify_url,
 )
+from backend.restore import canonical, diff_snapshots, state_token
 from backend.solver import reschedule_after_miss, solve
 from backend.storage import (
     SESSION_SECONDS,
@@ -53,7 +57,16 @@ ASSIGNMENT_UNKNOWN = "assignment_id must name an assignment of this account"
 ASSIGNMENT_CONFLICT = "This assignment changed in another window. Reload before saving."
 ASSIGNMENT_LIMIT = "An account holds at most 1000 assignments"
 WEEK_CONFLICT = "This week changed in another window. Reload before saving."
+ROUTINE_CONFLICT = "This routine changed in another window. Reload before saving."
+ROUTINE_LIMIT = "An account holds at most 50 routines"
+ROUTINE_UNKNOWN = "Routine not found"
+RESTORE_UNKNOWN = "Restore point not found"
+RESTORE_STALE = "This preview is out of date. Refresh it before restoring."
+OPERATION_CONFLICT = "This operation was already used with different data."
 MAX_ASSIGNMENTS = 1000
+MAX_ROUTINES = 50
+MAX_RESTORE_POINTS = 20
+MAX_OPERATIONS = 100
 
 
 def encode_assignment(content: AssignmentContent) -> str:
@@ -246,6 +259,222 @@ def save_week_row(
     return blocks, revision + 1
 
 
+def naive_now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M")
+
+
+def payload_digest(value: object) -> str:
+    return hashlib.sha256(canonical(value).encode()).hexdigest()
+
+
+def capture_account(db: sqlite3.Connection, user_id: int) -> dict:
+    weeks = [
+        {
+            "week_start": row["week_start"],
+            "blocks": json.loads(row["blocks"]),
+            "revision": row["revision"],
+        }
+        for row in db.execute(
+            "SELECT week_start, blocks, revision FROM weeks WHERE user_id = ? ORDER BY week_start",
+            (user_id,),
+        )
+    ]
+    assignments = [
+        {"id": row["id"], "body": json.loads(row["body"]), "revision": row["revision"]}
+        for row in db.execute(
+            "SELECT id, body, revision FROM assignments WHERE user_id = ? ORDER BY id",
+            (user_id,),
+        )
+    ]
+    return {"weeks": weeks, "assignments": assignments}
+
+
+def prune_restore_points(db: sqlite3.Connection, user_id: int, keep_ids: set[str]) -> None:
+    rows = db.execute(
+        "SELECT seq, id FROM restore_points WHERE user_id = ? ORDER BY seq ASC",
+        (user_id,),
+    ).fetchall()
+    overflow = len(rows) - MAX_RESTORE_POINTS
+    if overflow <= 0:
+        return
+    extras = [row for row in rows if row["id"] not in keep_ids]
+    for row in extras[:overflow]:
+        db.execute("DELETE FROM restore_points WHERE seq = ?", (row["seq"],))
+
+
+def prune_operations(db: sqlite3.Connection, user_id: int) -> None:
+    count = db.execute(
+        "SELECT COUNT(*) AS n FROM operations WHERE user_id = ?", (user_id,)
+    ).fetchone()
+    extra = int(count["n"]) - MAX_OPERATIONS
+    if extra <= 0:
+        return
+    db.execute(
+        """DELETE FROM operations WHERE seq IN (
+            SELECT seq FROM operations WHERE user_id = ? ORDER BY seq ASC LIMIT ?
+        )""",
+        (user_id, extra),
+    )
+
+
+def recall_operation(
+    db: sqlite3.Connection, user_id: int, operation_id: str, digest_value: str
+) -> dict | None:
+    row = db.execute(
+        """SELECT payload_hash, response FROM operations
+        WHERE user_id = ? AND operation_id = ?""",
+        (user_id, operation_id),
+    ).fetchone()
+    if row is None:
+        return None
+    if row["payload_hash"] != digest_value:
+        raise HTTPException(409, OPERATION_CONFLICT)
+    return json.loads(row["response"])
+
+
+def remember_operation(
+    db: sqlite3.Connection, user_id: int, operation_id: str, digest_value: str, response: dict
+) -> None:
+    db.execute(
+        """INSERT INTO operations(user_id, operation_id, payload_hash, response)
+        VALUES (?, ?, ?, ?)""",
+        (user_id, operation_id, digest_value, canonical(response)),
+    )
+    prune_operations(db, user_id)
+
+
+def restore_point_view(row: sqlite3.Row) -> dict:
+    return {
+        "id": row["id"],
+        "label": row["label"],
+        "created_at": row["created_at"],
+        "weeks": row["weeks_count"],
+        "assignments": row["assignments_count"],
+    }
+
+
+def insert_restore_point(
+    db: sqlite3.Connection, user_id: int, label: str, keep_ids: set[str] | None = None
+) -> dict:
+    snapshot = capture_account(db, user_id)
+    point_id = "rp-" + secrets.token_hex(8)
+    created_at = naive_now()
+    db.execute(
+        """INSERT INTO restore_points(
+            user_id, id, label, created_at, weeks_count, assignments_count, body
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (
+            user_id,
+            point_id,
+            label,
+            created_at,
+            len(snapshot["weeks"]),
+            len(snapshot["assignments"]),
+            canonical(snapshot),
+        ),
+    )
+    protected = set(keep_ids or ())
+    protected.add(point_id)
+    prune_restore_points(db, user_id, protected)
+    return {
+        "id": point_id,
+        "label": label,
+        "created_at": created_at,
+        "weeks": len(snapshot["weeks"]),
+        "assignments": len(snapshot["assignments"]),
+    }
+
+
+def replace_account(db: sqlite3.Connection, user_id: int, snapshot: dict) -> dict:
+    db.execute("DELETE FROM weeks WHERE user_id = ?", (user_id,))
+    db.execute("DELETE FROM assignments WHERE user_id = ?", (user_id,))
+    weeks = []
+    assignments = []
+    for week in snapshot["weeks"]:
+        db.execute(
+            "INSERT INTO weeks(user_id, week_start, blocks, revision) VALUES (?, ?, ?, ?)",
+            (user_id, week["week_start"], canonical(week["blocks"]), week["revision"]),
+        )
+        weeks.append({"week_start": week["week_start"], "revision": week["revision"]})
+    for item in snapshot["assignments"]:
+        db.execute(
+            "INSERT INTO assignments(user_id, id, body, revision) VALUES (?, ?, ?, ?)",
+            (user_id, item["id"], canonical(item["body"]), item["revision"]),
+        )
+        assignments.append({"id": item["id"], "revision": item["revision"]})
+    return {"weeks": weeks, "assignments": assignments}
+
+
+def encode_routine(routine: Routine) -> str:
+    return canonical([block.model_dump() for block in routine.blocks])
+
+
+def routine_view(row: sqlite3.Row) -> dict:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "blocks": json.loads(row["body"]),
+        "revision": row["revision"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def upsert_routine(db: sqlite3.Connection, user_id: int, routine: Routine) -> dict:
+    encoded = encode_routine(routine)
+    row = db.execute(
+        """SELECT id, name, body, revision, created_at, updated_at FROM routines
+        WHERE user_id = ? AND id = ?""",
+        (user_id, routine.id),
+    ).fetchone()
+    stored_revision = row["revision"] if row else 0
+    if row is not None and row["name"] == routine.name and row["body"] == encoded:
+        return routine_view(row)
+    if routine.revision != stored_revision:
+        raise HTTPException(409, ROUTINE_CONFLICT)
+    stamp = naive_now()
+    if row is None:
+        count = db.execute("SELECT COUNT(*) AS n FROM routines WHERE user_id = ?", (user_id,)).fetchone()
+        if int(count["n"]) >= MAX_ROUTINES:
+            raise HTTPException(422, ROUTINE_LIMIT)
+        db.execute(
+            """INSERT INTO routines(user_id, id, name, body, revision, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 1, ?, ?)""",
+            (user_id, routine.id, routine.name, encoded, stamp, stamp),
+        )
+        stored = db.execute(
+            """SELECT id, name, body, revision, created_at, updated_at FROM routines
+            WHERE user_id = ? AND id = ?""",
+            (user_id, routine.id),
+        ).fetchone()
+        assert stored is not None
+        return routine_view(stored)
+    db.execute(
+        """UPDATE routines SET name = ?, body = ?, revision = revision + 1, updated_at = ?
+        WHERE user_id = ? AND id = ?""",
+        (routine.name, encoded, stamp, user_id, routine.id),
+    )
+    stored = db.execute(
+        """SELECT id, name, body, revision, created_at, updated_at FROM routines
+        WHERE user_id = ? AND id = ?""",
+        (user_id, routine.id),
+    ).fetchone()
+    assert stored is not None
+    return routine_view(stored)
+
+
+def delete_routine(db: sqlite3.Connection, user_id: int, routine_id: str, revision: int) -> dict:
+    row = db.execute(
+        "SELECT revision FROM routines WHERE user_id = ? AND id = ?", (user_id, routine_id)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(404, ROUTINE_UNKNOWN)
+    if revision != row["revision"]:
+        raise HTTPException(409, ROUTINE_CONFLICT)
+    db.execute("DELETE FROM routines WHERE user_id = ? AND id = ?", (user_id, routine_id))
+    return {"id": routine_id}
+
+
 class Credentials(BaseModel):
     model_config = ConfigDict(extra="forbid")
     username: str = Field(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_]+$")
@@ -281,6 +510,27 @@ class ChangesRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     weeks: list[SavedWeek] = Field(default_factory=list)
     assignments: list[AssignmentChange] = Field(default_factory=list)
+    operation_id: str | None = Field(default=None, min_length=1, max_length=80)
+    snapshot_label: str | None = Field(default=None, min_length=1, max_length=80)
+
+
+class RestoreCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    label: str = Field(min_length=1, max_length=80)
+    operation_id: str = Field(min_length=1, max_length=80)
+
+    @field_validator("label")
+    @classmethod
+    def label_is_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("label required")
+        return value
+
+
+class RestoreApply(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    state_token: str = Field(min_length=1, max_length=128)
+    operation_id: str = Field(min_length=1, max_length=80)
 
 
 class AlarmPreference(BaseModel):
@@ -570,8 +820,15 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     @app.post("/api/changes")
     def post_changes(batch: ChangesRequest, account: Annotated[dict, Depends(user)]) -> dict:
+        digest_value = payload_digest(batch.model_dump())
         with connect(path) as db:
             db.execute("BEGIN IMMEDIATE")
+            if batch.operation_id is not None:
+                remembered = recall_operation(db, account["id"], batch.operation_id, digest_value)
+                if remembered is not None:
+                    return remembered
+            if batch.snapshot_label is not None:
+                insert_restore_point(db, account["id"], batch.snapshot_label)
             assignment_results: list[dict] = []
             deletes: list[AssignmentChange] = []
             for change in batch.assignments:
@@ -610,7 +867,10 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 week_results.append(
                     {"week_start": week.week_start, "blocks": stored_blocks, "revision": revision}
                 )
-        return {"weeks": week_results, "assignments": assignment_results}
+            result = {"weeks": week_results, "assignments": assignment_results}
+            if batch.operation_id is not None:
+                remember_operation(db, account["id"], batch.operation_id, digest_value, result)
+        return result
 
     @app.get("/api/preferences")
     def get_preferences(account: Annotated[dict, Depends(user)]) -> dict:
@@ -665,6 +925,124 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 ),
             )
         return preferences.model_dump()
+
+    @app.get("/api/routines")
+    def get_routines(account: Annotated[dict, Depends(user)]) -> dict:
+        with connect(path) as db:
+            rows = db.execute(
+                """SELECT id, name, body, revision, created_at, updated_at FROM routines
+                WHERE user_id = ? ORDER BY name, id""",
+                (account["id"],),
+            ).fetchall()
+        return {"routines": [routine_view(row) for row in rows]}
+
+    @app.put("/api/routines/{routine_id}")
+    def put_routine(
+        routine_id: str, payload: Routine, account: Annotated[dict, Depends(user)]
+    ) -> dict:
+        if payload.id != routine_id:
+            raise HTTPException(422, "routine id in the path and body must match")
+        with connect(path) as db:
+            db.execute("BEGIN IMMEDIATE")
+            return upsert_routine(db, account["id"], payload)
+
+    @app.delete("/api/routines/{routine_id}")
+    def remove_routine(
+        routine_id: str,
+        account: Annotated[dict, Depends(user)],
+        revision: int | None = None,
+        operation_id: str | None = None,
+    ) -> dict:
+        if revision is None:
+            raise HTTPException(422, "revision is required")
+        digest_value = payload_digest({"id": routine_id, "revision": revision, "op": "delete"})
+        with connect(path) as db:
+            db.execute("BEGIN IMMEDIATE")
+            if operation_id is not None:
+                remembered = recall_operation(db, account["id"], operation_id, digest_value)
+                if remembered is not None:
+                    return remembered
+            result = delete_routine(db, account["id"], routine_id, revision)
+            if operation_id is not None:
+                remember_operation(db, account["id"], operation_id, digest_value, result)
+        return result
+
+    @app.get("/api/storage-info")
+    def get_storage_info(_account: Annotated[dict, Depends(user)]) -> dict:
+        hostname = parsed.hostname or ""
+        if hostname in {"127.0.0.1", "localhost", "testserver"}:
+            return {"mode": "local", "label": "On this device"}
+        return {"mode": "hosted", "label": "On your FlexWeek server"}
+
+    @app.get("/api/restore-points")
+    def get_restore_points(account: Annotated[dict, Depends(user)]) -> dict:
+        with connect(path) as db:
+            rows = db.execute(
+                """SELECT id, label, created_at, weeks_count, assignments_count
+                FROM restore_points WHERE user_id = ? ORDER BY seq DESC""",
+                (account["id"],),
+            ).fetchall()
+        return {"restore_points": [restore_point_view(row) for row in rows]}
+
+    @app.post("/api/restore-points")
+    def post_restore_point(
+        payload: RestoreCreate, account: Annotated[dict, Depends(user)]
+    ) -> dict:
+        digest_value = payload_digest(payload.model_dump())
+        with connect(path) as db:
+            db.execute("BEGIN IMMEDIATE")
+            remembered = recall_operation(db, account["id"], payload.operation_id, digest_value)
+            if remembered is not None:
+                return remembered
+            result = insert_restore_point(db, account["id"], payload.label)
+            remember_operation(db, account["id"], payload.operation_id, digest_value, result)
+        return result
+
+    @app.get("/api/restore-points/{point_id}/preview")
+    def preview_restore_point(point_id: str, account: Annotated[dict, Depends(user)]) -> dict:
+        with connect(path) as db:
+            row = db.execute(
+                "SELECT id, body FROM restore_points WHERE user_id = ? AND id = ?",
+                (account["id"], point_id),
+            ).fetchone()
+            if row is None:
+                raise HTTPException(404, RESTORE_UNKNOWN)
+            current = capture_account(db, account["id"])
+        stored = json.loads(row["body"])
+        return {
+            "id": row["id"],
+            "state_token": state_token(current),
+            "changes": diff_snapshots(current, stored),
+        }
+
+    @app.post("/api/restore-points/{point_id}/restore")
+    def restore_restore_point(
+        point_id: str, payload: RestoreApply, account: Annotated[dict, Depends(user)]
+    ) -> dict:
+        digest_value = payload_digest({"id": point_id, **payload.model_dump()})
+        with connect(path) as db:
+            db.execute("BEGIN IMMEDIATE")
+            remembered = recall_operation(db, account["id"], payload.operation_id, digest_value)
+            if remembered is not None:
+                return remembered
+            row = db.execute(
+                "SELECT id, body FROM restore_points WHERE user_id = ? AND id = ?",
+                (account["id"], point_id),
+            ).fetchone()
+            if row is None:
+                raise HTTPException(404, RESTORE_UNKNOWN)
+            current = capture_account(db, account["id"])
+            if payload.state_token != state_token(current):
+                raise HTTPException(409, RESTORE_STALE)
+            stored = json.loads(row["body"])
+            stamp = naive_now()
+            recovery = insert_restore_point(
+                db, account["id"], f"Before restore — {stamp}", keep_ids={point_id}
+            )
+            replaced = replace_account(db, account["id"], stored)
+            result = {"id": point_id, "recovery_id": recovery["id"], **replaced}
+            remember_operation(db, account["id"], payload.operation_id, digest_value, result)
+        return result
 
     @app.post("/api/solve")
     def post_solve(week: SolveRequest, account: Annotated[dict, Depends(user)]) -> dict:

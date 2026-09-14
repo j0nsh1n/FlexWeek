@@ -50,6 +50,37 @@ ASSIGNMENTS_TABLE = """
         PRIMARY KEY (user_id, id)
     )
 """
+ROUTINES_TABLE = """
+    CREATE TABLE IF NOT EXISTS routines (
+        user_id INTEGER NOT NULL REFERENCES users(id), id TEXT NOT NULL,
+        name TEXT NOT NULL, body TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, id)
+    )
+"""
+RESTORE_POINTS_TABLE = """
+    CREATE TABLE IF NOT EXISTS restore_points (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        id TEXT NOT NULL,
+        label TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        weeks_count INTEGER NOT NULL,
+        assignments_count INTEGER NOT NULL,
+        body TEXT NOT NULL,
+        UNIQUE(user_id, id)
+    )
+"""
+OPERATIONS_TABLE = """
+    CREATE TABLE IF NOT EXISTS operations (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        operation_id TEXT NOT NULL,
+        payload_hash TEXT NOT NULL,
+        response TEXT NOT NULL,
+        UNIQUE(user_id, operation_id)
+    )
+"""
 
 
 def digest(value: str) -> str:
@@ -201,6 +232,9 @@ def initialize(path: Path) -> None:
             );
             {WEEKS_TABLE};
             {ASSIGNMENTS_TABLE};
+            {ROUTINES_TABLE};
+            {RESTORE_POINTS_TABLE};
+            {OPERATIONS_TABLE};
             {PREFERENCES_TABLE};
             CREATE TABLE IF NOT EXISTS auth_attempts (
                 key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL
