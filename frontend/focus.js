@@ -231,6 +231,8 @@ async function creditFocusSession() {
     block.focus_sessions = Math.min(9999, (block.focus_sessions || 0) + 1);
     block.focus_minutes = Math.min(71400, (block.focus_minutes || 0) + prefs.timer_work_min);
   }
+  // Focus credit is progress, not an edit, so Undo leaves it alone.
+  absorbIntoHistory();
   await saveWeek();
   renderWeek();
 }
@@ -298,7 +300,7 @@ async function finishFocusedHomework() {
   }
   putAssignment({ ...assignment, completed: true, completed_at: localStamp() });
   resetFocusTimer();
-  commitWeek("Finished " + assignment.title + ".");
+  commitWeek("Finished " + assignment.title + ".", "finishing " + assignment.title);
   return true;
 }
 
@@ -315,6 +317,7 @@ async function addFocusTime(minutes) {
     return false;
   }
   putAssignment({ ...assignment, estimate_min: assignment.estimate_min + minutes });
+  recordStep("adding time to " + assignment.title);
   beginFocusBreak();
   const saved = await saveWeek();
   renderWeek();

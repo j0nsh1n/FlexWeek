@@ -22,6 +22,7 @@ let editingOccurrenceDay = null;
 let editingScope = "series";
 let editingExisting = false;
 let editingAssignmentId = null;
+let editingSeries = false;
 // Days of a task added without dragging follow its due day until the student
 // picks days themselves. A dragged or existing task keeps the days it has.
 let flexDaysTouched = true;
@@ -405,7 +406,9 @@ function setEditScope(scope) {
   editingScope = scope === "occurrence" ? "occurrence" : "series";
   field("f-scope-occurrence").checked = editingScope === "occurrence";
   field("f-scope-series").checked = editingScope === "series";
-  formDeleteEl.textContent = editingScope === "occurrence" && editingOccurrenceDay !== null ? "Remove this day" : "Delete";
+  formDeleteEl.textContent = editingScope === "occurrence" && editingOccurrenceDay !== null
+    ? "Remove " + DAY_FULL[editingOccurrenceDay] + " only"
+    : (editingSeries ? "Delete all days" : "Delete");
 }
 
 function openEditor(draft, block, occurrenceDay = null, scope = null) {
@@ -413,6 +416,7 @@ function openEditor(draft, block, occurrenceDay = null, scope = null) {
   editingExisting = Boolean(block);
   editingOccurrenceDay = Number.isInteger(occurrenceDay) ? occurrenceDay : null;
   editingAssignmentId = draft.assignmentId || null;
+  editingSeries = Boolean(block) && block.kind === "locked" && isSeries(block);
   flexDaysTouched = true;
   showFormError(null);
   writeDraft(draft);
@@ -456,6 +460,7 @@ function closeForm() {
   editingScope = "series";
   editingExisting = false;
   editingAssignmentId = null;
+  editingSeries = false;
   showFormError(null);
 }
 

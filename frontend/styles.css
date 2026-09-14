@@ -631,6 +631,13 @@ button.danger {
 .link-button { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; font-weight: 650; }
 
 .status { padding: 0.45rem 1.1rem; margin: 0; min-height: 2.1rem; }
+.status-row { display: flex; align-items: center; gap: var(--space-2); padding-right: 1.1rem; }
+.status-row .status { flex: 1; }
+.status-row button { padding: 0.2rem 0.55rem; font-size: 0.8rem; }
+.week-menu { position: relative; }
+.week-menu > summary { cursor: pointer; list-style: none; padding: 0.3rem 0.55rem; font-size: 0.8rem; border: 1px solid var(--hairline); border-radius: var(--radius-sm); }
+.week-menu > summary::-webkit-details-marker { display: none; }
+.week-menu-items { position: absolute; z-index: 30; margin-top: var(--space-1); padding: var(--space-1); background: var(--surface-elevated); border: 1px solid var(--hairline-strong); border-radius: var(--radius); box-shadow: var(--shadow-lg); }
 .save-actions { padding: 0.6rem 1.1rem; border-bottom: 1px solid var(--hairline); background: var(--surface); }
 .save-actions button { margin: var(--space-1); }
 .controls { flex-wrap: wrap; }

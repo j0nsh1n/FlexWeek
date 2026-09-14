@@ -32,6 +32,15 @@ All notable changes to FlexWeek are documented here. Format follows
   is counted and asks the same question. Starting another timer asks first,
   logging out or signing in as another account clears it, and Quick focus
   times work that is not on the calendar without crediting anything.
+- Undo and redo (2026-09-13, frontend). The last 50 changes to weeks and
+  homework can be undone and redone with the Undo and Redo buttons beside the
+  status line, Ctrl/Cmd+Z, and Ctrl/Cmd+Shift+Z or Ctrl+Y, but not while
+  typing in a field. Undo saves through the normal revision checks, never
+  takes away focus minutes, and stops at a 409 with the usual reload actions;
+  a step for a week another device changed since is skipped. Repeating blocks
+  say "Remove Tuesday only" or "Delete all days", deleting homework asks
+  whether to remove this session or the whole homework, and Clear week moved
+  into a More menu. History is cleared on sign-out and account change.
 - Hybrid frost look (2026-09-10) in light and dark. The page sits on a soft
   gradient; the header, week bar, sidebar, sign-in card and dialogs are frosted
   glass with hairline borders; task cards and forms are more solid; the week

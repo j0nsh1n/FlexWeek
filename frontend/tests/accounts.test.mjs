@@ -963,3 +963,277 @@ test('homework added this week joins Continuing only when it needs more time tha
   h.run(`putAssignment({ ...assignments.get(${JSON.stringify(id)}), estimate_min: 90 })`);
   assert.deepEqual(continuing(h), [[id, 30]]);
 });
+
+// Stage 1: undo and redo.
+const weekdaySchool = { id: 'school', kind: 'locked', title: 'School', duration_min: 390, days: [0, 1, 2, 3, 4], start: '08:00', priority: 1, energy: 'medium' };
+const inPage = (h, code) => JSON.parse(h.run(`JSON.stringify(${code})`));
+
+/** A server that accepts every write and counts revisions up, recording what it was sent. */
+function fakeServer(h) {
+  const calls = [];
+  h.handle(async (path, options = {}) => {
+    const method = options.method || 'GET';
+    const body = options.body ? JSON.parse(options.body) : null;
+    calls.push({ method, path, body });
+    if (path === '/api/changes') return changesReply(body);
+    if (path === '/api/solve') {
+      return response(200, { placed: [], unplaced: [], moves: [], explanations: [], failed_constraints: [], solve_ms: 1, complete: true });
+    }
+    if (method === 'PUT') return response(200, { ...body, revision: body.revision + 1 });
+    if (method === 'DELETE') return response(200, { changed_weeks: [], removed_sessions: {} });
+    return response(404, { detail: `unexpected ${method} ${path}` });
+  });
+  return calls;
+}
+
+async function settle() {
+  await tick();
+  await tick();
+}
+
+test('Undo after a delete puts the block back with one week save, and Redo deletes it again', async () => {
+  const h = harness();
+  await h.login(1, [weekdaySchool]);
+  const calls = fakeServer(h);
+  assert.equal(h.elements.get('undo').hidden, true);
+  assert.equal(h.run("deleteBlockById('school')"), true);
+  await settle();
+  assert.equal(h.run('weekState().blocks.length'), 0);
+  assert.equal(h.elements.get('undo').hidden, false);
+  assert.equal(h.run('statusEl.textContent'), 'Deleted School. Undo brings it back.');
+
+  assert.equal(await h.run('undo()'), true);
+  assert.deepEqual(calls.map(call => [call.method, call.path, call.body.revision]), [['PUT', '/api/week', 0], ['PUT', '/api/week', 1]]);
+  assert.deepEqual(calls[1].body.blocks.map(block => block.id), ['school']);
+  assert.equal(h.run('weekState().blocks[0].id'), 'school');
+  assert.equal(h.run('statusEl.textContent'), 'Undid deleting School.');
+  assert.equal(h.elements.get('redo').hidden, false);
+
+  assert.equal(await h.run('redo()'), true);
+  assert.equal(h.run('weekState().blocks.length'), 0);
+  assert.equal(calls.at(-1).body.revision, 2);
+});
+
+test('Undo after Clear week restores every block, and a new edit clears Redo', async () => {
+  const h = harness();
+  await h.login(1, [weekdaySchool, task]);
+  fakeServer(h);
+  h.elements.get('new-week').listeners.click();
+  await settle();
+  assert.equal(h.run('weekState().blocks.length'), 0);
+  assert.equal(await h.run('undo()'), true);
+  assert.deepEqual(inPage(h, 'weekState().blocks.map(block => block.id)'), ['school', 'homework']);
+  assert.equal(h.elements.get('redo').hidden, false);
+
+  assert.equal(h.run("deleteBlockById('homework')"), true);
+  await settle();
+  assert.equal(h.run('redoSteps.length'), 0);
+  assert.equal(h.elements.get('redo').hidden, true);
+});
+
+test('Undo after a missed-day replan brings the day back as it was', async () => {
+  const h = harness();
+  await h.login(1, [weekdaySchool]);
+  const calls = fakeServer(h);
+  h.run('weekState().trace = { placed: [], unplaced: [], moves: [], explanations: [] }');
+  await h.run("recoverMissedOccurrence('school', 1)");
+  assert.deepEqual(inPage(h, 'weekState().blocks[0].missed_days'), [1]);
+  assert.equal(await h.run('undo()'), true);
+  assert.deepEqual(calls.at(-1).body.blocks[0].missed_days || [], []);
+  assert.equal(h.run('statusEl.textContent'), 'Undid the replan.');
+});
+
+test('Undo after deleting a whole homework re-creates it and puts back every removed session in one change', async () => {
+  const h = harness();
+  const math = openAssignment('hw-math', { title: 'Math', due: '2026-09-16T21:00', estimate_min: 120, revision: 4 });
+  const here = { id: 's-here', kind: 'flexible', title: 'Math', duration_min: 60, days: [3], assignment_id: 'hw-math' };
+  const nextWeek = { id: 's-next', kind: 'flexible', title: 'Math', duration_min: 60, days: [0], assignment_id: 'hw-math' };
+  const soccer = { id: 'soccer', kind: 'locked', title: 'Soccer', duration_min: 60, days: [1], start: '16:00' };
+  await h.login(1, [weekdaySchool, here], [], [math]);
+  const calls = [];
+  h.handle(async (path, options = {}) => {
+    const method = options.method || 'GET';
+    const body = options.body ? JSON.parse(options.body) : null;
+    calls.push({ method, path, body });
+    if (method === 'DELETE') {
+      return response(200, {
+        changed_weeks: [{ week_start: MONDAY, revision: 1 }, { week_start: '2026-09-14', revision: 8 }],
+        removed_sessions: { [MONDAY]: [here], '2026-09-14': [nextWeek] },
+      });
+    }
+    if (path === '/api/week?week_start=2026-09-14') return response(200, { week_start: '2026-09-14', blocks: [soccer], revision: 8 });
+    if (path === '/api/changes') return changesReply(body);
+    return response(404, { detail: `unexpected ${method} ${path}` });
+  });
+
+  assert.equal(h.run("deleteBlockById('s-here')"), true);
+  assert.equal(h.elements.get('delete-dialog').open, true);
+  assert.equal(calls.length, 0, 'nothing is deleted before the student chooses');
+  h.elements.get('delete-assignment').listeners.click();
+  await settle();
+  assert.equal(calls[0].path, '/api/assignments/hw-math?revision=4');
+  assert.equal(h.run("assignments.has('hw-math')"), false);
+  assert.deepEqual(inPage(h, 'weekState().blocks.map(block => block.id)'), ['school']);
+  assert.equal(h.run('weekState().revision'), 1);
+
+  assert.equal(await h.run('undo()'), true);
+  const change = calls.at(-1);
+  assert.equal(change.path, '/api/changes');
+  assert.deepEqual(change.body.assignments.map(item => [item.id, item.revision, item.assignment.title]), [['hw-math', 0, 'Math']]);
+  assert.deepEqual(change.body.weeks.map(week => [week.week_start, week.revision, week.blocks.map(block => block.id)]), [
+    [MONDAY, 1, ['school', 's-here']],
+    ['2026-09-14', 8, ['soccer', 's-next']],
+  ]);
+  assert.equal(h.run("assignments.get('hw-math').revision"), 3);
+  assert.deepEqual(inPage(h, 'weekState().blocks.map(block => block.id)'), ['school', 's-here']);
+});
+
+test('an undo refused with 409 stores nothing, keeps the step and shows the conflict actions', async () => {
+  const h = harness();
+  await h.login(1, [weekdaySchool]);
+  fakeServer(h);
+  h.run("deleteBlockById('school')");
+  await settle();
+  h.handle(async () => response(409, { detail: 'This week changed elsewhere.' }));
+  assert.equal(await h.run('undo()'), false);
+  assert.equal(h.run('undoSteps.length'), 1);
+  assert.equal(h.run('weekState().blocks.length'), 0);
+  assert.equal(h.run('weekState().conflict'), true);
+  assert.equal(h.elements.get('save-actions').hidden, false);
+  assert.match(h.run('statusEl.textContent'), /^Could not undo deleting School: it changed on another device\./);
+});
+
+test('an older step for a week another device changed is skipped instead of overwriting the newer week', async () => {
+  const h = harness();
+  await h.login(1, [weekdaySchool]);
+  fakeServer(h);
+  h.run("deleteBlockById('school')");
+  await settle();
+  // Reload saved week finds revision 5, which this page never wrote.
+  h.handle(async () => response(200, { week_start: MONDAY, blocks: [task], revision: 5 }));
+  h.elements.get('reload-week').listeners.click();
+  await settle();
+  const sent = h.requests.length;
+  assert.equal(await h.run('undo()'), false);
+  assert.equal(h.requests.length, sent);
+  assert.equal(h.run('undoSteps.length'), 0);
+  assert.equal(h.run('statusEl.textContent'), 'Undo skipped deleting School: it changed on another device since.');
+});
+
+test('Undo after adding homework saves the week without the session, then deletes the empty assignment', async () => {
+  const h = harness();
+  await h.login(1, [weekdaySchool]);
+  const calls = fakeServer(h);
+  h.run(`weekState().blocks.push(attachAssignment(
+    { id: 's1', kind: 'flexible', title: 'Essay', duration_min: 60, days: [3, 4] },
+    { assignmentId: null, dueDate: '2026-09-12', dueTime: '21:00' }))`);
+  h.run('commitWeek()');
+  await settle();
+  assert.equal(calls[0].path, '/api/changes');
+  const id = h.run('weekState().blocks[1].assignment_id');
+  assert.equal(await h.run('undo()'), true);
+  assert.deepEqual(calls.slice(1).map(call => [call.method, call.path]),
+    [['PUT', '/api/week'], ['DELETE', `/api/assignments/${id}?revision=3`]]);
+  assert.deepEqual(calls[1].body.blocks.map(block => block.id), ['school']);
+  assert.equal(h.run(`assignments.has(${JSON.stringify(id)})`), false);
+});
+
+test('Undo of a homework edit keeps the focus minutes counted since', async () => {
+  const h = harness();
+  const math = openAssignment('hw-math', { title: 'Math', due: '2026-09-16T21:00', estimate_min: 120, revision: 2 });
+  await h.login(1, [{ id: 's-here', kind: 'flexible', title: 'Math', duration_min: 60, days: [3], assignment_id: 'hw-math' }], [], [math]);
+  const calls = fakeServer(h);
+  h.run("putAssignment({ ...assignments.get('hw-math'), title: 'Algebra' })");
+  h.run('commitWeek()');
+  await settle();
+  // A focus session is credited afterwards; that is progress, not an edit.
+  h.run("putAssignment({ ...assignments.get('hw-math'), focus_minutes: 30, focus_sessions: 1 })");
+  h.run('absorbIntoHistory()');
+  assert.equal(await h.run('saveWeek()'), true);
+  assert.equal(await h.run('undo()'), true);
+  const restored = calls.at(-1);
+  assert.equal(restored.path, '/api/assignments/hw-math');
+  assert.deepEqual([restored.body.title, restored.body.focus_minutes, restored.body.focus_sessions, restored.body.revision],
+    ['Math', 30, 1, 3]);
+});
+
+test('Ctrl+Z undoes, Ctrl+Shift+Z and Ctrl+Y redo, but not while typing in a field', async () => {
+  const h = harness();
+  await h.login(1, [weekdaySchool]);
+  fakeServer(h);
+  h.run("deleteBlockById('school')");
+  await settle();
+  const press = ({ key, ctrl = false, meta = false, shift = false, field = false }) => h.run(`handleHistoryKey({
+    preventDefault() {}, target: ${field ? '{ closest: () => ({}) }' : 'null'}, key: ${JSON.stringify(key)},
+    ctrlKey: ${ctrl}, metaKey: ${meta}, shiftKey: ${shift}, altKey: false })`);
+  assert.equal(press({ key: 'z', ctrl: true, field: true }), false);
+  assert.equal(h.run('undoSteps.length'), 1);
+  assert.equal(press({ key: 'z', meta: true }), true);
+  await settle();
+  assert.equal(h.run('redoSteps.length'), 1);
+  assert.equal(press({ key: 'Z', ctrl: true, shift: true }), true);
+  await settle();
+  assert.equal(h.run('undoSteps.length'), 1);
+  assert.equal(press({ key: 'z', ctrl: true }), true);
+  await settle();
+  assert.equal(press({ key: 'y', ctrl: true }), true);
+  await settle();
+  assert.equal(h.run('weekState().blocks.length'), 0);
+  assert.equal(press({ key: 'y', meta: true }), false, 'Cmd+Y is not redo');
+});
+
+test('history is cleared when another account signs in', async () => {
+  const h = harness();
+  await h.login(1, [weekdaySchool]);
+  fakeServer(h);
+  h.run("deleteBlockById('school')");
+  await settle();
+  assert.equal(h.run('undoSteps.length'), 1);
+  await h.login(2, []);
+  assert.equal(h.run('undoSteps.length + redoSteps.length'), 0);
+  assert.equal(h.elements.get('undo').hidden, true);
+});
+
+test('repeating blocks offer Remove Tuesday only and Delete all days; a one-day block offers Delete', async () => {
+  const h = harness();
+  const dentist = { id: 'dentist', kind: 'locked', title: 'Dentist', duration_min: 60, days: [2], start: '15:00' };
+  await h.login(1, [weekdaySchool, dentist]);
+  h.run("openBlockEditor(weekState().blocks[0], 1, 'occurrence')");
+  assert.equal(h.elements.get('form-delete').textContent, 'Remove Tuesday only');
+  h.run("openBlockEditor(weekState().blocks[0], 1, 'series')");
+  assert.equal(h.elements.get('form-delete').textContent, 'Delete all days');
+  h.run("openBlockEditor(weekState().blocks[1], 2, 'occurrence')");
+  assert.equal(h.elements.get('form-delete').textContent, 'Delete');
+});
+
+test('deleting homework asks first, and Remove this session keeps the homework', async () => {
+  const h = harness();
+  const math = openAssignment('hw-math', { title: 'Math', due: '2026-09-16T21:00', estimate_min: 120, planned_min: 60 });
+  await h.login(1, [{ id: 's-here', kind: 'flexible', title: 'Math', duration_min: 60, days: [3], assignment_id: 'hw-math' }], [], [math]);
+  const calls = fakeServer(h);
+  assert.equal(h.run("deleteBlockById('s-here')"), true);
+  assert.equal(h.elements.get('delete-dialog').open, true);
+  assert.equal(calls.length, 0);
+  h.elements.get('delete-session').listeners.click();
+  await settle();
+  assert.equal(h.elements.get('delete-dialog').open, false);
+  assert.deepEqual(calls.map(call => [call.method, call.path]), [['PUT', '/api/week']]);
+  assert.equal(h.run("assignments.has('hw-math')"), true);
+  assert.equal(h.run('statusEl.textContent'), 'Removed this session of Math. The homework is kept. Undo brings the session back.');
+});
+
+test('deleting homework that was never saved asks for a save first, so Undo is never left pointing at nothing', async () => {
+  const h = harness();
+  await h.login(1, [weekdaySchool]);
+  h.handle(async () => { throw new Error('Offline'); });
+  h.run(`weekState().blocks.push(attachAssignment(
+    { id: 's1', kind: 'flexible', title: 'Essay', duration_min: 60, days: [3, 4] },
+    { assignmentId: null, dueDate: '2026-09-12', dueTime: '21:00' }))`);
+  assert.equal(await h.run('commitWeek()'), false);
+  const id = h.run('weekState().blocks[1].assignment_id');
+  const sent = h.requests.length;
+  assert.equal(await h.run(`deleteAssignmentEverywhere(${JSON.stringify(id)})`), false);
+  assert.equal(h.requests.length, sent);
+  assert.equal(h.run('weekState().blocks.length'), 2);
+  assert.equal(h.run('statusEl.textContent'), 'Essay is not saved yet. Press Retry save, then delete it.');
+});

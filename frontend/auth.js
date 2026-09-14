@@ -54,6 +54,7 @@ function signedOut(message = "Log in to open your week.", preserve = true, scree
   assignments.clear();
   dirtyAssignments.clear();
   plannedLater.clear();
+  clearHistory();
   savedWeeks = [];
   selectedWeek = currentWeekStart();
   saving = false;
@@ -106,6 +107,10 @@ async function loadAccount(identity) {
     state.blocks = week.blocks;
     state.revision = week.revision;
     rememberPlannedLater(selectedWeek, ownedItems, week.blocks);
+    // History belongs to one account and one page load.
+    clearHistory();
+    noteLoaded("week", selectedWeek, week.blocks, week.revision, null);
+    ownedItems.forEach(function (item) { noteLoaded("assignment", item.id, assignmentBody(item), item.revision, null); });
     (suspendedAssignments.get(account.id) || []).forEach(putAssignment);
     suspendedAssignments.delete(account.id);
     const suspendedDraft = suspendedDrafts.get(account.id);

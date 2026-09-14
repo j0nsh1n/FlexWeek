@@ -42,7 +42,11 @@
       <button type="button" id="solve"><svg class="icon" aria-hidden="true"><use href="#i-solve"/></svg>Solve</button>
     </div>
   </header>
-  <p id="status" class="status" role="status">Connecting…</p>
+  <div class="status-row">
+    <p id="status" class="status" role="status">Connecting…</p>
+    <button type="button" id="undo" class="secondary" hidden>Undo</button>
+    <button type="button" id="redo" class="secondary" hidden>Redo</button>
+  </div>
   <section id="auth-panel" class="auth-panel">
     <div id="register-screen" aria-labelledby="register-heading">
       <h2 id="register-heading">Create your account</h2>
@@ -109,7 +113,12 @@
         <p id="type-hint" class="note" aria-live="polite"></p>
         <div class="editor-actions">
           <button type="button" id="add-block" class="secondary"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>Add without dragging</button>
-          <button type="button" id="new-week" class="secondary">Clear week</button>
+          <details id="week-menu" class="week-menu">
+            <summary>More</summary>
+            <div class="week-menu-items">
+              <button type="button" id="new-week" class="secondary">Clear week</button>
+            </div>
+          </details>
         </div>
       </section>
 
@@ -160,6 +169,7 @@
   </main>
   <footer class="foot">Congressional App Challenge 2026 · GPL-3.0</footer>
   <script src="/static/app.js" defer></script>
+  <script src="/static/history.js" defer></script>
   <script src="/static/focus.js" defer></script>
   <script src="/static/editor.js" defer></script>
   <script src="/static/setup.js" defer></script>
@@ -398,6 +408,15 @@
       <button type="button" id="alarm-dismiss">Dismiss</button>
       <button type="button" id="alarm-snooze" class="secondary">Snooze 5 minutes</button>
       <button type="button" id="alarm-open-spotify" class="secondary" hidden>Open Spotify</button>
+    </div>
+  </dialog>
+  <dialog id="delete-dialog" class="alarm-dialog" aria-labelledby="delete-title">
+    <h2 id="delete-title">Delete homework</h2>
+    <p id="delete-detail"></p>
+    <div class="form-actions">
+      <button type="button" id="delete-session" class="danger">Remove this session</button>
+      <button type="button" id="delete-assignment" class="danger">Delete the whole homework</button>
+      <button type="button" id="delete-cancel" class="secondary">Cancel</button>
     </div>
   </dialog>
   <div id="reminder-toast" class="reminder-toast" hidden role="status" aria-live="polite"></div>

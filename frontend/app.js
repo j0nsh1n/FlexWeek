@@ -785,7 +785,10 @@ async function loadAssignments(weekStart) {
   const items = data && Array.isArray(data.assignments) ? data.assignments : [];
   items.forEach(function (item) {
     // An unsaved local edit wins until it is saved.
-    if (!dirtyAssignments.has(item.id)) assignments.set(item.id, item);
+    if (dirtyAssignments.has(item.id)) return;
+    const known = assignments.get(item.id);
+    noteLoaded("assignment", item.id, assignmentBody(item), item.revision, known ? known.revision : null);
+    assignments.set(item.id, item);
   });
   return items;
 }
@@ -994,6 +997,8 @@ async function selectWeek(weekStart) {
     const [data, owned] = await Promise.all([api("/api/week?week_start=" + weekStart), loadAssignments(weekStart)]);
     if (selectEpoch !== epoch) return false;
     const opened = isWeekStart(data.week_start) ? data.week_start : weekStart;
+    const known = weeks.get(opened);
+    noteLoaded("week", opened, data.blocks, data.revision, known ? known.revision : null);
     const state = weekState(opened);
     state.blocks = data.blocks;
     rememberPlannedLater(opened, owned, data.blocks);
@@ -1035,9 +1040,10 @@ function clearSolveResult(note = "Press Solve to place these around school and s
   flexNoteEl.textContent = note;
 }
 
-/** The one refresh path after the week's blocks change: drop the stale solve, save, redraw. */
-function commitWeek(note) {
+/** The one refresh path after the week's blocks change: drop the stale solve, record the undo step, save, redraw. */
+function commitWeek(note, label = "your last change") {
   clearSolveResult(note);
+  recordStep(label);
   const saved = saveWeek();
   renderWeek();
   return saved;
@@ -1098,15 +1104,60 @@ function applyBlockTimes(blockId, startMin, endMin) {
 
 function deleteBlockById(blockId) {
   if (!account || saving || !blockId) return false;
+  const block = weekState().blocks.find(function (item) { return item.id === blockId; });
+  if (!block) return false;
+  // Homework asks whether only this session goes or the whole assignment.
+  if (assignmentOf(block)) return askDeleteHomework(block);
+  return removeBlock(block, "deleting " + block.title, "Deleted " + block.title + ". Undo brings it back.");
+}
+
+function removeBlock(block, label, notice) {
   const state = weekState();
-  const before = state.blocks.length;
-  state.blocks = state.blocks.filter(function (item) { return item.id !== blockId; });
-  if (state.blocks.length === before) return false;
-  if (selectedBlockId === blockId) selectBlock(null, null);
+  state.blocks = state.blocks.filter(function (item) { return item.id !== block.id; });
+  if (selectedBlockId === block.id) selectBlock(null, null);
   closeForm();
-  commitWeek();
+  noticeAfterSave(commitWeek(undefined, label), notice);
   return true;
 }
+
+/** Once the save lands, say what changed and that Undo brings it back. */
+function noticeAfterSave(saved, notice) {
+  Promise.resolve(saved).then(function (ok) { if (ok) setStatus(notice); });
+}
+
+function askDeleteHomework(block) {
+  const dialog = document.getElementById("delete-dialog");
+  closeForm();
+  dialog.dataset.id = block.id;
+  document.getElementById("delete-detail").textContent = "Remove only this session and keep " + assignmentOf(block).title +
+    ", or delete the homework with its sessions in every week?";
+  if (typeof dialog.showModal === "function") {
+    if (!dialog.open) dialog.showModal();
+  } else {
+    dialog.open = true;
+  }
+  return true;
+}
+
+/** Close the delete question and return the block it was about. */
+function closeDeleteDialog() {
+  const dialog = document.getElementById("delete-dialog");
+  if (typeof dialog.close === "function") dialog.close();
+  else dialog.open = false;
+  return weekState().blocks.find(function (item) { return item.id === dialog.dataset.id; }) || null;
+}
+
+document.getElementById("delete-session").addEventListener("click", function () {
+  const block = closeDeleteDialog();
+  if (!block || !account || saving) return;
+  removeBlock(block, "removing a session of " + block.title,
+    "Removed this session of " + block.title + ". The homework is kept. Undo brings the session back.");
+});
+document.getElementById("delete-assignment").addEventListener("click", function () {
+  const block = closeDeleteDialog();
+  if (block && block.assignment_id) deleteAssignmentEverywhere(block.assignment_id);
+});
+document.getElementById("delete-cancel").addEventListener("click", function () { closeDeleteDialog(); });
 
 function hideContextMenu() {
   const menu = document.getElementById("block-context-menu");
@@ -1123,6 +1174,7 @@ function showContextMenu(clientX, clientY, blockId, day) {
     if (action === "edit") btn.hidden = Boolean(series);
     else if (action === "edit-occurrence" || action === "edit-series" || action === "delete-occurrence") {
       btn.hidden = !series;
+      if (action === "delete-occurrence" && Number.isInteger(day)) btn.textContent = "Remove " + DAY_FULL[day] + " only";
     } else if (action === "start-focus") {
       btn.hidden = !source || source.completed || source.pomodoro_role === "break" || !resolveFocusPlacement(blockId, day);
     } else if (action === "split-pomodoros") {
@@ -1134,6 +1186,7 @@ function showContextMenu(clientX, clientY, blockId, day) {
       btn.hidden = !source || !safeSpotifyUrl(source.spotify_url);
     } else {
       btn.hidden = false;
+      if (action === "delete") btn.textContent = series ? "Delete all days" : "Delete";
     }
   });
   menu.hidden = false;
@@ -1756,12 +1809,14 @@ function deleteOccurrenceById(blockId, day) {
   const state = weekState();
   const index = state.blocks.findIndex(function (item) { return item.id === blockId; });
   if (index < 0) return false;
+  const title = state.blocks[index].title;
   const updated = removeOccurrence(state.blocks[index], day);
   if (updated) state.blocks[index] = updated;
   else state.blocks.splice(index, 1);
   if (selectedBlockId === blockId) selectBlock(null, null);
   closeForm();
-  commitWeek();
+  noticeAfterSave(commitWeek(undefined, "removing " + DAY_FULL[day] + " from " + title),
+    "Removed " + DAY_FULL[day] + " from " + title + ". Undo brings it back.");
   return true;
 }
 
@@ -2268,10 +2323,12 @@ function syncPhase7Loops() {
 }
 
 document.getElementById("new-week").addEventListener("click", function () {
-  if (!account || saving || !confirm("Clear " + weekLabel(selectedWeek) + "? This will be saved to your account.")) return;
+  document.getElementById("week-menu").open = false;
+  if (!account || saving || !confirm("Clear " + weekLabel(selectedWeek) + "? Undo can bring it back.")) return;
   weekState().blocks = [];
   closeForm();
-  commitWeek("Add school or sports as fixed times, then homework as flexible tasks.");
+  noticeAfterSave(commitWeek("Add school or sports as fixed times, then homework as flexible tasks.", "clearing the week"),
+    "Cleared " + weekLabel(selectedWeek) + ". Undo brings it back.");
 });
 
 function missedHistoryBlocks() {
@@ -2309,6 +2366,7 @@ async function solveWeek() {
     if (splitCount) {
       saving = false;
       lockEditor(false);
+      recordStep("the focus split");
       if (!await saveWeek() || solveEpoch !== epoch) return;
       saving = true;
       lockEditor(true);
@@ -2353,7 +2411,10 @@ async function recoverMissedOccurrence(blockId, day) {
   } finally {
     if (recoverEpoch === epoch) { saving = false; lockEditor(false); }
   }
-  if (recovered && recoverEpoch === epoch) await saveWeek();
+  if (recovered && recoverEpoch === epoch) {
+    recordStep("the replan");
+    await saveWeek();
+  }
 }
 
 themeEl.addEventListener("change", async () => {
@@ -2384,6 +2445,7 @@ document.getElementById("reload-week").addEventListener("click", async () => {
     const data = await api("/api/week?week_start=" + weekStart);
     if (reloadEpoch !== epoch) return;
     const state = weekState(weekStart);
+    noteLoaded("week", weekStart, data.blocks, data.revision, state.revision);
     state.blocks = data.blocks;
     state.revision = data.revision;
     state.dirty = false;
