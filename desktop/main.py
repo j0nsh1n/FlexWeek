@@ -474,7 +474,7 @@ def smoke_flow(username: str) -> list[tuple[str, str, str | None]]:
         ("setup homework step", "!document.getElementById('setup-homework').hidden",
          "document.getElementById('setup-homework-title').value = 'Math worksheet';"
          "document.getElementById('setup-next').click();"),
-        ("setup summary", "document.getElementById('setup-next').textContent === 'Add to my week and Solve'",
+        ("setup summary", "document.getElementById('setup-next').textContent === 'Add to my week and plan'",
          "document.getElementById('setup-next').click();"),
         ("setup Solve", "!document.getElementById('setup-dialog').open && "
          "!document.getElementById('debug').hidden && Boolean(document.querySelector('.flex-block'))", None),

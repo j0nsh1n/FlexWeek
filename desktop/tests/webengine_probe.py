@@ -510,11 +510,14 @@ def run(case: str, root: Path) -> None:
             evaluate("document.getElementById('focus-reset').click()")
             click_agenda("Finished")
             wait_for("document.getElementById('status').textContent.startsWith('Finished Essay')")
+            # Pass the reply back as JSON text; runJavaScript does not hand arrays to Python reliably.
             evaluate("window.__done = undefined; "
                      "api('/api/assignments?week_start=' + selectedWeek + '&include_completed=true')"
-                     ".then(data => { window.__done = data.assignments.map(a => a.completed); })")
-            wait_for("Array.isArray(window.__done)")
-            assert evaluate("window.__done") == [True], evaluate("window.__done")
+                     ".then(data => { window.__done = JSON.stringify("
+                     "data.assignments.map(a => a.completed)); })")
+            wait_for("typeof window.__done === 'string'")
+            done = json.loads(evaluate("window.__done"))
+            assert done == [True], done
 
             # At 1280px Week still shows seven days, one control away, with Add homework on screen.
             window.resize(1280, 800)
