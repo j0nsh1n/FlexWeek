@@ -12,6 +12,12 @@ All notable changes to FlexWeek are documented here. Format follows
   `/api/assignments` and POST `/api/changes` land with the week save rules in
   `docs/stage1-contract.md`. Old weekday `latest` values migrate on start and
   are still accepted on saves.
+- Homework due dates (2026-09-13, frontend). Adding homework asks for a due
+  date and time instead of a weekday, and the date may be in a later week.
+  Each homework is saved as an assignment together with its session in the
+  week, and the card shows the full due date. Focus sessions add their minutes
+  to the homework and never mark it done; marking the session done finishes
+  the homework. Solve sends the week on screen so due dates become bounds.
 - Hybrid frost look (2026-09-10) in light and dark. The page sits on a soft
   gradient; the header, week bar, sidebar, sign-in card and dialogs are frosted
   glass with hairline borders; task cards and forms are more solid; the week

@@ -209,7 +209,7 @@ def run(case: str, root: Path) -> None:
                 document.getElementById('setup-sports-day-1').checked=true;
                 document.getElementById('setup-next').click();""")
             evaluate("""document.getElementById('setup-homework-title').value='Math worksheet';
-                document.getElementById('setup-homework-due-day').value='6';
+                document.getElementById('setup-homework-due-date').value=dateForDay(selectedWeek, 6);
                 document.getElementById('setup-next').click();""")
             assert "Math worksheet" in evaluate("document.getElementById('setup-summary').textContent")
             evaluate("document.getElementById('setup-next').click()")
@@ -359,7 +359,7 @@ def run(case: str, root: Path) -> None:
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")
             add_item("assignments", "document.getElementById('f-title').value='Homework';"
                      "document.getElementById('f-energy').value='high';"
-                     "document.getElementById('f-due-day').value='1';"
+                     "document.getElementById('f-due-date').value=dateForDay(selectedWeek, 1);"
                      "document.getElementById('f-due-time').value='09:00';", days=[0, 1])
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")
             evaluate("document.getElementById('solve').click()")

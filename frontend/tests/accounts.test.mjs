@@ -399,12 +399,11 @@ test('previous, next and Today open the expected Monday and render what came bac
   assert.equal(h.run('selectedWeek'), '2026-09-14');
   await h.elements.get('week-today').listeners.click();
   assert.equal(h.run('selectedWeek'), '2026-09-07');
-  assert.deepEqual(asked, [
-    '/api/week?week_start=2026-08-31',
-    '/api/week?week_start=2026-09-07',
-    '/api/week?week_start=2026-09-14',
-    '/api/week?week_start=2026-09-07',
-  ]);
+  // Opening a week also refreshes the assignments it plans against.
+  assert.deepEqual(asked, ['2026-08-31', '2026-09-07', '2026-09-14', '2026-09-07'].flatMap(week => [
+    `/api/week?week_start=${week}`,
+    `/api/assignments?week_start=${week}&include_completed=true`,
+  ]));
   // The year boundary: December 2026 into January 2027.
   h.elements.get('week-jump').value = '2026-12-28';
   await h.elements.get('week-jump').listeners.change();
@@ -418,8 +417,9 @@ test('previous, next and Today open the expected Monday and render what came bac
 test('an account whose data sits in an earlier week can still reach it', async () => {
   const h = harness();
   await h.login(1, [], ['2026-08-24']);
-  assert.deepEqual(h.requests.slice(-3).map(r => r.path).sort(),
-    ['/api/preferences', '/api/week?week_start=2026-09-07', '/api/weeks']);
+  assert.deepEqual(h.requests.slice(-4).map(r => r.path).sort(),
+    ['/api/assignments?week_start=2026-09-07&include_completed=true', '/api/preferences',
+      '/api/week?week_start=2026-09-07', '/api/weeks']);
   assert.deepEqual(h.elements.get('week-jump').children.map(option => option.value),
     ['2026-08-24', '2026-09-07']);
   assert.match(h.elements.get('status').textContent, /This week is empty/);
@@ -617,10 +617,13 @@ test('a new account walks through school, sports and first homework, then Solve 
   h.handle(async (path, options) => {
     if (path === '/api/auth/register') return response(200, { id: 9, username: 'rookie' });
     if (path.startsWith('/api/weeks')) return response(200, { weeks: [] });
-    if (path === '/api/week' && options.method === 'PUT') {
+    if (path === '/api/changes') {
       const body = JSON.parse(options.body);
       saves.push(body);
-      return response(200, { week_start: body.week_start, blocks: body.blocks, revision: saves.length });
+      return response(200, {
+        weeks: body.weeks.map(week => ({ ...week, revision: saves.length })),
+        assignments: body.assignments.map(change => ({ id: change.id, revision: 1, assignment: change.assignment })),
+      });
     }
     if (path.startsWith('/api/week')) return response(200, { week_start: weekOf(path), blocks: [], revision: 0 });
     if (path === '/api/solve') {
@@ -652,25 +655,41 @@ test('a new account walks through school, sports and first homework, then Solve 
   assert.equal(next(), false);
   assert.equal(h.elements.get('setup-error').textContent, 'Name the assignment, or choose Skip this step.');
   h.elements.get('setup-homework-title').value = 'Math worksheet';
-  assert.equal(h.elements.get('setup-homework-due-day').value, '4');
+  assert.equal(h.elements.get('setup-homework-due-date').value, '2026-09-11', 'due tomorrow by default');
   assert.equal(next(), true);
 
   assert.deepEqual(h.elements.get('setup-summary').children.map(item => item.textContent), [
     'School: Mon, Tue, Wed, Thu, Fri, 08:00–14:30',
     'Soccer: Tue, Thu, 15:30–17:00',
-    'Math worksheet: 1 h, due Friday at 21:00',
+    'Math worksheet: 1 h, due Fri Sep 11, 21:00',
   ]);
   assert.equal(h.elements.get('setup-next').textContent, 'Add to my week and Solve');
   assert.equal(await next(), true);
 
   assert.equal(h.elements.get('setup-dialog').open, false);
   assert.equal(saves.length, 1);
-  assert.deepEqual(saves[0].blocks.map(b => [b.title, b.kind, b.category, b.days, b.start, b.duration_min, b.latest]), [
+  const [week] = saves[0].weeks;
+  assert.deepEqual(week.blocks.map(b => [b.title, b.kind, b.category, b.days, b.start, b.duration_min, b.latest]), [
     ['School', 'locked', 'class', [0, 1, 2, 3, 4], '08:00', 390, null],
     ['Soccer', 'locked', 'exercise', [1, 3], '15:30', 90, null],
-    ['Math worksheet', 'flexible', 'assignments', [3, 4], null, 60, 'Friday 21:00'],
+    ['Math worksheet', 'flexible', 'assignments', [3, 4], null, 60, null],
   ]);
+  // The homework is an assignment with an exact due time; the week holds its work session.
+  assert.equal(saves[0].assignments.length, 1);
+  const { id, assignment, revision } = saves[0].assignments[0];
+  assert.match(id, /^hw-/);
+  assert.equal(week.blocks[2].assignment_id, id);
+  assert.equal(revision, 0);
+  const { id: bodyId, ...fields } = assignment;
+  assert.equal(bodyId, id);
+  assert.deepEqual(fields, {
+    title: 'Math worksheet', course: null, category: 'assignments', priority: 3, energy: 'medium',
+    spotify_url: null, due: '2026-09-11T21:00', estimate_min: 60, focus_minutes: 0, focus_sessions: 0,
+    completed: false, completed_at: null,
+  });
+  assert.equal(h.run('dirtyAssignments.size'), 0);
   assert.equal(solves.length, 1);
+  assert.equal(solves[0].week_start, MONDAY);
   assert.equal(h.elements.get('debug').hidden, false);
   assert.equal(h.elements.get('empty-week').hidden, true);
 });
@@ -746,4 +765,101 @@ test('without a device preference the System theme is light', async () => {
   const h = harness();
   await tick();
   assert.equal(h.run('document.documentElement.dataset.theme'), 'slate');
+});
+
+// Stage 1: homework is an assignment that outlives a week; the week holds its work session.
+const session = { ...task, assignment_id: 'hw-math' };
+const mathAssignment = {
+  id: 'hw-math', title: 'Math', course: null, category: null, priority: 3, energy: 'medium', spotify_url: null,
+  due: '2026-09-11T21:00', estimate_min: 60, focus_minutes: 0, focus_sessions: 0, completed: false,
+  completed_at: null, revision: 2, planned_min: 60, unplanned_min: 0,
+};
+const changesReply = (body, revision = 3) => response(200, {
+  weeks: body.weeks.map(week => ({ ...week, revision: week.revision + 1 })),
+  assignments: body.assignments.map(change => ({ id: change.id, revision, assignment: change.assignment })),
+});
+
+test('assignment edits save with their week in one change, and a week without any still uses PUT', async () => {
+  const h = harness();
+  await h.login(1, [session]);
+  h.run(`assignments.set('hw-math', ${JSON.stringify(mathAssignment)})`);
+  const calls = [];
+  h.handle(async (path, options) => {
+    const body = JSON.parse(options.body);
+    calls.push({ path, body });
+    if (path === '/api/changes') return changesReply(body);
+    return response(200, { week_start: body.week_start, blocks: body.blocks, revision: body.revision + 1 });
+  });
+
+  h.run("putAssignment({ ...assignments.get('hw-math'), title: 'Algebra' })");
+  assert.equal(await h.run('saveWeek()'), true);
+  assert.equal(calls[0].path, '/api/changes');
+  assert.deepEqual(calls[0].body.weeks.map(week => [week.week_start, week.revision]), [[MONDAY, 0]]);
+  assert.deepEqual(calls[0].body.assignments.map(change => [change.id, change.revision, change.assignment.title]),
+    [['hw-math', 2, 'Algebra']]);
+  assert.equal('planned_min' in calls[0].body.assignments[0].assignment, false, 'only contract fields are sent');
+  assert.equal(h.run("assignments.get('hw-math').revision"), 3);
+  assert.equal(h.run('dirtyAssignments.size'), 0);
+
+  assert.equal(await h.run('saveWeek()'), true);
+  assert.equal(calls[1].path, '/api/week');
+  assert.equal(h.run('weekState().revision'), 2);
+});
+
+test('Solve sends the week on screen, so the server can turn due dates into bounds', async () => {
+  const h = harness();
+  await h.login(1, [session]);
+  let body;
+  h.handle(async (_path, options) => {
+    body = JSON.parse(options.body);
+    return response(200, { placed: [], unplaced: [], moves: [], explanations: [], failed_constraints: [],
+      solve_ms: 1, complete: true });
+  });
+  await h.run('solveWeek()');
+  assert.equal(body.week_start, MONDAY);
+  assert.equal(body.blocks[0].assignment_id, 'hw-math');
+});
+
+test('marking homework done finishes its assignment, and unmarking it reopens the assignment', async () => {
+  const h = harness();
+  await h.login(1, [session]);
+  h.run(`assignments.set('hw-math', ${JSON.stringify(mathAssignment)})`);
+  h.handle(async () => { throw new Error('Offline'); });
+
+  assert.equal(h.run("toggleCompleted('homework')"), true);
+  await tick();
+  await tick();
+  assert.equal(h.run("assignments.get('hw-math').completed"), true);
+  assert.equal(h.run("assignments.get('hw-math').completed_at"), '2026-09-10T12:00');
+  assert.equal(h.run("dirtyAssignments.has('hw-math')"), true);
+
+  assert.equal(h.run("toggleCompleted('homework')"), true);
+  await tick();
+  await tick();
+  assert.equal(h.run("assignments.get('hw-math').completed"), false);
+  assert.equal(h.run("assignments.get('hw-math').completed_at"), null);
+});
+
+test('an import may carry assignment_id, but not together with an old weekday deadline', () => {
+  const h = harness();
+  assert.equal(h.run(`importBlockError(${JSON.stringify(session)}, 0)`), null);
+  assert.equal(h.run(`importBlockError(${JSON.stringify({ ...session, latest: 'Friday 21:00' })}, 0)`),
+    'Block 1 has both a deadline and an assignment.');
+});
+
+test('an expired session keeps unsaved assignment edits, for the same account only', async () => {
+  const h = harness();
+  await h.login(1, [session]);
+  h.run(`assignments.set('hw-math', ${JSON.stringify(mathAssignment)})`);
+  h.handle(async () => { throw new Error('Offline'); });
+  h.run("putAssignment({ ...assignments.get('hw-math'), title: 'Algebra' })");
+  assert.equal(await h.run('saveWeek()'), false);
+
+  h.run('signedOut()');
+  assert.equal(h.run('assignments.size'), 0);
+  await h.login(2, []);
+  assert.equal(h.run('dirtyAssignments.size'), 0, 'another account never receives them');
+  await h.login(1, [session]);
+  assert.equal(h.run("assignments.get('hw-math').title"), 'Algebra');
+  assert.equal(h.run("dirtyAssignments.has('hw-math')"), true);
 });

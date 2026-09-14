@@ -116,15 +116,17 @@ async function creditFocusSession() {
   if (!focusState || focusState.weekStart !== selectedWeek) return;
   const block = weekState().blocks.find(function (item) { return item.id === focusState.blockId; });
   if (!block) return;
-  block.focus_sessions = Math.min(9999, (block.focus_sessions || 0) + 1);
-  block.focus_minutes = Math.min(71400, (block.focus_minutes || 0) + prefs.timer_work_min);
-  if (block.focus_minutes >= block.duration_min) {
-    block.completed = true;
-    if (block.kind === "flexible") {
-      block.start = focusState.start;
-      block.completed_day = focusState.day;
-    }
+  // Minutes count toward the assignment and never finish anything; that is the student's choice.
+  const assignment = assignmentOf(block);
+  // A session's own focus fields must stay 0, so without its assignment there is nowhere to credit.
+  if (block.assignment_id && !assignment) {
+    setStatus("This homework did not load, so the focus time was not counted. Reload the week and try again.");
+    return;
   }
+  const progress = assignment ? { ...assignment } : block;
+  progress.focus_sessions = Math.min(9999, (progress.focus_sessions || 0) + 1);
+  progress.focus_minutes = Math.min(71400, (progress.focus_minutes || 0) + prefs.timer_work_min);
+  if (assignment) putAssignment(progress);
   await saveWeek();
   renderWeek();
 }
@@ -187,15 +189,16 @@ function renderFocusTasks() {
   // Only work that has a time and is not done can be focused; school and breaks cannot.
   weekState().blocks.filter(function (block) {
     return (block.kind === "flexible" || block.pomodoro_role === "work") && !block.completed &&
-      placementById.has(block.id);
+      !(assignmentOf(block) || {}).completed && placementById.has(block.id);
   }).forEach(function (block) {
     const placement = placementById.get(block.id);
+    const progress = assignmentOf(block) || block;
     const item = document.createElement("li");
     const name = document.createElement("strong");
     name.textContent = block.title;
     const count = document.createElement("small");
-    count.textContent = DAYS[placement.days[0]] + " " + placement.start + (block.focus_sessions
-      ? " · " + block.focus_sessions + (block.focus_sessions === 1 ? " session, " : " sessions, ") + formatDuration(block.focus_minutes || 0)
+    count.textContent = DAYS[placement.days[0]] + " " + placement.start + (progress.focus_sessions
+      ? " · " + progress.focus_sessions + (progress.focus_sessions === 1 ? " session, " : " sessions, ") + formatDuration(progress.focus_minutes || 0)
       : "");
     const start = document.createElement("button");
     start.type = "button";

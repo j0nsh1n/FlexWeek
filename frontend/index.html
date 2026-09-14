@@ -192,18 +192,7 @@
       <div id="f-flex-fields" hidden>
         <label>Time needed <select id="f-duration"></select></label>
         <div class="field-row">
-          <label>Due day
-            <select id="f-due-day">
-              <option value="">No due day</option>
-              <option value="0">Monday</option>
-              <option value="1">Tuesday</option>
-              <option value="2">Wednesday</option>
-              <option value="3">Thursday</option>
-              <option value="4">Friday</option>
-              <option value="5">Saturday</option>
-              <option value="6">Sunday</option>
-            </select>
-          </label>
+          <label>Due date <input id="f-due-date" type="date" min="2000-01-01" max="2099-12-31" /></label>
           <label>Due time <select id="f-due-time"></select></label>
         </div>
         <p id="f-flex-summary" class="note" aria-live="polite"></p>
@@ -301,10 +290,10 @@
         <label>Assignment <input id="setup-homework-title" type="text" maxlength="80" placeholder="Math worksheet" /></label>
         <div class="field-row">
           <label>Time needed <select id="setup-homework-duration"></select></label>
-          <label>Due day <select id="setup-homework-due-day"></select></label>
+          <label>Due date <input id="setup-homework-due-date" type="date" min="2000-01-01" max="2099-12-31" /></label>
           <label>Due time <select id="setup-homework-due-time"></select></label>
         </div>
-        <p class="note">Solve can place it on any day from today up to the due day.</p>
+        <p class="note">Solve can place it on any day from today up to the due date.</p>
       </section>
       <section id="setup-solve" hidden>
         <h3>Ready to plan your week</h3>

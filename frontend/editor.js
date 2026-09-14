@@ -1,10 +1,11 @@
 // The block editor. A dialog reads the form into a draft, checks the draft, and
 // turns it into a block patch. Drafts have this shape:
 //   { id, kind, category, title, day, days, startMin, endMin, duration_min,
-//     dueDay, dueTime, priority, energy, course, spotify_url, completed }
-// `day`, `startMin` and `endMin` describe a fixed time; `duration_min`, `dueDay`
-// and `dueTime` describe a flexible task. `days` is when it happens (fixed) or
-// which days Solve may use (flexible), which is not the same as the due day.
+//     dueDate, dueTime, assignmentId, priority, energy, course, spotify_url, completed }
+// `day`, `startMin` and `endMin` describe a fixed time; `duration_min`, `dueDate`
+// and `dueTime` describe a flexible task, which is homework: an assignment with an
+// exact due date and time, plus this week's work session. `days` is when it happens
+// (fixed) or which days Solve may use (flexible), which is not the same as the due date.
 
 const formEl = document.getElementById("block-form");
 const blockDialogEl = document.getElementById("block-dialog");
@@ -20,6 +21,7 @@ const DURATION_CHOICES = [15, 30, 45, 60, 90, 120, 150, 180, 240, 300, 360];
 let editingOccurrenceDay = null;
 let editingScope = "series";
 let editingExisting = false;
+let editingAssignmentId = null;
 // Days of a task added without dragging follow its due day until the student
 // picks days themselves. A dragged or existing task keeps the days it has.
 let flexDaysTouched = true;
@@ -29,9 +31,10 @@ function field(id) {
   return document.getElementById(id);
 }
 
-/** Days from `firstDay` through the due day, or the whole rest of the week without one. */
+/** Days from `firstDay` through the due day, or the rest of the week when it is due later. */
 function daysThrough(dueDay, firstDay = 0) {
-  const last = Number.isInteger(dueDay) ? dueDay : 6;
+  const last = Number.isInteger(dueDay) ? Math.min(dueDay, 6) : 6;
+  if (last < 0) return [];
   if (last < firstDay) return [last];
   return DAYS.map(function (_name, day) { return day; }).filter(function (day) { return day >= firstDay && day <= last; });
 }
@@ -40,6 +43,11 @@ function daysThrough(dueDay, firstDay = 0) {
 function firstPlannableDay(weekStart, now) {
   const info = currentDateInfo(now);
   return weekStart === info.week ? info.day : 0;
+}
+
+/** The due date as a day of the week on screen: 0..6, negative before it, 7 or more after it. */
+function dueDayInWeek(dueDate, weekStart = selectedWeek) {
+  return dueDate ? dayOffset(weekStart, dueDate) : null;
 }
 
 function dayList(days) {
@@ -54,7 +62,8 @@ function newDraft(category, day, startMin, endMin) {
   return {
     id: null, kind: type ? type.kind : "locked", category: type ? type.id : null, title: "",
     day: day, days: [day], startMin: startMin, endMin: endMin,
-    duration_min: Math.max(SNAP_MIN, endMin - startMin), dueDay: null, dueTime: "21:00",
+    duration_min: Math.max(SNAP_MIN, endMin - startMin), dueDate: dateForDay(selectedWeek, 6), dueTime: "23:59",
+    assignmentId: null,
     priority: 3, energy: "medium", course: "", spotify_url: "", completed: false,
   };
 }
@@ -66,7 +75,8 @@ function presetDraft(category, weekStart, now) {
   const preset = type.preset || {};
   if (type.kind === "flexible") {
     const draft = newDraft(type.id, day, DAY_START_MIN, DAY_START_MIN + (preset.duration_min || 60));
-    draft.days = daysThrough(null, day);
+    draft.dueDate = dateForDay(weekStart, 6);
+    draft.days = daysThrough(dueDayInWeek(draft.dueDate, weekStart), day);
     return draft;
   }
   const draft = newDraft(type.id, day, parseStart(preset.start), parseStart(preset.end));
@@ -75,16 +85,30 @@ function presetDraft(category, weekStart, now) {
   return draft;
 }
 
-function draftFromBlock(block, occurrenceDay) {
+/** A flexible block's due date and time: its assignment's, or an old weekday deadline in this week. */
+function blockDue(block) {
+  const assignment = assignmentOf(block);
+  if (assignment && assignment.due) {
+    const [date, time] = assignment.due.split("T");
+    return { date: date, time: time };
+  }
   const latest = parseLatest(block.latest);
+  const day = latest.day === "" ? Math.max.apply(null, block.days) : Number(latest.day);
+  return { date: dateForDay(selectedWeek, day), time: latest.time || "23:59" };
+}
+
+function draftFromBlock(block, occurrenceDay) {
   const startMin = block.start ? parseStart(block.start) : DAY_START_MIN;
+  const due = block.kind === "flexible" ? blockDue(block) : { date: null, time: "23:59" };
+  const assignment = assignmentOf(block);
   return {
     id: block.id, kind: block.kind, category: block.category || null, title: block.title,
     day: Number.isInteger(occurrenceDay) ? occurrenceDay : block.days[0], days: block.days.slice(),
     startMin: startMin, endMin: Math.min(DAY_END_MIN, startMin + block.duration_min),
-    duration_min: block.duration_min, dueDay: latest.day === "" ? null : Number(latest.day),
-    dueTime: latest.time || "21:00", priority: block.priority || 3, energy: block.energy || "medium",
-    course: block.course || "", spotify_url: block.spotify_url || "", completed: Boolean(block.completed),
+    duration_min: block.duration_min, dueDate: due.date, dueTime: due.time,
+    assignmentId: block.assignment_id || null, priority: block.priority || 3, energy: block.energy || "medium",
+    course: block.course || "", spotify_url: block.spotify_url || "",
+    completed: Boolean(assignment ? assignment.completed : block.completed),
   };
 }
 
@@ -104,16 +128,23 @@ function draftProblem(draft) {
     if (!Number.isInteger(draft.duration_min) || draft.duration_min <= 0 || draft.duration_min % SNAP_MIN) {
       return { field: "f-duration", message: "Choose how much time it needs." };
     }
-    if (Number.isInteger(draft.dueDay)) {
-      const usable = draft.days.filter(function (day) { return day <= draft.dueDay; });
+    const dueDay = dueDayInWeek(draft.dueDate);
+    if (dueDay === null || draft.dueDate < "2000-01-01" || draft.dueDate > "2099-12-31") {
+      return { field: "f-due-date", message: "Choose the date it is due." };
+    }
+    if (dueDay < 0) {
+      return { field: "f-due-date", message: "It is due before this week starts. Pick a later due date." };
+    }
+    if (dueDay <= 6) {
+      const usable = draft.days.filter(function (day) { return day <= dueDay; });
       if (!usable.length) {
-        return { field: "f-days", message: "It is due " + DAY_FULL[draft.dueDay] +
-          ", but every day you picked comes after that. Pick an earlier day or a later due day." };
+        return { field: "f-days", message: "It is due " + DAY_FULL[dueDay] +
+          ", but every day you picked comes after that. Pick an earlier day or a later due date." };
       }
       const roomOnDueDay = parseStart(draft.dueTime) - DAY_START_MIN;
-      if (usable.every(function (day) { return day === draft.dueDay; }) && roomOnDueDay < draft.duration_min) {
+      if (usable.every(function (day) { return day === dueDay; }) && roomOnDueDay < draft.duration_min) {
         return { field: "f-due-time", message: "There are not " + formatDuration(draft.duration_min) +
-          " between 06:00 and " + draft.dueTime + " on " + DAY_FULL[draft.dueDay] + ". Pick a later due time or an earlier day." };
+          " between 06:00 and " + draft.dueTime + " on " + DAY_FULL[dueDay] + ". Pick a later due time or an earlier day." };
       }
     }
   }
@@ -136,16 +167,14 @@ function draftPatch(draft) {
     completed: draft.completed,
     spotify_url: draft.spotify_url.trim() || null,
     earliest: null,
-    latest: !locked && Number.isInteger(draft.dueDay) ? DAY_FULL[draft.dueDay] + " " + draft.dueTime : null,
+    latest: null,
     start: locked ? formatMinute(draft.startMin) : null,
   };
 }
 
 function flexSummary(draft) {
   if (!draft.days.length) return "Pick at least one day under More options.";
-  const due = Number.isInteger(draft.dueDay)
-    ? " It is due " + DAY_FULL[draft.dueDay] + " at " + draft.dueTime + "."
-    : " It has no due time.";
+  const due = draft.dueDate ? " It is due " + dueLabel(draft.dueDate + "T" + draft.dueTime) + "." : " Choose when it is due.";
   return "Solve will find " + formatDuration(draft.duration_min) + " for it on " + dayList(draft.days) + "." + due;
 }
 
@@ -179,11 +208,23 @@ function fillDurationSelect(current) {
   fillOptions(field("f-duration"), choices.map(function (minutes) { return [minutes, formatDuration(minutes)]; }));
 }
 
+/** Due times: every 15 minutes of the day plus 23:59, keeping a saved time that is off that grid. */
+function dueTimeChoices(current) {
+  const times = [];
+  for (let min = 0; min < 24 * 60; min += 15) times.push(pad(Math.floor(min / 60)) + ":" + pad(min % 60));
+  times.push("23:59");
+  if (/^([01]\d|2[0-3]):[0-5]\d$/.test(current || "") && times.indexOf(current) === -1) {
+    times.push(current);
+    times.sort();
+  }
+  return times.map(function (time) { return [time, time]; });
+}
+
 function fillEditorSelects() {
   const starts = slotTimes().map(function (time) { return [time, time]; });
   fillOptions(startEl, starts);
   fillOptions(endEl, starts.slice(1).concat([[formatMinute(DAY_END_MIN), formatMinute(DAY_END_MIN)]]));
-  fillOptions(dueTimeEl, starts.concat([[formatMinute(DAY_END_MIN), formatMinute(DAY_END_MIN)]]));
+  fillOptions(dueTimeEl, dueTimeChoices());
   fillOptions(field("f-when-day"), DAY_FULL.map(function (name, day) { return [day, name]; }));
   fillOptions(field("f-category"), [["", "None"]].concat(CATEGORIES.map(function (cat) { return [cat.id, cat.label]; })));
   fillDurationSelect(60);
@@ -216,7 +257,6 @@ function readDraft() {
       ? [editingOccurrenceDay]
       : Array.from(new Set(days.concat([whenDay])));
   }
-  const due = field("f-due-day").value;
   return {
     id: field("f-id").value || null,
     kind: kind,
@@ -227,8 +267,9 @@ function readDraft() {
     startMin: parseStart(startEl.value),
     endMin: parseStart(endEl.value),
     duration_min: Number(field("f-duration").value),
-    dueDay: due === "" ? null : Number(due),
-    dueTime: dueTimeEl.value || "21:00",
+    dueDate: field("f-due-date").value || null,
+    dueTime: dueTimeEl.value || "23:59",
+    assignmentId: editingAssignmentId,
     priority: Number(field("f-priority").value) || 3,
     energy: field("f-energy").value || "medium",
     course: field("f-course").value,
@@ -248,7 +289,8 @@ function writeDraft(draft) {
   endEl.value = formatMinute(draft.endMin);
   fillDurationSelect(draft.duration_min);
   field("f-duration").value = String(draft.duration_min);
-  field("f-due-day").value = Number.isInteger(draft.dueDay) ? String(draft.dueDay) : "";
+  field("f-due-date").value = draft.dueDate || "";
+  fillOptions(dueTimeEl, dueTimeChoices(draft.dueTime));
   dueTimeEl.value = draft.dueTime;
   setSelectedDays(draft.days);
   field("f-priority").value = String(draft.priority);
@@ -271,7 +313,7 @@ function syncEditor() {
   field("f-days-legend").textContent = locked ? "Repeats on" : "Days Solve may use";
   field("f-days-help").textContent = locked
     ? "The day chosen above is always included."
-    : "The due day only sets the deadline. These are the days it can go on.";
+    : "The due date only sets the deadline. These are the days it can go on.";
   const whenDay = Number(field("f-when-day").value);
   field("f-when-day").disabled = occurrenceOnly;
   DAYS.forEach(function (_name, day) {
@@ -370,6 +412,7 @@ function openEditor(draft, block, occurrenceDay = null, scope = null) {
   if (!account || saving) return false;
   editingExisting = Boolean(block);
   editingOccurrenceDay = Number.isInteger(occurrenceDay) ? occurrenceDay : null;
+  editingAssignmentId = draft.assignmentId || null;
   flexDaysTouched = true;
   showFormError(null);
   writeDraft(draft);
@@ -412,7 +455,27 @@ function closeForm() {
   editingOccurrenceDay = null;
   editingScope = "series";
   editingExisting = false;
+  editingAssignmentId = null;
   showFormError(null);
+}
+
+/** Record a flexible draft's assignment locally and make the block its work session. */
+function attachAssignment(block, draft) {
+  const existing = draft.assignmentId ? assignments.get(draft.assignmentId) : null;
+  const id = draft.assignmentId || "hw-" + newId().slice(2);
+  putAssignment({
+    id: id, title: block.title, course: block.course || null, category: block.category || null,
+    priority: block.priority || 3, energy: block.energy || "medium", spotify_url: block.spotify_url || null,
+    due: draft.dueDate + "T" + draft.dueTime, estimate_min: block.duration_min,
+    focus_minutes: existing ? existing.focus_minutes || 0 : 0,
+    focus_sessions: existing ? existing.focus_sessions || 0 : 0,
+    completed: Boolean(block.completed),
+    completed_at: block.completed ? (existing && existing.completed ? existing.completed_at : localStamp()) : null,
+  });
+  const session = { ...block, assignment_id: id, latest: null };
+  delete session.focus_minutes;
+  delete session.focus_sessions;
+  return session;
 }
 
 function applyDraft(draft) {
@@ -453,7 +516,7 @@ function applyDraft(draft) {
     else blocks.splice(existing, 1);
     if (result.split) blocks.push(result.split);
   } else {
-    const block = {
+    let block = {
       ...(prior || {}),
       id: id,
       kind: draft.kind,
@@ -462,6 +525,7 @@ function applyDraft(draft) {
       }) : [],
       ...patch,
     };
+    if (draft.kind === "flexible") block = attachAssignment(block, draft);
     if (existing >= 0) blocks[existing] = block;
     else blocks.push(block);
   }
@@ -533,10 +597,9 @@ field("f-when-day").addEventListener("change", function () {
   if (days.length === 1) field("f-day-" + days[0]).checked = false;
   syncEditor();
 });
-field("f-due-day").addEventListener("change", function () {
+field("f-due-date").addEventListener("change", function () {
   if (!flexDaysTouched) {
-    const due = field("f-due-day").value;
-    setSelectedDays(daysThrough(due === "" ? null : Number(due), firstPlannableDay(selectedWeek)));
+    setSelectedDays(daysThrough(dueDayInWeek(field("f-due-date").value || null), firstPlannableDay(selectedWeek)));
   }
   syncEditor();
 });

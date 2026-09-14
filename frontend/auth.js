@@ -19,6 +19,10 @@ function signedOut(message = "Log in to open your week.", preserve = true, scree
       const state = weekState(weekStart);
       return { weekStart: weekStart, blocks: structuredClone(state.blocks), revision: state.revision };
     }));
+    // A restored week may point at assignments that were never saved.
+    suspendedAssignments.set(account.id, Array.from(dirtyAssignments).map(function (id) {
+      return structuredClone(assignments.get(id));
+    }));
   }
   epoch += 1;
   account = null;
@@ -47,6 +51,8 @@ function signedOut(message = "Log in to open your week.", preserve = true, scree
   if (gridGesture) clearGhost(gridGesture.lane);
   gridGesture = null;
   weeks.clear();
+  assignments.clear();
+  dirtyAssignments.clear();
   savedWeeks = [];
   selectedWeek = currentWeekStart();
   saving = false;
@@ -80,11 +86,19 @@ async function loadAccount(identity) {
   account = identity;
   const asked = currentWeekStart();
   try {
-    const [week, saved, preferences] = await Promise.all([
+    const [week, saved, preferences, owned] = await Promise.all([
       api("/api/week?week_start=" + asked), api("/api/weeks"), api("/api/preferences"),
+      api("/api/assignments?week_start=" + asked + "&include_completed=true"),
     ]);
     if (loadEpoch !== epoch) return;
     weeks.clear();
+    assignments.clear();
+    dirtyAssignments.clear();
+    (owned && Array.isArray(owned.assignments) ? owned.assignments : []).forEach(function (item) {
+      assignments.set(item.id, item);
+    });
+    (suspendedAssignments.get(account.id) || []).forEach(putAssignment);
+    suspendedAssignments.delete(account.id);
     savedWeeks = Array.isArray(saved.weeks) ? saved.weeks.slice() : [];
     selectedWeek = isWeekStart(week.week_start) ? week.week_start : asked;
     const state = weekState();
@@ -165,7 +179,10 @@ document.getElementById("logout").addEventListener("click", async () => {
   const logoutEpoch = epoch;
   try {
     await api("/api/auth/logout", { method: "POST" });
-    if (account) suspendedDrafts.delete(account.id);
+    if (account) {
+      suspendedDrafts.delete(account.id);
+      suspendedAssignments.delete(account.id);
+    }
     signedOut("Logged out.", false);
     channel?.postMessage("session-changed");
   } catch (error) { if (logoutEpoch === epoch) setStatus("Log out failed. " + error.message); }

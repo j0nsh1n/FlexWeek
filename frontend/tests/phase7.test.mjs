@@ -149,7 +149,7 @@ test('manual split replaces one placed task atomically and persists metadata', a
   assert.equal(saved.blocks[1].spotify_url, null);
 });
 
-test('focus completion credits once, persists the count, and completes the block', async () => {
+test('focus completion credits once and persists the count, but never completes the block', async () => {
   const block = { id: 'focus', title: 'Focus', kind: 'locked', duration_min: 30, days: [3], start: '12:00', priority: 3, energy: 'medium' };
   const h = harness();
   await h.login([block]);
@@ -163,7 +163,7 @@ test('focus completion credits once, persists the count, and completes the block
   await h.run('advanceFocusPhase(true)');
   assert.equal(h.run('weekState().blocks[0].focus_sessions'), 1);
   assert.equal(h.run('weekState().blocks[0].focus_minutes'), 30);
-  assert.equal(h.run('weekState().blocks[0].completed'), true);
+  assert.equal(h.run('Boolean(weekState().blocks[0].completed)'), false, 'finishing is the student\'s choice, not the timer\'s');
   assert.equal(puts, 1);
   assert.equal(h.run('focusState.phase'), 'break');
 });
@@ -283,4 +283,72 @@ test('a split child title stays inside the 80-character limit the server enforce
   assert.equal(child.length, 80);
   assert.ok(child.endsWith(' · focus 1/2'), child);
   assert.equal(h.run('focusChildTitle("Essay", 2, 3)'), 'Essay · focus 2/3');
+});
+
+// Stage 1: a homework session is work on an assignment, which holds the progress.
+const essaySession = {
+  id: 'essay', title: 'Essay', kind: 'flexible', duration_min: 60, days: [3],
+  priority: 3, energy: 'medium', category: 'assignments', assignment_id: 'hw-essay',
+};
+const essayAssignment = {
+  id: 'hw-essay', title: 'Essay', course: null, category: 'assignments', priority: 3, energy: 'medium',
+  spotify_url: null, due: '2026-09-11T21:00', estimate_min: 120, focus_minutes: 30, focus_sessions: 1,
+  completed: false, completed_at: null, revision: 4, planned_min: 60, unplanned_min: 30,
+};
+
+test('splitting a homework session keeps the assignment on work chunks only, with their own focus at 0', async () => {
+  const h = harness();
+  await h.login([essaySession]);
+  h.run("weekState().trace = {placed:[{...weekState().blocks[0],days:[3],start:'16:00'}],unplaced:[]}");
+  let saved;
+  h.handle(async (path, options) => {
+    assert.equal(path, '/api/week', 'no assignment changed, so the week saves alone');
+    saved = JSON.parse(options.body);
+    return response(200, { ...saved, revision: 1 });
+  });
+  assert.equal(h.run('splitBlockIntoPomodoros("essay", 3)'), true);
+  await tick();
+  assert.deepEqual(saved.blocks.map(block => [block.pomodoro_role, block.assignment_id, block.focus_sessions, block.focus_minutes]), [
+    ['work', 'hw-essay', 0, 0], ['break', undefined, 0, 0], ['work', 'hw-essay', 0, 0],
+  ]);
+});
+
+test('focus on a homework session credits its assignment, saved with the week, and finishes nothing', async () => {
+  const h = harness();
+  await h.login([essaySession]);
+  h.run(`assignments.set('hw-essay', ${JSON.stringify(essayAssignment)})`);
+  h.run("weekState().trace = {placed:[{...weekState().blocks[0],days:[3],start:'12:00'}],unplaced:[]}");
+  const bodies = [];
+  h.handle(async (path, options) => {
+    assert.equal(path, '/api/changes');
+    const body = JSON.parse(options.body);
+    bodies.push(body);
+    return response(200, {
+      weeks: body.weeks.map(week => ({ ...week, revision: week.revision + 1 })),
+      assignments: body.assignments.map(change => ({ id: change.id, revision: change.revision + 1, assignment: change.assignment })),
+    });
+  });
+  assert.equal(h.run('startFocus("essay", 3)'), true);
+  await h.run('advanceFocusPhase(true)');
+  assert.equal(bodies.length, 1);
+  const credited = bodies[0].assignments[0].assignment;
+  assert.deepEqual([credited.focus_sessions, credited.focus_minutes, credited.completed], [2, 60, false]);
+  assert.equal(bodies[0].weeks[0].blocks[0].focus_sessions || 0, 0, 'the session itself carries no focus');
+  assert.equal(h.run("assignments.get('hw-essay').revision"), 5);
+  assert.equal(h.run('dirtyAssignments.size'), 0);
+  assert.equal(h.run('Boolean(weekState().blocks[0].completed)'), false);
+  assert.equal(h.run('focusState.phase'), 'break');
+});
+
+test('focus on a homework session whose assignment did not load counts nothing rather than send a save the server refuses', async () => {
+  const h = harness();
+  await h.login([essaySession]);
+  h.run("weekState().trace = {placed:[{...weekState().blocks[0],days:[3],start:'12:00'}],unplaced:[]}");
+  let saves = 0;
+  h.handle(async () => { saves += 1; return response(422, { detail: 'session focus must be 0' }); });
+  assert.equal(h.run('startFocus("essay", 3)'), true);
+  await h.run('advanceFocusPhase(true)');
+  assert.equal(saves, 0);
+  assert.equal(h.run('weekState().blocks[0].focus_sessions || 0'), 0);
+  assert.equal(h.run('focusState.phase'), 'break');
 });

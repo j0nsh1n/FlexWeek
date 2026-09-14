@@ -304,7 +304,8 @@ function importBlockError(block, index) {
   if (!block || typeof block !== "object" || Array.isArray(block)) return at + " is not a block.";
   const allowed = new Set(["id", "title", "kind", "duration_min", "days", "priority", "energy",
     "earliest", "latest", "start", "course", "category", "completed", "completed_day", "missed_days",
-    "spotify_url", "focus_sessions", "focus_minutes", "pomodoro_parent_id", "pomodoro_role", "pomodoro_index"]);
+    "spotify_url", "focus_sessions", "focus_minutes", "pomodoro_parent_id", "pomodoro_role", "pomodoro_index",
+    "assignment_id"]);
   if (Object.keys(block).some(function (key) { return !allowed.has(key); })) return at + " has an unknown field.";
   if (typeof block.id !== "string" || !block.id || textLength(block.id) > 80) return at + " has a bad id.";
   if (typeof block.title !== "string" || !block.title.trim() || textLength(block.title) > 80) {
@@ -336,7 +337,7 @@ function importBlockError(block, index) {
     }
   }
   const texts = [["earliest", 40], ["latest", 40], ["course", 40], ["category", 32],
-    ["spotify_url", 500], ["pomodoro_parent_id", 80]];
+    ["spotify_url", 500], ["pomodoro_parent_id", 80], ["assignment_id", 80]];
   for (let i = 0; i < texts.length; i += 1) {
     const value = block[texts[i][0]];
     if (value === undefined || value === null) continue;
@@ -348,6 +349,7 @@ function importBlockError(block, index) {
   if ([block.earliest, block.latest].some(value => value != null && !boundPattern.test(value))) {
     return at + " has a bad deadline or earliest time.";
   }
+  if (block.assignment_id != null && block.latest != null) return at + " has both a deadline and an assignment.";
   if (block.spotify_url != null && !safeSpotifyUrl(block.spotify_url)) return at + " has a bad Spotify link.";
   for (const field of ["focus_sessions", "focus_minutes"]) {
     if (block[field] !== undefined && (!Number.isInteger(block[field]) || block[field] < 0)) {
@@ -608,6 +610,36 @@ function dateForDay(weekStart, dayIndex) {
   return isoDate(date);
 }
 
+/** Whole days from the week's Monday to a date: 0..6 inside the week, negative before, 7 or more after. */
+function dayOffset(weekStart, isoDay) {
+  const start = parseDate(weekStart);
+  const day = parseDate(isoDay);
+  if (!start || !day) return null;
+  return Math.round((day - start) / 86400000);
+}
+
+function addDaysIso(isoDay, days) {
+  const date = parseDate(isoDay);
+  if (!date) return "";
+  date.setUTCDate(date.getUTCDate() + days);
+  return isoDate(date);
+}
+
+/** Now as a naive local stamp, YYYY-MM-DDTHH:MM. */
+function localStamp(now) {
+  const date = now || new Date();
+  return date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate()) + "T" +
+    pad(date.getHours()) + ":" + pad(date.getMinutes());
+}
+
+/** "Tue Sep 15, 23:59" for an assignment's due stamp. */
+function dueLabel(due) {
+  const [isoDay, time] = String(due || "").split("T");
+  const date = parseDate(isoDay);
+  if (!date || !time) return "";
+  return DAYS[(date.getUTCDay() + 6) % 7] + " " + shortDate(isoDay) + ", " + time;
+}
+
 function shiftWeek(weekStart, weeksAhead) {
   const date = parseDate(weekStart);
   if (!date) return "";
@@ -673,6 +705,7 @@ let account = null;
 let epoch = 0;
 let saving = false;
 const suspendedDrafts = new Map();
+const suspendedAssignments = new Map();
 let prefs = {
   theme: "system",
   reminders_enabled: false,
@@ -713,6 +746,39 @@ let selectedBlockId = null;
 let selectedOccurrenceDay = null;
 let gridGesture = null;
 let savedWeeks = [];
+// Homework is an assignment that outlives any one week. A week's flexible blocks
+// are work sessions pointing at one with assignment_id (docs/stage1-contract.md).
+// Local edits stay in dirtyAssignments until a save sends them with the week.
+const assignments = new Map();
+const dirtyAssignments = new Set();
+
+function assignmentBody(item) {
+  return {
+    id: item.id, title: item.title, course: item.course || null, category: item.category || null,
+    priority: item.priority || 3, energy: item.energy || "medium", spotify_url: item.spotify_url || null,
+    due: item.due, estimate_min: item.estimate_min, focus_minutes: item.focus_minutes || 0,
+    focus_sessions: item.focus_sessions || 0, completed: Boolean(item.completed),
+    completed_at: item.completed ? item.completed_at : null,
+  };
+}
+
+function putAssignment(item) {
+  const prior = assignments.get(item.id) || { revision: 0, planned_min: 0, unplanned_min: 0 };
+  assignments.set(item.id, { ...prior, ...item });
+  dirtyAssignments.add(item.id);
+}
+
+function assignmentOf(block) {
+  return block && block.assignment_id ? assignments.get(block.assignment_id) || null : null;
+}
+
+async function loadAssignments(weekStart) {
+  const data = await api("/api/assignments?week_start=" + weekStart + "&include_completed=true");
+  (data && Array.isArray(data.assignments) ? data.assignments : []).forEach(function (item) {
+    // An unsaved local edit wins until it is saved.
+    if (!dirtyAssignments.has(item.id)) assignments.set(item.id, item);
+  });
+}
 
 function weekState(weekStart = selectedWeek) {
   let state = weeks.get(weekStart);
@@ -791,11 +857,27 @@ async function saveWeek() {
   document.getElementById("retry-save").disabled = true;
   setStatus("Saving…");
   try {
-    const data = await api("/api/week", { method: "PUT", body: JSON.stringify({
-      week_start: weekStart, blocks: state.blocks, revision: state.revision,
-    }) });
+    // Assignment edits travel with the week in one all-or-nothing save.
+    const changed = Array.from(dirtyAssignments);
+    const data = changed.length
+      ? await api("/api/changes", { method: "POST", body: JSON.stringify({
+        weeks: [{ week_start: weekStart, blocks: state.blocks, revision: state.revision }],
+        assignments: changed.map(function (id) {
+          const item = assignments.get(id);
+          return { id: id, assignment: assignmentBody(item), revision: item.revision || 0 };
+        }),
+      }) })
+      : await api("/api/week", { method: "PUT", body: JSON.stringify({
+        week_start: weekStart, blocks: state.blocks, revision: state.revision,
+      }) });
     if (saveEpoch !== epoch) return false;
-    state.revision = data.revision;
+    const saved = changed.length ? data.weeks[0] : data;
+    state.revision = saved.revision;
+    (changed.length ? data.assignments : []).forEach(function (result) {
+      const item = assignments.get(result.id);
+      if (item) item.revision = result.revision;
+      dirtyAssignments.delete(result.id);
+    });
     state.dirty = false;
     saveActions.hidden = true;
     rememberSavedWeek(weekStart);
@@ -882,7 +964,7 @@ async function selectWeek(weekStart) {
   lockEditor(true);
   setStatus("Opening " + weekLabel(weekStart) + "…");
   try {
-    const data = await api("/api/week?week_start=" + weekStart);
+    const [data] = await Promise.all([api("/api/week?week_start=" + weekStart), loadAssignments(weekStart)]);
     if (selectEpoch !== epoch) return false;
     const opened = isWeekStart(data.week_start) ? data.week_start : weekStart;
     const state = weekState(opened);
@@ -1273,8 +1355,9 @@ function buildGrid(blocks, explanations = []) {
 
       const sub = document.createElement("div");
       sub.className = "sub";
+      const progress = assignmentOf(block) || block;
       sub.textContent = formatDuration(block.duration_min) + (missed ? " · missed" : "") +
-        (block.focus_sessions ? " · " + block.focus_sessions + " focus" : "");
+        (progress.focus_sessions ? " · " + progress.focus_sessions + " focus" : "");
       el.appendChild(sub);
 
       const spotify = safeSpotifyUrl(block.spotify_url);
@@ -1346,15 +1429,17 @@ function renderFlexible(flex) {
       pills.appendChild(span);
     }
 
+    const assignment = assignmentOf(block);
     pill(formatDuration(block.duration_min));
-    if (block.latest) pill("due " + block.latest);
+    if (assignment) pill("due " + dueLabel(assignment.due));
+    else if (block.latest) pill("due " + block.latest);
     if (block.category) pill(categoryLabel(block.category) || block.category);
     if (block.course) pill(block.course);
     // Homework priority and medium energy are the defaults, so only a change is worth a pill.
     if (block.priority && block.priority !== 3) pill(PRIORITY_LABEL[block.priority] || "P" + block.priority);
     if (block.energy && block.energy !== "medium") pill(block.energy + " energy");
     if (block.completed) pill("done");
-    if (block.focus_sessions) pill(block.focus_sessions + " focus");
+    if ((assignment || block).focus_sessions) pill((assignment || block).focus_sessions + " focus");
 
     li.appendChild(pills);
     const spotify = safeSpotifyUrl(block.spotify_url);
@@ -1542,6 +1627,12 @@ function toggleCompleted(blockId) {
   const block = weekState().blocks.find(function (item) { return item.id === blockId; });
   if (!block) return false;
   block.completed = !block.completed;
+  const assignment = assignmentOf(block);
+  if (assignment && block.kind === "flexible") {
+    // Marking homework done finishes the assignment, not only this session.
+    putAssignment({ ...assignment, completed: block.completed,
+      completed_at: block.completed ? localStamp() : null });
+  }
   if (block.completed && block.kind === "flexible") {
     const placed = weekState().trace?.placed.find(item => item.id === blockId);
     if (placed && placed.start && placed.days.length === 1) {
@@ -1960,6 +2051,12 @@ function buildPomodoroBlocks(source, placed, plan) {
       latest: null,
     };
     if (segment.role === "work") firstWork = false;
+    if (source.assignment_id) {
+      // Progress lives on the assignment, and a break is not work on it.
+      child.focus_sessions = 0;
+      child.focus_minutes = 0;
+      if (segment.role === "break") delete child.assignment_id;
+    }
     delete child.completed_day;
     cursor += segment.duration_min;
     return child;
@@ -2103,7 +2200,7 @@ async function solveWeek() {
   setStatus("Solving…");
   try {
     let trace = await api("/api/solve", { method: "POST", body: JSON.stringify({
-      blocks: solveInputBlocks(weekState().blocks),
+      week_start: selectedWeek, blocks: solveInputBlocks(weekState().blocks),
     }) });
     if (solveEpoch !== epoch) return;
     const splitCount = prefs.auto_split_pomodoro ? autoSplitSolvedBlocks(trace) : 0;
@@ -2113,7 +2210,9 @@ async function solveWeek() {
       if (!await saveWeek() || solveEpoch !== epoch) return;
       saving = true;
       lockEditor(true);
-      trace = await api("/api/solve", { method: "POST", body: JSON.stringify({ blocks: weekState().blocks }) });
+      trace = await api("/api/solve", { method: "POST", body: JSON.stringify({
+        week_start: selectedWeek, blocks: weekState().blocks,
+      }) });
       if (solveEpoch !== epoch) return;
     }
     showTrace(trace);
@@ -2135,6 +2234,7 @@ async function recoverMissedOccurrence(blockId, day) {
   setStatus("Replanning after the miss…");
   try {
     const trace = await api("/api/solve", { method: "POST", body: JSON.stringify({
+      week_start: selectedWeek,
       blocks: state.blocks,
       recover: { missed_block_id: blockId, missed_day: day, previous_placed: previous },
     }) });
