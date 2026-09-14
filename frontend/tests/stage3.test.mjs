@@ -376,7 +376,7 @@ test('a routine with a long name still applies, with its restore point label cut
   assert.match(change.snapshot_label, /^Before applying Monday to Friday school week/);
 });
 
-test('a preview save refused with 409 ends that attempt, so saving again is a new operation', async () => {
+test('a preview save refused with 409 keeps Save off, and the next paste is a new operation', async () => {
   const h = harness();
   await h.login({ blocks: [fixed()] });
   h.run("copyBlockById('school', 0, 'block'); pasteStage3Clipboard(2, '12:00')");
@@ -389,6 +389,11 @@ test('a preview save refused with 409 ends that attempt, so saving again is a ne
   });
   assert.equal(await h.run('confirmStage3Preview()'), false);
   assert.match(h.elements.get('stage3-preview-error').textContent, /reload the week/);
+  assert.equal(h.elements.get('stage3-preview-confirm').disabled, true);
+  assert.equal(await h.run('confirmStage3Preview()'), false, 'the out-of-date preview cannot be saved again');
+  assert.equal(payloads.length, 1);
+
+  h.run("stage3Preview = null; pasteStage3Clipboard(2, '12:00')");
   assert.equal(await h.run('confirmStage3Preview()'), true);
   assert.notEqual(payloads[0].operation_id, payloads[1].operation_id);
   assert.notEqual(payloads[0].weeks[0].blocks[1].id, payloads[1].weeks[0].blocks[1].id);

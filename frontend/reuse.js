@@ -335,7 +335,7 @@ function renderStage3Preview() {
   list.replaceChildren();
   stage3Preview.rows.forEach(function (row) {
     const conflict = rowConflict(row, stage3Preview.rows);
-    // Conflicting and invalid rows start unchecked; the student opts them back in after fixing them.
+    // Conflicting and invalid rows start unchecked; a fixed-time row can be checked again once its time is fixed.
     if ((conflict || row.invalid) && row.firstRender !== false) row.checked = false;
     row.firstRender = false;
     const li = document.createElement("li");
@@ -382,7 +382,7 @@ function renderStage3Preview() {
     showStage3Error("stage3-preview-error", "");
   }
   document.getElementById("stage3-preview-confirm").disabled =
-    stage3Busy || !selected.length || conflict || Boolean(capacityProblem);
+    stage3Busy || Boolean(stage3Preview.stale) || !selected.length || conflict || Boolean(capacityProblem);
 }
 
 function showStage3Preview(title, summary, rows, options = {}) {
@@ -483,7 +483,7 @@ async function saveStage3Blocks(groups, preview) {
 }
 
 async function confirmStage3Preview() {
-  if (!stage3Preview || stage3Busy || !account) return false;
+  if (!stage3Preview || stage3Busy || !account || stage3Preview.stale) return false;
   const selected = stage3Preview.rows.filter(function (row) { return row.checked; });
   if (!selected.length || selected.some(function (row) { return row.invalid || rowConflict(row, stage3Preview.rows); })) {
     showStage3Error("stage3-preview-error", "Resolve conflicts or select at least one item before saving.");
@@ -511,10 +511,9 @@ async function confirmStage3Preview() {
     return true;
   } catch (error) {
     if (activeEpoch === epoch && error.status === 409) {
-      // Nothing was stored, so this attempt is over; saving again after a reload is a new operation.
+      // Nothing was stored and this preview is out of date. Save stays off; a paste after a reload is a new operation.
       finishStage3Attempt(active.attemptKey);
-      active.operationId = stage3OperationId();
-      active.ids.clear();
+      active.stale = true;
       showStage3Error("stage3-preview-error",
         "The destination changed elsewhere. Cancel, reload the week, then paste or apply again.");
     } else if (activeEpoch === epoch) {
