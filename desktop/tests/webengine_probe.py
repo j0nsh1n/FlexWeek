@@ -86,6 +86,14 @@ def run(case: str, root: Path) -> None:
             QTest.qWait(100)
         raise AssertionError(f"Condition not reached: {code}")
 
+    def api_json(path: str) -> dict:
+        """GET an API path with the page's session; a failed request comes back as {"status": code}."""
+        evaluate(f"window.__apiReply = undefined; api({json.dumps(path)}).then("
+                 "data => { window.__apiReply = JSON.stringify(data); }, "
+                 "error => { window.__apiReply = JSON.stringify({status: error.status}); })")
+        wait_for("typeof window.__apiReply === 'string'")
+        return cast(dict, json.loads(evaluate("window.__apiReply")))
+
     def assert_painted(label: str) -> None:
         QTest.qWait(300)
         colors = painted_colors(window.grab().toImage())
@@ -600,10 +608,94 @@ def run(case: str, root: Path) -> None:
                      "window.__routines=JSON.stringify(data.routines); })")
             wait_for("typeof window.__routines === 'string'")
             assert len(json.loads(evaluate("window.__routines"))) == 1
-            print(
-                "PASS: copy preview, routine save/apply, automatic restore point "
-                "and restore through real APIs"
+
+            # A retried batch with the same operation id stores once and replays the first answer.
+            evaluate("""window.__retry=undefined;
+                const retryBody=JSON.stringify({weeks:[{week_start:selectedWeek,
+                    blocks:weekState().blocks.concat([{id:'b-probe-retry',kind:'locked',title:'Retry',
+                        duration_min:30,days:[2],start:'18:00'}]),
+                    revision:weekState().revision}], assignments:[], operation_id:'probe-retry-operation'});
+                api('/api/changes',{method:'POST',body:retryBody}).then(first =>
+                    api('/api/changes',{method:'POST',body:retryBody}).then(second => {
+                        window.__retry=JSON.stringify([first.weeks[0].revision, second.weeks[0].revision,
+                            second.weeks[0].blocks.filter(block => block.title === 'Retry').length]);
+                    }));""")
+            wait_for("typeof window.__retry === 'string'")
+            retried = json.loads(evaluate("window.__retry"))
+            assert retried[0] == retried[1] and retried[2] == 1, retried
+
+            # Routines and restore points survive a reload, including the recovery point the restore kept.
+            evaluate("window.__beforeStage3Reload=true")
+            window.reload()
+            wait_for(
+                "typeof window.__beforeStage3Reload === 'undefined' && "
+                "document.getElementById('planner') && !document.getElementById('planner').hidden"
             )
+            assert len(api_json("/api/routines")["routines"]) == 1
+            labels = [point["label"] for point in api_json("/api/restore-points")["restore_points"]]
+            assert len(labels) == 2 and labels[0].startswith("Before restore"), labels
+
+            # Another account sees none of it, and the first account's restore point is not found for it.
+            evaluate("document.getElementById('logout').click()")
+            wait_for("!document.getElementById('login-screen').hidden")
+            submit_identity("stage3_other", "register")
+            evaluate("document.getElementById('setup-close').click()")
+            assert api_json("/api/routines")["routines"] == []
+            assert api_json("/api/restore-points")["restore_points"] == []
+            assert api_json(f"/api/restore-points/{point_id}/preview") == {"status": 404}
+            evaluate("document.getElementById('logout').click()")
+            wait_for("!document.getElementById('login-screen').hidden")
+            submit_identity("stage3_student", "login")
+            assert len(api_json("/api/routines")["routines"]) == 1
+            print(
+                "PASS: copy preview, routine save/apply, automatic restore point, restore, a retried "
+                "operation, reload and a second account through real APIs"
+            )
+        elif case == "stage3_mobile":
+            # A phone-width dark window carries unfinished homework into next week exactly once.
+            window.resize(390, 800)
+            QTest.qWait(100)
+            submit_identity("stage3_phone", "register")
+            evaluate("document.getElementById('setup-close').click()")
+            evaluate(
+                "document.getElementById('theme').value='nocturne'; "
+                "document.getElementById('theme').dispatchEvent(new Event('change'))"
+            )
+            wait_for("!document.getElementById('theme').disabled")
+            assert page_theme() == "nocturne"
+            due = evaluate("dateForDay(shiftWeek(selectedWeek, 1), 2)")
+            evaluate("document.getElementById('add-homework').click()")
+            wait_for("document.getElementById('homework-dialog').open")
+            evaluate(f"""document.getElementById('hw-title').value='Essay';
+                document.getElementById('hw-due-date').value={json.dumps(due)};
+                document.getElementById('hw-due-time').value='23:59';
+                document.getElementById('hw-estimate').value='60';
+                document.querySelector('#homework-form button[type=submit]').click();""")
+            wait_for("document.getElementById('status').textContent.startsWith('Added Essay')")
+            assignment_id = evaluate("Array.from(assignments.keys())[0]")
+            next_week = evaluate("shiftWeek(selectedWeek, 1)")
+            evaluate(f"selectWeek({json.dumps(next_week)})")
+            wait_for(f"selectedWeek === {json.dumps(next_week)} && !saving")
+            wait_for("!document.getElementById('unfinished-review').hidden")
+            assert evaluate("document.querySelectorAll('#unfinished-list li').length") == 1
+            evaluate("document.querySelector('#unfinished-list button').click()")
+            wait_for("document.getElementById('stage3-preview-dialog').open")
+            confirm_rect = "document.getElementById('stage3-preview-confirm').getBoundingClientRect()"
+            assert evaluate(f"{confirm_rect}.height >= 44"), "The preview's save button is under 44px"
+            fits = evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            assert fits, "Preview overflows at 390px"
+            evaluate("document.getElementById('stage3-preview-confirm').click()")
+            wait_for("document.getElementById('status').textContent.startsWith('Saved unfinished homework')")
+            assert evaluate("document.querySelectorAll('#unfinished-list li').length") == 0
+            week = api_json(f"/api/week?week_start={next_week}")
+            sessions = [block for block in week["blocks"] if block.get("assignment_id") == assignment_id]
+            assert len(sessions) == 1, week["blocks"]
+            homework_path = f"/api/assignments?week_start={next_week}&include_completed=true"
+            homework = api_json(homework_path)["assignments"]
+            kept = [(item["id"], item["due"]) for item in homework]
+            assert kept == [(assignment_id, due + "T23:59")], homework
+            print("PASS: at 390px in the dark theme, unfinished homework goes into next week once, "
+                  "keeping its id and deadline")
         elif case == "phase7":
             submit_identity("focus_student", "register")
             add_item("assignments", "document.getElementById('f-title').value='Maths';"
