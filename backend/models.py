@@ -65,6 +65,15 @@ def valid_spotify_url(value: str | None) -> str | None:
     return value
 
 
+def valid_http_url(value: str) -> str:
+    parsed = urlsplit(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("link url must be an http or https URL")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("link url must be an http or https URL")
+    return value
+
+
 class TimeBlock(BaseModel):
     id: str = Field(min_length=1, max_length=80)
     title: str = Field(min_length=1, max_length=80)
@@ -160,6 +169,35 @@ class TimeBlock(BaseModel):
         return self
 
 
+class AssignmentLink(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    label: str = Field(min_length=1, max_length=80)
+    url: str = Field(min_length=1, max_length=500)
+
+    _url = field_validator("url")(valid_http_url)
+
+    @field_validator("label")
+    @classmethod
+    def label_is_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("link label required")
+        return value
+
+
+class ChecklistItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, max_length=80)
+    text: str = Field(min_length=1, max_length=80)
+    done: bool = False
+
+    @field_validator("text")
+    @classmethod
+    def text_is_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("checklist text required")
+        return value
+
+
 class AssignmentContent(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str = Field(min_length=1, max_length=80)
@@ -175,6 +213,13 @@ class AssignmentContent(BaseModel):
     focus_sessions: int = Field(default=0, ge=0, le=9999)
     completed: bool = False
     completed_at: str | None = None
+    notes: str = Field(default="", max_length=4000, exclude_if=lambda value: value == "")
+    links: list[AssignmentLink] = Field(
+        default_factory=list, max_length=20, exclude_if=lambda value: not value
+    )
+    checklist: list[ChecklistItem] = Field(
+        default_factory=list, max_length=40, exclude_if=lambda value: not value
+    )
 
     _spotify_url = field_validator("spotify_url")(valid_spotify_url)
     _due = field_validator("due")(valid_naive_stamp)
@@ -206,6 +251,9 @@ class AssignmentContent(BaseModel):
             raise ValueError("completed_at is required when completed")
         if not self.completed and self.completed_at is not None:
             raise ValueError("completed_at must be null when not completed")
+        ids = [item.id for item in self.checklist]
+        if len(ids) != len(set(ids)):
+            raise ValueError("checklist ids must be unique")
         return self
 
 
@@ -362,6 +410,73 @@ class WeekRequest(BaseModel):
         return blocks
 
 
+class GridWindow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    days: list[int] = Field(min_length=1, max_length=7)
+    start: str = Field(min_length=5, max_length=5)
+    duration_min: int = Field(le=7140)
+
+    @field_validator("days")
+    @classmethod
+    def days_in_week(cls, value: list[int]) -> list[int]:
+        if len(set(value)) != len(value) or any(day < 0 or day > 6 for day in value):
+            raise ValueError("days must be unique values in 0..6")
+        return value
+
+    @field_validator("start")
+    @classmethod
+    def start_is_on_the_grid(cls, value: str) -> str:
+        if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value):
+            raise ValueError("start must be HH:MM")
+        hour, minute = map(int, value.split(":"))
+        start = hour * 60 + minute
+        if minute % 15 or start < 360 or start >= 1380:
+            raise ValueError("start must be on the 06:00–23:00 grid")
+        return value
+
+    @field_validator("duration_min")
+    @classmethod
+    def duration_is_slot_aligned(cls, value: int) -> int:
+        if value <= 0 or value % 15 != 0:
+            raise ValueError("duration_min must be a positive multiple of 15")
+        return value
+
+    @model_validator(mode="after")
+    def window_fits_the_grid(self) -> GridWindow:
+        hour, minute = map(int, self.start.split(":"))
+        start = hour * 60 + minute
+        if start + self.duration_min > 1380:
+            raise ValueError("window must fit the 06:00–23:00 grid")
+        return self
+
+
+class ProtectedWindow(GridWindow):
+    kind: Literal["downtime", "commute", "meal"]
+
+
+class SpreadRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    session_min: int = Field(ge=15, le=180)
+    from_date: str
+
+    @field_validator("session_min")
+    @classmethod
+    def session_is_slot_aligned(cls, value: int) -> int:
+        if value % 15 != 0:
+            raise ValueError("session_min must be a multiple of 15")
+        return value
+
+    @field_validator("from_date")
+    @classmethod
+    def from_date_is_calendar_day(cls, value: str) -> str:
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            raise ValueError("from_date must be YYYY-MM-DD")
+        day = date.fromisoformat(value)
+        if not FIRST_DAY <= day <= LAST_DAY:
+            raise ValueError("from_date must be between 2000-01-01 and 2099-12-31")
+        return value
+
+
 class RecoveryRequest(BaseModel):
     missed_block_id: str = Field(min_length=1, max_length=80)
     missed_day: int = Field(ge=0, le=6)
@@ -375,8 +490,35 @@ class RecoveryRequest(BaseModel):
         return blocks
 
 
+class RunningLateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    day: int = Field(ge=0, le=6)
+    minutes: Literal[15, 30, 60]
+    from_start: str = Field(min_length=5, max_length=5)
+    previous_placed: list[TimeBlock] = Field(max_length=100)
+
+    @field_validator("from_start")
+    @classmethod
+    def from_start_is_on_the_grid(cls, value: str) -> str:
+        if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value):
+            raise ValueError("from_start must be HH:MM")
+        hour, minute = map(int, value.split(":"))
+        start = hour * 60 + minute
+        if minute % 15 or start < 360 or start >= 1380:
+            raise ValueError("from_start must be on the 06:00–23:00 grid")
+        return value
+
+    @field_validator("previous_placed")
+    @classmethod
+    def previous_ids_are_unique(cls, blocks: list[TimeBlock]) -> list[TimeBlock]:
+        if len({block.id for block in blocks}) != len(blocks):
+            raise ValueError("previous placement ids must be unique")
+        return blocks
+
+
 class SolveRequest(WeekRequest):
     recover: RecoveryRequest | None = None
+    running_late: RunningLateRequest | None = None
     week_start: str | None = None
 
     @field_validator("week_start")
@@ -390,6 +532,8 @@ class SolveRequest(WeekRequest):
     def missed_occurrence_exists(self) -> SolveRequest:
         if self.week_start is None and any(block.assignment_id for block in self.blocks):
             raise ValueError("week_start is required when a block has assignment_id")
+        if self.recover is not None and self.running_late is not None:
+            raise ValueError("recover and running_late cannot both be set")
         if self.recover is None:
             return self
         matches = [block for block in self.blocks if block.id == self.recover.missed_block_id]

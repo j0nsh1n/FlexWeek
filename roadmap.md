@@ -312,8 +312,9 @@ Current scope mapping:
   deadline/session totals, missed_days recovery and cross-week persistence;
   atomic failure/retry tests and real preview/accept/undo walkthroughs. Retain the
   existing packed-fixture performance target and measure longer project planning.
-- Status: [ ] Planned. Depends on Stages 1 and 3. Borrows Daily Scheduler actions,
-  not its AI tool execution or its behavior of dropping work that no longer fits.
+- Status: [ ] Backend in progress on `grok/stage4-adapt-backend`. Frontend not
+  started. Depends on Stages 1 and 3. Borrows Daily Scheduler actions, not its
+  AI tool execution or its behavior of dropping work that no longer fits.
 
 ### Stage 5. Make reminders and settings comfortable
 - [ ] Group settings into appearance, focus, notifications and account sections.

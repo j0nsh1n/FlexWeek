@@ -1,6 +1,16 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-14. Student-experience Stage 4 backend is on
+  `grok/stage4-adapt-backend` (worktree
+  `~/.worktrees/flexweek-stage4-backend`), based on `claude/stage3-frontend` at
+  9759a23. Running-late solve preview, project-spread preview, assignment
+  notes/links/checklist, preference occupancy (protected windows, study hours,
+  day cutoff) and a deadline-cluster explanation live behind the proposed
+  contract in `docs/stage4-contract.md`. Claude still owns the shared frontend.
+  Nothing pushed. Web-only gate on this tree: 163 frontend tests, 229 Python
+  tests (`ruff check .`, `mypy backend`, `pytest` on `backend/tests`). Desktop
+  and packaged binaries were not run.
 - Date: 2026-09-14. Student-experience Stage 3 is complete locally on
   `claude/stage3-frontend`: Codex's frontend (copy, paste, duplicate and copy
   day with conflict previews, fixed-only routines, unfinished-homework review,
@@ -202,6 +212,17 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-14, `grok/stage4-adapt-backend`: Grok's Stage 4 backend slice.
+  Contract is `docs/stage4-contract.md` (still proposed). Running late is a
+  solve preview that occupies `[from_start, from_start + minutes)` on one day,
+  reuses `RESHUFFLE_AFTER_MISS` with a distinct sentence, and never drops
+  unplaced work. Spread is `POST /api/assignments/{id}/spread` and does not
+  write. Assignment notes, links and checklist omit empties. Preferences keep
+  protected / study / cutoff in `availability_json`; `POST /api/solve` loads
+  them. spec.md drift: those fields, `running_late` and the spread route are
+  not in the public API table until the owner approves the contract. Claude
+  still owns UI. Web-only gate: 163 frontend tests, 229 Python tests.
+  Cartographer skipped (not installed in the project venv). Nothing pushed.
 - 2026-09-14, `claude/stage3-frontend`: Stage 3 finished by Claude. Codex's
   frontend (857f43d, 1f569aa) and WebEngine case (d666a92) sit on Grok's backend
   (a6b484f, the same patch as cfb8c48 on `grok/stage3-reuse-backend`). a438d3a

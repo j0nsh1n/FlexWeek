@@ -6,6 +6,17 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Running late, project spread, assignment notes and protected hours
+  (2026-09-14, backend). `POST /api/solve` accepts `running_late` (15, 30 or 60
+  minutes from a grid cutoff) as a preview that keeps locked blocks and sleep
+  put and leaves overflow in `unplaced`. `POST /api/assignments/{id}/spread`
+  previews extra sessions of a chosen length on one assignment before the due
+  date. Assignments store notes, http(s) links and a small checklist.
+  Preferences store protected downtime, commute and meal windows, preferred
+  study hours and an optional day cutoff; solve loads them so the frontend
+  does not re-send occupancy. Crowded weeks get one extra explanation with
+  concrete choices instead of claiming the week was solved. Rules are in
+  `docs/stage4-contract.md`.
 - Schedule reuse and recovery (2026-09-14, frontend). Copy, paste, duplicate
   and copy-day use visible controls or Ctrl/Cmd shortcuts and preview fixed-time
   collisions before one atomic save; a retried save reuses its operation id so

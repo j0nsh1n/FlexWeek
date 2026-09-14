@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import re
 import secrets
 import sqlite3
 import time
@@ -23,18 +24,22 @@ from backend.assignments import (
     rewrite_session,
     unplanned_minutes,
 )
+from backend.availability import occupancy_from_windows, spread_sessions
 from backend.day import build_day
 from backend.models import (
     Assignment,
     AssignmentContent,
+    GridWindow,
+    ProtectedWindow,
     Routine,
     SolveRequest,
+    SpreadRequest,
     TimeBlock,
     WeekRequest,
     valid_spotify_url,
 )
 from backend.restore import canonical, diff_snapshots, state_token
-from backend.solver import reschedule_after_miss, solve
+from backend.solver import reschedule_after_miss, reschedule_running_late, solve
 from backend.storage import (
     SESSION_SECONDS,
     connect,
@@ -568,8 +573,69 @@ class Preferences(BaseModel):
     auto_split_pomodoro: bool = False
     default_spotify_url: str | None = Field(default=None, max_length=500)
     alarms: list[AlarmPreference] = Field(default_factory=list, max_length=20)
+    protected: list[ProtectedWindow] = Field(
+        default_factory=list, max_length=21, exclude_if=lambda value: not value
+    )
+    study_windows: list[GridWindow] = Field(
+        default_factory=list, max_length=21, exclude_if=lambda value: not value
+    )
+    day_cutoff: str | None = Field(default=None, exclude_if=lambda value: value is None)
 
     _spotify_url = field_validator("default_spotify_url")(valid_spotify_url)
+
+    @field_validator("day_cutoff")
+    @classmethod
+    def cutoff_is_on_the_grid(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value):
+            raise ValueError("day_cutoff must be HH:MM on the 15-minute grid")
+        hour, minute = map(int, value.split(":"))
+        start = hour * 60 + minute
+        if minute % 15 or start < 375 or start > 1380:
+            raise ValueError("day_cutoff must be between 06:15 and 23:00 on the 15-minute grid")
+        return value
+
+
+def encode_availability(preferences: Preferences) -> str:
+    return json.dumps(
+        {
+            "protected": [window.model_dump() for window in preferences.protected],
+            "study_windows": [window.model_dump() for window in preferences.study_windows],
+            "day_cutoff": preferences.day_cutoff,
+        },
+        separators=(",", ":"),
+    )
+
+
+def preferences_from_row(row: sqlite3.Row) -> dict:
+    availability = json.loads(row["availability_json"] or "{}")
+    return Preferences(
+        theme=row["theme"],
+        reminders_enabled=bool(row["reminders_enabled"]),
+        reminder_lead_min=int(row["reminder_lead_min"]),
+        reminder_sound=bool(row["reminder_sound"]),
+        reminder_dnd_override=bool(row["reminder_dnd_override"]),
+        timer_work_min=int(row["timer_work_min"]),
+        timer_break_min=int(row["timer_break_min"]),
+        timer_long_break_min=int(row["timer_long_break_min"]),
+        timer_long_break_every=int(row["timer_long_break_every"]),
+        auto_split_pomodoro=bool(row["auto_split_pomodoro"]),
+        default_spotify_url=row["default_spotify_url"],
+        alarms=json.loads(row["alarms_json"]),
+        protected=availability.get("protected") or [],
+        study_windows=availability.get("study_windows") or [],
+        day_cutoff=availability.get("day_cutoff"),
+    ).model_dump()
+
+
+def solve_availability(row: sqlite3.Row | None) -> tuple[list[int], list[GridWindow]]:
+    if row is None:
+        return [0] * 7, []
+    availability = json.loads(row["availability_json"] or "{}")
+    protected = [ProtectedWindow.model_validate(item) for item in availability.get("protected") or []]
+    study = [GridWindow.model_validate(item) for item in availability.get("study_windows") or []]
+    return occupancy_from_windows(protected, availability.get("day_cutoff")), study
 
 
 def create_app(database: Path | None = None, origin: str | None = None) -> FastAPI:
@@ -808,6 +874,37 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             db.execute("BEGIN IMMEDIATE")
             return upsert_assignment(db, account["id"], content, payload.revision)
 
+    @app.post("/api/assignments/{assignment_id}/spread")
+    def post_spread(
+        assignment_id: str, payload: SpreadRequest, account: Annotated[dict, Depends(user)]
+    ) -> dict:
+        with connect(path) as db:
+            row = db.execute(
+                "SELECT body FROM assignments WHERE user_id = ? AND id = ?",
+                (account["id"], assignment_id),
+            ).fetchone()
+            if row is None:
+                raise HTTPException(404, "Assignment not found")
+            weeks = list_account_weeks(db, account["id"])
+        body = json.loads(row["body"])
+        if body["completed"]:
+            raise HTTPException(422, "completed assignments cannot be spread")
+        planned = planned_minutes_by_id(weeks, "2000-01-01").get(assignment_id, 0)
+        sessions, remaining = spread_sessions(
+            estimate_min=int(body["estimate_min"]),
+            focus_minutes=int(body["focus_minutes"]),
+            planned_min=planned,
+            due=body["due"],
+            session_min=payload.session_min,
+            from_date=payload.from_date,
+        )
+        return {
+            "assignment_id": assignment_id,
+            "session_min": payload.session_min,
+            "remaining_min": remaining,
+            "sessions": sessions,
+        }
+
     @app.delete("/api/assignments/{assignment_id}")
     def remove_assignment(
         assignment_id: str, account: Annotated[dict, Depends(user)], revision: int | None = None
@@ -875,28 +972,8 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
     @app.get("/api/preferences")
     def get_preferences(account: Annotated[dict, Depends(user)]) -> dict:
         with connect(path) as db:
-            row = db.execute(
-                """SELECT theme, reminders_enabled, reminder_lead_min, reminder_sound,
-                    reminder_dnd_override, timer_work_min, timer_break_min,
-                    timer_long_break_min, timer_long_break_every, auto_split_pomodoro,
-                    default_spotify_url, alarms_json
-                FROM preferences WHERE user_id = ?""",
-                (account["id"],),
-            ).fetchone()
-        return {
-            "theme": row["theme"],
-            "reminders_enabled": bool(row["reminders_enabled"]),
-            "reminder_lead_min": int(row["reminder_lead_min"]),
-            "reminder_sound": bool(row["reminder_sound"]),
-            "reminder_dnd_override": bool(row["reminder_dnd_override"]),
-            "timer_work_min": int(row["timer_work_min"]),
-            "timer_break_min": int(row["timer_break_min"]),
-            "timer_long_break_min": int(row["timer_long_break_min"]),
-            "timer_long_break_every": int(row["timer_long_break_every"]),
-            "auto_split_pomodoro": bool(row["auto_split_pomodoro"]),
-            "default_spotify_url": row["default_spotify_url"],
-            "alarms": json.loads(row["alarms_json"]),
-        }
+            row = db.execute("SELECT * FROM preferences WHERE user_id = ?", (account["id"],)).fetchone()
+        return preferences_from_row(row)
 
     @app.put("/api/preferences")
     def put_preferences(preferences: Preferences, account: Annotated[dict, Depends(user)]) -> dict:
@@ -906,7 +983,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 SET theme = ?, reminders_enabled = ?, reminder_lead_min = ?, reminder_sound = ?,
                     reminder_dnd_override = ?, timer_work_min = ?, timer_break_min = ?,
                     timer_long_break_min = ?, timer_long_break_every = ?, auto_split_pomodoro = ?,
-                    default_spotify_url = ?, alarms_json = ?
+                    default_spotify_url = ?, alarms_json = ?, availability_json = ?
                 WHERE user_id = ?""",
                 (
                     preferences.theme,
@@ -921,6 +998,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                     int(preferences.auto_split_pomodoro),
                     preferences.default_spotify_url,
                     json.dumps([alarm.model_dump() for alarm in preferences.alarms], separators=(",", ":")),
+                    encode_availability(preferences),
                     account["id"],
                 ),
             )
@@ -1049,6 +1127,10 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         ids = assignment_ids_of(week.blocks)
         with connect(path) as db:
             owned = require_own_assignments(db, account["id"], ids) if ids else {}
+            prefs = db.execute(
+                "SELECT availability_json FROM preferences WHERE user_id = ?", (account["id"],)
+            ).fetchone()
+        extra_occ, study_windows = solve_availability(prefs)
         blocks = week.blocks
         extra_deadlines = None
         extra_slack = None
@@ -1064,8 +1146,28 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 week.recover.previous_placed,
                 deadlines=extra_deadlines,
                 slack_deadlines=extra_slack,
+                extra_occ=extra_occ,
+                study_windows=study_windows,
             ).model_dump()
-        return solve(blocks, deadlines=extra_deadlines, slack_deadlines=extra_slack).model_dump()
+        if week.running_late is not None:
+            return reschedule_running_late(
+                blocks,
+                week.running_late.day,
+                week.running_late.minutes,
+                week.running_late.from_start,
+                week.running_late.previous_placed,
+                deadlines=extra_deadlines,
+                slack_deadlines=extra_slack,
+                extra_occ=extra_occ,
+                study_windows=study_windows,
+            ).model_dump()
+        return solve(
+            blocks,
+            deadlines=extra_deadlines,
+            slack_deadlines=extra_slack,
+            extra_occ=extra_occ,
+            study_windows=study_windows,
+        ).model_dump()
 
     @app.get("/api/health")
     def health() -> dict[str, bool]:
