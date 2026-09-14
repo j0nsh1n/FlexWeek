@@ -82,7 +82,7 @@ function harness(options = {}) {
     localStorage: { getItem: key => local.get(key), removeItem: key => local.delete(key) },
     fetch: async (path, options) => { requests.push({ path, options }); return handler(path, options); },
     getComputedStyle: () => ({ getPropertyValue: () => '2.75rem' }),
-    setTimeout, clearTimeout, AbortController, structuredClone, console,
+    setTimeout, clearTimeout, AbortController, structuredClone, console, crypto: globalThis.crypto, TextEncoder,
     confirm: () => true, Date: FixedDate, matchMedia: options.matchMedia,
     location: options.location, history: options.history,
   });
@@ -1236,4 +1236,121 @@ test('deleting homework that was never saved asks for a save first, so Undo is n
   assert.equal(h.requests.length, sent);
   assert.equal(h.run('weekState().blocks.length'), 2);
   assert.equal(h.run('statusEl.textContent'), 'Essay is not saved yet. Press Retry save, then delete it.');
+});
+
+// Stage 1: export format 2 carries homework; import reads formats 1 and 2.
+const homeworkBody = ({ revision, planned_min, unplanned_min, ...body }) => body;
+const mathSession = { id: 's-here', kind: 'flexible', title: 'Math', duration_min: 60, days: [3], assignment_id: 'hw-math' };
+
+test('a week export is format 2 and carries only the homework its sessions point at', async () => {
+  const h = harness();
+  const math = openAssignment('hw-math', { title: 'Math', due: '2026-09-16T21:00', estimate_min: 120, focus_minutes: 30, focus_sessions: 1 });
+  const other = openAssignment('hw-other', { title: 'Other', due: '2026-09-18T21:00' });
+  const orphan = { id: 's-gone', kind: 'flexible', title: 'Gone', duration_min: 30, days: [4], assignment_id: 'hw-gone' };
+  await h.login(1, [weekdaySchool, mathSession, orphan], [], [math, other]);
+  const payload = inPage(h, `exportWeekPayload("${MONDAY}", weekState().blocks)`);
+  assert.equal(payload.version, 2);
+  assert.deepEqual(payload.assignments, [homeworkBody(math)]);
+  assert.equal('assignment_id' in payload.blocks[2], false, 'a session whose homework is not loaded loses the link');
+  assert.equal(h.run(`parseImportPayload(${JSON.stringify(JSON.stringify(payload))}).error`), undefined);
+});
+
+test('a format 2 file is refused when a session points at missing homework or the homework is malformed', () => {
+  const h = harness();
+  const math = homeworkBody(openAssignment('hw-math', { title: 'Math', due: '2026-09-16T21:00' }));
+  const base = { format: 'flexweek-week', version: 2, week_start: MONDAY, blocks: [mathSession] };
+  const parse = file => h.run(`parseImportPayload(${JSON.stringify(JSON.stringify(file))}).error`);
+  assert.equal(parse({ ...base, assignments: [math] }), undefined);
+  assert.equal(parse(base), 'Export is missing its homework list.');
+  assert.equal(parse({ ...base, assignments: [] }), 'Block 1 points at homework the file does not include. Nothing was imported.');
+  assert.equal(parse({ ...base, assignments: [{ ...math, due: '2026-02-30T21:00' }] }), 'Homework 1 has a bad due date. Nothing was imported.');
+  assert.equal(parse({ ...base, assignments: [{ ...math, estimate_min: 50 }] }),
+    'Homework 1 needs a total time in whole 15-minute steps. Nothing was imported.');
+  assert.equal(parse({ ...base, assignments: [{ ...math, completed: true }] }),
+    'Homework 1 has a completion time that does not match. Nothing was imported.');
+  assert.equal(parse({ ...base, assignments: [{ ...math, planned_min: 60 }] }), 'Homework 1 has an unknown field. Nothing was imported.');
+  assert.equal(parse({ ...base, assignments: [math, math] }), 'Export repeats the homework id hw-math. Nothing was imported.');
+  assert.equal(parse({ ...base, version: 3, assignments: [math] }), 'Export came from a newer FlexWeek (version 3).');
+});
+
+test('importing your own export reuses homework whose id, title and due match, and creates none', async () => {
+  const h = harness();
+  const math = openAssignment('hw-math', { title: 'Math', due: '2026-09-16T21:00', estimate_min: 120 });
+  await h.login(1, [weekdaySchool, mathSession], [], [math]);
+  const file = JSON.stringify(inPage(h, `exportWeekPayload("${MONDAY}", weekState().blocks)`));
+  const calls = fakeServer(h);
+  assert.equal(await h.run(`importPayloadIntoWeek(parseImportPayload(${JSON.stringify(file)}))`), true);
+  await settle();
+  assert.deepEqual(calls.map(call => [call.method, call.path]), [['PUT', '/api/week']]);
+  assert.equal(calls[0].body.blocks[1].assignment_id, 'hw-math');
+});
+
+test('another account gets homework ids for the destination week: the same week twice adds nothing, another week adds separate homework', async () => {
+  const h = harness();
+  await h.login(2, []);
+  const math = homeworkBody(openAssignment('hw-math', { title: 'Math', due: '2026-09-16T21:00', estimate_min: 120 }));
+  const fileFor = weekStart => JSON.stringify({
+    format: 'flexweek-week', version: 2, week_start: weekStart,
+    blocks: [{ id: 's-next', kind: 'flexible', title: 'Math', duration_min: 60, days: [0], assignment_id: 'hw-math' }],
+    assignments: [math],
+  });
+  const stored = new Map();
+  const created = [];
+  h.handle(async (path, options = {}) => {
+    if (path.startsWith('/api/assignments')) return response(200, { assignments: [] });
+    if (path.startsWith('/api/week?')) {
+      return response(200, { week_start: weekOf(path), blocks: stored.get(weekOf(path)) || [], revision: 0 });
+    }
+    const body = JSON.parse(options.body);
+    if (path === '/api/changes') {
+      body.assignments.forEach(change => created.push(change.id));
+      body.weeks.forEach(week => stored.set(week.week_start, week.blocks));
+      return changesReply(body);
+    }
+    stored.set(body.week_start, body.blocks);
+    return response(200, { ...body, revision: body.revision + 1 });
+  });
+  const importInto = weekStart => h.run(`importPayloadIntoWeek(parseImportPayload(${JSON.stringify(fileFor(weekStart))}))`);
+
+  assert.equal(await importInto('2026-09-14'), true);
+  await settle();
+  // The same "week_start:id" hash the backend migration uses (verified against backend.assignments).
+  assert.deepEqual(created, ['a-92b10e99fb1c8f61660089bd4f4d9066']);
+  assert.equal(h.run('selectedWeek'), '2026-09-14');
+  assert.equal(h.run('weekState().blocks[0].assignment_id'), 'a-92b10e99fb1c8f61660089bd4f4d9066');
+
+  assert.equal(await importInto('2026-09-14'), true);
+  await settle();
+  assert.equal(created.length, 1, 'the same file into the same week adds nothing');
+
+  assert.equal(await importInto('2026-09-21'), true);
+  await settle();
+  assert.equal(created.length, 2);
+  assert.match(created[1], /^a-[0-9a-f]{32}$/);
+  assert.notEqual(created[1], created[0]);
+});
+
+test('a format 1 file with an old weekday deadline shows the homework the server made from it', async () => {
+  const h = harness();
+  await h.login(1, []);
+  const essay = { id: 'essay', kind: 'flexible', title: 'Essay', duration_min: 60, days: [3, 4], latest: 'Friday 21:00' };
+  const adopted = { ...essay, latest: null, assignment_id: 'a-essay' };
+  let saved = false;
+  h.handle(async (path, options = {}) => {
+    if (options.method === 'PUT') {
+      saved = true;
+      assert.equal(JSON.parse(options.body).blocks[0].latest, 'Friday 21:00');
+      return response(200, { week_start: MONDAY, blocks: [adopted], revision: 1 });
+    }
+    if (path.startsWith('/api/assignments')) {
+      return response(200, { assignments: saved ? [openAssignment('a-essay', { title: 'Essay', due: '2026-09-11T21:00' })] : [] });
+    }
+    if (path.startsWith('/api/week?')) return response(200, { week_start: MONDAY, blocks: saved ? [adopted] : [], revision: saved ? 1 : 0 });
+    return response(404, { detail: `unexpected ${path}` });
+  });
+  const legacy = { format: 'flexweek-week', version: 1, week_start: MONDAY, blocks: [essay] };
+  assert.equal(await h.run(`importPayloadIntoWeek(parseImportPayload(${JSON.stringify(JSON.stringify(legacy))}))`), true);
+  await settle();
+  assert.deepEqual(inPage(h, '[weekState().blocks[0].assignment_id, weekState().blocks[0].latest]'), ['a-essay', null]);
+  assert.equal(h.run("dueLabel(assignments.get('a-essay').due)"), 'Fri Sep 11, 21:00');
 });

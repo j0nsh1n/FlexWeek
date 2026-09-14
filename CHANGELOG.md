@@ -41,6 +41,13 @@ All notable changes to FlexWeek are documented here. Format follows
   say "Remove Tuesday only" or "Delete all days", deleting homework asks
   whether to remove this session or the whole homework, and Clear week moved
   into a More menu. History is cleared on sign-out and account change.
+- Export format 2 (2026-09-13, frontend). Week and day exports, and the
+  unsaved-week download, carry the homework their sessions point at. Import
+  reads formats 1 and 2. Homework is reused only when its id, title and due all
+  match; otherwise it gets the backend migration's id for the destination week,
+  so importing a file into the same week twice adds nothing and into another
+  week adds separate homework. A format 1 file's weekday deadlines become
+  homework when saved, and the week reloads to show it.
 - Hybrid frost look (2026-09-10) in light and dark. The page sits on a soft
   gradient; the header, week bar, sidebar, sign-in card and dialogs are frosted
   glass with hairline borders; task cards and forms are more solid; the week

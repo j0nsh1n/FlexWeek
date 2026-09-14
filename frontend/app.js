@@ -27,7 +27,8 @@ const KIND_LABEL = { locked: "Fixed time", flexible: "Flexible" };
 const SLACK_BADGE = { tight: "Tight fit", danger: "At risk" };
 
 const EXPORT_FORMAT = "flexweek-week";
-const EXPORT_VERSION = 1;
+// Format 2 adds the homework that sessions point at. Import still reads format 1.
+const EXPORT_VERSION = 2;
 const REMINDER_WINDOW_MIN = 2;
 const REMINDER_POLL_MS = 30000;
 const LIVE_POLL_MS = 30000;
@@ -225,12 +226,27 @@ function categoryLabel(category) {
 }
 
 function exportWeekPayload(weekStart, blocks) {
+  const exported = (blocks || []).map(exportableBlock);
   return {
     format: EXPORT_FORMAT,
     version: EXPORT_VERSION,
     week_start: weekStart,
-    blocks: (blocks || []).map(function (block) { return cloneBlock(block); }),
+    blocks: exported,
+    assignments: referencedAssignments(exported),
   };
+}
+
+/** A block as a file keeps it. A session whose homework is not loaded loses the link rather than point at nothing. */
+function exportableBlock(block) {
+  const copy = cloneBlock(block);
+  if (copy.assignment_id && !assignments.has(copy.assignment_id)) delete copy.assignment_id;
+  return copy;
+}
+
+/** The homework these blocks point at, so a file carries it along. */
+function referencedAssignments(blocks) {
+  const ids = new Set(blocks.map(function (block) { return block.assignment_id; }).filter(Boolean));
+  return Array.from(ids).map(function (id) { return assignmentBody(assignments.get(id)); });
 }
 
 function presentationBlocks(state) {
@@ -248,7 +264,7 @@ function exportDayPayload(weekStart, day, blocks) {
   const dayBlocks = (blocks || []).filter(function (block) {
     return occurrenceDays(block).indexOf(day) !== -1;
   }).map(function (block) {
-    const copy = cloneBlock(block);
+    const copy = exportableBlock(block);
     copy.days = [day];
     if (copy.missed_days) {
       copy.missed_days = copy.missed_days.filter(function (d) { return d === day; });
@@ -262,6 +278,7 @@ function exportDayPayload(weekStart, day, blocks) {
     date: date,
     day: day,
     blocks: dayBlocks,
+    assignments: referencedAssignments(dayBlocks),
   };
 }
 
@@ -421,10 +438,14 @@ function parseImportPayload(raw) {
     return { error: "Export came from a newer FlexWeek (version " + data.version + ")." };
   }
   if (!Array.isArray(data.blocks)) return { error: "Export is missing blocks." };
+  // Format 2 carries the homework its sessions point at; format 1 has none.
+  const homework = data.version >= 2 ? data.assignments : [];
+  if (!Array.isArray(homework)) return { error: "Export is missing its homework list." };
   const weekStart = data.week_start;
   if (weekStart && !isWeekStart(weekStart)) return { error: "Export week_start must be a Monday." };
-  // Validate every block before returning, so a bad file never reaches week state.
-  const blockProblem = importBlocksError(data.blocks);
+  // Validate every block and homework item before returning, so a bad file never reaches week state.
+  const blockProblem = importBlocksError(data.blocks) ||
+    (data.version >= 2 ? importAssignmentsError(homework, data.blocks) : null);
   if (blockProblem) return { error: blockProblem + " Nothing was imported." };
   if (data.format === "flexweek-day" && (
     !Number.isInteger(data.day) || data.day < 0 || data.day > 6
@@ -435,7 +456,68 @@ function parseImportPayload(raw) {
     week_start: weekStart || null,
     day: Number.isInteger(data.day) ? data.day : null,
     blocks: data.blocks,
+    assignments: homework,
   };
+}
+
+/** A naive local YYYY-MM-DDTHH:MM on a real day in 2000..2099, as the server accepts for due and completed_at. */
+function isNaiveStamp(value) {
+  const match = typeof value === "string" && /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):[0-5]\d$/.exec(value);
+  if (!match) return false;
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return year >= 2000 && year <= 2099 && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+function importAssignmentError(item, index) {
+  const at = "Homework " + (index + 1);
+  if (!item || typeof item !== "object" || Array.isArray(item)) return at + " is not homework.";
+  const allowed = new Set(["id", "title", "course", "category", "priority", "energy", "spotify_url", "due",
+    "estimate_min", "focus_minutes", "focus_sessions", "completed", "completed_at"]);
+  if (Object.keys(item).some(function (key) { return !allowed.has(key); })) return at + " has an unknown field.";
+  if (typeof item.id !== "string" || !item.id || textLength(item.id) > 80) return at + " has a bad id.";
+  if (typeof item.title !== "string" || !item.title.trim() || textLength(item.title) > 80) return at + " has a bad title.";
+  const texts = [["course", 40], ["category", 32], ["spotify_url", 500]];
+  for (let i = 0; i < texts.length; i += 1) {
+    const value = item[texts[i][0]];
+    if (value != null && (typeof value !== "string" || textLength(value) > texts[i][1])) {
+      return at + " has a bad " + texts[i][0] + ".";
+    }
+  }
+  if (item.spotify_url != null && !safeSpotifyUrl(item.spotify_url)) return at + " has a bad Spotify link.";
+  if (item.priority !== undefined && [1, 2, 3, 4].indexOf(item.priority) === -1) return at + " has a bad priority.";
+  if (item.energy !== undefined && ENERGIES.indexOf(item.energy) === -1) return at + " has a bad energy.";
+  if (!isNaiveStamp(item.due)) return at + " has a bad due date.";
+  if (!Number.isInteger(item.estimate_min) || item.estimate_min <= 0 || item.estimate_min > 7140
+      || item.estimate_min % SNAP_MIN !== 0) {
+    return at + " needs a total time in whole 15-minute steps.";
+  }
+  if (item.focus_minutes !== undefined && (!Number.isInteger(item.focus_minutes) || item.focus_minutes < 0
+      || item.focus_minutes > 71400)) return at + " has bad focus minutes.";
+  if (item.focus_sessions !== undefined && (!Number.isInteger(item.focus_sessions) || item.focus_sessions < 0
+      || item.focus_sessions > 9999)) return at + " has bad focus sessions.";
+  if (item.completed !== undefined && typeof item.completed !== "boolean") return at + " has a bad completed flag.";
+  if (item.completed ? !isNaiveStamp(item.completed_at) : item.completed_at != null) {
+    return at + " has a completion time that does not match.";
+  }
+  return null;
+}
+
+function importAssignmentsError(homework, blocks) {
+  if (homework.length > MAX_IMPORT_BLOCKS) return "Export has more than " + MAX_IMPORT_BLOCKS + " homework items.";
+  const ids = new Set();
+  for (let i = 0; i < homework.length; i += 1) {
+    const problem = importAssignmentError(homework[i], i);
+    if (problem) return problem;
+    if (ids.has(homework[i].id)) return "Export repeats the homework id " + homework[i].id + ".";
+    ids.add(homework[i].id);
+  }
+  for (let i = 0; i < blocks.length; i += 1) {
+    if (blocks[i].assignment_id != null && !ids.has(blocks[i].assignment_id)) {
+      return "Block " + (i + 1) + " points at homework the file does not include.";
+    }
+  }
+  return null;
 }
 
 function mergeImportedBlocks(existing, incoming, mode, day) {
@@ -1887,6 +1969,11 @@ async function importPayloadIntoWeek(parsed, mode) {
       return false;
     }
   }
+  const importEpoch = epoch;
+  let plan;
+  try { plan = await planImportedHomework(parsed.assignments || [], parsed.blocks, selectedWeek); }
+  catch (error) { setStatus("Import failed. " + error.message); return false; }
+  if (importEpoch !== epoch || !account || saving) return false;
   const state = weekState();
   const mergeMode = mode || (parsed.format === "flexweek-day" ? "merge" : "replace");
   if (mergeMode === "replace" && state.blocks.length) {
@@ -1895,13 +1982,73 @@ async function importPayloadIntoWeek(parsed, mode) {
     }
   }
   let merged;
-  try { merged = mergeImportedBlocks(state.blocks, parsed.blocks, mergeMode, parsed.day); }
+  try { merged = mergeImportedBlocks(state.blocks, plan.blocks, mergeMode, parsed.day); }
   catch (error) { setStatus(error.message + " Nothing was imported."); return false; }
   const problem = importBlocksError(merged);
   if (problem) { setStatus(problem + " Nothing was imported."); return false; }
+  plan.create.forEach(putAssignment);
   state.blocks = merged;
   closeForm();
-  return commitWeek();
+  const saved = await commitWeek(undefined, "the import");
+  if (saved && merged.some(isLegacyHomework)) await refreshAdoptedWeek();
+  return saved;
+}
+
+/**
+ * Match a file's homework to this account's. An item is the same homework only when its id, title
+ * and due all match. Otherwise it gets the backend migration's id for this week, so one file imported
+ * into one week twice adds nothing, and imported into another week adds separate homework.
+ */
+async function planImportedHomework(homework, blocks, weekStart) {
+  const idFor = new Map();
+  const create = [];
+  for (const item of homework) {
+    const own = assignments.get(item.id);
+    if (own && own.title === item.title && own.due === item.due) {
+      idFor.set(item.id, item.id);
+      continue;
+    }
+    const id = await migratedAssignmentId(weekStart, item.id);
+    // An earlier import of this file into this week already made it, even if it was edited since.
+    if (!assignments.has(id)) create.push({ ...item, id: id });
+    idFor.set(item.id, id);
+  }
+  return {
+    blocks: blocks.map(function (block) {
+      return idFor.has(block.assignment_id) ? { ...cloneBlock(block), assignment_id: idFor.get(block.assignment_id) } : block;
+    }),
+    create: create,
+  };
+}
+
+/** The backend migration's id: "a-" and the first 32 hex digits of the SHA-256 of "week_start:source id". */
+async function migratedAssignmentId(weekStart, sourceId) {
+  if (typeof crypto === "undefined" || !crypto.subtle) throw new Error("This page cannot read homework from a file.");
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(weekStart + ":" + sourceId));
+  return "a-" + Array.from(new Uint8Array(digest), function (byte) {
+    return byte.toString(16).padStart(2, "0");
+  }).join("").slice(0, 32);
+}
+
+/** A flexible block from before homework had due dates; the server makes it homework when it is saved. */
+function isLegacyHomework(block) {
+  return block.kind === "flexible" && !block.assignment_id && Boolean(block.latest);
+}
+
+/** After a save turned old weekday deadlines into homework, show the sessions and homework the server stored. */
+async function refreshAdoptedWeek() {
+  const weekStart = selectedWeek;
+  const refreshEpoch = epoch;
+  try {
+    const [data, owned] = await Promise.all([api("/api/week?week_start=" + weekStart), loadAssignments(weekStart)]);
+    const state = weekState(weekStart);
+    if (refreshEpoch !== epoch || selectedWeek !== weekStart || state.dirty) return;
+    noteLoaded("week", weekStart, data.blocks, data.revision, state.revision);
+    state.blocks = data.blocks;
+    state.revision = data.revision;
+    rememberPlannedLater(weekStart, owned, data.blocks);
+    renderWeek();
+  } catch { /* The import is saved; opening the week again shows the homework. */ }
 }
 
 function showReminderToast(message) {
@@ -2482,6 +2629,7 @@ document.getElementById("import-week").addEventListener("click", async () => {
   if (await commitWeek()) {
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* A retry replaces the same blocks. */ }
     document.getElementById("import-panel").hidden = true;
+    if (blocks.some(isLegacyHomework)) await refreshAdoptedWeek();
   }
 });
 
