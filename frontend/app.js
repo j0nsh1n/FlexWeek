@@ -960,7 +960,6 @@ function weekStatus() {
 }
 
 function showWeek(weekStart) {
-  if (focusState && focusState.weekStart !== weekStart) resetFocusTimer();
   selectedWeek = weekStart;
   const state = weekState();
   state.trace = null;

@@ -23,6 +23,15 @@ All notable changes to FlexWeek are documented here. Format follows
   the rest here adds a session for that time on the days up to the due date,
   and a week that already holds 100 blocks refuses with a plain message.
   Weeks before this one and homework already past due list nothing.
+- Focus session choices (2026-09-13, frontend). When a homework focus session
+  ends, the student picks Finished (the homework is done and the session keeps
+  its slot, saved together), Need more time (adds 15-minute steps to its total
+  and starts the break) or Take a break. The timer keeps running across weeks
+  and survives a reload of the same account through sessionStorage, which
+  holds only ids and times; a session that ran out while the page was closed
+  is counted and asks the same question. Starting another timer asks first,
+  logging out or signing in as another account clears it, and Quick focus
+  times work that is not on the calendar without crediting anything.
 - Hybrid frost look (2026-09-10) in light and dark. The page sits on a soft
   gradient; the header, week bar, sidebar, sign-in card and dialogs are frosted
   glass with hairline borders; task cards and forms are more solid; the week

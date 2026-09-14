@@ -123,18 +123,29 @@
       </section>
       <section id="focus-section" class="focus-dashboard" aria-labelledby="focus-heading" hidden>
         <h2 id="focus-heading"><svg class="icon" aria-hidden="true"><use href="#i-timer"/></svg>Focus timer</h2>
-        <p class="note">Start a timer on a task Solve has placed.</p>
+        <p class="note">Start a timer on a task Solve has placed, or use Quick focus for anything else.</p>
         <div id="focus-panel" class="focus-panel" hidden>
           <strong id="focus-task"></strong>
           <span id="focus-phase"></span>
           <output id="focus-time">00:00</output>
-          <div class="form-actions">
+          <div id="focus-controls" class="form-actions">
             <button type="button" id="focus-pause">Pause</button>
             <button type="button" id="focus-skip" class="secondary">Skip</button>
             <button type="button" id="focus-reset" class="secondary">Reset</button>
           </div>
+          <div id="focus-choices" class="form-actions" hidden>
+            <button type="button" id="focus-finished">Finished</button>
+            <button type="button" id="focus-more" class="secondary">Need more time</button>
+            <button type="button" id="focus-break" class="secondary">Take a break</button>
+          </div>
+          <div id="focus-more-form" class="form-actions" hidden>
+            <label>How much more? <select id="focus-more-min"></select></label>
+            <button type="button" id="focus-more-add">Add time</button>
+            <button type="button" id="focus-more-cancel" class="secondary">Back</button>
+          </div>
         </div>
         <ul id="focus-tasks" class="focus-tasks"></ul>
+        <button type="button" id="focus-quick" class="secondary">Quick focus</button>
       </section>
       <section id="debug" class="debug" hidden>
         <h2><svg class="icon" aria-hidden="true"><use href="#i-results"/></svg>What Solve did</h2>

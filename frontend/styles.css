@@ -773,6 +773,7 @@ button:disabled { cursor: wait; opacity: 0.6; }
 .focus-tasks li, .continuing-list li { display: grid; grid-template-columns: 1fr auto; gap: 0.15rem 0.5rem; align-items: center; }
 .focus-tasks small, .continuing-list small { color: var(--muted); }
 .focus-tasks button, .continuing-list button { grid-column: 2; grid-row: 1 / span 2; padding: 0.22rem 0.5rem; }
+.focus-dashboard > button { margin-top: var(--space-2); }
 .now-next { color: var(--text); font-size: 0.8rem; }
 .week-nav .now-next { margin-left: auto; background: var(--accent-soft); border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: 0.12rem 0.5rem; font-variant-numeric: tabular-nums; }
 .side li.empty-note { border-left-color: var(--hairline-strong); color: var(--muted); box-shadow: none; }

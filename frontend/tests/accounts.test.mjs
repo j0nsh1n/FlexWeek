@@ -591,11 +591,13 @@ test('after Solve the chrome speaks plainly: results sentence, no badge for room
   assert.equal(h.elements.get('focus-section').hidden, false);
 });
 
-test('the Focus section stays hidden until a task has a time', async () => {
+test('the Focus section offers Quick focus before any task has a time', async () => {
   const h = harness();
   const school = { id: 'school', kind: 'locked', title: 'School', duration_min: 390, days: [0], start: '08:00', priority: 1, energy: 'medium' };
   await h.login(1, [school, task]);
   assert.equal(h.elements.get('focus-tasks').children.length, 0);
+  assert.equal(h.elements.get('focus-section').hidden, false);
+  h.run('signedOut()');
   assert.equal(h.elements.get('focus-section').hidden, true);
 });
 

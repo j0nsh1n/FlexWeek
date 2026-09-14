@@ -131,6 +131,7 @@ async function loadAccount(identity) {
     renderWeekNav();
     renderWeek();
     setStatus(state.dirty ? "Unsaved edits restored. " + (state.conflict ? "Download your draft and reload the newer week." : "Press Retry save.") : weekStatus());
+    restoreFocus();
     try {
       document.getElementById("import-panel").hidden = !localStorage.getItem(STORAGE_KEY);
     } catch { document.getElementById("import-panel").hidden = true; }
@@ -186,6 +187,7 @@ document.getElementById("logout").addEventListener("click", async () => {
     if (account) {
       suspendedDrafts.delete(account.id);
       suspendedAssignments.delete(account.id);
+      forgetFocus(account.id);
     }
     signedOut("Logged out.", false);
     channel?.postMessage("session-changed");
