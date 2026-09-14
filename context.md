@@ -2,25 +2,25 @@
 
 ## Current State
 - Date: 2026-09-13. Student-experience Stage 1 is complete locally on
-  `claude/stage1-frontend` (off the approved contract at 7fd40c4). The branch
-  includes the reviewed backend and the finished frontend: exact assignment
+  `feat/stage1-student-experience`. The branch combines the seven-stage roadmap,
+  approved contract, reviewed backend and finished frontend: exact assignment
   deadlines and cross-week sessions, Continuing and Plan the rest here, focus
   outcomes and reload-safe timers, Undo/Redo, safer deletes, and version 2
-  export/import. Nothing pushed.
-- Full source verification is green on that branch: 139 frontend tests and 241
-  Python tests, including the Stage 1 Qt WebEngine walkthrough. A live browser
-  check also covered assignment entry, next-week Continuing, Solve, and the
-  Finished / Need more time / Take a break prompt.
-- Date: 2026-09-11. v0.9.1 is released (PR #8, tag at b06f897). Branch
-  `feat/windows-installers` off that merge, for v0.9.2.
+  export/import. No remote branch changed.
+- Full source verification after integration is green: 139 frontend tests and
+  241 Python tests, including the Stage 1 Qt WebEngine walkthrough. A live
+  browser check also covered assignment entry, next-week Continuing, Solve,
+  and the Finished / Need more time / Take a break prompt. A read-only
+  Cartographer scan found 28 Python files, 16 routes, no parse errors, no
+  circular imports and no scanner warnings.
+- Date: 2026-09-11. v0.9.2 is released (PR #9, tag at a20831f).
   `feat/frost-reference-look` (5ca38b7, restyle after the owner's reference
   dashboards) is parked and in neither release.
-- 0.9.1 shipped: a page renderer that stops reopens solved and solid instead of
+- v0.9.1 shipped: a page renderer that stops reopens solved and solid instead of
   a blank window; `--smoke-test` walks setup to its Solve with a pixel check;
   the AppImage `.sha256` names only the file; AppImage FUSE doc tip.
-- 0.9.2 in progress: Windows installers (`FlexWeek-Windows-x64-Setup.exe`,
-  `FlexWeek-Windows-x64.msi`) replace the zip, whose shortcut pointed at the
-  build machine. Installers are only built and run on the GitHub Windows runner.
+- v0.9.2 replaced the Windows zip with per-account Setup.exe and per-machine
+  MSI installers, built and exercised on the GitHub Windows runner.
 - The owner sees flicker in the setup dialog on Windows and is investigating
   that directly. On the owner's Linux PC (KDE Wayland, RX 9070, Mesa 26.2.2) blur on,
   blur off and GPU off all looked the same, with no flicker.
@@ -168,14 +168,11 @@ flexible block with `assignment_id` is a work session of that assignment.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
-- 2026-09-13, `claude/stage1-frontend`: Stage 1 implementation is complete
-  locally through 3319ccf. It contains the reviewed backend from
-  `grok/stage1-assignments-backend`, five frontend feature commits, and a real
-  Qt WebEngine probe for assignment save/Solve, whole-assignment delete and
-  Undo, create Undo/Redo, and version 2 cross-week import. The full verifier is
-  green (139 frontend, 241 Python). The student-experience roadmap remains in
-  open PR #11; update its Stage 1 status when that roadmap is merged. Do not
-  push without the owner.
+- 2026-09-13, `feat/stage1-student-experience`: locally integrates the staged
+  student-experience roadmap with the approved Stage 1 contract, reviewed
+  backend, five frontend feature commits and the Qt WebEngine probe. Stage 1 is
+  marked complete; Stage 2 is next. The full source verifier is green (139
+  frontend, 241 Python), and packaging was not run during integration.
 - 2026-09-11, `docs/readme-screenshots`: README screenshots in `docs/images/`
   (week light, week dark, setup), taken offscreen at 1.5x from the real app with
   a demo week and a Wednesday 16:20 clock; a readme test keeps every shown image
@@ -187,8 +184,6 @@ flexible block with `assignment_id` is a work session of that assignment.
   uninstalls both; pull requests touching packaging run it without uploading.
   Docs and `desktop/tests/test_windows_installers.py` updated. Release notes in
   `docs/release-notes-v0.9.2.md`.
-- Open: spec.md still names `FlexWeek-Windows-x64.zip` (downloads list and the
-  Definition of Done); owner approval needed to change it.
 - 2026-09-11, `fix/0.9.1`: renderer recovery (shell reload with
   `?recovered=1`, solid panels, re-Solve, native panel on a repeat), extended
   smoke with pixel check and throwaway data, WebEngine `recovery` probe,
