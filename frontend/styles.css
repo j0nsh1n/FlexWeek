@@ -632,7 +632,7 @@ button.danger {
   .agenda-row { grid-template-columns: 1fr; }
   .agenda-actions { grid-column: 1; grid-row: auto; justify-content: flex-start; }
   /* Touch targets stay at least 44px tall on phones. */
-  .agenda-actions button, .agenda-next button, .view-switch button, #add-homework { min-height: 2.75rem; }
+  .agenda-actions button, .agenda-next button, .view-switch button, .add-homework { min-height: 2.75rem; }
 }
 
 .auth-panel {
