@@ -1,10 +1,16 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-13. Stage 2 backend `GET /api/day` is on
-  `grok/stage2-day-backend`, using the six defaults in
-  `docs/stage2-contract.md`. Frontend Stage 2 is still unbuilt. spec.md does
-  not list `/api/day` yet.
+- Date: 2026-09-14. Student-experience Stage 2 is complete locally on
+  `feat/stage2-student-experience` (the same commits as
+  `claude/stage2-frontend`): Grok's `GET /api/day` plus the Day agenda, Day
+  first at 800px and narrower, quick Add homework, Plan my homework / Update my
+  plan wording, collapsed results with slack in days, Export and Import in
+  Settings, and Edit / Finished / Start focus in agenda rows. It follows the six
+  proposed defaults in `docs/stage2-contract.md`, which is not approved yet, so
+  spec.md does not list `/api/day`. Full source gate green: 145 frontend tests
+  and 250 Python tests, including the stage2 WebEngine probe at 390px and
+  1280px. No remote branch changed.
 - Date: 2026-09-13. Student-experience Stage 1 is complete locally on
   `feat/stage1-student-experience`. The branch combines the seven-stage roadmap,
   approved contract, reviewed backend and finished frontend: exact assignment
@@ -172,6 +178,15 @@ flexible block with `assignment_id` is a work session of that assignment.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-14, `claude/stage2-frontend` and `feat/stage2-student-experience`:
+  Claude's Stage 2 frontend on Grok's `254e086`. The Day agenda and quick Add
+  homework live in `frontend/day.js`. Day view session times come from the week
+  in memory and its plan, because placements are not stored; `/api/day` supplies
+  the workload and each due-soon homework's unplanned minutes. Update my plan
+  stays once a week has been planned in this page session (`planned` on the
+  week state). Gate lessons: the theme guard reads an id such as `#add-…` as a
+  hex color, so style by class; the desktop smoke flow waits on the setup
+  button's text. Grok has not reviewed these commits. Nothing pushed.
 - 2026-09-13, `grok/stage2-day-backend`: Grok's Stage 2 slice, `GET /api/day`.
   Claude still owns Day/Week UI, Add homework and Plan my homework copy.
   spec.md drift: the day endpoint is not in the public API table until the
