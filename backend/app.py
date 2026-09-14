@@ -14,7 +14,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from backend.assignments import (
@@ -595,6 +595,23 @@ class Preferences(BaseModel):
         if minute % 15 or start < 375 or start > 1380:
             raise ValueError("day_cutoff must be between 06:15 and 23:00 on the 15-minute grid")
         return value
+
+    @model_validator(mode="after")
+    def protected_windows_do_not_overlap(self) -> Preferences:
+        # Half-open [start, end) ranges, checked per day: touching windows and
+        # windows on disjoint days are fine.
+        for day in range(7):
+            intervals: list[tuple[int, int]] = []
+            for window in self.protected:
+                if day not in window.days:
+                    continue
+                hour, minute = map(int, window.start.split(":"))
+                start = hour * 60 + minute
+                end = start + window.duration_min
+                if any(start < other_end and other_start < end for other_start, other_end in intervals):
+                    raise ValueError("protected windows must not overlap on a shared day")
+                intervals.append((start, end))
+        return self
 
 
 def encode_availability(preferences: Preferences) -> str:

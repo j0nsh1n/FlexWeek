@@ -8,8 +8,9 @@ from pathlib import Path
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
-from backend.app import create_app
+from backend.app import Preferences, create_app
 
 PASSWORD = "a-long-test-password"
 WRITE = {"X-FlexWeek-Request": "1", "Origin": "http://testserver"}
@@ -310,3 +311,69 @@ def test_preferences_reject_off_grid_windows_and_solve_honors_cutoff(alice: Test
     solved = alice.post("/api/solve", json={"blocks": [homework]}, headers=WRITE)
     assert solved.status_code == 200, solved.text
     assert [block["id"] for block in solved.json()["unplaced"]] == ["hw"]
+
+
+def test_preferences_reject_overlapping_protected_windows_and_accept_adjacent_ones(
+    alice: TestClient,
+) -> None:
+    prefs = defaults(alice)
+    overlapping = alice.put(
+        "/api/preferences",
+        json={
+            **prefs,
+            "protected": [
+                {"kind": "downtime", "days": [0], "start": "18:00", "duration_min": 60},
+                {"kind": "meal", "days": [0], "start": "18:30", "duration_min": 60},
+            ],
+        },
+        headers=WRITE,
+    )
+    assert overlapping.status_code == 422
+    adjacent = alice.put(
+        "/api/preferences",
+        json={
+            **prefs,
+            "protected": [
+                {"kind": "downtime", "days": [0], "start": "18:00", "duration_min": 60},
+                {"kind": "meal", "days": [0], "start": "19:00", "duration_min": 60},
+            ],
+        },
+        headers=WRITE,
+    )
+    assert adjacent.status_code == 200, adjacent.text
+    same_time_other_day = alice.put(
+        "/api/preferences",
+        json={
+            **prefs,
+            "protected": [
+                {"kind": "downtime", "days": [0], "start": "18:00", "duration_min": 120},
+                {"kind": "meal", "days": [1], "start": "19:00", "duration_min": 60},
+            ],
+        },
+        headers=WRITE,
+    )
+    assert same_time_other_day.status_code == 200, same_time_other_day.text
+
+
+def test_protected_window_model_rejects_overlap_and_accepts_adjacency() -> None:
+    base = {"theme": "system"}
+    with pytest.raises(ValidationError):
+        Preferences.model_validate(
+            {
+                **base,
+                "protected": [
+                    {"kind": "downtime", "days": [0], "start": "18:00", "duration_min": 60},
+                    {"kind": "meal", "days": [0], "start": "18:30", "duration_min": 60},
+                ],
+            }
+        )
+    adjacent = Preferences.model_validate(
+        {
+            **base,
+            "protected": [
+                {"kind": "downtime", "days": [0], "start": "18:00", "duration_min": 60},
+                {"kind": "meal", "days": [0], "start": "19:00", "duration_min": 60},
+            ],
+        }
+    )
+    assert len(adjacent.protected) == 2

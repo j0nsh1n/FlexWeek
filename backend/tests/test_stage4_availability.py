@@ -159,8 +159,22 @@ def test_spread_snaps_a_focus_remainder_down_to_the_grid() -> None:
         session_min=60,
         from_date="2026-09-14",
     )
-    assert remaining == 0
+    # 113 unplanned minutes place 105 on the grid; 8 minutes cannot fit a slot.
+    assert remaining == 8
     assert [item["duration_min"] for item in sessions] == [60, 45]
+
+
+def test_spread_reports_a_remainder_that_fits_no_grid_session() -> None:
+    sessions, remaining = spread_sessions(
+        estimate_min=60,
+        focus_minutes=53,
+        planned_min=0,
+        due="2026-09-15T23:59",
+        session_min=60,
+        from_date="2026-09-14",
+    )
+    assert sessions == []
+    assert remaining == 7
 
 
 def test_study_windows_are_preferred_before_energy() -> None:
@@ -170,6 +184,16 @@ def test_study_windows_are_preferred_before_energy() -> None:
     placed = {block.id: block for block in trace.placed}["hw"]
     assert placed.start == "18:00"
     assert hhmm_to_minutes(placed.start) >= 18 * 60
+
+
+def test_a_short_study_window_does_not_claim_a_longer_session() -> None:
+    homework = _flex("hw", 60, [0], energy="high")
+    windows = [GridWindow(days=[0], start="21:00", duration_min=30)]
+    trace = solve([homework], study_windows=windows)
+    placed = {block.id: block for block in trace.placed}["hw"]
+    # A 60-minute session cannot fit a 30-minute window, so the energy-matched
+    # morning slot keeps its usual first place.
+    assert placed.start == "06:00"
 
 
 def test_cutoff_occupancy_blocks_starts_that_would_finish_after_it() -> None:

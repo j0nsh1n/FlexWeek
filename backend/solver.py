@@ -399,7 +399,7 @@ def _order_values(
     def key(item: tuple[int, int]) -> tuple[int, int, int, int]:
         day, slot = item
         start_min = DAY_START_MIN + slot * SLOT_MIN
-        study = 0 if study_prefers(windows, day, start_min) else 1
+        study = 0 if study_prefers(windows, day, start_min, block.duration_min) else 1
         match = 0 if low <= start_min < high else 1
         return (study, match, day, slot)
 

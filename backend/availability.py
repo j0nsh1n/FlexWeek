@@ -56,13 +56,14 @@ def lateness_occupancy(day: int, from_start: str, minutes: int) -> list[int]:
     return occ
 
 
-def study_prefers(windows: list[GridWindow], day: int, start_min: int) -> bool:
+def study_prefers(windows: list[GridWindow], day: int, start_min: int, duration_min: int) -> bool:
     for window in windows:
         if day not in window.days:
             continue
         hour, minute = map(int, window.start.split(":"))
         begin = hour * 60 + minute
-        if begin <= start_min < begin + window.duration_min:
+        # The whole session must fit inside the window, not just its start.
+        if begin <= start_min and start_min + duration_min <= begin + window.duration_min:
             return True
     return False
 
@@ -81,7 +82,10 @@ def spread_sessions(
     from_date: str,
 ) -> tuple[list[dict[str, object]], int]:
     remaining = unplanned_minutes(estimate_min, focus_minutes, planned_min)
-    remaining -= remaining % SLOT_MIN
+    # Sessions stay on the grid; the sub-15-minute remainder is unschedulable,
+    # not zero, and comes back in remaining_min instead of being dropped.
+    remainder = remaining % SLOT_MIN
+    grid_total = remaining - remainder
     due_day, _ = parse_naive_stamp(due)
     start = date.fromisoformat(from_date)
     if remaining == 0 or start > due_day:
@@ -92,7 +96,7 @@ def spread_sessions(
         dates.append(cursor)
         cursor += timedelta(days=1)
     sizes: list[int] = []
-    left = remaining
+    left = grid_total
     while left >= session_min:
         sizes.append(session_min)
         left -= session_min
@@ -109,4 +113,4 @@ def spread_sessions(
                 "duration_min": duration,
             }
         )
-    return sessions, 0
+    return sessions, remainder
