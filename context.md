@@ -1,6 +1,9 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-13. Stage 2 contract is proposed on `docs/stage2-contract`
+  (`docs/stage2-contract.md`). Not approved. Do not implement until the owner
+  confirms the six decisions in that file.
 - Date: 2026-09-13. Student-experience Stage 1 is complete locally on
   `feat/stage1-student-experience`. The branch combines the seven-stage roadmap,
   approved contract, reviewed backend and finished frontend: exact assignment
@@ -168,6 +171,11 @@ flexible block with `assignment_id` is a work session of that assignment.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-13, `docs/stage2-contract`: proposed Stage 2 contract in
+  `docs/stage2-contract.md` (day agenda, Add homework, Plan my homework,
+  GET /api/day). Not approved. Do not implement until the owner confirms the
+  six decisions in that file. Base is `feat/stage1-student-experience` at
+  130ee99.
 - 2026-09-13, `feat/stage1-student-experience`: locally integrates the staged
   student-experience roadmap with the approved Stage 1 contract, reviewed
   backend, five frontend feature commits and the Qt WebEngine probe. Stage 1 is
