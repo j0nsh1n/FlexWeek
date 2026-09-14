@@ -9,8 +9,8 @@
   `/api/changes`, cherry-picked unchanged as a6b484f). Claude finished the
   WebEngine step and reviewed the code with two GLM adversarial passes, fixing
   seven defects. GLM findings that did not hold up against the source are
-  listed as rejected in the commit messages. The branch's contract copy is
-  marked approved, and spec.md lists the Stage 3 routes.
+  listed as rejected in the commit messages. Jonathan confirmed the contract
+  on 2026-09-14, and spec.md lists the Stage 3 routes.
 - Full source gate green on the final tree: 163 frontend tests and 278 Python
   tests, including the real Qt WebEngine `stage3` case (copy, routine apply,
   restore, a retried operation, reload, a second account) and `stage3_mobile`
