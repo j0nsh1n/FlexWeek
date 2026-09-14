@@ -76,6 +76,20 @@ Contract for the finished app:
   than an error; a duration that is not a positive multiple of 15 is rejected in
   both the browser form and the API. Legacy browser data is explicitly imported
   into a signed-in account; invalid data stays untouched and never loads a demo.
+- Copy, paste, duplicate and copy-day use a page-memory clipboard that clears
+  on account change. Fixed-time conflicts are previewed and must be resolved;
+  pasted homework keeps the same assignment identity, stays flexible and never
+  exceeds its remaining unplanned minutes.
+- Account-owned weekly routines contain fixed commitments only. Applying one
+  to a Monday-keyed destination week previews every occurrence and lets the
+  student omit or adjust one-week exceptions without changing the routine.
+- A later week reviews unfinished homework using the original assignment ID,
+  exact deadline and progress. Repeated planning and request retries cannot
+  duplicate or over-plan it.
+- Account-owned restore points snapshot weeks and assignments. Clear week,
+  routine application and restore preserve the replaced schedule first; a
+  stale restore preview returns 409 and no failure stores partial state. The UI
+  labels backups as local-device or hosted-server data.
 
 ## User Experience
 Web app, one page, desktop-first (designed at 1280px) and usable on a phone at
@@ -122,8 +136,11 @@ Current account/API contract:
 | GET | `/api/weeks` | The `week_start` dates this account has saved, ascending |
 | GET | `/api/assignments` | Open assignments with planned and unplanned minutes for a `week_start`; completed ones only when asked |
 | PUT/DELETE | `/api/assignments/{id}` | Revision-checked create, update and delete; delete removes its sessions from every week |
-| POST | `/api/changes` | Several week and assignment writes, all or nothing |
+| POST | `/api/changes` | Several week and assignment writes, all or nothing; optional operation ID and pre-change recovery point |
 | GET/PUT | `/api/preferences` | Theme, reminders, timers, alarms, Spotify default |
+| GET/PUT/DELETE | `/api/routines[/{id}]` | Account-owned, revision-checked fixed-time routine templates |
+| GET/POST | `/api/restore-points[/{id}/preview or /restore]` | Create/list restore points, preview a state-tokened diff, and restore transactionally |
+| GET | `/api/storage-info` | Authenticated local-versus-hosted backup label; no filesystem path |
 | POST | `/api/solve` | Authenticated week and its `week_start` in, SolveTrace out; no storage mutation |
 | GET | `/api/health` | Public health response |
 
@@ -183,7 +200,8 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
   uvicorn[standard] 0.52.4, pytest 9.1.1, httpx 0.28.1, ruff 0.16.6, mypy 2.3.1, Pydantic 2.13.5.
 - Storage: SQLite at `FLEXWEEK_DATABASE` (default `var/flexweek.db`), with users,
   sessions, weeks keyed `(user_id, week_start)`, assignments keyed
-  `(user_id, id)`, preferences and short-lived auth-attempt counters. Schema creation is additive on startup; related writes
+  `(user_id, id)`, preferences, routines, restore points, bounded idempotency
+  records and short-lived auth-attempt counters. Schema creation is additive on startup; related writes
   use transactions. The pre-dated single-week table migrates on first start
   inside one explicit transaction, stamping the existing row with the Monday of
   that day; it is idempotent and never drops a row. A preferences table from
@@ -206,7 +224,9 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
   - `frontend/`. `index.html`, `styles.css`, and deferred scripts sharing one
     global scope: `app.js` (week state, grid, saves, solve, alarms), `auth.js`
     (Create account / Log in), `editor.js` (Add/Edit dialog), `setup.js`
-    (first-week setup), `focus.js` (timer and Now / Next). The browser owns
+    (first-week setup), `focus.js` (timer and Now / Next), `reuse.js`
+    (clipboard, conflict preview and unfinished work), `routines.js` and
+    `restore.js`. The browser owns
     interaction and explanation display and **never reimplements placement**.
   - `desktop/`. PySide6 window, bundled uvicorn, packaging scripts, and
     isolated WebEngine probes.
@@ -250,9 +270,9 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
   are logged; validation responses omit submitted input.
 - Auth attempts are bounded per username (10) and source address (30) per
   five-minute window, persisted in SQLite and expired during auth requests.
-- Production needs HTTPS, database backups, and deployment-specific proxy setup.
-  Recovery, deletion/retention policy, advanced hardening and audits are deferred
-  to Phase 6 before public release.
+- Production needs HTTPS, deployment backups and deployment-specific proxy
+  setup. Stage 3 restore points cover student recovery inside one account;
+  deletion policy, advanced hardening and audits remain later release work.
 - Failed saves retain in-memory drafts with retry, download and reload controls.
   Stale revisions never silently overwrite newer data. Session loss hides all
   private content; a draft can restore only after the same account signs in.
@@ -260,6 +280,10 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
   kept in `sessionStorage` per account with ids and times only, never assignment
   text; undo history lives in page memory and clears on sign-out or account
   change.
+- The Stage 3 clipboard also lives only in page memory and clears on sign-out,
+  account change and reload. Routine and restore routes derive ownership from
+  the session; another account's opaque ID is treated as not found. Restore
+  previews use a state token so a later edit cannot be overwritten silently.
 - Demo data is anonymized: no real student names, schools, or addresses, and no
   copyrighted syllabus PDFs in the repo.
 - License is **GPL-3.0** (`LICENSE`); the README and the page footer must agree
@@ -327,6 +351,9 @@ The commands it runs, each of which must exit 0:
 - [ ] A student enters homework due next Tuesday at 11:59 p.m., works on it
       this week and next, ends a focus session without completing it, switches
       weeks without losing the timer, and undoes an accidental delete or replan.
+- [ ] A student copies one practice occurrence, applies a fixed-time routine to
+      next week with one holiday exception, carries unfinished homework once,
+      and previews and restores an account-owned recovery point.
 - [ ] Download names are `FlexWeek-Windows-x64-Setup.exe` (with
       `FlexWeek-Windows-x64.msi` for schools) and
       `FlexWeek-Linux-x86_64.tar.gz`.

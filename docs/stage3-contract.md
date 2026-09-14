@@ -1,7 +1,7 @@
 # Contract: Stage 3 — reuse routines and recover past work
 
-Status: proposed 2026-09-14. Not approved. Implementation and `spec.md`
-changes wait for owner approval.
+Status: approved 2026-09-14. The owner asked Codex to implement the
+Claude-owned frontend portion and will have Claude review it afterward.
 
 This contract is based on `claude/stage2-frontend` at `3b1f1c9`. Claude owns
 the browser/desktop frontend. Grok owns persistence and authenticated API
@@ -239,7 +239,8 @@ validated server-side. JSON errors use the existing response shape.
 
 `PUT /api/routines/{id}` accepts `id`, `name`, `blocks`, and `revision`.
 Revision 0 creates. An exact retry of an already-applied body succeeds without
-another revision increase. A stale non-identical update returns 409.
+another revision increase. A stale non-identical update returns 409. Success
+returns the full routine object.
 
 `DELETE /api/routines/{id}?revision=N` requires the current revision. An exact
 retry after a successful delete is idempotent for the same account and
@@ -247,7 +248,8 @@ operation ID.
 
 ### Restore points
 
-`GET /api/restore-points` returns summaries only, newest first.
+`GET /api/restore-points` returns `{"restore_points": [...]}` with summaries
+only, newest first.
 
 `POST /api/restore-points` accepts:
 
@@ -255,7 +257,8 @@ operation ID.
 {"label": "Before finals week", "operation_id": "client UUID"}
 ```
 
-An exact retry returns the original point. Labels are 1–80 characters.
+An exact retry returns the original full restore-point object. Labels are 1–80
+characters.
 
 `GET /api/restore-points/{id}/preview` returns:
 
@@ -277,14 +280,18 @@ returns 409 without mutation.
 
 ### Atomic change operation ID
 
-Extend `POST /api/changes` with optional `operation_id` and `recovery_label`
+Extend `POST /api/changes` with optional `operation_id` and `snapshot_label`
 fields for Stage 3 batch actions. An operation ID is a UUID. The server stores
 the successful response per account and operation ID. Repeating the same ID
 and identical payload returns that response; repeating the ID with different
-content returns 409. When `recovery_label` is present, the server snapshots
+content returns 409. When `snapshot_label` is present, the server snapshots
 the account's current weeks and assignments before applying the changes in the
 same transaction. Snapshot or change failure rolls back both. Existing callers
 that omit both fields keep current behavior.
+
+Successful operation records are bounded to the newest 1,000 per account.
+Pruning happens inside a later successful operation; normal resource revisions
+remain the backstop after an older operation record is pruned.
 
 ### Storage location
 

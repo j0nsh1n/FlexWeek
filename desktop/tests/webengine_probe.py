@@ -529,6 +529,81 @@ def run(case: str, root: Path) -> None:
             assert evaluate("document.querySelector('.week-nav #export-week') === null")
             print("PASS: 390px day agenda, Add homework, plan, start focus and finish without "
                   "a context menu; 1280px week of seven days")
+        elif case == "stage3":
+            submit_identity("stage3_student", "register")
+            evaluate("document.getElementById('setup-close').click()")
+            add_item("class", "document.getElementById('f-title').value='School';", days=[0])
+            wait_for("document.getElementById('status').textContent.startsWith('Saved')")
+
+            # Copy one occurrence through the shared preview and persist it through
+            # the real atomic API. The source block remains a separate Monday item.
+            evaluate("""window.__stage3Done=undefined;
+                const source=weekState().blocks.find(block => block.title === 'School');
+                copyBlockById(source.id, 0, 'occurrence');
+                pasteStage3Clipboard(1, source.start);
+                confirmStage3Preview().then(ok => { window.__stage3Done=ok; });""")
+            wait_for("window.__stage3Done !== undefined")
+            assert evaluate("window.__stage3Done") is True
+            assert evaluate("weekState().blocks.filter(block => block.title === 'School').length") == 2
+
+            # Save the current fixed commitments as a routine, then apply only
+            # Monday to next week. Applying snapshots the account first.
+            evaluate(
+                "window.__routineOpen=undefined; "
+                "openRoutineDialog().then(ok => { window.__routineOpen=ok; })"
+            )
+            wait_for("window.__routineOpen !== undefined")
+            evaluate("""document.getElementById('routine-name').value='School week';
+                window.__routineSaved=undefined;
+                saveNewRoutine().then(ok => { window.__routineSaved=ok; });""")
+            wait_for("window.__routineSaved !== undefined")
+            assert evaluate("window.__routineSaved") is True
+            next_week = evaluate("shiftWeek(selectedWeek, 1)")
+            evaluate(f"""document.getElementById('routine-destination').value={json.dumps(next_week)};
+                [0,1,2,3,4,5,6].forEach(day => document.getElementById('routine-day-'+day).checked=day===0);
+                window.__routineApplied=undefined;
+                applyRoutine(Array.from(stage3Routines.keys())[0]).then(ok => {{
+                    if (!ok) window.__routineApplied=false;
+                    else confirmStage3Preview().then(saved => {{ window.__routineApplied=saved; }});
+                }});""")
+            wait_for("window.__routineApplied !== undefined")
+            assert evaluate("window.__routineApplied") is True
+            assert evaluate("selectedWeek") == next_week
+            assert evaluate("weekState().blocks.length") == 1
+
+            evaluate("window.__points=undefined; api('/api/restore-points').then(data => { "
+                     "window.__points=JSON.stringify(data.restore_points); })")
+            wait_for("typeof window.__points === 'string'")
+            points = json.loads(evaluate("window.__points"))
+            assert len(points) == 1, points
+            assert points[0]["label"].startswith("Before applying School week"), points
+
+            # Restore the pre-apply snapshot. It removes the destination week,
+            # clears ephemeral clipboard/history, and leaves the saved routine.
+            point_id = points[0]["id"]
+            evaluate(f"window.__restorePreview=undefined; previewRestorePoint({json.dumps(point_id)})"
+                     ".then(ok => {{ window.__restorePreview=ok; }})")
+            wait_for("window.__restorePreview !== undefined")
+            assert evaluate("window.__restorePreview") is True
+            evaluate(
+                "window.__restored=undefined; "
+                "restoreFromPreview().then(ok => { window.__restored=ok; })"
+            )
+            wait_for("window.__restored !== undefined", timeout=20)
+            assert evaluate("window.__restored") is True
+            evaluate(f"window.__nextWeek=undefined; api('/api/week?week_start={next_week}')"
+                     ".then(data => {{ window.__nextWeek=JSON.stringify(data.blocks); }})")
+            wait_for("typeof window.__nextWeek === 'string'")
+            assert json.loads(evaluate("window.__nextWeek")) == []
+            assert evaluate("stage3Clipboard === null && undoSteps.length === 0")
+            evaluate("window.__routines=undefined; api('/api/routines').then(data => { "
+                     "window.__routines=JSON.stringify(data.routines); })")
+            wait_for("typeof window.__routines === 'string'")
+            assert len(json.loads(evaluate("window.__routines"))) == 1
+            print(
+                "PASS: copy preview, routine save/apply, automatic restore point "
+                "and restore through real APIs"
+            )
         elif case == "phase7":
             submit_identity("focus_student", "register")
             add_item("assignments", "document.getElementById('f-title').value='Maths';"

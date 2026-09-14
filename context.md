@@ -1,11 +1,19 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-14. `docs/stage3-contract` contains the proposed Stage 3
-  frontend/backend boundary for clipboard actions, fixed-only routines,
-  unfinished-homework review and account-owned restore points. It is based on
-  the locally integrated Stage 2 branch. No Stage 3 implementation or build has
-  started; owner approval of the seven defaults is next.
+- Date: 2026-09-14. The approved Stage 3 frontend is complete locally on
+  `claude/stage3-frontend`: page-memory clipboard and duplicate actions,
+  occurrence/series and copy-day scope, conflict previews, fixed-only weekly
+  routines, unfinished-homework carry-forward and restore-point controls. The
+  frontend uses stable operation IDs for retries and commits Undo state only
+  after successful saves. Grok's account-owned persistence, routes and backend
+  tests remain before Stage 3 is complete.
+- Full source verification for the Stage 3 frontend is green: 155 frontend
+  tests and 250 Python tests, including the existing real Qt WebEngine probes.
+  A live browser walkthrough at 1280px and 390px covered copying a recurring
+  occurrence, collision preview, mobile layout and 44px controls. Persistence
+  could not be exercised live because the Stage 3 backend is the next slice.
+  No package or executable build ran.
 - Date: 2026-09-14. Student-experience Stage 2 is complete locally on
   `feat/stage2-student-experience` (the same commits as
   `claude/stage2-frontend`): Grok's `GET /api/day` plus the Day agenda, Day
@@ -71,8 +79,12 @@ frontend/app.js          week state, grid, saves, solve, alarms, CATEGORIES tabl
 frontend/editor.js       Add/Edit dialog: draft -> draftProblem -> draftPatch
 frontend/setup.js        first-week setup, built on editor drafts
 frontend/focus.js        focus timer, Now / Next line
+frontend/reuse.js        clipboard, duplicate, copy-day and homework carry-forward
+frontend/routines.js     fixed-only weekly routine templates and apply preview
+frontend/restore.js      clear-week recovery and restore-point controls
 frontend/auth.js         Create account / Log in screens, session start (loads last)
 frontend/tests/app-scripts.mjs  loads index.html's scripts in order for DOM-stub tests
+frontend/tests/stage3.test.mjs  Stage 3 retry, identity, conflict and rollback cases
 frontend/styles.css      both theme token maps, then components that only read tokens
 frontend/fonts/          Figtree variable font + OFL license, served from /static
 frontend/theme.js        System/Light/Dark choice -> data-theme, loaded in <head>
@@ -183,6 +195,13 @@ flexible block with `assignment_id` is a work session of that assignment.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-14, `claude/stage3-frontend`: approved Stage 3 frontend based on
+  `docs/stage3-contract` at 9d7bf6e. The UI and client behavior are complete;
+  Grok still owns the routine/restore storage migrations, account-owned routes,
+  idempotency records and backend tests. Current Stage 2 backend therefore
+  cannot persist the new flows yet. Source gate: 155 frontend and 250 Python
+  tests; live browser at 1280px and 390px. No executable built and nothing
+  pushed. Claude review is next.
 - 2026-09-14, `docs/stage3-contract`: proposed Stage 3 contract based on
   `claude/stage2-frontend` at 3b1f1c9. Claude owns the shared browser/desktop
   frontend; Grok owns migrations, routes and backend tests. The contract keeps

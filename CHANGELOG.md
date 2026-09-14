@@ -6,6 +6,14 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Schedule reuse and recovery interface (2026-09-14, frontend). Copy, paste,
+  duplicate and copy-day use visible controls or Ctrl/Cmd shortcuts and preview
+  fixed-time collisions before one atomic save. Weekly routines capture fixed
+  commitments, apply to selected days or next week, and allow one-week holiday
+  or time exceptions. Later weeks review unfinished homework without changing
+  its assignment ID, deadline or progress. Settings can create and preview
+  account restore points and clearly labels local versus hosted storage. These
+  screens use the Stage 3 API contract; backend persistence lands separately.
 - Day agenda and quick Add homework (2026-09-14, frontend). A Day view sits
   beside Week: Due soon (due today, tomorrow or overdue), Homework today, Fixed
   time and one Next action, with no headings for empty lists and Edit, Finished

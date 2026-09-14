@@ -38,6 +38,7 @@ this gate. The generic kit CI that ran pyright is not used.
 | Grid gestures and event wiring | `frontend/tests/calendar-interactions.test.mjs`; WebEngine `calendar` case | Snap boundaries, cancel, a second pointer, move/resize, double-click, context menu and persisted reload |
 | Imports, exports, drafts, categories and completion | `frontend/tests/phase5-slices.test.mjs`; `backend/tests/test_phase5.py` | Invalid input, repeat import, maximum merged size, unusual/maximum Unicode IDs, multi-day flexible tasks, completed placement round trip and exported draft reimport |
 | Reminder preferences and session cleanup | Phase 5 frontend/backend tests | Lead window, solved flexible work, completed/missed filtering, account transition, browser notification closure and alert cleanup |
+| Stage 3 clipboard, routines, unfinished work and restore controls | `frontend/tests/stage3.test.mjs` | Backend persistence, account isolation, real save/reload, stale restore tokens, maximum-size weeks and desktop walkthrough after Grok's API slice lands |
 | Desktop navigation, downloads and layout | `desktop/tests/test_origin.py`, `test_server.py`, `test_webengine.py` | External popup/navigation, offline draft download, 1280px/390px overflow |
 | A painted week after setup, and a page process that stops | WebEngine `rookie` and `recovery` cases; `--smoke-test` tests in `test_webengine.py`; `frontend/tests/accounts.test.mjs` | Window grab colors after the setup Solve, killed renderer reopening solved and solid, a second stop showing the native panel |
 
@@ -62,6 +63,9 @@ not prove hardware pointer capture, touch scrolling or OS notification delivery.
 3. For event-driven UI behavior, extend a real WebEngine case alongside fast
    Node tests. The integration result can include a save and reload so the
    check covers persistence as well as the displayed draft.
+   For multi-request actions, also prove retry idempotency: preserve the
+   operation key and payload across a failed or ambiguous attempt, then start a
+   new operation only after success or an explicit user change.
 4. Demonstrate the test failing for the intended defect before fixing it, or
    temporarily remove the behavior in an isolated copy. Inspect the assertion
    mismatch; a missing dependency or syntax exception proves nothing about the
@@ -83,6 +87,20 @@ is only proven in the packaged build, because that bug never occurred in a sourc
 No hosted security audit or production configuration check runs here. Existing
 account tests prove their particular isolation/CSRF/revision cases, not the
 safety of every deployment.
+
+## Stage 3 frontend evidence
+
+The Stage 3 client cases cover fixed-block collision previews, occurrence and
+series scope, day-copy exclusions, flexible homework identity and remaining-time
+caps, guarded keyboard shortcuts, routine weekday selection, restore-token
+refresh, clear-week rollback and stable retry operation IDs. The live browser
+walkthrough checked the 1280px week view and a 390px day view, including a
+conflicting paste preview and measured 44px mobile controls.
+
+The current backend predates the Stage 3 contract, so these checks do not claim
+that routines or restore points persist. After Grok adds the API slice, extend a
+real WebEngine case through save, reload, retry and a second account before
+marking Stage 3 complete.
 
 ## Findings from the September 8–9 pass
 
