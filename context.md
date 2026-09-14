@@ -1,11 +1,16 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-13. Stage 1 backend is on local branch
-  `grok/stage1-assignments-backend` (off `docs/stage1-contract` at 7fd40c4).
-  Assignments table, migration, assignment APIs, `/api/changes`, week copy
-  rewrite, solve `week_start` adapter and leftover `latest` on save. Frontend
-  Stage 1 is Claude's parallel branch. Nothing pushed.
+- Date: 2026-09-13. Student-experience Stage 1 is complete locally on
+  `claude/stage1-frontend` (off the approved contract at 7fd40c4). The branch
+  includes the reviewed backend and the finished frontend: exact assignment
+  deadlines and cross-week sessions, Continuing and Plan the rest here, focus
+  outcomes and reload-safe timers, Undo/Redo, safer deletes, and version 2
+  export/import. Nothing pushed.
+- Full source verification is green on that branch: 139 frontend tests and 241
+  Python tests, including the Stage 1 Qt WebEngine walkthrough. A live browser
+  check also covered assignment entry, next-week Continuing, Solve, and the
+  Finished / Need more time / Take a break prompt.
 - Date: 2026-09-11. v0.9.1 is released (PR #8, tag at b06f897). Branch
   `feat/windows-installers` off that merge, for v0.9.2.
   `feat/frost-reference-look` (5ca38b7, restyle after the owner's reference
@@ -163,10 +168,14 @@ flexible block with `assignment_id` is a work session of that assignment.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
-- 2026-09-13, `grok/stage1-assignments-backend`: Stage 1 backend against the
-  approved contract. Claude reviewed 3dee825 FIX-PASS: deletes before week
-  writes in /api/changes, canonical week JSON on delete/migrate, one-pass
-  planned minutes. Next: Claude re-reviews. Do not push without the owner.
+- 2026-09-13, `claude/stage1-frontend`: Stage 1 implementation is complete
+  locally through 3319ccf. It contains the reviewed backend from
+  `grok/stage1-assignments-backend`, five frontend feature commits, and a real
+  Qt WebEngine probe for assignment save/Solve, whole-assignment delete and
+  Undo, create Undo/Redo, and version 2 cross-week import. The full verifier is
+  green (139 frontend, 241 Python). The student-experience roadmap remains in
+  open PR #11; update its Stage 1 status when that roadmap is merged. Do not
+  push without the owner.
 - 2026-09-11, `docs/readme-screenshots`: README screenshots in `docs/images/`
   (week light, week dark, setup), taken offscreen at 1.5x from the real app with
   a demo week and a Wednesday 16:20 clock; a readme test keeps every shown image
