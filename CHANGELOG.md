@@ -6,14 +6,24 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
-- Schedule reuse and recovery interface (2026-09-14, frontend). Copy, paste,
-  duplicate and copy-day use visible controls or Ctrl/Cmd shortcuts and preview
-  fixed-time collisions before one atomic save. Weekly routines capture fixed
-  commitments, apply to selected days or next week, and allow one-week holiday
-  or time exceptions. Later weeks review unfinished homework without changing
-  its assignment ID, deadline or progress. Settings can create and preview
-  account restore points and clearly labels local versus hosted storage. These
-  screens use the Stage 3 API contract; backend persistence lands separately.
+- Schedule reuse and recovery (2026-09-14, frontend). Copy, paste, duplicate
+  and copy-day use visible controls or Ctrl/Cmd shortcuts and preview fixed-time
+  collisions before one atomic save; a retried save reuses its operation id so
+  it cannot write twice. Weekly routines capture fixed commitments, apply to the
+  chosen weekdays of a destination week and allow one-week holiday or time
+  exceptions, with a restore point taken first. Later weeks review unfinished
+  homework without changing its assignment id, deadline or progress. Settings
+  creates, previews and restores account restore points and says whether they
+  are stored on this device or on the FlexWeek server.
+- Routines, restore points and storage location (2026-09-14, backend). An
+  account can save named weekly templates of fixed commitments, snapshot every
+  week and assignment, preview a restore against current data, and restore in
+  one transaction that first keeps a recovery point of the schedule being
+  replaced. `POST /api/changes` accepts an optional operation id so a retried
+  Apply routine or Clear week cannot double-write, and an optional snapshot
+  label so those writes take a restore point first. `GET /api/storage-info`
+  reports whether this process is local or hosted. Rules are in
+  `docs/stage3-contract.md`.
 - Day agenda and quick Add homework (2026-09-14, frontend). A Day view sits
   beside Week: Due soon (due today, tomorrow or overdue), Homework today, Fixed
   time and one Next action, with no headings for empty lists and Edit, Finished

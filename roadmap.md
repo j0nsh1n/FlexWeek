@@ -285,11 +285,12 @@ Current scope mapping:
 - Verification: cross-week identity and recurrence tests, collision previews,
   repeated-click/retry idempotency, maximum-size weeks, account isolation, stale
   saves and restore failure rollback; real save/reload in both clients.
-- Status: [ ] In progress. The approved frontend is complete locally on
-  `claude/stage3-frontend`: clipboard actions, fixed-only routines,
-  unfinished-homework review, restore-point controls and their preview/error
-  states. Grok's account-owned persistence, routes and backend tests remain.
-  Its Stage 1 dependency is complete.
+- Status: [ ] Complete locally on `claude/stage3-frontend`, not merged or
+  released: clipboard actions, fixed-only routines, unfinished-homework review
+  and restore points, with Grok's account-owned persistence and routes. Real
+  WebEngine walkthroughs cover save, apply, restore, a retried operation,
+  reload, a second account and a 390px dark-theme carry-forward. Its Stage 1
+  dependency is complete.
 
 ### Stage 4. Adapt plans to real student days
 - [ ] Add a direct “Running late” action with 15/30/60-minute choices and a preview

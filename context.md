@@ -1,19 +1,22 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-14. The approved Stage 3 frontend is complete locally on
-  `claude/stage3-frontend`: page-memory clipboard and duplicate actions,
-  occurrence/series and copy-day scope, conflict previews, fixed-only weekly
-  routines, unfinished-homework carry-forward and restore-point controls. The
-  frontend uses stable operation IDs for retries and commits Undo state only
-  after successful saves. Grok's account-owned persistence, routes and backend
-  tests remain before Stage 3 is complete.
-- Full source verification for the Stage 3 frontend is green: 155 frontend
-  tests and 250 Python tests, including the existing real Qt WebEngine probes.
-  A live browser walkthrough at 1280px and 390px covered copying a recurring
-  occurrence, collision preview, mobile layout and 44px controls. Persistence
-  could not be exercised live because the Stage 3 backend is the next slice.
-  No package or executable build ran.
+- Date: 2026-09-14. Student-experience Stage 3 is complete locally on
+  `claude/stage3-frontend`: Codex's frontend (copy, paste, duplicate and copy
+  day with conflict previews, fixed-only routines, unfinished-homework review,
+  restore points and the Settings storage label) on Grok's backend (routines,
+  restore points, storage-info, operation ids and snapshot labels on
+  `/api/changes`, cherry-picked unchanged as a6b484f). Claude finished the
+  WebEngine step and reviewed the code with two GLM adversarial passes, fixing
+  seven defects. GLM findings that did not hold up against the source are
+  listed as rejected in the commit messages. The branch's contract copy is
+  marked approved, and spec.md lists the Stage 3 routes.
+- Full source gate green on the final tree: 163 frontend tests and 278 Python
+  tests, including the real Qt WebEngine `stage3` case (copy, routine apply,
+  restore, a retried operation, reload, a second account) and `stage3_mobile`
+  (390px dark theme, unfinished homework carried once). The T3 preview browser
+  could not load a local server, so no separate live browser pass ran. No
+  package or executable build ran. Nothing pushed.
 - Date: 2026-09-14. Student-experience Stage 2 is complete locally on
   `feat/stage2-student-experience` (the same commits as
   `claude/stage2-frontend`): Grok's `GET /api/day` plus the Day agenda, Day
@@ -73,6 +76,7 @@ desktop/check_bundle.py  glibc and missing-library check, no Qt imports
 desktop/build_windows.ps1 Windows standalone build preparation
 desktop/tests/           origin/server tests and isolated real WebEngine probes
 backend/weeks.py         week-date helpers, no framework import
+backend/restore.py       restore-point snapshot diff and token, no HTTP
 backend/app.py           account/session/ownership APIs and static frontend
 backend/storage.py       SQLite, scrypt, hashed sessions
 frontend/app.js          week state, grid, saves, solve, alarms, CATEGORIES table
@@ -98,6 +102,9 @@ mode uses a local per-user database; hosted mode uses the configured deployment.
 There is no automatic synchronization between those databases.
 Assignments are keyed (user_id, id) with a JSON body and revision. A
 flexible block with `assignment_id` is a work session of that assignment.
+Routines are keyed (user_id, id) as named templates of locked blocks.
+Restore points snapshot all of an account's weeks and assignments.
+Recorded `operation_id` values make a retried write return the first result.
 
 ## Non-Obvious Decisions
 - A week's identity is its Monday. Blocks store a day index and derive their
@@ -195,13 +202,18 @@ flexible block with `assignment_id` is a work session of that assignment.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
-- 2026-09-14, `claude/stage3-frontend`: approved Stage 3 frontend based on
-  `docs/stage3-contract` at 9d7bf6e. The UI and client behavior are complete;
-  Grok still owns the routine/restore storage migrations, account-owned routes,
-  idempotency records and backend tests. Current Stage 2 backend therefore
-  cannot persist the new flows yet. Source gate: 155 frontend and 250 Python
-  tests; live browser at 1280px and 390px. No executable built and nothing
-  pushed. Claude review is next.
+- 2026-09-14, `claude/stage3-frontend`: Stage 3 finished by Claude. Codex's
+  frontend (857f43d, 1f569aa) and WebEngine case (d666a92) sit on Grok's backend
+  (a6b484f, the same patch as cfb8c48 on `grok/stage3-reuse-backend`). a438d3a
+  fixes a batch paste over-planning homework, long routine names failing Apply,
+  a 409 leaving a save stuck, restore jumping to this week, shortcuts firing
+  behind open dialogs and invalid preview rows starting checked. b8d74b2 extends
+  the WebEngine walkthrough and adds `stage3_mobile`. 25d0884 keeps a stale
+  preview from saving after a 409. Grok's docs commit 4bada61 is folded into
+  this branch's CHANGELOG and context. Gotchas: runJavaScript does not hand
+  arrays back reliably, so probes pass JSON text; port 8765 belongs to another
+  local service; the T3 preview browser could not load a local server. Nothing
+  pushed.
 - 2026-09-14, `docs/stage3-contract`: proposed Stage 3 contract based on
   `claude/stage2-frontend` at 3b1f1c9. Claude owns the shared browser/desktop
   frontend; Grok owns migrations, routes and backend tests. The contract keeps
