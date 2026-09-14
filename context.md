@@ -1,6 +1,11 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-14. `docs/stage3-contract` contains the proposed Stage 3
+  frontend/backend boundary for clipboard actions, fixed-only routines,
+  unfinished-homework review and account-owned restore points. It is based on
+  the locally integrated Stage 2 branch. No Stage 3 implementation or build has
+  started; owner approval of the seven defaults is next.
 - Date: 2026-09-14. Student-experience Stage 2 is complete locally on
   `feat/stage2-student-experience` (the same commits as
   `claude/stage2-frontend`): Grok's `GET /api/day` plus the Day agenda, Day
@@ -178,6 +183,11 @@ flexible block with `assignment_id` is a work session of that assignment.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-14, `docs/stage3-contract`: proposed Stage 3 contract based on
+  `claude/stage2-frontend` at 3b1f1c9. Claude owns the shared browser/desktop
+  frontend; Grok owns migrations, routes and backend tests. The contract keeps
+  clipboard, fixed-only routines, assignment-preserving carry-forward and
+  durable restore points separate. Nothing implemented, built or pushed.
 - 2026-09-14, `claude/stage2-frontend` and `feat/stage2-student-experience`:
   Claude's Stage 2 frontend on Grok's `254e086`. The Day agenda and quick Add
   homework live in `frontend/day.js`. Day view session times come from the week
