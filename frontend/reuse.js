@@ -20,6 +20,12 @@ function stage3OperationId() {
   return "00000000-0000-4000-8000-" + Date.now().toString(16).padStart(12, "0").slice(-12);
 }
 
+/** The server keeps restore point labels to 80 characters, so a long routine name is shortened to fit. */
+function restorePointLabel(text) {
+  const characters = Array.from(text);
+  return characters.length <= 80 ? text : characters.slice(0, 79).join("") + "…";
+}
+
 function openStage3Dialog(dialog) {
   if (typeof dialog.showModal === "function") {
     if (!dialog.open) dialog.showModal();
@@ -201,19 +207,22 @@ function copiedHomeworkBlock(source, assignment, day, duration, id) {
 function proposalsFromClipboard(targetDay, targetStart) {
   if (!stage3Clipboard) return [];
   const rows = [];
+  // Copied sessions of one homework share what it has left, so one batch never over-plans it.
+  const left = new Map();
   stage3Clipboard.items.forEach(function (item, itemIndex) {
     const source = item.block;
     if (isHomeworkSession(source)) {
       const assignment = assignments.get(source.assignment_id);
-      const available = availableHomeworkMinutes(source.assignment_id);
+      if (!left.has(source.assignment_id)) left.set(source.assignment_id, availableHomeworkMinutes(source.assignment_id));
+      const available = left.get(source.assignment_id);
       const duration = Math.min(source.duration_min, available);
+      const usable = Boolean(assignment && duration >= SNAP_MIN);
+      if (usable) left.set(source.assignment_id, available - duration);
       rows.push({
         weekStart: selectedWeek, day: targetDay, fixed: false,
-        block: assignment && duration >= SNAP_MIN
-          ? copiedHomeworkBlock(source, assignment, targetDay, duration, item.groupId)
-          : structuredClone(source),
-        groupId: item.groupId, checked: Boolean(assignment && duration >= SNAP_MIN),
-        invalid: assignment ? (duration < SNAP_MIN ? "No unplanned time remains for this homework." : "") :
+        block: usable ? copiedHomeworkBlock(source, assignment, targetDay, duration, item.groupId) : structuredClone(source),
+        groupId: item.groupId, checked: usable,
+        invalid: assignment ? (usable ? "" : "No unplanned time remains for this homework.") :
           "This homework did not load.",
       });
       return;
@@ -325,8 +334,9 @@ function renderStage3Preview() {
   const list = document.getElementById("stage3-preview-list");
   list.replaceChildren();
   stage3Preview.rows.forEach(function (row) {
-    const conflict = row.checked ? rowConflict(row, stage3Preview.rows) : rowConflict(row, stage3Preview.rows);
-    if (conflict && row.firstRender !== false) row.checked = false;
+    const conflict = rowConflict(row, stage3Preview.rows);
+    // Conflicting and invalid rows start unchecked; the student opts them back in after fixing them.
+    if ((conflict || row.invalid) && row.firstRender !== false) row.checked = false;
     row.firstRender = false;
     const li = document.createElement("li");
     if (conflict) li.classList.add("has-conflict");
@@ -500,9 +510,15 @@ async function confirmStage3Preview() {
     if (typeof active.afterSave === "function") active.afterSave();
     return true;
   } catch (error) {
-    if (activeEpoch === epoch) {
-      showStage3Error("stage3-preview-error", error.status === 409 ?
-        "The destination changed elsewhere. Close this preview, reopen it and check the newer schedule." : error.message);
+    if (activeEpoch === epoch && error.status === 409) {
+      // Nothing was stored, so this attempt is over; saving again after a reload is a new operation.
+      finishStage3Attempt(active.attemptKey);
+      active.operationId = stage3OperationId();
+      active.ids.clear();
+      showStage3Error("stage3-preview-error",
+        "The destination changed elsewhere. Cancel, reload the week, then paste or apply again.");
+    } else if (activeEpoch === epoch) {
+      showStage3Error("stage3-preview-error", error.message);
     }
     return false;
   } finally {
@@ -551,6 +567,8 @@ function handleStage3Key(event) {
   if (target && typeof target.closest === "function" && target.closest("input, textarea, select, [contenteditable], dialog")) {
     return false;
   }
+  // An open dialog owns the keyboard even when focus has fallen back to the page behind it.
+  if (typeof document.querySelector === "function" && document.querySelector("dialog[open]")) return false;
   const key = String(event.key || "").toLowerCase();
   let handled = false;
   if (key === "c") handled = copySelectedBlock();

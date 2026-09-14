@@ -342,3 +342,94 @@ test('Clear week rolls back on failure and reuses its operation id on retry', as
   assert.match(payloads[1].snapshot_label, /Before clearing/);
   assert.equal(h.run('weekState().blocks.length'), 0);
 });
+
+test('copied sessions of one homework share its remaining time, so a batch cannot over-plan it', async () => {
+  const h = harness();
+  const item = assignment({ estimate_min: 150, unplanned_min: 30 });
+  const first = { id: 's1', kind: 'flexible', title: 'Essay', duration_min: 60, days: [0], start: '12:00', assignment_id: item.id };
+  const second = { ...first, id: 's2', start: '14:00' };
+  await h.login({ blocks: [first, second], owned: [item] });
+  assert.equal(h.run('copyCurrentDay(0)'), true);
+  const rows = JSON.parse(h.run('JSON.stringify(proposalsFromClipboard(2, null).map(row => [row.checked, row.block.duration_min, row.invalid]))'));
+  assert.deepEqual(rows, [[true, 30, ''], [false, 60, 'No unplanned time remains for this homework.']]);
+});
+
+test('a routine with a long name still applies, with its restore point label cut to 80 characters', async () => {
+  const h = harness();
+  await h.login({ blocks: [] });
+  const routine = {
+    id: 'r-long', name: 'Monday to Friday school week with swim practice and orchestra rehearsal', revision: 1,
+    blocks: [{ template_id: 't-1', title: 'School', days: [0], start: '08:00', duration_min: 60 }],
+  };
+  h.run(`stage3Routines.set('r-long', ${JSON.stringify(routine)})`);
+  h.elements.get('routine-destination').value = NEXT;
+  h.elements.get('routine-day-0').checked = true;
+  let change;
+  h.handle(async (path, options) => {
+    if (path.startsWith('/api/week?')) return response(200, { week_start: NEXT, blocks: [], revision: 0 });
+    change = JSON.parse(options.body);
+    return response(200, { weeks: change.weeks.map(week => ({ ...week, revision: 1 })), assignments: [] });
+  });
+  assert.equal(await h.run("applyRoutine('r-long')"), true);
+  assert.equal(await h.run('confirmStage3Preview()'), true);
+  assert.equal(Array.from(change.snapshot_label).length, 80);
+  assert.match(change.snapshot_label, /^Before applying Monday to Friday school week/);
+});
+
+test('a preview save refused with 409 ends that attempt, so saving again is a new operation', async () => {
+  const h = harness();
+  await h.login({ blocks: [fixed()] });
+  h.run("copyBlockById('school', 0, 'block'); pasteStage3Clipboard(2, '12:00')");
+  const payloads = [];
+  h.handle(async (_path, options) => {
+    const body = JSON.parse(options.body);
+    payloads.push(body);
+    if (payloads.length === 1) return response(409, { detail: 'This operation id was already used for different changes.' });
+    return response(200, { weeks: body.weeks.map(week => ({ ...week, revision: 1 })), assignments: [] });
+  });
+  assert.equal(await h.run('confirmStage3Preview()'), false);
+  assert.match(h.elements.get('stage3-preview-error').textContent, /reload the week/);
+  assert.equal(await h.run('confirmStage3Preview()'), true);
+  assert.notEqual(payloads[0].operation_id, payloads[1].operation_id);
+  assert.notEqual(payloads[0].weeks[0].blocks[1].id, payloads[1].weeks[0].blocks[1].id);
+});
+
+test('a restore keeps the student on the week they were looking at', async () => {
+  const h = harness();
+  await h.login({ blocks: [fixed()] });
+  h.handle(async path => {
+    if (path.endsWith('/preview')) return response(200, { id: 'rp-1', state_token: 'state-1',
+      changes: { weeks: { added: [], changed: [NEXT], removed: [] }, assignments: { added: [], changed: [], removed: [] } } });
+    if (path.endsWith('/restore')) return response(200, { restored: true });
+    if (path.startsWith('/api/assignments')) return response(200, { assignments: [] });
+    if (path.startsWith('/api/weeks')) return response(200, { weeks: [MONDAY, NEXT] });
+    if (path.startsWith('/api/week')) return response(200, { week_start: weekOf(path), blocks: [], revision: 3 });
+    return response(200, { theme: 'nocturne' });
+  });
+  assert.equal(await h.run(`selectWeek('${NEXT}')`), true);
+  assert.equal(await h.run("previewRestorePoint('rp-1')"), true);
+  assert.equal(await h.run('restoreFromPreview()'), true);
+  assert.equal(h.run('selectedWeek'), NEXT);
+});
+
+test('shortcuts do nothing while a dialog is open, even when focus fell back to the page', async () => {
+  const h = harness();
+  await h.login({ blocks: [fixed()] });
+  h.run("selectBlock('school', 0)");
+  h.run("document.querySelector = selector => selector === 'dialog[open]' ? {} : null");
+  const press = key => h.run(`handleStage3Key({ctrlKey:true,metaKey:false,altKey:false,key:'${key}',target:null,preventDefault(){}})`);
+  assert.equal(press('c'), false);
+  assert.equal(h.run('stage3Clipboard'), null);
+  assert.equal(h.run("handleHistoryKey({ctrlKey:true,metaKey:false,altKey:false,key:'z',target:null,preventDefault(){}})"), false);
+});
+
+test('an invalid preview row starts unchecked', async () => {
+  const h = harness();
+  await h.login({ blocks: [] });
+  h.run(`stage3Clipboard = { kind: 'block', label: 'Loose', fingerprint: 'loose', items: [{
+    block: { id: 'loose', kind: 'locked', title: 'Loose', duration_min: 60, days: [1], start: null },
+    sourceDay: 1, scope: 'block', groupId: 'g-loose' }] }`);
+  assert.equal(h.run('pasteStage3Clipboard(1, null)'), true);
+  assert.equal(h.run('stage3Preview.rows[0].invalid'), 'Choose a start time.');
+  assert.equal(h.run('stage3Preview.rows[0].checked'), false);
+});

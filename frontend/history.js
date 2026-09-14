@@ -285,6 +285,8 @@ function handleHistoryKey(event) {
   if (target && typeof target.closest === "function" && target.closest("input, textarea, select, [contenteditable], dialog")) {
     return false;
   }
+  // An open dialog owns the keyboard even when focus has fallen back to the page behind it.
+  if (typeof document.querySelector === "function" && document.querySelector("dialog[open]")) return false;
   const key = String(event.key || "").toLowerCase();
   let action = null;
   if (key === "z") action = event.shiftKey ? redo : undo;

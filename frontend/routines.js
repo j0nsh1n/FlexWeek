@@ -99,7 +99,7 @@ async function applyRoutine(routineId) {
     return showStage3Preview("Apply " + routine.name, "Uncheck holidays or adjust one-off times before saving.",
       routineRows(routine, weekStart, allowed), {
         label: "the " + routine.name + " routine",
-        recoveryLabel: "Before applying " + routine.name + " to " + weekStart,
+        recoveryLabel: restorePointLabel("Before applying " + routine.name + " to " + weekStart),
         attemptKey: "routine|" + account.id + "|" + routine.id + "|" + routine.revision + "|" + weekStart + "|" + allowed.join(","),
         afterSave: function () { showWeek(weekStart); },
       });
