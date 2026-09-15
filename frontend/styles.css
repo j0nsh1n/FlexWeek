@@ -797,6 +797,16 @@ button:disabled { cursor: wait; opacity: 0.6; }
 .prefs-dialog label { display: flex; flex-direction: column; gap: 0.2rem; margin: 0.3rem 0; }
 .prefs-dialog .completed-toggle { flex-direction: row; }
 .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-3); }
+.availability-summary { margin: 0.45rem 0; color: var(--text); font-weight: 650; }
+.availability-group h3 { margin: 0.75rem 0 0.25rem; font-size: 0.92rem; }
+.availability-row { margin: 0.4rem 0; padding: 0.45rem; border: 1px solid var(--hairline); border-radius: var(--radius-sm); }
+.availability-row-main { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 0.35rem; align-items: end; }
+.availability-row-main label { margin: 0; }
+.availability-days { display: flex; flex-wrap: wrap; gap: 0.25rem 0.5rem; margin-top: 0.35rem; }
+.availability-days label { flex-direction: row; align-items: center; margin: 0; }
+.availability-overlay { position: absolute; left: 1px; right: 1px; pointer-events: none; z-index: 0; overflow: hidden; }
+.availability-overlay.protected-time { background: color-mix(in srgb, var(--muted) 17%, transparent); border-block: 1px solid color-mix(in srgb, var(--muted) 28%, transparent); }
+.availability-overlay.study-time { left: 4px; right: 4px; background: color-mix(in srgb, var(--accent) 7%, transparent); border: 1px dashed color-mix(in srgb, var(--accent) 34%, transparent); border-radius: var(--radius-sm); }
 .alarm-editor { border-top: 1px solid var(--hairline); margin-top: 0.6rem; padding-top: var(--space-2); }
 .alarm-list { margin-top: 0.6rem !important; }
 .alarm-list li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
@@ -891,6 +901,12 @@ button:disabled { cursor: wait; opacity: 0.6; }
 .alarm-dialog::backdrop { background: var(--scrim); }
 
 @media (max-width: 540px) { .settings-grid { grid-template-columns: 1fr; } }
+@media (max-width: 540px) {
+  .availability-row-main { grid-template-columns: 1fr 1fr; }
+  .availability-row-main .availability-remove { grid-column: 1 / -1; }
+  .availability-row-main select, .availability-row-main button, .availability-days label,
+  .availability-group > button, #availability-cutoff { min-height: 44px; }
+}
 
 .block-dialog { width: min(94vw, 34rem); }
 .block-dialog .block-form { background: transparent; border: 0; padding: 0; margin: 0; }

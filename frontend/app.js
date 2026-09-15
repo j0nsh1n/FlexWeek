@@ -857,6 +857,9 @@ let prefs = {
   auto_split_pomodoro: false,
   default_spotify_url: null,
   alarms: [],
+  protected: [],
+  study_windows: [],
+  day_cutoff: null,
 };
 const firedReminders = new Set();
 const activeNotifications = new Set();
@@ -1675,6 +1678,7 @@ function buildGrid(blocks, explanations = []) {
     });
   });
 
+  if (typeof renderAvailabilityOverlays === "function") renderAvailabilityOverlays(lanes);
   renderFreeGapOverlays(lanes, blocks);
   updateLiveDisplay();
 
@@ -1957,6 +1961,9 @@ function applyPreferences(preferences) {
     alarms: Array.isArray(preferences.alarms) ? preferences.alarms.map(function (alarm) {
       return { ...alarm, spotify_url: safeSpotifyUrl(alarm.spotify_url) || null };
     }) : [],
+    protected: Array.isArray(preferences.protected) ? structuredClone(preferences.protected) : [],
+    study_windows: Array.isArray(preferences.study_windows) ? structuredClone(preferences.study_windows) : [],
+    day_cutoff: preferences.day_cutoff || null,
   };
   themeEl.value = prefs.theme;
   applyTheme(prefs.theme);
@@ -1983,6 +1990,7 @@ function applyPreferences(preferences) {
   const autoSplit = document.getElementById("pref-auto-split");
   if (autoSplit) autoSplit.checked = prefs.auto_split_pomodoro;
   renderAlarmList();
+  if (typeof beginAvailabilityEdit === "function") beginAvailabilityEdit(prefs);
   syncReminderLoop();
   syncPhase7Loops();
 }
@@ -2001,6 +2009,9 @@ function preferencesPayload() {
     auto_split_pomodoro: prefs.auto_split_pomodoro,
     default_spotify_url: prefs.default_spotify_url,
     alarms: prefs.alarms.map(function (alarm) { return { ...alarm }; }),
+    protected: structuredClone(prefs.protected || []),
+    study_windows: structuredClone(prefs.study_windows || []),
+    day_cutoff: prefs.day_cutoff || null,
   };
 }
 
@@ -2878,6 +2889,13 @@ if (prefsForm) {
       invalid.textContent = "Use an https://open.spotify.com share link.";
       return;
     }
+    const availability = typeof readAvailabilityEdit === "function" ? readAvailabilityEdit() : { value: {} };
+    if (availability.error) {
+      const invalid = document.getElementById("prefs-error");
+      invalid.hidden = false;
+      invalid.textContent = availability.error;
+      return;
+    }
     const next = {
       theme: document.getElementById("pref-theme").value,
       reminders_enabled: Boolean(enabledEl && enabledEl.checked),
@@ -2891,12 +2909,14 @@ if (prefsForm) {
       auto_split_pomodoro: Boolean(document.getElementById("pref-auto-split").checked),
       default_spotify_url: spotify || null,
       alarms: pendingAlarms.map(function (alarm) { return { ...alarm }; }),
+      ...availability.value,
     };
     const err = document.getElementById("prefs-error");
     try {
       const saved = await api("/api/preferences", { method: "PUT", body: JSON.stringify(next) });
       if (preferenceEpoch !== epoch) return;
       applyPreferences(saved);
+      renderWeek();
       themeEl.value = saved.theme;
       if (err) { err.hidden = true; err.textContent = ""; }
       if (prefsDialog && typeof prefsDialog.close === "function") prefsDialog.close();

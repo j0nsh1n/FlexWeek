@@ -186,6 +186,7 @@
   </main>
   <footer class="foot">Congressional App Challenge 2026 · GPL-3.0</footer>
   <script src="/static/app.js" defer></script>
+  <script src="/static/availability.js" defer></script>
   <script src="/static/history.js" defer></script>
   <script src="/static/focus.js" defer></script>
   <script src="/static/editor.js" defer></script>
@@ -411,6 +412,24 @@
         </div>
         <label class="completed-toggle"><input type="checkbox" id="pref-auto-split" /> Split long tasks when planning</label>
         <p class="note">Grid splitting requires work and break lengths in 15-minute steps.</p>
+      </fieldset>
+      <fieldset id="availability-settings">
+        <legend>When I’m available</legend>
+        <p class="note">Keep meals, travel, and downtime out of homework plans. Preferred hours guide the planner when they fit.</p>
+        <label>Stop planning homework after
+          <select id="availability-cutoff"><option value="">No cutoff</option></select>
+        </label>
+        <p id="availability-summary" class="availability-summary"></p>
+        <section class="availability-group" aria-labelledby="protected-heading">
+          <h3 id="protected-heading">Protected time</h3>
+          <div id="protected-windows"></div>
+          <button type="button" id="protected-add" class="secondary">Add protected time</button>
+        </section>
+        <section class="availability-group" aria-labelledby="study-heading">
+          <h3 id="study-heading">Preferred study hours</h3>
+          <div id="study-windows"></div>
+          <button type="button" id="study-add" class="secondary">Add preferred hours</button>
+        </section>
       </fieldset>
       <fieldset>
         <legend>Notifications</legend>
