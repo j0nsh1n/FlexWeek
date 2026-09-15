@@ -274,3 +274,123 @@ test('project detail row limits stop before an oversized assignment can be built
   assert.equal(h.run('projectCheckRows.length'), 40);
   assert.match(h.elements.get('hw-error').textContent, /Up to 40 steps/);
 });
+
+test('Spread across days appears only for existing unfinished homework', async () => {
+  const h = harness();
+  const open = assignment({ due: '2026-09-16T21:00' });
+  await h.login({ owned: [open] });
+  h.run('openHomeworkDialog()');
+  assert.equal(h.elements.get('hw-spread').hidden, true);
+  h.run("openHomeworkDialog('hw-essay')");
+  assert.equal(h.elements.get('hw-spread').hidden, false);
+
+  const completed = assignment({ completed: true, completed_at: '2026-09-10T12:00' });
+  h.run(`assignments.set('hw-essay', ${JSON.stringify(completed)}); openHomeworkDialog('hw-essay')`);
+  assert.equal(h.elements.get('hw-spread').hidden, true);
+});
+
+test('spread previews distinct normal sessions and saves every week in one Undo step', async () => {
+  const h = harness();
+  const item = assignment({ due: '2026-09-16T21:00', estimate_min: 240, unplanned_min: 240 });
+  await h.login({ owned: [item] });
+  h.run("openHomeworkDialog('hw-essay'); openSpreadDialog('hw-essay')");
+  h.elements.get('spread-session').value = '60';
+  h.elements.get('spread-from').value = '2026-09-10';
+  let spreadRequest;
+  h.handle(async (path, options) => {
+    assert.equal(path, '/api/assignments/hw-essay/spread');
+    spreadRequest = JSON.parse(options.body);
+    return response(200, {
+      assignment_id: 'hw-essay', session_min: 60, remaining_min: 0,
+      sessions: [
+        { week_start: MONDAY, date: '2026-09-10', days: [3], duration_min: 60 },
+        { week_start: MONDAY, date: '2026-09-10', days: [3], duration_min: 60 },
+        { week_start: NEXT, date: '2026-09-14', days: [0], duration_min: 60 },
+      ],
+    });
+  });
+  assert.equal(await h.run('previewSpread()'), true);
+  assert.deepEqual(spreadRequest, { session_min: 60, from_date: '2026-09-10' });
+  assert.equal(h.elements.get('spread-dialog').open, false);
+  assert.equal(h.elements.get('stage3-preview-dialog').open, true);
+  assert.match(h.elements.get('stage3-preview-summary').textContent, /3 sessions · 3 h/);
+  const rows = JSON.parse(h.run(`JSON.stringify(stage3Preview.rows.map(row => ({
+    weekStart: row.weekStart, day: row.day, groupId: row.groupId, block: row.block
+  })))`));
+  assert.equal(new Set(rows.map(row => row.groupId)).size, 3);
+  assert.ok(rows.every(row => row.block.assignment_id === 'hw-essay' && row.block.kind === 'flexible'
+    && row.block.start === null && !('pomodoro_parent_id' in row.block)));
+
+  let changes;
+  h.handle(async (path, options) => {
+    if (path.startsWith('/api/week?')) return response(200, { week_start: weekOf(path), blocks: [], revision: 0 });
+    assert.equal(path, '/api/changes');
+    changes = JSON.parse(options.body);
+    return response(200, changesReply(changes));
+  });
+  assert.equal(await h.run('confirmStage3Preview()'), true);
+  assert.equal(changes.weeks.length, 2);
+  assert.equal(changes.weeks.flatMap(week => week.blocks).length, 3);
+  assert.equal(new Set(changes.weeks.flatMap(week => week.blocks).map(block => block.id)).size, 3);
+  assert.ok(changes.weeks.flatMap(week => week.blocks).every(block => block.assignment_id === 'hw-essay'));
+  assert.equal(h.run('undoSteps.length'), 1);
+});
+
+test('a failed spread confirmation retries one operation without changing weeks early', async () => {
+  const h = harness();
+  const item = assignment({ due: '2026-09-16T21:00', unplanned_min: 60 });
+  await h.login({ owned: [item] });
+  h.run("openSpreadDialog('hw-essay')");
+  h.handle(async path => {
+    assert.equal(path, '/api/assignments/hw-essay/spread');
+    return response(200, { assignment_id: 'hw-essay', session_min: 60, remaining_min: 0,
+      sessions: [{ week_start: MONDAY, date: '2026-09-10', days: [3], duration_min: 60 }] });
+  });
+  assert.equal(await h.run('previewSpread()'), true);
+  const operations = [];
+  let attempt = 0;
+  h.handle(async (path, options) => {
+    assert.equal(path, '/api/changes');
+    const body = JSON.parse(options.body);
+    operations.push(body.operation_id);
+    attempt += 1;
+    return attempt === 1 ? response(503, { detail: 'Try again' }) : response(200, changesReply(body));
+  });
+  assert.equal(await h.run('confirmStage3Preview()'), false);
+  assert.equal(h.run(`weekState('${MONDAY}').blocks.length`), 0);
+  assert.equal(await h.run('confirmStage3Preview()'), true);
+  assert.equal(new Set(operations).size, 1);
+  assert.equal(h.run(`weekState('${MONDAY}').blocks.length`), 1);
+  assert.equal(h.run('undoSteps.length'), 1);
+});
+
+test('spread keeps sub-slot minutes visible instead of dropping them', async () => {
+  const h = harness();
+  const item = assignment({ due: '2026-09-16T21:00', estimate_min: 67, unplanned_min: 67 });
+  await h.login({ owned: [item] });
+  h.run("openSpreadDialog('hw-essay')");
+  h.handle(async path => {
+    assert.equal(path, '/api/assignments/hw-essay/spread');
+    return response(200, { assignment_id: 'hw-essay', session_min: 60, remaining_min: 7,
+      sessions: [{ week_start: MONDAY, date: '2026-09-10', days: [3], duration_min: 60 }] });
+  });
+  assert.equal(await h.run('previewSpread()'), true);
+  assert.match(h.elements.get('stage3-preview-summary').textContent, /7 minutes cannot fit/);
+  assert.match(h.elements.get('stage3-preview-summary').textContent, /not been dropped/);
+});
+
+test('spread blocks confirmation before a destination would exceed 100 blocks', async () => {
+  const h = harness();
+  const blocks = Array.from({ length: 100 }, (_, index) => fixed({ id: 'fixed-' + index }));
+  const item = assignment({ due: '2026-09-16T21:00', unplanned_min: 60 });
+  await h.login({ blocks, owned: [item] });
+  h.run("openSpreadDialog('hw-essay')");
+  h.handle(async path => {
+    assert.equal(path, '/api/assignments/hw-essay/spread');
+    return response(200, { assignment_id: 'hw-essay', session_min: 60, remaining_min: 0,
+      sessions: [{ week_start: MONDAY, date: '2026-09-10', days: [3], duration_min: 60 }] });
+  });
+  assert.equal(await h.run('previewSpread()'), true);
+  assert.equal(h.elements.get('stage3-preview-confirm').disabled, true);
+  assert.match(h.elements.get('stage3-preview-error').textContent, /exceed 100 blocks/);
+});

@@ -192,6 +192,7 @@
   <script src="/static/editor.js" defer></script>
   <script src="/static/day.js" defer></script>
   <script src="/static/reuse.js" defer></script>
+  <script src="/static/adapt.js" defer></script>
   <script src="/static/routines.js" defer></script>
   <script src="/static/restore.js" defer></script>
   <script src="/static/setup.js" defer></script>
@@ -325,6 +326,23 @@
         <button type="submit" id="hw-save">Add homework</button>
         <button type="button" id="hw-cancel" class="secondary">Cancel</button>
         <button type="button" id="hw-custom" class="link-button">Choose a time myself</button>
+        <button type="button" id="hw-spread" class="secondary" hidden>Spread across days</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="spread-dialog" class="prefs-dialog adapt-dialog" aria-labelledby="spread-heading">
+    <form id="spread-form" novalidate>
+      <h2 id="spread-heading">Spread across days</h2>
+      <p id="spread-detail" class="note"></p>
+      <div class="field-row">
+        <label>Session length <select id="spread-session"></select></label>
+        <label>Start on <input id="spread-from" type="date" min="2000-01-01" max="2099-12-31" /></label>
+      </div>
+      <p class="note">This makes separate homework sessions. It does not split them into focus and break timers.</p>
+      <p id="spread-error" class="form-error" role="alert" hidden></p>
+      <div class="form-actions">
+        <button type="submit" id="spread-preview">Preview sessions</button>
+        <button type="button" id="spread-cancel" class="secondary">Cancel</button>
       </div>
     </form>
   </dialog>

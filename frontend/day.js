@@ -496,6 +496,7 @@ function openHomeworkDialog(assignmentId) {
   document.getElementById("homework-heading").textContent = item ? "Edit " + item.title : "Add homework";
   document.getElementById("hw-save").textContent = item ? "Save changes" : "Add homework";
   document.getElementById("hw-custom").hidden = Boolean(item);
+  document.getElementById("hw-spread").hidden = !item || item.completed;
   document.getElementById("hw-title").value = item ? item.title : "";
   document.getElementById("hw-due-date").value = dueDate;
   fillOptions(document.getElementById("hw-due-time"), dueTimeChoices(dueTime));

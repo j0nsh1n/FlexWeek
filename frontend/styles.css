@@ -909,6 +909,9 @@ button:disabled { cursor: wait; opacity: 0.6; }
 }
 
 .block-dialog { width: min(94vw, 34rem); }
+.adapt-dialog { width: min(94vw, 31rem); }
+.adapt-dialog .field-row { align-items: end; }
+.adapt-dialog .form-actions button { min-height: 44px; }
 .block-dialog .block-form { background: transparent; border: 0; padding: 0; margin: 0; }
 .block-dialog .block-form h2 { font-size: 1.05rem; }
 .block-dialog select, .block-dialog input[type="text"], .block-dialog input[type="url"] { width: 100%; }

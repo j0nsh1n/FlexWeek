@@ -48,6 +48,7 @@ function signedOut(message = "Log in to open your week.", preserve = true, scree
   const alarmDialog = document.getElementById("alarm-dialog");
   if (alarmDialog && typeof alarmDialog.close === "function") alarmDialog.close();
   if (typeof clearStage3State === "function") clearStage3State();
+  if (typeof clearAdaptState === "function") clearAdaptState();
   hideContextMenu();
   if (gridGesture) clearGhost(gridGesture.lane);
   gridGesture = null;
@@ -141,6 +142,7 @@ async function loadAccount(identity) {
     restoreFocus();
     refreshDayData();
     if (typeof prepareStage3Account === "function") prepareStage3Account();
+    if (typeof prepareAdaptAccount === "function") prepareAdaptAccount();
     try {
       document.getElementById("import-panel").hidden = !localStorage.getItem(STORAGE_KEY);
     } catch { document.getElementById("import-panel").hidden = true; }
