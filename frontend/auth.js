@@ -49,6 +49,7 @@ function signedOut(message = "Log in to open your week.", preserve = true, scree
   if (alarmDialog && typeof alarmDialog.close === "function") alarmDialog.close();
   if (typeof clearStage3State === "function") clearStage3State();
   if (typeof clearAdaptState === "function") clearAdaptState();
+  if (typeof clearComfortState === "function") clearComfortState();
   hideContextMenu();
   if (gridGesture) clearGhost(gridGesture.lane);
   gridGesture = null;

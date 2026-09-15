@@ -27,7 +27,7 @@ function dayTitle(isoDay) {
 
 /** A signed-in session starts on the default view for this screen, on today when this week is shown. */
 function resetPlannerView() {
-  plannerView = prefersDayView() ? "day" : "week";
+  plannerView = prefs.preferred_view || (prefersDayView() ? "day" : "week");
   selectedDay = selectedWeek === currentWeekStart() ? todayIso() : selectedWeek;
   dayData = null;
 }
@@ -603,5 +603,11 @@ document.getElementById("hw-add-link").addEventListener("click", function () { a
 document.getElementById("hw-add-check").addEventListener("click", function () { addProjectCheck(null); });
 document.getElementById("homework-dialog").addEventListener("cancel", function () { homeworkEditingId = null; });
 document.getElementById("add-homework").addEventListener("click", function () { openHomeworkDialog(); });
-document.getElementById("view-day").addEventListener("click", function () { setPlannerView("day"); });
-document.getElementById("view-week").addEventListener("click", function () { setPlannerView("week"); });
+document.getElementById("view-day").addEventListener("click", function () {
+  setPlannerView("day");
+  if (typeof rememberPlannerView === "function") rememberPlannerView("day");
+});
+document.getElementById("view-week").addEventListener("click", function () {
+  setPlannerView("week");
+  if (typeof rememberPlannerView === "function") rememberPlannerView("week");
+});

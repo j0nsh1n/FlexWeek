@@ -776,6 +776,76 @@ def run(case: str, root: Path) -> None:
                 "PASS: spread four hours, run 30 minutes late, keep school and homework, "
                 "reload keeps the late interval"
             )
+        elif case == "stage5":
+            submit_identity("comfort_student", "register")
+            evaluate("document.getElementById('setup-close').click()")
+            evaluate("document.getElementById('prefs-open').click()")
+            wait_for("document.getElementById('prefs-dialog').open")
+            evaluate("document.getElementById('settings-focus').open=true")
+            wait_for("document.querySelectorAll('#reminder-limits li').length === 4")
+            evaluate("""document.getElementById('pref-timer-work').value='25';
+                document.getElementById('pref-timer-break').value='5';
+                document.getElementById('timer-preview').click();""")
+            wait_for("!document.getElementById('timer-preview-result').hidden")
+            assert "becomes 30" in evaluate("document.getElementById('timer-preview-message').textContent")
+            assert "120 min on the calendar" in evaluate(
+                "document.getElementById('timer-preview-segments').textContent"
+            )
+            evaluate("document.getElementById('timer-use-rounded').click()")
+            assert evaluate("document.getElementById('pref-timer-work').value") == "30"
+            assert evaluate("document.getElementById('pref-timer-break').value") == "15"
+
+            # Preview uses the unsaved sound controls and does not make an HTTP request or
+            # spend a real reminder's once-per-start key.
+            evaluate("""window.__stage5Fetch=fetch; window.__stage5Fetches=0;
+                fetch=function(){window.__stage5Fetches += 1;
+                    return window.__stage5Fetch.apply(this, arguments);};
+                window.__stage5Sound=soundOnce; window.__stage5Sounds=0;
+                soundOnce=function(){window.__stage5Sounds += 1;};
+                document.getElementById('pref-reminder-sound').checked=true;
+                document.getElementById('pref-alert-volume').value='0';
+                document.getElementById('test-reminder').click();""")
+            assert evaluate("window.__stage5Fetches") == 0
+            assert evaluate("window.__stage5Sounds") == 0
+            assert evaluate("firedReminders.size") == 0
+            evaluate("""document.getElementById('pref-alert-volume').value='42';
+                document.getElementById('preview-alert').click();""")
+            assert evaluate("window.__stage5Sounds") == 1
+            evaluate("fetch=window.__stage5Fetch; soundOnce=window.__stage5Sound")
+
+            evaluate("""document.getElementById('pref-end-chime').checked=true;
+                document.getElementById('pref-tray-notifications').checked=false;
+                document.getElementById('pref-start-at-login').checked=true;
+                document.getElementById('pref-preferred-view').value='day';
+                document.getElementById('pref-auto-split').checked=true;
+                document.getElementById('prefs-save').click();""")
+            wait_for("!document.getElementById('prefs-dialog').open")
+            evaluate("document.getElementById('sidebar-toggle').click()")
+            wait_for("!layoutSaveRunning")
+
+            evaluate("window.__stage5BeforeReload=true")
+            window.reload()
+            wait_through_reload(
+                "typeof window.__stage5BeforeReload === 'undefined' && "
+                "document.getElementById('account-name').textContent === 'comfort_student'"
+            )
+            assert evaluate("plannerView") == "day"
+            assert evaluate("prefs.alert_volume") == 42
+            assert evaluate("prefs.end_chime") is True
+            assert evaluate("prefs.tray_notifications") is False
+            assert evaluate("prefs.start_at_login") is True
+            assert evaluate("prefs.sidebar_collapsed") is True
+            assert evaluate("getComputedStyle(document.getElementById('planner-sidebar')).display") == "none"
+
+            window.resize(390, 800)
+            QTest.qWait(100)
+            assert evaluate("getComputedStyle(document.getElementById('planner-sidebar')).display") == "block"
+            assert evaluate("getComputedStyle(document.getElementById('sidebar-resizer')).display") == "none"
+            assert evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            print(
+                "PASS: settings groups, timer rounding, local silent preview, comfort save, "
+                "remembered day view and responsive sidebar"
+            )
         elif case == "phase7":
             submit_identity("focus_student", "register")
             add_item("assignments", "document.getElementById('f-title').value='Maths';"

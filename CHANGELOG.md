@@ -6,6 +6,15 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Comfort settings UI (2026-09-14, frontend). Settings are grouped into
+  Appearance, Focus, Notifications and Account. Students can choose a timer
+  preset, preview and explicitly accept 15-minute calendar rounding, test an
+  alert at the unsaved volume, enable a quiet focus-transition chime, and read
+  the web, desktop, Spotify and duplicate-reminder limits. The preferred view,
+  collapsed state and keyboard/pointer-resizable sidebar persist per account;
+  phones restore a single-column layout even when the desktop sidebar was
+  collapsed. Start-at-login and tray preferences are stored for the Qt shell
+  follow-up.
 - Comfort settings persistence (2026-09-14, backend). Preferences store alert
   volume, an optional end-of-block chime, tray notification and start-at-login
   flags, preferred week or day view, and sidebar collapsed state and width.

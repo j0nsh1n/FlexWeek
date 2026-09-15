@@ -250,7 +250,7 @@ async function advanceFocusPhase(completed) {
         focusState.phase = "ended";
         focusState.running = false;
         focusState.remainingMs = 0;
-        maybeNotify("Focus session done", focusState.title, true, "soft");
+        maybeNotify("Focus session done", focusState.title, prefs.end_chime && prefs.reminder_sound, "soft");
         renderFocusPanel();
         persistFocus();
         return;
@@ -270,7 +270,8 @@ function setFocusPhase(phase) {
   focusState.running = true;
   focusState.remainingMs = phaseDurationMs(phase);
   focusState.endsAt = Date.now() + focusState.remainingMs;
-  maybeNotify(FOCUS_PHASE_LABEL[phase], focusState.title, true, phase === "work" ? "bright" : "soft");
+  maybeNotify(FOCUS_PHASE_LABEL[phase], focusState.title,
+    prefs.end_chime && prefs.reminder_sound, phase === "work" ? "bright" : "soft");
   renderFocusPanel();
   persistFocus();
 }

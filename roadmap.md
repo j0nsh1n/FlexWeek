@@ -318,23 +318,28 @@ Current scope mapping:
   AI tool execution or its behavior of dropping work that no longer fits.
 
 ### Stage 5. Make reminders and settings comfortable
-- [ ] Group settings into appearance, focus, notifications and account sections.
+- [x] Group settings into appearance, focus, notifications and account sections.
   Offer timer presets and explain any rounding before splitting work onto the grid.
-- [ ] Add Test reminder/Preview alert, volume control and an optional quiet
-  end-of-block chime. Offer notification toggles/test from the desktop tray.
-- [ ] Keep web-open and desktop-background reminder limits visible. Describe
+- [~] Add Test reminder/Preview alert, volume control and an optional quiet
+  end-of-block chime. The shared page is complete; desktop tray Test remains in
+  the Qt shell follow-up.
+- [x] Keep web-open and desktop-background reminder limits visible. Describe
   Spotify as a best-effort link with sound fallback, without promising playback.
-- [ ] Add an optional start-at-login preference for supported desktop platforms.
-- [ ] Add a collapsible/resizable sidebar and remember layout and preferred view.
+- [~] Add an optional start-at-login preference for supported desktop platforms.
+  The account preference is stored and editable; applying it at OS login remains
+  in the Qt shell follow-up.
+- [x] Add a collapsible/resizable sidebar and remember layout and preferred view.
 - Complete when: a student previews an alert, chooses a comfortable volume,
   configures a timer without learning grid rules, and returns to a remembered
   layout. Disabled sounds remain silent and reminders do not duplicate.
 - Verification: preference persistence, timer/split validation and duplicate-alert
   tests; physical sound, tray, startup, sleep/wake and notification checks on
   supported OSes. OS delivery limits remain separately recorded from test results.
-- Status: [ ] Backend in progress on `grok/stage5-comfort-backend`. Frontend not
-  started. Its Stage 1 dependency is complete; it can follow Stage 2 in parallel
-  with the larger scheduling stages.
+- Status: [~] Backend and shared browser/desktop frontend complete locally on
+  `feat/stage5-comfort-frontend`. The source gate includes 207 frontend tests,
+  243 backend tests and a real Stage 5 WebEngine walkthrough. The Qt shell still
+  must apply start-at-login and expose tray Test; physical sound, tray, startup
+  and sleep/wake checks remain platform work. No executable was built.
 
 ### Stage 6. Make account access and delivery dependable
 - [ ] Add account recovery appropriate to local and hosted modes, plus visible

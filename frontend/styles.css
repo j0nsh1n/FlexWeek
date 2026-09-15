@@ -10,6 +10,7 @@
 }
 
 :root {
+  --sidebar-width: 20rem;
   color-scheme: dark;
   /* Page: a soft gradient the frosted chrome sits on. */
   --bg: #0e1320; --bg-accent: #171a2e; --bg-glow: rgba(110, 150, 255, 0.10);
@@ -43,6 +44,7 @@
   --hour-h: 2.75rem; --gutter: 3.5rem;
 }
 :root[data-theme="slate"] {
+  --sidebar-width: 20rem;
   color-scheme: light;
   --bg: #edf2fa; --bg-accent: #f5f1fa; --bg-glow: rgba(90, 140, 255, 0.14);
   --surface: rgba(255, 255, 255, 0.62);
@@ -229,9 +231,23 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 
 .layout {
   display: grid;
-  grid-template-columns: 1fr 20rem;
+  grid-template-columns: minmax(0, 1fr) 0.55rem var(--sidebar-width);
   min-height: calc(100vh - 6.5rem);
 }
+
+.layout[data-sidebar-collapsed="true"] { grid-template-columns: minmax(0, 1fr) 0 0; }
+.layout[data-sidebar-collapsed="true"] .side,
+.layout[data-sidebar-collapsed="true"] .sidebar-resizer { display: none; }
+
+.sidebar-resizer {
+  cursor: col-resize;
+  background: var(--surface);
+  border-inline: 1px solid transparent;
+  touch-action: none;
+}
+.sidebar-resizer:hover,
+.sidebar-resizer:focus-visible,
+.sidebar-resizer.is-resizing { background: var(--accent-soft); border-color: var(--accent); outline: 0; }
 
 .calendar { overflow: auto; }
 
@@ -542,9 +558,10 @@ button.danger {
 .detail-button:hover { color: var(--text); }
 
 .side {
-  border-left: 1px solid var(--hairline);
   padding: 0.85rem;
   background: var(--surface);
+  min-width: 0;
+  overflow: auto;
 }
 
 .side h2 {
@@ -608,8 +625,11 @@ button.danger {
 
 @media (max-width: 800px) {
   .layout { grid-template-columns: 1fr; }
+  .layout[data-sidebar-collapsed="true"] { grid-template-columns: 1fr; }
   .top { flex-direction: column; align-items: flex-start; }
   .side { border-left: 0; border-top: 1px solid var(--hairline); }
+  .sidebar-resizer, .sidebar-toggle { display: none; }
+  .layout[data-sidebar-collapsed="true"] .side { display: block; }
 }
 
 .view-switch { display: inline-flex; gap: 0.2rem; }
@@ -779,6 +799,21 @@ button:disabled { cursor: wait; opacity: 0.6; }
 
 .prefs-dialog h2 { margin-top: 0; font-size: 1.1rem; font-weight: 750; }
 
+.settings-section {
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius);
+  margin-bottom: var(--space-3);
+  background: var(--surface-card);
+}
+.settings-section > summary {
+  cursor: pointer;
+  padding: 0.7rem 0.8rem;
+  font-weight: 750;
+  color: var(--text);
+}
+.settings-section[open] > summary { border-bottom: 1px solid var(--hairline); }
+.settings-section > fieldset { margin: 0.65rem !important; }
+
 .context-menu button[hidden] {
   display: none;
 }
@@ -797,6 +832,14 @@ button:disabled { cursor: wait; opacity: 0.6; }
 .prefs-dialog label { display: flex; flex-direction: column; gap: 0.2rem; margin: 0.3rem 0; }
 .prefs-dialog .completed-toggle { flex-direction: row; }
 .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-3); }
+.preset-buttons, .alert-preview-row, .split-preview-controls { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-2); margin-bottom: var(--space-2); }
+.preset-buttons button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); font-weight: 700; }
+.split-preview-controls label, .alert-preview-row label { margin: 0; }
+.split-preview { margin: var(--space-2) 0; padding: 0.55rem 0.65rem; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--surface-elevated); }
+.split-preview p { margin: 0 0 0.35rem; }
+.reminder-limits { margin: var(--space-2) 0 0; padding-left: 1.15rem; color: var(--muted); font-size: 0.8rem; }
+.reminder-limits li { margin: 0.25rem 0; }
+#pref-alert-volume { width: min(18rem, 100%); vertical-align: middle; }
 .availability-summary { margin: 0.45rem 0; color: var(--text); font-weight: 650; }
 .availability-group h3 { margin: 0.75rem 0 0.25rem; font-size: 0.92rem; }
 .availability-row { margin: 0.4rem 0; padding: 0.45rem; border: 1px solid var(--hairline); border-radius: var(--radius-sm); }

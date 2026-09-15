@@ -27,7 +27,7 @@ if importlib.util.find_spec("PySide6") is not None:
     [
         "accounts", "calendar", "completion", "phase6", "phase7", "popup", "navigation", "download",
         "tray", "no_icon", "instance", "rookie", "system_dark", "recovery", "stage1", "stage2",
-        "stage3", "stage3_mobile", "stage4",
+        "stage3", "stage3_mobile", "stage4", "stage5",
     ],
 )
 def test_webengine(case: str, tmp_path: Path) -> None:

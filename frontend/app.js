@@ -861,6 +861,13 @@ let prefs = {
   protected: [],
   study_windows: [],
   day_cutoff: null,
+  alert_volume: 80,
+  end_chime: false,
+  tray_notifications: true,
+  start_at_login: false,
+  preferred_view: null,
+  sidebar_collapsed: false,
+  sidebar_width_px: null,
 };
 const firedReminders = new Set();
 const activeNotifications = new Set();
@@ -1976,6 +1983,16 @@ function applyPreferences(preferences) {
     protected: Array.isArray(preferences.protected) ? structuredClone(preferences.protected) : [],
     study_windows: Array.isArray(preferences.study_windows) ? structuredClone(preferences.study_windows) : [],
     day_cutoff: preferences.day_cutoff || null,
+    alert_volume: Number.isFinite(Number(preferences.alert_volume)) ? Number(preferences.alert_volume) : 80,
+    end_chime: Boolean(preferences.end_chime),
+    tray_notifications: preferences.tray_notifications !== false,
+    start_at_login: Boolean(preferences.start_at_login),
+    preferred_view: preferences.preferred_view === "week" || preferences.preferred_view === "day"
+      ? preferences.preferred_view : null,
+    sidebar_collapsed: Boolean(preferences.sidebar_collapsed),
+    sidebar_width_px: preferences.sidebar_width_px !== null && preferences.sidebar_width_px !== undefined &&
+      Number.isFinite(Number(preferences.sidebar_width_px))
+      ? Number(preferences.sidebar_width_px) : null,
   };
   themeEl.value = prefs.theme;
   applyTheme(prefs.theme);
@@ -2003,6 +2020,7 @@ function applyPreferences(preferences) {
   if (autoSplit) autoSplit.checked = prefs.auto_split_pomodoro;
   renderAlarmList();
   if (typeof beginAvailabilityEdit === "function") beginAvailabilityEdit(prefs);
+  if (typeof applyComfortPreferences === "function") applyComfortPreferences();
   syncReminderLoop();
   syncPhase7Loops();
 }
@@ -2024,6 +2042,13 @@ function preferencesPayload() {
     protected: structuredClone(prefs.protected || []),
     study_windows: structuredClone(prefs.study_windows || []),
     day_cutoff: prefs.day_cutoff || null,
+    alert_volume: prefs.alert_volume,
+    end_chime: prefs.end_chime,
+    tray_notifications: prefs.tray_notifications,
+    start_at_login: prefs.start_at_login,
+    preferred_view: prefs.preferred_view,
+    sidebar_collapsed: prefs.sidebar_collapsed,
+    sidebar_width_px: prefs.sidebar_width_px,
   };
 }
 
@@ -2236,9 +2261,9 @@ function playReminderSound() {
   soundOnce("chime");
 }
 
-function maybeNotify(title, body, soundEnabled = prefs.reminder_sound, tone = "chime") {
+function maybeNotify(title, body, soundEnabled = prefs.reminder_sound, tone = "chime", volume = prefs.alert_volume) {
   showReminderToast(title + (body ? " — " + body : ""));
-  if (soundEnabled) soundOnce(tone);
+  if (soundEnabled) soundOnce(tone, volume);
   if (typeof Notification !== "function") return;
   if (Notification.permission === "granted") {
     try {
@@ -2351,8 +2376,10 @@ function currentDateInfo(now) {
   };
 }
 
-function soundOnce(tone) {
+function soundOnce(tone, volume = prefs.alert_volume) {
   try {
+    const level = Math.max(0, Math.min(100, Number(volume) || 0)) / 100;
+    if (level === 0) return;
     const Ctx = window.AudioContext || window.webkitAudioContext;
     if (!Ctx) return;
     const ctx = soundOnce._ctx || new Ctx();
@@ -2366,7 +2393,7 @@ function soundOnce(tone) {
       const gain = ctx.createGain();
       osc.type = tone === "soft" ? "sine" : "triangle";
       osc.frequency.value = frequency;
-      gain.gain.value = tone === "soft" ? 0.025 : 0.04;
+      gain.gain.value = (tone === "soft" ? 0.025 : 0.04) * level;
       osc.connect(gain);
       gain.connect(ctx.destination);
       const start = ctx.currentTime + index * 0.14;
@@ -2390,6 +2417,7 @@ function openSpotify(value) {
 
 function startAlarmSound(alarm) {
   stopTone();
+  if (prefs.alert_volume <= 0) return;
   const linked = alarm.sound === "spotify" && openSpotify(alarm.spotify_url || prefs.default_spotify_url);
   if (linked) return;
   const tone = alarm.sound === "spotify" ? "chime" : alarm.sound;
@@ -2893,6 +2921,8 @@ if (prefsForm) {
     event.preventDefault();
     if (!account) return;
     const preferenceEpoch = epoch;
+    if (typeof waitForComfortLayoutSave === "function") await waitForComfortLayoutSave();
+    if (preferenceEpoch !== epoch || !account) return;
     const enabledEl = document.getElementById("pref-reminders-enabled");
     const leadEl = document.getElementById("pref-reminder-lead");
     const soundEl = document.getElementById("pref-reminder-sound");
@@ -2924,8 +2954,18 @@ if (prefsForm) {
       default_spotify_url: spotify || null,
       alarms: pendingAlarms.map(function (alarm) { return { ...alarm }; }),
       ...availability.value,
+      ...(typeof readComfortEdit === "function" ? readComfortEdit() : {}),
     };
     const err = document.getElementById("prefs-error");
+    if (typeof prepareComfortSave === "function") {
+      const comfortProblem = await prepareComfortSave(next);
+      if (preferenceEpoch !== epoch) return;
+      if (comfortProblem) {
+        err.hidden = false;
+        err.textContent = comfortProblem;
+        return;
+      }
+    }
     try {
       const saved = await api("/api/preferences", { method: "PUT", body: JSON.stringify(next) });
       if (preferenceEpoch !== epoch) return;

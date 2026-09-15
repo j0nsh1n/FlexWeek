@@ -1,6 +1,16 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-14. The Stage 5 shared frontend is complete locally on
+  `feat/stage5-comfort-frontend`, based on Grok's backend at 10c9334. Settings
+  now use Appearance, Focus, Notifications and Account sections; presets and
+  split preview explain 15-minute rounding; local alert previews honor volume
+  and never spend reminder keys; and the preferred view plus sidebar state
+  survive reload. Live browser verification caught and fixed null sidebar width
+  saves and collapsed-sidebar phone overflow. A Stage 5 WebEngine walkthrough
+  covers the same path. The Qt shell still needs to apply start-at-login and a
+  tray Test action. spec.md drift remains pending contract approval. No packaged
+  executable was built and nothing was pushed.
 - Date: 2026-09-14. Student-experience Stage 5 backend is on
   `grok/stage5-comfort-backend` (worktree
   `~/.worktrees/flexweek-stage5-backend`), based on `feat/stage4-adaptive-plans`
@@ -234,6 +244,12 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-14, `feat/stage5-comfort-frontend`: Shared Stage 5 UI complete over
+  backend 10c9334. New `frontend/comfort.js` owns presets, split previews, alert
+  previews and remembered layout. Settings writes wait for in-flight layout
+  writes; account changes discard stale previews. The Qt shell still needs
+  start-at-login application and tray Test. `spec.md` still omits the proposed
+  comfort fields and three routes. No executable built; nothing pushed.
 - 2026-09-14, `grok/stage5-comfort-backend`: Grok's Stage 5 backend slice.
   Contract is `docs/stage5-contract.md` (still proposed). Comfort fields omit
   defaults so Phase 7 GET still matches. Split preview snaps 25/5 to 30/15.
