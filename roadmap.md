@@ -332,8 +332,9 @@ Current scope mapping:
 - Verification: preference persistence, timer/split validation and duplicate-alert
   tests; physical sound, tray, startup, sleep/wake and notification checks on
   supported OSes. OS delivery limits remain separately recorded from test results.
-- Status: [ ] Planned. Its Stage 1 dependency is complete; it can follow Stage 2
-  in parallel with the larger scheduling stages.
+- Status: [ ] Backend in progress on `grok/stage5-comfort-backend`. Frontend not
+  started. Its Stage 1 dependency is complete; it can follow Stage 2 in parallel
+  with the larger scheduling stages.
 
 ### Stage 6. Make account access and delivery dependable
 - [ ] Add account recovery appropriate to local and hosted modes, plus visible

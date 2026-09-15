@@ -34,7 +34,8 @@ PREFERENCES_TABLE = """
             CHECK(auto_split_pomodoro IN (0, 1)),
         default_spotify_url TEXT,
         alarms_json TEXT NOT NULL DEFAULT '[]',
-        availability_json TEXT NOT NULL DEFAULT '{}'
+        availability_json TEXT NOT NULL DEFAULT '{}',
+        comfort_json TEXT NOT NULL DEFAULT '{}'
     )
 """
 WEEKS_TABLE = """
@@ -158,6 +159,7 @@ def migrate_preferences(db: sqlite3.Connection) -> None:
         "default_spotify_url": "TEXT",
         "alarms_json": "TEXT NOT NULL DEFAULT '[]'",
         "availability_json": "TEXT NOT NULL DEFAULT '{}'",
+        "comfort_json": "TEXT NOT NULL DEFAULT '{}'",
     }
     for name, declaration in phase7_columns.items():
         if name not in cols:

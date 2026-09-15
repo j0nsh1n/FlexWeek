@@ -1,6 +1,17 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-14. Student-experience Stage 5 backend is on
+  `grok/stage5-comfort-backend` (worktree
+  `~/.worktrees/flexweek-stage5-backend`), based on `feat/stage4-adaptive-plans`
+  at 6ae893c. Comfort preference fields, timer-split preview, timer presets and
+  reminder-limit copy live behind the proposed contract in
+  `docs/stage5-contract.md`. Claude still owns the Settings grouping, Test
+  reminder, volume slider and remembered-layout UI. Desktop start-at-login and
+  tray Test are stored as prefs, not applied by the Qt shell yet. spec.md
+  drift: those fields and routes are not in the public API table until the
+  owner approves the contract. Web-only gate: 195 frontend tests, 243 Python
+  tests. Nothing pushed.
 - Date: 2026-09-14. Student-experience Stage 4 is complete locally on
   `feat/stage4-adaptive-plans` (worktree
   `~/.worktrees/flexweek-stage4-adaptive-plans`). Running late previews 15/30/60
@@ -223,6 +234,14 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-14, `grok/stage5-comfort-backend`: Grok's Stage 5 backend slice.
+  Contract is `docs/stage5-contract.md` (still proposed). Comfort fields omit
+  defaults so Phase 7 GET still matches. Split preview snaps 25/5 to 30/15.
+  Auto-split with a 25-minute work length is 422. Claude still owns the
+  Settings UI. Desktop autostart/tray Test is not wired. spec.md drift: comfort
+  fields, `/api/timer-split-preview`, `/api/timer-presets` and
+  `/api/reminder-limits`. Web-only gate: 195 frontend tests, 243 Python tests.
+  Cartographer skipped (not installed in the project venv). Nothing pushed.
 - 2026-09-14, `feat/stage4-adaptive-plans`: Stage 4 finished in this tree.
   Accepting Running late writes a locked "Running late" block through
   `/api/changes` then re-solves; a failed re-solve keeps its error status.

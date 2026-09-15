@@ -6,6 +6,14 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Comfort settings persistence (2026-09-14, backend). Preferences store alert
+  volume, an optional end-of-block chime, tray notification and start-at-login
+  flags, preferred week or day view, and sidebar collapsed state and width.
+  `POST /api/timer-split-preview` snaps timer lengths to the 15-minute grid and
+  returns the split plan without writing. `GET /api/timer-presets` and
+  `GET /api/reminder-limits` return the Short/Standard/Long presets and the
+  web-versus-desktop reminder copy. Auto-split still requires lengths already
+  on the grid. Rules are in `docs/stage5-contract.md`.
 - Running late, project spread, protected time and project details
   (2026-09-14, frontend). Running late offers 15, 30 or 60 minutes, previews
   moves and unplaced homework, then stores one locked "Running late" interval

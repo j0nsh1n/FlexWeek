@@ -25,6 +25,7 @@ from backend.assignments import (
     unplanned_minutes,
 )
 from backend.availability import occupancy_from_windows, spread_sessions
+from backend.comfort import REMINDER_LIMITS, TIMER_PRESETS, preview_split
 from backend.day import build_day
 from backend.models import (
     Assignment,
@@ -580,6 +581,17 @@ class Preferences(BaseModel):
         default_factory=list, max_length=21, exclude_if=lambda value: not value
     )
     day_cutoff: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    alert_volume: int = Field(default=80, ge=0, le=100, exclude_if=lambda value: value == 80)
+    end_chime: bool = Field(default=False, exclude_if=lambda value: value is False)
+    tray_notifications: bool = Field(default=True, exclude_if=lambda value: value is True)
+    start_at_login: bool = Field(default=False, exclude_if=lambda value: value is False)
+    preferred_view: Literal["week", "day"] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    sidebar_collapsed: bool = Field(default=False, exclude_if=lambda value: value is False)
+    sidebar_width_px: int | None = Field(
+        default=None, ge=200, le=640, exclude_if=lambda value: value is None
+    )
 
     _spotify_url = field_validator("default_spotify_url")(valid_spotify_url)
 
@@ -613,6 +625,31 @@ class Preferences(BaseModel):
                 intervals.append((start, end))
         return self
 
+    @model_validator(mode="after")
+    def split_lengths_are_on_the_grid(self) -> Preferences:
+        if not self.auto_split_pomodoro:
+            return self
+        for length in (self.timer_work_min, self.timer_break_min, self.timer_long_break_min):
+            if length % 15:
+                raise ValueError("auto_split_pomodoro needs 15-minute work and break lengths")
+        return self
+
+
+class TimerSplitRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    duration_min: int | None = Field(default=None, ge=15, le=7140)
+    timer_work_min: int = Field(ge=1, le=180)
+    timer_break_min: int = Field(ge=1, le=60)
+    timer_long_break_min: int = Field(ge=1, le=120)
+    timer_long_break_every: int = Field(ge=2, le=12)
+
+    @field_validator("duration_min")
+    @classmethod
+    def duration_is_on_the_grid(cls, value: int | None) -> int | None:
+        if value is not None and value % 15:
+            raise ValueError("duration_min must be a multiple of 15")
+        return value
+
 
 def encode_availability(preferences: Preferences) -> str:
     return json.dumps(
@@ -625,8 +662,24 @@ def encode_availability(preferences: Preferences) -> str:
     )
 
 
+def encode_comfort(preferences: Preferences) -> str:
+    return json.dumps(
+        {
+            "alert_volume": preferences.alert_volume,
+            "end_chime": preferences.end_chime,
+            "tray_notifications": preferences.tray_notifications,
+            "start_at_login": preferences.start_at_login,
+            "preferred_view": preferences.preferred_view,
+            "sidebar_collapsed": preferences.sidebar_collapsed,
+            "sidebar_width_px": preferences.sidebar_width_px,
+        },
+        separators=(",", ":"),
+    )
+
+
 def preferences_from_row(row: sqlite3.Row) -> dict:
     availability = json.loads(row["availability_json"] or "{}")
+    comfort = json.loads(row["comfort_json"] or "{}")
     return Preferences(
         theme=row["theme"],
         reminders_enabled=bool(row["reminders_enabled"]),
@@ -643,6 +696,13 @@ def preferences_from_row(row: sqlite3.Row) -> dict:
         protected=availability.get("protected") or [],
         study_windows=availability.get("study_windows") or [],
         day_cutoff=availability.get("day_cutoff"),
+        alert_volume=comfort.get("alert_volume", 80),
+        end_chime=bool(comfort.get("end_chime", False)),
+        tray_notifications=bool(comfort.get("tray_notifications", True)),
+        start_at_login=bool(comfort.get("start_at_login", False)),
+        preferred_view=comfort.get("preferred_view"),
+        sidebar_collapsed=bool(comfort.get("sidebar_collapsed", False)),
+        sidebar_width_px=comfort.get("sidebar_width_px"),
     ).model_dump()
 
 
@@ -1000,7 +1060,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 SET theme = ?, reminders_enabled = ?, reminder_lead_min = ?, reminder_sound = ?,
                     reminder_dnd_override = ?, timer_work_min = ?, timer_break_min = ?,
                     timer_long_break_min = ?, timer_long_break_every = ?, auto_split_pomodoro = ?,
-                    default_spotify_url = ?, alarms_json = ?, availability_json = ?
+                    default_spotify_url = ?, alarms_json = ?, availability_json = ?, comfort_json = ?
                 WHERE user_id = ?""",
                 (
                     preferences.theme,
@@ -1016,6 +1076,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                     preferences.default_spotify_url,
                     json.dumps([alarm.model_dump() for alarm in preferences.alarms], separators=(",", ":")),
                     encode_availability(preferences),
+                    encode_comfort(preferences),
                     account["id"],
                 ),
             )
@@ -1068,6 +1129,26 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         if hostname in {"127.0.0.1", "localhost", "testserver"}:
             return {"mode": "local", "label": "On this device"}
         return {"mode": "hosted", "label": "On your FlexWeek server"}
+
+    @app.get("/api/timer-presets")
+    def get_timer_presets(_account: Annotated[dict, Depends(user)]) -> dict:
+        return {"presets": list(TIMER_PRESETS)}
+
+    @app.get("/api/reminder-limits")
+    def get_reminder_limits(_account: Annotated[dict, Depends(user)]) -> dict:
+        return dict(REMINDER_LIMITS)
+
+    @app.post("/api/timer-split-preview")
+    def post_timer_split_preview(
+        payload: TimerSplitRequest, _account: Annotated[dict, Depends(user)]
+    ) -> dict:
+        return preview_split(
+            duration_min=payload.duration_min,
+            timer_work_min=payload.timer_work_min,
+            timer_break_min=payload.timer_break_min,
+            timer_long_break_min=payload.timer_long_break_min,
+            timer_long_break_every=payload.timer_long_break_every,
+        )
 
     @app.get("/api/restore-points")
     def get_restore_points(account: Annotated[dict, Depends(user)]) -> dict:
