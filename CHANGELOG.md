@@ -30,8 +30,8 @@ All notable changes to FlexWeek are documented here. Format follows
   includes username and public origin. `POST /api/account-export` and previewed
   `POST /api/account-import` copy weeks, assignments, preferences and routines
   onto another account after a Stage 3 restore point of the destination
-  schedule. Automatic sync is still out of scope. Rules are in
-  `docs/stage6-contract.md`.
+  schedule. Automatic sync is still out of scope. Rules are in the approved
+  `docs/stage6-contract.md` and the public API table in `spec.md`.
 - Comfort settings UI (2026-09-14, frontend). Settings are grouped into
   Appearance, Focus, Notifications and Account. Students can choose a timer
   preset, preview and explicitly accept 15-minute calendar rounding, test an

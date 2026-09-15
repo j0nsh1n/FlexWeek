@@ -90,6 +90,19 @@ Contract for the finished app:
   routine application and restore preserve the replaced schedule first; a
   stale restore preview returns 409 and no failure stores partial state. The UI
   labels backups as local-device or hosted-server data.
+- New accounts receive eight one-time recovery codes, shown once. A forgotten
+  password is recovered with a username, an unused code and a new password, not
+  email. Signed-in students can replace leftover codes, change the password or
+  delete the account; those writes need the current password. Delete removes
+  every row for that user. The username may be registered again.
+- `GET /api/storage-info` reports local or hosted `mode`, a student-facing
+  `label`, the signed-in `username`, the public `origin` and
+  `transfer_limit_bytes` (262144). It never returns a filesystem path.
+- Local-to-hosted transfer is a password-gated format-3 export and a previewed
+  import of weeks, assignments, preferences and routines. Import takes a Stage 3
+  restore point of the destination weeks and assignments first. Automatic
+  bidirectional or offline sync is out of scope. Export returns 413 when the
+  compact import apply envelope would exceed the 256 KiB write cap.
 
 ## User Experience
 Web app, one page, desktop-first (designed at 1280px) and usable on a phone at
@@ -98,9 +111,10 @@ framework**. FastAPI serves `frontend/` as static files, so there is one origin
 and no CORS.
 
 First paint with no session is Create account. Log in is a separate screen.
-A new account is offered a short first-week setup (school hours, one sport,
-then homework). Every step can be skipped. Dragging or clicking empty grid
-space opens an Add dialog for that range.
+A new account must acknowledge its eight recovery codes, then is offered a
+short first-week setup (school hours, one sport, then homework). Every setup
+step can be skipped. Dragging or clicking empty grid space opens an Add dialog
+for that range.
 
 Downloads from GitHub Releases:
 
@@ -128,10 +142,15 @@ Current account/API contract:
 
 | Method | Path | Behavior |
 |---|---|---|
-| POST | `/api/auth/register` | Create username/password account and session |
+| POST | `/api/auth/register` | Create username/password account, session and eight one-time recovery codes |
 | POST | `/api/auth/login` | Authenticate and rotate session |
 | POST | `/api/auth/logout` | Revoke current session |
 | GET | `/api/auth/me` | Current account; 401 when absent/expired |
+| POST | `/api/auth/recover` | Username, unused recovery code and new password; throttled like login |
+| GET | `/api/auth/recovery-status` | Unused recovery-code count |
+| POST | `/api/auth/recovery-codes` | Password-gated replacement of unused codes |
+| POST | `/api/auth/password` | Change password; keep this session and drop the others |
+| DELETE | `/api/auth/account` | Password-gated deletion of this account and its rows |
 | GET/PUT | `/api/week` | One dated week of the account, with revision-checked saves |
 | GET | `/api/weeks` | The `week_start` dates this account has saved, ascending |
 | GET | `/api/assignments` | Open assignments with planned and unplanned minutes for a `week_start`; completed ones only when asked |
@@ -140,7 +159,10 @@ Current account/API contract:
 | GET/PUT | `/api/preferences` | Theme, reminders, timers, alarms, Spotify default |
 | GET/PUT/DELETE | `/api/routines[/{id}]` | Account-owned, revision-checked fixed-time routine templates |
 | GET/POST | `/api/restore-points[/{id}/preview or /restore]` | Create/list restore points, preview a state-tokened diff, and restore transactionally |
-| GET | `/api/storage-info` | Authenticated local-versus-hosted backup label; no filesystem path |
+| GET | `/api/storage-info` | Authenticated mode, label, username, origin and 256 KiB transfer limit; no filesystem path |
+| POST | `/api/account-export` | Password-gated format-3 snapshot of weeks, assignments, preferences and routines |
+| POST | `/api/account-import/preview` | State-tokened diff of a format-3 snapshot against this account |
+| POST | `/api/account-import` | Previewed replace of weeks, assignments, preferences and routines |
 | POST | `/api/solve` | Authenticated week and its `week_start` in, SolveTrace out; no storage mutation |
 | GET | `/api/health` | Public health response |
 
@@ -154,12 +176,16 @@ Writes require `X-FlexWeek-Request: 1`; browser origins must match
 cross-tab account change. No CORS is enabled.
 
 Registration: normalized case-insensitive ASCII username (3–32 letters, digits,
-underscores), password 12–128 characters. New accounts have an empty week, and
-their theme follows the device's light or dark setting. Duplicate usernames
-return 409, invalid input 422, expired or missing sessions 401, stale changed
-writes 409, throttled auth 429, oversized requests 413, transient database
-failures 503. Identical week retries return success without duplicate blocks or
-another revision increment.
+underscores), password 12–128 characters. New accounts have an empty week, eight
+one-time recovery codes (hashes only in SQLite) and a theme that follows the
+device's light or dark setting. Duplicate usernames return 409, invalid input
+422, expired or missing sessions 401, stale changed writes 409, throttled auth
+429, oversized requests 413, transient database failures 503. Identical week
+retries return success without duplicate blocks or another revision increment.
+Wrong username and wrong recovery code share one 401 sentence. Account export
+and import apply use the same 256 KiB write cap; export 413s when the compact
+`{snapshot, state_token, operation_id}` envelope would not fit. Details live in
+`docs/stage6-contract.md`.
 
 A week is identified by `(account, week_start)`, where `week_start` is a naive
 local ISO date that is always a Monday. An account holds as many dated weeks as
@@ -200,11 +226,12 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
   uvicorn[standard] 0.52.4, pytest 9.1.1, httpx 0.28.1, ruff 0.16.6, mypy 2.3.1, Pydantic 2.13.5.
 - Storage: SQLite at `FLEXWEEK_DATABASE` (default `var/flexweek.db`), with users,
   sessions, weeks keyed `(user_id, week_start)`, assignments keyed
-  `(user_id, id)`, preferences, routines, restore points, bounded idempotency
-  records and short-lived auth-attempt counters. Schema creation is additive on startup; related writes
-  use transactions. The pre-dated single-week table migrates on first start
-  inside one explicit transaction, stamping the existing row with the Monday of
-  that day; it is idempotent and never drops a row. A preferences table from
+  `(user_id, id)`, preferences, routines, restore points, hashed recovery codes,
+  bounded idempotency records and short-lived auth-attempt counters. Schema
+  creation is additive on startup; related writes use transactions. The
+  pre-dated single-week table migrates on first start inside one explicit
+  transaction, stamping the existing row with the Monday of that day; it is
+  idempotent and never drops a row. A preferences table from
   before the System theme is rebuilt once on start in one transaction: stored
   `slate` and `nocturne` are kept and any other value becomes `system`. Flexible
   blocks without `assignment_id`, and pomodoro chunk groups, migrate once on
@@ -225,8 +252,9 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
     global scope: `app.js` (week state, grid, saves, solve, alarms), `auth.js`
     (Create account / Log in), `editor.js` (Add/Edit dialog), `setup.js`
     (first-week setup), `focus.js` (timer and Now / Next), `reuse.js`
-    (clipboard, conflict preview and unfinished work), `routines.js` and
-    `restore.js`. The browser owns
+    (clipboard, conflict preview and unfinished work), `routines.js`,
+    `restore.js` and `access.js` (recovery codes, storage identity and previewed
+    account transfer). The browser owns
     interaction and explanation display and **never reimplements placement**.
   - `desktop/`. PySide6 window, bundled uvicorn, packaging scripts, and
     isolated WebEngine probes.
@@ -271,8 +299,10 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
 - Auth attempts are bounded per username (10) and source address (30) per
   five-minute window, persisted in SQLite and expired during auth requests.
 - Production needs HTTPS, deployment backups and deployment-specific proxy
-  setup. Stage 3 restore points cover student recovery inside one account;
-  deletion policy, advanced hardening and audits remain later release work.
+  setup. Stage 3 restore points cover student recovery inside one account.
+  Stage 6 recovery codes, password change, account deletion and previewed
+  format-3 transfer are the supported access flows (`docs/stage6-contract.md`).
+  Advanced hardening and audits remain later release work.
 - Failed saves retain in-memory drafts with retry, download and reload controls.
   Stale revisions never silently overwrite newer data. Session loss hides all
   private content; a draft can restore only after the same account signs in.
@@ -281,9 +311,11 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
   text; undo history lives in page memory and clears on sign-out or account
   change.
 - The Stage 3 clipboard also lives only in page memory and clears on sign-out,
-  account change and reload. Routine and restore routes derive ownership from
-  the session; another account's opaque ID is treated as not found. Restore
-  previews use a state token so a later edit cannot be overwritten silently.
+  account change and reload. Routine, restore and transfer routes derive
+  ownership from the session; another account's opaque ID is treated as not
+  found. Restore and import previews use a state token so a later edit cannot
+  be overwritten silently. Password-gated export, code replacement, password
+  change and deletion are not enough from a stolen session cookie alone.
 - Demo data is anonymized: no real student names, schools, or addresses, and no
   copyrighted syllabus PDFs in the repo.
 - License is **GPL-3.0** (`LICENSE`); the README and the page footer must agree
@@ -354,6 +386,9 @@ The commands it runs, each of which must exit 0:
 - [ ] A student copies one practice occurrence, applies a fixed-time routine to
       next week with one holiday exception, carries unfinished homework once,
       and previews and restores an account-owned recovery point.
+- [ ] A student recovers a forgotten password with a one-time code, sees which
+      account and origin they are using, and previews a format-3 account file
+      onto another signed-in account without exposing it to a third account.
 - [ ] Download names are `FlexWeek-Windows-x64-Setup.exe` (with
       `FlexWeek-Windows-x64.msi` for schools) and
       `FlexWeek-Linux-x86_64.tar.gz`.

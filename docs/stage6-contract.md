@@ -1,6 +1,6 @@
 # Contract: Stage 6 — make account access and delivery dependable
 
-Status: proposed. Claude owns the browser/desktop frontend. Grok owns
+Status: approved 2026-09-15. Claude owns the browser/desktop frontend. Grok owns
 persistence, recovery, deletion, storage status and the authenticated transfer
 API. Both clients continue to use the same HTML, CSS and JavaScript frontend.
 
@@ -17,7 +17,7 @@ from a local database onto a hosted account after a preview. The same hosted
 login works in the browser and the desktop app. Automatic bidirectional or
 offline sync is out of scope.
 
-## Owner decisions (proposed defaults)
+## Owner decisions (2026-09-15)
 
 1. Recovery uses **one-time codes**, not email. Local SQLite has no mailbox, and
    hosted students are the same population. Registering returns eight codes
@@ -207,8 +207,8 @@ when it still fits.
 - Email, SMS, magic links, OAuth, or automatic local/hosted sync.
 - Changing Stage 3 restore-point contents to include preferences or routines.
 - Hosted Render deployment, Windows installers, Linux packaging, Safari and
-  iPhone checks, accessibility review, Qt shell changes.
-- Spec.md edits until the owner approves this contract.
+  iPhone checks, accessibility review, Qt shell changes. The owner skipped
+  deployment, installers and iOS checks for this slice on 2026-09-15.
 
 ## Verification (backend)
 

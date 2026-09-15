@@ -347,24 +347,23 @@ Current scope mapping:
 - [x] Provide a normal hosted-account path in both clients so a student can open
   the same saved week on another device. Keep local-to-hosted transfer explicit
   and previewed; automatic bidirectional/offline synchronization is separate scope.
-- [~] Finish hosted deployment, persistent storage, tested backup restoration,
-  recovery/deletion flows and the remaining security/accessibility review.
-- [ ] Verify Windows installers and the reported setup-dialog flicker on a real
-  PC, Linux packaging/tray behavior, and Safari/iPhone compatibility.
+- [~] Remaining security/accessibility review. Recovery, deletion, storage
+  identity and previewed transfer are implemented. Persistent SQLite storage is
+  already in use.
+- Hosted Render deployment, Windows installer verification, Linux packaging/tray
+  checks and Safari/iPhone compatibility: skipped by owner 2026-09-15.
 - Complete when: a student understands where their week is stored, can recover
   access through the supported flow, and can use the same hosted account in the
   browser and desktop without data loss or exposure to another account.
 - Verification: recovery abuse/expiry/revocation tests, ownership and CSRF checks,
-  backup restore drills, cross-client revision conflicts, installation/upgrade
-  smoke checks and physical-device evidence.
+  and cross-client revision conflicts. Hosted backup drills, installer smoke
+  checks and physical-device evidence are out of this slice.
 - Status: [~] Backend and shared browser/desktop frontend complete locally on
   `feat/stage6-access-frontend`, with transfer size limits reconciled on
-  `grok/stage6-transfer-limit`. Recovery codes, password change, deletion,
-  storage identity and previewed account transfer are implemented against the
-  proposed contract in `docs/stage6-contract.md`. Export and import share the
-  256 KiB write cap. Hosted deployment, the full security/accessibility review,
-  installers and physical Safari/iPhone checks remain later work. No executable
-  was built.
+  `grok/stage6-transfer-limit`. The Stage 6 contract is approved 2026-09-15 and
+  recorded in `spec.md`. Export and import share the 256 KiB write cap. Hosted
+  deployment, installers and physical Safari/iPhone checks are skipped. The
+  security/accessibility review remains. No executable was built.
 
 ### Stage 7. Add longer-range navigation and validate the student experience
 - [ ] Add Month view for deadlines and projects with date-to-Day navigation.

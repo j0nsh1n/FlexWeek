@@ -1,6 +1,13 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-15. Stage 6 contract approved and recorded in `spec.md` on
+  `grok/stage6-transfer-limit`. Recovery, deletion, storage identity, previewed
+  format-3 transfer and the 256 KiB import-apply envelope are product contract.
+  Hosted Render deployment, installers and Safari/iPhone checks are skipped by
+  the owner. Remaining Stage 6 work is the security/accessibility review.
+  Stages 4 and 5 stay proposed and off the public API table. Web-only gate
+  unchanged: 221 frontend tests, 263 Python tests. Nothing pushed.
 - Date: 2026-09-15. Transfer size limits are reconciled on
   `grok/stage6-transfer-limit`, based on `feat/stage6-access-frontend` at
   bdfbb61. Export 413s when the import apply envelope would exceed 256 KiB.
@@ -276,6 +283,12 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-15, `grok/stage6-transfer-limit`: Owner approved the Stage 6 spec
+  updates and skipped hosted deployment, installers and iOS checks.
+  `docs/stage6-contract.md` is approved 2026-09-15. `spec.md` now lists recovery,
+  password, deletion, storage-info fields, transfer routes and the 256 KiB
+  apply-envelope rule. Stages 4 and 5 remain proposed. Remaining Stage 6 work is
+  the security/accessibility review. Nothing pushed.
 - 2026-09-15, `grok/stage6-transfer-limit`: Export and import now share the
   256 KiB write cap. Export 413s when the compact `{snapshot, state_token,
   operation_id}` envelope would not fit import apply. The 400-week transfer cap
