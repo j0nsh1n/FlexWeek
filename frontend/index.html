@@ -124,6 +124,7 @@
         <p id="type-hint" class="note" aria-live="polite"></p>
         <div class="editor-actions">
           <button type="button" id="add-block" class="secondary"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>Add without dragging</button>
+          <button type="button" id="running-late" class="secondary">Running late</button>
           <details id="week-menu" class="week-menu">
             <summary>More</summary>
             <div class="week-menu-items">
@@ -270,17 +271,17 @@
         <div id="f-flex-advanced" class="field-row" hidden>
           <label>Priority
             <select id="f-priority">
-              <option value="1">Test</option>
-              <option value="2">Quiz</option>
+              <option value="1">Tests first</option>
+              <option value="2">Quizzes next</option>
               <option value="3" selected>Homework</option>
-              <option value="4">Reading</option>
+              <option value="4">Reading if there is time</option>
             </select>
           </label>
           <label>Energy
             <select id="f-energy">
-              <option value="high">High (morning)</option>
-              <option value="medium" selected>Medium (afternoon)</option>
-              <option value="low">Low (evening)</option>
+              <option value="high">High energy, mornings</option>
+              <option value="medium" selected>Typical energy, afternoons</option>
+              <option value="low">Low energy, evenings</option>
             </select>
           </label>
         </div>
@@ -343,6 +344,31 @@
       <div class="form-actions">
         <button type="submit" id="spread-preview">Preview sessions</button>
         <button type="button" id="spread-cancel" class="secondary">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="late-dialog" class="prefs-dialog adapt-dialog" aria-labelledby="late-heading">
+    <form id="late-form" novalidate>
+      <h2 id="late-heading">Running late</h2>
+      <p id="late-context" class="note"></p>
+      <label>Delay
+        <select id="late-minutes">
+          <option value="15">15 minutes</option>
+          <option value="30" selected>30 minutes</option>
+          <option value="60">1 hour</option>
+        </select>
+      </label>
+      <p class="note">Fixed commitments stay put. Homework that no longer fits will remain on your list.</p>
+      <section id="late-preview" class="late-preview" hidden>
+        <h3>What changes</h3>
+        <p id="late-summary"></p>
+        <ul id="late-changes"></ul>
+      </section>
+      <p id="late-error" class="form-error" role="alert" hidden></p>
+      <div class="form-actions">
+        <button type="submit" id="late-preview-button">Preview new plan</button>
+        <button type="button" id="late-accept" hidden>Accept and save</button>
+        <button type="button" id="late-cancel" class="secondary">Cancel</button>
       </div>
     </form>
   </dialog>

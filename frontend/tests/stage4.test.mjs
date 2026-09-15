@@ -394,3 +394,47 @@ test('spread blocks confirmation before a destination would exceed 100 blocks', 
   assert.equal(h.elements.get('stage3-preview-confirm').disabled, true);
   assert.match(h.elements.get('stage3-preview-error').textContent, /exceed 100 blocks/);
 });
+
+test('priority and energy labels stay readable without changing stored values', () => {
+  assert.match(html, /<option value="1">Tests first<\/option>/);
+  assert.match(html, /<option value="2">Quizzes next<\/option>/);
+  assert.match(html, /<option value="3" selected>Homework<\/option>/);
+  assert.match(html, /<option value="4">Reading if there is time<\/option>/);
+  assert.match(html, /<option value="high">High energy, mornings<\/option>/);
+  assert.match(html, /<option value="medium" selected>Typical energy, afternoons<\/option>/);
+  assert.match(html, /<option value="low">Low energy, evenings<\/option>/);
+  const h = harness();
+  assert.equal(h.run('PRIORITY_LABEL[1]'), 'tests first');
+  assert.equal(h.run('PRIORITY_LABEL[2]'), 'quizzes next');
+  assert.equal(h.run('PRIORITY_LABEL[4]'), 'reading last');
+  assert.equal(h.run("ENERGY_LABEL.high"), 'morning energy');
+  assert.equal(h.run("ENERGY_LABEL.low"), 'evening energy');
+  assert.equal(h.run("ENERGY_LABEL.medium"), 'afternoon energy');
+});
+
+test('deadline-cluster advice stays visible and does not claim the week was solved', async () => {
+  const h = harness();
+  await h.login({ blocks: [sessionBlock(), sessionBlock({ id: 'lab', title: 'Lab' })] });
+  const message = 'Several tasks are short on time. Shorten a session, pick another day, '
+    + 'or free some protected hours. Work that cannot fit stays unplaced.';
+  h.run(`showTrace(${JSON.stringify({
+    placed: [],
+    unplaced: [
+      { id: 'session', title: 'Essay', kind: 'flexible', duration_min: 120, days: [0] },
+      { id: 'lab', title: 'Lab', kind: 'flexible', duration_min: 120, days: [0] },
+    ],
+    moves: [],
+    explanations: [
+      { block_id: 'session', reason: 'NO_SLOT_LEFT', message: 'No slot left' },
+      { block_id: 'session', reason: null, message },
+    ],
+    failed_constraints: ['NO_SLOT_LEFT'],
+    solve_ms: 1,
+    complete: false,
+  })})`);
+  const open = h.elements.get('debug-unplaced').children.map(item => item.textContent).join('\n');
+  assert.match(open, /Several tasks are short on time/);
+  assert.match(open, /Work that cannot fit stays unplaced/);
+  assert.doesNotMatch(open, /Why the rest fit/);
+  assert.equal(h.elements.get('debug-unplaced').querySelector('.cluster-advice').textContent, message);
+});

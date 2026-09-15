@@ -3,7 +3,8 @@ const DAY_FULL = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Satur
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const START_HOUR = 6;
 const END_HOUR = 23;
-const PRIORITY_LABEL = { 1: "test", 2: "quiz", 3: "homework", 4: "reading" };
+const PRIORITY_LABEL = { 1: "tests first", 2: "quizzes next", 3: "homework", 4: "reading last" };
+const ENERGY_LABEL = { high: "morning energy", medium: "afternoon energy", low: "evening energy" };
 const SNAP_MIN = 15;
 const DAY_START_MIN = START_HOUR * 60;
 const DAY_END_MIN = END_HOUR * 60;
@@ -1727,7 +1728,7 @@ function renderFlexible(flex) {
     if (block.course) pill(block.course);
     // Homework priority and medium energy are the defaults, so only a change is worth a pill.
     if (block.priority && block.priority !== 3) pill(PRIORITY_LABEL[block.priority] || "P" + block.priority);
-    if (block.energy && block.energy !== "medium") pill(block.energy + " energy");
+    if (block.energy && block.energy !== "medium") pill(ENERGY_LABEL[block.energy] || block.energy);
     if (block.completed) pill("done");
     if ((assignment || block).focus_sessions) pill((assignment || block).focus_sessions + " focus");
 
@@ -1882,11 +1883,22 @@ function renderDebug(trace) {
   debugUnplacedEl.innerHTML = "";
   const unplaced = new Set((trace.unplaced || []).map(function (block) { return block.id; }));
   const explanations = trace.explanations || [];
-  // Unplaced work and deadlines at risk stay in the open; what simply fits folds away.
-  const open = explanations.filter(function (item) { return unplaced.has(item.block_id) || SLACK_BADGE[item.slack_status]; });
+  function isClusterAdvice(item) {
+    return !item.reason && !item.slack_status;
+  }
+  // Unplaced work, deadlines at risk, and cluster advice stay in the open; what simply fits folds away.
+  const open = explanations.filter(function (item) {
+    return unplaced.has(item.block_id) || SLACK_BADGE[item.slack_status] || isClusterAdvice(item);
+  });
   const fits = explanations.filter(function (item) { return open.indexOf(item) === -1; });
   open.forEach(function (item) {
     const li = document.createElement("li");
+    if (isClusterAdvice(item)) {
+      li.className = "cluster-advice";
+      li.textContent = item.message;
+      debugUnplacedEl.appendChild(li);
+      return;
+    }
     const due = !unplaced.has(item.block_id) ? slackDueText(item.block_id) : "";
     const button = detailButton(blockTitle(item.block_id) + " — " +
       (due ? SLACK_BADGE[item.slack_status] + ", " + due : item.message), item.block_id);
@@ -2662,7 +2674,7 @@ function showTrace(trace) {
 }
 
 async function solveWeek() {
-  if (!account || saving) return;
+  if (!account || saving) return false;
   const solveEpoch = epoch;
   saving = true;
   lockEditor(true);
@@ -2671,23 +2683,25 @@ async function solveWeek() {
     let trace = await api("/api/solve", { method: "POST", body: JSON.stringify({
       week_start: selectedWeek, blocks: solveInputBlocks(weekState().blocks),
     }) });
-    if (solveEpoch !== epoch) return;
+    if (solveEpoch !== epoch) return false;
     const splitCount = prefs.auto_split_pomodoro ? autoSplitSolvedBlocks(trace) : 0;
     if (splitCount) {
       saving = false;
       lockEditor(false);
       recordStep("the focus split");
-      if (!await saveWeek() || solveEpoch !== epoch) return;
+      if (!await saveWeek() || solveEpoch !== epoch) return false;
       saving = true;
       lockEditor(true);
       trace = await api("/api/solve", { method: "POST", body: JSON.stringify({
         week_start: selectedWeek, blocks: weekState().blocks,
       }) });
-      if (solveEpoch !== epoch) return;
+      if (solveEpoch !== epoch) return false;
     }
     showTrace(trace);
+    return true;
   } catch (error) {
     if (solveEpoch === epoch) setStatus("Could not plan. " + error.message);
+    return false;
   } finally {
     if (solveEpoch === epoch) { saving = false; lockEditor(false); }
   }

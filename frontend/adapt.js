@@ -2,6 +2,8 @@
 
 let spreadAssignmentId = null;
 let spreadBusy = false;
+let latePreview = null;
+let lateBusy = false;
 
 function openAdaptDialog(dialog) {
   if (typeof dialog.showModal === "function") {
@@ -150,8 +152,207 @@ function prepareAdaptAccount() {
 function clearAdaptState() {
   spreadAssignmentId = null;
   spreadBusy = false;
+  latePreview = null;
+  lateBusy = false;
   closeAdaptDialog(document.getElementById("spread-dialog"));
+  closeAdaptDialog(document.getElementById("late-dialog"));
   showSpreadError("");
+  showLateError("");
+}
+
+function showLateError(message) {
+  const error = document.getElementById("late-error");
+  error.textContent = message || "";
+  error.hidden = !message;
+}
+
+function lateStart(info) {
+  return Math.floor(info.minute / SNAP_MIN) * SNAP_MIN;
+}
+
+function openRunningLate(now) {
+  if (!account || saving || lateBusy) return false;
+  const info = currentDateInfo(now);
+  if (selectedWeek !== info.week) {
+    setStatus("Open this week before using Running late.");
+    return false;
+  }
+  if (info.minute < DAY_START_MIN || info.minute >= DAY_END_MIN) {
+    setStatus("Running late is available between 06:00 and 23:00.");
+    return false;
+  }
+  if (weekState().dirty || weekState().conflict) {
+    setStatus("Save or reload this week before previewing a late start.");
+    return false;
+  }
+  if (weekState().blocks.length >= MAX_IMPORT_BLOCKS) {
+    setStatus("This week already has 100 blocks. Remove one before recording a late start.");
+    return false;
+  }
+  latePreview = null;
+  document.getElementById("late-preview").hidden = true;
+  document.getElementById("late-accept").hidden = true;
+  document.getElementById("late-minutes").disabled = false;
+  document.getElementById("late-context").textContent = "Starting from " + formatMinute(lateStart(info))
+    + " today (" + DAY_FULL[info.day] + ").";
+  showLateError("");
+  openAdaptDialog(document.getElementById("late-dialog"));
+  return true;
+}
+
+function renderLatePreview(trace) {
+  const changes = document.getElementById("late-changes");
+  changes.replaceChildren();
+  (trace.moves || []).forEach(function (move) {
+    const item = document.createElement("li");
+    const fromDay = Number.isInteger(move.from_day) ? DAY_FULL[move.from_day] + " " : "";
+    const toDay = Number.isInteger(move.to_day) ? DAY_FULL[move.to_day] + " " : "";
+    item.textContent = blockTitle(move.block_id) + ": " + fromDay + (move.from_start || "unscheduled")
+      + " → " + toDay + (move.to_start || "unscheduled");
+    changes.appendChild(item);
+  });
+  (trace.unplaced || []).forEach(function (block) {
+    const item = document.createElement("li");
+    item.textContent = block.title + " no longer fits and will stay on the task list.";
+    changes.appendChild(item);
+  });
+  if (!changes.children.length) {
+    const item = document.createElement("li");
+    item.textContent = "No homework needs to move.";
+    changes.appendChild(item);
+  }
+  const moved = (trace.moves || []).length;
+  const unplaced = (trace.unplaced || []).length;
+  document.getElementById("late-summary").textContent = moved + (moved === 1 ? " task moves" : " tasks move")
+    + " · " + unplaced + (unplaced === 1 ? " task no longer fits" : " tasks no longer fit");
+  document.getElementById("late-preview").hidden = false;
+  document.getElementById("late-accept").hidden = false;
+  document.getElementById("late-minutes").disabled = true;
+}
+
+async function previewRunningLate(now) {
+  if (!account || saving || lateBusy) return false;
+  const info = currentDateInfo(now);
+  if (selectedWeek !== info.week || info.minute < DAY_START_MIN || info.minute >= DAY_END_MIN) return false;
+  const state = weekState();
+  if (state.dirty || state.conflict || state.blocks.length >= MAX_IMPORT_BLOCKS) return false;
+  const minutes = Number(document.getElementById("late-minutes").value);
+  if (![15, 30, 60].includes(minutes)) {
+    showLateError("Choose 15, 30 or 60 minutes.");
+    return false;
+  }
+  const fromMin = lateStart(info);
+  const fromStart = formatMinute(fromMin);
+  const lateEpoch = epoch;
+  const accountId = account.id;
+  const weekStart = selectedWeek;
+  lateBusy = true;
+  document.getElementById("late-preview-button").disabled = true;
+  showLateError("");
+  try {
+    let previous = state.trace && state.trace.placed;
+    if (!previous) {
+      const base = await api("/api/solve", { method: "POST", body: JSON.stringify({
+        week_start: weekStart, blocks: state.blocks,
+      }) });
+      previous = base.placed || [];
+    }
+    const trace = await api("/api/solve", { method: "POST", body: JSON.stringify({
+      week_start: weekStart,
+      blocks: state.blocks,
+      running_late: { day: info.day, minutes: minutes, from_start: fromStart, previous_placed: previous },
+    }) });
+    if (lateEpoch !== epoch || !account || account.id !== accountId || selectedWeek !== weekStart) return false;
+    if (!Array.isArray(trace.placed) || !Array.isArray(trace.unplaced) || !Array.isArray(trace.moves)) {
+      throw new Error("The late-plan preview was invalid. Nothing was changed.");
+    }
+    const duration = Math.min(minutes, DAY_END_MIN - fromMin);
+    const operationId = stage3OperationId();
+    const stem = operationId.replace(/-/g, "").slice(0, 24);
+    latePreview = {
+      trace: trace,
+      accountId: accountId,
+      epoch: lateEpoch,
+      weekStart: weekStart,
+      operationId: operationId,
+      block: {
+        id: "b-late-" + stem,
+        kind: "locked",
+        title: "Running late",
+        duration_min: duration,
+        days: [info.day],
+        start: fromStart,
+        priority: 1,
+        energy: "medium",
+        category: "downtime",
+        completed: false,
+        missed_days: [],
+      },
+      stale: false,
+    };
+    renderLatePreview(trace);
+    return true;
+  } catch (error) {
+    if (lateEpoch === epoch && account && account.id === accountId) showLateError(error.message);
+    return false;
+  } finally {
+    if (lateEpoch === epoch) {
+      lateBusy = false;
+      document.getElementById("late-preview-button").disabled = false;
+    }
+  }
+}
+
+async function acceptRunningLate() {
+  if (!latePreview || latePreview.stale || lateBusy || saving || !account
+      || epoch !== latePreview.epoch || account.id !== latePreview.accountId
+      || selectedWeek !== latePreview.weekStart) return false;
+  const active = latePreview;
+  const acceptEpoch = epoch;
+  lateBusy = true;
+  saving = true;
+  lockEditor(true);
+  document.getElementById("late-accept").disabled = true;
+  showLateError("");
+  let saved = false;
+  try {
+    await saveStage3Blocks([{ weekStart: active.weekStart, block: active.block }], {
+      operationId: active.operationId,
+      label: "running late",
+      recoveryLabel: null,
+    });
+    if (acceptEpoch !== epoch) return false;
+    saved = true;
+    closeAdaptDialog(document.getElementById("late-dialog"));
+    latePreview = null;
+    clearSolveResult();
+    renderWeekNav();
+    renderWeek();
+    refreshDayData();
+  } catch (error) {
+    if (acceptEpoch === epoch) {
+      if (error.status === 409) {
+        active.stale = true;
+        showLateError("This week changed elsewhere. Reload it before accepting this preview.");
+      } else {
+        showLateError(error.message);
+      }
+    }
+  } finally {
+    if (acceptEpoch === epoch) {
+      saving = false;
+      lateBusy = false;
+      lockEditor(false);
+      document.getElementById("late-accept").disabled = Boolean(active.stale);
+    }
+  }
+  if (saved && acceptEpoch === epoch) {
+    const planned = await solveWeek();
+    if (planned && acceptEpoch === epoch) {
+      setStatus("Saved the late start and updated your plan. Undo removes the late time.");
+    }
+  }
+  return saved;
 }
 
 document.getElementById("hw-spread").addEventListener("click", function () {
@@ -165,4 +366,15 @@ document.getElementById("spread-cancel").addEventListener("click", function () {
   if (spreadBusy) return;
   spreadAssignmentId = null;
   closeAdaptDialog(document.getElementById("spread-dialog"));
+});
+document.getElementById("running-late").addEventListener("click", openRunningLate);
+document.getElementById("late-form").addEventListener("submit", function (event) {
+  event.preventDefault();
+  previewRunningLate();
+});
+document.getElementById("late-accept").addEventListener("click", acceptRunningLate);
+document.getElementById("late-cancel").addEventListener("click", function () {
+  if (lateBusy) return;
+  latePreview = null;
+  closeAdaptDialog(document.getElementById("late-dialog"));
 });
