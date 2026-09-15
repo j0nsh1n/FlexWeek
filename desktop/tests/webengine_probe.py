@@ -696,6 +696,86 @@ def run(case: str, root: Path) -> None:
             assert kept == [(assignment_id, due + "T23:59")], homework
             print("PASS: at 390px in the dark theme, unfinished homework goes into next week once, "
                   "keeping its id and deadline")
+        elif case == "stage4":
+            submit_identity("stage4_student", "register")
+            evaluate("document.getElementById('setup-close').click()")
+            add_item(
+                "class",
+                "document.getElementById('f-title').value='School';",
+                days=[0, 1, 2, 3, 4],
+            )
+            wait_for("document.getElementById('status').textContent.startsWith('Saved')")
+            due = evaluate("dateForDay(shiftWeek(selectedWeek, 1), 4)")
+            evaluate("document.getElementById('add-homework').click()")
+            wait_for("document.getElementById('homework-dialog').open")
+            evaluate(f"""document.getElementById('hw-title').value='Essay';
+                document.getElementById('hw-due-date').value={json.dumps(due)};
+                document.getElementById('hw-due-time').value='23:59';
+                document.getElementById('hw-estimate').value='240';
+                document.querySelector('#homework-form button[type=submit]').click();""")
+            wait_for("document.getElementById('status').textContent.startsWith('Added Essay')")
+            assignment_id = evaluate("Array.from(assignments.keys())[0]")
+            evaluate(
+                "weekState().blocks = weekState().blocks.filter(function (block) {"
+                " return !block.assignment_id; });"
+                " weekState().dirty = true;"
+            )
+            evaluate("window.__cleared=undefined; saveWeek().then(ok => { window.__cleared=ok; })")
+            wait_for("window.__cleared === true")
+            evaluate(f"""window.__spread=undefined;
+                openHomeworkDialog({json.dumps(assignment_id)});
+                openSpreadDialog({json.dumps(assignment_id)});
+                document.getElementById('spread-session').value='60';
+                document.getElementById('spread-from').value=todayIso();
+                previewSpread().then(ok => {{ window.__spread=ok; }});""")
+            wait_for("window.__spread !== undefined")
+            spread_error = evaluate("document.getElementById('spread-error').textContent")
+            assert evaluate("window.__spread") is True, spread_error
+            evaluate(
+                "window.__spreadSaved=undefined; "
+                "confirmStage3Preview().then(ok => { window.__spreadSaved=ok; })"
+            )
+            wait_for("window.__spreadSaved !== undefined")
+            assert evaluate("window.__spreadSaved") is True
+            sessions_before = evaluate(
+                "weekState().blocks.filter(block => block.assignment_id).length"
+            )
+            assert sessions_before >= 1
+
+            evaluate("""window.__late=undefined;
+                const noon=new Date(); noon.setHours(12,0,0,0);
+                if (!openRunningLate(noon)) window.__late=false;
+                else previewRunningLate(noon).then(ok => { window.__late=ok; });""")
+            wait_for("window.__late !== undefined")
+            late_error = evaluate(
+                "document.getElementById('late-error').textContent"
+                " || document.getElementById('status').textContent"
+            )
+            assert evaluate("window.__late") is True, late_error
+            evaluate(
+                "window.__accepted=undefined; "
+                "acceptRunningLate().then(ok => { window.__accepted=ok; })"
+            )
+            wait_for("window.__accepted !== undefined", timeout=20)
+            assert evaluate("window.__accepted") is True
+            late_kept = "weekState().blocks.filter(block => block.title === 'Running late').length"
+            school_kept = "weekState().blocks.filter(block => block.title === 'School').length"
+            work_kept = "weekState().blocks.filter(block => block.assignment_id).length"
+            assert evaluate(late_kept) == 1
+            assert evaluate(school_kept) == 1
+            assert evaluate(work_kept) >= sessions_before
+            evaluate("window.__beforeStage4Reload=true")
+            window.reload()
+            wait_for(
+                "typeof window.__beforeStage4Reload === 'undefined' && "
+                "document.getElementById('planner') && !document.getElementById('planner').hidden"
+            )
+            assert evaluate(late_kept) == 1
+            assert evaluate(school_kept) == 1
+            print(
+                "PASS: spread four hours, run 30 minutes late, keep school and homework, "
+                "reload keeps the late interval"
+            )
         elif case == "phase7":
             submit_identity("focus_student", "register")
             add_item("assignments", "document.getElementById('f-title').value='Maths';"
