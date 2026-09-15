@@ -6,6 +6,14 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Running late, project spread, protected time and project details
+  (2026-09-14, frontend). Running late offers 15, 30 or 60 minutes, previews
+  moves and unplaced homework, then stores one locked "Running late" interval
+  so reload and Undo see a real change. Spread writes extra sessions in one
+  save. Assignments keep notes, links and a checklist. Settings hold protected
+  downtime, commute and meal windows, preferred study hours and an optional
+  day cutoff. Priority and energy labels describe the stored values without
+  changing them, and crowded weeks keep a visible cluster of concrete choices.
 - Running late, project spread, assignment notes and protected hours
   (2026-09-14, backend). `POST /api/solve` accepts `running_late` (15, 30 or 60
   minutes from a grid cutoff) as a preview that keeps locked blocks and sleep

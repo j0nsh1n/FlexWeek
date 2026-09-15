@@ -293,16 +293,16 @@ Current scope mapping:
   dependency is complete.
 
 ### Stage 4. Adapt plans to real student days
-- [ ] Add a direct “Running late” action with 15/30/60-minute choices and a preview
+- [x] Add a direct “Running late” action with 15/30/60-minute choices and a preview
   of changed work. Build on missed-block recovery; fixed commitments and sleep
   remain protected, and work that no longer fits stays visibly unplaced.
-- [ ] Spread a project across dates before its deadline, with total effort and
+- [x] Spread a project across dates before its deadline, with total effort and
   preferred session length. Keep sessions linked to one assignment and distinguish
   this from contiguous pomodoro splitting.
-- [ ] Add assignment notes, links and small checklists for larger projects.
-- [ ] Add protected downtime, commute/meal buffers and preferred study hours.
+- [x] Add assignment notes, links and small checklists for larger projects.
+- [x] Add protected downtime, commute/meal buffers and preferred study hours.
   Show the effect on available time rather than treating every gap as work time.
-- [ ] Improve priority/energy wording and actionable deadline-cluster explanations.
+- [x] Improve priority/energy wording and actionable deadline-cluster explanations.
   Prefer concrete choices such as shorten a session, choose another day, or adjust
   availability; avoid implying that an impossible workload has been solved.
 - Complete when: a student spreads four hours of project work across several days,
@@ -312,8 +312,9 @@ Current scope mapping:
   deadline/session totals, missed_days recovery and cross-week persistence;
   atomic failure/retry tests and real preview/accept/undo walkthroughs. Retain the
   existing packed-fixture performance target and measure longer project planning.
-- Status: [ ] Backend in progress on `grok/stage4-adapt-backend`. Frontend not
-  started. Depends on Stages 1 and 3. Borrows Daily Scheduler actions, not its
+- Status: [x] Complete locally on `feat/stage4-adaptive-plans`. Accepting Running
+  late stores a one-off locked interval. spec.md still omits Stage 4 routes.
+  Depends on Stages 1 and 3. Borrows Daily Scheduler actions, not its
   AI tool execution or its behavior of dropping work that no longer fits.
 
 ### Stage 5. Make reminders and settings comfortable

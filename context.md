@@ -1,6 +1,17 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-14. Student-experience Stage 4 is complete locally on
+  `feat/stage4-adaptive-plans` (worktree
+  `~/.worktrees/flexweek-stage4-adaptive-plans`). Running late previews 15/30/60
+  minute delays and stores one locked interval on accept. Spread, assignment
+  notes/links/checklist, protected time, preferred study hours and cutoff are
+  in. Priority and energy labels changed; stored values did not. Cluster advice
+  stays visible. spec.md drift: `running_late`, spread, assignment project
+  fields, availability prefs and the stored late block are not in the public
+  API table until the owner approves `docs/stage4-contract.md`. Full source gate
+  green: 195 frontend tests and 303 Python tests, including the Stage 4
+  WebEngine walkthrough. Packaged binaries were not run. Nothing pushed.
 - Date: 2026-09-14. Student-experience Stage 4 backend is on
   `grok/stage4-adapt-backend` (worktree
   `~/.worktrees/flexweek-stage4-backend`), based on `claude/stage3-frontend` at
@@ -212,6 +223,11 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-14, `feat/stage4-adaptive-plans`: Stage 4 finished in this tree.
+  Accepting Running late writes a locked "Running late" block through
+  `/api/changes` then re-solves; a failed re-solve keeps its error status.
+  spec.md drift: Stage 4 routes and fields stay off the public API table until
+  the contract is approved. Nothing pushed.
 - 2026-09-14, `grok/stage4-adapt-backend`: Grok's Stage 4 backend slice.
   Contract is `docs/stage4-contract.md` (still proposed). Running late is a
   solve preview that occupies `[from_start, from_start + minutes)` on one day,

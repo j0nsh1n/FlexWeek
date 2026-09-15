@@ -17,9 +17,11 @@ treat every gap as homework time.
 
 ## Owner decisions (proposed defaults)
 
-1. **Running late** is a solve preview, like missed-block recovery. It does not
-   write the week. The student accepts through the existing save/`/api/changes`
-   path. Undo of an accepted replan is one frontend Undo entry, already Stage 1.
+1. **Running late** is a solve preview, like missed-block recovery. Accepting it
+   writes one one-off locked block titled "Running late" for the occupied
+   interval through `/api/changes`, then re-solves. That stored interval is what
+   reload and Undo see. Undo of an accepted replan is one frontend Undo entry,
+   already Stage 1.
 2. Delay choices are **15, 30 and 60 minutes** only.
 3. The cutoff is an explicit `from_start` on the 15-minute grid. The frontend
    supplies "now" snapped down to a slot when the day is today.
@@ -64,6 +66,11 @@ treat every gap as homework time.
   use the same reshape as missed-block recovery. Work that cannot fit is
   unplaced, never dropped from the week payload.
 - Invalid combinations return 422. Solve still does not mutate storage.
+- Accepting the preview does not send `running_late` again. It stores the
+  occupied interval as a locked block (`title` "Running late", one day, start
+  and duration on the grid, clipped so it ends by 23:00) alongside every
+  existing block, using a stable `operation_id`. A later solve treats that
+  block as ordinary locked time.
 
 ## 2. Spread a project
 
