@@ -37,7 +37,8 @@ offline sync is out of scope.
    row keyed by that `user_id`. The username may be registered again. Other
    accounts are untouched.
 6. `GET /api/storage-info` keeps the Stage 3 `mode` and `label` values and adds
-   `username` plus the public `origin`. It never returns a filesystem path.
+   `username`, the public `origin`, and `transfer_limit_bytes` (262144). It
+   never returns a filesystem path.
 7. **Local-to-hosted transfer** is an authenticated export on the source and a
    previewed import on the destination. The snapshot is format 3: weeks,
    assignments, preferences and routines. Restore points, sessions, recovery
@@ -45,7 +46,9 @@ offline sync is out of scope.
    after taking a Stage 3 restore point of its weeks and assignments.
    Preferences and routines are not in that restore point (Stage 3 snapshot
    rule). The snapshot username is a label. It does not have to match the
-   hosted username and does not claim another account.
+   hosted username and does not claim another account. Export and import are
+   bounded by the same 256 KiB write cap, measured on the import apply
+   envelope, not by a separate week-count cap.
 8. Export and other password-gated account writes use the current password so a
    stolen session cookie is not enough to dump or destroy the account.
 9. Desktop hosted mode already follows `FLEXWEEK_DESKTOP_ORIGIN`. This slice
@@ -118,7 +121,8 @@ Loopback (`127.0.0.1`, `localhost`, `testserver`):
   "mode": "local",
   "label": "On this device",
   "username": "alice",
-  "origin": "http://testserver"
+  "origin": "http://testserver",
+  "transfer_limit_bytes": 262144
 }
 ```
 
@@ -129,11 +133,14 @@ Any other public origin:
   "mode": "hosted",
   "label": "On your FlexWeek server",
   "username": "alice",
-  "origin": "https://flexweek.example"
+  "origin": "https://flexweek.example",
+  "transfer_limit_bytes": 262144
 }
 ```
 
 `origin` is the process public origin, with no path. It is not a database file.
+`transfer_limit_bytes` is the same 256 KiB write cap used by every other POST
+(`/api/account-import` included).
 
 ## 4. Account transfer
 
@@ -185,6 +192,15 @@ then replace weeks, assignments, preferences and routines. Stale token is 409
 counts capped at the existing assignment and routine limits). Import never
 writes recovery codes or sessions for another user.
 
+Export and import share the 256 KiB write cap. Export measures the compact JSON
+of `{snapshot, state_token, operation_id}` with a 64-character token and an
+80-character operation id, and returns 413
+`This account is larger than the 256 KiB transfer limit.` when that envelope
+would not fit an import apply. Pretty-printed files may be larger than 256 KiB;
+the parsed snapshot still has to fit that envelope. Week count is not a
+separate transfer cap. A history with more than 400 small weeks can export
+when it still fits.
+
 ## Out of scope
 
 - Recovery, transfer, storage-status and delete UI (Claude).
@@ -212,6 +228,9 @@ writes recovery codes or sessions for another user.
   assignments, prefs and routines onto a hosted account. A third account cannot
   GET those assignment ids. A stale token 409s. CSRF without
   `X-FlexWeek-Request` is 403 on the new POSTs and DELETE.
+- Export of an account whose import apply envelope exceeds 256 KiB is 413 with
+  the transfer-limit sentence. More than 400 small weeks still export when they
+  fit.
 - Two sessions of one hosted user see the same saved week; a stale revision
   PUT is 409.
 - `.venv/bin/python scripts/verify.py --web-only` from this worktree.

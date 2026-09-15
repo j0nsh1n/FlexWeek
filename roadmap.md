@@ -358,12 +358,13 @@ Current scope mapping:
   backup restore drills, cross-client revision conflicts, installation/upgrade
   smoke checks and physical-device evidence.
 - Status: [~] Backend and shared browser/desktop frontend complete locally on
-  `feat/stage6-access-frontend`. Recovery codes, password change, deletion,
+  `feat/stage6-access-frontend`, with transfer size limits reconciled on
+  `grok/stage6-transfer-limit`. Recovery codes, password change, deletion,
   storage identity and previewed account transfer are implemented against the
-  proposed contract in `docs/stage6-contract.md`. The source gate passes 218
-  frontend and 331 Python tests, including the real Stage 6 WebEngine and smoke
-  paths. Hosted deployment, the full security/accessibility review, installers
-  and physical Safari/iPhone checks remain later work. No executable was built.
+  proposed contract in `docs/stage6-contract.md`. Export and import share the
+  256 KiB write cap. Hosted deployment, the full security/accessibility review,
+  installers and physical Safari/iPhone checks remain later work. No executable
+  was built.
 
 ### Stage 7. Add longer-range navigation and validate the student experience
 - [ ] Add Month view for deadlines and projects with date-to-Day navigation.

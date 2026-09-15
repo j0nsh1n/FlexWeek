@@ -270,6 +270,51 @@ test('account transfer files are distinct from week files and invalid references
   assert.match(h.elements.get('transfer-error').textContent, /homework the account file does not include/);
 });
 
+test('a padded account file still parses when the import apply envelope fits', async () => {
+  const h = harness();
+  await h.login();
+  const text = JSON.stringify(emptySnapshot()) + ' '.repeat(300000);
+  assert.ok(new Blob([text]).size > 256 * 1024);
+  const parsed = h.run('parseTransferSnapshot(' + JSON.stringify(text) + ')');
+  assert.equal(parsed.error, undefined);
+  assert.equal(parsed.value.format, 3);
+});
+
+test('more than 400 small weeks parse when the apply envelope still fits', async () => {
+  const h = harness();
+  await h.login();
+  const snapshot = emptySnapshot();
+  const start = Date.UTC(2018, 0, 1);
+  for (let index = 0; index < 401; index += 1) {
+    snapshot.weeks.push({
+      week_start: new Date(start + index * 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      revision: 0,
+      blocks: [],
+    });
+  }
+  const parsed = h.run('parseTransferSnapshot(' + JSON.stringify(JSON.stringify(snapshot)) + ')');
+  assert.equal(parsed.error, undefined);
+  assert.equal(parsed.value.weeks.length, 401);
+});
+
+test('import rejects a snapshot whose apply envelope exceeds 256 KiB', async () => {
+  const h = harness();
+  await h.login();
+  const snapshot = emptySnapshot();
+  snapshot.assignments = Array.from({ length: 80 }, (_, index) => ({
+    id: 'hw-' + index,
+    revision: 1,
+    body: {
+      id: 'hw-' + index, title: 'Essay', course: null, category: 'Homework', priority: 3,
+      energy: 'medium', spotify_url: null, due: '2026-09-16T23:59', estimate_min: 120,
+      focus_minutes: 0, focus_sessions: 0, completed: false, completed_at: null,
+      notes: 'n'.repeat(4000),
+    },
+  }));
+  const parsed = h.run('parseTransferSnapshot(' + JSON.stringify(JSON.stringify(snapshot)) + ')');
+  assert.match(parsed.error, /256 KiB transfer limit/);
+});
+
 test('preview shows removals, routines and settings before one acknowledged replacement', async () => {
   const h = harness();
   await h.login();

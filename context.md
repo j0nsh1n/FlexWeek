@@ -1,6 +1,16 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-15. Transfer size limits are reconciled on
+  `grok/stage6-transfer-limit`, based on `feat/stage6-access-frontend` at
+  bdfbb61. Export 413s when the import apply envelope would exceed 256 KiB.
+  More than 400 small weeks can export when they still fit.
+  `storage-info.transfer_limit_bytes` is 262144. Hosted deployment,
+  security/accessibility review, installers and physical platform checks remain.
+  spec.md drift: Stage 6 routes, storage-info fields including
+  `transfer_limit_bytes`, and the transfer envelope rule await approval of
+  `docs/stage6-contract.md`. Web-only gate: 221 frontend tests, 263 Python
+  tests. Nothing pushed.
 - Date: 2026-09-15. Stage 6 backend and shared frontend are complete locally on
   `feat/stage6-access-frontend`, based on Grok's backend at 6a5e3aa. Registration
   shows recovery codes once before setup; Forgot password, code replacement,
@@ -135,6 +145,8 @@ desktop/build_windows.ps1 Windows standalone build preparation
 desktop/tests/           origin/server tests and isolated real WebEngine probes
 backend/weeks.py         week-date helpers, no framework import
 backend/recovery.py      one-time recovery codes, no HTTP
+backend/limits.py        256 KiB write-body cap
+backend/transfer.py      import apply envelope size, no HTTP
 backend/restore.py       restore-point snapshot diff and token, no HTTP
 backend/app.py           account/session/ownership APIs and static frontend
 backend/storage.py       SQLite, scrypt, hashed sessions
@@ -264,6 +276,15 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-15, `grok/stage6-transfer-limit`: Export and import now share the
+  256 KiB write cap. Export 413s when the compact `{snapshot, state_token,
+  operation_id}` envelope would not fit import apply. The 400-week transfer cap
+  is gone; `storage-info` reports `transfer_limit_bytes`. The page measures that
+  envelope rather than raw file size. Remaining Stage 6 work is hosted
+  deployment, security/accessibility review, installers and physical platform
+  checks. `docs/stage6-contract.md` remains proposed; spec.md drift includes the
+  new field and envelope rule. Web-only gate: 221 frontend tests, 263 Python
+  tests. Nothing pushed.
 - 2026-09-15, `feat/stage6-access-frontend`: Shared Stage 6 UI complete over
   backend 6a5e3aa. `frontend/access.js` owns displayed recovery codes, storage
   identity and previewed transfer state; `auth.js` owns the recovery session

@@ -5,6 +5,14 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+- Account transfer size (2026-09-15, backend and shared frontend). Export
+  refuses with 413 when the compact import apply envelope would exceed the
+  256 KiB write cap, so a downloaded file can be posted back. Week count is no
+  longer a separate 400-week transfer cap. `GET /api/storage-info` includes
+  `transfer_limit_bytes`. The page measures that envelope, not the raw file
+  size, so pretty-printed files still import when they fit.
+
 ### Added
 - Account access and transfer UI (2026-09-15, frontend). New accounts must
   acknowledge their eight one-time recovery codes before first-week setup.

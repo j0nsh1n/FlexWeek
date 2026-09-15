@@ -27,6 +27,7 @@ from backend.assignments import (
 from backend.availability import occupancy_from_windows, spread_sessions
 from backend.comfort import REMINDER_LIMITS, TIMER_PRESETS, preview_split
 from backend.day import build_day
+from backend.limits import MAX_BODY
 from backend.models import (
     Assignment,
     AssignmentContent,
@@ -59,12 +60,12 @@ from backend.storage import (
     password_matches,
     throttle,
 )
+from backend.transfer import TRANSFER_TOO_LARGE, transfer_fits
 from backend.weeks import current_week_start, is_calendar_date, is_week_start, monday_of
 
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
 COOKIE = "flexweek_session"
-MAX_BODY = 256 * 1024
 WEEK_START_RULE = "week_start must be a Monday date between 2000-01-01 and 2099-12-31"
 DATE_RULE = "date must be YYYY-MM-DD between 2000-01-01 and 2099-12-31"
 ASSIGNMENT_UNKNOWN = "assignment_id must name an assignment of this account"
@@ -704,7 +705,7 @@ class TransferSnapshot(BaseModel):
     format: Literal[3]
     exported_at: str
     username: str = Field(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_]+$")
-    weeks: list[SavedWeek] = Field(max_length=400)
+    weeks: list[SavedWeek]
     assignments: list[TransferAssignment] = Field(max_length=1000)
     preferences: Preferences
     routines: list[TransferRoutine] = Field(max_length=50)
@@ -1425,6 +1426,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             "label": label,
             "username": account["username"],
             "origin": public_origin,
+            "transfer_limit_bytes": MAX_BODY,
         }
 
     @app.post("/api/account-export")
@@ -1440,7 +1442,10 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 "username": account["username"],
                 **capture_transfer(db, account["id"]),
             }
-        return TransferSnapshot.model_validate(payload).model_dump()
+        snapshot = TransferSnapshot.model_validate(payload).model_dump()
+        if not transfer_fits(snapshot):
+            raise HTTPException(413, TRANSFER_TOO_LARGE)
+        return snapshot
 
     @app.post("/api/account-import/preview")
     def preview_account_import(

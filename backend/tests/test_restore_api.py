@@ -103,6 +103,7 @@ def test_storage_info_is_local_on_loopback(alice: TestClient) -> None:
         "label": "On this device",
         "username": "alice",
         "origin": "http://testserver",
+        "transfer_limit_bytes": 262144,
     }
 
 
@@ -124,6 +125,7 @@ def test_storage_info_is_hosted_on_a_public_origin(tmp_path: Path) -> None:
             "label": "On your FlexWeek server",
             "username": "alice",
             "origin": "https://flexweek.example",
+            "transfer_limit_bytes": 262144,
         }
 
 

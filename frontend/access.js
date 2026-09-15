@@ -5,6 +5,7 @@ let stage6RecoveryCodes = [];
 let stage6RegistrationCodes = false;
 let stage6Import = null;
 let stage6Busy = false;
+let stage6TransferLimit = 256 * 1024;
 
 function accessElement(id) {
   return document.getElementById(id);
@@ -43,6 +44,9 @@ function renderStage6Storage(info) {
   accessElement("account-sync-note").textContent = info.mode === "hosted"
     ? "This hosted account opens the same saved data in the browser and desktop app. Offline changes do not sync automatically."
     : "This account stays in this device’s local database. It does not sync automatically.";
+  if (Number.isInteger(info.transfer_limit_bytes) && info.transfer_limit_bytes > 0) {
+    stage6TransferLimit = info.transfer_limit_bytes;
+  }
 }
 
 function renderRecoveryStatus(remaining) {
@@ -165,7 +169,7 @@ function transferSnapshotProblem(snapshot) {
   if (typeof snapshot.username !== "string" || !/^[A-Za-z0-9_]{3,32}$/.test(snapshot.username)) {
     return "The account file has an invalid source username.";
   }
-  if (!Array.isArray(snapshot.weeks) || snapshot.weeks.length > 400) return "The account file has too many or missing weeks.";
+  if (!Array.isArray(snapshot.weeks)) return "The account file has too many or missing weeks.";
   if (!Array.isArray(snapshot.assignments) || snapshot.assignments.length > 1000) {
     return "The account file has too many or missing homework items.";
   }
@@ -221,10 +225,18 @@ function transferSnapshotProblem(snapshot) {
 
 function parseTransferSnapshot(text) {
   if (!text || !text.trim()) return { error: "The account file is empty." };
-  if (new Blob([text]).size > 256 * 1024) return { error: "This account file is larger than the current 256 KiB transfer limit." };
   let snapshot;
   try { snapshot = JSON.parse(text); }
   catch { return { error: "The account file is not valid JSON." }; }
+  const envelope = JSON.stringify({
+    snapshot: snapshot,
+    state_token: "f".repeat(64),
+    operation_id: "o".repeat(80),
+  });
+  const limit = stage6TransferLimit;
+  if (new Blob([envelope]).size > limit) {
+    return { error: "This account file is larger than the current " + Math.round(limit / 1024) + " KiB transfer limit." };
+  }
   const problem = transferSnapshotProblem(snapshot);
   return problem ? { error: problem } : { value: snapshot };
 }

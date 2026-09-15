@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import sqlite3
 from collections.abc import Iterator
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -332,6 +333,7 @@ def test_storage_info_includes_username_and_origin_not_the_database_path(
         "label": "On this device",
         "username": "alice",
         "origin": "http://testserver",
+        "transfer_limit_bytes": 262144,
     }
     assert "test.db" not in response.text
     assert str(database) not in response.text
@@ -520,4 +522,37 @@ def test_two_hosted_sessions_share_a_week_and_conflict_on_stale_revision(tmp_pat
             "label": "On your FlexWeek server",
             "username": "alice",
             "origin": "https://flexweek.example",
+            "transfer_limit_bytes": 262144,
         }
+
+
+def test_export_accepts_more_than_four_hundred_small_weeks(
+    database: Path, registered: tuple[TestClient, list[str]]
+) -> None:
+    client, _codes = registered
+    user_id = client.get("/api/auth/me").json()["id"]
+    start = date(2018, 1, 1)
+    with connect(database) as db:
+        for index in range(401):
+            monday = (start + timedelta(weeks=index)).isoformat()
+            db.execute(
+                "INSERT INTO weeks(user_id, week_start, blocks, revision) VALUES (?, ?, ?, 0)",
+                (user_id, monday, "[]"),
+            )
+    exported = client.post("/api/account-export", json={"password": PASSWORD}, headers=WRITE)
+    assert exported.status_code == 200, exported.text
+    assert len(exported.json()["weeks"]) == 401
+
+
+def test_export_refuses_when_import_apply_would_exceed_the_body_cap(
+    registered: tuple[TestClient, list[str]],
+) -> None:
+    client, _codes = registered
+    notes = "n" * 4000
+    for index in range(80):
+        body = assignment(id=f"hw-{index:03d}", title=f"Item {index:03d}", notes=notes)
+        saved = client.put(f"/api/assignments/{body['id']}", json=body, headers=WRITE)
+        assert saved.status_code == 200, saved.text
+    exported = client.post("/api/account-export", json={"password": PASSWORD}, headers=WRITE)
+    assert exported.status_code == 413, exported.text
+    assert exported.json()["detail"] == "This account is larger than the 256 KiB transfer limit."
