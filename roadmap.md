@@ -366,8 +366,9 @@ Current scope mapping:
   security/accessibility review remains. No executable was built.
 
 ### Stage 7. Add longer-range navigation and validate the student experience
-- [ ] Add Month view for deadlines and projects with date-to-Day navigation.
-  Reassess Year view after Day/Month trials; it remains optional later work.
+- [~] Add Month view for deadlines and projects with date-to-Day navigation.
+  Backend `GET /api/month` is on `grok/stage7-month-backend` against the proposed
+  contract. Year view remains optional later work; the Month UI is Claude's.
 - [ ] Run student trials covering first use, adding several assignments, an
   impossible workload, a missed session, next-week reuse and recovery from an edit.
 - [ ] Compare completion rates, task time and wrong turns with the initial UI.
@@ -383,8 +384,9 @@ Current scope mapping:
 - Verification: month/year boundary and date-navigation tests; repeat the same
   student scenarios on the baseline and revised UI; record observed completion,
   assistance needed, device/browser and screenshots alongside release-gate output.
-- Status: [ ] Planned. Its Stage 1 date dependency is complete; student trials
-  and regression checks also occur within each earlier stage.
+- Status: [~] Month API in progress on `grok/stage7-month-backend`. The proposed
+  contract is `docs/stage7-contract.md`. Claude still owns Month view and
+  date-to-Day navigation. Year view, student trials and PR review remain.
 
 ### Scope and contract follow-up
 

@@ -1,6 +1,15 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-15. Stage 7 month API is on `grok/stage7-month-backend` (worktree
+  `~/.worktrees/flexweek-stage7-backend`), based on `grok/stage6-transfer-limit`
+  at f268b7e. `GET /api/month` returns a clipped complete-week grid, deadlines,
+  placed-session counts, projects and overdue homework against the proposed
+  contract in `docs/stage7-contract.md`. Claude still owns Month view and
+  date-to-Day navigation. Year view is out of this slice. spec.md drift:
+  `GET /api/month` and the month grid rules are not in the public API table
+  until the owner approves the contract. Web-only gate: 221 frontend tests, 279
+  Python tests. Nothing pushed.
 - Date: 2026-09-15. Stage 6 contract approved and recorded in `spec.md` on
   `grok/stage6-transfer-limit`. Recovery, deletion, storage identity, previewed
   format-3 transfer and the 256 KiB import-apply envelope are product contract.
@@ -283,6 +292,11 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-15, `grok/stage7-month-backend`: Stage 7 backend slice. Proposed
+  contract is `docs/stage7-contract.md`. `GET /api/month?month=YYYY-MM` is
+  authenticated and CSRF-free. Claude owns the Month UI. spec.md drift: the
+  month route. Web-only gate: 221 frontend tests, 279 Python tests. Nothing
+  pushed.
 - 2026-09-15, `grok/stage6-transfer-limit`: Owner approved the Stage 6 spec
   updates and skipped hosted deployment, installers and iOS checks.
   `docs/stage6-contract.md` is approved 2026-09-15. `spec.md` now lists recovery,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import calendar
 import re
 from datetime import date, timedelta
 
@@ -10,6 +11,7 @@ LAST_DAY = date(2099, 12, 31)
 # date.fromisoformat also accepts "20260907" and "2026-W37-1"; a week label is
 # always the padded calendar form, so the shape is pinned before parsing.
 ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+ISO_MONTH = re.compile(r"\d{4}-\d{2}")
 
 
 def _parse(value: str) -> date:
@@ -47,3 +49,40 @@ def is_calendar_date(value: str) -> bool:
         return True
     except ValueError:
         return False
+
+
+def parse_month(value: str) -> tuple[date, date]:
+    """First and last dates of YYYY-MM. Raises on a malformed or out-of-range month."""
+    if not ISO_MONTH.fullmatch(value):
+        raise ValueError("month must be written YYYY-MM")
+    year = int(value[:4])
+    month = int(value[5:7])
+    if month < 1 or month > 12:
+        raise ValueError("month must be written YYYY-MM")
+    start = date(year, month, 1)
+    end = date(year, month, calendar.monthrange(year, month)[1])
+    if start < FIRST_DAY or start > LAST_DAY:
+        raise ValueError("date must be between 2000-01-01 and 2099-12-31")
+    if end > LAST_DAY:
+        end = LAST_DAY
+    return start, end
+
+
+def is_month_label(value: str) -> bool:
+    """True when value is a well-formed YYYY-MM whose first day is in range."""
+    try:
+        parse_month(value)
+        return True
+    except ValueError:
+        return False
+
+
+def month_grid(start: date, end: date) -> tuple[date, date]:
+    """Monday of start through Sunday of end, clipped to FIRST_DAY..LAST_DAY."""
+    grid_start = start - timedelta(days=start.weekday())
+    grid_end = end + timedelta(days=6 - end.weekday())
+    if grid_start < FIRST_DAY:
+        grid_start = FIRST_DAY
+    if grid_end > LAST_DAY:
+        grid_end = LAST_DAY
+    return grid_start, grid_end

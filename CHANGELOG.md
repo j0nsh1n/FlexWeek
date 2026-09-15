@@ -14,6 +14,12 @@ All notable changes to FlexWeek are documented here. Format follows
   size, so pretty-printed files still import when they fit.
 
 ### Added
+- Month calendar API (2026-09-15, backend). `GET /api/month?month=YYYY-MM`
+  returns a complete-week grid of due dates, placed sessions and locked time,
+  plus project and overdue lists, so a Month view can open Day view for a
+  date without guessing week boundaries. Unplaced candidate days do not paint
+  the month. Year view is still later work. Rules are in
+  `docs/stage7-contract.md`.
 - Account access and transfer UI (2026-09-15, frontend). New accounts must
   acknowledge their eight one-time recovery codes before first-week setup.
   Students can recover a forgotten password, replace codes, change passwords,

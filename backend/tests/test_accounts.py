@@ -198,6 +198,7 @@ def test_protected_endpoints_require_session(client: TestClient) -> None:
     assert client.get("/api/week").status_code == 401
     assert client.get("/api/assignments?week_start=" + WEEK).status_code == 401
     assert client.get("/api/day?date=" + WEEK).status_code == 401
+    assert client.get("/api/month?month=2026-09").status_code == 401
     assert client.get("/api/routines").status_code == 401
     assert client.get("/api/restore-points").status_code == 401
     assert client.get("/api/storage-info").status_code == 401

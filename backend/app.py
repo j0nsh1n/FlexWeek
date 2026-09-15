@@ -41,6 +41,7 @@ from backend.models import (
     valid_naive_stamp,
     valid_spotify_url,
 )
+from backend.month import build_month
 from backend.recovery import (
     RECOVERY_CODE_COUNT,
     generate_recovery_codes,
@@ -61,13 +62,20 @@ from backend.storage import (
     throttle,
 )
 from backend.transfer import TRANSFER_TOO_LARGE, transfer_fits
-from backend.weeks import current_week_start, is_calendar_date, is_week_start, monday_of
+from backend.weeks import (
+    current_week_start,
+    is_calendar_date,
+    is_month_label,
+    is_week_start,
+    monday_of,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
 COOKIE = "flexweek_session"
 WEEK_START_RULE = "week_start must be a Monday date between 2000-01-01 and 2099-12-31"
 DATE_RULE = "date must be YYYY-MM-DD between 2000-01-01 and 2099-12-31"
+MONTH_RULE = "month must be YYYY-MM between 2000-01 and 2099-12"
 ASSIGNMENT_UNKNOWN = "assignment_id must name an assignment of this account"
 ASSIGNMENT_CONFLICT = "This assignment changed in another window. Reload before saving."
 ASSIGNMENT_LIMIT = "An account holds at most 1000 assignments"
@@ -1220,6 +1228,20 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             ]
             weeks = list_account_weeks(db, account["id"])
         return build_day(date, week_start, rewrite_stored_blocks(blocks, owned), assignment_rows, weeks)
+
+    @app.get("/api/month")
+    def get_month(account: Annotated[dict, Depends(user)], month: str | None = None) -> dict:
+        if month is None or not is_month_label(month):
+            raise HTTPException(422, MONTH_RULE)
+        with connect(path) as db:
+            assignment_rows = [
+                (json.loads(item["body"]), int(item["revision"]))
+                for item in db.execute(
+                    "SELECT body, revision FROM assignments WHERE user_id = ?", (account["id"],)
+                ).fetchall()
+            ]
+            weeks = list_account_weeks(db, account["id"])
+        return build_month(month, assignment_rows, weeks)
 
     @app.put("/api/week")
     def put_week(week: SavedWeek, account: Annotated[dict, Depends(user)]) -> dict:
