@@ -1009,15 +1009,18 @@ async function api(path, options = {}, protectedRequest = true) {
   const requestEpoch = epoch;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
+  const keepSessionOn401 = options.keepSessionOn401 === true;
+  const requestOptions = { ...options };
+  delete requestOptions.keepSessionOn401;
   try {
     const response = await fetch(path, {
-      ...options,
+      ...requestOptions,
       credentials: "same-origin", cache: "no-store", signal: controller.signal,
       headers: { "Content-Type": "application/json", "X-FlexWeek-Request": "1",
         ...(account && protectedRequest ? { "X-FlexWeek-Account": String(account.id) } : {}) },
     });
     if (requestEpoch !== epoch) throw new Error("Session changed. Please try again.");
-    if (response.status === 401 && protectedRequest) {
+    if (response.status === 401 && protectedRequest && !keepSessionOn401) {
       signedOut("Your session ended. Log in again; unsaved edits come back when you log in to the same account.");
     }
     if (!response.ok) {

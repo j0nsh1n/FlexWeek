@@ -6,6 +6,14 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Account access and transfer UI (2026-09-15, frontend). New accounts must
+  acknowledge their eight one-time recovery codes before first-week setup.
+  Students can recover a forgotten password, replace codes, change passwords,
+  delete an account, and see the signed-in username, storage mode and server
+  origin. Full-account transfer uses a password-gated download and shows weeks,
+  homework, routines, settings and named removals before replacing the
+  destination. Transfer state and displayed codes are cleared on account
+  changes; wrong current-password errors do not end a valid session.
 - Account recovery, deletion and local-to-hosted transfer (2026-09-14, backend).
   Registering returns eight one-time recovery codes (hashes only in SQLite).
   `POST /api/auth/recover` sets a new password, drops other sessions and signs

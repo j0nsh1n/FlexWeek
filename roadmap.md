@@ -342,12 +342,12 @@ Current scope mapping:
   and sleep/wake checks remain platform work. No executable was built.
 
 ### Stage 6. Make account access and delivery dependable
-- [ ] Add account recovery appropriate to local and hosted modes, plus visible
+- [x] Add account recovery appropriate to local and hosted modes, plus visible
   storage/sync status. Explain which account/database a student is using.
-- [ ] Provide a normal hosted-account path in both clients so a student can open
+- [x] Provide a normal hosted-account path in both clients so a student can open
   the same saved week on another device. Keep local-to-hosted transfer explicit
   and previewed; automatic bidirectional/offline synchronization is separate scope.
-- [ ] Finish hosted deployment, persistent storage, tested backup restoration,
+- [~] Finish hosted deployment, persistent storage, tested backup restoration,
   recovery/deletion flows and the remaining security/accessibility review.
 - [ ] Verify Windows installers and the reported setup-dialog flicker on a real
   PC, Linux packaging/tray behavior, and Safari/iPhone compatibility.
@@ -357,12 +357,13 @@ Current scope mapping:
 - Verification: recovery abuse/expiry/revocation tests, ownership and CSRF checks,
   backup restore drills, cross-client revision conflicts, installation/upgrade
   smoke checks and physical-device evidence.
-- Status: [~] Backend complete locally on `grok/stage6-access-backend`.
-  Recovery codes, password change, deletion, storage-info username/origin and
-  explicit local-to-hosted transfer are implemented against the proposed
-  contract in `docs/stage6-contract.md`. Claude still owns the UI. Hosted
-  deployment, installers, Safari/iPhone and accessibility review remain later
-  work. No executable was built.
+- Status: [~] Backend and shared browser/desktop frontend complete locally on
+  `feat/stage6-access-frontend`. Recovery codes, password change, deletion,
+  storage identity and previewed account transfer are implemented against the
+  proposed contract in `docs/stage6-contract.md`. The source gate passes 218
+  frontend and 331 Python tests, including the real Stage 6 WebEngine and smoke
+  paths. Hosted deployment, the full security/accessibility review, installers
+  and physical Safari/iPhone checks remain later work. No executable was built.
 
 ### Stage 7. Add longer-range navigation and validate the student experience
 - [ ] Add Month view for deadlines and projects with date-to-Day navigation.

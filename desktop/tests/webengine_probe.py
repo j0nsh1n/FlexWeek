@@ -67,7 +67,7 @@ def run(case: str, root: Path) -> None:
             QTest.qWait(50)
         raise AssertionError(f"Condition not reached: {code}")
 
-    def submit_identity(name: str, action: str) -> None:
+    def submit_identity(name: str, action: str, acknowledge_codes: bool = True) -> list[str]:
         evaluate(f"""if (document.getElementById('{action}-screen').hidden)
                 document.getElementById('show-{action}').click();
             document.getElementById('{action}-username').value={json.dumps(name)};
@@ -75,6 +75,20 @@ def run(case: str, root: Path) -> None:
             document.querySelector('#{action}-form button[type=submit]').click();""")
         wait_for(f"document.getElementById('account-name').textContent === {json.dumps(name)}")
         wait_for("!document.getElementById('planner').hidden")
+        codes: list[str] = []
+        if action == "register":
+            wait_for("document.getElementById('recovery-codes-dialog').open")
+            wait_for("document.querySelectorAll('#recovery-codes-list code').length === 8")
+            codes = cast(list[str], json.loads(evaluate(
+                "JSON.stringify(Array.from(document.querySelectorAll('#recovery-codes-list code'), "
+                "node => node.textContent))"
+            )))
+            if acknowledge_codes:
+                evaluate("""document.getElementById('recovery-codes-ack').checked=true;
+                    document.getElementById('recovery-codes-ack').dispatchEvent(new Event('change'));
+                    document.getElementById('recovery-codes-done').click();""")
+                wait_for("!document.getElementById('recovery-codes-dialog').open")
+        return codes
 
     def wait_through_reload(code: str, timeout: float = 20.0) -> None:
         """wait_for across a page that is gone or reloading, when scripts cannot answer."""
@@ -845,6 +859,96 @@ def run(case: str, root: Path) -> None:
             print(
                 "PASS: settings groups, timer rounding, local silent preview, comfort save, "
                 "remembered day view and responsive sidebar"
+            )
+        elif case == "stage6":
+            codes = submit_identity("access_student", "register", acknowledge_codes=False)
+            assert len(codes) == 8
+            assert evaluate("Object.hasOwn(account, 'recovery_codes')") is False
+            assert evaluate("document.getElementById('setup-dialog').open") is False
+            evaluate("""document.getElementById('recovery-codes-ack').checked=true;
+                document.getElementById('recovery-codes-ack').dispatchEvent(new Event('change'));
+                document.getElementById('recovery-codes-done').click();""")
+            wait_for("document.getElementById('setup-dialog').open")
+            evaluate("document.getElementById('setup-close').click()")
+
+            evaluate("document.getElementById('prefs-open').click()")
+            wait_for("document.getElementById('account-location-label').textContent === 'On this device'")
+            wait_for(
+                "document.getElementById('recovery-status').textContent === "
+                "'8 unused recovery codes remain.'"
+            )
+            assert evaluate("document.getElementById('prefs-account').textContent") == (
+                "Signed in as access_student"
+            )
+            assert evaluate("document.getElementById('recovery-status').textContent") == (
+                "8 unused recovery codes remain."
+            )
+            evaluate("document.getElementById('change-password-open').click()")
+            evaluate("""document.getElementById('change-password-current').value='temporary-test-password';
+                document.getElementById('change-password-new').value='changed-test-password';
+                document.getElementById('change-password-confirm').value='changed-test-password';
+                document.querySelector('#change-password-form button[type=submit]').click();""")
+            wait_for("document.getElementById('status').textContent.includes('Password changed')")
+
+            evaluate("document.getElementById('logout').click()")
+            wait_for("document.getElementById('planner').hidden")
+            evaluate("document.getElementById('show-recover').click()")
+            evaluate(f"""document.getElementById('recover-username').value='access_student';
+                document.getElementById('recover-code').value={json.dumps(codes[0])};
+                document.getElementById('recover-password').value='recovered-test-password';
+                document.getElementById('recover-password-confirm').value='recovered-test-password';
+                document.querySelector('#recover-form button[type=submit]').click();""")
+            wait_for("document.getElementById('status').textContent.includes('Account recovered')")
+            assert evaluate("document.getElementById('account-name').textContent") == "access_student"
+
+            add_item("class", "document.getElementById('f-title').value='School';", days=[0])
+            wait_for("document.getElementById('status').textContent.startsWith('Saved')")
+            evaluate("""window.__stage6Snapshot=null; window.__stage6Download=downloadText;
+                downloadText=function(_name, body){window.__stage6Snapshot=JSON.parse(body);};
+                document.getElementById('prefs-open').click();
+                document.getElementById('transfer-open').click();
+                document.getElementById('account-export-password').value='recovered-test-password';
+                document.querySelector('#account-export-form button[type=submit]').click();""")
+            wait_for("window.__stage6Snapshot !== null")
+            snapshot = cast(dict[str, Any], json.loads(evaluate("JSON.stringify(window.__stage6Snapshot)")))
+            assert snapshot["username"] == "access_student"
+            assert len(cast(list[Any], snapshot["weeks"])) == 1
+            evaluate(
+                "downloadText=window.__stage6Download; "
+                "document.getElementById('transfer-close').click()"
+            )
+
+            evaluate("document.getElementById('logout').click()")
+            wait_for("document.getElementById('planner').hidden")
+            submit_identity("destination_student", "register")
+            evaluate("document.getElementById('setup-close').click()")
+            evaluate(
+                "document.getElementById('prefs-open').click(); "
+                "document.getElementById('transfer-open').click()"
+            )
+            evaluate("previewTransferSnapshot(" + json.dumps(snapshot) + ")")
+            wait_for("!document.getElementById('account-import-preview').hidden")
+            assert evaluate("document.getElementById('account-import-source').textContent").startswith(
+                "From access_student."
+            )
+            evaluate("""document.getElementById('account-import-ack').checked=true;
+                document.getElementById('account-import-ack').dispatchEvent(new Event('change'));
+                document.getElementById('account-import-confirm').click();""")
+            wait_for("document.getElementById('status').textContent.includes('Account data imported')")
+            assert evaluate("document.querySelectorAll('.block').length") == 1
+            assert evaluate("document.querySelector('.block').textContent.includes('School')") is True
+
+            evaluate("document.getElementById('prefs-open').click()")
+            wait_for("document.getElementById('account-location-label').textContent === 'On this device'")
+            evaluate("document.getElementById('delete-account-open').click()")
+            evaluate("""document.getElementById('delete-account-username').value='destination_student';
+                document.getElementById('delete-account-password').value='temporary-test-password';
+                document.querySelector('#delete-account-form button[type=submit]').click();""")
+            wait_for("document.getElementById('status').textContent.includes('Account deleted')")
+            assert evaluate("!document.getElementById('register-screen').hidden") is True
+            print(
+                "PASS: one-time codes, password change, recovery, local identity, "
+                "previewed transfer and deletion"
             )
         elif case == "phase7":
             submit_identity("focus_student", "register")

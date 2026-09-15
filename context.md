@@ -1,18 +1,22 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-14. Student-experience Stage 6 backend is on
-  `grok/stage6-access-backend` (worktree
-  `~/.worktrees/flexweek-stage6-backend`), based on `feat/stage5-comfort-frontend`
-  at 38817ae. Recovery codes, password change, account deletion, storage-info
-  username/origin, and password-gated export plus previewed import live behind
-  the proposed contract in `docs/stage6-contract.md`. GLM is not in this
-  harness, so Grok wrote the contract too. Claude still owns recovery, transfer
-  and storage-status UI. Hosted Render, installers, Safari and accessibility
-  review are out of this slice. spec.md drift: those routes and the extra
-  storage-info fields are not in the public API table until the owner approves
-  the contract. Web-only gate: 207 frontend tests, 259 Python tests. Nothing
-  pushed.
+- Date: 2026-09-15. Stage 6 backend and shared frontend are complete locally on
+  `feat/stage6-access-frontend`, based on Grok's backend at 6a5e3aa. Registration
+  shows recovery codes once before setup; Forgot password, code replacement,
+  password change and typed-username account deletion are wired. Settings name
+  the username, local/hosted storage mode, origin and sync limit. Account
+  transfer separates format-3 files from week files, names removals and requires
+  review before replacement. The final source gate passes 218 frontend and 331
+  Python tests, including real WebEngine and packaged-app smoke paths. A
+  read-only Cartographer scan found 42 modules, 37 production routes and no
+  parse errors, circular imports or scanner warnings. Hosted deployment, full
+  security/accessibility review, installers and physical Safari/iPhone checks
+  remain. The backend still needs one transfer-limit follow-up: a valid export
+  can grow past the import request cap, and accounts above the 400-week export
+  validation cap can fail to export. spec.md drift: the Stage 6 routes and
+  storage fields await approval of `docs/stage6-contract.md`. No executable was
+  built and nothing was pushed.
 - Date: 2026-09-14. The Stage 5 shared frontend is complete locally on
   `feat/stage5-comfort-frontend`, based on Grok's backend at 10c9334. Settings
   now use Appearance, Focus, Notifications and Account sections; presets and
@@ -260,15 +264,16 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
-- 2026-09-14, `grok/stage6-access-backend`: Grok's Stage 6 backend slice.
-  Contract is `docs/stage6-contract.md` (still proposed). Recovery is eight
-  hashed one-time codes, not email. Change password and recover drop other
-  sessions. Delete cascades every row for that user_id. Storage-info adds
-  username and origin. Transfer is password-gated export and a restore-like
-  preview/import of format 3 (weeks, assignments, prefs, routines). Claude
-  still owns the UI. spec.md drift: new auth/transfer routes and storage-info
-  fields. Web-only gate: 207 frontend tests, 259 Python tests. Cartographer
-  skipped (not installed in the project venv). Nothing pushed.
+- 2026-09-15, `feat/stage6-access-frontend`: Shared Stage 6 UI complete over
+  backend 6a5e3aa. `frontend/access.js` owns displayed recovery codes, storage
+  identity and previewed transfer state; `auth.js` owns the recovery session
+  transition. Wrong password errors keep valid sessions, and account changes
+  clear codes and snapshots. A WebEngine case transfers a real saved week
+  between accounts. The final gate passes 218 frontend and 331 Python tests;
+  the 401 guard mutation fails by clearing the signed-in account as expected.
+  Remaining Stage 6 work is deployment, broader review and physical platform
+  evidence. `docs/stage6-contract.md` remains proposed; `spec.md` still omits
+  its routes. No executable built; nothing pushed.
 - 2026-09-14, `feat/stage5-comfort-frontend`: Shared Stage 5 UI complete over
   backend 10c9334. New `frontend/comfort.js` owns presets, split previews, alert
   previews and remembered layout. Settings writes wait for in-flight layout

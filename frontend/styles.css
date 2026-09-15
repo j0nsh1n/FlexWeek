@@ -919,6 +919,36 @@ button:disabled { cursor: wait; opacity: 0.6; }
 .restore-diff { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; }
 .restore-diff div { padding: 0.45rem; border: 1px solid var(--hairline); border-radius: var(--radius); background: var(--surface-card); }
 .restore-diff strong { display: block; font-size: 1.1rem; }
+.account-location {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.6rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--surface-card);
+}
+.account-location .note { margin: 0; }
+.account-location small { color: var(--muted); overflow-wrap: anywhere; }
+.account-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0; }
+.danger-zone { border-color: var(--error) !important; background: var(--error-soft) !important; }
+.access-dialog { width: min(94vw, 36rem); max-height: min(90vh, 48rem); overflow: auto; }
+.access-dialog form { display: grid; gap: var(--space-2); }
+.access-dialog section + section { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--hairline); }
+.access-dialog h3 { margin: 0 0 var(--space-2); font-size: 0.95rem; }
+.recovery-code-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  padding-left: 1.7rem;
+}
+.recovery-code-list code { font-size: 0.9rem; user-select: all; }
+.recovery-ack { margin: var(--space-3) 0; }
+.transfer-diff { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); margin: var(--space-2) 0; }
+.transfer-diff section { display: grid; gap: 0.2rem; margin: 0; padding: 0.55rem; border: 1px solid var(--hairline); border-radius: var(--radius); background: var(--surface-card); }
+.transfer-diff span { color: var(--muted); font-size: 0.8rem; }
+.transfer-removals { margin: var(--space-2) 0; padding: 0.55rem; border: 1px solid var(--error); border-radius: var(--radius); background: var(--error-soft); }
+.transfer-removals ul { margin: 0.35rem 0 0; padding-left: 1.2rem; }
+.transfer-dialog #account-import-confirm { margin-top: var(--space-2); }
 
 @media (max-width: 640px) {
   .preview-list li { grid-template-columns: auto 1fr; }
@@ -932,6 +962,8 @@ button:disabled { cursor: wait; opacity: 0.6; }
   .project-row.link-row { grid-template-columns: 1fr auto; }
   .project-row.link-row input:nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
   .restore-create { grid-template-columns: 1fr; }
+  .recovery-code-list, .transfer-diff { grid-template-columns: 1fr; }
+  .account-actions button, .access-dialog button { min-height: 44px; }
 }
 
 .current-time-line { position: absolute; left: 0; right: 0; height: 2px; background: var(--now); z-index: 6; pointer-events: none; }

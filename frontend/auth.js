@@ -1,6 +1,7 @@
 const AUTH_SCREENS = {
   register: { screen: "register-screen", form: "register-form", error: "register-error" },
   login: { screen: "login-screen", form: "login-form", error: "login-error" },
+  recover: { screen: "recover-screen", form: "recover-form", error: "recover-error" },
 };
 
 /** Show one auth screen. Page load opens register; returning after a session opens login. */
@@ -50,6 +51,7 @@ function signedOut(message = "Log in to open your week.", preserve = true, scree
   if (typeof clearStage3State === "function") clearStage3State();
   if (typeof clearAdaptState === "function") clearAdaptState();
   if (typeof clearComfortState === "function") clearComfortState();
+  if (typeof clearAccessState === "function") clearAccessState();
   hideContextMenu();
   if (gridGesture) clearGhost(gridGesture.lane);
   gridGesture = null;
@@ -166,15 +168,21 @@ async function submitAuth(action) {
     }) }, false);
     password.value = "";
     channel?.postMessage("session-changed");
-    await loadAccount(identity);
+    await loadAccount({ id: identity.id, username: identity.username });
     // A new account starts empty, so walk it through its first week instead of a blank grid.
-    if (action === "register" && account && !weekState().blocks.length) openSetup();
+    if (action === "register" && account && Array.isArray(identity.recovery_codes)
+        && typeof showRecoveryCodes === "function") {
+      showRecoveryCodes(identity.recovery_codes, true);
+    } else if (action === "register" && account && !weekState().blocks.length) {
+      openSetup();
+    }
   } catch (error) {
     if (authEpoch === epoch) document.getElementById(ids.error).textContent = error.message;
   } finally { form.querySelectorAll("button").forEach(el => { el.disabled = false; }); }
 }
 
-Object.keys(AUTH_SCREENS).forEach(function (action) {
+[["register", AUTH_SCREENS.register], ["login", AUTH_SCREENS.login]].forEach(function (entry) {
+  const action = entry[0];
   document.getElementById(AUTH_SCREENS[action].form).addEventListener("submit", function (event) {
     event.preventDefault();
     return submitAuth(action);
@@ -190,6 +198,43 @@ function switchAuthScreen(from, to) {
 }
 document.getElementById("show-login").addEventListener("click", () => switchAuthScreen("register", "login"));
 document.getElementById("show-register").addEventListener("click", () => switchAuthScreen("login", "register"));
+document.getElementById("show-recover").addEventListener("click", function () {
+  switchAuthScreen("login", "recover");
+});
+document.getElementById("recover-show-login").addEventListener("click", function () {
+  switchAuthScreen("recover", "login");
+});
+
+document.getElementById("recover-form").addEventListener("submit", async function (event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const password = document.getElementById("recover-password");
+  const confirmation = document.getElementById("recover-password-confirm");
+  const error = document.getElementById("recover-error");
+  if (password.value !== confirmation.value) {
+    error.textContent = "The new passwords do not match.";
+    return;
+  }
+  const recoverEpoch = epoch;
+  form.querySelectorAll("button").forEach(function (button) { button.disabled = true; });
+  error.textContent = "";
+  try {
+    const identity = await api("/api/auth/recover", { method: "POST", body: JSON.stringify({
+      username: document.getElementById("recover-username").value,
+      code: document.getElementById("recover-code").value,
+      password: password.value,
+    }) }, false);
+    if (recoverEpoch !== epoch) return;
+    form.reset();
+    channel?.postMessage("session-changed");
+    await loadAccount({ id: identity.id, username: identity.username });
+    if (account) setStatus("Account recovered. Your other sessions were signed out.");
+  } catch (recoverError) {
+    if (recoverEpoch === epoch) error.textContent = recoverError.message;
+  } finally {
+    form.querySelectorAll("button").forEach(function (button) { button.disabled = false; });
+  }
+});
 
 document.getElementById("logout").addEventListener("click", async () => {
   if (saving || (dirtyWeeks().length && !confirm("Log out and discard unsaved changes? Download the draft first if you need it."))) return;
@@ -222,7 +267,8 @@ async function reconnect() {
 }
 document.getElementById("reconnect").addEventListener("click", reconnect);
 window.addEventListener("beforeunload", event => {
-  if (dirtyWeeks().length) { event.preventDefault(); event.returnValue = ""; }
+  const unsavedCodes = typeof stage6RecoveryCodes !== "undefined" && stage6RecoveryCodes.length > 0;
+  if (dirtyWeeks().length || unsavedCodes) { event.preventDefault(); event.returnValue = ""; }
 });
 window.addEventListener("pageshow", event => { if (event.persisted) { signedOut(); reconnect(); } });
 document.addEventListener("visibilitychange", async () => {

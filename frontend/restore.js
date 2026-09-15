@@ -81,6 +81,7 @@ async function loadRestoreTools() {
     ]);
     if (!results[0] || typeof results[0].label !== "string") throw new Error("The server returned no storage location.");
     document.getElementById("storage-location").textContent = "Backups: " + results[0].label;
+    if (typeof renderStage6Storage === "function") renderStage6Storage(results[0]);
     restorePoints = (results[1] && results[1].restore_points) || (results[1] && results[1].points) || [];
     renderRestorePoints();
   } catch (error) {
