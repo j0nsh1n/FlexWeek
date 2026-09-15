@@ -116,7 +116,12 @@ function applyWritten(result) {
     dirtyAssignments.delete(saved.id);
     if (saved.assignment) {
       const prior = assignments.get(saved.id) || { planned_min: 0, unplanned_min: 0 };
-      assignments.set(saved.id, { ...prior, ...saved.assignment, revision: saved.revision });
+      // The server omits empty project details, so they default here before the merge;
+      // otherwise a stale copy would keep details the student just undid away.
+      assignments.set(saved.id, {
+        ...prior, notes: "", links: [], checklist: [],
+        ...saved.assignment, revision: saved.revision,
+      });
       committedAssignments.set(saved.id, assignmentBody(assignments.get(saved.id)));
       return;
     }

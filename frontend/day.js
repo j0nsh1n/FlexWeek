@@ -356,6 +356,135 @@ function showHomeworkError(message) {
   error.textContent = message || "";
 }
 
+// ---- Project details: notes, links and a checklist kept on the homework (Stage 4) ----
+
+// One record per row; the root element is rebuilt whenever a row comes or goes.
+let projectLinkRows = [];
+let projectCheckRows = [];
+
+function renderProjectRows() {
+  const links = document.getElementById("hw-links");
+  links.replaceChildren();
+  projectLinkRows.forEach(function (row) { links.appendChild(row.root); });
+  const checks = document.getElementById("hw-checklist");
+  checks.replaceChildren();
+  projectCheckRows.forEach(function (row) { checks.appendChild(row.root); });
+}
+
+function projectRemoveButton(label, record, rows) {
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "secondary";
+  remove.textContent = "Remove";
+  remove.ariaLabel = label;
+  remove.addEventListener("click", function () {
+    const index = rows.indexOf(record);
+    if (index !== -1) rows.splice(index, 1);
+    renderProjectRows();
+  });
+  return remove;
+}
+
+function addProjectLink(link) {
+  if (projectLinkRows.length >= PROJECT_LIMITS.links) {
+    showHomeworkError("Up to " + PROJECT_LIMITS.links + " links.");
+    return false;
+  }
+  const label = document.createElement("input");
+  label.type = "text";
+  label.maxLength = PROJECT_LIMITS.linkLabel;
+  label.placeholder = "Name, e.g. Reading list";
+  label.ariaLabel = "Link name";
+  label.value = link && link.label ? link.label : "";
+  const url = document.createElement("input");
+  url.type = "text";
+  url.inputMode = "url";
+  url.maxLength = PROJECT_LIMITS.url;
+  url.placeholder = "https://…";
+  url.ariaLabel = "Link address";
+  url.value = link && link.url ? link.url : "";
+  const record = { label: label, url: url };
+  const root = document.createElement("div");
+  root.className = "project-row link-row";
+  root.appendChild(label);
+  root.appendChild(url);
+  root.appendChild(projectRemoveButton("Remove link", record, projectLinkRows));
+  record.root = root;
+  projectLinkRows.push(record);
+  renderProjectRows();
+  return true;
+}
+
+function addProjectCheck(step) {
+  if (projectCheckRows.length >= PROJECT_LIMITS.checklist) {
+    showHomeworkError("Up to " + PROJECT_LIMITS.checklist + " steps.");
+    return false;
+  }
+  const done = document.createElement("input");
+  done.type = "checkbox";
+  done.ariaLabel = "Done";
+  done.checked = Boolean(step && step.done);
+  const toggle = document.createElement("label");
+  toggle.className = "check-toggle";
+  toggle.appendChild(done);
+  const text = document.createElement("input");
+  text.type = "text";
+  text.maxLength = PROJECT_LIMITS.text;
+  text.placeholder = "A step of the work";
+  text.ariaLabel = "Checklist step";
+  text.value = step && step.text ? step.text : "";
+  // The id is made once per row and saved with it, so completion survives editing.
+  const record = { id: step && step.id ? step.id : "chk-" + newId().slice(2), text: text, done: done };
+  const root = document.createElement("div");
+  root.className = "project-row check-row";
+  root.appendChild(toggle);
+  root.appendChild(text);
+  root.appendChild(projectRemoveButton("Remove step", record, projectCheckRows));
+  record.root = root;
+  projectCheckRows.push(record);
+  renderProjectRows();
+  return true;
+}
+
+/** Fill the project details area from the homework, or empty it for a new one. */
+function loadProjectDetails(item) {
+  document.getElementById("hw-notes").value = item && item.notes ? item.notes : "";
+  projectLinkRows = [];
+  projectCheckRows = [];
+  ((item && item.links) || []).forEach(function (link) { addProjectLink(link); });
+  ((item && item.checklist) || []).forEach(function (step) { addProjectCheck(step); });
+  renderProjectRows();
+}
+
+/** The details as they would be stored, or the first problem with them. */
+function readProjectDetails() {
+  const notes = document.getElementById("hw-notes").value;
+  if (textLength(notes) > PROJECT_LIMITS.notes) {
+    return { error: "Keep the notes to " + PROJECT_LIMITS.notes + " characters or fewer." };
+  }
+  const links = [];
+  for (const row of projectLinkRows) {
+    const label = row.label.value.trim();
+    const url = row.url.value.trim();
+    if (!label && !url) continue;
+    if (!label) return { error: "Give every link a name." };
+    if (textLength(label) > PROJECT_LIMITS.linkLabel) return { error: "Keep link names to 80 characters or fewer." };
+    if (!url) return { error: "Add the address for the link " + label + "." };
+    if (textLength(url) > PROJECT_LIMITS.url || !safeProjectUrl(url)) {
+      return { error: "Use an http or https address for the link " + label + "." };
+    }
+    links.push({ label: label, url: url });
+  }
+  const checklist = [];
+  for (const row of projectCheckRows) {
+    const text = row.text.value.trim();
+    if (!text) continue;
+    if (textLength(text) > PROJECT_LIMITS.text) return { error: "Keep checklist steps to 80 characters or fewer." };
+    checklist.push({ id: row.id, text: text, done: Boolean(row.done.checked) });
+  }
+  return { notes: notes, links: links, checklist: checklist };
+}
+
 /** The quick homework form: title, due date and time, and estimated time. With an id it edits that homework. */
 function openHomeworkDialog(assignmentId) {
   if (!account || saving) return false;
@@ -376,6 +505,10 @@ function openHomeworkDialog(assignmentId) {
     : DURATION_CHOICES;
   fillOptions(document.getElementById("hw-estimate"), choices.map(function (minutes) { return [minutes, formatDuration(minutes)]; }));
   document.getElementById("hw-estimate").value = String(estimate);
+  loadProjectDetails(item);
+  // Show the area already when the homework holds details; keep it folded otherwise.
+  document.getElementById("hw-project").open = Boolean(item
+    && (item.notes || (item.links || []).length || (item.checklist || []).length));
   showHomeworkError(null);
   const dialog = document.getElementById("homework-dialog");
   if (typeof dialog.showModal === "function") {
@@ -414,6 +547,11 @@ function saveHomework() {
     showHomeworkError("Name the homework.");
     return false;
   }
+  const details = readProjectDetails();
+  if (details.error) {
+    showHomeworkError(details.error);
+    return false;
+  }
   if (homeworkEditingId) {
     const item = assignments.get(homeworkEditingId);
     if (!item) return false;
@@ -421,7 +559,8 @@ function saveHomework() {
       showHomeworkError("Choose the date it is due.");
       return false;
     }
-    putAssignment({ ...item, title: title, due: dueDate + "T" + dueTime, estimate_min: estimate });
+    putAssignment({ ...item, title: title, due: dueDate + "T" + dueTime, estimate_min: estimate,
+      notes: details.notes, links: details.links, checklist: details.checklist });
     // Sessions carry copies of the title; the server rewrites them, so keep the week on screen in step.
     weekState().blocks.forEach(function (block) { if (block.assignment_id === item.id) block.title = title; });
     closeHomeworkDialog();
@@ -429,6 +568,9 @@ function saveHomework() {
     return true;
   }
   const draft = homeworkDraft(title, dueDate, dueTime, estimate);
+  if (details.notes) draft.notes = details.notes;
+  if (details.links.length) draft.links = details.links;
+  if (details.checklist.length) draft.checklist = details.checklist;
   const problem = draftProblem(draft);
   if (problem) {
     showHomeworkError(problem.message);
@@ -456,6 +598,8 @@ document.getElementById("homework-form").addEventListener("submit", function (ev
 });
 document.getElementById("hw-cancel").addEventListener("click", function () { closeHomeworkDialog(); });
 document.getElementById("hw-custom").addEventListener("click", function () { chooseTimeMyself(); });
+document.getElementById("hw-add-link").addEventListener("click", function () { addProjectLink(null); });
+document.getElementById("hw-add-check").addEventListener("click", function () { addProjectCheck(null); });
 document.getElementById("homework-dialog").addEventListener("cancel", function () { homeworkEditingId = null; });
 document.getElementById("add-homework").addEventListener("click", function () { openHomeworkDialog(); });
 document.getElementById("view-day").addEventListener("click", function () { setPlannerView("day"); });

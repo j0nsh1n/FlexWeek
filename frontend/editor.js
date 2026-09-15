@@ -468,6 +468,12 @@ function closeForm() {
 function attachAssignment(block, draft) {
   const existing = draft.assignmentId ? assignments.get(draft.assignmentId) : null;
   const id = draft.assignmentId || "hw-" + newId().slice(2);
+  // Project details from the quick homework dialog; a draft without them keeps what the
+  // assignment already holds, because putAssignment only overwrites the keys given here.
+  const details = {};
+  if (draft.notes !== undefined) details.notes = draft.notes;
+  if (draft.links !== undefined) details.links = draft.links;
+  if (draft.checklist !== undefined) details.checklist = draft.checklist;
   putAssignment({
     id: id, title: block.title, course: block.course || null, category: block.category || null,
     priority: block.priority || 3, energy: block.energy || "medium", spotify_url: block.spotify_url || null,
@@ -476,6 +482,7 @@ function attachAssignment(block, draft) {
     focus_sessions: existing ? existing.focus_sessions || 0 : 0,
     completed: Boolean(block.completed),
     completed_at: block.completed ? (existing && existing.completed ? existing.completed_at : localStamp()) : null,
+    ...details,
   });
   const session = { ...block, assignment_id: id, latest: null };
   delete session.focus_minutes;

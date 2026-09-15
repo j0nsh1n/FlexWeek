@@ -201,7 +201,8 @@ h1 {
 }
 
 input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
-select {
+select,
+textarea {
   font: inherit;
   color: var(--text);
   background: var(--field);
@@ -211,7 +212,8 @@ select {
 }
 
 input:not([type="checkbox"]):not([type="radio"]):focus-visible,
-select:focus-visible {
+select:focus-visible,
+textarea:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 0;
   border-color: var(--accent);
@@ -872,6 +874,10 @@ button:disabled { cursor: wait; opacity: 0.6; }
   .unfinished-list .form-actions, .routine-list .form-actions, .restore-list .form-actions { grid-column: 1; grid-row: auto; }
   .unfinished-list button, .routine-list button, .restore-list button, .stage3-dialog .form-actions button { min-height: 44px; }
   .week-nav button, .week-menu > summary, .week-menu-items button { min-height: 44px; }
+  .project-details summary, .project-row input, .project-row button, .project-details > button { min-height: 44px; }
+  .check-toggle { min-width: 44px; min-height: 44px; }
+  .project-row.link-row { grid-template-columns: 1fr auto; }
+  .project-row.link-row input:nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
   .restore-create { grid-template-columns: 1fr; }
 }
 
@@ -897,6 +903,24 @@ button:disabled { cursor: wait; opacity: 0.6; }
 .kind-choice input:disabled + span { opacity: 0.7; }
 .advanced { border-top: 1px solid var(--hairline); padding-top: var(--space-2); }
 .advanced summary { cursor: pointer; color: var(--accent); font-weight: 650; margin-bottom: 0.35rem; }
+/* Project details on the homework dialog: notes, links and checklist (Stage 4). */
+.project-details {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--surface-card);
+  padding: 0.1rem 0.6rem 0.55rem;
+  margin: 0.4rem 0 0.6rem;
+}
+.project-details summary { cursor: pointer; color: var(--accent); font-weight: 650; padding: 0.45rem 0; }
+.project-details summary small { color: var(--muted); font-weight: 400; margin-left: 0.3rem; }
+.project-details textarea { width: 100%; resize: vertical; }
+.project-label { margin: 0.7rem 0 0.2rem; color: var(--text); font-weight: 700; }
+.project-rows { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.45rem 0; }
+.project-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto; gap: 0.35rem; align-items: center; }
+.project-row.check-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+.project-row input { width: 100%; }
+.project-row button { padding: 0.2rem 0.45rem; }
+.check-toggle { display: flex; align-items: center; justify-content: center; margin: 0; }
 .prefs-dialog .days label { flex-direction: row; margin: 0; }
 .block-dialog .form-error:not([hidden]) { padding: 0.45rem 0.6rem; border: 1px solid var(--error); border-radius: var(--radius); background: var(--error-soft); }
 [aria-invalid="true"] { outline: 2px solid var(--error); outline-offset: 1px; }

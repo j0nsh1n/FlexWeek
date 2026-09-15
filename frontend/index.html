@@ -309,6 +309,16 @@
         <label>Due time <select id="hw-due-time"></select></label>
       </div>
       <label>Estimated time <select id="hw-estimate"></select></label>
+      <details id="hw-project" class="project-details">
+        <summary>Project details <small>optional</small></summary>
+        <label>Notes <textarea id="hw-notes" maxlength="4000" rows="3" placeholder="What the task asks for, page numbers, what is left…"></textarea></label>
+        <p class="project-label">Links</p>
+        <div id="hw-links" class="project-rows"></div>
+        <button type="button" id="hw-add-link" class="secondary">Add link</button>
+        <p class="project-label">Checklist</p>
+        <div id="hw-checklist" class="project-rows"></div>
+        <button type="button" id="hw-add-check" class="secondary">Add step</button>
+      </details>
       <p id="hw-error" class="form-error" role="alert" hidden></p>
       <div class="form-actions">
         <button type="submit" id="hw-save">Add homework</button>

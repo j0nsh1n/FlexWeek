@@ -148,6 +148,19 @@ function safeSpotifyUrl(value) {
   return text;
 }
 
+/** A project link the server accepts: urlsplit finds http(s), a host, and no user:password part. */
+function safeProjectUrl(value) {
+  const text = String(value || "");
+  if (!text || textLength(text) > PROJECT_LIMITS.url) return "";
+  const match = /^https?:\/\/([^/?#]*)(?:[/?#].*)?$/i.exec(text);
+  if (!match || match[1].includes("@")) return "";
+  const authority = match[1];
+  const host = authority.startsWith("[")
+    ? authority.slice(0, authority.indexOf("]") + 1)
+    : authority.split(":")[0];
+  return host ? text : "";
+}
+
 function pomodoroPlan(durationMin, workMin, breakMin, longBreakMin, cadence) {
   const values = [durationMin, workMin, breakMin, longBreakMin];
   if (values.some(function (value) {
@@ -312,6 +325,8 @@ function formatWeekExportText(weekStart, blocks) {
 
 const MAX_IMPORT_BLOCKS = 100;
 const ENERGIES = ["high", "medium", "low"];
+// Project details on an assignment (docs/stage4-contract.md section 3), matching backend/models.py.
+const PROJECT_LIMITS = { notes: 4000, links: 20, linkLabel: 80, url: 500, checklist: 40, text: 80 };
 
 /** Reject an import the server would reject, before any week state is touched.
     Mirrors the TimeBlock contract in backend/models.py; a payload that passes
@@ -473,7 +488,8 @@ function importAssignmentError(item, index) {
   const at = "Homework " + (index + 1);
   if (!item || typeof item !== "object" || Array.isArray(item)) return at + " is not homework.";
   const allowed = new Set(["id", "title", "course", "category", "priority", "energy", "spotify_url", "due",
-    "estimate_min", "focus_minutes", "focus_sessions", "completed", "completed_at"]);
+    "estimate_min", "focus_minutes", "focus_sessions", "completed", "completed_at",
+    "notes", "links", "checklist"]);
   if (Object.keys(item).some(function (key) { return !allowed.has(key); })) return at + " has an unknown field.";
   if (typeof item.id !== "string" || !item.id || textLength(item.id) > 80) return at + " has a bad id.";
   if (typeof item.title !== "string" || !item.title.trim() || textLength(item.title) > 80) return at + " has a bad title.";
@@ -485,6 +501,46 @@ function importAssignmentError(item, index) {
     }
   }
   if (item.spotify_url != null && !safeSpotifyUrl(item.spotify_url)) return at + " has a bad Spotify link.";
+  if (item.notes !== undefined && (typeof item.notes !== "string" || textLength(item.notes) > PROJECT_LIMITS.notes)) {
+    return at + " has bad notes.";
+  }
+  if (item.links !== undefined) {
+    if (!Array.isArray(item.links) || item.links.length > PROJECT_LIMITS.links) return at + " has bad links.";
+    for (let i = 0; i < item.links.length; i += 1) {
+      const link = item.links[i];
+      if (!link || typeof link !== "object" || Array.isArray(link)) return at + " has a bad link.";
+      if (Object.keys(link).some(function (key) { return key !== "label" && key !== "url"; })) {
+        return at + " has a bad link.";
+      }
+      if (typeof link.label !== "string" || !link.label.trim() || textLength(link.label) > PROJECT_LIMITS.linkLabel) {
+        return at + " has a bad link name.";
+      }
+      if (typeof link.url !== "string" || !link.url || textLength(link.url) > PROJECT_LIMITS.url
+          || !safeProjectUrl(link.url)) {
+        return at + " has a bad link address.";
+      }
+    }
+  }
+  if (item.checklist !== undefined) {
+    if (!Array.isArray(item.checklist) || item.checklist.length > PROJECT_LIMITS.checklist) {
+      return at + " has a bad checklist.";
+    }
+    const ids = new Set();
+    for (let i = 0; i < item.checklist.length; i += 1) {
+      const step = item.checklist[i];
+      if (!step || typeof step !== "object" || Array.isArray(step)) return at + " has a bad checklist item.";
+      if (Object.keys(step).some(function (key) { return key !== "id" && key !== "text" && key !== "done"; })) {
+        return at + " has a bad checklist item.";
+      }
+      if (typeof step.id !== "string" || !step.id || textLength(step.id) > 80
+          || typeof step.text !== "string" || !step.text.trim() || textLength(step.text) > PROJECT_LIMITS.text
+          || (step.done !== undefined && typeof step.done !== "boolean")) {
+        return at + " has a bad checklist item.";
+      }
+      if (ids.has(step.id)) return at + " repeats a checklist id.";
+      ids.add(step.id);
+    }
+  }
   if (item.priority !== undefined && [1, 2, 3, 4].indexOf(item.priority) === -1) return at + " has a bad priority.";
   if (item.energy !== undefined && ENERGIES.indexOf(item.energy) === -1) return at + " has a bad energy.";
   if (!isNaiveStamp(item.due)) return at + " has a bad due date.";
@@ -841,13 +897,25 @@ const assignments = new Map();
 const dirtyAssignments = new Set();
 
 function assignmentBody(item) {
-  return {
+  const body = {
     id: item.id, title: item.title, course: item.course || null, category: item.category || null,
     priority: item.priority || 3, energy: item.energy || "medium", spotify_url: item.spotify_url || null,
     due: item.due, estimate_min: item.estimate_min, focus_minutes: item.focus_minutes || 0,
     focus_sessions: item.focus_sessions || 0, completed: Boolean(item.completed),
     completed_at: item.completed ? item.completed_at : null,
   };
+  // Project details (Stage 4) ride along only when non-empty, as the server stores them,
+  // so saves, history snapshots and exports cannot drop them.
+  if (item.notes) body.notes = item.notes;
+  if (Array.isArray(item.links) && item.links.length) {
+    body.links = item.links.map(function (link) { return { label: link.label, url: link.url }; });
+  }
+  if (Array.isArray(item.checklist) && item.checklist.length) {
+    body.checklist = item.checklist.map(function (step) {
+      return { id: step.id, text: step.text, done: Boolean(step.done) };
+    });
+  }
+  return body;
 }
 
 // For each loaded week, the minutes each assignment has planned in later weeks: the
@@ -921,7 +989,7 @@ const weekJumpEl = document.getElementById("week-jump");
 const channel = typeof BroadcastChannel === "function" ? new BroadcastChannel("flexweek.session") : null;
 
 function lockEditor(locked) {
-  planner.querySelectorAll("button, input, select").forEach(el => { el.disabled = locked; });
+  planner.querySelectorAll("button, input, select, textarea").forEach(el => { el.disabled = locked; });
   solveEl.disabled = locked;
   document.getElementById("import-week").disabled = locked;
 }
