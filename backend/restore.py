@@ -61,3 +61,34 @@ def diff_snapshots(current: dict, stored: dict) -> dict:
             "removed": assignments_removed,
         },
     }
+
+
+def _routine_core(row: dict) -> dict:
+    return {"id": row["id"], "name": row["name"], "blocks": row["blocks"], "revision": row["revision"]}
+
+
+def diff_transfer(current: dict, incoming: dict) -> dict:
+    changes = diff_snapshots(current, incoming)
+    current_routines = {row["id"]: row for row in current["routines"]}
+    incoming_routines = {row["id"]: row for row in incoming["routines"]}
+    changes["routines"] = {
+        "added": [
+            {"id": key, "name": incoming_routines[key]["name"]}
+            for key in sorted(incoming_routines)
+            if key not in current_routines
+        ],
+        "changed": [
+            {"id": key, "name": incoming_routines[key]["name"]}
+            for key in sorted(incoming_routines)
+            if key in current_routines
+            and canonical(_routine_core(current_routines[key]))
+            != canonical(_routine_core(incoming_routines[key]))
+        ],
+        "removed": [
+            {"id": key, "name": current_routines[key]["name"]}
+            for key in sorted(current_routines)
+            if key not in incoming_routines
+        ],
+    }
+    changes["preferences_changed"] = canonical(current["preferences"]) != canonical(incoming["preferences"])
+    return changes

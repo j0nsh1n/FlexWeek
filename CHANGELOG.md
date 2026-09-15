@@ -6,6 +6,16 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Account recovery, deletion and local-to-hosted transfer (2026-09-14, backend).
+  Registering returns eight one-time recovery codes (hashes only in SQLite).
+  `POST /api/auth/recover` sets a new password, drops other sessions and signs
+  the student in. Signed-in students can change password, replace unused codes,
+  or delete the account with the current password. `GET /api/storage-info` now
+  includes username and public origin. `POST /api/account-export` and previewed
+  `POST /api/account-import` copy weeks, assignments, preferences and routines
+  onto another account after a Stage 3 restore point of the destination
+  schedule. Automatic sync is still out of scope. Rules are in
+  `docs/stage6-contract.md`.
 - Comfort settings UI (2026-09-14, frontend). Settings are grouped into
   Appearance, Focus, Notifications and Account. Students can choose a timer
   preset, preview and explicitly accept 15-minute calendar rounding, test an

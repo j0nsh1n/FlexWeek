@@ -357,8 +357,12 @@ Current scope mapping:
 - Verification: recovery abuse/expiry/revocation tests, ownership and CSRF checks,
   backup restore drills, cross-client revision conflicts, installation/upgrade
   smoke checks and physical-device evidence.
-- Status: [ ] Planned. Continues Phase 6 and Phase 8 delivery work in parallel;
-  hosted release readiness does not wait for every optional feature above.
+- Status: [~] Backend complete locally on `grok/stage6-access-backend`.
+  Recovery codes, password change, deletion, storage-info username/origin and
+  explicit local-to-hosted transfer are implemented against the proposed
+  contract in `docs/stage6-contract.md`. Claude still owns the UI. Hosted
+  deployment, installers, Safari/iPhone and accessibility review remain later
+  work. No executable was built.
 
 ### Stage 7. Add longer-range navigation and validate the student experience
 - [ ] Add Month view for deadlines and projects with date-to-Day navigation.

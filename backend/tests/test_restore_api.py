@@ -98,7 +98,12 @@ def create_point(client: TestClient, label: str, operation_id: str):
 def test_storage_info_is_local_on_loopback(alice: TestClient) -> None:
     response = alice.get("/api/storage-info")
     assert response.status_code == 200, response.text
-    assert response.json() == {"mode": "local", "label": "On this device"}
+    assert response.json() == {
+        "mode": "local",
+        "label": "On this device",
+        "username": "alice",
+        "origin": "http://testserver",
+    }
 
 
 def test_storage_info_is_hosted_on_a_public_origin(tmp_path: Path) -> None:
@@ -114,7 +119,12 @@ def test_storage_info_is_hosted_on_a_public_origin(tmp_path: Path) -> None:
         )
         response = client.get("/api/storage-info")
         assert response.status_code == 200, response.text
-        assert response.json() == {"mode": "hosted", "label": "On your FlexWeek server"}
+        assert response.json() == {
+            "mode": "hosted",
+            "label": "On your FlexWeek server",
+            "username": "alice",
+            "origin": "https://flexweek.example",
+        }
 
 
 def test_empty_account_has_no_restore_points(alice: TestClient) -> None:

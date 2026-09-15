@@ -73,6 +73,23 @@ RESTORE_POINTS_TABLE = """
         UNIQUE(user_id, id)
     )
 """
+RECOVERY_CODES_TABLE = """
+    CREATE TABLE IF NOT EXISTS recovery_codes (
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        code_hash TEXT NOT NULL,
+        PRIMARY KEY (user_id, code_hash)
+    )
+"""
+ACCOUNT_TABLES = (
+    "sessions",
+    "weeks",
+    "assignments",
+    "routines",
+    "restore_points",
+    "operations",
+    "preferences",
+    "recovery_codes",
+)
 OPERATIONS_TABLE = """
     CREATE TABLE IF NOT EXISTS operations (
         seq INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -240,6 +257,7 @@ def initialize(path: Path) -> None:
             {RESTORE_POINTS_TABLE};
             {OPERATIONS_TABLE};
             {PREFERENCES_TABLE};
+            {RECOVERY_CODES_TABLE};
             CREATE TABLE IF NOT EXISTS auth_attempts (
                 key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL
             );
@@ -248,6 +266,12 @@ def initialize(path: Path) -> None:
         migrate_preferences(db)
         allow_system_theme(db)
         migrate_assignments(db)
+
+
+def delete_account(db: sqlite3.Connection, user_id: int) -> None:
+    for table in ACCOUNT_TABLES:
+        db.execute(f"DELETE FROM {table} WHERE user_id = ?", (user_id,))
+    db.execute("DELETE FROM users WHERE id = ?", (user_id,))
 
 
 def create_session(db: sqlite3.Connection, user_id: int) -> str:

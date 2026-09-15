@@ -1,6 +1,18 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-14. Student-experience Stage 6 backend is on
+  `grok/stage6-access-backend` (worktree
+  `~/.worktrees/flexweek-stage6-backend`), based on `feat/stage5-comfort-frontend`
+  at 38817ae. Recovery codes, password change, account deletion, storage-info
+  username/origin, and password-gated export plus previewed import live behind
+  the proposed contract in `docs/stage6-contract.md`. GLM is not in this
+  harness, so Grok wrote the contract too. Claude still owns recovery, transfer
+  and storage-status UI. Hosted Render, installers, Safari and accessibility
+  review are out of this slice. spec.md drift: those routes and the extra
+  storage-info fields are not in the public API table until the owner approves
+  the contract. Web-only gate: 207 frontend tests, 259 Python tests. Nothing
+  pushed.
 - Date: 2026-09-14. The Stage 5 shared frontend is complete locally on
   `feat/stage5-comfort-frontend`, based on Grok's backend at 10c9334. Settings
   now use Appearance, Focus, Notifications and Account sections; presets and
@@ -118,6 +130,7 @@ desktop/check_bundle.py  glibc and missing-library check, no Qt imports
 desktop/build_windows.ps1 Windows standalone build preparation
 desktop/tests/           origin/server tests and isolated real WebEngine probes
 backend/weeks.py         week-date helpers, no framework import
+backend/recovery.py      one-time recovery codes, no HTTP
 backend/restore.py       restore-point snapshot diff and token, no HTTP
 backend/app.py           account/session/ownership APIs and static frontend
 backend/storage.py       SQLite, scrypt, hashed sessions
@@ -146,6 +159,9 @@ Assignments are keyed (user_id, id) with a JSON body and revision. A
 flexible block with `assignment_id` is a work session of that assignment.
 Routines are keyed (user_id, id) as named templates of locked blocks.
 Restore points snapshot all of an account's weeks and assignments.
+Recovery codes are hashed per user and shown only once at register or regenerate.
+A format-3 export can copy weeks, assignments, preferences and routines onto
+another account after a preview. There is no automatic local/hosted sync.
 Recorded `operation_id` values make a retried write return the first result.
 
 ## Non-Obvious Decisions
@@ -244,6 +260,15 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-14, `grok/stage6-access-backend`: Grok's Stage 6 backend slice.
+  Contract is `docs/stage6-contract.md` (still proposed). Recovery is eight
+  hashed one-time codes, not email. Change password and recover drop other
+  sessions. Delete cascades every row for that user_id. Storage-info adds
+  username and origin. Transfer is password-gated export and a restore-like
+  preview/import of format 3 (weeks, assignments, prefs, routines). Claude
+  still owns the UI. spec.md drift: new auth/transfer routes and storage-info
+  fields. Web-only gate: 207 frontend tests, 259 Python tests. Cartographer
+  skipped (not installed in the project venv). Nothing pushed.
 - 2026-09-14, `feat/stage5-comfort-frontend`: Shared Stage 5 UI complete over
   backend 10c9334. New `frontend/comfort.js` owns presets, split previews, alert
   previews and remembered layout. Settings writes wait for in-flight layout

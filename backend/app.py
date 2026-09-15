@@ -37,14 +37,22 @@ from backend.models import (
     SpreadRequest,
     TimeBlock,
     WeekRequest,
+    valid_naive_stamp,
     valid_spotify_url,
 )
-from backend.restore import canonical, diff_snapshots, state_token
+from backend.recovery import (
+    RECOVERY_CODE_COUNT,
+    generate_recovery_codes,
+    hash_recovery_code,
+    recovery_code_matches,
+)
+from backend.restore import canonical, diff_snapshots, diff_transfer, state_token
 from backend.solver import reschedule_after_miss, reschedule_running_late, solve
 from backend.storage import (
     SESSION_SECONDS,
     connect,
     create_session,
+    delete_account,
     digest,
     initialize,
     password_hash,
@@ -68,6 +76,10 @@ ROUTINE_LIMIT = "An account holds at most 50 routines"
 ROUTINE_UNKNOWN = "Routine not found"
 RESTORE_UNKNOWN = "Restore point not found"
 RESTORE_STALE = "This preview is out of date. Refresh it before restoring."
+IMPORT_STALE = "This preview is out of date. Refresh it before importing."
+RECOVER_WRONG = "Incorrect username or recovery code"
+PASSWORD_WRONG = "Incorrect password"
+PASSWORD_SAME = "New password must be different"
 OPERATION_CONFLICT = "This operation was already used with different data."
 MAX_ASSIGNMENTS = 1000
 MAX_ROUTINES = 50
@@ -411,6 +423,15 @@ def replace_account(db: sqlite3.Connection, user_id: int, snapshot: dict) -> dic
     return {"weeks": weeks, "assignments": assignments}
 
 
+def replace_recovery_codes(db: sqlite3.Connection, user_id: int, codes: list[str]) -> None:
+    db.execute("DELETE FROM recovery_codes WHERE user_id = ?", (user_id,))
+    for code in codes:
+        db.execute(
+            "INSERT INTO recovery_codes(user_id, code_hash) VALUES (?, ?)",
+            (user_id, hash_recovery_code(code)),
+        )
+
+
 def encode_routine(routine: Routine) -> str:
     return canonical([block.model_dump() for block in routine.blocks])
 
@@ -635,6 +656,139 @@ class Preferences(BaseModel):
         return self
 
 
+class PasswordConfirm(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    password: str = Field(min_length=12, max_length=128)
+
+
+class PasswordChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    current_password: str = Field(min_length=12, max_length=128)
+    new_password: str = Field(min_length=12, max_length=128)
+
+
+class RecoverRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    username: str = Field(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_]+$")
+    code: str = Field(min_length=8, max_length=64)
+    password: str = Field(min_length=12, max_length=128)
+
+    @field_validator("username")
+    @classmethod
+    def normalize(cls, value: str) -> str:
+        return value.lower()
+
+
+class TransferAssignment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, max_length=80)
+    body: AssignmentContent
+    revision: int = Field(ge=0, le=2**53 - 1)
+
+    @model_validator(mode="after")
+    def assignment_ids_match(self) -> TransferAssignment:
+        if self.id != self.body.id:
+            raise ValueError("assignment id and body.id must match")
+        return self
+
+
+class TransferRoutine(Routine):
+    created_at: str
+    updated_at: str
+
+    _stamps = field_validator("created_at", "updated_at")(valid_naive_stamp)
+
+
+class TransferSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    format: Literal[3]
+    exported_at: str
+    username: str = Field(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_]+$")
+    weeks: list[SavedWeek] = Field(max_length=400)
+    assignments: list[TransferAssignment] = Field(max_length=1000)
+    preferences: Preferences
+    routines: list[TransferRoutine] = Field(max_length=50)
+
+    _exported_at = field_validator("exported_at")(valid_naive_stamp)
+
+    @field_validator("username")
+    @classmethod
+    def normalize_username(cls, value: str) -> str:
+        return value.lower()
+
+    @model_validator(mode="after")
+    def snapshot_refs_are_consistent(self) -> TransferSnapshot:
+        starts = [week.week_start for week in self.weeks]
+        if len(set(starts)) != len(starts):
+            raise ValueError("week_start values must be unique")
+        assignment_ids = [item.id for item in self.assignments]
+        if len(set(assignment_ids)) != len(assignment_ids):
+            raise ValueError("assignment ids must be unique")
+        routine_ids = [item.id for item in self.routines]
+        if len(set(routine_ids)) != len(routine_ids):
+            raise ValueError("routine ids must be unique")
+        owned = set(assignment_ids)
+        for week in self.weeks:
+            for block in week.blocks:
+                if block.assignment_id and block.assignment_id not in owned:
+                    raise ValueError("assignment_id must name an assignment in this snapshot")
+        return self
+
+
+class TransferPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    snapshot: TransferSnapshot
+
+
+class TransferApplyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    snapshot: TransferSnapshot
+    state_token: str = Field(min_length=1, max_length=128)
+    operation_id: str = Field(min_length=1, max_length=80)
+
+
+def apply_transfer(db: sqlite3.Connection, user_id: int, snapshot: TransferSnapshot) -> dict:
+    write_preferences(db, user_id, snapshot.preferences)
+    db.execute("DELETE FROM routines WHERE user_id = ?", (user_id,))
+    for routine in snapshot.routines:
+        db.execute(
+            """INSERT INTO routines(user_id, id, name, body, revision, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                user_id,
+                routine.id,
+                routine.name,
+                encode_routine(routine),
+                routine.revision,
+                routine.created_at,
+                routine.updated_at,
+            ),
+        )
+    replaced = replace_account(
+        db,
+        user_id,
+        {
+            "weeks": [
+                {
+                    "week_start": week.week_start,
+                    "blocks": dump_blocks(week.blocks),
+                    "revision": week.revision,
+                }
+                for week in snapshot.weeks
+            ],
+            "assignments": [
+                {"id": item.id, "body": item.body.model_dump(), "revision": item.revision}
+                for item in snapshot.assignments
+            ],
+        },
+    )
+    return {
+        **replaced,
+        "preferences": snapshot.preferences.model_dump(),
+        "routines": [item.model_dump() for item in snapshot.routines],
+    }
+
+
 class TimerSplitRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     duration_min: int | None = Field(default=None, ge=15, le=7140)
@@ -704,6 +858,54 @@ def preferences_from_row(row: sqlite3.Row) -> dict:
         sidebar_collapsed=bool(comfort.get("sidebar_collapsed", False)),
         sidebar_width_px=comfort.get("sidebar_width_px"),
     ).model_dump()
+
+
+def capture_transfer(db: sqlite3.Connection, user_id: int) -> dict:
+    snapshot = capture_account(db, user_id)
+    prefs = db.execute("SELECT * FROM preferences WHERE user_id = ?", (user_id,)).fetchone()
+    assert prefs is not None
+    routines = [
+        routine_view(row)
+        for row in db.execute(
+            """SELECT id, name, body, revision, created_at, updated_at FROM routines
+            WHERE user_id = ? ORDER BY name, id""",
+            (user_id,),
+        )
+    ]
+    return {
+        **snapshot,
+        "preferences": preferences_from_row(prefs),
+        "routines": routines,
+    }
+
+
+def write_preferences(db: sqlite3.Connection, user_id: int, preferences: Preferences) -> dict:
+    db.execute(
+        """UPDATE preferences
+        SET theme = ?, reminders_enabled = ?, reminder_lead_min = ?, reminder_sound = ?,
+            reminder_dnd_override = ?, timer_work_min = ?, timer_break_min = ?,
+            timer_long_break_min = ?, timer_long_break_every = ?, auto_split_pomodoro = ?,
+            default_spotify_url = ?, alarms_json = ?, availability_json = ?, comfort_json = ?
+        WHERE user_id = ?""",
+        (
+            preferences.theme,
+            int(preferences.reminders_enabled),
+            preferences.reminder_lead_min,
+            int(preferences.reminder_sound),
+            int(preferences.reminder_dnd_override),
+            preferences.timer_work_min,
+            preferences.timer_break_min,
+            preferences.timer_long_break_min,
+            preferences.timer_long_break_every,
+            int(preferences.auto_split_pomodoro),
+            preferences.default_spotify_url,
+            json.dumps([alarm.model_dump() for alarm in preferences.alarms], separators=(",", ":")),
+            encode_availability(preferences),
+            encode_comfort(preferences),
+            user_id,
+        ),
+    )
+    return preferences.model_dump()
 
 
 def solve_availability(row: sqlite3.Row | None) -> tuple[list[int], list[GridWindow]]:
@@ -798,8 +1000,10 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             raise HTTPException(
                 429, "Too many attempts. Try again in five minutes.", headers={"Retry-After": "300"}
             )
+        codes: list[str] | None = None
         if register:
             encoded = password_hash(data.password)
+            codes = generate_recovery_codes()
             try:
                 with connect(path) as db:
                     cursor = db.execute(
@@ -807,6 +1011,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                     )
                     user_id = int(cursor.lastrowid or 0)
                     db.execute("INSERT INTO preferences(user_id) VALUES (?)", (user_id,))
+                    replace_recovery_codes(db, user_id, codes)
                     token = create_session(db, user_id)
             except sqlite3.IntegrityError as exc:
                 raise HTTPException(409, "Username unavailable") from exc
@@ -825,7 +1030,10 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 "DELETE FROM sessions WHERE token_hash = ?", (digest(request.cookies.get(COOKIE, "")),)
             )
         session_response(response, token)
-        return {"id": user_id, "username": data.username}
+        result = {"id": user_id, "username": data.username}
+        if codes is not None:
+            result["recovery_codes"] = codes
+        return result
 
     @app.post("/api/auth/register", status_code=201)
     def register(data: Credentials, request: Request, response: Response) -> dict:
@@ -847,6 +1055,113 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             db.execute(
                 "DELETE FROM sessions WHERE token_hash = ?", (digest(request.cookies.get(COOKIE, "")),)
             )
+        response.delete_cookie(COOKIE, path="/", httponly=True, secure=secure, samesite="strict")
+
+    def deny_if_throttled(request: Request, username: str) -> None:
+        address = request.client.host if request.client else "unknown"
+        if not throttle(path, address, username):
+            raise HTTPException(
+                429, "Too many attempts. Try again in five minutes.", headers={"Retry-After": "300"}
+            )
+
+    def require_password(user_id: int, password: str) -> None:
+        with connect(path) as db:
+            row = db.execute("SELECT password_hash FROM users WHERE id = ?", (user_id,)).fetchone()
+        if row is None or not password_matches(password, row["password_hash"]):
+            raise HTTPException(401, PASSWORD_WRONG)
+
+    @app.post("/api/auth/recover")
+    def recover(data: RecoverRequest, request: Request, response: Response) -> dict:
+        deny_if_throttled(request, data.username)
+        dummy = hash_recovery_code("missing-recovery-code")
+        with connect(path) as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT * FROM users WHERE username = ?", (data.username,)).fetchone()
+            hashes = (
+                [
+                    item["code_hash"]
+                    for item in db.execute(
+                        "SELECT code_hash FROM recovery_codes WHERE user_id = ?", (row["id"],)
+                    )
+                ]
+                if row is not None
+                else []
+            )
+            real = set(hashes)
+            padded = list(hashes)
+            while len(padded) < RECOVERY_CODE_COUNT:
+                padded.append(dummy)
+            matched = None
+            for stored in padded:
+                if recovery_code_matches(data.code, stored):
+                    matched = stored
+            if row is None or matched is None or matched not in real:
+                raise HTTPException(401, RECOVER_WRONG)
+            db.execute(
+                "DELETE FROM recovery_codes WHERE user_id = ? AND code_hash = ?",
+                (row["id"], matched),
+            )
+            db.execute(
+                "UPDATE users SET password_hash = ? WHERE id = ?",
+                (password_hash(data.password), row["id"]),
+            )
+            db.execute("DELETE FROM sessions WHERE user_id = ?", (row["id"],))
+            token = create_session(db, row["id"])
+            user_id = row["id"]
+            username = row["username"]
+        session_response(response, token)
+        return {"id": user_id, "username": username}
+
+    @app.get("/api/auth/recovery-status")
+    def recovery_status(account: Annotated[dict, Depends(user)]) -> dict:
+        with connect(path) as db:
+            row = db.execute(
+                "SELECT COUNT(*) AS n FROM recovery_codes WHERE user_id = ?", (account["id"],)
+            ).fetchone()
+        return {"remaining": int(row["n"]) if row else 0}
+
+    @app.post("/api/auth/recovery-codes")
+    def refresh_recovery_codes(
+        data: PasswordConfirm, request: Request, account: Annotated[dict, Depends(user)]
+    ) -> dict:
+        deny_if_throttled(request, account["username"])
+        require_password(account["id"], data.password)
+        codes = generate_recovery_codes()
+        with connect(path) as db:
+            db.execute("BEGIN IMMEDIATE")
+            replace_recovery_codes(db, account["id"], codes)
+        return {"recovery_codes": codes, "remaining": len(codes)}
+
+    @app.post("/api/auth/password")
+    def change_password(
+        data: PasswordChange, request: Request, response: Response, account: Annotated[dict, Depends(user)]
+    ) -> dict:
+        deny_if_throttled(request, account["username"])
+        with connect(path) as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT password_hash FROM users WHERE id = ?", (account["id"],)).fetchone()
+            if row is None or not password_matches(data.current_password, row["password_hash"]):
+                raise HTTPException(401, PASSWORD_WRONG)
+            if password_matches(data.new_password, row["password_hash"]):
+                raise HTTPException(422, PASSWORD_SAME)
+            db.execute(
+                "UPDATE users SET password_hash = ? WHERE id = ?",
+                (password_hash(data.new_password), account["id"]),
+            )
+            db.execute("DELETE FROM sessions WHERE user_id = ?", (account["id"],))
+            token = create_session(db, account["id"])
+        session_response(response, token)
+        return {"id": account["id"], "username": account["username"]}
+
+    @app.delete("/api/auth/account", status_code=204)
+    def remove_account(
+        data: PasswordConfirm, request: Request, response: Response, account: Annotated[dict, Depends(user)]
+    ) -> None:
+        deny_if_throttled(request, account["username"])
+        require_password(account["id"], data.password)
+        with connect(path) as db:
+            db.execute("BEGIN IMMEDIATE")
+            delete_account(db, account["id"])
         response.delete_cookie(COOKIE, path="/", httponly=True, secure=secure, samesite="strict")
 
     @app.get("/api/week")
@@ -1055,32 +1370,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
     @app.put("/api/preferences")
     def put_preferences(preferences: Preferences, account: Annotated[dict, Depends(user)]) -> dict:
         with connect(path) as db:
-            db.execute(
-                """UPDATE preferences
-                SET theme = ?, reminders_enabled = ?, reminder_lead_min = ?, reminder_sound = ?,
-                    reminder_dnd_override = ?, timer_work_min = ?, timer_break_min = ?,
-                    timer_long_break_min = ?, timer_long_break_every = ?, auto_split_pomodoro = ?,
-                    default_spotify_url = ?, alarms_json = ?, availability_json = ?, comfort_json = ?
-                WHERE user_id = ?""",
-                (
-                    preferences.theme,
-                    int(preferences.reminders_enabled),
-                    preferences.reminder_lead_min,
-                    int(preferences.reminder_sound),
-                    int(preferences.reminder_dnd_override),
-                    preferences.timer_work_min,
-                    preferences.timer_break_min,
-                    preferences.timer_long_break_min,
-                    preferences.timer_long_break_every,
-                    int(preferences.auto_split_pomodoro),
-                    preferences.default_spotify_url,
-                    json.dumps([alarm.model_dump() for alarm in preferences.alarms], separators=(",", ":")),
-                    encode_availability(preferences),
-                    encode_comfort(preferences),
-                    account["id"],
-                ),
-            )
-        return preferences.model_dump()
+            return write_preferences(db, account["id"], preferences)
 
     @app.get("/api/routines")
     def get_routines(account: Annotated[dict, Depends(user)]) -> dict:
@@ -1124,11 +1414,67 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         return result
 
     @app.get("/api/storage-info")
-    def get_storage_info(_account: Annotated[dict, Depends(user)]) -> dict:
+    def get_storage_info(account: Annotated[dict, Depends(user)]) -> dict:
         hostname = parsed.hostname or ""
         if hostname in {"127.0.0.1", "localhost", "testserver"}:
-            return {"mode": "local", "label": "On this device"}
-        return {"mode": "hosted", "label": "On your FlexWeek server"}
+            mode, label = "local", "On this device"
+        else:
+            mode, label = "hosted", "On your FlexWeek server"
+        return {
+            "mode": mode,
+            "label": label,
+            "username": account["username"],
+            "origin": public_origin,
+        }
+
+    @app.post("/api/account-export")
+    def export_account(
+        data: PasswordConfirm, request: Request, account: Annotated[dict, Depends(user)]
+    ) -> dict:
+        deny_if_throttled(request, account["username"])
+        require_password(account["id"], data.password)
+        with connect(path) as db:
+            payload = {
+                "format": 3,
+                "exported_at": naive_now(),
+                "username": account["username"],
+                **capture_transfer(db, account["id"]),
+            }
+        return TransferSnapshot.model_validate(payload).model_dump()
+
+    @app.post("/api/account-import/preview")
+    def preview_account_import(
+        payload: TransferPreviewRequest, account: Annotated[dict, Depends(user)]
+    ) -> dict:
+        incoming = payload.snapshot.model_dump()
+        with connect(path) as db:
+            current = capture_transfer(db, account["id"])
+        return {
+            "state_token": state_token({"current": current, "incoming": incoming}),
+            "source_username": payload.snapshot.username,
+            "changes": diff_transfer(current, incoming),
+        }
+
+    @app.post("/api/account-import")
+    def apply_account_import(
+        payload: TransferApplyRequest, account: Annotated[dict, Depends(user)]
+    ) -> dict:
+        incoming = payload.snapshot.model_dump()
+        digest_value = payload_digest(payload.model_dump())
+        with connect(path) as db:
+            db.execute("BEGIN IMMEDIATE")
+            remembered = recall_operation(db, account["id"], payload.operation_id, digest_value)
+            if remembered is not None:
+                return remembered
+            current = capture_transfer(db, account["id"])
+            if payload.state_token != state_token({"current": current, "incoming": incoming}):
+                raise HTTPException(409, IMPORT_STALE)
+            stamp = naive_now()
+            recovery = insert_restore_point(db, account["id"], f"Before import — {stamp}")
+            replaced = apply_transfer(db, account["id"], payload.snapshot)
+            result = {"recovery_id": recovery["id"], **replaced}
+            remember_operation(db, account["id"], payload.operation_id, digest_value, result)
+        return result
 
     @app.get("/api/timer-presets")
     def get_timer_presets(_account: Annotated[dict, Depends(user)]) -> dict:
