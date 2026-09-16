@@ -5,9 +5,10 @@ Congressional App Challenge 2026. Submit **Sunday, Oct 25, 2026, 8:00 p.m. PDT**
 phase may span several implementation slices. The original Sep 6 contest brief
 (working title Reslot) is archived in [docs/cac-build-plan.md](docs/cac-build-plan.md).
 
-The active next-work plan is the [student experience revision](#student-experience-revision-2026-09-12).
-Earlier phase descriptions and the first implementation slice retain their dated
-planning history; the revision maps remaining work into current stages.
+The active next-work plan is [release polish](#release-polish-2026-09-16-0101-then-011)
+— 0.10.1, then 0.11. The [student experience revision](#student-experience-revision-2026-09-12)
+stays the stage map for everything still open. Earlier phase descriptions and the
+first implementation slice retain their dated planning history.
 
 ## Phase 1 — Skeleton (Sep 6–12, 2026)
 - Tasks:
@@ -418,6 +419,101 @@ AI chat/Ollama, Google Calendar OAuth, LMS bridges, syllabus OCR and Qt custom
 painting remain outside this plan. More category chips, a social feed, streaks and
 productivity scores are not proposed. Existing alarms, Spotify links and themes
 receive targeted improvements rather than a wholesale replacement.
+
+## Release polish (2026-09-16): 0.10.1, then 0.11
+
+v0.10.0 is published, so classmates can install FlexWeek and hit its rough
+edges. The owner's plan of 2026-09-16 splits the response into two releases.
+0.10.1 is a hotfix: only the things that stop or mislead a first-time student.
+0.11 is the polish release: nothing flashes or looks ignored, motion is added
+where it explains a change, and a student can choose how the app looks. Neither
+release adds a stage. Stage 7's open trials and Phase 8 delivery continue
+alongside them.
+
+### 0.10.1 — hotfix, ship first
+
+- **P0. The assignment name field loses and duplicates letters.** Typing fast
+  into the setup step 3 name box (`setup-homework-title`) and the Add homework
+  dialog (`f-title`, `frontend/editor.js:287`) drops characters; one report
+  ended up with a single "H". Reproduce on the packaged build before changing
+  anything: no code in `frontend/setup.js` or `frontend/editor.js` rebuilds
+  either input on a keystroke today, so the cause is not yet identified. Open
+  suspects are the 30-second live and reminder ticks
+  (`frontend/app.js:2690-2691`) landing mid-word, and Qt WebEngine's own text
+  input path. Whatever the cause, the fix must never rebuild the element or
+  reassign its value while it holds focus. Needs a node test that types a long
+  name one character at a time into both fields and asserts the whole string
+  survives.
+- **P0. Running late has to show that it did something.** Every refusal inside
+  `openRunningLate` (`frontend/adapt.js:172-199`) only writes to the status
+  line, which a student does not look at, so the button reads as dead. On the
+  other side, accepting a preview calls `clearSolveResult()`, wiping the moves
+  at the moment they matter. Wanted: the preview lists what moves, accepting
+  leaves a visible locked "Running late" block on the grid, and a toast states
+  the outcome — including "nothing moved" when no work shifted. A quiet click
+  is the bug, not a nuance.
+- **P1. The week is too dense to read.** Thin the sidebar, and rename "Why the
+  rest fit" (`frontend/app.js:1950`) to something a 15-year-old reads without
+  stopping. Day view stays the plain view; it gets no new controls here.
+- **P1. A nearly empty month looks broken.** Make the date numbers larger
+  (`frontend/styles.css:654-656`, cells built in `frontend/month.js:176-186`)
+  and add one line of copy — along the lines of "only this is due so far" — so
+  a month holding one assignment reads as correct rather than failed. Build it
+  on the existing `#month-unscheduled` note rather than a new region.
+- **P2. Setup should not name the sport for the student.** The placeholder on
+  `frontend/index.html:284` is "Sports", and students accept it as the name.
+  Use an example instead, such as "Soccer, band…". The category label in
+  `frontend/app.js:19` stays "Sports".
+- Out of 0.10.1: new animation, the appearance workshop, Chromebook and hosted
+  web, Year view.
+- Complete when: a classmate installs 0.10.1, types a real assignment name that
+  survives intact, presses Running late and can see what changed, and opens
+  Month without asking whether the app is broken.
+- Verification: node tests for fast typing in both name fields and for the
+  Running late outcome message; a real Qt WebEngine walkthrough of setup step 3,
+  Running late and a one-assignment month at desktop and phone widths;
+  `.venv/bin/python scripts/verify.py` green before the tag.
+- Status: [ ]
+
+### 0.11 — seamless, motion and appearance
+
+**Seamless.** Solve, Spread and Running late each show a wait state: no blank
+flash while the request is out, and no silent result when the honest answer is
+"nothing changed". Moving between Week, Day and Month keeps the selected date.
+Adding work from a category chip stays a single gesture.
+
+**Motion, only where it explains something.** Fade or slide on a view switch,
+new blocks popping in after Solve, dialogs opening, and the Running late block
+drawing itself onto the grid. Never animate `backdrop-filter` — it flickers on
+Windows. Honour `prefers-reduced-motion` everywhere.
+
+**Appearance: packs first, then a Customize submenu.**
+- One tap picks a theme pack: System, Light frost, Dark frost, plus Nocturne
+  and Slate while those still ship (`frontend/theme.js`). A pack sets the
+  background, the chrome, the accent and the default motion level.
+- "Customize…" stays collapsed and holds three things: accent colour, an
+  optional "use the accent for category chips", and Motion set to Off, Normal
+  or Extra. Extra means pop-in plus the view slide. Off behaves exactly like
+  `prefers-reduced-motion` and is the safe setting on Windows. No blur sliders
+  and no per-widget curves.
+- Choices persist on the account, next to the existing theme preference.
+- On phones the menu offers the pack and motion only; the submenu must not take
+  over the screen.
+- Contest cap: packs, accent, and Off/Normal/Extra. A full per-surface colour
+  picker is post-CAC work unless the owner says otherwise.
+
+**P2. Account copy.** Soften `frontend/access.js:45-46` so "It does not sync
+automatically" does not read as a defect. Storing the week on this device is
+the design, and the sentence should say so.
+
+- Complete when: a student picks a pack in one tap, sets Motion to Off and sees
+  no animation anywhere, and both choices survive sign-out and a reinstall;
+  Solve, Spread and Running late never flash blank and never look ignored.
+- Verification: node tests for the wait states, for date continuity across
+  Week/Day/Month, and for the persisted pack, accent and motion level; a real
+  Qt WebEngine pass with `prefers-reduced-motion` forced on; a hand check of the
+  Windows build for the `backdrop-filter` flicker, since Linux cannot show it.
+- Status: [ ]
 
 ## First implementation slice — approved 2026-09-06
 
