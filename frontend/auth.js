@@ -15,6 +15,7 @@ function showAuthScreen(name) {
 
 function signedOut(message = "Log in to open your week.", preserve = true, screen = "login") {
   const pending = account ? dirtyWeeks() : [];
+  const wasSignedIn = Boolean(account);
   if (preserve && pending.length) {
     suspendedDrafts.set(account.id, pending.map(function (weekStart) {
       const state = weekState(weekStart);
@@ -79,6 +80,9 @@ function signedOut(message = "Log in to open your week.", preserve = true, scree
   debugEl.hidden = true;
   authPanel.hidden = false;
   showAuthScreen(screen);
+  // Signing out destroys the focused control, so focus falls to <body>; first load leaves it alone.
+  const field = wasSignedIn ? document.getElementById(screen + "-username") : null;
+  if (field && typeof field.focus === "function") field.focus();
   document.getElementById("reconnect").hidden = true;
   document.getElementById("account-controls").hidden = true;
   document.getElementById("account-name").textContent = "";

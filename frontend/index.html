@@ -588,8 +588,8 @@
             <span id="prefs-account" class="note"></span>
             <small id="account-location-origin"></small>
           </div>
-          <p id="account-sync-note" class="note">Checking how this account is shared…</p>
-          <p id="recovery-status" class="note">Checking recovery codes…</p>
+          <p id="account-sync-note" class="note" aria-live="polite">Checking how this account is shared…</p>
+          <p id="recovery-status" class="note" aria-live="polite">Checking recovery codes…</p>
           <div class="account-actions">
             <button type="button" id="recovery-codes-open" class="secondary">Replace recovery codes</button>
             <button type="button" id="change-password-open" class="secondary">Change password</button>
@@ -753,7 +753,7 @@
       <p class="note">Import replaces this account’s weeks, homework, settings and routines. A recovery point protects only the weeks and homework it replaces.</p>
       <button type="button" id="account-import-choose" class="secondary">Choose account file</button>
       <input id="account-import-file" type="file" accept=".json,application/json" hidden>
-      <div id="account-import-preview" hidden>
+      <div id="account-import-preview" role="group" aria-label="What will change" tabindex="-1" hidden>
         <p id="account-import-source"></p>
         <div id="account-import-diff" class="transfer-diff"></div>
         <div class="transfer-removals">

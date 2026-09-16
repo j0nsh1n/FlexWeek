@@ -291,7 +291,10 @@ function renderTransferPreview(preview) {
   }
   accessElement("account-import-ack").checked = false;
   accessElement("account-import-confirm").disabled = true;
-  accessElement("account-import-preview").hidden = false;
+  const panel = accessElement("account-import-preview");
+  panel.hidden = false;
+  // Appearing is silent: without a focus move the reader stays on the file button.
+  if (typeof panel.focus === "function") panel.focus();
 }
 
 function resetTransferPreview() {

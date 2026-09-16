@@ -9,6 +9,7 @@ import { runAppScripts } from './app-scripts.mjs';
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
 const response = (status, data) => ({ status, ok: status < 400, json: async () => structuredClone(data) });
+const tagFor = id => html.match(new RegExp(`<[^>]*\\bid="${id}"[^>]*>`))[0];
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const MONDAY = '2026-09-07';
 const NOW = new Date(2026, 8, 10, 12, 0, 0);
@@ -433,8 +434,11 @@ test('a confirmed successful deletion clears the account and returns to Create a
   h.handle(async path => path === '/api/auth/account'
     ? response(204)
     : response(404, { detail: 'Unexpected request' }));
+  const focused = [];
+  h.elements.get('register-username').focus = () => focused.push('register-username');
   await form.listeners.submit({ preventDefault() {}, currentTarget: form });
   assert.equal(h.run('account'), null);
+  assert.deepEqual(focused, ['register-username'], 'deleting drops focus to <body> unless the screen takes it');
   assert.equal(h.elements.get('planner').hidden, true);
   assert.equal(h.elements.get('register-screen').hidden, false);
   assert.equal(h.elements.get('status').textContent, 'Account deleted. You can create a new account with that username.');
@@ -449,4 +453,42 @@ test('signing out erases an in-memory transfer snapshot and any displayed recove
   assert.equal(h.run('stage6Import'), null);
   assert.equal(h.run('stage6RecoveryCodes.length'), 0);
   assert.equal(h.elements.get('recovery-codes-list').children.length, 0);
+});
+
+
+test('the account lines that change after load sit in a live region', () => {
+  for (const id of ['account-sync-note', 'recovery-status']) {
+    assert.match(tagFor(id), /aria-live="polite"/,
+      `#${id} is rewritten after every account load, so a silent update is never announced`);
+  }
+});
+
+test('the transfer preview is a named region that takes focus when it appears', async () => {
+  const h = harness();
+  await h.login();
+  const panel = h.elements.get('account-import-preview');
+  let focused = 0;
+  panel.focus = () => { focused += 1; };
+  h.handle(async path => path === '/api/account-import/preview'
+    ? response(200, { state_token: 'preview-token', source_username: 'source_student', changes: {
+      weeks: { added: [], changed: [], removed: [] }, assignments: { added: [], changed: [], removed: [] },
+      routines: { added: [], changed: [], removed: [] }, preferences_changed: false,
+    } })
+    : accountLoad(path) || response(404, { detail: 'Unexpected request' }));
+
+  assert.equal(await h.run(`previewTransferSnapshot(${JSON.stringify(emptySnapshot())})`), true);
+  assert.equal(panel.hidden, false);
+  assert.equal(focused, 1, 'an unhidden preview is silent unless the reader is moved to it');
+  assert.match(tagFor('account-import-preview'), /tabindex="-1"/, 'a container cannot take focus without it');
+  assert.match(tagFor('account-import-preview'), /aria-label="[^"]+"/, 'a focused region needs a name');
+});
+
+test('the first load leaves focus where the browser put it', async () => {
+  const h = harness();
+  await tick();
+  let focused = 0;
+  h.elements.get('register-username').focus = () => { focused += 1; };
+  h.run('signedOut("Create an account to start planning.", true, "register")');
+  assert.equal(h.elements.get('register-screen').hidden, false);
+  assert.equal(focused, 0, 'nobody was signed in, so nothing stole focus from the page');
 });
