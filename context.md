@@ -8,8 +8,10 @@
   contract in `docs/stage7-contract.md`. Claude still owns Month view and
   date-to-Day navigation. Year view is out of this slice. spec.md drift:
   `GET /api/month` and the month grid rules are not in the public API table
-  until the owner approves the contract. Web-only gate: 221 frontend tests, 279
-  Python tests. Nothing pushed.
+  until the owner approves the contract. Full source gate
+  (`scripts/verify.py`, desktop included): 221 frontend tests, 351 Python
+  tests; a live uvicorn probe of the month route matched the contract. No
+  executable was built. Nothing pushed.
 - Date: 2026-09-15. Stage 6 contract approved and recorded in `spec.md` on
   `grok/stage6-transfer-limit`. Recovery, deletion, storage identity, previewed
   format-3 transfer and the 256 KiB import-apply envelope are product contract.
@@ -295,7 +297,7 @@ Recorded `operation_id` values make a retried write return the first result.
 - 2026-09-15, `grok/stage7-month-backend`: Stage 7 backend slice. Proposed
   contract is `docs/stage7-contract.md`. `GET /api/month?month=YYYY-MM` is
   authenticated and CSRF-free. Claude owns the Month UI. spec.md drift: the
-  month route. Web-only gate: 221 frontend tests, 279 Python tests. Nothing
+  month route. Full gate: 221 frontend tests, 351 Python tests. Nothing
   pushed.
 - 2026-09-15, `grok/stage6-transfer-limit`: Owner approved the Stage 6 spec
   updates and skipped hosted deployment, installers and iOS checks.
