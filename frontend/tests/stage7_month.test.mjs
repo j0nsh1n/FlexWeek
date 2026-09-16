@@ -326,6 +326,38 @@ test('Month hides editing controls, warns about dirty saved-only data, and ships
   assert.equal(h.elements.has('view-year'), false);
 });
 
+test('the saved-only warning carries its own words and is written only when it changes', async () => {
+  const h = harness();
+  await h.login();
+  const warning = h.elements.get('month-saved-warning');
+  // A live region is announced when its text changes, so count the writes.
+  let text = '';
+  const writes = [];
+  Object.defineProperty(warning, 'textContent', {
+    get: () => text,
+    set: value => { text = value; writes.push(value); },
+  });
+
+  assert.match(html.match(/<[^>]*\bid="month-saved-warning"[^>]*>/)[0], /aria-live="polite"/,
+    'a warning that only appears is silent without a live region');
+
+  h.run('weekState().dirty=true');
+  await showMonth(h);
+  assert.equal(warning.hidden, false);
+  assert.equal(warning.textContent,
+    'This month shows saved changes only. Save your week to include recent edits.');
+
+  const announcements = writes.filter(value => value).length;
+  await h.run('renderMonthView()');
+  assert.equal(writes.filter(value => value).length, announcements,
+    'redrawing the same warning must not announce it again');
+
+  h.run('weekState().dirty=false');
+  await h.run('renderMonthView()');
+  assert.equal(warning.hidden, true);
+  assert.equal(warning.textContent, '');
+});
+
 test('the lower boundary week can open January 1 2000 but no other 1999 Monday is valid', async () => {
   const h = harness();
   await h.login();

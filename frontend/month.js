@@ -4,6 +4,7 @@ const MONTH_FULL = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
+const MONTH_SAVED_ONLY = "This month shows saved changes only. Save your week to include recent edits.";
 const FIRST_MONTH = "2000-01";
 const LAST_MONTH = "2099-12";
 
@@ -51,6 +52,8 @@ function clearMonthState() {
     const section = document.getElementById(id);
     if (section) section.hidden = true;
   });
+  const warning = document.getElementById("month-saved-warning");
+  if (warning) warning.textContent = "";
 }
 
 function openMonthView() {
@@ -297,7 +300,12 @@ function renderMonthView() {
   const state = document.getElementById("month-state");
   const calendar = document.getElementById("month-calendar");
   const warning = document.getElementById("month-saved-warning");
-  warning.hidden = !dirtyWeeks().length && !dirtyAssignments.size;
+  const unsaved = Boolean(dirtyWeeks().length || dirtyAssignments.size);
+  // An empty region that is merely unhidden is not announced, and rewriting the
+  // same sentence every render repeats it, so only write it when it changes.
+  const notice = unsaved ? MONTH_SAVED_ONLY : "";
+  if (warning.textContent !== notice) warning.textContent = notice;
+  warning.hidden = !unsaved;
   document.getElementById("week-prev").disabled = selectedMonth === FIRST_MONTH;
   document.getElementById("week-next").disabled = selectedMonth === LAST_MONTH;
   calendar.replaceChildren();

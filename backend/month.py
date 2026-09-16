@@ -50,7 +50,7 @@ def _is_undated_session(block: dict) -> bool:
 
 def _details(body: dict) -> tuple[bool, bool, int, int]:
     checklist = list(body.get("checklist") or [])
-    has_notes = bool(body.get("notes"))
+    has_notes = bool(str(body.get("notes") or "").strip())
     has_links = bool(body.get("links"))
     done = sum(1 for item in checklist if item.get("done"))
     return has_notes, has_links, len(checklist), done

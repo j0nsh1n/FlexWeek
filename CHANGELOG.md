@@ -6,6 +6,12 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Fixed
+- Blank notes no longer make a project (2026-09-15, backend). Homework whose
+  notes are only spaces or newlines stays an ordinary deadline in Month instead
+  of being listed as a project.
+- The Month saved-only warning is announced (2026-09-15, shared frontend).
+  Screen readers hear it when it appears, and redrawing the month does not
+  repeat it.
 - Day counted finished work more than once (2026-09-15, backend). A session
   completed on one day no longer adds its minutes to every day it could have
   been done on, so a day's scheduled and focus totals match what actually

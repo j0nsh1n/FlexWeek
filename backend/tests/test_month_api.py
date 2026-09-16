@@ -400,3 +400,11 @@ def test_december_2099_clips_the_trailing_week(alice: TestClient) -> None:
     assert body["days"][-1]["date"] == "2099-12-31"
     assert body["days"][-1]["week_start"] == "2099-12-28"
     assert body["days"][-1]["in_month"] is True
+
+
+def test_blank_notes_do_not_turn_a_deadline_into_a_project(alice: TestClient) -> None:
+    """Spaces and newlines are not notes, so they must not promote a plain deadline."""
+    assert put_assignment(alice, assignment(notes="   \n\t  ")).status_code == 200
+    body = get_month(alice).json()
+    assert body["projects"] == []
+    assert [item["id"] for item in body["deadlines"]] == ["hw-essay"]
