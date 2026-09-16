@@ -1,6 +1,19 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-16. Stages 1-7 are merged to `main` in PR #12 (merge commit
+  aca3068), together with the roadmap PR #11 at a7936b2. PR checks were green:
+  CodeQL, `analyze` and both `web` verify jobs, matching the local gate of 243
+  frontend and 365 Python tests. Local `main` was stale at 3f19d33 and is
+  fast-forwarded to aca3068. Packaging run 35053629863 (`workflow_dispatch`, no
+  tag, so nothing uploads to a release) built the Linux bundle on the runner in
+  9m43s; the Windows installers build in the same run and stay as run artifacts.
+  `desktop/build_linux.sh` does NOT complete on this machine: Nuitka compiles,
+  but `desktop/check_bundle.py` enforces `MAX_GLIBC` 2.38 while this host runs
+  glibc 2.43, so `libpython3.14.so.1.0` and `libuuid.so.1` fail on
+  `GLIBC_ABI_GNU2_TLS`, and PySide6 6.11.2's `libpyside6.abi3.so.6.11` and
+  `libshiboken6.abi3.so.6.11` are not vendored into the bundle. No release tag
+  exists, and Windows execution on a real PC is still unverified.
 - Date: 2026-09-15. `feat/stage7-month-frontend` now holds the integrated Stage
   7 branch: Grok's Stage 6/7 audit backend fixes merged with this branch's Month
   UI and accessibility fixes. `GET /api/day` no longer counts a completed
@@ -352,6 +365,15 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-16, `main`: PR #12 merged the seven student-experience stages, so
+  `main` now carries Stages 1-7 and a spec.md that matches every approved
+  contract. Follow-up work starts from `main` at aca3068, not from the stage
+  branches. Two packaging facts matter for whoever builds next: the CI runner
+  builds the Linux bundle successfully, and this workstation cannot, because its
+  glibc is newer than the 2.38 portability baseline the bundle check enforces.
+  Open product work: the Stage 2 student trial of the "Plan my homework"
+  wording, Stage 7 student trials and measured comparisons, Year view, hosted
+  deployment, and the Qt shell's Stage 5 start-at-login and tray Test.
 - 2026-09-15, `feat/stage7-month-frontend`: integrated `grok/stage7-month-backend`
   (merge 398531e; only CHANGELOG.md and context.md conflicted, both additive, and
   backend/app.py plus backend/weeks.py were checked against both parents). Then

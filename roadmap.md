@@ -238,7 +238,7 @@ Current scope mapping:
 - Verification: deadline migration and Sunday/Monday boundary tests; timer state
   and completion tests; undo after reload/session loss/conflicting saves;
   browser and desktop walkthrough with save/reload and two-account isolation.
-- Status: [x] Complete locally 2026-09-13. The approved contract and spec
+- Status: [x] Merged to `main` in PR #12 on 2026-09-16. Was complete locally 2026-09-13. The approved contract and spec
   reconciliation are included with the backend and frontend implementation.
   Verification passed with 139 frontend tests and 241 Python tests, including
   the Stage 1 Qt WebEngine walkthrough; the live browser covered assignment
@@ -266,7 +266,7 @@ Current scope mapping:
 - Verification: real browser/desktop walkthroughs at 390px and 1280px; keyboard,
   touch-target, screen-reader and both-theme checks; empty, busy and unplaced
   states. Record student task time and wrong turns before and after the change.
-- Status: [x] Complete locally on `feat/stage2-student-experience` (the same
+- Status: [x] Merged to `main` in PR #12 on 2026-09-16; developed on `feat/stage2-student-experience` (the same
   commits as `claude/stage2-frontend`). The contract is approved and spec.md
   carries Day view and `GET /api/day`; the status line in
   `docs/stage2-contract.md` said "proposed" until 2026-09-15 by mistake.
@@ -291,8 +291,7 @@ Current scope mapping:
 - Verification: cross-week identity and recurrence tests, collision previews,
   repeated-click/retry idempotency, maximum-size weeks, account isolation, stale
   saves and restore failure rollback; real save/reload in both clients.
-- Status: [ ] Complete locally on `claude/stage3-frontend`, not merged or
-  released: clipboard actions, fixed-only routines, unfinished-homework review
+- Status: [x] Merged to `main` in PR #12 on 2026-09-16; developed on `claude/stage3-frontend`. Not released: clipboard actions, fixed-only routines, unfinished-homework review
   and restore points, with Grok's account-owned persistence and routes. Real
   WebEngine walkthroughs cover save, apply, restore, a retried operation,
   reload, a second account and a 390px dark-theme carry-forward. Its Stage 1
@@ -318,7 +317,7 @@ Current scope mapping:
   deadline/session totals, missed_days recovery and cross-week persistence;
   atomic failure/retry tests and real preview/accept/undo walkthroughs. Retain the
   existing packed-fixture performance target and measure longer project planning.
-- Status: [x] Complete locally on `feat/stage4-adaptive-plans`. Accepting Running
+- Status: [x] Merged to `main` in PR #12 on 2026-09-16; developed on `feat/stage4-adaptive-plans`. Accepting Running
   late stores a one-off locked interval. The contract is approved 2026-09-15 and
   spec.md lists the Stage 4 routes, availability windows and assignment fields.
   Depends on Stages 1 and 3. Borrows Daily Scheduler actions, not its
@@ -342,7 +341,7 @@ Current scope mapping:
 - Verification: preference persistence, timer/split validation and duplicate-alert
   tests; physical sound, tray, startup, sleep/wake and notification checks on
   supported OSes. OS delivery limits remain separately recorded from test results.
-- Status: [~] Backend and shared browser/desktop frontend complete locally on
+- Status: [~] Merged to `main` in PR #12 on 2026-09-16; developed on
   `feat/stage5-comfort-frontend`. The contract is approved 2026-09-15 and
   spec.md lists the comfort fields and the three comfort routes. The source gate
   includes 207 frontend tests,
@@ -369,7 +368,7 @@ Current scope mapping:
 - Verification: recovery abuse/expiry/revocation tests, ownership and CSRF checks,
   and cross-client revision conflicts. Hosted backup drills, installer smoke
   checks and physical-device evidence are out of this slice.
-- Status: [~] Backend and shared browser/desktop frontend complete locally on
+- Status: [~] Merged to `main` in PR #12 on 2026-09-16; developed on
   `feat/stage6-access-frontend`, with transfer size limits reconciled on
   `grok/stage6-transfer-limit`. The Stage 6 contract is approved 2026-09-15 and
   recorded in `spec.md`. Export and import share the 256 KiB write cap. Hosted
@@ -396,8 +395,8 @@ Current scope mapping:
 - Verification: month/year boundary and date-navigation tests; repeat the same
   student scenarios on the baseline and revised UI; record observed completion,
   assistance needed, device/browser and screenshots alongside release-gate output.
-- Status: [~] The Month API and shared frontend are complete locally on
-  `feat/stage7-month-frontend`, now integrated with Grok's audit fixes from
+- Status: [~] Merged to `main` in PR #12 on 2026-09-16; developed on
+  `feat/stage7-month-frontend` and integrated with Grok's audit fixes from
   `grok/stage7-month-backend`. `docs/stage7-contract.md` is approved 2026-09-15
   with a planned-work amendment: Month shows planned and completed study time,
   pins a session only to a date that is certain, and reports work with several
