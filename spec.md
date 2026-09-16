@@ -103,6 +103,15 @@ Contract for the finished app:
   restore point of the destination weeks and assignments first. Automatic
   bidirectional or offline sync is out of scope. Export returns 413 when the
   compact import apply envelope would exceed the 256 KiB write cap.
+- Day view lists one date: homework due soon, that day's work sessions and fixed
+  commitments, one next action, and a workload summary that separates scheduled
+  time, recorded focus time and time still free before 23:00, with a breakdown by
+  category. Due soon is open homework due that day or the next, plus anything
+  already overdue. Below 800px Day is the default view and Week stays one control
+  away. Quick Add homework asks only for title, due date and estimated time, with
+  "Choose a time myself" for anything more. The planning button reads "Plan my
+  homework", and "Update my plan" once that week has been planned. Details live
+  in `docs/stage2-contract.md`.
 - Running late is a solve preview of a 15, 30 or 60 minute delay from a
   15-minute cutoff on one day of the open week. Fixed commitments and sleep stay
   put, and work that no longer fits stays unplaced rather than being dropped.
@@ -183,6 +192,7 @@ Current account/API contract:
 | DELETE | `/api/auth/account` | Password-gated deletion of this account and its rows |
 | GET/PUT | `/api/week` | One dated week of the account, with revision-checked saves |
 | GET | `/api/weeks` | The `week_start` dates this account has saved, ascending |
+| GET | `/api/day` | One date's agenda: due-soon homework, that day's sessions and fixed blocks, a next action and the workload split |
 | GET | `/api/month` | Month grid of deadlines, projects, overdue work, planned and completed study time, and an unscheduled total |
 | GET | `/api/assignments` | Open assignments with planned and unplanned minutes for a `week_start`; completed ones only when asked |
 | PUT/DELETE | `/api/assignments/{id}` | Revision-checked create, update and delete; delete removes its sessions from every week |
@@ -425,6 +435,9 @@ The commands it runs, each of which must exit 0:
 - [ ] A student recovers a forgotten password with a one-time code, sees which
       account and origin they are using, and previews a format-3 account file
       onto another signed-in account without exposing it to a third account.
+- [ ] A new student can see what is due tomorrow, add homework, plan it, start
+      it and mark it finished at 390px and 1280px, without a context menu or
+      reading scheduling documentation.
 - [ ] A student who is running late previews a 30-minute delay, accepts it, and
       undoes it in one step; spreading a project adds sessions only after a
       preview.

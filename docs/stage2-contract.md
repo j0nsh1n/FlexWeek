@@ -1,7 +1,8 @@
 # Contract: Stage 2 — today's work easy to find and add
 
-Status: proposed 2026-09-13 for roadmap Stage 2 of the student experience
-revision. Not approved. spec.md is not changed until approval.
+Status: approved by the owner for roadmap Stage 2 of the student experience
+revision. The approval predates this line, which said "proposed" until it was
+corrected on 2026-09-15; spec.md now carries Day view and `GET /api/day`.
 
 Grok builds the backend parts and Claude builds the frontend parts against this
 file at the same time. Neither side changes it alone.

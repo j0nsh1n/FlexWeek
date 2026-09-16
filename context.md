@@ -12,10 +12,11 @@
   2026-09-15, so spec.md now lists `GET /api/month`, the spread route, the three
   comfort routes, `running_late` on solve, availability windows, assignment
   notes/links/checklist and the comfort fields. Full source gate: 242 frontend
-  and 364 Python tests, mypy over 47 files, whitespace clean. spec.md drift: the
-  Stage 2 contract is still marked proposed, so `GET /api/day` remains off the
-  public API table even though the route ships. Year view, student trials,
-  measured comparisons and PR review remain. Nothing pushed.
+  and 364 Python tests, mypy over 47 files, whitespace clean. The Stage 2
+  contract was already approved and its status line was wrong; it is corrected
+  and spec.md now carries Day view and `GET /api/day`, which closes the last
+  documented drift. Year view, student trials, measured comparisons and PR
+  review remain. Nothing pushed.
 - Date: 2026-09-15. Three accessibility defects from Grok's Stage 6 audit are
   fixed on `feat/stage7-month-frontend` (3bdcfc3). The account sharing note and
   recovery-code status sit in polite live regions; the transfer preview is a
@@ -165,8 +166,8 @@
   first at 800px and narrower, quick Add homework, Plan my homework / Update my
   plan wording, collapsed results with slack in days, Export and Import in
   Settings, and Edit / Finished / Start focus in agenda rows. It follows the six
-  proposed defaults in `docs/stage2-contract.md`, which is not approved yet, so
-  spec.md does not list `/api/day`. Full source gate green: 145 frontend tests
+  owner decisions in `docs/stage2-contract.md`, which is approved; spec.md lists
+  Day view and `/api/day` from 2026-09-15. Full source gate green: 145 frontend tests
   and 250 Python tests, including the stage2 WebEngine probe at 390px and
   1280px. No remote branch changed.
 - Date: 2026-09-13. Student-experience Stage 1 is complete locally on
@@ -361,8 +362,7 @@ Recorded `operation_id` values make a retried write return the first result.
   "1 h done" per cell and a note for undated work. Ten mutations were red-checked
   across the three commits. The owner approved the Stage 4, 5 and 7 contracts, so
   spec.md and the contract status lines were updated. Gate: 242 frontend, 364
-  Python. Open: Stage 2 is still marked proposed, so `/api/day` stays off the
-  spec's API table. Nothing pushed.
+  Python. Nothing pushed.
 - 2026-09-15, `feat/stage7-month-frontend`: accessibility fixes from Grok's
   Stage 6 audit. `aria-live="polite"` on `#account-sync-note` and
   `#recovery-status`; `#account-import-preview` is a named `role="group"` with

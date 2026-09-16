@@ -245,20 +245,20 @@ Current scope mapping:
   entry, next-week Continuing, Solve and the focus outcome prompt.
 
 ### Stage 2. Make today's work easy to find and add
-- [ ] Add a Today/Day agenda alongside Week view. Prioritize due soon, today's
+- [x] Add a Today/Day agenda alongside Week view. Prioritize due soon, today's
   homework, total remaining planned work and a clear next action.
-- [ ] Make the phone layout a day agenda with a persistent Add action and visible
+- [x] Make the phone layout a day agenda with a persistent Add action and visible
   edit, complete and focus controls. Keep Week view available for planning.
-- [ ] Simplify quick entry to title, due date and estimated time, with “Choose a
+- [x] Simplify quick entry to title, due date and estimated time, with “Choose a
   time myself” and advanced scheduling options available when needed.
-- [ ] Replace “Solve” with student-facing wording such as “Plan my homework” or
+- [x] Replace “Solve” with student-facing wording such as “Plan my homework” or
   “Update my plan”; confirm wording in the student trial.
-- [ ] Reduce duplicated task lists and hide empty sections. Collapse successful
+- [x] Reduce duplicated task lists and hide empty sections. Collapse successful
   placement explanations while keeping unplaced work and useful next actions
   visible. Express deadline room in understandable dates/days, not large hour counts.
-- [ ] Move import/export and duplicate account/theme actions out of primary
+- [x] Move import/export and duplicate account/theme actions out of primary
   navigation. Preserve the current light/dark visual system while simplifying it.
-- [ ] Add a daily workload summary by category, distinguishing scheduled time,
+- [x] Add a daily workload summary by category, distinguishing scheduled time,
   recorded focus time and genuinely available time before the student's cutoff.
 - Complete when: a new student can identify what is due tomorrow, add homework,
   plan it, start it and mark it finished without using a context menu or reading
@@ -266,7 +266,13 @@ Current scope mapping:
 - Verification: real browser/desktop walkthroughs at 390px and 1280px; keyboard,
   touch-target, screen-reader and both-theme checks; empty, busy and unplaced
   states. Record student task time and wrong turns before and after the change.
-- Status: [ ] Planned. Builds on Stage 1 deadline and completion behavior.
+- Status: [x] Complete locally on `feat/stage2-student-experience` (the same
+  commits as `claude/stage2-frontend`). The contract is approved and spec.md
+  carries Day view and `GET /api/day`; the status line in
+  `docs/stage2-contract.md` said "proposed" until 2026-09-15 by mistake.
+  Confirming the "Plan my homework" wording in a student trial is still open, as
+  are the recorded task-time comparisons. Builds on Stage 1 deadline and
+  completion behavior.
 
 ### Stage 3. Reuse routines and recover past work
 - [ ] Port block copy/paste, duplicate, and copy-day actions with keyboard and
