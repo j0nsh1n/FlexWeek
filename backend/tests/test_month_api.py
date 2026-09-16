@@ -129,7 +129,9 @@ def test_empty_september_is_a_five_week_grid(alice: TestClient) -> None:
         "session_count": 0,
         "locked_count": 0,
         "scheduled_min": 0,
+        "focus_min": 0,
     }
+    assert body["unscheduled"] == {"session_count": 0, "minutes": 0}
     first = day_on(body, "2026-09-01")
     assert first["in_month"] is True
     assert first["week_start"] == "2026-08-31"
@@ -222,15 +224,48 @@ def test_completed_session_pins_only_its_completed_day(alice: TestClient) -> Non
     assert body["projects"] == []
 
 
-def test_unplaced_candidate_days_do_not_pin_the_calendar(alice: TestClient) -> None:
+def test_several_candidate_days_pin_nothing_and_count_as_unscheduled(alice: TestClient) -> None:
+    """Open work with a choice of days has no date the server can name (decision 7)."""
     assert put_assignment(alice, assignment()).status_code == 200
-    unplaced = session("s-tue", 1, "16:00")
-    del unplaced["start"]
-    assert save_week(alice, [unplaced]).status_code == 200
+    open_session = session("s-tue", 1, "16:00", days=[1, 2, 3])
+    del open_session["start"]
+    assert save_week(alice, [open_session]).status_code == 200
     body = get_month(alice).json()
-    assert day_on(body, "2026-09-15")["session_count"] == 0
+    for label in ("2026-09-15", "2026-09-16", "2026-09-17"):
+        assert day_on(body, label)["session_count"] == 0, label
+        assert day_on(body, label)["scheduled_min"] == 0, label
+    assert body["unscheduled"] == {"session_count": 1, "minutes": 60}
     assert body["projects"] == []
     assert body["deadlines"][0]["unplanned_min"] == 60
+
+
+def test_a_single_candidate_open_session_is_planned_work_on_that_day(alice: TestClient) -> None:
+    """One possible day is a real date, so planned work shows without claiming it is done."""
+    assert put_assignment(alice, assignment()).status_code == 200
+    open_session = session("s-tue", 1, "16:00")
+    del open_session["start"]
+    assert save_week(alice, [open_session]).status_code == 200
+    body = get_month(alice).json()
+    tuesday = day_on(body, "2026-09-15")
+    assert tuesday["session_count"] == 1
+    assert tuesday["scheduled_min"] == 60
+    assert tuesday["focus_min"] == 0
+    assert body["unscheduled"] == {"session_count": 0, "minutes": 0}
+
+
+def test_completing_undated_work_moves_it_onto_the_day_it_happened(alice: TestClient) -> None:
+    """The same session should stop being unscheduled once it has a completed day."""
+    assert put_assignment(alice, assignment()).status_code == 200
+    done = session("s-tue", 1, "16:00", days=[1, 2, 3], completed=True, completed_day=2)
+    assert save_week(alice, [done]).status_code == 200
+    body = get_month(alice).json()
+    wednesday = day_on(body, "2026-09-16")
+    assert wednesday["session_count"] == 1
+    assert wednesday["scheduled_min"] == 60
+    assert wednesday["focus_min"] == 60
+    assert day_on(body, "2026-09-15")["session_count"] == 0
+    assert day_on(body, "2026-09-17")["session_count"] == 0
+    assert body["unscheduled"] == {"session_count": 0, "minutes": 0}
 
 
 def test_overdue_open_homework_is_not_a_september_deadline(alice: TestClient) -> None:

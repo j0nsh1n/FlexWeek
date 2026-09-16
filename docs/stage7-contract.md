@@ -1,6 +1,8 @@
 # Contract: Stage 7 — month view for deadlines and projects
 
-Status: proposed. Claude owns the browser/desktop frontend. Grok owns
+Status: approved 2026-09-15 by the owner, with the planned-work amendment in
+decision 7 and section 1. The owner approved the Stage 4 and Stage 5 contracts
+on the same date. Claude owns the browser/desktop frontend. Grok owns
 persistence and the authenticated month API. Both clients continue to use the
 same HTML, CSS and JavaScript frontend.
 
@@ -43,11 +45,16 @@ API.
    than a single due-date pin: notes, links or a checklist, or placed sessions
    on two or more distinct grid dates. A one-session homework with no details
    is only a deadline.
-7. A flexible session **pins one date** only when it has a `start`: its
-   `completed_day` when set, otherwise its single candidate day. A completed
-   session keeps its full candidate list, so `days` alone is not the pin
-   (`backend/solver.py` spent-time rule). Unplaced candidate days do not paint
-   the whole week. Locked blocks with a start (school, sport, sleep, pomodoro
+7. A flexible session **pins one date** when that date is certain:
+   - completed: its `completed_day` when set, otherwise its single candidate
+     day. A completed session keeps its full candidate list, so `days` alone is
+     not the pin (`backend/solver.py` spent-time rule).
+   - open: only when it has exactly one candidate day. The solver's choice is
+     never stored, so an open session with two or more candidates has no date
+     the server can name. It pins nowhere and is reported in `unscheduled`
+     instead, so planned work is never silently dropped.
+   Unplaced candidate days do not paint the whole week. A `start` is not
+   required to pin, because open sessions never carry one. Locked blocks with a start (school, sport, sleep, pomodoro
    work chunks) recur on every listed day and add `locked_count` or
    `session_count` and `scheduled_min` the same way Day counts them.
 8. `preferred_view` stays `week` or `day`. Month is session navigation until
@@ -75,9 +82,11 @@ malformed. 401 without a session.
       "due_ids": [],
       "session_count": 0,
       "locked_count": 0,
-      "scheduled_min": 0
+      "scheduled_min": 0,
+      "focus_min": 0
     }
   ],
+  "unscheduled": {"session_count": 0, "minutes": 0},
   "deadlines": [
     {
       "id": "hw-essay",
@@ -102,19 +111,26 @@ Rules:
   that closed range, in order.
 - `due_ids` on a day are assignment ids whose due calendar date is that date,
   in the same order as `deadlines`.
-- `session_count` is work sessions pinned to that day (flexible with
-  `assignment_id` pinned by decision 7, or locked pomodoro work chunks with
-  `assignment_id` whose `days` include it), the same membership as Day
-  `sessions`, but only blocks that have `start`.
+- `session_count` is work sessions pinned to that day by decision 7, open or
+  completed, plus locked pomodoro work chunks with `assignment_id` whose `days`
+  include it.
 - `locked_count` is locked blocks on that day that are not those work chunks
   and that have `start`.
-- `scheduled_min` is the total `duration_min` of those placed sessions and
-  locked blocks.
+- `scheduled_min` is the total `duration_min` of those pinned sessions and
+  locked blocks, planned and completed together.
+- `focus_min` is the part of `scheduled_min` that comes from completed
+  sessions, so a client can show what is done against what is still planned
+  without a second request. It is never larger than `scheduled_min`.
+- `unscheduled` counts open flexible sessions with `assignment_id` on the
+  grid's saved weeks that pin to no date, because they still have two or more
+  candidate days. `session_count` is how many, `minutes` their total
+  `duration_min`. They appear in no day cell.
 - `unplanned_min` uses the existing formula against planned minutes from the
   Monday of `start` (the month's first day), so September 2026 uses
   `2026-08-31`.
-- Project rows add `session_dates` (sorted unique grid dates with a placed
-  session), `has_notes`, `has_links`, `checklist_total` and `checklist_done`.
+- Project rows add `session_dates` (sorted unique grid dates with a pinned
+  session, planned or completed), `has_notes`, `has_links`, `checklist_total`
+  and `checklist_done`.
   An assignment is a project when it is open, appears as a deadline, overdue
   item, or has a placed session on the grid, and either has notes, links or a
   checklist, or has two or more `session_dates`.
@@ -141,10 +157,14 @@ No change to existing endpoint JSON.
   assignment due 2026-09-16T23:59 with no start is a deadline on that date and
   not a project; the same assignment with notes is a project with empty
   `session_dates`. Placed sessions on Tuesday and Wednesday of that week make
-  a project with those `session_dates` even without notes. An unplaced session
-  whose `days` include Tuesday does not increment Tuesday's `session_count`. A
-  completed session with candidates Tue–Thu and `completed_day` Wednesday
-  counts only on Wednesday and is not a project.
+  a project with those `session_dates` even without notes. An open session with
+  candidates Tue–Thu does not increment Tuesday's `session_count` and adds one
+  session and its minutes to `unscheduled`; an open session whose only candidate
+  is Tuesday counts on Tuesday with `focus_min` 0 and raises no `unscheduled`. A
+  completed session with candidates Tue–Thu and `completed_day` Wednesday counts
+  only on Wednesday, with its minutes in both `scheduled_min` and `focus_min`,
+  and is not a project. Completing the Tue–Thu session on Wednesday moves its
+  minutes out of `unscheduled` and onto Wednesday.
   Open homework due 2026-08-15 is overdue, not a September deadline. Another
   account's month is empty. 422 on a missing or malformed month; 401 without a
   session. January 2000 clips `grid_start` to 2000-01-01; December 2099 clips
@@ -156,8 +176,8 @@ No change to existing endpoint JSON.
 
 ## spec.md changes on approval
 
-- Required Behavior: Month view of deadlines and projects; a date opens Day
-  view.
+- Required Behavior: Month view of deadlines and projects, showing planned and
+  completed work; a date opens Day view.
 - API: `GET /api/month`.
 - Acceptance Criteria: Stage 7's month navigation path. Year remains later
   work. Student trials stay a separate checklist item.
@@ -173,7 +193,9 @@ No change to existing endpoint JSON.
 
 - Empty September 2026 grid is 35 days, 2026-08-31..2026-10-04.
 - School week occupancy is only Mon–Fri of the saved week.
-- Deadline pins, notes-as-project, two placed dates-as-project, unplaced
-  candidates do not pin, overdue is separate, account isolation, 422/401.
+- Deadline pins, notes-as-project, two placed dates-as-project, multi-candidate
+  open sessions do not pin and land in `unscheduled`, single-candidate open
+  sessions pin with `focus_min` 0, overdue is separate, account isolation,
+  422/401.
 - Range clips at 2000-01 and 2099-12.
 - `.venv/bin/python scripts/verify.py --web-only` from this worktree.

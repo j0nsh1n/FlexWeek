@@ -103,7 +103,9 @@ async function refreshMonthData() {
     const data = await api("/api/month?month=" + asked);
     if (!currentMonthRequest(token, asked, requestEpoch, accountId)) return false;
     if (!data || data.month !== asked || !Array.isArray(data.days) ||
-        !Array.isArray(data.deadlines) || !Array.isArray(data.projects) || !Array.isArray(data.overdue)) {
+        !Array.isArray(data.deadlines) || !Array.isArray(data.projects) || !Array.isArray(data.overdue) ||
+        !data.unscheduled || !Number.isInteger(data.unscheduled.session_count) ||
+        !Number.isInteger(data.unscheduled.minutes)) {
       throw new Error("The server returned an invalid month.");
     }
     monthSnapshot = data;
@@ -131,7 +133,21 @@ function monthDaySummary(day) {
   if (day.session_count) parts.push(day.session_count + " study");
   if (day.locked_count) parts.push(day.locked_count + " fixed");
   if (day.scheduled_min) parts.push(formatDuration(day.scheduled_min));
+  // Planned and completed work share a cell, so say which of it is behind you.
+  if (day.focus_min && day.focus_min === day.scheduled_min) parts.push("all done");
+  else if (day.focus_min) parts.push(formatDuration(day.focus_min) + " done");
   return parts.join(" · ");
+}
+
+function unscheduledNote(snapshot) {
+  const note = document.getElementById("month-unscheduled");
+  const count = snapshot.unscheduled.session_count;
+  note.hidden = !count;
+  note.textContent = count
+    ? count + (count === 1 ? " study session (" : " study sessions (") + formatDuration(snapshot.unscheduled.minutes)
+      + (count === 1 ? ") is planned this month but has no day yet."
+        : ") are planned this month but have no day yet.")
+    : "";
 }
 
 async function openMonthDay(isoDay) {
@@ -273,6 +289,7 @@ function renderMonthLists(snapshot) {
   projects.replaceChildren();
   snapshot.projects.forEach(function (item) { projects.appendChild(projectRow(item)); });
   document.getElementById("month-projects-section").hidden = !snapshot.projects.length;
+  unscheduledNote(snapshot);
 }
 
 function renderMonthView() {
@@ -288,6 +305,7 @@ function renderMonthView() {
   document.getElementById("month-projects").replaceChildren();
   document.getElementById("month-overdue-section").hidden = true;
   document.getElementById("month-projects-section").hidden = true;
+  document.getElementById("month-unscheduled").hidden = true;
   state.replaceChildren();
   state.setAttribute("role", monthError ? "alert" : "status");
   if (monthLoading) {
@@ -310,7 +328,8 @@ function renderMonthView() {
   const hasCalendarContent = monthSnapshot.deadlines.length || monthSnapshot.days.some(function (day) {
     return day.in_month && (day.session_count || day.locked_count);
   });
-  if (!hasCalendarContent && !monthSnapshot.projects.length && !monthSnapshot.overdue.length) {
+  if (!hasCalendarContent && !monthSnapshot.projects.length && !monthSnapshot.overdue.length
+      && !monthSnapshot.unscheduled.session_count) {
     state.textContent = "Nothing is due or scheduled this month.";
   }
   renderMonthCalendar(monthSnapshot);

@@ -29,16 +29,23 @@ def _placed_on_day(block: dict, day_index: int) -> bool:
 
 def _session_pinned_on_day(block: dict, day_index: int) -> bool:
     # A completed session keeps its candidate list; completed_day names the slot it
-    # held (solver.py spent-time rule). Without it, only a single candidate pins.
-    if not block.get("start"):
-        return False
-    pinned = block.get("completed_day")
+    # held (solver.py spent-time rule). An open session carries no start at all, so
+    # only a lone candidate is a date the server can name. Contract decision 7.
+    days = list(block.get("days") or [])
+    pinned = block.get("completed_day") if block.get("completed") else None
     if pinned is None:
-        days = list(block.get("days") or [])
-        if len(days) != 1:
-            return False
-        pinned = days[0]
+        return len(days) == 1 and days[0] == day_index
     return int(pinned) == day_index
+
+
+def _is_undated_session(block: dict) -> bool:
+    """Open work the solver has not committed to a date: two or more candidates."""
+    return (
+        block.get("kind") == "flexible"
+        and is_work_session(block)
+        and not block.get("completed")
+        and len(list(block.get("days") or [])) >= 2
+    )
 
 
 def _details(body: dict) -> tuple[bool, bool, int, int]:
@@ -135,8 +142,22 @@ def build_month(
                 "session_count": len(sessions),
                 "locked_count": len(locked),
                 "scheduled_min": sum(int(block["duration_min"]) for block in sessions + locked),
+                "focus_min": sum(
+                    int(block["duration_min"]) for block in sessions if block.get("completed")
+                ),
             }
         )
+
+    undated = [
+        block
+        for week_start in {monday_of(day.isoformat()) for day in grid_days}
+        for block in weeks_by_start.get(week_start, [])
+        if _is_undated_session(block)
+        and any(
+            grid_start <= date.fromisoformat(week_start) + timedelta(days=int(index)) <= grid_end
+            for index in block["days"]
+        )
+    ]
 
     deadlines = [item for day in grid_days for item in due_by_date[day.isoformat()]]
     visible_ids = {item["id"] for item in deadlines + overdue}
@@ -173,4 +194,8 @@ def build_month(
         "deadlines": deadlines,
         "projects": projects,
         "overdue": overdue,
+        "unscheduled": {
+            "session_count": len(undated),
+            "minutes": sum(int(block["duration_min"]) for block in undated),
+        },
     }

@@ -105,9 +105,9 @@ function snapshot(month = '2026-09') {
   return {
     month, start: month + '-01', end: month + '-30', grid_start: '2026-08-31', grid_end: '2026-10-04',
     days: [
-      { date: '2026-08-31', week_start: '2026-08-31', in_month: false, due_ids: [], session_count: 0, locked_count: 0, scheduled_min: 0 },
-      { date: '2026-09-15', week_start: '2026-09-14', in_month: true, due_ids: [], session_count: 1, locked_count: 1, scheduled_min: 450 },
-      { date: '2026-09-16', week_start: '2026-09-14', in_month: true, due_ids: ['essay', 'quiz'], session_count: 1, locked_count: 0, scheduled_min: 60 },
+      { date: '2026-08-31', week_start: '2026-08-31', in_month: false, due_ids: [], session_count: 0, locked_count: 0, scheduled_min: 0, focus_min: 0 },
+      { date: '2026-09-15', week_start: '2026-09-14', in_month: true, due_ids: [], session_count: 1, locked_count: 1, scheduled_min: 450, focus_min: 0 },
+      { date: '2026-09-16', week_start: '2026-09-14', in_month: true, due_ids: ['essay', 'quiz'], session_count: 1, locked_count: 0, scheduled_min: 60, focus_min: 0 },
     ],
     deadlines: [
       { id: 'essay', title: 'History essay', due: '2026-09-16T23:59', date: '2026-09-16', completed: false, estimate_min: 120, unplanned_min: 60, revision: 1 },
@@ -118,6 +118,7 @@ function snapshot(month = '2026-09') {
       has_notes: true, has_links: true, checklist_total: 4, checklist_done: 2 }],
     overdue: [{ id: 'late', title: 'Late lab', due: '2026-08-15T17:00', date: '2026-08-15', completed: false,
       estimate_min: 45, unplanned_min: 45, revision: 1 }],
+    unscheduled: { session_count: 0, minutes: 0 },
   };
 }
 
@@ -338,4 +339,67 @@ test('the lower boundary week can open January 1 2000 but no other 1999 Monday i
   assert.equal(await h.run("openMonthDay('2000-01-01')"), true);
   assert.equal(h.run('selectedWeek'), '1999-12-27');
   assert.equal(h.run("isWeekStart('1999-12-20')"), false);
+});
+
+
+test('a day says how much of its work is already behind you', async () => {
+  const h = harness();
+  await h.login();
+  const data = snapshot();
+  data.days = [
+    { date: '2026-09-15', week_start: '2026-09-14', in_month: true, due_ids: [], session_count: 2, locked_count: 0, scheduled_min: 120, focus_min: 120 },
+    { date: '2026-09-16', week_start: '2026-09-14', in_month: true, due_ids: [], session_count: 2, locked_count: 0, scheduled_min: 120, focus_min: 60 },
+  ];
+  await showMonth(h, data);
+
+  assert.equal(h.find('month-day', item => item.dataset.date === '2026-09-15').children.at(-1).textContent,
+    '2 study · 2 h · all done');
+  assert.equal(h.find('month-day', item => item.dataset.date === '2026-09-16').children.at(-1).textContent,
+    '2 study · 2 h · 1 h done');
+});
+
+test('work that has no day yet is reported rather than silently dropped', async () => {
+  const h = harness();
+  await h.login();
+  const many = snapshot();
+  many.unscheduled = { session_count: 3, minutes: 150 };
+  await showMonth(h, many);
+  assert.equal(h.elements.get('month-unscheduled').hidden, false);
+  assert.equal(h.elements.get('month-unscheduled').textContent,
+    '3 study sessions (2 h 30 min) are planned this month but have no day yet.');
+
+  const one = snapshot();
+  one.unscheduled = { session_count: 1, minutes: 45 };
+  h.handle(async () => response(200, one));
+  await h.run('refreshMonthData()');
+  assert.equal(h.elements.get('month-unscheduled').textContent,
+    '1 study session (45 min) is planned this month but has no day yet.');
+
+  h.handle(async () => response(200, snapshot()));
+  await h.run('refreshMonthData()');
+  assert.equal(h.elements.get('month-unscheduled').hidden, true);
+});
+
+test('a month holding only undated work does not claim nothing is scheduled', async () => {
+  const h = harness();
+  await h.login();
+  const data = snapshot();
+  data.deadlines = []; data.projects = []; data.overdue = [];
+  data.days = data.days.map(day => ({ ...day, due_ids: [], session_count: 0, locked_count: 0, scheduled_min: 0, focus_min: 0 }));
+  data.unscheduled = { session_count: 2, minutes: 90 };
+  await showMonth(h, data);
+
+  assert.notEqual(h.elements.get('month-state').textContent, 'Nothing is due or scheduled this month.');
+  assert.equal(h.elements.get('month-unscheduled').hidden, false);
+});
+
+test('a month payload without the unscheduled total is refused, not half-drawn', async () => {
+  const h = harness();
+  await h.login();
+  const broken = snapshot();
+  delete broken.unscheduled;
+  await showMonth(h, broken);
+  await tick();
+  assert.equal(h.run('monthSnapshot'), null);
+  assert.match(h.elements.get('month-state').children[0].textContent, /invalid month/);
 });
