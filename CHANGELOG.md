@@ -16,6 +16,13 @@ All notable changes to FlexWeek are documented here. Format follows
   contains January 1 and 2, 2000 now uses its real Monday, December 27, 1999.
   Week and assignment routes accept only that one pre-2000 week start, so every
   supported calendar date can open in Day view without widening date limits.
+- Password-gated account writes (2026-09-15, backend). Replacing recovery
+  codes, deleting the account and exporting now verify the current password
+  inside the same database transaction as the write, so a password changed
+  from another session at the same moment can no longer authorize them.
+  `GET /api/month` rejects non-ASCII digits in the month label, and a
+  completed session counts only on the day it was completed, not on every
+  candidate day.
 - Account transfer size (2026-09-15, backend and shared frontend). Export
   refuses with 413 when the compact import apply envelope would exceed the
   256 KiB write cap, so a downloaded file can be posted back. Week count is no

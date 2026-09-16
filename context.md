@@ -27,6 +27,32 @@
   1280px and 390px. Year view, student trials, measured comparisons and PR review remain.
   spec.md drift: the proposed Month route and grid rules are not in the public
   API table. No executable was built and nothing was pushed.
+- Date: 2026-09-15. Audit of the Stage 6 backend, Stage 6 frontend and Stage 7
+  month API on `grok/stage7-month-backend`: one own review plus three
+  read-only GLM 5.3 Flash passes through `opencode` (security, month
+  correctness, frontend security/accessibility). Fixed: password check moved
+  inside the write transaction for recovery-codes, delete and export; month
+  label rejects Unicode digits; completed sessions pin `completed_day` only.
+  Tests added for wrong-password 401s, CSRF on every Stage 6 write, recover
+  dropping other sessions, pomodoro chunks, completed-overdue and Unicode
+  labels. Open for Claude: `aria-live` on `#recovery-status` and
+  `#account-sync-note`, announcing or focusing the transfer preview, focusing
+  the auth screen after account deletion. Open for the owner: stored open
+  sessions never carry `start` (placements live only in the page), so month
+  `session_count` and project `session_dates` reflect completed sessions and
+  pomodoro chunks; `GET /api/day` counts a completed multi-candidate session
+  on every candidate day (Stage 2 shape, unchanged). Nothing pushed.
+- Date: 2026-09-15. Stage 7 month API is on `grok/stage7-month-backend` (worktree
+  `~/.worktrees/flexweek-stage7-backend`), based on `grok/stage6-transfer-limit`
+  at f268b7e. `GET /api/month` returns a clipped complete-week grid, deadlines,
+  placed-session counts, projects and overdue homework against the proposed
+  contract in `docs/stage7-contract.md`. Claude still owns Month view and
+  date-to-Day navigation. Year view is out of this slice. spec.md drift:
+  `GET /api/month` and the month grid rules are not in the public API table
+  until the owner approves the contract. Full source gate
+  (`scripts/verify.py`, desktop included): 221 frontend tests, 351 Python
+  tests; a live uvicorn probe of the month route matched the contract. No
+  executable was built. Nothing pushed.
 - Date: 2026-09-15. Stage 6 contract approved and recorded in `spec.md` on
   `grok/stage6-transfer-limit`. Recovery, deletion, storage identity, previewed
   format-3 transfer and the 256 KiB import-apply envelope are product contract.
@@ -319,6 +345,15 @@ Recorded `operation_id` values make a retried write return the first result.
   the destructive confirm button. Each of the four new rules was broken in turn
   and its named test went red. Gate: 238 frontend, 353 Python. Grok's matching
   backend fixes are still unmerged on `grok/stage7-month-backend`. Nothing
+- 2026-09-15, `grok/stage7-month-backend`: Audit done (own review + three GLM
+  passes). Backend findings fixed and tested; three minor accessibility
+  findings handed to Claude (see Current State); two product questions for the
+  owner on what a month "session" means when placements are not stored.
+  Nothing pushed.
+- 2026-09-15, `grok/stage7-month-backend`: Stage 7 backend slice. Proposed
+  contract is `docs/stage7-contract.md`. `GET /api/month?month=YYYY-MM` is
+  authenticated and CSRF-free. Claude owns the Month UI. spec.md drift: the
+  month route. Full gate: 221 frontend tests, 351 Python tests. Nothing
   pushed.
 - 2026-09-15, `feat/stage7-month-frontend`: Stage 7 Month API and shared UI are
   complete. `frontend/month.js` owns read-only Month state and stale-response

@@ -209,6 +209,19 @@ def test_two_placed_session_dates_make_a_project_without_notes(alice: TestClient
     assert day_on(body, "2026-09-15")["scheduled_min"] == 60
 
 
+def test_completed_session_pins_only_its_completed_day(alice: TestClient) -> None:
+    # toggleCompleted keeps the candidate list and records the slot in completed_day.
+    assert put_assignment(alice, assignment()).status_code == 200
+    done = session("s-done", 1, "16:00", days=[1, 2, 3], completed=True, completed_day=2)
+    assert save_week(alice, [done]).status_code == 200, save_week(alice, [done]).text
+    body = get_month(alice).json()
+    assert day_on(body, "2026-09-15")["session_count"] == 0
+    assert day_on(body, "2026-09-16")["session_count"] == 1
+    assert day_on(body, "2026-09-16")["scheduled_min"] == 60
+    assert day_on(body, "2026-09-17")["session_count"] == 0
+    assert body["projects"] == []
+
+
 def test_unplaced_candidate_days_do_not_pin_the_calendar(alice: TestClient) -> None:
     assert put_assignment(alice, assignment()).status_code == 200
     unplaced = session("s-tue", 1, "16:00")
@@ -250,6 +263,64 @@ def test_completed_deadline_stays_on_its_date(alice: TestClient) -> None:
     assert body["deadlines"][0]["completed"] is True
     assert body["projects"] == []
     assert day_on(body, "2026-09-16")["due_ids"] == ["hw-essay"]
+
+
+def test_pomodoro_work_chunks_count_as_sessions_and_breaks_as_locked(alice: TestClient) -> None:
+    assert put_assignment(alice, assignment()).status_code == 200
+    work = {
+        "id": "essay-w1",
+        "title": "Essay",
+        "kind": "locked",
+        "duration_min": 30,
+        "days": [1],
+        "priority": 3,
+        "energy": "medium",
+        "start": "16:00",
+        "assignment_id": "hw-essay",
+        "category": "Homework",
+        "pomodoro_parent_id": "essay",
+        "pomodoro_role": "work",
+        "pomodoro_index": 1,
+    }
+    rest = {
+        "id": "essay-b1",
+        "title": "Break",
+        "kind": "locked",
+        "duration_min": 15,
+        "days": [1],
+        "priority": 3,
+        "energy": "medium",
+        "start": "16:30",
+        "category": "Homework",
+        "pomodoro_parent_id": "essay",
+        "pomodoro_role": "break",
+        "pomodoro_index": 1,
+    }
+    assert save_week(alice, [work, rest]).status_code == 200
+    cell = day_on(get_month(alice).json(), "2026-09-15")
+    assert cell["session_count"] == 1
+    assert cell["locked_count"] == 1
+    assert cell["scheduled_min"] == 45
+
+
+def test_completed_homework_due_before_the_grid_is_not_overdue(alice: TestClient) -> None:
+    assert (
+        put_assignment(
+            alice, assignment(due="2026-08-15T23:59", completed=True, completed_at="2026-08-14T20:00")
+        ).status_code
+        == 200
+    )
+    body = get_month(alice).json()
+    assert body["overdue"] == []
+    assert body["deadlines"] == []
+
+
+def test_month_rejects_unicode_digits(alice: TestClient) -> None:
+    # \d would match these and int() would accept them; the label must be ASCII.
+    for value in ("\u0662\u0660\u0662\u0666-\u0660\u0669", "\uff12\uff10\uff12\uff16-\uff10\uff19"):
+        response = alice.get(f"/api/month?month={value}")
+        assert response.status_code == 422, value
+        assert response.json()["detail"] == MONTH_RULE
 
 
 def test_month_rejects_a_malformed_label(alice: TestClient) -> None:

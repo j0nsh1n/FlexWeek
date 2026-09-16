@@ -27,6 +27,20 @@ def _placed_on_day(block: dict, day_index: int) -> bool:
     return bool(block.get("start")) and _on_day(block, day_index)
 
 
+def _session_pinned_on_day(block: dict, day_index: int) -> bool:
+    # A completed session keeps its candidate list; completed_day names the slot it
+    # held (solver.py spent-time rule). Without it, only a single candidate pins.
+    if not block.get("start"):
+        return False
+    pinned = block.get("completed_day")
+    if pinned is None:
+        days = list(block.get("days") or [])
+        if len(days) != 1:
+            return False
+        pinned = days[0]
+    return int(pinned) == day_index
+
+
 def _details(body: dict) -> tuple[bool, bool, int, int]:
     checklist = list(body.get("checklist") or [])
     has_notes = bool(body.get("notes"))
@@ -90,7 +104,14 @@ def build_month(
         day_index = day.weekday()
         blocks = weeks_by_start.get(week_start, [])
         sessions = [
-            block for block in blocks if is_work_session(block) and _placed_on_day(block, day_index)
+            block
+            for block in blocks
+            if is_work_session(block)
+            and (
+                _placed_on_day(block, day_index)
+                if block.get("kind") == "locked"
+                else _session_pinned_on_day(block, day_index)
+            )
         ]
         locked = [
             block

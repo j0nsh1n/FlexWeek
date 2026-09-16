@@ -12,7 +12,9 @@ FIRST_WEEK_START = date(1999, 12, 27)
 # date.fromisoformat also accepts "20260907" and "2026-W37-1"; a week label is
 # always the padded calendar form, so the shape is pinned before parsing.
 ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
-ISO_MONTH = re.compile(r"\d{4}-\d{2}")
+# [0-9], not \d: date.fromisoformat guards ISO_DATE against Unicode digits, but
+# parse_month feeds int() directly, which would accept them.
+ISO_MONTH = re.compile(r"[0-9]{4}-[0-9]{2}")
 
 
 def _parse(value: str) -> date:
@@ -67,8 +69,6 @@ def parse_month(value: str) -> tuple[date, date]:
     end = date(year, month, calendar.monthrange(year, month)[1])
     if start < FIRST_DAY or start > LAST_DAY:
         raise ValueError("date must be between 2000-01-01 and 2099-12-31")
-    if end > LAST_DAY:
-        end = LAST_DAY
     return start, end
 
 
