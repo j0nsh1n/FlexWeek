@@ -486,6 +486,71 @@ def test_csrf_rejects_account_writes(registered: tuple[TestClient, list[str]]) -
     ).status_code == 403
     assert client.post("/api/account-export", json={"password": PASSWORD}).status_code == 403
     assert client.request("DELETE", "/api/auth/account", json={"password": PASSWORD}).status_code == 403
+    assert client.post("/api/auth/recovery-codes", json={"password": PASSWORD}).status_code == 403
+    assert client.post(
+        "/api/auth/password", json={"current_password": PASSWORD, "new_password": REPLACEMENT}
+    ).status_code == 403
+    exported = client.post("/api/account-export", json={"password": PASSWORD}, headers=WRITE).json()
+    assert client.post("/api/account-import/preview", json={"snapshot": exported}).status_code == 403
+    assert client.post(
+        "/api/account-import", json={"snapshot": exported, "state_token": "x", "operation_id": "op"}
+    ).status_code == 403
+
+
+def test_wrong_password_rejects_every_gated_write_without_side_effects(
+    database: Path, registered: tuple[TestClient, list[str]]
+) -> None:
+    client, codes = registered
+    alice_id = client.get("/api/auth/me").json()["id"]
+    with connect(database) as db:
+        before = sorted(row["code_hash"] for row in db.execute("SELECT code_hash FROM recovery_codes"))
+
+    refreshed = client.post("/api/auth/recovery-codes", json={"password": REPLACEMENT}, headers=WRITE)
+    assert refreshed.status_code == 401
+    assert refreshed.json()["detail"] == "Incorrect password"
+    with connect(database) as db:
+        after = sorted(row["code_hash"] for row in db.execute("SELECT code_hash FROM recovery_codes"))
+    assert after == before
+
+    # A wrong current password is 401 even when the new one equals it, so the
+    # 422 "same password" reply never confirms a guess.
+    changed = client.post(
+        "/api/auth/password",
+        json={"current_password": REPLACEMENT, "new_password": REPLACEMENT},
+        headers=WRITE,
+    )
+    assert changed.status_code == 401
+    assert client.get("/api/auth/me").status_code == 200
+
+    removed = client.request("DELETE", "/api/auth/account", json={"password": REPLACEMENT}, headers=WRITE)
+    assert removed.status_code == 401
+    assert table_count(database, "users") == 1
+    assert table_count(database, "recovery_codes", alice_id) == 8
+
+    exported = client.post("/api/account-export", json={"password": REPLACEMENT}, headers=WRITE)
+    assert exported.status_code == 401
+    assert "weeks" not in exported.json()
+
+    # The old password still works, so nothing was rotated by the failures.
+    login = client.post("/api/auth/login", json={"username": "alice", "password": PASSWORD}, headers=WRITE)
+    assert login.status_code == 200, login.text
+
+
+def test_recover_drops_every_other_session(app: FastAPI, registered: tuple[TestClient, list[str]]) -> None:
+    alice, codes = registered
+    stolen = alice.cookies.get(COOKIE)
+    assert stolen
+    with TestClient(app) as thief:
+        thief.cookies.set(COOKIE, stolen)
+        assert thief.get("/api/auth/me").status_code == 200
+        recovered = alice.post(
+            "/api/auth/recover",
+            json={"username": "alice", "code": codes[0], "password": REPLACEMENT},
+            headers=WRITE,
+        )
+        assert recovered.status_code == 200, recovered.text
+        assert alice.get("/api/auth/me").status_code == 200
+        assert thief.get("/api/auth/me").status_code == 401
 
 
 def test_two_hosted_sessions_share_a_week_and_conflict_on_stale_revision(tmp_path: Path) -> None:

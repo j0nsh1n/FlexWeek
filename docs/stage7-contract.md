@@ -39,10 +39,13 @@ API.
    than a single due-date pin: notes, links or a checklist, or placed sessions
    on two or more distinct grid dates. A one-session homework with no details
    is only a deadline.
-7. A session **pins a date** only when it has a `start` and that day's index is
-   in `days`. Unplaced candidate days do not paint the whole week. Locked
-   non-session blocks with a start (school, sport, sleep) add `locked_count`
-   and `scheduled_min` the same way Day `scheduled_min` counts them.
+7. A flexible session **pins one date** only when it has a `start`: its
+   `completed_day` when set, otherwise its single candidate day. A completed
+   session keeps its full candidate list, so `days` alone is not the pin
+   (`backend/solver.py` spent-time rule). Unplaced candidate days do not paint
+   the whole week. Locked blocks with a start (school, sport, sleep, pomodoro
+   work chunks) recur on every listed day and add `locked_count` or
+   `session_count` and `scheduled_min` the same way Day counts them.
 8. `preferred_view` stays `week` or `day`. Month is session navigation until
    the Stage 5 preference contract is approved. Year view is out of scope.
 9. Date-to-Day navigation is frontend: the cell's `date` is `GET /api/day`'s
@@ -95,9 +98,10 @@ Rules:
   that closed range, in order.
 - `due_ids` on a day are assignment ids whose due calendar date is that date,
   in the same order as `deadlines`.
-- `session_count` is placed work sessions on that day (flexible with
-  `assignment_id`, or locked pomodoro work chunks with `assignment_id`), the
-  same membership as Day `sessions`, but only blocks that have `start`.
+- `session_count` is work sessions pinned to that day (flexible with
+  `assignment_id` pinned by decision 7, or locked pomodoro work chunks with
+  `assignment_id` whose `days` include it), the same membership as Day
+  `sessions`, but only blocks that have `start`.
 - `locked_count` is locked blocks on that day that are not those work chunks
   and that have `start`.
 - `scheduled_min` is the total `duration_min` of those placed sessions and
@@ -134,7 +138,9 @@ No change to existing endpoint JSON.
   not a project; the same assignment with notes is a project with empty
   `session_dates`. Placed sessions on Tuesday and Wednesday of that week make
   a project with those `session_dates` even without notes. An unplaced session
-  whose `days` include Tuesday does not increment Tuesday's `session_count`.
+  whose `days` include Tuesday does not increment Tuesday's `session_count`. A
+  completed session with candidates Tue–Thu and `completed_day` Wednesday
+  counts only on Wednesday and is not a project.
   Open homework due 2026-08-15 is overdue, not a September deadline. Another
   account's month is empty. 422 on a missing or malformed month; 401 without a
   session. January 2000 clips `grid_start` to 2000-01-01; December 2099 clips

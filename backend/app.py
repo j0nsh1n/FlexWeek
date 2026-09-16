@@ -1073,9 +1073,10 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 429, "Too many attempts. Try again in five minutes.", headers={"Retry-After": "300"}
             )
 
-    def require_password(user_id: int, password: str) -> None:
-        with connect(path) as db:
-            row = db.execute("SELECT password_hash FROM users WHERE id = ?", (user_id,)).fetchone()
+    def require_password(db: sqlite3.Connection, user_id: int, password: str) -> None:
+        # Called inside the caller's transaction so a password rotated by another
+        # session between the check and the write cannot still authorize the write.
+        row = db.execute("SELECT password_hash FROM users WHERE id = ?", (user_id,)).fetchone()
         if row is None or not password_matches(password, row["password_hash"]):
             raise HTTPException(401, PASSWORD_WRONG)
 
@@ -1083,6 +1084,8 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
     def recover(data: RecoverRequest, request: Request, response: Response) -> dict:
         deny_if_throttled(request, data.username)
         dummy = hash_recovery_code("missing-recovery-code")
+        # scrypt runs before the write lock is taken, like register.
+        new_hash = password_hash(data.password)
         with connect(path) as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute("SELECT * FROM users WHERE username = ?", (data.username,)).fetchone()
@@ -1110,10 +1113,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 "DELETE FROM recovery_codes WHERE user_id = ? AND code_hash = ?",
                 (row["id"], matched),
             )
-            db.execute(
-                "UPDATE users SET password_hash = ? WHERE id = ?",
-                (password_hash(data.password), row["id"]),
-            )
+            db.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, row["id"]))
             db.execute("DELETE FROM sessions WHERE user_id = ?", (row["id"],))
             token = create_session(db, row["id"])
             user_id = row["id"]
@@ -1134,10 +1134,10 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         data: PasswordConfirm, request: Request, account: Annotated[dict, Depends(user)]
     ) -> dict:
         deny_if_throttled(request, account["username"])
-        require_password(account["id"], data.password)
         codes = generate_recovery_codes()
         with connect(path) as db:
             db.execute("BEGIN IMMEDIATE")
+            require_password(db, account["id"], data.password)
             replace_recovery_codes(db, account["id"], codes)
         return {"recovery_codes": codes, "remaining": len(codes)}
 
@@ -1146,17 +1146,13 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         data: PasswordChange, request: Request, response: Response, account: Annotated[dict, Depends(user)]
     ) -> dict:
         deny_if_throttled(request, account["username"])
+        new_hash = password_hash(data.new_password)
         with connect(path) as db:
             db.execute("BEGIN IMMEDIATE")
-            row = db.execute("SELECT password_hash FROM users WHERE id = ?", (account["id"],)).fetchone()
-            if row is None or not password_matches(data.current_password, row["password_hash"]):
-                raise HTTPException(401, PASSWORD_WRONG)
-            if password_matches(data.new_password, row["password_hash"]):
+            require_password(db, account["id"], data.current_password)
+            if data.new_password == data.current_password:
                 raise HTTPException(422, PASSWORD_SAME)
-            db.execute(
-                "UPDATE users SET password_hash = ? WHERE id = ?",
-                (password_hash(data.new_password), account["id"]),
-            )
+            db.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, account["id"]))
             db.execute("DELETE FROM sessions WHERE user_id = ?", (account["id"],))
             token = create_session(db, account["id"])
         session_response(response, token)
@@ -1167,9 +1163,9 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         data: PasswordConfirm, request: Request, response: Response, account: Annotated[dict, Depends(user)]
     ) -> None:
         deny_if_throttled(request, account["username"])
-        require_password(account["id"], data.password)
         with connect(path) as db:
             db.execute("BEGIN IMMEDIATE")
+            require_password(db, account["id"], data.password)
             delete_account(db, account["id"])
         response.delete_cookie(COOKIE, path="/", httponly=True, secure=secure, samesite="strict")
 
@@ -1456,8 +1452,9 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         data: PasswordConfirm, request: Request, account: Annotated[dict, Depends(user)]
     ) -> dict:
         deny_if_throttled(request, account["username"])
-        require_password(account["id"], data.password)
         with connect(path) as db:
+            db.execute("BEGIN")
+            require_password(db, account["id"], data.password)
             payload = {
                 "format": 3,
                 "exported_at": naive_now(),
