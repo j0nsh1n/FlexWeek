@@ -25,7 +25,16 @@ def is_work_session(block: dict) -> bool:
 
 
 def _on_day(block: dict, day_index: int) -> bool:
-    return day_index in list(block.get("days") or [])
+    days = list(block.get("days") or [])
+    if block.get("kind") == "flexible" and block.get("completed"):
+        # A completed session keeps its candidate list, so counting every candidate
+        # would bill one finished hour to three days. completed_day names the slot it
+        # held; a lone candidate is its own. Same rule as occurrenceDays in app.js.
+        pinned = block.get("completed_day")
+        if pinned is None:
+            return len(days) == 1 and days[0] == day_index
+        return int(pinned) == day_index
+    return day_index in days
 
 
 def _dump(block: dict) -> dict:

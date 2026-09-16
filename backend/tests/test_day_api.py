@@ -208,3 +208,49 @@ def test_day_does_not_show_another_accounts_week(app: FastAPI, alice: TestClient
         assert body["due_soon"] == []
         assert body["workload"]["scheduled_min"] == 0
         assert body["next_action"] == {"kind": "add"}
+
+
+def test_a_completed_session_counts_only_on_the_day_it_was_completed(alice: TestClient) -> None:
+    """One finished hour is one hour, not one per candidate day (docs/stage2-contract.md)."""
+    assert put_assignment(
+        alice, assignment(completed=True, completed_at="2026-09-15T17:00")
+    ).status_code == 200
+    done = session("w1", days=[0, 1, 2], start="16:00", completed=True, completed_day=1)
+    assert save_week(alice, [done]).status_code == 200
+
+    tuesday = get_day(alice, "2026-09-15").json()
+    assert [block["id"] for block in tuesday["sessions"]] == ["w1"]
+    assert tuesday["workload"]["scheduled_min"] == 60
+    assert tuesday["workload"]["focus_min"] == 60
+
+    for other in ("2026-09-14", "2026-09-16"):
+        body = get_day(alice, other).json()
+        assert body["sessions"] == [], other
+        assert body["workload"]["scheduled_min"] == 0, other
+        assert body["workload"]["focus_min"] == 0, other
+
+
+def test_a_completed_session_with_no_named_day_counts_nowhere(alice: TestClient) -> None:
+    """Without completed_day the slot it held is unknown, so no day may claim it."""
+    assert put_assignment(
+        alice, assignment(completed=True, completed_at="2026-09-15T17:00")
+    ).status_code == 200
+    done = session("w1", days=[0, 1, 2], completed=True)
+    assert save_week(alice, [done]).status_code == 200
+
+    for day in ("2026-09-14", "2026-09-15", "2026-09-16"):
+        body = get_day(alice, day).json()
+        assert body["sessions"] == [], day
+        assert body["workload"]["focus_min"] == 0, day
+
+
+def test_an_unfinished_session_still_offers_every_candidate_day(alice: TestClient) -> None:
+    """Pinning completed work must not hide open work the student may still choose."""
+    assert put_assignment(alice, assignment()).status_code == 200
+    assert save_week(alice, [session("w1", days=[0, 1, 2])]).status_code == 200
+
+    for day in ("2026-09-14", "2026-09-15", "2026-09-16"):
+        body = get_day(alice, day).json()
+        assert [block["id"] for block in body["sessions"]] == ["w1"], day
+        assert body["workload"]["scheduled_min"] == 60, day
+        assert body["workload"]["focus_min"] == 0, day
