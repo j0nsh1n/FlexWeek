@@ -103,6 +103,36 @@ Contract for the finished app:
   restore point of the destination weeks and assignments first. Automatic
   bidirectional or offline sync is out of scope. Export returns 413 when the
   compact import apply envelope would exceed the 256 KiB write cap.
+- Running late is a solve preview of a 15, 30 or 60 minute delay from a
+  15-minute cutoff on one day of the open week. Fixed commitments and sleep stay
+  put, and work that no longer fits stays unplaced rather than being dropped.
+  Accepting it stores one locked "Running late" block through `/api/changes` and
+  re-solves, so reload and one-step Undo act on a real saved change. Details
+  live in `docs/stage4-contract.md`.
+- Spreading a project previews flexible sessions of a chosen length across the
+  dates from a start date through the due date. It writes nothing until the
+  student confirms, and each session is an ordinary session of the same
+  assignment, not a pomodoro split.
+- An assignment carries optional `notes` (at most 4000 characters), up to 20
+  `links` (`http` or `https` only) and a checklist of up to 40 items. Ticking
+  checklist items never completes the assignment, and focus minutes still
+  complete nothing.
+- Preferences carry availability: up to 21 `protected` windows (downtime,
+  commute or meal), up to 21 soft `study_windows`, and an optional `day_cutoff`
+  that flexible work must finish by. `POST /api/solve` loads them for the
+  signed-in account, so the browser never re-sends occupancy.
+- Comfort preferences persist per account: `alert_volume` (0-100), `end_chime`,
+  `tray_notifications`, `start_at_login`, `preferred_view` (`week` or `day`),
+  `sidebar_collapsed` and `sidebar_width_px` (200-640). Defaults stay omitted
+  from stored JSON so older clients keep working, and timer rounding to the
+  15-minute grid is previewed and explained rather than silent. Details live in
+  `docs/stage5-contract.md`.
+- Month view shows one calendar month of deadlines, projects, overdue homework
+  and study time, planned and completed, and any date opens Day view. A session
+  pins to a date only when that date is certain: the day it was completed, or
+  its only candidate day. Open work with several candidate days is reported as
+  an unscheduled total instead of being painted across all of them, because the
+  solver's choice is never stored. Details live in `docs/stage7-contract.md`.
 
 ## User Experience
 Web app, one page, desktop-first (designed at 1280px) and usable on a phone at
@@ -153,10 +183,15 @@ Current account/API contract:
 | DELETE | `/api/auth/account` | Password-gated deletion of this account and its rows |
 | GET/PUT | `/api/week` | One dated week of the account, with revision-checked saves |
 | GET | `/api/weeks` | The `week_start` dates this account has saved, ascending |
+| GET | `/api/month` | Month grid of deadlines, projects, overdue work, planned and completed study time, and an unscheduled total |
 | GET | `/api/assignments` | Open assignments with planned and unplanned minutes for a `week_start`; completed ones only when asked |
 | PUT/DELETE | `/api/assignments/{id}` | Revision-checked create, update and delete; delete removes its sessions from every week |
+| POST | `/api/assignments/{id}/spread` | Preview sessions of a chosen length from a start date through the due date; writes nothing |
 | POST | `/api/changes` | Several week and assignment writes, all or nothing; optional operation ID and pre-change recovery point |
-| GET/PUT | `/api/preferences` | Theme, reminders, timers, alarms, Spotify default |
+| GET/PUT | `/api/preferences` | Theme, reminders, timers, alarms, Spotify default, availability windows and comfort settings |
+| GET | `/api/timer-presets` | Named timer presets on the 15-minute grid |
+| GET | `/api/reminder-limits` | The reminder ceilings the settings dialog explains |
+| POST | `/api/timer-split-preview` | Explain how a timer splits and rounds before it is saved |
 | GET/PUT/DELETE | `/api/routines[/{id}]` | Account-owned, revision-checked fixed-time routine templates |
 | GET/POST | `/api/restore-points[/{id}/preview or /restore]` | Create/list restore points, preview a state-tokened diff, and restore transactionally |
 | GET | `/api/storage-info` | Authenticated mode, label, username, origin and 256 KiB transfer limit; no filesystem path |
@@ -167,7 +202,8 @@ Current account/API contract:
 | GET | `/api/health` | Public health response |
 
 `POST /api/solve` accepts `{ "blocks": [...], "week_start": "YYYY-MM-DD" }` and
-an optional `recover` object for a missed locked occurrence. `week_start` is
+either an optional `recover` object for a missed locked occurrence or an
+optional `running_late` object for a delayed start, never both. `week_start` is
 required when any block carries `assignment_id`. The solve trace contains `placed`,
 `unplaced`, `moves`, `explanations`, `failed_constraints`, `solve_ms`,
 `complete`. Demo endpoints are removed. Test-only seed JSON remains.
@@ -389,6 +425,13 @@ The commands it runs, each of which must exit 0:
 - [ ] A student recovers a forgotten password with a one-time code, sees which
       account and origin they are using, and previews a format-3 account file
       onto another signed-in account without exposing it to a third account.
+- [ ] A student who is running late previews a 30-minute delay, accepts it, and
+      undoes it in one step; spreading a project adds sessions only after a
+      preview.
+- [ ] Protected downtime, preferred study hours and a day cutoff change where
+      the solver places work without the browser re-sending occupancy.
+- [ ] A student opens Month, sees deadlines with planned and completed study
+      time, and clicks a date to open Day view.
 - [ ] Download names are `FlexWeek-Windows-x64-Setup.exe` (with
       `FlexWeek-Windows-x64.msi` for schools) and
       `FlexWeek-Linux-x86_64.tar.gz`.

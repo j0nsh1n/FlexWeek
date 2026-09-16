@@ -1,6 +1,21 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-15. `feat/stage7-month-frontend` now holds the integrated Stage
+  7 branch: Grok's Stage 6/7 audit backend fixes merged with this branch's Month
+  UI and accessibility fixes. `GET /api/day` no longer counts a completed
+  session on every candidate day, matching `occurrenceDays` and the month grid.
+  Month shows planned as well as completed work: a session pins to a date only
+  when that date is certain, each day carries `focus_min`, and open work with
+  several candidate days is reported in a new `unscheduled` total rather than
+  painted across the week. The owner approved the Stage 4, 5 and 7 contracts on
+  2026-09-15, so spec.md now lists `GET /api/month`, the spread route, the three
+  comfort routes, `running_late` on solve, availability windows, assignment
+  notes/links/checklist and the comfort fields. Full source gate: 242 frontend
+  and 364 Python tests, mypy over 47 files, whitespace clean. spec.md drift: the
+  Stage 2 contract is still marked proposed, so `GET /api/day` remains off the
+  public API table even though the route ships. Year view, student trials,
+  measured comparisons and PR review remain. Nothing pushed.
 - Date: 2026-09-15. Three accessibility defects from Grok's Stage 6 audit are
   fixed on `feat/stage7-month-frontend` (3bdcfc3). The account sharing note and
   recovery-code status sit in polite live regions; the transfer preview is a
@@ -336,6 +351,18 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-15, `feat/stage7-month-frontend`: integrated `grok/stage7-month-backend`
+  (merge 398531e; only CHANGELOG.md and context.md conflicted, both additive, and
+  backend/app.py plus backend/weeks.py were checked against both parents). Then
+  fixed the `GET /api/day` over-count (e8b7b5e) and added planned work to Month
+  (fc95fc7). `backend/month.py` pins a session by `completed_day`, or by a lone
+  candidate day for open work; `unscheduled` carries the rest; `focus_min` is the
+  completed part of `scheduled_min`. `frontend/month.js` renders "all done" /
+  "1 h done" per cell and a note for undated work. Ten mutations were red-checked
+  across the three commits. The owner approved the Stage 4, 5 and 7 contracts, so
+  spec.md and the contract status lines were updated. Gate: 242 frontend, 364
+  Python. Open: Stage 2 is still marked proposed, so `/api/day` stays off the
+  spec's API table. Nothing pushed.
 - 2026-09-15, `feat/stage7-month-frontend`: accessibility fixes from Grok's
   Stage 6 audit. `aria-live="polite"` on `#account-sync-note` and
   `#recovery-status`; `#account-import-preview` is a named `role="group"` with

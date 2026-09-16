@@ -313,7 +313,8 @@ Current scope mapping:
   atomic failure/retry tests and real preview/accept/undo walkthroughs. Retain the
   existing packed-fixture performance target and measure longer project planning.
 - Status: [x] Complete locally on `feat/stage4-adaptive-plans`. Accepting Running
-  late stores a one-off locked interval. spec.md still omits Stage 4 routes.
+  late stores a one-off locked interval. The contract is approved 2026-09-15 and
+  spec.md lists the Stage 4 routes, availability windows and assignment fields.
   Depends on Stages 1 and 3. Borrows Daily Scheduler actions, not its
   AI tool execution or its behavior of dropping work that no longer fits.
 
@@ -336,7 +337,9 @@ Current scope mapping:
   tests; physical sound, tray, startup, sleep/wake and notification checks on
   supported OSes. OS delivery limits remain separately recorded from test results.
 - Status: [~] Backend and shared browser/desktop frontend complete locally on
-  `feat/stage5-comfort-frontend`. The source gate includes 207 frontend tests,
+  `feat/stage5-comfort-frontend`. The contract is approved 2026-09-15 and
+  spec.md lists the comfort fields and the three comfort routes. The source gate
+  includes 207 frontend tests,
   243 backend tests and a real Stage 5 WebEngine walkthrough. The Qt shell still
   must apply start-at-login and expose tray Test; physical sound, tray, startup
   and sleep/wake checks remain platform work. No executable was built.
@@ -388,11 +391,15 @@ Current scope mapping:
   student scenarios on the baseline and revised UI; record observed completion,
   assistance needed, device/browser and screenshots alongside release-gate output.
 - Status: [~] The Month API and shared frontend are complete locally on
-  `feat/stage7-month-frontend`. The proposed contract is
-  `docs/stage7-contract.md`. Year view, student trials, measured comparisons
-  and PR review remain. The full source gate passes 235 frontend and 353 Python
-  tests, including the real Qt WebEngine Month walkthrough at desktop and phone
-  widths. No executable was built.
+  `feat/stage7-month-frontend`, now integrated with Grok's audit fixes from
+  `grok/stage7-month-backend`. `docs/stage7-contract.md` is approved 2026-09-15
+  with a planned-work amendment: Month shows planned and completed study time,
+  pins a session only to a date that is certain, and reports work with several
+  possible days as an unscheduled total. spec.md lists `GET /api/month`. Year
+  view, student trials, measured comparisons and PR review remain. The full
+  source gate passes 242 frontend and 364 Python tests, including the real Qt
+  WebEngine Month walkthrough at desktop and phone widths. No executable was
+  built.
 
 ### Scope and contract follow-up
 

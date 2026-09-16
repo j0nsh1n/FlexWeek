@@ -1,6 +1,6 @@
 # Contract: Stage 4 — adapt plans to real student days
 
-Status: proposed. Claude owns the browser/desktop frontend. Grok owns
+Status: approved 2026-09-15 by the owner. Claude owns the browser/desktop frontend. Grok owns
 persistence, the solver, and authenticated API work. Both clients continue to
 use the same HTML, CSS and JavaScript frontend.
 

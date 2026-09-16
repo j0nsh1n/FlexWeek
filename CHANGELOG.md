@@ -6,6 +6,10 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Fixed
+- Day counted finished work more than once (2026-09-15, backend). A session
+  completed on one day no longer adds its minutes to every day it could have
+  been done on, so a day's scheduled and focus totals match what actually
+  happened. Open work still offers every day it could be done.
 - Screen reader gaps in Account settings and transfer (2026-09-15, shared
   frontend). The note about how an account is shared and the recovery-code
   status are announced when they change. The account transfer preview is a
@@ -31,6 +35,12 @@ All notable changes to FlexWeek are documented here. Format follows
   size, so pretty-printed files still import when they fit.
 
 ### Added
+- Planned study time in Month (2026-09-15, backend and shared frontend). Month
+  shows work that is still planned as well as work that is finished. A session
+  appears on a date when that date is certain: the day it was completed, or its
+  only possible day. Each date says how much of its time is already behind you,
+  and study sessions that could still land on several days are reported as one
+  total under the calendar instead of being drawn on every one of them.
 - Month view (2026-09-15, shared browser and desktop frontend). Students can
   scan a Monday-first calendar for due work, completed deadlines and scheduled
   time, then open a date in Day view. Project rows show study dates, checklist
