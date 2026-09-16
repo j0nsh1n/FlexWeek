@@ -1,6 +1,20 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-15. Three accessibility defects from Grok's Stage 6 audit are
+  fixed on `feat/stage7-month-frontend` (3bdcfc3). The account sharing note and
+  recovery-code status sit in polite live regions; the transfer preview is a
+  named group that takes focus when it appears; sign-out moves focus to the auth
+  screen only when someone was signed in, so first load keeps browser focus.
+  Full source gate: 238 frontend and 353 Python tests. Grok's backend fixes from
+  the same audit (password checked inside the write transaction, completed
+  sessions pinned to `completed_day` in month, ASCII-only month parsing) are on
+  `grok/stage7-month-backend` at c61fab6 and are not merged here. Two product
+  questions are open for the owner: stored open sessions carry no `start`, so
+  month counts reflect completed work and pomodoro chunks only; and
+  `GET /api/day` over-counts a completed multi-candidate session the way month
+  did before its fix, disagreeing with `occurrenceDays` in the frontend.
+  Nothing pushed.
 - Date: 2026-09-15. Stage 7 Month is complete locally on
   `feat/stage7-month-frontend`, based on Grok's backend at 6ab42d6. The shared
   frontend shows due work, completed deadlines, scheduled time, projects and
@@ -296,6 +310,16 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-15, `feat/stage7-month-frontend`: accessibility fixes from Grok's
+  Stage 6 audit. `aria-live="polite"` on `#account-sync-note` and
+  `#recovery-status`; `#account-import-preview` is a named `role="group"` with
+  `tabindex="-1"` that `renderTransferPreview` focuses; `signedOut` focuses the
+  target screen's username field only when an account was signed in. A focus
+  move beats a live region on the preview because it holds the whole diff and
+  the destructive confirm button. Each of the four new rules was broken in turn
+  and its named test went red. Gate: 238 frontend, 353 Python. Grok's matching
+  backend fixes are still unmerged on `grok/stage7-month-backend`. Nothing
+  pushed.
 - 2026-09-15, `feat/stage7-month-frontend`: Stage 7 Month API and shared UI are
   complete. `frontend/month.js` owns read-only Month state and stale-response
   guards. The real WebEngine case checks actual API data at 1280px and 390px,

@@ -6,6 +6,12 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Fixed
+- Screen reader gaps in Account settings and transfer (2026-09-15, shared
+  frontend). The note about how an account is shared and the recovery-code
+  status are announced when they change. The account transfer preview is a
+  named region that takes focus when it appears, instead of appearing in
+  silence. Logging out or deleting an account moves focus to the log-in or
+  create-account screen rather than dropping it on the page.
 - Lower date boundary (2026-09-15, shared frontend and backend). The week that
   contains January 1 and 2, 2000 now uses its real Monday, December 27, 1999.
   Week and assignment routes accept only that one pre-2000 week start, so every
