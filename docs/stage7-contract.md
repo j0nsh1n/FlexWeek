@@ -6,8 +6,9 @@ same HTML, CSS and JavaScript frontend.
 
 This contract is based on `grok/stage6-transfer-limit` at `f268b7e`.
 
-GLM is not available in this harness, so this file was written with the
-backend slice rather than by a separate contract pass.
+GLM review was attempted through OpenCode, but the requests timed out without
+returning review output. This file was written with the backend slice and then
+checked against the combined implementation and verification evidence.
 
 ## Goal
 
@@ -30,6 +31,9 @@ API.
    days have `in_month: false`. Each day carries `week_start` from `monday_of`,
    including a Monday before 2000-01-01 when that is the week's Monday, so Day
    navigation uses the same label `GET /api/day` would.
+   Calendar dates remain limited to 2000-01-01..2099-12-31. Week and assignment
+   routes accept `1999-12-27` as the single lower-edge week start because it is
+   the Monday containing 2000-01-01 and 2000-01-02. No other 1999 date is valid.
 4. **Deadlines** are assignments whose due calendar date lands on the grid,
    open or completed, ordered by `due` then `id`. Completed items stay visible
    so finishing work does not erase the date.
@@ -141,7 +145,8 @@ No change to existing endpoint JSON.
   `grid_end` to 2099-12-31.
 - Frontend (Claude): Month shows due titles on their dates; a project lists
   its session days; clicking 2026-09-16 opens Day view for that date; empty
-  months have no leftover week headings; Year is not shipped.
+  months have no leftover week headings; Year is not shipped. Clicking
+  2000-01-01 loads the `1999-12-27` containing week before opening Day.
 
 ## spec.md changes on approval
 
@@ -153,7 +158,7 @@ No change to existing endpoint JSON.
 
 ## Out of scope
 
-- Month and Year UI (Claude).
+- Year UI.
 - Year API, stored `preferred_view: month`, student trials, PR review.
 - Changing Day, week, assignment or preference JSON.
 - Hosted deployment, installers, iOS checks.

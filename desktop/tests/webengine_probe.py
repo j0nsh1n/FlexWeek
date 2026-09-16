@@ -950,6 +950,83 @@ def run(case: str, root: Path) -> None:
                 "PASS: one-time codes, password change, recovery, local identity, "
                 "previewed transfer and deletion"
             )
+        elif case == "stage7_month":
+            submit_identity("month_student", "register")
+            evaluate("document.getElementById('setup-close').click()")
+            assignment = {
+                "id": "month-project", "title": "History essay", "course": "History",
+                "category": "Homework", "priority": 3, "energy": "medium", "spotify_url": None,
+                "due": "2026-09-16T23:59", "estimate_min": 120, "focus_minutes": 0,
+                "focus_sessions": 0, "completed": False, "completed_at": None, "revision": 0,
+                "notes": "Private outline", "links": [{"label": "Sources", "url": "https://example.test"}],
+                "checklist": [{"id": "draft", "text": "Draft", "done": True}],
+            }
+            overdue = {
+                **assignment, "id": "late-lab", "title": "Late lab", "course": "Science",
+                "due": "2026-08-15T17:00", "estimate_min": 45, "notes": "", "links": [],
+                "checklist": [],
+            }
+            sessions = [
+                {"id": "essay-tue", "title": "History essay", "kind": "flexible",
+                 "duration_min": 60, "days": [1], "priority": 3, "energy": "medium",
+                 "start": "16:00", "assignment_id": "month-project", "category": "Homework"},
+                {"id": "essay-wed", "title": "History essay", "kind": "flexible",
+                 "duration_min": 60, "days": [2], "priority": 3, "energy": "medium",
+                 "start": "16:00", "assignment_id": "month-project", "category": "Homework"},
+            ]
+            assignment_json = json.dumps(assignment)
+            overdue_json = json.dumps(overdue)
+            sessions_json = json.dumps(sessions)
+            evaluate(f"""window.__monthSeeded=false;
+                (async function(){{
+                    await api('/api/assignments/month-project',
+                        {{method:'PUT', body:JSON.stringify({assignment_json})}});
+                    await api('/api/assignments/late-lab',
+                        {{method:'PUT', body:JSON.stringify({overdue_json})}});
+                    await api('/api/week', {{method:'PUT', body:JSON.stringify({{
+                        week_start:'2026-09-14', blocks:{sessions_json}, revision:0
+                    }})}});
+                    window.__monthSeeded=true;
+                }})().catch(error => {{window.__monthSeedError=error.message;}});""")
+            wait_for("window.__monthSeeded || window.__monthSeedError")
+            assert evaluate("window.__monthSeedError || ''") == ""
+            evaluate(
+                "selectedDay='2026-09-16'; plannerView='day'; "
+                "document.getElementById('view-month').click()"
+            )
+            wait_for("plannerView === 'month' && monthSnapshot && monthSnapshot.month === '2026-09'")
+            assert evaluate("document.getElementById('week-label').textContent") == "September 2026"
+            assert evaluate(
+                "document.querySelector('.month-day[data-date=\"2026-09-16\"]')"
+                ".textContent.includes('History essay')"
+            )
+            assert evaluate(
+                "document.getElementById('month-projects').textContent"
+                ".includes('Checklist 1/1 · Notes · Links')"
+            )
+            assert evaluate("document.getElementById('month-overdue').textContent.includes('Late lab')")
+            assert evaluate(
+                "!document.getElementById('month-projects').textContent.includes('Private outline')"
+            )
+            assert evaluate("getComputedStyle(document.getElementById('planner-sidebar')).display") == "none"
+
+            for width in (1280, 390):
+                window.resize(width, 800)
+                QTest.qWait(150)
+                assert evaluate("document.documentElement.scrollWidth <= window.innerWidth"), (
+                    f"Month overflow at {width}px"
+                )
+                assert evaluate(
+                    "document.querySelector('.month-day[data-date=\"2026-09-16\"]')"
+                    ".getBoundingClientRect().height >= 44"
+                ), f"Month date target is shorter than 44px at {width}px"
+            evaluate("document.querySelector('.month-day[data-date=\"2026-09-16\"]').click()")
+            wait_for("plannerView === 'day' && selectedDay === '2026-09-16'")
+            assert evaluate("document.getElementById('week-label').textContent.includes('Wednesday')")
+            print(
+                "PASS: real month API data renders deadlines, project indicators and overdue work "
+                "at 1280px and 390px, then opens Day"
+            )
         elif case == "phase7":
             submit_identity("focus_student", "register")
             add_item("assignments", "document.getElementById('f-title').value='Maths';"

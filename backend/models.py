@@ -525,7 +525,9 @@ class SolveRequest(WeekRequest):
     @classmethod
     def week_start_is_a_monday(cls, value: str | None) -> str | None:
         if value is not None and not is_week_start(value):
-            raise ValueError("week_start must be a Monday date between 2000-01-01 and 2099-12-31")
+            raise ValueError(
+                "week_start must be a Monday from 2000-01-03 through 2099-12-28, or 1999-12-27"
+            )
         return value
 
     @model_validator(mode="after")

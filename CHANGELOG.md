@@ -6,6 +6,10 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Fixed
+- Lower date boundary (2026-09-15, shared frontend and backend). The week that
+  contains January 1 and 2, 2000 now uses its real Monday, December 27, 1999.
+  Week and assignment routes accept only that one pre-2000 week start, so every
+  supported calendar date can open in Day view without widening date limits.
 - Account transfer size (2026-09-15, backend and shared frontend). Export
   refuses with 413 when the compact import apply envelope would exceed the
   256 KiB write cap, so a downloaded file can be posted back. Week count is no
@@ -14,6 +18,12 @@ All notable changes to FlexWeek are documented here. Format follows
   size, so pretty-printed files still import when they fit.
 
 ### Added
+- Month view (2026-09-15, shared browser and desktop frontend). Students can
+  scan a Monday-first calendar for due work, completed deadlines and scheduled
+  time, then open a date in Day view. Project rows show study dates, checklist
+  progress and the presence of notes or links without displaying private
+  details. Overdue work stays separate. Phones use chronological full-width
+  date rows, and Month leaves saved Day or Week preferences unchanged.
 - Month calendar API (2026-09-15, backend). `GET /api/month?month=YYYY-MM`
   returns a complete-week grid of due dates, placed sessions and locked time,
   plus project and overdue lists, so a Month view can open Day view for a

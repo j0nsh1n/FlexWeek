@@ -1,15 +1,18 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-15. Stage 7 month API is on `grok/stage7-month-backend` (worktree
-  `~/.worktrees/flexweek-stage7-backend`), based on `grok/stage6-transfer-limit`
-  at f268b7e. `GET /api/month` returns a clipped complete-week grid, deadlines,
-  placed-session counts, projects and overdue homework against the proposed
-  contract in `docs/stage7-contract.md`. Claude still owns Month view and
-  date-to-Day navigation. Year view is out of this slice. spec.md drift:
-  `GET /api/month` and the month grid rules are not in the public API table
-  until the owner approves the contract. Web-only gate: 221 frontend tests, 279
-  Python tests. Nothing pushed.
+- Date: 2026-09-15. Stage 7 Month is complete locally on
+  `feat/stage7-month-frontend`, based on Grok's backend at 6ab42d6. The shared
+  frontend shows due work, completed deadlines, scheduled time, projects and
+  overdue homework at desktop and phone widths. A date opens Day only after its
+  editable week loads. Month state stays separate from editable weeks and
+  assignments, and stale month or account replies cannot redraw it. The single
+  lower-edge week start `1999-12-27` lets January 1 and 2, 2000 open without
+  accepting any other 1999 date. The full source gate passes 235 frontend and
+  353 Python tests. The real `stage7_month` WebEngine case also passes at
+  1280px and 390px. Year view, student trials, measured comparisons and PR review remain.
+  spec.md drift: the proposed Month route and grid rules are not in the public
+  API table. No executable was built and nothing was pushed.
 - Date: 2026-09-15. Stage 6 contract approved and recorded in `spec.md` on
   `grok/stage6-transfer-limit`. Recovery, deletion, storage identity, previewed
   format-3 transfer and the 256 KiB import-apply envelope are product contract.
@@ -167,6 +170,7 @@ backend/restore.py       restore-point snapshot diff and token, no HTTP
 backend/app.py           account/session/ownership APIs and static frontend
 backend/storage.py       SQLite, scrypt, hashed sessions
 frontend/app.js          week state, grid, saves, solve, alarms, CATEGORIES table
+frontend/month.js        read-only Month state, navigation and calendar rendering
 frontend/editor.js       Add/Edit dialog: draft -> draftProblem -> draftPatch
 frontend/setup.js        first-week setup, built on editor drafts
 frontend/focus.js        focus timer, Now / Next line
@@ -292,11 +296,14 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
-- 2026-09-15, `grok/stage7-month-backend`: Stage 7 backend slice. Proposed
-  contract is `docs/stage7-contract.md`. `GET /api/month?month=YYYY-MM` is
-  authenticated and CSRF-free. Claude owns the Month UI. spec.md drift: the
-  month route. Web-only gate: 221 frontend tests, 279 Python tests. Nothing
-  pushed.
+- 2026-09-15, `feat/stage7-month-frontend`: Stage 7 Month API and shared UI are
+  complete. `frontend/month.js` owns read-only Month state and stale-response
+  guards. The real WebEngine case checks actual API data at 1280px and 390px,
+  then opens Day. The full source gate passes 235 frontend and 353 Python tests.
+  The request-token mutation overwrites the newer reply with two deadlines and
+  fails as expected. Student trials, metrics and PR review remain. The Month
+  contract is proposed, so `spec.md` still omits its route. No executable was
+  built and nothing was pushed.
 - 2026-09-15, `grok/stage6-transfer-limit`: Owner approved the Stage 6 spec
   updates and skipped hosted deployment, installers and iOS checks.
   `docs/stage6-contract.md` is approved 2026-09-15. `spec.md` now lists recovery,

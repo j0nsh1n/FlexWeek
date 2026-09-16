@@ -52,6 +52,7 @@ function signedOut(message = "Log in to open your week.", preserve = true, scree
   if (typeof clearAdaptState === "function") clearAdaptState();
   if (typeof clearComfortState === "function") clearComfortState();
   if (typeof clearAccessState === "function") clearAccessState();
+  if (typeof clearMonthState === "function") clearMonthState();
   hideContextMenu();
   if (gridGesture) clearGhost(gridGesture.lane);
   gridGesture = null;
@@ -92,6 +93,7 @@ function signedOut(message = "Log in to open your week.", preserve = true, scree
 async function loadAccount(identity) {
   epoch += 1;
   const loadEpoch = epoch;
+  if (typeof clearMonthState === "function") clearMonthState();
   account = identity;
   const asked = currentWeekStart();
   try {

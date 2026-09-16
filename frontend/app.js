@@ -739,7 +739,7 @@ function isWeekStart(value) {
   const date = parseDate(value);
   if (!date) return false;
   const year = date.getUTCFullYear();
-  return date.getUTCDay() === 1 && year >= 2000 && year <= 2099;
+  return date.getUTCDay() === 1 && ((year >= 2000 && year <= 2099) || value === "1999-12-27");
 }
 
 function dateForDay(weekStart, dayIndex) {
@@ -895,7 +895,7 @@ let selectedBlockId = null;
 let selectedOccurrenceDay = null;
 let gridGesture = null;
 let savedWeeks = [];
-// Day or Week view for this signed-in session, and the date the Day view shows (frontend/day.js).
+// Day, Week or Month view for this signed-in session, and the date the Day view shows (frontend/day.js).
 let plannerView = "week";
 let selectedDay = null;
 // The last GET /api/day reply, and a counter so a late reply for another day is ignored.
@@ -1106,7 +1106,13 @@ function rememberSavedWeek(weekStart) {
 }
 
 function renderWeekNav() {
-  weekLabelEl.textContent = plannerView === "day" && selectedDay ? dayTitle(selectedDay) : weekLabel(selectedWeek);
+  weekLabelEl.textContent = plannerView === "month" && typeof monthTitle === "function"
+    ? monthTitle(selectedMonth)
+    : plannerView === "day" && selectedDay ? dayTitle(selectedDay) : weekLabel(selectedWeek);
+  const unit = plannerView === "month" ? "month" : plannerView === "day" ? "day" : "week";
+  document.getElementById("week-prev").ariaLabel = "Previous " + unit;
+  document.getElementById("week-next").ariaLabel = "Next " + unit;
+  document.getElementById("week-today").ariaLabel = "Open today in " + unit + " view";
   // A week holding unsaved edits is not saved on the server yet, so list it too
   // or the only way back to it would be the arrows.
   const listed = savedWeeks.concat([selectedWeek], dirtyWeeks()).filter(function (weekStart, index, all) {
@@ -1207,15 +1213,35 @@ function weekSummary() {
 
 function renderWeek() {
   const dayView = plannerView === "day";
-  document.getElementById("empty-week").hidden = dayView || weekState().blocks.length > 0;
-  weekEl.hidden = dayView;
+  const monthView = plannerView === "month";
+  document.getElementById("planner").dataset.view = plannerView;
+  document.getElementById("empty-week").hidden = dayView || monthView || weekState().blocks.length > 0;
+  weekEl.hidden = dayView || monthView;
   document.getElementById("day-agenda").hidden = !dayView;
-  document.getElementById("week-jump-label").hidden = dayView;
+  document.getElementById("month-view").hidden = !monthView;
+  document.getElementById("week-jump-label").hidden = dayView || monthView;
+  document.getElementById("sidebar-toggle").hidden = monthView;
+  document.getElementById("add-homework").hidden = monthView;
+  document.getElementById("now-next").hidden = monthView || document.getElementById("now-next").hidden;
+  document.getElementById("unfinished-review").hidden = monthView || document.getElementById("unfinished-review").hidden;
+  saveActions.hidden = monthView || (!weekState().dirty && !weekState().conflict);
+  solveEl.hidden = monthView;
+  document.getElementById("undo").hidden = monthView || document.getElementById("undo").hidden;
+  document.getElementById("redo").hidden = monthView || document.getElementById("redo").hidden;
   document.getElementById("view-day").ariaPressed = String(dayView);
-  document.getElementById("view-week").ariaPressed = String(!dayView);
-  buildGrid(weekState().blocks);
-  renderPlanButton();
-  renderDayAgenda();
+  document.getElementById("view-week").ariaPressed = String(!dayView && !monthView);
+  document.getElementById("view-month").ariaPressed = String(monthView);
+  if (monthView) {
+    if (typeof renderMonthView === "function") renderMonthView();
+  } else {
+    document.getElementById("week-prev").disabled = false;
+    document.getElementById("week-next").disabled = false;
+    buildGrid(weekState().blocks);
+    renderPlanButton();
+    if (typeof renderHistoryButtons === "function") renderHistoryButtons();
+    renderDayAgenda();
+    if (typeof updateLiveDisplay === "function") updateLiveDisplay();
+  }
 }
 
 /** The plan button reads Plan my homework, or Update my plan once this week has had a plan. */
@@ -2896,11 +2922,14 @@ document.addEventListener("pointerdown", function (event) {
 solveEl.addEventListener("click", solveWeek);
 // On the Day view the arrows move one day, crossing into the next or previous week as needed.
 document.getElementById("week-prev").addEventListener("click", () =>
-  plannerView === "day" ? openDay(addDaysIso(selectedDay, -1)) : selectWeek(shiftWeek(selectedWeek, -1)));
+  plannerView === "month" ? shiftSelectedMonth(-1) :
+    plannerView === "day" ? openDay(addDaysIso(selectedDay, -1)) : selectWeek(shiftWeek(selectedWeek, -1)));
 document.getElementById("week-next").addEventListener("click", () =>
-  plannerView === "day" ? openDay(addDaysIso(selectedDay, 1)) : selectWeek(shiftWeek(selectedWeek, 1)));
+  plannerView === "month" ? shiftSelectedMonth(1) :
+    plannerView === "day" ? openDay(addDaysIso(selectedDay, 1)) : selectWeek(shiftWeek(selectedWeek, 1)));
 document.getElementById("week-today").addEventListener("click", () =>
-  plannerView === "day" ? openDay(currentDateInfo().iso) : selectWeek(currentWeekStart()));
+  plannerView === "month" ? openCurrentMonth() :
+    plannerView === "day" ? openDay(currentDateInfo().iso) : selectWeek(currentWeekStart()));
 weekJumpEl.addEventListener("change", () => selectWeek(weekJumpEl.value));
 
 const prefsOpen = document.getElementById("prefs-open");

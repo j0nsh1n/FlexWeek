@@ -73,7 +73,9 @@ from backend.weeks import (
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
 COOKIE = "flexweek_session"
-WEEK_START_RULE = "week_start must be a Monday date between 2000-01-01 and 2099-12-31"
+WEEK_START_RULE = (
+    "week_start must be a Monday from 2000-01-03 through 2099-12-28, or 1999-12-27"
+)
 DATE_RULE = "date must be YYYY-MM-DD between 2000-01-01 and 2099-12-31"
 MONTH_RULE = "month must be YYYY-MM between 2000-01 and 2099-12"
 ASSIGNMENT_UNKNOWN = "assignment_id must name an assignment of this account"

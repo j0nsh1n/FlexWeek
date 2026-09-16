@@ -8,6 +8,7 @@ from datetime import date, timedelta
 
 FIRST_DAY = date(2000, 1, 1)
 LAST_DAY = date(2099, 12, 31)
+FIRST_WEEK_START = date(1999, 12, 27)
 # date.fromisoformat also accepts "20260907" and "2026-W37-1"; a week label is
 # always the padded calendar form, so the shape is pinned before parsing.
 ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -35,9 +36,12 @@ def current_week_start() -> str:
 
 
 def is_week_start(value: str) -> bool:
-    """True when value is a well-formed, in-range Monday."""
+    """True for an in-range Monday or the one week containing the lower date edge."""
     try:
-        return _parse(value).weekday() == 0
+        if not ISO_DATE.fullmatch(value):
+            return False
+        day = date.fromisoformat(value)
+        return day.weekday() == 0 and (FIRST_DAY <= day <= LAST_DAY or day == FIRST_WEEK_START)
     except ValueError:
         return False
 

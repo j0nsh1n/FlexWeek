@@ -179,7 +179,10 @@ async function previewRestorePoint(id) {
 /** A restore reloads the account, which opens this week; go back to the week and view the student was on. */
 async function keepPlannerPlace(place) {
   if (place.week !== selectedWeek && isWeekStart(place.week)) await selectWeek(place.week);
-  if (place.view === "day" && place.day && mondayOf(place.day) === selectedWeek) {
+  if (place.view === "month" && typeof shiftedMonth === "function" && shiftedMonth(place.month, 0)) {
+    selectedMonth = place.month;
+    plannerView = "month";
+  } else if (place.view === "day" && place.day && mondayOf(place.day) === selectedWeek) {
     plannerView = "day";
     selectedDay = place.day;
   } else if (place.view === "week") {
@@ -187,7 +190,8 @@ async function keepPlannerPlace(place) {
   }
   renderWeekNav();
   renderWeek();
-  refreshDayData();
+  if (plannerView === "month") await refreshMonthData();
+  else refreshDayData();
 }
 
 async function validateFocusAfterRestore(target) {
@@ -216,7 +220,8 @@ async function restoreFromPreview() {
   if (!stage3RestorePreview || stage3Busy || !account) return false;
   const preview = stage3RestorePreview;
   const identity = { ...account };
-  const place = { week: selectedWeek, day: selectedDay, view: plannerView };
+  const place = { week: selectedWeek, day: selectedDay,
+    month: typeof selectedMonth === "string" ? selectedMonth : null, view: plannerView };
   const focusTarget = focusState ? { weekStart: focusState.weekStart, blockId: focusState.blockId,
     assignmentId: focusState.assignmentId } : null;
   stage3Busy = true;

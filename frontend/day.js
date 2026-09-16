@@ -33,7 +33,11 @@ function resetPlannerView() {
 }
 
 function setPlannerView(next) {
-  if (next !== "day" && next !== "week") return;
+  if (next !== "day" && next !== "week" && next !== "month") return;
+  if (next === "month") {
+    if (typeof openMonthView === "function") openMonthView();
+    return;
+  }
   plannerView = next;
   if (!selectedDay || mondayOf(selectedDay) !== selectedWeek) {
     selectedDay = selectedWeek === currentWeekStart() ? todayIso() : selectedWeek;

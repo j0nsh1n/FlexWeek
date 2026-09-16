@@ -238,6 +238,9 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .layout[data-sidebar-collapsed="true"] { grid-template-columns: minmax(0, 1fr) 0 0; }
 .layout[data-sidebar-collapsed="true"] .side,
 .layout[data-sidebar-collapsed="true"] .sidebar-resizer { display: none; }
+.layout[data-view="month"] { grid-template-columns: minmax(0, 1fr); }
+.layout[data-view="month"] .side,
+.layout[data-view="month"] .sidebar-resizer { display: none; }
 
 .sidebar-resizer {
   cursor: col-resize;
@@ -637,6 +640,33 @@ button.danger {
 .week[hidden], .day-agenda[hidden] { display: none; }
 .day-agenda { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3) 1.1rem var(--space-4); }
 .day-title { margin: 0; font-size: 1.15rem; }
+.month-view { padding: var(--space-3) 1.1rem var(--space-4); }
+.month-view[hidden] { display: none; }
+.month-state { display: flex; align-items: center; gap: var(--space-2); min-height: 2.75rem; color: var(--muted); }
+.month-warning { margin: 0 0 var(--space-2); padding: 0.55rem 0.65rem; border: 1px solid var(--warn); border-radius: var(--radius); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 1px solid var(--hairline-strong); border-radius: var(--radius); overflow: hidden; background: var(--hairline); gap: 1px; }
+.month-weekday { padding: 0.45rem; background: var(--surface-solid); color: var(--muted); font-size: 0.75rem; font-weight: 700; text-align: center; }
+.month-cell { min-width: 0; background: var(--grid-cell); }
+.month-day { display: flex; flex-direction: column; align-items: stretch; gap: 0.3rem; width: 100%; min-height: 8rem; padding: 0.5rem; border: 0; border-radius: 0; background: var(--grid-cell); color: var(--text); text-align: left; box-shadow: none; }
+.month-day:hover { background: var(--surface-card); }
+.month-day.is-outside { color: var(--muted); opacity: 0.68; }
+.month-day.is-today { box-shadow: inset 0 0 0 2px var(--accent); }
+.month-day-date { align-self: flex-end; display: flex; align-items: baseline; gap: 0.25rem; }
+.month-day-weekday-mobile { display: none; }
+.month-day-number { font-weight: 750; }
+.month-today-marker { align-self: flex-start; padding: 0.1rem 0.35rem; border-radius: 999px; background: var(--accent-soft); color: var(--text); font-size: 0.68rem; font-weight: 750; }
+.month-due { overflow: hidden; padding: 0.18rem 0.3rem; border-left: 3px solid var(--flex); border-radius: var(--radius-sm); background: var(--surface-card); font-size: 0.72rem; text-overflow: ellipsis; white-space: nowrap; }
+.month-due.is-completed { text-decoration: line-through; opacity: 0.72; }
+.month-day-summary { margin-top: auto; color: var(--muted); font-size: 0.68rem; }
+.month-list-section { margin-top: var(--space-4); }
+.month-list-section h2 { margin: 0 0 var(--space-2); font-size: 1rem; }
+.month-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.month-list > li { display: grid; gap: 0.25rem; padding: 0.6rem; border: 1px solid var(--hairline); border-radius: var(--radius); background: var(--surface-card); }
+.month-list > li > span { color: var(--muted); font-size: 0.8rem; }
+.month-project-dates { display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem; }
+.month-project-dates > span { margin-right: 0.2rem; color: var(--muted); font-size: 0.8rem; }
+.month-project-dates button { padding: 0.25rem 0.45rem; font-size: 0.75rem; }
+.month-project-indicators { font-weight: 650; }
 .workload p { margin: 0; color: var(--muted); font-size: 0.85rem; }
 .workload-categories { list-style: none; display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.35rem 0 0; padding: 0; }
 .agenda-empty { margin: 0; color: var(--muted); }
@@ -964,6 +994,17 @@ button:disabled { cursor: wait; opacity: 0.6; }
   .restore-create { grid-template-columns: 1fr; }
   .recovery-code-list, .transfer-diff { grid-template-columns: 1fr; }
   .account-actions button, .access-dialog button { min-height: 44px; }
+  .month-view { padding-inline: 0.7rem; }
+  .month-grid { display: flex; flex-direction: column; border-radius: var(--radius); }
+  .month-weekday { display: none; }
+  .month-cell { width: 100%; }
+  .month-day { display: grid; grid-template-columns: 4.25rem minmax(0, 1fr); min-height: 44px; gap: 0.25rem 0.5rem; }
+  .month-day-date { grid-row: 1 / span 4; align-self: start; justify-self: start; }
+  .month-day-weekday-mobile { display: inline; color: var(--muted); font-size: 0.78rem; }
+  .month-day-number { font-size: 1rem; }
+  .month-today-marker, .month-due, .month-day-summary { grid-column: 2; }
+  .month-due { white-space: normal; }
+  .month-project-dates button { min-height: 44px; }
 }
 
 .current-time-line { position: absolute; left: 0; right: 0; height: 2px; background: var(--now); z-index: 6; pointer-events: none; }

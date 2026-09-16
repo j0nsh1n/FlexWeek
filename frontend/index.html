@@ -104,6 +104,7 @@
         <div class="view-switch" role="group" aria-label="View">
           <button type="button" id="view-day" class="secondary" aria-pressed="false">Day</button>
           <button type="button" id="view-week" class="secondary" aria-pressed="true">Week</button>
+          <button type="button" id="view-month" class="secondary" aria-pressed="false">Month</button>
         </div>
         <button type="button" id="sidebar-toggle" class="secondary sidebar-toggle" aria-controls="planner-sidebar" aria-expanded="true">Hide sidebar</button>
         <button type="button" id="week-prev" class="secondary"><svg class="icon" aria-hidden="true"><use href="#i-chevron-left"/></svg>Previous</button>
@@ -131,6 +132,19 @@
       </div>
       <div class="week" id="week"></div>
       <div id="day-agenda" class="day-agenda" hidden></div>
+      <section id="month-view" class="month-view" aria-label="Month calendar" hidden>
+        <p id="month-saved-warning" class="month-warning" hidden>This month shows saved changes only. Save your week to include recent edits.</p>
+        <div id="month-state" class="month-state" role="status"></div>
+        <div id="month-calendar"></div>
+        <section id="month-overdue-section" class="month-list-section" aria-labelledby="month-overdue-heading" hidden>
+          <h2 id="month-overdue-heading">Overdue</h2>
+          <ul id="month-overdue" class="month-list"></ul>
+        </section>
+        <section id="month-projects-section" class="month-list-section" aria-labelledby="month-projects-heading" hidden>
+          <h2 id="month-projects-heading">Projects</h2>
+          <ul id="month-projects" class="month-list"></ul>
+        </section>
+      </section>
     </section>
     <div id="sidebar-resizer" class="sidebar-resizer" role="separator" aria-label="Resize sidebar" aria-controls="planner-sidebar" aria-orientation="vertical" aria-valuemin="200" aria-valuemax="640" aria-valuenow="320" tabindex="0"></div>
     <aside class="side" id="planner-sidebar">
@@ -208,6 +222,7 @@
   <script src="/static/focus.js" defer></script>
   <script src="/static/editor.js" defer></script>
   <script src="/static/day.js" defer></script>
+  <script src="/static/month.js" defer></script>
   <script src="/static/comfort.js" defer></script>
   <script src="/static/reuse.js" defer></script>
   <script src="/static/adapt.js" defer></script>

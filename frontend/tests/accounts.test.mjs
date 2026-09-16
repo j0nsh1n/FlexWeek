@@ -361,7 +361,8 @@ test('week arithmetic stays on Mondays across month, year and clock changes', as
   assert.equal(h.run('shiftWeek("2026-03-02", 1)'), '2026-03-09');
   assert.equal(h.run('dateForDay("2026-12-28", 6)'), '2027-01-03');
   assert.equal(h.run('isWeekStart("2026-09-08")'), false);
-  assert.equal(h.run('isWeekStart("1999-12-27")'), false);
+  assert.equal(h.run('isWeekStart("1999-12-27")'), true);
+  assert.equal(h.run('isWeekStart("1999-12-20")'), false);
   assert.equal(h.run('isWeekStart("2026-02-30")'), false);
   assert.equal(h.run('isWeekStart("07/09/2026")'), false);
 });

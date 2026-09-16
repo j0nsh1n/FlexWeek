@@ -23,6 +23,7 @@ def test_monday_of_rejects_malformed_and_non_calendar_shapes() -> None:
 
 
 def test_monday_of_accepts_the_range_boundaries_and_rejects_outside_them() -> None:
+    assert monday_of("2000-01-01") == "1999-12-27"
     assert monday_of("2000-01-03") == "2000-01-03"
     assert monday_of("2099-12-31") == "2099-12-28"
     with pytest.raises(ValueError):
@@ -33,13 +34,15 @@ def test_monday_of_accepts_the_range_boundaries_and_rejects_outside_them() -> No
 
 def test_is_week_start_is_true_only_for_an_in_range_monday() -> None:
     assert is_week_start("2026-09-07") is True
+    assert is_week_start("1999-12-27") is True
     for value in (
         "2026-09-08",
         "2026-09-13",
         "2026-9-7",
         "20260907",
         "2026-W37-1",
-        "1999-12-27",
+        "1999-12-20",
+        "1999-12-28",
         "2100-01-04",
     ):
         assert is_week_start(value) is False

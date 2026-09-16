@@ -181,6 +181,13 @@ def test_day_rejects_a_malformed_date(alice: TestClient) -> None:
     assert alice.get("/api/day?date=1999-12-31").status_code == 422
 
 
+def test_first_calendar_dates_use_the_single_lower_edge_week(alice: TestClient) -> None:
+    body = get_day(alice, "2000-01-01").json()
+    assert body["date"] == "2000-01-01"
+    assert body["week_start"] == "1999-12-27"
+    assert body["sessions"] == []
+
+
 def test_day_requires_a_session(client: TestClient) -> None:
     assert client.get(f"/api/day?date={DAY}").status_code == 401
 
