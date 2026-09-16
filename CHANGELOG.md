@@ -5,6 +5,8 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-16
+
 ### Fixed
 - Blank notes no longer make a project (2026-09-15, backend). Homework whose
   notes are only spaces or newlines stays an ordinary deadline in Month instead
