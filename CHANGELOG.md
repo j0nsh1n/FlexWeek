@@ -6,6 +6,13 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Fixed
+- Password-gated account writes (2026-09-15, backend). Replacing recovery
+  codes, deleting the account and exporting now verify the current password
+  inside the same database transaction as the write, so a password changed
+  from another session at the same moment can no longer authorize them.
+  `GET /api/month` rejects non-ASCII digits in the month label, and a
+  completed session counts only on the day it was completed, not on every
+  candidate day.
 - Account transfer size (2026-09-15, backend and shared frontend). Export
   refuses with 413 when the compact import apply envelope would exceed the
   256 KiB write cap, so a downloaded file can be posted back. Week count is no

@@ -347,9 +347,11 @@ Current scope mapping:
 - [x] Provide a normal hosted-account path in both clients so a student can open
   the same saved week on another device. Keep local-to-hosted transfer explicit
   and previewed; automatic bidirectional/offline synchronization is separate scope.
-- [~] Remaining security/accessibility review. Recovery, deletion, storage
-  identity and previewed transfer are implemented. Persistent SQLite storage is
-  already in use.
+- [~] Security/accessibility review run 2026-09-15 (own review plus GLM passes
+  on backend security, month correctness and frontend a11y). Backend findings
+  fixed on `grok/stage7-month-backend`; three minor accessibility items remain
+  for the frontend (live regions for recovery status and transfer preview,
+  focus after account deletion).
 - Hosted Render deployment, Windows installer verification, Linux packaging/tray
   checks and Safari/iPhone compatibility: skipped by owner 2026-09-15.
 - Complete when: a student understands where their week is stored, can recover

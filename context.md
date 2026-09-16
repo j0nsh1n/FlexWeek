@@ -1,6 +1,21 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-15. Audit of the Stage 6 backend, Stage 6 frontend and Stage 7
+  month API on `grok/stage7-month-backend`: one own review plus three
+  read-only GLM 5.3 Flash passes through `opencode` (security, month
+  correctness, frontend security/accessibility). Fixed: password check moved
+  inside the write transaction for recovery-codes, delete and export; month
+  label rejects Unicode digits; completed sessions pin `completed_day` only.
+  Tests added for wrong-password 401s, CSRF on every Stage 6 write, recover
+  dropping other sessions, pomodoro chunks, completed-overdue and Unicode
+  labels. Open for Claude: `aria-live` on `#recovery-status` and
+  `#account-sync-note`, announcing or focusing the transfer preview, focusing
+  the auth screen after account deletion. Open for the owner: stored open
+  sessions never carry `start` (placements live only in the page), so month
+  `session_count` and project `session_dates` reflect completed sessions and
+  pomodoro chunks; `GET /api/day` counts a completed multi-candidate session
+  on every candidate day (Stage 2 shape, unchanged). Nothing pushed.
 - Date: 2026-09-15. Stage 7 month API is on `grok/stage7-month-backend` (worktree
   `~/.worktrees/flexweek-stage7-backend`), based on `grok/stage6-transfer-limit`
   at f268b7e. `GET /api/month` returns a clipped complete-week grid, deadlines,
@@ -294,6 +309,11 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-15, `grok/stage7-month-backend`: Audit done (own review + three GLM
+  passes). Backend findings fixed and tested; three minor accessibility
+  findings handed to Claude (see Current State); two product questions for the
+  owner on what a month "session" means when placements are not stored.
+  Nothing pushed.
 - 2026-09-15, `grok/stage7-month-backend`: Stage 7 backend slice. Proposed
   contract is `docs/stage7-contract.md`. `GET /api/month?month=YYYY-MM` is
   authenticated and CSRF-free. Claude owns the Month UI. spec.md drift: the
