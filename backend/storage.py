@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import secrets
 import sqlite3
 import time
@@ -9,6 +10,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from backend.assignments import migrate_blocks
 from backend.weeks import current_week_start
 
 SESSION_SECONDS = 7 * 24 * 60 * 60
@@ -31,7 +33,9 @@ PREFERENCES_TABLE = """
         auto_split_pomodoro INTEGER NOT NULL DEFAULT 0
             CHECK(auto_split_pomodoro IN (0, 1)),
         default_spotify_url TEXT,
-        alarms_json TEXT NOT NULL DEFAULT '[]'
+        alarms_json TEXT NOT NULL DEFAULT '[]',
+        availability_json TEXT NOT NULL DEFAULT '{}',
+        comfort_json TEXT NOT NULL DEFAULT '{}'
     )
 """
 WEEKS_TABLE = """
@@ -39,6 +43,61 @@ WEEKS_TABLE = """
         user_id INTEGER NOT NULL REFERENCES users(id), week_start TEXT NOT NULL,
         blocks TEXT NOT NULL DEFAULT '[]', revision INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (user_id, week_start)
+    )
+"""
+ASSIGNMENTS_TABLE = """
+    CREATE TABLE IF NOT EXISTS assignments (
+        user_id INTEGER NOT NULL REFERENCES users(id), id TEXT NOT NULL,
+        body TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (user_id, id)
+    )
+"""
+ROUTINES_TABLE = """
+    CREATE TABLE IF NOT EXISTS routines (
+        user_id INTEGER NOT NULL REFERENCES users(id), id TEXT NOT NULL,
+        name TEXT NOT NULL, body TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, id)
+    )
+"""
+RESTORE_POINTS_TABLE = """
+    CREATE TABLE IF NOT EXISTS restore_points (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        id TEXT NOT NULL,
+        label TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        weeks_count INTEGER NOT NULL,
+        assignments_count INTEGER NOT NULL,
+        body TEXT NOT NULL,
+        UNIQUE(user_id, id)
+    )
+"""
+RECOVERY_CODES_TABLE = """
+    CREATE TABLE IF NOT EXISTS recovery_codes (
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        code_hash TEXT NOT NULL,
+        PRIMARY KEY (user_id, code_hash)
+    )
+"""
+ACCOUNT_TABLES = (
+    "sessions",
+    "weeks",
+    "assignments",
+    "routines",
+    "restore_points",
+    "operations",
+    "preferences",
+    "recovery_codes",
+)
+OPERATIONS_TABLE = """
+    CREATE TABLE IF NOT EXISTS operations (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        operation_id TEXT NOT NULL,
+        payload_hash TEXT NOT NULL,
+        response TEXT NOT NULL,
+        UNIQUE(user_id, operation_id)
     )
 """
 
@@ -116,6 +175,8 @@ def migrate_preferences(db: sqlite3.Connection) -> None:
         "auto_split_pomodoro": "INTEGER NOT NULL DEFAULT 0",
         "default_spotify_url": "TEXT",
         "alarms_json": "TEXT NOT NULL DEFAULT '[]'",
+        "availability_json": "TEXT NOT NULL DEFAULT '{}'",
+        "comfort_json": "TEXT NOT NULL DEFAULT '{}'",
     }
     for name, declaration in phase7_columns.items():
         if name not in cols:
@@ -148,6 +209,34 @@ def allow_system_theme(db: sqlite3.Connection) -> None:
     db.execute("COMMIT")
 
 
+def migrate_assignments(db: sqlite3.Connection) -> None:
+    """Turn leftover flexible blocks and pomodoro groups into assignments. A no-op on a second start."""
+    tables = {row["name"] for row in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    if "weeks" not in tables:
+        return
+    db.execute("BEGIN IMMEDIATE")
+    rows = db.execute("SELECT user_id, week_start, blocks FROM weeks").fetchall()
+    for row in rows:
+        blocks = json.loads(row["blocks"])
+        updated, created = migrate_blocks(row["week_start"], blocks)
+        for body in created:
+            db.execute(
+                """INSERT INTO assignments(user_id, id, body, revision) VALUES (?, ?, ?, 1)
+                ON CONFLICT(user_id, id) DO NOTHING""",
+                (row["user_id"], body["id"], json.dumps(body, sort_keys=True, separators=(",", ":"))),
+            )
+        if updated != blocks:
+            db.execute(
+                "UPDATE weeks SET blocks = ? WHERE user_id = ? AND week_start = ?",
+                (
+                    json.dumps(updated, sort_keys=True, separators=(",", ":")),
+                    row["user_id"],
+                    row["week_start"],
+                ),
+            )
+    db.execute("COMMIT")
+
+
 def initialize(path: Path) -> None:
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     path.touch(mode=0o600, exist_ok=True)
@@ -163,7 +252,12 @@ def initialize(path: Path) -> None:
                 expires INTEGER NOT NULL
             );
             {WEEKS_TABLE};
+            {ASSIGNMENTS_TABLE};
+            {ROUTINES_TABLE};
+            {RESTORE_POINTS_TABLE};
+            {OPERATIONS_TABLE};
             {PREFERENCES_TABLE};
+            {RECOVERY_CODES_TABLE};
             CREATE TABLE IF NOT EXISTS auth_attempts (
                 key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL
             );
@@ -171,6 +265,13 @@ def initialize(path: Path) -> None:
         date_legacy_weeks(db)
         migrate_preferences(db)
         allow_system_theme(db)
+        migrate_assignments(db)
+
+
+def delete_account(db: sqlite3.Connection, user_id: int) -> None:
+    for table in ACCOUNT_TABLES:
+        db.execute(f"DELETE FROM {table} WHERE user_id = ?", (user_id,))
+    db.execute("DELETE FROM users WHERE id = ?", (user_id,))
 
 
 def create_session(db: sqlite3.Connection, user_id: int) -> str:

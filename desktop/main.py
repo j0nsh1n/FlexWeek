@@ -466,6 +466,11 @@ def smoke_flow(username: str) -> list[tuple[str, str, str | None]]:
          f"document.getElementById('register-username').value = {json.dumps(username)};"
          f"document.getElementById('register-password').value = {json.dumps(secrets.token_urlsafe(18))};"
          "document.querySelector('#register-form button[type=submit]').click();"),
+        ("recovery codes", "document.getElementById('recovery-codes-dialog').open && "
+         "document.querySelectorAll('#recovery-codes-list code').length === 8",
+         "document.getElementById('recovery-codes-ack').checked = true;"
+         "document.getElementById('recovery-codes-ack').dispatchEvent(new Event('change'));"
+         "document.getElementById('recovery-codes-done').click();"),
         ("setup school step", "document.getElementById('setup-dialog').open && "
          "!document.getElementById('setup-school').hidden",
          "document.getElementById('setup-next').click();"),
@@ -474,7 +479,7 @@ def smoke_flow(username: str) -> list[tuple[str, str, str | None]]:
         ("setup homework step", "!document.getElementById('setup-homework').hidden",
          "document.getElementById('setup-homework-title').value = 'Math worksheet';"
          "document.getElementById('setup-next').click();"),
-        ("setup summary", "document.getElementById('setup-next').textContent === 'Add to my week and Solve'",
+        ("setup summary", "document.getElementById('setup-next').textContent === 'Add to my week and plan'",
          "document.getElementById('setup-next').click();"),
         ("setup Solve", "!document.getElementById('setup-dialog').open && "
          "!document.getElementById('debug').hidden && Boolean(document.querySelector('.flex-block'))", None),

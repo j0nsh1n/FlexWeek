@@ -7,6 +7,7 @@ __pycache__/
 
 # local-only agent notes
 notes.md
+.traceworks/
 *.bak-*
 
 # Account database and SQLite journals

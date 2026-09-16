@@ -96,11 +96,14 @@ def test_get_rejects_non_monday_and_malformed_week_starts(account: TestClient) -
         assert response.status_code == 422
 
 
-def test_out_of_range_week_starts_are_rejected(account: TestClient) -> None:
-    # Both are Mondays, so only the range rule can reject them.
-    assert account.get("/api/week?week_start=1999-12-27").status_code == 422
+def test_only_the_monday_containing_the_lower_date_edge_is_allowed(account: TestClient) -> None:
+    assert account.get("/api/week?week_start=1999-12-27").json() == {
+        "week_start": "1999-12-27", "blocks": [], "revision": 0,
+    }
+    assert save(account, "1999-12-27", [], 0).status_code == 200
+    assert account.get("/api/week?week_start=1999-12-20").status_code == 422
     assert account.get("/api/week?week_start=2100-01-04").status_code == 422
-    assert save(account, "1999-12-27", [], 0).status_code == 422
+    # Saving an empty week intentionally stores no row.
     assert account.get("/api/weeks").json() == {"weeks": []}
 
 

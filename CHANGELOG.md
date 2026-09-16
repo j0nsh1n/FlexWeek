@@ -5,7 +5,188 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+- Blank notes no longer make a project (2026-09-15, backend). Homework whose
+  notes are only spaces or newlines stays an ordinary deadline in Month instead
+  of being listed as a project.
+- The Month saved-only warning is announced (2026-09-15, shared frontend).
+  Screen readers hear it when it appears, and redrawing the month does not
+  repeat it.
+- Day counted finished work more than once (2026-09-15, backend). A session
+  completed on one day no longer adds its minutes to every day it could have
+  been done on, so a day's scheduled and focus totals match what actually
+  happened. Open work still offers every day it could be done.
+- Screen reader gaps in Account settings and transfer (2026-09-15, shared
+  frontend). The note about how an account is shared and the recovery-code
+  status are announced when they change. The account transfer preview is a
+  named region that takes focus when it appears, instead of appearing in
+  silence. Logging out or deleting an account moves focus to the log-in or
+  create-account screen rather than dropping it on the page.
+- Lower date boundary (2026-09-15, shared frontend and backend). The week that
+  contains January 1 and 2, 2000 now uses its real Monday, December 27, 1999.
+  Week and assignment routes accept only that one pre-2000 week start, so every
+  supported calendar date can open in Day view without widening date limits.
+- Password-gated account writes (2026-09-15, backend). Replacing recovery
+  codes, deleting the account and exporting now verify the current password
+  inside the same database transaction as the write, so a password changed
+  from another session at the same moment can no longer authorize them.
+  `GET /api/month` rejects non-ASCII digits in the month label, and a
+  completed session counts only on the day it was completed, not on every
+  candidate day.
+- Account transfer size (2026-09-15, backend and shared frontend). Export
+  refuses with 413 when the compact import apply envelope would exceed the
+  256 KiB write cap, so a downloaded file can be posted back. Week count is no
+  longer a separate 400-week transfer cap. `GET /api/storage-info` includes
+  `transfer_limit_bytes`. The page measures that envelope, not the raw file
+  size, so pretty-printed files still import when they fit.
+
 ### Added
+- Planned study time in Month (2026-09-15, backend and shared frontend). Month
+  shows work that is still planned as well as work that is finished. A session
+  appears on a date when that date is certain: the day it was completed, or its
+  only possible day. Each date says how much of its time is already behind you,
+  and study sessions that could still land on several days are reported as one
+  total under the calendar instead of being drawn on every one of them.
+- Month view (2026-09-15, shared browser and desktop frontend). Students can
+  scan a Monday-first calendar for due work, completed deadlines and scheduled
+  time, then open a date in Day view. Project rows show study dates, checklist
+  progress and the presence of notes or links without displaying private
+  details. Overdue work stays separate. Phones use chronological full-width
+  date rows, and Month leaves saved Day or Week preferences unchanged.
+- Month calendar API (2026-09-15, backend). `GET /api/month?month=YYYY-MM`
+  returns a complete-week grid of due dates, placed sessions and locked time,
+  plus project and overdue lists, so a Month view can open Day view for a
+  date without guessing week boundaries. Unplaced candidate days do not paint
+  the month. Year view is still later work. Rules are in
+  `docs/stage7-contract.md`.
+- Account access and transfer UI (2026-09-15, frontend). New accounts must
+  acknowledge their eight one-time recovery codes before first-week setup.
+  Students can recover a forgotten password, replace codes, change passwords,
+  delete an account, and see the signed-in username, storage mode and server
+  origin. Full-account transfer uses a password-gated download and shows weeks,
+  homework, routines, settings and named removals before replacing the
+  destination. Transfer state and displayed codes are cleared on account
+  changes; wrong current-password errors do not end a valid session.
+- Account recovery, deletion and local-to-hosted transfer (2026-09-14, backend).
+  Registering returns eight one-time recovery codes (hashes only in SQLite).
+  `POST /api/auth/recover` sets a new password, drops other sessions and signs
+  the student in. Signed-in students can change password, replace unused codes,
+  or delete the account with the current password. `GET /api/storage-info` now
+  includes username and public origin. `POST /api/account-export` and previewed
+  `POST /api/account-import` copy weeks, assignments, preferences and routines
+  onto another account after a Stage 3 restore point of the destination
+  schedule. Automatic sync is still out of scope. Rules are in the approved
+  `docs/stage6-contract.md` and the public API table in `spec.md`.
+- Comfort settings UI (2026-09-14, frontend). Settings are grouped into
+  Appearance, Focus, Notifications and Account. Students can choose a timer
+  preset, preview and explicitly accept 15-minute calendar rounding, test an
+  alert at the unsaved volume, enable a quiet focus-transition chime, and read
+  the web, desktop, Spotify and duplicate-reminder limits. The preferred view,
+  collapsed state and keyboard/pointer-resizable sidebar persist per account;
+  phones restore a single-column layout even when the desktop sidebar was
+  collapsed. Start-at-login and tray preferences are stored for the Qt shell
+  follow-up.
+- Comfort settings persistence (2026-09-14, backend). Preferences store alert
+  volume, an optional end-of-block chime, tray notification and start-at-login
+  flags, preferred week or day view, and sidebar collapsed state and width.
+  `POST /api/timer-split-preview` snaps timer lengths to the 15-minute grid and
+  returns the split plan without writing. `GET /api/timer-presets` and
+  `GET /api/reminder-limits` return the Short/Standard/Long presets and the
+  web-versus-desktop reminder copy. Auto-split still requires lengths already
+  on the grid. Rules are in `docs/stage5-contract.md`.
+- Running late, project spread, protected time and project details
+  (2026-09-14, frontend). Running late offers 15, 30 or 60 minutes, previews
+  moves and unplaced homework, then stores one locked "Running late" interval
+  so reload and Undo see a real change. Spread writes extra sessions in one
+  save. Assignments keep notes, links and a checklist. Settings hold protected
+  downtime, commute and meal windows, preferred study hours and an optional
+  day cutoff. Priority and energy labels describe the stored values without
+  changing them, and crowded weeks keep a visible cluster of concrete choices.
+- Running late, project spread, assignment notes and protected hours
+  (2026-09-14, backend). `POST /api/solve` accepts `running_late` (15, 30 or 60
+  minutes from a grid cutoff) as a preview that keeps locked blocks and sleep
+  put and leaves overflow in `unplaced`. `POST /api/assignments/{id}/spread`
+  previews extra sessions of a chosen length on one assignment before the due
+  date. Assignments store notes, http(s) links and a small checklist.
+  Preferences store protected downtime, commute and meal windows, preferred
+  study hours and an optional day cutoff; solve loads them so the frontend
+  does not re-send occupancy. Crowded weeks get one extra explanation with
+  concrete choices instead of claiming the week was solved. Rules are in
+  `docs/stage4-contract.md`.
+- Schedule reuse and recovery (2026-09-14, frontend). Copy, paste, duplicate
+  and copy-day use visible controls or Ctrl/Cmd shortcuts and preview fixed-time
+  collisions before one atomic save; a retried save reuses its operation id so
+  it cannot write twice. Weekly routines capture fixed commitments, apply to the
+  chosen weekdays of a destination week and allow one-week holiday or time
+  exceptions, with a restore point taken first. Later weeks review unfinished
+  homework without changing its assignment id, deadline or progress. Settings
+  creates, previews and restores account restore points and says whether they
+  are stored on this device or on the FlexWeek server.
+- Routines, restore points and storage location (2026-09-14, backend). An
+  account can save named weekly templates of fixed commitments, snapshot every
+  week and assignment, preview a restore against current data, and restore in
+  one transaction that first keeps a recovery point of the schedule being
+  replaced. `POST /api/changes` accepts an optional operation id so a retried
+  Apply routine or Clear week cannot double-write, and an optional snapshot
+  label so those writes take a restore point first. `GET /api/storage-info`
+  reports whether this process is local or hosted. Rules are in
+  `docs/stage3-contract.md`.
+- Day agenda and quick Add homework (2026-09-14, frontend). A Day view sits
+  beside Week: Due soon (due today, tomorrow or overdue), Homework today, Fixed
+  time and one Next action, with no headings for empty lists and Edit, Finished
+  and Start focus in each row. At 800px and narrower Day comes first; wider
+  windows start on Week. Add homework asks only for title, due date and time,
+  and estimated time, with Choose a time myself for the full editor. The Day
+  view shows the day's scheduled, focus and free time from `GET /api/day`. Solve
+  is now Plan my homework, or Update my plan once the week has a plan. Results
+  list unplaced work first and fold what fits into one line, deadlines at risk
+  read "due Tuesday" or "9 days left", and Export and Import moved into
+  Settings.
+- Day agenda API (2026-09-13, backend). `GET /api/day?date=` returns due-soon
+  homework, that day's sessions and fixed blocks, one next action, and
+  scheduled / focus / available minutes. Rules are in `docs/stage2-contract.md`.
+- Assignments (2026-09-13, backend). Homework is account-owned, with an exact
+  local due time, a total estimate, focus progress and its own revision. A
+  week holds work sessions that point at an assignment. GET/PUT/DELETE
+  `/api/assignments` and POST `/api/changes` land with the week save rules in
+  `docs/stage1-contract.md`. Old weekday `latest` values migrate on start and
+  are still accepted on saves.
+- Homework due dates (2026-09-13, frontend). Adding homework asks for a due
+  date and time instead of a weekday, and the date may be in a later week.
+  Each homework is saved as an assignment together with its session in the
+  week, and the card shows the full due date. Focus sessions add their minutes
+  to the homework and never mark it done; marking the session done finishes
+  the homework. Solve sends the week on screen so due dates become bounds.
+- Continuing (2026-09-13, frontend). The sidebar lists homework due this week
+  or later that still needs time no session covers, with its due date. Plan
+  the rest here adds a session for that time on the days up to the due date,
+  and a week that already holds 100 blocks refuses with a plain message.
+  Weeks before this one and homework already past due list nothing.
+- Focus session choices (2026-09-13, frontend). When a homework focus session
+  ends, the student picks Finished (the homework is done and the session keeps
+  its slot, saved together), Need more time (adds 15-minute steps to its total
+  and starts the break) or Take a break. The timer keeps running across weeks
+  and survives a reload of the same account through sessionStorage, which
+  holds only ids and times; a session that ran out while the page was closed
+  is counted and asks the same question. Starting another timer asks first,
+  logging out or signing in as another account clears it, and Quick focus
+  times work that is not on the calendar without crediting anything.
+- Undo and redo (2026-09-13, frontend). The last 50 changes to weeks and
+  homework can be undone and redone with the Undo and Redo buttons beside the
+  status line, Ctrl/Cmd+Z, and Ctrl/Cmd+Shift+Z or Ctrl+Y, but not while
+  typing in a field. Undo saves through the normal revision checks, never
+  takes away focus minutes, and stops at a 409 with the usual reload actions;
+  a step for a week another device changed since is skipped. Repeating blocks
+  say "Remove Tuesday only" or "Delete all days", deleting homework asks
+  whether to remove this session or the whole homework, and Clear week moved
+  into a More menu. History is cleared on sign-out and account change.
+- Export format 2 (2026-09-13, frontend). Week and day exports, and the
+  unsaved-week download, carry the homework their sessions point at. Import
+  reads formats 1 and 2. Homework is reused only when its id, title and due all
+  match; otherwise it gets the backend migration's id for the destination week,
+  so importing a file into the same week twice adds nothing and into another
+  week adds separate homework. A format 1 file's weekday deadlines become
+  homework when saved, and the week reloads to show it.
 - Hybrid frost look (2026-09-10) in light and dark. The page sits on a soft
   gradient; the header, week bar, sidebar, sign-in card and dialogs are frosted
   glass with hairline borders; task cards and forms are more solid; the week

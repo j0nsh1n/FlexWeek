@@ -82,7 +82,8 @@ function harness(options = {}) {
     localStorage: { getItem: key => local.get(key), removeItem: key => local.delete(key) },
     fetch: async (path, options) => { requests.push({ path, options }); return handler(path, options); },
     getComputedStyle: () => ({ getPropertyValue: () => '2.75rem' }),
-    setTimeout, clearTimeout, AbortController, structuredClone, console,
+    setTimeout, clearTimeout, setInterval, clearInterval, AbortController, structuredClone, console,
+    crypto: globalThis.crypto, TextEncoder,
     confirm: () => true, Date: FixedDate, matchMedia: options.matchMedia,
     location: options.location, history: options.history,
   });
@@ -94,9 +95,10 @@ function harness(options = {}) {
     dayHeads: () => elements.get('week').children
       .filter(child => child.className === 'day-head')
       .map(head => head.children.map(part => part.textContent).join(' ')),
-    async login(id = 1, blocks = [], saved = []) {
+    async login(id = 1, blocks = [], saved = [], owned = []) {
       await tick();
       handler = async path => {
+        if (path.startsWith('/api/assignments')) return response(200, { assignments: owned });
         if (path.startsWith('/api/weeks')) return response(200, { weeks: saved });
         if (path.startsWith('/api/week')) return response(200, { week_start: weekOf(path), blocks, revision: 0 });
         return response(200, { theme: 'nocturne' });
@@ -359,7 +361,8 @@ test('week arithmetic stays on Mondays across month, year and clock changes', as
   assert.equal(h.run('shiftWeek("2026-03-02", 1)'), '2026-03-09');
   assert.equal(h.run('dateForDay("2026-12-28", 6)'), '2027-01-03');
   assert.equal(h.run('isWeekStart("2026-09-08")'), false);
-  assert.equal(h.run('isWeekStart("1999-12-27")'), false);
+  assert.equal(h.run('isWeekStart("1999-12-27")'), true);
+  assert.equal(h.run('isWeekStart("1999-12-20")'), false);
   assert.equal(h.run('isWeekStart("2026-02-30")'), false);
   assert.equal(h.run('isWeekStart("07/09/2026")'), false);
 });
@@ -390,7 +393,7 @@ test('previous, next and Today open the expected Monday and render what came bac
   assert.equal(h.run('weekState().revision'), 4);
   // A solve describes the week it ran on, so it must not follow the reader.
   assert.equal(h.elements.get('debug').hidden, true);
-  assert.equal(h.elements.get('flex-note').textContent, 'Press Solve to place these around school and sports.');
+  assert.equal(h.elements.get('flex-note').textContent, 'Press Plan my homework to place these around school and sports.');
   assert.equal(h.run('weekState().blocks[0].title'), 'Science');
   assert.equal(h.elements.get('week-label').textContent, 'Week of Aug 31, 2026');
   await h.elements.get('week-next').listeners.click();
@@ -399,12 +402,11 @@ test('previous, next and Today open the expected Monday and render what came bac
   assert.equal(h.run('selectedWeek'), '2026-09-14');
   await h.elements.get('week-today').listeners.click();
   assert.equal(h.run('selectedWeek'), '2026-09-07');
-  assert.deepEqual(asked, [
-    '/api/week?week_start=2026-08-31',
-    '/api/week?week_start=2026-09-07',
-    '/api/week?week_start=2026-09-14',
-    '/api/week?week_start=2026-09-07',
-  ]);
+  // Opening a week also refreshes the assignments it plans against.
+  assert.deepEqual(asked, ['2026-08-31', '2026-09-07', '2026-09-14', '2026-09-07'].flatMap(week => [
+    `/api/week?week_start=${week}`,
+    `/api/assignments?week_start=${week}&include_completed=true`,
+  ]));
   // The year boundary: December 2026 into January 2027.
   h.elements.get('week-jump').value = '2026-12-28';
   await h.elements.get('week-jump').listeners.change();
@@ -418,8 +420,9 @@ test('previous, next and Today open the expected Monday and render what came bac
 test('an account whose data sits in an earlier week can still reach it', async () => {
   const h = harness();
   await h.login(1, [], ['2026-08-24']);
-  assert.deepEqual(h.requests.slice(-3).map(r => r.path).sort(),
-    ['/api/preferences', '/api/week?week_start=2026-09-07', '/api/weeks']);
+  assert.deepEqual(h.requests.slice(-4).map(r => r.path).sort(),
+    ['/api/assignments?week_start=2026-09-07&include_completed=true', '/api/preferences',
+      '/api/week?week_start=2026-09-07', '/api/weeks']);
   assert.deepEqual(h.elements.get('week-jump').children.map(option => option.value),
     ['2026-08-24', '2026-09-07']);
   assert.match(h.elements.get('status').textContent, /This week is empty/);
@@ -580,9 +583,14 @@ test('after Solve the chrome speaks plainly: results sentence, no badge for room
 
   const badges = h.allElements.filter(el => el.classList.contains('slack-badge')).map(el => el.textContent);
   assert.deepEqual(badges, ['At risk']);
-  assert.equal(h.elements.get('debug-stats').textContent,
-    'Placed 2 of 3 tasks. 1 still needs a time. The reasons are below.');
-  assert.equal(h.elements.get('debug-stats').title, 'Solved in 3.3 ms');
+  assert.equal(h.elements.get('debug-stats').textContent, '1 task still needs a time. 2 tasks fit.');
+  assert.equal(h.elements.get('debug-stats').title, 'Planned in 3.3 ms');
+  // The lab that did not fit and the quiz at risk stay in the open; the essay that fits folds away.
+  const results = h.elements.get('debug-unplaced').children;
+  assert.deepEqual(results.slice(0, 2).map(item => item.children[0].textContent),
+    ['Quiz prep — Very little room: scheduled to finish 15m before the deadline.', 'Lab report — The week is too full to place this task.']);
+  assert.equal(results[2].className, 'fit-details');
+  assert.equal(h.elements.get('solve-label').textContent, 'Update my plan');
 
   const focusItems = h.elements.get('focus-tasks').children;
   assert.deepEqual(focusItems.map(item => item.children[0].textContent), ['Essay', 'Quiz prep']);
@@ -590,11 +598,13 @@ test('after Solve the chrome speaks plainly: results sentence, no badge for room
   assert.equal(h.elements.get('focus-section').hidden, false);
 });
 
-test('the Focus section stays hidden until a task has a time', async () => {
+test('the Focus section offers Quick focus before any task has a time', async () => {
   const h = harness();
   const school = { id: 'school', kind: 'locked', title: 'School', duration_min: 390, days: [0], start: '08:00', priority: 1, energy: 'medium' };
   await h.login(1, [school, task]);
   assert.equal(h.elements.get('focus-tasks').children.length, 0);
+  assert.equal(h.elements.get('focus-section').hidden, false);
+  h.run('signedOut()');
   assert.equal(h.elements.get('focus-section').hidden, true);
 });
 
@@ -617,10 +627,13 @@ test('a new account walks through school, sports and first homework, then Solve 
   h.handle(async (path, options) => {
     if (path === '/api/auth/register') return response(200, { id: 9, username: 'rookie' });
     if (path.startsWith('/api/weeks')) return response(200, { weeks: [] });
-    if (path === '/api/week' && options.method === 'PUT') {
+    if (path === '/api/changes') {
       const body = JSON.parse(options.body);
       saves.push(body);
-      return response(200, { week_start: body.week_start, blocks: body.blocks, revision: saves.length });
+      return response(200, {
+        weeks: body.weeks.map(week => ({ ...week, revision: saves.length })),
+        assignments: body.assignments.map(change => ({ id: change.id, revision: 1, assignment: change.assignment })),
+      });
     }
     if (path.startsWith('/api/week')) return response(200, { week_start: weekOf(path), blocks: [], revision: 0 });
     if (path === '/api/solve') {
@@ -652,25 +665,41 @@ test('a new account walks through school, sports and first homework, then Solve 
   assert.equal(next(), false);
   assert.equal(h.elements.get('setup-error').textContent, 'Name the assignment, or choose Skip this step.');
   h.elements.get('setup-homework-title').value = 'Math worksheet';
-  assert.equal(h.elements.get('setup-homework-due-day').value, '4');
+  assert.equal(h.elements.get('setup-homework-due-date').value, '2026-09-11', 'due tomorrow by default');
   assert.equal(next(), true);
 
   assert.deepEqual(h.elements.get('setup-summary').children.map(item => item.textContent), [
     'School: Mon, Tue, Wed, Thu, Fri, 08:00–14:30',
     'Soccer: Tue, Thu, 15:30–17:00',
-    'Math worksheet: 1 h, due Friday at 21:00',
+    'Math worksheet: 1 h, due Fri Sep 11, 21:00',
   ]);
-  assert.equal(h.elements.get('setup-next').textContent, 'Add to my week and Solve');
+  assert.equal(h.elements.get('setup-next').textContent, 'Add to my week and plan');
   assert.equal(await next(), true);
 
   assert.equal(h.elements.get('setup-dialog').open, false);
   assert.equal(saves.length, 1);
-  assert.deepEqual(saves[0].blocks.map(b => [b.title, b.kind, b.category, b.days, b.start, b.duration_min, b.latest]), [
+  const [week] = saves[0].weeks;
+  assert.deepEqual(week.blocks.map(b => [b.title, b.kind, b.category, b.days, b.start, b.duration_min, b.latest]), [
     ['School', 'locked', 'class', [0, 1, 2, 3, 4], '08:00', 390, null],
     ['Soccer', 'locked', 'exercise', [1, 3], '15:30', 90, null],
-    ['Math worksheet', 'flexible', 'assignments', [3, 4], null, 60, 'Friday 21:00'],
+    ['Math worksheet', 'flexible', 'assignments', [3, 4], null, 60, null],
   ]);
+  // The homework is an assignment with an exact due time; the week holds its work session.
+  assert.equal(saves[0].assignments.length, 1);
+  const { id, assignment, revision } = saves[0].assignments[0];
+  assert.match(id, /^hw-/);
+  assert.equal(week.blocks[2].assignment_id, id);
+  assert.equal(revision, 0);
+  const { id: bodyId, ...fields } = assignment;
+  assert.equal(bodyId, id);
+  assert.deepEqual(fields, {
+    title: 'Math worksheet', course: null, category: 'assignments', priority: 3, energy: 'medium',
+    spotify_url: null, due: '2026-09-11T21:00', estimate_min: 60, focus_minutes: 0, focus_sessions: 0,
+    completed: false, completed_at: null,
+  });
+  assert.equal(h.run('dirtyAssignments.size'), 0);
   assert.equal(solves.length, 1);
+  assert.equal(solves[0].week_start, MONDAY);
   assert.equal(h.elements.get('debug').hidden, false);
   assert.equal(h.elements.get('empty-week').hidden, true);
 });
@@ -746,4 +775,721 @@ test('without a device preference the System theme is light', async () => {
   const h = harness();
   await tick();
   assert.equal(h.run('document.documentElement.dataset.theme'), 'slate');
+});
+
+// Stage 1: homework is an assignment that outlives a week; the week holds its work session.
+const session = { ...task, assignment_id: 'hw-math' };
+const mathAssignment = {
+  id: 'hw-math', title: 'Math', course: null, category: null, priority: 3, energy: 'medium', spotify_url: null,
+  due: '2026-09-11T21:00', estimate_min: 60, focus_minutes: 0, focus_sessions: 0, completed: false,
+  completed_at: null, revision: 2, planned_min: 60, unplanned_min: 0,
+};
+const changesReply = (body, revision = 3) => response(200, {
+  weeks: body.weeks.map(week => ({ ...week, revision: week.revision + 1 })),
+  assignments: body.assignments.map(change => ({ id: change.id, revision, assignment: change.assignment })),
+});
+
+test('assignment edits save with their week in one change, and a week without any still uses PUT', async () => {
+  const h = harness();
+  await h.login(1, [session]);
+  h.run(`assignments.set('hw-math', ${JSON.stringify(mathAssignment)})`);
+  const calls = [];
+  h.handle(async (path, options) => {
+    const body = JSON.parse(options.body);
+    calls.push({ path, body });
+    if (path === '/api/changes') return changesReply(body);
+    return response(200, { week_start: body.week_start, blocks: body.blocks, revision: body.revision + 1 });
+  });
+
+  h.run("putAssignment({ ...assignments.get('hw-math'), title: 'Algebra' })");
+  assert.equal(await h.run('saveWeek()'), true);
+  assert.equal(calls[0].path, '/api/changes');
+  assert.deepEqual(calls[0].body.weeks.map(week => [week.week_start, week.revision]), [[MONDAY, 0]]);
+  assert.deepEqual(calls[0].body.assignments.map(change => [change.id, change.revision, change.assignment.title]),
+    [['hw-math', 2, 'Algebra']]);
+  assert.equal('planned_min' in calls[0].body.assignments[0].assignment, false, 'only contract fields are sent');
+  assert.equal(h.run("assignments.get('hw-math').revision"), 3);
+  assert.equal(h.run('dirtyAssignments.size'), 0);
+
+  assert.equal(await h.run('saveWeek()'), true);
+  assert.equal(calls[1].path, '/api/week');
+  assert.equal(h.run('weekState().revision'), 2);
+});
+
+test('Solve sends the week on screen, so the server can turn due dates into bounds', async () => {
+  const h = harness();
+  await h.login(1, [session]);
+  let body;
+  h.handle(async (_path, options) => {
+    body = JSON.parse(options.body);
+    return response(200, { placed: [], unplaced: [], moves: [], explanations: [], failed_constraints: [],
+      solve_ms: 1, complete: true });
+  });
+  await h.run('solveWeek()');
+  assert.equal(body.week_start, MONDAY);
+  assert.equal(body.blocks[0].assignment_id, 'hw-math');
+});
+
+test('marking homework done finishes its assignment, and unmarking it reopens the assignment', async () => {
+  const h = harness();
+  await h.login(1, [session]);
+  h.run(`assignments.set('hw-math', ${JSON.stringify(mathAssignment)})`);
+  h.handle(async () => { throw new Error('Offline'); });
+
+  assert.equal(h.run("toggleCompleted('homework')"), true);
+  await tick();
+  await tick();
+  assert.equal(h.run("assignments.get('hw-math').completed"), true);
+  assert.equal(h.run("assignments.get('hw-math').completed_at"), '2026-09-10T12:00');
+  assert.equal(h.run("dirtyAssignments.has('hw-math')"), true);
+
+  assert.equal(h.run("toggleCompleted('homework')"), true);
+  await tick();
+  await tick();
+  assert.equal(h.run("assignments.get('hw-math').completed"), false);
+  assert.equal(h.run("assignments.get('hw-math').completed_at"), null);
+});
+
+test('an import may carry assignment_id, but not together with an old weekday deadline', () => {
+  const h = harness();
+  assert.equal(h.run(`importBlockError(${JSON.stringify(session)}, 0)`), null);
+  assert.equal(h.run(`importBlockError(${JSON.stringify({ ...session, latest: 'Friday 21:00' })}, 0)`),
+    'Block 1 has both a deadline and an assignment.');
+});
+
+test('an expired session keeps unsaved assignment edits, for the same account only', async () => {
+  const h = harness();
+  await h.login(1, [session]);
+  h.run(`assignments.set('hw-math', ${JSON.stringify(mathAssignment)})`);
+  h.handle(async () => { throw new Error('Offline'); });
+  h.run("putAssignment({ ...assignments.get('hw-math'), title: 'Algebra' })");
+  assert.equal(await h.run('saveWeek()'), false);
+
+  h.run('signedOut()');
+  assert.equal(h.run('assignments.size'), 0);
+  await h.login(2, []);
+  assert.equal(h.run('dirtyAssignments.size'), 0, 'another account never receives them');
+  await h.login(1, [session]);
+  assert.equal(h.run("assignments.get('hw-math').title"), 'Algebra');
+  assert.equal(h.run("dirtyAssignments.has('hw-math')"), true);
+});
+
+// Stage 1: Continuing lists homework that still needs time no session covers.
+const openAssignment = (id, fields) => ({
+  id, title: id, course: null, category: 'assignments', priority: 3, energy: 'medium', spotify_url: null,
+  estimate_min: 60, focus_minutes: 0, focus_sessions: 0, completed: false, completed_at: null, revision: 1,
+  planned_min: 0, unplanned_min: 0, ...fields,
+});
+const workSession = (id, minutes) => ({ id: 's-' + id, kind: 'flexible', title: id, duration_min: minutes, days: [3, 4], assignment_id: id });
+const continuing = h => JSON.parse(h.run('JSON.stringify(continuingAssignments().map(entry => [entry.assignment.id, entry.minutes]))'));
+
+test('Continuing lists homework that still needs time, counting sessions this week and in later weeks', async () => {
+  const h = harness();
+  const owned = [
+    openAssignment('Quiz', { due: '2026-09-11T09:00', estimate_min: 60, planned_min: 60 }),
+    openAssignment('Essay', { due: '2026-09-16T21:00', estimate_min: 180, focus_minutes: 30, planned_min: 60 }),
+    openAssignment('Project', { due: '2026-09-20T23:59', estimate_min: 120, planned_min: 120 }),
+    openAssignment('Lab', { due: '2026-09-08T21:00', estimate_min: 60 }),
+    openAssignment('Poem', { due: '2026-09-18T12:00', completed: true, completed_at: '2026-09-09T10:00' }),
+  ];
+  await h.login(1, [workSession('Essay', 60), workSession('Quiz', 60)], [], owned);
+  // Essay: 180 minus 30 focused minus the 60-minute session. Quiz is covered here, Project next
+  // week, Lab was due Tuesday and Poem is finished.
+  assert.deepEqual(continuing(h), [['Essay', 90]]);
+  assert.equal(h.elements.get('continuing-section').hidden, false);
+  const card = h.elements.get('continuing').children[0];
+  assert.equal(card.children[0].textContent, 'Essay');
+  assert.equal(card.children[1].textContent, h.run('formatDuration(90)') + ' not planned yet · due Wed Sep 16, 21:00');
+
+  h.run('weekState().blocks[1].duration_min = 30');
+  assert.deepEqual(continuing(h), [['Quiz', 30], ['Essay', 90]], 'a shorter session counts before it is saved');
+});
+
+test('Plan the rest here adds a session for the missing time on the days up to the due date', async () => {
+  const h = harness();
+  await h.login(1, [workSession('Essay', 60)], [], [
+    openAssignment('Essay', { due: '2026-09-12T21:00', estimate_min: 150, planned_min: 60 }),
+  ]);
+  let saved;
+  h.handle(async (path, options) => {
+    assert.equal(path, '/api/week', 'no assignment changed, so the week saves alone');
+    saved = JSON.parse(options.body);
+    return response(200, { ...saved, revision: 1 });
+  });
+  h.elements.get('continuing').children[0].children[2].listeners.click();
+  await tick();
+  const added = saved.blocks[1];
+  assert.deepEqual([added.kind, added.title, added.duration_min, added.days, added.assignment_id, added.latest],
+    ['flexible', 'Essay', 90, [3, 4, 5], 'Essay', null]);
+  assert.equal(h.elements.get('continuing-section').hidden, true);
+  assert.deepEqual(continuing(h), []);
+});
+
+test('a later week lists the homework with days from Monday to the due day, and an earlier week lists nothing', async () => {
+  const h = harness();
+  await h.login(1, [], [], [openAssignment('Essay', { due: '2026-09-16T21:00', estimate_min: 120 })]);
+  assert.deepEqual(continuing(h), [['Essay', 120]]);
+  assert.equal(await h.run("selectWeek('2026-08-31')"), true);
+  assert.deepEqual(continuing(h), []);
+  assert.equal(h.elements.get('continuing-section').hidden, true);
+  assert.equal(await h.run("selectWeek('2026-09-14')"), true);
+  assert.deepEqual(continuing(h), [['Essay', 120]]);
+
+  let saved;
+  h.handle(async (_path, options) => {
+    saved = JSON.parse(options.body);
+    return response(200, { ...saved, revision: 1 });
+  });
+  assert.equal(h.run("planRestHere('Essay')"), true);
+  await tick();
+  assert.equal(saved.week_start, '2026-09-14');
+  assert.deepEqual(saved.blocks.map(block => [block.duration_min, block.days]), [[120, [0, 1, 2]]]);
+});
+
+test('Plan the rest here refuses a week that already holds 100 blocks and sends nothing', async () => {
+  const h = harness();
+  const full = Array.from({ length: 100 }, (_, i) => ({
+    id: 'b' + i, kind: 'locked', title: 'Block', duration_min: 15, days: [0], start: '06:00',
+  }));
+  await h.login(1, full, [], [openAssignment('Essay', { due: '2026-09-16T21:00', estimate_min: 120 })]);
+  const sent = h.requests.length;
+  assert.equal(h.run("planRestHere('Essay')"), false);
+  assert.equal(h.requests.length, sent);
+  assert.equal(h.run('weekState().blocks.length'), 100);
+  assert.equal(h.run('statusEl.textContent'), 'This week already has 100 blocks. Remove one before planning more here.');
+});
+
+test('homework added this week joins Continuing only when it needs more time than its sessions', async () => {
+  const h = harness();
+  await h.login(1, [], [], []);
+  h.run(`weekState().blocks.push(attachAssignment(
+    { id: 's1', kind: 'flexible', title: 'Essay', duration_min: 60, days: [3, 4] },
+    { assignmentId: null, dueDate: '2026-09-12', dueTime: '21:00' }))`);
+  const id = h.run('weekState().blocks[0].assignment_id');
+  assert.deepEqual(continuing(h), []);
+  h.run(`putAssignment({ ...assignments.get(${JSON.stringify(id)}), estimate_min: 90 })`);
+  assert.deepEqual(continuing(h), [[id, 30]]);
+});
+
+// Stage 1: undo and redo.
+const weekdaySchool = { id: 'school', kind: 'locked', title: 'School', duration_min: 390, days: [0, 1, 2, 3, 4], start: '08:00', priority: 1, energy: 'medium' };
+const inPage = (h, code) => JSON.parse(h.run(`JSON.stringify(${code})`));
+
+/** A server that accepts every write and counts revisions up, recording what it was sent. */
+function fakeServer(h) {
+  const calls = [];
+  h.handle(async (path, options = {}) => {
+    const method = options.method || 'GET';
+    const body = options.body ? JSON.parse(options.body) : null;
+    calls.push({ method, path, body });
+    if (path === '/api/changes') return changesReply(body);
+    if (path === '/api/solve') {
+      return response(200, { placed: [], unplaced: [], moves: [], explanations: [], failed_constraints: [], solve_ms: 1, complete: true });
+    }
+    if (method === 'PUT') return response(200, { ...body, revision: body.revision + 1 });
+    if (method === 'DELETE') return response(200, { changed_weeks: [], removed_sessions: {} });
+    return response(404, { detail: `unexpected ${method} ${path}` });
+  });
+  return calls;
+}
+
+async function settle() {
+  await tick();
+  await tick();
+}
+
+test('Undo after a delete puts the block back with one week save, and Redo deletes it again', async () => {
+  const h = harness();
+  await h.login(1, [weekdaySchool]);
+  const calls = fakeServer(h);
+  assert.equal(h.elements.get('undo').hidden, true);
+  assert.equal(h.run("deleteBlockById('school')"), true);
+  await settle();
+  assert.equal(h.run('weekState().blocks.length'), 0);
+  assert.equal(h.elements.get('undo').hidden, false);
+  assert.equal(h.run('statusEl.textContent'), 'Deleted School. Undo brings it back.');
+
+  assert.equal(await h.run('undo()'), true);
+  assert.deepEqual(calls.map(call => [call.method, call.path, call.body.revision]), [['PUT', '/api/week', 0], ['PUT', '/api/week', 1]]);
+  assert.deepEqual(calls[1].body.blocks.map(block => block.id), ['school']);
+  assert.equal(h.run('weekState().blocks[0].id'), 'school');
+  assert.equal(h.run('statusEl.textContent'), 'Undid deleting School.');
+  assert.equal(h.elements.get('redo').hidden, false);
+
+  assert.equal(await h.run('redo()'), true);
+  assert.equal(h.run('weekState().blocks.length'), 0);
+  assert.equal(calls.at(-1).body.revision, 2);
+});
+
+test('Undo after Clear week restores every block, and a new edit clears Redo', async () => {
+  const h = harness();
+  await h.login(1, [weekdaySchool, task]);
+  fakeServer(h);
+  h.elements.get('new-week').listeners.click();
+  await settle();
+  assert.equal(h.run('weekState().blocks.length'), 0);
+  assert.equal(await h.run('undo()'), true);
+  assert.deepEqual(inPage(h, 'weekState().blocks.map(block => block.id)'), ['school', 'homework']);
+  assert.equal(h.elements.get('redo').hidden, false);
+
+  assert.equal(h.run("deleteBlockById('homework')"), true);
+  await settle();
+  assert.equal(h.run('redoSteps.length'), 0);
+  assert.equal(h.elements.get('redo').hidden, true);
+});
+
+test('Undo after a missed-day replan brings the day back as it was', async () => {
+  const h = harness();
+  await h.login(1, [weekdaySchool]);
+  const calls = fakeServer(h);
+  h.run('weekState().trace = { placed: [], unplaced: [], moves: [], explanations: [] }');
+  await h.run("recoverMissedOccurrence('school', 1)");
+  assert.deepEqual(inPage(h, 'weekState().blocks[0].missed_days'), [1]);
+  assert.equal(await h.run('undo()'), true);
+  assert.deepEqual(calls.at(-1).body.blocks[0].missed_days || [], []);
+  assert.equal(h.run('statusEl.textContent'), 'Undid the replan.');
+});
+
+test('Undo after deleting a whole homework re-creates it and puts back every removed session in one change', async () => {
+  const h = harness();
+  const math = openAssignment('hw-math', { title: 'Math', due: '2026-09-16T21:00', estimate_min: 120, revision: 4 });
+  const here = { id: 's-here', kind: 'flexible', title: 'Math', duration_min: 60, days: [3], assignment_id: 'hw-math' };
+  const nextWeek = { id: 's-next', kind: 'flexible', title: 'Math', duration_min: 60, days: [0], assignment_id: 'hw-math' };
+  const soccer = { id: 'soccer', kind: 'locked', title: 'Soccer', duration_min: 60, days: [1], start: '16:00' };
+  await h.login(1, [weekdaySchool, here], [], [math]);
+  const calls = [];
+  h.handle(async (path, options = {}) => {
+    const method = options.method || 'GET';
+    const body = options.body ? JSON.parse(options.body) : null;
+    calls.push({ method, path, body });
+    if (method === 'DELETE') {
+      return response(200, {
+        changed_weeks: [{ week_start: MONDAY, revision: 1 }, { week_start: '2026-09-14', revision: 8 }],
+        removed_sessions: { [MONDAY]: [here], '2026-09-14': [nextWeek] },
+      });
+    }
+    if (path === '/api/week?week_start=2026-09-14') return response(200, { week_start: '2026-09-14', blocks: [soccer], revision: 8 });
+    if (path === '/api/changes') return changesReply(body);
+    return response(404, { detail: `unexpected ${method} ${path}` });
+  });
+
+  assert.equal(h.run("deleteBlockById('s-here')"), true);
+  assert.equal(h.elements.get('delete-dialog').open, true);
+  assert.equal(calls.length, 0, 'nothing is deleted before the student chooses');
+  h.elements.get('delete-assignment').listeners.click();
+  await settle();
+  assert.equal(calls[0].path, '/api/assignments/hw-math?revision=4');
+  assert.equal(h.run("assignments.has('hw-math')"), false);
+  assert.deepEqual(inPage(h, 'weekState().blocks.map(block => block.id)'), ['school']);
+  assert.equal(h.run('weekState().revision'), 1);
+
+  assert.equal(await h.run('undo()'), true);
+  const change = calls.at(-1);
+  assert.equal(change.path, '/api/changes');
+  assert.deepEqual(change.body.assignments.map(item => [item.id, item.revision, item.assignment.title]), [['hw-math', 0, 'Math']]);
+  assert.deepEqual(change.body.weeks.map(week => [week.week_start, week.revision, week.blocks.map(block => block.id)]), [
+    [MONDAY, 1, ['school', 's-here']],
+    ['2026-09-14', 8, ['soccer', 's-next']],
+  ]);
+  assert.equal(h.run("assignments.get('hw-math').revision"), 3);
+  assert.deepEqual(inPage(h, 'weekState().blocks.map(block => block.id)'), ['school', 's-here']);
+});
+
+test('an undo refused with 409 stores nothing, keeps the step and shows the conflict actions', async () => {
+  const h = harness();
+  await h.login(1, [weekdaySchool]);
+  fakeServer(h);
+  h.run("deleteBlockById('school')");
+  await settle();
+  h.handle(async () => response(409, { detail: 'This week changed elsewhere.' }));
+  assert.equal(await h.run('undo()'), false);
+  assert.equal(h.run('undoSteps.length'), 1);
+  assert.equal(h.run('weekState().blocks.length'), 0);
+  assert.equal(h.run('weekState().conflict'), true);
+  assert.equal(h.elements.get('save-actions').hidden, false);
+  assert.match(h.run('statusEl.textContent'), /^Could not undo deleting School: it changed on another device\./);
+});
+
+test('an older step for a week another device changed is skipped instead of overwriting the newer week', async () => {
+  const h = harness();
+  await h.login(1, [weekdaySchool]);
+  fakeServer(h);
+  h.run("deleteBlockById('school')");
+  await settle();
+  // Reload saved week finds revision 5, which this page never wrote.
+  h.handle(async () => response(200, { week_start: MONDAY, blocks: [task], revision: 5 }));
+  h.elements.get('reload-week').listeners.click();
+  await settle();
+  const sent = h.requests.length;
+  assert.equal(await h.run('undo()'), false);
+  assert.equal(h.requests.length, sent);
+  assert.equal(h.run('undoSteps.length'), 0);
+  assert.equal(h.run('statusEl.textContent'), 'Undo skipped deleting School: it changed on another device since.');
+});
+
+test('Undo after adding homework saves the week without the session, then deletes the empty assignment', async () => {
+  const h = harness();
+  await h.login(1, [weekdaySchool]);
+  const calls = fakeServer(h);
+  h.run(`weekState().blocks.push(attachAssignment(
+    { id: 's1', kind: 'flexible', title: 'Essay', duration_min: 60, days: [3, 4] },
+    { assignmentId: null, dueDate: '2026-09-12', dueTime: '21:00' }))`);
+  h.run('commitWeek()');
+  await settle();
+  assert.equal(calls[0].path, '/api/changes');
+  const id = h.run('weekState().blocks[1].assignment_id');
+  assert.equal(await h.run('undo()'), true);
+  assert.deepEqual(calls.slice(1).map(call => [call.method, call.path]),
+    [['PUT', '/api/week'], ['DELETE', `/api/assignments/${id}?revision=3`]]);
+  assert.deepEqual(calls[1].body.blocks.map(block => block.id), ['school']);
+  assert.equal(h.run(`assignments.has(${JSON.stringify(id)})`), false);
+});
+
+test('Undo of a homework edit keeps the focus minutes counted since', async () => {
+  const h = harness();
+  const math = openAssignment('hw-math', { title: 'Math', due: '2026-09-16T21:00', estimate_min: 120, revision: 2 });
+  await h.login(1, [{ id: 's-here', kind: 'flexible', title: 'Math', duration_min: 60, days: [3], assignment_id: 'hw-math' }], [], [math]);
+  const calls = fakeServer(h);
+  h.run("putAssignment({ ...assignments.get('hw-math'), title: 'Algebra' })");
+  h.run('commitWeek()');
+  await settle();
+  // A focus session is credited afterwards; that is progress, not an edit.
+  h.run("putAssignment({ ...assignments.get('hw-math'), focus_minutes: 30, focus_sessions: 1 })");
+  h.run('absorbIntoHistory()');
+  assert.equal(await h.run('saveWeek()'), true);
+  assert.equal(await h.run('undo()'), true);
+  const restored = calls.at(-1);
+  assert.equal(restored.path, '/api/assignments/hw-math');
+  assert.deepEqual([restored.body.title, restored.body.focus_minutes, restored.body.focus_sessions, restored.body.revision],
+    ['Math', 30, 1, 3]);
+});
+
+test('Ctrl+Z undoes, Ctrl+Shift+Z and Ctrl+Y redo, but not while typing in a field', async () => {
+  const h = harness();
+  await h.login(1, [weekdaySchool]);
+  fakeServer(h);
+  h.run("deleteBlockById('school')");
+  await settle();
+  const press = ({ key, ctrl = false, meta = false, shift = false, field = false }) => h.run(`handleHistoryKey({
+    preventDefault() {}, target: ${field ? '{ closest: () => ({}) }' : 'null'}, key: ${JSON.stringify(key)},
+    ctrlKey: ${ctrl}, metaKey: ${meta}, shiftKey: ${shift}, altKey: false })`);
+  assert.equal(press({ key: 'z', ctrl: true, field: true }), false);
+  assert.equal(h.run('undoSteps.length'), 1);
+  assert.equal(press({ key: 'z', meta: true }), true);
+  await settle();
+  assert.equal(h.run('redoSteps.length'), 1);
+  assert.equal(press({ key: 'Z', ctrl: true, shift: true }), true);
+  await settle();
+  assert.equal(h.run('undoSteps.length'), 1);
+  assert.equal(press({ key: 'z', ctrl: true }), true);
+  await settle();
+  assert.equal(press({ key: 'y', ctrl: true }), true);
+  await settle();
+  assert.equal(h.run('weekState().blocks.length'), 0);
+  assert.equal(press({ key: 'y', meta: true }), false, 'Cmd+Y is not redo');
+});
+
+test('history is cleared when another account signs in', async () => {
+  const h = harness();
+  await h.login(1, [weekdaySchool]);
+  fakeServer(h);
+  h.run("deleteBlockById('school')");
+  await settle();
+  assert.equal(h.run('undoSteps.length'), 1);
+  await h.login(2, []);
+  assert.equal(h.run('undoSteps.length + redoSteps.length'), 0);
+  assert.equal(h.elements.get('undo').hidden, true);
+});
+
+test('repeating blocks offer Remove Tuesday only and Delete all days; a one-day block offers Delete', async () => {
+  const h = harness();
+  const dentist = { id: 'dentist', kind: 'locked', title: 'Dentist', duration_min: 60, days: [2], start: '15:00' };
+  await h.login(1, [weekdaySchool, dentist]);
+  h.run("openBlockEditor(weekState().blocks[0], 1, 'occurrence')");
+  assert.equal(h.elements.get('form-delete').textContent, 'Remove Tuesday only');
+  h.run("openBlockEditor(weekState().blocks[0], 1, 'series')");
+  assert.equal(h.elements.get('form-delete').textContent, 'Delete all days');
+  h.run("openBlockEditor(weekState().blocks[1], 2, 'occurrence')");
+  assert.equal(h.elements.get('form-delete').textContent, 'Delete');
+});
+
+test('deleting homework asks first, and Remove this session keeps the homework', async () => {
+  const h = harness();
+  const math = openAssignment('hw-math', { title: 'Math', due: '2026-09-16T21:00', estimate_min: 120, planned_min: 60 });
+  await h.login(1, [{ id: 's-here', kind: 'flexible', title: 'Math', duration_min: 60, days: [3], assignment_id: 'hw-math' }], [], [math]);
+  const calls = fakeServer(h);
+  assert.equal(h.run("deleteBlockById('s-here')"), true);
+  assert.equal(h.elements.get('delete-dialog').open, true);
+  assert.equal(calls.length, 0);
+  h.elements.get('delete-session').listeners.click();
+  await settle();
+  assert.equal(h.elements.get('delete-dialog').open, false);
+  assert.deepEqual(calls.map(call => [call.method, call.path]), [['PUT', '/api/week']]);
+  assert.equal(h.run("assignments.has('hw-math')"), true);
+  assert.equal(h.run('statusEl.textContent'), 'Removed this session of Math. The homework is kept. Undo brings the session back.');
+});
+
+test('deleting homework that was never saved asks for a save first, so Undo is never left pointing at nothing', async () => {
+  const h = harness();
+  await h.login(1, [weekdaySchool]);
+  h.handle(async () => { throw new Error('Offline'); });
+  h.run(`weekState().blocks.push(attachAssignment(
+    { id: 's1', kind: 'flexible', title: 'Essay', duration_min: 60, days: [3, 4] },
+    { assignmentId: null, dueDate: '2026-09-12', dueTime: '21:00' }))`);
+  assert.equal(await h.run('commitWeek()'), false);
+  const id = h.run('weekState().blocks[1].assignment_id');
+  const sent = h.requests.length;
+  assert.equal(await h.run(`deleteAssignmentEverywhere(${JSON.stringify(id)})`), false);
+  assert.equal(h.requests.length, sent);
+  assert.equal(h.run('weekState().blocks.length'), 2);
+  assert.equal(h.run('statusEl.textContent'), 'Essay is not saved yet. Press Retry save, then delete it.');
+});
+
+// Stage 1: export format 2 carries homework; import reads formats 1 and 2.
+const homeworkBody = ({ revision, planned_min, unplanned_min, ...body }) => body;
+const mathSession = { id: 's-here', kind: 'flexible', title: 'Math', duration_min: 60, days: [3], assignment_id: 'hw-math' };
+
+test('a week export is format 2 and carries only the homework its sessions point at', async () => {
+  const h = harness();
+  const math = openAssignment('hw-math', { title: 'Math', due: '2026-09-16T21:00', estimate_min: 120, focus_minutes: 30, focus_sessions: 1 });
+  const other = openAssignment('hw-other', { title: 'Other', due: '2026-09-18T21:00' });
+  const orphan = { id: 's-gone', kind: 'flexible', title: 'Gone', duration_min: 30, days: [4], assignment_id: 'hw-gone' };
+  await h.login(1, [weekdaySchool, mathSession, orphan], [], [math, other]);
+  const payload = inPage(h, `exportWeekPayload("${MONDAY}", weekState().blocks)`);
+  assert.equal(payload.version, 2);
+  assert.deepEqual(payload.assignments, [homeworkBody(math)]);
+  assert.equal('assignment_id' in payload.blocks[2], false, 'a session whose homework is not loaded loses the link');
+  assert.equal(h.run(`parseImportPayload(${JSON.stringify(JSON.stringify(payload))}).error`), undefined);
+});
+
+test('a format 2 file is refused when a session points at missing homework or the homework is malformed', () => {
+  const h = harness();
+  const math = homeworkBody(openAssignment('hw-math', { title: 'Math', due: '2026-09-16T21:00' }));
+  const base = { format: 'flexweek-week', version: 2, week_start: MONDAY, blocks: [mathSession] };
+  const parse = file => h.run(`parseImportPayload(${JSON.stringify(JSON.stringify(file))}).error`);
+  assert.equal(parse({ ...base, assignments: [math] }), undefined);
+  assert.equal(parse(base), 'Export is missing its homework list.');
+  assert.equal(parse({ ...base, assignments: [] }), 'Block 1 points at homework the file does not include. Nothing was imported.');
+  assert.equal(parse({ ...base, assignments: [{ ...math, due: '2026-02-30T21:00' }] }), 'Homework 1 has a bad due date. Nothing was imported.');
+  assert.equal(parse({ ...base, assignments: [{ ...math, estimate_min: 50 }] }),
+    'Homework 1 needs a total time in whole 15-minute steps. Nothing was imported.');
+  assert.equal(parse({ ...base, assignments: [{ ...math, completed: true }] }),
+    'Homework 1 has a completion time that does not match. Nothing was imported.');
+  assert.equal(parse({ ...base, assignments: [{ ...math, planned_min: 60 }] }), 'Homework 1 has an unknown field. Nothing was imported.');
+  assert.equal(parse({ ...base, assignments: [math, math] }), 'Export repeats the homework id hw-math. Nothing was imported.');
+  assert.equal(parse({ ...base, version: 3, assignments: [math] }), 'Export came from a newer FlexWeek (version 3).');
+});
+
+test('importing your own export reuses homework whose id, title and due match, and creates none', async () => {
+  const h = harness();
+  const math = openAssignment('hw-math', { title: 'Math', due: '2026-09-16T21:00', estimate_min: 120 });
+  await h.login(1, [weekdaySchool, mathSession], [], [math]);
+  const file = JSON.stringify(inPage(h, `exportWeekPayload("${MONDAY}", weekState().blocks)`));
+  const calls = fakeServer(h);
+  assert.equal(await h.run(`importPayloadIntoWeek(parseImportPayload(${JSON.stringify(file)}))`), true);
+  await settle();
+  assert.deepEqual(calls.map(call => [call.method, call.path]), [['PUT', '/api/week']]);
+  assert.equal(calls[0].body.blocks[1].assignment_id, 'hw-math');
+});
+
+test('another account gets homework ids for the destination week: the same week twice adds nothing, another week adds separate homework', async () => {
+  const h = harness();
+  await h.login(2, []);
+  const math = homeworkBody(openAssignment('hw-math', { title: 'Math', due: '2026-09-16T21:00', estimate_min: 120 }));
+  const fileFor = weekStart => JSON.stringify({
+    format: 'flexweek-week', version: 2, week_start: weekStart,
+    blocks: [{ id: 's-next', kind: 'flexible', title: 'Math', duration_min: 60, days: [0], assignment_id: 'hw-math' }],
+    assignments: [math],
+  });
+  const stored = new Map();
+  const created = [];
+  h.handle(async (path, options = {}) => {
+    if (path.startsWith('/api/assignments')) return response(200, { assignments: [] });
+    if (path.startsWith('/api/week?')) {
+      return response(200, { week_start: weekOf(path), blocks: stored.get(weekOf(path)) || [], revision: 0 });
+    }
+    const body = JSON.parse(options.body);
+    if (path === '/api/changes') {
+      body.assignments.forEach(change => created.push(change.id));
+      body.weeks.forEach(week => stored.set(week.week_start, week.blocks));
+      return changesReply(body);
+    }
+    stored.set(body.week_start, body.blocks);
+    return response(200, { ...body, revision: body.revision + 1 });
+  });
+  const importInto = weekStart => h.run(`importPayloadIntoWeek(parseImportPayload(${JSON.stringify(fileFor(weekStart))}))`);
+
+  assert.equal(await importInto('2026-09-14'), true);
+  await settle();
+  // The same "week_start:id" hash the backend migration uses (verified against backend.assignments).
+  assert.deepEqual(created, ['a-92b10e99fb1c8f61660089bd4f4d9066']);
+  assert.equal(h.run('selectedWeek'), '2026-09-14');
+  assert.equal(h.run('weekState().blocks[0].assignment_id'), 'a-92b10e99fb1c8f61660089bd4f4d9066');
+
+  assert.equal(await importInto('2026-09-14'), true);
+  await settle();
+  assert.equal(created.length, 1, 'the same file into the same week adds nothing');
+
+  assert.equal(await importInto('2026-09-21'), true);
+  await settle();
+  assert.equal(created.length, 2);
+  assert.match(created[1], /^a-[0-9a-f]{32}$/);
+  assert.notEqual(created[1], created[0]);
+});
+
+test('a format 1 file with an old weekday deadline shows the homework the server made from it', async () => {
+  const h = harness();
+  await h.login(1, []);
+  const essay = { id: 'essay', kind: 'flexible', title: 'Essay', duration_min: 60, days: [3, 4], latest: 'Friday 21:00' };
+  const adopted = { ...essay, latest: null, assignment_id: 'a-essay' };
+  let saved = false;
+  h.handle(async (path, options = {}) => {
+    if (options.method === 'PUT') {
+      saved = true;
+      assert.equal(JSON.parse(options.body).blocks[0].latest, 'Friday 21:00');
+      return response(200, { week_start: MONDAY, blocks: [adopted], revision: 1 });
+    }
+    if (path.startsWith('/api/assignments')) {
+      return response(200, { assignments: saved ? [openAssignment('a-essay', { title: 'Essay', due: '2026-09-11T21:00' })] : [] });
+    }
+    if (path.startsWith('/api/week?')) return response(200, { week_start: MONDAY, blocks: saved ? [adopted] : [], revision: saved ? 1 : 0 });
+    return response(404, { detail: `unexpected ${path}` });
+  });
+  const legacy = { format: 'flexweek-week', version: 1, week_start: MONDAY, blocks: [essay] };
+  assert.equal(await h.run(`importPayloadIntoWeek(parseImportPayload(${JSON.stringify(JSON.stringify(legacy))}))`), true);
+  await settle();
+  assert.deepEqual(inPage(h, '[weekState().blocks[0].assignment_id, weekState().blocks[0].latest]'), ['a-essay', null]);
+  assert.equal(h.run("dueLabel(assignments.get('a-essay').due)"), 'Fri Sep 11, 21:00');
+});
+
+// Stage 2: the day agenda, quick Add homework and plan wording.
+const phone = query => ({ matches: query === '(max-width: 800px)' });
+const agendaChildren = h => h.elements.get('day-agenda').children;
+const agendaSections = h => agendaChildren(h).filter(child => child.className === 'agenda-section')
+  .map(section => [section.children[0].textContent, section.children[1].children.map(row => row.children[0].textContent)]);
+const nextText = h => agendaChildren(h).find(child => child.className === 'agenda-next').children[0].textContent;
+
+test('at phone width the day agenda comes first with Add homework on screen; a wide window starts on the week', async () => {
+  const narrow = harness({ matchMedia: phone });
+  await narrow.login(1, [weekdaySchool]);
+  assert.equal(narrow.run('plannerView'), 'day');
+  assert.equal(narrow.elements.get('day-agenda').hidden, false);
+  assert.equal(narrow.elements.get('week').hidden, true);
+  assert.equal(narrow.elements.get('add-homework').hidden, false);
+  assert.equal(narrow.elements.get('week-label').textContent, 'Thursday, Sep 10');
+  assert.deepEqual(agendaSections(narrow), [['Fixed time', ['School']]]);
+
+  const wide = harness();
+  await wide.login(1, [weekdaySchool]);
+  assert.equal(wide.run('plannerView'), 'week');
+  assert.equal(wide.elements.get('day-agenda').hidden, true);
+  assert.equal(wide.elements.get('week').hidden, false);
+});
+
+test('the day agenda lists homework due tomorrow as due soon, and an empty day has no empty headings', async () => {
+  const h = harness({ matchMedia: phone });
+  const quiz = openAssignment('hw-quiz', { title: 'Quiz', due: '2026-09-11T08:00', estimate_min: 60 });
+  const project = openAssignment('hw-project', { title: 'Project', due: '2026-09-18T08:00' });
+  await h.login(1, [], [], [quiz, project]);
+  assert.deepEqual(agendaSections(h), [['Due soon', ['Quiz']]]);
+  assert.equal(nextText(h), 'Next: add homework');
+
+  h.handle(async path => {
+    assert.ok(path.startsWith('/api/day?date=2026-09-10'), path);
+    return response(200, {
+      date: '2026-09-10', week_start: MONDAY, due_soon: [{ ...quiz, unplanned_min: 60 }], sessions: [], locked: [],
+      next_action: { kind: 'plan', assignment_id: 'hw-quiz' },
+      workload: { scheduled_min: 0, focus_min: 0, available_min: 1020, by_category: [] },
+    });
+  });
+  await h.run('refreshDayData()');
+  assert.equal(nextText(h), 'Next: plan time for Quiz');
+  const workload = agendaChildren(h).find(child => child.className === 'workload');
+  assert.equal(workload.children[0].textContent, 'Scheduled 0 min · Focus 0 min · Free ' + h.run('formatDuration(1020)'));
+
+  const empty = harness({ matchMedia: phone });
+  await empty.login(2, []);
+  assert.deepEqual(agendaSections(empty), []);
+  assert.equal(agendaChildren(empty).find(child => child.className === 'agenda-empty').textContent,
+    'Nothing is due soon and nothing is planned for Thursday.');
+});
+
+test('Add homework asks for title, due date and time, and estimate, then saves homework with a session this week', async () => {
+  const h = harness({ matchMedia: phone });
+  await h.login(1, []);
+  const calls = fakeServer(h);
+  h.elements.get('add-homework').listeners.click();
+  assert.equal(h.elements.get('homework-dialog').open, true);
+  assert.equal(h.elements.get('hw-due-date').value, '2026-09-11', 'due tomorrow unless changed');
+  h.elements.get('hw-title').value = 'Essay';
+  h.elements.get('hw-due-date').value = '2026-09-12';
+  h.elements.get('hw-due-time').value = '21:00';
+  h.elements.get('hw-estimate').value = '90';
+  assert.equal(h.elements.get('homework-form').listeners.submit({ preventDefault() {} }), true);
+  await settle();
+  assert.equal(h.elements.get('homework-dialog').open, false);
+  const saved = calls.find(call => call.path === '/api/changes');
+  const [change] = saved.body.assignments;
+  assert.deepEqual([change.revision, change.assignment.title, change.assignment.due, change.assignment.estimate_min],
+    [0, 'Essay', '2026-09-12T21:00', 90]);
+  const session = saved.body.weeks[0].blocks[0];
+  assert.deepEqual([session.kind, session.assignment_id, session.duration_min, session.days],
+    ['flexible', change.id, 90, [3, 4, 5]]);
+  assert.equal(h.run('statusEl.textContent'), 'Added Essay. Press Plan my homework to find time for it.');
+  assert.deepEqual(agendaSections(h), [['Homework today', ['Essay']]]);
+});
+
+test('from the day agenda a student can start focus and mark homework finished without the context menu', async () => {
+  const h = harness({ matchMedia: phone });
+  const essay = openAssignment('hw-essay', { title: 'Essay', due: '2026-09-11T21:00', estimate_min: 60 });
+  const session = { id: 's-essay', kind: 'flexible', title: 'Essay', duration_min: 60, days: [3], assignment_id: 'hw-essay' };
+  await h.login(1, [session], [], [essay]);
+  const calls = fakeServer(h);
+  h.run("showTrace({ placed: [{ ...weekState().blocks[0], days: [3], start: '16:00' }], unplaced: [], moves: [], explanations: [], solve_ms: 1 })");
+  assert.equal(h.elements.get('solve-label').textContent, 'Update my plan');
+  const today = agendaChildren(h).find(child => child.className === 'agenda-section' && child.children[0].textContent === 'Homework today');
+  const row = today.children[1].children[0];
+  assert.equal(row.children[1].textContent, '16:00–17:00');
+  const [edit, finished, focus] = row.children[2].children;
+  assert.deepEqual([edit, finished, focus].map(button => button.textContent), ['Edit', 'Finished', 'Start focus']);
+  assert.equal(nextText(h), 'Next: Essay at 16:00');
+
+  focus.listeners.click();
+  assert.equal(h.run('focusState.blockId'), 's-essay');
+  h.run('resetFocusTimer()');
+  finished.listeners.click();
+  await settle();
+  const saved = calls.find(call => call.path === '/api/changes');
+  const [week] = saved.body.weeks;
+  assert.deepEqual(
+    [saved.body.assignments[0].assignment.completed, week.blocks[0].completed, week.blocks[0].start, week.blocks[0].completed_day],
+    [true, true, '16:00', 3]);
+});
+
+test('on the Day view Previous and Next move one day and cross into the next week', async () => {
+  const h = harness({ matchMedia: phone });
+  await h.login(1, []);
+  h.handle(async path => {
+    if (path.startsWith('/api/week?')) return response(200, { week_start: weekOf(path), blocks: [], revision: 0 });
+    if (path.startsWith('/api/assignments')) return response(200, { assignments: [] });
+    return response(404, { detail: 'not part of this test' });
+  });
+  const next = () => h.elements.get('week-next').listeners.click();
+  for (let step = 0; step < 3; step += 1) await next();
+  assert.deepEqual([h.run('selectedDay'), h.run('selectedWeek')], ['2026-09-13', MONDAY]);
+  await next();
+  assert.deepEqual([h.run('selectedDay'), h.run('selectedWeek')], ['2026-09-14', '2026-09-14']);
+  assert.equal(h.elements.get('week-label').textContent, 'Monday, Sep 14');
+  await h.elements.get('week-today').listeners.click();
+  assert.deepEqual([h.run('selectedDay'), h.run('selectedWeek')], ['2026-09-10', MONDAY]);
+});
+
+test('Export week and Import file live in Settings, not in the week bar', () => {
+  const weekBar = html.slice(html.indexOf('class="week-nav"'), html.indexOf('id="empty-week"'));
+  const settings = html.slice(html.indexOf('id="prefs-dialog"'));
+  for (const id of ['export-week', 'import-file', 'import-file-input']) {
+    assert.equal(weekBar.includes(`id="${id}"`), false, id);
+    assert.equal(settings.includes(`id="${id}"`), true, id);
+  }
+  assert.equal(weekBar.includes('id="add-homework"'), true);
 });

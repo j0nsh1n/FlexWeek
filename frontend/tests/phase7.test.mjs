@@ -7,10 +7,26 @@ import vm from 'node:vm';
 import { runAppScripts } from './app-scripts.mjs';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-const response = (status, data) => ({ status, ok: status < 400, json: async () => data });
+// Each response parses to fresh objects, as over the network, so one test's edits never leak into a shared fixture.
+const response = (status, data) => ({ status, ok: status < 400, json: async () => structuredClone(data) });
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const NOW = new Date(2026, 8, 10, 12, 0, 0);
 const MONDAY = '2026-09-07';
+
+function memoryStorage(entries = new Map()) {
+  return {
+    get length() { return entries.size; },
+    key: index => Array.from(entries.keys())[index] ?? null,
+    getItem: key => (entries.has(key) ? entries.get(key) : null),
+    setItem: (key, value) => { entries.set(key, String(value)); },
+    removeItem: key => { entries.delete(key); },
+  };
+}
+
+const changesReply = body => response(200, {
+  weeks: body.weeks.map(week => ({ ...week, revision: week.revision + 1 })),
+  assignments: body.assignments.map(change => ({ id: change.id, revision: change.revision + 1, assignment: change.assignment })),
+});
 
 class FixedDate extends Date {
   constructor(...args) { super(...(args.length ? args : [NOW.getTime()])); }
@@ -87,6 +103,7 @@ function harness(options = {}) {
     },
     window: { addEventListener() {}, AudioContext: undefined, open: url => { opened.push(url); return {}; } },
     localStorage: { getItem() { return null; }, removeItem() {} },
+    sessionStorage: options.sessionStorage || memoryStorage(),
     fetch: async (path, options) => { requests.push({ path, options }); return handler(path, options); },
     getComputedStyle: () => ({ getPropertyValue: () => '2.75rem' }),
     setTimeout, clearTimeout, setInterval, clearInterval, AbortController, structuredClone, console,
@@ -98,9 +115,11 @@ function harness(options = {}) {
   return {
     elements, opened, notices, requests, run: code => vm.runInContext(code, context),
     handle: fn => { handler = fn; },
-    async login(blocks = [], preferences = defaultPrefs) {
+    async login(blocks = [], preferences = defaultPrefs, owned = []) {
       await tick();
-      handler = async path => {
+      handler = async (path, request) => {
+        if (path === '/api/changes') return changesReply(JSON.parse(request.body));
+        if (path.startsWith('/api/assignments')) return response(200, { assignments: owned });
         if (path.startsWith('/api/weeks')) return response(200, { weeks: [] });
         if (path.startsWith('/api/week')) return response(200, { week_start: MONDAY, blocks, revision: 0 });
         return response(200, preferences);
@@ -149,7 +168,7 @@ test('manual split replaces one placed task atomically and persists metadata', a
   assert.equal(saved.blocks[1].spotify_url, null);
 });
 
-test('focus completion credits once, persists the count, and completes the block', async () => {
+test('focus completion credits once and persists the count, but never completes the block', async () => {
   const block = { id: 'focus', title: 'Focus', kind: 'locked', duration_min: 30, days: [3], start: '12:00', priority: 3, energy: 'medium' };
   const h = harness();
   await h.login([block]);
@@ -163,7 +182,7 @@ test('focus completion credits once, persists the count, and completes the block
   await h.run('advanceFocusPhase(true)');
   assert.equal(h.run('weekState().blocks[0].focus_sessions'), 1);
   assert.equal(h.run('weekState().blocks[0].focus_minutes'), 30);
-  assert.equal(h.run('weekState().blocks[0].completed'), true);
+  assert.equal(h.run('Boolean(weekState().blocks[0].completed)'), false, 'finishing is the student\'s choice, not the timer\'s');
   assert.equal(puts, 1);
   assert.equal(h.run('focusState.phase'), 'break');
 });
@@ -283,4 +302,215 @@ test('a split child title stays inside the 80-character limit the server enforce
   assert.equal(child.length, 80);
   assert.ok(child.endsWith(' · focus 1/2'), child);
   assert.equal(h.run('focusChildTitle("Essay", 2, 3)'), 'Essay · focus 2/3');
+});
+
+// Stage 1: a homework session is work on an assignment, which holds the progress.
+const essaySession = {
+  id: 'essay', title: 'Essay', kind: 'flexible', duration_min: 60, days: [3],
+  priority: 3, energy: 'medium', category: 'assignments', assignment_id: 'hw-essay',
+};
+const essayAssignment = {
+  id: 'hw-essay', title: 'Essay', course: null, category: 'assignments', priority: 3, energy: 'medium',
+  spotify_url: null, due: '2026-09-11T21:00', estimate_min: 120, focus_minutes: 30, focus_sessions: 1,
+  completed: false, completed_at: null, revision: 4, planned_min: 60, unplanned_min: 30,
+};
+
+test('splitting a homework session keeps the assignment on work chunks only, with their own focus at 0', async () => {
+  const h = harness();
+  await h.login([essaySession]);
+  h.run("weekState().trace = {placed:[{...weekState().blocks[0],days:[3],start:'16:00'}],unplaced:[]}");
+  let saved;
+  h.handle(async (path, options) => {
+    assert.equal(path, '/api/week', 'no assignment changed, so the week saves alone');
+    saved = JSON.parse(options.body);
+    return response(200, { ...saved, revision: 1 });
+  });
+  assert.equal(h.run('splitBlockIntoPomodoros("essay", 3)'), true);
+  await tick();
+  assert.deepEqual(saved.blocks.map(block => [block.pomodoro_role, block.assignment_id, block.focus_sessions, block.focus_minutes]), [
+    ['work', 'hw-essay', 0, 0], ['break', undefined, 0, 0], ['work', 'hw-essay', 0, 0],
+  ]);
+});
+
+test('focus on a homework session credits its assignment, saved with the week, and finishes nothing', async () => {
+  const h = harness();
+  await h.login([essaySession]);
+  h.run(`assignments.set('hw-essay', ${JSON.stringify(essayAssignment)})`);
+  h.run("weekState().trace = {placed:[{...weekState().blocks[0],days:[3],start:'12:00'}],unplaced:[]}");
+  const bodies = [];
+  h.handle(async (path, options) => {
+    assert.equal(path, '/api/changes');
+    const body = JSON.parse(options.body);
+    bodies.push(body);
+    return response(200, {
+      weeks: body.weeks.map(week => ({ ...week, revision: week.revision + 1 })),
+      assignments: body.assignments.map(change => ({ id: change.id, revision: change.revision + 1, assignment: change.assignment })),
+    });
+  });
+  assert.equal(h.run('startFocus("essay", 3)'), true);
+  await h.run('advanceFocusPhase(true)');
+  assert.equal(bodies.length, 1);
+  const credited = bodies[0].assignments[0].assignment;
+  assert.deepEqual([credited.focus_sessions, credited.focus_minutes, credited.completed], [2, 60, false]);
+  assert.equal(bodies[0].weeks[0].blocks[0].focus_sessions || 0, 0, 'the session itself carries no focus');
+  assert.equal(h.run("assignments.get('hw-essay').revision"), 5);
+  assert.equal(h.run('dirtyAssignments.size'), 0);
+  assert.equal(h.run('Boolean(weekState().blocks[0].completed)'), false);
+  assert.equal(h.run('focusState.phase'), 'ended', 'homework asks what comes next');
+  assert.equal(h.elements.get('focus-choices').hidden, false);
+});
+
+test('focus on a homework session whose assignment did not load counts nothing rather than send a save the server refuses', async () => {
+  const h = harness();
+  await h.login([essaySession]);
+  h.run("weekState().trace = {placed:[{...weekState().blocks[0],days:[3],start:'12:00'}],unplaced:[]}");
+  let saves = 0;
+  h.handle(async () => { saves += 1; return response(422, { detail: 'session focus must be 0' }); });
+  assert.equal(h.run('startFocus("essay", 3)'), true);
+  await h.run('advanceFocusPhase(true)');
+  assert.equal(saves, 0);
+  assert.equal(h.run('weekState().blocks[0].focus_sessions || 0'), 0);
+  assert.equal(h.run('focusState.phase'), 'break');
+});
+
+// Stage 1: when a homework session ends, the student chooses what comes next.
+async function endedHomeworkSession(options = {}) {
+  const h = harness(options);
+  await h.login([essaySession], defaultPrefs, [essayAssignment]);
+  h.run("weekState().trace = {placed:[{...weekState().blocks[0],days:[3],start:'12:00'}],unplaced:[]}");
+  const bodies = [];
+  h.handle(async (path, request) => {
+    const body = JSON.parse(request.body);
+    bodies.push({ path, body });
+    return path === '/api/changes' ? changesReply(body) : response(200, { ...body, revision: body.revision + 1 });
+  });
+  assert.equal(h.run('startFocus("essay", 3)'), true);
+  await h.run('advanceFocusPhase(true)');
+  assert.equal(h.run('focusState.phase'), 'ended');
+  return { h, bodies };
+}
+
+test('Finished completes the homework and keeps the session in the slot it was worked in, in one save', async () => {
+  const { h, bodies } = await endedHomeworkSession();
+  assert.equal(h.elements.get('focus-phase').textContent, 'Session done');
+  assert.equal(h.elements.get('focus-controls').hidden, true);
+  h.elements.get('focus-finished').listeners.click();
+  await tick();
+  await tick();
+  const last = bodies.at(-1);
+  assert.equal(last.path, '/api/changes');
+  const worked = last.body.weeks[0].blocks[0];
+  assert.deepEqual([worked.completed, worked.start, worked.completed_day], [true, '12:00', 3]);
+  const done = last.body.assignments[0].assignment;
+  assert.deepEqual([done.completed, done.completed_at, done.focus_sessions], [true, '2026-09-10T12:00', 2]);
+  assert.equal(h.run('focusState'), null);
+  assert.equal(h.elements.get('focus-panel').hidden, true);
+});
+
+test('Need more time adds the chosen amount to the homework, keeps it open and starts the break', async () => {
+  const { h, bodies } = await endedHomeworkSession();
+  h.elements.get('focus-more').listeners.click();
+  assert.equal(h.elements.get('focus-more-form').hidden, false);
+  assert.equal(h.elements.get('focus-choices').hidden, true);
+  assert.deepEqual(h.elements.get('focus-more-min').children.map(option => option.value),
+    ['15', '30', '45', '60', '90', '120', '180', '240']);
+  assert.equal(await h.run('addFocusTime(20)'), false, 'not on the 15-minute grid');
+  assert.equal(h.run('focusState.phase'), 'ended');
+
+  h.elements.get('focus-more-min').value = '30';
+  h.elements.get('focus-more-add').listeners.click();
+  await tick();
+  await tick();
+  const raised = bodies.at(-1).body.assignments[0].assignment;
+  assert.deepEqual([raised.estimate_min, raised.completed], [150, false]);
+  assert.equal(h.run('focusState.phase'), 'break');
+  assert.equal(h.elements.get('focus-more-form').hidden, true);
+  assert.equal(h.run('statusEl.textContent'),
+    'Added ' + h.run('formatDuration(30)') + ' to Essay. Plan it under Continuing, then press Plan my homework.');
+});
+
+test('Take a break starts the break, stores nothing and leaves the homework open', async () => {
+  const { h, bodies } = await endedHomeworkSession();
+  const sent = bodies.length;
+  h.elements.get('focus-break').listeners.click();
+  assert.deepEqual(JSON.parse(h.run('JSON.stringify([focusState.phase, focusState.running])')), ['break', true]);
+  assert.equal(bodies.length, sent);
+  assert.equal(h.run("assignments.get('hw-essay').completed"), false);
+});
+
+test('a running timer survives switching weeks, and a reload resumes it from ids and times only', async () => {
+  const storage = memoryStorage();
+  const h = harness({ sessionStorage: storage });
+  await h.login([essaySession], defaultPrefs, [essayAssignment]);
+  h.run("weekState().trace = {placed:[{...weekState().blocks[0],days:[3],start:'12:00'}],unplaced:[]}");
+  assert.equal(h.run('startFocus("essay", 3)'), true);
+  h.run("showWeek('2026-09-14')");
+  assert.equal(h.run('focusState.title'), 'Essay');
+  assert.equal(h.elements.get('focus-panel').hidden, false);
+
+  const stored = JSON.parse(storage.getItem('flexweek.focus.1'));
+  assert.deepEqual(Object.keys(stored).sort(),
+    ['assignmentId', 'cycles', 'day', 'endsAt', 'phase', 'remainingMs', 'sessionId', 'start', 'weekStart']);
+  assert.equal(JSON.stringify(stored).includes('Essay'), false, 'no homework text is kept in the browser');
+
+  const reloaded = harness({ sessionStorage: storage });
+  await reloaded.login([essaySession], defaultPrefs, [essayAssignment]);
+  assert.deepEqual(JSON.parse(reloaded.run('JSON.stringify([focusState.title, focusState.phase, focusState.running])')),
+    ['Essay', 'work', true]);
+  assert.equal(reloaded.elements.get('focus-panel').hidden, false);
+});
+
+test('a work session that ran out while the page was closed is counted and asks what comes next', async () => {
+  const storage = memoryStorage();
+  storage.setItem('flexweek.focus.1', JSON.stringify({
+    assignmentId: 'hw-essay', sessionId: 'essay', weekStart: MONDAY, day: 3, start: '12:00',
+    phase: 'work', cycles: 0, endsAt: NOW.getTime() - 60000, remainingMs: null,
+  }));
+  const h = harness({ sessionStorage: storage });
+  await h.login([essaySession], defaultPrefs, [essayAssignment]);
+  await tick();
+  await tick();
+  assert.equal(h.run('focusState.phase'), 'ended');
+  assert.equal(h.run("assignments.get('hw-essay').focus_sessions"), 2);
+  assert.equal(h.elements.get('focus-choices').hidden, false);
+});
+
+test('starting another timer asks first, and Quick focus runs without homework and credits nothing', async () => {
+  const h = harness();
+  await h.login([essaySession], defaultPrefs, [essayAssignment]);
+  h.run("weekState().trace = {placed:[{...weekState().blocks[0],days:[3],start:'12:00'}],unplaced:[]}");
+  assert.equal(h.elements.get('focus-section').hidden, false);
+  assert.equal(h.run('startFocus("essay", 3)'), true);
+  h.run('confirm = () => false');
+  h.elements.get('focus-quick').listeners.click();
+  assert.equal(h.run('focusState.title'), 'Essay', 'declining keeps the running timer');
+
+  h.run('confirm = () => true');
+  assert.equal(h.run('startQuickFocus()'), true);
+  assert.deepEqual(JSON.parse(h.run('JSON.stringify([focusState.title, focusState.blockId, focusState.assignmentId])')),
+    ['Quick focus', null, null]);
+  const sent = h.requests.length;
+  await h.run('advanceFocusPhase(true)');
+  assert.equal(h.requests.length, sent);
+  assert.equal(h.run('focusState.phase'), 'break');
+  assert.equal(h.run("assignments.get('hw-essay').focus_sessions"), 1);
+});
+
+test('another account or logging out clears the stored timer, but an expired session keeps it', async () => {
+  const storage = memoryStorage();
+  const h = harness({ sessionStorage: storage });
+  await h.login([], defaultPrefs);
+  assert.equal(h.run('startQuickFocus()'), true);
+  h.run('signedOut()');
+  assert.notEqual(storage.getItem('flexweek.focus.1'), null, 'the same account can come back to it');
+  await h.run("loadAccount({id:2,username:'other'})");
+  assert.equal(storage.getItem('flexweek.focus.1'), null, 'another account never resumes it');
+  assert.equal(h.run('focusState'), null);
+
+  assert.equal(h.run('startQuickFocus()'), true);
+  assert.notEqual(storage.getItem('flexweek.focus.2'), null);
+  h.elements.get('logout').listeners.click();
+  await tick();
+  await tick();
+  assert.equal(storage.getItem('flexweek.focus.2'), null);
 });

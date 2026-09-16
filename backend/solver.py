@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import time
 
+from backend.availability import CLUSTER_COPY, LATE_COPY, lateness_occupancy, merge_occupancy, study_prefers
 from backend.explain import sentence, slack_sentence
-from backend.models import Explanation, Move, ReasonCode, SlackStatus, SolveTrace, TimeBlock
+from backend.models import Explanation, GridWindow, Move, ReasonCode, SlackStatus, SolveTrace, TimeBlock
 from backend.slots import (
     DAY_END_MIN,
     DAY_START_MIN,
@@ -27,7 +28,14 @@ TIGHT_SLACK_MIN = 3 * 60
 DANGER_SLACK_MIN = 60
 
 
-def solve(blocks: list[TimeBlock]) -> SolveTrace:
+def solve(
+    blocks: list[TimeBlock],
+    *,
+    deadlines: dict[str, tuple[int, int] | None] | None = None,
+    slack_deadlines: dict[str, tuple[int, int]] | None = None,
+    extra_occ: list[int] | None = None,
+    study_windows: list[GridWindow] | None = None,
+) -> SolveTrace:
     """Place flexible blocks around locked ones. Pure and synchronous."""
     started = time.perf_counter()
     locked = _active_locked(blocks)
@@ -51,13 +59,21 @@ def solve(blocks: list[TimeBlock]) -> SolveTrace:
     flexible = [block for block in every_flexible if not block.completed]
 
     occ_locked = _locked_occupancy(locked + spent)
+    if extra_occ is not None:
+        occ_locked = merge_occupancy(occ_locked, extra_occ)
+    windows = study_windows or []
     flex_by_id = {block.id: block for block in flexible}
     ids = [block.id for block in flexible]
-    deadlines = {block.id: parse_deadline(block.latest, block.days) for block in flexible}
+    parsed_deadlines = {block.id: parse_deadline(block.latest, block.days) for block in flexible}
+    if deadlines:
+        parsed_deadlines.update(deadlines)
+    slack_points = dict(parsed_deadlines)
+    if slack_deadlines:
+        slack_points.update(slack_deadlines)
     earliest = {block.id: parse_deadline(block.earliest, block.days) for block in flexible}
     lengths = {block.id: duration_to_slots(block.duration_min) for block in flexible}
     domains0 = {
-        block.id: _domain(block, occ_locked, deadlines[block.id], earliest[block.id])
+        block.id: _domain(block, occ_locked, parsed_deadlines[block.id], earliest[block.id])
         for block in flexible
     }
 
@@ -97,12 +113,12 @@ def solve(blocks: list[TimeBlock]) -> SolveTrace:
             key=lambda item: (
                 len(domains[item]),
                 flex_by_id[item].priority,
-                deadlines[item] if deadlines[item] is not None else (7, 0),
+                parsed_deadlines[item] if parsed_deadlines[item] is not None else (7, 0),
                 item,
             ),
         )
         n = lengths[var]
-        for day, slot in _order_values(flex_by_id[var], domains[var]):
+        for day, slot in _order_values(flex_by_id[var], domains[var], windows):
             if remaining_ms() <= 0:
                 timed_out = True
                 return
@@ -153,7 +169,7 @@ def solve(blocks: list[TimeBlock]) -> SolveTrace:
     for block in flexible:
         if block.id in best:
             continue
-        reason = _reason_for(block, occ_locked, best, flex_by_id, deadlines, earliest)
+        reason = _reason_for(block, occ_locked, best, flex_by_id, parsed_deadlines, earliest)
         unplaced.append(block.model_copy())
         moves.append(Move(block_id=block.id, reason=reason))
         explanations.append(Explanation(block_id=block.id, reason=reason, message=sentence(reason)))
@@ -169,7 +185,7 @@ def solve(blocks: list[TimeBlock]) -> SolveTrace:
             explanations.append(
                 Explanation(block_id=block.id, reason=energy_reason, message=sentence(energy_reason))
             )
-        deadline = deadlines[block.id]
+        deadline = slack_points[block.id]
         if deadline is not None:
             day = block.days[0]
             slack_min = (deadline[0] - day) * 24 * 60 + deadline[1] - start_min - block.duration_min
@@ -182,6 +198,12 @@ def solve(blocks: list[TimeBlock]) -> SolveTrace:
                     slack_status=status,
                 )
             )
+
+    danger = sum(1 for item in explanations if item.slack_status == "danger")
+    if len(unplaced) + danger >= 2:
+        explanations.append(
+            Explanation(block_id=unplaced[0].id if unplaced else placed_flex[0].id, message=CLUSTER_COPY)
+        )
 
     return SolveTrace(
         placed=locked + spent + placed_flex,
@@ -199,6 +221,11 @@ def reschedule_after_miss(
     missed_block_id: str,
     missed_day: int,
     previous_placed: list[TimeBlock],
+    *,
+    deadlines: dict[str, tuple[int, int] | None] | None = None,
+    slack_deadlines: dict[str, tuple[int, int]] | None = None,
+    extra_occ: list[int] | None = None,
+    study_windows: list[GridWindow] | None = None,
 ) -> SolveTrace:
     """Mark one locked occurrence missed, solve again, and describe changed flexible placements."""
     updated: list[TimeBlock] = []
@@ -213,7 +240,50 @@ def reschedule_after_miss(
     if not found:
         raise ValueError("missed occurrence must identify a locked block on that day")
 
-    trace = solve(updated)
+    trace = solve(
+        updated,
+        deadlines=deadlines,
+        slack_deadlines=slack_deadlines,
+        extra_occ=extra_occ,
+        study_windows=study_windows,
+    )
+    return _reshape_moves(
+        trace, blocks, previous_placed, "RESHUFFLE_AFTER_MISS", sentence("RESHUFFLE_AFTER_MISS")
+    )
+
+
+def reschedule_running_late(
+    blocks: list[TimeBlock],
+    day: int,
+    minutes: int,
+    from_start: str,
+    previous_placed: list[TimeBlock],
+    *,
+    deadlines: dict[str, tuple[int, int] | None] | None = None,
+    slack_deadlines: dict[str, tuple[int, int]] | None = None,
+    extra_occ: list[int] | None = None,
+    study_windows: list[GridWindow] | None = None,
+) -> SolveTrace:
+    """Occupy a late window on one day, solve again, and describe changed flexible placements."""
+    late = lateness_occupancy(day, from_start, minutes)
+    combined = merge_occupancy(extra_occ or [0] * 7, late)
+    trace = solve(
+        blocks,
+        deadlines=deadlines,
+        slack_deadlines=slack_deadlines,
+        extra_occ=combined,
+        study_windows=study_windows,
+    )
+    return _reshape_moves(trace, blocks, previous_placed, "RESHUFFLE_AFTER_MISS", LATE_COPY)
+
+
+def _reshape_moves(
+    trace: SolveTrace,
+    blocks: list[TimeBlock],
+    previous_placed: list[TimeBlock],
+    reason: ReasonCode,
+    message: str,
+) -> SolveTrace:
     before = _flex_positions(previous_placed)
     after = _flex_positions(trace.placed)
     changes: list[Move] = []
@@ -232,7 +302,7 @@ def reschedule_after_miss(
             changes.append(
                 Move(
                     block_id=block.id,
-                    reason="RESHUFFLE_AFTER_MISS",
+                    reason=reason,
                     from_day=old[0] if old else None,
                     from_start=old[1] if old else None,
                     to_day=new[0] if new else None,
@@ -243,8 +313,8 @@ def reschedule_after_miss(
             trace.explanations.append(
                 Explanation(
                     block_id=block.id,
-                    reason="RESHUFFLE_AFTER_MISS",
-                    message=sentence("RESHUFFLE_AFTER_MISS"),
+                    reason=reason,
+                    message=message,
                 )
             )
     trace.moves = changes + trace.moves
@@ -321,14 +391,17 @@ def _domain(
     return out
 
 
-def _order_values(block: TimeBlock, values: list[tuple[int, int]]) -> list[tuple[int, int]]:
+def _order_values(
+    block: TimeBlock, values: list[tuple[int, int]], windows: list[GridWindow]
+) -> list[tuple[int, int]]:
     low, high = ENERGY_WINDOW[block.energy]
 
-    def key(item: tuple[int, int]) -> tuple[int, int, int]:
+    def key(item: tuple[int, int]) -> tuple[int, int, int, int]:
         day, slot = item
         start_min = DAY_START_MIN + slot * SLOT_MIN
+        study = 0 if study_prefers(windows, day, start_min, block.duration_min) else 1
         match = 0 if low <= start_min < high else 1
-        return (match, day, slot)
+        return (study, match, day, slot)
 
     return sorted(values, key=key)
 

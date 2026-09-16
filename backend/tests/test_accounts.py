@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 from collections.abc import Iterator
 from datetime import date, timedelta
@@ -86,6 +87,15 @@ def flex(block_id: str, **overrides) -> dict:
     }
     block.update(overrides)
     return block
+
+
+def migrated_session(block: dict, week_start: str = WEEK) -> dict:
+    body = dict(block)
+    body["latest"] = None
+    body["assignment_id"] = "a-" + hashlib.sha256(f"{week_start}:{block['id']}".encode()).hexdigest()[:32]
+    body.pop("focus_minutes", None)
+    body.pop("focus_sessions", None)
+    return body
 
 
 def cookie_attrs(response) -> dict[str, str]:
@@ -186,10 +196,22 @@ def test_session_cookie_is_secure_over_https(tmp_path: Path) -> None:
 def test_protected_endpoints_require_session(client: TestClient) -> None:
     assert client.get("/api/auth/me").status_code == 401
     assert client.get("/api/week").status_code == 401
+    assert client.get("/api/assignments?week_start=" + WEEK).status_code == 401
+    assert client.get("/api/day?date=" + WEEK).status_code == 401
+    assert client.get("/api/month?month=2026-09").status_code == 401
+    assert client.get("/api/routines").status_code == 401
+    assert client.get("/api/restore-points").status_code == 401
+    assert client.get("/api/storage-info").status_code == 401
     assert client.get("/api/preferences").status_code == 401
     assert client.post("/api/solve", json={"blocks": []}, headers=WRITE).status_code == 401
     unsaved = {"week_start": WEEK, "blocks": [], "revision": 0}
     assert client.put("/api/week", json=unsaved, headers=WRITE).status_code == 401
+    assert client.put("/api/assignments/hw-essay", json={"id": "hw-essay", "title": "Essay", "due": "2026-09-15T23:59", "estimate_min": 60, "revision": 0}, headers=WRITE).status_code == 401
+    assert client.delete("/api/assignments/hw-essay?revision=1", headers=WRITE).status_code == 401
+    assert client.post("/api/changes", json={"weeks": [], "assignments": []}, headers=WRITE).status_code == 401
+    assert client.put("/api/routines/r-1", json={"id": "r-1", "name": "School week", "blocks": [], "revision": 0}, headers=WRITE).status_code == 401
+    assert client.delete("/api/routines/r-1?revision=1", headers=WRITE).status_code == 401
+    assert client.post("/api/restore-points", json={"label": "Before", "operation_id": "op-1"}, headers=WRITE).status_code == 401
     assert client.put("/api/preferences", json=preferences("slate"), headers=WRITE).status_code == 401
     forged = {"Cookie": "flexweek_session=forged-token"}
     assert client.get("/api/auth/me", headers=forged).status_code == 401
@@ -224,7 +246,11 @@ def test_two_accounts_are_isolated(app: FastAPI, alice: TestClient) -> None:
             headers=WRITE,
         )
         assert stale.status_code == 409
-        assert alice.get("/api/week").json() == {"week_start": WEEK, "blocks": [mine], "revision": 1}
+        assert alice.get("/api/week").json() == {
+            "week_start": WEEK,
+            "blocks": [migrated_session(mine)],
+            "revision": 1,
+        }
         assert bob.get("/api/week").json() == {"week_start": WEEK, "blocks": [theirs], "revision": 1}
 
         assert alice.put("/api/preferences", json=preferences("slate"), headers=WRITE).status_code == 200
@@ -330,7 +356,7 @@ def test_accounts_and_weeks_survive_restart(tmp_path: Path) -> None:
         assert resumed.json()["username"] == "alice"
         assert second.get("/api/week", headers=session_header).json() == {
             "week_start": WEEK,
-            "blocks": blocks,
+            "blocks": [migrated_session(flex("a"))],
             "revision": 1,
         }
         assert login(second, "alice").status_code == 200

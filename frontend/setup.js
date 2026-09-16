@@ -30,13 +30,14 @@ function setupDrafts() {
     drafts.sports = setupFixedDraft("exercise", "setup-sports", field("setup-sports-title").value);
   }
   if (!setupSkipped.has("homework")) {
-    const dueDay = Number(field("setup-homework-due-day").value);
+    const dueDate = field("setup-homework-due-date").value || null;
     const duration = Number(field("setup-homework-duration").value);
-    const homework = newDraft("assignments", dueDay, DAY_START_MIN, DAY_START_MIN + duration);
+    const firstDay = firstPlannableDay(selectedWeek);
+    const homework = newDraft("assignments", firstDay, DAY_START_MIN, DAY_START_MIN + duration);
     homework.title = field("setup-homework-title").value;
-    homework.dueDay = dueDay;
+    homework.dueDate = dueDate;
     homework.dueTime = field("setup-homework-due-time").value;
-    homework.days = daysThrough(dueDay, firstPlannableDay(selectedWeek));
+    homework.days = daysThrough(dueDayInWeek(dueDate), firstDay);
     drafts.homework = homework;
   }
   return drafts;
@@ -65,7 +66,7 @@ function setupSummary(drafts) {
   });
   if (drafts.homework) {
     lines.push(draftPatch(drafts.homework).title + ": " + formatDuration(drafts.homework.duration_min) +
-      ", due " + DAY_FULL[drafts.homework.dueDay] + " at " + drafts.homework.dueTime);
+      ", due " + dueLabel(drafts.homework.dueDate + "T" + drafts.homework.dueTime));
   }
   return lines;
 }
@@ -84,7 +85,7 @@ function renderSetupStep() {
   field("setup-skip").hidden = step === "solve";
   const drafts = setupDrafts();
   const lines = setupSummary(drafts);
-  field("setup-next").textContent = step !== "solve" ? "Next" : (lines.length ? "Add to my week and Solve" : "Finish");
+  field("setup-next").textContent = step !== "solve" ? "Next" : (lines.length ? "Add to my week and plan" : "Finish");
   if (step === "solve") {
     const list = field("setup-summary");
     list.replaceChildren();
@@ -121,9 +122,9 @@ function fillSetupDefaults() {
     return [minutes, formatDuration(minutes)];
   }));
   field("setup-homework-duration").value = String(categoryById("assignments").preset.duration_min);
-  fillOptions(field("setup-homework-due-day"), DAY_FULL.map(function (name, day) { return [day, name]; }));
-  field("setup-homework-due-day").value = String(Math.min(6, firstPlannableDay(selectedWeek) + 1));
-  fillOptions(field("setup-homework-due-time"), starts.slice(1).concat([["23:00", "23:00"]]));
+  // Due tomorrow by default, which may already fall in next week.
+  field("setup-homework-due-date").value = addDaysIso(dateForDay(selectedWeek, firstPlannableDay(selectedWeek)), 1);
+  fillOptions(field("setup-homework-due-time"), dueTimeChoices());
   field("setup-homework-due-time").value = "21:00";
 }
 
@@ -151,7 +152,8 @@ async function finishSetup() {
   closeSetup();
   const added = ["school", "sports", "homework"].filter(function (step) { return drafts[step]; })
     .map(function (step) {
-      return { id: newId(), kind: drafts[step].kind, missed_days: [], ...draftPatch(drafts[step]) };
+      const block = { id: newId(), kind: drafts[step].kind, missed_days: [], ...draftPatch(drafts[step]) };
+      return drafts[step].kind === "flexible" ? attachAssignment(block, drafts[step]) : block;
     });
   if (!added.length) {
     setStatus("Setup skipped. Pick a type on the right, then drag on the calendar.");

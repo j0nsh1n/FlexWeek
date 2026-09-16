@@ -103,8 +103,9 @@ desktop shell is proposed; shell selection follows compatibility testing.
 - Build order for the remaining interaction port (2026-09-08): A calendar
   drag/resize/create/context menus (15-minute snap) → D recurring occurrence
   vs series edit → F reminders → B categories → E export/import and
-  completion. Clipboard, duplicate-day, and undo/redo stay deferred. Do not
-  port Daily Scheduler AI chat, Google Calendar OAuth, or Qt custom painting.
+  completion. Clipboard, duplicate-day, and undo/redo were deferred at this
+  point in the plan. Daily Scheduler AI chat, Google Calendar OAuth and Qt
+  custom painting remain outside the port.
 - Status: [~] Linux desktop shell built and running 2026-09-07
   (`dist/FlexWeek/FlexWeek`), with popup/download fixes and preserved rebuilds.
   Dated weeks landed 2026-09-08: weeks keyed by calendar Monday, navigation,
@@ -114,8 +115,8 @@ desktop shell is proposed; shell selection follows compatibility testing.
   select, double-click edit, context Edit/Delete, thin category colors).
   Slices D/F/B/E landed 2026-09-08: occurrence vs series edits, start reminders
   (web Notification + in-app toast; tray deferred), full category chips,
-  export/import and completion. Still open: Windows execution, copy-paste,
-  duplicate day, undo/redo.
+  export/import and completion. Undo/redo landed with student-experience Stage
+  1 on 2026-09-13. Still open: Windows execution, copy-paste and duplicate day.
 
 ## Phase 6 — Scheduling explanations, later design and hardening
 - Priority and energy controls, explanation panel, click reason to highlight.
@@ -162,9 +163,8 @@ desktop shell is proposed; shell selection follows compatibility testing.
   alarm that plays a linked Spotify playlist (tone fallback when Spotify is
   unreachable), and split chunks survive save/reload in both clients.
 - Status: [~] Focus tools are implemented in current source and recorded as
-  released in local history. The original playback and platform completion
-  claims are not re-certified here. Remaining focus correctness, reminder
-  usability and device checks are tracked in Stages 1, 5 and 7 below.
+  released in local history. Stage 1 completed the focus outcome and timer
+  lifetime work. Reminder usability and device checks remain in Stages 5–7.
 
 ## Later (post-contest or only if Phase 5–7 are green)
 - Stronger deadline-cluster insight on top of existing slack ok/tight/danger
@@ -198,37 +198,39 @@ order, not a renumbering of Phases 1–8 or a promise to finish every addition b
 the contest. Phase 8 delivery continues alongside this backlog. The contest
 release can ship a verified subset; remaining stages continue after submission.
 
-The reviews used current source and the committed FlexWeek screenshots. Live
-browser and native-app interaction were unavailable, so usability findings remain
-hypotheses to confirm in student trials. Existing category colors, themes,
-dragging, Now/Next, reminders, tray support and export are refinements, not new
-ports. The earlier first-slice proposal below is historical.
+The original reviews used current source and the committed FlexWeek screenshots.
+Stage 1 later received live-browser and Qt WebEngine walkthroughs. Broader
+usability findings remain hypotheses to confirm in student trials. Existing
+category colors, themes, dragging, Now/Next, reminders, tray support and export
+are refinements, not new ports. The earlier first-slice proposal below is
+historical.
 
 Current scope mapping:
-- Phase 5's remaining navigation, clipboard, duplicate-day and undo work moves
-  into Stages 1–3 and 7. Their previous deferral is superseded by this revision.
+- Phase 5's remaining navigation, clipboard and duplicate-day work moves into
+  Stages 2, 3 and 7. Stage 1 completed Undo/Redo; the previous deferral is
+  superseded by this revision.
 - Phase 6's remaining usability, recovery, accessibility and deployment work is
   organized into Stages 1, 2, 5, 6 and 7.
 - Phase 7 focus tools are implemented in the current source and recorded as
-  released in local history. Completion semantics,
-  reminder usability and platform verification continue in Stages 1, 5 and 7.
+  released in local history. Stage 1 completed the revised completion semantics;
+  reminder usability and platform verification continue in Stages 5–7.
 - Windows installers and theme redesign have progressed beyond the older phase
   entries. Actual Windows behavior, including the reported setup flicker, still
   needs physical-device verification.
 
 ### Stage 1. Make deadlines, focus and edits trustworthy
-- [ ] Separate exact deadline dates and times from 15-minute work placement.
+- [x] Separate exact deadline dates and times from 15-minute work placement.
   Support 11:59 p.m., next-week deadlines and work spanning Sunday to Monday.
   Preserve existing weekday deadlines through an explicit migration and adapter.
-- [ ] Separate focus minutes from assignment completion. At session end offer
+- [x] Separate focus minutes from assignment completion. At session end offer
   Finished, Need more time, and Take a break. Add “I need 30 more minutes.”
-- [ ] Keep the active timer while navigating between weeks. Make restart and
+- [x] Keep the active timer while navigating between weeks. Make restart and
   reload behavior explicit, and avoid silently replacing an active session.
-- [ ] Add a quick focus timer without first placing an assignment.
-- [ ] Add visible Undo and keyboard undo/redo for create, edit, move, resize and
+- [x] Add a quick focus timer without first placing an assignment.
+- [x] Add visible Undo and keyboard undo/redo for create, edit, move, resize and
   delete. Treat a replan as one reversible operation. Preserve account isolation
   and revision conflicts when applying undo across saved weeks.
-- [ ] Move Clear week into a secondary menu. Make “Delete this day” versus
+- [x] Move Clear week into a secondary menu. Make “Delete this day” versus
   “Delete all occurrences” explicit and provide recovery for either action.
 - Complete when: a student enters next Tuesday at 11:59 p.m., works on it this
   week, finishes a timer without falsely completing the assignment, switches
@@ -236,24 +238,27 @@ Current scope mapping:
 - Verification: deadline migration and Sunday/Monday boundary tests; timer state
   and completion tests; undo after reload/session loss/conflicting saves;
   browser and desktop walkthrough with save/reload and two-account isolation.
-- Status: [ ] Planned. Date/deadline and timer-lifetime changes need corresponding
-  spec reconciliation before implementation; this revision changes roadmap only.
+- Status: [x] Complete locally 2026-09-13. The approved contract and spec
+  reconciliation are included with the backend and frontend implementation.
+  Verification passed with 139 frontend tests and 241 Python tests, including
+  the Stage 1 Qt WebEngine walkthrough; the live browser covered assignment
+  entry, next-week Continuing, Solve and the focus outcome prompt.
 
 ### Stage 2. Make today's work easy to find and add
-- [ ] Add a Today/Day agenda alongside Week view. Prioritize due soon, today's
+- [x] Add a Today/Day agenda alongside Week view. Prioritize due soon, today's
   homework, total remaining planned work and a clear next action.
-- [ ] Make the phone layout a day agenda with a persistent Add action and visible
+- [x] Make the phone layout a day agenda with a persistent Add action and visible
   edit, complete and focus controls. Keep Week view available for planning.
-- [ ] Simplify quick entry to title, due date and estimated time, with “Choose a
+- [x] Simplify quick entry to title, due date and estimated time, with “Choose a
   time myself” and advanced scheduling options available when needed.
-- [ ] Replace “Solve” with student-facing wording such as “Plan my homework” or
+- [x] Replace “Solve” with student-facing wording such as “Plan my homework” or
   “Update my plan”; confirm wording in the student trial.
-- [ ] Reduce duplicated task lists and hide empty sections. Collapse successful
+- [x] Reduce duplicated task lists and hide empty sections. Collapse successful
   placement explanations while keeping unplaced work and useful next actions
   visible. Express deadline room in understandable dates/days, not large hour counts.
-- [ ] Move import/export and duplicate account/theme actions out of primary
+- [x] Move import/export and duplicate account/theme actions out of primary
   navigation. Preserve the current light/dark visual system while simplifying it.
-- [ ] Add a daily workload summary by category, distinguishing scheduled time,
+- [x] Add a daily workload summary by category, distinguishing scheduled time,
   recorded focus time and genuinely available time before the student's cutoff.
 - Complete when: a new student can identify what is due tomorrow, add homework,
   plan it, start it and mark it finished without using a context menu or reading
@@ -261,7 +266,13 @@ Current scope mapping:
 - Verification: real browser/desktop walkthroughs at 390px and 1280px; keyboard,
   touch-target, screen-reader and both-theme checks; empty, busy and unplaced
   states. Record student task time and wrong turns before and after the change.
-- Status: [ ] Planned. Builds on Stage 1 deadline and completion behavior.
+- Status: [x] Complete locally on `feat/stage2-student-experience` (the same
+  commits as `claude/stage2-frontend`). The contract is approved and spec.md
+  carries Day view and `GET /api/day`; the status line in
+  `docs/stage2-contract.md` said "proposed" until 2026-09-15 by mistake.
+  Confirming the "Plan my homework" wording in a student trial is still open, as
+  are the recorded task-time comparisons. Builds on Stage 1 deadline and
+  completion behavior.
 
 ### Stage 3. Reuse routines and recover past work
 - [ ] Port block copy/paste, duplicate, and copy-day actions with keyboard and
@@ -280,19 +291,24 @@ Current scope mapping:
 - Verification: cross-week identity and recurrence tests, collision previews,
   repeated-click/retry idempotency, maximum-size weeks, account isolation, stale
   saves and restore failure rollback; real save/reload in both clients.
-- Status: [ ] Planned. Depends on Stage 1 reversible edits and dated deadlines.
+- Status: [ ] Complete locally on `claude/stage3-frontend`, not merged or
+  released: clipboard actions, fixed-only routines, unfinished-homework review
+  and restore points, with Grok's account-owned persistence and routes. Real
+  WebEngine walkthroughs cover save, apply, restore, a retried operation,
+  reload, a second account and a 390px dark-theme carry-forward. Its Stage 1
+  dependency is complete.
 
 ### Stage 4. Adapt plans to real student days
-- [ ] Add a direct “Running late” action with 15/30/60-minute choices and a preview
+- [x] Add a direct “Running late” action with 15/30/60-minute choices and a preview
   of changed work. Build on missed-block recovery; fixed commitments and sleep
   remain protected, and work that no longer fits stays visibly unplaced.
-- [ ] Spread a project across dates before its deadline, with total effort and
+- [x] Spread a project across dates before its deadline, with total effort and
   preferred session length. Keep sessions linked to one assignment and distinguish
   this from contiguous pomodoro splitting.
-- [ ] Add assignment notes, links and small checklists for larger projects.
-- [ ] Add protected downtime, commute/meal buffers and preferred study hours.
+- [x] Add assignment notes, links and small checklists for larger projects.
+- [x] Add protected downtime, commute/meal buffers and preferred study hours.
   Show the effect on available time rather than treating every gap as work time.
-- [ ] Improve priority/energy wording and actionable deadline-cluster explanations.
+- [x] Improve priority/energy wording and actionable deadline-cluster explanations.
   Prefer concrete choices such as shorten a session, choose another day, or adjust
   availability; avoid implying that an impossible workload has been solved.
 - Complete when: a student spreads four hours of project work across several days,
@@ -302,49 +318,69 @@ Current scope mapping:
   deadline/session totals, missed_days recovery and cross-week persistence;
   atomic failure/retry tests and real preview/accept/undo walkthroughs. Retain the
   existing packed-fixture performance target and measure longer project planning.
-- Status: [ ] Planned. Depends on Stages 1 and 3. Borrows Daily Scheduler actions,
-  not its AI tool execution or its behavior of dropping work that no longer fits.
+- Status: [x] Complete locally on `feat/stage4-adaptive-plans`. Accepting Running
+  late stores a one-off locked interval. The contract is approved 2026-09-15 and
+  spec.md lists the Stage 4 routes, availability windows and assignment fields.
+  Depends on Stages 1 and 3. Borrows Daily Scheduler actions, not its
+  AI tool execution or its behavior of dropping work that no longer fits.
 
 ### Stage 5. Make reminders and settings comfortable
-- [ ] Group settings into appearance, focus, notifications and account sections.
+- [x] Group settings into appearance, focus, notifications and account sections.
   Offer timer presets and explain any rounding before splitting work onto the grid.
-- [ ] Add Test reminder/Preview alert, volume control and an optional quiet
-  end-of-block chime. Offer notification toggles/test from the desktop tray.
-- [ ] Keep web-open and desktop-background reminder limits visible. Describe
+- [~] Add Test reminder/Preview alert, volume control and an optional quiet
+  end-of-block chime. The shared page is complete; desktop tray Test remains in
+  the Qt shell follow-up.
+- [x] Keep web-open and desktop-background reminder limits visible. Describe
   Spotify as a best-effort link with sound fallback, without promising playback.
-- [ ] Add an optional start-at-login preference for supported desktop platforms.
-- [ ] Add a collapsible/resizable sidebar and remember layout and preferred view.
+- [~] Add an optional start-at-login preference for supported desktop platforms.
+  The account preference is stored and editable; applying it at OS login remains
+  in the Qt shell follow-up.
+- [x] Add a collapsible/resizable sidebar and remember layout and preferred view.
 - Complete when: a student previews an alert, chooses a comfortable volume,
   configures a timer without learning grid rules, and returns to a remembered
   layout. Disabled sounds remain silent and reminders do not duplicate.
 - Verification: preference persistence, timer/split validation and duplicate-alert
   tests; physical sound, tray, startup, sleep/wake and notification checks on
   supported OSes. OS delivery limits remain separately recorded from test results.
-- Status: [ ] Planned. Depends on Stage 1 timer semantics; can follow Stage 2 in
-  parallel with the larger scheduling stages.
+- Status: [~] Backend and shared browser/desktop frontend complete locally on
+  `feat/stage5-comfort-frontend`. The contract is approved 2026-09-15 and
+  spec.md lists the comfort fields and the three comfort routes. The source gate
+  includes 207 frontend tests,
+  243 backend tests and a real Stage 5 WebEngine walkthrough. The Qt shell still
+  must apply start-at-login and expose tray Test; physical sound, tray, startup
+  and sleep/wake checks remain platform work. No executable was built.
 
 ### Stage 6. Make account access and delivery dependable
-- [ ] Add account recovery appropriate to local and hosted modes, plus visible
+- [x] Add account recovery appropriate to local and hosted modes, plus visible
   storage/sync status. Explain which account/database a student is using.
-- [ ] Provide a normal hosted-account path in both clients so a student can open
+- [x] Provide a normal hosted-account path in both clients so a student can open
   the same saved week on another device. Keep local-to-hosted transfer explicit
   and previewed; automatic bidirectional/offline synchronization is separate scope.
-- [ ] Finish hosted deployment, persistent storage, tested backup restoration,
-  recovery/deletion flows and the remaining security/accessibility review.
-- [ ] Verify Windows installers and the reported setup-dialog flicker on a real
-  PC, Linux packaging/tray behavior, and Safari/iPhone compatibility.
+- [~] Security/accessibility review run 2026-09-15 (own review plus GLM passes
+  on backend security, month correctness and frontend a11y). Backend findings
+  fixed on `grok/stage7-month-backend`; three minor accessibility items remain
+  for the frontend (live regions for recovery status and transfer preview,
+  focus after account deletion).
+- Hosted Render deployment, Windows installer verification, Linux packaging/tray
+  checks and Safari/iPhone compatibility: skipped by owner 2026-09-15.
 - Complete when: a student understands where their week is stored, can recover
   access through the supported flow, and can use the same hosted account in the
   browser and desktop without data loss or exposure to another account.
 - Verification: recovery abuse/expiry/revocation tests, ownership and CSRF checks,
-  backup restore drills, cross-client revision conflicts, installation/upgrade
-  smoke checks and physical-device evidence.
-- Status: [ ] Planned. Continues Phase 6 and Phase 8 delivery work in parallel;
-  hosted release readiness does not wait for every optional feature above.
+  and cross-client revision conflicts. Hosted backup drills, installer smoke
+  checks and physical-device evidence are out of this slice.
+- Status: [~] Backend and shared browser/desktop frontend complete locally on
+  `feat/stage6-access-frontend`, with transfer size limits reconciled on
+  `grok/stage6-transfer-limit`. The Stage 6 contract is approved 2026-09-15 and
+  recorded in `spec.md`. Export and import share the 256 KiB write cap. Hosted
+  deployment, installers and physical Safari/iPhone checks are skipped. The
+  security/accessibility review remains. No executable was built.
 
 ### Stage 7. Add longer-range navigation and validate the student experience
-- [ ] Add Month view for deadlines and projects with date-to-Day navigation.
-  Reassess Year view after Day/Month trials; it remains optional later work.
+- [x] Add Month view for deadlines and projects with date-to-Day navigation.
+  The shared browser and desktop frontend reads `GET /api/month` without
+  loading month summaries into editable week state. Year view remains optional
+  later work.
 - [ ] Run student trials covering first use, adding several assignments, an
   impossible workload, a missed session, next-week reuse and recovery from an edit.
 - [ ] Compare completion rates, task time and wrong turns with the initial UI.
@@ -360,16 +396,24 @@ Current scope mapping:
 - Verification: month/year boundary and date-navigation tests; repeat the same
   student scenarios on the baseline and revised UI; record observed completion,
   assistance needed, device/browser and screenshots alongside release-gate output.
-- Status: [ ] Planned. Month view depends on Stage 1 dates; student trials and
-  regression checks also occur within each earlier stage, not only at the end.
+- Status: [~] The Month API and shared frontend are complete locally on
+  `feat/stage7-month-frontend`, now integrated with Grok's audit fixes from
+  `grok/stage7-month-backend`. `docs/stage7-contract.md` is approved 2026-09-15
+  with a planned-work amendment: Month shows planned and completed study time,
+  pins a session only to a date that is certain, and reports work with several
+  possible days as an unscheduled total. spec.md lists `GET /api/month`. Year
+  view, student trials, measured comparisons and PR review remain. The full
+  source gate passes 242 frontend and 364 Python tests, including the real Qt
+  WebEngine Month walkthrough at desktop and phone widths. No executable was
+  built.
 
 ### Scope and contract follow-up
 
 The existing pure solver, account ownership, Monday-keyed weeks, missed_days
-recovery and 15-minute placement remain the foundation for these stages. Exact
-deadlines, assignment identity across weeks, routine exceptions, timer lifetime,
-undo/restore semantics and account recovery introduce contract changes to reconcile
-with spec.md. That file remains unchanged by this roadmap revision.
+recovery and 15-minute placement remain the foundation for these stages. Stage
+1's exact deadlines, cross-week assignment identity, timer lifetime and undo
+semantics are reconciled with spec.md. Routine exceptions, restore semantics and
+account recovery still need contract changes before their implementation.
 
 AI chat/Ollama, Google Calendar OAuth, LMS bridges, syllabus OCR and Qt custom
 painting remain outside this plan. More category chips, a social feed, streaks and

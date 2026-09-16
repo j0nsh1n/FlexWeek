@@ -9,7 +9,7 @@ import signal
 import sys
 import time
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from unittest.mock import patch
 
 from PySide6.QtCore import QEventLoop, QTimer, QUrl
@@ -18,6 +18,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWebEngineCore import QWebEnginePage, QWebEnginePermission
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
+from backend.assignments import migrated_assignment_id
 from desktop.main import (
     OFFLINE_HEADING,
     PAGE_STOPPED_HEADING,
@@ -66,7 +67,7 @@ def run(case: str, root: Path) -> None:
             QTest.qWait(50)
         raise AssertionError(f"Condition not reached: {code}")
 
-    def submit_identity(name: str, action: str) -> None:
+    def submit_identity(name: str, action: str, acknowledge_codes: bool = True) -> list[str]:
         evaluate(f"""if (document.getElementById('{action}-screen').hidden)
                 document.getElementById('show-{action}').click();
             document.getElementById('{action}-username').value={json.dumps(name)};
@@ -74,6 +75,20 @@ def run(case: str, root: Path) -> None:
             document.querySelector('#{action}-form button[type=submit]').click();""")
         wait_for(f"document.getElementById('account-name').textContent === {json.dumps(name)}")
         wait_for("!document.getElementById('planner').hidden")
+        codes: list[str] = []
+        if action == "register":
+            wait_for("document.getElementById('recovery-codes-dialog').open")
+            wait_for("document.querySelectorAll('#recovery-codes-list code').length === 8")
+            codes = cast(list[str], json.loads(evaluate(
+                "JSON.stringify(Array.from(document.querySelectorAll('#recovery-codes-list code'), "
+                "node => node.textContent))"
+            )))
+            if acknowledge_codes:
+                evaluate("""document.getElementById('recovery-codes-ack').checked=true;
+                    document.getElementById('recovery-codes-ack').dispatchEvent(new Event('change'));
+                    document.getElementById('recovery-codes-done').click();""")
+                wait_for("!document.getElementById('recovery-codes-dialog').open")
+        return codes
 
     def wait_through_reload(code: str, timeout: float = 20.0) -> None:
         """wait_for across a page that is gone or reloading, when scripts cannot answer."""
@@ -84,6 +99,14 @@ def run(case: str, root: Path) -> None:
                     return
             QTest.qWait(100)
         raise AssertionError(f"Condition not reached: {code}")
+
+    def api_json(path: str) -> dict:
+        """GET an API path with the page's session; a failed request comes back as {"status": code}."""
+        evaluate(f"window.__apiReply = undefined; api({json.dumps(path)}).then("
+                 "data => { window.__apiReply = JSON.stringify(data); }, "
+                 "error => { window.__apiReply = JSON.stringify({status: error.status}); })")
+        wait_for("typeof window.__apiReply === 'string'")
+        return cast(dict, json.loads(evaluate("window.__apiReply")))
 
     def assert_painted(label: str) -> None:
         QTest.qWait(300)
@@ -97,7 +120,7 @@ def run(case: str, root: Path) -> None:
         evaluate("document.getElementById('setup-skip').click()")
         evaluate("""document.getElementById('setup-homework-title').value='Math worksheet';
             document.getElementById('setup-next').click();""")
-        assert evaluate("document.getElementById('setup-next').textContent") == "Add to my week and Solve"
+        assert evaluate("document.getElementById('setup-next').textContent") == "Add to my week and plan"
         evaluate("document.getElementById('setup-next').click()")
 
     solved_week = (
@@ -209,7 +232,7 @@ def run(case: str, root: Path) -> None:
                 document.getElementById('setup-sports-day-1').checked=true;
                 document.getElementById('setup-next').click();""")
             evaluate("""document.getElementById('setup-homework-title').value='Math worksheet';
-                document.getElementById('setup-homework-due-day').value='6';
+                document.getElementById('setup-homework-due-date').value=dateForDay(selectedWeek, 6);
                 document.getElementById('setup-next').click();""")
             assert "Math worksheet" in evaluate("document.getElementById('setup-summary').textContent")
             evaluate("document.getElementById('setup-next').click()")
@@ -219,7 +242,7 @@ def run(case: str, root: Path) -> None:
             assert evaluate("document.querySelectorAll('.block:not(.flex-block)').length") == 6
             assert evaluate("document.querySelectorAll('.flex-block').length") == 1, "Homework was not placed"
             stats = evaluate("document.getElementById('debug-stats').textContent")
-            assert stats == "Placed 1 of 1 task.", stats
+            assert stats == "1 task fits.", stats
             assert not evaluate("Array.from(document.querySelectorAll('.slack-badge'))"
                                 ".some(b => /slack/i.test(b.textContent))"), "Raw slack jargon on the grid"
             assert not evaluate("document.getElementById('focus-section').hidden")
@@ -246,7 +269,7 @@ def run(case: str, root: Path) -> None:
             status = evaluate("document.getElementById('status').textContent")
             assert status.startswith("FlexWeek reopened after a display problem. Saved week"), status
             assert evaluate("getComputedStyle(document.querySelector('.side')).backdropFilter") == "none"
-            assert evaluate("document.getElementById('debug-stats').textContent") == "Placed 1 of 1 task."
+            assert evaluate("document.getElementById('debug-stats').textContent") == "1 task fits."
             assert_painted("After recovering the page")
             # Stopping again right away gets a native message instead of a reload loop.
             os.kill(page.renderProcessPid(), signal.SIGKILL)
@@ -359,7 +382,7 @@ def run(case: str, root: Path) -> None:
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")
             add_item("assignments", "document.getElementById('f-title').value='Homework';"
                      "document.getElementById('f-energy').value='high';"
-                     "document.getElementById('f-due-day').value='1';"
+                     "document.getElementById('f-due-date').value=dateForDay(selectedWeek, 1);"
                      "document.getElementById('f-due-time').value='09:00';", days=[0, 1])
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")
             evaluate("document.getElementById('solve').click()")
@@ -400,6 +423,610 @@ def run(case: str, root: Path) -> None:
             assert evaluate("document.querySelectorAll('.missed-block').length") == 0
             assert evaluate("document.querySelectorAll('.block:not(.flex-block)').length") == 1
             print("PASS: explanations, slack, one-day miss recovery, move list and restore in desktop")
+        elif case == "stage1":
+            submit_identity("stage1_student", "register")
+            evaluate("document.getElementById('setup-close').click()")
+
+            def fetch_json(path: str) -> Any:
+                evaluate(f"window.__reply = undefined; api({json.dumps(path)})"
+                         ".then(data => { window.__reply = JSON.stringify(data); })")
+                wait_for("typeof window.__reply === 'string'")
+                return json.loads(evaluate("window.__reply"))
+
+            this_week = evaluate("selectedWeek")
+            next_week = evaluate("shiftWeek(selectedWeek, 1)")
+            homework_path = f"/api/assignments?week_start={this_week}&include_completed=true"
+            week_path = f"/api/week?week_start={this_week}"
+            due = evaluate("dateForDay(shiftWeek(selectedWeek, 1), 2)") + "T21:00"
+            add_item("assignments", "document.getElementById('f-title').value='Essay';"
+                     f"document.getElementById('f-due-date').value={json.dumps(due[:10])};"
+                     "document.getElementById('f-due-time').value='21:00';", days=[0])
+            wait_for("document.getElementById('status').textContent.startsWith('Saved')")
+            homework = fetch_json(homework_path)["assignments"]
+            assert [(item["title"], item["due"]) for item in homework] == [("Essay", due)], homework
+            assignment_id = homework[0]["id"]
+            session = fetch_json(week_path)["blocks"][0]
+            assert session["assignment_id"] == assignment_id and session.get("latest") is None, session
+
+            evaluate("document.getElementById('solve').click()")
+            wait_for("!document.getElementById('debug').hidden")
+            stats = evaluate("document.getElementById('debug-stats').textContent")
+            assert stats == "1 task fits.", stats
+
+            evaluate(f"deleteBlockById({json.dumps(session['id'])})")
+            wait_for("document.getElementById('delete-dialog').open")
+            evaluate("document.getElementById('delete-assignment').click()")
+            wait_for("document.getElementById('status').textContent.startsWith('Deleted Essay')")
+            assert fetch_json(homework_path)["assignments"] == []
+            assert fetch_json(week_path)["blocks"] == []
+            evaluate("document.getElementById('undo').click()")
+            wait_for("document.getElementById('status').textContent === 'Undid deleting Essay.'")
+            assert [item["id"] for item in fetch_json(homework_path)["assignments"]] == [assignment_id]
+            assert [block["id"] for block in fetch_json(week_path)["blocks"]] == [session["id"]]
+
+            evaluate("document.getElementById('undo').click()")
+            wait_for("document.getElementById('status').textContent === 'Undid your last change.'")
+            assert fetch_json(homework_path)["assignments"] == []
+            assert fetch_json(week_path)["blocks"] == []
+            evaluate("document.getElementById('redo').click()")
+            wait_for("document.getElementById('status').textContent === 'Redid your last change.'")
+            assert [item["id"] for item in fetch_json(homework_path)["assignments"]] == [assignment_id]
+
+            evaluate("window.__file = exportWeekPayload(selectedWeek, weekState().blocks)")
+            assert evaluate("window.__file.version") == 2
+            evaluate(f"selectWeek({json.dumps(next_week)})")
+            wait_for(f"selectedWeek === {json.dumps(next_week)} && !saving")
+            evaluate(f"""window.__imported = undefined;
+                window.__file.week_start = {json.dumps(next_week)};
+                window.__file.assignments[0].title = 'Essay copy';
+                importPayloadIntoWeek(parseImportPayload(JSON.stringify(window.__file)))
+                    .then(ok => {{ window.__imported = ok; }});""")
+            wait_for("window.__imported !== undefined")
+            status = evaluate("document.getElementById('status').textContent")
+            assert evaluate("window.__imported") is True, status
+            copy_id = migrated_assignment_id(next_week, assignment_id)
+            assignment_path = f"/api/assignments?week_start={next_week}&include_completed=true"
+            stored = fetch_json(assignment_path)["assignments"]
+            assert sorted((item["id"], item["title"]) for item in stored) == sorted(
+                [(assignment_id, "Essay"), (copy_id, "Essay copy")]
+            ), stored
+            imported = fetch_json(f"/api/week?week_start={next_week}")["blocks"]
+            assert [block["assignment_id"] for block in imported] == [copy_id], imported
+            print("PASS: homework saves as an assignment, Solve, whole-homework delete and undo, "
+                  "undo and redo of adding it, and a format 2 import into another week")
+        elif case == "stage2":
+            # At 390px the day agenda comes first and the whole path runs without a context menu.
+            window.resize(390, 800)
+            QTest.qWait(100)
+            submit_identity("stage2_student", "register")
+            evaluate("document.getElementById('setup-close').click()")
+            assert evaluate("plannerView") == "day", "A 390px window did not start on the day agenda"
+            assert not evaluate("document.getElementById('day-agenda').hidden")
+            add_rect = "document.getElementById('add-homework').getBoundingClientRect()"
+            on_screen = evaluate(f"{add_rect}.width > 0 && {add_rect}.right <= window.innerWidth")
+            assert on_screen, "Add homework is off screen"
+
+            def click_agenda(label: str) -> None:
+                evaluate("Array.from(document.querySelectorAll('#day-agenda .agenda-row button'))"
+                         f".find(b => b.textContent === {json.dumps(label)}).click()")
+
+            tomorrow = evaluate("addDaysIso(currentDateInfo().iso, 1)")
+            evaluate("document.getElementById('add-homework').click()")
+            wait_for("document.getElementById('homework-dialog').open")
+            evaluate(f"""document.getElementById('hw-title').value='Essay';
+                document.getElementById('hw-due-date').value={json.dumps(tomorrow)};
+                document.getElementById('hw-due-time').value='23:59';
+                document.getElementById('hw-estimate').value='60';
+                document.querySelector('#homework-form button[type=submit]').click();""")
+            wait_for("document.getElementById('status').textContent.startsWith('Added Essay')")
+            due_soon = (
+                "Array.from(document.querySelectorAll('#day-agenda .agenda-section')).some(s => "
+                "s.querySelector('h3').textContent === 'Due soon' && s.textContent.includes('Essay'))"
+            )
+            wait_for(due_soon)
+            evaluate("document.getElementById('solve').click()")
+            wait_for("!document.getElementById('debug').hidden")
+            assert evaluate("document.getElementById('solve-label').textContent") == "Update my plan"
+            click_agenda("Start focus")
+            wait_for("!document.getElementById('focus-panel').hidden")
+            evaluate("document.getElementById('focus-reset').click()")
+            click_agenda("Finished")
+            wait_for("document.getElementById('status').textContent.startsWith('Finished Essay')")
+            # Pass the reply back as JSON text; runJavaScript does not hand arrays to Python reliably.
+            evaluate("window.__done = undefined; "
+                     "api('/api/assignments?week_start=' + selectedWeek + '&include_completed=true')"
+                     ".then(data => { window.__done = JSON.stringify("
+                     "data.assignments.map(a => a.completed)); })")
+            wait_for("typeof window.__done === 'string'")
+            done = json.loads(evaluate("window.__done"))
+            assert done == [True], done
+
+            # At 1280px Week still shows seven days, one control away, with Add homework on screen.
+            window.resize(1280, 800)
+            QTest.qWait(100)
+            evaluate("document.getElementById('view-week').click()")
+            wait_for("!document.getElementById('week').hidden")
+            assert evaluate("document.querySelectorAll('.day-head').length") == 7
+            assert evaluate("document.getElementById('add-homework').getBoundingClientRect().width > 0")
+            assert evaluate("document.querySelector('.week-nav #export-week') === null")
+            print("PASS: 390px day agenda, Add homework, plan, start focus and finish without "
+                  "a context menu; 1280px week of seven days")
+        elif case == "stage3":
+            submit_identity("stage3_student", "register")
+            evaluate("document.getElementById('setup-close').click()")
+            add_item("class", "document.getElementById('f-title').value='School';", days=[0])
+            wait_for("document.getElementById('status').textContent.startsWith('Saved')")
+
+            # Copy one occurrence through the shared preview and persist it through
+            # the real atomic API. The source block remains a separate Monday item.
+            evaluate("""window.__stage3Done=undefined;
+                const source=weekState().blocks.find(block => block.title === 'School');
+                copyBlockById(source.id, 0, 'occurrence');
+                pasteStage3Clipboard(1, source.start);
+                confirmStage3Preview().then(ok => { window.__stage3Done=ok; });""")
+            wait_for("window.__stage3Done !== undefined")
+            assert evaluate("window.__stage3Done") is True
+            assert evaluate("weekState().blocks.filter(block => block.title === 'School').length") == 2
+
+            # Save the current fixed commitments as a routine, then apply only
+            # Monday to next week. Applying snapshots the account first.
+            evaluate(
+                "window.__routineOpen=undefined; "
+                "openRoutineDialog().then(ok => { window.__routineOpen=ok; })"
+            )
+            wait_for("window.__routineOpen !== undefined")
+            evaluate("""document.getElementById('routine-name').value='School week';
+                window.__routineSaved=undefined;
+                saveNewRoutine().then(ok => { window.__routineSaved=ok; });""")
+            wait_for("window.__routineSaved !== undefined")
+            assert evaluate("window.__routineSaved") is True
+            next_week = evaluate("shiftWeek(selectedWeek, 1)")
+            evaluate(f"""document.getElementById('routine-destination').value={json.dumps(next_week)};
+                [0,1,2,3,4,5,6].forEach(day => document.getElementById('routine-day-'+day).checked=day===0);
+                window.__routineApplied=undefined;
+                applyRoutine(Array.from(stage3Routines.keys())[0]).then(ok => {{
+                    if (!ok) window.__routineApplied=false;
+                    else confirmStage3Preview().then(saved => {{ window.__routineApplied=saved; }});
+                }});""")
+            wait_for("window.__routineApplied !== undefined")
+            assert evaluate("window.__routineApplied") is True
+            assert evaluate("selectedWeek") == next_week
+            assert evaluate("weekState().blocks.length") == 1
+
+            evaluate("window.__points=undefined; api('/api/restore-points').then(data => { "
+                     "window.__points=JSON.stringify(data.restore_points); })")
+            wait_for("typeof window.__points === 'string'")
+            points = json.loads(evaluate("window.__points"))
+            assert len(points) == 1, points
+            assert points[0]["label"].startswith("Before applying School week"), points
+
+            # Restore the pre-apply snapshot. It removes the destination week,
+            # clears ephemeral clipboard/history, and leaves the saved routine.
+            point_id = points[0]["id"]
+            evaluate(f"window.__restorePreview=undefined; previewRestorePoint({json.dumps(point_id)})"
+                     ".then(ok => {{ window.__restorePreview=ok; }})")
+            wait_for("window.__restorePreview !== undefined")
+            assert evaluate("window.__restorePreview") is True
+            evaluate(
+                "window.__restored=undefined; "
+                "restoreFromPreview().then(ok => { window.__restored=ok; })"
+            )
+            wait_for("window.__restored !== undefined", timeout=20)
+            assert evaluate("window.__restored") is True
+            evaluate(f"window.__nextWeek=undefined; api('/api/week?week_start={next_week}')"
+                     ".then(data => {{ window.__nextWeek=JSON.stringify(data.blocks); }})")
+            wait_for("typeof window.__nextWeek === 'string'")
+            assert json.loads(evaluate("window.__nextWeek")) == []
+            assert evaluate("stage3Clipboard === null && undoSteps.length === 0")
+            evaluate("window.__routines=undefined; api('/api/routines').then(data => { "
+                     "window.__routines=JSON.stringify(data.routines); })")
+            wait_for("typeof window.__routines === 'string'")
+            assert len(json.loads(evaluate("window.__routines"))) == 1
+
+            # A retried batch with the same operation id stores once and replays the first answer.
+            evaluate("""window.__retry=undefined;
+                const retryBody=JSON.stringify({weeks:[{week_start:selectedWeek,
+                    blocks:weekState().blocks.concat([{id:'b-probe-retry',kind:'locked',title:'Retry',
+                        duration_min:30,days:[2],start:'18:00'}]),
+                    revision:weekState().revision}], assignments:[], operation_id:'probe-retry-operation'});
+                api('/api/changes',{method:'POST',body:retryBody}).then(first =>
+                    api('/api/changes',{method:'POST',body:retryBody}).then(second => {
+                        window.__retry=JSON.stringify([first.weeks[0].revision, second.weeks[0].revision,
+                            second.weeks[0].blocks.filter(block => block.title === 'Retry').length]);
+                    }));""")
+            wait_for("typeof window.__retry === 'string'")
+            retried = json.loads(evaluate("window.__retry"))
+            assert retried[0] == retried[1] and retried[2] == 1, retried
+
+            # Routines and restore points survive a reload, including the recovery point the restore kept.
+            evaluate("window.__beforeStage3Reload=true")
+            window.reload()
+            wait_for(
+                "typeof window.__beforeStage3Reload === 'undefined' && "
+                "document.getElementById('planner') && !document.getElementById('planner').hidden"
+            )
+            assert len(api_json("/api/routines")["routines"]) == 1
+            labels = [point["label"] for point in api_json("/api/restore-points")["restore_points"]]
+            assert len(labels) == 2 and labels[0].startswith("Before restore"), labels
+
+            # Another account sees none of it, and the first account's restore point is not found for it.
+            evaluate("document.getElementById('logout').click()")
+            wait_for("!document.getElementById('login-screen').hidden")
+            submit_identity("stage3_other", "register")
+            evaluate("document.getElementById('setup-close').click()")
+            assert api_json("/api/routines")["routines"] == []
+            assert api_json("/api/restore-points")["restore_points"] == []
+            assert api_json(f"/api/restore-points/{point_id}/preview") == {"status": 404}
+            evaluate("document.getElementById('logout').click()")
+            wait_for("!document.getElementById('login-screen').hidden")
+            submit_identity("stage3_student", "login")
+            assert len(api_json("/api/routines")["routines"]) == 1
+            print(
+                "PASS: copy preview, routine save/apply, automatic restore point, restore, a retried "
+                "operation, reload and a second account through real APIs"
+            )
+        elif case == "stage3_mobile":
+            # A phone-width dark window carries unfinished homework into next week exactly once.
+            window.resize(390, 800)
+            QTest.qWait(100)
+            submit_identity("stage3_phone", "register")
+            evaluate("document.getElementById('setup-close').click()")
+            evaluate(
+                "document.getElementById('theme').value='nocturne'; "
+                "document.getElementById('theme').dispatchEvent(new Event('change'))"
+            )
+            wait_for("!document.getElementById('theme').disabled")
+            assert page_theme() == "nocturne"
+            due = evaluate("dateForDay(shiftWeek(selectedWeek, 1), 2)")
+            evaluate("document.getElementById('add-homework').click()")
+            wait_for("document.getElementById('homework-dialog').open")
+            evaluate(f"""document.getElementById('hw-title').value='Essay';
+                document.getElementById('hw-due-date').value={json.dumps(due)};
+                document.getElementById('hw-due-time').value='23:59';
+                document.getElementById('hw-estimate').value='60';
+                document.querySelector('#homework-form button[type=submit]').click();""")
+            wait_for("document.getElementById('status').textContent.startsWith('Added Essay')")
+            assignment_id = evaluate("Array.from(assignments.keys())[0]")
+            next_week = evaluate("shiftWeek(selectedWeek, 1)")
+            evaluate(f"selectWeek({json.dumps(next_week)})")
+            wait_for(f"selectedWeek === {json.dumps(next_week)} && !saving")
+            wait_for("!document.getElementById('unfinished-review').hidden")
+            assert evaluate("document.querySelectorAll('#unfinished-list li').length") == 1
+            evaluate("document.querySelector('#unfinished-list button').click()")
+            wait_for("document.getElementById('stage3-preview-dialog').open")
+            confirm_rect = "document.getElementById('stage3-preview-confirm').getBoundingClientRect()"
+            assert evaluate(f"{confirm_rect}.height >= 44"), "The preview's save button is under 44px"
+            fits = evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            assert fits, "Preview overflows at 390px"
+            evaluate("document.getElementById('stage3-preview-confirm').click()")
+            wait_for("document.getElementById('status').textContent.startsWith('Saved unfinished homework')")
+            assert evaluate("document.querySelectorAll('#unfinished-list li').length") == 0
+            week = api_json(f"/api/week?week_start={next_week}")
+            sessions = [block for block in week["blocks"] if block.get("assignment_id") == assignment_id]
+            assert len(sessions) == 1, week["blocks"]
+            homework_path = f"/api/assignments?week_start={next_week}&include_completed=true"
+            homework = api_json(homework_path)["assignments"]
+            kept = [(item["id"], item["due"]) for item in homework]
+            assert kept == [(assignment_id, due + "T23:59")], homework
+            print("PASS: at 390px in the dark theme, unfinished homework goes into next week once, "
+                  "keeping its id and deadline")
+        elif case == "stage4":
+            submit_identity("stage4_student", "register")
+            evaluate("document.getElementById('setup-close').click()")
+            add_item(
+                "class",
+                "document.getElementById('f-title').value='School';",
+                days=[0, 1, 2, 3, 4],
+            )
+            wait_for("document.getElementById('status').textContent.startsWith('Saved')")
+            due = evaluate("dateForDay(shiftWeek(selectedWeek, 1), 4)")
+            evaluate("document.getElementById('add-homework').click()")
+            wait_for("document.getElementById('homework-dialog').open")
+            evaluate(f"""document.getElementById('hw-title').value='Essay';
+                document.getElementById('hw-due-date').value={json.dumps(due)};
+                document.getElementById('hw-due-time').value='23:59';
+                document.getElementById('hw-estimate').value='240';
+                document.querySelector('#homework-form button[type=submit]').click();""")
+            wait_for("document.getElementById('status').textContent.startsWith('Added Essay')")
+            assignment_id = evaluate("Array.from(assignments.keys())[0]")
+            evaluate(
+                "weekState().blocks = weekState().blocks.filter(function (block) {"
+                " return !block.assignment_id; });"
+                " weekState().dirty = true;"
+            )
+            evaluate("window.__cleared=undefined; saveWeek().then(ok => { window.__cleared=ok; })")
+            wait_for("window.__cleared === true")
+            evaluate(f"""window.__spread=undefined;
+                openHomeworkDialog({json.dumps(assignment_id)});
+                openSpreadDialog({json.dumps(assignment_id)});
+                document.getElementById('spread-session').value='60';
+                document.getElementById('spread-from').value=todayIso();
+                previewSpread().then(ok => {{ window.__spread=ok; }});""")
+            wait_for("window.__spread !== undefined")
+            spread_error = evaluate("document.getElementById('spread-error').textContent")
+            assert evaluate("window.__spread") is True, spread_error
+            evaluate(
+                "window.__spreadSaved=undefined; "
+                "confirmStage3Preview().then(ok => { window.__spreadSaved=ok; })"
+            )
+            wait_for("window.__spreadSaved !== undefined")
+            assert evaluate("window.__spreadSaved") is True
+            sessions_before = evaluate(
+                "weekState().blocks.filter(block => block.assignment_id).length"
+            )
+            assert sessions_before >= 1
+
+            evaluate("""window.__late=undefined;
+                const noon=new Date(); noon.setHours(12,0,0,0);
+                if (!openRunningLate(noon)) window.__late=false;
+                else previewRunningLate(noon).then(ok => { window.__late=ok; });""")
+            wait_for("window.__late !== undefined")
+            late_error = evaluate(
+                "document.getElementById('late-error').textContent"
+                " || document.getElementById('status').textContent"
+            )
+            assert evaluate("window.__late") is True, late_error
+            evaluate(
+                "window.__accepted=undefined; "
+                "acceptRunningLate().then(ok => { window.__accepted=ok; })"
+            )
+            wait_for("window.__accepted !== undefined", timeout=20)
+            assert evaluate("window.__accepted") is True
+            late_kept = "weekState().blocks.filter(block => block.title === 'Running late').length"
+            school_kept = "weekState().blocks.filter(block => block.title === 'School').length"
+            work_kept = "weekState().blocks.filter(block => block.assignment_id).length"
+            assert evaluate(late_kept) == 1
+            assert evaluate(school_kept) == 1
+            assert evaluate(work_kept) >= sessions_before
+            evaluate("window.__beforeStage4Reload=true")
+            window.reload()
+            wait_for(
+                "typeof window.__beforeStage4Reload === 'undefined' && "
+                "document.getElementById('planner') && !document.getElementById('planner').hidden"
+            )
+            assert evaluate(late_kept) == 1
+            assert evaluate(school_kept) == 1
+            print(
+                "PASS: spread four hours, run 30 minutes late, keep school and homework, "
+                "reload keeps the late interval"
+            )
+        elif case == "stage5":
+            submit_identity("comfort_student", "register")
+            evaluate("document.getElementById('setup-close').click()")
+            evaluate("document.getElementById('prefs-open').click()")
+            wait_for("document.getElementById('prefs-dialog').open")
+            evaluate("document.getElementById('settings-focus').open=true")
+            wait_for("document.querySelectorAll('#reminder-limits li').length === 4")
+            evaluate("""document.getElementById('pref-timer-work').value='25';
+                document.getElementById('pref-timer-break').value='5';
+                document.getElementById('timer-preview').click();""")
+            wait_for("!document.getElementById('timer-preview-result').hidden")
+            assert "becomes 30" in evaluate("document.getElementById('timer-preview-message').textContent")
+            assert "120 min on the calendar" in evaluate(
+                "document.getElementById('timer-preview-segments').textContent"
+            )
+            evaluate("document.getElementById('timer-use-rounded').click()")
+            assert evaluate("document.getElementById('pref-timer-work').value") == "30"
+            assert evaluate("document.getElementById('pref-timer-break').value") == "15"
+
+            # Preview uses the unsaved sound controls and does not make an HTTP request or
+            # spend a real reminder's once-per-start key.
+            evaluate("""window.__stage5Fetch=fetch; window.__stage5Fetches=0;
+                fetch=function(){window.__stage5Fetches += 1;
+                    return window.__stage5Fetch.apply(this, arguments);};
+                window.__stage5Sound=soundOnce; window.__stage5Sounds=0;
+                soundOnce=function(){window.__stage5Sounds += 1;};
+                document.getElementById('pref-reminder-sound').checked=true;
+                document.getElementById('pref-alert-volume').value='0';
+                document.getElementById('test-reminder').click();""")
+            assert evaluate("window.__stage5Fetches") == 0
+            assert evaluate("window.__stage5Sounds") == 0
+            assert evaluate("firedReminders.size") == 0
+            evaluate("""document.getElementById('pref-alert-volume').value='42';
+                document.getElementById('preview-alert').click();""")
+            assert evaluate("window.__stage5Sounds") == 1
+            evaluate("fetch=window.__stage5Fetch; soundOnce=window.__stage5Sound")
+
+            evaluate("""document.getElementById('pref-end-chime').checked=true;
+                document.getElementById('pref-tray-notifications').checked=false;
+                document.getElementById('pref-start-at-login').checked=true;
+                document.getElementById('pref-preferred-view').value='day';
+                document.getElementById('pref-auto-split').checked=true;
+                document.getElementById('prefs-save').click();""")
+            wait_for("!document.getElementById('prefs-dialog').open")
+            evaluate("document.getElementById('sidebar-toggle').click()")
+            wait_for("!layoutSaveRunning")
+
+            evaluate("window.__stage5BeforeReload=true")
+            window.reload()
+            wait_through_reload(
+                "typeof window.__stage5BeforeReload === 'undefined' && "
+                "document.getElementById('account-name').textContent === 'comfort_student'"
+            )
+            assert evaluate("plannerView") == "day"
+            assert evaluate("prefs.alert_volume") == 42
+            assert evaluate("prefs.end_chime") is True
+            assert evaluate("prefs.tray_notifications") is False
+            assert evaluate("prefs.start_at_login") is True
+            assert evaluate("prefs.sidebar_collapsed") is True
+            assert evaluate("getComputedStyle(document.getElementById('planner-sidebar')).display") == "none"
+
+            window.resize(390, 800)
+            QTest.qWait(100)
+            assert evaluate("getComputedStyle(document.getElementById('planner-sidebar')).display") == "block"
+            assert evaluate("getComputedStyle(document.getElementById('sidebar-resizer')).display") == "none"
+            assert evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            print(
+                "PASS: settings groups, timer rounding, local silent preview, comfort save, "
+                "remembered day view and responsive sidebar"
+            )
+        elif case == "stage6":
+            codes = submit_identity("access_student", "register", acknowledge_codes=False)
+            assert len(codes) == 8
+            assert evaluate("Object.hasOwn(account, 'recovery_codes')") is False
+            assert evaluate("document.getElementById('setup-dialog').open") is False
+            evaluate("""document.getElementById('recovery-codes-ack').checked=true;
+                document.getElementById('recovery-codes-ack').dispatchEvent(new Event('change'));
+                document.getElementById('recovery-codes-done').click();""")
+            wait_for("document.getElementById('setup-dialog').open")
+            evaluate("document.getElementById('setup-close').click()")
+
+            evaluate("document.getElementById('prefs-open').click()")
+            wait_for("document.getElementById('account-location-label').textContent === 'On this device'")
+            wait_for(
+                "document.getElementById('recovery-status').textContent === "
+                "'8 unused recovery codes remain.'"
+            )
+            assert evaluate("document.getElementById('prefs-account').textContent") == (
+                "Signed in as access_student"
+            )
+            assert evaluate("document.getElementById('recovery-status').textContent") == (
+                "8 unused recovery codes remain."
+            )
+            evaluate("document.getElementById('change-password-open').click()")
+            evaluate("""document.getElementById('change-password-current').value='temporary-test-password';
+                document.getElementById('change-password-new').value='changed-test-password';
+                document.getElementById('change-password-confirm').value='changed-test-password';
+                document.querySelector('#change-password-form button[type=submit]').click();""")
+            wait_for("document.getElementById('status').textContent.includes('Password changed')")
+
+            evaluate("document.getElementById('logout').click()")
+            wait_for("document.getElementById('planner').hidden")
+            evaluate("document.getElementById('show-recover').click()")
+            evaluate(f"""document.getElementById('recover-username').value='access_student';
+                document.getElementById('recover-code').value={json.dumps(codes[0])};
+                document.getElementById('recover-password').value='recovered-test-password';
+                document.getElementById('recover-password-confirm').value='recovered-test-password';
+                document.querySelector('#recover-form button[type=submit]').click();""")
+            wait_for("document.getElementById('status').textContent.includes('Account recovered')")
+            assert evaluate("document.getElementById('account-name').textContent") == "access_student"
+
+            add_item("class", "document.getElementById('f-title').value='School';", days=[0])
+            wait_for("document.getElementById('status').textContent.startsWith('Saved')")
+            evaluate("""window.__stage6Snapshot=null; window.__stage6Download=downloadText;
+                downloadText=function(_name, body){window.__stage6Snapshot=JSON.parse(body);};
+                document.getElementById('prefs-open').click();
+                document.getElementById('transfer-open').click();
+                document.getElementById('account-export-password').value='recovered-test-password';
+                document.querySelector('#account-export-form button[type=submit]').click();""")
+            wait_for("window.__stage6Snapshot !== null")
+            snapshot = cast(dict[str, Any], json.loads(evaluate("JSON.stringify(window.__stage6Snapshot)")))
+            assert snapshot["username"] == "access_student"
+            assert len(cast(list[Any], snapshot["weeks"])) == 1
+            evaluate(
+                "downloadText=window.__stage6Download; "
+                "document.getElementById('transfer-close').click()"
+            )
+
+            evaluate("document.getElementById('logout').click()")
+            wait_for("document.getElementById('planner').hidden")
+            submit_identity("destination_student", "register")
+            evaluate("document.getElementById('setup-close').click()")
+            evaluate(
+                "document.getElementById('prefs-open').click(); "
+                "document.getElementById('transfer-open').click()"
+            )
+            evaluate("previewTransferSnapshot(" + json.dumps(snapshot) + ")")
+            wait_for("!document.getElementById('account-import-preview').hidden")
+            assert evaluate("document.getElementById('account-import-source').textContent").startswith(
+                "From access_student."
+            )
+            evaluate("""document.getElementById('account-import-ack').checked=true;
+                document.getElementById('account-import-ack').dispatchEvent(new Event('change'));
+                document.getElementById('account-import-confirm').click();""")
+            wait_for("document.getElementById('status').textContent.includes('Account data imported')")
+            assert evaluate("document.querySelectorAll('.block').length") == 1
+            assert evaluate("document.querySelector('.block').textContent.includes('School')") is True
+
+            evaluate("document.getElementById('prefs-open').click()")
+            wait_for("document.getElementById('account-location-label').textContent === 'On this device'")
+            evaluate("document.getElementById('delete-account-open').click()")
+            evaluate("""document.getElementById('delete-account-username').value='destination_student';
+                document.getElementById('delete-account-password').value='temporary-test-password';
+                document.querySelector('#delete-account-form button[type=submit]').click();""")
+            wait_for("document.getElementById('status').textContent.includes('Account deleted')")
+            assert evaluate("!document.getElementById('register-screen').hidden") is True
+            print(
+                "PASS: one-time codes, password change, recovery, local identity, "
+                "previewed transfer and deletion"
+            )
+        elif case == "stage7_month":
+            submit_identity("month_student", "register")
+            evaluate("document.getElementById('setup-close').click()")
+            assignment = {
+                "id": "month-project", "title": "History essay", "course": "History",
+                "category": "Homework", "priority": 3, "energy": "medium", "spotify_url": None,
+                "due": "2026-09-16T23:59", "estimate_min": 120, "focus_minutes": 0,
+                "focus_sessions": 0, "completed": False, "completed_at": None, "revision": 0,
+                "notes": "Private outline", "links": [{"label": "Sources", "url": "https://example.test"}],
+                "checklist": [{"id": "draft", "text": "Draft", "done": True}],
+            }
+            overdue = {
+                **assignment, "id": "late-lab", "title": "Late lab", "course": "Science",
+                "due": "2026-08-15T17:00", "estimate_min": 45, "notes": "", "links": [],
+                "checklist": [],
+            }
+            sessions = [
+                {"id": "essay-tue", "title": "History essay", "kind": "flexible",
+                 "duration_min": 60, "days": [1], "priority": 3, "energy": "medium",
+                 "start": "16:00", "assignment_id": "month-project", "category": "Homework"},
+                {"id": "essay-wed", "title": "History essay", "kind": "flexible",
+                 "duration_min": 60, "days": [2], "priority": 3, "energy": "medium",
+                 "start": "16:00", "assignment_id": "month-project", "category": "Homework"},
+            ]
+            assignment_json = json.dumps(assignment)
+            overdue_json = json.dumps(overdue)
+            sessions_json = json.dumps(sessions)
+            evaluate(f"""window.__monthSeeded=false;
+                (async function(){{
+                    await api('/api/assignments/month-project',
+                        {{method:'PUT', body:JSON.stringify({assignment_json})}});
+                    await api('/api/assignments/late-lab',
+                        {{method:'PUT', body:JSON.stringify({overdue_json})}});
+                    await api('/api/week', {{method:'PUT', body:JSON.stringify({{
+                        week_start:'2026-09-14', blocks:{sessions_json}, revision:0
+                    }})}});
+                    window.__monthSeeded=true;
+                }})().catch(error => {{window.__monthSeedError=error.message;}});""")
+            wait_for("window.__monthSeeded || window.__monthSeedError")
+            assert evaluate("window.__monthSeedError || ''") == ""
+            evaluate(
+                "selectedDay='2026-09-16'; plannerView='day'; "
+                "document.getElementById('view-month').click()"
+            )
+            wait_for("plannerView === 'month' && monthSnapshot && monthSnapshot.month === '2026-09'")
+            assert evaluate("document.getElementById('week-label').textContent") == "September 2026"
+            assert evaluate(
+                "document.querySelector('.month-day[data-date=\"2026-09-16\"]')"
+                ".textContent.includes('History essay')"
+            )
+            assert evaluate(
+                "document.getElementById('month-projects').textContent"
+                ".includes('Checklist 1/1 · Notes · Links')"
+            )
+            assert evaluate("document.getElementById('month-overdue').textContent.includes('Late lab')")
+            assert evaluate(
+                "!document.getElementById('month-projects').textContent.includes('Private outline')"
+            )
+            assert evaluate("getComputedStyle(document.getElementById('planner-sidebar')).display") == "none"
+
+            for width in (1280, 390):
+                window.resize(width, 800)
+                QTest.qWait(150)
+                assert evaluate("document.documentElement.scrollWidth <= window.innerWidth"), (
+                    f"Month overflow at {width}px"
+                )
+                assert evaluate(
+                    "document.querySelector('.month-day[data-date=\"2026-09-16\"]')"
+                    ".getBoundingClientRect().height >= 44"
+                ), f"Month date target is shorter than 44px at {width}px"
+            evaluate("document.querySelector('.month-day[data-date=\"2026-09-16\"]').click()")
+            wait_for("plannerView === 'day' && selectedDay === '2026-09-16'")
+            assert evaluate("document.getElementById('week-label').textContent.includes('Wednesday')")
+            print(
+                "PASS: real month API data renders deadlines, project indicators and overdue work "
+                "at 1280px and 390px, then opens Day"
+            )
         elif case == "phase7":
             submit_identity("focus_student", "register")
             add_item("assignments", "document.getElementById('f-title').value='Maths';"

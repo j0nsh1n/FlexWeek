@@ -204,19 +204,30 @@ test('clicking empty grid offers a 1-hour block clipped at the next block, title
 test('a flexible type dragged on a day becomes a task Solve may place on that day', async () => {
   const h = harness();
   await h.login();
-  h.handle(async (_path, options) => response(200, { week_start: MONDAY, blocks: JSON.parse(options.body).blocks, revision: 1 }));
+  let saved;
+  h.handle(async (_path, options) => {
+    saved = JSON.parse(options.body);
+    return response(200, {
+      weeks: saved.weeks.map(week => ({ ...week, revision: 1 })),
+      assignments: saved.assignments.map(change => ({ id: change.id, revision: 1, assignment: change.assignment })),
+    });
+  });
   chip(h, 'type-chips', 'assignments').listeners.click();
 
   h.run('requestCreate(2, 960, 1050)');
   assert.equal(h.elements.get('f-kind-flexible').checked, true);
   assert.equal(h.elements.get('f-duration').value, '90');
+  // With no due date picked, it is due at the end of the week on screen.
   assert.equal(h.elements.get('f-flex-summary').textContent,
-    'Solve will find 1 h 30 min for it on Wednesday. It has no due time.');
+    'Your plan will find 1 h 30 min for it on Wednesday. It is due Sun Sep 13, 23:59.');
   h.elements.get('f-title').value = 'Chemistry lab report';
   submitEditor(h);
   await tick();
   same(h.run('weekState().blocks.map(b => [b.kind, b.days, b.start, b.duration_min, b.latest, b.category])'),
     [['flexible', [2], null, 90, null, 'assignments']]);
+  assert.equal(saved.assignments[0].assignment.due, '2026-09-13T23:59');
+  assert.equal(saved.weeks[0].blocks[0].assignment_id, saved.assignments[0].id);
+  assert.equal(h.run('weekState().dirty'), false);
 });
 
 test('the editor refuses a task with no days, and says so, instead of saving', async () => {
@@ -241,10 +252,10 @@ test('a due day before every allowed day is an error that names both', async () 
   const h = harness();
   await h.login();
   h.run('requestCreate(4, 960, 1020)');
-  h.elements.get('f-due-day').value = '1';
+  h.elements.get('f-due-date').value = '2026-09-08';
   assert.equal(submitEditor(h), false);
   assert.equal(h.elements.get('form-error').textContent,
-    'It is due Tuesday, but every day you picked comes after that. Pick an earlier day or a later due day.');
+    'It is due Tuesday, but every day you picked comes after that. Pick an earlier day or a later due date.');
   assert.equal(h.run('weekState().blocks.length'), 0);
 });
 
@@ -270,12 +281,12 @@ test('Add without dragging starts from the type preset, not a blank 16:00 block'
   assert.equal(h.elements.get('f-duration').value, '60');
   same([0, 1, 2, 3, 4, 5, 6].map(day => h.elements.get(`f-day-${day}`).checked),
     [false, false, false, true, true, true, true]);
-  h.elements.get('f-due-day').value = '5';
-  h.elements.get('f-due-day').listeners.change();
+  h.elements.get('f-due-date').value = '2026-09-12';
+  h.elements.get('f-due-date').listeners.change();
   same([0, 1, 2, 3, 4, 5, 6].map(day => h.elements.get(`f-day-${day}`).checked),
     [false, false, false, true, true, true, false]);
   assert.equal(h.elements.get('f-flex-summary').textContent,
-    'Solve will find 1 h for it on Thursday, Friday or Saturday. It is due Saturday at 21:00.');
+    'Your plan will find 1 h for it on Thursday, Friday or Saturday. It is due Sat Sep 12, 23:59.');
 });
 
 test('move and resize update start/duration and keep 15-min grid', async () => {
@@ -320,6 +331,24 @@ test('categoryColor maps thin palette and the chosen type persists as the catego
   assert.equal(savedCategory, 'meals');
   assert.equal(h.run('weekState().blocks[0].category'), 'meals');
   assert.equal(h.run('weekState().blocks[0].kind'), 'locked');
+});
+
+test('homework due off the 15-minute grid keeps its due time when its session opens in the editor', async () => {
+  const h = harness();
+  const session = { id: 'lab', title: 'Lab report', kind: 'flexible', duration_min: 60, days: [3, 4], assignment_id: 'hw-lab' };
+  const assignment = {
+    id: 'hw-lab', title: 'Lab report', due: '2026-09-11T08:10', estimate_min: 60, focus_minutes: 0,
+    focus_sessions: 0, completed: false, completed_at: null, revision: 1, planned_min: 60, unplanned_min: 0,
+  };
+  await h.login(1, [session]);
+  h.run(`assignments.set('hw-lab', ${JSON.stringify(assignment)})`);
+  assert.equal(h.run('openEditor(draftFromBlock(weekState().blocks[0], null), weekState().blocks[0])'), true);
+  const times = h.elements.get('f-due-time').children.map(option => option.value);
+  assert.equal(h.elements.get('f-due-date').value, '2026-09-11');
+  assert.equal(h.elements.get('f-due-time').value, '08:10');
+  assert.deepEqual([times[0], times.at(-2), times.at(-1)], ['00:00', '23:45', '23:59']);
+  assert.equal(times.filter(time => time === '08:10').length, 1);
+  assert.ok(times.indexOf('08:00') < times.indexOf('08:10') && times.indexOf('08:10') < times.indexOf('08:15'));
 });
 
 test('dragging one day of a repeating locked block is refused, not applied to the series', async () => {

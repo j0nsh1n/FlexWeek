@@ -27,9 +27,25 @@ superseded by the expanded roadmap.
 Contract for the finished app:
 
 - A week is a set of `TimeBlock`s: `locked` blocks have a fixed `start`;
-  `flexible` blocks have a `duration_min` and a deadline (`latest`) and are
-  placed by the solver.
-- Optional block fields the API and storage already keep: `category`,
+  `flexible` blocks are work sessions with a `duration_min` that the solver
+  places.
+- Homework is an account-owned assignment that outlives any one week: `title`,
+  an exact `due` (naive local `YYYY-MM-DDTHH:MM`, any minute), `estimate_min`,
+  progress (`focus_minutes`, `focus_sessions`) and completion (`completed`,
+  `completed_at`), with its own revision. A work session points at its
+  assignment with `assignment_id` and takes its title, deadline, priority,
+  energy, course, category and Spotify link from it. One assignment can have
+  sessions in several weeks. Details live in `docs/stage1-contract.md`.
+- The solver stays day-index pure. Before solving, the backend turns an
+  assignment's `due` into the week's bound: a due time inside the week bounds
+  that day, a due date after the week adds no bound, and a due date before the
+  week leaves the session unplaced with `DEADLINE_MISS`.
+- Focus minutes never complete anything. Finishing an assignment, or adding time
+  to it, is the student's explicit choice when a session ends.
+- Old weekday deadlines (`latest`, `"Thursday 21:00"` or `"21:00"`) migrate once
+  into assignments on start and are still accepted on saves. A save that uses
+  them never changes an existing assignment.
+- Optional block fields the API and storage keep: `assignment_id`, `category`,
   `completed`, `completed_day`, `missed_days`, `spotify_url`, `focus_sessions`,
   `focus_minutes`, and pomodoro split fields (`pomodoro_parent_id`,
   `pomodoro_role`, `pomodoro_index`). `completed_day` is only valid on a
@@ -60,6 +76,72 @@ Contract for the finished app:
   than an error; a duration that is not a positive multiple of 15 is rejected in
   both the browser form and the API. Legacy browser data is explicitly imported
   into a signed-in account; invalid data stays untouched and never loads a demo.
+- Copy, paste, duplicate and copy-day use a page-memory clipboard that clears
+  on account change. Fixed-time conflicts are previewed and must be resolved;
+  pasted homework keeps the same assignment identity, stays flexible and never
+  exceeds its remaining unplanned minutes.
+- Account-owned weekly routines contain fixed commitments only. Applying one
+  to a Monday-keyed destination week previews every occurrence and lets the
+  student omit or adjust one-week exceptions without changing the routine.
+- A later week reviews unfinished homework using the original assignment ID,
+  exact deadline and progress. Repeated planning and request retries cannot
+  duplicate or over-plan it.
+- Account-owned restore points snapshot weeks and assignments. Clear week,
+  routine application and restore preserve the replaced schedule first; a
+  stale restore preview returns 409 and no failure stores partial state. The UI
+  labels backups as local-device or hosted-server data.
+- New accounts receive eight one-time recovery codes, shown once. A forgotten
+  password is recovered with a username, an unused code and a new password, not
+  email. Signed-in students can replace leftover codes, change the password or
+  delete the account; those writes need the current password. Delete removes
+  every row for that user. The username may be registered again.
+- `GET /api/storage-info` reports local or hosted `mode`, a student-facing
+  `label`, the signed-in `username`, the public `origin` and
+  `transfer_limit_bytes` (262144). It never returns a filesystem path.
+- Local-to-hosted transfer is a password-gated format-3 export and a previewed
+  import of weeks, assignments, preferences and routines. Import takes a Stage 3
+  restore point of the destination weeks and assignments first. Automatic
+  bidirectional or offline sync is out of scope. Export returns 413 when the
+  compact import apply envelope would exceed the 256 KiB write cap.
+- Day view lists one date: homework due soon, that day's work sessions and fixed
+  commitments, one next action, and a workload summary that separates scheduled
+  time, recorded focus time and time still free before 23:00, with a breakdown by
+  category. Due soon is open homework due that day or the next, plus anything
+  already overdue. Below 800px Day is the default view and Week stays one control
+  away. Quick Add homework asks only for title, due date and estimated time, with
+  "Choose a time myself" for anything more. The planning button reads "Plan my
+  homework", and "Update my plan" once that week has been planned. Details live
+  in `docs/stage2-contract.md`.
+- Running late is a solve preview of a 15, 30 or 60 minute delay from a
+  15-minute cutoff on one day of the open week. Fixed commitments and sleep stay
+  put, and work that no longer fits stays unplaced rather than being dropped.
+  Accepting it stores one locked "Running late" block through `/api/changes` and
+  re-solves, so reload and one-step Undo act on a real saved change. Details
+  live in `docs/stage4-contract.md`.
+- Spreading a project previews flexible sessions of a chosen length across the
+  dates from a start date through the due date. It writes nothing until the
+  student confirms, and each session is an ordinary session of the same
+  assignment, not a pomodoro split.
+- An assignment carries optional `notes` (at most 4000 characters), up to 20
+  `links` (`http` or `https` only) and a checklist of up to 40 items. Ticking
+  checklist items never completes the assignment, and focus minutes still
+  complete nothing.
+- Preferences carry availability: up to 21 `protected` windows (downtime,
+  commute or meal), up to 21 soft `study_windows`, and an optional `day_cutoff`
+  that flexible work must finish by. `POST /api/solve` loads them for the
+  signed-in account, so the browser never re-sends occupancy.
+- Comfort preferences persist per account: `alert_volume` (0-100), `end_chime`,
+  `tray_notifications`, `start_at_login`, `preferred_view` (`week` or `day`),
+  `sidebar_collapsed` and `sidebar_width_px` (200-640). Defaults stay omitted
+  from stored JSON so older clients keep working, and timer rounding to the
+  15-minute grid is previewed and explained rather than silent. Details live in
+  `docs/stage5-contract.md`.
+- Month view shows one calendar month of deadlines, projects, overdue homework
+  and study time, planned and completed, and any date opens Day view. A session
+  pins to a date only when that date is certain: the day it was completed, or
+  its only candidate day. Open work with several candidate days is reported as
+  an unscheduled total instead of being painted across all of them, because the
+  solver's choice is never stored. Details live in `docs/stage7-contract.md`.
 
 ## User Experience
 Web app, one page, desktop-first (designed at 1280px) and usable on a phone at
@@ -68,17 +150,20 @@ framework**. FastAPI serves `frontend/` as static files, so there is one origin
 and no CORS.
 
 First paint with no session is Create account. Log in is a separate screen.
-A new account is offered a short first-week setup (school hours, one sport,
-then homework). Every step can be skipped. Dragging or clicking empty grid
-space opens an Add dialog for that range.
+A new account must acknowledge its eight recovery codes, then is offered a
+short first-week setup (school hours, one sport, then homework). Every setup
+step can be skipped. Dragging or clicking empty grid space opens an Add dialog
+for that range.
 
 Downloads from GitHub Releases:
 
-- **Download for Windows.** `FlexWeek-Windows-x64.zip`
+- **Download for Windows.** `FlexWeek-Windows-x64-Setup.exe`
 - **Download for Linux.** `FlexWeek-Linux-x86_64.tar.gz`
 
-Windows: extract the zip first; running from inside the zip does not work.
-Until the app is code-signed, SmartScreen is More info, then Run anyway.
+Windows: `FlexWeek-Windows-x64-Setup.exe` installs for the student's account
+without an administrator; `FlexWeek-Windows-x64.msi` installs for every account
+on a PC, for schools and IT. Until the app is code-signed, SmartScreen is More
+info, then Run anyway.
 Linux: 64-bit desktop (GNOME, KDE Plasma, Cinnamon, Xfce), glibc 2.38 or
 newer, OpenGL or EGL. The X11 cursor helper is inside the archive. A shippable
 Linux tarball is built on Ubuntu 24.04, not on a newer-glibc Fedora host.
@@ -96,18 +181,40 @@ Current account/API contract:
 
 | Method | Path | Behavior |
 |---|---|---|
-| POST | `/api/auth/register` | Create username/password account and session |
+| POST | `/api/auth/register` | Create username/password account, session and eight one-time recovery codes |
 | POST | `/api/auth/login` | Authenticate and rotate session |
 | POST | `/api/auth/logout` | Revoke current session |
 | GET | `/api/auth/me` | Current account; 401 when absent/expired |
+| POST | `/api/auth/recover` | Username, unused recovery code and new password; throttled like login |
+| GET | `/api/auth/recovery-status` | Unused recovery-code count |
+| POST | `/api/auth/recovery-codes` | Password-gated replacement of unused codes |
+| POST | `/api/auth/password` | Change password; keep this session and drop the others |
+| DELETE | `/api/auth/account` | Password-gated deletion of this account and its rows |
 | GET/PUT | `/api/week` | One dated week of the account, with revision-checked saves |
 | GET | `/api/weeks` | The `week_start` dates this account has saved, ascending |
-| GET/PUT | `/api/preferences` | Theme, reminders, timers, alarms, Spotify default |
-| POST | `/api/solve` | Authenticated week in, SolveTrace out; no storage mutation |
+| GET | `/api/day` | One date's agenda: due-soon homework, that day's sessions and fixed blocks, a next action and the workload split |
+| GET | `/api/month` | Month grid of deadlines, projects, overdue work, planned and completed study time, and an unscheduled total |
+| GET | `/api/assignments` | Open assignments with planned and unplanned minutes for a `week_start`; completed ones only when asked |
+| PUT/DELETE | `/api/assignments/{id}` | Revision-checked create, update and delete; delete removes its sessions from every week |
+| POST | `/api/assignments/{id}/spread` | Preview sessions of a chosen length from a start date through the due date; writes nothing |
+| POST | `/api/changes` | Several week and assignment writes, all or nothing; optional operation ID and pre-change recovery point |
+| GET/PUT | `/api/preferences` | Theme, reminders, timers, alarms, Spotify default, availability windows and comfort settings |
+| GET | `/api/timer-presets` | Named timer presets on the 15-minute grid |
+| GET | `/api/reminder-limits` | The reminder ceilings the settings dialog explains |
+| POST | `/api/timer-split-preview` | Explain how a timer splits and rounds before it is saved |
+| GET/PUT/DELETE | `/api/routines[/{id}]` | Account-owned, revision-checked fixed-time routine templates |
+| GET/POST | `/api/restore-points[/{id}/preview or /restore]` | Create/list restore points, preview a state-tokened diff, and restore transactionally |
+| GET | `/api/storage-info` | Authenticated mode, label, username, origin and 256 KiB transfer limit; no filesystem path |
+| POST | `/api/account-export` | Password-gated format-3 snapshot of weeks, assignments, preferences and routines |
+| POST | `/api/account-import/preview` | State-tokened diff of a format-3 snapshot against this account |
+| POST | `/api/account-import` | Previewed replace of weeks, assignments, preferences and routines |
+| POST | `/api/solve` | Authenticated week and its `week_start` in, SolveTrace out; no storage mutation |
 | GET | `/api/health` | Public health response |
 
-`POST /api/solve` accepts `{ "blocks": [...] }` and an optional `recover`
-object for a missed locked occurrence. The solve trace contains `placed`,
+`POST /api/solve` accepts `{ "blocks": [...], "week_start": "YYYY-MM-DD" }` and
+either an optional `recover` object for a missed locked occurrence or an
+optional `running_late` object for a delayed start, never both. `week_start` is
+required when any block carries `assignment_id`. The solve trace contains `placed`,
 `unplaced`, `moves`, `explanations`, `failed_constraints`, `solve_ms`,
 `complete`. Demo endpoints are removed. Test-only seed JSON remains.
 Writes require `X-FlexWeek-Request: 1`; browser origins must match
@@ -115,12 +222,16 @@ Writes require `X-FlexWeek-Request: 1`; browser origins must match
 cross-tab account change. No CORS is enabled.
 
 Registration: normalized case-insensitive ASCII username (3–32 letters, digits,
-underscores), password 12–128 characters. New accounts have an empty week, and
-their theme follows the device's light or dark setting. Duplicate usernames
-return 409, invalid input 422, expired or missing sessions 401, stale changed
-writes 409, throttled auth 429, oversized requests 413, transient database
-failures 503. Identical week retries return success without duplicate blocks or
-another revision increment.
+underscores), password 12–128 characters. New accounts have an empty week, eight
+one-time recovery codes (hashes only in SQLite) and a theme that follows the
+device's light or dark setting. Duplicate usernames return 409, invalid input
+422, expired or missing sessions 401, stale changed writes 409, throttled auth
+429, oversized requests 413, transient database failures 503. Identical week
+retries return success without duplicate blocks or another revision increment.
+Wrong username and wrong recovery code share one 401 sentence. Account export
+and import apply use the same 256 KiB write cap; export 413s when the compact
+`{snapshot, state_token, operation_id}` envelope would not fit. Details live in
+`docs/stage6-contract.md`.
 
 A week is identified by `(account, week_start)`, where `week_start` is a naive
 local ISO date that is always a Monday. An account holds as many dated weeks as
@@ -133,8 +244,10 @@ and derive their calendar date, so the solver stays day-index pure.
 A week has at most 100 uniquely identified blocks; titles 1–80,
 course names at most 40, durations positive multiples of 15 up to 7140 minutes,
 and unique day indices. Explicit starts are on the visible grid and end by
-23:00. Deadlines/earliest bounds use full English weekday plus HH:MM, or HH:MM.
-API write bodies are capped at 256 KiB.
+23:00. An assignment's `due` is a naive local `YYYY-MM-DDTHH:MM` between
+2000-01-01 and 2099-12-31; `earliest` bounds and legacy `latest` values use a
+full English weekday plus HH:MM, or HH:MM. An account holds at most 1000
+assignments. API write bodies are capped at 256 KiB.
 
 Preferences store `theme` as `system`, `slate` or `nocturne`; the menus label
 them System, Light and Dark, so Light is stored as `slate` and Dark as
@@ -158,13 +271,18 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
 - Frameworks, pinned in `requirements.txt`: FastAPI 0.141.1,
   uvicorn[standard] 0.52.4, pytest 9.1.1, httpx 0.28.1, ruff 0.16.6, mypy 2.3.1, Pydantic 2.13.5.
 - Storage: SQLite at `FLEXWEEK_DATABASE` (default `var/flexweek.db`), with users,
-  sessions, weeks keyed `(user_id, week_start)`, preferences and short-lived
-  auth-attempt counters. Schema creation is additive on startup; related writes
-  use transactions. The pre-dated single-week table migrates on first start
-  inside one explicit transaction, stamping the existing row with the Monday of
-  that day; it is idempotent and never drops a row. A preferences table from
+  sessions, weeks keyed `(user_id, week_start)`, assignments keyed
+  `(user_id, id)`, preferences, routines, restore points, hashed recovery codes,
+  bounded idempotency records and short-lived auth-attempt counters. Schema
+  creation is additive on startup; related writes use transactions. The
+  pre-dated single-week table migrates on first start inside one explicit
+  transaction, stamping the existing row with the Monday of that day; it is
+  idempotent and never drops a row. A preferences table from
   before the System theme is rebuilt once on start in one transaction: stored
-  `slate` and `nocturne` are kept and any other value becomes `system`. Browser
+  `slate` and `nocturne` are kept and any other value becomes `system`. Flexible
+  blocks without `assignment_id`, and pomodoro chunk groups, migrate once on
+  start into assignments with deterministic ids, inside one transaction and
+  without changing week revisions (`docs/stage1-contract.md`). Browser
   localStorage is read only for explicit legacy import, then removed on success.
 - Major components:
   - `backend/models.py`. Pydantic models (`TimeBlock`, `Move`, `SolveTrace`,
@@ -179,12 +297,16 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
   - `frontend/`. `index.html`, `styles.css`, and deferred scripts sharing one
     global scope: `app.js` (week state, grid, saves, solve, alarms), `auth.js`
     (Create account / Log in), `editor.js` (Add/Edit dialog), `setup.js`
-    (first-week setup), `focus.js` (timer and Now / Next). The browser owns
+    (first-week setup), `focus.js` (timer and Now / Next), `reuse.js`
+    (clipboard, conflict preview and unfinished work), `routines.js`,
+    `restore.js` and `access.js` (recovery codes, storage identity and previewed
+    account transfer). The browser owns
     interaction and explanation display and **never reimplements placement**.
   - `desktop/`. PySide6 window, bundled uvicorn, packaging scripts, and
     isolated WebEngine probes.
-- Time model: local `HH:MM` strings and Mon–Sun day indices, assumed
-  America/Los_Angeles. No timezone conversion math anywhere in v1.
+- Time model: local `HH:MM` strings and Mon–Sun day indices, plus naive local
+  `YYYY-MM-DDTHH:MM` assignment deadlines, assumed America/Los_Angeles. No
+  timezone conversion math anywhere in v1.
 - Slot grid: Mon–Sun 06:00–23:00, 15-minute slots, 68/day × 7 = 476/week.
   Overlap uses half-open ranges `[start, end)`. One `overlaps()` helper. There
   is no duplicate date math.
@@ -195,9 +317,9 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
   Python install; its database sits beside the browser profile in the user data
   directory. `FLEXWEEK_DESKTOP_ORIGIN` (or `FLEXWEEK_ORIGIN`) points that window
   at a hosted deployment instead, and an invalid value is an error rather than a
-  silent fall back to local. Windows zip is built on GitHub Actions
-  (`.github/workflows/release-windows.yml`); extracting and running it on a
-  real PC is unverified here. Production requires HTTPS via FLEXWEEK_ORIGIN and
+  silent fall back to local. The Windows installers are built on GitHub
+  Actions (`.github/workflows/release-windows.yml`), which installs, opens and
+  uninstalls each one; running them on a real PC is unverified here. Production requires HTTPS via FLEXWEEK_ORIGIN and
   persistent SQLite storage.
 - GitHub Actions: `.github/workflows/verify.yml` is the source gate (mypy, not
   pyright). `.github/workflows/codeql.yml` runs CodeQL on Python and JavaScript.
@@ -222,13 +344,24 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
   are logged; validation responses omit submitted input.
 - Auth attempts are bounded per username (10) and source address (30) per
   five-minute window, persisted in SQLite and expired during auth requests.
-- Production needs HTTPS, database backups, and deployment-specific proxy setup.
-  Recovery, deletion/retention policy, advanced hardening and audits are deferred
-  to Phase 6 before public release.
+- Production needs HTTPS, deployment backups and deployment-specific proxy
+  setup. Stage 3 restore points cover student recovery inside one account.
+  Stage 6 recovery codes, password change, account deletion and previewed
+  format-3 transfer are the supported access flows (`docs/stage6-contract.md`).
+  Advanced hardening and audits remain later release work.
 - Failed saves retain in-memory drafts with retry, download and reload controls.
   Stale revisions never silently overwrite newer data. Session loss hides all
   private content; a draft can restore only after the same account signs in.
-  Explicit sign-out discards drafts after confirmation.
+  Explicit sign-out discards drafts after confirmation. A running focus timer is
+  kept in `sessionStorage` per account with ids and times only, never assignment
+  text; undo history lives in page memory and clears on sign-out or account
+  change.
+- The Stage 3 clipboard also lives only in page memory and clears on sign-out,
+  account change and reload. Routine, restore and transfer routes derive
+  ownership from the session; another account's opaque ID is treated as not
+  found. Restore and import previews use a state token so a later edit cannot
+  be overwritten silently. Password-gated export, code replacement, password
+  change and deletion are not enough from a stolen session cookie alone.
 - Demo data is anonymized: no real student names, schools, or addresses, and no
   copyrighted syllabus PDFs in the repo.
 - License is **GPL-3.0** (`LICENSE`); the README and the page footer must agree
@@ -293,7 +426,27 @@ The commands it runs, each of which must exit 0:
 - [ ] A pomodoro parent cannot be stored with the chunks split from it.
 - [ ] Marking a locked occurrence missed reshuffles remaining flexible work and
       leaves sleep intact.
-- [ ] Download names are `FlexWeek-Windows-x64.zip` and
+- [ ] A student enters homework due next Tuesday at 11:59 p.m., works on it
+      this week and next, ends a focus session without completing it, switches
+      weeks without losing the timer, and undoes an accidental delete or replan.
+- [ ] A student copies one practice occurrence, applies a fixed-time routine to
+      next week with one holiday exception, carries unfinished homework once,
+      and previews and restores an account-owned recovery point.
+- [ ] A student recovers a forgotten password with a one-time code, sees which
+      account and origin they are using, and previews a format-3 account file
+      onto another signed-in account without exposing it to a third account.
+- [ ] A new student can see what is due tomorrow, add homework, plan it, start
+      it and mark it finished at 390px and 1280px, without a context menu or
+      reading scheduling documentation.
+- [ ] A student who is running late previews a 30-minute delay, accepts it, and
+      undoes it in one step; spreading a project adds sessions only after a
+      preview.
+- [ ] Protected downtime, preferred study hours and a day cutoff change where
+      the solver places work without the browser re-sending occupancy.
+- [ ] A student opens Month, sees deadlines with planned and completed study
+      time, and clicks a date to open Day view.
+- [ ] Download names are `FlexWeek-Windows-x64-Setup.exe` (with
+      `FlexWeek-Windows-x64.msi` for schools) and
       `FlexWeek-Linux-x86_64.tar.gz`.
 - [ ] A public Render URL loads the app and a judge can follow the README.
 - [ ] `scripts/verify.py` exits 0 (`ruff check .`, `mypy backend`, and

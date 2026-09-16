@@ -38,6 +38,9 @@ this gate. The generic kit CI that ran pyright is not used.
 | Grid gestures and event wiring | `frontend/tests/calendar-interactions.test.mjs`; WebEngine `calendar` case | Snap boundaries, cancel, a second pointer, move/resize, double-click, context menu and persisted reload |
 | Imports, exports, drafts, categories and completion | `frontend/tests/phase5-slices.test.mjs`; `backend/tests/test_phase5.py` | Invalid input, repeat import, maximum merged size, unusual/maximum Unicode IDs, multi-day flexible tasks, completed placement round trip and exported draft reimport |
 | Reminder preferences and session cleanup | Phase 5 frontend/backend tests | Lead window, solved flexible work, completed/missed filtering, account transition, browser notification closure and alert cleanup |
+| Stage 6 recovery, identity and account transfer | `frontend/tests/stage6_access.test.mjs`; `backend/tests/test_stage6_api.py`, `test_recovery.py`; WebEngine `stage6` case | One-time code handling, wrong-password session preservation, local/hosted identity, malformed files, named removals, stale previews, replace/reload and deletion |
+| Stage 7 month navigation | `frontend/tests/stage7_month.test.mjs`; `backend/tests/test_month_api.py`, `test_weeks.py`, `test_day_api.py`; WebEngine `stage7_month` case | Deadlines, completed work, project indicators, overdue work, empty/error states, stale month/account replies, year and 2000/2099 boundaries, responsive date targets and date-to-Day handoff |
+| Stage 3 clipboard, routines, unfinished work and restore points | `frontend/tests/stage3.test.mjs`; `backend/tests/test_routines_api.py`, `test_restore_api.py`; WebEngine `stage3` and `stage3_mobile` cases | Collision previews, a remaining-time cap shared across a batch, the 100-block limit, operation ids on retry and after 409, stale restore tokens, reload, a second account and a 390px dark-theme carry-forward |
 | Desktop navigation, downloads and layout | `desktop/tests/test_origin.py`, `test_server.py`, `test_webengine.py` | External popup/navigation, offline draft download, 1280px/390px overflow |
 | A painted week after setup, and a page process that stops | WebEngine `rookie` and `recovery` cases; `--smoke-test` tests in `test_webengine.py`; `frontend/tests/accounts.test.mjs` | Window grab colors after the setup Solve, killed renderer reopening solved and solid, a second stop showing the native panel |
 
@@ -62,6 +65,9 @@ not prove hardware pointer capture, touch scrolling or OS notification delivery.
 3. For event-driven UI behavior, extend a real WebEngine case alongside fast
    Node tests. The integration result can include a save and reload so the
    check covers persistence as well as the displayed draft.
+   For multi-request actions, also prove retry idempotency: preserve the
+   operation key and payload across a failed or ambiguous attempt, then start a
+   new operation only after success or an explicit user change.
 4. Demonstrate the test failing for the intended defect before fixing it, or
    temporarily remove the behavior in an isolated copy. Inspect the assertion
    mismatch; a missing dependency or syntax exception proves nothing about the
@@ -83,6 +89,24 @@ is only proven in the packaged build, because that bug never occurred in a sourc
 No hosted security audit or production configuration check runs here. Existing
 account tests prove their particular isolation/CSRF/revision cases, not the
 safety of every deployment.
+
+## Stage 3 evidence
+
+Node cases cover fixed-block collision previews, occurrence and series scope,
+day-copy exclusions, homework identity and a remaining-time cap shared across a
+batch, keyboard shortcuts that stay off in form fields and behind open dialogs,
+routine weekday selection and long routine names, restore-token refresh, the
+week kept after a restore, Clear week rollback, and operation ids that repeat
+after an unknown response but not after a 409.
+
+The WebEngine `stage3` case drives the real API: copy through the preview, save
+and apply a routine, find the automatic restore point, restore it, repeat one
+`/api/changes` operation id (stored once), reload, and confirm that a second
+account lists no routines or restore points and gets 404 for the first
+account's point. `stage3_mobile` runs at 390px in the dark theme, carries
+unfinished homework into next week once and checks that the saved session keeps
+its assignment id and deadline. Backend isolation, limits and transactions are
+in `test_routines_api.py` and `test_restore_api.py`.
 
 ## Findings from the September 8–9 pass
 
