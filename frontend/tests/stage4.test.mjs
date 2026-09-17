@@ -435,6 +435,6 @@ test('deadline-cluster advice stays visible and does not claim the week was solv
   const open = h.elements.get('debug-unplaced').children.map(item => item.textContent).join('\n');
   assert.match(open, /Several tasks are short on time/);
   assert.match(open, /Work that cannot fit stays unplaced/);
-  assert.doesNotMatch(open, /Why the rest fit/);
+  assert.doesNotMatch(open, /See the rest of your plan/);
   assert.equal(h.elements.get('debug-unplaced').querySelector('.cluster-advice').textContent, message);
 });

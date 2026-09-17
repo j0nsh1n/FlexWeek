@@ -5,6 +5,31 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+- Running late no longer looks like it did nothing (2026-09-16, shared
+  frontend). Every reason it refuses to open now appears as a toast as well as
+  in the status line, the Preview button explains a week that changed while the
+  dialog sat open instead of going quiet, and accepting says what happened,
+  including "Nothing had to move." If the replan afterwards fails, the toast
+  still confirms the late start was saved.
+- Setup cannot blank a half-typed assignment name (2026-09-16, shared
+  frontend). Opening the first-week setup while it is already open is now
+  ignored, rather than resetting every field back to its default.
+
+### Changed
+- Larger date numbers in Month (2026-09-16, shared frontend), on both desktop
+  and phone widths.
+- A month with deadlines but nothing planned yet says so (2026-09-16, shared
+  frontend): "Only one thing is due so far. The rest of the month fills in as
+  you plan your work." A single assignment no longer reads as a broken month.
+- The collapsed list of work that fit is now called "See the rest of your plan"
+  instead of "Why the rest fit" (2026-09-16, shared frontend).
+- Setup no longer suggests "Sports" as the name of your sport (2026-09-16,
+  shared frontend). The example is now "Soccer, band, karate…".
+- Week chrome regrouped (2026-09-16, shared frontend). Hide sidebar moved out
+  from between the view switch and the date arrows, the sidebar's Add panel is
+  separated from the task list by a rule, and the focus-timer hint is shorter.
+
 ## [0.10.0] - 2026-09-16
 
 ### Fixed

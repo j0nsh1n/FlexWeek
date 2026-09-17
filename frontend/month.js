@@ -333,12 +333,19 @@ function renderMonthView() {
     return;
   }
   if (!monthSnapshot) return;
-  const hasCalendarContent = monthSnapshot.deadlines.length || monthSnapshot.days.some(function (day) {
+  const plannedDays = monthSnapshot.days.filter(function (day) {
     return day.in_month && (day.session_count || day.locked_count);
-  });
+  }).length;
+  const hasCalendarContent = monthSnapshot.deadlines.length || plannedDays;
   if (!hasCalendarContent && !monthSnapshot.projects.length && !monthSnapshot.overdue.length
       && !monthSnapshot.unscheduled.session_count) {
     state.textContent = "Nothing is due or scheduled this month.";
+  } else if (!plannedDays && monthSnapshot.deadlines.length) {
+    // A single deadline on an otherwise blank grid reads as a broken month, so say it is early.
+    state.textContent = monthSnapshot.deadlines.length === 1
+      ? "Only one thing is due so far. The rest of the month fills in as you plan your work."
+      : "Only " + monthSnapshot.deadlines.length
+        + " things are due so far. The rest of the month fills in as you plan your work.";
   }
   renderMonthCalendar(monthSnapshot);
   renderMonthLists(monthSnapshot);

@@ -653,7 +653,7 @@ button.danger {
 .month-day.is-today { box-shadow: inset 0 0 0 2px var(--accent); }
 .month-day-date { align-self: flex-end; display: flex; align-items: baseline; gap: 0.25rem; }
 .month-day-weekday-mobile { display: none; }
-.month-day-number { font-weight: 750; }
+.month-day-number { font-weight: 750; font-size: 1.2rem; line-height: 1.1; }
 .month-today-marker { align-self: flex-start; padding: 0.1rem 0.35rem; border-radius: 999px; background: var(--accent-soft); color: var(--text); font-size: 0.68rem; font-weight: 750; }
 .month-due { overflow: hidden; padding: 0.18rem 0.3rem; border-left: 3px solid var(--flex); border-radius: var(--radius-sm); background: var(--surface-card); font-size: 0.72rem; text-overflow: ellipsis; white-space: nowrap; }
 .month-due.is-completed { text-decoration: line-through; opacity: 0.72; }
@@ -1001,7 +1001,7 @@ button:disabled { cursor: wait; opacity: 0.6; }
   .month-day { display: grid; grid-template-columns: 4.25rem minmax(0, 1fr); min-height: 44px; gap: 0.25rem 0.5rem; }
   .month-day-date { grid-row: 1 / span 4; align-self: start; justify-self: start; }
   .month-day-weekday-mobile { display: inline; color: var(--muted); font-size: 0.78rem; }
-  .month-day-number { font-size: 1rem; }
+  .month-day-number { font-size: 1.15rem; }
   .month-today-marker, .month-due, .month-day-summary { grid-column: 2; }
   .month-due { white-space: normal; }
   .month-project-dates button { min-height: 44px; }
@@ -1063,7 +1063,7 @@ button:disabled { cursor: wait; opacity: 0.6; }
 .prefs-dialog .days label { flex-direction: row; margin: 0; }
 .block-dialog .form-error:not([hidden]) { padding: 0.45rem 0.6rem; border: 1px solid var(--error); border-radius: var(--radius); background: var(--error-soft); }
 [aria-invalid="true"] { outline: 2px solid var(--error); outline-offset: 1px; }
-.add-panel { margin-bottom: var(--space-4); }
+.add-panel { margin-bottom: var(--space-4); padding-bottom: var(--space-3); border-bottom: 1px solid var(--hairline); }
 .add-panel .category-chips { margin-bottom: 0.35rem; }
 
 .empty-week { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); margin: var(--space-3); padding: 0.75rem 0.9rem; background: var(--surface); border: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent); border-radius: var(--radius-lg); }

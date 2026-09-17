@@ -1,6 +1,17 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-16 (later). v0.10.0 is published as the Latest release, not a
+  draft and not a prerelease, from `main` at d17647a. All eight assets are
+  attached: `FlexWeek-Linux-x86_64.tar.gz`, `FlexWeek-x86_64.AppImage`,
+  `FlexWeek-Windows-x64-Setup.exe`, `FlexWeek-Windows-x64.msi`, and a `.sha256`
+  for each. Packaging run 35055532872 finished green on both jobs (linux 6m50s,
+  windows 13m14s). Windows is the slower job by design: its Nuitka compile took
+  750s against Linux's 495s in the comparable run, then it spends about 152s
+  building the Inno Setup and WiX installers and 38s installing, opening and
+  uninstalling each one, where Linux only builds a 24s AppImage and has no
+  install step. Nothing has been run on a real Windows PC yet. The next work is
+  the 0.10.1 hotfix in roadmap.md, not a new stage.
 - Date: 2026-09-16. Stages 1-7 are merged to `main` in PR #12 (merge commit
   aca3068), together with the roadmap PR #11 at a7936b2. PR checks were green:
   CodeQL, `analyze` and both `web` verify jobs, matching the local gate of 243
@@ -365,6 +376,23 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-16, `fix/0-10-1-hotfix`: implemented the 0.10.1 hotfix. Running late
+  now reports every refusal and every outcome, Month says when a month is early
+  rather than looking broken, the date numbers are larger, the collapsed
+  explanation list is "See the rest of your plan", setup stops suggesting
+  "Sports" as a sport name, and Hide sidebar moved out of the date controls.
+  Ten new node tests, each red-checked. Gate green: 253 frontend, 365 Python.
+  The reported name-field letter loss could not be reproduced and has no cause
+  in the frontend or the Qt shell; only a re-open guard and regression tests
+  landed for it. Next step: reproduce that symptom on Jonathan's machine, then
+  the Qt WebEngine walkthrough before tagging 0.10.1.
+- 2026-09-16, `docs/roadmap-0-10-1`: recorded the owner's post-0.10.0 plan in
+  roadmap.md as "Release polish (2026-09-16): 0.10.1, then 0.11", and pointed
+  the roadmap header at it. 0.10.1 is five fixes (two P0: the assignment name
+  field losing letters, and Running late giving no visible result); 0.11 is wait
+  states, targeted motion, and theme packs with a small Customize submenu.
+  Nothing in the app changed yet. Next step: reproduce the name-field bug on the
+  packaged build, since no code path rebuilds that input on a keystroke today.
 - 2026-09-16, `main`: PR #12 merged the seven student-experience stages, so
   `main` now carries Stages 1-7 and a spec.md that matches every approved
   contract. Follow-up work starts from `main` at aca3068, not from the stage

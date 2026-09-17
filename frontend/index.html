@@ -106,13 +106,13 @@
           <button type="button" id="view-week" class="secondary" aria-pressed="true">Week</button>
           <button type="button" id="view-month" class="secondary" aria-pressed="false">Month</button>
         </div>
-        <button type="button" id="sidebar-toggle" class="secondary sidebar-toggle" aria-controls="planner-sidebar" aria-expanded="true">Hide sidebar</button>
         <button type="button" id="week-prev" class="secondary"><svg class="icon" aria-hidden="true"><use href="#i-chevron-left"/></svg>Previous</button>
         <button type="button" id="week-today" class="secondary"><svg class="icon" aria-hidden="true"><use href="#i-today"/></svg>Today</button>
         <button type="button" id="week-next" class="secondary">Next<svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
         <strong id="week-label" class="week-label"></strong>
         <label id="week-jump-label">Saved weeks <select id="week-jump"></select></label>
         <button type="button" id="add-homework" class="add-homework"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>Add homework</button>
+        <button type="button" id="sidebar-toggle" class="secondary sidebar-toggle" aria-controls="planner-sidebar" aria-expanded="true">Hide sidebar</button>
         <span id="now-next" class="now-next" aria-live="polite" hidden></span>
       </div>
       <section id="unfinished-review" class="unfinished-review" aria-labelledby="unfinished-heading" hidden>
@@ -181,7 +181,7 @@
       </section>
       <section id="focus-section" class="focus-dashboard" aria-labelledby="focus-heading" hidden>
         <h2 id="focus-heading"><svg class="icon" aria-hidden="true"><use href="#i-timer"/></svg>Focus timer</h2>
-        <p class="note">Start a timer on a task your plan has placed, or use Quick focus for anything else.</p>
+        <p class="note">Start a timer on placed work, or Quick focus for anything else.</p>
         <div id="focus-panel" class="focus-panel" hidden>
           <strong id="focus-task"></strong>
           <span id="focus-phase"></span>
@@ -430,7 +430,7 @@
       <section id="setup-sports" hidden>
         <h3>Do you have a sport or practice?</h3>
         <p class="note">Add one regular activity now. You can add more later.</p>
-        <label>Name <input id="setup-sports-title" type="text" maxlength="80" placeholder="Sports" /></label>
+        <label>Name <input id="setup-sports-title" type="text" maxlength="80" placeholder="Soccer, band, karate…" /></label>
         <fieldset class="days"><legend>Days</legend>
           <label><input type="checkbox" id="setup-sports-day-0" value="0" /> Mon</label>
           <label><input type="checkbox" id="setup-sports-day-1" value="1" /> Tue</label>

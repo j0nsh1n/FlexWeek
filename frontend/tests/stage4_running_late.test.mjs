@@ -407,6 +407,62 @@ test('reload and re-solve keep the accepted late interval', async () => {
   assert.ok(again.blocks.some(block => block.id === late.id && block.kind === 'locked' && block.duration_min === 30));
 });
 
+test('every Running late refusal reaches the toast, not only the status line', async () => {
+  const h = harness();
+  await h.login({ blocks: [school(), homework()] });
+  assert.equal(await h.run(`selectWeek('${NEXT}')`), true);
+
+  assert.equal(h.run('openRunningLate()'), false);
+  assert.equal(h.elements.get('reminder-toast').hidden, false);
+  assert.match(h.elements.get('reminder-toast').textContent, /Open this week before using Running late\./);
+
+  assert.equal(await h.run(`selectWeek('${MONDAY}')`), true);
+  h.elements.get('reminder-toast').textContent = '';
+  assert.equal(await h.run(`openRunningLate(new Date(${BEFORE_SIX.getTime()}))`), false);
+  assert.match(h.elements.get('reminder-toast').textContent, /between 06:00 and 23:00\./);
+});
+
+test('the dialog explains a preview it cannot run instead of going quiet', async () => {
+  const h = harness();
+  await h.login({ blocks: [school(), homework()] });
+  assert.equal(h.run('openRunningLate()'), true);
+  h.elements.get('late-minutes').value = '30';
+  // The week goes dirty while the dialog sits open, which used to make Preview do nothing at all.
+  h.run('weekState().dirty = true');
+  assert.equal(await h.run('previewRunningLate()'), false);
+  assert.equal(h.elements.get('late-error').hidden, false);
+  assert.match(h.elements.get('late-error').textContent, /changed while the dialog was open/);
+  assert.equal(h.elements.get('late-preview').hidden, true);
+});
+
+test('accepting says what happened, including when no homework had to move', async () => {
+  const h = harness();
+  await h.login({ blocks: [school(), homework()] });
+  const quiet = emptyTrace({ placed: [school(), homework()] });
+  assert.equal((await previewLate(h, { existing: [school(), homework()], trace: quiet })).previewed, true);
+  assert.equal(h.elements.get('late-summary').textContent, '0 tasks move · 0 tasks no longer fit');
+  h.handle(async (path, options) => {
+    if (path === '/api/solve') return response(200, quiet);
+    assert.equal(path, '/api/changes');
+    return response(200, changesReply(JSON.parse(options.body)));
+  });
+  assert.equal(await h.run('acceptRunningLate()'), true);
+  assert.match(h.elements.get('status').textContent, /Late start saved\. Nothing had to move\./);
+  assert.match(h.elements.get('reminder-toast').textContent, /Late start saved\. Nothing had to move\./);
+});
+
+test('accepting counts the homework that moved', async () => {
+  const h = harness();
+  await h.login({ blocks: [school(), homework()] });
+  assert.equal((await previewLate(h, { existing: [school(), homework()] })).previewed, true);
+  h.handle(async (path, options) => {
+    if (path === '/api/solve') return response(200, emptyTrace({ placed: [school(), homework()] }));
+    return response(200, changesReply(JSON.parse(options.body)));
+  });
+  assert.equal(await h.run('acceptRunningLate()'), true);
+  assert.match(h.elements.get('status').textContent, /Late start saved and 1 task moved\./);
+});
+
 test('a failed re-plan after accept keeps the error instead of a success status', async () => {
   const h = harness();
   await h.login({ blocks: [school(), homework()] });
