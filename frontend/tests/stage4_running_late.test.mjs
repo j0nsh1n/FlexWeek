@@ -482,6 +482,51 @@ test('accepting counts the homework that moved', async () => {
   assert.match(h.elements.get('status').textContent, /Late start saved and 1 task moved\./);
 });
 
+function gridBlocks(h) {
+  const found = [];
+  (function visit(el) {
+    el.children.forEach(child => { found.push(child); visit(child); });
+  })(h.elements.get('week'));
+  return found.filter(el => el.classList.contains('block'));
+}
+
+test('the accepted late block draws itself onto the grid, once', async () => {
+  const h = harness();
+  await h.login({ blocks: [school(), homework()] });
+  assert.equal((await previewLate(h, { existing: [school(), homework()] })).previewed, true);
+  const lateId = h.run('latePreview.block.id');
+  h.handle(async (path, options) => {
+    if (path === '/api/solve') {
+      const body = JSON.parse(options.body);
+      return response(200, emptyTrace({ placed: body.blocks.filter(block => block.kind === 'locked') }));
+    }
+    return response(200, changesReply(JSON.parse(options.body)));
+  });
+  assert.equal(await h.run('acceptRunningLate()'), true);
+
+  const drawn = gridBlocks(h).filter(el => el.classList.contains('is-drawn-on'));
+  assert.equal(drawn.length, 1, 'only the late block draws on');
+  assert.equal(drawn[0].dataset.id, lateId);
+
+  // An ordinary redraw must not replay it.
+  h.run('renderWeek()');
+  assert.equal(gridBlocks(h).filter(el => el.classList.contains('is-drawn-on')).length, 0);
+});
+
+test('a failed re-plan does not leave the late block waiting to animate', async () => {
+  const h = harness();
+  await h.login({ blocks: [school(), homework()] });
+  assert.equal((await previewLate(h, { existing: [school(), homework()] })).previewed, true);
+  h.handle(async (path, options) => {
+    if (path === '/api/solve') return response(503, { detail: 'Planner busy' });
+    return response(200, changesReply(JSON.parse(options.body)));
+  });
+  assert.equal(await h.run('acceptRunningLate()'), true);
+  assert.equal(h.run('drawOnBlockId'), null);
+  h.run('renderWeek()');
+  assert.equal(gridBlocks(h).filter(el => el.classList.contains('is-drawn-on')).length, 0);
+});
+
 test('a failed re-plan after accept keeps the error instead of a success status', async () => {
   const h = harness();
   await h.login({ blocks: [school(), homework()] });

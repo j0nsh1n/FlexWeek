@@ -1620,10 +1620,15 @@ function bindDayLane(lane, day) {
 // showTrace sets this so the work a plan has just placed pops in once. buildGrid
 // takes it back down, so an ordinary redraw does not replay the animation.
 let solvePopIn = false;
+// The one block a student has just accepted, so it draws itself onto the grid
+// rather than simply being there. Same one-shot rule as solvePopIn.
+let drawOnBlockId = null;
 
 function buildGrid(blocks, explanations = []) {
   const popIn = solvePopIn;
   solvePopIn = false;
+  const drawOn = drawOnBlockId;
+  drawOnBlockId = null;
   weekEl.innerHTML = "";
   hideContextMenu();
   const corner = document.createElement("div");
@@ -1682,7 +1687,8 @@ function buildGrid(blocks, explanations = []) {
       el.className = "block" + (block.kind === "flexible" ? " flex-block" : "") +
         (missed ? " missed-block" : "") + (block.completed ? " is-completed" : "") +
         (block.pomodoro_role === "break" ? " pomodoro-break" : "") +
-        (popIn && block.kind === "flexible" ? " is-new" : "");
+        (popIn && block.kind === "flexible" ? " is-new" : "") +
+        (drawOn === block.id ? " is-drawn-on" : "");
       el.dataset.id = block.id;
       el.dataset.day = String(day);
       el.style.top = ((clippedStart - visibleStart) / 60) * hourH + "rem";

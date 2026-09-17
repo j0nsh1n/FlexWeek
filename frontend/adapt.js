@@ -364,7 +364,13 @@ async function acceptRunningLate() {
     }
   }
   if (saved && acceptEpoch === epoch) {
+    // The re-plan repaints the whole grid, so the late block has to be marked for
+    // that redraw, not the one above, or it would be replaced mid-animation.
+    drawOnBlockId = active.block.id;
     const planned = await solveWeek();
+    // A failed re-plan leaves the block already on screen; drawing it on later
+    // would animate at some unrelated redraw, so take the mark back down.
+    if (!planned) drawOnBlockId = null;
     if (acceptEpoch !== epoch) return saved;
     // Accepting is worth a sentence either way: a late start that moved nothing is still recorded.
     const moved = (active.trace.moves || []).length;

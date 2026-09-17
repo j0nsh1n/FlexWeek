@@ -29,4 +29,3 @@ function rememberMotion(level) {
 }
 
 applyMotion(storedMotion());
-

@@ -1,492 +1,594 @@
-# Changelog
+# context.md — FlexWeek
 
-All notable changes to FlexWeek are documented here. Format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+## Current State
+- Date: 2026-09-16 (later). v0.10.0 is published as the Latest release, not a
+  draft and not a prerelease, from `main` at d17647a. All eight assets are
+  attached: `FlexWeek-Linux-x86_64.tar.gz`, `FlexWeek-x86_64.AppImage`,
+  `FlexWeek-Windows-x64-Setup.exe`, `FlexWeek-Windows-x64.msi`, and a `.sha256`
+  for each. Packaging run 35055532872 finished green on both jobs (linux 6m50s,
+  windows 13m14s). Windows is the slower job by design: its Nuitka compile took
+  750s against Linux's 495s in the comparable run, then it spends about 152s
+  building the Inno Setup and WiX installers and 38s installing, opening and
+  uninstalling each one, where Linux only builds a 24s AppImage and has no
+  install step. Nothing has been run on a real Windows PC yet. The next work is
+  the 0.10.1 hotfix in roadmap.md, not a new stage.
+- Date: 2026-09-16. Stages 1-7 are merged to `main` in PR #12 (merge commit
+  aca3068), together with the roadmap PR #11 at a7936b2. PR checks were green:
+  CodeQL, `analyze` and both `web` verify jobs, matching the local gate of 243
+  frontend and 365 Python tests. Local `main` was stale at 3f19d33 and is
+  fast-forwarded to aca3068. Packaging run 35053629863 (`workflow_dispatch`, no
+  tag, so nothing uploads to a release) built the Linux bundle on the runner in
+  9m43s; the Windows installers build in the same run and stay as run artifacts.
+  `desktop/build_linux.sh` does NOT complete on this machine: Nuitka compiles,
+  but `desktop/check_bundle.py` enforces `MAX_GLIBC` 2.38 while this host runs
+  glibc 2.43, so `libpython3.14.so.1.0` and `libuuid.so.1` fail on
+  `GLIBC_ABI_GNU2_TLS`, and PySide6 6.11.2's `libpyside6.abi3.so.6.11` and
+  `libshiboken6.abi3.so.6.11` are not vendored into the bundle. No release tag
+  exists, and Windows execution on a real PC is still unverified.
+- Date: 2026-09-15. `feat/stage7-month-frontend` now holds the integrated Stage
+  7 branch: Grok's Stage 6/7 audit backend fixes merged with this branch's Month
+  UI and accessibility fixes. `GET /api/day` no longer counts a completed
+  session on every candidate day, matching `occurrenceDays` and the month grid.
+  Month shows planned as well as completed work: a session pins to a date only
+  when that date is certain, each day carries `focus_min`, and open work with
+  several candidate days is reported in a new `unscheduled` total rather than
+  painted across the week. The owner approved the Stage 4, 5 and 7 contracts on
+  2026-09-15, so spec.md now lists `GET /api/month`, the spread route, the three
+  comfort routes, `running_late` on solve, availability windows, assignment
+  notes/links/checklist and the comfort fields. Full source gate: 242 frontend
+  and 364 Python tests, mypy over 47 files, whitespace clean. The Stage 2
+  contract was already approved and its status line was wrong; it is corrected
+  and spec.md now carries Day view and `GET /api/day`, which closes the last
+  documented drift. Year view, student trials, measured comparisons and PR
+  review remain. Nothing pushed.
+- Date: 2026-09-15. Three accessibility defects from Grok's Stage 6 audit are
+  fixed on `feat/stage7-month-frontend` (3bdcfc3). The account sharing note and
+  recovery-code status sit in polite live regions; the transfer preview is a
+  named group that takes focus when it appears; sign-out moves focus to the auth
+  screen only when someone was signed in, so first load keeps browser focus.
+  Full source gate: 238 frontend and 353 Python tests. Grok's backend fixes from
+  the same audit (password checked inside the write transaction, completed
+  sessions pinned to `completed_day` in month, ASCII-only month parsing) are on
+  `grok/stage7-month-backend` at c61fab6 and are not merged here. Two product
+  questions are open for the owner: stored open sessions carry no `start`, so
+  month counts reflect completed work and pomodoro chunks only; and
+  `GET /api/day` over-counts a completed multi-candidate session the way month
+  did before its fix, disagreeing with `occurrenceDays` in the frontend.
+  Nothing pushed.
+- Date: 2026-09-15. Stage 7 Month is complete locally on
+  `feat/stage7-month-frontend`, based on Grok's backend at 6ab42d6. The shared
+  frontend shows due work, completed deadlines, scheduled time, projects and
+  overdue homework at desktop and phone widths. A date opens Day only after its
+  editable week loads. Month state stays separate from editable weeks and
+  assignments, and stale month or account replies cannot redraw it. The single
+  lower-edge week start `1999-12-27` lets January 1 and 2, 2000 open without
+  accepting any other 1999 date. The full source gate passes 235 frontend and
+  353 Python tests. The real `stage7_month` WebEngine case also passes at
+  1280px and 390px. Year view, student trials, measured comparisons and PR review remain.
+  spec.md drift: the proposed Month route and grid rules are not in the public
+  API table. No executable was built and nothing was pushed.
+- Date: 2026-09-15. Audit of the Stage 6 backend, Stage 6 frontend and Stage 7
+  month API on `grok/stage7-month-backend`: one own review plus three
+  read-only GLM 5.3 Flash passes through `opencode` (security, month
+  correctness, frontend security/accessibility). Fixed: password check moved
+  inside the write transaction for recovery-codes, delete and export; month
+  label rejects Unicode digits; completed sessions pin `completed_day` only.
+  Tests added for wrong-password 401s, CSRF on every Stage 6 write, recover
+  dropping other sessions, pomodoro chunks, completed-overdue and Unicode
+  labels. Open for Claude: `aria-live` on `#recovery-status` and
+  `#account-sync-note`, announcing or focusing the transfer preview, focusing
+  the auth screen after account deletion. Open for the owner: stored open
+  sessions never carry `start` (placements live only in the page), so month
+  `session_count` and project `session_dates` reflect completed sessions and
+  pomodoro chunks; `GET /api/day` counts a completed multi-candidate session
+  on every candidate day (Stage 2 shape, unchanged). Nothing pushed.
+- Date: 2026-09-15. Stage 7 month API is on `grok/stage7-month-backend` (worktree
+  `~/.worktrees/flexweek-stage7-backend`), based on `grok/stage6-transfer-limit`
+  at f268b7e. `GET /api/month` returns a clipped complete-week grid, deadlines,
+  placed-session counts, projects and overdue homework against the proposed
+  contract in `docs/stage7-contract.md`. Claude still owns Month view and
+  date-to-Day navigation. Year view is out of this slice. spec.md drift:
+  `GET /api/month` and the month grid rules are not in the public API table
+  until the owner approves the contract. Full source gate
+  (`scripts/verify.py`, desktop included): 221 frontend tests, 351 Python
+  tests; a live uvicorn probe of the month route matched the contract. No
+  executable was built. Nothing pushed.
+- Date: 2026-09-15. Stage 6 contract approved and recorded in `spec.md` on
+  `grok/stage6-transfer-limit`. Recovery, deletion, storage identity, previewed
+  format-3 transfer and the 256 KiB import-apply envelope are product contract.
+  Hosted Render deployment, installers and Safari/iPhone checks are skipped by
+  the owner. Remaining Stage 6 work is the security/accessibility review.
+  Stages 4 and 5 stay proposed and off the public API table. Web-only gate
+  unchanged: 221 frontend tests, 263 Python tests. Nothing pushed.
+- Date: 2026-09-15. Transfer size limits are reconciled on
+  `grok/stage6-transfer-limit`, based on `feat/stage6-access-frontend` at
+  bdfbb61. Export 413s when the import apply envelope would exceed 256 KiB.
+  More than 400 small weeks can export when they still fit.
+  `storage-info.transfer_limit_bytes` is 262144. Hosted deployment,
+  security/accessibility review, installers and physical platform checks remain.
+  spec.md drift: Stage 6 routes, storage-info fields including
+  `transfer_limit_bytes`, and the transfer envelope rule await approval of
+  `docs/stage6-contract.md`. Web-only gate: 221 frontend tests, 263 Python
+  tests. Nothing pushed.
+- Date: 2026-09-15. Stage 6 backend and shared frontend are complete locally on
+  `feat/stage6-access-frontend`, based on Grok's backend at 6a5e3aa. Registration
+  shows recovery codes once before setup; Forgot password, code replacement,
+  password change and typed-username account deletion are wired. Settings name
+  the username, local/hosted storage mode, origin and sync limit. Account
+  transfer separates format-3 files from week files, names removals and requires
+  review before replacement. The final source gate passes 218 frontend and 331
+  Python tests, including real WebEngine and packaged-app smoke paths. A
+  read-only Cartographer scan found 42 modules, 37 production routes and no
+  parse errors, circular imports or scanner warnings. Hosted deployment, full
+  security/accessibility review, installers and physical Safari/iPhone checks
+  remain. The backend still needs one transfer-limit follow-up: a valid export
+  can grow past the import request cap, and accounts above the 400-week export
+  validation cap can fail to export. spec.md drift: the Stage 6 routes and
+  storage fields await approval of `docs/stage6-contract.md`. No executable was
+  built and nothing was pushed.
+- Date: 2026-09-14. The Stage 5 shared frontend is complete locally on
+  `feat/stage5-comfort-frontend`, based on Grok's backend at 10c9334. Settings
+  now use Appearance, Focus, Notifications and Account sections; presets and
+  split preview explain 15-minute rounding; local alert previews honor volume
+  and never spend reminder keys; and the preferred view plus sidebar state
+  survive reload. Live browser verification caught and fixed null sidebar width
+  saves and collapsed-sidebar phone overflow. A Stage 5 WebEngine walkthrough
+  covers the same path. The Qt shell still needs to apply start-at-login and a
+  tray Test action. spec.md drift remains pending contract approval. No packaged
+  executable was built and nothing was pushed.
+- Date: 2026-09-14. Student-experience Stage 5 backend is on
+  `grok/stage5-comfort-backend` (worktree
+  `~/.worktrees/flexweek-stage5-backend`), based on `feat/stage4-adaptive-plans`
+  at 6ae893c. Comfort preference fields, timer-split preview, timer presets and
+  reminder-limit copy live behind the proposed contract in
+  `docs/stage5-contract.md`. Claude still owns the Settings grouping, Test
+  reminder, volume slider and remembered-layout UI. Desktop start-at-login and
+  tray Test are stored as prefs, not applied by the Qt shell yet. spec.md
+  drift: those fields and routes are not in the public API table until the
+  owner approves the contract. Web-only gate: 195 frontend tests, 243 Python
+  tests. Nothing pushed.
+- Date: 2026-09-14. Student-experience Stage 4 is complete locally on
+  `feat/stage4-adaptive-plans` (worktree
+  `~/.worktrees/flexweek-stage4-adaptive-plans`). Running late previews 15/30/60
+  minute delays and stores one locked interval on accept. Spread, assignment
+  notes/links/checklist, protected time, preferred study hours and cutoff are
+  in. Priority and energy labels changed; stored values did not. Cluster advice
+  stays visible. spec.md drift: `running_late`, spread, assignment project
+  fields, availability prefs and the stored late block are not in the public
+  API table until the owner approves `docs/stage4-contract.md`. Full source gate
+  green: 195 frontend tests and 303 Python tests, including the Stage 4
+  WebEngine walkthrough. Packaged binaries were not run. Nothing pushed.
+- Date: 2026-09-14. Student-experience Stage 4 backend is on
+  `grok/stage4-adapt-backend` (worktree
+  `~/.worktrees/flexweek-stage4-backend`), based on `claude/stage3-frontend` at
+  9759a23. Running-late solve preview, project-spread preview, assignment
+  notes/links/checklist, preference occupancy (protected windows, study hours,
+  day cutoff) and a deadline-cluster explanation live behind the proposed
+  contract in `docs/stage4-contract.md`. Claude still owns the shared frontend.
+  Nothing pushed. Web-only gate on this tree: 163 frontend tests, 229 Python
+  tests (`ruff check .`, `mypy backend`, `pytest` on `backend/tests`). Desktop
+  and packaged binaries were not run.
+- Date: 2026-09-14. Student-experience Stage 3 is complete locally on
+  `claude/stage3-frontend`: Codex's frontend (copy, paste, duplicate and copy
+  day with conflict previews, fixed-only routines, unfinished-homework review,
+  restore points and the Settings storage label) on Grok's backend (routines,
+  restore points, storage-info, operation ids and snapshot labels on
+  `/api/changes`, cherry-picked unchanged as a6b484f). Claude finished the
+  WebEngine step and reviewed the code with two GLM adversarial passes, fixing
+  seven defects. GLM findings that did not hold up against the source are
+  listed as rejected in the commit messages. Jonathan confirmed the contract
+  on 2026-09-14, and spec.md lists the Stage 3 routes.
+- Full source gate green on the final tree: 163 frontend tests and 278 Python
+  tests, including the real Qt WebEngine `stage3` case (copy, routine apply,
+  restore, a retried operation, reload, a second account) and `stage3_mobile`
+  (390px dark theme, unfinished homework carried once). The T3 preview browser
+  could not load a local server, so no separate live browser pass ran. No
+  package or executable build ran. Nothing pushed.
+- Date: 2026-09-14. Student-experience Stage 2 is complete locally on
+  `feat/stage2-student-experience` (the same commits as
+  `claude/stage2-frontend`): Grok's `GET /api/day` plus the Day agenda, Day
+  first at 800px and narrower, quick Add homework, Plan my homework / Update my
+  plan wording, collapsed results with slack in days, Export and Import in
+  Settings, and Edit / Finished / Start focus in agenda rows. It follows the six
+  owner decisions in `docs/stage2-contract.md`, which is approved; spec.md lists
+  Day view and `/api/day` from 2026-09-15. Full source gate green: 145 frontend tests
+  and 250 Python tests, including the stage2 WebEngine probe at 390px and
+  1280px. No remote branch changed.
+- Date: 2026-09-13. Student-experience Stage 1 is complete locally on
+  `feat/stage1-student-experience`. The branch combines the seven-stage roadmap,
+  approved contract, reviewed backend and finished frontend: exact assignment
+  deadlines and cross-week sessions, Continuing and Plan the rest here, focus
+  outcomes and reload-safe timers, Undo/Redo, safer deletes, and version 2
+  export/import. No remote branch changed.
+- Full source verification after integration is green: 139 frontend tests and
+  241 Python tests, including the Stage 1 Qt WebEngine walkthrough. A live
+  browser check also covered assignment entry, next-week Continuing, Solve,
+  and the Finished / Need more time / Take a break prompt. A read-only
+  Cartographer scan found 28 Python files, 16 routes, no parse errors, no
+  circular imports and no scanner warnings.
+- Date: 2026-09-11. v0.9.2 is released (PR #9, tag at a20831f).
+  `feat/frost-reference-look` (5ca38b7, restyle after the owner's reference
+  dashboards) is parked and in neither release.
+- v0.9.1 shipped: a page renderer that stops reopens solved and solid instead of
+  a blank window; `--smoke-test` walks setup to its Solve with a pixel check;
+  the AppImage `.sha256` names only the file; AppImage FUSE doc tip.
+- v0.9.2 replaced the Windows zip with per-account Setup.exe and per-machine
+  MSI installers, built and exercised on the GitHub Windows runner.
+- The owner sees flicker in the setup dialog on Windows and is investigating
+  that directly. On the owner's Linux PC (KDE Wayland, RX 9070, Mesa 26.2.2) blur on,
+  blur off and GPU off all looked the same, with no flicker.
+- Hybrid frost visual system is in: one token map per theme in
+  `frontend/styles.css` (`:root` = nocturne/dark, `[data-theme="slate"]` =
+  light), frosted chrome with a solid fallback, near-opaque week grid, soft blue
+  accent, Figtree font and a duotone SVG icon sprite in `index.html`.
+- Gates green 2026-09-10 via `scripts/verify.py`: ruff, mypy over 22 files,
+  184 Python tests (real WebEngine probes, now checking the Figtree face loads
+  and signed-out pages start light) and 95 frontend tests.
+- Windows execution on a real PC, Safari/iPhone, physical touch and OS
+  notification delivery remain unverified. Hosted web URL is not online.
+- Default desktop mode uses a local database. Hosted mode uses the configured
+  server; there is no automatic synchronization between them.
 
-## [Unreleased]
+## Repo Landmarks
+```
+docs/cac-build-plan.md   original Sep 6 contest brief (working title Reslot)
+.github/workflows/       verify.yml (mypy), codeql.yml, release packages
+DESKTOP.md               PySide6 QWebEngineView recommendation + build status
+desktop/origin.py        origin resolution, no Qt imports (unit-tested)
+desktop/server.py        bundled uvicorn on a loopback port, no Qt imports
+desktop/main.py          Qt window, persistent profile, retry panel
+desktop/build_linux.sh   staged Linux build, previous artifacts preserved
+desktop/package_linux.sh release tar.gz with README, icon and .desktop
+desktop/check_bundle.py  glibc and missing-library check, no Qt imports
+desktop/build_windows.ps1 Windows standalone build preparation
+desktop/tests/           origin/server tests and isolated real WebEngine probes
+backend/weeks.py         week-date helpers, no framework import
+backend/recovery.py      one-time recovery codes, no HTTP
+backend/limits.py        256 KiB write-body cap
+backend/transfer.py      import apply envelope size, no HTTP
+backend/restore.py       restore-point snapshot diff and token, no HTTP
+backend/app.py           account/session/ownership APIs and static frontend
+backend/storage.py       SQLite, scrypt, hashed sessions
+frontend/app.js          week state, grid, saves, solve, alarms, CATEGORIES table
+frontend/month.js        read-only Month state, navigation and calendar rendering
+frontend/editor.js       Add/Edit dialog: draft -> draftProblem -> draftPatch
+frontend/setup.js        first-week setup, built on editor drafts
+frontend/focus.js        focus timer, Now / Next line
+frontend/reuse.js        clipboard, duplicate, copy-day and homework carry-forward
+frontend/routines.js     fixed-only weekly routine templates and apply preview
+frontend/restore.js      clear-week recovery and restore-point controls
+frontend/auth.js         Create account / Log in screens, session start (loads last)
+frontend/tests/app-scripts.mjs  loads index.html's scripts in order for DOM-stub tests
+frontend/tests/stage3.test.mjs  Stage 3 retry, identity, conflict and rollback cases
+frontend/styles.css      both theme token maps, then components that only read tokens
+frontend/fonts/          Figtree variable font + OFL license, served from /static
+frontend/theme.js        System/Light/Dark choice -> data-theme, loaded in <head>
+frontend/tests/theme-tokens.test.mjs  token parity, no raw colors, no-blur contrast, accent vs categories
+```
 
-### Added
-- Motion (2026-09-17, shared frontend). Settings now has Off, Normal and Extra.
-  Normal fades the calendar in when you switch between Week, Day and Month;
-  Extra adds a short rise and pops in the work a plan has just placed. A system
-  that asks for reduced motion gets none of it whatever is chosen. Nothing
-  frosted is animated, so the Windows flicker has no new way in. This setting
-  is kept on this device only for now and does not follow you to another
-  computer.
+## Domain Model
+SQLite: users → sessions, many dated weeks keyed (user_id, week_start), one
+preference row. Default desktop
+mode uses a local per-user database; hosted mode uses the configured deployment.
+There is no automatic synchronization between those databases.
+Assignments are keyed (user_id, id) with a JSON body and revision. A
+flexible block with `assignment_id` is a work session of that assignment.
+Routines are keyed (user_id, id) as named templates of locked blocks.
+Restore points snapshot all of an account's weeks and assignments.
+Recovery codes are hashed per user and shown only once at register or regenerate.
+A format-3 export can copy weeks, assignments, preferences and routines onto
+another account after a preview. There is no automatic local/hosted sync.
+Recorded `operation_id` values make a retried write return the first result.
 
-### Changed
-- A sidebar type chip is now the whole gesture (2026-09-17, shared frontend).
-  Picking School, Homework or any other type opens Add with that type already
-  chosen, instead of only arming the calendar. Cancelling leaves the type
-  armed, so dragging on the calendar still places it by time.
-- Solve, Spread and Running late say what they are doing (2026-09-16, shared
-  frontend). Each button now reads "Planning…", "Working out sessions…" or
-  "Replanning…" while its request is out, and goes back to its own words
-  afterwards. A finished Solve still reads "Update my plan".
-- Leaving Month keeps the month you were reading (2026-09-16, shared
-  frontend). Pressing Week or Day from Month opens a date inside that month
-  rather than the week you happened to come from. If that week cannot be
-  loaded, the view stays on Month instead of moving to the wrong dates.
+## Non-Obvious Decisions
+- A week's identity is its Monday. Blocks store a day index and derive their
+  date, which is why the day-index solver needed no adapter at all.
+- `weeks.py` pins the ISO shape with a regex before parsing, because
+  `date.fromisoformat` also accepts "20260907" and "2026-W37-1".
+- The migration is guarded on the weeks table existing, since PRAGMA
+  table_info returns nothing for a missing table and ALTER TABLE would raise on
+  a fresh database. It runs in an explicit BEGIN IMMEDIATE, not in
+  executescript, which issues an implicit COMMIT.
+- Registration no longer seeds a weeks row; the NOT NULL key would reject it,
+  and a missing row already means an empty week.
+- GET /api/week 422s a non-Monday rather than snapping it, so a client and
+  server cannot disagree about which week is open while both think they won.
+- The identical-blocks short-circuit deliberately runs before the revision
+  check, preserving what the pre-dated code and tests already did.
+- The desktop app bundles the backend and runs it in-process (owner asked for
+  this 2026-09-07). It supersedes DESKTOP.md section 1, which said not to; that
+  section's reasoning was about a *second process*, which this is not.
+- The loopback port is chosen by binding a socket before create_app is called,
+  because the backend pins its CSRF origin check and TrustedHostMiddleware to
+  one exact origin. uvicorn is handed the already-bound socket.
+- uvicorn runs with loop="asyncio" and http="h11" so the build does not depend
+  on uvloop/httptools surviving being frozen.
+- An invalid FLEXWEEK_*_ORIGIN is an error, not a silent fall back to local:
+  a typo must not quietly open a different, empty database.
+- The Qt profile is parented to the QApplication, not the window: parenting it to
+  the window makes Qt warn "Release of profile requested but WebEnginePage still
+  not deleted" and can crash on close.
+- `profile_root()` reads QStandardPaths AppDataLocation, which derives from the
+  application name, so main() sets that before building the profile.
+- Nuitka is called directly instead of via pyside6-deploy, which rewrites its own
+  spec with absolute machine paths on every run.
+- Qt translations are included; stripping them made WebEngine warn about a
+  missing en-US.pak at every start.
+- PySide6 6.10+ documents Python 3.14. pywebview classifiers stop at 3.13.
+- Qt WebEngine cannot be statically linked; onedir Chromium libs are expected.
+- No Qt WebChannel / pywebview js_api in v1 (cookies and CSRF stay on the page).
+- License file is GPL-3.0. Qt for Python is LGPLv3/GPLv2/commercial.
+- Frontend scripts are classic deferred scripts sharing one global scope, not
+  modules, so there is still no build step. A script's top-level code can only
+  reach scripts loaded before it. The tests run them in index.html order.
+- The tray icon path is anchored on the `backend` package, because Nuitka puts
+  `desktop/main.py` at the bundle root as `__main__`.
+- A new flexible task in the week on screen may use today onward. The solver
+  does not know today's date, so without this it placed new homework on days
+  already over.
+- The dialog offers Fixed or Flexible only for a new item; editing keeps the
+  existing kind, because converting needs completed_day and start cleanup that
+  no flow asks for yet.
+- Windows installers: the Inno `AppId` and the MSI `UpgradeCode` are fixed
+  forever, since upgrades find the installed copy by them. The .exe is per
+  account (`PrivilegesRequired=lowest`) for students; the .msi is per machine
+  for school IT. Inno Setup is not on windows-latest, so CI downloads 7.1.0 and
+  checks its SHA-256. WiX is pinned to 6.0.2 because v7 blocks every command
+  until someone accepts its EULA.
+- Windows ICU (icuuc/icuin) is a system DLL since 1703. Copying it out of
+  System32 would redistribute Microsoft's files; the bundle check requires the
+  import to be satisfied by Windows 10 1809+ instead.
+- `theme` is `system|slate|nocturne` (default `system`, owner decision
+  2026-09-10). CSS only knows slate and nocturne on `<html data-theme>`;
+  `frontend/theme.js` runs in `<head>` so first paint already matches the
+  device, and re-resolves on device changes only while the choice is system.
+  Signed-out screens always follow the device.
+- SQLite cannot alter a CHECK, so `allow_system_theme()` rebuilds an older
+  preferences table once in one transaction; stored slate/nocturne are kept.
+- Offscreen Qt ignores `setColorScheme`; the `system_dark` probe forces a dark
+  device with `--blink-settings=preferredColorScheme=0`. A real KDE dark
+  session does reach `prefers-color-scheme: dark`.
+- Frost alphas are chosen so text passes WCAG AA composited straight over the
+  page gradient with no blur; that is the case Qt WebEngine hits when blur is
+  not drawn. The theme-tokens test computes it, so do not lower an alpha without
+  rerunning it.
+- The accent must stay at least CIE76 distance 15 from every category color
+  (School blue is the near miss), enforced by the same test.
+- Icons are an inline `<symbol>` sprite, not a file: `<use>` inherits
+  `--icon-secondary` into the symbol only when the sprite is in the page.
+- Linux leads with a tar.gz so the executable bit survives and no extra runtime
+  is required. The AppImage ships too, but needs FUSE (libfuse2); without it
+  the docs say `--appimage-extract` then `squashfs-root/AppRun`, or the tarball.
+  Unused Qt `.qm` files are dropped; the Chromium en-US locale pack stays.
+- A dead page renderer leaves Qt's view one flat near-white color, and a lost
+  GPU context leaves it the page background color; neither reaches the page or
+  shows a dialog. A GPU-process crash kills the whole app instead (Qt runs GPU
+  in-process). Hence `renderProcessTerminated` recovery in `desktop/main.py` and
+  the smoke's window-grab color count (a blank page is 1 color, the bare page
+  gradient under 100, a solved week 400 or more on an 8 px grid).
+- The 0.9.0 blank window was not reproduced on: source offscreen, the published
+  v0.9.0 Linux build on Xvfb/llvmpipe with GPU compositing, tray and
+  notifications on, accessibility on, or eight clock times across the week.
+  Trigger still unknown; likely GPU/driver specific (0.9.0 added the only
+  backdrop-filter rules) or Windows.
+- Smoke runs use a temporary data folder. WebEngine writes profile files until
+  its page and profile are destroyed, so `MainWindow.discard()` runs before the
+  folder is removed, or empty cache folders come back.
 
-### Fixed
-- Running late no longer looks like it did nothing (2026-09-16, shared
-  frontend). Every reason it refuses to open now appears as a toast as well as
-  in the status line, the Preview button explains a week that changed while the
-  dialog sat open instead of going quiet, and accepting says what happened,
-  including "Nothing had to move." If the replan afterwards fails, the toast
-  still confirms the late start was saved.
-- Setup cannot blank a half-typed assignment name (2026-09-16, shared
-  frontend). Opening the first-week setup while it is already open is now
-  ignored, rather than resetting every field back to its default.
-
-### Changed
-- Larger date numbers in Month (2026-09-16, shared frontend), on both desktop
-  and phone widths.
-- A month with deadlines but nothing planned yet says so (2026-09-16, shared
-  frontend): "Only one thing is due so far. The rest of the month fills in as
-  you plan your work." A single assignment no longer reads as a broken month.
-- The collapsed list of work that fit is now called "See the rest of your plan"
-  instead of "Why the rest fit" (2026-09-16, shared frontend).
-- Setup no longer suggests "Sports" as the name of your sport (2026-09-16,
-  shared frontend). The example is now "Soccer, band, karate…".
-- Week chrome regrouped (2026-09-16, shared frontend). Hide sidebar moved out
-  from between the view switch and the date arrows, the sidebar's Add panel is
-  separated from the task list by a rule, and the focus-timer hint is shorter.
-
-## [0.10.0] - 2026-09-16
-
-### Fixed
-- Blank notes no longer make a project (2026-09-15, backend). Homework whose
-  notes are only spaces or newlines stays an ordinary deadline in Month instead
-  of being listed as a project.
-- The Month saved-only warning is announced (2026-09-15, shared frontend).
-  Screen readers hear it when it appears, and redrawing the month does not
-  repeat it.
-- Day counted finished work more than once (2026-09-15, backend). A session
-  completed on one day no longer adds its minutes to every day it could have
-  been done on, so a day's scheduled and focus totals match what actually
-  happened. Open work still offers every day it could be done.
-- Screen reader gaps in Account settings and transfer (2026-09-15, shared
-  frontend). The note about how an account is shared and the recovery-code
-  status are announced when they change. The account transfer preview is a
-  named region that takes focus when it appears, instead of appearing in
-  silence. Logging out or deleting an account moves focus to the log-in or
-  create-account screen rather than dropping it on the page.
-- Lower date boundary (2026-09-15, shared frontend and backend). The week that
-  contains January 1 and 2, 2000 now uses its real Monday, December 27, 1999.
-  Week and assignment routes accept only that one pre-2000 week start, so every
-  supported calendar date can open in Day view without widening date limits.
-- Password-gated account writes (2026-09-15, backend). Replacing recovery
-  codes, deleting the account and exporting now verify the current password
-  inside the same database transaction as the write, so a password changed
-  from another session at the same moment can no longer authorize them.
-  `GET /api/month` rejects non-ASCII digits in the month label, and a
-  completed session counts only on the day it was completed, not on every
-  candidate day.
-- Account transfer size (2026-09-15, backend and shared frontend). Export
-  refuses with 413 when the compact import apply envelope would exceed the
-  256 KiB write cap, so a downloaded file can be posted back. Week count is no
-  longer a separate 400-week transfer cap. `GET /api/storage-info` includes
-  `transfer_limit_bytes`. The page measures that envelope, not the raw file
-  size, so pretty-printed files still import when they fit.
-
-### Added
-- Planned study time in Month (2026-09-15, backend and shared frontend). Month
-  shows work that is still planned as well as work that is finished. A session
-  appears on a date when that date is certain: the day it was completed, or its
-  only possible day. Each date says how much of its time is already behind you,
-  and study sessions that could still land on several days are reported as one
-  total under the calendar instead of being drawn on every one of them.
-- Month view (2026-09-15, shared browser and desktop frontend). Students can
-  scan a Monday-first calendar for due work, completed deadlines and scheduled
-  time, then open a date in Day view. Project rows show study dates, checklist
-  progress and the presence of notes or links without displaying private
-  details. Overdue work stays separate. Phones use chronological full-width
-  date rows, and Month leaves saved Day or Week preferences unchanged.
-- Month calendar API (2026-09-15, backend). `GET /api/month?month=YYYY-MM`
-  returns a complete-week grid of due dates, placed sessions and locked time,
-  plus project and overdue lists, so a Month view can open Day view for a
-  date without guessing week boundaries. Unplaced candidate days do not paint
-  the month. Year view is still later work. Rules are in
-  `docs/stage7-contract.md`.
-- Account access and transfer UI (2026-09-15, frontend). New accounts must
-  acknowledge their eight one-time recovery codes before first-week setup.
-  Students can recover a forgotten password, replace codes, change passwords,
-  delete an account, and see the signed-in username, storage mode and server
-  origin. Full-account transfer uses a password-gated download and shows weeks,
-  homework, routines, settings and named removals before replacing the
-  destination. Transfer state and displayed codes are cleared on account
-  changes; wrong current-password errors do not end a valid session.
-- Account recovery, deletion and local-to-hosted transfer (2026-09-14, backend).
-  Registering returns eight one-time recovery codes (hashes only in SQLite).
-  `POST /api/auth/recover` sets a new password, drops other sessions and signs
-  the student in. Signed-in students can change password, replace unused codes,
-  or delete the account with the current password. `GET /api/storage-info` now
-  includes username and public origin. `POST /api/account-export` and previewed
-  `POST /api/account-import` copy weeks, assignments, preferences and routines
-  onto another account after a Stage 3 restore point of the destination
-  schedule. Automatic sync is still out of scope. Rules are in the approved
-  `docs/stage6-contract.md` and the public API table in `spec.md`.
-- Comfort settings UI (2026-09-14, frontend). Settings are grouped into
-  Appearance, Focus, Notifications and Account. Students can choose a timer
-  preset, preview and explicitly accept 15-minute calendar rounding, test an
-  alert at the unsaved volume, enable a quiet focus-transition chime, and read
-  the web, desktop, Spotify and duplicate-reminder limits. The preferred view,
-  collapsed state and keyboard/pointer-resizable sidebar persist per account;
-  phones restore a single-column layout even when the desktop sidebar was
-  collapsed. Start-at-login and tray preferences are stored for the Qt shell
-  follow-up.
-- Comfort settings persistence (2026-09-14, backend). Preferences store alert
-  volume, an optional end-of-block chime, tray notification and start-at-login
-  flags, preferred week or day view, and sidebar collapsed state and width.
-  `POST /api/timer-split-preview` snaps timer lengths to the 15-minute grid and
-  returns the split plan without writing. `GET /api/timer-presets` and
-  `GET /api/reminder-limits` return the Short/Standard/Long presets and the
-  web-versus-desktop reminder copy. Auto-split still requires lengths already
-  on the grid. Rules are in `docs/stage5-contract.md`.
-- Running late, project spread, protected time and project details
-  (2026-09-14, frontend). Running late offers 15, 30 or 60 minutes, previews
-  moves and unplaced homework, then stores one locked "Running late" interval
-  so reload and Undo see a real change. Spread writes extra sessions in one
-  save. Assignments keep notes, links and a checklist. Settings hold protected
-  downtime, commute and meal windows, preferred study hours and an optional
-  day cutoff. Priority and energy labels describe the stored values without
-  changing them, and crowded weeks keep a visible cluster of concrete choices.
-- Running late, project spread, assignment notes and protected hours
-  (2026-09-14, backend). `POST /api/solve` accepts `running_late` (15, 30 or 60
-  minutes from a grid cutoff) as a preview that keeps locked blocks and sleep
-  put and leaves overflow in `unplaced`. `POST /api/assignments/{id}/spread`
-  previews extra sessions of a chosen length on one assignment before the due
-  date. Assignments store notes, http(s) links and a small checklist.
-  Preferences store protected downtime, commute and meal windows, preferred
-  study hours and an optional day cutoff; solve loads them so the frontend
-  does not re-send occupancy. Crowded weeks get one extra explanation with
-  concrete choices instead of claiming the week was solved. Rules are in
-  `docs/stage4-contract.md`.
-- Schedule reuse and recovery (2026-09-14, frontend). Copy, paste, duplicate
-  and copy-day use visible controls or Ctrl/Cmd shortcuts and preview fixed-time
-  collisions before one atomic save; a retried save reuses its operation id so
-  it cannot write twice. Weekly routines capture fixed commitments, apply to the
-  chosen weekdays of a destination week and allow one-week holiday or time
-  exceptions, with a restore point taken first. Later weeks review unfinished
-  homework without changing its assignment id, deadline or progress. Settings
-  creates, previews and restores account restore points and says whether they
-  are stored on this device or on the FlexWeek server.
-- Routines, restore points and storage location (2026-09-14, backend). An
-  account can save named weekly templates of fixed commitments, snapshot every
-  week and assignment, preview a restore against current data, and restore in
-  one transaction that first keeps a recovery point of the schedule being
-  replaced. `POST /api/changes` accepts an optional operation id so a retried
-  Apply routine or Clear week cannot double-write, and an optional snapshot
-  label so those writes take a restore point first. `GET /api/storage-info`
-  reports whether this process is local or hosted. Rules are in
-  `docs/stage3-contract.md`.
-- Day agenda and quick Add homework (2026-09-14, frontend). A Day view sits
-  beside Week: Due soon (due today, tomorrow or overdue), Homework today, Fixed
-  time and one Next action, with no headings for empty lists and Edit, Finished
-  and Start focus in each row. At 800px and narrower Day comes first; wider
-  windows start on Week. Add homework asks only for title, due date and time,
-  and estimated time, with Choose a time myself for the full editor. The Day
-  view shows the day's scheduled, focus and free time from `GET /api/day`. Solve
-  is now Plan my homework, or Update my plan once the week has a plan. Results
-  list unplaced work first and fold what fits into one line, deadlines at risk
-  read "due Tuesday" or "9 days left", and Export and Import moved into
-  Settings.
-- Day agenda API (2026-09-13, backend). `GET /api/day?date=` returns due-soon
-  homework, that day's sessions and fixed blocks, one next action, and
-  scheduled / focus / available minutes. Rules are in `docs/stage2-contract.md`.
-- Assignments (2026-09-13, backend). Homework is account-owned, with an exact
-  local due time, a total estimate, focus progress and its own revision. A
-  week holds work sessions that point at an assignment. GET/PUT/DELETE
-  `/api/assignments` and POST `/api/changes` land with the week save rules in
-  `docs/stage1-contract.md`. Old weekday `latest` values migrate on start and
-  are still accepted on saves.
-- Homework due dates (2026-09-13, frontend). Adding homework asks for a due
-  date and time instead of a weekday, and the date may be in a later week.
-  Each homework is saved as an assignment together with its session in the
-  week, and the card shows the full due date. Focus sessions add their minutes
-  to the homework and never mark it done; marking the session done finishes
-  the homework. Solve sends the week on screen so due dates become bounds.
-- Continuing (2026-09-13, frontend). The sidebar lists homework due this week
-  or later that still needs time no session covers, with its due date. Plan
-  the rest here adds a session for that time on the days up to the due date,
-  and a week that already holds 100 blocks refuses with a plain message.
-  Weeks before this one and homework already past due list nothing.
-- Focus session choices (2026-09-13, frontend). When a homework focus session
-  ends, the student picks Finished (the homework is done and the session keeps
-  its slot, saved together), Need more time (adds 15-minute steps to its total
-  and starts the break) or Take a break. The timer keeps running across weeks
-  and survives a reload of the same account through sessionStorage, which
-  holds only ids and times; a session that ran out while the page was closed
-  is counted and asks the same question. Starting another timer asks first,
-  logging out or signing in as another account clears it, and Quick focus
-  times work that is not on the calendar without crediting anything.
-- Undo and redo (2026-09-13, frontend). The last 50 changes to weeks and
-  homework can be undone and redone with the Undo and Redo buttons beside the
-  status line, Ctrl/Cmd+Z, and Ctrl/Cmd+Shift+Z or Ctrl+Y, but not while
-  typing in a field. Undo saves through the normal revision checks, never
-  takes away focus minutes, and stops at a 409 with the usual reload actions;
-  a step for a week another device changed since is skipped. Repeating blocks
-  say "Remove Tuesday only" or "Delete all days", deleting homework asks
-  whether to remove this session or the whole homework, and Clear week moved
-  into a More menu. History is cleared on sign-out and account change.
-- Export format 2 (2026-09-13, frontend). Week and day exports, and the
-  unsaved-week download, carry the homework their sessions point at. Import
-  reads formats 1 and 2. Homework is reused only when its id, title and due all
-  match; otherwise it gets the backend migration's id for the destination week,
-  so importing a file into the same week twice adds nothing and into another
-  week adds separate homework. A format 1 file's weekday deadlines become
-  homework when saved, and the week reloads to show it.
-- Hybrid frost look (2026-09-10) in light and dark. The page sits on a soft
-  gradient; the header, week bar, sidebar, sign-in card and dialogs are frosted
-  glass with hairline borders; task cards and forms are more solid; the week
-  grid and its blocks stay nearly opaque so they remain easy to scan. Buttons
-  and focus rings use a soft blue that is kept apart from the category colors.
-- Figtree, a friendly geometric typeface, ships with the app (SIL Open Font
-  License, `frontend/fonts/`), so the desktop app needs no internet for fonts.
-- Small duotone icons on Settings, Log out, Solve, week navigation, export and
-  import, and the sidebar headings.
-- First-open downloads (2026-09-10). GitHub Releases and the README lead with
-  Download for Windows and Download for Linux. Each archive includes a README
-  that names glibc 2.38, a normal desktop with OpenGL or EGL, and SmartScreen
-  on Windows. Checksums sit next to the downloads. Chromebooks are pointed at
-  the web version when it exists.
-- Linux archive extras: README, icon, `.desktop` file, menu-entry script, and
-  vendored libxcb-cursor. Unused Qt translations are dropped.
-- First-week setup (2026-09-10). A new account is asked for school days and
-  hours, one sport or practice, and the first homework, then Solve runs. Every
-  step can be skipped. An empty week shows a Set up my week banner.
-- Add dialog (2026-09-10). Dragging or clicking empty calendar space opens a
-  dialog on that time range instead of adding a block at once. The sidebar now
-  holds type chips (School, Homework, Study, Sports and more) with a hint for
-  the chosen type, plus Add without dragging.
-- Desktop: launching FlexWeek again while it runs brings the open window
-  forward instead of starting a second copy (2026-09-10).
-- Focus timers. Start a pomodoro on a task the solver has placed, then pause,
-  skip or reset it. Sessions and minutes are kept on the task and survive a save.
-- Alarms you set yourself, separate from your schedule. They live in
-  preferences and pop up until you dismiss or snooze them.
-- Spotify share links on blocks and alarms, and a Now / Next line showing what
-  is running and what comes after it.
-- Linux desktop release archive rebuilt from `f12ea5c`, with the extracted
-  executable verified against its bundled health endpoint and web UI
-  (2026-09-09).
-- Repeatable full-source verification command, web CI workflow, a feature
-  coverage guide, generated solver invariants and real calendar/completion
-  WebEngine regression checks (2026-09-08).
-- Multi-day locked blocks open with Edit this day vs Entire series: occurrence
-  edits can remove one weekday or split a changed day into its own block; series
-  edits still change every weekday together. Context menu mirrors those choices.
-- Start reminders: preferences for enable, lead minutes and sound. While the tab
-  is open, FlexWeek polls due starts (Daily Scheduler start-alert math), shows an
-  in-app toast, and uses the Notification API when permitted. Desktop system-tray
-  alerts are deferred (no new tray dependency in this slice).
-- Category chips in the editor and a sidebar legend (School, Study, Homework,
-  Sports, Activity, Meals, Sleep, Free) with stronger grid colors.
-- Per-block completed flag with form checkbox and context toggle; survives
-  save/reload.
-- Export current week as JSON (Shift-click for plain text) and import a
-  FlexWeek JSON week/day file into the matching week without touching other
-  weeks. Context menu can export one day as JSON.
-- Week grid drag interactions: empty drag creates a locked block on the 15-minute
-  grid, click-empty creates a 60-minute block clipped to the next block, drag body
-  moves, edge resize, click selects, double-click opens the editor, and a context
-  menu offers Edit/Delete. Changes use the existing dirty/save path.
-- Optional activity category with a thin color palette (School, Study, Homework,
-  Sports, Activity, Meals, Free); older weeks without a category still load.
-
-### Changed
-- The README shows the app (2026-09-11): a solved week in light at the top, and
-  the first-week setup and the dark theme under Screenshots. The images in
-  `docs/images/` are captured from the real app with a demo week.
-- Windows downloads are installers, 0.9.2 (2026-09-11). The zip is gone.
-  `FlexWeek-Windows-x64-Setup.exe` (Inno Setup) installs for the current
-  account without an administrator, with a Start menu shortcut, an optional
-  desktop shortcut and an uninstaller. `FlexWeek-Windows-x64.msi` (WiX)
-  installs for every account in Program Files, for schools and IT. The release
-  workflow installs each one, opens the app through its Start menu shortcut
-  with the setup-Solve smoke test, and uninstalls it before attaching the files.
-  Pull requests that touch packaging run the same build and tests.
-- Theme now defaults to System (2026-09-10): FlexWeek follows the device's
-  light or dark setting and switches when that setting changes. Choosing Light
-  or Dark in the header or Settings keeps that theme. New accounts and
-  signed-out screens start on System. The menus say System, Light and Dark;
-  saved values `slate` and `nocturne` are unchanged, so existing accounts keep
-  their choice, and older databases upgrade automatically on start.
-- Selection outlines, the Now / Next line, Focus timer controls, slack badges
-  and the reminder toast use theme colors instead of fixed yellow, lime and
-  amber (2026-09-10).
-- When the system asks for reduced transparency or more contrast, or blur is
-  unavailable, frosted panels turn solid instead (2026-09-10).
-- Create account and Log in are separate screens (2026-09-10). Create account
-  is shown first; logging out opens Log in. The app says Log in and Log out.
-- Locked and flexible are labeled Fixed time and Flexible, each with a one-line
-  explanation (2026-09-10). Repeat days, priority, energy, course, Spotify and
-  Completed are under More options. A flexible task states which days Solve
-  may use and when it is due.
-- School starts at 08:00–14:30 Monday to Friday and homework at 1 hour when
-  added without dragging. Time needed is chosen from a list instead of typed
-  in minutes (2026-09-10).
-- For the current week, a new flexible task may use today onward, not days
-  that are already over (2026-09-10).
-- After Solve, badges read Tight fit or At risk, and tasks with room to spare
-  get none. Results open with a sentence such as "Placed 2 of 3 tasks." The
-  Focus timer section appears only once a task has a time. Now / Next is one
-  line in the week bar (2026-09-10).
-
-### Fixed
-- Windows, 0.9.2 (2026-09-11): the `FlexWeek.lnk` shortcut in the 0.9.0 and
-  0.9.1 zip pointed at `C:\dist\zip-stage\FlexWeek\app\FlexWeek.exe`, a folder
-  on the build machine, because the workflow created it with a relative path.
-  The installers replace it with shortcuts made on the user's PC.
-- Desktop, 0.9.1 (2026-09-11): after first-week setup, "Add to my week and
-  Solve" could leave a blank white window with no message and no way back.
-  That is what Qt shows when the page's renderer process stops, and the window
-  did not handle it. FlexWeek now reopens the page with solid panels instead of
-  frosted glass, signs back in and runs Solve again, so the placed homework and
-  What Solve did return with a status line saying so. If the page stops again
-  within a minute, a native panel offers Reload instead of reloading in a loop.
-  The exact trigger on the testers' machines was not reproduced here.
-- Release checks, 0.9.1 (2026-09-11): `FlexWeek --smoke-test` now walks a
-  throwaway account through setup to its first Solve and fails when the window
-  grab is blank, on the Linux tarball, the Linux onedir and the Windows build.
-  It used to stop at the Create account screen.
-- The AppImage checksum named the build machine's path
-  (`/home/runner/work/...`), so `sha256sum -c` failed next to the download. It
-  now names only the file, like the tarball's, and the release workflow checks
-  both (2026-09-11).
-- Download notes (2026-09-11): the README and release text say what to do when
-  the AppImage will not start for lack of FUSE (`--appimage-extract`, then
-  `squashfs-root/AppRun`, or use the tarball). The Windows README, README and
-  release text say to double-click the FlexWeek shortcut, not files inside
-  `app/`; the old text still said to open FlexWeek.exe.
-- The editor no longer saves a task with no days, or a task due before every
-  day it may use. It keeps the dialog open and names the problem (2026-09-10).
-- Desktop: the tray icon was missing from the packaged app, so closing the
-  window left FlexWeek running with no window and no way back. The icon now
-  loads, the first close explains that FlexWeek is still in the tray, and
-  closing quits when no tray icon is visible (2026-09-10).
-- The Keep alerts visible until handled setting now keeps desktop tray alerts
-  until you click them. Unchecked alerts still disappear after ten seconds.
-- Skip, pause, or a second complete during a focus-session save no longer
-  double-counts that cycle.
-- Import and week save refuse a pomodoro parent together with the chunks split
-  from it, so the same hours cannot hold both the original task and its pieces.
-- Cancelled calendar gestures no longer save, and secondary pointers cannot
-  finish another pointer's gesture (2026-09-08).
-- Signing out clears private reminder alerts. Delayed preference responses and
-  file reads cannot change the next account. Today's loaded reminders continue
-  while browsing a different week (2026-09-08).
-- Signing out also closes live browser notifications, solved flexible tasks can
-  trigger reminders, and suspended drafts remain isolated by account (2026-09-09).
-- Legacy and day imports validate starts and scheduling bounds before changing
-  the week, including the resulting merged size and occurrence-ID collisions.
-  Valid unusual IDs survive import, and downloaded drafts use the importable
-  export format (2026-09-08).
-- Saving an unchanged occurrence keeps its recurring series intact (2026-09-08).
-- Completing through the menu or editor retains the task's solved placement
-  as spent time without losing its candidate days. Day and text exports follow
-  the visible solved placement, and ambiguous day imports cannot duplicate a
-  multi-day flexible assignment (2026-09-09).
-- Exam preparation wins contested capacity even when a lower-priority reading
-  task has fewer possible placements. The solver first looks for a complete
-  schedule before exploring optional omissions, avoiding a reproduced timeout
-  on a feasible energy-sensitive week (2026-09-09).
-- A task you finished but left listed on several possible days no longer blocks
-  that hour on every one of them. It was one piece of work done once, and it
-  could push three real tasks off the week. A finished task that was actually
-  placed on a day still holds that time, because you really did use it.
-- When finished work is what fills a slot, FlexWeek says so instead of telling
-  you the time is taken by school, sports or sleep.
-- A task you have ticked off no longer competes for a slot. Finished work used
-  to be scheduled again, so a completed essay could take the last free hour and
-  FlexWeek would tell you your real homework did not fit because a
-  higher-priority task took the slot. A finished task that already had a time
-  keeps it; one that never had a time is simply left alone.
-- A damaged or unrecognised export file is refused with a reason, and the week
-  on screen is left exactly as it was. Previously the file was written into your
-  week and drawn on the grid before the save failed, so a bad file could wipe
-  what was there. Files from a newer version of FlexWeek are refused too.
-- Dragging a single day of a repeating block no longer silently retimes every
-  other day of it. The drag is refused and FlexWeek points you at Edit
-  occurrence or Edit series, which is how every other change to a repeating
-  block already works. One-off blocks still drag and resize normally.
-- Importing a week now stops without changing the open week when the target
-  week cannot be loaded. Day-file imports preserve the other occurrences of a
-  repeating block, including when the same file is imported again.
-- Desktop new-window links no longer leave hidden browser pages running; only
-  HTTP(S) external links are sent to the system browser (2026-09-07).
-- Desktop users can save an unsaved draft through a native file dialog.
-
-### Added
-- Scheduling explanations now use student-facing messages, can highlight the
-  affected task, and show ok/tight/danger deadline slack on placed tasks.
-- A solved week can recover from one missed weekday occurrence of a locked
-  block. FlexWeek keeps the missed occurrence in the saved week, re-solves the
-  remaining tasks, lists time and day changes, and lets the user restore it.
-- Dated weeks. Your schedule is now kept per calendar week instead of as one
-  rolling week, with Previous, Next and Today controls, the date shown on each
-  day header, and a picker listing the weeks you have saved. Each week keeps
-  its own unsaved edits, so moving between weeks never loses work and never
-  copies one week's blocks into another.
-- `GET /api/weeks` lists the weeks an account has saved, so a week you did not
-  know about is still reachable.
-- Windows standalone build script and isolated real-WebEngine account, link and
-  offline-draft tests (2026-09-07); Windows execution remains unverified.
-- Linux desktop app: a PySide6 web-engine window with the FlexWeek backend
-  bundled in, so it runs with no separate server and no Python installed. It
-  starts its own backend on a loopback port and keeps its database in your user
-  data directory. A persistent profile means a sign-in survives restarting the
-  app; there is a retry screen if the backend cannot be reached, and external
-  links open in the system browser. Build with `desktop/build_linux.sh`.
-  Point it at a hosted deployment with `FLEXWEEK_DESKTOP_ORIGIN`.
-- Desktop packaging recommendation: PySide6 web-engine shell around the hosted
-  app (`DESKTOP.md`).
-- 2026-09-07: Username/password accounts, expiring sessions, account-owned SQLite
-  weeks and saved Nocturne/Slate themes adapted from Daily Scheduler.
-- Save retry, revision-conflict handling, unsaved draft download and explicit
-  import of legacy browser weeks; same-account draft restoration after expiry.
-- Basic request protection, authentication throttling and bounded input.
-- Account/API and frontend state tests.
-- Add / edit / delete forms for locked blocks and flexible tasks.
-- Last week saved in the browser; a corrupt save resets to a demo.
-- Constraint solver: backtracking with MRV and forward checking, 150 ms cap.
-- Solve button and a debug panel (`solve_ms`, placed count, unplaced titles).
-- Placed flexible tasks painted on the week grid.
-- App logo and favicon, cropped from `FlexWeek.png` (lime phone + dumbbell).
-- Partner-style demo weeks: Alex and Jordan each have 4 locked blocks and 8
-  flexible tasks.
-- 15-minute tick marks on the week grid, duration labels on locked blocks, and
-  due/course pills on flexible tasks.
-
-### Changed
-- Existing accounts are migrated on first start: the one saved week becomes the
-  week containing that day, keeping its blocks and its revision.
-- An unsaved-draft download is now named for its week and carries the week in
-  its JSON, so drafts from two weeks are no longer indistinguishable files.
-- "New week" and the legacy-import confirmation now name the week on screen
-  instead of saying "your current week".
-- Linux builds preserve previous artifacts and use separate staging directories.
-- 2026-09-06: Revise the post-Phase-3 roadmap for accounts, app/web delivery,
-  Daily Scheduler interactions and themes, with design and audits deferred.
-- Week grid colors follow the logo (paper gray, lime, dark teal) instead of a
-  generic dark dashboard.
-- Slot starts are the half-open range `[06:00, 23:00)`; `23:00` is not a legal
-  start.
-
-### Removed
-- `grok-desktop-prompt.md` after the desktop packaging recommendation landed.
-- Product demo picker/endpoints and anonymous localStorage saving. Seed schedules
-  remain test fixtures.
-- `backend/tests/test_models.py`, which still imported the pre-Pydantic
-  dataclass API and broke collection.
-
-## [0.1.0] — 2026-09-06
-
-### Added
-- Pydantic `TimeBlock`, `Move`, `SolveTrace` in `backend/models.py`.
-- 15-minute slot helpers in `backend/slots.py`.
-- FastAPI app serving `frontend/` plus `GET /api/demos/{name}` and a stub
-  `POST /api/solve`.
-- Week grid UI with a demo switcher.
-- `PHASES.md` contest calendar.
+## Session Handoff
+- 2026-09-17, `feat/0-11-seamless`: added the chip gesture and the motion
+  slice on top of the seamless work. A sidebar type chip now opens Add with
+  that category; the calendar WebEngine probe encoded the old contract and was
+  updated, which is real-browser evidence for the change. Motion lives in a new
+  head script `frontend/motion.js` writing `<html data-motion>`, device-only in
+  localStorage under `flexweek-motion`, with the Settings control wired from
+  comfort.js so no head script touches page elements. The CSS gate is static:
+  theme-tokens.test.mjs now proves no rule animates backdrop-filter, keyframes
+  move only opacity and transform, every animation sits inside
+  prefers-reduced-motion: no-preference, Off animates nothing, and no frosted
+  panel is animated. Gate green: 270 frontend, 365 Python. GLM is drafting
+  docs/stage8-appearance-contract.md; packs, accent and the account-persisted
+  motion level wait on that contract and owner approval.
+- 2026-09-17, `feat/0-11-seamless` (later): accepting a late start now marks
+  that one block so it draws onto the grid, on the re-plan's redraw rather than
+  the one before it, which would have been replaced mid-animation; a failed
+  re-plan takes the mark back down. Settings splits Appearance into "Theme and
+  layout" (account) and "This device only" (Motion). Gate green: 274 frontend,
+  365 Python. Two long GLM runs through OpenCode produced no output at all (one
+  exited 0 empty, one hit a 900s timeout); a short run works, so the model is
+  configured but unreliable for long briefs here. The appearance contract is
+  still unwritten.
+- 2026-09-17, `feat/0-11-seamless`: PR #13 merged the 0.10.1 hotfix and the
+  release-polish roadmap to `main` at 251c59a. Started 0.11 with the seamless
+  slice: showBusy() in app.js swaps a button's label while its request is out
+  and restores it only if nothing else wrote a new one, wired into Solve,
+  Spread and Running late; leaving Month for Week or Day now anchors to the
+  month on screen through openMonthAnchor() in month.js. Seven new node tests,
+  all red-checked. Gate green: 260 frontend, 365 Python. Still open in 0.11:
+  motion, the appearance packs and Customize submenu (needs a contract and
+  owner approval before spec.md changes, since preferences gain fields), the
+  P2 account copy, and a decision on what "add-from-chip stays one gesture"
+  refers to.
+- 2026-09-16, `fix/0-10-1-hotfix`: implemented the 0.10.1 hotfix. Running late
+  now reports every refusal and every outcome, Month says when a month is early
+  rather than looking broken, the date numbers are larger, the collapsed
+  explanation list is "See the rest of your plan", setup stops suggesting
+  "Sports" as a sport name, and Hide sidebar moved out of the date controls.
+  Ten new node tests, each red-checked. Gate green: 253 frontend, 365 Python.
+  The reported name-field letter loss could not be reproduced and has no cause
+  in the frontend or the Qt shell; only a re-open guard and regression tests
+  landed for it. Next step: reproduce that symptom on Jonathan's machine, then
+  the Qt WebEngine walkthrough before tagging 0.10.1.
+- 2026-09-16, `docs/roadmap-0-10-1`: recorded the owner's post-0.10.0 plan in
+  roadmap.md as "Release polish (2026-09-16): 0.10.1, then 0.11", and pointed
+  the roadmap header at it. 0.10.1 is five fixes (two P0: the assignment name
+  field losing letters, and Running late giving no visible result); 0.11 is wait
+  states, targeted motion, and theme packs with a small Customize submenu.
+  Nothing in the app changed yet. Next step: reproduce the name-field bug on the
+  packaged build, since no code path rebuilds that input on a keystroke today.
+- 2026-09-16, `main`: PR #12 merged the seven student-experience stages, so
+  `main` now carries Stages 1-7 and a spec.md that matches every approved
+  contract. Follow-up work starts from `main` at aca3068, not from the stage
+  branches. Two packaging facts matter for whoever builds next: the CI runner
+  builds the Linux bundle successfully, and this workstation cannot, because its
+  glibc is newer than the 2.38 portability baseline the bundle check enforces.
+  Open product work: the Stage 2 student trial of the "Plan my homework"
+  wording, Stage 7 student trials and measured comparisons, Year view, hosted
+  deployment, and the Qt shell's Stage 5 start-at-login and tray Test.
+- 2026-09-15, `feat/stage7-month-frontend`: integrated `grok/stage7-month-backend`
+  (merge 398531e; only CHANGELOG.md and context.md conflicted, both additive, and
+  backend/app.py plus backend/weeks.py were checked against both parents). Then
+  fixed the `GET /api/day` over-count (e8b7b5e) and added planned work to Month
+  (fc95fc7). `backend/month.py` pins a session by `completed_day`, or by a lone
+  candidate day for open work; `unscheduled` carries the rest; `focus_min` is the
+  completed part of `scheduled_min`. `frontend/month.js` renders "all done" /
+  "1 h done" per cell and a note for undated work. Ten mutations were red-checked
+  across the three commits. The owner approved the Stage 4, 5 and 7 contracts, so
+  spec.md and the contract status lines were updated. Gate: 242 frontend, 364
+  Python. Nothing pushed.
+- 2026-09-15, `feat/stage7-month-frontend`: accessibility fixes from Grok's
+  Stage 6 audit. `aria-live="polite"` on `#account-sync-note` and
+  `#recovery-status`; `#account-import-preview` is a named `role="group"` with
+  `tabindex="-1"` that `renderTransferPreview` focuses; `signedOut` focuses the
+  target screen's username field only when an account was signed in. A focus
+  move beats a live region on the preview because it holds the whole diff and
+  the destructive confirm button. Each of the four new rules was broken in turn
+  and its named test went red. Gate: 238 frontend, 353 Python. Grok's matching
+  backend fixes are still unmerged on `grok/stage7-month-backend`. Nothing
+- 2026-09-15, `grok/stage7-month-backend`: Audit done (own review + three GLM
+  passes). Backend findings fixed and tested; three minor accessibility
+  findings handed to Claude (see Current State); two product questions for the
+  owner on what a month "session" means when placements are not stored.
+  Nothing pushed.
+- 2026-09-15, `grok/stage7-month-backend`: Stage 7 backend slice. Proposed
+  contract is `docs/stage7-contract.md`. `GET /api/month?month=YYYY-MM` is
+  authenticated and CSRF-free. Claude owns the Month UI. spec.md drift: the
+  month route. Full gate: 221 frontend tests, 351 Python tests. Nothing
+  pushed.
+- 2026-09-15, `feat/stage7-month-frontend`: Stage 7 Month API and shared UI are
+  complete. `frontend/month.js` owns read-only Month state and stale-response
+  guards. The real WebEngine case checks actual API data at 1280px and 390px,
+  then opens Day. The full source gate passes 235 frontend and 353 Python tests.
+  The request-token mutation overwrites the newer reply with two deadlines and
+  fails as expected. Student trials, metrics and PR review remain. The Month
+  contract is proposed, so `spec.md` still omits its route. No executable was
+  built and nothing was pushed.
+- 2026-09-15, `grok/stage6-transfer-limit`: Owner approved the Stage 6 spec
+  updates and skipped hosted deployment, installers and iOS checks.
+  `docs/stage6-contract.md` is approved 2026-09-15. `spec.md` now lists recovery,
+  password, deletion, storage-info fields, transfer routes and the 256 KiB
+  apply-envelope rule. Stages 4 and 5 remain proposed. Remaining Stage 6 work is
+  the security/accessibility review. Nothing pushed.
+- 2026-09-15, `grok/stage6-transfer-limit`: Export and import now share the
+  256 KiB write cap. Export 413s when the compact `{snapshot, state_token,
+  operation_id}` envelope would not fit import apply. The 400-week transfer cap
+  is gone; `storage-info` reports `transfer_limit_bytes`. The page measures that
+  envelope rather than raw file size. Remaining Stage 6 work is hosted
+  deployment, security/accessibility review, installers and physical platform
+  checks. `docs/stage6-contract.md` remains proposed; spec.md drift includes the
+  new field and envelope rule. Web-only gate: 221 frontend tests, 263 Python
+  tests. Nothing pushed.
+- 2026-09-15, `feat/stage6-access-frontend`: Shared Stage 6 UI complete over
+  backend 6a5e3aa. `frontend/access.js` owns displayed recovery codes, storage
+  identity and previewed transfer state; `auth.js` owns the recovery session
+  transition. Wrong password errors keep valid sessions, and account changes
+  clear codes and snapshots. A WebEngine case transfers a real saved week
+  between accounts. The final gate passes 218 frontend and 331 Python tests;
+  the 401 guard mutation fails by clearing the signed-in account as expected.
+  Remaining Stage 6 work is deployment, broader review and physical platform
+  evidence. `docs/stage6-contract.md` remains proposed; `spec.md` still omits
+  its routes. No executable built; nothing pushed.
+- 2026-09-14, `feat/stage5-comfort-frontend`: Shared Stage 5 UI complete over
+  backend 10c9334. New `frontend/comfort.js` owns presets, split previews, alert
+  previews and remembered layout. Settings writes wait for in-flight layout
+  writes; account changes discard stale previews. The Qt shell still needs
+  start-at-login application and tray Test. `spec.md` still omits the proposed
+  comfort fields and three routes. No executable built; nothing pushed.
+- 2026-09-14, `grok/stage5-comfort-backend`: Grok's Stage 5 backend slice.
+  Contract is `docs/stage5-contract.md` (still proposed). Comfort fields omit
+  defaults so Phase 7 GET still matches. Split preview snaps 25/5 to 30/15.
+  Auto-split with a 25-minute work length is 422. Claude still owns the
+  Settings UI. Desktop autostart/tray Test is not wired. spec.md drift: comfort
+  fields, `/api/timer-split-preview`, `/api/timer-presets` and
+  `/api/reminder-limits`. Web-only gate: 195 frontend tests, 243 Python tests.
+  Cartographer skipped (not installed in the project venv). Nothing pushed.
+- 2026-09-14, `feat/stage4-adaptive-plans`: Stage 4 finished in this tree.
+  Accepting Running late writes a locked "Running late" block through
+  `/api/changes` then re-solves; a failed re-solve keeps its error status.
+  spec.md drift: Stage 4 routes and fields stay off the public API table until
+  the contract is approved. Nothing pushed.
+- 2026-09-14, `grok/stage4-adapt-backend`: Grok's Stage 4 backend slice.
+  Contract is `docs/stage4-contract.md` (still proposed). Running late is a
+  solve preview that occupies `[from_start, from_start + minutes)` on one day,
+  reuses `RESHUFFLE_AFTER_MISS` with a distinct sentence, and never drops
+  unplaced work. Spread is `POST /api/assignments/{id}/spread` and does not
+  write. Assignment notes, links and checklist omit empties. Preferences keep
+  protected / study / cutoff in `availability_json`; `POST /api/solve` loads
+  them. spec.md drift: those fields, `running_late` and the spread route are
+  not in the public API table until the owner approves the contract. Claude
+  still owns UI. Web-only gate: 163 frontend tests, 229 Python tests.
+  Cartographer skipped (not installed in the project venv). Nothing pushed.
+- 2026-09-14, `claude/stage3-frontend`: Stage 3 finished by Claude. Codex's
+  frontend (857f43d, 1f569aa) and WebEngine case (d666a92) sit on Grok's backend
+  (a6b484f, the same patch as cfb8c48 on `grok/stage3-reuse-backend`). a438d3a
+  fixes a batch paste over-planning homework, long routine names failing Apply,
+  a 409 leaving a save stuck, restore jumping to this week, shortcuts firing
+  behind open dialogs and invalid preview rows starting checked. b8d74b2 extends
+  the WebEngine walkthrough and adds `stage3_mobile`. 25d0884 keeps a stale
+  preview from saving after a 409. Grok's docs commit 4bada61 is folded into
+  this branch's CHANGELOG and context. Gotchas: runJavaScript does not hand
+  arrays back reliably, so probes pass JSON text; port 8765 belongs to another
+  local service; the T3 preview browser could not load a local server. Nothing
+  pushed.
+- 2026-09-14, `docs/stage3-contract`: proposed Stage 3 contract based on
+  `claude/stage2-frontend` at 3b1f1c9. Claude owns the shared browser/desktop
+  frontend; Grok owns migrations, routes and backend tests. The contract keeps
+  clipboard, fixed-only routines, assignment-preserving carry-forward and
+  durable restore points separate. Nothing implemented, built or pushed.
+- 2026-09-14, `claude/stage2-frontend` and `feat/stage2-student-experience`:
+  Claude's Stage 2 frontend on Grok's `254e086`. The Day agenda and quick Add
+  homework live in `frontend/day.js`. Day view session times come from the week
+  in memory and its plan, because placements are not stored; `/api/day` supplies
+  the workload and each due-soon homework's unplanned minutes. Update my plan
+  stays once a week has been planned in this page session (`planned` on the
+  week state). Gate lessons: the theme guard reads an id such as `#add-…` as a
+  hex color, so style by class; the desktop smoke flow waits on the setup
+  button's text. Grok has not reviewed these commits. Nothing pushed.
+- 2026-09-13, `grok/stage2-day-backend`: Grok's Stage 2 slice, `GET /api/day`.
+  Claude still owns Day/Week UI, Add homework and Plan my homework copy.
+  spec.md drift: the day endpoint is not in the public API table until the
+  contract is approved. Nothing pushed.
+- 2026-09-13, `docs/stage2-contract`: proposed Stage 2 contract in
+  `docs/stage2-contract.md`. Base is `feat/stage1-student-experience` at
+  130ee99.
+- 2026-09-13, `feat/stage1-student-experience`: locally integrates the staged
+  student-experience roadmap with the approved Stage 1 contract, reviewed
+  backend, five frontend feature commits and the Qt WebEngine probe. Stage 1 is
+  marked complete; Stage 2 is next. The full source verifier is green (139
+  frontend, 241 Python), and packaging was not run during integration.
+- 2026-09-11, `docs/readme-screenshots`: README screenshots in `docs/images/`
+  (week light, week dark, setup), taken offscreen at 1.5x from the real app with
+  a demo week and a Wednesday 16:20 clock; a readme test keeps every shown image
+  present and none unused. v0.9.2 released with the Windows installers.
+- Open: the owner is diagnosing the Windows setup-dialog flicker with a separate
+  prompt (GPU/ANGLE/Qt renderer switches, then DevTools CSS toggles).
+- 2026-09-11, `feat/windows-installers`: Inno Setup and WiX scripts in
+  `packaging/windows/`, workflow builds, installs, shortcut-checks, smokes and
+  uninstalls both; pull requests touching packaging run it without uploading.
+  Docs and `desktop/tests/test_windows_installers.py` updated. Release notes in
+  `docs/release-notes-v0.9.2.md`.
+- 2026-09-11, `fix/0.9.1`: renderer recovery (shell reload with
+  `?recovered=1`, solid panels, re-Solve, native panel on a repeat), extended
+  smoke with pixel check and throwaway data, WebEngine `recovery` probe,
+  basename AppImage checksum plus workflow check, AppImage FUSE and Windows
+  shortcut doc lines, release notes in `docs/release-notes-v0.9.1.md`.
+- v0.9.1 released and marked latest after CI smoke passed on all three builds.
+- 2026-09-10, `feat/hybrid-frost`: token maps, frosted chrome, grid tokens,
+  Light/Dark labels, slate signed-out default, Figtree, duotone icons, theme
+  token tests and CHANGELOG. Before/after screenshots were taken offscreen in
+  /tmp/fw-frost (not committed). Nothing pushed.
+- Theme defaults to System per the owner's spec change (same day): API,
+  storage migration, theme.js, menus and probes updated.
+- Next: owner review of both themes on a real screen.
+- Open: hosted web URL, a hand check of close-to-tray and of the Windows zip
+  on a real PC.

@@ -185,7 +185,7 @@ test('no rule animates or transitions backdrop-filter, and none uses the all sho
 
 test('keyframes move opacity and transform only', () => {
   const names = [...css.matchAll(/@keyframes\s+([\w-]+)/g)].map(match => match[1]);
-  assert.deepEqual(names, ['view-fade-in', 'view-rise-in', 'block-pop-in']);
+  assert.deepEqual(names, ['view-fade-in', 'view-rise-in', 'block-pop-in', 'block-draw-on']);
   for (const name of names) {
     const body = balancedBlock(css, `@keyframes ${name}`);
     for (const declaration of body.matchAll(/([a-z-]+)\s*:/g)) {
@@ -214,6 +214,10 @@ test('nothing frosted is animated', () => {
     assert.ok(!motionBlock.includes(selector),
       `${selector} has backdrop-filter, so animating it risks the Windows flicker`);
   }
+});
+
+test('the accepted late block draws on at Normal, not only at Extra', () => {
+  assert.match(motionBlock, /:not\(\[data-motion="off"\]\)[^{]*\.block\.is-drawn-on[^}]*animation:\s*block-draw-on/);
 });
 
 test('Extra is the level that adds the pop-in, and Normal only fades', () => {

@@ -140,6 +140,19 @@ test('settings expose four expandable groups and desktop/web limits without flat
   }
 });
 
+test('Motion sits in its own device-only group, apart from the account settings', () => {
+  const appearance = html.slice(html.indexOf('<summary>Appearance</summary>'), html.indexOf('<summary>Focus</summary>'));
+  const deviceAt = appearance.indexOf('<legend>This device only</legend>');
+  assert.ok(deviceAt !== -1, 'Appearance has no device-only group');
+  const account = appearance.slice(0, deviceAt);
+  const device = appearance.slice(deviceAt);
+  assert.match(account, /id="pref-theme"/);
+  assert.match(account, /id="pref-preferred-view"/);
+  assert.doesNotMatch(account, /id="pref-motion"/,
+    'Motion is not saved to the account, so it must not sit with the settings that are');
+  assert.match(device, /id="pref-motion"/);
+});
+
 test('a saved collapsed desktop sidebar returns to the single-column phone layout', () => {
   assert.match(css, /@media \(max-width: 800px\)[\s\S]*?\.layout\[data-sidebar-collapsed="true"\]\s*\{\s*grid-template-columns:\s*1fr;/);
   assert.match(css, /\.layout\[data-sidebar-collapsed="true"\] \.side\s*\{\s*display:\s*block;/);
