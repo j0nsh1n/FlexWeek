@@ -1947,7 +1947,7 @@ function renderDebug(trace) {
     li.className = "fit-details";
     const details = document.createElement("details");
     const summary = document.createElement("summary");
-    summary.textContent = "Why the rest fit";
+    summary.textContent = "See the rest of your plan";
     const list = document.createElement("ul");
     fits.forEach(function (item) {
       const entry = document.createElement("li");

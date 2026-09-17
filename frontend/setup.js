@@ -130,6 +130,8 @@ function fillSetupDefaults() {
 
 function openSetup() {
   if (!account || saving) return false;
+  // Opening it again resets every field, so a second open would blank a half-typed name.
+  if (setupDialogEl.open) return false;
   setupStep = 0;
   setupSkipped.clear();
   fillSetupDefaults();

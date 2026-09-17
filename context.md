@@ -376,6 +376,16 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-16, `fix/0-10-1-hotfix`: implemented the 0.10.1 hotfix. Running late
+  now reports every refusal and every outcome, Month says when a month is early
+  rather than looking broken, the date numbers are larger, the collapsed
+  explanation list is "See the rest of your plan", setup stops suggesting
+  "Sports" as a sport name, and Hide sidebar moved out of the date controls.
+  Ten new node tests, each red-checked. Gate green: 253 frontend, 365 Python.
+  The reported name-field letter loss could not be reproduced and has no cause
+  in the frontend or the Qt shell; only a re-open guard and regression tests
+  landed for it. Next step: reproduce that symptom on Jonathan's machine, then
+  the Qt WebEngine walkthrough before tagging 0.10.1.
 - 2026-09-16, `docs/roadmap-0-10-1`: recorded the owner's post-0.10.0 plan in
   roadmap.md as "Release polish (2026-09-16): 0.10.1, then 0.11", and pointed
   the roadmap header at it. 0.10.1 is five fixes (two P0: the assignment name

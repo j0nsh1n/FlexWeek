@@ -473,7 +473,17 @@ alongside them.
   Running late outcome message; a real Qt WebEngine walkthrough of setup step 3,
   Running late and a one-assignment month at desktop and phone widths;
   `.venv/bin/python scripts/verify.py` green before the tag.
-- Status: [ ]
+- Status: [~] Code landed 2026-09-16 on `fix/0-10-1-hotfix`. Running late, the
+  sparse-month line, the larger date numbers, the "See the rest of your plan"
+  rename, the sport placeholder and the week-chrome regroup are all done, with
+  ten new node tests and the gate green at 253 frontend and 365 Python tests.
+  The P0 name field is only half closed: a search of every frontend script
+  found nothing that rewrites either name box while you type, and the Qt shell
+  does not touch key input, so the reported letter loss has no cause in this
+  code. What landed is a guard against re-opening setup over a half-typed name
+  plus regression tests that type a whole name one character at a time while
+  the timers and renders fire. Still open: reproduce the original symptom on a
+  real machine, and the Qt WebEngine walkthrough at both widths.
 
 ### 0.11 — seamless, motion and appearance
 

@@ -108,6 +108,53 @@ function harness(options = {}) {
   };
 }
 
+// Students reported the assignment name losing letters as they type. Nothing in the
+// frontend rewrites either name field today; these tests keep it that way.
+const TYPED = 'History essay outline';
+
+function typeInto(h, id, background) {
+  const input = h.elements.get(id);
+  input.value = '';
+  for (const letter of TYPED) {
+    input.value += letter;
+    background();
+    assert.ok(TYPED.startsWith(input.value), `lost or gained a letter at "${input.value}"`);
+  }
+  return input.value;
+}
+
+test('the setup assignment name survives the timers and renders that fire while you type', async () => {
+  const h = harness();
+  await h.login();
+  assert.equal(h.run('openSetup()'), true);
+  h.run('setupStep = 2; renderSetupStep()');
+  // Everything the app can start on its own between two keystrokes.
+  const background = () => h.run('updateLiveDisplay(); checkReminders(); checkAlarms(); renderWeekNav(); renderWeek(); renderSetupStep()');
+  assert.equal(typeInto(h, 'setup-homework-title', background), TYPED);
+  assert.equal(h.elements.get('setup-progress').textContent, 'Step 3 of 4');
+});
+
+test('the Add block title survives the same background work', async () => {
+  const h = harness();
+  await h.login();
+  h.elements.get('add-block').listeners.click();
+  assert.equal(h.elements.get('block-dialog').open, true);
+  const background = () => h.run('updateLiveDisplay(); checkReminders(); checkAlarms(); renderWeekNav(); renderWeek(); syncEditor()');
+  assert.equal(typeInto(h, 'f-title', background), TYPED);
+});
+
+test('re-opening setup cannot blank a name that is already half typed', async () => {
+  const h = harness();
+  await h.login();
+  assert.equal(h.run('openSetup()'), true);
+  h.run('setupStep = 2; renderSetupStep()');
+  h.elements.get('setup-homework-title').value = 'Half typed';
+  assert.equal(h.run('openSetup()'), false);
+  h.elements.get('setup-open').listeners.click();
+  assert.equal(h.elements.get('setup-homework-title').value, 'Half typed');
+  assert.equal(h.elements.get('setup-progress').textContent, 'Step 3 of 4');
+});
+
 test('solve renders student-facing explanations, slack, and click-to-highlight', async () => {
   const h = harness();
   await h.login(1, [task]);
@@ -590,6 +637,7 @@ test('after Solve the chrome speaks plainly: results sentence, no badge for room
   assert.deepEqual(results.slice(0, 2).map(item => item.children[0].textContent),
     ['Quiz prep — Very little room: scheduled to finish 15m before the deadline.', 'Lab report — The week is too full to place this task.']);
   assert.equal(results[2].className, 'fit-details');
+  assert.equal(results[2].children[0].children[0].textContent, 'See the rest of your plan');
   assert.equal(h.elements.get('solve-label').textContent, 'Update my plan');
 
   const focusItems = h.elements.get('focus-tasks').children;

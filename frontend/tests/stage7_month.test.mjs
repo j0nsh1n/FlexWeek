@@ -157,6 +157,38 @@ test('an empty month clears old rows and reports the empty saved calendar', asyn
   assert.equal(h.elements.get('month-projects').children.length, 0);
 });
 
+test('one deadline on an otherwise blank month says it is early, not broken', async () => {
+  const h = harness();
+  await h.login();
+  const sparse = snapshot();
+  sparse.projects = []; sparse.overdue = [];
+  sparse.deadlines = [sparse.deadlines[0]];
+  sparse.days = sparse.days.map(day => ({ ...day, session_count: 0, locked_count: 0, scheduled_min: 0,
+    due_ids: day.date === '2026-09-16' ? ['essay'] : [] }));
+  await showMonth(h, sparse);
+  assert.equal(h.elements.get('month-state').textContent,
+    'Only one thing is due so far. The rest of the month fills in as you plan your work.');
+});
+
+test('several deadlines with nothing planned are counted in the same line', async () => {
+  const h = harness();
+  await h.login();
+  const sparse = snapshot();
+  sparse.projects = []; sparse.overdue = [];
+  sparse.days = sparse.days.map(day => ({ ...day, session_count: 0, locked_count: 0, scheduled_min: 0 }));
+  await showMonth(h, sparse);
+  assert.equal(h.elements.get('month-state').textContent,
+    'Only 2 things are due so far. The rest of the month fills in as you plan your work.');
+});
+
+test('a month with work planned on it is not called early', async () => {
+  const h = harness();
+  await h.login();
+  await showMonth(h);
+  // The stub keeps stale text after replaceChildren, so check the sentence was never written.
+  assert.doesNotMatch(h.elements.get('month-state').textContent, /due so far/);
+});
+
 test('a late response for the previous month cannot replace the selected month', async () => {
   const h = harness();
   await h.login();

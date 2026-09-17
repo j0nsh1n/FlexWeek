@@ -170,24 +170,26 @@ function lateStart(info) {
   return Math.floor(info.minute / SNAP_MIN) * SNAP_MIN;
 }
 
+/** The status line sits at the top of the page, far from the button, so say it in both places. */
+function sayLate(message) {
+  setStatus(message);
+  if (typeof showReminderToast === "function") showReminderToast(message);
+  return false;
+}
+
 function openRunningLate(now) {
-  if (!account || saving || lateBusy) return false;
+  if (!account) return false;
+  if (saving || lateBusy) return sayLate("FlexWeek is still working. Try Running late again in a moment.");
   const info = currentDateInfo(now);
-  if (selectedWeek !== info.week) {
-    setStatus("Open this week before using Running late.");
-    return false;
-  }
+  if (selectedWeek !== info.week) return sayLate("Open this week before using Running late.");
   if (info.minute < DAY_START_MIN || info.minute >= DAY_END_MIN) {
-    setStatus("Running late is available between 06:00 and 23:00.");
-    return false;
+    return sayLate("Running late is available between 06:00 and 23:00.");
   }
   if (weekState().dirty || weekState().conflict) {
-    setStatus("Save or reload this week before previewing a late start.");
-    return false;
+    return sayLate("Save or reload this week before previewing a late start.");
   }
   if (weekState().blocks.length >= MAX_IMPORT_BLOCKS) {
-    setStatus("This week already has 100 blocks. Remove one before recording a late start.");
-    return false;
+    return sayLate("This week already has 100 blocks. Remove one before recording a late start.");
   }
   latePreview = null;
   document.getElementById("late-preview").hidden = true;
@@ -233,9 +235,20 @@ function renderLatePreview(trace) {
 async function previewRunningLate(now) {
   if (!account || saving || lateBusy) return false;
   const info = currentDateInfo(now);
-  if (selectedWeek !== info.week || info.minute < DAY_START_MIN || info.minute >= DAY_END_MIN) return false;
+  // These can all turn true after the dialog opened, so the button must not just go quiet.
+  if (selectedWeek !== info.week || info.minute < DAY_START_MIN || info.minute >= DAY_END_MIN) {
+    showLateError("This is no longer today between 06:00 and 23:00. Close this and open Running late again.");
+    return false;
+  }
   const state = weekState();
-  if (state.dirty || state.conflict || state.blocks.length >= MAX_IMPORT_BLOCKS) return false;
+  if (state.dirty || state.conflict) {
+    showLateError("This week changed while the dialog was open. Save or reload it, then try again.");
+    return false;
+  }
+  if (state.blocks.length >= MAX_IMPORT_BLOCKS) {
+    showLateError("This week already has 100 blocks. Remove one before recording a late start.");
+    return false;
+  }
   const minutes = Number(document.getElementById("late-minutes").value);
   if (![15, 30, 60].includes(minutes)) {
     showLateError("Choose 15, 30 or 60 minutes.");
@@ -348,8 +361,16 @@ async function acceptRunningLate() {
   }
   if (saved && acceptEpoch === epoch) {
     const planned = await solveWeek();
-    if (planned && acceptEpoch === epoch) {
-      setStatus("Saved the late start and updated your plan. Undo removes the late time.");
+    if (acceptEpoch !== epoch) return saved;
+    // Accepting is worth a sentence either way: a late start that moved nothing is still recorded.
+    const moved = (active.trace.moves || []).length;
+    const outcome = moved
+      ? "Late start saved and " + moved + (moved === 1 ? " task moved." : " tasks moved.")
+      : "Late start saved. Nothing had to move.";
+    if (planned) sayLate(outcome + " Undo removes the late time.");
+    else if (typeof showReminderToast === "function") {
+      // solveWeek already put its own failure in the status line; do not overwrite it.
+      showReminderToast(outcome + " Your plan could not be updated. Press Plan my homework.");
     }
   }
   return saved;
