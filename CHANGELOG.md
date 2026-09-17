@@ -5,6 +5,41 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-17
+
+### Added
+- Theme packs, accent and account motion (2026-09-17, shared frontend and
+  backend). Settings and the top bar offer System, Light frost, Dark frost,
+  Nocturne and Slate. Customize (hidden on a phone) sets Sky, Gold, Sea or Sand
+  and can paint category chips with that accent. Motion Off, Normal and Extra
+  follow the account, with a copy left on this device for the sign-in screen.
+  Normal fades the calendar in when you switch between Week, Day and Month;
+  Extra adds a short rise and pops in the work a plan has just placed. A system
+  that asks for reduced motion gets none of it whatever is chosen. Nothing
+  frosted is animated, so the Windows flicker has no new way in.
+- Accepting a late start draws the new block onto the calendar (2026-09-17,
+  shared frontend), so you can see the time you just agreed to arrive instead
+  of finding it already there. It draws once, at Normal as well as Extra.
+
+### Changed
+- A sidebar type chip is now the whole gesture (2026-09-17, shared frontend).
+  Picking School, Homework or any other type opens Add with that type already
+  chosen, instead of only arming the calendar. Cancelling leaves the type
+  armed, so dragging on the calendar still places it by time.
+- Solve, Spread and Running late say what they are doing (2026-09-16, shared
+  frontend). Each button now reads "Planning…", "Working out sessions…" or
+  "Replanning…" while its request is out, and goes back to its own words
+  afterwards. A finished Solve still reads "Update my plan".
+- Leaving Month keeps the month you were reading (2026-09-16, shared
+  frontend). Pressing Week or Day from Month opens a date inside that month
+  rather than the week you happened to come from. If that week cannot be
+  loaded, the view stays on Month instead of moving to the wrong dates.
+
+## [0.10.1] - 2026-09-16
+
+0.10.1 landed on `main` as a hotfix and is included in the 0.11.0 installers.
+There is no separate `v0.10.1` GitHub release.
+
 ### Fixed
 - Running late no longer looks like it did nothing (2026-09-16, shared
   frontend). Every reason it refuses to open now appears as a toast as well as

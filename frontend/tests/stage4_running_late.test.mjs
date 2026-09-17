@@ -407,6 +407,25 @@ test('reload and re-solve keep the accepted late interval', async () => {
   assert.ok(again.blocks.some(block => block.id === late.id && block.kind === 'locked' && block.duration_min === 30));
 });
 
+test('the Preview button says it is replanning while the solve is out', async () => {
+  const h = harness();
+  await h.login({ blocks: [school(), homework()] });
+  assert.equal(h.run('openRunningLate()'), true);
+  h.elements.get('late-minutes').value = '30';
+  // The fake DOM builds elements from ids alone, so give the button its real words first.
+  h.elements.get('late-preview-button').textContent = 'Preview new plan';
+  h.run(`weekState().trace = ${JSON.stringify({ placed: [school(), homework()] })}`);
+  let duringRequest = null;
+  h.handle(async () => {
+    duringRequest = h.elements.get('late-preview-button').textContent;
+    return response(200, lateTrace());
+  });
+  assert.equal(await h.run('previewRunningLate()'), true);
+  assert.equal(duringRequest, 'Replanning\u2026');
+  assert.equal(h.elements.get('late-preview-button').textContent, 'Preview new plan');
+  assert.equal(h.elements.get('late-preview-button').disabled, false);
+});
+
 test('every Running late refusal reaches the toast, not only the status line', async () => {
   const h = harness();
   await h.login({ blocks: [school(), homework()] });
@@ -461,6 +480,51 @@ test('accepting counts the homework that moved', async () => {
   });
   assert.equal(await h.run('acceptRunningLate()'), true);
   assert.match(h.elements.get('status').textContent, /Late start saved and 1 task moved\./);
+});
+
+function gridBlocks(h) {
+  const found = [];
+  (function visit(el) {
+    el.children.forEach(child => { found.push(child); visit(child); });
+  })(h.elements.get('week'));
+  return found.filter(el => el.classList.contains('block'));
+}
+
+test('the accepted late block draws itself onto the grid, once', async () => {
+  const h = harness();
+  await h.login({ blocks: [school(), homework()] });
+  assert.equal((await previewLate(h, { existing: [school(), homework()] })).previewed, true);
+  const lateId = h.run('latePreview.block.id');
+  h.handle(async (path, options) => {
+    if (path === '/api/solve') {
+      const body = JSON.parse(options.body);
+      return response(200, emptyTrace({ placed: body.blocks.filter(block => block.kind === 'locked') }));
+    }
+    return response(200, changesReply(JSON.parse(options.body)));
+  });
+  assert.equal(await h.run('acceptRunningLate()'), true);
+
+  const drawn = gridBlocks(h).filter(el => el.classList.contains('is-drawn-on'));
+  assert.equal(drawn.length, 1, 'only the late block draws on');
+  assert.equal(drawn[0].dataset.id, lateId);
+
+  // An ordinary redraw must not replay it.
+  h.run('renderWeek()');
+  assert.equal(gridBlocks(h).filter(el => el.classList.contains('is-drawn-on')).length, 0);
+});
+
+test('a failed re-plan does not leave the late block waiting to animate', async () => {
+  const h = harness();
+  await h.login({ blocks: [school(), homework()] });
+  assert.equal((await previewLate(h, { existing: [school(), homework()] })).previewed, true);
+  h.handle(async (path, options) => {
+    if (path === '/api/solve') return response(503, { detail: 'Planner busy' });
+    return response(200, changesReply(JSON.parse(options.body)));
+  });
+  assert.equal(await h.run('acceptRunningLate()'), true);
+  assert.equal(h.run('drawOnBlockId'), null);
+  h.run('renderWeek()');
+  assert.equal(gridBlocks(h).filter(el => el.classList.contains('is-drawn-on')).length, 0);
 });
 
 test('a failed re-plan after accept keeps the error instead of a success status', async () => {

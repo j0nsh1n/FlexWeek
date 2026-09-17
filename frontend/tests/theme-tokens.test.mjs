@@ -22,10 +22,25 @@ function tokens(selector) {
   return map;
 }
 
-const themes = { dark: tokens(':root'), light: tokens(':root[data-theme="slate"]') };
-const outsideMaps = css
-  .replace(block(':root'), '')
-  .replace(block(':root[data-theme="slate"]'), '');
+const THEME_SELECTORS = {
+  dark: ':root',
+  light: ':root[data-theme="slate"]',
+  'dark-frost': ':root[data-theme="dark-frost"]',
+  'light-frost': ':root[data-theme="light-frost"]',
+};
+const ACCENT_NAMES = ['sky', 'gold', 'sea', 'sand'];
+const themes = Object.fromEntries(Object.entries(THEME_SELECTORS).map(([name, selector]) => [name, tokens(selector)]));
+const accentMaps = [
+  ...ACCENT_NAMES.map(name => `:root[data-accent="${name}"]`),
+  ...ACCENT_NAMES.flatMap(name => [
+    `:root[data-theme="slate"][data-accent="${name}"]`,
+    `:root[data-theme="light-frost"][data-accent="${name}"]`,
+  ]),
+];
+let outsideMaps = css;
+for (const selector of [...Object.values(THEME_SELECTORS), ...accentMaps]) {
+  outsideMaps = outsideMaps.replace(block(selector), '');
+}
 
 function rgba(value) {
   const hex = /^#([0-9a-f]{6})$/i.exec(value);
@@ -54,8 +69,11 @@ function lab([r, g, b]) {
 }
 const distance = (a, b) => Math.hypot(...lab(a).map((value, i) => value - lab(b)[i]));
 
-test('light and dark define exactly the same tokens', () => {
-  assert.deepEqual([...themes.light.keys()].sort(), [...themes.dark.keys()].sort());
+test('light, dark and both frost packs define exactly the same tokens', () => {
+  const names = [...themes.dark.keys()].sort();
+  for (const [theme, map] of Object.entries(themes)) {
+    assert.deepEqual([...map.keys()].sort(), names, `${theme} token names differ`);
+  }
   for (const name of ['--bg', '--bg-accent', '--surface', '--surface-elevated', '--frost', '--frost-strong',
     '--hairline', '--accent', '--accent-ink', '--accent-soft', '--radius', '--space-2', '--text', '--muted',
     '--icon-primary', '--icon-secondary']) {
@@ -95,19 +113,30 @@ test('every frosted panel turns solid when blur is unavailable or unwanted', () 
 test('a page the desktop app reopened after it stopped gets the same solid panels', () => {
   const frosted = /\n([^{}@]+)\{\s*-webkit-backdrop-filter: blur\(var\(--frost\)\)/.exec(css)[1]
     .split(',').map(item => item.trim()).filter(Boolean);
-  assert.match(css, /:root\[data-frost="off"\], :root\[data-frost="off"\]\[data-theme="slate"\] \{\s*--surface: var\(--surface-solid\); --surface-elevated: var\(--surface-solid\); --surface-card: var\(--surface-solid\);/);
+  assert.match(css, /:root\[data-frost="off"\][^{]*\{[^}]*--surface: var\(--surface-solid\)/);
+  for (const theme of ['slate', 'light-frost', 'dark-frost']) {
+    assert.match(css, new RegExp(`:root\\[data-frost="off"\\]\\[data-theme="${theme}"\\]`));
+  }
   const cleared = /:root\[data-frost="off"\] :is\(([^)]*)\), :root\[data-frost="off"\] \.prefs-dialog::backdrop \{\s*-webkit-backdrop-filter: none;\s*backdrop-filter: none;/.exec(css);
   assert.ok(cleared, 'recovery mode does not remove backdrop filters');
   assert.deepEqual(cleared[1].split(',').map(item => item.trim()).sort(), [...frosted].sort());
 });
 
-test('the accent is clearly different from every category color in both themes', () => {
+test('every accent on offer stays clearly apart from every category colour', () => {
   const categories = Array.from(appJs.matchAll(/id: "([a-z]+)", label: "[^"]+", color: "(#[0-9a-f]{6})"/g));
   assert.equal(categories.length, 8);
+  const accents = [];
   for (const [theme, map] of Object.entries(themes)) {
-    const accent = rgba(map.get('--accent'));
+    accents.push([`${theme} default`, map.get('--accent')]);
+  }
+  for (const name of ACCENT_NAMES) {
+    accents.push([`dark ${name}`, tokens(`:root[data-accent="${name}"]`).get('--accent')]);
+    accents.push([`light ${name}`, tokens(`:root[data-theme="slate"][data-accent="${name}"]`).get('--accent')]);
+  }
+  for (const [label, hex] of accents) {
+    const accent = rgba(hex);
     for (const [, id, color] of categories) {
-      assert.ok(distance(accent, rgba(color)) >= 15, `${theme} accent is too close to the ${id} category`);
+      assert.ok(distance(accent, rgba(color)) >= 15, `${label} is too close to the ${id} category`);
     }
   }
 });
@@ -133,15 +162,17 @@ test('text stays readable with frost composited straight over the page, no blur'
   }
 });
 
-test('the page resolves the theme in <head> and menus offer System, Light and Dark', () => {
+test('the page resolves the look in <head> and menus offer the five packs', () => {
   assert.match(html, /<html lang="en" data-theme="slate">/);
   assert.ok(html.indexOf('<script src="/static/theme.js"></script>') < html.indexOf('</head>'),
     'theme.js must run before the body paints');
+  const packs = [['system', 'System'], ['light-frost', 'Light frost'], ['dark-frost', 'Dark frost'],
+    ['nocturne', 'Nocturne'], ['slate', 'Slate']];
   for (const id of ['theme', 'pref-theme']) {
     const select = new RegExp(`<select id="${id}">(.*?)</select>`).exec(html);
     assert.ok(select, `no #${id} select`);
-    assert.deepEqual(Array.from(select[1].matchAll(/<option value="([a-z]+)">([^<]+)<\/option>/g), m => [m[1], m[2]]),
-      [['system', 'System'], ['slate', 'Light'], ['nocturne', 'Dark']]);
+    assert.deepEqual(Array.from(select[1].matchAll(/<option value="([a-z-]+)">([^<]+)<\/option>/g), m => [m[1], m[2]]),
+      packs);
   }
 });
 
@@ -152,4 +183,75 @@ test('every icon used in the page exists in the sprite and is hidden from screen
   assert.ok(uses.length >= 10);
   assert.deepEqual(uses.filter(name => !symbols.has(name)), []);
   assert.equal((html.match(/<use href=/g) || []).length, uses.length, 'an icon is missing aria-hidden');
+});
+
+// Motion, added in 0.11. The rules below are what keeps it from becoming the
+// flicker the Windows build already suffers from: nothing frosted moves, and
+// nothing moves at all for a system that asked for less motion.
+const FROSTED = ['.top', '.week-nav', '.side', '.auth-panel', '.save-actions', '.empty-week',
+  '.prefs-dialog', '.context-menu', '.reminder-toast'];
+
+function balancedBlock(source, opening) {
+  const start = source.indexOf(opening);
+  assert.ok(start !== -1, `styles.css has no ${opening}`);
+  let depth = 0;
+  for (let i = source.indexOf('{', start); i < source.length; i += 1) {
+    if (source[i] === '{') depth += 1;
+    else if (source[i] === '}') {
+      depth -= 1;
+      if (depth === 0) return source.slice(source.indexOf('{', start) + 1, i);
+    }
+  }
+  assert.fail(`${opening} is not balanced`);
+}
+
+const motionBlock = balancedBlock(css, '@media (prefers-reduced-motion: no-preference)');
+
+test('no rule animates or transitions backdrop-filter, and none uses the all shorthand', () => {
+  for (const match of css.matchAll(/(?:transition|animation)(?:-property)?\s*:\s*([^;}]+)/g)) {
+    assert.doesNotMatch(match[1], /backdrop-filter/, `${match[1].trim()} animates the frosted layer`);
+    assert.doesNotMatch(match[1], /\ball\b/, `${match[1].trim()} would sweep up backdrop-filter`);
+  }
+});
+
+test('keyframes move opacity and transform only', () => {
+  const names = [...css.matchAll(/@keyframes\s+([\w-]+)/g)].map(match => match[1]);
+  assert.deepEqual(names, ['view-fade-in', 'view-rise-in', 'block-pop-in', 'block-draw-on']);
+  for (const name of names) {
+    const body = balancedBlock(css, `@keyframes ${name}`);
+    for (const declaration of body.matchAll(/([a-z-]+)\s*:/g)) {
+      assert.ok(['opacity', 'transform'].includes(declaration[1]),
+        `@keyframes ${name} may not move ${declaration[1]}`);
+    }
+  }
+});
+
+test('every animation sits behind the system reduced-motion setting', () => {
+  const outsideTheGate = css.replace(motionBlock, '');
+  assert.doesNotMatch(outsideTheGate, /\banimation\s*:/,
+    'an animation outside prefers-reduced-motion: no-preference ignores the system setting');
+});
+
+test('Motion set to Off animates nothing', () => {
+  const rules = motionBlock.split('}').map(rule => rule.split('{')[0].trim()).filter(Boolean);
+  for (const rule of rules) {
+    assert.ok(rule.includes(':not([data-motion="off"])') || rule.includes('[data-motion="extra"]'),
+      `${rule} still animates when Motion is Off`);
+  }
+});
+
+test('nothing frosted is animated', () => {
+  for (const selector of FROSTED) {
+    assert.ok(!motionBlock.includes(selector),
+      `${selector} has backdrop-filter, so animating it risks the Windows flicker`);
+  }
+});
+
+test('the accepted late block draws on at Normal, not only at Extra', () => {
+  assert.match(motionBlock, /:not\(\[data-motion="off"\]\)[^{]*\.block\.is-drawn-on[^}]*animation:\s*block-draw-on/);
+});
+
+test('Extra is the level that adds the pop-in, and Normal only fades', () => {
+  assert.match(motionBlock, /\[data-motion="extra"\][^{]*\.block\.is-new/);
+  assert.match(motionBlock, /:not\(\[data-motion="off"\]\)[^{]*#week[\s\S]*?animation:\s*view-fade-in/);
 });

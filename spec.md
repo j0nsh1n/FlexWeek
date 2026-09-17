@@ -136,6 +136,16 @@ Contract for the finished app:
   from stored JSON so older clients keep working, and timer rounding to the
   15-minute grid is previewed and explained rather than silent. Details live in
   `docs/stage5-contract.md`.
+- Appearance preferences persist per account beside `theme`: `theme_pack`
+  (`system`, `light-frost`, `dark-frost`, `nocturne`, `slate`), `accent`
+  (`default`, `sky`, `gold`, `sea`, `sand`), `accent_chips`, and `motion`
+  (`off`, `normal`, `extra`). Omitted pack leaves `theme` as today's
+  light/dark/system choice. A set pack must be stored with `theme` on the
+  matching axis (`slate` for `light-frost` and `slate`, `nocturne` for
+  `dark-frost` and `nocturne`). Omitted `motion` means the account has never
+  stored a level; an explicit `"normal"` stays on the wire so a second device
+  cannot treat it as unset. Details live in
+  `docs/stage8-appearance-contract.md`.
 - Month view shows one calendar month of deadlines, projects, overdue homework
   and study time, planned and completed, and any date opens Day view. A session
   pins to a date only when that date is certain: the day it was completed, or
@@ -198,7 +208,7 @@ Current account/API contract:
 | PUT/DELETE | `/api/assignments/{id}` | Revision-checked create, update and delete; delete removes its sessions from every week |
 | POST | `/api/assignments/{id}/spread` | Preview sessions of a chosen length from a start date through the due date; writes nothing |
 | POST | `/api/changes` | Several week and assignment writes, all or nothing; optional operation ID and pre-change recovery point |
-| GET/PUT | `/api/preferences` | Theme, reminders, timers, alarms, Spotify default, availability windows and comfort settings |
+| GET/PUT | `/api/preferences` | Theme, appearance pack, accent, motion, reminders, timers, alarms, Spotify default, availability windows and comfort settings |
 | GET | `/api/timer-presets` | Named timer presets on the 15-minute grid |
 | GET | `/api/reminder-limits` | The reminder ceilings the settings dialog explains |
 | POST | `/api/timer-split-preview` | Explain how a timer splits and rounds before it is saved |
@@ -249,15 +259,16 @@ and unique day indices. Explicit starts are on the visible grid and end by
 full English weekday plus HH:MM, or HH:MM. An account holds at most 1000
 assignments. API write bodies are capped at 256 KiB.
 
-Preferences store `theme` as `system`, `slate` or `nocturne`; the menus label
-them System, Light and Dark, so Light is stored as `slate` and Dark as
-`nocturne`. `system` is the default: the app follows the device's light or dark
-setting, uses Light when the device reports none, and switches when that
-setting changes. Choosing Light or Dark keeps that theme until the student
-chooses again. Signed-out screens follow the device setting; signing out does
-not change an account's saved choice. Preferences also store reminder
-enable/lead/sound, `reminder_dnd_override`, pomodoro lengths, `auto_split_pomodoro`,
-`default_spotify_url`, and a list of alarms. On desktop, `reminder_dnd_override`
+Preferences store `theme` as `system`, `slate` or `nocturne` for the light/dark
+axis. The menus offer appearance packs: System, Light frost, Dark frost,
+Nocturne and Slate. Light frost and Dark frost are new looks. `system` is the
+default pack: the app follows the device's light or dark setting, uses Light
+when the device reports none, and switches when that setting changes. Choosing
+Slate, Nocturne or a frost pack keeps that look until the student chooses
+again. Signed-out screens follow the device setting; signing out does not
+change an account's saved choice. Preferences
+also store reminder enable/lead/sound, `reminder_dnd_override`, pomodoro
+lengths, `auto_split_pomodoro`, `default_spotify_url`, and a list of alarms. On desktop, `reminder_dnd_override`
 tags the Notification `flexweek-stay` so the tray presenter skips the 10-second
 auto-close. Unchecked alerts still close at 10 seconds. Qt has no
 `requireInteraction`.

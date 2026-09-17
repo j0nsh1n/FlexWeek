@@ -868,6 +868,10 @@ let prefs = {
   preferred_view: null,
   sidebar_collapsed: false,
   sidebar_width_px: null,
+  theme_pack: "system",
+  accent: "default",
+  accent_chips: false,
+  motion: "normal",
 };
 const firedReminders = new Set();
 const activeNotifications = new Set();
@@ -998,6 +1002,21 @@ const themeEl = document.getElementById("theme");
 const weekLabelEl = document.getElementById("week-label");
 const weekJumpEl = document.getElementById("week-jump");
 const channel = typeof BroadcastChannel === "function" ? new BroadcastChannel("flexweek.session") : null;
+
+/**
+ * Say what a button is doing while its request is out, and hand back the undo.
+ * The undo leaves a label alone if something else has since written a new one,
+ * so a finished Solve can keep "Update my plan".
+ */
+function showBusy(labelId, message) {
+  const label = document.getElementById(labelId);
+  if (!label) return function () {};
+  const original = label.textContent;
+  label.textContent = message;
+  return function () {
+    if (label.textContent === message) label.textContent = original;
+  };
+}
 
 function lockEditor(locked) {
   planner.querySelectorAll("button, input, select, textarea").forEach(el => { el.disabled = locked; });
@@ -1602,7 +1621,18 @@ function bindDayLane(lane, day) {
   });
 }
 
+// showTrace sets this so the work a plan has just placed pops in once. buildGrid
+// takes it back down, so an ordinary redraw does not replay the animation.
+let solvePopIn = false;
+// The one block a student has just accepted, so it draws itself onto the grid
+// rather than simply being there. Same one-shot rule as solvePopIn.
+let drawOnBlockId = null;
+
 function buildGrid(blocks, explanations = []) {
+  const popIn = solvePopIn;
+  solvePopIn = false;
+  const drawOn = drawOnBlockId;
+  drawOnBlockId = null;
   weekEl.innerHTML = "";
   hideContextMenu();
   const corner = document.createElement("div");
@@ -1660,7 +1690,9 @@ function buildGrid(blocks, explanations = []) {
       const missed = block.kind === "locked" && (block.missed_days || []).indexOf(day) !== -1;
       el.className = "block" + (block.kind === "flexible" ? " flex-block" : "") +
         (missed ? " missed-block" : "") + (block.completed ? " is-completed" : "") +
-        (block.pomodoro_role === "break" ? " pomodoro-break" : "");
+        (block.pomodoro_role === "break" ? " pomodoro-break" : "") +
+        (popIn && block.kind === "flexible" ? " is-new" : "") +
+        (drawOn === block.id ? " is-drawn-on" : "");
       el.dataset.id = block.id;
       el.dataset.day = String(day);
       el.style.top = ((clippedStart - visibleStart) / 60) * hourH + "rem";
@@ -2022,9 +2054,23 @@ function applyPreferences(preferences) {
     sidebar_width_px: preferences.sidebar_width_px !== null && preferences.sidebar_width_px !== undefined &&
       Number.isFinite(Number(preferences.sidebar_width_px))
       ? Number(preferences.sidebar_width_px) : null,
+    theme_pack: typeof knownPack === "function"
+      ? knownPack(preferences.theme_pack || preferences.theme || "system") : (preferences.theme || "system"),
+    accent: typeof ACCENTS !== "undefined" && ACCENTS.indexOf(preferences.accent) !== -1
+      ? preferences.accent : "default",
+    accent_chips: Boolean(preferences.accent_chips),
+    motion: preferences.motion === "off" || preferences.motion === "normal" || preferences.motion === "extra"
+      ? preferences.motion : null,
   };
-  themeEl.value = prefs.theme;
-  applyTheme(prefs.theme);
+  const needsMotionSeed = prefs.motion === null;
+  if (needsMotionSeed) {
+    const device = typeof storedMotion === "function" ? storedMotion() : null;
+    prefs.motion = typeof MOTION_LEVELS !== "undefined" && MOTION_LEVELS.indexOf(device) !== -1
+      ? device : "normal";
+  }
+  themeEl.value = prefs.theme_pack;
+  if (typeof applyAppearance === "function") applyAppearance();
+  else applyTheme(prefs.theme);
   const enabled = document.getElementById("pref-reminders-enabled");
   const lead = document.getElementById("pref-reminder-lead");
   const sound = document.getElementById("pref-reminder-sound");
@@ -2034,7 +2080,7 @@ function applyPreferences(preferences) {
   if (sound) sound.checked = prefs.reminder_sound;
   if (dnd) dnd.checked = prefs.reminder_dnd_override;
   const values = {
-    "pref-theme": prefs.theme,
+    "pref-theme": prefs.theme_pack,
     "pref-timer-work": prefs.timer_work_min,
     "pref-timer-break": prefs.timer_break_min,
     "pref-timer-long-break": prefs.timer_long_break_min,
@@ -2050,13 +2096,19 @@ function applyPreferences(preferences) {
   renderAlarmList();
   if (typeof beginAvailabilityEdit === "function") beginAvailabilityEdit(prefs);
   if (typeof applyComfortPreferences === "function") applyComfortPreferences();
+  if (typeof syncAppearanceControls === "function") syncAppearanceControls();
   syncReminderLoop();
   syncPhase7Loops();
 }
 
 function preferencesPayload() {
+  const pack = prefs.theme_pack || themeEl.value || "system";
   return {
-    theme: themeEl.value,
+    theme: typeof packAxis === "function" ? packAxis(pack) : pack,
+    theme_pack: pack,
+    accent: prefs.accent || "default",
+    accent_chips: Boolean(prefs.accent_chips),
+    motion: prefs.motion || "normal",
     reminders_enabled: prefs.reminders_enabled,
     reminder_lead_min: prefs.reminder_lead_min,
     reminder_sound: prefs.reminder_sound,
@@ -2718,6 +2770,7 @@ function missedHistoryBlocks() {
 function showTrace(trace) {
   weekState().trace = trace;
   weekState().planned = true;
+  solvePopIn = true;
   buildGrid((trace.placed || []).concat(missedHistoryBlocks()), trace.explanations || []);
   renderFlexible(trace.unplaced || []);
   renderDebug(trace);
@@ -2736,6 +2789,7 @@ async function solveWeek() {
   saving = true;
   lockEditor(true);
   setStatus("Planning your homework…");
+  const doneBusy = showBusy("solve-label", "Planning…");
   try {
     let trace = await api("/api/solve", { method: "POST", body: JSON.stringify({
       week_start: selectedWeek, blocks: solveInputBlocks(weekState().blocks),
@@ -2760,6 +2814,7 @@ async function solveWeek() {
     if (solveEpoch === epoch) setStatus("Could not plan. " + error.message);
     return false;
   } finally {
+    doneBusy();
     if (solveEpoch === epoch) { saving = false; lockEditor(false); }
   }
 }
@@ -2798,22 +2853,55 @@ async function recoverMissedOccurrence(blockId, day) {
   }
 }
 
-themeEl.addEventListener("change", async () => {
-  const oldTheme = prefs.theme;
-  const themeEpoch = epoch;
-  applyTheme(themeEl.value);
-  prefs.theme = themeEl.value;
+function syncAppearanceControls() {
+  const pack = prefs.theme_pack || "system";
+  themeEl.value = pack;
+  const prefTheme = document.getElementById("pref-theme");
+  if (prefTheme) prefTheme.value = pack;
+  const prefMotion = document.getElementById("pref-motion");
+  if (prefMotion) prefMotion.value = prefs.motion || "normal";
+  const prefAccent = document.getElementById("pref-accent");
+  if (prefAccent) prefAccent.value = prefs.accent || "default";
+  const chips = document.getElementById("pref-accent-chips");
+  if (chips) chips.checked = Boolean(prefs.accent_chips);
+}
+
+function applyAppearance() {
+  if (typeof applyPack === "function") applyPack(prefs.theme_pack || "system");
+  else applyTheme(prefs.theme);
+  if (typeof applyAccent === "function") applyAccent(prefs.accent || "default");
+  if (typeof applyAccentChips === "function") applyAccentChips(prefs.accent_chips);
+  if (typeof rememberMotion === "function") rememberMotion(prefs.motion || "normal");
+  syncAppearanceControls();
+  if (typeof renderTypeChips === "function") renderTypeChips();
+}
+
+async function choosePack(pack) {
+  if (!account) return;
+  const previous = { pack: prefs.theme_pack, theme: prefs.theme, motion: prefs.motion };
+  const chosen = typeof applyPack === "function" ? applyPack(pack) : pack;
+  prefs.theme_pack = chosen;
+  prefs.theme = typeof packAxis === "function" ? packAxis(chosen) : chosen;
+  prefs.motion = typeof packMotion === "function" ? packMotion(chosen) : "normal";
+  applyAppearance();
+  const packEpoch = epoch;
   themeEl.disabled = true;
-  try { await api("/api/preferences", { method: "PUT", body: JSON.stringify(preferencesPayload()) }); }
-  catch (error) {
-    if (themeEpoch === epoch) {
-      themeEl.value = oldTheme;
-      prefs.theme = oldTheme;
-      applyTheme(oldTheme);
-      setStatus("Theme was not saved. " + error.message);
+  try {
+    await api("/api/preferences", { method: "PUT", body: JSON.stringify(preferencesPayload()) });
+  } catch (error) {
+    if (packEpoch === epoch) {
+      prefs.theme_pack = previous.pack;
+      prefs.theme = previous.theme;
+      prefs.motion = previous.motion;
+      applyAppearance();
+      setStatus("Look was not saved. " + error.message);
     }
-  } finally { themeEl.disabled = false; }
-});
+  } finally {
+    if (packEpoch === epoch) themeEl.disabled = false;
+  }
+}
+
+themeEl.addEventListener("change", function () { return choosePack(themeEl.value); });
 
 document.getElementById("retry-save").addEventListener("click", saveWeek);
 document.getElementById("reload-week").addEventListener("click", async () => {
@@ -2973,7 +3061,9 @@ if (prefsForm) {
       return;
     }
     const next = {
-      theme: document.getElementById("pref-theme").value,
+      theme: typeof packAxis === "function"
+        ? packAxis(document.getElementById("pref-theme").value)
+        : document.getElementById("pref-theme").value,
       reminders_enabled: Boolean(enabledEl && enabledEl.checked),
       reminder_lead_min: Math.max(0, Math.min(120, Number(leadEl && leadEl.value) || 0)),
       reminder_sound: Boolean(soundEl && soundEl.checked),

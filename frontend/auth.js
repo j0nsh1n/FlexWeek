@@ -137,6 +137,12 @@ async function loadAccount(identity) {
       suspendedDrafts.delete(account.id);
     }
     applyPreferences(preferences);
+    if (loadEpoch === epoch && account &&
+        preferences.motion !== "off" && preferences.motion !== "normal" && preferences.motion !== "extra" &&
+        typeof saveComfortLayout === "function") {
+      await saveComfortLayout();
+      if (loadEpoch !== epoch) return;
+    }
     authPanel.hidden = true;
     planner.hidden = false;
     document.getElementById("account-controls").hidden = false;

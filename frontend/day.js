@@ -607,11 +607,14 @@ document.getElementById("hw-add-link").addEventListener("click", function () { a
 document.getElementById("hw-add-check").addEventListener("click", function () { addProjectCheck(null); });
 document.getElementById("homework-dialog").addEventListener("cancel", function () { homeworkEditingId = null; });
 document.getElementById("add-homework").addEventListener("click", function () { openHomeworkDialog(); });
-document.getElementById("view-day").addEventListener("click", function () {
-  setPlannerView("day");
-  if (typeof rememberPlannerView === "function") rememberPlannerView("day");
-});
-document.getElementById("view-week").addEventListener("click", function () {
-  setPlannerView("week");
-  if (typeof rememberPlannerView === "function") rememberPlannerView("week");
-});
+// Leaving Month has to carry its dates across, or November in Month becomes
+// September in Week and the student has to navigate back to where they were.
+async function leaveMonthFor(view) {
+  if (plannerView === "month" && typeof openMonthAnchor === "function" && !await openMonthAnchor()) return false;
+  setPlannerView(view);
+  if (typeof rememberPlannerView === "function") rememberPlannerView(view);
+  return true;
+}
+
+document.getElementById("view-day").addEventListener("click", function () { leaveMonthFor("day"); });
+document.getElementById("view-week").addEventListener("click", function () { leaveMonthFor("week"); });

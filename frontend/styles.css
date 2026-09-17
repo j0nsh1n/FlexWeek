@@ -73,6 +73,103 @@
   --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
   --hour-h: 2.75rem; --gutter: 3.5rem;
 }
+:root[data-theme="dark-frost"] {
+  --sidebar-width: 20rem;
+  color-scheme: dark;
+  --bg: #071018; --bg-accent: #0c1c28; --bg-glow: rgba(80, 210, 230, 0.12);
+  --surface: rgba(18, 36, 48, 0.62);
+  --surface-elevated: rgba(20, 42, 56, 0.92);
+  --surface-card: rgba(22, 46, 60, 0.94);
+  --surface-solid: #0f1c26;
+  --field: #0b151c;
+  --scrim: rgba(2, 8, 12, 0.55);
+  --frost: 12px; --frost-strong: 22px;
+  --hairline: rgba(160, 230, 240, 0.12); --hairline-strong: rgba(160, 230, 240, 0.24);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.30), 0 6px 18px rgba(0, 0, 0, 0.22);
+  --shadow-lg: 0 2px 6px rgba(0, 0, 0, 0.35), 0 18px 48px rgba(0, 0, 0, 0.40);
+  --text: #e4f3f6; --muted: #8ea8b0;
+  --accent: #5eead4; --accent-strong: #99f6e4; --accent-ink: #0b1224; --accent-soft: rgba(94, 234, 212, 0.16);
+  --error: #ff9b9b; --error-soft: rgba(255, 155, 155, 0.10);
+  --danger-bg: #8f2a33; --danger-ink: #fff4f4;
+  --ok: #79d39f; --warn: #f1cc66; --risk: #ff9a92; --badge-ink: #0e1320;
+  --now: #ff6b7a;
+  --grid-cell: #0d1820; --grid-line: rgba(160, 230, 240, 0.07);
+  --block-locked: #234050; --block-locked-ink: #eef8fa;
+  --block-flex: #4a3c1c; --block-flex-ink: #fff4dc;
+  --block-border: rgba(0, 0, 0, 0.25); --block-edge: #6a93a0;
+  --flex: #e3b34f;
+  --icon-primary: #c5e4ea; --icon-secondary: rgba(94, 234, 212, 0.30);
+  --radius-sm: 3px; --radius: 5px; --radius-lg: 8px;
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+  --hour-h: 2.75rem; --gutter: 3.5rem;
+}
+:root[data-theme="light-frost"] {
+  --sidebar-width: 20rem;
+  color-scheme: light;
+  --bg: #e7f4fa; --bg-accent: #f3f9fc; --bg-glow: rgba(14, 116, 144, 0.14);
+  --surface: rgba(255, 255, 255, 0.58);
+  --surface-elevated: rgba(255, 255, 255, 0.92);
+  --surface-card: rgba(255, 255, 255, 0.95);
+  --surface-solid: #ffffff;
+  --field: #f7fcfe;
+  --scrim: rgba(12, 40, 56, 0.28);
+  --frost: 12px; --frost-strong: 22px;
+  --hairline: rgba(12, 64, 80, 0.12); --hairline-strong: rgba(12, 64, 80, 0.22);
+  --shadow: 0 1px 2px rgba(12, 40, 56, 0.06), 0 6px 18px rgba(12, 40, 56, 0.07);
+  --shadow-lg: 0 2px 6px rgba(12, 40, 56, 0.08), 0 18px 48px rgba(12, 40, 56, 0.16);
+  --text: #14303a; --muted: #4d6870;
+  --accent: #0e7490; --accent-strong: #155e75; --accent-ink: #ffffff; --accent-soft: rgba(14, 116, 144, 0.12);
+  --error: #b42318; --error-soft: rgba(180, 35, 24, 0.07);
+  --danger-bg: #b93434; --danger-ink: #ffffff;
+  --ok: #bde7cd; --warn: #f9e3a1; --risk: #f7c6c1; --badge-ink: #1b2433;
+  --now: #e5484d;
+  --grid-cell: #f7fcfe; --grid-line: rgba(12, 64, 80, 0.06);
+  --block-locked: #d7e8ee; --block-locked-ink: #14303a;
+  --block-flex: #f5e6c3; --block-flex-ink: #3b2a05;
+  --block-border: rgba(12, 64, 80, 0.10); --block-edge: #7a9aa4;
+  --flex: #c98a14;
+  --icon-primary: #2a4a54; --icon-secondary: rgba(14, 116, 144, 0.20);
+  --radius-sm: 3px; --radius: 5px; --radius-lg: 8px;
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+  --hour-h: 2.75rem; --gutter: 3.5rem;
+}
+:root[data-accent="sky"] {
+  --accent: #38bdf8; --accent-strong: #7dd3fc; --accent-ink: #0b1224; --accent-soft: rgba(56, 189, 248, 0.16);
+}
+:root[data-theme="slate"][data-accent="sky"] {
+  --accent: #0369a1; --accent-strong: #075985; --accent-ink: #ffffff; --accent-soft: rgba(3, 105, 161, 0.12);
+}
+:root[data-theme="light-frost"][data-accent="sky"] {
+  --accent: #0369a1; --accent-strong: #075985; --accent-ink: #ffffff; --accent-soft: rgba(3, 105, 161, 0.12);
+}
+:root[data-accent="gold"] {
+  --accent: #eab308; --accent-strong: #facc15; --accent-ink: #0b1224; --accent-soft: rgba(234, 179, 8, 0.16);
+}
+:root[data-theme="slate"][data-accent="gold"] {
+  --accent: #a16207; --accent-strong: #854d0e; --accent-ink: #ffffff; --accent-soft: rgba(161, 98, 7, 0.12);
+}
+:root[data-theme="light-frost"][data-accent="gold"] {
+  --accent: #a16207; --accent-strong: #854d0e; --accent-ink: #ffffff; --accent-soft: rgba(161, 98, 7, 0.12);
+}
+:root[data-accent="sea"] {
+  --accent: #2dd4bf; --accent-strong: #5eead4; --accent-ink: #0b1224; --accent-soft: rgba(45, 212, 191, 0.16);
+}
+:root[data-theme="slate"][data-accent="sea"] {
+  --accent: #0f766e; --accent-strong: #115e59; --accent-ink: #ffffff; --accent-soft: rgba(15, 118, 110, 0.12);
+}
+:root[data-theme="light-frost"][data-accent="sea"] {
+  --accent: #0f766e; --accent-strong: #115e59; --accent-ink: #ffffff; --accent-soft: rgba(15, 118, 110, 0.12);
+}
+:root[data-accent="sand"] {
+  --accent: #e7d5a3; --accent-strong: #f5e6c3; --accent-ink: #0b1224; --accent-soft: rgba(231, 213, 163, 0.16);
+}
+:root[data-theme="slate"][data-accent="sand"] {
+  --accent: #926a2a; --accent-strong: #78350f; --accent-ink: #ffffff; --accent-soft: rgba(146, 106, 42, 0.12);
+}
+:root[data-theme="light-frost"][data-accent="sand"] {
+  --accent: #926a2a; --accent-strong: #78350f; --accent-ink: #ffffff; --accent-soft: rgba(146, 106, 42, 0.12);
+}
+:root[data-accent-chips="on"] .category-chip { --chip-color: var(--accent); }
 
 /* Frosted chrome. Without backdrop-filter, or when the user asks for less
    transparency or more contrast, the same panels turn solid instead. */
@@ -86,10 +183,12 @@
   backdrop-filter: blur(var(--frost-strong)) saturate(150%);
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  :root, :root[data-theme="slate"] { --surface: var(--surface-card); --surface-elevated: var(--surface-card); }
+  :root, :root[data-theme="slate"], :root[data-theme="light-frost"], :root[data-theme="dark-frost"] {
+    --surface: var(--surface-card); --surface-elevated: var(--surface-card);
+  }
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more), (forced-colors: active) {
-  :root, :root[data-theme="slate"] {
+  :root, :root[data-theme="slate"], :root[data-theme="light-frost"], :root[data-theme="dark-frost"] {
     --surface: var(--surface-solid); --surface-elevated: var(--surface-solid); --surface-card: var(--surface-solid);
   }
   .top, .week-nav, .side, .auth-panel, .save-actions, .empty-week, .prefs-dialog,
@@ -99,7 +198,10 @@
   }
 }
 /* The same solid panels for a page the desktop app reopened after it stopped (theme.js). */
-:root[data-frost="off"], :root[data-frost="off"][data-theme="slate"] {
+:root[data-frost="off"],
+:root[data-frost="off"][data-theme="slate"],
+:root[data-frost="off"][data-theme="light-frost"],
+:root[data-frost="off"][data-theme="dark-frost"] {
   --surface: var(--surface-solid); --surface-elevated: var(--surface-solid); --surface-card: var(--surface-solid);
 }
 :root[data-frost="off"] :is(.top, .week-nav, .side, .auth-panel, .save-actions, .empty-week, .prefs-dialog,
@@ -633,6 +735,7 @@ button.danger {
   .side { border-left: 0; border-top: 1px solid var(--hairline); }
   .sidebar-resizer, .sidebar-toggle { display: none; }
   .layout[data-sidebar-collapsed="true"] .side { display: block; }
+  #appearance-customize { display: none; }
 }
 
 .view-switch { display: inline-flex; gap: 0.2rem; }
@@ -1076,3 +1179,35 @@ button:disabled { cursor: wait; opacity: 0.6; }
 .setup-summary { margin: var(--space-2) 0; padding-left: 1.2rem; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @media (max-width: 540px) { .empty-week { flex-direction: column; align-items: flex-start; } }
+
+/* Motion. Only opacity and transform ever move. backdrop-filter is never
+   animated: recompositing a frosted panel every frame flickers on Windows, and
+   every element below is outside the frosted set on purpose. The whole block
+   sits inside prefers-reduced-motion: no-preference, so a system that asks for
+   less motion gets none of it whatever Settings says. */
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-motion="off"]) #week,
+  :root:not([data-motion="off"]) #day-agenda,
+  :root:not([data-motion="off"]) #month-view {
+    animation: view-fade-in 150ms ease-out;
+  }
+  /* Extra replaces the fade with the same fade plus a short rise. */
+  :root[data-motion="extra"] #week,
+  :root[data-motion="extra"] #day-agenda,
+  :root[data-motion="extra"] #month-view {
+    animation: view-rise-in 200ms ease-out;
+  }
+  :root[data-motion="extra"] .block.is-new {
+    animation: block-pop-in 220ms ease-out;
+  }
+  /* Confirming an action you took, not decoration, so Normal draws it too. */
+  :root:not([data-motion="off"]) .block.is-drawn-on {
+    transform-origin: top center;
+    animation: block-draw-on 260ms ease-out;
+  }
+}
+
+@keyframes view-fade-in { from { opacity: 0; } }
+@keyframes view-rise-in { from { opacity: 0; transform: translateY(0.4rem); } }
+@keyframes block-pop-in { from { opacity: 0; transform: scale(0.96); } }
+@keyframes block-draw-on { from { opacity: 0; transform: scaleY(0.35); } }

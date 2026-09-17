@@ -8,6 +8,7 @@
   <link rel="apple-touch-icon" href="/static/logo.png">
   <link rel="stylesheet" href="/static/styles.css">
   <script src="/static/theme.js"></script>
+  <script src="/static/motion.js"></script>
 </head>
 <body>
   <!-- Duotone icons: the outline follows the text color, the fill reads --icon-secondary. -->
@@ -36,7 +37,7 @@
     </div>
     <div class="controls" id="account-controls" hidden>
       <span id="account-name"></span>
-      <label>Theme <select id="theme"><option value="system">System</option><option value="slate">Light</option><option value="nocturne">Dark</option></select></label>
+      <label>Look <select id="theme"><option value="system">System</option><option value="light-frost">Light frost</option><option value="dark-frost">Dark frost</option><option value="nocturne">Nocturne</option><option value="slate">Slate</option></select></label>
       <button type="button" id="prefs-open" class="secondary"><svg class="icon" aria-hidden="true"><use href="#i-gear"/></svg>Settings</button>
       <button type="button" id="logout" class="secondary"><svg class="icon" aria-hidden="true"><use href="#i-logout"/></svg>Log out</button>
       <button type="button" id="solve"><svg class="icon" aria-hidden="true"><use href="#i-solve"/></svg><span id="solve-label">Plan my homework</span></button>
@@ -475,13 +476,34 @@
       <details class="settings-section" open>
         <summary>Appearance</summary>
         <fieldset>
-          <legend>Theme and layout</legend>
-        <label>Theme
-          <select id="pref-theme"><option value="system">System</option><option value="slate">Light</option><option value="nocturne">Dark</option></select>
+          <legend>Look and layout</legend>
+        <label>Look
+          <select id="pref-theme"><option value="system">System</option><option value="light-frost">Light frost</option><option value="dark-frost">Dark frost</option><option value="nocturne">Nocturne</option><option value="slate">Slate</option></select>
         </label>
+          <label>Motion
+            <select id="pref-motion">
+              <option value="off">Off</option>
+              <option value="normal">Normal</option>
+              <option value="extra">Extra</option>
+            </select>
+          </label>
+          <details id="appearance-customize">
+            <summary>Customize</summary>
+            <label>Accent
+              <select id="pref-accent">
+                <option value="default">Pack default</option>
+                <option value="sky">Sky</option>
+                <option value="gold">Gold</option>
+                <option value="sea">Sea</option>
+                <option value="sand">Sand</option>
+              </select>
+            </label>
+            <label class="completed-toggle"><input type="checkbox" id="pref-accent-chips" /> Use the accent for category chips</label>
+          </details>
           <label>Open my calendar in
             <select id="pref-preferred-view"><option value="">Automatic for screen size</option><option value="week">Week view</option><option value="day">Day view</option></select>
           </label>
+          <p class="note">Look, motion and accent are kept on your account, so they follow you to another computer. A copy of motion also stays on this device for the sign-in screen. If your system asks for reduced motion, nothing animates.</p>
           <p class="note">The sidebar width and whether it is open are remembered when you change them on the calendar.</p>
         </fieldset>
       </details>

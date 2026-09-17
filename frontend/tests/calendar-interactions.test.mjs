@@ -148,6 +148,31 @@ const chip = (h, container, category) =>
   h.elements.get(container).children.find(button => button.dataset.category === category);
 const submitEditor = h => h.elements.get('block-form').listeners.submit({ preventDefault() {} });
 
+test('a sidebar type chip opens Add with that category, in one gesture', async () => {
+  const h = harness();
+  await h.login();
+  assert.equal(h.elements.get('block-dialog').open, false);
+  chip(h, 'type-chips', 'exercise').listeners.click();
+  assert.equal(h.elements.get('block-dialog').open, true);
+  assert.equal(h.elements.get('f-category').value, 'exercise');
+  assert.equal(h.elements.get('f-kind-locked').checked, true);
+  assert.equal(h.elements.get('form-heading').textContent, 'Add Sports');
+  assert.equal(h.run('addType'), 'exercise');
+});
+
+test('cancelling a chip leaves the calendar armed with that type', async () => {
+  const h = harness();
+  await h.login();
+  chip(h, 'type-chips', 'assignments').listeners.click();
+  h.elements.get('form-cancel').listeners.click();
+  assert.equal(h.elements.get('block-dialog').open, false);
+  assert.equal(h.run('addType'), 'assignments');
+  // Dragging still places it by time, with the type the chip chose.
+  assert.equal(h.run('requestCreate(2, 960, 1050)'), true);
+  assert.equal(h.elements.get('f-kind-flexible').checked, true);
+  assert.equal(h.elements.get('f-duration').value, '90');
+});
+
 test('dragging empty grid opens the editor on that range and adds nothing until Save', async () => {
   const h = harness();
   await h.login();

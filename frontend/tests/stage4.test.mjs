@@ -243,6 +243,7 @@ test('week JSON round-trips assignment notes, links, and checklist', async () =>
 test('unsafe project metadata is refused before import can save', async () => {
   const h = harness();
   await h.login();
+  const before = h.requests.filter(request => request.options && request.options.method).length;
   const cases = [
     storedAssignment({ links: [{ label: 'Bad', url: 'javascript:alert(1)' }] }),
     storedAssignment({ links: [{ label: 'Bad', url: 'https://student:secret@school.example/file' }] }),
@@ -258,7 +259,7 @@ test('unsafe project metadata is refused before import can save', async () => {
     assert.match(parsed.error, /bad link|repeats a checklist id/i);
     assert.equal(await h.run(`importPayloadIntoWeek(parseImportPayload(${JSON.stringify(JSON.stringify(payload))}))`), false);
   }
-  assert.equal(h.requests.filter(request => request.options.method).length, 0);
+  assert.equal(h.requests.filter(request => request.options && request.options.method).length, before);
 });
 
 test('project detail row limits stop before an oversized assignment can be built', async () => {
@@ -287,6 +288,29 @@ test('Spread across days appears only for existing unfinished homework', async (
   const completed = assignment({ completed: true, completed_at: '2026-09-10T12:00' });
   h.run(`assignments.set('hw-essay', ${JSON.stringify(completed)}); openHomeworkDialog('hw-essay')`);
   assert.equal(h.elements.get('hw-spread').hidden, true);
+});
+
+test('the Spread button says it is working while the preview is out', async () => {
+  const h = harness();
+  const item = assignment({ due: '2026-09-16T21:00', estimate_min: 240, unplanned_min: 240 });
+  await h.login({ owned: [item] });
+  h.run("openHomeworkDialog('hw-essay'); openSpreadDialog('hw-essay')");
+  h.elements.get('spread-session').value = '60';
+  h.elements.get('spread-from').value = '2026-09-10';
+  // The fake DOM builds elements from ids alone, so give the button its real words first.
+  h.elements.get('spread-preview').textContent = 'Preview sessions';
+  let duringRequest = null;
+  h.handle(async () => {
+    duringRequest = h.elements.get('spread-preview').textContent;
+    return response(200, {
+      assignment_id: 'hw-essay', session_min: 60, remaining_min: 0,
+      sessions: [{ week_start: MONDAY, date: '2026-09-10', days: [3], duration_min: 60 }],
+    });
+  });
+  assert.equal(await h.run('previewSpread()'), true);
+  assert.equal(duringRequest, 'Working out sessions\u2026');
+  assert.equal(h.elements.get('spread-preview').textContent, 'Preview sessions');
+  assert.equal(h.elements.get('spread-preview').disabled, false);
 });
 
 test('spread previews distinct normal sessions and saves every week in one Undo step', async () => {

@@ -79,7 +79,7 @@ function harness(options = {}) {
         selector.split(',').some(part => el.classList.contains(part.trim().replace(/^\./, '')))),
     },
     window: { addEventListener() {} },
-    localStorage: { getItem: key => local.get(key), removeItem: key => local.delete(key) },
+    localStorage: { getItem: key => local.get(key) ?? null, setItem: (key, value) => local.set(key, value), removeItem: key => local.delete(key) },
     fetch: async (path, options) => { requests.push({ path, options }); return handler(path, options); },
     getComputedStyle: () => ({ getPropertyValue: () => '2.75rem' }),
     setTimeout, clearTimeout, setInterval, clearInterval, AbortController, structuredClone, console,
@@ -153,6 +153,30 @@ test('re-opening setup cannot blank a name that is already half typed', async ()
   h.elements.get('setup-open').listeners.click();
   assert.equal(h.elements.get('setup-homework-title').value, 'Half typed');
   assert.equal(h.elements.get('setup-progress').textContent, 'Step 3 of 4');
+});
+
+test('Solve says it is planning while it waits, then shows the plan label', async () => {
+  const h = harness();
+  await h.login(1, [task]);
+  let duringRequest = null;
+  h.handle(async () => {
+    duringRequest = h.elements.get('solve-label').textContent;
+    return response(200, { placed: [], unplaced: [], moves: [], explanations: [],
+      failed_constraints: [], solve_ms: 1, complete: true });
+  });
+  assert.equal(await h.run('solveWeek()'), true);
+  assert.equal(duringRequest, 'Planning\u2026');
+  assert.equal(h.elements.get('solve-label').textContent, 'Update my plan');
+});
+
+test('a Solve that fails puts the button back to its own words', async () => {
+  const h = harness();
+  await h.login(1, [task]);
+  assert.equal(h.elements.get('solve-label').textContent, 'Plan my homework');
+  h.handle(async () => response(503, { detail: 'Planner busy' }));
+  assert.equal(await h.run('solveWeek()'), false);
+  assert.equal(h.elements.get('solve-label').textContent, 'Plan my homework');
+  assert.match(h.elements.get('status').textContent, /Could not plan\. Planner busy/);
 });
 
 test('solve renders student-facing explanations, slack, and click-to-highlight', async () => {
@@ -467,8 +491,8 @@ test('previous, next and Today open the expected Monday and render what came bac
 test('an account whose data sits in an earlier week can still reach it', async () => {
   const h = harness();
   await h.login(1, [], ['2026-08-24']);
-  assert.deepEqual(h.requests.slice(-4).map(r => r.path).sort(),
-    ['/api/assignments?week_start=2026-09-07&include_completed=true', '/api/preferences',
+  assert.deepEqual(h.requests.slice(-5).map(r => r.path).sort(),
+    ['/api/assignments?week_start=2026-09-07&include_completed=true', '/api/preferences', '/api/preferences',
       '/api/week?week_start=2026-09-07', '/api/weeks']);
   assert.deepEqual(h.elements.get('week-jump').children.map(option => option.value),
     ['2026-08-24', '2026-09-07']);

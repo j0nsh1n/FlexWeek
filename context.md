@@ -1,6 +1,17 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-17 (release). v0.11.0 is prepared on `feat/0-11-seamless`: packs,
+  Customize, account motion, wait-states and the 0.10.1 hotfix. P2 account copy,
+  a reduced-motion WebEngine pass and a Windows flicker hand-check remain after
+  the tag. Next work is those leftovers, not a new stage.
+- Date: 2026-09-17. Appearance contract approved. `docs/stage8-appearance-contract.md`
+  records the owner's answers: Light frost and Dark frost are new token sets,
+  pack sits beside `theme` with an axis pairing, motion uses `None` for never-set
+  so an explicit Normal stays on the wire, accents are `default`/`sky`/`gold`/
+  `sea`/`sand`. `GET`/`PUT /api/preferences` stores the four fields in
+  `comfort_json`. Pack UI, Customize, and wiring motion onto the account are
+  still Claude's. Branch `feat/0-11-seamless`, local only.
 - Date: 2026-09-16 (later). v0.10.0 is published as the Latest release, not a
   draft and not a prerelease, from `main` at d17647a. All eight assets are
   attached: `FlexWeek-Linux-x86_64.tar.gz`, `FlexWeek-x86_64.AppImage`,
@@ -376,6 +387,58 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-17, `feat/0-11-seamless` (latest): pack UI, frost token maps,
+  Customize and account-backed motion are in. First sign-in writes omitted
+  motion from the device copy. Phone width hides Customize. P2 account copy
+  is still open. Nothing pushed.
+- 2026-09-17, `feat/0-11-seamless`: owner approved the appearance
+  contract. Light frost / Dark frost are new token sets; pack sits beside
+  `theme`; motion seeds once from omitted/`None` then the account wins; accents
+  are `default`, `sky`, `gold`, `sea`, `sand`. spec.md lists the fields.
+  Backend round-trips them on `/api/preferences`. Frontend still keeps motion
+  device-only and has no pack picker. Next: Claude's pack UI and account-wired
+  motion. Nothing pushed.
+- 2026-09-17, `feat/0-11-seamless`: `docs/stage8-appearance-contract.md`
+  is written and proposed, not approved. GLM drafted it through OpenCode; the
+  channel that works is passing the brief as an attached file (`-f`), not as a
+  long argv, which failed three times. One chunk still returned empty on its
+  first try and worked on retry, so treat it as flaky rather than fixed.
+  Corrections to GLM's draft are listed in the contract's header note. Five
+  owner decisions are open, including Light frost / Dark frost and which
+  accents to offer. No spec.md change until the owner approves.
+- 2026-09-17, `feat/0-11-seamless`: accepting a late start now marks that one
+  block so it draws onto the grid, on the re-plan's redraw rather than the one
+  before it, which would have been replaced mid-animation; a failed re-plan
+  takes the mark back down. Settings splits Appearance into "Theme and layout"
+  (account) and "This device only" (Motion). Gate green: 274 frontend, 365
+  Python. Note for whoever reads the history: commit 3157f1d overwrote
+  CHANGELOG.md with a copy of context.md through a scripting mistake, and
+  2ddc3b4 did not catch it. Restored from 9b03f60. Nothing in the gate reads
+  CHANGELOG.md, so no test could have caught it.
+- 2026-09-17, `feat/0-11-seamless`: added the chip gesture and the motion
+  slice on top of the seamless work. A sidebar type chip now opens Add with
+  that category; the calendar WebEngine probe encoded the old contract and was
+  updated, which is real-browser evidence for the change. Motion lives in a new
+  head script `frontend/motion.js` writing `<html data-motion>`, device-only in
+  localStorage under `flexweek-motion`, with the Settings control wired from
+  comfort.js so no head script touches page elements. The CSS gate is static:
+  theme-tokens.test.mjs now proves no rule animates backdrop-filter, keyframes
+  move only opacity and transform, every animation sits inside
+  prefers-reduced-motion: no-preference, Off animates nothing, and no frosted
+  panel is animated. Gate green: 270 frontend, 365 Python. GLM is drafting
+  docs/stage8-appearance-contract.md; packs, accent and the account-persisted
+  motion level wait on that contract and owner approval.
+- 2026-09-17, `feat/0-11-seamless`: PR #13 merged the 0.10.1 hotfix and the
+  release-polish roadmap to `main` at 251c59a. Started 0.11 with the seamless
+  slice: showBusy() in app.js swaps a button's label while its request is out
+  and restores it only if nothing else wrote a new one, wired into Solve,
+  Spread and Running late; leaving Month for Week or Day now anchors to the
+  month on screen through openMonthAnchor() in month.js. Seven new node tests,
+  all red-checked. Gate green: 260 frontend, 365 Python. Still open in 0.11:
+  motion, the appearance packs and Customize submenu (needs a contract and
+  owner approval before spec.md changes, since preferences gain fields), the
+  P2 account copy, and a decision on what "add-from-chip stays one gesture"
+  refers to.
 - 2026-09-16, `fix/0-10-1-hotfix`: implemented the 0.10.1 hotfix. Running late
   now reports every refusal and every outcome, Month says when a month is early
   rather than looking broken, the date numbers are larger, the collapsed

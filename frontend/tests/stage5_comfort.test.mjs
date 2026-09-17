@@ -101,7 +101,7 @@ function harness(options = {}) {
       querySelectorAll: selector => connected().filter(item => selector.split(',').some(part => matches(item, part.trim()))),
     },
     window: { addEventListener() {}, AudioContext, open: () => ({}) },
-    localStorage: { getItem() { return null; }, removeItem() {} },
+    localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
     sessionStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
     fetch: async (path, request) => { requests.push({ path, request }); return handler(path, request); },
     getComputedStyle: () => ({ getPropertyValue: () => '2.75rem' }),
@@ -138,6 +138,20 @@ test('settings expose four expandable groups and desktop/web limits without flat
     'pref-preferred-view', 'timer-preview', 'test-reminder', 'preview-alert', 'sidebar-toggle', 'sidebar-resizer']) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
+});
+
+test('Motion sits with the account look settings, and Customize is hidden on a phone', () => {
+  const appearance = html.slice(html.indexOf('<summary>Appearance</summary>'), html.indexOf('<summary>Focus</summary>'));
+  assert.doesNotMatch(appearance, /This device only/);
+  assert.match(appearance, /id="pref-theme"/);
+  assert.match(appearance, /id="pref-motion"/);
+  assert.match(appearance, /id="appearance-customize"/);
+  assert.match(appearance, /id="pref-accent"/);
+  assert.match(appearance, /id="pref-accent-chips"/);
+  const customize = appearance.slice(appearance.indexOf('id="appearance-customize"'));
+  assert.match(customize, /id="pref-accent"/);
+  assert.doesNotMatch(customize, /id="pref-motion"/);
+  assert.match(css, /@media \(max-width: 800px\)[\s\S]*?#appearance-customize\s*\{\s*display:\s*none;/);
 });
 
 test('a saved collapsed desktop sidebar returns to the single-column phone layout', () => {
@@ -278,6 +292,25 @@ test('saving Settings sends every comfort choice in the existing flat preference
   });
 });
 
+test('Motion is stored on the account and a copy stays on this device', async () => {
+  const h = harness();
+  await h.login();
+  assert.equal(h.elements.get('pref-motion').value, 'normal');
+  h.elements.get('pref-motion').value = 'extra';
+  h.elements.get('pref-motion').listeners.change();
+  assert.equal(h.run('document.documentElement.dataset.motion'), 'extra');
+  const payload = JSON.parse(h.run('JSON.stringify(preferencesPayload())'));
+  assert.equal(payload.motion, 'extra');
+});
+
+test('an unknown stored motion level falls back to Normal rather than breaking', async () => {
+  const h = harness();
+  await h.login();
+  assert.equal(h.run('applyMotion("sideways")'), 'normal');
+  assert.equal(h.run('document.documentElement.dataset.motion'), 'normal');
+  assert.equal(h.run('applyMotion("off")'), 'off');
+});
+
 test('alert previews stay local, honor unsaved volume, and never consume a reminder key', async () => {
   const h = harness();
   await h.login();
@@ -356,4 +389,50 @@ test('Settings waits for an in-flight layout write so the older payload cannot l
   assert.equal(writes[0].preferred_view, 'day');
   assert.equal(writes[1].preferred_view, 'day');
   assert.equal(writes[1].alert_volume, 55);
+});
+
+test('picking a pack applies its look and default motion together', async () => {
+  const h = harness();
+  await h.login();
+  h.handle(async (path, request) => {
+    if (path !== '/api/preferences') return response(404, { detail: path });
+    return response(200, JSON.parse(request.body));
+  });
+  h.elements.get('theme').value = 'light-frost';
+  await h.elements.get('theme').listeners.change();
+  assert.equal(h.run('document.documentElement.dataset.pack'), 'light-frost');
+  assert.equal(h.run('document.documentElement.dataset.theme'), 'light-frost');
+  assert.equal(h.run('prefs.theme'), 'slate');
+  assert.equal(h.run('prefs.motion'), 'extra');
+  assert.equal(h.run('document.documentElement.dataset.motion'), 'extra');
+  const payload = JSON.parse(h.run('JSON.stringify(preferencesPayload())'));
+  assert.equal(payload.theme_pack, 'light-frost');
+  assert.equal(payload.theme, 'slate');
+  assert.equal(payload.motion, 'extra');
+});
+
+test('a Customize accent chosen after a pack still wins', async () => {
+  const h = harness();
+  await h.login();
+  h.handle(async (path, request) => {
+    if (path !== '/api/preferences') return response(404, { detail: path });
+    return response(200, JSON.parse(request.body));
+  });
+  h.elements.get('theme').value = 'dark-frost';
+  await h.elements.get('theme').listeners.change();
+  h.elements.get('pref-accent').value = 'gold';
+  h.elements.get('pref-accent').listeners.change();
+  assert.equal(h.run('document.documentElement.dataset.accent'), 'gold');
+  assert.equal(h.run('prefs.accent'), 'gold');
+  assert.equal(JSON.parse(h.run('JSON.stringify(preferencesPayload())')).accent, 'gold');
+});
+
+test('an account with no stored motion keeps an explicit Normal on the wire', async () => {
+  const h = harness();
+  await h.login();
+  const payload = JSON.parse(h.run('JSON.stringify(preferencesPayload())'));
+  assert.equal(payload.motion, 'normal');
+  const seeded = h.requests.filter(item => item.path === '/api/preferences' && item.request && item.request.method === 'PUT');
+  assert.ok(seeded.length >= 1, 'first sign-in writes the device motion level once');
+  assert.equal(JSON.parse(seeded[0].request.body).motion, 'normal');
 });
