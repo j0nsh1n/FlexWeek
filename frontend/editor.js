@@ -355,8 +355,10 @@ function renderCategoryChips(container, selected, onPick) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "category-chip" + (selected === cat.id ? " is-selected" : "");
-    if (btn.style && typeof btn.style.setProperty === "function") btn.style.setProperty("--chip-color", cat.color);
-    else if (btn.style) btn.style.borderLeftColor = cat.color;
+    if (document.documentElement.dataset.accentChips !== "on") {
+      if (btn.style && typeof btn.style.setProperty === "function") btn.style.setProperty("--chip-color", cat.color);
+      else if (btn.style) btn.style.borderLeftColor = cat.color;
+    }
     btn.textContent = cat.label;
     btn.title = cat.label + " · " + KIND_LABEL[cat.kind];
     btn.dataset.category = cat.id;

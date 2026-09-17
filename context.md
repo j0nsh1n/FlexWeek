@@ -1,6 +1,18 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-17 (later). Appearance packs, Customize and account motion are
+  on `feat/0-11-seamless`. Light frost and Dark frost have their own token maps.
+  Accents are default/sky/gold/sea/sand. Motion seeds once from the device copy
+  then lives on the account. Phone Settings hides Customize. P2 account copy
+  and a reduced-motion WebEngine pass remain. Local only.
+- Date: 2026-09-17. Appearance contract approved. `docs/stage8-appearance-contract.md`
+  records the owner's answers: Light frost and Dark frost are new token sets,
+  pack sits beside `theme` with an axis pairing, motion uses `None` for never-set
+  so an explicit Normal stays on the wire, accents are `default`/`sky`/`gold`/
+  `sea`/`sand`. `GET`/`PUT /api/preferences` stores the four fields in
+  `comfort_json`. Pack UI, Customize, and wiring motion onto the account are
+  still Claude's. Branch `feat/0-11-seamless`, local only.
 - Date: 2026-09-16 (later). v0.10.0 is published as the Latest release, not a
   draft and not a prerelease, from `main` at d17647a. All eight assets are
   attached: `FlexWeek-Linux-x86_64.tar.gz`, `FlexWeek-x86_64.AppImage`,
@@ -376,7 +388,18 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
-- 2026-09-17, `feat/0-11-seamless` (latest): `docs/stage8-appearance-contract.md`
+- 2026-09-17, `feat/0-11-seamless` (latest): pack UI, frost token maps,
+  Customize and account-backed motion are in. First sign-in writes omitted
+  motion from the device copy. Phone width hides Customize. P2 account copy
+  is still open. Nothing pushed.
+- 2026-09-17, `feat/0-11-seamless`: owner approved the appearance
+  contract. Light frost / Dark frost are new token sets; pack sits beside
+  `theme`; motion seeds once from omitted/`None` then the account wins; accents
+  are `default`, `sky`, `gold`, `sea`, `sand`. spec.md lists the fields.
+  Backend round-trips them on `/api/preferences`. Frontend still keeps motion
+  device-only and has no pack picker. Next: Claude's pack UI and account-wired
+  motion. Nothing pushed.
+- 2026-09-17, `feat/0-11-seamless`: `docs/stage8-appearance-contract.md`
   is written and proposed, not approved. GLM drafted it through OpenCode; the
   channel that works is passing the brief as an attached file (`-f`), not as a
   long argv, which failed three times. One chunk still returned empty on its

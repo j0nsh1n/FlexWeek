@@ -133,7 +133,13 @@ function useRoundedTimerPreview() {
 }
 
 function readComfortEdit() {
+  const pack = comfortElement("pref-theme").value;
   return {
+    theme: typeof packAxis === "function" ? packAxis(pack) : pack,
+    theme_pack: pack,
+    accent: comfortElement("pref-accent").value,
+    accent_chips: comfortElement("pref-accent-chips").checked,
+    motion: comfortElement("pref-motion").value,
     alert_volume: clampComfort(comfortElement("pref-alert-volume").value, 0, 100, 80),
     end_chime: comfortElement("pref-end-chime").checked,
     tray_notifications: comfortElement("pref-tray-notifications").checked,
@@ -195,6 +201,7 @@ function applyComfortPreferences() {
   updateVolumeOutput();
   renderTimerPresetSelection();
   applySidebarLayout();
+  if (typeof syncAppearanceControls === "function") syncAppearanceControls();
 }
 
 async function saveComfortLayout() {
@@ -335,11 +342,28 @@ Object.values(COMFORT_TIMER_IDS).forEach(function (id) {
   comfortElement(id).addEventListener("input", function () { hideSplitPreview(); renderTimerPresetSelection(); });
 });
 comfortElement("pref-alert-volume").addEventListener("input", updateVolumeOutput);
-// Motion is a device setting, not an account one: it never reaches
-// /api/preferences, because the preferences model has no field for it yet.
-comfortElement("pref-motion").value = document.documentElement.dataset.motion;
+comfortElement("pref-theme").addEventListener("change", function () {
+  if (typeof choosePack === "function") return choosePack(comfortElement("pref-theme").value);
+});
+comfortElement("pref-motion").value = document.documentElement.dataset.motion || "normal";
 comfortElement("pref-motion").addEventListener("change", function () {
-  if (typeof rememberMotion === "function") rememberMotion(comfortElement("pref-motion").value);
+  const level = comfortElement("pref-motion").value;
+  prefs.motion = level;
+  if (typeof rememberMotion === "function") rememberMotion(level);
+  if (account) saveComfortLayout();
+});
+comfortElement("pref-accent").addEventListener("change", function () {
+  prefs.accent = typeof applyAccent === "function"
+    ? applyAccent(comfortElement("pref-accent").value) : comfortElement("pref-accent").value;
+  if (typeof renderTypeChips === "function") renderTypeChips();
+  if (account) saveComfortLayout();
+});
+comfortElement("pref-accent-chips").addEventListener("change", function () {
+  prefs.accent_chips = typeof applyAccentChips === "function"
+    ? applyAccentChips(comfortElement("pref-accent-chips").checked)
+    : comfortElement("pref-accent-chips").checked;
+  if (typeof renderTypeChips === "function") renderTypeChips();
+  if (account) saveComfortLayout();
 });
 comfortElement("test-reminder").addEventListener("click", function () { previewComfortAlert("reminder"); });
 comfortElement("preview-alert").addEventListener("click", function () { previewComfortAlert("alert"); });

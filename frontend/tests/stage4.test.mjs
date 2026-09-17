@@ -243,6 +243,7 @@ test('week JSON round-trips assignment notes, links, and checklist', async () =>
 test('unsafe project metadata is refused before import can save', async () => {
   const h = harness();
   await h.login();
+  const before = h.requests.filter(request => request.options && request.options.method).length;
   const cases = [
     storedAssignment({ links: [{ label: 'Bad', url: 'javascript:alert(1)' }] }),
     storedAssignment({ links: [{ label: 'Bad', url: 'https://student:secret@school.example/file' }] }),
@@ -258,7 +259,7 @@ test('unsafe project metadata is refused before import can save', async () => {
     assert.match(parsed.error, /bad link|repeats a checklist id/i);
     assert.equal(await h.run(`importPayloadIntoWeek(parseImportPayload(${JSON.stringify(JSON.stringify(payload))}))`), false);
   }
-  assert.equal(h.requests.filter(request => request.options.method).length, 0);
+  assert.equal(h.requests.filter(request => request.options && request.options.method).length, before);
 });
 
 test('project detail row limits stop before an oversized assignment can be built', async () => {

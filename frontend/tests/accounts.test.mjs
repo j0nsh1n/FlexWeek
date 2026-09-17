@@ -79,7 +79,7 @@ function harness(options = {}) {
         selector.split(',').some(part => el.classList.contains(part.trim().replace(/^\./, '')))),
     },
     window: { addEventListener() {} },
-    localStorage: { getItem: key => local.get(key), removeItem: key => local.delete(key) },
+    localStorage: { getItem: key => local.get(key) ?? null, setItem: (key, value) => local.set(key, value), removeItem: key => local.delete(key) },
     fetch: async (path, options) => { requests.push({ path, options }); return handler(path, options); },
     getComputedStyle: () => ({ getPropertyValue: () => '2.75rem' }),
     setTimeout, clearTimeout, setInterval, clearInterval, AbortController, structuredClone, console,
@@ -491,8 +491,8 @@ test('previous, next and Today open the expected Monday and render what came bac
 test('an account whose data sits in an earlier week can still reach it', async () => {
   const h = harness();
   await h.login(1, [], ['2026-08-24']);
-  assert.deepEqual(h.requests.slice(-4).map(r => r.path).sort(),
-    ['/api/assignments?week_start=2026-09-07&include_completed=true', '/api/preferences',
+  assert.deepEqual(h.requests.slice(-5).map(r => r.path).sort(),
+    ['/api/assignments?week_start=2026-09-07&include_completed=true', '/api/preferences', '/api/preferences',
       '/api/week?week_start=2026-09-07', '/api/weeks']);
   assert.deepEqual(h.elements.get('week-jump').children.map(option => option.value),
     ['2026-08-24', '2026-09-07']);

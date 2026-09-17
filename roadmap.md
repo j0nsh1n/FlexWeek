@@ -523,7 +523,11 @@ the design, and the sentence should say so.
   Week/Day/Month, and for the persisted pack, accent and motion level; a real
   Qt WebEngine pass with `prefers-reduced-motion` forced on; a hand check of the
   Windows build for the `backdrop-filter` flicker, since Linux cannot show it.
-- Status: [ ]
+- Status: [~] Seamless, chip-opens-Add, packs, Customize and account motion are
+  on `feat/0-11-seamless`. `docs/stage8-appearance-contract.md` is approved
+  2026-09-17. The P2 account copy remains. A Qt WebEngine pass with
+  `prefers-reduced-motion` forced on and a Windows flicker hand-check are still
+  open.
 
 ## First implementation slice — approved 2026-09-06
 

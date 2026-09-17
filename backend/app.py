@@ -624,6 +624,16 @@ class Preferences(BaseModel):
     sidebar_width_px: int | None = Field(
         default=None, ge=200, le=640, exclude_if=lambda value: value is None
     )
+    theme_pack: Literal["system", "light-frost", "dark-frost", "nocturne", "slate"] = Field(
+        default="system", exclude_if=lambda value: value == "system"
+    )
+    accent: Literal["default", "sky", "gold", "sea", "sand"] = Field(
+        default="default", exclude_if=lambda value: value == "default"
+    )
+    accent_chips: bool = Field(default=False, exclude_if=lambda value: value is False)
+    motion: Literal["off", "normal", "extra"] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     _spotify_url = field_validator("default_spotify_url")(valid_spotify_url)
 
@@ -664,6 +674,15 @@ class Preferences(BaseModel):
         for length in (self.timer_work_min, self.timer_break_min, self.timer_long_break_min):
             if length % 15:
                 raise ValueError("auto_split_pomodoro needs 15-minute work and break lengths")
+        return self
+
+    @model_validator(mode="after")
+    def pack_keeps_theme_on_its_axis(self) -> Preferences:
+        if self.theme_pack == "system":
+            return self
+        axis = "slate" if self.theme_pack in {"light-frost", "slate"} else "nocturne"
+        if self.theme != axis:
+            raise ValueError("theme_pack needs theme on the same light or dark axis")
         return self
 
 
@@ -837,6 +856,10 @@ def encode_comfort(preferences: Preferences) -> str:
             "preferred_view": preferences.preferred_view,
             "sidebar_collapsed": preferences.sidebar_collapsed,
             "sidebar_width_px": preferences.sidebar_width_px,
+            "theme_pack": preferences.theme_pack,
+            "accent": preferences.accent,
+            "accent_chips": preferences.accent_chips,
+            "motion": preferences.motion,
         },
         separators=(",", ":"),
     )
@@ -868,6 +891,10 @@ def preferences_from_row(row: sqlite3.Row) -> dict:
         preferred_view=comfort.get("preferred_view"),
         sidebar_collapsed=bool(comfort.get("sidebar_collapsed", False)),
         sidebar_width_px=comfort.get("sidebar_width_px"),
+        theme_pack=comfort.get("theme_pack", "system"),
+        accent=comfort.get("accent", "default"),
+        accent_chips=bool(comfort.get("accent_chips", False)),
+        motion=comfort.get("motion"),
     ).model_dump()
 
 

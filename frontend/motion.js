@@ -1,7 +1,8 @@
-// How much the app animates, for this device only. Nothing here is sent to the
-// account: the account-persisted setting arrives with the appearance contract.
-// The stylesheet reads <html data-motion>; the system reduced-motion setting
-// wins over any choice made here, so "off" and "reduce" mean the same thing.
+// How much the app animates. The stylesheet reads <html data-motion>. The
+// account stores the level once the student is signed in; a copy also stays
+// on this device so the sign-in screen has a level to read. The system
+// reduced-motion setting wins over any choice made here, so "off" and
+// "reduce" mean the same thing.
 const MOTION_KEY = "flexweek-motion";
 const MOTION_LEVELS = ["off", "normal", "extra"];
 

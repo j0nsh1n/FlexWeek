@@ -6,14 +6,15 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
-- Motion (2026-09-17, shared frontend). Settings now has Off, Normal and Extra.
+- Theme packs, accent and account motion (2026-09-17, shared frontend and
+  backend). Settings and the top bar offer System, Light frost, Dark frost,
+  Nocturne and Slate. Customize (hidden on a phone) sets Sky, Gold, Sea or Sand
+  and can paint category chips with that accent. Motion Off, Normal and Extra
+  follow the account, with a copy left on this device for the sign-in screen.
   Normal fades the calendar in when you switch between Week, Day and Month;
   Extra adds a short rise and pops in the work a plan has just placed. A system
   that asks for reduced motion gets none of it whatever is chosen. Nothing
-  frosted is animated, so the Windows flicker has no new way in. This setting
-  is kept on this device only for now and does not follow you to another
-  computer, and Settings groups it under "This device only" so it does not sit
-  among the settings that do follow your account.
+  frosted is animated, so the Windows flicker has no new way in.
 - Accepting a late start draws the new block onto the calendar (2026-09-17,
   shared frontend), so you can see the time you just agreed to arrive instead
   of finding it already there. It draws once, at Normal as well as Extra.
