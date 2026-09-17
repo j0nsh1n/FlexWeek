@@ -407,6 +407,25 @@ test('reload and re-solve keep the accepted late interval', async () => {
   assert.ok(again.blocks.some(block => block.id === late.id && block.kind === 'locked' && block.duration_min === 30));
 });
 
+test('the Preview button says it is replanning while the solve is out', async () => {
+  const h = harness();
+  await h.login({ blocks: [school(), homework()] });
+  assert.equal(h.run('openRunningLate()'), true);
+  h.elements.get('late-minutes').value = '30';
+  // The fake DOM builds elements from ids alone, so give the button its real words first.
+  h.elements.get('late-preview-button').textContent = 'Preview new plan';
+  h.run(`weekState().trace = ${JSON.stringify({ placed: [school(), homework()] })}`);
+  let duringRequest = null;
+  h.handle(async () => {
+    duringRequest = h.elements.get('late-preview-button').textContent;
+    return response(200, lateTrace());
+  });
+  assert.equal(await h.run('previewRunningLate()'), true);
+  assert.equal(duringRequest, 'Replanning\u2026');
+  assert.equal(h.elements.get('late-preview-button').textContent, 'Preview new plan');
+  assert.equal(h.elements.get('late-preview-button').disabled, false);
+});
+
 test('every Running late refusal reaches the toast, not only the status line', async () => {
   const h = harness();
   await h.login({ blocks: [school(), homework()] });

@@ -999,6 +999,21 @@ const weekLabelEl = document.getElementById("week-label");
 const weekJumpEl = document.getElementById("week-jump");
 const channel = typeof BroadcastChannel === "function" ? new BroadcastChannel("flexweek.session") : null;
 
+/**
+ * Say what a button is doing while its request is out, and hand back the undo.
+ * The undo leaves a label alone if something else has since written a new one,
+ * so a finished Solve can keep "Update my plan".
+ */
+function showBusy(labelId, message) {
+  const label = document.getElementById(labelId);
+  if (!label) return function () {};
+  const original = label.textContent;
+  label.textContent = message;
+  return function () {
+    if (label.textContent === message) label.textContent = original;
+  };
+}
+
 function lockEditor(locked) {
   planner.querySelectorAll("button, input, select, textarea").forEach(el => { el.disabled = locked; });
   solveEl.disabled = locked;
@@ -2736,6 +2751,7 @@ async function solveWeek() {
   saving = true;
   lockEditor(true);
   setStatus("Planning your homework…");
+  const doneBusy = showBusy("solve-label", "Planning…");
   try {
     let trace = await api("/api/solve", { method: "POST", body: JSON.stringify({
       week_start: selectedWeek, blocks: solveInputBlocks(weekState().blocks),
@@ -2760,6 +2776,7 @@ async function solveWeek() {
     if (solveEpoch === epoch) setStatus("Could not plan. " + error.message);
     return false;
   } finally {
+    doneBusy();
     if (solveEpoch === epoch) { saving = false; lockEditor(false); }
   }
 }

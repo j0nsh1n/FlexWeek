@@ -376,6 +376,17 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-17, `feat/0-11-seamless`: PR #13 merged the 0.10.1 hotfix and the
+  release-polish roadmap to `main` at 251c59a. Started 0.11 with the seamless
+  slice: showBusy() in app.js swaps a button's label while its request is out
+  and restores it only if nothing else wrote a new one, wired into Solve,
+  Spread and Running late; leaving Month for Week or Day now anchors to the
+  month on screen through openMonthAnchor() in month.js. Seven new node tests,
+  all red-checked. Gate green: 260 frontend, 365 Python. Still open in 0.11:
+  motion, the appearance packs and Customize submenu (needs a contract and
+  owner approval before spec.md changes, since preferences gain fields), the
+  P2 account copy, and a decision on what "add-from-chip stays one gesture"
+  refers to.
 - 2026-09-16, `fix/0-10-1-hotfix`: implemented the 0.10.1 hotfix. Running late
   now reports every refusal and every outcome, Month says when a month is early
   rather than looking broken, the date numbers are larger, the collapsed

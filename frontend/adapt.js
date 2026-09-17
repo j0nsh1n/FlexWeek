@@ -103,6 +103,7 @@ async function previewSpread() {
   const accountId = account.id;
   spreadBusy = true;
   document.getElementById("spread-preview").disabled = true;
+  const doneBusy = showBusy("spread-preview", "Working out sessions…");
   showSpreadError("");
   try {
     const result = await api("/api/assignments/" + encodeURIComponent(item.id) + "/spread", {
@@ -138,6 +139,7 @@ async function previewSpread() {
     if (spreadEpoch === epoch && account && account.id === accountId) showSpreadError(error.message);
     return false;
   } finally {
+    doneBusy();
     if (spreadEpoch === epoch) {
       spreadBusy = false;
       document.getElementById("spread-preview").disabled = false;
@@ -261,6 +263,7 @@ async function previewRunningLate(now) {
   const weekStart = selectedWeek;
   lateBusy = true;
   document.getElementById("late-preview-button").disabled = true;
+  const doneBusy = showBusy("late-preview-button", "Replanning…");
   showLateError("");
   try {
     let previous = state.trace && state.trace.placed;
@@ -309,6 +312,7 @@ async function previewRunningLate(now) {
     if (lateEpoch === epoch && account && account.id === accountId) showLateError(error.message);
     return false;
   } finally {
+    doneBusy();
     if (lateEpoch === epoch) {
       lateBusy = false;
       document.getElementById("late-preview-button").disabled = false;

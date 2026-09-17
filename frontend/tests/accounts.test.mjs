@@ -155,6 +155,30 @@ test('re-opening setup cannot blank a name that is already half typed', async ()
   assert.equal(h.elements.get('setup-progress').textContent, 'Step 3 of 4');
 });
 
+test('Solve says it is planning while it waits, then shows the plan label', async () => {
+  const h = harness();
+  await h.login(1, [task]);
+  let duringRequest = null;
+  h.handle(async () => {
+    duringRequest = h.elements.get('solve-label').textContent;
+    return response(200, { placed: [], unplaced: [], moves: [], explanations: [],
+      failed_constraints: [], solve_ms: 1, complete: true });
+  });
+  assert.equal(await h.run('solveWeek()'), true);
+  assert.equal(duringRequest, 'Planning\u2026');
+  assert.equal(h.elements.get('solve-label').textContent, 'Update my plan');
+});
+
+test('a Solve that fails puts the button back to its own words', async () => {
+  const h = harness();
+  await h.login(1, [task]);
+  assert.equal(h.elements.get('solve-label').textContent, 'Plan my homework');
+  h.handle(async () => response(503, { detail: 'Planner busy' }));
+  assert.equal(await h.run('solveWeek()'), false);
+  assert.equal(h.elements.get('solve-label').textContent, 'Plan my homework');
+  assert.match(h.elements.get('status').textContent, /Could not plan\. Planner busy/);
+});
+
 test('solve renders student-facing explanations, slack, and click-to-highlight', async () => {
   const h = harness();
   await h.login(1, [task]);

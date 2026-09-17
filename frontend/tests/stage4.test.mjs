@@ -289,6 +289,29 @@ test('Spread across days appears only for existing unfinished homework', async (
   assert.equal(h.elements.get('hw-spread').hidden, true);
 });
 
+test('the Spread button says it is working while the preview is out', async () => {
+  const h = harness();
+  const item = assignment({ due: '2026-09-16T21:00', estimate_min: 240, unplanned_min: 240 });
+  await h.login({ owned: [item] });
+  h.run("openHomeworkDialog('hw-essay'); openSpreadDialog('hw-essay')");
+  h.elements.get('spread-session').value = '60';
+  h.elements.get('spread-from').value = '2026-09-10';
+  // The fake DOM builds elements from ids alone, so give the button its real words first.
+  h.elements.get('spread-preview').textContent = 'Preview sessions';
+  let duringRequest = null;
+  h.handle(async () => {
+    duringRequest = h.elements.get('spread-preview').textContent;
+    return response(200, {
+      assignment_id: 'hw-essay', session_min: 60, remaining_min: 0,
+      sessions: [{ week_start: MONDAY, date: '2026-09-10', days: [3], duration_min: 60 }],
+    });
+  });
+  assert.equal(await h.run('previewSpread()'), true);
+  assert.equal(duringRequest, 'Working out sessions\u2026');
+  assert.equal(h.elements.get('spread-preview').textContent, 'Preview sessions');
+  assert.equal(h.elements.get('spread-preview').disabled, false);
+});
+
 test('spread previews distinct normal sessions and saves every week in one Undo step', async () => {
   const h = harness();
   const item = assignment({ due: '2026-09-16T21:00', estimate_min: 240, unplanned_min: 240 });

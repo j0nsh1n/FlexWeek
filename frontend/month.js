@@ -26,6 +26,28 @@ function monthForView(view) {
   return month < FIRST_MONTH ? FIRST_MONTH : month > LAST_MONTH ? LAST_MONTH : month;
 }
 
+/** The date Week and Day should land on when you leave the month you are reading. */
+function monthAnchorDate() {
+  if (!selectedMonth) return null;
+  const today = currentDateInfo().iso;
+  return today.slice(0, 7) === selectedMonth ? today : selectedMonth + "-01";
+}
+
+/**
+ * Leaving Month keeps the month on screen rather than the week you happened to
+ * come from. Returns false when that month's week cannot be loaded, so the
+ * caller leaves the student where they are instead of on the wrong dates.
+ */
+async function openMonthAnchor() {
+  const anchor = monthAnchorDate();
+  if (!anchor) return false;
+  const monday = mondayOf(anchor);
+  if (monday !== selectedWeek && !await selectWeek(monday)) return false;
+  selectedDay = anchor;
+  dayData = null;
+  return true;
+}
+
 function shiftedMonth(month, amount) {
   const match = /^(\d{4})-(\d{2})$/.exec(String(month || ""));
   if (!match) return null;

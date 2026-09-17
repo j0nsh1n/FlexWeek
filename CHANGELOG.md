@@ -5,6 +5,16 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+- Solve, Spread and Running late say what they are doing (2026-09-16, shared
+  frontend). Each button now reads "Planning…", "Working out sessions…" or
+  "Replanning…" while its request is out, and goes back to its own words
+  afterwards. A finished Solve still reads "Update my plan".
+- Leaving Month keeps the month you were reading (2026-09-16, shared
+  frontend). Pressing Week or Day from Month opens a date inside that month
+  rather than the week you happened to come from. If that week cannot be
+  loaded, the view stays on Month instead of moving to the wrong dates.
+
 ### Fixed
 - Running late no longer looks like it did nothing (2026-09-16, shared
   frontend). Every reason it refuses to open now appears as a toast as well as

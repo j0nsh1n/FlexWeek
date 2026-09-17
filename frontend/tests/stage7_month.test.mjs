@@ -304,6 +304,60 @@ test('entering Month anchors Day to its month and Week to Thursday while preferr
   assert.equal(h.run('selectedMonth'), '2026-10');
 });
 
+test('leaving Month for Week lands on the month you were reading, not the week you left', async () => {
+  const h = harness();
+  await h.login();
+  await showMonth(h, snapshot('2026-10'));
+  assert.equal(h.run('selectedWeek'), '2026-09-07');
+  h.handle(async path => {
+    if (path.startsWith('/api/month')) return response(200, snapshot('2026-10'));
+    if (path.startsWith('/api/assignments')) return response(200, { assignments: [] });
+    if (path === '/api/weeks') return response(200, { weeks: [] });
+    if (path.startsWith('/api/week')) return response(200, { week_start: '2026-09-28', blocks: [], revision: 0 });
+    if (path.startsWith('/api/day')) return response(200, { date: '2026-10-01', due_soon: [], workload: null });
+    return response(404, { detail: 'Unexpected request ' + path });
+  });
+  await h.elements.get('view-week').listeners.click();
+  await tick();
+  assert.equal(h.run('plannerView'), 'week');
+  // October 1 2026 is a Thursday, so its week starts Monday September 28.
+  assert.equal(h.run('selectedWeek'), '2026-09-28');
+  assert.equal(h.run('selectedDay'), '2026-10-01');
+});
+
+test('leaving Month for Day opens a date inside that month', async () => {
+  const h = harness();
+  await h.login();
+  await showMonth(h, snapshot('2026-10'));
+  h.handle(async path => {
+    if (path.startsWith('/api/month')) return response(200, snapshot('2026-10'));
+    if (path.startsWith('/api/assignments')) return response(200, { assignments: [] });
+    if (path === '/api/weeks') return response(200, { weeks: [] });
+    if (path.startsWith('/api/week')) return response(200, { week_start: '2026-09-28', blocks: [], revision: 0 });
+    if (path.startsWith('/api/day')) return response(200, { date: '2026-10-01', due_soon: [], workload: null });
+    return response(404, { detail: 'Unexpected request ' + path });
+  });
+  await h.elements.get('view-day').listeners.click();
+  await tick();
+  assert.equal(h.run('plannerView'), 'day');
+  assert.equal(h.run('selectedDay'), '2026-10-01');
+});
+
+test('the month you are reading stays put when its week cannot be loaded', async () => {
+  const h = harness();
+  await h.login();
+  await showMonth(h, snapshot('2026-10'));
+  h.handle(async path => {
+    if (path.startsWith('/api/month')) return response(200, snapshot('2026-10'));
+    if (path.startsWith('/api/week')) return response(503, { detail: 'Storage is busy' });
+    return response(404, { detail: 'Unexpected request ' + path });
+  });
+  await h.elements.get('view-week').listeners.click();
+  await tick();
+  assert.equal(h.run('plannerView'), 'month');
+  assert.equal(h.run('selectedWeek'), '2026-09-07');
+});
+
 test('opening a month date switches to Day only after authoritative week data succeeds', async () => {
   const h = harness();
   await h.login();
