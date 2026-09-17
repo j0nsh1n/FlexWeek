@@ -376,6 +376,23 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-17, `feat/0-11-seamless` (latest): `docs/stage8-appearance-contract.md`
+  is written and proposed, not approved. GLM drafted it through OpenCode; the
+  channel that works is passing the brief as an attached file (`-f`), not as a
+  long argv, which failed three times. One chunk still returned empty on its
+  first try and worked on retry, so treat it as flaky rather than fixed.
+  Corrections to GLM's draft are listed in the contract's header note. Five
+  owner decisions are open, including Light frost / Dark frost and which
+  accents to offer. No spec.md change until the owner approves.
+- 2026-09-17, `feat/0-11-seamless`: accepting a late start now marks that one
+  block so it draws onto the grid, on the re-plan's redraw rather than the one
+  before it, which would have been replaced mid-animation; a failed re-plan
+  takes the mark back down. Settings splits Appearance into "Theme and layout"
+  (account) and "This device only" (Motion). Gate green: 274 frontend, 365
+  Python. Note for whoever reads the history: commit 3157f1d overwrote
+  CHANGELOG.md with a copy of context.md through a scripting mistake, and
+  2ddc3b4 did not catch it. Restored from 9b03f60. Nothing in the gate reads
+  CHANGELOG.md, so no test could have caught it.
 - 2026-09-17, `feat/0-11-seamless`: added the chip gesture and the motion
   slice on top of the seamless work. A sidebar type chip now opens Add with
   that category; the calendar WebEngine probe encoded the old contract and was
