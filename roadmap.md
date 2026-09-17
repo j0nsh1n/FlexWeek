@@ -6,7 +6,7 @@ phase may span several implementation slices. The original Sep 6 contest brief
 (working title Reslot) is archived in [docs/cac-build-plan.md](docs/cac-build-plan.md).
 
 The active next-work plan is [release polish](#release-polish-2026-09-16-0101-then-011)
-— 0.10.1, then 0.11. The [student experience revision](#student-experience-revision-2026-09-12)
+— 0.11.0 is tagged; leftover P2 copy and desktop motion checks remain. The [student experience revision](#student-experience-revision-2026-09-12)
 stays the stage map for everything still open. Earlier phase descriptions and the
 first implementation slice retain their dated planning history.
 
@@ -523,11 +523,10 @@ the design, and the sentence should say so.
   Week/Day/Month, and for the persisted pack, accent and motion level; a real
   Qt WebEngine pass with `prefers-reduced-motion` forced on; a hand check of the
   Windows build for the `backdrop-filter` flicker, since Linux cannot show it.
-- Status: [~] Seamless, chip-opens-Add, packs, Customize and account motion are
-  on `feat/0-11-seamless`. `docs/stage8-appearance-contract.md` is approved
-  2026-09-17. The P2 account copy remains. A Qt WebEngine pass with
-  `prefers-reduced-motion` forced on and a Windows flicker hand-check are still
-  open.
+- Status: [~] Code for 0.11.0 is tagged. Seamless, chip-opens-Add, packs,
+  Customize and account motion shipped. The P2 account copy remains. A Qt
+  WebEngine pass with `prefers-reduced-motion` forced on and a Windows flicker
+  hand-check are still open.
 
 ## First implementation slice — approved 2026-09-06
 

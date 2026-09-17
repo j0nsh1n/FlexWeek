@@ -5,6 +5,8 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-17
+
 ### Added
 - Theme packs, accent and account motion (2026-09-17, shared frontend and
   backend). Settings and the top bar offer System, Light frost, Dark frost,
@@ -32,6 +34,11 @@ All notable changes to FlexWeek are documented here. Format follows
   frontend). Pressing Week or Day from Month opens a date inside that month
   rather than the week you happened to come from. If that week cannot be
   loaded, the view stays on Month instead of moving to the wrong dates.
+
+## [0.10.1] - 2026-09-16
+
+0.10.1 landed on `main` as a hotfix and is included in the 0.11.0 installers.
+There is no separate `v0.10.1` GitHub release.
 
 ### Fixed
 - Running late no longer looks like it did nothing (2026-09-16, shared

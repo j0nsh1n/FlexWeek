@@ -1,11 +1,10 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-17 (later). Appearance packs, Customize and account motion are
-  on `feat/0-11-seamless`. Light frost and Dark frost have their own token maps.
-  Accents are default/sky/gold/sea/sand. Motion seeds once from the device copy
-  then lives on the account. Phone Settings hides Customize. P2 account copy
-  and a reduced-motion WebEngine pass remain. Local only.
+- Date: 2026-09-17 (release). v0.11.0 is prepared on `feat/0-11-seamless`: packs,
+  Customize, account motion, wait-states and the 0.10.1 hotfix. P2 account copy,
+  a reduced-motion WebEngine pass and a Windows flicker hand-check remain after
+  the tag. Next work is those leftovers, not a new stage.
 - Date: 2026-09-17. Appearance contract approved. `docs/stage8-appearance-contract.md`
   records the owner's answers: Light frost and Dark frost are new token sets,
   pack sits beside `theme` with an axis pairing, motion uses `None` for never-set
