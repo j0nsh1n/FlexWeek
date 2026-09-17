@@ -1076,3 +1076,29 @@ button:disabled { cursor: wait; opacity: 0.6; }
 .setup-summary { margin: var(--space-2) 0; padding-left: 1.2rem; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @media (max-width: 540px) { .empty-week { flex-direction: column; align-items: flex-start; } }
+
+/* Motion. Only opacity and transform ever move. backdrop-filter is never
+   animated: recompositing a frosted panel every frame flickers on Windows, and
+   every element below is outside the frosted set on purpose. The whole block
+   sits inside prefers-reduced-motion: no-preference, so a system that asks for
+   less motion gets none of it whatever Settings says. */
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-motion="off"]) #week,
+  :root:not([data-motion="off"]) #day-agenda,
+  :root:not([data-motion="off"]) #month-view {
+    animation: view-fade-in 150ms ease-out;
+  }
+  /* Extra replaces the fade with the same fade plus a short rise. */
+  :root[data-motion="extra"] #week,
+  :root[data-motion="extra"] #day-agenda,
+  :root[data-motion="extra"] #month-view {
+    animation: view-rise-in 200ms ease-out;
+  }
+  :root[data-motion="extra"] .block.is-new {
+    animation: block-pop-in 220ms ease-out;
+  }
+}
+
+@keyframes view-fade-in { from { opacity: 0; } }
+@keyframes view-rise-in { from { opacity: 0; transform: translateY(0.4rem); } }
+@keyframes block-pop-in { from { opacity: 0; transform: scale(0.96); } }

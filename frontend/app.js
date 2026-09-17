@@ -1617,7 +1617,13 @@ function bindDayLane(lane, day) {
   });
 }
 
+// showTrace sets this so the work a plan has just placed pops in once. buildGrid
+// takes it back down, so an ordinary redraw does not replay the animation.
+let solvePopIn = false;
+
 function buildGrid(blocks, explanations = []) {
+  const popIn = solvePopIn;
+  solvePopIn = false;
   weekEl.innerHTML = "";
   hideContextMenu();
   const corner = document.createElement("div");
@@ -1675,7 +1681,8 @@ function buildGrid(blocks, explanations = []) {
       const missed = block.kind === "locked" && (block.missed_days || []).indexOf(day) !== -1;
       el.className = "block" + (block.kind === "flexible" ? " flex-block" : "") +
         (missed ? " missed-block" : "") + (block.completed ? " is-completed" : "") +
-        (block.pomodoro_role === "break" ? " pomodoro-break" : "");
+        (block.pomodoro_role === "break" ? " pomodoro-break" : "") +
+        (popIn && block.kind === "flexible" ? " is-new" : "");
       el.dataset.id = block.id;
       el.dataset.day = String(day);
       el.style.top = ((clippedStart - visibleStart) / 60) * hourH + "rem";
@@ -2733,6 +2740,7 @@ function missedHistoryBlocks() {
 function showTrace(trace) {
   weekState().trace = trace;
   weekState().planned = true;
+  solvePopIn = true;
   buildGrid((trace.placed || []).concat(missedHistoryBlocks()), trace.explanations || []);
   renderFlexible(trace.unplaced || []);
   renderDebug(trace);

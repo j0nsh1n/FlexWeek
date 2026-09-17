@@ -153,3 +153,70 @@ test('every icon used in the page exists in the sprite and is hidden from screen
   assert.deepEqual(uses.filter(name => !symbols.has(name)), []);
   assert.equal((html.match(/<use href=/g) || []).length, uses.length, 'an icon is missing aria-hidden');
 });
+
+// Motion, added in 0.11. The rules below are what keeps it from becoming the
+// flicker the Windows build already suffers from: nothing frosted moves, and
+// nothing moves at all for a system that asked for less motion.
+const FROSTED = ['.top', '.week-nav', '.side', '.auth-panel', '.save-actions', '.empty-week',
+  '.prefs-dialog', '.context-menu', '.reminder-toast'];
+
+function balancedBlock(source, opening) {
+  const start = source.indexOf(opening);
+  assert.ok(start !== -1, `styles.css has no ${opening}`);
+  let depth = 0;
+  for (let i = source.indexOf('{', start); i < source.length; i += 1) {
+    if (source[i] === '{') depth += 1;
+    else if (source[i] === '}') {
+      depth -= 1;
+      if (depth === 0) return source.slice(source.indexOf('{', start) + 1, i);
+    }
+  }
+  assert.fail(`${opening} is not balanced`);
+}
+
+const motionBlock = balancedBlock(css, '@media (prefers-reduced-motion: no-preference)');
+
+test('no rule animates or transitions backdrop-filter, and none uses the all shorthand', () => {
+  for (const match of css.matchAll(/(?:transition|animation)(?:-property)?\s*:\s*([^;}]+)/g)) {
+    assert.doesNotMatch(match[1], /backdrop-filter/, `${match[1].trim()} animates the frosted layer`);
+    assert.doesNotMatch(match[1], /\ball\b/, `${match[1].trim()} would sweep up backdrop-filter`);
+  }
+});
+
+test('keyframes move opacity and transform only', () => {
+  const names = [...css.matchAll(/@keyframes\s+([\w-]+)/g)].map(match => match[1]);
+  assert.deepEqual(names, ['view-fade-in', 'view-rise-in', 'block-pop-in']);
+  for (const name of names) {
+    const body = balancedBlock(css, `@keyframes ${name}`);
+    for (const declaration of body.matchAll(/([a-z-]+)\s*:/g)) {
+      assert.ok(['opacity', 'transform'].includes(declaration[1]),
+        `@keyframes ${name} may not move ${declaration[1]}`);
+    }
+  }
+});
+
+test('every animation sits behind the system reduced-motion setting', () => {
+  const outsideTheGate = css.replace(motionBlock, '');
+  assert.doesNotMatch(outsideTheGate, /\banimation\s*:/,
+    'an animation outside prefers-reduced-motion: no-preference ignores the system setting');
+});
+
+test('Motion set to Off animates nothing', () => {
+  const rules = motionBlock.split('}').map(rule => rule.split('{')[0].trim()).filter(Boolean);
+  for (const rule of rules) {
+    assert.ok(rule.includes(':not([data-motion="off"])') || rule.includes('[data-motion="extra"]'),
+      `${rule} still animates when Motion is Off`);
+  }
+});
+
+test('nothing frosted is animated', () => {
+  for (const selector of FROSTED) {
+    assert.ok(!motionBlock.includes(selector),
+      `${selector} has backdrop-filter, so animating it risks the Windows flicker`);
+  }
+});
+
+test('Extra is the level that adds the pop-in, and Normal only fades', () => {
+  assert.match(motionBlock, /\[data-motion="extra"\][^{]*\.block\.is-new/);
+  assert.match(motionBlock, /:not\(\[data-motion="off"\]\)[^{]*#week[\s\S]*?animation:\s*view-fade-in/);
+});

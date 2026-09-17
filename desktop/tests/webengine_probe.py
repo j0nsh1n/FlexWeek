@@ -308,6 +308,12 @@ def run(case: str, root: Path) -> None:
                          "new MouseEvent('dblclick', {bubbles:true}))")
 
             evaluate("document.querySelector('#type-chips [data-category=class]').click()")
+            # 0.11: picking a type chip is the whole gesture, so Add opens with it chosen.
+            wait_for("document.getElementById('block-dialog').open")
+            assert evaluate("document.getElementById('f-category').value") == "class", \
+                "Chip did not choose the type"
+            evaluate("document.getElementById('form-cancel').click()")
+            assert not evaluate("document.getElementById('block-dialog').open"), "Cancel left the editor open"
             gesture(600, 660, cancel=True)
             QTest.qWait(100)
             assert evaluate("document.querySelectorAll('.block').length") == 0, "Cancelled create"

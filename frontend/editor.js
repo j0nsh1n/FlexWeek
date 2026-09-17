@@ -378,6 +378,9 @@ function renderTypeChips() {
   renderCategoryChips(field("type-chips"), addType, function (category) {
     addType = category;
     renderTypeChips();
+    // Picking a type is the whole gesture: Add opens with it already chosen. The
+    // chip still arms the calendar, so cancelling and dragging places it by time.
+    openEditor(presetDraft(category, selectedWeek), null);
   });
   field("type-hint").textContent = typeHint(addType);
 }

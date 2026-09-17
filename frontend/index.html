@@ -8,6 +8,7 @@
   <link rel="apple-touch-icon" href="/static/logo.png">
   <link rel="stylesheet" href="/static/styles.css">
   <script src="/static/theme.js"></script>
+  <script src="/static/motion.js"></script>
 </head>
 <body>
   <!-- Duotone icons: the outline follows the text color, the fill reads --icon-secondary. -->
@@ -482,6 +483,14 @@
           <label>Open my calendar in
             <select id="pref-preferred-view"><option value="">Automatic for screen size</option><option value="week">Week view</option><option value="day">Day view</option></select>
           </label>
+          <label>Motion
+            <select id="pref-motion">
+              <option value="off">Off</option>
+              <option value="normal">Normal</option>
+              <option value="extra">Extra</option>
+            </select>
+          </label>
+          <p class="note">Motion is kept on this device only for now, so it does not follow you to another computer. If your system asks for reduced motion, the app does not animate whatever is chosen here.</p>
           <p class="note">The sidebar width and whether it is open are remembered when you change them on the calendar.</p>
         </fieldset>
       </details>

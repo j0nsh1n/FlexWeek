@@ -335,6 +335,12 @@ Object.values(COMFORT_TIMER_IDS).forEach(function (id) {
   comfortElement(id).addEventListener("input", function () { hideSplitPreview(); renderTimerPresetSelection(); });
 });
 comfortElement("pref-alert-volume").addEventListener("input", updateVolumeOutput);
+// Motion is a device setting, not an account one: it never reaches
+// /api/preferences, because the preferences model has no field for it yet.
+comfortElement("pref-motion").value = document.documentElement.dataset.motion;
+comfortElement("pref-motion").addEventListener("change", function () {
+  if (typeof rememberMotion === "function") rememberMotion(comfortElement("pref-motion").value);
+});
 comfortElement("test-reminder").addEventListener("click", function () { previewComfortAlert("reminder"); });
 comfortElement("preview-alert").addEventListener("click", function () { previewComfortAlert("alert"); });
 comfortElement("sidebar-toggle").addEventListener("click", toggleSidebar);

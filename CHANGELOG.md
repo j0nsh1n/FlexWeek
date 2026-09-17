@@ -5,7 +5,20 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- Motion (2026-09-17, shared frontend). Settings now has Off, Normal and Extra.
+  Normal fades the calendar in when you switch between Week, Day and Month;
+  Extra adds a short rise and pops in the work a plan has just placed. A system
+  that asks for reduced motion gets none of it whatever is chosen. Nothing
+  frosted is animated, so the Windows flicker has no new way in. This setting
+  is kept on this device only for now and does not follow you to another
+  computer.
+
 ### Changed
+- A sidebar type chip is now the whole gesture (2026-09-17, shared frontend).
+  Picking School, Homework or any other type opens Add with that type already
+  chosen, instead of only arming the calendar. Cancelling leaves the type
+  armed, so dragging on the calendar still places it by time.
 - Solve, Spread and Running late say what they are doing (2026-09-16, shared
   frontend). Each button now reads "Planning…", "Working out sessions…" or
   "Replanning…" while its request is out, and goes back to its own words

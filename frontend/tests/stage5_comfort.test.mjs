@@ -278,6 +278,37 @@ test('saving Settings sends every comfort choice in the existing flat preference
   });
 });
 
+test('Motion changes this device only and is never sent to the account', async () => {
+  const h = harness();
+  await h.login();
+  assert.equal(h.elements.get('pref-motion').value, 'normal');
+  const before = h.requests.length;
+  h.elements.get('pref-motion').value = 'extra';
+  h.elements.get('pref-motion').listeners.change();
+  assert.equal(h.run('document.documentElement.dataset.motion'), 'extra');
+  assert.equal(h.requests.length, before, 'changing Motion must not talk to the server');
+
+  let saved;
+  h.handle(async (path, request) => {
+    assert.equal(path, '/api/preferences');
+    saved = JSON.parse(request.body);
+    return response(200, saved);
+  });
+  await h.elements.get('prefs-form').listeners.submit({
+    submitter: { value: 'save' }, preventDefault() {},
+  });
+  // The preferences model forbids unknown fields, so a leaked motion key is a 422.
+  assert.ok(!('motion' in saved), 'motion must not reach /api/preferences until the contract lands');
+});
+
+test('an unknown stored motion level falls back to Normal rather than breaking', async () => {
+  const h = harness();
+  await h.login();
+  assert.equal(h.run('applyMotion("sideways")'), 'normal');
+  assert.equal(h.run('document.documentElement.dataset.motion'), 'normal');
+  assert.equal(h.run('applyMotion("off")'), 'off');
+});
+
 test('alert previews stay local, honor unsaved volume, and never consume a reminder key', async () => {
   const h = harness();
   await h.login();

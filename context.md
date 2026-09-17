@@ -376,6 +376,19 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-17, `feat/0-11-seamless`: added the chip gesture and the motion
+  slice on top of the seamless work. A sidebar type chip now opens Add with
+  that category; the calendar WebEngine probe encoded the old contract and was
+  updated, which is real-browser evidence for the change. Motion lives in a new
+  head script `frontend/motion.js` writing `<html data-motion>`, device-only in
+  localStorage under `flexweek-motion`, with the Settings control wired from
+  comfort.js so no head script touches page elements. The CSS gate is static:
+  theme-tokens.test.mjs now proves no rule animates backdrop-filter, keyframes
+  move only opacity and transform, every animation sits inside
+  prefers-reduced-motion: no-preference, Off animates nothing, and no frosted
+  panel is animated. Gate green: 270 frontend, 365 Python. GLM is drafting
+  docs/stage8-appearance-contract.md; packs, accent and the account-persisted
+  motion level wait on that contract and owner approval.
 - 2026-09-17, `feat/0-11-seamless`: PR #13 merged the 0.10.1 hotfix and the
   release-polish roadmap to `main` at 251c59a. Started 0.11 with the seamless
   slice: showBusy() in app.js swaps a button's label while its request is out
