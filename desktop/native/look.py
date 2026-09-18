@@ -43,6 +43,40 @@ LOOK_PRESETS = {
         "density": "compact",
         "text": "normal",
     },
+    "poster": {
+        "surface": "flat",
+        "corners": "sharp",
+        "depth": "hard",
+        "font": "sans",
+        "blocks": "filled",
+        "density": "compact",
+        "text": "large",
+    },
+    "ink": {
+        "surface": "flat",
+        "corners": "sharp",
+        "depth": "flat",
+        "font": "serif",
+        "blocks": "edge",
+        "density": "comfortable",
+        "text": "normal",
+    },
+    "high-contrast": {
+        "surface": "flat",
+        "corners": "sharp",
+        "depth": "hard",
+        "font": "sans",
+        "blocks": "outlined",
+        "density": "comfortable",
+        "text": "large",
+    },
+}
+LOOK_PRESET_LABELS = {
+    "default": "Pack default",
+    "terminal": "Terminal",
+    "poster": "Poster",
+    "ink": "Ink",
+    "high-contrast": "High contrast",
 }
 PACKS = ("system", "light-frost", "dark-frost", "nocturne", "slate")
 ACCENTS = ("default", "sky", "gold", "sea", "sand")
@@ -139,6 +173,7 @@ PALETTES = {
     ),
 }
 # A preset may replace the pack's colours outright. Terminal is true black with phosphor text.
+# Ink has a light map and a dark map so it follows the pack axis; the others are one look.
 PRESET_PALETTES = {
     "terminal": _palette(
         "dark", "#78ff78", soft=0.25, strong=0.45,
@@ -147,6 +182,36 @@ PRESET_PALETTES = {
         block_locked="#0a0a0a", block_locked_ink="#d6ffd6",
         block_flex="#0a0a0a", block_flex_ink="#ffe9a8", block_edge="#7fbf7f",
     ),
+    "poster": _palette(
+        "light", "#0b132b", soft=0.75, strong=1.0,
+        window="#ffd60a", panel="#ffd60a", field="#ffd60a", grid="#ffe14d",
+        text="#0b132b", muted="#5c3d2e", accent="#8b0000", accent_ink="#ffd60a", error="#6b0000",
+        block_locked="#0b132b", block_locked_ink="#ffd60a",
+        block_flex="#8b0000", block_flex_ink="#ffd60a", block_edge="#0b132b",
+    ),
+    "high-contrast": _palette(
+        "dark", "#ffffff", soft=0.95, strong=1.0,
+        window="#000000", panel="#000000", field="#000000", grid="#000000",
+        text="#ffffff", muted="#ffff00", accent="#ffff00", accent_ink="#000000", error="#ffff00",
+        block_locked="#000000", block_locked_ink="#ffffff",
+        block_flex="#000000", block_flex_ink="#ffff00", block_edge="#ffff00",
+    ),
+    "ink": {
+        "dark": _palette(
+            "dark", "#eaeaea", soft=0.28, strong=0.50,
+            window="#111111", panel="#111111", field="#111111", grid="#161616",
+            text="#eaeaea", muted="#9a9a9a", accent="#eaeaea", accent_ink="#111111", error="#ff6b6b",
+            block_locked="#111111", block_locked_ink="#eaeaea",
+            block_flex="#111111", block_flex_ink="#eaeaea", block_edge="#9a9a9a",
+        ),
+        "light": _palette(
+            "light", "#1a1a1a", strong=0.22,
+            window="#f4f1ea", panel="#f4f1ea", field="#f4f1ea", grid="#efece4",
+            text="#1a1a1a", muted="#5a5a5a", accent="#1a1a1a", accent_ink="#f4f1ea", error="#9b1b30",
+            block_locked="#f4f1ea", block_locked_ink="#1a1a1a",
+            block_flex="#f4f1ea", block_flex_ink="#1a1a1a", block_edge="#1a1a1a",
+        ),
+    },
 }
 # Each accent has a dark-axis and a light-axis colour with its own ink, so it reads on either.
 ACCENT_COLORS = {
@@ -218,10 +283,21 @@ def known_accent(name: object) -> str:
     return name if name in ACCENTS else "default"
 
 
+def _preset_palette(preset: str, pack: object, system_dark: bool) -> dict | None:
+    table = PRESET_PALETTES.get(preset)
+    if table is None:
+        return None
+    if "axis" in table:
+        return table
+    theme = resolved_pack_theme(pack, system_dark)
+    return table["dark" if theme in {"nocturne", "dark-frost"} else "light"]
+
+
 def resolved_palette(pack: object, system_dark: bool, look: dict | None, accent: object = "default") -> dict:
     """The colours on screen: the preset's palette or the pack's, then the accent, then the surface knob."""
     choice = sanitize_look(look)
-    base = PRESET_PALETTES.get(choice["preset"]) or PALETTES[resolved_pack_theme(pack, system_dark)]
+    pack_colours = PALETTES[resolved_pack_theme(pack, system_dark)]
+    base = _preset_palette(choice["preset"], pack, system_dark) or pack_colours
     palette = dict(base)
     chosen = known_accent(accent)
     if chosen != "default":

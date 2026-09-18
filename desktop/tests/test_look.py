@@ -94,14 +94,28 @@ def test_every_knob_value_changes_what_is_drawn() -> None:
 
 
 def test_choosing_a_preset_means_every_one_of_its_knobs() -> None:
-    assert preset_knobs("terminal") == {
-        "surface": "flat", "corners": "sharp", "depth": "flat", "font": "mono",
-        "blocks": "outlined", "density": "compact", "text": "normal",
+    expected = {
+        "terminal": {
+            "surface": "flat", "corners": "sharp", "depth": "flat", "font": "mono",
+            "blocks": "outlined", "density": "compact", "text": "normal",
+        },
+        "poster": {
+            "surface": "flat", "corners": "sharp", "depth": "hard", "font": "sans",
+            "blocks": "filled", "density": "compact", "text": "large",
+        },
+        "ink": {
+            "surface": "flat", "corners": "sharp", "depth": "flat", "font": "serif",
+            "blocks": "edge", "density": "comfortable", "text": "normal",
+        },
+        "high-contrast": {
+            "surface": "flat", "corners": "sharp", "depth": "hard", "font": "sans",
+            "blocks": "outlined", "density": "comfortable", "text": "large",
+        },
     }
     assert preset_knobs("default") == LOOK_DEFAULTS
-    # Settings shows every knob. Showing the preset's own values must record no overrides at all,
-    # or each box beats the preset and Terminal arrives with round corners and a sans font.
-    assert look_overrides("terminal", preset_knobs("terminal")) == {}
+    for name, knobs in expected.items():
+        assert preset_knobs(name) == knobs
+        assert look_overrides(name, knobs) == {}
     assert look_overrides("terminal", {**preset_knobs("terminal"), "depth": "hard"}) == {"depth": "hard"}
     assert look_overrides("default", {**LOOK_DEFAULTS, "corners": "pill"}) == {"corners": "pill"}
 
@@ -119,6 +133,12 @@ def test_native_colours_are_the_audited_web_tokens() -> None:
     }
     tables = [(name, PALETTES[name], selector) for name, selector in selectors.items()]
     tables.append(("terminal", PRESET_PALETTES["terminal"], ':root[data-preset="terminal"]'))
+    tables.append(("poster", PRESET_PALETTES["poster"], ':root[data-preset="poster"]'))
+    tables.append(("high-contrast", PRESET_PALETTES["high-contrast"], ':root[data-preset="high-contrast"]'))
+    tables.append(("ink-dark", PRESET_PALETTES["ink"]["dark"], ':root[data-preset="ink"]'))
+    tables.append(
+        ("ink-light", PRESET_PALETTES["ink"]["light"], ':root[data-theme="slate"][data-preset="ink"]'),
+    )
     for look, native, selector in tables:
         web = web_tokens(selector)
         for key, token in names.items():
@@ -141,7 +161,7 @@ def test_every_look_keeps_its_text_readable() -> None:
         ("muted", "window"), ("muted", "panel"), ("error", "panel"),
         ("accent_ink", "accent"), ("block_locked_ink", "block_locked"), ("block_flex_ink", "block_flex"),
     ]
-    assert len(EVERY_LOOK) == 5 * 2 * 2 * 5 * 2
+    assert len(EVERY_LOOK) == 5 * 2 * 5 * 5 * 2
     for pack, system_dark, preset, accent, surface in EVERY_LOOK:
         palette = resolved_palette(pack, system_dark, look_of(preset, surface=surface), accent)
         for ink, fill in pairs:
@@ -170,6 +190,16 @@ def test_an_accent_always_changes_the_accent() -> None:
             chosen = resolved_palette(pack, system_dark, look_of(preset), accent)["accent"]
             assert chosen not in seen, f"{accent} on {pack}/{preset} repeats {chosen}"
             seen.add(chosen)
+
+
+def test_ink_follows_the_pack_axis() -> None:
+    light = resolved_palette("slate", False, look_of("ink"))
+    dark = resolved_palette("nocturne", True, look_of("ink"))
+    frost_light = resolved_palette("light-frost", False, look_of("ink"))
+    assert light["text"] == frost_light["text"] == "#1a1a1a"
+    assert dark["text"] == "#eaeaea"
+    assert light["axis"] == "light"
+    assert dark["axis"] == "dark"
 
 
 def test_a_students_accent_wins_over_the_presets_own() -> None:

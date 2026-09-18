@@ -166,6 +166,159 @@
   --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
   --hour-h: 2.75rem; --gutter: 3.5rem;
 }
+/* Poster: yellow field, navy ink, dark red accent, hard offset shadows. */
+:root[data-preset="poster"] {
+  --sidebar-width: 20rem;
+  color-scheme: light;
+  --bg: #ffd60a; --bg-accent: #ffbf00; --bg-glow: rgba(139, 0, 0, 0.16);
+  --surface: #ffd60a;
+  --surface-elevated: #ffd60a;
+  --surface-card: #ffd60a;
+  --surface-solid: #ffd60a;
+  --field: #ffd60a;
+  --scrim: rgba(11, 19, 43, 0.45);
+  --frost: 0px; --frost-strong: 0px;
+  --hairline: rgba(11, 19, 43, 0.75); --hairline-strong: rgba(11, 19, 43, 1);
+  --shadow: 3px 3px 0 #0b132b;
+  --shadow-lg: 6px 6px 0 #0b132b;
+  --text: #0b132b; --muted: #5c3d2e;
+  --accent: #8b0000; --accent-strong: #a80000; --accent-ink: #ffd60a; --accent-soft: rgba(139, 0, 0, 0.16);
+  --error: #6b0000; --error-soft: rgba(107, 0, 0, 0.12);
+  --danger-bg: #8b0000; --danger-ink: #ffd60a;
+  --ok: #0b132b; --warn: #8b0000; --risk: #111111; --badge-ink: #ffd60a;
+  --now: #8b0000;
+  --grid-cell: #ffe14d; --grid-line: rgba(11, 19, 43, 0.22);
+  --block-locked: #0b132b; --block-locked-ink: #ffd60a;
+  --block-flex: #8b0000; --block-flex-ink: #ffd60a;
+  --block-border: rgba(11, 19, 43, 0.85); --block-edge: #0b132b;
+  --flex: #8b0000;
+  --icon-primary: #0b132b; --icon-secondary: rgba(11, 19, 43, 0.30);
+  --radius-sm: 0; --radius: 0; --radius-lg: 0;
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+  --hour-h: 2.75rem; --gutter: 3.5rem;
+}
+/* High contrast: black, white and yellow. Large text and outlined blocks are knobs. */
+:root[data-preset="high-contrast"] {
+  --sidebar-width: 20rem;
+  color-scheme: dark;
+  --bg: #000000; --bg-accent: #000000; --bg-glow: rgba(0, 0, 0, 0);
+  --surface: #000000;
+  --surface-elevated: #000000;
+  --surface-card: #000000;
+  --surface-solid: #000000;
+  --field: #000000;
+  --scrim: rgba(0, 0, 0, 0.85);
+  --frost: 0px; --frost-strong: 0px;
+  --hairline: rgba(255, 255, 255, 0.95); --hairline-strong: rgba(255, 255, 255, 1);
+  --shadow: 3px 3px 0 #ffff00;
+  --shadow-lg: 6px 6px 0 #ffff00;
+  --text: #ffffff; --muted: #ffff00;
+  --accent: #ffff00; --accent-strong: #ffff66; --accent-ink: #000000; --accent-soft: rgba(255, 255, 0, 0.20);
+  --error: #ffff00; --error-soft: rgba(255, 255, 0, 0.16);
+  --danger-bg: #ffff00; --danger-ink: #000000;
+  --ok: #00ff00; --warn: #ffff00; --risk: #ffffff; --badge-ink: #000000;
+  --now: #ffff00;
+  --grid-cell: #000000; --grid-line: rgba(255, 255, 255, 0.45);
+  --block-locked: #000000; --block-locked-ink: #ffffff;
+  --block-flex: #000000; --block-flex-ink: #ffff00;
+  --block-border: rgba(255, 255, 255, 0.95); --block-edge: #ffff00;
+  --flex: #ffff00;
+  --icon-primary: #ffffff; --icon-secondary: rgba(255, 255, 255, 0.40);
+  --radius-sm: 0; --radius: 0; --radius-lg: 0;
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+  --hour-h: 2.75rem; --gutter: 3.5rem;
+}
+/* Ink: near-monochrome, hairlines instead of fills. Dark map first; light packs override. */
+:root[data-preset="ink"] {
+  --sidebar-width: 20rem;
+  color-scheme: dark;
+  --bg: #111111; --bg-accent: #161616; --bg-glow: rgba(0, 0, 0, 0);
+  --surface: #111111;
+  --surface-elevated: #111111;
+  --surface-card: #111111;
+  --surface-solid: #111111;
+  --field: #111111;
+  --scrim: rgba(0, 0, 0, 0.72);
+  --frost: 0px; --frost-strong: 0px;
+  --hairline: rgba(234, 234, 234, 0.28); --hairline-strong: rgba(234, 234, 234, 0.50);
+  --shadow: none;
+  --shadow-lg: none;
+  --text: #eaeaea; --muted: #9a9a9a;
+  --accent: #eaeaea; --accent-strong: #ffffff; --accent-ink: #111111; --accent-soft: rgba(234, 234, 234, 0.16);
+  --error: #ff6b6b; --error-soft: rgba(255, 107, 107, 0.12);
+  --danger-bg: #7a1f1f; --danger-ink: #ffecec;
+  --ok: #7fff7f; --warn: #ffe066; --risk: #ff8080; --badge-ink: #000000;
+  --now: #eaeaea;
+  --grid-cell: #161616; --grid-line: rgba(234, 234, 234, 0.12);
+  --block-locked: #111111; --block-locked-ink: #eaeaea;
+  --block-flex: #111111; --block-flex-ink: #eaeaea;
+  --block-border: rgba(234, 234, 234, 0.28); --block-edge: #9a9a9a;
+  --flex: #eaeaea;
+  --icon-primary: #eaeaea; --icon-secondary: rgba(234, 234, 234, 0.30);
+  --radius-sm: 0; --radius: 0; --radius-lg: 0;
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+  --hour-h: 2.75rem; --gutter: 3.5rem;
+}
+:root[data-theme="slate"][data-preset="ink"] {
+  --sidebar-width: 20rem;
+  color-scheme: light;
+  --bg: #f4f1ea; --bg-accent: #efece4; --bg-glow: rgba(0, 0, 0, 0);
+  --surface: #f4f1ea;
+  --surface-elevated: #f4f1ea;
+  --surface-card: #f4f1ea;
+  --surface-solid: #f4f1ea;
+  --field: #f4f1ea;
+  --scrim: rgba(26, 26, 26, 0.28);
+  --frost: 0px; --frost-strong: 0px;
+  --hairline: rgba(26, 26, 26, 0.12); --hairline-strong: rgba(26, 26, 26, 0.22);
+  --shadow: none;
+  --shadow-lg: none;
+  --text: #1a1a1a; --muted: #5a5a5a;
+  --accent: #1a1a1a; --accent-strong: #000000; --accent-ink: #f4f1ea; --accent-soft: rgba(26, 26, 26, 0.12);
+  --error: #9b1b30; --error-soft: rgba(155, 27, 48, 0.10);
+  --danger-bg: #9b1b30; --danger-ink: #fff4f4;
+  --ok: #1a1a1a; --warn: #5a5a5a; --risk: #9b1b30; --badge-ink: #f4f1ea;
+  --now: #1a1a1a;
+  --grid-cell: #efece4; --grid-line: rgba(26, 26, 26, 0.10);
+  --block-locked: #f4f1ea; --block-locked-ink: #1a1a1a;
+  --block-flex: #f4f1ea; --block-flex-ink: #1a1a1a;
+  --block-border: rgba(26, 26, 26, 0.22); --block-edge: #1a1a1a;
+  --flex: #1a1a1a;
+  --icon-primary: #1a1a1a; --icon-secondary: rgba(26, 26, 26, 0.28);
+  --radius-sm: 0; --radius: 0; --radius-lg: 0;
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+  --hour-h: 2.75rem; --gutter: 3.5rem;
+}
+:root[data-theme="light-frost"][data-preset="ink"] {
+  --sidebar-width: 20rem;
+  color-scheme: light;
+  --bg: #f4f1ea; --bg-accent: #efece4; --bg-glow: rgba(0, 0, 0, 0);
+  --surface: #f4f1ea;
+  --surface-elevated: #f4f1ea;
+  --surface-card: #f4f1ea;
+  --surface-solid: #f4f1ea;
+  --field: #f4f1ea;
+  --scrim: rgba(26, 26, 26, 0.28);
+  --frost: 0px; --frost-strong: 0px;
+  --hairline: rgba(26, 26, 26, 0.12); --hairline-strong: rgba(26, 26, 26, 0.22);
+  --shadow: none;
+  --shadow-lg: none;
+  --text: #1a1a1a; --muted: #5a5a5a;
+  --accent: #1a1a1a; --accent-strong: #000000; --accent-ink: #f4f1ea; --accent-soft: rgba(26, 26, 26, 0.12);
+  --error: #9b1b30; --error-soft: rgba(155, 27, 48, 0.10);
+  --danger-bg: #9b1b30; --danger-ink: #fff4f4;
+  --ok: #1a1a1a; --warn: #5a5a5a; --risk: #9b1b30; --badge-ink: #f4f1ea;
+  --now: #1a1a1a;
+  --grid-cell: #efece4; --grid-line: rgba(26, 26, 26, 0.10);
+  --block-locked: #f4f1ea; --block-locked-ink: #1a1a1a;
+  --block-flex: #f4f1ea; --block-flex-ink: #1a1a1a;
+  --block-border: rgba(26, 26, 26, 0.22); --block-edge: #1a1a1a;
+  --flex: #1a1a1a;
+  --icon-primary: #1a1a1a; --icon-secondary: rgba(26, 26, 26, 0.28);
+  --radius-sm: 0; --radius: 0; --radius-lg: 0;
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+  --hour-h: 2.75rem; --gutter: 3.5rem;
+}
 :root[data-accent="sky"] {
   --accent: #38bdf8; --accent-strong: #7dd3fc; --accent-ink: #0b1224; --accent-soft: rgba(56, 189, 248, 0.16);
 }

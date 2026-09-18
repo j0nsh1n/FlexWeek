@@ -32,6 +32,7 @@ from desktop.native.focus import FOCUS_PHASE_LABEL, format_countdown, more_time_
 from desktop.native.look import (
     ACCENTS,
     LOOK_KNOBS,
+    LOOK_PRESET_LABELS,
     LOOK_PRESETS,
     PACKS,
     effective_look,
@@ -188,7 +189,7 @@ class PrefsDialog(QDialog):
         self.preset = QComboBox()
         self.preset.setObjectName("lookPreset")
         for name in LOOK_PRESETS:
-            self.preset.addItem(name.title(), name)
+            self.preset.addItem(LOOK_PRESET_LABELS[name], name)
         index = self.preset.findData(self._look.get("preset") or "default")
         self.preset.setCurrentIndex(max(0, index))
         form.addRow("Device preset", self.preset)

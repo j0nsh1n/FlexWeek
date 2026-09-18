@@ -303,20 +303,22 @@ tests as a pack (same tokens, AA text, accent distance), and sets every knob.
 Picking a preset drops any knob the student set by hand, so one tap is the
 whole look; Customize then edits from there.
 
-Built in this slice as the proof: **Terminal**. True black, phosphor text,
-amber accent; flat surface, sharp corners, no shadows, monospace, outlined
-blocks, compact. It flips six of the seven knobs and carries its own palette,
-so it exercises the whole architecture.
+Built as device-only presets, audited like packs (same tokens, AA text, accent
+distance). Nothing here is saved on the account until Amendment A is approved.
 
-Proposed next, in this order, each one token map plus seven values:
+- **Terminal**. True black, phosphor text, amber accent; flat surface, sharp
+  corners, no shadows, monospace, outlined blocks, compact.
+- **Poster**. Yellow field, navy ink, dark red accent; flat surface, sharp
+  corners, hard offset shadows, filled blocks, compact, large type.
+- **Ink**. Near-monochrome; category colour only as a thin edge; hairlines
+  instead of fills; no shadows; serif type. Light packs get the paper map,
+  dark packs the charcoal map.
+- **High contrast**. Black, white and yellow; thick borders; outlined blocks;
+  large text. It is a Preset choice. `prefers-contrast: more` still only turns
+  frosted panels solid; it does not switch this preset on its own.
 
-- **Poster**: flat saturated colours, thick dark outlines on every panel, hard
-  offset shadows, sharp corners, heavy type.
-- **Ink**: near-monochrome; category colour only as a thin edge; hairlines
-  instead of fills; no shadows; generous space. Light and dark maps.
-- **High contrast**: black, white and yellow; thick borders; outlined blocks;
-  large text by default. Also the look the app should adopt on its own under
-  `prefers-contrast: more`.
+Proposed after those, subject to the owner:
+
 - **Paper**: warm cream, serif type, muted category tints, no blur, rounded.
 - **Pastel**: soft candy tints, pill corners, soft shadows, lavender accent.
 
@@ -351,8 +353,9 @@ Customize, which is hidden on phones as today.
 
 Static, in `frontend/tests/theme-tokens.test.mjs`: each knob rule moves only
 the properties it names; the flat surface clears `backdrop-filter` on exactly
-the frosted panels; the Terminal map passes the same-tokens, readability and
-accent-distance audits; blocks take their colour through `--block-color`.
+the frosted panels; the Terminal, Poster, Ink and High contrast maps pass the
+same-tokens, readability and accent-distance audits; blocks take their colour
+through `--block-color`.
 
 Behaviour, in `frontend/tests/stage5_comfort.test.mjs`: the preset and knobs
 change nothing on the server and never enter the payload; a preset sets every
@@ -368,10 +371,46 @@ validator still holds for every new preset.
 1. Fold the Preset control into Look once approved, or keep two controls?
    Recommendation: fold. Two lists that both change the whole look will confuse
    a student.
-2. Which presets after Terminal? Recommendation for the contest: Poster, Ink
-   and High contrast; Paper and Pastel after. Those three give the widest
-   spread for the least contrast-auditing, and one of them is an accessibility
-   feature.
+2. Which presets after Terminal? Poster, Ink and High contrast are built
+   device-only. Still open: whether they join `theme_pack` once Amendment A is
+   approved, whether High contrast should apply on its own under
+   `prefers-contrast: more`, and whether Paper and Pastel come next.
 3. Should choosing a preset reset hand-set knobs, as built, or keep them?
    Recommendation: reset. A preset that only half applies is the thing
    students will report as broken.
+
+## Amendment B — Native Qt client
+
+Drafted 2026-09-18 against `feat/native-python`. The default desktop launcher
+is Qt widgets (`python -m desktop.main`), not the HTML frontend named in the
+Goal. Packs, knobs and presets still share one contract: the same ids, the
+same knob values, and the same audited hex for the colours Qt can draw.
+`desktop/native/look.py` is the native table. `frontend/look.js` and the token
+maps in `frontend/styles.css` are the web table.
+`desktop/tests/test_look.py` fails if those hex values drift.
+
+What Qt cannot copy from CSS:
+
+- `backdrop-filter`. Frost vs flat is a panel colour. Frost uses the solid
+  panel token as a raised surface. Flat paints the panel and the field in the
+  page colour.
+- Drop shadows. Soft depth is a 1px hairline, flat is no border, hard is a
+  heavy bottom and right edge in the strong hairline colour.
+- Translucent hairlines. The web states them as `rgba`. Native mixes the tint
+  over the panel and stores the solid.
+
+Look stays on this device. Native writes `flexweek-look.json` under the Qt
+app data folder. The web client still uses `localStorage` key `flexweek-look`.
+Neither `PUT /api/preferences` payload includes look keys until Amendment A
+is approved.
+
+Ink is the only preset with two palettes. Light packs (Slate, Light frost, or
+System on a light device) get the light map. Dark packs get the dark map.
+Poster, Terminal and High contrast are one look on every pack.
+
+The large-text More menu is unchanged. That is an owner decision, not part of
+this amendment.
+
+spec.md drift: the native launcher, the four device-only presets, and the
+proposed `look_*` fields are not in spec.md. Do not edit spec.md until the
+owner approves them.

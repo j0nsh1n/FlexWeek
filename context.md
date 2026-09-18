@@ -1,6 +1,14 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-18 (native). Branch `feat/native-python`, local only. Native
+  week-load, undo, focus and UI shortcut findings from the post-unit review
+  are merged. Poster, Ink and High contrast sit beside Terminal as device-only
+  presets on both the web client and the Qt window; Ink follows the pack axis
+  with a paper map and a charcoal map. Full source gate: 289 frontend and 543
+  Python tests. Look still never enters `/api/preferences`.
+  spec.md drift: native launcher, four presets, proposed `look_*` fields.
+  Nothing pushed.
 - Date: 2026-09-17 (native). Branch `feat/native-python` off look-knobs at
   a92feef, local only. All six units of `docs/native-python-migration.md` are
   in. `python -m desktop.main` (and `python -m desktop.native`) starts Qt
@@ -417,6 +425,16 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-18, `feat/native-python`: finished the post-unit native review and
+  the next three look presets. `fix/native-logic` and `fix/native-ui` merged
+  locally. Week loads apply week+assignments together; dirty navigation is
+  refused; undo keeps live focus counters; W/D/M and Ctrl+C reach the window
+  from the calendar. Poster, Ink and High contrast are selectable device-only
+  presets. Amendment B in `docs/stage8-appearance-contract.md` records how Qt
+  draws frost, depth and hairlines. Owner still decides: fold Preset into
+  Look, auto High contrast under `prefers-contrast: more`, large-text More
+  menu, per-week drafts, reminders while another week is on screen. Nothing
+  pushed.
 - 2026-09-17, `feat/native-python`: GLM 5.3 Flash parity audit of units 4–6.
   Native now matches the web client on lead-0 reminders, queued alarms, this-
   week-only reminder sources, week-file replace confirm, restore clearing undo

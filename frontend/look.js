@@ -27,6 +27,18 @@ const LOOK_PRESETS = {
     surface: "flat", corners: "sharp", depth: "flat", font: "mono",
     blocks: "outlined", density: "compact", text: "normal",
   },
+  poster: {
+    surface: "flat", corners: "sharp", depth: "hard", font: "sans",
+    blocks: "filled", density: "compact", text: "large",
+  },
+  ink: {
+    surface: "flat", corners: "sharp", depth: "flat", font: "serif",
+    blocks: "edge", density: "comfortable", text: "normal",
+  },
+  "high-contrast": {
+    surface: "flat", corners: "sharp", depth: "hard", font: "sans",
+    blocks: "outlined", density: "comfortable", text: "large",
+  },
 };
 let lookChoice = { preset: "default", knobs: {} };
 

@@ -22,14 +22,16 @@ All notable changes to FlexWeek are documented here. Format follows
   recovery, restore points, week/day files and account transfer use the existing
   account APIs. `--smoke-test` walks a native week without Chromium.
   `--database` points at a file for isolated checks.
-- Look knobs and a Terminal preset (2026-09-17, shared frontend). Settings
+- Look knobs and presets (2026-09-18, shared frontend and native Qt). Settings
   gains Preset and Text size beside Look and Motion, and Customize gains
-  Surface, Corners, Depth, Font, Calendar blocks and Density. Terminal is the
-  first preset that is not a frost variant: true black, phosphor text, amber
-  accent, monospace, sharp corners, no shadows, outlined blocks, compact. All
-  of it stays on this computer for now; nothing is saved to the account until
-  the contract amendment is approved, and picking a preset resets the knobs
-  to that preset's own settings.
+  Surface, Corners, Depth, Font, Calendar blocks and Density. Four device-only
+  presets: Terminal (true black, phosphor, amber, monospace), Poster (yellow
+  field, navy ink, dark red accent, hard shadows, large type), Ink
+  (near-monochrome serif, category colour as an edge, light and dark maps),
+  High contrast (black, white and yellow, outlined blocks, large text). All of
+  it stays on this computer; nothing is saved to the account until the
+  contract amendment is approved, and picking a preset resets the knobs to
+  that preset's own settings.
 - Pill corners keep calendar blocks readable (2026-09-17, shared frontend).
   Chips become capsules; a block's corners stop at 8px so a tall School block
   cannot round its own title away.
@@ -39,6 +41,14 @@ All notable changes to FlexWeek are documented here. Format follows
   instead of an inline border colour (2026-09-17, shared frontend), so a look
   can decide whether the colour lands on the edge, the outline or nowhere.
   Nothing changes on screen with the default look.
+
+### Fixed
+- Native week navigation, undo, focus credit and calendar shortcuts (2026-09-18).
+  A failed week load no longer leaves the previous week's blocks under the new
+  date. A dirty week stays until Save, Retry or Reload. Undo after a conflict
+  keeps live focus minutes. W, D, M, Delete and Ctrl+C/V/D/Z/Y reach the window
+  from the week grid. Day Previous and Next move one day. Recovery Continue is
+  the only path off the recovery codes page.
 
 ## [0.11.0] - 2026-09-17
 

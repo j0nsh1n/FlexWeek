@@ -29,6 +29,11 @@ const THEME_SELECTORS = {
   'light-frost': ':root[data-theme="light-frost"]',
   // A preset palette is audited exactly like a pack: same tokens, AA text, accent distance.
   terminal: ':root[data-preset="terminal"]',
+  poster: ':root[data-preset="poster"]',
+  'high-contrast': ':root[data-preset="high-contrast"]',
+  ink: ':root[data-preset="ink"]',
+  'ink-light': ':root[data-theme="slate"][data-preset="ink"]',
+  'ink-light-frost': ':root[data-theme="light-frost"][data-preset="ink"]',
 };
 const ACCENT_NAMES = ['sky', 'gold', 'sea', 'sand'];
 const themes = Object.fromEntries(Object.entries(THEME_SELECTORS).map(([name, selector]) => [name, tokens(selector)]));
@@ -323,4 +328,34 @@ test('the Terminal preset changes every knob the frost packs leave at default', 
   });
   assert.ok(html.indexOf('<script src="/static/look.js"></script>') < html.indexOf('</head>'),
     'look.js must run before the body paints');
+});
+
+test('Poster, Ink and High contrast each name a full knob bundle', () => {
+  const lookJs = readFileSync(new URL('../look.js', import.meta.url), 'utf8');
+  const named = (name) => {
+    const match = new RegExp(`${name}: \\{([\\s\\S]*?)\\}`).exec(lookJs);
+    assert.ok(match, `look.js has no ${name} preset`);
+    return Object.fromEntries(Array.from(match[1].matchAll(/(\w+): "([a-z]+)"/g), m => [m[1], m[2]]));
+  };
+  assert.deepEqual(named('poster'), {
+    surface: 'flat', corners: 'sharp', depth: 'hard', font: 'sans',
+    blocks: 'filled', density: 'compact', text: 'large',
+  });
+  assert.deepEqual(named('ink'), {
+    surface: 'flat', corners: 'sharp', depth: 'flat', font: 'serif',
+    blocks: 'edge', density: 'comfortable', text: 'normal',
+  });
+  assert.deepEqual(named('"high-contrast"'), {
+    surface: 'flat', corners: 'sharp', depth: 'hard', font: 'sans',
+    blocks: 'outlined', density: 'comfortable', text: 'large',
+  });
+  const select = /<select id="pref-preset">(.*?)<\/select>/.exec(html);
+  assert.ok(select, 'no #pref-preset select');
+  assert.deepEqual(
+    Array.from(select[1].matchAll(/<option value="([^"]+)">([^<]+)<\/option>/g), m => [m[1], m[2]]),
+    [
+      ['default', 'Pack default'], ['terminal', 'Terminal'], ['poster', 'Poster'],
+      ['ink', 'Ink'], ['high-contrast', 'High contrast'],
+    ],
+  );
 });
