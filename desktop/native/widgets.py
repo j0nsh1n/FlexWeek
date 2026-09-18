@@ -733,6 +733,7 @@ class BlockDialog(QDialog):
         self._result: dict | None = None
         self._deleted = False
         self._occurrence_day = occurrence_day
+        self._series_days: list[bool] | None = None
         existing = block is not None
         series = existing and is_series(self._original)
         self.setWindowTitle("Edit fixed commitment" if existing else "Add fixed commitment")
@@ -806,12 +807,20 @@ class BlockDialog(QDialog):
 
     def _sync_scope(self) -> None:
         occurrence = self.scope_occurrence.isChecked() and self._occurrence_day is not None
+        # "This day only" ticks one day. Going back used to leave it that way, so Save took the block
+        # off every other day. The series' ticks are kept while the one-day view is showing.
+        if occurrence and self._series_days is None:
+            self._series_days = [check.isChecked() for check in self.days]
         for index, check in enumerate(self.days):
             if occurrence:
                 check.setChecked(index == self._occurrence_day)
                 check.setEnabled(False)
             else:
+                if self._series_days is not None:
+                    check.setChecked(self._series_days[index])
                 check.setEnabled(True)
+        if not occurrence:
+            self._series_days = None
 
     def scope(self) -> str:
         if self.scope_occurrence.isChecked() and self._occurrence_day is not None:

@@ -62,3 +62,34 @@ def test_unticking_a_missed_day_restores_it(qapp: QApplication) -> None:
     dialog.accept()
     assert dialog.block()["missed_days"] == [1]
     assert dialog.recover_missed() is False
+
+
+def ticked(dialog: BlockDialog) -> list[int]:
+    return [index for index, check in enumerate(dialog.days) if check.isChecked()]
+
+
+def test_trying_this_day_only_and_going_back_keeps_the_series_days(qapp: QApplication) -> None:
+    """The web leaves the day boxes alone when the scope changes (editor.js, setEditScope).
+
+    Here "This day only" ticked Wednesday alone and going back only re-enabled the boxes, so Save
+    took School off Monday, Tuesday, Thursday and Friday.
+    """
+    dialog = BlockDialog(None, school(), occurrence_day=2)
+    dialog.scope_occurrence.setChecked(True)
+    assert ticked(dialog) == [2]
+    assert not any(check.isEnabled() for check in dialog.days)
+    dialog.scope_series.setChecked(True)
+    assert ticked(dialog) == [0, 1, 2, 3, 4]
+    assert all(check.isEnabled() for check in dialog.days)
+    dialog.accept()
+    assert dialog.scope() == "series"
+    assert dialog.block()["days"] == [0, 1, 2, 3, 4]
+
+
+def test_going_back_keeps_a_day_the_student_had_already_unticked(qapp: QApplication) -> None:
+    dialog = BlockDialog(None, school(), occurrence_day=2)
+    dialog.days[4].setChecked(False)
+    dialog.scope_occurrence.setChecked(True)
+    dialog.scope_series.setChecked(True)
+    dialog.accept()
+    assert dialog.block()["days"] == [0, 1, 2, 3]
