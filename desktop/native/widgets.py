@@ -825,8 +825,10 @@ class BlockDialog(QDialog):
         return self._deleted
 
     def recover_missed(self) -> bool:
+        # The window asks after exec() returns. isVisible() is false for every child of a closed dialog,
+        # so it made this box do nothing; isHidden() only says whether the box was ever offered.
         return (
-            self.missed.isVisible()
+            not self.missed.isHidden()
             and self.missed.isChecked()
             and self._occurrence_day is not None
             and self._occurrence_day not in (self._original.get("missed_days") or [])
@@ -849,8 +851,13 @@ class BlockDialog(QDialog):
             duration_min=self.duration.value(),
             category=self.category.currentData(),
         )
+        # Unticking a day that was missed restores it, as the web's "Restore Wed" button does.
+        unticked = not self.missed.isHidden() and not self.missed.isChecked()
+        restored = self._occurrence_day if unticked else None
         candidate["missed_days"] = [
-            day for day in candidate.get("missed_days", []) if day in candidate["days"]
+            day
+            for day in candidate.get("missed_days", [])
+            if day in candidate["days"] and day != restored
         ]
         try:
             if candidate["kind"] != "locked":

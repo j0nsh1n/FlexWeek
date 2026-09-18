@@ -575,12 +575,21 @@ class NativeWindow(QMainWindow):
                 dialog.block()["id"], scope=dialog.scope(), day=dialog.occurrence_day()
             )
         else:
+            before = {item["id"] for item in self.session.blocks}
             self.session.add_block(dialog.block(), scope=dialog.scope(), day=dialog.occurrence_day())
-            if dialog.recover_missed() and dialog.occurrence_day() is not None:
-                day = dialog.occurrence_day()
-                assert day is not None
-                self.session.recover_missed(dialog.block()["id"], day)
-                return
+            day = dialog.occurrence_day()
+            if dialog.recover_missed() and day is not None:
+                # "This day only" splits the series and gives that day a new id. recover_missed returns
+                # without saving when its block does not hold the day, so it only gets one that does;
+                # otherwise the edit is saved the ordinary way instead of staying an unsaved draft.
+                ids = {dialog.block()["id"]} | ({item["id"] for item in self.session.blocks} - before)
+                holder = next(
+                    (item for item in self.session.blocks if item["id"] in ids and day in item["days"]),
+                    None,
+                )
+                if holder is not None:
+                    self.session.recover_missed(holder["id"], day)
+                    return
         self.session.save()
 
     def _commit_homework(self, dialog: HomeworkDialog, days: list[int] | None = None) -> None:
