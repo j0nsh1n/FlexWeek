@@ -955,7 +955,9 @@ def solve_availability(row: sqlite3.Row | None) -> tuple[list[int], list[GridWin
     return occupancy_from_windows(protected, availability.get("day_cutoff")), study
 
 
-def create_app(database: Path | None = None, origin: str | None = None) -> FastAPI:
+def create_app(
+    database: Path | None = None, origin: str | None = None, *, serve_frontend: bool = True,
+) -> FastAPI:
     path = database or Path(os.environ.get("FLEXWEEK_DATABASE", str(ROOT / "var" / "flexweek.db")))
     public_origin = (origin or os.environ.get("FLEXWEEK_ORIGIN", "http://127.0.0.1:8000")).rstrip("/")
     parsed = urlsplit(public_origin)
@@ -1670,11 +1672,12 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
     def health() -> dict[str, bool]:
         return {"ok": True}
 
-    @app.get("/")
-    def index() -> FileResponse:
-        return FileResponse(FRONTEND / "index.html")
+    if serve_frontend:
+        @app.get("/")
+        def index() -> FileResponse:
+            return FileResponse(FRONTEND / "index.html")
 
-    app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
+        app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
     return app
 
 

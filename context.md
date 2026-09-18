@@ -1,6 +1,14 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-17 (native). Branch `feat/native-python` off look-knobs at
+  a92feef, local only. ChatGPT started the overhaul: a private API with
+  `serve_frontend=False`, `QNetworkAccessManager` client, and week/homework
+  dialogs. Unit 1 of `docs/native-python-migration.md` is now a real window:
+  `python -m desktop.native` (optional `--database`) registers, shows eight
+  recovery codes, loads a dated week, saves fixed time and homework through
+  `POST /api/changes`, and runs Solve. The WebEngine app is still the default.
+  Native widget tests plus the no-browser server case. Units 2–6 remain.
 - Date: 2026-09-17 (after 0.11.0). Branch `feat/look-knobs` off `main` at
   30e0724, local only. The owner asked for more control over the UI and for
   presets that look drastically different, and chose architecture first with
@@ -400,6 +408,10 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-17, `feat/native-python`: unit 1 of the native Python overhaul is in.
+  `python -m desktop.native` is the experimental launcher. Next is unit 2,
+  calendar and homework parity (Day, Month, drag, occurrence vs series). The
+  WebEngine app stays the default. Nothing pushed.
 - 2026-09-17, `feat/look-knobs`: presets-and-knobs architecture with Terminal
   as the proof, device-only. Knob rules are constrained by a static test that
   lets each move only what it names; the flat surface must clear blur on

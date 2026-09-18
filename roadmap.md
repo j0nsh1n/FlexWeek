@@ -5,8 +5,9 @@ Congressional App Challenge 2026. Submit **Sunday, Oct 25, 2026, 8:00 p.m. PDT**
 phase may span several implementation slices. The original Sep 6 contest brief
 (working title Reslot) is archived in [docs/cac-build-plan.md](docs/cac-build-plan.md).
 
-The active next-work plan is [release polish](#release-polish-2026-09-16-0101-then-011)
-— 0.11.0 is tagged; leftover P2 copy and desktop motion checks remain. The [student experience revision](#student-experience-revision-2026-09-12)
+The active next-work plan is [native Python desktop](#native-python-desktop-2026-09-17)
+on `feat/native-python`. 0.11.0 is tagged; leftover P2 copy and desktop motion
+checks remain on the WebEngine app. The [student experience revision](#student-experience-revision-2026-09-12)
 stays the stage map for everything still open. Earlier phase descriptions and the
 first implementation slice retain their dated planning history.
 
@@ -419,6 +420,25 @@ AI chat/Ollama, Google Calendar OAuth, LMS bridges, syllabus OCR and Qt custom
 painting remain outside this plan. More category chips, a social feed, streaks and
 productivity scores are not proposed. Existing alarms, Spotify links and themes
 receive targeted improvements rather than a wholesale replacement.
+
+## Native Python desktop (2026-09-17)
+
+Jonathan chose a full Python desktop: Qt widgets, no WebEngine, no JavaScript.
+The existing FastAPI app still owns accounts and the database on a loopback
+port; the browser page is optional. Plan: `docs/native-python-migration.md`.
+Launch: `python -m desktop.native`. Default remains `python -m desktop.main`.
+
+- Unit 1 foundation: [x] 2026-09-17. Register, recovery codes, login, dated
+  week, fixed time, homework, Solve, atomic save, restart, isolation, stale
+  replies, 409 drafts, no WebEngine import.
+- Unit 2 calendar and homework parity: drag, Day, Month, occurrence vs series.
+- Unit 3 planning and reuse: undo, routines, running late, spread.
+- Unit 4 focus and preferences: timers, packs, look knobs, tray.
+- Unit 5 account recovery and files: codes, transfer, restore points.
+- Unit 6 retirement: native becomes the default launcher; drop Chromium.
+
+Complete when unit 6 has switched the normal launcher and packaging smoke uses
+native widgets. Executables stay unbuilt until Jonathan asks.
 
 ## Release polish (2026-09-16): 0.10.1, then 0.11
 

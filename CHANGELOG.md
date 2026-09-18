@@ -6,6 +6,11 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Experimental native desktop (`python -m desktop.native`, 2026-09-17). Qt
+  widgets talk to the same local Python API with no WebEngine and no JavaScript.
+  Create account, recovery codes, sign-in, a dated week, fixed times, homework,
+  Solve and Save work. The usual `python -m desktop.main` window is still the
+  app people should open. `--database` points at a file for isolated checks.
 - Look knobs and a Terminal preset (2026-09-17, shared frontend). Settings
   gains Preset and Text size beside Look and Motion, and Customize gains
   Surface, Corners, Depth, Font, Calendar blocks and Density. Terminal is the
