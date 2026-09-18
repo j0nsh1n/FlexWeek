@@ -133,6 +133,39 @@
   --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
   --hour-h: 2.75rem; --gutter: 3.5rem;
 }
+/* Terminal preset: true black, phosphor text, amber accent. A full map, so the
+   same-tokens, readability and accent-distance tests audit it like a pack. It
+   sits before the accent maps so a chosen accent still wins. */
+:root[data-preset="terminal"] {
+  --sidebar-width: 20rem;
+  color-scheme: dark;
+  --bg: #000000; --bg-accent: #050505; --bg-glow: rgba(0, 0, 0, 0);
+  --surface: #0a0a0a;
+  --surface-elevated: #0f0f0f;
+  --surface-card: #111111;
+  --surface-solid: #0a0a0a;
+  --field: #000000;
+  --scrim: rgba(0, 0, 0, 0.72);
+  --frost: 0px; --frost-strong: 0px;
+  --hairline: rgba(120, 255, 120, 0.25); --hairline-strong: rgba(120, 255, 120, 0.45);
+  --shadow: none;
+  --shadow-lg: none;
+  --text: #d6ffd6; --muted: #7fbf7f;
+  --accent: #ffb000; --accent-strong: #ffc94d; --accent-ink: #000000; --accent-soft: rgba(255, 176, 0, 0.16);
+  --error: #ff6b6b; --error-soft: rgba(255, 107, 107, 0.12);
+  --danger-bg: #7a1f1f; --danger-ink: #ffecec;
+  --ok: #7fff7f; --warn: #ffe066; --risk: #ff8080; --badge-ink: #000000;
+  --now: #ff5555;
+  --grid-cell: #050505; --grid-line: rgba(120, 255, 120, 0.12);
+  --block-locked: #0a0a0a; --block-locked-ink: #d6ffd6;
+  --block-flex: #0a0a0a; --block-flex-ink: #ffe9a8;
+  --block-border: rgba(120, 255, 120, 0.35); --block-edge: #7fbf7f;
+  --flex: #ffb000;
+  --icon-primary: #d6ffd6; --icon-secondary: rgba(120, 255, 120, 0.30);
+  --radius-sm: 0; --radius: 0; --radius-lg: 0;
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+  --hour-h: 2.75rem; --gutter: 3.5rem;
+}
 :root[data-accent="sky"] {
   --accent: #38bdf8; --accent-strong: #7dd3fc; --accent-ink: #0b1224; --accent-soft: rgba(56, 189, 248, 0.16);
 }
@@ -208,6 +241,45 @@
   .context-menu, .reminder-toast), :root[data-frost="off"] .prefs-dialog::backdrop {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+}
+
+/* Look knobs (look.js). Each attribute moves one thing and nothing else, and
+   none of them names a colour: the palette stays in the token maps. */
+:root[data-corners="sharp"] { --radius-sm: 0; --radius: 0; --radius-lg: 0; }
+:root[data-corners="pill"] { --radius-sm: 999px; --radius: 14px; --radius-lg: 20px; }
+:root[data-depth="flat"] { --shadow: none; --shadow-lg: none; }
+:root[data-depth="hard"] { --shadow: 3px 3px 0 var(--hairline-strong); --shadow-lg: 6px 6px 0 var(--hairline-strong); }
+/* Font and size go on both html and body: body declares its own font, and rem
+   units measure html. */
+:root[data-font="mono"], :root[data-font="mono"] body {
+  font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+:root[data-font="serif"], :root[data-font="serif"] body {
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, "Times New Roman", serif;
+}
+:root[data-text="small"], :root[data-text="small"] body { font-size: 13px; }
+:root[data-text="large"], :root[data-text="large"] body { font-size: 16px; }
+:root[data-density="compact"] { --hour-h: 2.1rem; --space-2: 0.35rem; --space-3: 0.5rem; --space-4: 0.7rem; }
+:root[data-surface="flat"] {
+  --surface: var(--surface-solid); --surface-elevated: var(--surface-solid); --surface-card: var(--surface-solid);
+}
+:root[data-surface="flat"] :is(.top, .week-nav, .side, .auth-panel, .save-actions, .empty-week, .prefs-dialog,
+  .context-menu, .reminder-toast), :root[data-surface="flat"] .prefs-dialog::backdrop {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+/* Where a category's colour lands on a calendar block: the edge (default), the
+   whole outline, or only the edge on a plain card. */
+:root[data-blocks="outlined"] .block {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--block-color, var(--block-edge));
+  border-left-width: 2px;
+}
+:root[data-blocks="edge"] .block {
+  background: var(--surface-card);
+  color: var(--text);
+  border-color: var(--hairline);
 }
 
 * { box-sizing: border-box; }
@@ -469,7 +541,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   background: var(--block-locked);
   color: var(--block-locked-ink);
   border: 1px solid var(--block-border);
-  border-left: 3px solid var(--block-edge);
+  border-left: 3px solid var(--block-color, var(--block-edge));
   border-radius: var(--radius-sm);
   padding: 0.18rem 0.35rem;
   font-size: 0.7rem;
@@ -479,6 +551,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   cursor: grab;
 }
 
+.block.is-colored { border-left-width: 4px; }
 .block .title { font-weight: 650; }
 .block .sub { opacity: 0.8; font-size: 0.65rem; }
 .block:active { cursor: grabbing; }
@@ -498,7 +571,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .flex-block {
   background: var(--block-flex);
   color: var(--block-flex-ink);
-  border-left-color: var(--flex);
+  border-left-color: var(--block-color, var(--flex));
 }
 
 .slack-badge {

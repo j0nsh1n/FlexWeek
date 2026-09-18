@@ -1699,8 +1699,11 @@ function buildGrid(blocks, explanations = []) {
       el.style.height = Math.max(((endMin - clippedStart) / 60) * hourH, 1.1) + "rem";
       const color = categoryColor(block.category);
       if (color) {
-        el.style.borderLeftColor = color;
-        el.style.borderLeftWidth = "4px";
+        // The stylesheet decides where the colour lands, so a look can put it on
+        // the edge, the outline or nowhere. Older fake DOMs have no setProperty.
+        if (typeof el.style.setProperty === "function") el.style.setProperty("--block-color", color);
+        else el.style.borderLeftColor = color;
+        el.classList.add("is-colored");
       }
       el.title = block.title + " · " + KIND_LABEL[block.kind] + (block.course ? " · " + block.course : "") +
         (missed ? " · missed" : "") + " · double-click to edit";

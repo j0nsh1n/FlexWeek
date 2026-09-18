@@ -5,6 +5,22 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- Look knobs and a Terminal preset (2026-09-17, shared frontend). Settings
+  gains Preset and Text size beside Look and Motion, and Customize gains
+  Surface, Corners, Depth, Font, Calendar blocks and Density. Terminal is the
+  first preset that is not a frost variant: true black, phosphor text, amber
+  accent, monospace, sharp corners, no shadows, outlined blocks, compact. All
+  of it stays on this computer for now; nothing is saved to the account until
+  the contract amendment is approved, and picking a preset resets the knobs
+  to that preset's own settings.
+
+### Changed
+- Calendar blocks take their category colour through a stylesheet property
+  instead of an inline border colour (2026-09-17, shared frontend), so a look
+  can decide whether the colour lands on the edge, the outline or nowhere.
+  Nothing changes on screen with the default look.
+
 ## [0.11.0] - 2026-09-17
 
 ### Added

@@ -815,6 +815,34 @@ def run(case: str, root: Path) -> None:
             assert evaluate("document.getElementById('pref-timer-work').value") == "30"
             assert evaluate("document.getElementById('pref-timer-break').value") == "15"
 
+            # Look knobs reach real layout: the Terminal preset changes the font the
+            # page computes and the hour height the grid measures, and choosing the
+            # pack default puts both back. Device-only, so no request goes out.
+            root_token = "getComputedStyle(document.documentElement).getPropertyValue('{}').trim()"
+            body_font = "getComputedStyle(document.body).fontFamily"
+
+            def pick_preset(name: str) -> None:
+                evaluate(f"document.getElementById('pref-preset').value='{name}';"
+                         "document.getElementById('pref-preset').dispatchEvent(new Event('change'))")
+
+            evaluate("window.__lookFetches=0; window.__lookFetch=fetch;"
+                     "fetch=function(){window.__lookFetches+=1;"
+                     " return window.__lookFetch.apply(this, arguments);}")
+            pick_preset("terminal")
+            assert evaluate("document.documentElement.dataset.preset") == "terminal"
+            assert "mono" in evaluate(body_font).lower()
+            assert evaluate(root_token.format("--hour-h")) == "2.1rem"
+            assert evaluate(root_token.format("--radius")) == "0"
+            assert evaluate("JSON.parse(localStorage.getItem('flexweek-look')).preset") == "terminal"
+            assert evaluate("window.__lookFetches") == 0
+            pick_preset("default")
+            evaluate("fetch=window.__lookFetch")
+            # A removed attribute reads as undefined, which the bridge does not map to None.
+            assert evaluate("'preset' in document.documentElement.dataset") is False
+            assert evaluate("'font' in document.documentElement.dataset") is False
+            assert evaluate(root_token.format("--hour-h")) == "2.75rem"
+            assert "figtree" in evaluate(body_font).lower()
+
             # Preview uses the unsaved sound controls and does not make an HTTP request or
             # spend a real reminder's once-per-start key.
             evaluate("""window.__stage5Fetch=fetch; window.__stage5Fetches=0;

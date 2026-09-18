@@ -1,6 +1,19 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-17 (after 0.11.0). Branch `feat/look-knobs` off `main` at
+  30e0724, local only. The owner asked for more control over the UI and for
+  presets that look drastically different, and chose architecture first with
+  one preset to judge by. Built: seven look knobs (surface, corners, depth,
+  font, blocks, density, text) as `data-*` attributes on `<html>` set by the
+  head script `frontend/look.js`, stored device-only under `flexweek-look`,
+  never sent to `/api/preferences`; a Terminal preset with its own full token
+  map, audited by the same tests as a pack; blocks now carry category colour as
+  `--block-color`. Gate: 287 frontend and 372 Python tests, including the real
+  WebEngine stage5 probe proving the preset changes computed font and hour
+  height. `docs/stage8-appearance-contract.md` Amendment A proposes the seven
+  `look_*` fields and Terminal as a pack; spec.md is untouched until the owner
+  approves it.
 - Date: 2026-09-17 (release). v0.11.0 is prepared on `feat/0-11-seamless`: packs,
   Customize, account motion, wait-states and the 0.10.1 hotfix. P2 account copy,
   a reduced-motion WebEngine pass and a Windows flicker hand-check remain after
@@ -387,6 +400,16 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-17, `feat/look-knobs`: presets-and-knobs architecture with Terminal
+  as the proof, device-only. Knob rules are constrained by a static test that
+  lets each move only what it names; the flat surface must clear blur on
+  exactly the frosted panels; any preset palette is audited for same tokens, AA
+  text and accent distance automatically once named in the token test. Red
+  checks caught a real gap: the payload test only guarded preferencesPayload()
+  while the Save button spreads readComfortEdit(); it now captures the real PUT
+  on submit. Next: owner decides on Amendment A (fold Preset into Look, which
+  presets next, reset-on-preset), then Grok adds the fields and the knobs move
+  to the account. Poster, Ink and High contrast are the recommended next three.
 - 2026-09-17, `feat/0-11-seamless` (latest): pack UI, frost token maps,
   Customize and account-backed motion are in. First sign-in writes omitted
   motion from the device copy. Phone width hides Customize. P2 account copy

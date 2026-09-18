@@ -261,3 +261,117 @@ Waits until after the contest:
 
 The backend tests land with the preference fields. The frontend tests land with
 the pack UI.
+
+## Amendment A (proposed 2026-09-17): presets and look knobs
+
+Status: proposed. Needs owner approval before any of the fields below reach
+spec.md or the preferences model. Until then everything in this amendment is
+device-only: stored in the browser under `flexweek-look`, applied from
+`frontend/look.js` in `<head>`, and never sent to `/api/preferences`. A test
+asserts that.
+
+The owner asked for more control over the interface and for presets that look
+drastically different from the frost family rather than palette swaps of it.
+Both come from one idea: a preset is a bundle of knob values plus a palette, and
+Customize edits the same knobs. Adding a preset is then a token map and seven
+values, and adding a knob is one attribute, one control, one field, one test.
+
+### A1. Knobs
+
+A knob is one attribute on `<html>` that the stylesheet reads. Each moves one
+kind of thing and nothing else; a static test enforces that, so a knob can
+never smuggle in a colour or an animation. Accent and motion are already knobs
+on the account (sections 3.2 and 3.4) and stay as they are.
+
+| Knob | Values | Default | What it moves |
+| --- | --- | --- | --- |
+| surface | frost, flat | frost | frosted panels, or solid ones with no blur |
+| corners | round, sharp, pill | round | the three radius tokens |
+| depth | soft, flat, hard | soft | diffuse shadows, none, or hard offset ones |
+| font | sans, mono, serif | sans | Figtree, the system monospace, the system serif |
+| blocks | filled, outlined, edge | filled | where a category's colour lands on a calendar block |
+| density | comfortable, compact | comfortable | hour height and spacing |
+| text | small, normal, large | normal | the base size; rem scales with it |
+
+The font and text knobs use system faces and sizes only. No new font files
+ship with them.
+
+### A2. Presets
+
+A preset names a palette, which is a complete token map audited by the same
+tests as a pack (same tokens, AA text, accent distance), and sets every knob.
+Picking a preset drops any knob the student set by hand, so one tap is the
+whole look; Customize then edits from there.
+
+Built in this slice as the proof: **Terminal**. True black, phosphor text,
+amber accent; flat surface, sharp corners, no shadows, monospace, outlined
+blocks, compact. It flips six of the seven knobs and carries its own palette,
+so it exercises the whole architecture.
+
+Proposed next, in this order, each one token map plus seven values:
+
+- **Poster**: flat saturated colours, thick dark outlines on every panel, hard
+  offset shadows, sharp corners, heavy type.
+- **Ink**: near-monochrome; category colour only as a thin edge; hairlines
+  instead of fills; no shadows; generous space. Light and dark maps.
+- **High contrast**: black, white and yellow; thick borders; outlined blocks;
+  large text by default. Also the look the app should adopt on its own under
+  `prefers-contrast: more`.
+- **Paper**: warm cream, serif type, muted category tints, no blur, rounded.
+- **Pastel**: soft candy tints, pill corners, soft shadows, lavender accent.
+
+Relationship to packs: a pack is a palette with the knobs at their defaults; a
+preset is a palette with its own knob values. Once approved they are one list.
+The five packs keep their names and behaviour; each new preset joins
+`theme_pack` with an axis for the existing validator (Terminal is dark). The
+separate Preset control in Settings then folds into Look.
+
+### A3. Proposed preference fields
+
+```python
+look_surface: Literal["frost", "flat"] | None = Field(default=None, exclude_if=lambda value: value is None)
+look_corners: Literal["round", "sharp", "pill"] | None = Field(default=None, exclude_if=lambda value: value is None)
+look_depth: Literal["soft", "flat", "hard"] | None = Field(default=None, exclude_if=lambda value: value is None)
+look_font: Literal["sans", "mono", "serif"] | None = Field(default=None, exclude_if=lambda value: value is None)
+look_blocks: Literal["filled", "outlined", "edge"] | None = Field(default=None, exclude_if=lambda value: value is None)
+look_density: Literal["comfortable", "compact"] | None = Field(default=None, exclude_if=lambda value: value is None)
+look_text: Literal["small", "normal", "large"] | None = Field(default=None, exclude_if=lambda value: value is None)
+```
+
+`None` means "whatever the pack or preset says", so an old client that omits
+them keeps the look it has, and an explicit value is a deliberate override.
+Choosing a preset writes `None` to all seven. `extra="forbid"` is unchanged.
+
+### A4. On a phone
+
+Preset, Text size and Motion sit up front. The other knobs stay inside
+Customize, which is hidden on phones as today.
+
+### A5. Verification
+
+Static, in `frontend/tests/theme-tokens.test.mjs`: each knob rule moves only
+the properties it names; the flat surface clears `backdrop-filter` on exactly
+the frosted panels; the Terminal map passes the same-tokens, readability and
+accent-distance audits; blocks take their colour through `--block-color`.
+
+Behaviour, in `frontend/tests/stage5_comfort.test.mjs`: the preset and knobs
+change nothing on the server and never enter the payload; a preset sets every
+knob and resets hand-set ones; a hand-set knob wins over the preset; a stored
+look applies before the body paints; a bad stored value falls back to the pack.
+
+Backend, once approved: a round-trip with all seven omitted still validates and
+returns none of them; a value outside a Literal is a 422; the pack-axis
+validator still holds for every new preset.
+
+### Open decisions for the owner
+
+1. Fold the Preset control into Look once approved, or keep two controls?
+   Recommendation: fold. Two lists that both change the whole look will confuse
+   a student.
+2. Which presets after Terminal? Recommendation for the contest: Poster, Ink
+   and High contrast; Paper and Pastel after. Those three give the widest
+   spread for the least contrast-auditing, and one of them is an accessibility
+   feature.
+3. Should choosing a preset reset hand-set knobs, as built, or keep them?
+   Recommendation: reset. A preset that only half applies is the thing
+   students will report as broken.

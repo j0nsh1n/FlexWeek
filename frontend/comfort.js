@@ -352,6 +352,28 @@ comfortElement("pref-motion").addEventListener("change", function () {
   if (typeof rememberMotion === "function") rememberMotion(level);
   if (account) saveComfortLayout();
 });
+// Preset and look knobs are device-only until the contract amendment is
+// approved. They live outside readComfortEdit and preferencesPayload, so they
+// cannot reach the account by accident; look.js owns the storage.
+const LOOK_CONTROL_KNOBS = ["surface", "corners", "depth", "font", "blocks", "density", "text"];
+function syncLookControls() {
+  comfortElement("pref-preset").value = document.documentElement.dataset.preset || "default";
+  const look = typeof effectiveLook === "function" ? effectiveLook() : {};
+  LOOK_CONTROL_KNOBS.forEach(function (knob) {
+    comfortElement("pref-" + knob).value = look[knob] || "";
+  });
+}
+comfortElement("pref-preset").addEventListener("change", function () {
+  if (typeof choosePreset === "function") choosePreset(comfortElement("pref-preset").value);
+  syncLookControls();
+});
+LOOK_CONTROL_KNOBS.forEach(function (knob) {
+  comfortElement("pref-" + knob).addEventListener("change", function () {
+    if (typeof setLookKnob === "function") setLookKnob(knob, comfortElement("pref-" + knob).value);
+    syncLookControls();
+  });
+});
+syncLookControls();
 comfortElement("pref-accent").addEventListener("change", function () {
   prefs.accent = typeof applyAccent === "function"
     ? applyAccent(comfortElement("pref-accent").value) : comfortElement("pref-accent").value;

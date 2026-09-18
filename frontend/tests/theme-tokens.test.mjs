@@ -27,6 +27,8 @@ const THEME_SELECTORS = {
   light: ':root[data-theme="slate"]',
   'dark-frost': ':root[data-theme="dark-frost"]',
   'light-frost': ':root[data-theme="light-frost"]',
+  // A preset palette is audited exactly like a pack: same tokens, AA text, accent distance.
+  terminal: ':root[data-preset="terminal"]',
 };
 const ACCENT_NAMES = ['sky', 'gold', 'sea', 'sand'];
 const themes = Object.fromEntries(Object.entries(THEME_SELECTORS).map(([name, selector]) => [name, tokens(selector)]));
@@ -82,7 +84,7 @@ test('light, dark and both frost packs define exactly the same tokens', () => {
 });
 
 test('every var() in styles.css is a theme token, and the legacy names are gone', () => {
-  const setByScript = new Set(['--chip-color']);
+  const setByScript = new Set(['--chip-color', '--block-color']);
   const used = new Set(Array.from(css.matchAll(/var\((--[a-z0-9-]+)/g), match => match[1]));
   const undefinedTokens = [...used].filter(name => !themes.dark.has(name) && !setByScript.has(name)).sort();
   assert.deepEqual(undefinedTokens, []);
@@ -254,4 +256,64 @@ test('the accepted late block draws on at Normal, not only at Extra', () => {
 test('Extra is the level that adds the pop-in, and Normal only fades', () => {
   assert.match(motionBlock, /\[data-motion="extra"\][^{]*\.block\.is-new/);
   assert.match(motionBlock, /:not\(\[data-motion="off"\]\)[^{]*#week[\s\S]*?animation:\s*view-fade-in/);
+});
+
+// Look knobs, added after 0.11.0. Each attribute on <html> may move one kind of
+// thing only, so a preset cannot smuggle a colour or an animation in through a
+// knob, and Customize stays a set of independent switches.
+function knobRules(knob) {
+  const rules = [];
+  const pattern = new RegExp(`\n(:root\\[data-${knob}="([a-z]+)"\\][^{]*)\\{([^}]*)\\}`, 'g');
+  for (const match of css.matchAll(pattern)) rules.push({ selector: match[1].trim(), value: match[2], body: match[3] });
+  assert.ok(rules.length > 0, `styles.css has no data-${knob} rule`);
+  return rules;
+}
+const properties = body => Array.from(body.matchAll(/(?:^|;|\s)([a-z-]+|--[a-z0-9-]+)\s*:/g), match => match[1]);
+
+test('each look knob moves only the properties it names', () => {
+  const allowed = {
+    corners: name => name.startsWith('--radius'),
+    depth: name => name.startsWith('--shadow'),
+    font: name => name === 'font-family',
+    text: name => name === 'font-size',
+    density: name => name === '--hour-h' || name.startsWith('--space-'),
+    surface: name => name.startsWith('--surface') || name.endsWith('backdrop-filter'),
+    blocks: name => ['background', 'color', 'border-color', 'border-left-width'].includes(name),
+  };
+  for (const [knob, ok] of Object.entries(allowed)) {
+    for (const rule of knobRules(knob)) {
+      for (const name of properties(rule.body)) {
+        assert.ok(ok(name), `${rule.selector} moves ${name}, which is not this knob's job`);
+      }
+    }
+  }
+});
+
+test('the flat surface turns solid and clears blur on exactly the frosted panels', () => {
+  const frosted = /\n([^{}@]+)\{\s*-webkit-backdrop-filter: blur\(var\(--frost\)\)/.exec(css)[1]
+    .split(',').map(item => item.trim()).filter(Boolean);
+  assert.match(css, /:root\[data-surface="flat"\]\s*\{[^}]*--surface: var\(--surface-solid\)/);
+  const cleared = /:root\[data-surface="flat"\] :is\(([^)]*)\), :root\[data-surface="flat"\] \.prefs-dialog::backdrop \{\s*-webkit-backdrop-filter: none;\s*backdrop-filter: none;/.exec(css);
+  assert.ok(cleared, 'the flat surface does not remove backdrop filters');
+  assert.deepEqual(cleared[1].split(',').map(item => item.trim()).sort(), [...frosted].sort());
+});
+
+test('a block takes its category colour from --block-color, so a look can decide where it lands', () => {
+  assert.match(appJs, /el\.style\.setProperty\("--block-color", color\)/);
+  assert.match(css, /\.block \{[^}]*border-left: 3px solid var\(--block-color, var\(--block-edge\)\)/);
+  assert.match(css, /\.flex-block \{[^}]*border-left-color: var\(--block-color, var\(--flex\)\)/);
+  assert.match(css, /:root\[data-blocks="outlined"\] \.block \{[^}]*background: transparent/);
+});
+
+test('the Terminal preset changes every knob the frost packs leave at default', () => {
+  const lookJs = readFileSync(new URL('../look.js', import.meta.url), 'utf8');
+  const preset = /terminal: \{([\s\S]*?)\}/.exec(lookJs);
+  assert.ok(preset, 'look.js has no terminal preset');
+  const values = Object.fromEntries(Array.from(preset[1].matchAll(/(\w+): "([a-z]+)"/g), m => [m[1], m[2]]));
+  assert.deepEqual(values, {
+    surface: 'flat', corners: 'sharp', depth: 'flat', font: 'mono',
+    blocks: 'outlined', density: 'compact', text: 'normal',
+  });
+  assert.ok(html.indexOf('<script src="/static/look.js"></script>') < html.indexOf('</head>'),
+    'look.js must run before the body paints');
 });

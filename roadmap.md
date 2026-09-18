@@ -528,6 +528,28 @@ the design, and the sentence should say so.
   WebEngine pass with `prefers-reduced-motion` forced on and a Windows flicker
   hand-check are still open.
 
+### Looks and knobs (owner request, 2026-09-17)
+
+After 0.11.0 the owner asked for more control over the interface and for
+presets that look drastically different from the frost family. The plan is one
+idea: a preset is a bundle of knob values plus a palette, and Customize edits
+the same knobs, so more presets and more control are the same work.
+
+- Knobs, each one attribute on `<html>`, one control, one field, one test:
+  surface, corners, depth, font, blocks, density, text. Accent and motion
+  already exist on the account.
+- Presets: Terminal first as the proof, then Poster, Ink and High contrast for
+  the contest, Paper and Pastel after, subject to the owner's choice.
+- Complete when: the owner has picked the presets from a real example, the
+  seven fields and the new pack values are approved in Amendment A of
+  `docs/stage8-appearance-contract.md`, the knobs persist on the account, and
+  every preset palette passes the same-tokens, AA and accent-distance audits.
+- Status: [~] Architecture and Terminal landed 2026-09-17 on `feat/look-knobs`,
+  device-only; the Settings note says so. 287 frontend and 372 Python tests,
+  with the real WebEngine probe showing the preset reaching computed layout.
+  Waiting on the owner: which presets next, whether Preset folds into Look,
+  and approval of the fields before anything is saved to the account.
+
 ## First implementation slice — approved 2026-09-06
 
 ### Goal and user stories
