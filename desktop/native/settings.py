@@ -28,7 +28,16 @@ from PySide6.QtWidgets import (
 from backend.comfort import TIMER_PRESETS
 from desktop.native.calendar import DAY_FULL
 from desktop.native.focus import FOCUS_PHASE_LABEL, format_countdown, more_time_choices, remaining_ms
-from desktop.native.look import ACCENTS, LOOK_KNOBS, LOOK_PRESETS, PACKS, sanitize_look
+from desktop.native.look import (
+    ACCENTS,
+    LOOK_KNOBS,
+    LOOK_PRESETS,
+    PACKS,
+    effective_look,
+    look_overrides,
+    preset_knobs,
+    sanitize_look,
+)
 from desktop.native.reuse import format_duration
 
 
@@ -96,6 +105,9 @@ class FocusPanel(QWidget):
         layout.addWidget(self.tasks)
         self._ended_widgets = (self.finished, self.take_break, self.more_min, self.more)
         self._run_widgets = (self.pause, self.skip, self.reset)
+        # Nothing to show until a timer runs or the plan places work, and blank rows cost the calendar height.
+        for widget in (self.task, self.phase, self.time, self.tasks):
+            widget.setVisible(False)
 
     def _emit_more(self) -> None:
         self.more_requested.emit(int(self.more_min.currentData() or 0))
@@ -133,6 +145,15 @@ class FocusPanel(QWidget):
             )
             row.setData(Qt.ItemDataRole.UserRole, item)
             self.tasks.addItem(row)
+        for label in (self.task, self.phase, self.time):
+            label.setVisible(bool(label.text()))
+        # An empty list still asks for about 190 pixels, and a long one would bury the calendar, so it
+        # is hidden when empty and never taller than four rows; the rest scrolls.
+        shown = min(self.tasks.count(), 4)
+        self.tasks.setVisible(shown > 0)
+        if shown:
+            rows = shown * self.tasks.sizeHintForRow(0)
+            self.tasks.setMaximumHeight(rows + 2 * self.tasks.frameWidth() + 8)
 
 
 class PrefsDialog(QDialog):
@@ -165,15 +186,19 @@ class PrefsDialog(QDialog):
         self.preset.setCurrentIndex(max(0, index))
         form.addRow("Device preset", self.preset)
         self.knobs = {}
+        # Each box shows what is on screen now: the preset's value unless the student moved that knob.
+        shown = effective_look(self._look)
         for knob, values in LOOK_KNOBS.items():
             box = QComboBox()
             box.setObjectName("look" + knob.title())
             for value in values:
                 box.addItem(value.title(), value)
-            current = self._look.get("knobs", {}).get(knob) or values[0]
-            box.setCurrentIndex(max(0, box.findData(current)))
+            box.setCurrentIndex(max(0, box.findData(shown[knob])))
             self.knobs[knob] = box
             form.addRow(knob.title(), box)
+        # Connected after the boxes exist, and after the stored preset was selected above, so opening
+        # Settings never resets a student's own knobs; only picking a preset does.
+        self.preset.currentIndexChanged.connect(self._apply_look_preset)
         self.work = QSpinBox()
         self.work.setRange(15, 180)
         self.work.setSingleStep(15)
@@ -295,11 +320,18 @@ class PrefsDialog(QDialog):
             "alarms": deepcopy(self._alarms),
         }
 
-    def look_choice(self) -> dict:
-        knobs = {}
+    def _apply_look_preset(self) -> None:
+        """One tap is the whole look: every knob moves to what the chosen preset sets."""
+        bundle = preset_knobs(self.preset.currentData())
         for knob, box in self.knobs.items():
-            knobs[knob] = box.currentData()
-        return sanitize_look({"preset": self.preset.currentData(), "knobs": knobs})
+            box.setCurrentIndex(max(0, box.findData(bundle[knob])))
+
+    def look_choice(self) -> dict:
+        # Only knobs moved away from the preset are overrides. Recording all seven made every box beat
+        # the preset, so choosing Terminal changed its colours and none of its knobs.
+        preset = self.preset.currentData()
+        shown = {knob: box.currentData() for knob, box in self.knobs.items()}
+        return sanitize_look({"preset": preset, "knobs": look_overrides(preset, shown)})
 
 
 class RestoreDialog(QDialog):

@@ -6,8 +6,19 @@ from copy import deepcopy
 from datetime import date, timedelta
 from uuid import uuid4
 
-from PySide6.QtCore import QDate, QDateTime, Qt, QTime, Signal
-from PySide6.QtGui import QColor, QMouseEvent
+from PySide6.QtCore import (
+    QDate,
+    QDateTime,
+    QModelIndex,
+    QPersistentModelIndex,
+    QPoint,
+    QRect,
+    QSize,
+    Qt,
+    QTime,
+    Signal,
+)
+from PySide6.QtGui import QColor, QMouseEvent, QPainter
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -20,6 +31,8 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLayout,
+    QLayoutItem,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
@@ -29,6 +42,8 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QScrollArea,
     QSpinBox,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QTableWidget,
     QTableWidgetItem,
     QTimeEdit,
@@ -60,6 +75,7 @@ from desktop.native.calendar import (
     resize_bottom_range,
     resize_top_range,
 )
+from desktop.native.look import block_paint, resolved_palette
 from desktop.native.reuse import (
     AVAILABILITY_LIMIT,
     LATE_MINUTES,
@@ -87,6 +103,106 @@ MONTH_FULL = (
 )
 
 
+class FlowLayout(QLayout):
+    """Left to right, wrapping onto new rows.
+
+    The week page has about twenty actions. In a plain row their combined width became the window's
+    minimum, over 2,300 pixels, which no laptop screen holds. Here the minimum is one button wide.
+    """
+
+    def __init__(self, parent: QWidget | None = None, gap: int = 6) -> None:
+        super().__init__(parent)
+        self._items: list[QLayoutItem] = []
+        self._gap = gap
+
+    def addItem(self, item: QLayoutItem) -> None:  # noqa: N802 - Qt virtual
+        self._items.append(item)
+
+    def count(self) -> int:
+        return len(self._items)
+
+    def itemAt(self, index: int) -> QLayoutItem | None:  # noqa: N802 - Qt virtual
+        return self._items[index] if 0 <= index < len(self._items) else None
+
+    def takeAt(self, index: int) -> QLayoutItem | None:  # noqa: N802 - Qt virtual
+        return self._items.pop(index) if 0 <= index < len(self._items) else None
+
+    def expandingDirections(self) -> Qt.Orientation:  # noqa: N802 - Qt virtual
+        return Qt.Orientation(0)
+
+    def hasHeightForWidth(self) -> bool:  # noqa: N802 - Qt virtual
+        return True
+
+    def heightForWidth(self, width: int) -> int:  # noqa: N802 - Qt virtual
+        return self._arrange(QRect(0, 0, width, 0), place=False)
+
+    def setGeometry(self, rect: QRect) -> None:  # noqa: N802 - Qt virtual
+        super().setGeometry(rect)
+        self._arrange(rect, place=True)
+
+    def sizeHint(self) -> QSize:  # noqa: N802 - Qt virtual
+        return self.minimumSize()
+
+    def minimumSize(self) -> QSize:  # noqa: N802 - Qt virtual
+        size = QSize()
+        for item in self._items:
+            size = size.expandedTo(item.minimumSize())
+        margins = self.contentsMargins()
+        return size + QSize(margins.left() + margins.right(), margins.top() + margins.bottom())
+
+    def _arrange(self, rect: QRect, place: bool) -> int:
+        margins = self.contentsMargins()
+        area = rect.adjusted(margins.left(), margins.top(), -margins.right(), -margins.bottom())
+        x, y, row_height = area.x(), area.y(), 0
+        for item in self._items:
+            if item.isEmpty():
+                continue
+            hint = item.sizeHint()
+            if row_height and x + hint.width() > area.right() + 1:
+                x = area.x()
+                y += row_height + self._gap
+                row_height = 0
+            if place:
+                item.setGeometry(QRect(QPoint(x, y), hint))
+            x += hint.width() + self._gap
+            row_height = max(row_height, hint.height())
+        return y + row_height - rect.y() + margins.bottom()
+
+
+# What a table cell cannot draw for itself, carried on the item for BlockDelegate.
+OUTLINE_ROLE = Qt.ItemDataRole.UserRole.value + 1
+EDGE_ROLE = Qt.ItemDataRole.UserRole.value + 2
+ENDS_ROLE = Qt.ItemDataRole.UserRole.value + 3
+
+
+class BlockDelegate(QStyledItemDelegate):
+    """Draws a block's outline or coloured edge over the cell, for the Blocks look knob."""
+
+    def paint(
+        self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex | QPersistentModelIndex
+    ) -> None:
+        super().paint(painter, option, index)
+        outline = index.data(OUTLINE_ROLE)
+        edge = index.data(EDGE_ROLE)
+        if not outline and not edge:
+            return
+        rect = option.rect
+        painter.save()
+        if outline:
+            # A block is a run of cells, so only its first cell closes the top and its last the bottom.
+            top, bottom = index.data(ENDS_ROLE) or (True, True)
+            color = QColor(outline)
+            painter.fillRect(rect.left(), rect.top(), 2, rect.height(), color)
+            painter.fillRect(rect.right() - 1, rect.top(), 2, rect.height(), color)
+            if top:
+                painter.fillRect(rect.left(), rect.top(), rect.width(), 2, color)
+            if bottom:
+                painter.fillRect(rect.left(), rect.bottom() - 1, rect.width(), 2, color)
+        if edge:
+            painter.fillRect(rect.left(), rect.top(), 4, rect.height(), QColor(edge))
+        painter.restore()
+
+
 class WeekTable(QTableWidget):
     block_activated = Signal(str)
     slot_activated = Signal(int, str)
@@ -111,9 +227,21 @@ class WeekTable(QTableWidget):
         self._blocks: dict[str, dict] = {}
         self._week_blocks: list[dict] = []
         self._gesture: dict | None = None
+        self._look: dict | None = None
+        self._palette = resolved_palette("system", False, None)
+        self._shown: tuple[str, list[dict], dict | None] | None = None
+        self.setItemDelegate(BlockDelegate(self))
+
+    def set_look(self, look: dict | None, palette: dict) -> None:
+        """Repaint the week on screen with a new look; the blocks themselves do not change."""
+        self._look = look
+        self._palette = palette
+        if self._shown is not None:
+            self.set_week(*self._shown)
 
     def set_week(self, week_start: str, blocks: list[dict], trace: dict | None = None) -> None:
         monday = date.fromisoformat(week_start)
+        self._shown = (week_start, blocks, trace)
         self._week_blocks = list(blocks)
         self._blocks = {block["id"]: block for block in blocks}
         self.clearContents()
@@ -124,7 +252,8 @@ class WeekTable(QTableWidget):
             ]
         )
         placed = {block["id"]: block for block in (trace or {}).get("placed", [])}
-        cells: dict[tuple[int, int], list[tuple[dict, str]]] = {}
+        cells: dict[tuple[int, int], list[tuple[dict, str, str]]] = {}
+        spans: dict[tuple[int, int], tuple[int, int]] = {}
         for original in blocks:
             block = placed.get(original["id"], original) if not original.get("completed") else original
             if not block.get("start"):
@@ -140,17 +269,41 @@ class WeekTable(QTableWidget):
                     label += " · Missed"
                 if block.get("completed"):
                     label += " · Done"
-                text = f"{block['title']}\n{block['start']} · {label}"
-                for row in range(first, min(first + size, SLOTS_PER_DAY)):
-                    cells.setdefault((row, day), []).append((block, text))
+                detail = f"{block['start']} · {label}"
+                text = f"{block['title']}\n{detail}"
+                last = min(first + size, SLOTS_PER_DAY) - 1
+                for row in range(first, last + 1):
+                    # A cell is one 15-minute row, too short for two lines. Qt elided the title to
+                    # "School…" and dropped the second line, which is where Missed and Done are said.
+                    # So the title takes the first row, the detail the second, and the rest stay blank.
+                    if first == last:
+                        visible = f"{block['title']} · {detail}"
+                    elif row == first:
+                        visible = block["title"]
+                    else:
+                        visible = detail if row == first + 1 else ""
+                    cells.setdefault((row, day), []).append((block, text, visible))
+                    spans.setdefault((row, day), (first, last))
         for (row, day), entries in cells.items():
-            item = QTableWidgetItem("\n".join(text for _, text in entries))
-            item.setData(Qt.ItemDataRole.UserRole, [block["id"] for block, _ in entries])
-            item.setToolTip(item.text())
-            color = CATEGORIES.get(entries[0][0].get("category") or "", {}).get("color", "#e2e8f0")
-            item.setBackground(QColor(color))
-            item.setForeground(QColor("#172033"))
+            item = QTableWidgetItem(" / ".join(visible for _, _, visible in entries if visible))
+            item.setData(Qt.ItemDataRole.UserRole, [block["id"] for block, _, _ in entries])
+            item.setToolTip("\n".join(text for _, text, _ in entries))
+            shown = entries[0][0]
+            category = CATEGORIES.get(shown.get("category") or "", {})
+            paint = block_paint(
+                self._look, self._palette, category.get("color"), shown["kind"], category.get("mark")
+            )
+            item.setBackground(QColor(paint["fill"]))
+            item.setForeground(QColor(paint["ink"]))
+            item.setData(OUTLINE_ROLE, paint["outline"])
+            item.setData(EDGE_ROLE, paint["edge"])
+            first, last = spans[(row, day)]
+            item.setData(ENDS_ROLE, (row == first, row == last))
             self.setItem(row, day, item)
+
+    def block_titles(self, ids: list[str]) -> list[str]:
+        """Names for the blocks sharing a cell, taken from the blocks: the cell's own text may be blank."""
+        return [self._blocks.get(block_id, {}).get("title") or block_id for block_id in ids]
 
     def _activate(self, row: int, day: int) -> None:
         item = self.item(row, day)
@@ -159,9 +312,8 @@ class WeekTable(QTableWidget):
             self.block_activated.emit(ids[0])
         elif ids:
             menu = QMenu(self)
-            texts = item.text().splitlines()
-            for index, block_id in enumerate(ids):
-                action = menu.addAction(texts[index * 2])
+            for block_id, title in zip(ids, self.block_titles(ids), strict=True):
+                action = menu.addAction(title)
                 action.triggered.connect(
                     lambda checked=False, value=block_id: self.block_activated.emit(value)
                 )
@@ -417,8 +569,16 @@ class MonthGrid(QWidget):
         self.overdue.setObjectName("monthOverdue")
         self.overdue.setWordWrap(True)
         layout.addWidget(self.overdue)
+        self._palette = resolved_palette("system", False, None)
+        self._shown: tuple[dict | None, bool] | None = None
+
+    def set_palette(self, palette: dict) -> None:
+        self._palette = palette
+        if self._shown is not None:
+            self.set_month(*self._shown)
 
     def set_month(self, snapshot: dict | None, dirty: bool) -> None:
+        self._shown = (snapshot, dirty)
         if snapshot is None:
             self.heading.setText("Month")
             self.table.clearContents()
@@ -446,7 +606,7 @@ class MonthGrid(QWidget):
             item = QTableWidgetItem("\n".join(lines))
             item.setData(Qt.ItemDataRole.UserRole, cell["date"])
             if not cell.get("in_month"):
-                item.setForeground(QColor("#64748b"))
+                item.setForeground(QColor(self._palette["muted"]))
             self.table.setItem(row, column, item)
         overdue = snapshot.get("overdue") or []
         if overdue:

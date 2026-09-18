@@ -26,52 +26,61 @@ SERIES_DRAG_MESSAGE = (
     "{title} repeats on {count} days, so dragging it is ambiguous. "
     "Edit the occurrence or the series."
 )
+# color is the pale cell fill; mark is the strong colour the web client uses, for outlines and edges.
 CATEGORIES = {
     "class": {
         "label": "School",
         "color": "#bfdbfe",
+        "mark": "#3b82f6",
         "kind": "locked",
         "preset": {"start": "08:00", "end": "14:30", "days": WEEKDAYS},
     },
     "assignments": {
         "label": "Homework",
         "color": "#fecaca",
+        "mark": "#ef4444",
         "kind": "flexible",
         "preset": {"duration_min": 60},
     },
     "study": {
         "label": "Study",
         "color": "#ddd6fe",
+        "mark": "#8b5cf6",
         "kind": "flexible",
         "preset": {"duration_min": 60},
     },
     "exercise": {
         "label": "Sports",
         "color": "#a7f3d0",
+        "mark": "#10b981",
         "kind": "locked",
         "preset": {"start": "15:30", "end": "17:00"},
     },
     "extra": {
         "label": "Activity",
         "color": "#fbcfe8",
+        "mark": "#ec4899",
         "kind": "locked",
         "preset": {"start": "17:00", "end": "18:00"},
     },
     "meals": {
         "label": "Meals",
         "color": "#fed7aa",
+        "mark": "#f97316",
         "kind": "locked",
         "preset": {"start": "18:00", "end": "18:30"},
     },
     "sleep": {
         "label": "Sleep",
         "color": "#c7d2fe",
+        "mark": "#6366f1",
         "kind": "locked",
         "preset": {"start": "22:00", "end": "23:00"},
     },
     "free": {
         "label": "Free",
         "color": "#e2e8f0",
+        "mark": "#94a3b8",
         "kind": "locked",
         "preset": {"start": "19:00", "end": "20:00"},
     },

@@ -34,7 +34,7 @@ from backend.slots import minutes_to_hhmm
 from desktop.native.calendar import DAY_FULL, FLEX_CATEGORIES, agenda_for, sunday_due
 from desktop.native.controller import NativeSession
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
-from desktop.native.look import pack_stylesheet, sanitize_look
+from desktop.native.look import pack_stylesheet, resolved_palette, sanitize_look
 from desktop.native.remind import REMINDER_POLL_MS
 from desktop.native.reuse import late_from_start, restore_point_label, running_late_refusal, week_label
 from desktop.native.settings import (
@@ -50,6 +50,7 @@ from desktop.native.widgets import (
     BlockDialog,
     CategoryChips,
     DayAgenda,
+    FlowLayout,
     HomeworkDialog,
     LateDialog,
     MonthGrid,
@@ -256,7 +257,8 @@ class NativeWindow(QMainWindow):
         self.chips = CategoryChips()
         self.chips.category_chosen.connect(self._add_from_chip)
         layout.addWidget(self.chips)
-        actions = QHBoxLayout()
+        # Wrapping, because twenty buttons in one row made the window wider than any laptop screen.
+        actions = FlowLayout()
         add_fixed = QPushButton("Add fixed time")
         add_fixed.setObjectName("addFixed")
         add_fixed.clicked.connect(self._add_fixed)
@@ -376,7 +378,8 @@ class NativeWindow(QMainWindow):
         self.month_grid = MonthGrid()
         self.month_grid.day_activated.connect(self.session.open_day)
         self.planner.addWidget(self.month_grid)
-        layout.addWidget(self.planner)
+        # The calendar is the point of this page, so it takes whatever height the rest does not need.
+        layout.addWidget(self.planner, 1)
         self.week_status = QLabel()
         self.week_status.setObjectName("weekStatus")
         self.week_status.setWordWrap(True)
@@ -1056,6 +1059,10 @@ class NativeWindow(QMainWindow):
         accent = (self.session.preferences or {}).get("accent") or "default"
         system_dark = QGuiApplication.palette().color(QPalette.ColorRole.Window).lightness() < 128
         self.setStyleSheet(pack_stylesheet(pack, system_dark, self._look, accent))
+        # Blocks and month cells are painted per item, which a stylesheet cannot reach.
+        palette = resolved_palette(pack, system_dark, self._look, accent)
+        self.week_table.set_look(self._look, palette)
+        self.month_grid.set_palette(palette)
 
     def _install_tray(self) -> None:
         tray = QSystemTrayIcon(self._icon, self)
