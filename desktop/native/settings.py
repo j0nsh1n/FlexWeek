@@ -5,7 +5,8 @@ from __future__ import annotations
 from copy import deepcopy
 from uuid import uuid4
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QUrl, Qt, Signal
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -138,13 +139,19 @@ class FocusPanel(QWidget):
         for widget in self._ended_widgets:
             widget.setVisible(ended)
         self.more.setEnabled(bool(choices))
-        self.tasks.clear()
-        for item in session.focus_tasks():
-            row = QListWidgetItem(
-                f"{item['title']}  {item.get('start') or ''} · {item.get('focus_sessions') or 0} sessions"
-            )
-            row.setData(Qt.ItemDataRole.UserRole, item)
-            self.tasks.addItem(row)
+        tasks = [
+            (item.get("id"), item.get("start"), item.get("focus_sessions"), item.get("title"))
+            for item in session.focus_tasks()
+        ]
+        if tasks != getattr(self, "_shown_tasks", None):
+            self._shown_tasks = tasks
+            self.tasks.clear()
+            for item in session.focus_tasks():
+                row = QListWidgetItem(
+                    f"{item['title']}  {item.get('start') or ''} · {item.get('focus_sessions') or 0} sessions"
+                )
+                row.setData(Qt.ItemDataRole.UserRole, item)
+                self.tasks.addItem(row)
         for label in (self.task, self.phase, self.time):
             label.setVisible(bool(label.text()))
         # An empty list still asks for about 190 pixels, and a long one would bury the calendar, so it
@@ -200,25 +207,36 @@ class PrefsDialog(QDialog):
         # Settings never resets a student's own knobs; only picking a preset does.
         self.preset.currentIndexChanged.connect(self._apply_look_preset)
         self.work = QSpinBox()
-        self.work.setRange(15, 180)
-        self.work.setSingleStep(15)
+        self.work.setRange(1, 180)
+        self.work.setSingleStep(1)
         self.work.setValue(int(preferences.get("timer_work_min") or 30))
         form.addRow("Focus minutes", self.work)
         self.break_min = QSpinBox()
-        self.break_min.setRange(15, 60)
-        self.break_min.setSingleStep(15)
+        self.break_min.setRange(1, 60)
+        self.break_min.setSingleStep(1)
         self.break_min.setValue(int(preferences.get("timer_break_min") or 15))
         form.addRow("Break minutes", self.break_min)
         self.long_break = QSpinBox()
-        self.long_break.setRange(15, 120)
-        self.long_break.setSingleStep(15)
+        self.long_break.setRange(1, 120)
+        self.long_break.setSingleStep(1)
         self.long_break.setValue(int(preferences.get("timer_long_break_min") or 30))
         form.addRow("Long break", self.long_break)
         self.preset_timer = QComboBox()
         self.preset_timer.setObjectName("timerPreset")
+        self.preset_timer.addItem("Custom", None)
         for item in TIMER_PRESETS:
             self.preset_timer.addItem(item["label"], item["id"])
-        self.preset_timer.currentIndexChanged.connect(self._apply_timer_preset)
+        chosen = None
+        for item in TIMER_PRESETS:
+            if (
+                item["timer_work_min"] == self.work.value()
+                and item["timer_break_min"] == self.break_min.value()
+                and item["timer_long_break_min"] == self.long_break.value()
+            ):
+                chosen = item["id"]
+                break
+        self.preset_timer.setCurrentIndex(max(0, self.preset_timer.findData(chosen)))
+        self.preset_timer.activated.connect(self._apply_timer_preset)
         form.addRow("Timer preset", self.preset_timer)
         self.reminders = QCheckBox("Reminders")
         self.reminders.setObjectName("prefReminders")
@@ -266,8 +284,10 @@ class PrefsDialog(QDialog):
         layout.addWidget(buttons)
         self._render_alarms()
 
-    def _apply_timer_preset(self) -> None:
+    def _apply_timer_preset(self, _index: int = 0) -> None:
         chosen = self.preset_timer.currentData()
+        if chosen is None:
+            return
         preset = next((item for item in TIMER_PRESETS if item["id"] == chosen), None)
         if preset is None:
             return
@@ -394,6 +414,14 @@ class RestoreDialog(QDialog):
         layout.addWidget(close)
         self.action: str | None = None
         self.create_label = ""
+        self.selected_id: str | None = None
+        preview_id = None if not preview else preview.get("id")
+        if preview_id:
+            for index in range(self.list.count()):
+                item = self.list.item(index)
+                if item is not None and item.data(Qt.ItemDataRole.UserRole) == preview_id:
+                    self.list.setCurrentRow(index)
+                    break
 
     def _selected(self) -> str | None:
         item = self.list.currentItem()
@@ -405,12 +433,20 @@ class RestoreDialog(QDialog):
         self.accept()
 
     def _preview(self) -> None:
-        self.selected_id = self._selected()
+        chosen = self._selected()
+        if not chosen:
+            self.summary.setText("Choose a restore point.")
+            return
+        self.selected_id = chosen
         self.action = "preview"
         self.accept()
 
     def _restore(self) -> None:
-        self.selected_id = self._selected()
+        chosen = self._selected()
+        if not chosen:
+            self.summary.setText("Choose a restore point.")
+            return
+        self.selected_id = chosen
         self.action = "restore"
         self.accept()
 
@@ -494,6 +530,7 @@ class AlarmRingDialog(QDialog):
         self.setModal(True)
         self.snoozed = False
         self.open_spotify = False
+        self._url = spotify
         layout = QVBoxLayout(self)
         title = QLabel(alarm.get("name") or "Alarm")
         title.setObjectName("alarmTitle")
@@ -523,6 +560,8 @@ class AlarmRingDialog(QDialog):
 
     def _spotify(self) -> None:
         self.open_spotify = True
+        if self._url:
+            QDesktopServices.openUrl(QUrl(self._url))
 
 
 class TransferPreviewDialog(QDialog):

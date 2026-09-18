@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from PySide6.QtCore import QStandardPaths, Qt, QTimer, QUrl
+from PySide6.QtCore import QEvent, QObject, QStandardPaths, Qt, QTimer, QUrl
 from PySide6.QtGui import QCloseEvent, QDesktopServices, QGuiApplication, QIcon, QKeyEvent, QPalette
 from PySide6.QtNetwork import QLocalServer
 from PySide6.QtWidgets import (
@@ -92,6 +93,7 @@ class NativeWindow(QMainWindow):
         self._icon = icon or QIcon()
         self._alarm_dialog: AlarmRingDialog | None = None
         self._look = sanitize_look(None)
+        self._allow_week_page = True
         self._load_look()
         self.session.look = self._look
         self.session.focus_changed.connect(self._on_focus)
@@ -221,7 +223,7 @@ class NativeWindow(QMainWindow):
         self.recovery_continue = QPushButton("Continue")
         self.recovery_continue.setObjectName("recoveryContinue")
         self.recovery_continue.setEnabled(False)
-        self.recovery_continue.clicked.connect(self.session.finish_recovery)
+        self.recovery_continue.clicked.connect(self._finish_recovery)
         layout.addWidget(self.recovery_continue)
         layout.addStretch()
         self._stack.addWidget(page)
@@ -378,6 +380,13 @@ class NativeWindow(QMainWindow):
         self.month_grid = MonthGrid()
         self.month_grid.day_activated.connect(self.session.open_day)
         self.planner.addWidget(self.month_grid)
+        for widget in (
+            self.week_table,
+            self.day_agenda.list,
+            self.month_grid.table,
+            self.focus_panel.tasks,
+        ):
+            widget.installEventFilter(self)
         # The calendar is the point of this page, so it takes whatever height the rest does not need.
         layout.addWidget(self.planner, 1)
         self.week_status = QLabel()
@@ -394,7 +403,15 @@ class NativeWindow(QMainWindow):
             return
         self.account_name.setText(account["username"])
 
+    def _on_recovery(self) -> bool:
+        return self.findChild(QWidget, "recoveryPage") is self._stack.currentWidget()
+
+    def _finish_recovery(self) -> None:
+        self._allow_week_page = True
+        self.session.finish_recovery()
+
     def _show_recovery(self, codes: list) -> None:
+        self._allow_week_page = False
         self.recovery_list.setText("\n".join(str(code) for code in codes))
         self.recovery_ack.setChecked(False)
         self.recovery_continue.setEnabled(False)
@@ -402,6 +419,8 @@ class NativeWindow(QMainWindow):
 
     def _on_week(self) -> None:
         if self.session.account is None:
+            return
+        if self._on_recovery() and not self._allow_week_page:
             return
         self.week_table.set_week(self.session.week_start, self.session.blocks, self.session.trace)
         agenda = agenda_for(
@@ -424,8 +443,16 @@ class NativeWindow(QMainWindow):
             if button is not None:
                 button.setChecked(name == f"view{view.title()}")
         month = view == "month"
-        self.prev_nav.setText("Previous month" if month else "Previous week")
-        self.next_nav.setText("Next month" if month else "Next week")
+        day = view == "day"
+        if month:
+            self.prev_nav.setText("Previous month")
+            self.next_nav.setText("Next month")
+        elif day:
+            self.prev_nav.setText("Previous day")
+            self.next_nav.setText("Next day")
+        else:
+            self.prev_nav.setText("Previous week")
+            self.next_nav.setText("Next week")
         self._show_page("weekPage")
         retry = self.findChild(QPushButton, "retrySave")
         if retry is not None:
@@ -555,11 +582,19 @@ class NativeWindow(QMainWindow):
         if self.session.planner_view == "month":
             self.session.shift_month(-1)
             return
+        if self.session.planner_view == "day":
+            current = date.fromisoformat(self.session.selected_day)
+            self.session.open_day((current + timedelta(days=-1)).isoformat())
+            return
         self._shift_week(-7)
 
     def _go_next(self) -> None:
         if self.session.planner_view == "month":
             self.session.shift_month(1)
+            return
+        if self.session.planner_view == "day":
+            current = date.fromisoformat(self.session.selected_day)
+            self.session.open_day((current + timedelta(days=1)).isoformat())
             return
         self._shift_week(7)
 
@@ -682,6 +717,8 @@ class NativeWindow(QMainWindow):
         self._commit_homework(HomeworkDialog(self, assignment, self.session.week_start))
 
     def _edit_block(self, block_id: str) -> None:
+        if self.session.planner_view == "day":
+            self.session.select_block(block_id, date.fromisoformat(self.session.selected_day).weekday())
         block = next((item for item in self.session.blocks if item["id"] == block_id), None)
         if block is None:
             return
@@ -779,28 +816,41 @@ class NativeWindow(QMainWindow):
             return
         if dialog.action == "apply" and dialog.routine_id:
             routine = self.session.routines.get(dialog.routine_id)
-            rows = self.session.apply_routine_rows(
-                dialog.routine_id, dialog.destination, dialog.days
-            )
+            dest = dialog.destination
+            rows = self.session.apply_routine_rows(dialog.routine_id, dest, dialog.days)
             name = routine["name"] if routine else "routine"
             key = None
             if routine and self.session.account is not None:
                 key = (
                     f"routine|{self.session.account['id']}|{dialog.routine_id}|"
-                    f"{routine['revision']}|{dialog.destination}|"
+                    f"{routine['revision']}|{dest}|"
                     + ",".join(str(day) for day in dialog.days)
                 )
-            self._show_preview(
-                "Apply " + name,
-                "Uncheck holidays or adjust one-off times before saving.",
-                rows,
-                label="the " + name + " routine",
-                snapshot_label=restore_point_label(
-                    "Before applying " + name + " to " + dialog.destination
-                ),
-                attempt_key=key,
-                destination=dialog.destination,
-            )
+
+            def show(existing: list[dict]) -> None:
+                self._show_preview(
+                    "Apply " + name,
+                    "Uncheck holidays or adjust one-off times before saving.",
+                    rows,
+                    label="the " + name + " routine",
+                    snapshot_label=restore_point_label("Before applying " + name + " to " + dest),
+                    attempt_key=key,
+                    existing=existing,
+                    destination=dest,
+                )
+
+            if dest == self.session.week_start:
+                show(self.session.blocks)
+                return
+
+            def ok(data: dict) -> None:
+                show(list(data.get("blocks") or []))
+
+            def err(error: object) -> None:
+                self.session._say(getattr(error, "message", str(error)))
+
+            self.session.client.request("GET", f"/api/week?week_start={dest}", None, ok, err)
+            return
 
     def _show_unfinished(self) -> None:
         self.unfinished_panel.set_items(self.session.unfinished())
@@ -839,10 +889,15 @@ class NativeWindow(QMainWindow):
             lambda: self.session.preview_running_late(dialog.chosen_minutes(), now)
         )
         self._late_dialog = dialog
+        self.session.status.connect(dialog.error.setText)
         accepted = dialog.exec() == QDialog.DialogCode.Accepted
+        with contextlib.suppress(RuntimeError, TypeError):
+            self.session.status.disconnect(dialog.error.setText)
         self._late_dialog = None
         if accepted:
             self.session.accept_running_late()
+        else:
+            self.session.late_preview = None
 
     def _open_spread(self, assignment_id: str) -> None:
         item = self.session.assignments.get(assignment_id)
@@ -860,6 +915,7 @@ class NativeWindow(QMainWindow):
 
     def _open_availability(self) -> None:
         if self.session.preferences is None:
+            self.session._say("Still loading your settings…")
             return
         dialog = AvailabilityDialog(self, self.session.preferences)
         if dialog.exec() != QDialog.DialogCode.Accepted:
@@ -912,11 +968,8 @@ class NativeWindow(QMainWindow):
         dialog = AlarmRingDialog(self, alarm, url)
         self._alarm_dialog = dialog
         dialog.exec()
-        open_spotify = dialog.open_spotify
         snoozed = dialog.snoozed
         self._alarm_dialog = None
-        if open_spotify and url:
-            QDesktopServices.openUrl(QUrl(url))
         self.session.finish_alarm(snoozed)
 
     def _open_spotify(self) -> None:
@@ -928,6 +981,7 @@ class NativeWindow(QMainWindow):
 
     def _open_settings(self) -> None:
         if self.session.preferences is None:
+            self.session._say("Still loading your settings…")
             return
         dialog = PrefsDialog(self, self.session.preferences, self._look, self.session.reminder_limits)
         if dialog.exec() != QDialog.DialogCode.Accepted:
@@ -989,7 +1043,10 @@ class NativeWindow(QMainWindow):
             self._write_json("flexweek-" + self.session.week_start + ".json", self.session.week_file())
         elif dialog.action == "day":
             destination = self.session.paste_destination()
-            day = 0 if destination is None else destination[0]
+            if destination is None:
+                self.session._say("Select a day first.")
+                return
+            day = destination[0]
             self._write_json("flexweek-day.json", self.session.day_file(day))
         elif dialog.action == "import-week":
             path, _ = QFileDialog.getOpenFileName(self, "Import week or day", "", "JSON (*.json)")
@@ -997,7 +1054,7 @@ class NativeWindow(QMainWindow):
                 return
             try:
                 raw = Path(path).read_text()
-            except OSError as error:
+            except (OSError, UnicodeDecodeError) as error:
                 self.session._say("Could not read that file. " + str(error))
                 return
             parsed = parse_import_payload(raw)
@@ -1036,7 +1093,10 @@ class NativeWindow(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, "Save FlexWeek file", name, "JSON (*.json)")
         if not path:
             return
-        Path(path).write_text(json.dumps(payload, indent=2) + "\n")
+        try:
+            Path(path).write_text(json.dumps(payload, indent=2) + "\n")
+        except OSError as error:
+            self.session._say("Could not write that file. " + str(error))
 
     def _look_path(self) -> Path:
         root = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation))
@@ -1061,7 +1121,7 @@ class NativeWindow(QMainWindow):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(self._look) + "\n")
         except OSError:
-            return
+            self.session._say("Could not save the look for this device.")
 
     def _apply_appearance(self) -> None:
         pack = (self.session.preferences or {}).get("theme_pack") or "system"
@@ -1123,6 +1183,9 @@ class NativeWindow(QMainWindow):
         if self.session.account is None or QApplication.activeModalWidget() is not None:
             super().keyPressEvent(event)
             return
+        if self._on_recovery():
+            super().keyPressEvent(event)
+            return
         focus = QApplication.focusWidget()
         if isinstance(focus, (QLineEdit, QPlainTextEdit, QAbstractSpinBox, QComboBox)):
             super().keyPressEvent(event)
@@ -1171,3 +1234,17 @@ class NativeWindow(QMainWindow):
             event.accept()
             return
         super().keyPressEvent(event)
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if event.type() != QEvent.Type.KeyPress:
+            return super().eventFilter(watched, event)
+        key = event.key()
+        mods = event.modifiers()
+        control = bool(mods & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier))
+        if not control and key in (Qt.Key.Key_W, Qt.Key.Key_D, Qt.Key.Key_M, Qt.Key.Key_Delete):
+            self.keyPressEvent(event)
+            return True
+        if control and key in (Qt.Key.Key_C, Qt.Key.Key_V, Qt.Key.Key_D, Qt.Key.Key_Z, Qt.Key.Key_Y):
+            self.keyPressEvent(event)
+            return True
+        return super().eventFilter(watched, event)

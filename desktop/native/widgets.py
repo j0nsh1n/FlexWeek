@@ -51,6 +51,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from pydantic import ValidationError
+
 from backend.models import Assignment, TimeBlock, WeekRequest
 from backend.slots import (
     DAY_END_MIN,
@@ -70,6 +72,7 @@ from desktop.native.calendar import (
     create_drag_range,
     is_series,
     local_stamp,
+    monday_of,
     move_range,
     occupied_intervals,
     resize_bottom_range,
@@ -101,6 +104,12 @@ MONTH_FULL = (
     "November",
     "December",
 )
+
+
+def _validation_text(error: Exception) -> str:
+    if isinstance(error, ValidationError) and error.errors():
+        return str(error.errors()[0].get("msg") or error)
+    return str(error)
 
 
 class FlowLayout(QLayout):
@@ -331,8 +340,9 @@ class WeekTable(QTableWidget):
 
     def _edit_mode(self, block: dict, row: int) -> str:
         first = hhmm_to_slot(block["start"])
-        last = first + duration_to_slots(block["duration_min"]) - 1
-        if first == last:
+        size = duration_to_slots(block["duration_min"])
+        last = first + size - 1
+        if size < 3:
             return "move"
         if row <= first:
             return "resize_top"
@@ -420,7 +430,12 @@ class WeekTable(QTableWidget):
             return
         if gesture["type"] == "create":
             if gesture["moved"]:
-                span = create_drag_range(gesture["start_min"], gesture["cur_min"])
+                start = gesture["start_min"]
+                cur = gesture["cur_min"]
+                if cur >= start:
+                    span = create_drag_range(start, cur + SLOT_MIN)
+                else:
+                    span = create_drag_range(start + SLOT_MIN, cur)
             else:
                 span = create_click_range(
                     gesture["start_min"], occupied_intervals(self._week_blocks, gesture["day"])
@@ -491,6 +506,7 @@ class DayAgenda(QWidget):
         self.list.itemDoubleClicked.connect(self._on_item)
         layout.addWidget(self.list)
         self._next_kind = "add"
+        self._next_id: str | None = None
 
     def set_agenda(self, iso_day: str, agenda: dict, day_data: dict | None) -> None:
         day_index = agenda["day_index"]
@@ -498,6 +514,7 @@ class DayAgenda(QWidget):
         self.heading.setText(date.fromisoformat(iso_day).strftime("%A, %b %d"))
         nxt = agenda["next_action"]
         self._next_kind = nxt["kind"]
+        self._next_id = nxt.get("id")
         labels = {
             "add": "Add homework",
             "plan": "Plan my homework",
@@ -537,6 +554,8 @@ class DayAgenda(QWidget):
             self.plan_requested.emit()
         elif self._next_kind == "add":
             self.add_requested.emit()
+        elif self._next_id:
+            self.item_activated.emit(self._next_id)
         else:
             for index in range(self.list.count()):
                 candidate = self.list.item(index)
@@ -873,7 +892,7 @@ class BlockDialog(QDialog):
                 raise ValueError("Use the homework editor for flexible work.")
             WeekRequest(blocks=[TimeBlock.model_validate(candidate)])
         except ValueError as error:
-            self.error.setText(str(error))
+            self.error.setText(_validation_text(error))
             return
         self._result = candidate
         super().accept()
@@ -986,11 +1005,25 @@ class HomeworkDialog(QDialog):
             spread = QPushButton("Spread across days")
             spread.setObjectName("spreadHomework")
             spread.clicked.connect(self._request_spread)
+            spread.setToolTip("Save these edits first, then spread.")
             layout.addWidget(spread)
+            self._spread_button = spread
+            self.title.textChanged.connect(self._disable_spread)
+            self.notes.textChanged.connect(self._disable_spread)
+            self.estimate.valueChanged.connect(self._disable_spread)
+            self.due.dateTimeChanged.connect(self._disable_spread)
+            self.course.textChanged.connect(self._disable_spread)
+        else:
+            self._spread_button = None
         buttons = _buttons()
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _disable_spread(self, *_args: object) -> None:
+        if self._spread_button is None:
+            return
+        self._spread_button.setEnabled(False)
 
     def _request_spread(self) -> None:
         self._spread = True
@@ -1073,7 +1106,7 @@ class HomeworkDialog(QDialog):
                 {key: value for key, value in candidate.items() if key in Assignment.model_fields}
             )
         except ValueError as error:
-            self.error.setText(str(error))
+            self.error.setText(_validation_text(error))
             return
         self._result = candidate
         super().accept()
@@ -1140,7 +1173,6 @@ class PreviewDialog(QDialog):
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
-        selected = [row for row in self._rows if row.get("checked")]
         conflicted = False
         for index, row in enumerate(self._rows):
             conflict = row_conflict(row, self._rows, self._existing)
@@ -1149,6 +1181,7 @@ class PreviewDialog(QDialog):
             conflicted = conflicted or bool(row.get("checked") and (conflict or row.get("invalid")))
             self._list_layout.addWidget(self._row_widget(index, row, conflict))
         self._first = False
+        selected = [row for row in self._rows if row.get("checked")]
         self.confirm.setEnabled(bool(selected) and not conflicted)
         if conflicted:
             self.error.setText("Resolve conflicts or select at least one item before saving.")
@@ -1321,9 +1354,13 @@ class RoutineDialog(QDialog):
             )
             item.setData(Qt.ItemDataRole.UserRole, routine["id"])
             self.list.addItem(item)
-        dest = QLineEdit(week_start)
+        dest = QDateEdit(QDate.fromString(week_start, "yyyy-MM-dd"))
         dest.setObjectName("routineDestination")
-        dest.setMaxLength(10)
+        dest.setDisplayFormat("yyyy-MM-dd")
+        dest.setCalendarPopup(True)
+        dest.setMinimumDate(QDate(2000, 1, 1))
+        dest.setMaximumDate(QDate(2099, 12, 31))
+        dest.dateChanged.connect(self._snap_destination)
         layout.addWidget(dest)
         self._dest = dest
         days_row = QHBoxLayout()
@@ -1377,9 +1414,18 @@ class RoutineDialog(QDialog):
             return
         self.action = "apply"
         self.routine_id = item.data(Qt.ItemDataRole.UserRole)
-        self.destination = self._dest.text().strip()
+        self.destination = self._dest.date().toString("yyyy-MM-dd")
         self.days = days
         super().accept()
+
+    def _snap_destination(self, value: QDate) -> None:
+        iso = value.toString("yyyy-MM-dd")
+        monday = monday_of(iso)
+        if monday == iso:
+            return
+        self._dest.blockSignals(True)
+        self._dest.setDate(QDate.fromString(monday, "yyyy-MM-dd"))
+        self._dest.blockSignals(False)
 
     def _delete(self) -> None:
         item = self.list.currentItem()

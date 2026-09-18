@@ -86,6 +86,24 @@ def test_trying_this_day_only_and_going_back_keeps_the_series_days(qapp: QApplic
     assert dialog.block()["days"] == [0, 1, 2, 3, 4]
 
 
+def test_restore_preview_keeps_the_chosen_point(qapp: QApplication) -> None:
+    from desktop.native.settings import RestoreDialog
+
+    points = [{"id": "p1", "label": "Before", "created_at": "2026-09-18", "weeks_count": 1}]
+    preview = {"id": "p1", "changes": {"weeks": {}, "assignments": {}}}
+    first = RestoreDialog(None, points, None, None)
+    first.show()
+    qapp.processEvents()
+    first.list.setCurrentRow(0)
+    first._preview()
+    assert first.selected_id == "p1"
+    reopened = RestoreDialog(None, points, preview, None)
+    reopened.show()
+    qapp.processEvents()
+    reopened._restore()
+    assert reopened.selected_id == "p1"
+
+
 def test_going_back_keeps_a_day_the_student_had_already_unticked(qapp: QApplication) -> None:
     dialog = BlockDialog(None, school(), occurrence_day=2)
     dialog.days[4].setChecked(False)

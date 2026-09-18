@@ -22,7 +22,9 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QStandardPaths
+    from PySide6.QtCore import QStandardPaths, Qt
+    from PySide6.QtGui import QGuiApplication
+    from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication, QDialog, QPushButton
 
     from desktop.native.widgets import BlockDialog
@@ -135,3 +137,42 @@ def test_this_day_only_plus_missed_marks_that_one_day_and_saves(
     assert by_days[(2,)].get("missed_days") == [2]
     assert by_days[(0, 1, 3, 4)].get("missed_days") is None
     assert window.session.revision == 2, "the split and the missed day reached the server"
+
+
+def soccer() -> dict:
+    return {"id": "soccer", "title": "Soccer", "kind": "locked", "start": "07:00",
+            "duration_min": 60, "days": [0]}
+
+
+def test_w_d_and_m_switch_views_while_the_calendar_has_the_keyboard(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """A click in the calendar gives it the keyboard, and Qt sends keys to the widget that has it.
+
+    Item views keep letter keys for their own type-ahead search, so W, D and M never reached the
+    window. The older test sends the key straight to the window, which no student can do.
+    """
+    session = window.session
+    QTest.keyClick(window.week_table, Qt.Key.Key_D)
+    wait_until(qapp, lambda: session.planner_view == "day" and not session.busy)
+    QTest.keyClick(window.day_agenda.list, Qt.Key.Key_M)
+    wait_until(qapp, lambda: session.planner_view == "month" and not session.busy)
+    QTest.keyClick(window.month_grid.table, Qt.Key.Key_W)
+    wait_until(qapp, lambda: session.planner_view == "week" and not session.busy)
+    QTest.keyClick(window.focus_panel.tasks, Qt.Key.Key_M)
+    wait_until(qapp, lambda: session.planner_view == "month" and not session.busy)
+
+
+def test_ctrl_c_in_the_week_grid_copies_the_block_and_leaves_the_os_clipboard_alone(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """docs/native-python-migration.md: "Ctrl/C/V/D never touch the OS clipboard"."""
+    saved(qapp, window, soccer())
+    window.session.select_block("soccer", 0)
+    QGuiApplication.clipboard().setText("the student's own text")
+    # Qt copies the current cell's text on Ctrl+C, and arrow keys or a click can make a cell current.
+    window.week_table.setCurrentCell(5, 0)
+    QTest.keyClick(window.week_table, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
+    assert QGuiApplication.clipboard().text() == "the student's own text"
+    assert (window.session.clipboard or {}).get("kind") == "block"
+    assert "Soccer" in window.session.clipboard["label"]
