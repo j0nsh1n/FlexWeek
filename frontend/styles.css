@@ -542,7 +542,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   color: var(--block-locked-ink);
   border: 1px solid var(--block-border);
   border-left: 3px solid var(--block-color, var(--block-edge));
-  border-radius: var(--radius-sm);
+  /* Pill corners are 999px so chips become capsules; a tall block would clip its own title. */
+  border-radius: min(var(--radius-sm), 0.5rem);
   padding: 0.18rem 0.35rem;
   font-size: 0.7rem;
   line-height: 1.2;

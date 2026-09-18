@@ -407,7 +407,10 @@ Recorded `operation_id` values make a retried write return the first result.
   text and accent distance automatically once named in the token test. Red
   checks caught a real gap: the payload test only guarded preferencesPayload()
   while the Save button spreads readComfortEdit(); it now captures the real PUT
-  on submit. Next: owner decides on Amendment A (fold Preset into Look, which
+  on submit. A real offscreen grab caught what no test could: pill corners
+  turned tall blocks into capsules that clipped their titles; blocks now cap
+  their radius at 0.5rem and a static test holds it. Next: owner decides on
+  Amendment A (fold Preset into Look, which
   presets next, reset-on-preset), then Grok adds the fields and the knobs move
   to the account. Poster, Ink and High contrast are the recommended next three.
 - 2026-09-17, `feat/0-11-seamless` (latest): pack UI, frost token maps,

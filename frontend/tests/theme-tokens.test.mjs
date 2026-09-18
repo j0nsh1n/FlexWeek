@@ -305,6 +305,13 @@ test('a block takes its category colour from --block-color, so a look can decide
   assert.match(css, /:root\[data-blocks="outlined"\] \.block \{[^}]*background: transparent/);
 });
 
+test('pill corners cannot turn a calendar block into a capsule that clips its title', () => {
+  // Seen in a real grab: 999px on a tall School block rounded the text away.
+  assert.match(css, /\.block \{[^}]*border-radius: min\(var\(--radius-sm\), 0\.5rem\)/);
+  const pill = /:root\[data-corners="pill"\] \{([^}]*)\}/.exec(css);
+  assert.ok(pill && /--radius-sm: 999px/.test(pill[1]), 'chips still get true pill corners');
+});
+
 test('the Terminal preset changes every knob the frost packs leave at default', () => {
   const lookJs = readFileSync(new URL('../look.js', import.meta.url), 'utf8');
   const preset = /terminal: \{([\s\S]*?)\}/.exec(lookJs);

@@ -14,6 +14,9 @@ All notable changes to FlexWeek are documented here. Format follows
   of it stays on this computer for now; nothing is saved to the account until
   the contract amendment is approved, and picking a preset resets the knobs
   to that preset's own settings.
+- Pill corners keep calendar blocks readable (2026-09-17, shared frontend).
+  Chips become capsules; a block's corners stop at 8px so a tall School block
+  cannot round its own title away.
 
 ### Changed
 - Calendar blocks take their category colour through a stylesheet property
