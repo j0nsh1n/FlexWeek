@@ -257,6 +257,7 @@ class NativeSession(QObject):
         self._attempts.clear()
         self._preview_attempt = None
         self._solve_after_save = False
+        self._history_label = "editing the week"
         self._reset_focus(persist=False)
         self.fired_reminders.clear()
         self.fired_alarms.clear()
@@ -440,12 +441,12 @@ class NativeSession(QObject):
         self._say("Signing in…")
 
         def ok(data: dict) -> None:
-            if not self._alive(ticket):
+            if not self._idle(ticket):
                 return
             self.client.set_account(data)
             self.account = {"id": data["id"], "username": data["username"]}
             self.account_changed.emit(self.account)
-            self.load_week(self.week_start)
+            self.load_week(self.week_start, discard=True)
 
         self.client.request(
             "POST",
@@ -484,45 +485,59 @@ class NativeSession(QObject):
             return
         self.client.request("POST", "/api/auth/logout", None, lambda _data: finish(), lambda _error: finish())
 
-    def load_week(self, week_start: str | None = None) -> None:
+    def load_week(self, week_start: str | None = None, *, discard: bool = False) -> None:
+        if self.account is None:
+            return
+        if self.busy:
+            return
+        if not discard and (self.dirty or self.dirty_assignments or self.pending_save):
+            self._say("Save, retry or reload before opening another week.")
+            return
         start = week_start or current_week_start()
         previous = self.week_start
         ticket = self._begin()
-        self.week_start = start
         self._say("Loading…")
 
-        def ok(data: dict) -> None:
+        def week_ok(data: dict) -> None:
             if not self._alive(ticket) or self.client.account is None:
                 return
-            loaded = data["week_start"]
+            self._load_assignments(ticket, previous, data)
+
+        def failed(error: ApiError) -> None:
+            if not self._alive(ticket):
+                return
+            # The week on screen did not change, so Day view must not stay on a day outside it.
+            if monday_of(self.selected_day) != self.week_start:
+                self._ensure_selected_day()
+                self._refresh_view()
+            self._fail(ticket, error)
+            self.week_changed.emit()
+
+        self.client.request("GET", f"/api/week?week_start={start}", None, week_ok, failed)
+
+    def _assignments_url(self, week_start: str) -> str:
+        return f"/api/assignments?week_start={week_start}&include_completed=true"
+
+    def _load_assignments(self, ticket: int, previous: str, week: dict) -> None:
+        loaded = week["week_start"]
+
+        def ok(data: dict) -> None:
+            if not self._idle(ticket):
+                return
             if loaded != previous:
                 self._undo.clear()
                 self._redo.clear()
-            elif self.revision != data["revision"]:
+            elif self.revision != week["revision"]:
                 mark_stale(self._undo, loaded)
                 mark_stale(self._redo, loaded)
-            self.blocks = list(data["blocks"])
-            self.revision = data["revision"]
+            self.blocks = list(week["blocks"])
+            self.revision = week["revision"]
             self.week_start = loaded
             self.dirty = False
             self.conflict = False
             self.pending_save = None
             self._pending_step = None
             self.trace = None
-            self._load_assignments(ticket)
-
-        self.client.request(
-            "GET",
-            f"/api/week?week_start={start}",
-            None,
-            ok,
-            lambda error: self._fail(ticket, error),
-        )
-
-    def _load_assignments(self, ticket: int) -> None:
-        def ok(data: dict) -> None:
-            if not self._idle(ticket):
-                return
             self.assignments = {item["id"]: item for item in data["assignments"]}
             self.dirty_assignments.clear()
             self._committed_blocks = deepcopy(self.blocks)
@@ -539,19 +554,23 @@ class NativeSession(QObject):
             self._fetch_restore_points()
             self._fetch_recovery_status()
 
-        self.client.request(
-            "GET",
-            f"/api/assignments?week_start={self.week_start}",
-            None,
-            ok,
-            lambda error: self._fail(ticket, error),
-        )
+        def failed(error: ApiError) -> None:
+            if not self._alive(ticket):
+                return
+            if monday_of(self.selected_day) != self.week_start:
+                self._ensure_selected_day()
+                self._refresh_view()
+            self._fail(ticket, error)
+            self.week_changed.emit()
+
+        self.client.request("GET", self._assignments_url(loaded), None, ok, failed)
 
     def reload(self) -> None:
         self.pending_save = None
         self.dirty = False
         self.conflict = False
-        self.load_week(self.week_start)
+        self.dirty_assignments.clear()
+        self.load_week(self.week_start, discard=True)
 
     def _touch(self, label: str | None = None) -> None:
         if label:
@@ -559,6 +578,7 @@ class NativeSession(QObject):
         self.dirty = True
         self.conflict = False
         self.pending_save = None
+        self.trace = None
         self.week_changed.emit()
 
     def add_block(self, block: dict, *, scope: str = "series", day: int | None = None) -> None:
@@ -683,10 +703,30 @@ class NativeSession(QObject):
         self._history_label = ("finishing " if completed else "reopening ") + body["title"]
 
     def can_undo(self) -> bool:
-        return bool(self._undo) and not self._undo[-1].get("stale") and not self.busy and not self.conflict
+        self._drop_stale_history()
+        return (
+            bool(self._undo)
+            and not self.busy
+            and not self.conflict
+            and not self.dirty
+            and self.pending_save is None
+        )
 
     def can_redo(self) -> bool:
-        return bool(self._redo) and not self._redo[-1].get("stale") and not self.busy and not self.conflict
+        self._drop_stale_history()
+        return (
+            bool(self._redo)
+            and not self.busy
+            and not self.conflict
+            and not self.dirty
+            and self.pending_save is None
+        )
+
+    def _drop_stale_history(self) -> None:
+        while self._undo and self._undo[-1].get("stale"):
+            self._undo.pop()
+        while self._redo and self._redo[-1].get("stale"):
+            self._redo.pop()
 
     def _apply_side(self, step: dict, side: str) -> None:
         for week in step.get("weeks") or []:
@@ -697,7 +737,13 @@ class NativeSession(QObject):
             if target is None:
                 self.assignments.pop(entry["id"], None)
             else:
-                self.assignments[entry["id"]] = deepcopy(target)
+                live = self.assignments.get(entry["id"])
+                restored = deepcopy(target)
+                restored["revision"] = int((live or {}).get("revision") or 0)
+                if live is not None:
+                    restored["focus_minutes"] = live.get("focus_minutes") or 0
+                    restored["focus_sessions"] = live.get("focus_sessions") or 0
+                self.assignments[entry["id"]] = restored
             self.dirty_assignments.add(entry["id"])
         self._touch(step["label"])
 
@@ -734,6 +780,8 @@ class NativeSession(QObject):
     def save(self, snapshot_label: str | None = None, operation_id: str | None = None,
              record_history: bool = True) -> None:
         if self.account is None or self.conflict:
+            return
+        if self.busy:
             return
         if self.pending_save is None:
             writes = []
@@ -834,6 +882,13 @@ class NativeSession(QObject):
             if not self._idle(ticket):
                 return
             if self._traveling and self._travel_step is not None:
+                if error.status != 409:
+                    self.blocks = deepcopy(self._committed_blocks)
+                    self.assignments = deepcopy(self._committed_assignments)
+                    self.dirty_assignments.clear()
+                    self.dirty = False
+                    self.pending_save = None
+                    self.conflict = False
                 if self._traveling == "undo":
                     self._undo.append(self._travel_step)
                 else:
@@ -954,7 +1009,7 @@ class NativeSession(QObject):
 
         self.client.request(
             "GET",
-            f"/api/assignments?week_start={asked}",
+            self._assignments_url(asked),
             None,
             ok,
             lambda _error: None,
@@ -1386,8 +1441,8 @@ class NativeSession(QObject):
                     return
                 missed = sorted(set(target.get("missed_days") or []) | {day})
                 target["missed_days"] = missed
-                self.trace = trace
                 self._touch("the replan")
+                self.trace = trace
                 self.save()
 
             self.client.request(
@@ -1868,6 +1923,7 @@ class NativeSession(QObject):
                 return
             self.blocks = [updated if item["id"] == updated["id"] else item for item in self.blocks]
         self.dirty = True
+        self.pending_save = None
         self.save(record_history=False)
 
     def finish_focused_homework(self) -> bool:
@@ -1912,6 +1968,7 @@ class NativeSession(QObject):
         )
         self._history_label = "adding time to " + assignment["title"]
         self.dirty = True
+        self.pending_save = None
         self._persist_focus()
         self.focus_changed.emit()
         self.save()
@@ -2073,12 +2130,12 @@ class NativeSession(QObject):
         self._say("Recovering account…")
 
         def ok(data: dict) -> None:
-            if not self._alive(ticket):
+            if not self._idle(ticket):
                 return
             self.client.set_account(data)
             self.account = {"id": data["id"], "username": data["username"]}
             self.account_changed.emit(self.account)
-            self.load_week(self.week_start)
+            self.load_week(self.week_start, discard=True)
 
         self.client.request(
             "POST",
@@ -2309,8 +2366,10 @@ class NativeSession(QObject):
             if not self._idle(ticket):
                 return
             self.transfer_preview = None
+            self._undo.clear()
+            self._redo.clear()
             self._say("Imported account data.")
-            self.load_week(self.week_start)
+            self.load_week(self.week_start, discard=True)
             self._fetch_restore_points()
 
         def err(error: ApiError) -> None:

@@ -124,7 +124,10 @@ def due_alarms(
         if not alarm.get("enabled") or weekday not in (alarm.get("days") or []):
             continue
         hour, minute = (int(part) for part in str(alarm["time"]).split(":"))
-        due_ms = midnight_ms + (hour * 60 + minute) * 60_000
+        due_at = datetime.fromisoformat(today_iso).replace(
+            hour=hour, minute=minute, second=0, microsecond=0
+        )
+        due_ms = int(due_at.timestamp() * 1000)
         key = alarm_key(today_iso, alarm)
         if start_ms < due_ms <= now_ms and key not in fired:
             fired.add(key)

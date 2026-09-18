@@ -113,3 +113,40 @@ def test_alarm_fires_once_then_snoozes_five_minutes() -> None:
     )
     assert [item["id"] for item in later[0]] == ["wake"]
     assert later[1] == {}
+
+
+def test_alarm_fires_at_seven_on_a_daylight_saving_day() -> None:
+    import os
+    import time
+
+    previous = os.environ.get("TZ")
+    os.environ["TZ"] = "America/New_York"
+    time.tzset()
+    try:
+        alarm = {"id": "wake", "name": "Wake", "time": "07:00", "days": [6], "enabled": True}
+
+        def queued_at(iso: str) -> list[str]:
+            moment = datetime.fromisoformat(iso).replace(hour=7, minute=0)
+            now_ms = int(moment.timestamp() * 1000)
+            clock = clock_parts(now_ms)
+            queued, _, _ = due_alarms(
+                alarms=[alarm],
+                today_iso=iso,
+                weekday=moment.weekday(),
+                now_ms=now_ms,
+                midnight_ms=clock["midnight_ms"],
+                last_check_ms=now_ms - 60_000,
+                fired=set(),
+                snoozed={},
+            )
+            return [item["id"] for item in queued]
+
+        assert queued_at("2026-03-08") == ["wake"]
+        assert queued_at("2026-11-01") == ["wake"]
+        assert queued_at("2026-09-13") == ["wake"]
+    finally:
+        if previous is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = previous
+        time.tzset()
