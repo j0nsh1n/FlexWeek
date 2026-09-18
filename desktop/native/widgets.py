@@ -573,6 +573,7 @@ class MonthGrid(QWidget):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.setHorizontalHeaderLabels(DAYS)
         self.table.cellClicked.connect(self._activate)
         layout.addWidget(self.table)
@@ -600,7 +601,10 @@ class MonthGrid(QWidget):
         self.heading.setText(f"{MONTH_FULL[month - 1]} {year}")
         self.warning.setText(MONTH_SAVED_ONLY if dirty else "")
         days = snapshot.get("days") or []
-        for index in range(35):
+        # The API sends whole weeks, four to six of them. Five fixed rows lost the last week of August.
+        self.table.setRowCount((len(days) + 6) // 7)
+        tallest = 1
+        for index in range(self.table.rowCount() * 7):
             row, column = divmod(index, 7)
             if index >= len(days):
                 self.table.setItem(row, column, QTableWidgetItem(""))
@@ -614,11 +618,16 @@ class MonthGrid(QWidget):
                 lines.append(f"{cell['session_count']} sessions")
             if cell.get("locked_count"):
                 lines.append(f"{cell['locked_count']} fixed")
+            tallest = max(tallest, len(lines))
             item = QTableWidgetItem("\n".join(lines))
             item.setData(Qt.ItemDataRole.UserRole, cell["date"])
             if not cell.get("in_month"):
                 item.setForeground(QColor(self._palette["muted"]))
             self.table.setItem(row, column, item)
+        # Rows share the height on offer but never shrink below the busiest day, or Qt draws "14…"
+        # where the counts should be. Past that the table scrolls.
+        line = self.table.fontMetrics().lineSpacing()
+        self.table.verticalHeader().setMinimumSectionSize(tallest * line + 8)
         overdue = snapshot.get("overdue") or []
         if overdue:
             titles = ", ".join(item.get("title") or item.get("id", "") for item in overdue[:8])

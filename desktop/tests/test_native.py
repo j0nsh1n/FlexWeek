@@ -446,7 +446,15 @@ def test_month_view_is_a_five_week_saved_snapshot(qapp: QApplication, server: Lo
     session.set_view("month")
     wait_until(qapp, lambda: session.month_data is not None)
     body = session.month_data
-    assert len(body["days"]) == 35
+    # Whole weeks: the Monday on or before the 1st through the Sunday on or after the last day. That
+    # is 28, 35 or 42 days, so a fixed 35 passed in September and would have failed in November.
+    first = date.fromisoformat(session.selected_month + "-01")
+    last = (first + timedelta(days=31)).replace(day=1) - timedelta(days=1)
+    grid_start = first - timedelta(days=first.weekday())
+    grid_end = last + timedelta(days=6 - last.weekday())
+    assert body["days"][0]["date"] == grid_start.isoformat()
+    assert body["days"][-1]["date"] == grid_end.isoformat()
+    assert len(body["days"]) == (grid_end - grid_start).days + 1
     assert body["month"] == session.selected_month
     assert any(day["locked_count"] >= 1 for day in body["days"])
 
