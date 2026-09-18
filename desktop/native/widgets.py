@@ -434,6 +434,17 @@ class WeekTable(QTableWidget):
             self.times_changed.emit(gesture["block_id"], start_min, end_min)
         event.accept()
 
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        # mousePressEvent keeps a press on a block from Qt, so Qt never records the pressed cell and
+        # would deliver this double-click as one more press. cellDoubleClicked then never fires.
+        index = self.indexAt(event.position().toPoint())
+        if event.button() != Qt.MouseButton.LeftButton or self.item(index.row(), index.column()) is None:
+            super().mouseDoubleClickEvent(event)
+            return
+        self._gesture = None
+        self._activate(index.row(), index.column())
+        event.accept()
+
 
 class CategoryChips(QWidget):
     category_chosen = Signal(str)
