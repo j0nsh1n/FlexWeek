@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+
 import pytest
 
 from desktop.tests import logic_support

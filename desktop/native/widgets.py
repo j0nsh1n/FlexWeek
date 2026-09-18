@@ -6,6 +6,7 @@ from copy import deepcopy
 from datetime import date, timedelta
 from uuid import uuid4
 
+from pydantic import ValidationError
 from PySide6.QtCore import (
     QDate,
     QDateTime,
@@ -50,8 +51,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
-from pydantic import ValidationError
 
 from backend.models import Assignment, TimeBlock, WeekRequest
 from backend.slots import (

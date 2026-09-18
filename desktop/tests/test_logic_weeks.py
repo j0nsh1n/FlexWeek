@@ -18,7 +18,6 @@ server = logic_support.server
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtWidgets import QApplication
 
-    from desktop.native.calendar import monday_of
     from desktop.native.controller import NativeSession
     from desktop.server import LocalServer
     from desktop.tests.logic_support import fail_once, fixed, settled, signed_in
