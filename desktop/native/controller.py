@@ -569,21 +569,38 @@ class NativeSession(QObject):
     def add_homework(self, assignment: dict, *, days: list[int] | None = None) -> None:
         payload = {key: value for key, value in assignment.items() if key in Assignment.model_fields}
         payload.setdefault("revision", 0)
+        known = self.assignments.get(payload.get("id"))
+        if known is not None:
+            # A dialog that stayed open across a focus credit holds an older copy. As in the web
+            # client's saveHomework, an edit never sets the revision or the focus counters.
+            for key in ("revision", "focus_minutes", "focus_sessions"):
+                payload[key] = known.get(key) or 0
         body = Assignment.model_validate(payload).model_dump(mode="json")
-        existing = next(
-            (item for item in self.blocks if item.get("assignment_id") == body["id"]), None
+        sessions = [item for item in self.blocks if item.get("assignment_id") == body["id"]]
+        # One session as long as the old estimate is the homework's only planned time, so it follows
+        # the new estimate. Spread, pasted or partly planned sessions keep the lengths already chosen.
+        whole = (
+            len(sessions) == 1
+            and known is not None
+            and sessions[0]["duration_min"] == known.get("estimate_min")
         )
-        if existing is not None:
-            session = deepcopy(existing)
+        blocks = []
+        for item in self.blocks:
+            if item.get("assignment_id") != body["id"]:
+                blocks.append(item)
+                continue
+            session = deepcopy(item)
             session["title"] = body["title"]
-            session["duration_min"] = body["estimate_min"]
+            if whole:
+                session["duration_min"] = body["estimate_min"]
             session["priority"] = body["priority"]
             session["energy"] = body["energy"]
             if body.get("category") is not None:
                 session["category"] = body["category"]
-            if days is not None and not session.get("start"):
+            if days is not None and len(sessions) == 1 and not session.get("start"):
                 session["days"] = days
-        else:
+            blocks.append(TimeBlock.model_validate(session).model_dump(mode="json"))
+        if not sessions:
             session = {
                 "id": str(uuid4()),
                 "title": body["title"],
@@ -595,12 +612,10 @@ class NativeSession(QObject):
                 "assignment_id": body["id"],
                 "category": body.get("category"),
             }
-        session = TimeBlock.model_validate(session).model_dump(mode="json")
+            blocks.append(TimeBlock.model_validate(session).model_dump(mode="json"))
         self.assignments[body["id"]] = body
         self.dirty_assignments.add(body["id"])
-        self.blocks = [item for item in self.blocks if item.get("assignment_id") != body["id"]] + [
-            session
-        ]
+        self.blocks = blocks
         self._touch("editing " + body["title"])
 
     def apply_times(self, block_id: str, start_min: int, end_min: int) -> bool:
