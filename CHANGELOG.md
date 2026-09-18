@@ -6,11 +6,22 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
-- Experimental native desktop (`python -m desktop.native`, 2026-09-17). Qt
-  widgets talk to the same local Python API with no WebEngine and no JavaScript.
-  Create account, recovery codes, sign-in, a dated week, fixed times, homework,
-  Solve and Save work. The usual `python -m desktop.main` window is still the
-  app people should open. `--database` points at a file for isolated checks.
+- Native desktop (`python -m desktop.main`, 2026-09-17). Qt widgets talk to the
+  same local Python API with no WebEngine and no JavaScript on the default
+  path. Create account, recovery codes, sign-in, a dated week, fixed times,
+  homework, Solve and Save work. Week, Day and Month share that week; dragging
+  empty time adds a block of the armed type, dragging a one-day block moves or
+  resizes it, and a repeating commitment refuses the drag so it is not silently
+  retimed. Homework keeps the exact due minute, notes, links, a checklist and
+  Finished. Undo and Redo walk the last saved change on the week on screen
+  (Ctrl+Z). Copy, paste, duplicate and copy-day stay on an internal clipboard
+  (Ctrl+C/V/D). Routines, unfinished homework, missed recovery, running late,
+  spread and availability talk to the same Stage 3/4 API. Focus timers credit
+  homework once when a work phase ends and forget the timer on sign-out.
+  Settings round-trip packs, timers, reminders and alarms. Forgotten-password
+  recovery, restore points, week/day files and account transfer use the existing
+  account APIs. `--smoke-test` walks a native week without Chromium.
+  `--database` points at a file for isolated checks.
 - Look knobs and a Terminal preset (2026-09-17, shared frontend). Settings
   gains Preset and Text size beside Look and Motion, and Customize gains
   Surface, Corners, Depth, Font, Calendar blocks and Density. Terminal is the

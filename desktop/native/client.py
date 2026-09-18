@@ -69,6 +69,10 @@ def _api_path(path: str) -> None:
 def _error(status: int, detail: object = None) -> ApiError:
     if status == 401 and detail == "Incorrect password":
         return ApiError(status, "Incorrect password. Try again.")
+    if status == 401 and detail == "Incorrect username or password":
+        return ApiError(status, "Incorrect username or password. Try again.")
+    if status == 401 and detail == "Incorrect username or recovery code":
+        return ApiError(status, "Incorrect username or recovery code.")
     messages = {
         0: "Could not reach FlexWeek. Your changes may not have been saved. Try again.",
         401: "Please sign in again, or check your username and password.",
@@ -200,7 +204,12 @@ class NativeClient(QObject):
                     expired = (
                         status == 401
                         and account_id is not None
-                        and detail != "Incorrect password"
+                        and detail
+                        not in {
+                            "Incorrect password",
+                            "Incorrect username or password",
+                            "Incorrect username or recovery code",
+                        }
                         and epoch == self.epoch
                     )
                     if expired:

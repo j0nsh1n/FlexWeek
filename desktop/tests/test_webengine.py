@@ -82,6 +82,7 @@ def test_smoke_mode_passes_once_setup_solve_paints_the_week(tmp_path: Path) -> N
     assert result.returncode == 0, report
     assert report["ok"] is True
     assert report["stage"] == "week shown after setup Solve"
+    assert int(report.get("block_count") or 0) >= 1
     assert cast(int, report["painted_colors"]) >= PAINTED_MIN_COLORS
     assert report["window_visible"] is True
     assert report["window_icon_loaded"] is True

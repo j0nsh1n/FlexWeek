@@ -19,7 +19,8 @@ from PySide6.QtWebEngineCore import QWebEnginePage, QWebEnginePermission
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 from backend.assignments import migrated_assignment_id
-from desktop.main import (
+from desktop.server import LocalServer
+from desktop.webengine import (
     OFFLINE_HEADING,
     PAGE_STOPPED_HEADING,
     PAINTED_MIN_COLORS,
@@ -28,7 +29,6 @@ from desktop.main import (
     painted_colors,
     show_running_instance,
 )
-from desktop.server import LocalServer
 
 
 def run(case: str, root: Path) -> None:
@@ -1142,7 +1142,7 @@ def run(case: str, root: Path) -> None:
             print("PASS: unsaved offline draft downloads through the desktop save dialog")
         elif case == "popup":
             with patch(
-                "desktop.main.QDesktopServices.openUrl",
+                "desktop.webengine.QDesktopServices.openUrl",
                 side_effect=record_external,
             ):
                 evaluate("""const link=document.createElement('a'); link.href='https://example.com/help';
@@ -1159,7 +1159,7 @@ def run(case: str, root: Path) -> None:
             print("PASS: external popup handed off once without hidden page")
         elif case == "navigation":
             with patch(
-                "desktop.main.QDesktopServices.openUrl",
+                "desktop.webengine.QDesktopServices.openUrl",
                 side_effect=record_external,
             ):
                 for target in ("file:///tmp/private.txt", "javascript:alert(1)", "data:text/html,hello"):
@@ -1259,7 +1259,7 @@ def run(case: str, root: Path) -> None:
             assert quit_event.isAccepted(), "Explicit Quit was intercepted as close-to-tray"
             print("PASS: notification permission, tray presentation, quick-open, close and quit")
         elif case == "no_icon":
-            with patch("desktop.main.app_icon_path", return_value=root / "missing.png"):
+            with patch("desktop.webengine.app_icon_path", return_value=root / "missing.png"):
                 iconless = MainWindow(origin, tray_enabled=True)
             assert iconless._tray_icon is None, "Installed a tray entry that cannot be seen"
             iconless.show()

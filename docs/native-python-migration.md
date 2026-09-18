@@ -61,12 +61,49 @@ isolated source verification. No existing database is moved or replaced.
    widget tests cover registration and recovery-code acknowledgment, login and
    logout, dated weeks, a saved fixed time after restart, homework plus Solve,
    two-account isolation, stale replies, a 409 that keeps the draft, and no
-   WebEngine import. The WebEngine app remains the default launcher.
-2. Calendar and homework parity: unverified.
-3. Planning and reuse parity: unverified.
-4. Focus and preferences parity: unverified.
-5. Account recovery and files: unverified.
-6. Retirement and delivery: unverified.
+   WebEngine import. `python -m desktop.main` is now the native launcher.
+2. Calendar and homework parity: verified 2026-09-17. Day and Month talk to
+   `GET /api/day` and `GET /api/month`. Drag create/move/resize uses the same
+   15-minute grid as the web calendar; a repeating locked block refuses a
+   one-day drag. Occurrence edits split a one-day block. Homework keeps exact
+   due times, notes, links, a checklist and a completion stamp, and a notes-only
+   edit keeps the existing session. Keyboard W/D/M switches Week/Day/Month;
+   Delete removes the selected occurrence or block. Type chips open Add already
+   armed.
+3. Planning and reuse parity: verified 2026-09-17. Undo and Redo walk the last
+   saved change on the week on screen. Copy, paste, duplicate and copy-day use
+   an internal clipboard (Ctrl/C/V/D never touch the OS clipboard). A collision
+   preview leaves overlapping times unchecked and never force-pastes. Homework
+   paste keeps the assignment id and shares remaining unplanned minutes across
+   a batch. A 100th block is refused. Routines store locked times only and apply
+   through the same preview, writing `snapshot_label` on `/api/changes`.
+   Unfinished homework from an earlier saved week plans here with the same id.
+   Missed days recover through `/api/solve` recover. Running late previews a
+   solve then saves one locked "Running late" block. Spread posts
+   `/api/assignments/{id}/spread` then confirms through `/api/changes`.
+   Availability is GET/PUT `/api/preferences` protected/study_windows/day_cutoff.
+4. Focus and preferences parity: verified 2026-09-17. Work/break/long-break
+   timers use wall-clock `endsAt`, persist per account in the session store, and
+   clear on sign-out. Completing a work phase credits `focus_minutes` once and
+   does not push Undo. Quick focus credits nothing. Homework sessions end with
+   Finished / more time / break. Reminders fire once per block start inside the
+   lead window. Alarms snooze five minutes. Spotify opens only `open.spotify.com`
+   share links. Theme packs PUT `theme_pack` with the axis `theme` field. Look
+   knobs stay device-only JSON. The tray can hide the window while reminders
+   keep running. Native notification delivery is still the OS tray message;
+   offscreen tests do not prove a real desktop notification.
+5. Account recovery and files: verified 2026-09-17. Forgot-password recovery
+   uses `POST /api/auth/recover`. A wrong login or current-password 401 leaves
+   the signed-in session in place. Password and recovery-code replacement, account
+   deletion, restore-point create/preview/restore, week and day JSON files, and
+   previewed account transfer talk to the existing Stage 3/6 API. A stale restore
+   token is refused and the week on screen is unchanged.
+6. Retirement and delivery: verified 2026-09-17. `python -m desktop.main` and
+   `python -m desktop.native` launch native widgets. The private server starts
+   with browser files disabled. `--smoke-test` registers a throwaway account,
+   saves a week, and writes a report without Chromium. `desktop/webengine.py`
+   remains only for leftover probe tests. Packaging scripts and installers are
+   unchanged and still unbuilt.
 
 ## Sources
 

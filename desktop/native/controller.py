@@ -2,15 +2,82 @@
 
 from __future__ import annotations
 
+import time
 from copy import deepcopy
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from urllib.parse import quote
 from uuid import uuid4
 
 from PySide6.QtCore import QObject, Signal
 
-from backend.models import Assignment, TimeBlock
+from backend.models import Assignment, GridWindow, ProtectedWindow, TimeBlock
 from backend.weeks import current_week_start
+from desktop.native.calendar import (
+    DAY_FULL,
+    SERIES_DRAG_MESSAGE,
+    apply_block_edit,
+    apply_block_times,
+    date_for_day,
+    days_through,
+    delete_occurrence,
+    due_day_in_week,
+    first_plannable_day,
+    is_series,
+    local_stamp,
+    monday_of,
+    month_anchor_date,
+    month_for_view,
+    shifted_month,
+)
 from desktop.native.client import ApiError, NativeClient
+from desktop.native.files import (
+    export_day_payload,
+    export_week_payload,
+    merge_imported_blocks,
+    parse_import_payload,
+    plan_imported_homework,
+)
+from desktop.native.focus import (
+    DEFAULT_TIMERS,
+    begin_state,
+    break_phase,
+    credit_target,
+    focus_candidates,
+    more_time_choices,
+    now_and_next,
+    now_next_line,
+    pause_state,
+    persist_payload,
+    remaining_ms,
+    restore_state,
+    set_phase,
+)
+from desktop.native.history import capture_step, mark_stale, push_step
+from desktop.native.look import pack_axis, sanitize_look
+from desktop.native.remind import clock_parts, due_alarms, due_reminders, reminder_lead_min, snooze_until
+from desktop.native.reuse import (
+    MAX_WEEK_BLOCKS,
+    available_homework_minutes,
+    block_occurs_on_day,
+    capacity_problem,
+    clipboard_fingerprint,
+    clipboard_item,
+    copied_homework_block,
+    copy_label,
+    late_from_start,
+    late_id,
+    merge_preview_rows,
+    proposals_from_clipboard,
+    restore_point_label,
+    routine_rows,
+    routine_source_blocks,
+    routine_template,
+    row_conflict,
+    running_late_block,
+    running_late_refusal,
+    unfinished_items,
+    week_label,
+)
 
 
 def session_days(week_start: str, due: str) -> list[int]:
@@ -24,13 +91,15 @@ def session_days(week_start: str, due: str) -> list[int]:
     return list(range(due_day.weekday() + 1))
 
 
-def _assignment_change(item: dict) -> dict:
+def _assignment_write(item_id: str, item: dict | None, revision: int) -> dict:
+    if item is None:
+        return {"id": item_id, "assignment": None, "revision": revision}
     body = Assignment.model_validate(
         {key: value for key, value in item.items() if key in Assignment.model_fields}
     )
     dumped = body.model_dump(mode="json")
-    revision = dumped.pop("revision")
-    return {"id": body.id, "assignment": dumped, "revision": revision}
+    dumped.pop("revision", None)
+    return {"id": item_id, "assignment": dumped, "revision": revision}
 
 
 def _week_write(week_start: str, blocks: list[dict], revision: int) -> dict:
@@ -47,6 +116,10 @@ class NativeSession(QObject):
     week_changed = Signal()
     busy_changed = Signal(bool)
     status = Signal(str)
+    focus_changed = Signal()
+    focus_replace_needed = Signal(str, str)
+    alerts = Signal(list)
+    alarm_due = Signal(object)
 
     def __init__(self, origin: str, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -64,7 +137,61 @@ class NativeSession(QObject):
         self.pending_save: dict | None = None
         self.busy = False
         self.message = ""
+        self.planner_view = "week"
+        self.selected_day = current_week_start()
+        self.day_data: dict | None = None
+        self.selected_month: str | None = None
+        self.month_data: dict | None = None
+        self.armed_category = "class"
+        self.selected_block_id: str | None = None
+        self.selected_occurrence_day: int | None = None
         self._ticket = 0
+        self._day_ticket = 0
+        self._month_ticket = 0
+        self._undo: list[dict] = []
+        self._redo: list[dict] = []
+        self._committed_blocks: list[dict] = []
+        self._committed_assignments: dict[str, dict] = {}
+        self._history_label = "editing the week"
+        self._pending_step: dict | None = None
+        self._traveling: str | None = None
+        self._travel_step: dict | None = None
+        self.clipboard: dict | None = None
+        self.routines: dict[str, dict] = {}
+        self.saved_weeks: list[str] = []
+        self.preferences: dict | None = None
+        self.late_preview: dict | None = None
+        self.spread_preview: dict | None = None
+        self._seen_unfinished: set[str] = set()
+        self._attempts: dict[str, str] = {}
+        self._weeks_ticket = 0
+        self._routines_ticket = 0
+        self._prefs_ticket = 0
+        self._assign_ticket = 0
+        self._preview_attempt: str | None = None
+        self._solve_after_save = False
+        self.focus: dict | None = None
+        self.focus_store: dict[int, dict | None] = {}
+        self.look: dict = sanitize_look(None)
+        self.now_ms = lambda: int(time.time() * 1000)
+        self._focus_busy = False
+        self._pending_focus: dict | None = None
+        self._record_history = True
+        self.fired_reminders: set[str] = set()
+        self.fired_alarms: set[str] = set()
+        self.snoozed_alarms: dict[str, int] = {}
+        self.last_alarm_check: int | None = None
+        self.active_alarm: dict | None = None
+        self.alarm_queue: list[dict] = []
+        self._focus_after_restore = False
+        self.restore_points: list[dict] = []
+        self.restore_preview: dict | None = None
+        self.storage_info: dict | None = None
+        self.transfer_preview: dict | None = None
+        self.timer_presets: list[dict] = []
+        self.reminder_limits: dict = {}
+        self.recovery_remaining: int | None = None
+        self.split_preview: dict | None = None
 
     def _say(self, text: str) -> None:
         self.message = text
@@ -91,6 +218,8 @@ class NativeSession(QObject):
             self._say(error.message)
 
     def _clear_local(self) -> None:
+        if self.account is not None:
+            self.focus_store.pop(self.account["id"], None)
         self.account = None
         self.week_start = current_week_start()
         self.blocks = []
@@ -101,6 +230,177 @@ class NativeSession(QObject):
         self.dirty = False
         self.conflict = False
         self.pending_save = None
+        self.planner_view = "week"
+        self.selected_day = current_week_start()
+        self.day_data = None
+        self.selected_month = None
+        self.month_data = None
+        self.armed_category = "class"
+        self.selected_block_id = None
+        self.selected_occurrence_day = None
+        self._day_ticket += 1
+        self._month_ticket += 1
+        self._undo.clear()
+        self._redo.clear()
+        self._committed_blocks = []
+        self._committed_assignments = {}
+        self._pending_step = None
+        self._traveling = None
+        self._travel_step = None
+        self.clipboard = None
+        self.routines = {}
+        self.saved_weeks = []
+        self.preferences = None
+        self.late_preview = None
+        self.spread_preview = None
+        self._seen_unfinished.clear()
+        self._attempts.clear()
+        self._preview_attempt = None
+        self._solve_after_save = False
+        self._reset_focus(persist=False)
+        self.fired_reminders.clear()
+        self.fired_alarms.clear()
+        self.snoozed_alarms.clear()
+        self.last_alarm_check = None
+        self.active_alarm = None
+        self.alarm_queue.clear()
+        self._focus_after_restore = False
+        self.restore_points = []
+        self.restore_preview = None
+        self.storage_info = None
+        self.transfer_preview = None
+        self.timer_presets = []
+        self.reminder_limits = {}
+        self.recovery_remaining = None
+        self.split_preview = None
+
+    def arm_category(self, category: str) -> None:
+        self.armed_category = category
+
+    def select_block(self, block_id: str | None, day: int | None) -> None:
+        self.selected_block_id = block_id
+        self.selected_occurrence_day = day
+
+    def _ensure_selected_day(self) -> None:
+        today = date.today().isoformat()
+        if monday_of(today) == self.week_start:
+            self.selected_day = today
+        elif monday_of(self.selected_day) != self.week_start:
+            self.selected_day = self.week_start
+
+    def _refresh_view(self) -> None:
+        if self.planner_view == "day":
+            self._ensure_selected_day()
+            self._fetch_day()
+        elif self.planner_view == "month" and self.selected_month:
+            self._fetch_month()
+
+    def set_view(self, view: str) -> None:
+        if view not in {"day", "week", "month"} or self.account is None:
+            return
+        if view == "month":
+            self.open_month()
+            return
+        if self.planner_view == "month":
+            self._leave_month(view)
+            return
+        self.planner_view = view
+        self._refresh_view()
+        self.week_changed.emit()
+
+    def open_day(self, iso_day: str) -> None:
+        if self.account is None:
+            return
+        try:
+            date.fromisoformat(iso_day)
+        except ValueError:
+            return
+        monday = monday_of(iso_day)
+        self.selected_day = iso_day
+        self.planner_view = "day"
+        self.day_data = None
+        if monday != self.week_start:
+            self.load_week(monday)
+            return
+        self._fetch_day()
+        self.week_changed.emit()
+
+    def open_month(self, month: str | None = None) -> None:
+        if self.account is None:
+            return
+        anchor = self.selected_day if self.planner_view == "day" else date_for_day(self.week_start, 3)
+        self.selected_month = month or month_for_view(anchor)
+        self.planner_view = "month"
+        self.month_data = None
+        self._fetch_month()
+        self.week_changed.emit()
+
+    def shift_month(self, amount: int) -> None:
+        if self.planner_view != "month" or not self.selected_month:
+            return
+        nxt = shifted_month(self.selected_month, amount)
+        if nxt is None:
+            return
+        self.selected_month = nxt
+        self.month_data = None
+        self._fetch_month()
+        self.week_changed.emit()
+
+    def _leave_month(self, view: str) -> None:
+        if not self.selected_month:
+            self.planner_view = view
+            self.week_changed.emit()
+            return
+        anchor = month_anchor_date(self.selected_month, date.today().isoformat())
+        monday = monday_of(anchor)
+        self.selected_day = anchor
+        self.planner_view = view
+        if monday != self.week_start:
+            self.load_week(monday)
+            return
+        self._refresh_view()
+        self.week_changed.emit()
+
+    def _fetch_day(self) -> None:
+        if self.account is None or self.planner_view != "day":
+            return
+        asked = self.selected_day
+        self._day_ticket += 1
+        token = self._day_ticket
+
+        def ok(data: dict) -> None:
+            if token != self._day_ticket or self.planner_view != "day" or self.selected_day != asked:
+                return
+            self.day_data = data
+            self.week_changed.emit()
+
+        def err(_error: ApiError) -> None:
+            if token != self._day_ticket:
+                return
+            self.week_changed.emit()
+
+        self.client.request("GET", f"/api/day?date={asked}", None, ok, err)
+
+    def _fetch_month(self) -> None:
+        if self.account is None or self.planner_view != "month" or not self.selected_month:
+            return
+        asked = self.selected_month
+        self._month_ticket += 1
+        token = self._month_ticket
+
+        def ok(data: dict) -> None:
+            if token != self._month_ticket or self.planner_view != "month" or self.selected_month != asked:
+                return
+            self.month_data = data
+            self.week_changed.emit()
+
+        def err(error: ApiError) -> None:
+            if token != self._month_ticket:
+                return
+            self._say(error.message)
+            self.week_changed.emit()
+
+        self.client.request("GET", f"/api/month?month={asked}", None, ok, err)
 
     def _on_expired(self) -> None:
         self._ticket += 1
@@ -161,18 +461,22 @@ class NativeSession(QObject):
         self.load_week(current_week_start())
 
     def logout(self) -> None:
+        account_id = None if self.account is None else self.account["id"]
         ticket = self._begin()
         self._say("Signing out…")
 
         def finish() -> None:
             if not self._alive(ticket):
                 return
+            if account_id is not None:
+                self.focus_store.pop(account_id, None)
             self.client.reset()
             self._clear_local()
             self.busy = False
             self.busy_changed.emit(False)
             self.account_changed.emit(None)
             self.week_changed.emit()
+            self.focus_changed.emit()
             self._say("Signed out.")
 
         if self.client.account is None:
@@ -182,6 +486,7 @@ class NativeSession(QObject):
 
     def load_week(self, week_start: str | None = None) -> None:
         start = week_start or current_week_start()
+        previous = self.week_start
         ticket = self._begin()
         self.week_start = start
         self._say("Loading…")
@@ -189,12 +494,20 @@ class NativeSession(QObject):
         def ok(data: dict) -> None:
             if not self._alive(ticket) or self.client.account is None:
                 return
+            loaded = data["week_start"]
+            if loaded != previous:
+                self._undo.clear()
+                self._redo.clear()
+            elif self.revision != data["revision"]:
+                mark_stale(self._undo, loaded)
+                mark_stale(self._redo, loaded)
             self.blocks = list(data["blocks"])
             self.revision = data["revision"]
-            self.week_start = data["week_start"]
+            self.week_start = loaded
             self.dirty = False
             self.conflict = False
             self.pending_save = None
+            self._pending_step = None
             self.trace = None
             self._load_assignments(ticket)
 
@@ -212,8 +525,19 @@ class NativeSession(QObject):
                 return
             self.assignments = {item["id"]: item for item in data["assignments"]}
             self.dirty_assignments.clear()
+            self._committed_blocks = deepcopy(self.blocks)
+            self._committed_assignments = deepcopy(self.assignments)
+            self._ensure_selected_day()
             self._say("This week.")
+            self._refresh_view()
             self.week_changed.emit()
+            self._restore_focus()
+            self._drop_missing_focus()
+            self._fetch_weeks()
+            self._fetch_routines()
+            self._fetch_preferences()
+            self._fetch_restore_points()
+            self._fetch_recovery_status()
 
         self.client.request(
             "GET",
@@ -229,75 +553,282 @@ class NativeSession(QObject):
         self.conflict = False
         self.load_week(self.week_start)
 
-    def _touch(self) -> None:
+    def _touch(self, label: str | None = None) -> None:
+        if label:
+            self._history_label = label
         self.dirty = True
         self.conflict = False
         self.pending_save = None
         self.week_changed.emit()
 
-    def add_block(self, block: dict) -> None:
+    def add_block(self, block: dict, *, scope: str = "series", day: int | None = None) -> None:
         validated = TimeBlock.model_validate(block).model_dump(mode="json")
-        self.blocks = [item for item in self.blocks if item["id"] != validated["id"]] + [validated]
-        self._touch()
+        self.blocks = apply_block_edit(self.blocks, validated, scope=scope, day=day)
+        self._touch("editing " + validated["title"])
 
-    def add_homework(self, assignment: dict) -> None:
-        body = Assignment.model_validate(
-            {key: value for key, value in assignment.items() if key in Assignment.model_fields}
-        ).model_dump(mode="json")
-        session = TimeBlock.model_validate(
-            {
+    def add_homework(self, assignment: dict, *, days: list[int] | None = None) -> None:
+        payload = {key: value for key, value in assignment.items() if key in Assignment.model_fields}
+        payload.setdefault("revision", 0)
+        body = Assignment.model_validate(payload).model_dump(mode="json")
+        existing = next(
+            (item for item in self.blocks if item.get("assignment_id") == body["id"]), None
+        )
+        if existing is not None:
+            session = deepcopy(existing)
+            session["title"] = body["title"]
+            session["duration_min"] = body["estimate_min"]
+            session["priority"] = body["priority"]
+            session["energy"] = body["energy"]
+            if body.get("category") is not None:
+                session["category"] = body["category"]
+            if days is not None and not session.get("start"):
+                session["days"] = days
+        else:
+            session = {
                 "id": str(uuid4()),
                 "title": body["title"],
                 "kind": "flexible",
                 "duration_min": body["estimate_min"],
-                "days": session_days(self.week_start, body["due"]),
+                "days": days if days is not None else session_days(self.week_start, body["due"]),
                 "priority": body["priority"],
                 "energy": body["energy"],
                 "assignment_id": body["id"],
+                "category": body.get("category"),
             }
-        ).model_dump(mode="json")
+        session = TimeBlock.model_validate(session).model_dump(mode="json")
         self.assignments[body["id"]] = body
         self.dirty_assignments.add(body["id"])
-        self.blocks = [item for item in self.blocks if item.get("assignment_id") != body["id"]] + [session]
-        self._touch()
+        self.blocks = [item for item in self.blocks if item.get("assignment_id") != body["id"]] + [
+            session
+        ]
+        self._touch("editing " + body["title"])
 
-    def save(self) -> None:
+    def apply_times(self, block_id: str, start_min: int, end_min: int) -> bool:
+        block = next((item for item in self.blocks if item["id"] == block_id), None)
+        if block is None:
+            return False
+        if is_series(block):
+            self._say(SERIES_DRAG_MESSAGE.format(title=block["title"], count=len(block["days"])))
+            return False
+        updated = apply_block_times(block, start_min, end_min)
+        if updated is None:
+            return False
+        self.add_block(updated)
+        return True
+
+    def refuse_series_drag(self, block_id: str) -> None:
+        block = next((item for item in self.blocks if item["id"] == block_id), None)
+        if block is None:
+            return
+        self._say(SERIES_DRAG_MESSAGE.format(title=block["title"], count=len(block["days"])))
+
+    def delete_block(self, block_id: str, *, scope: str = "series", day: int | None = None) -> None:
+        block = next((item for item in self.blocks if item["id"] == block_id), None)
+        if block is None:
+            return
+        if block.get("assignment_id") or scope != "occurrence":
+            self.blocks = [item for item in self.blocks if item["id"] != block_id]
+        else:
+            self.blocks = delete_occurrence(self.blocks, block_id, day)
+        if self.selected_block_id == block_id:
+            self.select_block(None, None)
+        self._touch("deleting " + block["title"])
+
+    def delete_selected(self) -> bool:
+        if self.selected_block_id is None:
+            return False
+        block = next((item for item in self.blocks if item["id"] == self.selected_block_id), None)
+        if block is None:
+            return False
+        scope = "occurrence" if is_series(block) else "series"
+        self.delete_block(block["id"], scope=scope, day=self.selected_occurrence_day)
+        return True
+
+    def complete_homework(self, assignment_id: str, completed: bool = True) -> None:
+        item = self.assignments.get(assignment_id)
+        if item is None:
+            return
+        body = deepcopy(item)
+        body["completed"] = completed
+        body["completed_at"] = (body.get("completed_at") or local_stamp()) if completed else None
+        for block in self.blocks:
+            if block.get("assignment_id") != assignment_id:
+                continue
+            block["completed"] = completed
+            if (
+                completed
+                and block.get("kind") == "flexible"
+                and block.get("start")
+                and len(block["days"]) == 1
+            ):
+                block["completed_day"] = block["days"][0]
+            elif not completed:
+                block.pop("completed_day", None)
+        self.add_homework(body)
+        self._history_label = ("finishing " if completed else "reopening ") + body["title"]
+
+    def can_undo(self) -> bool:
+        return bool(self._undo) and not self._undo[-1].get("stale") and not self.busy and not self.conflict
+
+    def can_redo(self) -> bool:
+        return bool(self._redo) and not self._redo[-1].get("stale") and not self.busy and not self.conflict
+
+    def _apply_side(self, step: dict, side: str) -> None:
+        for week in step.get("weeks") or []:
+            if week["week_start"] == self.week_start:
+                self.blocks = deepcopy(week[side])
+        for entry in step.get("assignments") or []:
+            target = entry[side]
+            if target is None:
+                self.assignments.pop(entry["id"], None)
+            else:
+                self.assignments[entry["id"]] = deepcopy(target)
+            self.dirty_assignments.add(entry["id"])
+        self._touch(step["label"])
+
+    def undo(self) -> None:
+        if not self.can_undo():
+            if self._undo and self._undo[-1].get("stale"):
+                self._say("That change cannot be undone. Reload and try again.")
+            return
+        step = self._undo.pop()
+        if step.get("weeks") and step["weeks"][0]["week_start"] != self.week_start:
+            self._undo.append(step)
+            self._say("Undo applies to the week where that change was saved.")
+            return
+        self._traveling = "undo"
+        self._travel_step = step
+        self._apply_side(step, "before")
+        self.save()
+
+    def redo(self) -> None:
+        if not self.can_redo():
+            if self._redo and self._redo[-1].get("stale"):
+                self._say("That change cannot be redone. Reload and try again.")
+            return
+        step = self._redo.pop()
+        if step.get("weeks") and step["weeks"][0]["week_start"] != self.week_start:
+            self._redo.append(step)
+            self._say("Redo applies to the week where that change was saved.")
+            return
+        self._traveling = "redo"
+        self._travel_step = step
+        self._apply_side(step, "after")
+        self.save()
+
+    def save(self, snapshot_label: str | None = None, operation_id: str | None = None,
+             record_history: bool = True) -> None:
         if self.account is None or self.conflict:
             return
         if self.pending_save is None:
+            writes = []
+            for item_id in sorted(self.dirty_assignments):
+                item = self.assignments.get(item_id)
+                source = item if item is not None else self._committed_assignments.get(item_id)
+                revision = int((source or {}).get("revision") or 0)
+                writes.append(_assignment_write(item_id, item, revision))
             self.pending_save = {
                 "weeks": [_week_write(self.week_start, self.blocks, self.revision)],
-                "assignments": [
-                    _assignment_change(self.assignments[item_id])
-                    for item_id in sorted(self.dirty_assignments)
-                ],
-                "operation_id": str(uuid4()),
+                "assignments": writes,
+                "operation_id": operation_id or str(uuid4()),
             }
-        ticket = self._begin()
+            if snapshot_label:
+                self.pending_save["snapshot_label"] = snapshot_label
+            if self._traveling is None and record_history:
+                self._pending_step = capture_step(
+                    self._history_label,
+                    self.week_start,
+                    self._committed_blocks,
+                    self.blocks,
+                    self._committed_assignments,
+                    self.assignments,
+                    set(self.dirty_assignments),
+                )
+        self._post_pending()
+
+    def _post_pending(self, ticket: int | None = None) -> None:
+        if self.pending_save is None:
+            return
+        if ticket is None:
+            ticket = self._begin()
         self._say("Saving…")
+        destination = None
+        written = {week["week_start"] for week in self.pending_save.get("weeks") or []}
+        if self.week_start not in written and written:
+            destination = next(iter(written))
 
         def ok(data: dict) -> None:
             if not self._idle(ticket):
                 return
-            week = data["weeks"][0]
-            self.blocks = list(week["blocks"])
-            self.revision = week["revision"]
-            self.dirty = False
-            self.conflict = False
+            current = next(
+                (week for week in data.get("weeks") or [] if week["week_start"] == self.week_start),
+                None,
+            )
+            if current is not None:
+                self.blocks = list(current["blocks"])
+                self.revision = current["revision"]
+                self.dirty = False
+                self.conflict = False
             for result in data.get("assignments", []):
                 self.dirty_assignments.discard(result["id"])
                 if result.get("assignment"):
                     stored = dict(result["assignment"])
                     stored["revision"] = result["revision"]
                     self.assignments[result["id"]] = stored
+                else:
+                    self.assignments.pop(result["id"], None)
+            if self._traveling == "undo" and self._travel_step is not None:
+                push_step(self._redo, self._travel_step)
+                self._say("Undid " + self._travel_step["label"] + ".")
+            elif self._traveling == "redo" and self._travel_step is not None:
+                push_step(self._undo, self._travel_step)
+                self._say("Redid " + self._travel_step["label"] + ".")
+            elif self._pending_step is not None:
+                if current is not None and self._pending_step["weeks"]:
+                    self._pending_step["weeks"][0]["after"] = deepcopy(self.blocks)
+                for entry in self._pending_step["assignments"]:
+                    stored = self.assignments.get(entry["id"])
+                    entry["after"] = None if stored is None else deepcopy(stored)
+                push_step(self._undo, self._pending_step)
+                self._redo.clear()
+                self._say("Saved.")
+            else:
+                self._say("Saved.")
+            self._traveling = None
+            self._travel_step = None
+            self._pending_step = None
             self.pending_save = None
-            self._say("Saved.")
+            if current is not None:
+                self._committed_blocks = deepcopy(self.blocks)
+                self._committed_assignments = deepcopy(self.assignments)
+            if self._preview_attempt:
+                self._attempts.pop(self._preview_attempt, None)
+                self._preview_attempt = None
+            if destination is not None:
+                self.load_week(destination)
+                return
+            self._refresh_view()
             self.week_changed.emit()
+            self._fetch_weeks()
+            self._refresh_assignments()
+            if self._solve_after_save:
+                self._solve_after_save = False
+                self.solve()
 
         def err(error: ApiError) -> None:
             if not self._idle(ticket):
                 return
+            if self._traveling and self._travel_step is not None:
+                if self._traveling == "undo":
+                    self._undo.append(self._travel_step)
+                else:
+                    self._redo.append(self._travel_step)
+                self._traveling = None
+                self._travel_step = None
             self.conflict = error.status == 409
+            if error.status == 409 and self._preview_attempt:
+                self._attempts.pop(self._preview_attempt, None)
+                self._preview_attempt = None
             self._say("Not saved. " + error.message)
             self.week_changed.emit()
 
@@ -331,3 +862,1508 @@ class NativeSession(QObject):
             ok,
             lambda error: self._fail(ticket, error),
         )
+
+    def _operation(self, key: str) -> str:
+        if key not in self._attempts:
+            self._attempts[key] = str(uuid4())
+        return self._attempts[key]
+
+    def _dump_blocks(self, blocks: list[dict] | None = None) -> list[dict]:
+        return [
+            TimeBlock.model_validate(block).model_dump(mode="json")
+            for block in (blocks if blocks is not None else self.blocks)
+        ]
+
+    def _fetch_weeks(self) -> None:
+        if self.account is None:
+            return
+        self._weeks_ticket += 1
+        token = self._weeks_ticket
+
+        def ok(data: dict) -> None:
+            if token != self._weeks_ticket or self.account is None:
+                return
+            self.saved_weeks = list(data.get("weeks") or [])
+            self.week_changed.emit()
+
+        self.client.request("GET", "/api/weeks", None, ok, lambda _error: None)
+
+    def _fetch_routines(self) -> None:
+        if self.account is None:
+            return
+        self._routines_ticket += 1
+        token = self._routines_ticket
+
+        def ok(data: dict) -> None:
+            if token != self._routines_ticket or self.account is None:
+                return
+            self.routines = {item["id"]: item for item in data.get("routines") or []}
+            self.week_changed.emit()
+
+        self.client.request("GET", "/api/routines", None, ok, lambda _error: None)
+
+    def _fetch_preferences(self) -> None:
+        if self.account is None:
+            return
+        self._prefs_ticket += 1
+        token = self._prefs_ticket
+
+        def ok(data: dict) -> None:
+            if token != self._prefs_ticket or self.account is None:
+                return
+            self.preferences = data
+            self.week_changed.emit()
+            self._fetch_timer_tools()
+
+        self.client.request("GET", "/api/preferences", None, ok, lambda _error: None)
+
+    def _refresh_assignments(self) -> None:
+        if self.account is None:
+            return
+        asked = self.week_start
+        self._assign_ticket += 1
+        token = self._assign_ticket
+
+        def ok(data: dict) -> None:
+            if token != self._assign_ticket or self.account is None or self.week_start != asked:
+                return
+            for item in data.get("assignments") or []:
+                if item["id"] in self.dirty_assignments:
+                    local = self.assignments.get(item["id"])
+                    if local is not None:
+                        local["unplanned_min"] = item.get("unplanned_min")
+                        local["planned_min"] = item.get("planned_min")
+                    continue
+                self.assignments[item["id"]] = item
+            self.week_changed.emit()
+
+        self.client.request(
+            "GET",
+            f"/api/assignments?week_start={asked}",
+            None,
+            ok,
+            lambda _error: None,
+        )
+
+    def remaining_for(self, assignment_id: str) -> int:
+        return available_homework_minutes(
+            self.assignments.get(assignment_id),
+            self.blocks,
+            self._committed_blocks,
+        )
+
+    def paste_destination(self, today: date | None = None) -> tuple[int, str | None] | None:
+        if self.selected_block_id and self.selected_occurrence_day is not None:
+            source = next((item for item in self.blocks if item["id"] == self.selected_block_id), None)
+            if source is not None:
+                placed = source if source.get("start") else None
+                if placed is None and self.trace:
+                    placed = next(
+                        (
+                            item
+                            for item in (self.trace.get("placed") or [])
+                            if item["id"] == self.selected_block_id
+                            and self.selected_occurrence_day in (item.get("days") or [])
+                        ),
+                        None,
+                    )
+                start = placed["start"] if placed and placed.get("start") else None
+                return (self.selected_occurrence_day, start if isinstance(start, str) else None)
+        if self.planner_view == "day" and monday_of(self.selected_day) == self.week_start:
+            day = (date.fromisoformat(self.selected_day) - date.fromisoformat(self.week_start)).days
+            return (day, None)
+        today = today or date.today()
+        if monday_of(today.isoformat()) == self.week_start:
+            return (today.weekday(), None)
+        return None
+
+    def copy_block(self, block_id: str, day: int | None, scope: str = "auto") -> bool:
+        if self.account is None:
+            return False
+        source = next((item for item in self.blocks if item["id"] == block_id), None)
+        if source is None:
+            return False
+        source_day = day if day is not None else (source.get("days") or [0])[0]
+        copy_scope = scope if scope != "auto" else ("occurrence" if is_series(source) else "block")
+        label = copy_label(source, source_day, copy_scope)
+        items = [clipboard_item(source, source_day, copy_scope, str(uuid4()))]
+        self.clipboard = {
+            "kind": "block",
+            "label": label,
+            "items": items,
+            "fingerprint": clipboard_fingerprint(items),
+        }
+        self._say(label + " copied. Choose a destination and paste.")
+        self.week_changed.emit()
+        return True
+
+    def copy_selected(self, scope: str = "auto") -> bool:
+        if not self.selected_block_id:
+            self._say("Select a block before copying it.")
+            return False
+        return self.copy_block(self.selected_block_id, self.selected_occurrence_day, scope)
+
+    def copy_day(self, day: int | None = None) -> bool:
+        if self.account is None:
+            return False
+        destination = (day, None) if day is not None else self.paste_destination()
+        if destination is None:
+            self._say("Select a block or open Day view before copying a day from this week.")
+            return False
+        chosen = destination[0]
+        placed = list((self.trace or {}).get("placed") or [])
+        items = []
+        for block in self.blocks:
+            if not block_occurs_on_day(block, chosen, placed):
+                continue
+            if block.get("assignment_id") and block.get("completed"):
+                continue
+            items.append(clipboard_item(block, chosen, "occurrence", str(uuid4())))
+        if not items:
+            self._say(DAY_FULL[chosen] + " has nothing to copy.")
+            return False
+        noun = " item" if len(items) == 1 else " items"
+        label = f"{DAY_FULL[chosen]} · {len(items)}{noun}"
+        self.clipboard = {
+            "kind": "day",
+            "label": label,
+            "items": items,
+            "fingerprint": clipboard_fingerprint(items),
+        }
+        self._say(label + " copied. Choose a destination and paste.")
+        self.week_changed.emit()
+        return True
+
+    def paste_proposals(
+        self,
+        target_day: int | None = None,
+        target_start: str | None = None,
+        *,
+        today: date | None = None,
+    ) -> list[dict] | None:
+        if self.account is None or self.clipboard is None:
+            if self.clipboard is None:
+                self._say("Copy a block or day before pasting.")
+            return None
+        destination = (
+            (target_day, target_start)
+            if target_day is not None
+            else self.paste_destination(today)
+        )
+        if destination is None:
+            self._say("Select a block or open Day view before pasting into this week.")
+            return None
+        available = {item_id: self.remaining_for(item_id) for item_id in self.assignments}
+        return proposals_from_clipboard(
+            self.clipboard["items"],
+            kind=self.clipboard["kind"],
+            week_start=self.week_start,
+            target_day=destination[0],
+            target_start=destination[1],
+            assignments=self.assignments,
+            available=available,
+        )
+
+    def duplicate_selected(self, scope: str = "auto") -> list[dict] | None:
+        source_id = self.selected_block_id
+        day = self.selected_occurrence_day
+        if source_id is None:
+            self._say("Select a block before duplicating it.")
+            return None
+        prior = deepcopy(self.clipboard)
+        if not self.copy_block(source_id, day, scope):
+            return None
+        rows = self.paste_proposals(day if day is not None else 0, None)
+        self.clipboard = prior
+        self.week_changed.emit()
+        return rows
+
+    def confirm_preview(
+        self,
+        rows: list[dict],
+        *,
+        label: str,
+        snapshot_label: str | None = None,
+        operation_id: str | None = None,
+        attempt_key: str | None = None,
+        existing: list[dict] | None = None,
+        destination: str | None = None,
+    ) -> bool:
+        if self.account is None or self.conflict:
+            return False
+        checked = [row for row in rows if row.get("checked")]
+        dest_weeks = {row.get("week_start") for row in rows}
+        if existing is not None:
+            existing_blocks = existing
+        elif dest_weeks == {self.week_start}:
+            existing_blocks = self.blocks
+        else:
+            existing_blocks = []
+        if not checked or any(
+            row.get("invalid") or row_conflict(row, rows, existing_blocks) for row in checked
+        ):
+            self._say("Resolve conflicts or select at least one item before saving.")
+            return False
+        op_id = operation_id or (self._operation(attempt_key) if attempt_key else str(uuid4()))
+        groups = merge_preview_rows(rows, op_id)
+        if not groups:
+            self._say("There is nothing available to add.")
+            return False
+        by_week: dict[str, list[dict]] = {}
+        for group in groups:
+            by_week.setdefault(group["week_start"], []).append(group["block"])
+        if attempt_key:
+            self._preview_attempt = attempt_key
+        if list(by_week) == [self.week_start]:
+            added = by_week[self.week_start]
+            problem = capacity_problem(len(self.blocks), len(added), week_label(self.week_start))
+            if problem:
+                self._say(problem)
+                return False
+            self.blocks = list(self.blocks) + added
+            self._touch(label)
+            self.save(snapshot_label=snapshot_label, operation_id=op_id)
+            return True
+        self._commit_groups(
+            by_week,
+            label=label,
+            snapshot_label=snapshot_label,
+            operation_id=op_id,
+        )
+        return True
+
+    def _commit_groups(
+        self,
+        by_week: dict[str, list[dict]],
+        *,
+        label: str,
+        snapshot_label: str | None,
+        operation_id: str,
+    ) -> None:
+        needed = [week for week in by_week if week != self.week_start]
+        ticket = self._begin()
+        fetched: dict[str, dict] = {}
+
+        def fail(error: ApiError) -> None:
+            self._fail(ticket, error)
+
+        def proceed() -> None:
+            if not self._alive(ticket):
+                return
+            writes = []
+            current_after = None
+            for week, added in by_week.items():
+                if week == self.week_start:
+                    blocks = list(self.blocks) + added
+                    revision = self.revision
+                    current_after = blocks
+                else:
+                    data = fetched[week]
+                    blocks = list(data["blocks"]) + added
+                    revision = data["revision"]
+                if len(blocks) > MAX_WEEK_BLOCKS:
+                    if self._idle(ticket):
+                        self._say(
+                            capacity_problem(len(blocks) - len(added), len(added), week_label(week))
+                        )
+                    return
+                writes.append(_week_write(week, blocks, revision))
+            if current_after is not None:
+                self.blocks = current_after
+                self._history_label = label
+                self.dirty = True
+                self.conflict = False
+                self._pending_step = capture_step(
+                    label,
+                    self.week_start,
+                    self._committed_blocks,
+                    self.blocks,
+                    self._committed_assignments,
+                    self.assignments,
+                    set(),
+                )
+            payload: dict = {"weeks": writes, "assignments": [], "operation_id": operation_id}
+            if snapshot_label:
+                payload["snapshot_label"] = snapshot_label
+            self.pending_save = payload
+            self._post_pending(ticket)
+
+        def fetch_next() -> None:
+            if not needed:
+                proceed()
+                return
+            week = needed.pop()
+
+            def ok(data: dict) -> None:
+                if not self._alive(ticket):
+                    return
+                fetched[week] = data
+                fetch_next()
+
+            self.client.request("GET", f"/api/week?week_start={week}", None, ok, fail)
+
+        fetch_next()
+
+    def save_routine(self, name: str, block_ids: list[str] | None = None) -> bool:
+        if self.account is None:
+            return False
+        sources = routine_source_blocks(self.blocks)
+        if block_ids is not None:
+            allowed = set(block_ids)
+            sources = [block for block in sources if block["id"] in allowed]
+        title = name.strip()
+        if not title or not sources:
+            self._say("Name the routine and select at least one fixed commitment.")
+            return False
+        templates = [routine_template(block, str(uuid4())) for block in sources]
+        fingerprint = clipboard_fingerprint(
+            [{"block": block, "source_day": 0, "scope": "block"} for block in sources]
+        )
+        key = f"create-routine|{self.account['id']}|{title}|{fingerprint}"
+        routine_id = "r-" + self._operation(key)
+        ticket = self._begin()
+        self._say("Saving routine…")
+        body = {"id": routine_id, "name": title, "blocks": templates, "revision": 0}
+
+        def ok(data: dict) -> None:
+            if not self._idle(ticket):
+                return
+            saved = data.get("routine") or data
+            self.routines[saved["id"]] = saved
+            self._attempts.pop(key, None)
+            self._say("Saved " + saved["name"] + ".")
+            self.week_changed.emit()
+
+        self.client.request(
+            "PUT",
+            f"/api/routines/{quote(routine_id, safe='')}",
+            body,
+            ok,
+            lambda error: self._fail(ticket, error),
+        )
+        return True
+
+    def delete_routine(self, routine_id: str) -> None:
+        routine = self.routines.get(routine_id)
+        if self.account is None or routine is None:
+            return
+        key = f"delete-routine|{self.account['id']}|{routine_id}|{routine['revision']}"
+        operation_id = self._operation(key)
+        ticket = self._begin()
+        path = (
+            f"/api/routines/{quote(routine_id, safe='')}?revision={int(routine['revision'])}"
+            f"&operation_id={quote(operation_id, safe='')}"
+        )
+
+        def ok(_data: dict) -> None:
+            if not self._idle(ticket):
+                return
+            self.routines.pop(routine_id, None)
+            self._attempts.pop(key, None)
+            self._say("Deleted " + routine["name"] + ".")
+            self.week_changed.emit()
+
+        self.client.request("DELETE", path, None, ok, lambda error: self._fail(ticket, error))
+
+    def apply_routine_rows(self, routine_id: str, week_start: str, days: list[int]) -> list[dict] | None:
+        routine = self.routines.get(routine_id)
+        if routine is None or not days:
+            self._say("Choose at least one weekday to copy.")
+            return None
+        return routine_rows(routine, week_start, days)
+
+    def apply_routine(
+        self,
+        routine_id: str,
+        week_start: str,
+        days: list[int],
+        rows: list[dict] | None = None,
+        existing: list[dict] | None = None,
+    ) -> bool:
+        routine = self.routines.get(routine_id)
+        if self.account is None or routine is None:
+            return False
+        proposals = rows if rows is not None else self.apply_routine_rows(routine_id, week_start, days)
+        if not proposals:
+            self._say("There is nothing available to add.")
+            return False
+        key = (
+            f"routine|{self.account['id']}|{routine_id}|{routine['revision']}|"
+            f"{week_start}|{','.join(str(day) for day in days)}"
+        )
+        return self.confirm_preview(
+            proposals,
+            label="the " + routine["name"] + " routine",
+            snapshot_label=restore_point_label(
+                "Before applying " + routine["name"] + " to " + week_start
+            ),
+            operation_id=self._operation(key),
+            attempt_key=key,
+            existing=existing,
+            destination=week_start,
+        )
+
+    def unfinished(self) -> list[dict]:
+        return unfinished_items(
+            self.assignments,
+            self.saved_weeks,
+            self.week_start,
+            self.blocks,
+            self._committed_blocks,
+        )
+
+    def consume_unfinished(self) -> list[dict]:
+        items = self.unfinished()
+        if not items or self.week_start in self._seen_unfinished:
+            return []
+        self._seen_unfinished.add(self.week_start)
+        return items
+
+    def plan_unfinished(self, assignment_id: str) -> list[dict] | None:
+        item = self.assignments.get(assignment_id)
+        minutes = self.remaining_for(assignment_id)
+        if item is None or minutes < 15:
+            self._say("That homework is already fully planned.")
+            return None
+        due_day = due_day_in_week(item.get("due"), self.week_start)
+        days = days_through(due_day, first_plannable_day(self.week_start))
+        block = copied_homework_block(item, days[0] if days else 0, minutes, str(uuid4()))
+        block["days"] = days or [0]
+        return [
+            {
+                "week_start": self.week_start,
+                "day": block["days"][0],
+                "fixed": False,
+                "block": block,
+                "group_id": block["id"],
+                "checked": True,
+                "invalid": "",
+                "original_duration": minutes,
+            }
+        ]
+
+    def recover_missed(self, block_id: str, day: int) -> None:
+        block = next((item for item in self.blocks if item["id"] == block_id), None)
+        if block is None or block.get("kind") != "locked" or day not in (block.get("days") or []):
+            return
+        if day in (block.get("missed_days") or []):
+            self.save()
+            return
+        ticket = self._begin()
+        self._say("Replanning after the miss…")
+
+        def run(previous: list[dict]) -> None:
+            payload = {
+                "week_start": self.week_start,
+                "blocks": self._dump_blocks(),
+                "recover": {
+                    "missed_block_id": block_id,
+                    "missed_day": day,
+                    "previous_placed": previous,
+                },
+            }
+
+            def ok(trace: dict) -> None:
+                if not self._idle(ticket):
+                    return
+                target = next((item for item in self.blocks if item["id"] == block_id), None)
+                if target is None:
+                    return
+                missed = sorted(set(target.get("missed_days") or []) | {day})
+                target["missed_days"] = missed
+                self.trace = trace
+                self._touch("the replan")
+                self.save()
+
+            self.client.request(
+                "POST",
+                "/api/solve",
+                payload,
+                ok,
+                lambda error: self._fail(ticket, error),
+            )
+
+        if self.trace and self.trace.get("placed"):
+            run(self._dump_blocks(self.trace["placed"]))
+            return
+
+        def base_ok(trace: dict) -> None:
+            if not self._alive(ticket):
+                return
+            run(self._dump_blocks(trace.get("placed") or []))
+
+        self.client.request(
+            "POST",
+            "/api/solve",
+            {"week_start": self.week_start, "blocks": self._dump_blocks()},
+            base_ok,
+            lambda error: self._fail(ticket, error),
+        )
+
+    def preview_running_late(self, minutes: int, now: datetime | None = None) -> None:
+        moment = now or datetime.now()
+        refusal = running_late_refusal(
+            week_start=self.week_start,
+            now=moment,
+            dirty=self.dirty,
+            conflict=self.conflict,
+            block_count=len(self.blocks),
+        )
+        if refusal:
+            self._say(refusal)
+            return
+        if minutes not in (15, 30, 60):
+            self._say("Choose 15, 30 or 60 minutes.")
+            return
+        from_start = late_from_start(moment.hour * 60 + moment.minute)
+        day = moment.weekday()
+        ticket = self._begin()
+        self._say("Replanning…")
+
+        def run(previous: list[dict]) -> None:
+            payload = {
+                "week_start": self.week_start,
+                "blocks": self._dump_blocks(),
+                "running_late": {
+                    "day": day,
+                    "minutes": minutes,
+                    "from_start": from_start,
+                    "previous_placed": previous,
+                },
+            }
+
+            def ok(trace: dict) -> None:
+                if not self._idle(ticket):
+                    return
+                operation_id = str(uuid4())
+                self.late_preview = {
+                    "trace": trace,
+                    "operation_id": operation_id,
+                    "week_start": self.week_start,
+                    "block": running_late_block(day, from_start, minutes, late_id(operation_id)),
+                    "stale": False,
+                }
+                moved = len(trace.get("moves") or [])
+                unplaced = len(trace.get("unplaced") or [])
+                self._say(f"{moved} tasks move · {unplaced} tasks no longer fit")
+                self.week_changed.emit()
+
+            self.client.request(
+                "POST",
+                "/api/solve",
+                payload,
+                ok,
+                lambda error: self._fail(ticket, error),
+            )
+
+        if self.trace and self.trace.get("placed"):
+            run(self._dump_blocks(self.trace["placed"]))
+            return
+
+        def base_ok(trace: dict) -> None:
+            if not self._alive(ticket):
+                return
+            run(self._dump_blocks(trace.get("placed") or []))
+
+        self.client.request(
+            "POST",
+            "/api/solve",
+            {"week_start": self.week_start, "blocks": self._dump_blocks()},
+            base_ok,
+            lambda error: self._fail(ticket, error),
+        )
+
+    def accept_running_late(self) -> bool:
+        preview = self.late_preview
+        if preview is None or preview.get("stale") or preview.get("week_start") != self.week_start:
+            return False
+        if len(self.blocks) >= MAX_WEEK_BLOCKS:
+            self._say("This week already has 100 blocks. Remove one before recording a late start.")
+            return False
+        self.blocks = list(self.blocks) + [preview["block"]]
+        self._touch("running late")
+        self._solve_after_save = True
+        self.save(operation_id=preview["operation_id"])
+        self.late_preview = None
+        return True
+
+    def preview_spread(self, assignment_id: str, session_min: int, from_date: str) -> None:
+        item = self.assignments.get(assignment_id)
+        if item is None or item.get("completed"):
+            return
+        ticket = self._begin()
+        self._say("Working out sessions…")
+
+        def ok(data: dict) -> None:
+            if not self._idle(ticket):
+                return
+            sessions = data.get("sessions") or []
+            remaining = int(data.get("remaining_min") or 0)
+            if not sessions:
+                if remaining:
+                    self._say(
+                        f"{remaining} minutes remain, but they do not fit the 15-minute planning grid."
+                    )
+                else:
+                    self._say("All of this homework is already focused or planned.")
+                self.spread_preview = None
+                return
+            rows = []
+            total = 0
+            for index, session in enumerate(sessions):
+                duration = int(session["duration_min"])
+                total += duration
+                group_id = f"spread-{uuid4()}-{index:x}"
+                block = copied_homework_block(item, session["days"][0], duration, group_id)
+                rows.append(
+                    {
+                        "week_start": session["week_start"],
+                        "day": session["days"][0],
+                        "fixed": False,
+                        "block": block,
+                        "group_id": group_id,
+                        "checked": True,
+                        "invalid": "",
+                    }
+                )
+            summary = f"{len(rows)} sessions · {total} minutes ready to add before {item['due']}."
+            if remaining:
+                summary += (
+                    f" {remaining} minutes cannot fit the 15-minute grid and have not been "
+                    "dropped from the homework total."
+                )
+            self.spread_preview = {
+                "assignment_id": assignment_id,
+                "rows": rows,
+                "summary": summary,
+                "from_date": from_date,
+                "session_min": session_min,
+            }
+            self._say(summary)
+            self.week_changed.emit()
+
+        self.client.request(
+            "POST",
+            f"/api/assignments/{quote(assignment_id, safe='')}/spread",
+            {"session_min": session_min, "from_date": from_date},
+            ok,
+            lambda error: self._fail(ticket, error),
+        )
+
+    def confirm_spread(self) -> bool:
+        preview = self.spread_preview
+        if preview is None or self.account is None:
+            return False
+        item = self.assignments.get(preview["assignment_id"])
+        title = item["title"] if item else "homework"
+        key = (
+            f"spread|{self.account['id']}|{preview['assignment_id']}|"
+            f"{preview['from_date']}|{preview['session_min']}"
+        )
+        ok = self.confirm_preview(
+            preview["rows"],
+            label="spreading " + title,
+            operation_id=self._operation(key),
+            attempt_key=key,
+        )
+        if ok:
+            self.spread_preview = None
+        return ok
+
+    def save_availability(
+        self,
+        protected: list[dict],
+        study_windows: list[dict],
+        day_cutoff: str | None,
+    ) -> bool:
+        if self.account is None or self.preferences is None:
+            return False
+        try:
+            for window in protected:
+                ProtectedWindow.model_validate(window)
+            for window in study_windows:
+                GridWindow.model_validate(window)
+        except ValueError as error:
+            self._say(str(error))
+            return False
+        body = dict(self.preferences)
+        body["protected"] = protected
+        body["study_windows"] = study_windows
+        body["day_cutoff"] = day_cutoff or None
+        ticket = self._begin()
+        self._say("Saving availability…")
+
+        def ok(data: dict) -> None:
+            if not self._idle(ticket):
+                return
+            self.preferences = data
+            self._say("Saved availability.")
+            self.week_changed.emit()
+
+        self.client.request(
+            "PUT",
+            "/api/preferences",
+            body,
+            ok,
+            lambda error: self._fail(ticket, error),
+        )
+        return True
+
+    def _clock(self) -> dict:
+        return clock_parts(self.now_ms())
+
+    def scheduled_blocks(self) -> list[dict]:
+        if not self.trace:
+            return [
+                block
+                for block in self.blocks
+                if block.get("kind") == "locked" or (block.get("kind") == "flexible" and block.get("start"))
+            ]
+        sources = {block["id"]: block for block in self.blocks}
+        merged = []
+        for placed in self.trace.get("placed") or []:
+            source = sources.get(placed["id"])
+            if source is None:
+                merged.append(placed)
+                continue
+            item = dict(source)
+            item["days"] = list(placed.get("days") or source.get("days") or [])
+            item["start"] = placed.get("start")
+            merged.append(item)
+        return merged
+
+    def now_next_text(self) -> str:
+        clock = self._clock()
+        week = monday_of(clock["iso"])
+        if week != self.week_start:
+            return ""
+        return now_next_line(
+            now_and_next(self.scheduled_blocks(), clock["day"], clock["minute"]),
+            clock["minute"],
+        )
+
+    def focus_tasks(self) -> list[dict]:
+        return focus_candidates(self.blocks, self.assignments, self.trace)
+
+    def _drop_missing_focus(self) -> None:
+        state = self.focus
+        announce = self._focus_after_restore
+        self._focus_after_restore = False
+        if state is None or not state.get("blockId") or state.get("weekStart") != self.week_start:
+            return
+        exists = any(
+            item["id"] == state["blockId"]
+            and (not state.get("assignmentId") or item.get("assignment_id") == state["assignmentId"])
+            for item in self.blocks
+        )
+        if exists:
+            return
+        self._reset_focus()
+        if announce:
+            self._say(
+                "Schedule restored. The previous focus timer was stopped because "
+                "its session no longer exists."
+            )
+
+    def _persist_focus(self) -> None:
+        if self.account is None:
+            return
+        payload = persist_payload(self.focus)
+        if payload is None:
+            self.focus_store.pop(self.account["id"], None)
+        else:
+            self.focus_store[self.account["id"]] = payload
+
+    def _reset_focus(self, persist: bool = True) -> None:
+        self.focus = None
+        self._focus_busy = False
+        self._pending_focus = None
+        if persist:
+            self._persist_focus()
+        self.focus_changed.emit()
+
+    def _restore_focus(self) -> None:
+        if self.account is None or self.focus is not None:
+            return
+        saved = self.focus_store.get(self.account["id"])
+        state = restore_state(
+            saved, assignments=self.assignments, blocks=self.blocks, now_ms=self.now_ms()
+        )
+        if state is None:
+            self.focus_store.pop(self.account["id"], None)
+            return
+        expired = state.pop("expired", False)
+        self.focus = state
+        self._persist_focus()
+        self.focus_changed.emit()
+        if expired and state["phase"] == "work":
+            self.advance_focus(completed=True)
+        elif expired:
+            self.focus = set_phase(state, "work", self.preferences, self.now_ms())
+            self.focus["running"] = False
+            self.focus["remainingMs"] = remaining_ms(self.focus, self.now_ms())
+            self._say("The break ended while FlexWeek was closed. Press Resume to focus again.")
+            self._persist_focus()
+            self.focus_changed.emit()
+
+    def start_quick_focus(self, *, replace: bool = False) -> bool:
+        return self.start_focus(None, None, replace=replace, quick=True)
+
+    def start_focus(
+        self,
+        block_id: str | None,
+        day: int | None = None,
+        *,
+        replace: bool = False,
+        quick: bool = False,
+    ) -> bool:
+        if self.account is None or self.busy or self._focus_busy:
+            return False
+        if quick:
+            target = {
+                "weekStart": self.week_start,
+                "blockId": None,
+                "assignmentId": None,
+                "day": None,
+                "start": None,
+                "title": "Quick focus",
+            }
+        else:
+            block = next((item for item in self.blocks if item["id"] == block_id), None)
+            if block is None or block.get("completed") or block.get("pomodoro_role") == "break":
+                self._say("Place an unfinished work block before starting focus.")
+                return False
+            placed = block if block.get("start") else None
+            if placed is None and self.trace:
+                placed = next(
+                    (
+                        item
+                        for item in (self.trace.get("placed") or [])
+                        if item["id"] == block_id and (day is None or day in (item.get("days") or []))
+                    ),
+                    None,
+                )
+            if placed is None or not placed.get("start"):
+                self._say("Place an unfinished work block before starting focus.")
+                return False
+            target = {
+                "weekStart": self.week_start,
+                "blockId": block_id,
+                "assignmentId": block.get("assignment_id"),
+                "day": (placed.get("days") or [day])[0],
+                "start": placed["start"],
+                "title": block["title"],
+            }
+        if self.focus is not None and not replace:
+            self._pending_focus = {**target, "quick": quick, "block_id": block_id, "day": day}
+            self.focus_replace_needed.emit(self.focus["title"], target["title"])
+            return False
+        self.focus = begin_state(target, self.preferences, self.now_ms())
+        self._pending_focus = None
+        self._persist_focus()
+        self.focus_changed.emit()
+        return True
+
+    def confirm_replace_focus(self) -> bool:
+        pending = self._pending_focus
+        if pending is None:
+            return False
+        return self.start_focus(
+            pending.get("block_id"),
+            pending.get("day"),
+            replace=True,
+            quick=bool(pending.get("quick")),
+        )
+
+    def toggle_focus_pause(self) -> None:
+        if self.focus is None or self._focus_busy or self.busy or self.focus.get("phase") == "ended":
+            return
+        self.focus = pause_state(self.focus, self.now_ms())
+        self._persist_focus()
+        self.focus_changed.emit()
+
+    def reset_focus(self) -> None:
+        self._reset_focus()
+
+    def tick_focus(self) -> None:
+        if self.focus is None or not self.focus.get("running"):
+            return
+        if int(self.focus.get("endsAt") or 0) <= self.now_ms():
+            self.focus["running"] = False
+            self.focus["remainingMs"] = 0
+            self.advance_focus(completed=True)
+            return
+        self.focus_changed.emit()
+
+    def advance_focus(self, completed: bool) -> None:
+        if self.focus is None or self._focus_busy or self.focus.get("phase") == "ended":
+            return
+        self._focus_busy = True
+        try:
+            if self.focus["phase"] == "work":
+                if completed:
+                    self.credit_focus_session()
+                if self.focus is None:
+                    return
+                self.focus["cycles"] = int(self.focus.get("cycles") or 0) + (1 if completed else 0)
+                assignment_id = self.focus.get("assignmentId")
+                if completed and assignment_id and assignment_id in self.assignments:
+                    self.focus["phase"] = "ended"
+                    self.focus["running"] = False
+                    self.focus["remainingMs"] = 0
+                    self._persist_focus()
+                    self.focus_changed.emit()
+                    self.alerts.emit(
+                        [{"title": "Focus session done", "body": self.focus["title"], "kind": "focus"}]
+                    )
+                    return
+                self.focus = set_phase(
+                    self.focus, break_phase(int(self.focus.get("cycles") or 0), self.preferences),
+                    self.preferences, self.now_ms(),
+                )
+            else:
+                self.focus = set_phase(self.focus, "work", self.preferences, self.now_ms())
+            self._persist_focus()
+            self.focus_changed.emit()
+        finally:
+            self._focus_busy = False
+
+    def credit_focus_session(self) -> None:
+        state = self.focus
+        if state is None or not state.get("blockId"):
+            return
+        work_min = int((self.preferences or DEFAULT_TIMERS).get("timer_work_min") or 30)
+        if state.get("assignmentId"):
+            assignment = self.assignments.get(state["assignmentId"])
+            updated = credit_target(state, assignment, None, work_min)
+            if updated is None:
+                self._say(
+                    "This homework did not load, so the focus time was not counted. "
+                    "Reload the week and try again."
+                )
+                return
+            self.assignments[updated["id"]] = updated
+            self.dirty_assignments.add(updated["id"])
+        else:
+            if state.get("weekStart") != self.week_start:
+                return
+            block = next((item for item in self.blocks if item["id"] == state["blockId"]), None)
+            updated = credit_target(state, None, block, work_min)
+            if updated is None:
+                return
+            self.blocks = [updated if item["id"] == updated["id"] else item for item in self.blocks]
+        self.dirty = True
+        self.save(record_history=False)
+
+    def finish_focused_homework(self) -> bool:
+        state = self.focus
+        if state is None or state.get("phase") != "ended" or self.busy or self._focus_busy:
+            return False
+        assignment_id = state.get("assignmentId")
+        if not assignment_id or assignment_id not in self.assignments:
+            return False
+        if state.get("weekStart") != self.week_start:
+            self.load_week(state["weekStart"])
+            return False
+        block = next((item for item in self.blocks if item["id"] == state.get("blockId")), None)
+        if block is not None and block.get("kind") == "flexible":
+            if (
+                state.get("start")
+                and isinstance(state.get("day"), int)
+                and state["day"] in (block.get("days") or [])
+            ):
+                block["start"] = state["start"]
+                block["completed_day"] = state["day"]
+            elif not isinstance(block.get("completed_day"), int):
+                block["start"] = None
+        self.complete_homework(assignment_id, True)
+        self._reset_focus()
+        self.save()
+        return True
+
+    def add_focus_time(self, minutes: int) -> bool:
+        state = self.focus
+        if state is None or state.get("phase") != "ended" or self.busy or self._focus_busy:
+            return False
+        assignment = self.assignments.get(state.get("assignmentId"))
+        if assignment is None or minutes not in more_time_choices(int(assignment.get("estimate_min") or 0)):
+            self._say("Choose how much more time it needs.")
+            return False
+        assignment["estimate_min"] = int(assignment["estimate_min"]) + minutes
+        self.dirty_assignments.add(assignment["id"])
+        self.focus = set_phase(
+            state, break_phase(int(state.get("cycles") or 0), self.preferences),
+            self.preferences, self.now_ms(),
+        )
+        self._history_label = "adding time to " + assignment["title"]
+        self.dirty = True
+        self._persist_focus()
+        self.focus_changed.emit()
+        self.save()
+        return True
+
+    def take_focus_break(self) -> bool:
+        state = self.focus
+        if state is None or state.get("phase") != "ended" or self._focus_busy:
+            return False
+        self.focus = set_phase(
+            state, break_phase(int(state.get("cycles") or 0), self.preferences),
+            self.preferences, self.now_ms(),
+        )
+        self._persist_focus()
+        self.focus_changed.emit()
+        return True
+
+    def check_alerts(self) -> None:
+        if self.account is None:
+            return
+        clock = self._clock()
+        notices: list[dict] = []
+        prefs = self.preferences or {}
+        if prefs.get("reminders_enabled") and self.week_start == monday_of(clock["iso"]):
+            due = due_reminders(
+                blocks=self.blocks,
+                trace=self.trace,
+                today_iso=clock["iso"],
+                now_min=clock["minute"],
+                lead_min=reminder_lead_min(prefs),
+                fired=self.fired_reminders,
+            )
+            for item in due:
+                self.fired_reminders.add(item["key"])
+                notices.append({"title": item["title"], "body": item["body"], "kind": "reminder"})
+        queued, self.snoozed_alarms, self.last_alarm_check = due_alarms(
+            alarms=list(prefs.get("alarms") or []),
+            today_iso=clock["iso"],
+            weekday=clock["day"],
+            now_ms=clock["now_ms"],
+            midnight_ms=clock["midnight_ms"],
+            last_check_ms=self.last_alarm_check,
+            fired=self.fired_alarms,
+            snoozed=self.snoozed_alarms,
+        )
+        if notices:
+            self.alerts.emit(notices)
+        for alarm in queued:
+            self._enqueue_alarm(alarm)
+
+    def _enqueue_alarm(self, alarm: dict) -> None:
+        alarm_id = alarm.get("id")
+        if self.active_alarm is not None and self.active_alarm.get("id") == alarm_id:
+            return
+        if any(item.get("id") == alarm_id for item in self.alarm_queue):
+            return
+        if self.active_alarm is None:
+            self.active_alarm = alarm
+            self.alarm_due.emit(alarm)
+            return
+        self.alarm_queue.append(alarm)
+
+    def finish_alarm(self, snooze: bool = False) -> None:
+        alarm = self.active_alarm
+        self.active_alarm = None
+        if snooze and alarm is not None:
+            self.snoozed_alarms[alarm["id"]] = snooze_until(self.now_ms())
+        nxt = self.alarm_queue.pop(0) if self.alarm_queue else None
+        self.active_alarm = nxt
+        self.alarm_due.emit(nxt)
+
+    def spotify_url(self, value: str | None = None) -> str:
+        from backend.models import valid_spotify_url
+
+        raw = value
+        if raw is None:
+            block = next((item for item in self.blocks if item["id"] == self.selected_block_id), None)
+            raw = (block or {}).get("spotify_url") or (self.preferences or {}).get("default_spotify_url")
+        try:
+            return valid_spotify_url(raw) or ""
+        except ValueError:
+            return ""
+
+    def save_preferences(self, updates: dict) -> bool:
+        if self.account is None or self.preferences is None:
+            return False
+        body = dict(self.preferences)
+        body.update(updates)
+        if "theme_pack" in body:
+            body["theme"] = pack_axis(body.get("theme_pack") or "system")
+        ticket = self._begin()
+        self._say("Saving preferences…")
+
+        def ok(data: dict) -> None:
+            if not self._idle(ticket):
+                return
+            self.preferences = data
+            self._say("Saved preferences.")
+            self.week_changed.emit()
+
+        self.client.request("PUT", "/api/preferences", body, ok, lambda error: self._fail(ticket, error))
+        return True
+
+    def preview_timer_split(self, duration_min: int) -> None:
+        if self.account is None or self.preferences is None:
+            return
+        ticket = self._begin()
+
+        def ok(data: dict) -> None:
+            if not self._idle(ticket):
+                return
+            self.split_preview = data
+            self.week_changed.emit()
+
+        self.client.request(
+            "POST",
+            "/api/timer-split-preview",
+            {
+                "duration_min": duration_min,
+                "timer_work_min": self.preferences.get("timer_work_min"),
+                "timer_break_min": self.preferences.get("timer_break_min"),
+                "timer_long_break_min": self.preferences.get("timer_long_break_min"),
+                "timer_long_break_every": self.preferences.get("timer_long_break_every"),
+            },
+            ok,
+            lambda error: self._fail(ticket, error),
+        )
+
+    def _fetch_timer_tools(self) -> None:
+        if self.account is None:
+            return
+
+        def presets(data: dict) -> None:
+            self.timer_presets = list(data.get("presets") or [])
+
+        def limits(data: dict) -> None:
+            self.reminder_limits = dict(data)
+            self.week_changed.emit()
+
+        self.client.request("GET", "/api/timer-presets", None, presets, lambda _error: None)
+        self.client.request("GET", "/api/reminder-limits", None, limits, lambda _error: None)
+
+    def _fetch_recovery_status(self) -> None:
+        if self.account is None:
+            return
+
+        def ok(data: dict) -> None:
+            self.recovery_remaining = int(data.get("remaining") or 0)
+            self.week_changed.emit()
+
+        def storage(data: dict) -> None:
+            self.storage_info = data
+
+        self.client.request("GET", "/api/auth/recovery-status", None, ok, lambda _error: None)
+        self.client.request("GET", "/api/storage-info", None, storage, lambda _error: None)
+
+    def recover(self, username: str, code: str, password: str) -> None:
+        ticket = self._begin()
+        self._say("Recovering account…")
+
+        def ok(data: dict) -> None:
+            if not self._alive(ticket):
+                return
+            self.client.set_account(data)
+            self.account = {"id": data["id"], "username": data["username"]}
+            self.account_changed.emit(self.account)
+            self.load_week(self.week_start)
+
+        self.client.request(
+            "POST",
+            "/api/auth/recover",
+            {"username": username, "code": code, "password": password},
+            ok,
+            lambda error: self._fail(ticket, error),
+        )
+
+    def change_password(self, current_password: str, new_password: str) -> None:
+        ticket = self._begin()
+        self._say("Changing password…")
+
+        def ok(data: dict) -> None:
+            if not self._idle(ticket):
+                return
+            if data.get("id"):
+                self.client.set_account(data)
+                self.account = {"id": data["id"], "username": data["username"]}
+            self._say("Password replaced.")
+            self.week_changed.emit()
+
+        self.client.request(
+            "POST",
+            "/api/auth/password",
+            {"current_password": current_password, "new_password": new_password},
+            ok,
+            lambda error: self._fail(ticket, error),
+        )
+
+    def replace_recovery_codes(self, password: str) -> None:
+        ticket = self._begin()
+        self._say("Replacing recovery codes…")
+
+        def ok(data: dict) -> None:
+            if not self._idle(ticket):
+                return
+            codes = list(data.get("recovery_codes") or [])
+            self.recovery_remaining = int(data.get("remaining") or len(codes))
+            self.recovery_codes.emit(codes)
+            self._say("Save these replacement recovery codes.")
+
+        self.client.request(
+            "POST",
+            "/api/auth/recovery-codes",
+            {"password": password},
+            ok,
+            lambda error: self._fail(ticket, error),
+        )
+
+    def delete_account(self, password: str) -> None:
+        ticket = self._begin()
+        self._say("Deleting account…")
+
+        def ok(_data: dict) -> None:
+            if not self._alive(ticket):
+                return
+            self.client.reset()
+            self._clear_local()
+            self.busy = False
+            self.busy_changed.emit(False)
+            self.account_changed.emit(None)
+            self.week_changed.emit()
+            self._say("Account deleted.")
+
+        self.client.request(
+            "DELETE",
+            "/api/auth/account",
+            {"password": password},
+            ok,
+            lambda error: self._fail(ticket, error),
+        )
+
+    def _fetch_restore_points(self) -> None:
+        if self.account is None:
+            return
+
+        def ok(data: dict) -> None:
+            self.restore_points = list(data.get("restore_points") or data.get("points") or [])
+            self.week_changed.emit()
+
+        self.client.request("GET", "/api/restore-points", None, ok, lambda _error: None)
+
+    def create_restore_point(self, label: str) -> None:
+        if self.account is None or not label.strip():
+            self._say("Give the restore point a name.")
+            return
+        key = f"create-restore|{self.account['id']}|{label.strip()}"
+        ticket = self._begin()
+        self._say("Saving restore point…")
+
+        def ok(data: dict) -> None:
+            if not self._idle(ticket):
+                return
+            point = data.get("restore_point") or data
+            self.restore_points = [point] + [
+                item for item in self.restore_points if item.get("id") != point.get("id")
+            ]
+            self.restore_points = self.restore_points[:20]
+            self._say("Saved restore point " + point.get("label", label) + ".")
+            self.week_changed.emit()
+
+        self.client.request(
+            "POST",
+            "/api/restore-points",
+            {"label": label.strip(), "operation_id": self._operation(key)},
+            ok,
+            lambda error: self._fail(ticket, error),
+        )
+
+    def preview_restore_point(self, point_id: str, on_preview=None) -> None:
+        if self.account is None:
+            return
+        ticket = self._begin()
+
+        def ok(data: dict) -> None:
+            if not self._idle(ticket):
+                return
+            self.restore_preview = data
+            self.week_changed.emit()
+            if on_preview is not None:
+                on_preview()
+
+        def err(error: ApiError) -> None:
+            if self._alive(ticket):
+                self.restore_preview = None
+            self._fail(ticket, error)
+
+        self.client.request(
+            "GET",
+            f"/api/restore-points/{quote(point_id, safe='')}/preview",
+            None,
+            ok,
+            err,
+        )
+
+    def apply_restore_point(self, point_id: str) -> None:
+        preview = self.restore_preview
+        if self.account is None or preview is None or preview.get("id") != point_id:
+            self._say("Preview the restore point first.")
+            return
+        key = f"restore|{self.account['id']}|{point_id}"
+        ticket = self._begin()
+        self._say("Restoring…")
+
+        def ok(_data: dict) -> None:
+            if not self._idle(ticket):
+                return
+            self.restore_preview = None
+            self._undo.clear()
+            self._redo.clear()
+            self._focus_after_restore = True
+            self._say("Restored.")
+            self.load_week(self.week_start)
+            self._fetch_restore_points()
+
+        def err(error: ApiError) -> None:
+            if self._alive(ticket) and error.status == 409:
+                self.restore_preview = None
+            self._fail(ticket, error)
+
+        self.client.request(
+            "POST",
+            f"/api/restore-points/{quote(point_id, safe='')}/restore",
+            {"state_token": preview["state_token"], "operation_id": self._operation(key)},
+            ok,
+            err,
+        )
+
+    def export_account(self, password: str, on_snapshot) -> None:
+        if self.account is None or self.dirty or self.dirty_assignments:
+            self._say("Save, retry or download your unsaved changes before transferring account data.")
+            return
+        ticket = self._begin()
+
+        def ok(data: dict) -> None:
+            if not self._idle(ticket):
+                return
+            on_snapshot(data)
+            self._say("Account file ready. Keep it private.")
+
+        self.client.request(
+            "POST",
+            "/api/account-export",
+            {"password": password},
+            ok,
+            lambda error: self._fail(ticket, error),
+        )
+
+    def preview_account_import(self, snapshot: dict, on_preview=None) -> None:
+        if self.account is None or self.dirty or self.dirty_assignments:
+            self._say("Save, retry or download your unsaved changes before transferring account data.")
+            return
+        ticket = self._begin()
+
+        def ok(data: dict) -> None:
+            if not self._idle(ticket):
+                return
+            self.transfer_preview = {"snapshot": snapshot, **data}
+            self.week_changed.emit()
+            if on_preview is not None:
+                on_preview()
+
+        def err(error: ApiError) -> None:
+            if self._alive(ticket):
+                self.transfer_preview = None
+            self._fail(ticket, error)
+
+        self.client.request(
+            "POST",
+            "/api/account-import/preview",
+            {"snapshot": snapshot},
+            ok,
+            err,
+        )
+
+    def apply_account_import(self) -> None:
+        preview = self.transfer_preview
+        if self.account is None or preview is None:
+            return
+        if self.dirty or self.dirty_assignments:
+            self._say("Save, retry or download your unsaved changes before transferring account data.")
+            return
+        key = f"import|{self.account['id']}|{preview.get('state_token')}"
+        ticket = self._begin()
+
+        def ok(_data: dict) -> None:
+            if not self._idle(ticket):
+                return
+            self.transfer_preview = None
+            self._say("Imported account data.")
+            self.load_week(self.week_start)
+            self._fetch_restore_points()
+
+        def err(error: ApiError) -> None:
+            if self._alive(ticket) and error.status == 409:
+                self.transfer_preview = None
+            self._fail(ticket, error)
+
+        self.client.request(
+            "POST",
+            "/api/account-import",
+            {
+                "snapshot": preview["snapshot"],
+                "state_token": preview["state_token"],
+                "operation_id": self._operation(key),
+            },
+            ok,
+            err,
+        )
+
+    def week_file(self) -> dict:
+        return export_week_payload(self.week_start, self.blocks, self.assignments)
+
+    def day_file(self, day: int) -> dict:
+        return export_day_payload(self.week_start, day, self.blocks, self.assignments)
+
+    def import_week_file(self, raw: str, *, replace: bool | None = None) -> bool:
+        parsed = parse_import_payload(raw)
+        if parsed.get("error"):
+            self._say(parsed["error"])
+            return False
+        target = parsed.get("week_start") or self.week_start
+        if target != self.week_start:
+            self._say(
+                "This file is for "
+                + week_label(target)
+                + ". Open that week and import without changing other weeks?"
+            )
+            return False
+        plan = plan_imported_homework(
+            parsed.get("assignments") or [], parsed.get("blocks") or [], self.week_start, self.assignments
+        )
+        mode = "merge" if parsed.get("format") == "flexweek-day" else "replace"
+        if replace is False:
+            mode = "merge"
+        if replace is True:
+            mode = "replace"
+        if mode == "replace" and self.blocks and replace is not True:
+            self._say(
+                "Replace blocks in "
+                + week_label(self.week_start)
+                + " with the import? Other weeks stay untouched."
+            )
+            return False
+        try:
+            merged = merge_imported_blocks(self.blocks, plan["blocks"], mode, parsed.get("day"))
+        except ValueError as error:
+            self._say(str(error) + " Nothing was imported.")
+            return False
+        if len(merged) > MAX_WEEK_BLOCKS:
+            self._say(
+                week_label(self.week_start)
+                + " would exceed 100 blocks. Uncheck an item or remove a block first."
+            )
+            return False
+        for item in plan["create"]:
+            self.assignments[item["id"]] = item
+            self.dirty_assignments.add(item["id"])
+        self.blocks = merged
+        self._touch("the import")
+        self.save()
+        return True

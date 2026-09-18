@@ -2,13 +2,20 @@
 
 ## Current State
 - Date: 2026-09-17 (native). Branch `feat/native-python` off look-knobs at
-  a92feef, local only. ChatGPT started the overhaul: a private API with
-  `serve_frontend=False`, `QNetworkAccessManager` client, and week/homework
-  dialogs. Unit 1 of `docs/native-python-migration.md` is now a real window:
-  `python -m desktop.native` (optional `--database`) registers, shows eight
-  recovery codes, loads a dated week, saves fixed time and homework through
-  `POST /api/changes`, and runs Solve. The WebEngine app is still the default.
-  Native widget tests plus the no-browser server case. Units 2–6 remain.
+  a92feef, local only. All six units of `docs/native-python-migration.md` are
+  in. `python -m desktop.main` (and `python -m desktop.native`) starts Qt
+  widgets against the existing Python API with browser files disabled. Focus
+  timers, packs, device-only look knobs, tray hide, forgotten-password recovery,
+  restore points, week/day files and account transfer are on that window.
+  `--smoke-test` no longer loads Chromium. The old WebEngine shell remains in
+  `desktop/webengine.py` for leftover probe tests. Packaging and installers are
+  untouched. Native widget tests plus focus/look/remind/files helpers. GLM
+  5.3 Flash audited units 4–6; native now matches the web client on lead-0
+  reminders, queued alarms, this-week-only reminder sources, week-file replace
+  confirm, restore/undo/focus cleanup, and account-import preview timing.
+- Date: 2026-09-17 (native, earlier). Units 1–3 of the native overhaul: register,
+  dated week, Week/Day/Month, drag, series refuse, homework notes, undo, copy,
+  paste, routines, unfinished, missed, running late, spread and availability.
 - Date: 2026-09-17 (after 0.11.0). Branch `feat/look-knobs` off `main` at
   30e0724, local only. The owner asked for more control over the UI and for
   presets that look drastically different, and chose architecture first with
@@ -268,12 +275,14 @@ docs/cac-build-plan.md   original Sep 6 contest brief (working title Reslot)
 DESKTOP.md               PySide6 QWebEngineView recommendation + build status
 desktop/origin.py        origin resolution, no Qt imports (unit-tested)
 desktop/server.py        bundled uvicorn on a loopback port, no Qt imports
-desktop/main.py          Qt window, persistent profile, retry panel
+desktop/main.py          native Qt window; default launcher after unit 6
+desktop/webengine.py     leftover WebEngine shell for probe tests
+desktop/native/          widgets, session, focus/remind/files/look
 desktop/build_linux.sh   staged Linux build, previous artifacts preserved
 desktop/package_linux.sh release tar.gz with README, icon and .desktop
 desktop/check_bundle.py  glibc and missing-library check, no Qt imports
 desktop/build_windows.ps1 Windows standalone build preparation
-desktop/tests/           origin/server tests and isolated real WebEngine probes
+desktop/tests/           native helpers, widget tests, leftover WebEngine probes
 backend/weeks.py         week-date helpers, no framework import
 backend/recovery.py      one-time recovery codes, no HTTP
 backend/limits.py        256 KiB write-body cap
@@ -408,6 +417,21 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-17, `feat/native-python`: GLM 5.3 Flash parity audit of units 4–6.
+  Native now matches the web client on lead-0 reminders, queued alarms, this-
+  week-only reminder sources, week-file replace confirm, restore clearing undo
+  and a vanished focus timer, expiry forgetting the timer, completed-flexible
+  day export, and the week-file reject list. Nothing pushed.
+- 2026-09-17, `feat/native-python`: units 4–6 of the native Python overhaul are
+  in. Default launcher is native widgets. Focus credit, prefs packs, recovery,
+  restore points, week files and `--smoke-test` without Chromium. Packaging
+  still points at WebEngine in its scripts and stays unbuilt. Nothing pushed.
+- 2026-09-17, `feat/native-python`: unit 3 of the native Python overhaul is in.
+  Internal clipboard and collision previews, locked-only routines with
+  `snapshot_label`, unfinished homework identity, missed recovery, running late,
+  spread and availability prefs. Undo/Redo of the week on screen stay. Next is
+  unit 4 (focus timers, packs, tray). The WebEngine app stays the default.
+  Nothing pushed.
 - 2026-09-17, `feat/native-python`: unit 1 of the native Python overhaul is in.
   `python -m desktop.native` is the experimental launcher. Next is unit 2,
   calendar and homework parity (Day, Month, drag, occurrence vs series). The
