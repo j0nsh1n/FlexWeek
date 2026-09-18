@@ -40,7 +40,9 @@ function setPlannerView(next) {
   }
   plannerView = next;
   if (!selectedDay || mondayOf(selectedDay) !== selectedWeek) {
-    selectedDay = selectedWeek === currentWeekStart() ? todayIso() : selectedWeek;
+    selectedDay = typeof dayInWeek === "function"
+      ? dayInWeek(selectedWeek, selectedDay)
+      : (selectedWeek === currentWeekStart() ? todayIso() : selectedWeek);
   }
   renderWeekNav();
   renderWeek();

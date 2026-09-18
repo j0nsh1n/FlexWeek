@@ -133,7 +133,9 @@ function useRoundedTimerPreview() {
 }
 
 function readComfortEdit() {
-  const pack = comfortElement("pref-theme").value;
+  const pack = typeof lookMenuPack === "function"
+    ? lookMenuPack(comfortElement("pref-theme").value, prefs.theme_pack)
+    : comfortElement("pref-theme").value;
   return {
     theme: typeof packAxis === "function" ? packAxis(pack) : pack,
     theme_pack: pack,
@@ -342,9 +344,6 @@ Object.values(COMFORT_TIMER_IDS).forEach(function (id) {
   comfortElement(id).addEventListener("input", function () { hideSplitPreview(); renderTimerPresetSelection(); });
 });
 comfortElement("pref-alert-volume").addEventListener("input", updateVolumeOutput);
-comfortElement("pref-theme").addEventListener("change", function () {
-  if (typeof choosePack === "function") return choosePack(comfortElement("pref-theme").value);
-});
 comfortElement("pref-motion").value = document.documentElement.dataset.motion || "normal";
 comfortElement("pref-motion").addEventListener("change", function () {
   const level = comfortElement("pref-motion").value;
@@ -357,14 +356,20 @@ comfortElement("pref-motion").addEventListener("change", function () {
 // cannot reach the account by accident; look.js owns the storage.
 const LOOK_CONTROL_KNOBS = ["surface", "corners", "depth", "font", "blocks", "density", "text"];
 function syncLookControls() {
-  comfortElement("pref-preset").value = document.documentElement.dataset.preset || "default";
+  const selected = typeof lookMenuValue === "function"
+    ? lookMenuValue(typeof prefs !== "undefined" ? prefs.theme_pack : "system")
+    : (typeof prefs !== "undefined" && prefs.theme_pack) || "system";
+  const prefTheme = comfortElement("pref-theme");
+  const chrome = document.getElementById("theme");
+  prefTheme.value = selected;
+  if (chrome) chrome.value = selected;
   const look = typeof effectiveLook === "function" ? effectiveLook() : {};
   LOOK_CONTROL_KNOBS.forEach(function (knob) {
     comfortElement("pref-" + knob).value = look[knob] || "";
   });
 }
-comfortElement("pref-preset").addEventListener("change", function () {
-  if (typeof choosePreset === "function") choosePreset(comfortElement("pref-preset").value);
+comfortElement("pref-theme").addEventListener("change", function () {
+  if (typeof chooseLook === "function") chooseLook(comfortElement("pref-theme").value);
   syncLookControls();
 });
 LOOK_CONTROL_KNOBS.forEach(function (knob) {

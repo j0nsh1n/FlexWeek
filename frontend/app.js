@@ -742,6 +742,16 @@ function isWeekStart(value) {
   return date.getUTCDay() === 1 && ((year >= 2000 && year <= 2099) || value === "1999-12-27");
 }
 
+function weekdayOf(isoDay) {
+  const date = parseDate(isoDay);
+  if (!date) return 0;
+  return (date.getUTCDay() + 6) % 7;
+}
+
+function dayInWeek(weekStart, isoDay) {
+  return dateForDay(weekStart, weekdayOf(isoDay));
+}
+
 function dateForDay(weekStart, dayIndex) {
   const date = parseDate(weekStart);
   if (!date || !Number.isInteger(dayIndex) || dayIndex < 0 || dayIndex > 6) return "";
@@ -1160,9 +1170,8 @@ function weekStatus() {
 
 function showWeek(weekStart) {
   selectedWeek = weekStart;
-  // The Day view stays inside the week on screen: today in this week, Monday in any other.
   if (!selectedDay || mondayOf(selectedDay) !== weekStart) {
-    selectedDay = weekStart === currentWeekStart() ? currentDateInfo().iso : weekStart;
+    selectedDay = dayInWeek(weekStart, selectedDay);
   }
   dayData = null;
   const state = weekState();
@@ -2071,7 +2080,6 @@ function applyPreferences(preferences) {
     prefs.motion = typeof MOTION_LEVELS !== "undefined" && MOTION_LEVELS.indexOf(device) !== -1
       ? device : "normal";
   }
-  themeEl.value = prefs.theme_pack;
   if (typeof applyAppearance === "function") applyAppearance();
   else applyTheme(prefs.theme);
   const enabled = document.getElementById("pref-reminders-enabled");
@@ -2083,7 +2091,6 @@ function applyPreferences(preferences) {
   if (sound) sound.checked = prefs.reminder_sound;
   if (dnd) dnd.checked = prefs.reminder_dnd_override;
   const values = {
-    "pref-theme": prefs.theme_pack,
     "pref-timer-work": prefs.timer_work_min,
     "pref-timer-break": prefs.timer_break_min,
     "pref-timer-long-break": prefs.timer_long_break_min,
@@ -2368,6 +2375,8 @@ function maybeNotify(title, body, soundEnabled = prefs.reminder_sound, tone = "c
   }
 }
 
+let reminderWeekFetch = null;
+
 function checkReminders(nowDate) {
   if (!account || !prefs.reminders_enabled) return;
   const now = nowDate || new Date();
@@ -2376,7 +2385,23 @@ function checkReminders(nowDate) {
   const lead = prefs.reminder_lead_min;
   const reminderWeek = mondayOf(todayIso);
   const state = weeks.get(reminderWeek);
-  if (!state) return;
+  if (!state) {
+    if (reminderWeekFetch === reminderWeek) return;
+    reminderWeekFetch = reminderWeek;
+    api("/api/week?week_start=" + reminderWeek).then(function (week) {
+      const existing = weeks.get(reminderWeek);
+      if (existing && existing.dirty) return;
+      const next = weekState(reminderWeek);
+      if (!next.dirty) {
+        next.blocks = week.blocks;
+        next.revision = week.revision;
+      }
+      checkReminders(nowDate);
+    }).catch(function () { /* The next poll tries again. */ }).then(function () {
+      if (reminderWeekFetch === reminderWeek) reminderWeekFetch = null;
+    });
+    return;
+  }
   const sources = new Map(state.blocks.map(function (block) { return [block.id, block]; }));
   const reminderBlocks = state.trace ? state.blocks.filter(function (block) {
     return block.kind === "locked";
@@ -2857,10 +2882,10 @@ async function recoverMissedOccurrence(blockId, day) {
 }
 
 function syncAppearanceControls() {
-  const pack = prefs.theme_pack || "system";
-  themeEl.value = pack;
+  const selected = typeof lookMenuValue === "function" ? lookMenuValue(prefs.theme_pack) : (prefs.theme_pack || "system");
+  themeEl.value = selected;
   const prefTheme = document.getElementById("pref-theme");
-  if (prefTheme) prefTheme.value = pack;
+  if (prefTheme) prefTheme.value = selected;
   const prefMotion = document.getElementById("pref-motion");
   if (prefMotion) prefMotion.value = prefs.motion || "normal";
   const prefAccent = document.getElementById("pref-accent");
@@ -2904,7 +2929,10 @@ async function choosePack(pack) {
   }
 }
 
-themeEl.addEventListener("change", function () { return choosePack(themeEl.value); });
+themeEl.addEventListener("change", function () {
+  if (typeof chooseLook === "function") return chooseLook(themeEl.value);
+  return choosePack(themeEl.value);
+});
 
 document.getElementById("retry-save").addEventListener("click", saveWeek);
 document.getElementById("reload-week").addEventListener("click", async () => {
@@ -3065,7 +3093,9 @@ if (prefsForm) {
     }
     const next = {
       theme: typeof packAxis === "function"
-        ? packAxis(document.getElementById("pref-theme").value)
+        ? packAxis(typeof lookMenuPack === "function"
+          ? lookMenuPack(document.getElementById("pref-theme").value, prefs.theme_pack)
+          : document.getElementById("pref-theme").value)
         : document.getElementById("pref-theme").value,
       reminders_enabled: Boolean(enabledEl && enabledEl.checked),
       reminder_lead_min: Math.max(0, Math.min(120, Number(leadEl && leadEl.value) || 0)),
@@ -3096,7 +3126,6 @@ if (prefsForm) {
       if (preferenceEpoch !== epoch) return;
       applyPreferences(saved);
       renderWeek();
-      themeEl.value = saved.theme;
       if (err) { err.hidden = true; err.textContent = ""; }
       if (prefsDialog && typeof prefsDialog.close === "function") prefsDialog.close();
       else if (prefsDialog) prefsDialog.removeAttribute("open");

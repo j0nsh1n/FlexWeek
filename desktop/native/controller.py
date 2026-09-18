@@ -138,7 +138,7 @@ class NativeSession(QObject):
         self.busy = False
         self.message = ""
         self.planner_view = "week"
-        self.selected_day = current_week_start()
+        self.selected_day = date.today().isoformat()
         self.day_data: dict | None = None
         self.selected_month: str | None = None
         self.month_data: dict | None = None
@@ -192,6 +192,12 @@ class NativeSession(QObject):
         self.reminder_limits: dict = {}
         self.recovery_remaining: int | None = None
         self.split_preview: dict | None = None
+        self._drafts: dict[str, dict] = {}
+        self._reminder_ticket = 0
+        self._reminder_fetching: str | None = None
+        self._reminder_week: str | None = None
+        self._reminder_blocks: list[dict] = []
+        self._reminder_trace: dict | None = None
 
     def _say(self, text: str) -> None:
         self.message = text
@@ -231,7 +237,7 @@ class NativeSession(QObject):
         self.conflict = False
         self.pending_save = None
         self.planner_view = "week"
-        self.selected_day = current_week_start()
+        self.selected_day = date.today().isoformat()
         self.day_data = None
         self.selected_month = None
         self.month_data = None
@@ -274,6 +280,12 @@ class NativeSession(QObject):
         self.reminder_limits = {}
         self.recovery_remaining = None
         self.split_preview = None
+        self._drafts.clear()
+        self._reminder_ticket += 1
+        self._reminder_fetching = None
+        self._reminder_week = None
+        self._reminder_blocks = []
+        self._reminder_trace = None
 
     def arm_category(self, category: str) -> None:
         self.armed_category = category
@@ -283,11 +295,59 @@ class NativeSession(QObject):
         self.selected_occurrence_day = day
 
     def _ensure_selected_day(self) -> None:
-        today = date.today().isoformat()
-        if monday_of(today) == self.week_start:
-            self.selected_day = today
-        elif monday_of(self.selected_day) != self.week_start:
+        try:
+            if monday_of(self.selected_day) == self.week_start:
+                return
+            weekday = date.fromisoformat(self.selected_day).weekday()
+        except ValueError:
             self.selected_day = self.week_start
+            return
+        self.selected_day = date_for_day(self.week_start, weekday)
+
+    def _held(self) -> bool:
+        return bool(self.dirty or self.dirty_assignments or self.pending_save)
+
+    def _week_snapshot(self) -> dict:
+        return {
+            "week_start": self.week_start,
+            "blocks": deepcopy(self.blocks),
+            "revision": self.revision,
+            "assignments": deepcopy(self.assignments),
+            "dirty_assignments": set(self.dirty_assignments),
+            "trace": deepcopy(self.trace),
+            "dirty": self.dirty,
+            "conflict": self.conflict,
+            "pending_save": deepcopy(self.pending_save),
+            "undo": deepcopy(self._undo),
+            "redo": deepcopy(self._redo),
+            "committed_blocks": deepcopy(self._committed_blocks),
+            "committed_assignments": deepcopy(self._committed_assignments),
+            "pending_step": deepcopy(self._pending_step),
+            "history_label": self._history_label,
+            "selected_day": self.selected_day,
+            "selected_block_id": self.selected_block_id,
+            "selected_occurrence_day": self.selected_occurrence_day,
+        }
+
+    def _restore_week(self, snap: dict) -> None:
+        self.week_start = snap["week_start"]
+        self.blocks = deepcopy(snap["blocks"])
+        self.revision = snap["revision"]
+        self.assignments = deepcopy(snap["assignments"])
+        self.dirty_assignments = set(snap["dirty_assignments"])
+        self.trace = deepcopy(snap["trace"])
+        self.dirty = snap["dirty"]
+        self.conflict = snap["conflict"]
+        self.pending_save = deepcopy(snap["pending_save"])
+        self._undo = deepcopy(snap["undo"])
+        self._redo = deepcopy(snap["redo"])
+        self._committed_blocks = deepcopy(snap["committed_blocks"])
+        self._committed_assignments = deepcopy(snap["committed_assignments"])
+        self._pending_step = deepcopy(snap["pending_step"])
+        self._history_label = snap["history_label"]
+        self.selected_day = snap["selected_day"]
+        self.selected_block_id = snap["selected_block_id"]
+        self.selected_occurrence_day = snap["selected_occurrence_day"]
 
     def _refresh_view(self) -> None:
         if self.planner_view == "day":
@@ -490,10 +550,27 @@ class NativeSession(QObject):
             return
         if self.busy:
             return
-        if not discard and (self.dirty or self.dirty_assignments or self.pending_save):
-            self._say("Save, retry or reload before opening another week.")
-            return
         start = week_start or current_week_start()
+        if discard:
+            self._drafts.pop(start, None)
+        elif start == self.week_start and self._held():
+            return
+        else:
+            parked = self._drafts.get(start)
+            if parked is not None and (
+                parked["dirty"] or parked["dirty_assignments"] or parked["pending_save"]
+            ):
+                if start != self.week_start:
+                    if self._held():
+                        self._drafts[self.week_start] = self._week_snapshot()
+                    self._restore_week(parked)
+                    self._drafts.pop(start, None)
+                    self._say("This week.")
+                    self._refresh_view()
+                    self.week_changed.emit()
+                    self._restore_focus()
+                    self._drop_missing_focus()
+                return
         previous = self.week_start
         ticket = self._begin()
         self._say("Loading…")
@@ -525,11 +602,14 @@ class NativeSession(QObject):
             if not self._idle(ticket):
                 return
             if loaded != previous:
+                if self._held():
+                    self._drafts[previous] = self._week_snapshot()
                 self._undo.clear()
                 self._redo.clear()
             elif self.revision != week["revision"]:
                 mark_stale(self._undo, loaded)
                 mark_stale(self._redo, loaded)
+            self._drafts.pop(loaded, None)
             self.blocks = list(week["blocks"])
             self.revision = week["revision"]
             self.week_start = loaded
@@ -1986,24 +2066,86 @@ class NativeSession(QObject):
         self.focus_changed.emit()
         return True
 
+    def _today_reminder_source(self, today_monday: str) -> tuple[list[dict], dict | None] | None:
+        if self.week_start == today_monday:
+            return self.blocks, self.trace
+        parked = self._drafts.get(today_monday)
+        if parked is not None:
+            return parked["blocks"], parked.get("trace")
+        if self._reminder_week == today_monday:
+            return self._reminder_blocks, self._reminder_trace
+        return None
+
+    def _due_reminder_notices(
+        self, blocks: list[dict], trace: dict | None, clock: dict, prefs: dict
+    ) -> list[dict]:
+        notices: list[dict] = []
+        due = due_reminders(
+            blocks=blocks,
+            trace=trace,
+            today_iso=clock["iso"],
+            now_min=clock["minute"],
+            lead_min=reminder_lead_min(prefs),
+            fired=self.fired_reminders,
+        )
+        for item in due:
+            self.fired_reminders.add(item["key"])
+            notices.append({"title": item["title"], "body": item["body"], "kind": "reminder"})
+        return notices
+
+    def _request_today_reminders(self, today_monday: str) -> None:
+        if self._reminder_fetching == today_monday:
+            return
+        self._reminder_fetching = today_monday
+        self._reminder_ticket += 1
+        token = self._reminder_ticket
+
+        def ok(data: dict) -> None:
+            if token != self._reminder_ticket or self.account is None:
+                return
+            self._reminder_fetching = None
+            if self.week_start == today_monday or today_monday in self._drafts:
+                self._emit_cached_today_reminders(today_monday)
+                return
+            self._reminder_week = data.get("week_start") or today_monday
+            self._reminder_blocks = list(data.get("blocks") or [])
+            self._reminder_trace = None
+            self._emit_cached_today_reminders(today_monday)
+
+        def failed(_error: ApiError) -> None:
+            if token != self._reminder_ticket:
+                return
+            self._reminder_fetching = None
+
+        self.client.request("GET", f"/api/week?week_start={today_monday}", None, ok, failed)
+
+    def _emit_cached_today_reminders(self, today_monday: str) -> None:
+        prefs = self.preferences or {}
+        if not prefs.get("reminders_enabled"):
+            return
+        clock = self._clock()
+        if monday_of(clock["iso"]) != today_monday:
+            return
+        source = self._today_reminder_source(today_monday)
+        if source is None:
+            return
+        notices = self._due_reminder_notices(source[0], source[1], clock, prefs)
+        if notices:
+            self.alerts.emit(notices)
+
     def check_alerts(self) -> None:
         if self.account is None:
             return
         clock = self._clock()
         notices: list[dict] = []
         prefs = self.preferences or {}
-        if prefs.get("reminders_enabled") and self.week_start == monday_of(clock["iso"]):
-            due = due_reminders(
-                blocks=self.blocks,
-                trace=self.trace,
-                today_iso=clock["iso"],
-                now_min=clock["minute"],
-                lead_min=reminder_lead_min(prefs),
-                fired=self.fired_reminders,
-            )
-            for item in due:
-                self.fired_reminders.add(item["key"])
-                notices.append({"title": item["title"], "body": item["body"], "kind": "reminder"})
+        if prefs.get("reminders_enabled"):
+            today_monday = monday_of(clock["iso"])
+            source = self._today_reminder_source(today_monday)
+            if source is None:
+                self._request_today_reminders(today_monday)
+            else:
+                notices.extend(self._due_reminder_notices(source[0], source[1], clock, prefs))
         queued, self.snoozed_alarms, self.last_alarm_check = due_alarms(
             alarms=list(prefs.get("alarms") or []),
             today_iso=clock["iso"],

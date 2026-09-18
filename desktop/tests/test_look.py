@@ -24,10 +24,14 @@ from desktop.native.look import (
     block_paint,
     contrast,
     effective_look,
+    look_menu_items,
+    look_menu_token,
+    look_menu_value,
     look_overrides,
     mix,
     pack_axis,
     pack_stylesheet,
+    parse_look_menu_token,
     preset_knobs,
     readable_ink,
     resolved_pack_theme,
@@ -48,6 +52,20 @@ def web_tokens(selector: str) -> dict[str, str]:
 
 def look_of(preset: str, **knobs: str) -> dict:
     return {"preset": preset, "knobs": knobs}
+
+
+def test_the_look_menu_lists_packs_then_device_presets() -> None:
+    items = look_menu_items()
+    assert [kind for _name, _label, kind in items[:5]] == ["pack"] * 5
+    assert all(kind == "preset" for _name, _label, kind in items[5:])
+    assert look_menu_value("nocturne", {"preset": "default", "knobs": {}}) == look_menu_token(
+        "pack", "nocturne"
+    )
+    assert look_menu_value("nocturne", {"preset": "terminal", "knobs": {}}) == look_menu_token(
+        "preset", "terminal"
+    )
+    assert parse_look_menu_token("preset:default") is None
+    assert parse_look_menu_token("preset:terminal") == ("preset", "terminal")
 
 
 def test_unknown_knobs_and_packs_fall_back() -> None:

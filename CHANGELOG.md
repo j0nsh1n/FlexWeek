@@ -23,15 +23,14 @@ All notable changes to FlexWeek are documented here. Format follows
   account APIs. `--smoke-test` walks a native week without Chromium.
   `--database` points at a file for isolated checks.
 - Look knobs and presets (2026-09-18, shared frontend and native Qt). Settings
-  gains Preset and Text size beside Look and Motion, and Customize gains
-  Surface, Corners, Depth, Font, Calendar blocks and Density. Four device-only
-  presets: Terminal (true black, phosphor, amber, monospace), Poster (yellow
-  field, navy ink, dark red accent, hard shadows, large type), Ink
-  (near-monochrome serif, category colour as an edge, light and dark maps),
-  High contrast (black, white and yellow, outlined blocks, large text). All of
-  it stays on this computer; nothing is saved to the account until the
-  contract amendment is approved, and picking a preset resets the knobs to
-  that preset's own settings.
+  Look lists the five account packs and the device presets Terminal, Poster,
+  Ink and High contrast. Customize still has Surface, Corners, Depth, Font,
+  Calendar blocks and Density. Terminal is true black, phosphor, amber,
+  monospace; Poster is yellow, navy and dark red with hard shadows and large
+  type; Ink is near-monochrome serif with light and dark maps; High contrast
+  is black, white and yellow with outlined blocks and large text, and it turns
+  on only from this menu. Knobs you set by hand stay when you change Look. All
+  of it stays on this computer until the contract amendment is approved.
 - Pill corners keep calendar blocks readable (2026-09-17, shared frontend).
   Chips become capsules; a block's corners stop at 8px so a tall School block
   cannot round its own title away.
@@ -41,14 +40,18 @@ All notable changes to FlexWeek are documented here. Format follows
   instead of an inline border colour (2026-09-17, shared frontend), so a look
   can decide whether the colour lands on the edge, the outline or nowhere.
   Nothing changes on screen with the default look.
+- Unsaved weeks stay as drafts when another week opens (2026-09-18, native).
+  The weekday you were on stays selected. Reminders for today still fire if
+  you are looking at another week or another page.
+- Large text enlarges the More menu (2026-09-18, web and native). Overflow
+  actions on the native window sit under More.
 
 ### Fixed
 - Native week navigation, undo, focus credit and calendar shortcuts (2026-09-18).
   A failed week load no longer leaves the previous week's blocks under the new
-  date. A dirty week stays until Save, Retry or Reload. Undo after a conflict
-  keeps live focus minutes. W, D, M, Delete and Ctrl+C/V/D/Z/Y reach the window
-  from the week grid. Day Previous and Next move one day. Recovery Continue is
-  the only path off the recovery codes page.
+  date. Undo after a conflict keeps live focus minutes. W, D, M, Delete and
+  Ctrl+C/V/D/Z/Y reach the window from the week grid. Day Previous and Next
+  move one day. Recovery Continue is the only path off the recovery codes page.
 
 ## [0.11.0] - 2026-09-17
 

@@ -1047,6 +1047,22 @@ button.danger {
 .week-menu-items { position: absolute; z-index: 30; margin-top: var(--space-1); padding: var(--space-1); background: var(--surface-elevated); border: 1px solid var(--hairline-strong); border-radius: var(--radius); box-shadow: var(--shadow-lg); }
 .week-menu-items { min-width: 12.5rem; }
 .week-menu-items button { display: block; width: 100%; margin: 0.12rem 0; text-align: left; }
+html[data-text="large"] .week-menu > summary,
+html[data-text="large"] .week-menu-items button,
+html[data-text="large"] .advanced > summary {
+  font-size: 1rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+}
+html[data-text="large"] .week-menu-items {
+  min-width: 18rem;
+  max-height: min(24rem, 70vh);
+  overflow: auto;
+}
+html[data-text="large"] .editor-actions {
+  flex-direction: column;
+  align-items: stretch;
+}
 .menu-note { margin: 0.15rem 0 0.35rem; padding: 0 0.25rem; color: var(--muted); font-size: 0.72rem; }
 .save-actions { padding: 0.6rem 1.1rem; border-bottom: 1px solid var(--hairline); background: var(--surface); }
 .save-actions button { margin: var(--space-1); }

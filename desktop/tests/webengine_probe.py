@@ -821,21 +821,21 @@ def run(case: str, root: Path) -> None:
             root_token = "getComputedStyle(document.documentElement).getPropertyValue('{}').trim()"
             body_font = "getComputedStyle(document.body).fontFamily"
 
-            def pick_preset(name: str) -> None:
-                evaluate(f"document.getElementById('pref-preset').value='{name}';"
-                         "document.getElementById('pref-preset').dispatchEvent(new Event('change'))")
+            def pick_look(name: str) -> None:
+                evaluate(f"document.getElementById('pref-theme').value='{name}';"
+                         "document.getElementById('pref-theme').dispatchEvent(new Event('change'))")
 
             evaluate("window.__lookFetches=0; window.__lookFetch=fetch;"
                      "fetch=function(){window.__lookFetches+=1;"
                      " return window.__lookFetch.apply(this, arguments);}")
-            pick_preset("terminal")
+            pick_look("terminal")
             assert evaluate("document.documentElement.dataset.preset") == "terminal"
             assert "mono" in evaluate(body_font).lower()
             assert evaluate(root_token.format("--hour-h")) == "2.1rem"
             assert evaluate(root_token.format("--radius")) == "0"
             assert evaluate("JSON.parse(localStorage.getItem('flexweek-look')).preset") == "terminal"
             assert evaluate("window.__lookFetches") == 0
-            pick_preset("default")
+            pick_look("system")
             evaluate("fetch=window.__lookFetch")
             # A removed attribute reads as undefined, which the bridge does not map to None.
             assert evaluate("'preset' in document.documentElement.dataset") is False

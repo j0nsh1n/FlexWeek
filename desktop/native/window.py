@@ -77,6 +77,7 @@ class NativeWindow(QMainWindow):
         self._stack = QStackedWidget(self)
         self._stack.setObjectName("nativeStack")
         self.setCentralWidget(self._stack)
+        self._more_pairs = []
         self._build_auth()
         self._build_recovery()
         self._build_week()
@@ -321,6 +322,30 @@ class NativeWindow(QMainWindow):
         spotify = QPushButton("Spotify")
         spotify.setObjectName("openSpotify")
         spotify.clicked.connect(self._open_spotify)
+        more = QPushButton("More")
+        more.setObjectName("moreButton")
+        overflow = QWidget(page)
+        overflow.setObjectName("moreOverflow")
+        overflow.hide()
+        more_menu = QMenu(more)
+        self._more_pairs = []
+        for button in (
+            copy_day,
+            routines,
+            unfinished,
+            late,
+            availability,
+            restore,
+            account,
+            spotify,
+            reload_week,
+        ):
+            button.setParent(overflow)
+            action = more_menu.addAction(button.text())
+            action.triggered.connect(button.click)
+            self._more_pairs.append((action, button))
+        more_menu.aboutToShow.connect(self._sync_more_menu)
+        more.setMenu(more_menu)
         for button in (
             add_fixed,
             add_homework,
@@ -329,19 +354,11 @@ class NativeWindow(QMainWindow):
             copy_block,
             paste_block,
             duplicate,
-            copy_day,
-            routines,
-            unfinished,
-            late,
-            availability,
             settings,
-            restore,
-            account,
-            spotify,
             solve,
             save,
             retry,
-            reload_week,
+            more,
         ):
             actions.addWidget(button)
         layout.addLayout(actions)
@@ -518,6 +535,10 @@ class NativeWindow(QMainWindow):
         self.auth_status.setText(message)
         self.week_status.setText(message)
 
+    def _sync_more_menu(self) -> None:
+        for action, button in self._more_pairs:
+            action.setEnabled(button.isEnabled())
+
     def _on_busy(self, busy: bool) -> None:
         names = (
             "createAccount",
@@ -550,6 +571,7 @@ class NativeWindow(QMainWindow):
             "openSpotify",
             "forgotPassword",
             "recoverAccount",
+            "moreButton",
         )
         for name in names:
             button = self.findChild(QPushButton, name)

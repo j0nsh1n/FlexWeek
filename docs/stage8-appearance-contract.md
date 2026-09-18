@@ -299,12 +299,14 @@ ship with them.
 ### A2. Presets
 
 A preset names a palette, which is a complete token map audited by the same
-tests as a pack (same tokens, AA text, accent distance), and sets every knob.
-Picking a preset drops any knob the student set by hand, so one tap is the
-whole look; Customize then edits from there.
+tests as a pack (same tokens, AA text, accent distance), and sets every knob
+the student has not moved by hand. Customize then edits from there.
 
 Built as device-only presets, audited like packs (same tokens, AA text, accent
 distance). Nothing here is saved on the account until Amendment A is approved.
+
+Look is one menu: the five account packs, then Terminal, Poster, Ink and High
+contrast on this device. Pack default is choosing the pack itself.
 
 - **Terminal**. True black, phosphor text, amber accent; flat surface, sharp
   corners, no shadows, monospace, outlined blocks, compact.
@@ -314,19 +316,15 @@ distance). Nothing here is saved on the account until Amendment A is approved.
   instead of fills; no shadows; serif type. Light packs get the paper map,
   dark packs the charcoal map.
 - **High contrast**. Black, white and yellow; thick borders; outlined blocks;
-  large text. It is a Preset choice. `prefers-contrast: more` still only turns
-  frosted panels solid; it does not switch this preset on its own.
+  large text. It turns on only from this menu, never from the operating
+  system's contrast setting, in case that signal is wrong.
+  `prefers-contrast: more` still only turns frosted panels solid.
 
-Proposed after those, subject to the owner:
-
-- **Paper**: warm cream, serif type, muted category tints, no blur, rounded.
-- **Pastel**: soft candy tints, pill corners, soft shadows, lavender accent.
+Paper and Pastel remain unbuilt; they are Claude's.
 
 Relationship to packs: a pack is a palette with the knobs at their defaults; a
-preset is a palette with its own knob values. Once approved they are one list.
-The five packs keep their names and behaviour; each new preset joins
-`theme_pack` with an axis for the existing validator (Terminal is dark). The
-separate Preset control in Settings then folds into Look.
+preset is a palette with its own knob values. Once Amendment A is approved they
+join `theme_pack` with an axis for the existing validator (Terminal is dark).
 
 ### A3. Proposed preference fields
 
@@ -342,11 +340,12 @@ look_text: Literal["small", "normal", "large"] | None = Field(default=None, excl
 
 `None` means "whatever the pack or preset says", so an old client that omits
 them keeps the look it has, and an explicit value is a deliberate override.
-Choosing a preset writes `None` to all seven. `extra="forbid"` is unchanged.
+Choosing a look keeps knobs the student set by hand; only those overrides are
+stored, and the rest stay `None`. `extra="forbid"` is unchanged.
 
 ### A4. On a phone
 
-Preset, Text size and Motion sit up front. The other knobs stay inside
+Look, Text size and Motion sit up front. The other knobs stay inside
 Customize, which is hidden on phones as today.
 
 ### A5. Verification
@@ -357,27 +356,24 @@ the frosted panels; the Terminal, Poster, Ink and High contrast maps pass the
 same-tokens, readability and accent-distance audits; blocks take their colour
 through `--block-color`.
 
-Behaviour, in `frontend/tests/stage5_comfort.test.mjs`: the preset and knobs
-change nothing on the server and never enter the payload; a preset sets every
-knob and resets hand-set ones; a hand-set knob wins over the preset; a stored
-look applies before the body paints; a bad stored value falls back to the pack.
+Behaviour, in `frontend/tests/stage5_comfort.test.mjs`: the look and knobs
+change nothing on the server and never enter the payload; a look fills in only
+the knobs the student left alone; a hand-set knob stays when the look changes;
+a stored look applies before the body paints; a bad stored value falls back to
+the pack.
 
 Backend, once approved: a round-trip with all seven omitted still validates and
 returns none of them; a value outside a Literal is a 422; the pack-axis
 validator still holds for every new preset.
 
-### Open decisions for the owner
+### Owner answers 2026-09-18
 
-1. Fold the Preset control into Look once approved, or keep two controls?
-   Recommendation: fold. Two lists that both change the whole look will confuse
-   a student.
-2. Which presets after Terminal? Poster, Ink and High contrast are built
-   device-only. Still open: whether they join `theme_pack` once Amendment A is
-   approved, whether High contrast should apply on its own under
-   `prefers-contrast: more`, and whether Paper and Pastel come next.
-3. Should choosing a preset reset hand-set knobs, as built, or keep them?
-   Recommendation: reset. A preset that only half applies is the thing
-   students will report as broken.
+1. Fold Preset into Look. One menu: packs, then the device presets.
+2. High contrast turns on only from that menu. It must not follow
+   `prefers-contrast: more`, in case the operating system reports it by
+   mistake. Paper and Pastel stay for Claude.
+3. A look acclimates to knobs set by hand. Choosing Terminal, Poster, Ink or
+   High contrast keeps those overrides and fills in the rest.
 
 ## Amendment B — Native Qt client
 
@@ -408,8 +404,8 @@ Ink is the only preset with two palettes. Light packs (Slate, Light frost, or
 System on a light device) get the light map. Dark packs get the dark map.
 Poster, Terminal and High contrast are one look on every pack.
 
-The large-text More menu is unchanged. That is an owner decision, not part of
-this amendment.
+Large text enlarges the More menu: web `#week-menu` items, and the native More
+button's menu, so overflow actions stay tappable.
 
 spec.md drift: the native launcher, the four device-only presets, and the
 proposed `look_*` fields are not in spec.md. Do not edit spec.md until the

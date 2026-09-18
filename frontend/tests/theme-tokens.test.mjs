@@ -169,17 +169,19 @@ test('text stays readable with frost composited straight over the page, no blur'
   }
 });
 
-test('the page resolves the look in <head> and menus offer the five packs', () => {
+test('the page resolves the look in <head> and Look offers packs then presets', () => {
   assert.match(html, /<html lang="en" data-theme="slate">/);
   assert.ok(html.indexOf('<script src="/static/theme.js"></script>') < html.indexOf('</head>'),
     'theme.js must run before the body paints');
   const packs = [['system', 'System'], ['light-frost', 'Light frost'], ['dark-frost', 'Dark frost'],
     ['nocturne', 'Nocturne'], ['slate', 'Slate']];
+  const looks = packs.concat([['terminal', 'Terminal'], ['poster', 'Poster'], ['ink', 'Ink'],
+    ['high-contrast', 'High contrast']]);
   for (const id of ['theme', 'pref-theme']) {
     const select = new RegExp(`<select id="${id}">(.*?)</select>`).exec(html);
     assert.ok(select, `no #${id} select`);
     assert.deepEqual(Array.from(select[1].matchAll(/<option value="([a-z-]+)">([^<]+)<\/option>/g), m => [m[1], m[2]]),
-      packs);
+      looks);
   }
 });
 
@@ -349,13 +351,14 @@ test('Poster, Ink and High contrast each name a full knob bundle', () => {
     surface: 'flat', corners: 'sharp', depth: 'hard', font: 'sans',
     blocks: 'outlined', density: 'comfortable', text: 'large',
   });
-  const select = /<select id="pref-preset">(.*?)<\/select>/.exec(html);
-  assert.ok(select, 'no #pref-preset select');
-  assert.deepEqual(
-    Array.from(select[1].matchAll(/<option value="([^"]+)">([^<]+)<\/option>/g), m => [m[1], m[2]]),
-    [
-      ['default', 'Pack default'], ['terminal', 'Terminal'], ['poster', 'Poster'],
-      ['ink', 'Ink'], ['high-contrast', 'High contrast'],
-    ],
-  );
+  const select = /<select id="pref-theme">(.*?)<\/select>/.exec(html);
+  assert.ok(select, 'no #pref-theme select');
+  assert.ok(select[1].includes('value="terminal"'), 'Terminal belongs in Look');
+  assert.ok(select[1].includes('value="high-contrast"'), 'High contrast belongs in Look');
+  assert.doesNotMatch(html, /id="pref-preset"/);
+});
+
+test('large text makes the More menu readable', () => {
+  assert.match(css, /html\[data-text="large"\] \.week-menu > summary/);
+  assert.match(css, /html\[data-text="large"\] \.week-menu-items \{\s*min-width: 18rem/);
 });

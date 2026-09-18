@@ -984,6 +984,10 @@ def test_native_window_exposes_recovery_and_focus_controls(
     assert window.findChild(QPushButton, "settingsButton") is not None
     assert window.findChild(QPushButton, "restoreButton") is not None
     assert window.findChild(QPushButton, "accountButton") is not None
+    assert window.findChild(QPushButton, "moreButton") is not None
+    copy_day = window.findChild(QPushButton, "copyDay")
+    assert copy_day is not None
+    assert copy_day.parent().objectName() == "moreOverflow"
 
 
 def test_reminders_ignore_a_week_that_is_not_today(qapp: QApplication, server: LocalServer) -> None:
@@ -997,6 +1001,25 @@ def test_reminders_ignore_a_week_that_is_not_today(qapp: QApplication, server: L
     session.alerts.connect(notices.extend)
     session.check_alerts()
     assert notices == []
+    wait_until(qapp, lambda: session._reminder_fetching is None, timeout=4.0)
+    assert notices == []
+
+
+def test_todays_reminders_still_fire_while_another_week_is_on_screen(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    session = signed_in(qapp, server.origin, "alice", create=True)
+    wait_until(qapp, lambda: session.preferences is not None)
+    session.week_start = "2026-09-21"
+    session.blocks = [{**soccer(), "id": "band", "title": "Band", "start": "18:00"}]
+    session._reminder_week = "2026-09-14"
+    session._reminder_blocks = [soccer()]
+    session.preferences = {**(session.preferences or {}), "reminders_enabled": True, "reminder_lead_min": 5}
+    session.now_ms = lambda: int(datetime(2026, 9, 14, 15, 55).timestamp() * 1000)
+    notices: list[dict] = []
+    session.alerts.connect(notices.extend)
+    session.check_alerts()
+    assert [item["title"] for item in notices] == ["Soccer starts soon"]
 
 
 def test_a_second_alarm_waits_until_the_first_is_dismissed(

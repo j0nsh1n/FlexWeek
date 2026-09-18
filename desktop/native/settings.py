@@ -32,12 +32,13 @@ from desktop.native.focus import FOCUS_PHASE_LABEL, format_countdown, more_time_
 from desktop.native.look import (
     ACCENTS,
     LOOK_KNOBS,
-    LOOK_PRESET_LABELS,
-    LOOK_PRESETS,
-    PACKS,
     effective_look,
+    known_pack,
+    look_menu_items,
+    look_menu_token,
+    look_menu_value,
     look_overrides,
-    preset_knobs,
+    parse_look_menu_token,
     sanitize_look,
 )
 from desktop.native.reuse import format_duration
@@ -173,26 +174,20 @@ class PrefsDialog(QDialog):
         self._alarms = [deepcopy(item) for item in preferences.get("alarms") or []]
         layout = QVBoxLayout(self)
         form = QFormLayout()
-        self.pack = QComboBox()
-        self.pack.setObjectName("prefTheme")
-        for name in PACKS:
-            self.pack.addItem(name.replace("-", " ").title(), name)
-        index = self.pack.findData(preferences.get("theme_pack") or "system")
-        self.pack.setCurrentIndex(max(0, index))
-        form.addRow("Look pack", self.pack)
+        self._pack = known_pack(preferences.get("theme_pack"))
+        self.look = QComboBox()
+        self.look.setObjectName("prefTheme")
+        for name, label, kind in look_menu_items():
+            self.look.addItem(label, look_menu_token(kind, name))
+        index = self.look.findData(look_menu_value(self._pack, self._look))
+        self.look.setCurrentIndex(max(0, index))
+        form.addRow("Look", self.look)
         self.accent = QComboBox()
         for name in ACCENTS:
             self.accent.addItem(name.title(), name)
         index = self.accent.findData(preferences.get("accent") or "default")
         self.accent.setCurrentIndex(max(0, index))
         form.addRow("Accent", self.accent)
-        self.preset = QComboBox()
-        self.preset.setObjectName("lookPreset")
-        for name in LOOK_PRESETS:
-            self.preset.addItem(LOOK_PRESET_LABELS[name], name)
-        index = self.preset.findData(self._look.get("preset") or "default")
-        self.preset.setCurrentIndex(max(0, index))
-        form.addRow("Device preset", self.preset)
         self.knobs = {}
         # Each box shows what is on screen now: the preset's value unless the student moved that knob.
         shown = effective_look(self._look)
@@ -204,9 +199,10 @@ class PrefsDialog(QDialog):
             box.setCurrentIndex(max(0, box.findData(shown[knob])))
             self.knobs[knob] = box
             form.addRow(knob.title(), box)
-        # Connected after the boxes exist, and after the stored preset was selected above, so opening
-        # Settings never resets a student's own knobs; only picking a preset does.
-        self.preset.currentIndexChanged.connect(self._apply_look_preset)
+        # Connected after the boxes exist, and after the stored look was selected above, so opening
+        # Settings never resets a student's own knobs; only picking a Look does, and then it keeps
+        # the knobs they moved by hand.
+        self.look.currentIndexChanged.connect(self._apply_look_menu)
         self.work = QSpinBox()
         self.work.setRange(1, 180)
         self.work.setSingleStep(1)
@@ -329,7 +325,7 @@ class PrefsDialog(QDialog):
     def updates(self) -> dict:
         spotify = self.spotify.text().strip() or None
         return {
-            "theme_pack": self.pack.currentData(),
+            "theme_pack": self._pack,
             "accent": self.accent.currentData(),
             "timer_work_min": self.work.value(),
             "timer_break_min": self.break_min.value(),
@@ -341,16 +337,30 @@ class PrefsDialog(QDialog):
             "alarms": deepcopy(self._alarms),
         }
 
-    def _apply_look_preset(self) -> None:
-        """One tap is the whole look: every knob moves to what the chosen preset sets."""
-        bundle = preset_knobs(self.preset.currentData())
+    def _apply_look_menu(self) -> None:
+        """Keep knobs moved by hand; the chosen look fills in only the rest."""
+        previous = self._look.get("preset") or "default"
+        shown = {knob: box.currentData() for knob, box in self.knobs.items()}
+        kept = look_overrides(previous, shown)
+        parsed = parse_look_menu_token(self.look.currentData())
+        if parsed is None:
+            return
+        kind, name = parsed
+        if kind == "pack":
+            self._pack = name
+            preset = "default"
+        else:
+            preset = name
+        self._look = sanitize_look({"preset": preset, "knobs": kept})
+        bundle = effective_look(self._look)
         for knob, box in self.knobs.items():
+            box.blockSignals(True)
             box.setCurrentIndex(max(0, box.findData(bundle[knob])))
+            box.blockSignals(False)
 
     def look_choice(self) -> dict:
-        # Only knobs moved away from the preset are overrides. Recording all seven made every box beat
-        # the preset, so choosing Terminal changed its colours and none of its knobs.
-        preset = self.preset.currentData()
+        parsed = parse_look_menu_token(self.look.currentData())
+        preset = parsed[1] if parsed and parsed[0] == "preset" else "default"
         shown = {knob: box.currentData() for knob, box in self.knobs.items()}
         return sanitize_look({"preset": preset, "knobs": look_overrides(preset, shown)})
 

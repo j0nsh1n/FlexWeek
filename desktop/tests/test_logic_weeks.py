@@ -7,6 +7,7 @@ from datetime import date, timedelta
 
 import pytest
 
+from desktop.native.calendar import date_for_day
 from desktop.tests import logic_support
 
 pytestmark = pytest.mark.skipif(
@@ -113,6 +114,8 @@ def test_a_failed_open_day_leaves_day_view_inside_the_week_on_screen(
     session.open_day(week_after(first))
     settled(qapp, session)
     assert session.week_start == first
+
+
 def test_a_failed_assignments_load_does_not_switch_the_week(
     qapp: QApplication, server: LocalServer
 ) -> None:
@@ -131,7 +134,7 @@ def test_a_failed_assignments_load_does_not_switch_the_week(
     assert titles(session) == ["Soccer"]
 
 
-def test_an_unsaved_week_does_not_switch_until_it_is_saved_or_reloaded(
+def test_an_unsaved_week_is_kept_when_opening_another(
     qapp: QApplication, server: LocalServer
 ) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
@@ -141,14 +144,18 @@ def test_an_unsaved_week_does_not_switch_until_it_is_saved_or_reloaded(
     session.save()
     settled(qapp, session)
     session.add_block(fixed("chess", "Chess", 2, "15:00"))
-    session.load_week(second)
-    assert session.week_start == first
-    assert "Save, retry or reload" in session.message
-    assert titles(session) == ["Soccer", "Chess"]
-    session.reload()
-    settled(qapp, session)
-    assert session.week_start == first
-    assert titles(session) == ["Soccer"]
+    wednesday = date_for_day(first, 2)
+    session.selected_day = wednesday
     session.load_week(second)
     settled(qapp, session)
     assert session.week_start == second
+    assert titles(session) == []
+    assert session.selected_day == date_for_day(second, 2)
+    session.load_week(first)
+    settled(qapp, session)
+    assert session.week_start == first
+    assert titles(session) == ["Soccer", "Chess"]
+    assert session.selected_day == wednesday
+    session.reload()
+    settled(qapp, session)
+    assert titles(session) == ["Soccer"]

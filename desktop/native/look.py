@@ -78,6 +78,13 @@ LOOK_PRESET_LABELS = {
     "ink": "Ink",
     "high-contrast": "High contrast",
 }
+PACK_LABELS = {
+    "system": "System",
+    "light-frost": "Light frost",
+    "dark-frost": "Dark frost",
+    "nocturne": "Nocturne",
+    "slate": "Slate",
+}
 PACKS = ("system", "light-frost", "dark-frost", "nocturne", "slate")
 ACCENTS = ("default", "sky", "gold", "sea", "sand")
 TEXT_PT = {"small": 10, "normal": 12, "large": 15}
@@ -247,6 +254,37 @@ def resolved_pack_theme(pack: object, system_dark: bool) -> str:
     return chosen
 
 
+def look_menu_items() -> list[tuple[str, str, str]]:
+    """One Look list: account packs first, then device presets. Pack default is the pack itself."""
+    items = [(name, PACK_LABELS[name], "pack") for name in PACKS]
+    items.extend(
+        (name, LOOK_PRESET_LABELS[name], "preset") for name in LOOK_PRESETS if name != "default"
+    )
+    return items
+
+
+def look_menu_token(kind: str, name: str) -> str:
+    return f"{kind}:{name}"
+
+
+def parse_look_menu_token(token: object) -> tuple[str, str] | None:
+    if not isinstance(token, str) or ":" not in token:
+        return None
+    kind, name = token.split(":", 1)
+    if kind == "pack" and name in PACKS:
+        return kind, name
+    if kind == "preset" and name in LOOK_PRESETS and name != "default":
+        return kind, name
+    return None
+
+
+def look_menu_value(pack: object, look: dict | None) -> str:
+    preset = sanitize_look(look)["preset"]
+    if preset != "default":
+        return look_menu_token("preset", preset)
+    return look_menu_token("pack", known_pack(pack))
+
+
 def sanitize_look(raw: object) -> dict:
     clean: dict = {"preset": "default", "knobs": {}}
     if not isinstance(raw, dict):
@@ -357,6 +395,8 @@ def pack_stylesheet(pack: object, system_dark: bool, look: dict | None, accent: 
     family = FONT_FAMILIES[knobs["font"]]
     radius = CORNER_RADIUS[knobs["corners"]]
     edges = _depth_rules(knobs["depth"], palette)
+    item_h = 36 if knobs["text"] == "large" else 22
+    button_min = f" min-height: {item_h}px;" if knobs["text"] == "large" else ""
     return (
         f"QMainWindow, QDialog, QWidget {{ background: {palette['window']}; color: {palette['text']}; "
         f"font-family: {family}; font-size: {size}pt; }}"
@@ -375,8 +415,9 @@ def pack_stylesheet(pack: object, system_dark: bool, look: dict | None, accent: 
         # QLabel is a QFrame in Qt, so without this every label, even an empty one, is drawn as a panel.
         f"QLabel {{ background: transparent; border: none; padding: 0; }}"
         f"QPushButton {{ background: {palette['accent']}; color: {palette['accent_ink']}; "
-        f"padding: {pad}px {pad * 2}px; border-radius: {radius}px; {edges} }}"
+        f"padding: {pad}px {pad * 2}px; border-radius: {radius}px; {edges}{button_min} }}"
         f"QPushButton:disabled {{ background: {palette['hairline_strong']}; color: {palette['muted']}; }}"
+        f"QMenu::item {{ min-height: {item_h}px; padding: {pad}px {pad * 2}px; }}"
         f"QLabel#nowNext {{ font-weight: 600; }}"
     )
 

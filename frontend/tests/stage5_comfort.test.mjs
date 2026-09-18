@@ -316,12 +316,13 @@ test('an unknown stored motion level falls back to Normal rather than breaking',
   assert.equal(h.run('applyMotion("off")'), 'off');
 });
 
-test('Preset and Text size sit up front, the other look knobs inside Customize', () => {
+test('Look and Text size sit up front, the other look knobs inside Customize', () => {
   const appearance = html.slice(html.indexOf('<summary>Appearance</summary>'), html.indexOf('<summary>Focus</summary>'));
   const customize = appearance.slice(appearance.indexOf('id="appearance-customize"'));
   const front = appearance.slice(0, appearance.indexOf('id="appearance-customize"'));
-  assert.match(front, /id="pref-preset"/);
+  assert.match(front, /id="pref-theme"/);
   assert.match(front, /id="pref-text"/);
+  assert.doesNotMatch(front, /id="pref-preset"/);
   for (const knob of ['surface', 'corners', 'depth', 'font', 'blocks', 'density']) {
     assert.match(customize, new RegExp(`id="pref-${knob}"`), `${knob} belongs inside Customize`);
     assert.doesNotMatch(front, new RegExp(`id="pref-${knob}"`));
@@ -332,8 +333,8 @@ test('the preset and look knobs change this device only and never enter the acco
   const h = harness();
   await h.login();
   const before = h.requests.length;
-  h.elements.get('pref-preset').value = 'terminal';
-  h.elements.get('pref-preset').listeners.change();
+  h.elements.get('pref-theme').value = 'terminal';
+  h.elements.get('pref-theme').listeners.change();
   // theme.js and motion.js write their own attributes beside these; only the look keys are under test.
   const LOOK_KEYS = ['preset', 'surface', 'corners', 'depth', 'font', 'blocks', 'density', 'text'];
   const root = JSON.parse(h.run('JSON.stringify(document.documentElement.dataset)'));
@@ -358,21 +359,22 @@ test('the preset and look knobs change this device only and never enter the acco
   for (const key of leaked) assert.ok(!(key in saved), `${key} leaks through the Save button`);
 });
 
-test('a knob set by hand wins over the preset, and choosing a preset resets it again', async () => {
+test('a knob set by hand stays when a look is chosen', async () => {
   const h = harness();
   await h.login();
   h.elements.get('pref-corners').value = 'pill';
   h.elements.get('pref-corners').listeners.change();
   assert.equal(h.run('document.documentElement.dataset.corners'), 'pill');
-  h.elements.get('pref-preset').value = 'terminal';
-  h.elements.get('pref-preset').listeners.change();
-  assert.equal(h.run('document.documentElement.dataset.corners'), 'sharp', 'the preset is the whole look');
+  h.elements.get('pref-theme').value = 'terminal';
+  h.elements.get('pref-theme').listeners.change();
+  assert.equal(h.run('document.documentElement.dataset.corners'), 'pill');
+  assert.equal(h.run('document.documentElement.dataset.font'), 'mono');
   h.elements.get('pref-depth').value = 'hard';
   h.elements.get('pref-depth').listeners.change();
   assert.equal(h.run('document.documentElement.dataset.depth'), 'hard');
   assert.equal(h.run('document.documentElement.dataset.font'), 'mono', 'other knobs keep the preset value');
   assert.equal(h.elements.get('pref-depth').value, 'hard');
-  assert.equal(h.elements.get('pref-corners').value, 'sharp');
+  assert.equal(h.elements.get('pref-corners').value, 'pill');
 });
 
 test('a stored look is applied before the body paints, and a bad one falls back to the pack', async () => {

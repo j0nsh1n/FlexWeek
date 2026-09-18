@@ -24,10 +24,16 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QStandardPaths
     from PySide6.QtGui import QColor
-    from PySide6.QtWidgets import QApplication, QPushButton
+    from PySide6.QtWidgets import QApplication, QComboBox, QPushButton
 
     from desktop.native.calendar import CATEGORIES
-    from desktop.native.look import LOOK_DEFAULTS, effective_look, preset_knobs, resolved_palette
+    from desktop.native.look import (
+        LOOK_DEFAULTS,
+        effective_look,
+        look_menu_token,
+        preset_knobs,
+        resolved_palette,
+    )
     from desktop.native.settings import PrefsDialog
     from desktop.native.widgets import EDGE_ROLE, ENDS_ROLE, OUTLINE_ROLE, MonthGrid, WeekTable
     from desktop.native.window import NativeWindow
@@ -160,8 +166,10 @@ def settings(look: dict) -> PrefsDialog:
     return PrefsDialog(None, {}, look, {})
 
 
-def choose(dialog: PrefsDialog, preset: str) -> None:
-    dialog.preset.setCurrentIndex(dialog.preset.findData(preset))
+def choose(dialog: PrefsDialog, token: str) -> None:
+    index = dialog.look.findData(token)
+    assert index >= 0, token
+    dialog.look.setCurrentIndex(index)
 
 
 def move(dialog: PrefsDialog, knob: str, value: str) -> None:
@@ -179,22 +187,28 @@ def test_choosing_terminal_in_settings_applies_every_one_of_its_knobs(qapp: QApp
     """
     dialog = settings({"preset": "default", "knobs": {}})
     assert shown(dialog) == LOOK_DEFAULTS
-    choose(dialog, "terminal")
-    assert shown(dialog) == preset_knobs("terminal"), "one tap is the whole look"
+    choose(dialog, look_menu_token("preset", "terminal"))
+    assert shown(dialog) == preset_knobs("terminal")
     chosen = dialog.look_choice()
     assert chosen == {"preset": "terminal", "knobs": {}}
     assert effective_look(chosen) == preset_knobs("terminal")
 
 
-def test_a_knob_moved_by_hand_is_the_only_override_and_a_preset_resets_it(qapp: QApplication) -> None:
+def test_a_knob_moved_by_hand_stays_when_the_look_changes(qapp: QApplication) -> None:
     dialog = settings({"preset": "default", "knobs": {}})
-    choose(dialog, "terminal")
+    move(dialog, "corners", "pill")
+    choose(dialog, look_menu_token("preset", "terminal"))
+    assert shown(dialog)["corners"] == "pill"
+    assert shown(dialog)["font"] == "mono"
+    assert dialog.look_choice() == {"preset": "terminal", "knobs": {"corners": "pill"}}
     move(dialog, "depth", "hard")
-    assert dialog.look_choice() == {"preset": "terminal", "knobs": {"depth": "hard"}}
+    assert dialog.look_choice() == {"preset": "terminal", "knobs": {"corners": "pill", "depth": "hard"}}
     assert effective_look(dialog.look_choice())["font"] == "mono"
-    choose(dialog, "default")
-    assert shown(dialog) == LOOK_DEFAULTS
-    assert dialog.look_choice() == {"preset": "default", "knobs": {}}
+    choose(dialog, look_menu_token("pack", "system"))
+    assert shown(dialog)["corners"] == "pill"
+    assert shown(dialog)["depth"] == "hard"
+    assert shown(dialog)["font"] == "sans"
+    assert dialog.look_choice() == {"preset": "default", "knobs": {"corners": "pill", "depth": "hard"}}
 
 
 def test_opening_settings_shows_the_look_on_screen_and_changes_nothing(qapp: QApplication) -> None:
@@ -205,6 +219,9 @@ def test_opening_settings_shows_the_look_on_screen_and_changes_nothing(qapp: QAp
     # Pressing OK untouched must hand back exactly what was stored: the preset connection is made
     # after the stored preset is selected, so opening the dialog never resets a student's own knobs.
     assert dialog.look_choice() == stored
+    assert dialog.findChild(QComboBox, "lookPreset") is None
+    assert dialog.look.findData(look_menu_token("preset", "terminal")) >= 0
+    assert dialog.look.findData(look_menu_token("pack", "system")) >= 0
 
 
 

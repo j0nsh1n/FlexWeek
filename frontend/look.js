@@ -93,11 +93,46 @@ function applyLook() {
   return look;
 }
 
-/** One tap is the whole look, so choosing a preset drops any knob the student set by hand. */
+/** Keep knobs the student set by hand. The preset fills in only the ones they left alone. */
 function choosePreset(name) {
-  lookChoice = { preset: Object.prototype.hasOwnProperty.call(LOOK_PRESETS, name) ? name : "default", knobs: {} };
+  const preset = Object.prototype.hasOwnProperty.call(LOOK_PRESETS, name) ? name : "default";
+  lookChoice = { preset: preset, knobs: lookChoice.knobs || {} };
   writeLook();
   return applyLook();
+}
+
+function isDevicePreset(name) {
+  return Object.prototype.hasOwnProperty.call(LOOK_PRESETS, name) && name !== "default";
+}
+
+function lookMenuValue(pack) {
+  if (lookChoice.preset && lookChoice.preset !== "default") return lookChoice.preset;
+  if (pack) return pack;
+  if (typeof prefs !== "undefined" && prefs.theme_pack) return prefs.theme_pack;
+  return "system";
+}
+
+function lookMenuPack(value, pack) {
+  if (isDevicePreset(value)) {
+    return typeof knownPack === "function" ? knownPack(pack) : (pack || "system");
+  }
+  return typeof knownPack === "function" ? knownPack(value) : (value || "system");
+}
+
+function chooseLook(value) {
+  if (isDevicePreset(value)) {
+    choosePreset(value);
+    if (typeof syncLookControls === "function") syncLookControls();
+    return;
+  }
+  choosePreset("default");
+  const pack = lookMenuPack(value, typeof prefs !== "undefined" ? prefs.theme_pack : "system");
+  if (typeof prefs !== "undefined" && prefs.theme_pack === pack) {
+    if (typeof applyAppearance === "function") applyAppearance();
+    else if (typeof syncLookControls === "function") syncLookControls();
+    return;
+  }
+  if (typeof choosePack === "function") return choosePack(value);
 }
 
 function setLookKnob(knob, value) {
