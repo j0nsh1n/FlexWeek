@@ -34,6 +34,8 @@ const THEME_SELECTORS = {
   ink: ':root[data-preset="ink"]',
   'ink-light': ':root[data-theme="slate"][data-preset="ink"]',
   'ink-light-frost': ':root[data-theme="light-frost"][data-preset="ink"]',
+  paper: ':root[data-preset="paper"]',
+  pastel: ':root[data-preset="pastel"]',
 };
 const ACCENT_NAMES = ['sky', 'gold', 'sea', 'sand'];
 const themes = Object.fromEntries(Object.entries(THEME_SELECTORS).map(([name, selector]) => [name, tokens(selector)]));
@@ -176,7 +178,7 @@ test('the page resolves the look in <head> and Look offers packs then presets', 
   const packs = [['system', 'System'], ['light-frost', 'Light frost'], ['dark-frost', 'Dark frost'],
     ['nocturne', 'Nocturne'], ['slate', 'Slate']];
   const looks = packs.concat([['terminal', 'Terminal'], ['poster', 'Poster'], ['ink', 'Ink'],
-    ['high-contrast', 'High contrast']]);
+    ['high-contrast', 'High contrast'], ['paper', 'Paper'], ['pastel', 'Pastel']]);
   for (const id of ['theme', 'pref-theme']) {
     const select = new RegExp(`<select id="${id}">(.*?)</select>`).exec(html);
     assert.ok(select, `no #${id} select`);
@@ -356,6 +358,32 @@ test('Poster, Ink and High contrast each name a full knob bundle', () => {
   assert.ok(select[1].includes('value="terminal"'), 'Terminal belongs in Look');
   assert.ok(select[1].includes('value="high-contrast"'), 'High contrast belongs in Look');
   assert.doesNotMatch(html, /id="pref-preset"/);
+});
+
+test('Paper and Pastel are the two soft looks: rounded, with depth, and full knob bundles', () => {
+  const lookJs = readFileSync(new URL('../look.js', import.meta.url), 'utf8');
+  const named = name => {
+    const match = new RegExp(`\\n  ${name}: \\{([\\s\\S]*?)\\}`).exec(lookJs);
+    assert.ok(match, `look.js has no ${name} preset`);
+    return Object.fromEntries(Array.from(match[1].matchAll(/(\w+): "([a-z]+)"/g), m => [m[1], m[2]]));
+  };
+  assert.deepEqual(named('paper'), {
+    surface: 'flat', corners: 'round', depth: 'soft', font: 'serif',
+    blocks: 'filled', density: 'comfortable', text: 'normal',
+  });
+  assert.deepEqual(named('pastel'), {
+    surface: 'frost', corners: 'pill', depth: 'soft', font: 'sans',
+    blocks: 'filled', density: 'comfortable', text: 'normal',
+  });
+  // Both are light looks on any pack, and neither borrows Ink's black-on-paper.
+  for (const look of ['paper', 'pastel']) {
+    assert.match(block(`:root[data-preset="${look}"]`), /color-scheme: light/);
+    assert.notEqual(themes[look].get('--text'), themes['ink-light'].get('--text'));
+    assert.notEqual(themes[look].get('--bg'), themes['ink-light'].get('--bg'));
+  }
+  // Pastel asks for pill corners, which the block rule caps so a tall block keeps its title.
+  assert.equal(themes.pastel.get('--radius-sm'), '999px');
+  assert.match(css, /\.block \{[^}]*border-radius: min\(var\(--radius-sm\), 0\.5rem\)/);
 });
 
 test('large text makes the More menu readable', () => {

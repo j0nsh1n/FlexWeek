@@ -39,6 +39,15 @@ const LOOK_PRESETS = {
     surface: "flat", corners: "sharp", depth: "hard", font: "sans",
     blocks: "outlined", density: "comfortable", text: "large",
   },
+  // The two soft looks. Every preset above is flat and sharp; these keep rounded corners and shadows.
+  paper: {
+    surface: "flat", corners: "round", depth: "soft", font: "serif",
+    blocks: "filled", density: "comfortable", text: "normal",
+  },
+  pastel: {
+    surface: "frost", corners: "pill", depth: "soft", font: "sans",
+    blocks: "filled", density: "comfortable", text: "normal",
+  },
 };
 let lookChoice = { preset: "default", knobs: {} };
 

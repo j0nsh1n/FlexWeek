@@ -319,6 +319,71 @@
   --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
   --hour-h: 2.75rem; --gutter: 3.5rem;
 }
+/* Paper preset: a planner notebook. Warm cream, brown ink, a sepia accent, soft
+   shadows. Warmer than Ink's light sheet on purpose, and rounded where Ink is sharp. */
+:root[data-preset="paper"] {
+  --sidebar-width: 20rem;
+  color-scheme: light;
+  --bg: #f7ecd2; --bg-accent: #f0e2c0; --bg-glow: rgba(138, 75, 42, 0.10);
+  --surface: #fbf4e2;
+  --surface-elevated: #fdf8ea;
+  --surface-card: #fdf8ea;
+  --surface-solid: #fdf8ea;
+  --field: #fffcf2;
+  --scrim: rgba(60, 40, 20, 0.30);
+  --frost: 0px; --frost-strong: 0px;
+  --hairline: rgba(74, 52, 30, 0.16); --hairline-strong: rgba(74, 52, 30, 0.30);
+  --shadow: 0 1px 2px rgba(74, 52, 30, 0.10), 0 6px 16px rgba(74, 52, 30, 0.10);
+  --shadow-lg: 0 2px 6px rgba(74, 52, 30, 0.12), 0 16px 40px rgba(74, 52, 30, 0.18);
+  --text: #2f2418; --muted: #6a5a45;
+  --accent: #8a4b2a; --accent-strong: #723c20; --accent-ink: #fdf8ea; --accent-soft: rgba(138, 75, 42, 0.12);
+  --error: #9b1b30; --error-soft: rgba(155, 27, 48, 0.08);
+  --danger-bg: #8f2a2a; --danger-ink: #fff6ee;
+  --ok: #cfe3c3; --warn: #f2dfa0; --risk: #f0c4b4; --badge-ink: #2f2418;
+  --now: #b5452f;
+  --grid-cell: #fffcf2; --grid-line: rgba(74, 52, 30, 0.08);
+  --block-locked: #eadfc6; --block-locked-ink: #2f2418;
+  --block-flex: #f3dca6; --block-flex-ink: #3b2a05;
+  --block-border: rgba(74, 52, 30, 0.14); --block-edge: #a08a68;
+  --flex: #b07a1e;
+  --icon-primary: #4a3a28; --icon-secondary: rgba(138, 75, 42, 0.22);
+  --radius-sm: 3px; --radius: 5px; --radius-lg: 8px;
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+  --hour-h: 2.75rem; --gutter: 3.5rem;
+}
+/* Pastel preset: soft candy surfaces and pill corners. The softness lives in the
+   surfaces; the accent is a deep orchid, because a pale lavender cannot pass as
+   text and would sit too near the violet and indigo category colours. */
+:root[data-preset="pastel"] {
+  --sidebar-width: 20rem;
+  color-scheme: light;
+  --bg: #fdf2f8; --bg-accent: #f3e8ff; --bg-glow: rgba(167, 139, 250, 0.18);
+  --surface: #fff7fb;
+  --surface-elevated: #ffffff;
+  --surface-card: #ffffff;
+  --surface-solid: #ffffff;
+  --field: #fffafd;
+  --scrim: rgba(76, 29, 149, 0.25);
+  --frost: 0px; --frost-strong: 0px;
+  --hairline: rgba(122, 62, 157, 0.16); --hairline-strong: rgba(122, 62, 157, 0.30);
+  --shadow: 0 1px 2px rgba(122, 62, 157, 0.08), 0 8px 22px rgba(122, 62, 157, 0.12);
+  --shadow-lg: 0 2px 6px rgba(122, 62, 157, 0.10), 0 18px 48px rgba(122, 62, 157, 0.20);
+  --text: #3b2a4a; --muted: #6b5a7a;
+  --accent: #7a3e9d; --accent-strong: #63308a; --accent-ink: #ffffff; --accent-soft: rgba(122, 62, 157, 0.12);
+  --error: #b42318; --error-soft: rgba(180, 35, 24, 0.07);
+  --danger-bg: #b93434; --danger-ink: #ffffff;
+  --ok: #bde7cd; --warn: #f9e3a1; --risk: #f7c6c1; --badge-ink: #1b2433;
+  --now: #e5484d;
+  --grid-cell: #fffafd; --grid-line: rgba(122, 62, 157, 0.08);
+  --block-locked: #ede4fb; --block-locked-ink: #2e1f47;
+  --block-flex: #ffe4ef; --block-flex-ink: #4a1230;
+  --block-border: rgba(122, 62, 157, 0.14); --block-edge: #a78bda;
+  --flex: #c0447f;
+  --icon-primary: #4b3a5e; --icon-secondary: rgba(122, 62, 157, 0.22);
+  --radius-sm: 999px; --radius: 14px; --radius-lg: 20px;
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+  --hour-h: 2.75rem; --gutter: 3.5rem;
+}
 :root[data-accent="sky"] {
   --accent: #38bdf8; --accent-strong: #7dd3fc; --accent-ink: #0b1224; --accent-soft: rgba(56, 189, 248, 0.16);
 }

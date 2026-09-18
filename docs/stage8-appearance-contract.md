@@ -305,8 +305,8 @@ the student has not moved by hand. Customize then edits from there.
 Built as device-only presets, audited like packs (same tokens, AA text, accent
 distance). Nothing here is saved on the account until Amendment A is approved.
 
-Look is one menu: the five account packs, then Terminal, Poster, Ink and High
-contrast on this device. Pack default is choosing the pack itself.
+Look is one menu: the five account packs, then Terminal, Poster, Ink, High
+contrast, Paper and Pastel on this device. Pack default is choosing the pack itself.
 
 - **Terminal**. True black, phosphor text, amber accent; flat surface, sharp
   corners, no shadows, monospace, outlined blocks, compact.
@@ -319,8 +319,19 @@ contrast on this device. Pack default is choosing the pack itself.
   large text. It turns on only from this menu, never from the operating
   system's contrast setting, in case that signal is wrong.
   `prefers-contrast: more` still only turns frosted panels solid.
+- **Paper**. A planner notebook: warm cream, brown ink, a sepia accent, serif
+  type; flat surface, round corners, soft shadows, filled blocks. It is warmer
+  than Ink's light sheet on purpose, and rounded where Ink is sharp.
+- **Pastel**. Pink and lavender surfaces, pill corners, soft shadows and raised
+  panels; sans type, filled blocks. The softness lives in the surfaces. The
+  accent is a deep orchid, because a pale lavender cannot pass as text at 4.5
+  to 1 and would sit too near the violet and indigo category colours.
 
-Paper and Pastel remain unbuilt; they are Claude's.
+Paper and Pastel are the two soft looks: every other preset is flat and sharp.
+Both are light whatever pack sits underneath, as Poster is, so a chosen accent
+takes its light-axis colour even over a dark pack. Pill corners are capped at
+half a rem on calendar blocks, so a tall block keeps its title. Claude built
+both on 2026-09-18, in both clients, under the same audits as the others.
 
 Relationship to packs: a pack is a palette with the knobs at their defaults; a
 preset is a palette with its own knob values. Once Amendment A is approved they

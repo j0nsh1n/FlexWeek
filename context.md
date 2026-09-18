@@ -1,6 +1,18 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-18 (looks complete). Branch `feat/native-python`, local only.
+  Paper and Pastel are built in both clients, which finishes the six presets of
+  Amendment A: Terminal, Poster, Ink, High contrast, Paper, Pastel. They are
+  the two soft looks (rounded, with depth) where the other four are flat and
+  sharp, and both are light over any pack. Each is a full token map in
+  `frontend/styles.css`, a row in `desktop/native/look.py`, and an entry in the
+  one Look menu; the native rows are held equal to the web tokens by
+  `test_native_colours_are_the_audited_web_tokens`. The native contrast audit
+  now covers 700 look combinations. Still device-only: the account `look_*`
+  fields and joining presets to `theme_pack` wait on the owner's approval of
+  Amendment A, and spec.md is untouched. GLM through OpenCode answered nothing,
+  not even a one-line prompt, on 2026-09-18, so no part of this was drafted by it.
 - Date: 2026-09-18 (native). Branch `feat/native-python`, local only. Owner
   answers for look and navigation are in: Preset is folded into Look; a look
   keeps knobs set by hand; High contrast is menu-only; Paper and Pastel stay
@@ -424,6 +436,17 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-18, `feat/native-python`: Claude committed Grok's finished but
+  uncommitted owner-answers work as 8d351d2 after the gate passed on it, then
+  built Paper and Pastel in both clients. Red checks: a pale lavender accent, an
+  accent parked on a category colour, native colours drifting from the web's,
+  Paper going sharp or losing its serif, Pastel dropped from the menus, a token
+  missing from a map, and Pastel losing its raised panels each turned a named
+  test red. One red was first reported for the wrong reason: same-length edits
+  to one .py file inside a second reuse stale bytecode, so mutation runs now set
+  PYTHONDONTWRITEBYTECODE and clear the module's .pyc. Offscreen grabs of both
+  clients were checked by eye. Next: the owner's approval of Amendment A, then
+  the `look_*` fields and presets joining `theme_pack`. Nothing pushed.
 - 2026-09-18, `feat/native-python`: owner answers 1–7. Look is one menu
   (packs then Terminal/Poster/Ink/High contrast). Knobs set by hand survive a
   look change. High contrast is opt-in only. Native More holds overflow

@@ -70,6 +70,25 @@ LOOK_PRESETS = {
         "density": "comfortable",
         "text": "large",
     },
+    # The two soft looks. Every preset above is flat and sharp; these keep rounded corners and depth.
+    "paper": {
+        "surface": "flat",
+        "corners": "round",
+        "depth": "soft",
+        "font": "serif",
+        "blocks": "filled",
+        "density": "comfortable",
+        "text": "normal",
+    },
+    "pastel": {
+        "surface": "frost",
+        "corners": "pill",
+        "depth": "soft",
+        "font": "sans",
+        "blocks": "filled",
+        "density": "comfortable",
+        "text": "normal",
+    },
 }
 LOOK_PRESET_LABELS = {
     "default": "Pack default",
@@ -77,6 +96,8 @@ LOOK_PRESET_LABELS = {
     "poster": "Poster",
     "ink": "Ink",
     "high-contrast": "High contrast",
+    "paper": "Paper",
+    "pastel": "Pastel",
 }
 PACK_LABELS = {
     "system": "System",
@@ -202,6 +223,22 @@ PRESET_PALETTES = {
         text="#ffffff", muted="#ffff00", accent="#ffff00", accent_ink="#000000", error="#ffff00",
         block_locked="#000000", block_locked_ink="#ffffff",
         block_flex="#000000", block_flex_ink="#ffff00", block_edge="#ffff00",
+    ),
+    # Light looks whatever pack sits underneath, as Poster is. Paper is warmer than Ink's light sheet
+    # on purpose. Pastel's softness is in its surfaces; a pale lavender accent could not pass as text.
+    "paper": _palette(
+        "light", "#4a341e", soft=0.16, strong=0.30,
+        window="#f7ecd2", panel="#fdf8ea", field="#fffcf2", grid="#fffcf2",
+        text="#2f2418", muted="#6a5a45", accent="#8a4b2a", accent_ink="#fdf8ea", error="#9b1b30",
+        block_locked="#eadfc6", block_locked_ink="#2f2418",
+        block_flex="#f3dca6", block_flex_ink="#3b2a05", block_edge="#a08a68",
+    ),
+    "pastel": _palette(
+        "light", "#7a3e9d", soft=0.16, strong=0.30,
+        window="#fdf2f8", panel="#ffffff", field="#fffafd", grid="#fffafd",
+        text="#3b2a4a", muted="#6b5a7a", accent="#7a3e9d", accent_ink="#ffffff", error="#b42318",
+        block_locked="#ede4fb", block_locked_ink="#2e1f47",
+        block_flex="#ffe4ef", block_flex_ink="#4a1230", block_edge="#a78bda",
     ),
     "ink": {
         "dark": _palette(

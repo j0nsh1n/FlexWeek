@@ -129,6 +129,14 @@ def test_choosing_a_preset_means_every_one_of_its_knobs() -> None:
             "surface": "flat", "corners": "sharp", "depth": "hard", "font": "sans",
             "blocks": "outlined", "density": "comfortable", "text": "large",
         },
+        "paper": {
+            "surface": "flat", "corners": "round", "depth": "soft", "font": "serif",
+            "blocks": "filled", "density": "comfortable", "text": "normal",
+        },
+        "pastel": {
+            "surface": "frost", "corners": "pill", "depth": "soft", "font": "sans",
+            "blocks": "filled", "density": "comfortable", "text": "normal",
+        },
     }
     assert preset_knobs("default") == LOOK_DEFAULTS
     for name, knobs in expected.items():
@@ -153,6 +161,8 @@ def test_native_colours_are_the_audited_web_tokens() -> None:
     tables.append(("terminal", PRESET_PALETTES["terminal"], ':root[data-preset="terminal"]'))
     tables.append(("poster", PRESET_PALETTES["poster"], ':root[data-preset="poster"]'))
     tables.append(("high-contrast", PRESET_PALETTES["high-contrast"], ':root[data-preset="high-contrast"]'))
+    tables.append(("paper", PRESET_PALETTES["paper"], ':root[data-preset="paper"]'))
+    tables.append(("pastel", PRESET_PALETTES["pastel"], ':root[data-preset="pastel"]'))
     tables.append(("ink-dark", PRESET_PALETTES["ink"]["dark"], ':root[data-preset="ink"]'))
     tables.append(
         ("ink-light", PRESET_PALETTES["ink"]["light"], ':root[data-theme="slate"][data-preset="ink"]'),
@@ -179,7 +189,7 @@ def test_every_look_keeps_its_text_readable() -> None:
         ("muted", "window"), ("muted", "panel"), ("error", "panel"),
         ("accent_ink", "accent"), ("block_locked_ink", "block_locked"), ("block_flex_ink", "block_flex"),
     ]
-    assert len(EVERY_LOOK) == 5 * 2 * 5 * 5 * 2
+    assert len(EVERY_LOOK) == 5 * 2 * 7 * 5 * 2
     for pack, system_dark, preset, accent, surface in EVERY_LOOK:
         palette = resolved_palette(pack, system_dark, look_of(preset, surface=surface), accent)
         for ink, fill in pairs:
@@ -280,3 +290,34 @@ def test_category_marks_are_the_web_clients_category_colours() -> None:
     web = dict(re.findall(r'id: "([a-z]+)", label: "[^"]+", color: "(#[0-9a-f]{6})"', app_js))
     assert len(web) == 8
     assert {name: category["mark"] for name, category in CATEGORIES.items()} == web
+
+
+def test_paper_and_pastel_are_light_looks_on_any_pack_and_close_the_menu() -> None:
+    assert [name for name, _label, kind in look_menu_items() if kind == "preset"] == [
+        "terminal", "poster", "ink", "high-contrast", "paper", "pastel",
+    ]
+    for preset, accent in (("paper", "#8a4b2a"), ("pastel", "#7a3e9d")):
+        for pack, system_dark in (("nocturne", True), ("dark-frost", True), ("slate", False)):
+            palette = resolved_palette(pack, system_dark, look_of(preset))
+            assert (palette["axis"], palette["accent"]) == ("light", accent), f"{preset} on {pack}"
+        # A chosen accent therefore takes its light-axis colour, even over a dark pack.
+        chosen = resolved_palette("nocturne", True, look_of(preset), "sea")
+        assert (chosen["accent"], chosen["accent_ink"]) == ("#0f766e", "#ffffff")
+
+
+def test_paper_and_pastel_are_the_soft_looks_and_are_not_ink() -> None:
+    """Every earlier preset is flat and sharp. These two keep rounded corners and drawn depth."""
+    for preset in ("paper", "pastel"):
+        sheet = pack_stylesheet("slate", False, look_of(preset))
+        assert "border-radius: 0px" not in sheet
+        assert "border: 1px solid" in sheet, "soft depth is a hairline edge"
+    assert "border-radius: 16px" in pack_stylesheet("slate", False, look_of("pastel"))
+    assert "Noto Serif" in pack_stylesheet("slate", False, look_of("paper"))
+    # Pastel is the one preset with raised panels; Paper's pages sit flat in the cream.
+    pastel = resolved_palette("slate", False, look_of("pastel"))
+    paper = resolved_palette("slate", False, look_of("paper"))
+    assert pastel["panel"] != pastel["window"]
+    assert paper["panel"] == paper["window"] == "#f7ecd2"
+    ink = resolved_palette("slate", False, look_of("ink"))
+    assert (paper["text"], paper["window"]) != (ink["text"], ink["window"])
+    assert preset_knobs("paper")["blocks"] == "filled" and preset_knobs("ink")["blocks"] == "edge"

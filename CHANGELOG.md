@@ -24,13 +24,17 @@ All notable changes to FlexWeek are documented here. Format follows
   `--database` points at a file for isolated checks.
 - Look knobs and presets (2026-09-18, shared frontend and native Qt). Settings
   Look lists the five account packs and the device presets Terminal, Poster,
-  Ink and High contrast. Customize still has Surface, Corners, Depth, Font,
-  Calendar blocks and Density. Terminal is true black, phosphor, amber,
-  monospace; Poster is yellow, navy and dark red with hard shadows and large
-  type; Ink is near-monochrome serif with light and dark maps; High contrast
-  is black, white and yellow with outlined blocks and large text, and it turns
-  on only from this menu. Knobs you set by hand stay when you change Look. All
-  of it stays on this computer until the contract amendment is approved.
+  Ink, High contrast, Paper and Pastel. Customize still has Surface, Corners,
+  Depth, Font, Calendar blocks and Density. Terminal is true black, phosphor,
+  amber, monospace; Poster is yellow, navy and dark red with hard shadows and
+  large type; Ink is near-monochrome serif with light and dark maps; High
+  contrast is black, white and yellow with outlined blocks and large text, and
+  it turns on only from this menu. Paper is a warm cream planner page with
+  serif type and a sepia accent; Pastel is pink and lavender with pill corners,
+  raised panels and a deep orchid accent. Those two are the soft looks, rounded
+  and with depth, where the other four are flat and sharp, and both stay light
+  over a dark pack. Knobs you set by hand stay when you change Look. All of it
+  stays on this computer until the contract amendment is approved.
 - Pill corners keep calendar blocks readable (2026-09-17, shared frontend).
   Chips become capsules; a block's corners stop at 8px so a tall School block
   cannot round its own title away.

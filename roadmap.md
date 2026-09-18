@@ -574,10 +574,11 @@ the same knobs, so more presets and more control are the same work.
   seven fields and the new pack values are approved in Amendment A of
   `docs/stage8-appearance-contract.md`, the knobs persist on the account, and
   every preset palette passes the same-tokens, AA and accent-distance audits.
-- Status: [~] Architecture, Terminal, Poster, Ink and High contrast landed
-  device-only on `feat/native-python` (2026-09-18). Preset is folded into Look.
-  A look keeps knobs set by hand. High contrast is menu-only. Paper and Pastel
-  wait on Claude. Settings still says the look stays on this computer.
+- Status: [~] Architecture and all six presets landed device-only on
+  `feat/native-python` (2026-09-18): Terminal, Poster, Ink, High contrast, then
+  Paper and Pastel, the two soft looks, in both clients. Preset is folded into
+  Look. A look keeps knobs set by hand. High contrast is menu-only. Settings
+  still says the look stays on this computer.
   Approval of the `look_*` fields is still required before anything is saved
   to the account.
 
