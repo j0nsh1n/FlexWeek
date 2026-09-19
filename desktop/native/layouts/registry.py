@@ -226,14 +226,33 @@ def options_for(choice: dict | None, layout_id: str) -> dict[str, str]:
     return {option.key: stored.get(option.key, option.default) for option in LAYOUTS[layout_id].options}
 
 
-def _tint(accent: str, surface: str, share: float, inks: tuple[str, ...], floor: float = 4.5) -> str:
-    """As much of the accent as the text on it can take. A fixed share dipped muted text to 4.49."""
-    while share > 0.01:
-        colour = mix(accent, surface, share)
-        if all(contrast(ink, colour) >= floor for ink in inks):
-            return colour
-        share *= 0.75
-    return surface
+def _tint(accent: str, surface: str, share: float, inks: tuple[str, ...], bg: str, floor: float = 4.5) -> str:
+    """As much of the accent as the text on it can take, without vanishing into the page.
+
+    The four cards keep their relative shares. If the strongest would disappear into `bg`, the
+    whole set is scaled up to the last mix the inks can still read.
+    """
+
+    def readable(colour: str) -> bool:
+        return all(contrast(ink, colour) >= floor for ink in inks)
+
+    def paint(amount: float) -> str:
+        return mix(accent, surface, amount)
+
+    max_ok = 0.0
+    for step in range(1, 99):
+        amount = step / 100
+        if readable(paint(amount)):
+            max_ok = amount
+    if max_ok == 0:
+        return surface
+    strongest = 0.22
+    peak = min(strongest, max_ok)
+    amount = min(share, max_ok)
+    if max_ok > strongest and contrast(paint(peak), bg) < 3.0:
+        amount = min(share * max_ok / strongest, max_ok)
+    colour = paint(amount)
+    return colour if readable(colour) else surface
 
 
 def complete(tokens: dict[str, str]) -> dict[str, str]:
@@ -241,7 +260,7 @@ def complete(tokens: dict[str, str]) -> dict[str, str]:
     from one over a pale card from another measured 1.15 to 1."""
     inks = (tokens["text"], tokens["muted"])
     cards = {
-        f"card_{name}": _tint(tokens["accent"], tokens["surface"], share, inks)
+        f"card_{name}": _tint(tokens["accent"], tokens["surface"], share, inks, tokens["bg"])
         for name, share in zip("abcd", (0.10, 0.16, 0.22, 0.13), strict=True)
     }
     return {"cta": tokens["accent"], "cta_ink": tokens["accent_ink"], **cards, **tokens}
@@ -274,8 +293,12 @@ def tokens_for(layout_id: str, colour: str, palette: dict) -> dict[str, str]:
 
 
 def contrast_failures(tokens: dict[str, str], floor: float = 4.5) -> list[str]:
-    """Every pair of colours a layout puts text on, held to AA. The pairs come from the token names:
-    `x_ink` is text on `x`, `text` and `muted` sit on `surface` and on every `card_`, `bg_muted` on `bg`."""
+    """Every pair of colours a layout puts text on, held to AA, and every card tint against the page.
+
+    The pairs come from the token names: `x_ink` is text on `x`, `text` and `muted` sit on `surface`
+    and on every `card_`, `bg_muted` on `bg`. A `card_` that is the same colour as `bg` is a load bar
+    that disappears.
+    """
     pairs = [(f"{key}", tokens[key], tokens[key[:-4]]) for key in tokens if key.endswith("_ink")]
     pairs += [(name, tokens[name], tokens["surface"]) for name in ("text", "muted")]
     pairs += [("bg_muted", tokens["bg_muted"], tokens["bg"])]
@@ -285,6 +308,11 @@ def contrast_failures(tokens: dict[str, str], floor: float = 4.5) -> list[str]:
         if key.startswith("card_")
         for name in ("text", "muted")
     ]
-    return [
-        f"{label} {contrast(ink, paper):.2f}" for label, ink, paper in pairs if contrast(ink, paper) < floor
-    ]
+    pairs += [(f"{key} on bg", tokens[key], tokens["bg"]) for key in tokens if key.startswith("card_")]
+    failed = []
+    for label, ink, paper in pairs:
+        ratio = contrast(ink, paper)
+        need = 1.01 if label.endswith(" on bg") else floor
+        if ratio < need:
+            failed.append(f"{label} {ratio:.2f}")
+    return failed

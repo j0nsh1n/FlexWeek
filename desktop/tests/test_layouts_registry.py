@@ -125,13 +125,10 @@ def test_a_design_can_ask_for_a_colour_its_colourway_does_not_name() -> None:
     tokens = tokens_for("one", "black", palette)
     assert (tokens["bg"], tokens["cta"], tokens["cta_ink"]) == ("#000000", "#fb923c", "#000000")
     # Derived from the colourway itself. Borrowed from the student's light look it was white on pale.
-    assert [tokens[key] for key in ("card_a", "card_b", "card_c", "card_d")] == [
-        "#190f06",
-        "#28170a",
-        "#37200d",
-        "#211308",
-    ]
-    assert contrast(tokens["text"], tokens["card_c"]) >= 4.5
+    for key in ("card_a", "card_b", "card_c", "card_d"):
+        assert contrast(tokens["text"], tokens[key]) >= 4.5
+        assert contrast(tokens["muted"], tokens[key]) >= 4.5
+        assert contrast(tokens[key], tokens["bg"]) >= 1.01
 
 
 def test_an_unknown_colourway_falls_back_to_the_students_look() -> None:
@@ -151,3 +148,4 @@ def test_the_audit_names_each_unreadable_pair() -> None:
         "text on card_b 1.00",
         "muted on card_b 1.93",
     ]
+    assert contrast_failures({**good, "card_c": good["bg"]}) == ["card_c on bg 1.00"]
