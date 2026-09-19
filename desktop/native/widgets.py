@@ -86,6 +86,7 @@ from desktop.native.reuse import (
     routine_source_blocks,
     row_conflict,
 )
+from desktop.native.weekmodel import due_label, length_label
 
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 DAY_FULL = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
@@ -544,26 +545,60 @@ class DayAgenda(QWidget):
             empty.setFlags(Qt.ItemFlag.NoItemFlags)
             self.list.addItem(empty)
             return
+        week_start = monday_of(iso_day)
         load = (day_data or {}).get("workload") or {}
         if load:
             work = QListWidgetItem(
-                f"Scheduled {load.get('scheduled_min', 0)} min · {load.get('available_min', 0)} min free"
+                f"{length_label(load.get('scheduled_min', 0))} planned"
+                f" · {length_label(load.get('available_min', 0))} free"
             )
             work.setFlags(Qt.ItemFlag.NoItemFlags)
             self.list.addItem(work)
+        self._section("Due soon", agenda["due_soon"])
         for item in agenda["due_soon"]:
-            row = QListWidgetItem(f"Due {item['due']}: {item['title']}")
+            # A student reads "Thu 23:59", not "2026-09-17T23:59". due_label is what every other
+            # surface in the app already uses.
+            row = self._row(
+                f"{item['title']} · due {due_label(item.get('due'), week_start)}",
+                item.get("category") or "assignments",
+            )
             row.setData(Qt.ItemDataRole.UserRole, {"kind": "homework", "id": item["id"]})
             self.list.addItem(row)
+        self._section("Homework", agenda["sessions"])
         for row in agenda["sessions"]:
-            start = row["start"] or "unplanned"
-            item = QListWidgetItem(f"{row['block']['title']} · {start}")
-            item.setData(Qt.ItemDataRole.UserRole, {"kind": "block", "id": row["block"]["id"]})
+            block = row["block"]
+            when = row["start"] or "not placed yet"
+            item = self._row(
+                f"{when} · {block['title']} · {length_label(block.get('duration_min') or 0)}",
+                block.get("category") or "assignments",
+            )
+            item.setData(Qt.ItemDataRole.UserRole, {"kind": "block", "id": block["id"]})
             self.list.addItem(item)
+        self._section("Fixed", agenda["fixed"])
         for row in agenda["fixed"]:
-            item = QListWidgetItem(f"{row['block']['title']} · {row['start']}")
-            item.setData(Qt.ItemDataRole.UserRole, {"kind": "block", "id": row["block"]["id"]})
+            block = row["block"]
+            item = self._row(
+                f"{row['start']} · {block['title']} · {length_label(block.get('duration_min') or 0)}",
+                block.get("category") or "",
+            )
+            item.setData(Qt.ItemDataRole.UserRole, {"kind": "block", "id": block["id"]})
             self.list.addItem(item)
+
+    def _section(self, title: str, rows: list) -> None:
+        if not rows:
+            return
+        head = QListWidgetItem(title.upper())
+        head.setFlags(Qt.ItemFlag.NoItemFlags)
+        self.list.addItem(head)
+
+    @staticmethod
+    def _row(words: str, category: str) -> QListWidgetItem:
+        """One agenda row, with the category's own colour beside it, as every other surface paints it."""
+        item = QListWidgetItem(words)
+        mark = (CATEGORIES.get(category) or {}).get("mark")
+        if mark:
+            item.setData(Qt.ItemDataRole.DecorationRole, QColor(mark))
+        return item
 
     def _on_next(self) -> None:
         if self._next_kind == "plan":
