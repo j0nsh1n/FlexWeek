@@ -87,7 +87,13 @@ LAYOUTS: dict[str, LayoutSpec] = {
                     "style",
                     (Choice("comfortable", "Comfortable"), Choice("compact", "Compact")),
                 ),
-                _show("strip", "Week strip"),
+                # Never "hidden": the strip is how a day is picked, so without it the week is out of reach.
+                Option(
+                    "strip",
+                    "Week strip",
+                    "detail",
+                    (Choice("show", "With load bars"), Choice("hide", "Day names only")),
+                ),
                 _show("finished", "Finished and past items"),
             ),
             TIMELINE,
