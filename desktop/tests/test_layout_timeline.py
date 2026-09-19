@@ -122,8 +122,8 @@ def test_option_strip_with_and_without_load_bars(qapp: QApplication) -> None:
     def bars(view: TimelineView) -> int:
         return len([item for item in view.findChildren(QFrame) if item.property("role") == "load"])
 
-    assert (bars(shown(qapp)), bars(shown(qapp, strip="hide"))) == (7, 0)
-    assert shown(qapp, strip="hide").findChild(QPushButton, "timelineDay6") is not None
+    assert (bars(shown(qapp)), bars(shown(qapp, strip="names"))) == (7, 0)
+    assert shown(qapp, strip="names").findChild(QPushButton, "timelineDay6") is not None
 
 
 def test_option_compact_tightens_the_column(qapp: QApplication) -> None:

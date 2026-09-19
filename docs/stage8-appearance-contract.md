@@ -477,9 +477,10 @@ behaviour it already has. No layout adds, plans or finishes anything itself.
 ### C3. Three levels of customising
 
 1. **Pick** a main view and a day screen.
-2. **Style** the picked design. Every design has its own colourways, and every
-   design also offers *Match my look*, which paints it in the pack, preset and
-   accent the rest of the app is wearing.
+2. **Style** the picked design. Every design but Today's app has its own
+   colourways and also offers *Match my look*, which paints it in the pack,
+   preset and accent the rest of the app is wearing. Today's app has no layout
+   options: it is the week grid, and its colours are the Look menu.
 3. **Fine-tune** what the design shows. These options wait behind one checkbox,
    which opens by itself when a fine-tune option is already in use.
 
@@ -488,14 +489,22 @@ behaviour it already has. No layout adds, plans or finishes anything itself.
 | Timeline | Colours (Paper, Night), Spacing | Week strip, Finished and past items |
 | Mission control | Colours (Cyan, Amber, Green) | Hours shown, Deadline radar and load |
 | Bento | Colours (Indigo, Sunset, Mono), Tile corners | Tiles |
-| Retro desktop | Colours (Teal, Plum, Slate desktop) | Windows open at start |
+| Retro desktop | Colours (Teal desktop, Plum desktop, Slate desktop) | Windows open at start |
 | Clay deck | Colours (Pastel, Mint, Sunset) | Cards in the deck, Tilted cards |
 | One thing | Colours (Black and orange, Paper and ink) | Lead with, Buttons, Day bar |
-| Day dial | Colours (Midnight, Daylight) | Hours shown, Hour by hour list, Small dials |
+| Day dial | Colours (Midnight, Daylight) | Hours shown, Hour by hour list, Small dials for the week |
 
-An option never costs a design something C2 says it owes. Timeline's week strip
-is "with load bars" or "day names only", never hidden, because it is how a day
-is picked.
+Defaults: the first colourway named in each row. Every show or hide option is
+shown. Spacing is comfortable, Week strip is with load bars, Hours shown is
+06:00 to 22:00, Tile corners are soft, Tiles is all tiles, Windows open at start
+is all three, Cards in the deck is five, Tilted cards is tilted, and Lead with is
+what is on now.
+
+An option never costs a design something C2 says it owes. No option hides
+homework that has no time yet: Bento's essentials keep that tile, and Retro
+desktop lists it in the week window as well as the notepad. Timeline's week strip
+is "with load bars" (`bars`) or "day names only" (`names`). It has no hidden
+value, because the strip is how a day is picked.
 
 Only what differs from a design's own settings is stored, so an improved default
 still reaches everyone.

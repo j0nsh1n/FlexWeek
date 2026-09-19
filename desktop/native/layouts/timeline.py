@@ -168,7 +168,7 @@ class TimelineView(LayoutView):
             pick.setAccessibleName(f"Show {DAY_FULL[day]}, {scene.week.load_min(day)} minutes of homework")
             pick.clicked.connect(lambda _=False, target=day: self._show_day(target))
             cell.addWidget(pick)
-            if scene.options.get("strip") != "hide":
+            if scene.options.get("strip") != "names":
                 bar = QFrame()
                 bar.setProperty("role", "load")
                 bar.setFixedHeight(scene.px(4))

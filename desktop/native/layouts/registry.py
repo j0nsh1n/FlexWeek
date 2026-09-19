@@ -92,7 +92,7 @@ LAYOUTS: dict[str, LayoutSpec] = {
                     "strip",
                     "Week strip",
                     "detail",
-                    (Choice("show", "With load bars"), Choice("hide", "Day names only")),
+                    (Choice("bars", "With load bars"), Choice("names", "Day names only")),
                 ),
                 _show("finished", "Finished and past items"),
             ),

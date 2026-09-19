@@ -454,8 +454,11 @@ Recorded `operation_id` values make a retried write return the first result.
   Open for the owner: approve Amendment C's `layout_*` account fields, and the
   spec.md drift it lists. Not done: layouts in the web client; a per-session
   "done" (the product only finishes whole homework, so day screens say Homework
-  finished); GLM did not check Amendment C because OpenRouter returned nothing
-  all day, so it was checked against the registry by script instead. Defects
+  finished). GLM checked Amendment C through OpenCode and three of its findings
+  were right: Today's app has no colourways, Timeline's strip stored `hide` for
+  a choice the contract calls never hidden (now `bars` and `names`), and one
+  option label was shortened. Earlier reports that GLM was down were wrong:
+  `opencode run` waits for stdin to close, so call it with `< /dev/null`. Defects
   found by looking at screenshots rather than by tests, each now pinned by one:
   a design's rule losing to the reset's more specific selector; a wrapped title
   and a three-line card cut off because a stylesheet min-height beats
