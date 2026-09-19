@@ -118,7 +118,7 @@ class BentoView(LayoutView):
                         color=tokens["muted"], text_decoration="line-through"
                     ),
                     "QPushButton:focus": css(border=f"2px solid {tokens['text']}"),
-                    'QFrame[role="bar"]': css(background=tokens["card_c"], border_radius=f"{scene.px(6)}px"),
+                    'QFrame[role="bar"]': css(background=tokens["fill"], border_radius=f"{scene.px(6)}px"),
                     'QFrame[role="bar"][today="true"]': css(background=tokens["accent"]),
                 },
             )

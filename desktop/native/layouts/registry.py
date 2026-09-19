@@ -255,6 +255,20 @@ def _tint(accent: str, surface: str, share: float, inks: tuple[str, ...], bg: st
     return colour if readable(colour) else surface
 
 
+def _fill(accent: str, surface: str, floor: float = 1.8) -> str:
+    """A block of colour that carries no text, only has to be seen.
+
+    The card tints are held down by the text that sits on them, which left Bento's load bars at
+    1.27 to 1 against their tile in the median look and 1.01 at worst. A bar has no text on it, so
+    it is free to be as strong as it needs to be.
+    """
+    for step in range(20, 101, 5):
+        colour = mix(accent, surface, step / 100)
+        if contrast(colour, surface) >= floor:
+            return colour
+    return accent
+
+
 def complete(tokens: dict[str, str]) -> dict[str, str]:
     """Fill in what a colourway leaves out from its own colours, never from another palette: white text
     from one over a pale card from another measured 1.15 to 1."""
@@ -263,7 +277,13 @@ def complete(tokens: dict[str, str]) -> dict[str, str]:
         f"card_{name}": _tint(tokens["accent"], tokens["surface"], share, inks, tokens["bg"])
         for name, share in zip("abcd", (0.10, 0.16, 0.22, 0.13), strict=True)
     }
-    return {"cta": tokens["accent"], "cta_ink": tokens["accent_ink"], **cards, **tokens}
+    return {
+        "cta": tokens["accent"],
+        "cta_ink": tokens["accent_ink"],
+        "fill": _fill(tokens["accent"], tokens["surface"]),
+        **cards,
+        **tokens,
+    }
 
 
 def match_tokens(palette: dict) -> dict[str, str]:
@@ -309,10 +329,16 @@ def contrast_failures(tokens: dict[str, str], floor: float = 4.5) -> list[str]:
         for name in ("text", "muted")
     ]
     pairs += [(f"{key} on bg", tokens[key], tokens["bg"]) for key in tokens if key.startswith("card_")]
+    pairs += [("fill on surface", tokens["fill"], tokens["surface"])]
     failed = []
     for label, ink, paper in pairs:
         ratio = contrast(ink, paper)
-        need = 1.01 if label.endswith(" on bg") else floor
+        if label == "fill on surface":
+            need = 1.8
+        elif label.endswith(" on bg"):
+            need = 1.01
+        else:
+            need = floor
         if ratio < need:
             failed.append(f"{label} {ratio:.2f}")
     return failed
