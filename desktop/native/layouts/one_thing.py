@@ -10,14 +10,20 @@ from PySide6.QtGui import QColor, QFont, QFontMetrics, QKeyEvent, QPainter, QPai
 from PySide6.QtWidgets import QHBoxLayout, QProgressBar, QVBoxLayout, QWidget
 
 from desktop.native.calendar import DAY_FULL
-from desktop.native.layouts.base import LayoutView, Scene, base_sheet, button, empty, label, rules
+from desktop.native.layouts.base import (
+    LayoutView,
+    Scene,
+    base_sheet,
+    day_buttons,
+    empty,
+    label,
+    plural,
+    rules,
+    work_left,
+)
 from desktop.native.weekmodel import Occurrence, clock_label, length_label
 
 DAY_START, DAY_END = 6 * 60, 22 * 60
-
-
-def plural(count: int, word: str) -> str:
-    return f"{count} {word}" if count == 1 else f"{count} {word}s"
 
 
 class DayBar(QWidget):
@@ -161,14 +167,7 @@ class OneThingView(LayoutView):
         self._fit_title()
 
     def _left_text(self, scene: Scene) -> str:
-        if scene.today is None:
-            return ""
-        left = [
-            entry
-            for entry in scene.week.on_day(scene.today)
-            if entry.work and entry.live and entry.end > scene.minute
-        ]
-        return plural(len(left), "homework session") + " left today"
+        return "" if scene.today is None else plural(work_left(scene), "homework session") + " left today"
 
     def _empty_title(self, scene: Scene) -> str:
         return "Day screens show today" if scene.today is None else "Nothing else today"
@@ -195,26 +194,7 @@ class OneThingView(LayoutView):
     def _actions(self, scene: Scene, item: Occurrence | None) -> QHBoxLayout:
         row = QHBoxLayout()
         row.setSpacing(scene.px(10))
-        made = []
-        if scene.options.get("actions") != "hide":
-            if item is not None and item.work and item.assignment_id:
-                finished = button("HOMEWORK FINISHED", "oneFinished", "main")
-                finished.clicked.connect(
-                    lambda _=False, key=item.assignment_id: self.finished_requested.emit(key)
-                )
-                focus = button("START FOCUS", "oneFocus")
-                focus.clicked.connect(
-                    lambda _=False, entry=item: self.focus_requested.emit(entry.block_id, entry.day)
-                )
-                made += [finished, focus]
-            if self._left_text(scene)[:1] not in ("", "0"):
-                late = button("RUNNING LATE", "oneLate")
-                late.clicked.connect(self.late_requested.emit)
-                made.append(late)
-        back = button("BACK TO PLANNING", "oneBack")
-        back.clicked.connect(self.back_requested.emit)
-        made.append(back)
-        for entry in made:
+        for entry in day_buttons(self, scene, item, "one", upper=True):
             row.addWidget(entry)
         row.addStretch()
         return row

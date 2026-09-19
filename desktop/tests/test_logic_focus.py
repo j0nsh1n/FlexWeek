@@ -33,9 +33,7 @@ def essay(session: NativeSession) -> dict:
     }
 
 
-def test_a_focus_credit_is_not_lost_behind_a_failed_save(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_a_focus_credit_is_not_lost_behind_a_failed_save(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     session.add_homework(essay(session))
     session.blocks[0]["start"] = "16:00"
@@ -59,9 +57,7 @@ def test_a_focus_credit_is_not_lost_behind_a_failed_save(
     assert item["notes"] == "Cite two sources"
 
 
-def test_completed_homework_can_be_reopened_after_a_reload(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_completed_homework_can_be_reopened_after_a_reload(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     session.add_homework(essay(session))
     session.save()

@@ -33,8 +33,15 @@ def qapp() -> Iterator[QApplication]:
 
 
 def block(**fields: object) -> dict:
-    return {"id": "school", "title": "School", "kind": "locked", "start": "08:00",
-            "duration_min": 60, "days": [0], **fields}
+    return {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "start": "08:00",
+        "duration_min": 60,
+        "days": [0],
+        **fields,
+    }
 
 
 def column(table: WeekTable, day: int) -> list[str]:
@@ -55,8 +62,16 @@ def test_a_block_says_its_title_then_its_time_and_the_rest_stay_quiet(qapp: QApp
 def test_missed_and_done_can_be_seen_without_hovering(qapp: QApplication) -> None:
     table = WeekTable()
     missed = block(missed_days=[0])
-    done = block(id="essay", title="Essay", kind="flexible", start="16:00", duration_min=30,
-                 days=[1, 2], completed=True, completed_day=1)
+    done = block(
+        id="essay",
+        title="Essay",
+        kind="flexible",
+        start="16:00",
+        duration_min=30,
+        days=[1, 2],
+        completed=True,
+        completed_day=1,
+    )
     table.set_week(WEEK, [missed, done], None)
     assert column(table, 0)[1] == "08:00 · Fixed · Missed"
     assert column(table, 1) == ["Essay", "16:00 · Work · Done"]

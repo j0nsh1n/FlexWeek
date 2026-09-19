@@ -12,7 +12,8 @@ from dataclasses import dataclass, field
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QApplication, QLabel, QLayout, QPushButton, QWidget
 
-from desktop.native.weekmodel import WeekModel
+from desktop.native.calendar import CATEGORIES
+from desktop.native.weekmodel import Occurrence, WeekModel
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,12 @@ def rules(name: str, entries: dict[str, str]) -> str:
     )
 
 
+def css(**properties: object) -> str:
+    """`css(font_size="13px", color=ink)` is `font-size: 13px; color: ...;`. It keeps a design's rules
+    one property to a line instead of one long string."""
+    return " ".join(f"{name.replace('_', '-')}: {value};" for name, value in properties.items())
+
+
 def label(text: str, name: str, *, wrap: bool = False) -> QLabel:
     made = QLabel(text)
     made.setObjectName(name)
@@ -83,6 +90,24 @@ def button(text: str, name: str, kind: str = "") -> QPushButton:
     if kind:
         made.setProperty("kind", kind)
     return made
+
+
+def plural(count: int, word: str) -> str:
+    return f"{count} {word}" if count == 1 else f"{count} {word}s"
+
+
+def mark_of(category: str) -> str:
+    """A category's strong colour, the one the web client paints with."""
+    return (CATEGORIES.get(category) or {}).get("mark") or "#94a3b8"
+
+
+def work_left(scene: Scene) -> int:
+    """Homework sessions still ahead today. Running late is only offered while there are some."""
+    if scene.today is None:
+        return 0
+    return sum(
+        1 for item in scene.week.on_day(scene.today) if item.work and item.live and item.end > scene.minute
+    )
 
 
 class LayoutView(QWidget):
@@ -123,3 +148,44 @@ class LayoutView(QWidget):
 
     def render(self, scene: Scene, week_changed: bool) -> None:
         raise NotImplementedError
+
+
+def day_buttons(
+    view: LayoutView, scene: Scene, item: Occurrence | None, prefix: str, *, upper: bool = False
+) -> list[QPushButton]:
+    """What a student does while living the day, written once for every day screen: finish the
+    homework, start focus, say they are running late, go back to planning."""
+
+    def word(text: str) -> str:
+        return text.upper() if upper else text
+
+    made = []
+    if scene.options.get("actions") != "hide":
+        if item is not None and item.work and item.assignment_id:
+            finished = button(word("Homework finished"), f"{prefix}Finished", "main")
+            finished.clicked.connect(
+                lambda _=False, key=item.assignment_id: view.finished_requested.emit(key)
+            )
+            focus = button(word("Start focus"), f"{prefix}Focus")
+            focus.clicked.connect(
+                lambda _=False, entry=item: view.focus_requested.emit(entry.block_id, entry.day)
+            )
+            made += [finished, focus]
+        if work_left(scene):
+            late = button(word("Running late"), f"{prefix}Late")
+            late.clicked.connect(view.late_requested.emit)
+            made.append(late)
+    back = button(word("Back to planning"), f"{prefix}Back")
+    back.clicked.connect(view.back_requested.emit)
+    return [*made, back]
+
+
+def plan_buttons(view: LayoutView, prefix: str, words: tuple[str, str, str]) -> list[QPushButton]:
+    """What every main view has to offer by itself: add homework, run the plan, go to the day screen."""
+    add = button(words[0], f"{prefix}Add", "main")
+    add.clicked.connect(lambda _=False: view.add_requested.emit(""))
+    plan = button(words[1], f"{prefix}Plan")
+    plan.clicked.connect(view.plan_requested.emit)
+    my_day = button(words[2], f"{prefix}MyDay")
+    my_day.clicked.connect(view.my_day_requested.emit)
+    return [add, plan, my_day]

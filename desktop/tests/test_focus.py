@@ -93,12 +93,15 @@ def test_restore_drops_completed_homework_and_keeps_a_running_timer() -> None:
     )
     assert restored is not None
     assert restored["running"] is True
-    assert restore_state(
-        saved,
-        assignments={"essay": {"id": "essay", "title": "Essay", "completed": True}},
-        blocks=[{"id": "sess", "title": "Essay"}],
-        now_ms=1_000_000,
-    ) is None
+    assert (
+        restore_state(
+            saved,
+            assignments={"essay": {"id": "essay", "title": "Essay", "completed": True}},
+            blocks=[{"id": "sess", "title": "Essay"}],
+            now_ms=1_000_000,
+        )
+        is None
+    )
 
 
 def test_expired_work_phase_is_flagged_so_credit_can_run() -> None:

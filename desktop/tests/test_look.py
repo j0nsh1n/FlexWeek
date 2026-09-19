@@ -114,28 +114,58 @@ def test_every_knob_value_changes_what_is_drawn() -> None:
 def test_choosing_a_preset_means_every_one_of_its_knobs() -> None:
     expected = {
         "terminal": {
-            "surface": "flat", "corners": "sharp", "depth": "flat", "font": "mono",
-            "blocks": "outlined", "density": "compact", "text": "normal",
+            "surface": "flat",
+            "corners": "sharp",
+            "depth": "flat",
+            "font": "mono",
+            "blocks": "outlined",
+            "density": "compact",
+            "text": "normal",
         },
         "poster": {
-            "surface": "flat", "corners": "sharp", "depth": "hard", "font": "sans",
-            "blocks": "filled", "density": "compact", "text": "large",
+            "surface": "flat",
+            "corners": "sharp",
+            "depth": "hard",
+            "font": "sans",
+            "blocks": "filled",
+            "density": "compact",
+            "text": "large",
         },
         "ink": {
-            "surface": "flat", "corners": "sharp", "depth": "flat", "font": "serif",
-            "blocks": "edge", "density": "comfortable", "text": "normal",
+            "surface": "flat",
+            "corners": "sharp",
+            "depth": "flat",
+            "font": "serif",
+            "blocks": "edge",
+            "density": "comfortable",
+            "text": "normal",
         },
         "high-contrast": {
-            "surface": "flat", "corners": "sharp", "depth": "hard", "font": "sans",
-            "blocks": "outlined", "density": "comfortable", "text": "large",
+            "surface": "flat",
+            "corners": "sharp",
+            "depth": "hard",
+            "font": "sans",
+            "blocks": "outlined",
+            "density": "comfortable",
+            "text": "large",
         },
         "paper": {
-            "surface": "flat", "corners": "round", "depth": "soft", "font": "serif",
-            "blocks": "filled", "density": "comfortable", "text": "normal",
+            "surface": "flat",
+            "corners": "round",
+            "depth": "soft",
+            "font": "serif",
+            "blocks": "filled",
+            "density": "comfortable",
+            "text": "normal",
         },
         "pastel": {
-            "surface": "frost", "corners": "pill", "depth": "soft", "font": "sans",
-            "blocks": "filled", "density": "comfortable", "text": "normal",
+            "surface": "frost",
+            "corners": "pill",
+            "depth": "soft",
+            "font": "sans",
+            "blocks": "filled",
+            "density": "comfortable",
+            "text": "normal",
         },
     }
     assert preset_knobs("default") == LOOK_DEFAULTS
@@ -148,14 +178,26 @@ def test_choosing_a_preset_means_every_one_of_its_knobs() -> None:
 
 def test_native_colours_are_the_audited_web_tokens() -> None:
     names = {
-        "window": "--bg", "panel": "--surface-solid", "field": "--field", "grid": "--grid-cell",
-        "text": "--text", "muted": "--muted", "accent": "--accent", "accent_ink": "--accent-ink",
-        "error": "--error", "block_locked": "--block-locked", "block_locked_ink": "--block-locked-ink",
-        "block_flex": "--block-flex", "block_flex_ink": "--block-flex-ink", "block_edge": "--block-edge",
+        "window": "--bg",
+        "panel": "--surface-solid",
+        "field": "--field",
+        "grid": "--grid-cell",
+        "text": "--text",
+        "muted": "--muted",
+        "accent": "--accent",
+        "accent_ink": "--accent-ink",
+        "error": "--error",
+        "block_locked": "--block-locked",
+        "block_locked_ink": "--block-locked-ink",
+        "block_flex": "--block-flex",
+        "block_flex_ink": "--block-flex-ink",
+        "block_edge": "--block-edge",
     }
     selectors = {
-        "nocturne": ":root", "slate": ':root[data-theme="slate"]',
-        "dark-frost": ':root[data-theme="dark-frost"]', "light-frost": ':root[data-theme="light-frost"]',
+        "nocturne": ":root",
+        "slate": ':root[data-theme="slate"]',
+        "dark-frost": ':root[data-theme="dark-frost"]',
+        "light-frost": ':root[data-theme="light-frost"]',
     }
     tables = [(name, PALETTES[name], selector) for name, selector in selectors.items()]
     tables.append(("terminal", PRESET_PALETTES["terminal"], ':root[data-preset="terminal"]'))
@@ -185,9 +227,16 @@ def test_native_colours_are_the_audited_web_tokens() -> None:
 
 def test_every_look_keeps_its_text_readable() -> None:
     pairs = [
-        ("text", "window"), ("text", "panel"), ("text", "field"), ("text", "grid"),
-        ("muted", "window"), ("muted", "panel"), ("error", "panel"),
-        ("accent_ink", "accent"), ("block_locked_ink", "block_locked"), ("block_flex_ink", "block_flex"),
+        ("text", "window"),
+        ("text", "panel"),
+        ("text", "field"),
+        ("text", "grid"),
+        ("muted", "window"),
+        ("muted", "panel"),
+        ("error", "panel"),
+        ("accent_ink", "accent"),
+        ("block_locked_ink", "block_locked"),
+        ("block_flex_ink", "block_flex"),
     ]
     assert len(EVERY_LOOK) == 5 * 2 * 7 * 5 * 2
     for pack, system_dark, preset, accent, surface in EVERY_LOOK:
@@ -294,7 +343,12 @@ def test_category_marks_are_the_web_clients_category_colours() -> None:
 
 def test_paper_and_pastel_are_light_looks_on_any_pack_and_close_the_menu() -> None:
     assert [name for name, _label, kind in look_menu_items() if kind == "preset"] == [
-        "terminal", "poster", "ink", "high-contrast", "paper", "pastel",
+        "terminal",
+        "poster",
+        "ink",
+        "high-contrast",
+        "paper",
+        "pastel",
     ]
     for preset, accent in (("paper", "#8a4b2a"), ("pastel", "#7a3e9d")):
         for pack, system_dark in (("nocturne", True), ("dark-frost", True), ("slate", False)):

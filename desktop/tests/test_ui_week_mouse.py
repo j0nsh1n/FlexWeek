@@ -37,8 +37,15 @@ def qapp() -> Iterator[QApplication]:
 
 
 def fixed(block_id: str, start: str, duration_min: int, day: int = 0, **fields: object) -> dict:
-    return {"id": block_id, "title": block_id.title(), "kind": "locked", "start": start,
-            "duration_min": duration_min, "days": [day], **fields}
+    return {
+        "id": block_id,
+        "title": block_id.title(),
+        "kind": "locked",
+        "start": start,
+        "duration_min": duration_min,
+        "days": [day],
+        **fields,
+    }
 
 
 def week(qapp: QApplication, blocks: list[dict]) -> WeekTable:
@@ -57,15 +64,22 @@ def row_of(hhmm: str) -> int:
 
 def cell(table: WeekTable, hhmm: str, day: int) -> QPoint:
     row = row_of(hhmm)
-    return QPoint(table.columnViewportPosition(day) + 30,
-                  table.rowViewportPosition(row) + table.rowHeight(row) // 2)
+    return QPoint(
+        table.columnViewportPosition(day) + 30, table.rowViewportPosition(row) + table.rowHeight(row) // 2
+    )
 
 
 def send(table: WeekTable, kind: QEvent.Type, pos: QPoint, held: str) -> None:
     viewport = table.viewport()
     buttons = Qt.MouseButton.LeftButton if held == LEFT else Qt.MouseButton.NoButton
-    event = QMouseEvent(kind, QPointF(pos), QPointF(viewport.mapToGlobal(pos)),
-                        Qt.MouseButton.LeftButton, buttons, Qt.KeyboardModifier.NoModifier)
+    event = QMouseEvent(
+        kind,
+        QPointF(pos),
+        QPointF(viewport.mapToGlobal(pos)),
+        Qt.MouseButton.LeftButton,
+        buttons,
+        Qt.KeyboardModifier.NoModifier,
+    )
     QApplication.sendEvent(viewport, event)
 
 

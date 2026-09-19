@@ -43,7 +43,8 @@ def test_setup_exe_installs_for_the_current_account_and_keeps_its_app_id() -> No
 def test_setup_exe_shortcuts_open_the_installed_app_from_its_folder() -> None:
     icons = iss_section("Icons")
     assert [line.split(";")[0] for line in icons] == [
-        r'Name: "{autoprograms}\FlexWeek"', r'Name: "{autodesktop}\FlexWeek"'
+        r'Name: "{autoprograms}\FlexWeek"',
+        r'Name: "{autodesktop}\FlexWeek"',
     ]
     for line in icons:
         assert r'Filename: "{app}\FlexWeek.exe"' in line

@@ -41,8 +41,13 @@ if importlib.util.find_spec("PySide6") is not None:
 
 WEEK = "2026-09-14"
 SCHOOL = {
-    "id": "school", "title": "School", "kind": "locked", "category": "class",
-    "start": "08:00", "duration_min": 60, "days": [0],
+    "id": "school",
+    "title": "School",
+    "kind": "locked",
+    "category": "class",
+    "start": "08:00",
+    "duration_min": 60,
+    "days": [0],
 }
 CLUB = {"id": "club", "title": "Club", "kind": "locked", "start": "10:00", "duration_min": 30, "days": [1]}
 PALE, STRONG = "#bfdbfe", "#3b82f6"
@@ -114,7 +119,10 @@ def test_an_outlined_block_is_drawn_as_one_outline_in_the_strong_colour(qapp: QA
         assert item.data(OUTLINE_ROLE) == STRONG
     # A block is a run of cells: only the first closes the top and only the last the bottom.
     assert [tuple(table.item(row, 0).data(ENDS_ROLE)) for row in rows] == [
-        (True, False), (False, False), (False, False), (False, True),
+        (True, False),
+        (False, False),
+        (False, False),
+        (False, True),
     ]
     assert pixel(table, rows[1], 0, "left") == STRONG
     assert pixel(table, rows[1], 0, "inside") == palette["grid"]
@@ -222,7 +230,6 @@ def test_opening_settings_shows_the_look_on_screen_and_changes_nothing(qapp: QAp
     assert dialog.findChild(QComboBox, "lookPreset") is None
     assert dialog.look.findData(look_menu_token("preset", "terminal")) >= 0
     assert dialog.look.findData(look_menu_token("pack", "system")) >= 0
-
 
 
 def wait_until(qapp: QApplication, predicate, timeout: float = 8.0) -> None:

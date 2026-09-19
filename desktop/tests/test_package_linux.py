@@ -18,7 +18,11 @@ def test_package_linux_ships_readme_icon_and_checksum(tmp_path: Path) -> None:
     env = {**os.environ, "FLEXWEEK_WEB_URL": "https://example.test/flexweek"}
     subprocess.run(
         ["bash", str(ROOT / "desktop/package_linux.sh"), str(bundle), str(output)],
-        cwd=ROOT, env=env, check=True, capture_output=True, text=True,
+        cwd=ROOT,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
     )
     archive = output / "FlexWeek-Linux-x86_64.tar.gz"
     checksum = output / "FlexWeek-Linux-x86_64.tar.gz.sha256"
@@ -55,7 +59,11 @@ def test_appimage_checksum_names_only_the_file(tmp_path: Path) -> None:
     env = {**os.environ, "PATH": f"{tools}{os.pathsep}{os.environ['PATH']}"}
     subprocess.run(
         ["bash", str(ROOT / "packaging/make-appimage.sh"), str(bundle), str(output)],
-        cwd=ROOT, env=env, check=True, capture_output=True, text=True,
+        cwd=ROOT,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
     )
     checksum = output.with_name("FlexWeek-x86_64.AppImage.sha256")
     assert checksum.read_text(encoding="utf-8").split()[1] == "FlexWeek-x86_64.AppImage"

@@ -44,7 +44,9 @@ def test_readme_screenshots_exist_and_none_sit_unused() -> None:
 def test_render_inserts_the_hosted_url_or_says_none_is_online() -> None:
     assert render("X @WEB_VERSION@ Y", "") == f"X {OFFLINE} Y"
     assert "https://example.test/app" in render("@WEB_VERSION@", "https://example.test/app")
-    assert render("@WEB_VERSION@", "https://example.test/app") == ONLINE.format(url="https://example.test/app")
+    assert render("@WEB_VERSION@", "https://example.test/app") == ONLINE.format(
+        url="https://example.test/app"
+    )
 
 
 APPIMAGE_EXTRACT = (

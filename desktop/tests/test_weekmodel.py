@@ -159,6 +159,22 @@ def test_homework_the_account_marks_complete_is_done_even_if_the_block_is_not() 
     assert [(item.block_id, item.done) for item in week.occurrences] == [("math-2", True)]
 
 
+def test_a_homework_session_saved_without_a_category_is_still_homework() -> None:
+    blocks = [
+        {**block("essay-1", "flexible", [3], "18:45", 60, assignment_id="essay"), "category": None},
+        {**block("vocab-1", "flexible", [4], "15:30", 30, assignment_id="essay"), "category": "study"},
+        {**block("waits", "flexible", [], None, 30, assignment_id="essay"), "category": None},
+        {**block("club", "locked", [2], "15:00", 60), "category": None},
+    ]
+    week = build_week(WEEK, blocks, HOMEWORK, None)
+    assert [(item.block_id, item.category) for item in week.occurrences] == [
+        ("club", ""),
+        ("essay-1", "assignments"),
+        ("vocab-1", "study"),
+    ]
+    assert [(item.block_id, item.category) for item in week.waiting] == [("waits", "assignments")]
+
+
 def test_a_block_cannot_run_past_midnight() -> None:
     week = build_week(WEEK, [block("late", "locked", [0], "23:30", 90)], {}, None)
     assert [(clock_label(item.start), clock_label(item.end)) for item in week.occurrences] == [

@@ -326,3 +326,13 @@ def test_a_design_can_be_put_back_to_its_own_settings(qapp: QApplication) -> Non
 def test_every_built_view_is_a_design_in_the_registry(qapp: QApplication) -> None:
     assert set(VIEW_CLASSES) <= set(LAYOUTS) - {"classic"}
     assert all(view.layout_id == layout_id for layout_id, view in VIEW_CLASSES.items())
+
+
+def test_my_day_opens_whichever_day_screen_was_picked(qapp: QApplication, window: NativeWindow) -> None:
+    window._layout = {"main": "classic", "day": "dial", "options": {}}
+    click(window, "viewMyDay")
+    view = window.planner.currentWidget()
+    assert type(view).__name__ == "DayDialView"
+    assert view.findChild(QLabel, "dialTitle").text() == "History essay"
+    click(window, "dialBack")
+    assert window.planner.currentWidget() is window.week_table

@@ -246,18 +246,18 @@ def test_running_late_occupies_from_a_snapped_start_until_the_day_end() -> None:
     assert block["duration_min"] == 30
     assert block["category"] == "downtime"
     now = datetime(2026, 9, 14, 14, 7)
-    assert running_late_refusal(
-        week_start="2026-09-14", now=now, dirty=False, conflict=False, block_count=0
-    ) is None
-    assert "this week" in (
-        running_late_refusal(
-            week_start="2026-09-07", now=now, dirty=False, conflict=False, block_count=0
-        )
-        or ""
-    ).lower()
-    assert running_late_refusal(
-        week_start="2026-09-14", now=now, dirty=True, conflict=False, block_count=0
+    assert (
+        running_late_refusal(week_start="2026-09-14", now=now, dirty=False, conflict=False, block_count=0)
+        is None
     )
+    assert (
+        "this week"
+        in (
+            running_late_refusal(week_start="2026-09-07", now=now, dirty=False, conflict=False, block_count=0)
+            or ""
+        ).lower()
+    )
+    assert running_late_refusal(week_start="2026-09-14", now=now, dirty=True, conflict=False, block_count=0)
 
 
 def test_restore_point_labels_fit_eighty_characters() -> None:

@@ -65,9 +65,7 @@ THREE_SESSIONS = [
 ]
 
 
-def test_a_notes_edit_keeps_every_session_of_the_homework(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_a_notes_edit_keeps_every_session_of_the_homework(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     assert spread_essay(qapp, session) == THREE_SESSIONS
     session.add_homework({**session.assignments["essay"], "notes": "Cite two sources"})
@@ -101,9 +99,7 @@ def test_completing_homework_keeps_its_sessions(qapp: QApplication, server: Loca
     assert session.assignments["essay"]["completed"] is True
 
 
-def test_a_single_whole_session_still_follows_a_new_estimate(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_a_single_whole_session_still_follows_a_new_estimate(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     session.add_homework(
         {
@@ -120,9 +116,7 @@ def test_a_single_whole_session_still_follows_a_new_estimate(
     assert [block["duration_min"] for block in session.blocks] == [90]
 
 
-def test_a_partial_session_is_not_stretched_to_the_estimate(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_a_partial_session_is_not_stretched_to_the_estimate(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     session.add_homework(
         {

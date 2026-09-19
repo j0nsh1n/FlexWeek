@@ -116,9 +116,7 @@ def test_a_failed_open_day_leaves_day_view_inside_the_week_on_screen(
     assert session.week_start == first
 
 
-def test_a_failed_assignments_load_does_not_switch_the_week(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_a_failed_assignments_load_does_not_switch_the_week(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     first, second = two_saved_weeks(qapp, session)
     fail_once(session, "GET", "/api/assignments")
@@ -134,9 +132,7 @@ def test_a_failed_assignments_load_does_not_switch_the_week(
     assert titles(session) == ["Soccer"]
 
 
-def test_an_unsaved_week_is_kept_when_opening_another(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_an_unsaved_week_is_kept_when_opening_another(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     first = session.week_start
     second = week_after(first)

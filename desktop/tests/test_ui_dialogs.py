@@ -31,8 +31,16 @@ def qapp() -> Iterator[QApplication]:
 
 
 def school(**fields: object) -> dict:
-    return {"id": "school", "title": "School", "kind": "locked", "category": "class",
-            "start": "08:00", "duration_min": 390, "days": [0, 1, 2, 3, 4], **fields}
+    return {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "category": "class",
+        "start": "08:00",
+        "duration_min": 390,
+        "days": [0, 1, 2, 3, 4],
+        **fields,
+    }
 
 
 def test_ticking_this_day_was_missed_is_still_known_after_the_dialog_closes(qapp: QApplication) -> None:

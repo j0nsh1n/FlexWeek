@@ -79,9 +79,7 @@ def test_undo_keeps_focus_minutes_counted_since_the_saved_step(
     assert session.assignments["essay"].get("notes") in (None, "")
 
 
-def test_undo_is_blocked_while_an_unsaved_edit_is_waiting(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_undo_is_blocked_while_an_unsaved_edit_is_waiting(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     session.add_block(fixed("soccer", "Soccer", 0, "16:00"))
     session.save()

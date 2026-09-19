@@ -17,6 +17,8 @@ from desktop.native.calendar import DAYS, _is_work_session
 SLACK_WORDS = {"danger": "Very little room", "tight": "Limited room", "ok": "Room"}
 _SLACK_ORDER = {"danger": 0, "tight": 1, None: 2, "ok": 3}
 NOT_PLANNED = "Not planned yet."
+# A homework session is saved with no category unless the student picked one. It is still homework.
+HOMEWORK = "assignments"
 END_OF_DAY = 24 * 60
 
 
@@ -155,7 +157,7 @@ def build_week(
                     Waiting(
                         block_id=original["id"],
                         title=original.get("title") or "Untitled",
-                        category=original.get("category") or "",
+                        category=original.get("category") or HOMEWORK,
                         minutes=int(original.get("duration_min") or 0),
                         assignment_id=original.get("assignment_id"),
                         due=assignment.get("due"),
@@ -173,7 +175,7 @@ def build_week(
                 Occurrence(
                     block_id=original["id"],
                     title=block.get("title") or "Untitled",
-                    category=block.get("category") or "",
+                    category=block.get("category") or (HOMEWORK if work else ""),
                     day=day,
                     start=start,
                     end=end,

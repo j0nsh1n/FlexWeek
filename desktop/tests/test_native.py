@@ -132,9 +132,7 @@ def test_session_days_cover_the_due_date_inside_the_open_week() -> None:
     assert session_days("2026-09-07", "2026-08-31T21:00") == [0]
 
 
-def test_create_account_shows_eight_codes_then_an_empty_week(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_create_account_shows_eight_codes_then_an_empty_week(qapp: QApplication, server: LocalServer) -> None:
     window = NativeWindow(server.origin)
     HELD.append(window)
     window.username.setText("alice")
@@ -152,9 +150,7 @@ def test_create_account_shows_eight_codes_then_an_empty_week(
     assert table_text(window) == ""
 
 
-def test_saved_fixed_time_survives_sign_out_and_sign_in(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_saved_fixed_time_survives_sign_out_and_sign_in(qapp: QApplication, server: LocalServer) -> None:
     first = NativeWindow(server.origin)
     HELD.append(first)
     first.username.setText("alice")
@@ -181,9 +177,7 @@ def test_saved_fixed_time_survives_sign_out_and_sign_in(
     assert "Soccer" in table_text(second)
 
 
-def test_a_different_monday_loads_as_its_own_empty_week(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_a_different_monday_loads_as_its_own_empty_week(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     start = session.week_start
     session.add_block(soccer())
@@ -250,9 +244,7 @@ def test_a_stale_week_save_keeps_the_draft(qapp: QApplication, server: LocalServ
     assert other.message.startswith("Not saved.")
 
 
-def test_homework_solve_places_the_session_and_explains(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_homework_solve_places_the_session_and_explains(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     session.add_block(soccer())
     due = date.fromisoformat(session.week_start) + timedelta(days=4)
@@ -658,9 +650,7 @@ def test_apply_routine_writes_a_restore_snapshot(qapp: QApplication, server: Loc
     assert any("Sports week" in (point.get("label") or "") for point in points)
 
 
-def test_unfinished_homework_keeps_the_same_assignment(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_unfinished_homework_keeps_the_same_assignment(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     current = session.week_start
     previous = (date.fromisoformat(current) - timedelta(days=7)).isoformat()
@@ -702,9 +692,7 @@ def test_missed_recovery_stores_the_missed_day(qapp: QApplication, server: Local
     assert block["missed_days"] == [0]
 
 
-def test_running_late_saves_a_locked_occupancy_block(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_running_late_saves_a_locked_occupancy_block(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     session.add_homework(
         {
@@ -732,9 +720,7 @@ def test_running_late_saves_a_locked_occupancy_block(
     assert any(block["title"] == "Running late" for block in session.blocks)
 
 
-def test_spread_keeps_assignment_identity_across_sessions(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_spread_keeps_assignment_identity_across_sessions(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     due = sunday_due(session.week_start)
     session.add_homework(
@@ -811,9 +797,7 @@ def test_preview_dialog_leaves_a_collision_unchecked(qapp: QApplication, server:
     dialog.close()
 
 
-def test_focus_credits_homework_once_and_leaves_undo_alone(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_focus_credits_homework_once_and_leaves_undo_alone(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     session.add_homework(
         {
@@ -871,9 +855,11 @@ def test_preference_round_trip_keeps_theme_pack_and_reminders(
     )
     wait_until(
         qapp,
-        lambda: not session.busy
-        and session.preferences is not None
-        and session.preferences.get("theme_pack") == "nocturne",
+        lambda: (
+            not session.busy
+            and session.preferences is not None
+            and session.preferences.get("theme_pack") == "nocturne"
+        ),
     )
     assert session.preferences["theme"] == "nocturne"
     assert session.preferences["reminders_enabled"] is True
@@ -881,9 +867,7 @@ def test_preference_round_trip_keeps_theme_pack_and_reminders(
     assert session.preferences["timer_work_min"] == 15
 
 
-def test_wrong_password_keeps_the_signed_in_session(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_wrong_password_keeps_the_signed_in_session(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     account = dict(session.account)
     session.login("alice", "not-the-password-at-all")
@@ -935,9 +919,7 @@ def test_restore_point_preview_then_restore(qapp: QApplication, server: LocalSer
     )
 
 
-def test_week_file_round_trip_replaces_the_open_week(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_week_file_round_trip_replaces_the_open_week(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     session.add_block(soccer())
     session.save()
@@ -974,9 +956,7 @@ def test_stale_restore_preview_is_refused(qapp: QApplication, server: LocalServe
     assert any(word in text for word in ("changed", "reload", "stale", "again"))
 
 
-def test_native_window_exposes_recovery_and_focus_controls(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_native_window_exposes_recovery_and_focus_controls(qapp: QApplication, server: LocalServer) -> None:
     window = NativeWindow(server.origin)
     HELD.append(window)
     assert window.findChild(QPushButton, "forgotPassword") is not None
@@ -1022,9 +1002,7 @@ def test_todays_reminders_still_fire_while_another_week_is_on_screen(
     assert [item["title"] for item in notices] == ["Soccer starts soon"]
 
 
-def test_a_second_alarm_waits_until_the_first_is_dismissed(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_a_second_alarm_waits_until_the_first_is_dismissed(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     wait_until(qapp, lambda: session.preferences is not None)
     moment = datetime(2026, 9, 14, 7, 0)
@@ -1075,16 +1053,16 @@ def test_restore_clears_undo_of_the_replaced_week(qapp: QApplication, server: Lo
     session.apply_restore_point(point_id)
     wait_until(
         qapp,
-        lambda: not session.busy
-        and any(block["id"] == "soccer" for block in session.blocks)
-        and not any(block["id"] == "band" for block in session.blocks),
+        lambda: (
+            not session.busy
+            and any(block["id"] == "soccer" for block in session.blocks)
+            and not any(block["id"] == "band" for block in session.blocks)
+        ),
     )
     assert not session.can_undo()
 
 
-def test_restore_stops_a_timer_whose_session_vanished(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_restore_stops_a_timer_whose_session_vanished(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     session.create_restore_point("Empty")
     wait_until(qapp, lambda: bool(session.restore_points) and not session.busy)

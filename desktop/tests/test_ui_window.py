@@ -93,8 +93,15 @@ def window(qapp: QApplication, registering: NativeWindow) -> NativeWindow:
 
 
 def school() -> dict:
-    return {"id": "school", "title": "School", "kind": "locked", "category": "class",
-            "start": "08:00", "duration_min": 390, "days": [0, 1, 2, 3, 4]}
+    return {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "category": "class",
+        "start": "08:00",
+        "duration_min": 390,
+        "days": [0, 1, 2, 3, 4],
+    }
 
 
 def saved(qapp: QApplication, window: NativeWindow, *blocks: dict) -> None:
@@ -140,8 +147,14 @@ def test_this_day_only_plus_missed_marks_that_one_day_and_saves(
 
 
 def soccer() -> dict:
-    return {"id": "soccer", "title": "Soccer", "kind": "locked", "start": "07:00",
-            "duration_min": 60, "days": [0]}
+    return {
+        "id": "soccer",
+        "title": "Soccer",
+        "kind": "locked",
+        "start": "07:00",
+        "duration_min": 60,
+        "days": [0],
+    }
 
 
 def test_w_d_and_m_switch_views_while_the_calendar_has_the_keyboard(
