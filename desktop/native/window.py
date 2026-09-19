@@ -32,11 +32,15 @@ from PySide6.QtWidgets import (
 )
 
 from backend.slots import minutes_to_hhmm
-from desktop.native.calendar import DAY_FULL, FLEX_CATEGORIES, agenda_for, sunday_due
+from desktop.native.calendar import DAY_FULL, FLEX_CATEGORIES, agenda_for, monday_of, sunday_due
 from desktop.native.controller import NativeSession
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
-from desktop.native.look import pack_stylesheet, resolved_palette, sanitize_look
-from desktop.native.remind import REMINDER_POLL_MS
+from desktop.native.layouts.base import LayoutView, Scene
+from desktop.native.layouts.dialog import LayoutDialog
+from desktop.native.layouts.registry import options_for, sanitize_layout, tokens_for
+from desktop.native.layouts.views import VIEW_CLASSES
+from desktop.native.look import TEXT_PT, effective_look, pack_stylesheet, resolved_palette, sanitize_look
+from desktop.native.remind import REMINDER_POLL_MS, clock_parts
 from desktop.native.reuse import late_from_start, restore_point_label, running_late_refusal, week_label
 from desktop.native.settings import (
     AccountDialog,
@@ -46,6 +50,7 @@ from desktop.native.settings import (
     RestoreDialog,
     TransferPreviewDialog,
 )
+from desktop.native.weekmodel import build_week
 from desktop.native.widgets import (
     AvailabilityDialog,
     BlockDialog,
@@ -63,6 +68,7 @@ from desktop.native.widgets import (
 )
 
 WINDOW_SIZE = (1280, 800)
+LAYOUT_TICK_MS = 20_000
 
 
 class NativeWindow(QMainWindow):
@@ -78,6 +84,9 @@ class NativeWindow(QMainWindow):
         self._stack.setObjectName("nativeStack")
         self.setCentralWidget(self._stack)
         self._more_pairs = []
+        self._layout = sanitize_layout(None)
+        self._day_mode = False
+        self._views: dict[str, LayoutView] = {}
         self._build_auth()
         self._build_recovery()
         self._build_week()
@@ -109,6 +118,11 @@ class NativeWindow(QMainWindow):
         self._alert_tick.setInterval(REMINDER_POLL_MS)
         self._alert_tick.timeout.connect(self.session.check_alerts)
         self._alert_tick.start()
+        # A day screen is about the minute, so it is looked at again well inside one.
+        self._layout_tick = QTimer(self)
+        self._layout_tick.setInterval(LAYOUT_TICK_MS)
+        self._layout_tick.timeout.connect(self._refresh_layout)
+        self._layout_tick.start()
         self._apply_appearance()
         if QSystemTrayIcon.isSystemTrayAvailable() and not self._icon.isNull():
             self._install_tray()
@@ -148,9 +162,7 @@ class NativeWindow(QMainWindow):
         heading = QLabel("Create your account")
         heading.setObjectName("authHeading")
         layout.addWidget(heading)
-        note = QLabel(
-            "FlexWeek fits homework around school and sports. Your week is saved to your account."
-        )
+        note = QLabel("FlexWeek fits homework around school and sports. Your week is saved to your account.")
         note.setWordWrap(True)
         layout.addWidget(note)
         self.username = QLineEdit()
@@ -249,17 +261,32 @@ class NativeWindow(QMainWindow):
             button = QPushButton(label)
             button.setObjectName(f"view{view.title()}")
             button.setCheckable(True)
-            button.clicked.connect(lambda checked=False, value=view: self.session.set_view(value))
+            button.clicked.connect(lambda checked=False, value=view: self._choose_view(value))
             bar.addWidget(button)
+        my_day = QPushButton("My day")
+        my_day.setObjectName("viewMyDay")
+        my_day.setCheckable(True)
+        my_day.clicked.connect(self._enter_day)
+        bar.addWidget(my_day)
         bar.addStretch()
+        layout_button = QPushButton("Layout")
+        layout_button.setObjectName("layoutButton")
+        layout_button.clicked.connect(self._open_layout)
+        bar.addWidget(layout_button)
         sign_out = QPushButton("Log out")
         sign_out.setObjectName("signOut")
         sign_out.clicked.connect(self.session.logout)
         bar.addWidget(sign_out)
         layout.addLayout(bar)
+        # Everything between the bar and the calendar is for planning, so a day screen can put it away.
+        self.plan_chrome = QWidget()
+        self.plan_chrome.setObjectName("planChrome")
+        chrome = QVBoxLayout(self.plan_chrome)
+        chrome.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.plan_chrome)
         self.chips = CategoryChips()
         self.chips.category_chosen.connect(self._add_from_chip)
-        layout.addWidget(self.chips)
+        chrome.addWidget(self.chips)
         # Wrapping, because twenty buttons in one row made the window wider than any laptop screen.
         actions = FlowLayout()
         add_fixed = QPushButton("Add fixed time")
@@ -361,10 +388,10 @@ class NativeWindow(QMainWindow):
             more,
         ):
             actions.addWidget(button)
-        layout.addLayout(actions)
+        chrome.addLayout(actions)
         self.clipboard_summary = QLabel("Nothing copied")
         self.clipboard_summary.setObjectName("clipboardSummary")
-        layout.addWidget(self.clipboard_summary)
+        chrome.addWidget(self.clipboard_summary)
         self.focus_panel = FocusPanel()
         self.focus_panel.start_requested.connect(self._start_focus)
         self.focus_panel.quick_requested.connect(self.session.start_quick_focus)
@@ -377,7 +404,7 @@ class NativeWindow(QMainWindow):
         layout.addWidget(self.focus_panel)
         self.unfinished_panel = UnfinishedPanel()
         self.unfinished_panel.plan_requested.connect(self._plan_unfinished)
-        layout.addWidget(self.unfinished_panel)
+        chrome.addWidget(self.unfinished_panel)
         self.planner = QStackedWidget()
         self.planner.setObjectName("plannerStack")
         self.week_table = WeekTable()
@@ -412,8 +439,105 @@ class NativeWindow(QMainWindow):
         layout.addWidget(self.week_status)
         self._stack.addWidget(page)
 
+    def _planner_widget(self, view: str) -> QWidget:
+        """The chosen main view stands in for the week grid; Day and Month stay what they were."""
+        if self._day_mode:
+            return self._layout_view(self._layout["day"])
+        if view == "week" and self._layout["main"] in VIEW_CLASSES:
+            return self._layout_view(self._layout["main"])
+        return {"day": self.day_agenda, "month": self.month_grid}.get(view, self.week_table)
+
+    def _layout_view(self, layout_id: str) -> LayoutView:
+        view = self._views.get(layout_id)
+        if view is None:
+            view = VIEW_CLASSES[layout_id]()
+            # A layout only says what the student wants. What happens is what the window already does.
+            view.add_requested.connect(
+                lambda category: self._add_from_chip(category) if category else self._add_homework()
+            )
+            view.plan_requested.connect(self.session.solve)
+            view.block_activated.connect(self._edit_block)
+            view.finished_requested.connect(self._finish_homework)
+            view.focus_requested.connect(self._start_focus)
+            view.late_requested.connect(self._open_late)
+            view.my_day_requested.connect(self._enter_day)
+            view.back_requested.connect(self._leave_day)
+            self.planner.addWidget(view)
+            self._views[layout_id] = view
+        view.show_week(self._scene_for(layout_id))
+        return view
+
+    def _finish_homework(self, assignment_id: str) -> None:
+        # Finishing marks the week changed and no more, so it is saved as the focus timer saves it.
+        # Left at that, the homework was finished on screen and unfinished after a restart.
+        self.session.complete_homework(assignment_id, True)
+        self.session.save()
+
+    def _look_inputs(self) -> tuple[str, bool, str]:
+        pack = (self.session.preferences or {}).get("theme_pack") or "system"
+        accent = (self.session.preferences or {}).get("accent") or "default"
+        system_dark = QGuiApplication.palette().color(QPalette.ColorRole.Window).lightness() < 128
+        return pack, system_dark, accent
+
+    def _scene_for(self, layout_id: str) -> Scene:
+        clock = clock_parts(self.session.now_ms())
+        options = options_for(self._layout, layout_id)
+        pack, system_dark, accent = self._look_inputs()
+        palette = resolved_palette(pack, system_dark, self._look, accent)
+        session = self.session
+        return Scene(
+            week=build_week(session.week_start, session.blocks, session.assignments, session.trace),
+            today=clock["day"] if monday_of(clock["iso"]) == session.week_start else None,
+            minute=clock["minute"],
+            options=options,
+            tokens=tokens_for(layout_id, options["colour"], palette),
+            scale=TEXT_PT[effective_look(self._look)["text"]] / TEXT_PT["normal"],
+        )
+
+    def _refresh_layout(self) -> None:
+        shown = self.planner.currentWidget()
+        if isinstance(shown, LayoutView) and self.session.account is not None:
+            shown.show_week(self._scene_for(shown.layout_id))
+
+    def _sync_chrome(self) -> None:
+        """A day screen puts the planning controls away. The focus timer stays while it is running,
+        or Start focus would look as if it did nothing."""
+        self.plan_chrome.setVisible(not self._day_mode)
+        self.focus_panel.setVisible(not self._day_mode or self.session.focus is not None)
+        if self._day_mode:
+            # Picking what to focus on is planning. Left in, the picker took the height and the day
+            # screen's title was cut off after its first line.
+            self.focus_panel.tasks.hide()
+            self.focus_panel.quick.hide()
+        else:
+            self.focus_panel.quick.show()
+
+    def _choose_view(self, view: str) -> None:
+        self._day_mode = False
+        self.session.set_view(view)
+
+    def _enter_day(self) -> None:
+        if self.session.account is None:
+            return
+        self._day_mode = True
+        self._on_week()
+        self._views[self._layout["day"]].setFocus()
+
+    def _leave_day(self) -> None:
+        self._day_mode = False
+        self._on_week()
+
+    def _open_layout(self) -> None:
+        dialog = LayoutDialog(self, self._layout)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._layout = dialog.choice()
+        self._save_look()
+        self._on_week()
+
     def _on_account(self, account: object) -> None:
         if account is None:
+            self._day_mode = False
             self.username.clear()
             self.password.clear()
             self._show_page("authPage")
@@ -452,13 +576,11 @@ class NativeWindow(QMainWindow):
         self.month_grid.set_month(self.session.month_data, self.session.dirty)
         self.chips.set_armed(self.session.armed_category)
         view = self.session.planner_view
-        self.planner.setCurrentWidget(
-            {"day": self.day_agenda, "month": self.month_grid}.get(view, self.week_table)
-        )
-        for name in ("viewDay", "viewWeek", "viewMonth"):
+        self.planner.setCurrentWidget(self._planner_widget(view))
+        for name in ("viewDay", "viewWeek", "viewMonth", "viewMyDay"):
             button = self.findChild(QPushButton, name)
             if button is not None:
-                button.setChecked(name == f"view{view.title()}")
+                button.setChecked(name == ("viewMyDay" if self._day_mode else f"view{view.title()}"))
         month = view == "month"
         day = view == "day"
         if month:
@@ -509,6 +631,7 @@ class NativeWindow(QMainWindow):
             titles = {block["id"]: block["title"] for block in self.session.blocks}
             self._late_dialog.show_trace(self.session.late_preview["trace"], titles)
         self.focus_panel.set_state(self.session)
+        self._sync_chrome()
         self._apply_appearance()
         if self._pending_spread_ui and self.session.spread_preview:
             self._pending_spread_ui = False
@@ -628,9 +751,7 @@ class NativeWindow(QMainWindow):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         if dialog.deleted():
-            self.session.delete_block(
-                dialog.block()["id"], scope=dialog.scope(), day=dialog.occurrence_day()
-            )
+            self.session.delete_block(dialog.block()["id"], scope=dialog.scope(), day=dialog.occurrence_day())
         else:
             before = {item["id"] for item in self.session.blocks}
             self.session.add_block(dialog.block(), scope=dialog.scope(), day=dialog.occurrence_day())
@@ -668,17 +789,13 @@ class NativeWindow(QMainWindow):
         category = self.session.armed_category
         if category not in FLEX_CATEGORIES:
             category = "assignments"
-        self._commit_homework(
-            HomeworkDialog(self, week_start=self.session.week_start, category=category)
-        )
+        self._commit_homework(HomeworkDialog(self, week_start=self.session.week_start, category=category))
 
     def _add_from_chip(self, category: str) -> None:
         self.session.arm_category(category)
         self.chips.set_armed(category)
         if category in FLEX_CATEGORIES:
-            self._commit_homework(
-                HomeworkDialog(self, week_start=self.session.week_start, category=category)
-            )
+            self._commit_homework(HomeworkDialog(self, week_start=self.session.week_start, category=category))
             return
         self._commit_block(BlockDialog(self, category=category))
 
@@ -825,9 +942,7 @@ class NativeWindow(QMainWindow):
         self.session.copy_day()
 
     def _open_routines(self) -> None:
-        dialog = RoutineDialog(
-            self, self.session.routines, self.session.blocks, self.session.week_start
-        )
+        dialog = RoutineDialog(self, self.session.routines, self.session.blocks, self.session.week_start)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         if dialog.action == "save":
@@ -845,8 +960,7 @@ class NativeWindow(QMainWindow):
             if routine and self.session.account is not None:
                 key = (
                     f"routine|{self.session.account['id']}|{dialog.routine_id}|"
-                    f"{routine['revision']}|{dest}|"
-                    + ",".join(str(day) for day in dialog.days)
+                    f"{routine['revision']}|{dest}|" + ",".join(str(day) for day in dialog.days)
                 )
 
             def show(existing: list[dict]) -> None:
@@ -971,6 +1085,8 @@ class NativeWindow(QMainWindow):
 
     def _on_focus(self) -> None:
         self.focus_panel.set_state(self.session)
+        self._sync_chrome()
+        self._refresh_layout()
 
     def _present_alerts(self, notices: list) -> None:
         for notice in notices:
@@ -1131,9 +1247,11 @@ class NativeWindow(QMainWindow):
         if not path.is_file():
             return
         try:
-            self._look = sanitize_look(json.loads(path.read_text()))
-        except (OSError, ValueError):
-            self._look = sanitize_look(None)
+            stored = json.loads(path.read_text())
+        except OSError, ValueError:
+            stored = None
+        self._look = sanitize_look(stored)
+        self._layout = sanitize_layout(stored.get("layout") if isinstance(stored, dict) else None)
 
     def _save_look(self) -> None:
         import json
@@ -1141,19 +1259,18 @@ class NativeWindow(QMainWindow):
         path = self._look_path()
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(self._look) + "\n")
+            path.write_text(json.dumps({**self._look, "layout": self._layout}) + "\n")
         except OSError:
             self.session._say("Could not save the look for this device.")
 
     def _apply_appearance(self) -> None:
-        pack = (self.session.preferences or {}).get("theme_pack") or "system"
-        accent = (self.session.preferences or {}).get("accent") or "default"
-        system_dark = QGuiApplication.palette().color(QPalette.ColorRole.Window).lightness() < 128
+        pack, system_dark, accent = self._look_inputs()
         self.setStyleSheet(pack_stylesheet(pack, system_dark, self._look, accent))
         # Blocks and month cells are painted per item, which a stylesheet cannot reach.
         palette = resolved_palette(pack, system_dark, self._look, accent)
         self.week_table.set_look(self._look, palette)
         self.month_grid.set_palette(palette)
+        self._refresh_layout()
 
     def _install_tray(self) -> None:
         tray = QSystemTrayIcon(self._icon, self)
@@ -1243,16 +1360,24 @@ class NativeWindow(QMainWindow):
                 self.session.save()
             event.accept()
             return
+        if key == Qt.Key.Key_T:
+            self._enter_day()
+            event.accept()
+            return
+        if self._day_mode and key in (Qt.Key.Key_B, Qt.Key.Key_Escape):
+            self._leave_day()
+            event.accept()
+            return
         if key == Qt.Key.Key_W:
-            self.session.set_view("week")
+            self._choose_view("week")
             event.accept()
             return
         if key == Qt.Key.Key_D:
-            self.session.set_view("day")
+            self._choose_view("day")
             event.accept()
             return
         if key == Qt.Key.Key_M:
-            self.session.set_view("month")
+            self._choose_view("month")
             event.accept()
             return
         super().keyPressEvent(event)
