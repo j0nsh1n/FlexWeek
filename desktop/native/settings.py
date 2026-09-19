@@ -86,6 +86,9 @@ class FocusPanel(QWidget):
         self.quick.clicked.connect(self.quick_requested.emit)
         for button in (self.pause, self.skip, self.reset, self.quick):
             controls.addWidget(button)
+        # Without this the four buttons split the window between them, 439px each over a layout
+        # of its own. They keep their natural width and the row fills with space instead.
+        controls.addStretch(1)
         layout.addLayout(controls)
         choices = QHBoxLayout()
         self.finished = QPushButton("Finished")
@@ -101,6 +104,7 @@ class FocusPanel(QWidget):
         self.more.clicked.connect(self._emit_more)
         for widget in (self.finished, self.take_break, self.more_min, self.more):
             choices.addWidget(widget)
+        choices.addStretch(1)
         layout.addLayout(choices)
         self.tasks = QListWidget()
         self.tasks.setObjectName("focusTasks")

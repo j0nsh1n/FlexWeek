@@ -75,6 +75,7 @@ from desktop.native.widgets import (
 )
 
 WINDOW_SIZE = (1280, 800)
+AUTH_CARD_WIDTH = 380
 LAYOUT_TICK_MS = 20_000
 
 
@@ -165,7 +166,25 @@ class NativeWindow(QMainWindow):
     def _build_auth(self) -> None:
         page = QWidget()
         page.setObjectName("authPage")
-        layout = QVBoxLayout(page)
+        # The first screen anyone sees. Left to a plain page layout it stretched every field and
+        # button the full width of the window, so it read as an unstyled form with a lot of nothing
+        # under it. The content sits in a card of its own, centred.
+        outer = QVBoxLayout(page)
+        outer.addStretch(1)
+        middle = QHBoxLayout()
+        middle.addStretch(1)
+        card = QWidget()
+        card.setObjectName("authCard")
+        card.setMaximumWidth(AUTH_CARD_WIDTH)
+        card.setMinimumWidth(AUTH_CARD_WIDTH)
+        middle.addWidget(card)
+        middle.addStretch(1)
+        outer.addLayout(middle)
+        outer.addStretch(1)
+        layout = QVBoxLayout(card)
+        brand = QLabel("FlexWeek")
+        brand.setObjectName("authBrand")
+        layout.addWidget(brand)
         heading = QLabel("Create your account")
         heading.setObjectName("authHeading")
         layout.addWidget(heading)
@@ -217,7 +236,6 @@ class NativeWindow(QMainWindow):
         self.auth_status.setObjectName("authStatus")
         self.auth_status.setWordWrap(True)
         layout.addWidget(self.auth_status)
-        layout.addStretch()
         self._stack.addWidget(page)
 
     def _build_recovery(self) -> None:

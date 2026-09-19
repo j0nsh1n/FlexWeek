@@ -631,6 +631,9 @@ def pack_stylesheet(
         f"QPushButton:disabled {{ background: {palette['hairline_strong']}; color: {palette['muted']}; }}"
         f"QMenu::item {{ min-height: {item_h}px; padding: {pad}px {pad * 2}px; }}"
         f"QLabel#nowNext {{ font-weight: 600; }}"
+        f"QWidget#authCard {{ background: {palette['panel']}; border-radius: {radius}px; {edges} }}"
+        f"QLabel#authBrand {{ font-size: {size + 8}pt; font-weight: 700; color: {palette['accent']}; }}"
+        f"QLabel#authHeading {{ font-weight: 600; }}"
     )
 
 

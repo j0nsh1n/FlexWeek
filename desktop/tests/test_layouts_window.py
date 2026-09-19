@@ -530,3 +530,30 @@ def test_category_colours_survive_a_layouts_colourway(qapp: QApplication, window
     assert dressed["window"] != base["window"]
     for key in ("block_locked", "block_flex", "block_edge"):
         assert dressed[key] == base[key], key
+
+
+def test_no_chrome_button_spreads_across_the_window(qapp: QApplication, window: NativeWindow) -> None:
+    """A button that fills the window reads as a banner, not a button. Seen at 439px on a day
+    screen with focus running, and full width on the Day view."""
+    window._layout = {"main": "bento", "day": "one", "options": {}}
+    window._on_week()
+    block = next(b for b in window.session.blocks if b.get("assignment_id"))
+    window.session.start_focus(block["id"], 3)
+    wait_until(qapp, lambda: window.session.focus is not None)
+    qapp.processEvents()
+    shown = [b for b in window.focus_panel.findChildren(QPushButton) if b.isVisible()]
+    assert shown
+    # "Not stretched" means each button is its own natural width, not a share of the window.
+    stretched = [
+        f"{b.objectName()} {b.width()}px vs {b.sizeHint().width()}px natural"
+        for b in shown
+        if b.width() > b.sizeHint().width() + 8
+    ]
+    assert stretched == []
+    window.session.reset_focus()
+    wait_until(qapp, lambda: window.session.focus is None)
+
+    click(window, "viewDay")
+    qapp.processEvents()
+    action = window.day_agenda.next_action
+    assert action.width() <= action.sizeHint().width() + 8, f"day action is {action.width()}px"
