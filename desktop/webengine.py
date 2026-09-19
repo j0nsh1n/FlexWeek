@@ -106,9 +106,9 @@ def show_running_instance(name: str) -> bool:
 
 def painted_colors(image: QImage, step: int = 8) -> int:
     """Distinct colors on a sparse grid of a window grab, to tell a painted page from a blank one."""
-    return len(
-        {image.pixel(x, y) for x in range(0, image.width(), step) for y in range(0, image.height(), step)}
-    )
+    return len({
+        image.pixel(x, y) for x in range(0, image.width(), step) for y in range(0, image.height(), step)
+    })
 
 
 def notification_timeout_ms(tag: str) -> int:
@@ -457,48 +457,27 @@ def smoke_report_path(argv: list[str]) -> Path | None:
 def smoke_flow(username: str) -> list[tuple[str, str, str | None]]:
     """(stage, condition that shows it was reached, JavaScript that moves on) for a new account."""
     return [
-        (
-            "first screen",
-            SMOKE_READY_JS,
-            f"document.getElementById('register-username').value = {json.dumps(username)};"
-            f"document.getElementById('register-password').value = {json.dumps(secrets.token_urlsafe(18))};"
-            "document.querySelector('#register-form button[type=submit]').click();",
-        ),
-        (
-            "recovery codes",
-            "document.getElementById('recovery-codes-dialog').open && "
-            "document.querySelectorAll('#recovery-codes-list code').length === 8",
-            "document.getElementById('recovery-codes-ack').checked = true;"
-            "document.getElementById('recovery-codes-ack').dispatchEvent(new Event('change'));"
-            "document.getElementById('recovery-codes-done').click();",
-        ),
-        (
-            "setup school step",
-            "document.getElementById('setup-dialog').open && !document.getElementById('setup-school').hidden",
-            "document.getElementById('setup-next').click();",
-        ),
-        (
-            "setup sports step",
-            "!document.getElementById('setup-sports').hidden",
-            "document.getElementById('setup-skip').click();",
-        ),
-        (
-            "setup homework step",
-            "!document.getElementById('setup-homework').hidden",
-            "document.getElementById('setup-homework-title').value = 'Math worksheet';"
-            "document.getElementById('setup-next').click();",
-        ),
-        (
-            "setup summary",
-            "document.getElementById('setup-next').textContent === 'Add to my week and plan'",
-            "document.getElementById('setup-next').click();",
-        ),
-        (
-            "setup Solve",
-            "!document.getElementById('setup-dialog').open && "
-            "!document.getElementById('debug').hidden && Boolean(document.querySelector('.flex-block'))",
-            None,
-        ),
+        ("first screen", SMOKE_READY_JS,
+         f"document.getElementById('register-username').value = {json.dumps(username)};"
+         f"document.getElementById('register-password').value = {json.dumps(secrets.token_urlsafe(18))};"
+         "document.querySelector('#register-form button[type=submit]').click();"),
+        ("recovery codes", "document.getElementById('recovery-codes-dialog').open && "
+         "document.querySelectorAll('#recovery-codes-list code').length === 8",
+         "document.getElementById('recovery-codes-ack').checked = true;"
+         "document.getElementById('recovery-codes-ack').dispatchEvent(new Event('change'));"
+         "document.getElementById('recovery-codes-done').click();"),
+        ("setup school step", "document.getElementById('setup-dialog').open && "
+         "!document.getElementById('setup-school').hidden",
+         "document.getElementById('setup-next').click();"),
+        ("setup sports step", "!document.getElementById('setup-sports').hidden",
+         "document.getElementById('setup-skip').click();"),
+        ("setup homework step", "!document.getElementById('setup-homework').hidden",
+         "document.getElementById('setup-homework-title').value = 'Math worksheet';"
+         "document.getElementById('setup-next').click();"),
+        ("setup summary", "document.getElementById('setup-next').textContent === 'Add to my week and plan'",
+         "document.getElementById('setup-next').click();"),
+        ("setup Solve", "!document.getElementById('setup-dialog').open && "
+         "!document.getElementById('debug').hidden && Boolean(document.querySelector('.flex-block'))", None),
     ]
 
 
@@ -523,11 +502,9 @@ class SmokeTest:
             "qt_platform": QApplication.platformName(),
         }
         self._done = False
-        self._flow = (
-            smoke_flow("smoke_" + secrets.token_hex(6))
-            if walk_setup
-            else [("first screen", SMOKE_READY_JS, None)]
-        )
+        self._flow = smoke_flow("smoke_" + secrets.token_hex(6)) if walk_setup else [
+            ("first screen", SMOKE_READY_JS, None)
+        ]
         self._busy = False
         self._poll = QTimer(window)
         self._poll.setInterval(SMOKE_POLL_MS)
@@ -585,15 +562,13 @@ class SmokeTest:
         self._done = True
         self._poll.stop()
         window = self._window
-        self._facts.update(
-            {
-                "ok": ok,
-                "stage": stage,
-                "window_visible": window.isVisible(),
-                "window_icon_loaded": not window._icon.isNull(),
-                "tray_icon_installed": window._tray_icon is not None,
-            }
-        )
+        self._facts.update({
+            "ok": ok,
+            "stage": stage,
+            "window_visible": window.isVisible(),
+            "window_icon_loaded": not window._icon.isNull(),
+            "tray_icon_installed": window._tray_icon is not None,
+        })
         self._report.write_text(json.dumps(self._facts, indent=2) + "\n")
         window.quit_app()
         application = QApplication.instance()
@@ -607,9 +582,8 @@ def main(argv: list[str] | None = None) -> int:
     # Chromium reads this while QApplication starts, so it has to be decided first.
     sandbox_reason = disable_sandbox_if_blocked(os.environ)
     if sandbox_reason is not None:
-        print(
-            f"FlexWeek: Chromium sandbox unavailable ({sandbox_reason}); running without it.", file=sys.stderr
-        )
+        print(f"FlexWeek: Chromium sandbox unavailable ({sandbox_reason}); running without it.",
+              file=sys.stderr)
     app = QApplication(arguments)
     # Application name drives profile_root(); set it before any profile exists.
     app.setApplicationName("FlexWeek")

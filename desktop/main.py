@@ -96,7 +96,7 @@ def origin_reachable(origin: str) -> bool:
     try:
         with urllib.request.urlopen(origin + "/api/health", timeout=2) as response:
             return 200 <= response.status < 300
-    except urllib.error.URLError, TimeoutError, OSError, ValueError:
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
         return False
 
 

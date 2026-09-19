@@ -24,159 +24,47 @@ from pathlib import Path
 # GCC runtime set, the X11 and Wayland client stack, GL/EGL from the graphics
 # driver, fonts (FreeType pulls in Brotli), D-Bus, sound, NSS, Expat (WebEngine
 # XML), and util-linux uuid.
-LINUX_SYSTEM_LIBS = frozenset(
-    {
-        "ld-linux-x86-64.so.2",
-        "libc.so.6",
-        "libm.so.6",
-        "libdl.so.2",
-        "libpthread.so.0",
-        "librt.so.1",
-        "libresolv.so.2",
-        "libutil.so.1",
-        "libstdc++.so.6",
-        "libgcc_s.so.1",
-        "libz.so.1",
-        "libGL.so.1",
-        "libEGL.so.1",
-        "libOpenGL.so.0",
-        "libGLX.so.0",
-        "libgbm.so.1",
-        "libdrm.so.2",
-        "libX11.so.6",
-        "libX11-xcb.so.1",
-        "libXext.so.6",
-        "libXfixes.so.3",
-        "libXrandr.so.2",
-        "libXrender.so.1",
-        "libXcomposite.so.1",
-        "libXdamage.so.1",
-        "libXtst.so.6",
-        "libXi.so.6",
-        "libxkbfile.so.1",
-        "libxshmfence.so.1",
-        "libxcb.so.1",
-        "libxcb-glx.so.0",
-        "libxcb-randr.so.0",
-        "libxcb-render.so.0",
-        "libxcb-shape.so.0",
-        "libxcb-shm.so.0",
-        "libxcb-sync.so.1",
-        "libxcb-xfixes.so.0",
-        "libxcb-xkb.so.1",
-        "libxcb-xinerama.so.0",
-        "libxcb-xinput.so.0",
-        "libxkbcommon.so.0",
-        "libxkbcommon-x11.so.0",
-        "libwayland-client.so.0",
-        "libwayland-cursor.so.0",
-        "libwayland-egl.so.1",
-        "libfontconfig.so.1",
-        "libfreetype.so.6",
-        "libdbus-1.so.3",
-        "libglib-2.0.so.0",
-        "libgobject-2.0.so.0",
-        "libgthread-2.0.so.0",
-        "libasound.so.2",
-        "libnss3.so",
-        "libnssutil3.so",
-        "libsmime3.so",
-        "libnspr4.so",
-        "libplc4.so",
-        "libplds4.so",
-        "libudev.so.1",
-        "libgssapi_krb5.so.2",
-        "libxcb-dri3.so.0",
-        "libxcb-present.so.0",
-        "libbrotlidec.so.1",
-        "libbrotlicommon.so.1",
-        "libexpat.so.1",
-        "libuuid.so.1",
-    }
-)
+LINUX_SYSTEM_LIBS = frozenset({
+    "ld-linux-x86-64.so.2", "libc.so.6", "libm.so.6", "libdl.so.2", "libpthread.so.0", "librt.so.1",
+    "libresolv.so.2", "libutil.so.1", "libstdc++.so.6", "libgcc_s.so.1", "libz.so.1",
+    "libGL.so.1", "libEGL.so.1", "libOpenGL.so.0", "libGLX.so.0", "libgbm.so.1", "libdrm.so.2",
+    "libX11.so.6", "libX11-xcb.so.1", "libXext.so.6", "libXfixes.so.3", "libXrandr.so.2",
+    "libXrender.so.1", "libXcomposite.so.1", "libXdamage.so.1", "libXtst.so.6", "libXi.so.6",
+    "libxkbfile.so.1", "libxshmfence.so.1", "libxcb.so.1", "libxcb-glx.so.0", "libxcb-randr.so.0",
+    "libxcb-render.so.0", "libxcb-shape.so.0", "libxcb-shm.so.0", "libxcb-sync.so.1",
+    "libxcb-xfixes.so.0", "libxcb-xkb.so.1", "libxcb-xinerama.so.0", "libxcb-xinput.so.0",
+    "libxkbcommon.so.0", "libxkbcommon-x11.so.0", "libwayland-client.so.0", "libwayland-cursor.so.0",
+    "libwayland-egl.so.1", "libfontconfig.so.1", "libfreetype.so.6", "libdbus-1.so.3",
+    "libglib-2.0.so.0", "libgobject-2.0.so.0", "libgthread-2.0.so.0", "libasound.so.2",
+    "libnss3.so", "libnssutil3.so", "libsmime3.so", "libnspr4.so", "libplc4.so", "libplds4.so",
+    "libudev.so.1", "libgssapi_krb5.so.2", "libxcb-dri3.so.0", "libxcb-present.so.0",
+    "libbrotlidec.so.1", "libbrotlicommon.so.1", "libexpat.so.1", "libuuid.so.1",
+})
 
 # DLLs that are part of Windows 10 1809 and later. icuuc/icuin have been system
 # DLLs since 1703, so Qt6Core's import of icuuc.dll is satisfied by Windows.
-WINDOWS_SYSTEM_DLLS = frozenset(
-    {
-        "advapi32.dll",
-        "authz.dll",
-        "bcrypt.dll",
-        "bcryptprimitives.dll",
-        "bthprops.cpl",
-        "cfgmgr32.dll",
-        "comctl32.dll",
-        "comdlg32.dll",
-        "crypt32.dll",
-        "d3d9.dll",
-        "d3d11.dll",
-        "d3d12.dll",
-        "dbghelp.dll",
-        "dcomp.dll",
-        "dhcpcsvc.dll",
-        "dnsapi.dll",
-        "dwmapi.dll",
-        "dwrite.dll",
-        "dxgi.dll",
-        "fontsub.dll",
-        "gdi32.dll",
-        "hid.dll",
-        "icu.dll",
-        "icuin.dll",
-        "icuuc.dll",
-        "imm32.dll",
-        "iphlpapi.dll",
-        "kernel32.dll",
-        "mmdevapi.dll",
-        "mpr.dll",
-        "msimg32.dll",
-        "ncrypt.dll",
-        "netapi32.dll",
-        "ntdll.dll",
-        "ole32.dll",
-        "oleacc.dll",
-        "oleaut32.dll",
-        "opengl32.dll",
-        "pdh.dll",
-        "powrprof.dll",
-        "propsys.dll",
-        "psapi.dll",
-        "rpcrt4.dll",
-        "secur32.dll",
-        "setupapi.dll",
-        "shcore.dll",
-        "shell32.dll",
-        "shlwapi.dll",
-        "uiautomationcore.dll",
-        "urlmon.dll",
-        "user32.dll",
-        "userenv.dll",
-        "uxtheme.dll",
-        "version.dll",
-        "winhttp.dll",
-        "winmm.dll",
-        "winspool.drv",
-        "winusb.dll",
-        "wintrust.dll",
-        "wldap32.dll",
-        "ws2_32.dll",
-        "wtsapi32.dll",
-        "d2d1.dll",
-        "windowscodecs.dll",
-        "normaliz.dll",
-        "credui.dll",
-    }
-)
+WINDOWS_SYSTEM_DLLS = frozenset({
+    "advapi32.dll", "authz.dll", "bcrypt.dll", "bcryptprimitives.dll", "bthprops.cpl",
+    "cfgmgr32.dll", "comctl32.dll",
+    "comdlg32.dll", "crypt32.dll", "d3d9.dll", "d3d11.dll", "d3d12.dll", "dbghelp.dll", "dcomp.dll",
+    "dhcpcsvc.dll", "dnsapi.dll", "dwmapi.dll", "dwrite.dll", "dxgi.dll", "fontsub.dll", "gdi32.dll",
+    "hid.dll", "icu.dll", "icuin.dll", "icuuc.dll", "imm32.dll", "iphlpapi.dll", "kernel32.dll",
+    "mmdevapi.dll", "mpr.dll", "msimg32.dll", "ncrypt.dll", "netapi32.dll", "ntdll.dll", "ole32.dll",
+    "oleacc.dll", "oleaut32.dll", "opengl32.dll", "pdh.dll", "powrprof.dll", "propsys.dll",
+    "psapi.dll", "rpcrt4.dll", "secur32.dll", "setupapi.dll", "shcore.dll", "shell32.dll",
+    "shlwapi.dll", "uiautomationcore.dll", "urlmon.dll", "user32.dll", "userenv.dll",
+    "uxtheme.dll", "version.dll",
+    "winhttp.dll", "winmm.dll", "winspool.drv", "winusb.dll", "wintrust.dll", "wldap32.dll",
+    "ws2_32.dll", "wtsapi32.dll", "d2d1.dll", "windowscodecs.dll", "normaliz.dll", "credui.dll",
+})
 WINDOWS_API_SET_PREFIXES = ("api-ms-win-", "ext-ms-win-")
 
 # Qt loads these plugins only when their libraries exist and quietly skips them
 # otherwise: GTK file dialogs outside GTK desktops, GLib network status.
-OPTIONAL_LINUX_PLUGINS = frozenset(
-    {
-        "PySide6/qt-plugins/platformthemes/libqgtk3.so",
-        "PySide6/qt-plugins/networkinformation/libqglib.so",
-    }
-)
+OPTIONAL_LINUX_PLUGINS = frozenset({
+    "PySide6/qt-plugins/platformthemes/libqgtk3.so",
+    "PySide6/qt-plugins/networkinformation/libqglib.so",
+})
 
 NEEDED_LINE = re.compile(r"\(NEEDED\)\s+Shared library: \[([^\]]+)\]")
 GLIBC_NAME = re.compile(r"\bName: (GLIBC_[A-Z0-9_.]+)")
@@ -248,17 +136,16 @@ def windows_problems(binaries: dict[str, list[str]], bundled: set[str]) -> list[
 
 def pe_imports(data: bytes) -> list[str]:
     """DLL names in a PE file's import table. Empty for anything that is not a PE image."""
-
     def u16(at: int) -> int:
-        return int.from_bytes(data[at : at + 2], "little")
+        return int.from_bytes(data[at:at + 2], "little")
 
     def u32(at: int) -> int:
-        return int.from_bytes(data[at : at + 4], "little")
+        return int.from_bytes(data[at:at + 4], "little")
 
     if data[:2] != b"MZ" or len(data) < 0x40:
         return []
     header = u32(0x3C)
-    if data[header : header + 4] != b"PE\0\0":
+    if data[header:header + 4] != b"PE\0\0":
         return []
     coff = header + 4
     section_count = u16(coff + 2)
@@ -279,11 +166,11 @@ def pe_imports(data: bytes) -> list[str]:
 
     names = []
     descriptor = file_offset(import_rva) if import_rva else None
-    while descriptor is not None and data[descriptor : descriptor + 20] not in (b"", bytes(20)):
+    while descriptor is not None and data[descriptor:descriptor + 20] not in (b"", bytes(20)):
         name_at = file_offset(u32(descriptor + 12))
         if name_at is None:
             break
-        names.append(data[name_at : data.index(b"\0", name_at)].decode("ascii"))
+        names.append(data[name_at:data.index(b"\0", name_at)].decode("ascii"))
         descriptor += 20
     return names
 
@@ -310,8 +197,7 @@ def check_linux(root: Path, max_glibc: tuple[int, int]) -> list[str]:
 def check_windows(root: Path) -> list[str]:
     binaries = {
         str(path.relative_to(root)): pe_imports(path.read_bytes())
-        for path in files(root)
-        if path.suffix.lower() in {".dll", ".exe", ".pyd"}
+        for path in files(root) if path.suffix.lower() in {".dll", ".exe", ".pyd"}
     }
     bundled = {path.name.lower() for path in root.rglob("*")}
     return windows_problems(binaries, bundled)
