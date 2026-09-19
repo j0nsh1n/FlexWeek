@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FlexWeek look concepts (mock-up)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Amatic+SC:wght@700&family=Anton&family=Bebas+Neue&family=Caveat:wght@500;700&family=DM+Sans:wght@400;500;700&family=Epilogue:wght@400;700;900&family=Figtree:wght@400;600;700&family=Fira+Code:wght@400;600&family=Fira+Sans:wght@400;500;700&family=Fredoka:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;700&family=Newsreader:wght@400;600;800&family=Nunito:wght@400;700;800&family=Outfit:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;600;800&family=Press+Start+2P&family=Quicksand:wght@500;700&family=Roboto:wght@400;500;700&family=Share+Tech+Mono&family=Source+Sans+3:wght@400;600&family=Space+Grotesk:wght@500;700&family=VT323&family=Work+Sans:wght@400;500;600&display=swap">
+<style>
+/* A throwaway mock-up. One sample week, nine ways of showing it. No backend, no product code. */
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { font: 14px/1.4 system-ui, "Segoe UI", sans-serif; background: #111; color: #eee; display: flex; flex-direction: column; }
+#switcher { display: flex; gap: 6px; padding: 8px 10px; background: #0b0b0d; border-bottom: 1px solid #2a2a30; flex-wrap: wrap; align-items: center; }
+#switcher b { color: #9aa; font-weight: 600; margin-right: 6px; letter-spacing: .04em; font-size: 12px; text-transform: uppercase; }
+#switcher button { font: inherit; font-size: 13px; color: #cfd3dc; background: #1a1b20; border: 1px solid #30323a; border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+#switcher button kbd { font: 11px ui-monospace, monospace; opacity: .6; margin-right: 5px; }
+#switcher button[aria-pressed="true"] { background: #e8eaf0; color: #111; border-color: #e8eaf0; font-weight: 700; }
+#stage { flex: 1; min-height: 0; overflow: auto; position: relative; }
+#notes { background: #0b0b0d; border-top: 1px solid #2a2a30; padding: 8px 12px; font-size: 12.5px; color: #c4c8d4; display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+#notes b { color: #fff; display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 2px; }
+#pop { position: fixed; z-index: 50; width: 260px; background: #fff; color: #111; border-radius: 10px; padding: 12px 14px; box-shadow: 0 12px 40px rgba(0,0,0,.45); font: 13px/1.4 system-ui, sans-serif; }
+#pop h4 { margin: 0 0 4px; font-size: 15px; } #pop p { margin: 2px 0; color: #444; }
+#pop .row { display: flex; gap: 6px; margin-top: 10px; } #pop button { font: inherit; border: 1px solid #ccc; background: #f4f4f6; border-radius: 6px; padding: 4px 9px; cursor: pointer; }
+[data-id], button { cursor: pointer; }
+
+/* 1. FROST: today's app, for comparison */
+.frost { font-family: Figtree, system-ui, sans-serif; min-height: 100%; background: #0e1320 linear-gradient(160deg, #0e1320, #171a2e); color: #e6ebf5; display: grid; grid-template-rows: auto 1fr; }
+.frost .top { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: rgba(26,33,49,.7); border-bottom: 1px solid rgba(186,204,255,.12); }
+.frost .top h1 { font-size: 17px; margin: 0; flex: 1; } .frost .btn { background: #7fa8ff; color: #0b1224; border: 0; border-radius: 5px; padding: 6px 12px; font-weight: 600; }
+.frost .body { display: grid; grid-template-columns: 1fr 280px; min-height: 0; }
+.frost .grid { display: grid; grid-template-columns: 44px repeat(7, 1fr); position: relative; padding: 0 8px 8px; }
+.frost .dh { text-align: center; font-size: 12px; padding: 6px 0; color: #9ba6ba; border-bottom: 1px solid rgba(186,204,255,.12); } .frost .dh.today { color: #7fa8ff; font-weight: 700; }
+.frost .col { position: relative; height: 448px; border-left: 1px solid rgba(186,204,255,.07); background: repeating-linear-gradient(#131a27 0 27px, rgba(186,204,255,.07) 27px 28px); }
+.frost .hrs { position: relative; height: 448px; font-size: 11px; color: #9ba6ba; } .frost .hrs span { position: absolute; right: 6px; transform: translateY(-50%); }
+.frost .blk { position: absolute; left: 3px; right: 3px; border-radius: 4px; padding: 2px 5px; font-size: 11px; overflow: hidden; background: #2b3a52; border-left: 4px solid var(--c); }
+.frost .blk.work { background: #4a3c1c; color: #fff4dc; } .frost .side { border-left: 1px solid rgba(186,204,255,.12); padding: 12px; background: rgba(26,33,49,.66); }
+.frost .side h3 { font-size: 13px; margin: 0 0 6px; } .frost .chip { display: inline-block; font-size: 11px; border: 1px solid rgba(186,204,255,.24); border-left: 3px solid var(--c); border-radius: 3px; padding: 2px 7px; margin: 0 4px 4px 0; }
+.frost .task { background: rgba(34,42,61,.94); border: 1px solid rgba(186,204,255,.12); border-left: 3px solid var(--c); border-radius: 5px; padding: 6px 8px; margin-bottom: 6px; font-size: 12px; }
+
+@keyframes blink { 50% { opacity: 0; } } .tui h5 { margin: 0 0 4px; font: inherit; color: #ffb000; }
+
+
+/* 4. TIMELINE RIVER: now, next, later */
+.river { min-height: 100%; background: #f6f4ef; color: #1d1b16; font-family: "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif; }
+.river .wrap { max-width: 720px; margin: 0 auto; padding: 22px 20px 40px; } .river h1 { font-size: 44px; margin: 0; letter-spacing: -.03em; } .river .sub { color: #5f594c; margin-bottom: 14px; }
+.river .heat { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 22px; } .river .heat div { border-radius: 8px; padding: 6px 8px; font-size: 11px; background: #e9e4d8; } .river .heat .today { outline: 2px solid #1d1b16; }
+.river .heat i { display: block; height: 5px; border-radius: 3px; background: #1d1b16; margin-top: 5px; }
+.river .rail { position: relative; padding-left: 86px; } .river .rail::before { content: ""; position: absolute; left: 68px; top: 0; bottom: 0; width: 3px; background: #d9d2c0; border-radius: 2px; }
+.river .ev { position: relative; margin-bottom: 12px; background: #fff; border-radius: 14px; padding: 11px 14px; box-shadow: 0 1px 0 #e4ddcb; } .river .ev::before { content: ""; position: absolute; left: -25px; top: 16px; width: 13px; height: 13px; border-radius: 50%; background: var(--c); border: 3px solid #f6f4ef; }
+.river .ev time { position: absolute; left: -86px; top: 12px; width: 52px; text-align: right; font-weight: 700; font-size: 13px; background: #f6f4ef; } .river .ev.past { color: #5f594c; } .river .ev.past b { font-weight: 500; } .river .ev small { color: #5f594c; display: block; }
+.river .ev.next { background: #1d1b16; color: #fff; padding: 18px; } .river .ev.next time { color: #1d1b16; } .river .ev.next h2 { margin: 2px 0 4px; font-size: 24px; } .river .ev.next small { color: #c9c2b0; } .river .ev.next button { margin-top: 10px; border: 0; border-radius: 999px; padding: 8px 16px; font-family: inherit; font-weight: 700; font-size: 13px; background: #ffd84d; display: block; color: #1d1b16; }
+.river .now { position: relative; margin: 4px 0 14px; } .river .now span { position: relative; left: -86px; background: #c2303a; color: #fff; font-weight: 700; font-size: 12px; border-radius: 999px; padding: 2px 9px; }
+
+/* 5. MISSION CONTROL: time runs sideways */
+.control { min-height: 100%; background: #070b12; color: #b9c7dc; font: 12px/1.35 "IBM Plex Sans", "Segoe UI", system-ui, sans-serif; display: grid; grid-template: "rail head head" auto "rail gantt side" 1fr "rail log side" auto / 46px 1fr 280px; gap: 1px; background-color: #182234; }
+.control > * { background: #070b12; padding: 10px 12px; } .control .railnav { grid-area: rail; display: flex; flex-direction: column; gap: 14px; align-items: center; padding-top: 14px; font-size: 17px; } .control .railnav svg { width: 20px; height: 20px; } .control .railnav svg:first-child { color: #4ee6c4; }
+.control .head { grid-area: head; display: flex; gap: 22px; align-items: baseline; } .control .head b { color: #fff; font-size: 14px; letter-spacing: .08em; } .control .head em { font-style: normal; color: #4ee6c4; font: 600 13px ui-monospace, monospace; }
+.control .gantt { grid-area: gantt; } .control .axis, .control .lane { display: grid; grid-template-columns: 74px 1fr; align-items: center; } .control .axis div:last-child { position: relative; height: 16px; font: 11px "Share Tech Mono", ui-monospace, monospace; color: #8aa0c4; } .control .axis span { position: absolute; transform: translateX(-50%); }
+.control .lane { margin: 7px 0; } .control .lane > b { font: 600 11px ui-monospace, monospace; color: #7f93b4; } .control .lane.today > b { color: #4ee6c4; }
+.control .track { position: relative; height: 34px; background: repeating-linear-gradient(90deg, #0d1422 0, #0d1422 calc(6.25% - 1px), #182234 calc(6.25% - 1px), #182234 6.25%); border-radius: 3px; }
+.control .bar { position: absolute; top: 4px; bottom: 4px; border-radius: 3px; background: color-mix(in srgb, var(--c) 30%, #070b12); border: 1px solid var(--c); color: #fff; font-size: 10.5px; padding: 3px 5px; overflow: hidden; white-space: nowrap; }
+.control .bar.work { background: var(--c); color: #04101c; font-weight: 700; } .control .nowline { position: absolute; top: -4px; bottom: -4px; width: 2px; background: #ff4d6d; box-shadow: 0 0 8px #ff4d6d; }
+.control .side { grid-area: side; } .control h4 { margin: 0 0 8px; font: 400 12px "Share Tech Mono", ui-monospace, monospace; letter-spacing: .12em; color: #8aa0c4; text-transform: uppercase; }
+.control .risk { margin-bottom: 9px; } .control .risk i { display: block; height: 4px; border-radius: 2px; margin-top: 4px; background: linear-gradient(90deg, var(--c) var(--p), #182234 var(--p)); } .control .risk span { float: right; font: 10.5px ui-monospace, monospace; }
+.control .load { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; align-items: end; height: 64px; margin-bottom: 4px; } .control .load div { background: #2b6cff; border-radius: 2px 2px 0 0; } .control .load div.today { background: #4ee6c4; }
+.control .log { grid-area: log; font: 11px/1.5 ui-monospace, monospace; color: #8aa0c4; } .control .log b { color: #4ee6c4; font-weight: 400; } .control .log u { color: #ff4d6d; text-decoration: none; }
+
+
+
+/* 8. DAY DIAL: the day as a clock face */
+.dial { min-height: 100%; background: #0a0d1a radial-gradient(circle at 50% 30%, #1d2440, #0a0d1a 70%); color: #e8ecff; font-family: Outfit, "Work Sans", system-ui, sans-serif; padding: 16px 20px 26px; display: grid; grid-template-columns: minmax(360px, 1.2fr) 1fr; gap: 26px; align-items: center; }
+.dial svg { width: 100%; height: auto; max-height: 560px; display: block; } .dial .mini { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; } .dial .mini figure { margin: 0; text-align: center; font-size: 12px; color: #9aa6d6; } .dial .mini figure.today { color: #fff; font-weight: 700; }
+.dial h2 { margin: 0 0 4px; font-size: 26px; } .dial p { color: #9aa6d6; margin: 0 0 16px; } .dial .legend span { display: inline-block; margin: 0 10px 6px 0; font-size: 12px; } .dial .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--c); margin-right: 5px; }
+
+
+/* Accessibility, from the design skill's checklist: a visible focus ring, hover feedback that does not
+   shift layout, no motion for people who asked for none, and larger targets on the switcher. */
+:focus-visible { outline: 3px solid #ffbf47; outline-offset: 2px; }
+[data-id]:hover { outline: 2px solid currentColor; outline-offset: 1px; }
+#switcher button { min-height: 36px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+.dial p, .dial .legend, .dial figure { font-family: "Work Sans", system-ui, sans-serif; }
+
+/* 10. BENTO: a dashboard of different-sized tiles (catalogue style 39) */
+.bento { min-height: 100%; background: #EEF2FF; color: #1E1B4B; font-family: "DM Sans", system-ui, sans-serif; padding: 20px; }
+.bento .tiles { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 148px; gap: 16px; }
+.bento .t { background: #fff; border-radius: 24px; padding: 18px 20px; box-shadow: 0 4px 6px rgba(30,27,75,.06); overflow: hidden; transition: box-shadow .2s ease-out; }
+.bento .t:hover { box-shadow: 0 10px 24px rgba(30,27,75,.14); } .bento small { display: block; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #4F46E5; margin-bottom: 6px; }
+.bento h2, .bento h3, .bento .big { font-family: "Space Grotesk", system-ui, sans-serif; margin: 0; } .bento .hero { grid-column: span 2; grid-row: span 2; background: #4F46E5; color: #fff; display: flex; flex-direction: column; justify-content: flex-end; }
+.bento .hero small { color: #e0e7ff; } .bento .hero h2 { font-size: 46px; line-height: 1; letter-spacing: -.02em; } .bento .hero p { margin: 8px 0 0; font-size: 16px; color: #e0e7ff; }
+.bento .tall { grid-row: span 2; } .bento .wide { grid-column: span 2; } .bento .full { grid-column: 1 / -1; } .bento .big { font-size: 40px; font-weight: 700; } .bento button { border: 0; border-radius: 999px; background: #c2410c; color: #fff; font: 700 14px inherit; font-family: inherit; padding: 9px 18px; margin-top: 8px; cursor: pointer; }
+.bento .dl { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid #e0e7ff; font-size: 14px; } .bento .dl b { font-weight: 600; } .bento .tag { font-size: 11px; line-height: 1.7; font-weight: 700; border-radius: 999px; padding: 0 9px; white-space: nowrap; background: #e0e7ff; color: #1E1B4B; } .bento .tag.risk { background: #991b1b; color: #fff; } .bento .tag.tight { background: #92400e; color: #fff; }
+.bento .bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; align-items: end; height: 70px; } .bento .bars div { background: #c7d2fe; border-radius: 8px 8px 3px 3px; position: relative; } .bento .bars div.today { background: #4F46E5; } .bento .bars span { position: absolute; bottom: -20px; left: 0; right: 0; text-align: center; font-size: 12px; background: #fff; color: #1E1B4B; }
+.bento .strip { display: flex; gap: 8px; margin-top: 4px; } .bento .strip div { flex: 1; border-radius: 12px; padding: 8px 10px; font-size: 13px; background: #eef2ff; border-left: 5px solid var(--c); } .bento .strip div.past { background: #f1f2f6; color: #565b6b; border-left-color: #a8adbb; }
+
+/* 11. RETRO DESKTOP: windows and a taskbar (catalogue style 40, Y2K) */
+.y2k { min-height: 100%; position: relative; overflow: hidden; background-color: #5b2bd6; background-image: linear-gradient(135deg, #9400D3, #2f6fd6 55%, #00a6a6); font: 13px/1.35 Tahoma, "MS Sans Serif", Verdana, sans-serif; color: #000; }
+.y2k .win { position: absolute; background: #C0C0C0; box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #fff, inset -2px -2px #808080, inset 2px 2px #dfdfdf, 6px 8px 0 rgba(0,0,0,.35); padding: 3px; }
+.y2k .bar { background-color: #3b1d8f; background-image: linear-gradient(90deg, #3b1d8f, #9400D3); color: #fff; font-weight: 700; padding: 3px 6px; display: flex; justify-content: space-between; align-items: center; } .y2k .bar i { display: inline-block; width: 16px; height: 14px; background: #C0C0C0; box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #fff; margin-left: 2px; }
+.y2k .body { padding: 8px; } .y2k .sunken { background: #fff; box-shadow: inset 1px 1px #808080, inset -1px -1px #fff, inset 2px 2px #0a0a0a; padding: 6px 8px; } .y2k .vt { font: 19px/1.15 VT323, ui-monospace, monospace; }
+.y2k table { border-collapse: collapse; width: 100%; font-size: 12px; } .y2k th { background: #C0C0C0; box-shadow: inset -1px -1px #808080, inset 1px 1px #fff; padding: 2px 4px; font-weight: 400; text-align: left; } .y2k th.today { font-weight: 700; } .y2k td { vertical-align: top; padding: 3px 4px; border-right: 1px solid #dfdfdf; } .y2k td div { margin-bottom: 3px; border-left: 4px solid var(--c); padding-left: 4px; }
+.y2k .btn { background: #C0C0C0; border: 0; box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #fff, inset -2px -2px #808080, inset 2px 2px #dfdfdf; padding: 4px 14px; font: inherit; cursor: pointer; }
+.y2k .task { position: absolute; left: 0; right: 0; bottom: 0; height: 34px; background: #C0C0C0; box-shadow: inset 0 1px #fff; display: flex; gap: 4px; align-items: center; padding: 3px; } .y2k .task .btn.on { box-shadow: inset 1px 1px #0a0a0a, inset -1px -1px #fff; font-weight: 700; background: #d8d8d8; } .y2k .clock { margin-left: auto; box-shadow: inset 1px 1px #808080, inset -1px -1px #fff; padding: 4px 10px; }
+.y2k .icons { position: absolute; left: 14px; top: 14px; display: grid; gap: 16px; color: #fff; text-align: center; width: 78px; font-size: 12px; text-shadow: 1px 1px #000; } .y2k .icons b { display: block; width: 34px; height: 30px; margin: 0 auto 4px; background: #FF69B4; box-shadow: inset -2px -2px #9400D3, inset 2px 2px #ffd1ea, 2px 2px 0 #000; }
+
+/* 12. ONE THING: the next thing, and nothing else (catalogue styles 47 and 18) */
+.one { min-height: 100%; background: #000; color: #fff; font-family: "Source Sans 3", system-ui, sans-serif; display: grid; grid-template-rows: auto 1fr auto; padding: 22px 30px; }
+.one .top, .one .foot { display: flex; justify-content: space-between; font-size: 15px; letter-spacing: .14em; text-transform: uppercase; color: #bdbdbd; } .one .mid { align-self: center; }
+.one h1 { font: 400 clamp(4rem, 13vw, 12rem)/.86 "Bebas Neue", Impact, sans-serif; margin: 0; letter-spacing: .005em; } .one h2 { font: 400 clamp(1.6rem, 4vw, 3.4rem)/1 "Bebas Neue", Impact, sans-serif; margin: 14px 0 0; color: #fb923c; letter-spacing: .04em; }
+.one .day { position: relative; height: 10px; background: #2a2a2a; margin-bottom: 12px; } .one .day i { position: absolute; top: 0; bottom: 0; background: #6b6b6b; } .one .day i.next { background: #fb923c; } .one .day u { position: absolute; top: -6px; bottom: -6px; width: 3px; background: #fff; }
+
+
+
+/* 15. CLAY DECK: puffy day cards, today in the middle (catalogue style 9) */
+.clay { min-height: 100%; background-color: #f3ecff; background-image: linear-gradient(160deg, #fde8e4, #e6e6fa 50%, #dff3ff); color: #3a2f4d; font-family: Nunito, system-ui, sans-serif; padding: 22px; display: grid; grid-template-rows: auto 1fr auto; }
+.clay h1 { font: 700 30px Fredoka, system-ui, sans-serif; margin: 0; } .clay .sub { margin-bottom: 8px; color: #4a3f5e; } .clay .deck { display: flex; justify-content: center; align-items: center; gap: 0; }
+.clay .c { width: 250px; min-height: 380px; border-radius: 24px; border: 4px solid #fff; padding: 16px; margin: 0 -18px; background: var(--bg); box-shadow: inset -3px -4px 10px rgba(58,47,77,.16), inset 3px 3px 8px rgba(255,255,255,.7), 8px 12px 22px rgba(58,47,77,.18); transform: scale(var(--s)) rotate(var(--r)); z-index: var(--z); }
+.clay .c h2 { font: 700 24px Fredoka, sans-serif; margin: 0 0 10px; } .clay .c.today h2::after { content: " · today"; font-size: 15px; font-weight: 600; }
+.clay .pill { background: #fff; border-radius: 16px; padding: 8px 12px; margin-bottom: 8px; font-size: 15px; font-weight: 700; box-shadow: inset -2px -2px 6px rgba(58,47,77,.12), 2px 3px 6px rgba(58,47,77,.12); display: flex; gap: 8px; align-items: center; } .clay .pill i { flex: none; width: 12px; height: 12px; border-radius: 50%; background: var(--c); } .clay .pill small { display: block; font-weight: 400; font-size: 13px; color: #4a3f5e; } .clay .pill.done { background: #ece8f3; color: #4a3f5e; text-decoration: line-through; box-shadow: none; }
+.clay .chip { margin-left: auto; font-size: 11px; font-weight: 800; border-radius: 999px; padding: 2px 8px; background: #3a2f4d; color: #fff; white-space: nowrap; } .clay .nav { display: flex; justify-content: center; gap: 14px; margin-top: 10px; } .clay .nav button { font: 700 16px Fredoka, sans-serif; color: #3a2f4d; background: #fff; border: 4px solid #fff; border-radius: 20px; padding: 10px 22px; cursor: pointer; box-shadow: inset -2px -3px 8px rgba(58,47,77,.16), 4px 6px 12px rgba(58,47,77,.16); }
+
+/* Demo controls shared by every concept, the add dialog, and the states that make the concepts tryable. */
+#tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 10px; background: #121318; border-bottom: 1px solid #2a2a30; font-size: 13px; color: #cfd3dc; }
+#tools button { font: inherit; color: #fff; background: #2b4fd6; border: 0; border-radius: 6px; padding: 6px 12px; min-height: 34px; }
+#tools button.ghost { background: #1a1b20; border: 1px solid #30323a; color: #cfd3dc; } #tools label { display: flex; align-items: center; gap: 6px; } #tools input[type=range] { width: 230px; }
+#tools output { font: 600 13px ui-monospace, monospace; color: #fff; min-width: 3.2em; } #t-msg { color: #9fe89f; } #t-focus { background: #3a2a00; color: #ffd866; border-radius: 999px; padding: 3px 4px 3px 12px; display: inline-flex; gap: 8px; align-items: center; } #t-focus button { min-height: 26px; padding: 2px 10px; background: #ffd866; color: #1b1400; } #t-focus[hidden] { display: none; } #t-reset { margin-left: auto; }
+#notes { grid-template-columns: repeat(5, 1fr); }
+dialog#add-dialog { border: 0; border-radius: 12px; padding: 18px 20px; width: 350px; font: 14px/1.4 system-ui, sans-serif; color: #111; background: #fff; } dialog::backdrop { background: rgba(0,0,0,.55); }
+#add-dialog h2 { margin: 0 0 4px; font-size: 18px; } #add-dialog label { display: block; margin: 10px 0 4px; font-weight: 600; } #add-dialog input, #add-dialog select { width: 100%; font: inherit; padding: 7px 8px; border: 1px solid #767676; border-radius: 6px; background: #fff; color: #111; }
+#add-dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; } #add-dialog button { font: inherit; padding: 7px 14px; border-radius: 6px; border: 1px solid #767676; background: #f4f4f6; color: #111; } #add-dialog button[value=ok] { background: #2b4fd6; color: #fff; border-color: #2b4fd6; }
+#pop select { font: inherit; padding: 3px 6px; max-width: 100%; } #pop .row { flex-wrap: wrap; }
+.frost .nowl { position: absolute; left: 0; right: 0; height: 2px; background: #ff6b7a; z-index: 3; } .frost .chip { cursor: pointer; background: transparent; color: inherit; font-family: inherit; }
+.river .heat div { cursor: pointer; } .dial .mini figure { cursor: pointer; } .heat .cell.open { cursor: pointer; }
+.y2k .bar { cursor: move; touch-action: none; user-select: none; } .y2k .bar i { cursor: pointer; } .y2k .menu { position: absolute; left: 3px; bottom: 36px; width: 210px; background: #C0C0C0; padding: 3px; z-index: 40; box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #fff, inset -2px -2px #808080, inset 2px 2px #dfdfdf; }
+.y2k .menu button { display: block; width: 100%; text-align: left; background: transparent; border: 0; padding: 5px 10px; font: inherit; color: #000; } .y2k .menu button:hover, .y2k .menu button:focus-visible { background: #3b1d8f; color: #fff; }
+
+/* Two roles: main views you plan in, and day screens you watch once planning is done. */
+#switcher .grp { color: #aab0bd; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; margin: 0 2px 0 12px; }
+#notes ul { list-style: none; margin: 0; padding: 0; } #notes li.no { color: #ffb3c0; font-weight: 700; }
+.frost .top .btn.ghost { background: transparent; color: #dfe8ff; border: 1px solid rgba(186,204,255,.45); }
+.river .acts { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; } .river .acts button, .river .inbox button { min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1.5px solid #1d1b16; background: #fff; color: #1d1b16; font: 600 14px "Plus Jakarta Sans", system-ui, sans-serif; } .river .acts button:first-child, .river .inbox button { background: #1d1b16; color: #f6f4ef; }
+.river .inbox { border: 1.5px dashed #8a8372; border-radius: 14px; padding: 12px 14px; margin-bottom: 16px; background: #fffdf8; } .river .inbox .it { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid #e4dfd3; cursor: pointer; } .river .inbox small { color: #5f594c; display: block; } .river .inbox button { margin-top: 10px; }
+.control .cmds { margin-left: auto; display: flex; gap: 8px; } .control .cmds button { min-height: 36px; padding: 0 12px; background: #0d1524; color: #4ee6c4; border: 1px solid #4ee6c4; font: 600 12px "Share Tech Mono", ui-monospace, monospace; letter-spacing: .08em; } .control .cmds button:hover { background: #4ee6c4; color: #04101c; }
+.bento .span3 { grid-column: span 3; } .bento .un { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; padding: 5px 0; border-bottom: 1px solid #e0e7ff; cursor: pointer; } .bento .un span:last-child { white-space: nowrap; } .bento .hero button { background: #fff; color: #312e81; align-self: flex-start; margin-top: 14px; } .bento .bars div { cursor: pointer; } .bento .bars div.sel { outline: 3px solid #c2410c; outline-offset: 2px; } .bento .t.scroll { overflow: auto; } .bento button { min-height: 40px; }
+.y2k .menubar { display: flex; gap: 2px; margin-bottom: 6px; } .y2k .menubar button { background: transparent; border: 0; padding: 3px 9px; font: inherit; color: #000; } .y2k .menubar button:hover, .y2k .menubar button:focus-visible { background: #3b1d8f; color: #fff; } .y2k .vt span { cursor: pointer; }
+.clay .tray { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; font-weight: 700; } .clay .tray .pill { margin: 0; cursor: pointer; } .clay .nav { flex-wrap: wrap; } .clay .nav .gap { width: 18px; }
+.one h1 { font-size: clamp(3.2rem, 9.5vw, 9rem); cursor: pointer; } .one .lbl { font: 400 clamp(1.1rem, 2.2vw, 1.8rem)/1 "Bebas Neue", Impact, sans-serif; letter-spacing: .18em; color: #fb923c; margin-bottom: 10px; } .one .prog { height: 6px; background: #2a2a2a; margin-top: 18px; max-width: 720px; } .one .prog i { display: block; height: 100%; background: #fb923c; }
+.one .acts { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 26px; } .one .acts button { min-height: 48px; padding: 0 22px; background: #000; color: #fff; border: 2px solid #fff; font: 600 15px "Source Sans 3", system-ui, sans-serif; letter-spacing: .12em; text-transform: uppercase; } .one .acts button.main { background: #fb923c; border-color: #fb923c; color: #000; }
+.dial { align-items: start; } .dial .card { background: #141a33; border: 1px solid #2b3564; border-radius: 16px; padding: 16px 18px; margin-bottom: 14px; } .dial .card small { display: block; color: #b6c0ea; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; } .dial .card h3 { font-size: 30px; margin: 4px 0 2px; cursor: pointer; }
+.dial .acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; } .dial .acts button { min-height: 44px; border-radius: 999px; padding: 0 18px; border: 1px solid #56629a; background: transparent; color: #e8ecff; font: 600 14px Outfit, system-ui, sans-serif; } .dial .acts button.main { background: #8ea2ff; border-color: #8ea2ff; color: #0a0d1a; }
+.dial .rest { list-style: none; padding: 0; margin: 0 0 12px; } .dial .rest li { display: grid; grid-template-columns: 56px 1fr auto; gap: 10px; padding: 9px 10px; border-left: 4px solid var(--c); background: #10152b; margin-bottom: 6px; border-radius: 8px; font-size: 14px; cursor: pointer; } .dial .rest li.past { color: #9aa6d6; text-decoration: line-through; } .dial .rest li.cur { background: #1b2450; outline: 1px solid #8ea2ff; } .dial h4 { margin: 0 0 8px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: #b6c0ea; }
+.dial .mini { grid-template-columns: repeat(7, 1fr); gap: 8px; } .dial .unp { color: #ffb3c0; margin: 0 0 12px; cursor: pointer; }
+</style>
+</head>
+<body>
+<nav id="switcher" aria-label="Concepts"></nav>
+<div id="tools" role="toolbar" aria-label="Demo controls">
+  <label for="t-now">Now <input id="t-now" type="range" min="360" max="1320" step="5"> <output id="t-now-out" for="t-now"></output></label>
+  <span id="t-focus" hidden></span>
+  <span id="t-msg" role="status" aria-live="polite"></span>
+  <button id="t-reset" type="button" class="ghost">Reset demo</button>
+</div>
+<main id="stage"></main>
+<aside id="notes"></aside>
+<dialog id="add-dialog" aria-labelledby="add-title">
+  <form method="dialog" id="add-form">
+    <h2 id="add-title">Add homework</h2>
+    <label for="add-name">What is it?</label><input id="add-name" required maxlength="60" placeholder="Science fair poster">
+    <label for="add-cat">Kind</label><select id="add-cat"><option value="assignments">Homework</option><option value="study">Study</option></select>
+    <label for="add-dur">How long will it take?</label><select id="add-dur"><option value="30">30 min</option><option value="45">45 min</option><option value="60" selected>1 h</option><option value="90">1 h 30 min</option><option value="120">2 h</option><option value="180">3 h</option></select>
+    <label for="add-due">Due</label><select id="add-due"></select>
+    <div class="row"><button value="cancel" formnovalidate>Cancel</button><button value="ok">Add</button></div>
+  </form>
+</dialog>
+<script>
+"use strict";
+/* One shared week, eight ways of showing it, in two roles: main views you plan in, and day screens you
+   watch once planning is done. The demo toolbar holds only the clock and Reset, so every main view has
+   to offer Add, Plan and "not placed yet" by itself. Nothing here talks to a server. */
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], FULL = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const DATES = [14, 15, 16, 17, 18, 19, 20], TODAY = 3, DAY_START = 360, DAY_LEN = 960, KEY = "flexweek-mockup-v3";
+const CATS = {
+  class: { label: "School", color: "#3b82f6" }, assignments: { label: "Homework", color: "#ef4444" },
+  study: { label: "Study", color: "#8b5cf6" }, exercise: { label: "Sports", color: "#10b981" },
+  meals: { label: "Meals", color: "#f97316" }, extra: { label: "Activity", color: "#ec4899" },
+};
+const seed = () => ({
+  now: 820, viewDay: TODAY, seq: 1, clay: TODAY, oneSkip: 0, startOpen: false, focus: null, planView: "frost", dayView: "one",
+  wins: { week: { x: 112, y: 22, open: true }, notes: { x: 560, y: 330, open: true }, next: { x: 150, y: 350, open: true } },
+  log: ["12:58 OK week saved, revision 14", "13:31 OK Math worksheet marked done", "13:40 OK plan accepted, 4 sessions placed", "13:40 WARN Science fair poster is not planned yet"],
+  blocks: [
+    { id: "school", title: "School", cat: "class", kind: "fixed", days: [0, 1, 2, 3, 4], start: 480, dur: 390 },
+    { id: "band", title: "Band", cat: "extra", kind: "fixed", days: [2], start: 900, dur: 60 },
+    { id: "soccer", title: "Soccer practice", cat: "exercise", kind: "fixed", days: [1, 3], start: 930, dur: 90 },
+    { id: "dinner", title: "Dinner", cat: "meals", kind: "fixed", days: [0, 1, 2, 3, 4, 5, 6], start: 1080, dur: 30 },
+    { id: "math", title: "Math worksheet", cat: "assignments", kind: "work", days: [0], start: 945, dur: 45, due: { day: 1, min: 480 }, done: true },
+    { id: "chem", title: "Chem lab report", cat: "assignments", kind: "work", days: [3], start: 1200, dur: 90, due: { day: 3, min: 1439 } },
+    { id: "essay", title: "History essay outline", cat: "assignments", kind: "work", days: [3], start: 1125, dur: 60, due: { day: 4, min: 1260 } },
+    { id: "vocab", title: "Spanish vocab", cat: "study", kind: "work", days: [4], start: 930, dur: 30, due: { day: 7, min: 480 } },
+    { id: "bio", title: "Bio reading ch. 4", cat: "study", kind: "work", days: [5], start: 600, dur: 60, due: { day: 7, min: 480 } },
+    { id: "poster", title: "Science fair poster", cat: "assignments", kind: "work", days: [], start: null, dur: 120, due: { day: 6, min: 1200 } },
+  ],
+});
+let state;
+try { state = JSON.parse(localStorage.getItem(KEY)) || seed(); } catch { state = seed(); }
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* private window: the demo still works */ } };
+
+const hm = m => String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
+const dur = m => (m >= 60 ? Math.floor(m / 60) + " h" + (m % 60 ? " " + (m % 60) + " min" : "") : m + " min");
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+const col = o => CATS[o.cat].color, dueText = o => (o.due ? DAYS[o.due.day % 7] + " " + hm(o.due.min) : "");
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+let OCC = [], WORK = [], UNPLACED = [];
+function riskOf(o) {
+  if (o.kind !== "work" || o.done || !o.due) return 0;
+  const slack = o.due.day * 1440 + o.due.min - (o.day * 1440 + o.start + o.dur);
+  return slack < 0 ? 1 : slack < 720 ? 0.9 : slack < 2160 ? 0.55 : 0.2;
+}
+const slackOf = o => o.due.day * 1440 + o.due.min - (o.day * 1440 + o.start + o.dur);
+const riskWord = o => (o.risk >= 1 ? "Misses it" : o.risk > .8 ? "At risk" : o.risk > .5 ? "Tight" : "Comfortable");
+function derive() {
+  OCC = state.blocks.flatMap(b => b.days.map(day => ({ ...b, day }))).sort((a, b) => a.day - b.day || a.start - b.start);
+  OCC.forEach(o => { o.risk = riskOf(o); });
+  WORK = OCC.filter(o => o.kind === "work");
+  UNPLACED = state.blocks.filter(b => b.kind === "work" && !b.days.length);
+}
+const onDay = d => OCC.filter(o => o.day === d), loadMin = d => onDay(d).filter(o => o.kind === "work").reduce((t, o) => t + o.dur, 0);
+const openWork = () => WORK.filter(o => !o.done).sort((a, b) => b.risk - a.risk || a.day - b.day);
+const after = d => onDay(d).filter(o => !(o.kind === "work" && o.done) && (d !== TODAY || o.start > state.now));
+/* What a day screen is about: the thing on now (homework wins over the fixed block around it), then the rest of today. */
+function dayQueue() {
+  const current = onDay(TODAY).filter(o => !(o.kind === "work" && o.done) && o.start <= state.now && o.start + o.dur > state.now).sort((a, b) => (b.kind === "work") - (a.kind === "work"))[0] || null;
+  return { current, queue: (current ? [current] : []).concat(after(TODAY).filter(o => o !== current)) };
+}
+const why = b => (b.tried ? `No free stretch of ${dur(b.dur)} before ${dueText(b)}.` : "Not planned yet.");
+function say(text) { document.getElementById("t-msg").textContent = text; state.log.push(hm(state.now) + " " + text); state.log = state.log.slice(-8); }
+
+/* ---- actions: the only code that changes the week ---- */
+function findSlot(day, length, from, skipId) {
+  const open = day > 4 ? 540 : 900, close = DAY_START + DAY_LEN, busy = onDay(day).filter(o => o.id !== skipId);
+  for (let t = Math.max(open, Math.ceil(from / 15) * 15); t + length <= close; t += 15) {
+    if (!busy.some(o => t < o.start + o.dur && o.start < t + length)) return t;
+  }
+  return null;
+}
+function plan() {
+  derive();
+  let placed = 0; const waiting = UNPLACED.slice().sort((a, b) => a.due.day * 1440 + a.due.min - (b.due.day * 1440 + b.due.min));
+  for (const item of waiting) {
+    item.tried = true;
+    for (let d = TODAY; d <= Math.min(item.due.day, 6); d++) {
+      const slot = findSlot(d, item.dur, d === TODAY ? state.now : 0, item.id);
+      if (slot !== null && d * 1440 + slot + item.dur <= item.due.day * 1440 + item.due.min) { item.days = [d]; item.start = slot; placed++; derive(); break; }
+    }
+  }
+  say(waiting.length ? `Plan: placed ${placed} of ${waiting.length}.` + (placed < waiting.length ? " The rest has no room before its deadline." : "") : "Plan: everything already has a time.");
+  commit();
+}
+function addHomework(title, minutes, dueDay, cat) {
+  const id = "hw" + state.seq++;
+  state.blocks.push({ id, title: title.trim() || "Untitled", cat: cat || "assignments", kind: "work", days: [], start: null, dur: minutes, due: { day: dueDay, min: dueDay > 6 ? 480 : 1260 } });
+  say(`Added "${title.trim()}". Run the plan to give it a time.`); commit(); return id;
+}
+const find = id => state.blocks.find(b => b.id === id);
+function toggleDone(id) { const b = find(id); if (!b || b.kind !== "work") return; b.done = !b.done; state.oneSkip = 0; say(`${b.title} ${b.done ? "marked done" : "reopened"}.`); commit(); }
+function removeBlock(id) { const b = find(id); if (!b) return; state.blocks = state.blocks.filter(x => x !== b); if (state.focus && state.focus.id === id) state.focus = null; say(`${b.title} deleted.`); commit(); }
+const isLate = (b, day, start) => !!b.due && day * 1440 + start + b.dur > b.due.day * 1440 + b.due.min;
+function moveTo(id, day) {
+  const b = find(id); if (!b || b.kind !== "work") return;
+  derive(); const slot = findSlot(day, b.dur, day === TODAY ? state.now : 0, id);
+  if (slot === null) { say(`${DAYS[day]} has no free ${dur(b.dur)} for ${b.title}.`); commit(); return; }
+  b.days = [day]; b.start = slot;
+  say(`${b.title} moved to ${DAYS[day]} ${hm(slot)}.` + (isLate(b, day, slot) ? ` That is after it is due (${dueText(b)}).` : "")); commit();
+}
+/* Running late: push what is left of today's homework 15 minutes, latest first so each has room to move into. */
+function runningLate() {
+  derive();
+  const left = onDay(TODAY).filter(o => o.kind === "work" && !o.done && o.start + o.dur > state.now).sort((a, b) => b.start - a.start), moved = [], stuck = [];
+  for (const o of left) {
+    const b = find(o.id); derive();
+    const slot = findSlot(TODAY, b.dur, Math.max(b.start, state.now) + 15, b.id);
+    if (slot === null) stuck.push(b.title); else { b.start = slot; moved.unshift(`${b.title} to ${hm(slot)}` + (isLate(b, TODAY, slot) ? " (past its deadline)" : "")); }
+  }
+  say(!left.length ? "Running late: no homework is left today." : "Running late: " + [moved.length ? "moved " + moved.join(", ") + "." : "", stuck.length ? `${stuck.join(" and ")} no longer fit${stuck.length === 1 ? "s" : ""} today.` : ""].filter(Boolean).join(" "));
+  commit();
+}
+function startFocus(id) { const b = find(id); if (!b) return; state.focus = { id, title: b.title, endsAt: Date.now() + 25 * 60000 }; say(`Focus started on ${b.title}.`); commit(); }
+function stopFocus() { state.focus = null; say("Focus stopped."); commit(); }
+function setNow(min) { state.now = Math.max(DAY_START, Math.min(1320, min)); state.oneSkip = 0; commit(true); }
+function commit(quiet) { save(); render(); if (!quiet) syncTools(); }
+function resetDemo() { const keep = { planView: state.planView, dayView: state.dayView }; state = Object.assign(seed(), keep); say("Demo reset."); commit(); }
+
+/* ---- main views ---- */
+function frost() {
+  const hours = Array.from({ length: 17 }, (_, i) => `<span style="top:${i * 28}px">${hm(360 + i * 60)}</span>`).join("");
+  const cols = DAYS.map((_, d) => `<div class="col">${d === TODAY ? `<div class="nowl" style="top:${(state.now - 360) / 60 * 28}px"></div>` : ""}${onDay(d).map(o => `<div class="blk ${o.kind}" data-id="${o.id}" style="--c:${col(o)};top:${(o.start - 360) / 60 * 28}px;height:${Math.max(o.dur / 60 * 28, 16)}px;${o.done ? "filter:saturate(.35);text-decoration:line-through" : ""}"><b>${esc(o.title)}</b></div>`).join("")}</div>`).join("");
+  return `<div class="frost"><div class="top"><h1>FlexWeek</h1><span>Week of Sep 14</span><button class="btn ghost" data-act="today">My day</button><button class="btn" data-act="plan">Update my plan</button></div><div class="body"><div><div class="grid"><div></div>${DAYS.map((n, d) => `<div class="dh ${d === TODAY ? "today" : ""}">${n} ${DATES[d]}</div>`).join("")}<div class="hrs">${hours}</div>${cols}</div></div>
+  <div class="side"><h3>Add to your week</h3>${["assignments", "study"].map(c => `<button class="chip" data-act="add" data-arg="${c}" style="--c:${CATS[c].color}">${CATS[c].label}</button>`).join("")}<h3 style="margin-top:12px">Tasks to place</h3>${UNPLACED.length ? UNPLACED.map(b => `<div class="task" data-id="${b.id}" style="--c:${col(b)}"><b>${esc(b.title)}</b><br>${dur(b.dur)} · due ${dueText(b)}</div>`).join("") : `<div class="task" style="--c:#79d39f">Every task has a time.</div>`}<h3>Your plan</h3>${openWork().map(o => `<div class="task" data-id="${o.id}" style="--c:${col(o)}">${esc(o.title)}<br><small>${DAYS[o.day]} ${hm(o.start)} · due ${dueText(o)} · ${riskWord(o)}</small></div>`).join("")}</div></div></div>`;
+}
+
+function river() {
+  const d = state.viewDay, list = onDay(d), next = after(d)[0], max = Math.max(...DAYS.map((_, i) => loadMin(i)), 1), nowPill = `<div class="now"><span>NOW ${hm(state.now)}</span></div>`;
+  const ev = o => (o === next ? (d === TODAY ? nowPill : "") + `<div class="ev next" data-id="${o.id}" style="--c:${col(o)}"><time>${hm(o.start)}</time><small>UP NEXT${d === TODAY ? " · in " + dur(o.start - state.now) : ""}</small><h2>${esc(o.title)}</h2><small>${dur(o.dur)} · ${CATS[o.cat].label}${o.due ? " · due " + dueText(o) : ""}</small>${o.kind === "work" ? `<button data-act="focus" data-arg="${o.id}">Start focus</button>` : ""}</div>`
+    : `<div class="ev ${d < TODAY || (d === TODAY && o.start + o.dur <= state.now) || o.done ? "past" : ""}" data-id="${o.id}" style="--c:${col(o)}"><time>${hm(o.start)}</time><b>${o.done ? "<s>" + esc(o.title) + "</s>" : esc(o.title)}</b><small>${dur(o.dur)}${o.due ? " · due " + dueText(o) : ""}${d === TODAY && o.start <= state.now && o.start + o.dur > state.now ? " · happening now" : ""}</small></div>`);
+  const work = list.filter(o => o.kind === "work" && !o.done).length;
+  const inbox = UNPLACED.length ? `<div class="inbox"><b>Not placed yet</b>${UNPLACED.map(b => `<div class="it" data-id="${b.id}"><span><b>${esc(b.title)}</b><small>${dur(b.dur)} · due ${dueText(b)} · ${esc(why(b))}</small></span></div>`).join("")}<button data-act="plan">Plan ${UNPLACED.length === 1 ? "it" : "them"}</button></div>` : "";
+  return `<div class="river"><div class="wrap"><h1>${FULL[d]}</h1><div class="sub">September ${DATES[d]} · ${plural(work, "homework session")} · ${UNPLACED.length} not placed yet</div>
+  <div class="acts"><button data-act="add">+ Add homework</button><button data-act="plan">Plan my week</button><button data-act="today">Go to my day</button></div>
+  <div class="heat">${DAYS.map((n, i) => `<div class="${i === d ? "today" : ""}" data-act="day" data-arg="${i}" aria-label="Show ${FULL[i]}">${n} ${DATES[i]}<i style="width:${Math.max(loadMin(i) / max * 100, 4)}%;opacity:${loadMin(i) ? 1 : .2}"></i></div>`).join("")}</div>${inbox}
+  <div class="rail">${list.map(ev).join("")}${!next && d === TODAY ? nowPill + `<div class="ev" style="--c:#777"><b>Nothing else today.</b><small>Tomorrow starts with ${esc((onDay(d + 1)[0] || { title: "a free morning" }).title)}.</small></div>` : ""}${!list.length ? `<div class="ev" style="--c:#777"><b>A free day.</b></div>` : ""}</div></div></div>`;
+}
+
+function control() {
+  const pct = m => (m - DAY_START) / DAY_LEN * 100;
+  const lanes = DAYS.map((n, d) => `<div class="lane ${d === TODAY ? "today" : ""}"><b>${n.toUpperCase()} ${DATES[d]}</b><div class="track">${onDay(d).map(o => `<div class="bar ${o.kind}" data-id="${o.id}" style="--c:${col(o)};left:${pct(o.start)}%;width:${o.dur / DAY_LEN * 100}%;${o.done ? "background:#1b2230;border-style:dashed;color:#c9d2e0;font-weight:400;text-decoration:line-through" : ""}">${esc(o.title)}</div>`).join("")}${d === TODAY ? `<div class="nowline" style="left:${pct(state.now)}%"></div>` : ""}</div></div>`).join("");
+  const axis = Array.from({ length: 9 }, (_, i) => `<span style="left:${i * 12.5}%">${hm(360 + i * 120)}</span>`).join("");
+  const risks = openWork().map(o => `<div class="risk" data-id="${o.id}" style="--c:${o.risk > .8 ? "#ff4d6d" : o.risk > .5 ? "#ffb000" : "#4ee6c4"};--p:${o.risk * 100}%">${esc(o.title)}<span>${riskWord(o).toUpperCase()} · ${dueText(o)}</span><i></i></div>`).join("");
+  const max = Math.max(...DAYS.map((_, d) => loadMin(d)), 1), worst = openWork()[0];
+  return `<div class="control"><div class="railnav">${icon("target")}${icon("list")}${icon("clock")}${icon("flag")}${icon("sliders")}</div><div class="head"><b>FLEXWEEK / WEEK 38</b><span>LOCAL <em>${hm(state.now)}</em></span><span>PLAN <em>${WORK.length}/${WORK.length + UNPLACED.length} PLACED</em></span><span>SLACK MIN <em style="color:#ff4d6d">${worst ? dur(Math.max(slackOf(worst), 0)) : "n/a"}</em></span><span class="cmds"><button data-act="add">+ ADD</button><button data-act="plan">RUN PLAN</button><button data-act="today">MY DAY</button></span></div>
+  <div class="gantt"><div class="axis"><div></div><div>${axis}</div></div>${lanes}</div>
+  <div class="side"><h4>Deadline radar</h4>${risks || (UNPLACED.length ? "" : "<div>All clear.</div>")}${UNPLACED.map(b => `<div class="risk" data-id="${b.id}" style="--c:#ff4d6d;--p:100%">${esc(b.title)}<span>UNPLACED</span><i></i></div>`).join("")}<h4 style="margin-top:16px">Homework load / day</h4><div class="load">${DAYS.map((_, d) => `<div class="${d === TODAY ? "today" : ""}" style="height:${Math.max(loadMin(d) / max * 100, 3)}%"></div>`).join("")}</div><div style="display:grid;grid-template-columns:repeat(7,1fr);font:11px ui-monospace,monospace;text-align:center">${DAYS.map(n => `<span>${n[0]}</span>`).join("")}</div></div>
+  <div class="log">${state.log.slice(-4).map(line => esc(line).replace(/ (OK) /, " <b>$1</b> ").replace(/ (WARN) /, " <u>$1</u> ")).join(" · ")}</div></div>`;
+}
+
+function bento() {
+  const d = state.viewDay, shown = onDay(d), next = after(TODAY)[0], tonight = onDay(TODAY).find(o => o.kind === "work" && !o.done && o.start + o.dur > state.now), max = Math.max(...DAYS.map((_, i) => loadMin(i)), 1);
+  return `<div class="bento"><div class="tiles">
+  <section class="t hero">${next ? `<small>Up next · in ${dur(next.start - state.now)}</small><h2 data-id="${next.id}">${esc(next.title)}</h2><p>${hm(next.start)}–${hm(next.start + next.dur)} · ${CATS[next.cat].label}</p>` : `<small>Up next</small><h2>Nothing else today</h2><p>The rest of the day is yours.</p>`}<button data-act="today">Go to my day</button></section>
+  <section class="t tall scroll"><small>Deadlines</small>${openWork().map(o => `<div class="dl" data-id="${o.id}"><span><b>${esc(o.title)}</b><br>${dueText(o)}</span><span class="tag ${o.risk > .8 ? "risk" : o.risk > .5 ? "tight" : ""}">${riskWord(o)}</span></div>`).join("") || "<p>None open.</p>"}</section>
+  ${tonight ? `<section class="t"><small>Tonight</small><h3 data-id="${tonight.id}">${esc(tonight.title)}</h3><p style="margin:4px 0 0">${hm(tonight.start)} · ${dur(tonight.dur)}</p><button data-act="focus" data-arg="${tonight.id}">Start focus</button></section>` : `<section class="t"><small>Tonight</small><h3>No homework tonight</h3></section>`}
+  <section class="t"><small>Homework this week</small><div class="big">${dur(DAYS.reduce((t, _, i) => t + loadMin(i), 0))}</div><p style="margin:2px 0 0">${plural(WORK.length, "session")}, ${WORK.filter(o => o.done).length} done</p></section>
+  <section class="t tall scroll"><small>Not placed yet${UNPLACED.length ? " (" + UNPLACED.length + ")" : ""}</small>${UNPLACED.length ? UNPLACED.map(b => `<div class="un" data-id="${b.id}"><span><b>${esc(b.title)}</b><br>${esc(why(b))}</span><span>${dur(b.dur)}<br>${dueText(b)}</span></div>`).join("") + `<button data-act="plan">Plan ${UNPLACED.length === 1 ? "it" : "them"}</button>` : `<h3>Nothing waiting</h3><p style="margin:4px 0 0">Everything you added has a time.</p>`}</section>
+  <section class="t wide"><small>Load by day, in minutes. Click a day.</small><div class="bars">${DAYS.map((n, i) => `<div class="${i === TODAY ? "today" : ""} ${i === d ? "sel" : ""}" data-act="day" data-arg="${i}" aria-label="Show ${FULL[i]}" style="height:${Math.max(loadMin(i) / max * 100, 6)}%"><span>${n} ${loadMin(i) || "0"}</span></div>`).join("")}</div></section>
+  <section class="t"><small>Something new?</small><h3>Add homework</h3><button data-act="add">+ Add</button></section>
+  <section class="t span3"><small>${d === TODAY ? "Today, " : ""}${FULL[d]} ${DATES[d]}</small><div class="strip">${shown.map(o => `<div data-id="${o.id}" class="${(d === TODAY ? o.start + o.dur <= state.now : d < TODAY) || o.done ? "past" : ""}" style="--c:${col(o)}"><b>${hm(o.start)}</b><br>${esc(o.title)}</div>`).join("") || "<div style='--c:#a8adbb'>A free day.</div>"}</div></section>
+  </div></div>`;
+}
+
+function y2k() {
+  const w = state.wins, pos = n => `left:${w[n].x}px;top:${w[n].y}px`;
+  const cells = DAYS.map((_, d) => `<td>${onDay(d).map(o => `<div data-id="${o.id}" style="--c:${col(o)};${o.done ? "text-decoration:line-through" : ""}">${hm(o.start)} ${esc(o.title)}</div>`).join("")}</td>`).join("");
+  const lines = openWork().map(o => `<span data-id="${o.id}">${o.risk > .8 ? "!!" : o.risk > .5 ? " !" : "  "} ${esc(o.title.padEnd(24))} ${dueText(o)}</span>`).concat(UNPLACED.map(b => `<span data-id="${b.id}">?? ${esc(b.title.padEnd(24))} ${dueText(b)}  (not placed)</span>`)).join("\n") || "nothing open.";
+  const next = after(TODAY)[0];
+  return `<div class="y2k"><div class="icons"><div><b></b>My Week</div><div><b></b>Homework</div><div><b></b>Focus Timer</div><div><b></b>Recycle Bin</div></div>
+  ${w.week.open ? `<div class="win" data-win="week" style="${pos("week")};width:820px"><div class="bar"><span>Week.exe — September 14 to 20</span><span><i data-act="win" data-arg="week" role="button" aria-label="Close Week"></i></span></div><div class="body"><div class="menubar"><button data-act="add">Add homework…</button><button data-act="plan">Plan my week</button><button data-act="today">My day</button></div><div class="sunken"><table><tr>${DAYS.map((n, d) => `<th class="${d === TODAY ? "today" : ""}">${n} ${DATES[d]}${d === TODAY ? " (today)" : ""}</th>`).join("")}</tr><tr>${cells}</tr></table></div></div></div>` : ""}
+  ${w.notes.open ? `<div class="win" data-win="notes" style="${pos("notes")};width:500px"><div class="bar"><span>deadlines.txt — Notepad</span><span><i data-act="win" data-arg="notes" role="button" aria-label="Close Notepad"></i></span></div><div class="body"><div class="sunken vt"><pre style="margin:0;font:inherit">${lines}</pre></div></div></div>` : ""}
+  ${w.next.open ? `<div class="win" data-win="next" style="${pos("next")};width:350px"><div class="bar"><span>Up next</span><span><i data-act="win" data-arg="next" role="button" aria-label="Close Up next"></i></span></div><div class="body"><p style="margin:2px 0 8px">${next ? `<b>${esc(next.title)}</b> starts at ${hm(next.start)}, in ${dur(next.start - state.now)}.` : "Nothing else today."}</p><button class="btn" data-act="win" data-arg="next">OK</button> <button class="btn" data-act="today">My day</button></div></div>` : ""}
+  ${state.startOpen ? `<div class="menu">${CONCEPTS.map((c, i) => `<button data-act="view" data-arg="${i}">${esc(c.name)}</button>`).join("")}</div>` : ""}
+  <div class="task"><button class="btn" style="font-weight:700" data-act="start">Start</button>${[["week", "Week.exe"], ["notes", "deadlines.txt"], ["next", "Up next"]].map(([n, label]) => `<button class="btn ${w[n].open ? "on" : ""}" data-act="win" data-arg="${n}">${label}</button>`).join("")}<span class="clock">${hm(state.now)}</span></div></div>`;
+}
+
+function clay() {
+  const bgs = ["#FDBCB4", "#ADD8E6", "#c9f7d0", "#E6E6FA", "#ffe2b8", "#ADD8E6", "#FDBCB4"], mid = state.clay, shown = [mid - 2, mid - 1, mid, mid + 1, mid + 2].filter(d => d >= 0 && d <= 6);
+  const card = d => { const off = d - mid, s = off === 0 ? 1 : Math.abs(off) === 1 ? .86 : .72;
+    return `<div class="c ${d === TODAY ? "today" : ""}" style="--bg:${bgs[d]};--s:${s};--r:${off * 3}deg;--z:${5 - Math.abs(off)}"><h2>${FULL[d]} ${DATES[d]}</h2>${onDay(d).map(o => `<div class="pill ${o.done ? "done" : ""}" data-id="${o.id}" style="--c:${col(o)}"><i></i><span>${esc(o.title)}<small>${hm(o.start)} · ${dur(o.dur)}</small></span>${o.kind === "work" && !o.done ? `<span class="chip">${o.risk > .8 ? "at risk" : "due " + DAYS[o.due.day % 7]}</span>` : ""}</div>`).join("") || "<p>A free day.</p>"}</div>`; };
+  return `<div class="clay"><div><h1>Your week, one day at a time</h1><div class="sub">${FULL[mid]} is in the middle.</div>${UNPLACED.length ? `<div class="tray">Not placed yet:${UNPLACED.map(b => `<span class="pill" data-id="${b.id}" style="--c:${col(b)}"><i></i>${esc(b.title)}</span>`).join("")}</div>` : ""}</div><div class="deck">${shown.map(card).join("")}</div>
+  <div class="nav"><button data-act="clay" data-arg="-1">Earlier</button><button data-act="clay" data-arg="0">Today</button><button data-act="clay" data-arg="1">Later</button><span class="gap"></span><button data-act="add">Add homework</button><button data-act="plan">Plan my week</button><button data-act="today">My day</button></div></div>`;
+}
+
+/* ---- day screens: what you do while living the day, written once ---- */
+const workLeft = () => onDay(TODAY).some(o => o.kind === "work" && !o.done && o.start + o.dur > state.now);
+const dayActions = o => `<div class="acts">${o && o.kind === "work" ? `<button class="main" data-act="done" data-arg="${o.id}">Done</button><button data-act="focus" data-arg="${o.id}">Start focus</button>` : ""}${workLeft() ? `<button data-act="late">Running late</button>` : ""}<button data-act="back">Back to planning</button></div>`;
+
+function one() {
+  const { current, queue } = dayQueue(), at = Math.min(state.oneSkip, Math.max(queue.length - 1, 0)), item = queue[at], isNow = !!item && item === current;
+  const pct = m => (m - DAY_START) / DAY_LEN * 100, left = onDay(TODAY).filter(o => o.kind === "work" && !o.done && o.start + o.dur > state.now).length, tomorrow = onDay(TODAY + 1)[0];
+  const label = !item ? "Done for today" : isNow ? "Now" : at === (current ? 1 : 0) ? "Up next" : "Later today";
+  const line = !item ? (tomorrow ? `Tomorrow starts with ${esc(tomorrow.title)} at ${hm(tomorrow.start)}` : "Nothing is planned tomorrow") : isNow ? `until ${hm(item.start + item.dur)} · ${dur(item.start + item.dur - state.now)} left` : `${hm(item.start)} · in ${dur(item.start - state.now)}`;
+  const then = queue.slice(at + 1, at + 3);
+  return `<div class="one"><div class="top"><span>${FULL[TODAY]} ${DATES[TODAY]} · ${hm(state.now)}</span><span>${plural(left, "homework session")} left today</span></div>
+  <div class="mid" data-now><div class="lbl">${label}</div><h1 ${item ? `data-id="${item.id}"` : ""}>${item ? esc(item.title) : "Nothing else today"}</h1><h2>${line}</h2>${isNow ? `<div class="prog" role="img" aria-label="${Math.round((state.now - item.start) / item.dur * 100)} percent through"><i style="width:${(state.now - item.start) / item.dur * 100}%"></i></div>` : ""}${dayActions(item)}</div>
+  <div><div class="day" aria-hidden="true">${onDay(TODAY).map(o => `<i class="${o === item ? "next" : ""}" style="left:${pct(o.start)}%;width:${o.dur / DAY_LEN * 100}%"></i>`).join("")}<u style="left:${pct(state.now)}%"></u></div>
+  <div class="foot"><span>${then.length ? "Then: " + then.map(o => esc(o.title) + " " + hm(o.start)).join(", ") : "Then: nothing"}</span><span>Space: what comes after · B: back to planning</span></div></div></div>`;
+}
+
+function dialSvg(d, size, big) {
+  const c = size / 2, r = size * 0.38, w = size * (big ? 0.11 : 0.13), ang = m => (-150 + (m - DAY_START) / DAY_LEN * 300) * Math.PI / 180;
+  const pt = (a, rad) => [c + rad * Math.sin(a), c - rad * Math.cos(a)];
+  const arc = (m1, m2, rad) => { const [x1, y1] = pt(ang(m1), rad), [x2, y2] = pt(ang(m2), rad); return `M${x1.toFixed(1)} ${y1.toFixed(1)}A${rad} ${rad} 0 ${ang(m2) - ang(m1) > Math.PI ? 1 : 0} 1 ${x2.toFixed(1)} ${y2.toFixed(1)}`; };
+  let s = `<svg viewBox="0 0 ${size} ${size}" role="img" aria-label="${FULL[d]} shown as a clock face from 06:00 to 22:00"><path d="${arc(DAY_START, DAY_START + DAY_LEN, r)}" fill="none" stroke="#232b4d" stroke-width="${w}" stroke-linecap="round"/>`;
+  onDay(d).forEach(o => { s += `<path ${big ? `data-id="${o.id}"` : ""} d="${arc(o.start, o.start + o.dur, o.kind === "work" ? r + w * 0.75 : r)}" fill="none" stroke="${col(o)}" stroke-width="${o.kind === "work" ? w * 0.5 : w}" opacity="${o.done ? .35 : 1}"/>`; });
+  if (big) {
+    for (let h = 6; h <= 22; h += 2) { const [x, y] = pt(ang(h * 60), r - w * 1.15); s += `<text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" fill="#7f8cc0" font-size="12" text-anchor="middle">${h}</text>`; }
+    if (d === TODAY) { const [hx, hy] = pt(ang(state.now), r + w); s += `<line x1="${c}" y1="${c}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="#ff4d6d" stroke-width="3" stroke-linecap="round"/><circle cx="${c}" cy="${c}" r="6" fill="#ff4d6d"/><text x="${c}" y="${c + 60}" fill="#fff" font-size="34" font-weight="700" text-anchor="middle">${hm(state.now)}</text>`; }
+    else s += `<text x="${c}" y="${c + 12}" fill="#fff" font-size="30" font-weight="700" text-anchor="middle">${DAYS[d]} ${DATES[d]}</text>`;
+  }
+  return s + "</svg>";
+}
+function dial() {
+  const d = state.viewDay, isToday = d === TODAY, { current, queue } = dayQueue(), item = queue[0], isNow = !!item && item === current, list = onDay(d);
+  const card = !isToday ? `<div class="card"><small>${FULL[d]}, September ${DATES[d]}</small><h3>${plural(list.filter(o => o.kind === "work" && !o.done).length, "homework session")}</h3><div class="acts"><button class="main" data-act="day" data-arg="${TODAY}">Back to today</button><button data-act="back">Back to planning</button></div></div>`
+    : item ? `<div class="card" data-now><small>${isNow ? `Now · until ${hm(item.start + item.dur)} · ${dur(item.start + item.dur - state.now)} left` : `Up next · ${hm(item.start)} · in ${dur(item.start - state.now)}`}</small><h3 data-id="${item.id}">${esc(item.title)}</h3>${queue[1] ? `<small>Then ${esc(queue[1].title)} at ${hm(queue[1].start)}</small>` : ""}${dayActions(item)}</div>`
+    : `<div class="card" data-now><small>Done for today</small><h3>Nothing else today</h3>${dayActions(null)}</div>`;
+  const past = o => o.done || (isToday ? o.start + o.dur <= state.now : d < TODAY);
+  return `<div class="dial"><div>${dialSvg(d, 520, true)}</div><div>${card}<h4>${isToday ? "Today" : FULL[d]}, hour by hour</h4>
+  <ol class="rest">${list.map(o => `<li data-id="${o.id}" class="${past(o) ? "past" : isToday && o === item && isNow ? "cur" : ""}" ${isToday && o === item && isNow ? 'aria-current="true"' : ""} style="--c:${col(o)}"><b>${hm(o.start)}</b><span>${esc(o.title)}</span><span>${dur(o.dur)}</span></li>`).join("") || "<li style='--c:#56629a'><b></b><span>A free day.</span><span></span></li>"}</ol>
+  ${UNPLACED.length ? `<p class="unp" data-act="back">${plural(UNPLACED.length, "task")} not placed yet. Go back to planning to give ${UNPLACED.length === 1 ? "it" : "them"} a time.</p>` : ""}
+  <div class="mini">${DAYS.map((n, i) => `<figure class="${i === d ? "today" : ""}" data-act="day" data-arg="${i}" aria-label="Show ${FULL[i]}">${dialSvg(i, 150, false)}${n} ${DATES[i]}</figure>`).join("")}</div></div></div>`;
+}
+
+const ICONS = {
+  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/>', list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', flag: '<path d="M4 21V4h13l-2 4 2 4H4"/>',
+  sliders: '<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
+};
+function icon(name) { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`; }
+
+/* role "plan" = a main view you plan in; role "day" = a screen you watch once planning is done. */
+const CONCEPTS = [
+  { id: "frost", role: "plan", name: "Today's app", render: frost, tryit: "Add from a chip, press Update my plan, then My day.", what: "The baseline: a top bar, a vertical week grid and a sidebar. The familiar thing, and the only one that was already a complete main view.", qt: "Already built natively.", cat: "Pairing 30 (Figtree). Style 3, Glassmorphism." },
+  { id: "river", role: "plan", name: "Timeline", render: river, tryit: "Add homework, press Plan it in the dashed box, click a day in the strip, then Go to my day.", what: "One column for one day, the week shrunk to a strip of load bars. New: its own Add and Plan, and an inbox for what has no time yet. Phone-first.", qt: "A list view with a custom delegate; the closest to the existing Day view.", cat: "Pairing 13 (Plus Jakarta Sans). Style 1, Minimalism. 44px buttons with 8px gaps, per the catalogue's touch rules." },
+  { id: "control", role: "plan", name: "Mission control", render: control, tryit: "Press + ADD then RUN PLAN in the header. Drag Now: the red line and the slack figure move.", what: "Time runs sideways: days are Gantt lanes with deadline risk, daily load and an event log. New: command buttons in the header.", qt: "QGraphicsView for the lanes; the side panels are plain widgets.", cat: "Pairings 31 and 51 (IBM Plex Sans, Share Tech Mono). Style 28, Data-Dense Dashboard. Mouse-first: its 36px buttons are under the 44px touch minimum on purpose." },
+  { id: "bento", role: "plan", name: "Bento", render: bento, tryit: "Click a day in the load chart: the bottom strip follows. Add, then Plan them. Go to my day.", what: "A home screen of tiles. New: a Not placed yet tile that lists everything and plans it, an Add tile, and load bars that open any day.", qt: "A QGridLayout of frames with row and column spans. Cheap; the tiles reuse data the Day view already fetches.", cat: "Style 39, Bento Box Grid. Pairing 3 (Space Grotesk, DM Sans). Empty tiles say what to do next, per the catalogue's empty-state rule." },
+  { id: "y2k", role: "plan", name: "Retro desktop", render: y2k, tryit: "Use the Week window's menu bar. Drag windows, close and reopen them from the taskbar, press Start.", what: "A desktop with windows and a taskbar. New: a real menu bar (Add, Plan, My day) and clickable lines in the Notepad.", qt: "QMdiArea gives draggable sub-windows natively; the bevels are a stylesheet.", cat: "Style 40, Y2K Aesthetic. Pairing 52 (VT323). Title bars stay dark under white text, as the catalogue's contrast flag asks." },
+  { id: "clay", role: "plan", name: "Clay deck", render: clay, tryit: "Flip with Earlier and Later. Add homework, Plan my week, then click a pill.", what: "Puffy day cards in a deck, one day in the middle. New: a tray for what is not placed yet, and Add and Plan beside the flip buttons.", qt: "QGraphicsView for the overlapping, rotated cards; double shadows need QGraphicsEffects.", cat: "Style 9, Claymorphism. Pairing 6 (Fredoka, Nunito). Dark text on the pastels, as the catalogue's 4.5 to 1 warning asks." },
+  { id: "one", role: "day", name: "One thing", render: one, tryit: "Drag Now to 19:00: homework is on, so Done and Start focus appear. Press Space for what comes after, Running late, then B.", what: "A day screen. The whole window is the thing that is on now, or next if nothing is, with time left and the day as a thin bar. It deliberately cannot plan.", qt: "The cheapest of all: a few labels, four buttons and a painted bar.", cat: "Styles 47, Exaggerated Minimalism, and 18, Zero Interface. Pairing 7 (Bebas Neue, Source Sans 3). One accent only; 48px buttons." },
+  { id: "dial", role: "day", name: "Day dial", render: dial, tryit: "Drag Now and watch the hand. Click a small dial to look at another day. Running late moves the outer arcs.", what: "A day screen. The day is a clock face; a card says what is on now with the same four actions, and the hour-by-hour list reads the arcs out in words.", qt: "A QPainter widget for the face, a list beside it. Arc maths is simple.", cat: "Pairing 11, Geometric Modern (Outfit, Work Sans). Palette 47. The list is the text alternative the catalogue asks charts to have." },
+];
+const NEEDS = {
+  plan: [["week", "Reach the whole week"], ["unplaced", "Show everything not placed yet"], ["add", "Add homework"], ["plan", "Run the plan"], ["open", "Open any block"]],
+  day: [["now", "Say what is on now or next"], ["done", "Mark it done"], ["focus", "Start focus"], ["late", "Running late"], ["back", "Back to planning"]],
+};
+/* The checklist is measured, not claimed: render the concept against a fixed probe week (the seed at 19:00, homework
+   in progress, two tasks waiting) and look for what it offers by itself. */
+function measure(c) {
+  const real = state; state = seed(); state.now = 1140;
+  state.blocks.push({ id: "probe1", title: "Probe one", cat: "study", kind: "work", days: [], start: null, dur: 30, due: { day: 6, min: 1200 } }, { id: "probe2", title: "Probe two", cat: "study", kind: "work", days: [], start: null, dur: 30, due: { day: 6, min: 1200 } });
+  derive();
+  const box = document.createElement("div"); box.innerHTML = c.render();
+  const has = sel => !!box.querySelector(sel), ids = new Set([...box.querySelectorAll("[data-id]")].map(e => e.dataset.id));
+  const found = {
+    week: [...new Set(WORK.map(o => o.id))].every(id => ids.has(id)) || has('[data-act="day"], [data-act="clay"]'),
+    unplaced: UNPLACED.every(b => ids.has(b.id)), add: has('[data-act="add"]'), plan: has('[data-act="plan"]'), open: ids.size > 0,
+    now: has("[data-now]"), done: has('[data-act="done"]'), focus: has('[data-act="focus"]'), late: has('[data-act="late"]'), back: has('[data-act="back"]'),
+  };
+  state = real; derive();
+  return NEEDS[c.role].map(([key, label]) => ({ key, label, ok: found[key] }));
+}
+window.measureAll = () => CONCEPTS.map(c => { const m = measure(c); return `${c.id.padEnd(8)} ${c.role.padEnd(5)} ${m.map(x => x.key + ":" + (x.ok ? "yes" : " NO")).join("  ")}   => ${m.filter(x => x.ok).length}/${m.length}`; }).join(" ## ");
+
+/* ---- shell: switching, rendering, input ---- */
+const stage = document.getElementById("stage"), nav = document.getElementById("switcher"), notes = document.getElementById("notes");
+const indexOf = id => Math.max(0, CONCEPTS.findIndex(c => c.id === id));
+let current = 0;
+function render() {
+  derive();
+  stage.innerHTML = CONCEPTS[current].render();
+  stage.querySelectorAll("[data-id], [data-act]:not(button)").forEach(el => { el.setAttribute("tabindex", "0"); if (!el.hasAttribute("role")) el.setAttribute("role", "button"); });
+}
+function show(index, push = true) {
+  current = (index + CONCEPTS.length) % CONCEPTS.length;
+  const c = CONCEPTS[current];
+  if (c.role === "plan") state.planView = c.id; else state.dayView = c.id;
+  state.startOpen = false; save();
+  document.body.dataset.concept = c.id; closePop(); render(); stage.scrollTop = 0;
+  nav.querySelectorAll("button").forEach((b, i) => b.setAttribute("aria-pressed", String(i === current)));
+  notes.innerHTML = `<div><b>Try this</b>${esc(c.tryit)}</div><div><b>What it is</b>${c.what}</div><div><b>${c.role === "plan" ? "Main view" : "Day screen"} checklist, measured</b><ul>${measure(c).map(m => `<li class="${m.ok ? "" : "no"}">${m.ok ? "✓" : "✗ missing:"} ${m.label}</li>`).join("")}</ul></div><div><b>Building it natively (Qt)</b>${c.qt}</div><div><b>From the design catalogue</b>${c.cat}</div>`;
+  if (push && location.hash !== "#" + c.id) history.pushState(null, "", "#" + c.id);
+}
+[["plan", "Plan in"], ["day", "Then watch your day"]].forEach(([role, label]) => {
+  const tag = document.createElement("span"); tag.className = "grp"; tag.textContent = label; nav.appendChild(tag);
+  CONCEPTS.forEach((c, i) => { if (c.role !== role) return; const b = document.createElement("button"); b.type = "button"; b.innerHTML = `<kbd>${i + 1}</kbd>${c.name}`; b.addEventListener("click", () => show(i)); nav.appendChild(b); });
+});
+window.addEventListener("popstate", () => show(indexOf(location.hash.slice(1)), false));
+
+function syncTools() {
+  document.getElementById("t-now").value = state.now; document.getElementById("t-now-out").textContent = hm(state.now);
+  const chip = document.getElementById("t-focus");
+  if (!state.focus) { chip.hidden = true; return; }
+  const left = Math.max(0, Math.round((state.focus.endsAt - Date.now()) / 1000));
+  chip.hidden = false; chip.innerHTML = `Focus · ${esc(state.focus.title)} · ${String(Math.floor(left / 60)).padStart(2, "0")}:${String(left % 60).padStart(2, "0")} <button type="button" data-tool="stop">Stop</button>`;
+  if (!left) { say(`Focus session on ${state.focus.title} finished.`); state.focus = null; save(); chip.hidden = true; }
+}
+setInterval(() => { if (state.focus) syncTools(); }, 1000);
+
+function openAdd(cat) {
+  const due = document.getElementById("add-due"); due.innerHTML = "";
+  for (let d = TODAY; d <= 7; d++) due.add(new Option(d === TODAY ? "Tonight" : d === 7 ? "Next Monday morning" : FULL[d], d));
+  due.value = "6"; document.getElementById("add-cat").value = cat && CATS[cat] ? cat : "assignments"; document.getElementById("add-name").value = "";
+  document.getElementById("add-dialog").showModal();
+}
+/* Listen for submit, not the dialog's close: close never fired under QtWebEngine, and submit names the button that was pressed. */
+document.getElementById("add-form").addEventListener("submit", event => {
+  if (!event.submitter || event.submitter.value !== "ok") return;
+  addHomework(document.getElementById("add-name").value, Number(document.getElementById("add-dur").value), Number(document.getElementById("add-due").value), document.getElementById("add-cat").value);
+});
+document.getElementById("t-reset").addEventListener("click", resetDemo);
+document.getElementById("t-now").addEventListener("input", event => { setNow(Number(event.target.value)); document.getElementById("t-now-out").textContent = hm(state.now); });
+document.getElementById("t-focus").addEventListener("click", event => { if (event.target.dataset.tool === "stop") stopFocus(); });
+
+function closePop() { const p = document.getElementById("pop"); if (p) p.remove(); }
+function openPop(id, anchor) {
+  const b = find(id); if (!b) return;
+  const occ = OCC.find(o => o.id === id), pop = document.createElement("div"); pop.id = "pop"; pop.setAttribute("role", "dialog"); pop.setAttribute("aria-label", b.title);
+  const when = b.days.length ? (b.days.length > 1 ? b.days.map(d => DAYS[d]).join(", ") : DAYS[b.days[0]]) + " " + hm(b.start) + "–" + hm(b.start + b.dur) : "not placed yet";
+  const days = Array.from({ length: 7 - TODAY }, (_, i) => TODAY + i).map(d => `<option value="${d}" ${b.days[0] === d ? "selected" : ""}>${FULL[d]}</option>`).join("");
+  pop.innerHTML = `<h4>${esc(b.title)}</h4><p>${CATS[b.cat].label} · ${dur(b.dur)} · ${when}</p>${b.due ? `<p>Due ${dueText(b)}${occ && !b.done ? " · " + riskWord(occ) : ""}</p>` : ""}${!b.days.length ? `<p>${esc(why(b))}</p>` : ""}
+  <div class="row">${b.kind === "work" ? `<button data-pop="done">${b.done ? "Reopen" : "Mark done"}</button><button data-pop="focus">Start focus</button><label>Move to <select data-pop="move"><option value="">…</option>${days}</select></label><button data-pop="delete">Delete</button>` : ""}<button data-pop="close">Close</button></div>`;
+  document.body.appendChild(pop);
+  const r = anchor.getBoundingClientRect(); pop.style.left = Math.min(Math.max(8, r.left), innerWidth - 280) + "px"; pop.style.top = Math.max(8, Math.min(r.bottom + 6, innerHeight - pop.offsetHeight - 8)) + "px";
+  pop.addEventListener("click", event => { const a = event.target.dataset.pop; if (!a || a === "move") return; closePop(); if (a === "done") toggleDone(id); else if (a === "focus") startFocus(id); else if (a === "delete") removeBlock(id); });
+  pop.addEventListener("change", event => { if (event.target.dataset.pop === "move" && event.target.value !== "") { closePop(); moveTo(id, Number(event.target.value)); } });
+  pop.querySelector("button").focus();
+}
+const ACTIONS = {
+  plan, add: arg => openAdd(arg), focus: arg => startFocus(arg), done: arg => toggleDone(arg), late: runningLate, view: arg => show(Number(arg)),
+  today: () => show(indexOf(state.dayView)), back: () => show(indexOf(state.planView)),
+  day: arg => { state.viewDay = Number(arg); commit(true); },
+  clay: arg => { state.clay = Number(arg) === 0 ? TODAY : Math.max(0, Math.min(6, state.clay + Number(arg))); commit(true); },
+  win: arg => { state.wins[arg].open = !state.wins[arg].open; commit(true); }, start: () => { state.startOpen = !state.startOpen; commit(true); },
+};
+stage.addEventListener("click", event => {
+  const act = event.target.closest("[data-act]"), block = event.target.closest("[data-id]");
+  closePop();
+  if (act) { if (act.dataset.act !== "start" && state.startOpen) state.startOpen = false; ACTIONS[act.dataset.act](act.dataset.arg); event.stopPropagation(); }
+  else if (block) { openPop(block.dataset.id, block); event.stopPropagation(); }
+});
+
+/* retro desktop: drag a window by its title bar */
+let dragWin = null;
+stage.addEventListener("pointerdown", event => { const bar = event.target.closest(".y2k .bar"); if (!bar || event.target.closest("[data-act]")) return; const win = bar.parentElement, name = win.dataset.win; dragWin = { win, name, dx: event.clientX - state.wins[name].x, dy: event.clientY - state.wins[name].y }; try { bar.setPointerCapture(event.pointerId); } catch { /* dragging still works without capture */ } });
+stage.addEventListener("pointermove", event => { if (!dragWin) return; const p = state.wins[dragWin.name]; p.x = Math.max(0, event.clientX - dragWin.dx); p.y = Math.max(0, event.clientY - dragWin.dy); dragWin.win.style.left = p.x + "px"; dragWin.win.style.top = p.y + "px"; });
+stage.addEventListener("pointerup", () => { if (dragWin) { dragWin = null; save(); } });
+
+/* Shortcuts never fire while someone is typing: the same bug class the native review found. */
+document.addEventListener("keydown", event => {
+  if (event.target.closest("input, textarea, select, dialog")) { if (event.key === "Escape") closePop(); return; }
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  const focused = document.activeElement, c = CONCEPTS[current], key = event.key.toLowerCase();
+  if (event.key === " " && c.id === "one") { event.preventDefault(); closePop(); const n = dayQueue().queue.length; state.oneSkip = state.oneSkip + 1 >= n ? 0 : state.oneSkip + 1; commit(true); }
+  else if ((event.key === "Enter" || event.key === " ") && focused && focused !== document.body && stage.contains(focused) && focused.tagName !== "BUTTON") { event.preventDefault(); focused.dispatchEvent(new MouseEvent("click", { bubbles: true })); }
+  else if (key === "b" && c.role === "day") ACTIONS.back();
+  else if (key === "d" && c.role === "plan") ACTIONS.today();
+  else if (/^[1-8]$/.test(event.key)) show(Number(event.key) - 1);
+  else if (event.key === "ArrowRight") show(current + 1); else if (event.key === "ArrowLeft") show(current - 1); else if (event.key === "Escape") closePop();
+});
+window.__errors = []; window.addEventListener("error", e => window.__errors.push(String(e.message)));
+syncTools();
+show(indexOf(location.hash.slice(1)), false);
+</script>
+</body>
+</html>
