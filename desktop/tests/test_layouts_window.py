@@ -593,3 +593,24 @@ def test_every_dialog_fits_a_laptop_screen(qapp: QApplication, window: NativeWin
     # screen, which is why a screen-sized bound caught nothing; 700 square is the real rule.
     wrong = {name: size for name, size in sizes.items() if size[0] > 700 or size[1] > 768 or size[0] < 320}
     assert wrong == {}
+
+
+def test_the_focus_timer_reads_as_one_status_line(qapp: QApplication, window: NativeWindow) -> None:
+    """Over a design of its own the timer arrived as loose text: the homework, then the phase, then
+    the countdown, each on its own row."""
+    from PySide6.QtWidgets import QLabel
+
+    window._layout = {"main": "bento", "day": "one", "options": {}}
+    window._on_week()
+    block = next(b for b in window.session.blocks if b.get("assignment_id"))
+    window.session.start_focus(block["id"], 3)
+    wait_until(qapp, lambda: window.session.focus is not None)
+    qapp.processEvents()
+    parts = [window.focus_panel.findChild(QLabel, name) for name in ("focusTask", "focusPhase", "focusTime")]
+    assert all(part is not None and part.isVisible() for part in parts)
+    tops = {part.mapTo(window.focus_panel, part.rect().topLeft()).y() for part in parts}
+    assert max(tops) - min(tops) < 8, f"the status is stacked, not one line: {sorted(tops)}"
+    lefts = [part.mapTo(window.focus_panel, part.rect().topLeft()).x() for part in parts]
+    assert lefts == sorted(lefts), "the parts should read left to right"
+    window.session.reset_focus()
+    wait_until(qapp, lambda: window.session.focus is None)

@@ -108,6 +108,7 @@ PACK_LABELS = {
 }
 PACKS = ("system", "light-frost", "dark-frost", "nocturne", "slate")
 ACCENTS = ("default", "sky", "gold", "sea", "sand")
+MONO_FAMILY = "DejaVu Sans Mono, Noto Sans Mono, monospace"
 TEXT_PT = {"small": 10, "normal": 12, "large": 15}
 DENSITY_PAD = {"comfortable": 8, "compact": 4}
 CORNER_RADIUS = {"round": 8, "sharp": 0, "pill": 16}
@@ -631,6 +632,9 @@ def pack_stylesheet(
         f"QPushButton:disabled {{ background: {palette['hairline_strong']}; color: {palette['muted']}; }}"
         f"QMenu::item {{ min-height: {item_h}px; padding: {pad}px {pad * 2}px; }}"
         f"QLabel#nowNext {{ font-weight: 600; }}"
+        f"QLabel#focusTask {{ font-weight: 600; }}"
+        f"QLabel#focusPhase {{ color: {palette['muted']}; }}"
+        f"QLabel#focusTime {{ font-family: {MONO_FAMILY}; font-weight: 700; }}"
         f"QWidget#authCard {{ background: {palette['panel']}; border-radius: {radius}px; {edges} }}"
         f"QLabel#authBrand {{ font-size: {size + 8}pt; font-weight: 700; color: {palette['accent']}; }}"
         f"QLabel#authHeading {{ font-weight: 600; }}"

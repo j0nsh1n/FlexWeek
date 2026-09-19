@@ -76,15 +76,19 @@ class FocusPanel(QWidget):
         self.now_next.setObjectName("nowNext")
         self.now_next.setWordWrap(True)
         layout.addWidget(self.now_next)
+        # One status line, not four stacked labels. Over a design of its own the timer used to
+        # arrive as loose text: the homework, then "Focus session", then "30:00", each on its own row.
+        status = QHBoxLayout()
         self.task = QLabel()
         self.task.setObjectName("focusTask")
-        layout.addWidget(self.task)
         self.phase = QLabel()
         self.phase.setObjectName("focusPhase")
-        layout.addWidget(self.phase)
         self.time = QLabel()
         self.time.setObjectName("focusTime")
-        layout.addWidget(self.time)
+        for widget in (self.task, self.phase, self.time):
+            status.addWidget(widget)
+        status.addStretch(1)
+        layout.addLayout(status)
         controls = QHBoxLayout()
         self.pause = QPushButton("Pause")
         self.pause.setObjectName("focusPause")
