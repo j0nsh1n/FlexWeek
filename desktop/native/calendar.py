@@ -23,8 +23,7 @@ FIRST_MONTH = "2000-01"
 LAST_MONTH = "2099-12"
 MONTH_SAVED_ONLY = "This month shows saved changes only. Save your week to include recent edits."
 SERIES_DRAG_MESSAGE = (
-    "{title} repeats on {count} days, so dragging it is ambiguous. "
-    "Edit the occurrence or the series."
+    "{title} repeats on {count} days, so dragging it is ambiguous. Edit the occurrence or the series."
 )
 # color is the pale cell fill; mark is the strong colour the web client uses, for outlines and edges.
 CATEGORIES = {
@@ -307,9 +306,7 @@ def due_soon_for(iso_day: str, assignments: dict[str, dict]) -> list[dict]:
 
 def _is_work_session(block: dict) -> bool:
     return block.get("kind") == "flexible" or (
-        block.get("kind") == "locked"
-        and block.get("pomodoro_role") == "work"
-        and block.get("assignment_id")
+        block.get("kind") == "locked" and block.get("pomodoro_role") == "work" and block.get("assignment_id")
     )
 
 
@@ -372,8 +369,7 @@ def next_action_for(
         if row["start"] and not row["block"].get("completed") and not (assignment or {}).get("completed"):
             return {"kind": "start", "id": row["block"]["id"]}
     unplanned = {
-        item["id"]: item.get("unplanned_min") or 0
-        for item in (day_data or {}).get("due_soon") or []
+        item["id"]: item.get("unplanned_min") or 0 for item in (day_data or {}).get("due_soon") or []
     }
     for item in due_soon:
         if unplanned.get(item["id"], 0) > 0:

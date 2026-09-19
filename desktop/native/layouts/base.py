@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QApplication, QLabel, QLayout, QPushButton, QWidget
+from PySide6.QtWidgets import QApplication, QFrame, QLabel, QLayout, QPushButton, QScrollArea, QWidget
 
 from desktop.native.calendar import CATEGORIES
 from desktop.native.weekmodel import Occurrence, WeekModel
@@ -189,3 +189,23 @@ def plan_buttons(view: LayoutView, prefix: str, words: tuple[str, str, str]) -> 
     my_day = button(words[2], f"{prefix}MyDay")
     my_day.clicked.connect(view.my_day_requested.emit)
     return [add, plan, my_day]
+
+
+def block_button(view: LayoutView, text: str, name: str, block_id: str, kind: str = "row") -> QPushButton:
+    """A block as something a keyboard can reach. The `block_id` property is how a test, or a screen
+    reader's script, can tell which block a button opens."""
+    made = button(text, name, kind)
+    made.setProperty("block_id", block_id)
+    made.clicked.connect(lambda _=False: view.block_activated.emit(block_id))
+    return made
+
+
+def scrolling(content: QWidget, name: str) -> QScrollArea:
+    """A main view shares the window with the planning controls and gets about half its height, so
+    whatever does not fit scrolls instead of being cut off."""
+    area = QScrollArea()
+    area.setObjectName(name)
+    area.setWidgetResizable(True)
+    area.setFrameShape(QFrame.Shape.NoFrame)
+    area.setWidget(content)
+    return area

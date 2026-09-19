@@ -336,3 +336,62 @@ def test_my_day_opens_whichever_day_screen_was_picked(qapp: QApplication, window
     assert view.findChild(QLabel, "dialTitle").text() == "History essay"
     click(window, "dialBack")
     assert window.planner.currentWidget() is window.week_table
+
+
+def tool_actions(window: NativeWindow) -> dict[str, bool]:
+    menu = window.tools_button.menu()
+    menu.aboutToShow.emit()
+    return {action.text(): action.isEnabled() for action in menu.actions() if action.text()}
+
+
+def test_a_design_of_its_own_gets_the_window_and_tools_holds_the_controls(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    assert window.tools_button.isVisible() is False
+    window._layout = {"main": "bento", "day": "one", "options": {}}
+    window._on_week()
+    assert type(window.planner.currentWidget()).__name__ == "BentoView"
+    assert window.plan_chrome.isVisible() is False
+    assert window.tools_button.isVisible() is True
+    qapp.processEvents()
+    assert window.planner.height() > window.height() * 0.8
+    offered = tool_actions(window)
+    assert list(offered)[:6] == ["Add fixed time", "Add homework", "Plan my homework", "Undo", "Redo", "Save"]
+    assert {"Settings", "Running late", "Routines", "Account", "Reload"} <= set(offered)
+    assert (offered["Undo"], offered["Redo"]) == (True, False)
+
+
+def test_a_tool_does_what_its_button_does(qapp: QApplication, window: NativeWindow) -> None:
+    window._layout = {"main": "bento", "day": "one", "options": {}}
+    window._on_week()
+    before = len(window.session.blocks)
+    menu = window.tools_button.menu()
+    next(action for action in menu.actions() if action.text() == "Undo").trigger()
+    settled(qapp, window)
+    assert len(window.session.blocks) != before or window.session.can_redo() is True
+
+
+def test_day_and_month_keep_the_planning_controls(qapp: QApplication, window: NativeWindow) -> None:
+    window._layout = {"main": "bento", "day": "one", "options": {}}
+    click(window, "viewDay")
+    assert window.planner.currentWidget() is window.day_agenda
+    assert (window.plan_chrome.isVisible(), window.tools_button.isVisible()) == (True, False)
+    click(window, "viewWeek")
+    assert (window.plan_chrome.isVisible(), window.tools_button.isVisible()) == (False, True)
+    click(window, "viewMyDay")
+    assert (window.plan_chrome.isVisible(), window.tools_button.isVisible()) == (False, False)
+
+
+def test_bentos_buttons_reach_the_products_own_add_and_plan(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asked: list[str] = []
+    monkeypatch.setattr(NativeWindow, "_add_homework", lambda self: asked.append("add"))
+    monkeypatch.setattr(type(window.session), "solve", lambda self: asked.append("plan"))
+    window._layout = {"main": "bento", "day": "one", "options": {}}
+    window._on_week()
+    click(window, "bentoAdd")
+    click(window, "bentoPlan")
+    click(window, "bentoMyDay")
+    assert asked == ["add", "plan"]
+    assert type(window.planner.currentWidget()).__name__ == "OneThingView"

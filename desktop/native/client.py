@@ -43,8 +43,11 @@ def _local_origin(origin: str) -> str:
         host = f"[{address}]" if address.version == 6 else str(address)
         canonical = f"http://{host}:{parsed.port}"
         if (
-            not address.is_loopback or parsed.port is None or parsed.port == 0
-            or parsed.username is not None or parsed.password is not None
+            not address.is_loopback
+            or parsed.port is None
+            or parsed.port == 0
+            or parsed.username is not None
+            or parsed.password is not None
             or origin != canonical
         ):
             raise ValueError
@@ -57,8 +60,13 @@ def _api_path(path: str) -> None:
     parsed = urlsplit(path)
     decoded = unquote(parsed.path)
     if (
-        not path.startswith("/api/") or parsed.scheme or parsed.netloc or parsed.fragment
-        or "#" in path or "\\" in decoded or "//" in decoded
+        not path.startswith("/api/")
+        or parsed.scheme
+        or parsed.netloc
+        or parsed.fragment
+        or "#" in path
+        or "\\" in decoded
+        or "//" in decoded
         or any(part in {".", ".."} for part in decoded.split("/"))
         or any(ord(char) < 33 or ord(char) == 127 for char in path)
         or not decoded.startswith("/api/")
@@ -128,8 +136,10 @@ class NativeClient(QObject):
     def set_account(self, identity: dict) -> None:
         self._check_thread()
         if (
-            type(identity.get("id")) is not int or identity["id"] <= 0
-            or not isinstance(identity.get("username"), str) or not identity["username"]
+            type(identity.get("id")) is not int
+            or identity["id"] <= 0
+            or not isinstance(identity.get("username"), str)
+            or not identity["username"]
         ):
             raise ValueError("An account needs a valid id and username.")
         jar = self._manager.cookieJar()

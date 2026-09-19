@@ -857,8 +857,9 @@ class NativeSession(QObject):
         self._apply_side(step, "after")
         self.save()
 
-    def save(self, snapshot_label: str | None = None, operation_id: str | None = None,
-             record_history: bool = True) -> None:
+    def save(
+        self, snapshot_label: str | None = None, operation_id: str | None = None, record_history: bool = True
+    ) -> None:
         if self.account is None or self.conflict:
             return
         if self.busy:
@@ -1195,11 +1196,7 @@ class NativeSession(QObject):
             if self.clipboard is None:
                 self._say("Copy a block or day before pasting.")
             return None
-        destination = (
-            (target_day, target_start)
-            if target_day is not None
-            else self.paste_destination(today)
-        )
+        destination = (target_day, target_start) if target_day is not None else self.paste_destination(today)
         if destination is None:
             self._say("Select a block or open Day view before pasting into this week.")
             return None
@@ -1313,9 +1310,7 @@ class NativeSession(QObject):
                     revision = data["revision"]
                 if len(blocks) > MAX_WEEK_BLOCKS:
                     if self._idle(ticket):
-                        self._say(
-                            capacity_problem(len(blocks) - len(added), len(added), week_label(week))
-                        )
+                        self._say(capacity_problem(len(blocks) - len(added), len(added), week_label(week)))
                     return
                 writes.append(_week_write(week, blocks, revision))
             if current_after is not None:
@@ -1444,9 +1439,7 @@ class NativeSession(QObject):
         return self.confirm_preview(
             proposals,
             label="the " + routine["name"] + " routine",
-            snapshot_label=restore_point_label(
-                "Before applying " + routine["name"] + " to " + week_start
-            ),
+            snapshot_label=restore_point_label("Before applying " + routine["name"] + " to " + week_start),
             operation_id=self._operation(key),
             attempt_key=key,
             existing=existing,
@@ -1651,9 +1644,7 @@ class NativeSession(QObject):
             remaining = int(data.get("remaining_min") or 0)
             if not sessions:
                 if remaining:
-                    self._say(
-                        f"{remaining} minutes remain, but they do not fit the 15-minute planning grid."
-                    )
+                    self._say(f"{remaining} minutes remain, but they do not fit the 15-minute planning grid.")
                 else:
                     self._say("All of this homework is already focused or planned.")
                 self.spread_preview = None
@@ -1836,9 +1827,7 @@ class NativeSession(QObject):
         if self.account is None or self.focus is not None:
             return
         saved = self.focus_store.get(self.account["id"])
-        state = restore_state(
-            saved, assignments=self.assignments, blocks=self.blocks, now_ms=self.now_ms()
-        )
+        state = restore_state(saved, assignments=self.assignments, blocks=self.blocks, now_ms=self.now_ms())
         if state is None:
             self.focus_store.pop(self.account["id"], None)
             return
@@ -1968,8 +1957,10 @@ class NativeSession(QObject):
                     )
                     return
                 self.focus = set_phase(
-                    self.focus, break_phase(int(self.focus.get("cycles") or 0), self.preferences),
-                    self.preferences, self.now_ms(),
+                    self.focus,
+                    break_phase(int(self.focus.get("cycles") or 0), self.preferences),
+                    self.preferences,
+                    self.now_ms(),
                 )
             else:
                 self.focus = set_phase(self.focus, "work", self.preferences, self.now_ms())
@@ -2043,8 +2034,10 @@ class NativeSession(QObject):
         assignment["estimate_min"] = int(assignment["estimate_min"]) + minutes
         self.dirty_assignments.add(assignment["id"])
         self.focus = set_phase(
-            state, break_phase(int(state.get("cycles") or 0), self.preferences),
-            self.preferences, self.now_ms(),
+            state,
+            break_phase(int(state.get("cycles") or 0), self.preferences),
+            self.preferences,
+            self.now_ms(),
         )
         self._history_label = "adding time to " + assignment["title"]
         self.dirty = True
@@ -2059,8 +2052,10 @@ class NativeSession(QObject):
         if state is None or state.get("phase") != "ended" or self._focus_busy:
             return False
         self.focus = set_phase(
-            state, break_phase(int(state.get("cycles") or 0), self.preferences),
-            self.preferences, self.now_ms(),
+            state,
+            break_phase(int(state.get("cycles") or 0), self.preferences),
+            self.preferences,
+            self.now_ms(),
         )
         self._persist_focus()
         self.focus_changed.emit()

@@ -124,9 +124,7 @@ def parse_import_payload(raw: str) -> dict:
     homework_ids = [item["id"] for item in assignments]
     if version >= 2:
         if len(homework_ids) > MAX_WEEK_BLOCKS:
-            return {
-                "error": f"Export has more than {MAX_WEEK_BLOCKS} homework items. Nothing was imported."
-            }
+            return {"error": f"Export has more than {MAX_WEEK_BLOCKS} homework items. Nothing was imported."}
         if len(homework_ids) != len(set(homework_ids)):
             repeated = next(item for item in homework_ids if homework_ids.count(item) > 1)
             return {"error": "Export repeats the homework id " + repeated + ". Nothing was imported."}
@@ -199,9 +197,7 @@ def merge_imported_blocks(
         current = by_id.get(block["id"])
         split_id = occurrence_import_id(day, block["id"]) if day is not None else ""
         prior_split = by_id.get(split_id)
-        imports_one_day = (
-            isinstance(day, int) and (block.get("days") or []) == [day]
-        )
+        imports_one_day = isinstance(day, int) and (block.get("days") or []) == [day]
         if (
             current
             and imports_one_day

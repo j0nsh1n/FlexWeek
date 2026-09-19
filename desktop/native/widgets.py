@@ -254,10 +254,7 @@ class WeekTable(QTableWidget):
         self._blocks = {block["id"]: block for block in blocks}
         self.clearContents()
         self.setHorizontalHeaderLabels(
-            [
-                f"{day} {(monday + timedelta(days=index)).strftime('%b %d')}"
-                for index, day in enumerate(DAYS)
-            ]
+            [f"{day} {(monday + timedelta(days=index)).strftime('%b %d')}" for index, day in enumerate(DAYS)]
         )
         placed = {block["id"]: block for block in (trace or {}).get("placed", [])}
         cells: dict[tuple[int, int], list[tuple[dict, str, str]]] = {}
@@ -529,8 +526,7 @@ class DayAgenda(QWidget):
         load = (day_data or {}).get("workload") or {}
         if load:
             work = QListWidgetItem(
-                f"Scheduled {load.get('scheduled_min', 0)} min · "
-                f"{load.get('available_min', 0)} min free"
+                f"Scheduled {load.get('scheduled_min', 0)} min · {load.get('available_min', 0)} min free"
             )
             work.setFlags(Qt.ItemFlag.NoItemFlags)
             self.list.addItem(work)
@@ -687,9 +683,7 @@ def _error_label() -> QLabel:
 
 
 def _buttons() -> QDialogButtonBox:
-    buttons = QDialogButtonBox(
-        QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
-    )
+    buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
     buttons.setObjectName("dialogButtons")
     return buttons
 
@@ -882,9 +876,7 @@ class BlockDialog(QDialog):
         unticked = not self.missed.isHidden() and not self.missed.isChecked()
         restored = self._occurrence_day if unticked else None
         candidate["missed_days"] = [
-            day
-            for day in candidate.get("missed_days", [])
-            if day in candidate["days"] and day != restored
+            day for day in candidate.get("missed_days", []) if day in candidate["days"] and day != restored
         ]
         try:
             if candidate["kind"] != "locked":
@@ -912,21 +904,23 @@ class HomeworkDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         info = CATEGORIES.get(category or "")
-        self._original = deepcopy(assignment) if assignment is not None else {
-            "id": str(uuid4()),
-            "title": info["label"] if info else "",
-            "due": due or week_start + "T21:00",
-            "estimate_min": estimate_min
-            or (info or {}).get("preset", {}).get("duration_min")
-            or 60,
-            "category": category,
-            "revision": 0,
-            "notes": "",
-            "links": [],
-            "checklist": [],
-            "completed": False,
-            "completed_at": None,
-        }
+        self._original = (
+            deepcopy(assignment)
+            if assignment is not None
+            else {
+                "id": str(uuid4()),
+                "title": info["label"] if info else "",
+                "due": due or week_start + "T21:00",
+                "estimate_min": estimate_min or (info or {}).get("preset", {}).get("duration_min") or 60,
+                "category": category,
+                "revision": 0,
+                "notes": "",
+                "links": [],
+                "checklist": [],
+                "completed": False,
+                "completed_at": None,
+            }
+        )
         self._result: dict | None = None
         self._spread = False
         self.setWindowTitle("Edit homework" if assignment else "Add homework")
@@ -1348,9 +1342,7 @@ class RoutineDialog(QDialog):
         self.list.setObjectName("routineList")
         layout.addWidget(self.list)
         for routine in routines.values():
-            item = QListWidgetItem(
-                f"{routine['name']} · {len(routine.get('blocks') or [])} fixed times"
-            )
+            item = QListWidgetItem(f"{routine['name']} · {len(routine.get('blocks') or [])} fixed times")
             item.setData(Qt.ItemDataRole.UserRole, routine["id"])
             self.list.addItem(item)
         dest = QDateEdit(QDate.fromString(week_start, "yyyy-MM-dd"))
@@ -1502,11 +1494,7 @@ class SpreadDialog(QDialog):
         self.setObjectName("spreadDialog")
         self.setWindowTitle("Spread " + assignment["title"])
         layout = QVBoxLayout(self)
-        layout.addWidget(
-            QLabel(
-                f"{assignment['estimate_min']} minutes total · due {assignment['due']}"
-            )
-        )
+        layout.addWidget(QLabel(f"{assignment['estimate_min']} minutes total · due {assignment['due']}"))
         self.session = QComboBox()
         self.session.setObjectName("spreadSession")
         remaining = max(SLOT_MIN, int(assignment.get("unplanned_min") or SLOT_MIN))

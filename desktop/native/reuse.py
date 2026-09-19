@@ -136,8 +136,7 @@ def clipboard_item(block: dict, source_day: int, scope: str, group_id: str) -> d
 
 def clipboard_fingerprint(items: list[dict]) -> str:
     payload = [
-        {"block": item["block"], "source_day": item["source_day"], "scope": item["scope"]}
-        for item in items
+        {"block": item["block"], "source_day": item["source_day"], "scope": item["scope"]} for item in items
     ]
     return json.dumps(payload, sort_keys=True, default=str)
 
@@ -308,9 +307,7 @@ def routine_source_blocks(blocks: list[dict]) -> list[dict]:
     return [
         block
         for block in blocks
-        if block.get("kind") == "locked"
-        and not block.get("assignment_id")
-        and not block.get("pomodoro_role")
+        if block.get("kind") == "locked" and not block.get("assignment_id") and not block.get("pomodoro_role")
     ]
 
 
