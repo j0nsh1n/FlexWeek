@@ -654,6 +654,7 @@ class NativeWindow(QMainWindow):
         )
         self.day_agenda.set_agenda(self.session.selected_day, agenda, self.session.day_data)
         self.month_grid.set_month(self.session.month_data, self.session.dirty)
+        self.month_grid.reveal(self.session.selected_day)
         self.chips.set_armed(self.session.armed_category)
         view = self.session.planner_view
         self.planner.setCurrentWidget(self._planner_widget(view))

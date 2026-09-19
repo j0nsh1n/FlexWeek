@@ -709,6 +709,16 @@ class MonthGrid(QWidget):
         else:
             self.overdue.setText("")
 
+    def reveal(self, iso_day: str) -> None:
+        """Open the month on the week the student is in. It opened on the first row, so on the 19th
+        the current week sat below the fold behind a fortnight of empty cells."""
+        for row in range(self.table.rowCount()):
+            for column in range(7):
+                cell = self.table.item(row, column)
+                if cell is not None and cell.data(Qt.ItemDataRole.UserRole) == iso_day:
+                    self.table.scrollToItem(cell, QAbstractItemView.ScrollHint.PositionAtCenter)
+                    return
+
     def _activate(self, row: int, column: int) -> None:
         item = self.table.item(row, column)
         iso_day = item.data(Qt.ItemDataRole.UserRole) if item else None
@@ -1557,7 +1567,10 @@ class SpreadDialog(QDialog):
         self.setObjectName("spreadDialog")
         self.setWindowTitle("Spread " + assignment["title"])
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel(f"{assignment['estimate_min']} minutes total · due {assignment['due']}"))
+        # The same vocabulary as every other surface: "1 h 30 min total · due Thu 23:59".
+        due = due_label(assignment.get("due"), monday_of(from_date))
+        total = length_label(int(assignment.get("estimate_min") or 0))
+        layout.addWidget(QLabel(f"{total} total · due {due}"))
         self.session = QComboBox()
         self.session.setObjectName("spreadSession")
         remaining = max(SLOT_MIN, int(assignment.get("unplanned_min") or SLOT_MIN))
