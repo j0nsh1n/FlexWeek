@@ -1,6 +1,14 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-19 (retire Chromium shell). Branch `feat/retire-webengine` off
+  `main` at the 0.12.0 merge. `desktop/webengine.py`, `desktop/sandbox.py`, and
+  the leftover probe tests are deleted. Native `--smoke-test` stays in
+  `desktop/tests/test_smoke.py`. Packaging still refuses Chromium in the
+  bundle. Local gate: 291 frontend and 686 Python tests. spec.md still
+  describes a WebEngine desktop shell; that drift is unchanged and was not
+  edited. Next: merge this cleanup, then delete merged leftover remote
+  branches.
 - Date: 2026-09-19 (0.12.0). Branch `feat/0-12-release` off `main` after PR #15.
   Packaging compiles the native window and refuses Chromium in the bundle.
   CHANGELOG closed as 0.12.0. Local gate: 291 frontend and 712 Python tests.
@@ -322,13 +330,12 @@ DESKTOP.md               PySide6 QWebEngineView recommendation + build status
 desktop/origin.py        origin resolution, no Qt imports (unit-tested)
 desktop/server.py        bundled uvicorn on a loopback port, no Qt imports
 desktop/main.py          native Qt window; default launcher after unit 6
-desktop/webengine.py     leftover WebEngine shell for probe tests
 desktop/native/          widgets, session, focus/remind/files/look
 desktop/build_linux.sh   staged Linux build, previous artifacts preserved
 desktop/package_linux.sh release tar.gz with README, icon and .desktop
 desktop/check_bundle.py  glibc and missing-library check, no Qt imports
 desktop/build_windows.ps1 Windows standalone build preparation
-desktop/tests/           native helpers, widget tests, leftover WebEngine probes
+desktop/tests/           native helpers, widget tests, `--smoke-test`
 backend/weeks.py         week-date helpers, no framework import
 backend/recovery.py      one-time recovery codes, no HTTP
 backend/limits.py        256 KiB write-body cap
@@ -463,6 +470,9 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-19, `feat/retire-webengine`: deleted the retired Chromium shell and
+  leftover probes. Native smoke stays. Next: merge, then delete merged remote
+  branches. spec.md still says WebEngine desktop.
 - 2026-09-19, `feat/0-12-release`: 0.12.0 packaging and release notes. Nuitka
   skips `desktop.webengine`. Release jobs fail if WebEngine lands in the
   package. Next: merge, tag `v0.12.0`, `gh release create`, wait for assets.

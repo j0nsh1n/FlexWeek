@@ -38,7 +38,7 @@ trap 'echo "Build staging retained at $STAGING" >&2' ERR
     --enable-plugin=pyside6 \
     --include-package=desktop.native \
     --include-package=backend \
-    --nofollow-import-to=desktop.tests,desktop.webengine,backend.tests \
+    --nofollow-import-to=desktop.tests,backend.tests \
     --nofollow-import-to=PySide6.QtWebEngineCore,PySide6.QtWebEngineWidgets,PySide6.QtWebEngineQuick \
     --nofollow-import-to=mypy,pydantic.mypy,uvloop,httptools,watchfiles,websockets,yaml \
     --nofollow-import-to=curses,readline,termios \

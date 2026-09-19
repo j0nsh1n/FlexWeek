@@ -5,6 +5,11 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Removed
+- Retired Qt WebEngine desktop shell (2026-09-19). The Chromium window,
+  Linux renderer sandbox helper, and leftover probe tests are gone. The
+  look-concepts mock-up opens in the system browser.
+
 ## [0.12.0] - 2026-09-19
 
 ### Added

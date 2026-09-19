@@ -1,4 +1,4 @@
-"""Packaged builds compile the native window and must not follow the retired Chromium shell."""
+"""Packaged builds compile the native window and must not follow Chromium."""
 
 from __future__ import annotations
 
@@ -10,13 +10,26 @@ WINDOWS = (ROOT / "desktop/build_windows.ps1").read_text(encoding="utf-8")
 FINISH = (ROOT / "desktop/finish_linux_bundle.sh").read_text(encoding="utf-8")
 WORKFLOW = (ROOT / ".github/workflows/release-windows.yml").read_text(encoding="utf-8")
 
+GONE = (
+    "desktop/webengine.py",
+    "desktop/sandbox.py",
+    "desktop/tests/webengine_probe.py",
+    "desktop/tests/test_webengine.py",
+    "desktop/tests/test_sandbox.py",
+)
 
-def test_nuitka_does_not_compile_the_retired_webengine_shell() -> None:
+
+def test_retired_chromium_shell_is_gone() -> None:
+    for relative in GONE:
+        assert not (ROOT / relative).exists(), relative
+
+
+def test_nuitka_does_not_compile_chromium() -> None:
     assert "--include-package=desktop \\" not in LINUX
     assert "'--include-package=desktop'" not in WINDOWS
     for text in (LINUX, WINDOWS):
         assert "include-package=desktop.native" in text
-        assert "desktop.webengine" in text
+        assert "desktop.webengine" not in text
         assert "PySide6.QtWebEngineCore" in text
         assert "noinclude-module" not in text
 

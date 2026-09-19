@@ -101,10 +101,10 @@ isolated source verification. No existing database is moved or replaced.
 6. Retirement and delivery: verified 2026-09-19 for packaging. `python -m desktop.main` and
    `python -m desktop.native` launch native widgets. The private server starts
    with browser files disabled. `--smoke-test` registers a throwaway account,
-   saves a week, and writes a report without Chromium. `desktop.webengine` is
-   excluded from Nuitka. The Windows and Linux release jobs fail if Chromium
-   lands in the package. `desktop/webengine.py` remains only for leftover probe
-   tests.
+   saves a week, and writes a report without Chromium. Nuitka compiles
+   `desktop.native` and refuses PySide6 WebEngine modules. The Windows and Linux
+   release jobs fail if Chromium lands in the package. The retired Chromium
+   shell and leftover probe tests are deleted.
 
 ## Sources
 
