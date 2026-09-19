@@ -6,6 +6,17 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Native desktop layouts (2026-09-18, device-only). A layout is a whole way of
+  showing the week, where a look is only its colours. **Layout** in the top bar
+  picks a main view to plan in (Today's app, Timeline, Mission control, Bento,
+  Retro desktop, Clay deck) and a day screen to watch once the plan is made (One
+  thing, Day dial). **My day**, or T, opens the day screen; Back to planning, B
+  or Escape leaves it. Each design has its own colourways plus *Match my look*,
+  and Fine-tune options behind one checkbox. Risk is shown in the solver's own
+  words. A design of its own gets the window: the planning controls move into a
+  **Tools** menu. Every layout fits 1366 by 768. See Amendment C of
+  `docs/stage8-appearance-contract.md`. The web client has no layouts yet, and
+  the choice does not sync to the account until the owner approves the fields.
 - Native desktop (`python -m desktop.main`, 2026-09-17). Qt widgets talk to the
   same local Python API with no WebEngine and no JavaScript on the default
   path. Create account, recovery codes, sign-in, a dated week, fixed times,

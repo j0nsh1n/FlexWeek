@@ -1,7 +1,18 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-18 (looks complete). Branch `feat/native-python`, local only.
+- Date: 2026-09-18 (native layouts built). Branch `feat/native-python`, local only.
+  The native client now has layouts as well as looks: six main views to plan in
+  (Today's app, Timeline, Mission control, Bento, Retro desktop, Clay deck) and
+  two day screens to watch once the plan is made (One thing, Day dial), each with
+  its own colourways, Match my look, and fine-tune options. **Layout** in the top
+  bar picks them, **My day** or T opens the day screen, and a design of its own
+  gets the window while the planning controls move into **Tools**. It all lives
+  in `desktop/native/layouts/` on top of `desktop/native/weekmodel.py`, one
+  reading of the week every layout shares. Device-only; Amendment C of
+  `docs/stage8-appearance-contract.md` proposes the account fields. The web
+  client has no layouts. The design reference is `docs/mockups/look-concepts/`.
+- Earlier on 2026-09-18 (looks complete), same branch.
   Paper and Pastel are built in both clients, which finishes the six presets of
   Amendment A: Terminal, Poster, Ink, High contrast, Paper, Pastel. They are
   the two soft looks (rounded, with depth) where the other four are flat and
@@ -436,6 +447,22 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-18, `feat/native-python`: Claude built the eight layouts the owner
+  picked from the look-concepts mock-up, one verified unit per commit: the week
+  model, the registry, My day with One thing and the Layout dialog, Day dial,
+  Bento with the Tools menu, Timeline, Mission control, Clay deck, Retro desktop.
+  Open for the owner: approve Amendment C's `layout_*` account fields, and the
+  spec.md drift it lists. Not done: layouts in the web client; a per-session
+  "done" (the product only finishes whole homework, so day screens say Homework
+  finished); GLM did not check Amendment C because OpenRouter returned nothing
+  all day, so it was checked against the registry by script instead. Defects
+  found by looking at screenshots rather than by tests, each now pinned by one:
+  a design's rule losing to the reset's more specific selector; a wrapped title
+  and a three-line card cut off because a stylesheet min-height beats
+  setMinimumHeight; Bento as a 300 pixel letterbox under the week grid's
+  controls; three designs pushing the window past a 768 pixel laptop; closing a
+  Retro window crashing the view. `Homework finished` wired straight to
+  `complete_homework` did not save, which a window test caught.
 - 2026-09-18, `feat/native-python`: Claude committed Grok's finished but
   uncommitted owner-answers work as 8d351d2 after the gate passed on it, then
   built Paper and Pastel in both clients. Red checks: a pale lavender accent, an

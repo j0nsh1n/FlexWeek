@@ -421,3 +421,128 @@ button's menu, so overflow actions stay tappable.
 spec.md drift: the native launcher, the four device-only presets, and the
 proposed `look_*` fields are not in spec.md. Do not edit spec.md until the
 owner approves them.
+
+## Amendment C (proposed 2026-09-18): layouts
+
+Status: the native client ships this device-only. The account fields in C5 are
+proposed and need owner approval before they reach `PUT /api/preferences` or
+`spec.md`. The web client has no layouts yet.
+
+A look is paint. A layout is a whole way of showing the week. The owner picked
+eight from a fifteen-concept mock-up (`docs/mockups/look-concepts/`) and drew the
+line this amendment is built on: not every design is good enough to be the main
+view, and some are screens for the day after planning is done.
+
+### C1. Two roles
+
+A **main view** is where planning happens. It stands in for the week grid when
+Week is chosen. Day and Month stay as they are.
+
+| id | Name |
+| --- | --- |
+| `classic` | Today's app, the week grid. The shipped default. |
+| `timeline` | Timeline |
+| `mission` | Mission control |
+| `bento` | Bento |
+| `retro` | Retro desktop |
+| `clay` | Clay deck |
+
+A **day screen** is what the student watches once the plan is made. My day, or
+the T key, opens it. Back to planning, B or Escape leaves it, and so do Day, Week
+and Month.
+
+| id | Name |
+| --- | --- |
+| `one` | One thing. The shipped default. |
+| `dial` | Day dial |
+
+A day screen cannot be stored as the main view, nor the other way round.
+
+### C2. What each role owes the student
+
+A main view offers these by itself, in every combination of its options: add
+homework, run the plan, reach the day screen, show every piece of homework that
+has no time yet, open any block on screen, and reach every day of the week.
+
+A day screen says what is on now, or what is next, and offers Homework finished,
+Start focus, Running late and Back to planning. It cannot plan.
+
+Homework finished finishes the whole homework and saves, as the focus timer
+does. The product has no way to finish one session of several, and a day screen
+does not add one. Running late is only offered while homework is left today.
+
+A layout is presentation only. It raises a request and the window answers with
+behaviour it already has. No layout adds, plans or finishes anything itself.
+
+### C3. Three levels of customising
+
+1. **Pick** a main view and a day screen.
+2. **Style** the picked design. Every design has its own colourways, and every
+   design also offers *Match my look*, which paints it in the pack, preset and
+   accent the rest of the app is wearing.
+3. **Fine-tune** what the design shows. These options wait behind one checkbox,
+   which opens by itself when a fine-tune option is already in use.
+
+| Design | Style | Fine-tune |
+| --- | --- | --- |
+| Timeline | Colours (Paper, Night), Spacing | Week strip, Finished and past items |
+| Mission control | Colours (Cyan, Amber, Green) | Hours shown, Deadline radar and load |
+| Bento | Colours (Indigo, Sunset, Mono), Tile corners | Tiles |
+| Retro desktop | Colours (Teal, Plum, Slate desktop) | Windows open at start |
+| Clay deck | Colours (Pastel, Mint, Sunset) | Cards in the deck, Tilted cards |
+| One thing | Colours (Black and orange, Paper and ink) | Lead with, Buttons, Day bar |
+| Day dial | Colours (Midnight, Daylight) | Hours shown, Hour by hour list, Small dials |
+
+An option never costs a design something C2 says it owes. Timeline's week strip
+is "with load bars" or "day names only", never hidden, because it is how a day
+is picked.
+
+Only what differs from a design's own settings is stored, so an improved default
+still reaches everyone.
+
+### C4. Rules every design keeps
+
+- Risk is the solver's verdict (`slack_status`) in the solver's words: Very
+  little room, Limited room, Room. Work with no time yet carries the solver's
+  reason. No design invents a threshold.
+- Every colourway passes WCAG AA for the text it carries, and so does Match my
+  look in all 700 combinations of pack, light or dark, preset, accent and
+  surface. Colours a colourway leaves out are derived from its own colours.
+- A design with a painted surface (Day dial's face, Mission control's lanes,
+  Clay deck's neighbours) has a keyboard twin: the same blocks as buttons.
+- A design of its own gets the window. The planning controls step aside into a
+  Tools menu in the top bar, which carries the real buttons' enabled states.
+- With any layout the window fits 1366 by 768. What does not fit scrolls.
+- Text size scales every design. No design animates `backdrop-filter`.
+- No streaks, points, scores or levels.
+
+### C5. Storage, and the proposed account fields
+
+Device-only today, in the native client's `flexweek-look.json` beside the look:
+
+```json
+{"preset": "paper", "knobs": {},
+ "layout": {"main": "bento", "day": "dial",
+            "options": {"bento": {"colour": "sunset"}}}}
+```
+
+A file from before layouts loads with the defaults. Unknown designs, options and
+values are dropped on load.
+
+Proposed for the account, to follow Amendment A's fields:
+
+| Field | Values | Default |
+| --- | --- | --- |
+| `layout_main` | the ids in C1's first table | `classic` |
+| `layout_day` | the ids in C1's second table | `one` |
+| `layout_options` | object keyed by design id, then option key | `{}` |
+
+### C6. Verification
+
+`desktop/tests/test_weekmodel.py`, `test_layouts_registry.py`,
+`test_layouts_main_views.py`, `test_layouts_window.py` and one
+`test_layout_<design>.py` per design. `test_layouts_main_views.py` holds every
+main view to C2 in every combination of its options.
+
+spec.md drift: layouts, My day and the Tools menu are not in spec.md. Do not edit
+spec.md until the owner approves them.

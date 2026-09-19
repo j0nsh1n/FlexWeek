@@ -436,3 +436,18 @@ def test_every_layout_leaves_the_window_fitting_a_laptop(qapp: QApplication, win
         assert type(window.planner.currentWidget()).layout_id == layout_id
         sizes[layout_id] = (window.minimumSizeHint().width(), window.minimumSizeHint().height())
     assert {name: size for name, size in sizes.items() if size[0] > 1366 or size[1] > 768} == {}
+
+
+def test_the_dialog_fits_a_laptop_with_every_level_open(qapp: QApplication) -> None:
+    busiest = {
+        "main": "timeline",
+        "day": "dial",
+        "options": {"timeline": {"finished": "hide"}, "dial": {"list": "hide"}},
+    }
+    dialog = LayoutDialog(None, busiest)
+    for name in ("layoutMainMore", "layoutDayMore"):
+        assert dialog.findChild(QCheckBox, name).isChecked() is True
+    dialog.show()
+    qapp.processEvents()
+    assert dialog.sizeHint().height() <= 700
+    assert dialog.sizeHint().width() <= 1300

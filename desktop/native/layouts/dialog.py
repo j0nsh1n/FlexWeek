@@ -6,6 +6,7 @@ view under it, and its Fine-tune options wait behind one checkbox so the first l
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -13,6 +14,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFormLayout,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QPushButton,
     QVBoxLayout,
@@ -131,8 +133,15 @@ class LayoutDialog(QDialog):
         intro.setWordWrap(True)
         body.addWidget(intro)
         self.sections = [LayoutSection(slot, role, title, blurb, clean) for slot, role, title, blurb in SLOTS]
+        # Side by side: stacked, with both designs fine-tuned, the dialog was 976 pixels tall.
+        columns = QHBoxLayout()
         for section in self.sections:
-            body.addWidget(section)
+            columns.addWidget(section, 1, Qt.AlignmentFlag.AlignTop)
+        body.addLayout(columns)
+        self.setStyleSheet(
+            "QGroupBox { margin-top: 16px; font-weight: 700; }"
+            "QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }"
+        )
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )

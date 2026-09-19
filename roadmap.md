@@ -441,6 +441,8 @@ is the same entry.
   a time (undo of another week is refused).
 - Unit 4 focus and preferences: [x] 2026-09-17. Timers, once-only credit, packs,
   device-only look knobs, reminders, alarms/snooze, Spotify, tray.
+  Layouts (2026-09-18): six main views and two day screens with per-design
+  options, device-only, native only; see Amendment C of the appearance contract.
 - Unit 5 account recovery and files: [x] 2026-09-17. Forgotten-password recovery,
   password/code replacement, deletion, week/day files, restore points, transfer.
 - Unit 6 retirement: [x] 2026-09-17. Native is the default launcher. Smoke is
