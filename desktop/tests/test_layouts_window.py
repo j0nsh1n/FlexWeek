@@ -395,3 +395,43 @@ def test_bentos_buttons_reach_the_products_own_add_and_plan(
     click(window, "bentoMyDay")
     assert asked == ["add", "plan"]
     assert type(window.planner.currentWidget()).__name__ == "OneThingView"
+
+
+def test_every_layout_leaves_the_window_fitting_a_laptop(qapp: QApplication, window: NativeWindow) -> None:
+    # A busy Thursday: with two blocks every view is short, and three designs only outgrew the screen
+    # once the day had a realistic number of rows.
+    for index, (title, start) in enumerate(
+        (
+            ("Soccer", "15:30"),
+            ("Dinner", "18:00"),
+            ("Chores", "17:15"),
+            ("Reading", "20:00"),
+            ("Club", "07:00"),
+        )
+    ):
+        window.session.add_block(
+            {"id": f"busy{index}", "title": title, "kind": "locked", "category": "extra",
+             "start": start, "duration_min": 30, "days": [3]}
+        )  # fmt: skip
+    for index in range(3):
+        window.session.add_homework(
+            {"id": f"wait{index}", "title": f"Waiting {index}", "due": sunday_due(window.session.week_start),
+             "estimate_min": 45, "revision": 0}
+        )  # fmt: skip
+    sizes = {}
+    for layout_id, spec in LAYOUTS.items():
+        if layout_id not in VIEW_CLASSES:
+            continue
+        window._day_mode = spec.role == "day"
+        window._layout = {
+            "main": layout_id if spec.role == "plan" else "classic",
+            "day": "dial",
+            "options": {},
+        }
+        if spec.role == "day":
+            window._layout["day"] = layout_id
+        window._on_week()
+        qapp.processEvents()
+        assert type(window.planner.currentWidget()).layout_id == layout_id
+        sizes[layout_id] = (window.minimumSizeHint().width(), window.minimumSizeHint().height())
+    assert {name: size for name, size in sizes.items() if size[0] > 1366 or size[1] > 768} == {}

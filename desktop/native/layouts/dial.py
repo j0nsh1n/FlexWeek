@@ -25,6 +25,7 @@ from desktop.native.layouts.base import (
     mark_of,
     plural,
     rules,
+    scrolling,
 )
 from desktop.native.weekmodel import Occurrence, clock_label, length_label
 
@@ -186,9 +187,16 @@ class DayDialView(LayoutView):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._day: int | None = None
-        self._root = QHBoxLayout(self)
+        # A view's minimum height must not become the window's: three designs pushed it past a 768 pixel
+        # laptop screen. Inside a scroll area, what does not fit scrolls and the window keeps its size.
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        self._page = QWidget()
+        self._page.setObjectName("dialPage")
+        self._root = QHBoxLayout(self._page)
         self._root.setContentsMargins(22, 16, 22, 16)
         self._root.setSpacing(26)
+        outer.addWidget(scrolling(self._page, "dialScroll"))
 
     def shown_day(self, scene: Scene) -> int:
         return self._day if self._day is not None else (scene.today if scene.today is not None else 0)
@@ -213,6 +221,7 @@ class DayDialView(LayoutView):
             + rules(
                 name,
                 {
+                    "#dialScroll, #dialPage": css(background=tokens["bg"]),
                     "#dialCard": css(
                         background=tokens["surface"],
                         border=f"1px solid {tokens['line']}",

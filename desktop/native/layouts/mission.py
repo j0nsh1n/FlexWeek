@@ -23,6 +23,7 @@ from desktop.native.layouts.base import (
     mark_of,
     plan_buttons,
     rules,
+    scrolling,
 )
 from desktop.native.look import readable_ink
 from desktop.native.weekmodel import Occurrence, WeekModel, clock_label, due_label
@@ -162,8 +163,15 @@ class MissionView(LayoutView):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._day: int | None = None
-        self._root = QVBoxLayout(self)
+        # A view's minimum height must not become the window's: three designs pushed it past a 768 pixel
+        # laptop screen. Inside a scroll area, what does not fit scrolls and the window keeps its size.
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        self._page = QWidget()
+        self._page.setObjectName("missionPage")
+        self._root = QVBoxLayout(self._page)
         self._root.setContentsMargins(14, 10, 14, 10)
+        outer.addWidget(scrolling(self._page, "missionScroll"))
 
     def shown_day(self, scene: Scene) -> int:
         return self._day if self._day is not None else (scene.today if scene.today is not None else 0)
@@ -183,6 +191,7 @@ class MissionView(LayoutView):
             + rules(
                 name,
                 {
+                    "#missionScroll, #missionPage": css(background=tokens["bg"]),
                     "QLabel": css(
                         font_size=f"{scene.px(12)}px", letter_spacing="1px", color=tokens["bg_muted"]
                     ),
