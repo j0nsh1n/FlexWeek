@@ -451,3 +451,22 @@ def test_the_dialog_fits_a_laptop_with_every_level_open(qapp: QApplication) -> N
     qapp.processEvents()
     assert dialog.sizeHint().height() <= 700
     assert dialog.sizeHint().width() <= 1300
+
+
+def test_a_design_with_nothing_to_change_offers_no_fine_tune_or_reset(qapp: QApplication) -> None:
+    dialog = LayoutDialog(None, None)
+    dialog.show()
+    qapp.processEvents()
+
+    def offered() -> tuple[bool, bool]:
+        return (
+            dialog.findChild(QCheckBox, "layoutMainMore").isVisible(),
+            dialog.findChild(QPushButton, "layoutMainReset").isVisible(),
+        )
+
+    assert offered() == (False, False)
+    pick = combo(dialog, "layoutMain")
+    pick.setCurrentIndex(pick.findData("bento"))
+    assert offered() == (True, True)
+    pick.setCurrentIndex(pick.findData("classic"))
+    assert offered() == (False, False)
