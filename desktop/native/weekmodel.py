@@ -1,0 +1,190 @@
+"""One reading of the week, shared by every layout.
+
+The week table works out where a block sits inside its own set_week. Seven more views each doing that
+would be seven chances to disagree about what is on Thursday, so the rules live here once: a solver
+placement wins unless the block is finished, a finished session stays on the day it was finished, and
+flexible work with no start is waiting for a time. Risk is the solver's own verdict from the trace,
+never a threshold invented by a view.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date, timedelta
+
+from desktop.native.calendar import DAYS, _is_work_session
+
+SLACK_WORDS = {"danger": "Very little room", "tight": "Limited room", "ok": "Room"}
+_SLACK_ORDER = {"danger": 0, "tight": 1, None: 2, "ok": 3}
+NOT_PLANNED = "Not planned yet."
+END_OF_DAY = 24 * 60
+
+
+def minute_of(hhmm: str) -> int:
+    hours, minutes = hhmm.split(":")[:2]
+    return int(hours) * 60 + int(minutes)
+
+
+def clock_label(minute: int) -> str:
+    return f"{minute // 60:02d}:{minute % 60:02d}"
+
+
+def length_label(minutes: int) -> str:
+    hours, rest = divmod(max(minutes, 0), 60)
+    if not hours:
+        return f"{rest} min"
+    return f"{hours} h {rest} min" if rest else f"{hours} h"
+
+
+def due_label(due: str | None, week_start: str) -> str:
+    """A deadline as a student says it: the weekday inside this week, the date outside it."""
+    if not due:
+        return ""
+    day = date.fromisoformat(due[:10])
+    offset = (day - date.fromisoformat(week_start)).days
+    name = DAYS[offset] if 0 <= offset <= 6 else f"{day.strftime('%b')} {day.day}"
+    return f"{name} {due[11:16]}" if len(due) >= 16 else name
+
+
+@dataclass(frozen=True)
+class Occurrence:
+    """One block on one day, with its time already resolved."""
+
+    block_id: str
+    title: str
+    category: str
+    day: int
+    start: int
+    end: int
+    work: bool
+    done: bool
+    missed: bool
+    assignment_id: str | None
+    due: str | None
+    slack: str | None
+
+    @property
+    def minutes(self) -> int:
+        return self.end - self.start
+
+    @property
+    def live(self) -> bool:
+        """Still something to do: fixed blocks always, homework until it is done or missed."""
+        return not (self.work and (self.done or self.missed))
+
+    @property
+    def slack_words(self) -> str:
+        return SLACK_WORDS.get(self.slack or "", "")
+
+
+@dataclass(frozen=True)
+class Waiting:
+    """Homework that has no time yet, with the reason the solver gave if it gave one."""
+
+    block_id: str
+    title: str
+    category: str
+    minutes: int
+    assignment_id: str | None
+    due: str | None
+    reason: str
+
+
+@dataclass(frozen=True)
+class DayQueue:
+    current: Occurrence | None
+    queue: tuple[Occurrence, ...]
+
+
+@dataclass(frozen=True)
+class WeekModel:
+    week_start: str
+    occurrences: tuple[Occurrence, ...] = ()
+    waiting: tuple[Waiting, ...] = ()
+
+    def date_of(self, day: int) -> date:
+        return date.fromisoformat(self.week_start) + timedelta(days=day)
+
+    def on_day(self, day: int) -> tuple[Occurrence, ...]:
+        return tuple(item for item in self.occurrences if item.day == day)
+
+    def load_min(self, day: int) -> int:
+        return sum(item.minutes for item in self.on_day(day) if item.work)
+
+    def open_work(self) -> tuple[Occurrence, ...]:
+        """Homework still to do, the most squeezed first."""
+        items = [item for item in self.occurrences if item.work and item.live]
+        return tuple(sorted(items, key=lambda item: (_SLACK_ORDER[item.slack], item.day, item.start)))
+
+    def day_queue(self, day: int, minute: int) -> DayQueue:
+        """What a day screen is about: the thing on now, then the rest of the day in order.
+
+        Homework wins over the fixed block around it, because a study hall inside School is the part
+        the student has to act on.
+        """
+        live = [item for item in self.on_day(day) if item.live]
+        running = sorted(
+            (item for item in live if item.start <= minute < item.end),
+            key=lambda item: (not item.work, item.start),
+        )
+        current = running[0] if running else None
+        later = tuple(item for item in live if item.start > minute)
+        return DayQueue(current, ((current,) if current else ()) + later)
+
+
+def build_week(
+    week_start: str,
+    blocks: list[dict],
+    assignments: dict[str, dict] | None = None,
+    trace: dict | None = None,
+) -> WeekModel:
+    homework = assignments or {}
+    placed = {item["id"]: item for item in (trace or {}).get("placed") or []}
+    notes = {item["block_id"]: item for item in (trace or {}).get("explanations") or []}
+    occurrences: list[Occurrence] = []
+    waiting: list[Waiting] = []
+    for original in blocks:
+        block = original if original.get("completed") else placed.get(original["id"], original)
+        assignment = homework.get(original.get("assignment_id") or "") or {}
+        work = _is_work_session(original)
+        done = bool(block.get("completed") or assignment.get("completed"))
+        note = notes.get(original["id"]) or {}
+        if not block.get("start"):
+            if work and not done:
+                waiting.append(
+                    Waiting(
+                        block_id=original["id"],
+                        title=original.get("title") or "Untitled",
+                        category=original.get("category") or "",
+                        minutes=int(original.get("duration_min") or 0),
+                        assignment_id=original.get("assignment_id"),
+                        due=assignment.get("due"),
+                        reason=note.get("message") or NOT_PLANNED,
+                    )
+                )
+            continue
+        days = block.get("days") or []
+        if block.get("completed") and block.get("completed_day") is not None:
+            days = [block["completed_day"]]
+        start = minute_of(block["start"])
+        end = min(start + int(block.get("duration_min") or 0), END_OF_DAY)
+        for day in days:
+            occurrences.append(
+                Occurrence(
+                    block_id=original["id"],
+                    title=block.get("title") or "Untitled",
+                    category=block.get("category") or "",
+                    day=day,
+                    start=start,
+                    end=end,
+                    work=work,
+                    done=done,
+                    missed=day in (original.get("missed_days") or []),
+                    assignment_id=original.get("assignment_id"),
+                    due=assignment.get("due"),
+                    slack=note.get("slack_status"),
+                )
+            )
+    occurrences.sort(key=lambda item: (item.day, item.start, item.block_id))
+    waiting.sort(key=lambda item: (item.due or "9999", item.block_id))
+    return WeekModel(week_start, tuple(occurrences), tuple(waiting))
