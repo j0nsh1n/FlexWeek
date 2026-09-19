@@ -1,6 +1,16 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-18 (PR #15). Branch `feat/native-python`, GitHub PR
+  https://github.com/j0nsh1n/FlexWeek/pull/15 onto `main`. Claude's native
+  layouts and Paper/Pastel are on the branch. Reviewer fixes: T from the week
+  grid, day list and month grid opens My day (the same event filter as W/D/M);
+  Tools keeps Copy, Paste and Duplicate when a layout owns the window. Local
+  gate: 291 frontend and 709 Python tests, `scripts/verify.py` VERIFIED. CI
+  Verify web is green; desktop is local only. Open for the
+  owner: merge, Amendment A `look_*` fields, Amendment C `layout_*` fields.
+  spec.md drift: native launcher, six presets, proposed look/layout account
+  fields. Packaging still launches WebEngine.
 - Date: 2026-09-18 (native layouts built). Branch `feat/native-python`, local only.
   The native client now has layouts as well as looks: six main views to plan in
   (Today's app, Timeline, Mission control, Bento, Retro desktop, Clay deck) and
@@ -447,6 +457,11 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-18, `feat/native-python`: finishing PR #15 after Claude's UI. T from
+  an item view now reaches My day, and Tools keeps Copy, Paste and Duplicate
+  when a layout hides the planning bar. Next for the owner: merge #15, then
+  Amendment A/C if the fields should live on the account. Web layouts and
+  packaged native builds are still out of this PR.
 - 2026-09-18, `feat/native-python`: Claude built the eight layouts the owner
   picked from the look-concepts mock-up, one verified unit per commit: the week
   model, the registry, My day with One thing and the Layout dialog, Day dial,

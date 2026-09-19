@@ -396,7 +396,19 @@ class NativeWindow(QMainWindow):
         chrome.addLayout(actions)
         tools_menu = QMenu(self.tools_button)
         self._tool_pairs = []
-        for button in (add_fixed, add_homework, solve, undo, redo, save, retry, settings):
+        for button in (
+            add_fixed,
+            add_homework,
+            solve,
+            undo,
+            redo,
+            copy_block,
+            paste_block,
+            duplicate,
+            save,
+            retry,
+            settings,
+        ):
             self._tool_pairs.append((tools_menu.addAction(button.text()), button))
         tools_menu.addSeparator()
         for button in (
@@ -1422,7 +1434,13 @@ class NativeWindow(QMainWindow):
         key = event.key()
         mods = event.modifiers()
         control = bool(mods & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier))
-        if not control and key in (Qt.Key.Key_W, Qt.Key.Key_D, Qt.Key.Key_M, Qt.Key.Key_Delete):
+        if not control and key in (
+            Qt.Key.Key_W,
+            Qt.Key.Key_D,
+            Qt.Key.Key_M,
+            Qt.Key.Key_T,
+            Qt.Key.Key_Delete,
+        ):
             self.keyPressEvent(event)
             return True
         if control and key in (Qt.Key.Key_C, Qt.Key.Key_V, Qt.Key.Key_D, Qt.Key.Key_Z, Qt.Key.Key_Y):

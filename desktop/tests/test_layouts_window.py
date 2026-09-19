@@ -185,18 +185,21 @@ def test_running_late_opens_the_products_own_running_late(
 
 
 def test_the_keyboard_reaches_my_day_and_back(qapp: QApplication, window: NativeWindow) -> None:
-    window.week_table.setFocus()
-    QTest.keyClick(window, Qt.Key.Key_T)
-    assert isinstance(window.planner.currentWidget(), OneThingView)
-    QTest.keyClick(window, Qt.Key.Key_B)
+    """The week grid keeps letter keys for type-ahead, so T has to be taken the way W, D and M are."""
+    QTest.keyClick(window.week_table, Qt.Key.Key_T)
+    day = window.planner.currentWidget()
+    assert isinstance(day, OneThingView)
+    QTest.keyClick(day, Qt.Key.Key_B)
     assert window.planner.currentWidget() is window.week_table
-    QTest.keyClick(window, Qt.Key.Key_T)
-    QTest.keyClick(window, Qt.Key.Key_Escape)
+    QTest.keyClick(window.week_table, Qt.Key.Key_T)
+    QTest.keyClick(window.planner.currentWidget(), Qt.Key.Key_Escape)
     assert window.planner.currentWidget() is window.week_table
-    QTest.keyClick(window, Qt.Key.Key_T)
-    QTest.keyClick(window, Qt.Key.Key_M)
+    QTest.keyClick(window.week_table, Qt.Key.Key_T)
+    QTest.keyClick(window.planner.currentWidget(), Qt.Key.Key_M)
     wait_until(qapp, lambda: window.planner.currentWidget() is window.month_grid)
     assert window.plan_chrome.isVisible() is True
+    QTest.keyClick(window.month_grid.table, Qt.Key.Key_T)
+    assert isinstance(window.planner.currentWidget(), OneThingView)
 
 
 def test_the_view_buttons_leave_a_day_screen(qapp: QApplication, window: NativeWindow) -> None:
@@ -357,7 +360,10 @@ def test_a_design_of_its_own_gets_the_window_and_tools_holds_the_controls(
     qapp.processEvents()
     assert window.planner.height() > window.height() * 0.8
     offered = tool_actions(window)
-    assert list(offered)[:6] == ["Add fixed time", "Add homework", "Plan my homework", "Undo", "Redo", "Save"]
+    labels = list(offered)
+    assert labels[:6] == ["Add fixed time", "Add homework", "Plan my homework", "Undo", "Redo", "Copy"]
+    assert labels[7:10] == ["Duplicate", "Save", "Retry save"]
+    assert labels[6].startswith("Paste")
     assert {"Settings", "Running late", "Routines", "Account", "Reload"} <= set(offered)
     assert (offered["Undo"], offered["Redo"]) == (True, False)
 

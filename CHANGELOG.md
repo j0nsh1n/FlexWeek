@@ -64,9 +64,12 @@ All notable changes to FlexWeek are documented here. Format follows
 ### Fixed
 - Native week navigation, undo, focus credit and calendar shortcuts (2026-09-18).
   A failed week load no longer leaves the previous week's blocks under the new
-  date. Undo after a conflict keeps live focus minutes. W, D, M, Delete and
-  Ctrl+C/V/D/Z/Y reach the window from the week grid. Day Previous and Next
-  move one day. Recovery Continue is the only path off the recovery codes page.
+  date. Undo after a conflict keeps live focus minutes. W, D, M, T, Delete and
+  Ctrl+C/V/D/Z/Y reach the window from the week grid. T opens My day the way W
+  opens the week. Day Previous and Next move one day. Recovery Continue is the
+  only path off the recovery codes page.
+- Tools keeps Copy, Paste and Duplicate when a layout owns the window (2026-09-18).
+  Those three sat only in the planning bar, which a design of its own hides.
 
 ## [0.11.0] - 2026-09-17
 
