@@ -127,6 +127,10 @@ class BentoView(LayoutView):
         self._grid.setContentsMargins(scene.px(20), scene.px(16), scene.px(20), scene.px(16))
         self._grid.setSpacing(scene.px(14))
         everything = scene.options.get("tiles") != "essentials"
+        if self.cramped:
+            # Two columns rather than a sideways scroll to reach Add and Plan.
+            self._narrow_board(scene, everything)
+            return
         self._grid.addWidget(self._hero(scene), 0, 0, 2, 2)
         self._grid.addWidget(self._deadlines(scene), 0, 2, 2, 1)
         self._grid.addWidget(
@@ -147,6 +151,30 @@ class BentoView(LayoutView):
         for found in self._board.findChildren(type(label("", ""))):
             role = found.objectName()
             found.setProperty("role", "kicker" if role.endswith("Kicker") else found.property("role"))
+
+    def _narrow_board(self, scene: Scene, everything: bool) -> None:
+        """The same tiles in two columns, for a window too narrow for four."""
+        tiles = [self._hero(scene), self._deadlines(scene), self._waiting(scene)]
+        if everything:
+            tiles += [self._tonight(scene), self._total(scene), self._load(scene), self._add(scene)]
+        tiles.append(self._strip(scene))
+        wide_names = {"bentoHero", "bentoStrip", "bentoLoad"}
+        row, column = 0, 0
+        for tile in tiles:
+            if tile.objectName() in wide_names:
+                if column:
+                    row, column = row + 1, 0
+                self._grid.addWidget(tile, row, 0, 1, 2)
+                row += 1
+                continue
+            self._grid.addWidget(tile, row, column, 1, 1)
+            column += 1
+            if column == 2:
+                row, column = row + 1, 0
+        for index in range(2):
+            self._grid.setColumnStretch(index, 1)
+        for index in range(self._grid.rowCount()):
+            self._grid.setRowMinimumHeight(index, scene.px(128))
 
     def _hero(self, scene: Scene) -> QFrame:
         tile, inner = self._tile(scene, "bentoHero", "Up next")

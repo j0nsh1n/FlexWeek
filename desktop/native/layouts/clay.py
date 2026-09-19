@@ -211,6 +211,7 @@ class ClayDeckView(LayoutView):
             tray.addStretch(1)
             self._root.addLayout(tray)
         reach = 2 if scene.options.get("cards") != "three" else 1
+        reach = min(reach, 1) if self.cramped else reach
         tilted = scene.options.get("tilt") != "off"
         deck = QHBoxLayout()
         deck.setSpacing(0)

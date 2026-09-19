@@ -291,7 +291,9 @@ class MissionView(LayoutView):
         left.addWidget(lanes, 1)
         left.addLayout(self._day_row(scene, day))
         body.addLayout(left, 1)
-        if scene.options.get("side") != "hide":
+        # The radar is the first thing to go when there is no room: the lanes are the point, and
+        # everything the radar says is also in the unplaced strip and the day row.
+        if scene.options.get("side") != "hide" and not self.cramped:
             body.addWidget(self._side(scene))
         self._root.addLayout(body, 1)
 

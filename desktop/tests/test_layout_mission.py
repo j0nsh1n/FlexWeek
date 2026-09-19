@@ -176,3 +176,24 @@ def test_the_radar_elides_a_long_title_with_an_ellipsis(qapp: QApplication) -> N
     assert "…" in row.text()
     assert "annotated bibliography" not in row.text().split("\n")[0]
     assert row.toolTip() == long_title
+
+
+def test_the_radar_steps_aside_on_a_narrow_window(qapp: QApplication) -> None:
+    """Mission wanted 1220px. The lanes are the point; the radar repeats what the unplaced strip
+    and the day row already say, so it is the first thing to go."""
+    wide = shown(qapp)
+    wide.resize(1366, 700)
+    qapp.processEvents()
+    assert wide.findChild(QFrame, "missionSide") is not None
+
+    tight = MissionView()
+    tight.resize(1024, 640)
+    tight.show()
+    qapp.processEvents()
+    tight.show_week(wide.scene)
+    qapp.processEvents()
+    assert tight.cramped is True
+    assert tight.findChild(QFrame, "missionSide") is None
+    for name in ("missionAdd", "missionPlan", "missionMyDay"):
+        button = tight.findChild(QPushButton, name)
+        assert button is not None and button.x() + button.width() <= tight.width()

@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import QApplication, QFrame, QLabel, QLayout, QPushButton, QScrollArea, QWidget
 
 from desktop.native.calendar import CATEGORIES
@@ -110,6 +111,11 @@ def work_left(scene: Scene) -> int:
     )
 
 
+# Mission control wanted 1220 pixels, Clay deck 1148 and Bento 1130. Below this a design gives up a
+# column rather than making the student scroll sideways to reach Run plan.
+NARROW_WIDTH = 1150
+
+
 class LayoutView(QWidget):
     add_requested = Signal(str)
     plan_requested = Signal()
@@ -129,6 +135,7 @@ class LayoutView(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._scene: Scene | None = None
+        self._was_cramped: bool | None = None
 
     @property
     def scene(self) -> Scene | None:
@@ -141,10 +148,23 @@ class LayoutView(QWidget):
         self._scene = scene
         held = QApplication.focusWidget()
         name = held.objectName() if held is not None and held is not self and self.isAncestorOf(held) else ""
+        self._was_cramped = self.cramped
         self.render(scene, week_changed)
         again = self.findChild(QWidget, name) if name else None
         if again is not None:
             again.setFocus()
+
+    @property
+    def cramped(self) -> bool:
+        """Too narrow for this design's full arrangement. Measured on the view, not the window."""
+        return 0 < self.width() < NARROW_WIDTH
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        # Only when the answer changes, so an ordinary resize does not rebuild the whole view.
+        if self._scene is not None and self.cramped != self._was_cramped:
+            self._was_cramped = self.cramped
+            self.render(self._scene, False)
 
     def render(self, scene: Scene, week_changed: bool) -> None:
         raise NotImplementedError
