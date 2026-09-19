@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from uuid import uuid4
 
 from pydantic import ValidationError
@@ -238,6 +238,7 @@ class WeekTable(QTableWidget):
         self._look: dict | None = None
         self._palette = resolved_palette("system", False, None)
         self._shown: tuple[str, list[dict], dict | None] | None = None
+        self._revealed: str | None = None
         self.setItemDelegate(BlockDelegate(self))
 
     def set_look(self, look: dict | None, palette: dict) -> None:
@@ -305,6 +306,26 @@ class WeekTable(QTableWidget):
             first, last = spans[(row, day)]
             item.setData(ENDS_ROLE, (row == first, row == last))
             self.setItem(row, day, item)
+
+    def reveal(self, week_start: str, now_ms: int) -> None:
+        """Open this week on the time that matters: now, or the first block, not 06:00."""
+        if self._revealed == week_start:
+            return
+        self._revealed = week_start
+        moment = datetime.fromtimestamp(now_ms / 1000.0)
+        if monday_of(moment.date().isoformat()) == week_start:
+            row = min(
+                max((moment.hour * 60 + moment.minute - DAY_START_MIN) // SLOT_MIN, 0),
+                SLOTS_PER_DAY - 1,
+            )
+        else:
+            row = self._first_block_row()
+        lead = min(2, row)
+        self.scrollTo(self.model().index(row - lead, 0), QAbstractItemView.ScrollHint.PositionAtTop)
+
+    def _first_block_row(self) -> int:
+        starts = [hhmm_to_slot(block["start"]) for block in self._week_blocks if block.get("start")]
+        return min(starts) if starts else 0
 
     def block_titles(self, ids: list[str]) -> list[str]:
         """Names for the blocks sharing a cell, taken from the blocks: the cell's own text may be blank."""

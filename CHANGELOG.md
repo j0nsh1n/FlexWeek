@@ -5,6 +5,9 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+- The week grid opens on the current time, not empty dawn (2026-09-19).
+
 ### Removed
 - Retired Qt WebEngine desktop shell (2026-09-19). The Chromium window,
   Linux renderer sandbox helper, and leftover probe tests are gone. The

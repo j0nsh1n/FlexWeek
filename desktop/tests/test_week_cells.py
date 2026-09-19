@@ -9,6 +9,7 @@ from __future__ import annotations
 import importlib.util
 import os
 from collections.abc import Iterator
+from datetime import datetime
 
 import pytest
 
@@ -21,6 +22,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtWidgets import QApplication
 
+    from backend.slots import DAY_START_MIN, SLOT_MIN
     from desktop.native.widgets import WeekTable
 
 WEEK = "2026-09-14"
@@ -93,6 +95,23 @@ def test_double_clicking_any_row_of_a_block_opens_it_even_a_blank_one(qapp: QApp
     assert table.item(rows[3], 0).text() == ""
     table._activate(rows[3], 0)
     assert opened == ["school"]
+
+
+def test_the_current_week_opens_scrolled_to_now_not_dawn(qapp: QApplication) -> None:
+    table = WeekTable()
+    table.resize(960, 320)
+    table.show()
+    qapp.processEvents()
+    table.set_week(WEEK, [block()], None)
+    now = datetime(2026, 9, 17, 13, 40)
+    table.reveal(WEEK, int(now.timestamp() * 1000))
+    qapp.processEvents()
+    now_row = (now.hour * 60 + now.minute - DAY_START_MIN) // SLOT_MIN
+    bar = table.verticalScrollBar()
+    top = table.rowAt(1)
+    bottom = table.rowAt(table.viewport().height() - 1)
+    assert bar.value() > 0
+    assert top <= now_row <= bottom
 
 
 def test_blocks_sharing_a_cell_are_named_from_the_blocks_not_from_the_cell(qapp: QApplication) -> None:

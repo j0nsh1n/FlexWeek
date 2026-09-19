@@ -610,6 +610,7 @@ class NativeWindow(QMainWindow):
         if self._on_recovery() and not self._allow_week_page:
             return
         self.week_table.set_week(self.session.week_start, self.session.blocks, self.session.trace)
+        self.week_table.reveal(self.session.week_start, self.session.now_ms())
         agenda = agenda_for(
             self.session.week_start,
             self.session.selected_day,
