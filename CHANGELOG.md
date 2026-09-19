@@ -9,6 +9,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - The week grid opens on the current time, not empty dawn (2026-09-19).
 - Retro Week.exe stays on the desk, and Saturday and Sunday scroll into view
   (2026-09-19).
+- Mission control names skinny bars and elides radar titles (2026-09-19).
 
 ### Removed
 - Retired Qt WebEngine desktop shell (2026-09-19). The Chromium window,
