@@ -3,6 +3,10 @@
 Date: 2026-09-07. Sources are official docs (links dated below). This is a
 packaging choice, not a UI redesign or security audit.
 
+As of 0.12.0 the shipped window is native Qt widgets (`python -m desktop.main`).
+The Chromium shell and its probe tests are gone. The sections below are the
+2026-09-07 packaging recommendation that led to the first desktop builds.
+
 ## 1. Recommendation
 
 Use a **minimal PySide6 `QWebEngineView` window** that loads the hosted FlexWeek
@@ -174,13 +178,10 @@ network.
 
 ## 8. Desktop completion checks — 2026-09-07
 
-The account flow is now exercised automatically by `desktop/tests/test_webengine.py`
-in real Qt WebEngine processes, using temporary profiles and databases. It covers
-registration, editor save, Solve, reload, theme persistence, sign-out, second-account
-isolation, phone/desktop widths, external links and offline draft downloads.
-PySide6 is optional for the backend test environment; these tests skip explicitly
-when desktop dependencies are absent. The test processes keep the Chromium sandbox
-enabled and use offscreen rendering with GPU acceleration disabled.
+The account flow is now exercised automatically by `desktop/tests/test_native.py`
+and `desktop/tests/test_smoke.py` against a real local API, using temporary
+databases and offscreen widgets. PySide6 is optional for the backend test
+environment; these tests skip explicitly when desktop dependencies are absent.
 
 Two wrapper defects were reproduced and fixed: new-window links retained hidden
 pages after handoff, and requested downloads had no native handler. New windows

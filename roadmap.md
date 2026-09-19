@@ -446,11 +446,11 @@ is the same entry.
 - Unit 5 account recovery and files: [x] 2026-09-17. Forgotten-password recovery,
   password/code replacement, deletion, week/day files, restore points, transfer.
 - Unit 6 retirement: [x] 2026-09-17. Native is the default launcher. Smoke is
-  native widgets. Chromium remains only in leftover probe tests.
+  native widgets. The Chromium shell is deleted.
 
 Complete when unit 6 has switched the normal launcher and packaging smoke uses
 native widgets. Executables stay unbuilt until Jonathan asks. Packaging for
-0.12.0 compiles `desktop/main.py` and skips `desktop.webengine`, so the Windows
+0.12.0 compiles `desktop/main.py` and the native package, so the Windows
 and Linux downloads are the native client.
 
 ## Release polish (2026-09-16): 0.10.1, then 0.11

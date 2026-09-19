@@ -11,8 +11,7 @@ The command runs JavaScript syntax, every `frontend/tests/*.test.mjs` file,
 Ruff, mypy, all pytest cases, and working, staged and committed-range diff
 whitespace checks. A failed command, timeout, missing desktop dependency, empty
 test suite or skipped Python/Node test makes it fail. It installs nothing and does not build or
-publish a binary. Qt cases use temporary profiles and databases with Chromium
-sandboxing enabled.
+publish a binary. Qt cases use temporary databases and offscreen native widgets.
 
 For environments with only the web dependencies:
 
@@ -34,26 +33,26 @@ this gate. The generic kit CI that ran pyright is not used.
 | Accounts, expiry, ownership, CSRF, revision conflicts and retries | `backend/tests/test_accounts.py`, `test_account_edges.py`, `test_week_api.py`; `frontend/tests/accounts.test.mjs` | Another account, expired session, stale response and failed save |
 | Dated weeks and migration | `backend/tests/test_weeks.py`, `test_migration.py`, `test_week_api.py`; frontend account/calendar tests | Monday validation, year/DST boundaries, repeat migration, unsaved week navigation |
 | Solver placement, priorities and explanations | `backend/tests/test_solver.py`, `test_completed.py`, `test_solver_invariants.py` | Contested capacity with unequal domains, completed work, deadline/earliest bounds, timeout partial results |
-| Missed occurrences and recovery | Solver tests; WebEngine `phase6` case | One day of a series, cross-day movement, completed work, restore/save/reload |
-| Grid gestures and event wiring | `frontend/tests/calendar-interactions.test.mjs`; WebEngine `calendar` case | Snap boundaries, cancel, a second pointer, move/resize, double-click, context menu and persisted reload |
+| Missed occurrences and recovery | Solver tests; `desktop/tests/test_calendar.py`, `test_history.py` | One day of a series, cross-day movement, completed work, restore/save/reload |
+| Grid gestures and event wiring | `frontend/tests/calendar-interactions.test.mjs`; `desktop/tests/test_calendar.py` | Snap boundaries, cancel, a second pointer, move/resize, double-click, context menu and persisted reload |
 | Imports, exports, drafts, categories and completion | `frontend/tests/phase5-slices.test.mjs`; `backend/tests/test_phase5.py` | Invalid input, repeat import, maximum merged size, unusual/maximum Unicode IDs, multi-day flexible tasks, completed placement round trip and exported draft reimport |
-| Reminder preferences and session cleanup | Phase 5 frontend/backend tests | Lead window, solved flexible work, completed/missed filtering, account transition, browser notification closure and alert cleanup |
-| Stage 6 recovery, identity and account transfer | `frontend/tests/stage6_access.test.mjs`; `backend/tests/test_stage6_api.py`, `test_recovery.py`; WebEngine `stage6` case | One-time code handling, wrong-password session preservation, local/hosted identity, malformed files, named removals, stale previews, replace/reload and deletion |
-| Stage 7 month navigation | `frontend/tests/stage7_month.test.mjs`; `backend/tests/test_month_api.py`, `test_weeks.py`, `test_day_api.py`; WebEngine `stage7_month` case | Deadlines, completed work, project indicators, overdue work, empty/error states, stale month/account replies, year and 2000/2099 boundaries, responsive date targets and date-to-Day handoff |
-| Stage 3 clipboard, routines, unfinished work and restore points | `frontend/tests/stage3.test.mjs`; `backend/tests/test_routines_api.py`, `test_restore_api.py`; WebEngine `stage3` and `stage3_mobile` cases | Collision previews, a remaining-time cap shared across a batch, the 100-block limit, operation ids on retry and after 409, stale restore tokens, reload, a second account and a 390px dark-theme carry-forward |
-| Desktop navigation, downloads and layout | `desktop/tests/test_origin.py`, `test_server.py`, `test_webengine.py` | External popup/navigation, offline draft download, 1280px/390px overflow |
-| Native Qt widgets (no WebEngine) | `desktop/tests/test_native.py`, `test_calendar.py`, `test_history.py`, `test_reuse.py`, `test_focus.py`, `test_look.py`, `test_remind.py`, `test_files.py`, `test_server.py` native-mode case | Packaging smoke on a real desktop |
-| A painted week after setup, and a page process that stops | Native `--smoke-test` in `test_webengine.py`; leftover WebEngine `rookie`/`recovery` probes via `desktop/webengine.py`; `frontend/tests/accounts.test.mjs` | Window grab after a saved week, killed renderer on the retired shell |
+| Reminder preferences and session cleanup | Phase 5 frontend/backend tests; `desktop/tests/test_remind.py` | Lead window, solved flexible work, completed/missed filtering, account transition, browser notification closure and alert cleanup |
+| Stage 6 recovery, identity and account transfer | `frontend/tests/stage6_access.test.mjs`; `backend/tests/test_stage6_api.py`, `test_recovery.py`; `desktop/tests/test_files.py` | One-time code handling, wrong-password session preservation, local/hosted identity, malformed files, named removals, stale previews, replace/reload and deletion |
+| Stage 7 month navigation | `frontend/tests/stage7_month.test.mjs`; `backend/tests/test_month_api.py`, `test_weeks.py`, `test_day_api.py`; `desktop/tests/test_calendar.py` | Deadlines, completed work, project indicators, overdue work, empty/error states, stale month/account replies, year and 2000/2099 boundaries, responsive date targets and date-to-Day handoff |
+| Stage 3 clipboard, routines, unfinished work and restore points | `frontend/tests/stage3.test.mjs`; `backend/tests/test_routines_api.py`, `test_restore_api.py`; `desktop/tests/test_reuse.py`, `test_history.py` | Collision previews, a remaining-time cap shared across a batch, the 100-block limit, operation ids on retry and after 409, stale restore tokens, reload, a second account and a 390px dark-theme carry-forward |
+| Desktop origin, local server and native window | `desktop/tests/test_origin.py`, `test_server.py`, `test_native.py`, `test_files.py` | Loopback origin, offline draft download, native Save/Open |
+| Native Qt widgets | `desktop/tests/test_native.py`, `test_calendar.py`, `test_history.py`, `test_reuse.py`, `test_focus.py`, `test_look.py`, `test_remind.py`, `test_files.py`, `test_smoke.py`, `test_server.py` native-mode case | Packaging smoke on a real desktop |
+| A painted week after setup | Native `--smoke-test` in `desktop/tests/test_smoke.py`; `frontend/tests/accounts.test.mjs` | Window grab after a saved week; hosted origin that cannot load |
 
 The generated solver cases use 20 fixed seeds and independent integer-minute
 arithmetic. They check purity, candidate days, grid/deadline bounds, occupied
 slots, completed work and explanations. They are not an exhaustive proof of
 search optimality or a performance benchmark.
 
-Node tests run the application in a simulated document. WebEngine tests load
-the real HTML, CSS and JavaScript, dispatch DOM events, save through the real
-API, and reload from SQLite. Synthetic pointer events test event wiring but do
-not prove hardware pointer capture, touch scrolling or OS notification delivery.
+Node tests run the application in a simulated document. Native widget tests
+drive the Qt window against the real API and reload from SQLite. Synthetic
+pointer events test event wiring but do not prove hardware pointer capture,
+touch scrolling or OS notification delivery.
 
 ## Adding coverage with a feature
 
@@ -63,7 +62,7 @@ not prove hardware pointer capture, touch scrolling or OS notification delivery.
 2. Cover the successful action and its relevant failure boundary. Examples
    include a cancelled gesture, rejected import, failed save, account change or
    exhausted scheduling window.
-3. For event-driven UI behavior, extend a real WebEngine case alongside fast
+3. For event-driven UI behavior, extend a native widget case alongside fast
    Node tests. The integration result can include a save and reload so the
    check covers persistence as well as the displayed draft.
    For multi-request actions, also prove retry idempotency: preserve the
@@ -84,7 +83,7 @@ needs the same create/save/reload and recovery paths exercised through the
 packaged executable in a fresh profile. `DESKTOP.md` describes the build and
 artifact checks. Windows execution, Safari/iPhone, physical touch, keyboard
 accessibility, notification permission/sound and visual contrast remain separate
-checks. The WebEngine probes cover close-to-tray in a source checkout, but the tray icon path
+checks. Native widget tests cover close-to-tray in a source checkout, but the tray icon path
 is only proven in the packaged build, because that bug never occurred in a source checkout.
 
 No hosted security audit or production configuration check runs here. Existing
@@ -100,14 +99,11 @@ routine weekday selection and long routine names, restore-token refresh, the
 week kept after a restore, Clear week rollback, and operation ids that repeat
 after an unknown response but not after a 409.
 
-The WebEngine `stage3` case drives the real API: copy through the preview, save
-and apply a routine, find the automatic restore point, restore it, repeat one
-`/api/changes` operation id (stored once), reload, and confirm that a second
-account lists no routines or restore points and gets 404 for the first
-account's point. `stage3_mobile` runs at 390px in the dark theme, carries
-unfinished homework into next week once and checks that the saved session keeps
-its assignment id and deadline. Backend isolation, limits and transactions are
-in `test_routines_api.py` and `test_restore_api.py`.
+Native widget tests in `test_reuse.py` and `test_history.py` drive the same
+APIs from the Qt window: copy through a collision preview, routines, unfinished
+homework, and restore points. Backend isolation, limits and transactions are in
+`test_routines_api.py` and `test_restore_api.py`. The browser client still
+covers Stage 3 in `frontend/tests/stage3.test.mjs`.
 
 ## Findings from the September 8–9 pass
 
@@ -124,7 +120,7 @@ The regression cases reproduced and now protect against:
 - Unimportable downloaded drafts.
 - Completing a solved task discarding either its spent slot or its original
   candidate days. The persisted completed day now round-trips independently;
-  WebEngine `completion` covers save/reload/solve.
+  native and frontend completion tests cover save/reload/solve.
 - A day import duplicating a multi-day flexible assignment, and text/day export
   disagreeing with the placement visible after Solve.
 - A second account login discarding the first account's suspended draft.

@@ -1,4 +1,4 @@
-"""Run real WebEngine integration checks in isolated processes and profiles."""
+"""Native `--smoke-test` against a real local API, with no Chromium."""
 
 from __future__ import annotations
 
@@ -22,57 +22,6 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.server import LocalServer
 
 
-@pytest.mark.parametrize(
-    "case",
-    [
-        "accounts",
-        "calendar",
-        "completion",
-        "phase6",
-        "phase7",
-        "popup",
-        "navigation",
-        "download",
-        "tray",
-        "no_icon",
-        "instance",
-        "rookie",
-        "system_dark",
-        "recovery",
-        "stage1",
-        "stage2",
-        "stage3",
-        "stage3_mobile",
-        "stage4",
-        "stage5",
-        "stage6",
-        "stage7_month",
-    ],
-)
-def test_webengine(case: str, tmp_path: Path) -> None:
-    env = {
-        **os.environ,
-        "XDG_DATA_HOME": str(tmp_path / "data"),
-        "XDG_CACHE_HOME": str(tmp_path / "cache"),
-        "QT_QPA_PLATFORM": "offscreen",
-        # preferredColorScheme=0 makes prefers-color-scheme report dark offscreen.
-        "QTWEBENGINE_CHROMIUM_FLAGS": "--disable-gpu"
-        + (" --blink-settings=preferredColorScheme=0" if case == "system_dark" else ""),
-    }
-    env.pop("FLEXWEEK_ORIGIN", None)
-    env.pop("FLEXWEEK_DESKTOP_ORIGIN", None)
-    result = subprocess.run(
-        [sys.executable, "-m", "desktop.tests.webengine_probe", case, str(tmp_path)],
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=45,
-        check=False,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "PASS:" in result.stdout
-
-
 def run_smoke(tmp_path: Path, **extra: str) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     report = tmp_path / "smoke.json"
     (tmp_path / "tmp").mkdir()
@@ -82,7 +31,6 @@ def run_smoke(tmp_path: Path, **extra: str) -> tuple[subprocess.CompletedProcess
         "XDG_DATA_HOME": str(tmp_path / "data"),
         "XDG_CACHE_HOME": str(tmp_path / "cache"),
         "QT_QPA_PLATFORM": "offscreen",
-        "QTWEBENGINE_CHROMIUM_FLAGS": "--disable-gpu",
         **extra,
     }
     for name in ("FLEXWEEK_ORIGIN", "FLEXWEEK_DESKTOP_ORIGIN"):
@@ -109,7 +57,6 @@ def test_smoke_mode_passes_once_setup_solve_paints_the_week(tmp_path: Path) -> N
     assert cast(int, report["painted_colors"]) >= PAINTED_MIN_COLORS
     assert report["window_visible"] is True
     assert report["window_icon_loaded"] is True
-    # The throwaway account never lands in the user's own FlexWeek data, and its own is removed.
     assert not (tmp_path / "data").exists() or not any((tmp_path / "data").rglob("flexweek.db"))
     assert list((tmp_path / "tmp").glob("flexweek-smoke-*")) == []
 

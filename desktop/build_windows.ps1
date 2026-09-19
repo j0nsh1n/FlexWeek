@@ -82,7 +82,7 @@ $NuitkaArgs = @(
     '--enable-plugins=pyside6',
     '--include-package=desktop.native',
     '--include-package=backend',
-    '--nofollow-import-to=desktop.tests,desktop.webengine,backend.tests',
+    '--nofollow-import-to=desktop.tests,backend.tests',
     '--nofollow-import-to=PySide6.QtWebEngineCore,PySide6.QtWebEngineWidgets,PySide6.QtWebEngineQuick',
     # Type-checking tools and uvicorn extras desktop/server.py never enables;
     # the same list as build_linux.sh.
