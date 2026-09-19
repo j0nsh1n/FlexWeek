@@ -1,6 +1,12 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-19 (0.12.0). Branch `feat/0-12-release` off `main` after PR #15.
+  Packaging compiles the native window and refuses Chromium in the bundle.
+  CHANGELOG closed as 0.12.0. Local gate: 291 frontend and 712 Python tests.
+  spec.md still describes a WebEngine desktop shell; that drift is unchanged
+  and was not edited. Next: tag `v0.12.0` and publish the GitHub release so CI
+  attaches Windows and Linux downloads.
 - Date: 2026-09-18 (PR #15). Branch `feat/native-python`, GitHub PR
   https://github.com/j0nsh1n/FlexWeek/pull/15 onto `main`. Claude's native
   layouts and Paper/Pastel are on the branch. Reviewer fixes: T from the week
@@ -457,6 +463,9 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-19, `feat/0-12-release`: 0.12.0 packaging and release notes. Nuitka
+  skips `desktop.webengine`. Release jobs fail if WebEngine lands in the
+  package. Next: merge, tag `v0.12.0`, `gh release create`, wait for assets.
 - 2026-09-18, `feat/native-python`: finishing PR #15 after Claude's UI. T from
   an item view now reaches My day, and Tools keeps Copy, Paste and Duplicate
   when a layout hides the planning bar. Next for the owner: merge #15, then

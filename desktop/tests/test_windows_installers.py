@@ -88,3 +88,6 @@ def test_workflow_builds_tests_and_uploads_both_installers_and_no_zip() -> None:
     assert "$link.TargetPath" in WORKFLOW
     assert ".Save()" not in WORKFLOW
     assert ".zip" not in WORKFLOW
+    assert "Native package must not ship WebEngine" in WORKFLOW
+    assert "WebEngine core DLL missing" not in WORKFLOW
+    assert "QtWebEngineProcess.exe missing" not in WORKFLOW

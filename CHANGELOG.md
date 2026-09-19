@@ -5,6 +5,8 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-19
+
 ### Added
 - Native desktop layouts (2026-09-18, device-only). A layout is a whole way of
   showing the week, where a look is only its colours. **Layout** in the top bar
@@ -51,6 +53,9 @@ All notable changes to FlexWeek are documented here. Format follows
   cannot round its own title away.
 
 ### Changed
+- Packaged Windows and Linux downloads are the native Qt client (2026-09-19).
+  Chromium is not compiled into the bundle. The retired WebEngine shell stays
+  in source for leftover probe tests.
 - Calendar blocks take their category colour through a stylesheet property
   instead of an inline border colour (2026-09-17, shared frontend), so a look
   can decide whether the colour lands on the edge, the outline or nowhere.

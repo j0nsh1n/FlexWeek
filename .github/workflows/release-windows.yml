@@ -6,9 +6,9 @@ name: Release packages
 # that touch packaging, and a hand run without a tag, build and test everything
 # but upload nothing to a release; the Windows installers are kept as run artifacts.
 #
-# onedir (not onefile): Qt WebEngine cannot be statically linked, so each
-# bundle ships as a folder, installed on Windows and inside a tar.gz or
-# AppImage on Linux — see DESKTOP.md.
+# onedir (not onefile): Qt plugins ship as a folder, so each bundle is a
+# directory, installed on Windows and inside a tar.gz or AppImage on Linux.
+# The window is native Qt widgets. Chromium is not in the package.
 on:
   release:
     types: [published]
@@ -56,12 +56,11 @@ jobs:
 
       - name: Smoke-test package layout and the setup Solve
         # GUI-subsystem freezes do not set $LASTEXITCODE under `&`. Start-Process
-        # -Wait reads the process exit code. The WebEngine core DLL is Qt6-prefixed.
+        # -Wait reads the process exit code.
         # --smoke-test walks a new account through setup to its first Solve and
         # fails on a blank window, which is how 0.9.0 broke for testers.
         env:
           QT_QPA_PLATFORM: offscreen
-          QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
         run: |
           $root = "dist\FlexWeek-Windows"
           $exe = Join-Path $root "FlexWeek.exe"
@@ -69,11 +68,11 @@ jobs:
           foreach ($name in @("README.txt", "LICENSE.txt", "flexweek.png", "frontend\index.html")) {
             if (-not (Test-Path (Join-Path $root $name))) { throw "$name missing under $root" }
           }
-          if (-not (Get-ChildItem -Path $root -Recurse -Filter "*WebEngineCore*.dll" -ErrorAction SilentlyContinue)) {
-            throw "WebEngine core DLL missing under $root"
+          if (Get-ChildItem -Path $root -Recurse -Filter "*WebEngineCore*" -ErrorAction SilentlyContinue) {
+            throw "Native package must not ship WebEngine"
           }
-          if (-not (Get-ChildItem -Path $root -Recurse -Filter "QtWebEngineProcess.exe" -ErrorAction SilentlyContinue)) {
-            throw "QtWebEngineProcess.exe missing under $root"
+          if (Get-ChildItem -Path $root -Recurse -Filter "QtWebEngineProcess.exe" -ErrorAction SilentlyContinue) {
+            throw "Native package must not ship QtWebEngineProcess.exe"
           }
           $report = Join-Path (Get-Location) "dist\windows-smoke.json"
           $proc = Start-Process -FilePath $exe -ArgumentList "--smoke-test",$report -WorkingDirectory $root -PassThru -Wait
@@ -138,7 +137,6 @@ jobs:
         # setup-Solve smoke test, and uninstall must remove it.
         env:
           QT_QPA_PLATFORM: offscreen
-          QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
         run: |
           function Invoke-Checked([string] $file, [string[]] $arguments, [string] $what) {
             $proc = Start-Process -FilePath $file -ArgumentList $arguments -Wait -PassThru
@@ -243,18 +241,20 @@ jobs:
         # account through setup to its first Solve and fails on a blank window.
         env:
           QT_QPA_PLATFORM: offscreen
-          QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
           LD_LIBRARY_PATH: ""
         run: |
           mkdir dist/stage
           tar -xzf dist/release/FlexWeek-Linux-x86_64.tar.gz -C dist/stage
+          if find dist/stage/FlexWeek dist/FlexWeek -name '*WebEngineCore*' | grep -q .; then
+            echo "Native package must not ship WebEngine" >&2
+            exit 1
+          fi
           xvfb-run -a -s "-screen 0 1280x800x24" dist/stage/FlexWeek/FlexWeek --smoke-test dist/packaged-smoke.json
           python -c 'import json,sys; r=json.load(open("dist/packaged-smoke.json")); print(r); sys.exit(0 if r.get("ok") and r.get("stage") == "week shown after setup Solve" else 1)'
 
       - name: Smoke-test the setup Solve
         env:
           QT_QPA_PLATFORM: offscreen
-          QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
           LD_LIBRARY_PATH: ""
         run: |
           xvfb-run -a -s "-screen 0 1280x800x24" dist/FlexWeek/FlexWeek --smoke-test dist/linux-smoke.json
