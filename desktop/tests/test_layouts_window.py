@@ -324,7 +324,8 @@ def test_a_design_can_be_put_back_to_its_own_settings(qapp: QApplication) -> Non
 
 
 def test_every_built_view_is_a_design_in_the_registry(qapp: QApplication) -> None:
-    assert set(VIEW_CLASSES) <= set(LAYOUTS) - {"classic"}
+    # Today's app is the week grid itself, so it is the one design with no view of its own.
+    assert set(VIEW_CLASSES) == set(LAYOUTS) - {"classic"}
     assert all(view.layout_id == layout_id for layout_id, view in VIEW_CLASSES.items())
 
 
