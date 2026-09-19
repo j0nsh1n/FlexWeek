@@ -569,8 +569,38 @@ def _depth_rules(depth: str, palette: dict) -> str:
     return f"border: 1px solid {palette['hairline']};"
 
 
-def pack_stylesheet(pack: object, system_dark: bool, look: dict | None, accent: object = "default") -> str:
-    palette = resolved_palette(pack, system_dark, look, accent)
+def palette_from_tokens(tokens: dict[str, str], base: dict) -> dict:
+    """Read a layout's colourway back into the palette the window chrome is painted from.
+
+    A layout used to dress only itself, so Bento's indigo sat under a top bar in the pack's blue and
+    the focus timer arrived in default chrome. The chrome now follows whichever design is on screen.
+    Category colours stay on `base`: a block is School-blue in every design.
+    """
+    line = tokens["line"]
+    return {
+        **base,
+        "window": tokens["bg"],
+        "panel": tokens["surface"],
+        "field": tokens["surface"],
+        "grid": line,
+        "text": tokens["bg_ink"],
+        "muted": tokens["bg_muted"],
+        "accent": tokens["accent"],
+        "accent_ink": tokens["accent_ink"],
+        "error": tokens["danger"],
+        "hairline": line,
+        "hairline_strong": mix(tokens["bg_ink"], tokens["surface"], 0.30),
+    }
+
+
+def pack_stylesheet(
+    pack: object,
+    system_dark: bool,
+    look: dict | None,
+    accent: object = "default",
+    palette: dict | None = None,
+) -> str:
+    palette = palette if palette is not None else resolved_palette(pack, system_dark, look, accent)
     knobs = effective_look(look)
     pad = DENSITY_PAD[knobs["density"]]
     size = TEXT_PT[knobs["text"]]

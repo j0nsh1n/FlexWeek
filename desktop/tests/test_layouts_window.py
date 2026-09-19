@@ -476,3 +476,57 @@ def test_a_design_with_nothing_to_change_offers_no_fine_tune_or_reset(qapp: QApp
     assert offered() == (True, True)
     pick.setCurrentIndex(pick.findData("classic"))
     assert offered() == (False, False)
+
+
+def chrome_colour(window: NativeWindow) -> str:
+    """What the top bar is actually painted with. A checked button blends, so this is only ever
+    compared against another rendering, never against a token."""
+    button = window.findChild(QPushButton, "signOut")
+    return button.grab().toImage().pixelColor(button.width() // 2, button.height() // 2).name()
+
+
+def chrome_accent(window: NativeWindow) -> str:
+    from desktop.native.look import resolved_palette
+
+    base = resolved_palette("light-frost", False, None, "default")
+    return window._chrome_palette(base)["accent"]
+
+
+def test_the_chrome_follows_whichever_design_is_on_screen(qapp: QApplication, window: NativeWindow) -> None:
+    window._layout = {"main": "classic", "day": "one", "options": {}}
+    window._on_week()
+    qapp.processEvents()
+    pack_accent, pack_pixels = chrome_accent(window), chrome_colour(window)
+
+    for layout_id in ("bento", "mission", "clay"):
+        window._layout = {"main": layout_id, "day": "one", "options": {}}
+        window._on_week()
+        qapp.processEvents()
+        wanted = window.planner.currentWidget().scene.tokens["accent"]
+        assert chrome_accent(window) == wanted, layout_id
+        assert chrome_colour(window) != pack_pixels, layout_id
+
+    window._layout = {"main": "classic", "day": "one", "options": {}}
+    window._on_week()
+    qapp.processEvents()
+    assert chrome_accent(window) == pack_accent
+    assert chrome_colour(window) == pack_pixels
+
+
+def test_a_day_screen_dresses_the_chrome_too(qapp: QApplication, window: NativeWindow) -> None:
+    window._layout = {"main": "classic", "day": "one", "options": {}}
+    click(window, "viewMyDay")
+    qapp.processEvents()
+    assert chrome_accent(window) == window.planner.currentWidget().scene.tokens["accent"]
+
+
+def test_category_colours_survive_a_layouts_colourway(qapp: QApplication, window: NativeWindow) -> None:
+    """A block is School-blue in every design. Only the chrome follows the layout."""
+    from desktop.native.layouts.registry import tokens_for
+    from desktop.native.look import palette_from_tokens, resolved_palette
+
+    base = resolved_palette("light-frost", False, None, "default")
+    dressed = palette_from_tokens(tokens_for("bento", "sunset", base), base)
+    assert dressed["window"] != base["window"]
+    for key in ("block_locked", "block_flex", "block_edge"):
+        assert dressed[key] == base[key], key

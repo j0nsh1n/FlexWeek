@@ -39,7 +39,14 @@ from desktop.native.layouts.base import LayoutView, Scene
 from desktop.native.layouts.dialog import LayoutDialog
 from desktop.native.layouts.registry import options_for, sanitize_layout, tokens_for
 from desktop.native.layouts.views import VIEW_CLASSES
-from desktop.native.look import TEXT_PT, effective_look, pack_stylesheet, resolved_palette, sanitize_look
+from desktop.native.look import (
+    TEXT_PT,
+    effective_look,
+    pack_stylesheet,
+    palette_from_tokens,
+    resolved_palette,
+    sanitize_look,
+)
 from desktop.native.remind import REMINDER_POLL_MS, clock_parts
 from desktop.native.reuse import late_from_start, restore_point_label, running_late_refusal, week_label
 from desktop.native.settings import (
@@ -531,6 +538,14 @@ class NativeWindow(QMainWindow):
             tokens=tokens_for(layout_id, options["colour"], palette),
             scale=TEXT_PT[effective_look(self._look)["text"]] / TEXT_PT["normal"],
         )
+
+    def _chrome_palette(self, palette: dict) -> dict:
+        """The colours for the window around the planner. A design of its own dresses the whole
+        window, so the top bar, the dialogs and the focus timer stop arriving in the pack's blue."""
+        shown = self.planner.currentWidget()
+        if isinstance(shown, LayoutView) and shown.scene is not None:
+            return palette_from_tokens(shown.scene.tokens, palette)
+        return palette
 
     def _refresh_layout(self) -> None:
         shown = self.planner.currentWidget()
@@ -1312,9 +1327,11 @@ class NativeWindow(QMainWindow):
 
     def _apply_appearance(self) -> None:
         pack, system_dark, accent = self._look_inputs()
-        self.setStyleSheet(pack_stylesheet(pack, system_dark, self._look, accent))
         # Blocks and month cells are painted per item, which a stylesheet cannot reach.
         palette = resolved_palette(pack, system_dark, self._look, accent)
+        self.setStyleSheet(
+            pack_stylesheet(pack, system_dark, self._look, accent, self._chrome_palette(palette))
+        )
         self.week_table.set_look(self._look, palette)
         self.month_grid.set_palette(palette)
         self._refresh_layout()
