@@ -165,3 +165,16 @@ def test_option_corners_and_colours_repaint_the_board(qapp: QApplication) -> Non
     assert (
         hero(shown(qapp, colour="match")) == resolved_palette("light-frost", False, None, "default")["accent"]
     )
+
+
+def test_a_tile_does_not_hold_its_buttons_a_screen_away_from_its_text(qapp: QApplication) -> None:
+    """The stretch belongs under the buttons. Above them it left a 165px hole in a 297px tile."""
+    for blocks in (None, []):
+        view = shown(qapp, blocks=blocks)
+        tile = view.findChild(QFrame, "bentoWaiting")
+        labels = tile.findChildren(QLabel)
+        buttons = tile.findChildren(QPushButton)
+        assert labels and buttons
+        lowest_text = max(x.mapTo(tile, x.rect().bottomLeft()).y() for x in labels)
+        highest_button = min(x.mapTo(tile, x.rect().topLeft()).y() for x in buttons)
+        assert highest_button - lowest_text < 40, f"gap is {highest_button - lowest_text}px"

@@ -116,3 +116,40 @@ def test_option_colours_repaint_the_deck_and_the_middle_card(qapp: QApplication)
 
     assert seen(shown(qapp)) == ("#f3ecff", "#e6e6fa")
     assert seen(shown(qapp, colour="mint")) == ("#ecfbf3", "#f4f3b3")
+
+
+def test_a_side_card_says_when_it_has_cut_a_title(qapp: QApplication) -> None:
+    """Qt clips drawText to its rect, so a long title was cut mid-word with nothing to show for it."""
+    long_title = [
+        {**block, "title": "Saturday shift at the cafe until late in the evening"}
+        if block["id"] == "school"
+        else block
+        for block in BLOCKS
+    ]
+    options = {**options_for(None, "clay"), "tilt": "off"}
+    palette = resolved_palette("light-frost", False, None, "default")
+    view = ClayDeckView()
+    view.resize(1366, 760)
+    view.show_week(
+        Scene(
+            build_week(WEEK, long_title, HOMEWORK, TRACE),
+            3,
+            minute_of("13:40"),
+            options,
+            tokens_for("clay", options["colour"], palette),
+        )
+    )
+    view.show()
+    qapp.processEvents()
+    card = view.findChild(SideCard, "claySide1")
+    assert card is not None
+    painted = card.painted_lines()
+    assert painted, "the card should have lines to paint"
+    cut = [line for line in painted if line != card._lines[painted.index(line)]]
+    assert cut, "the long title should not have fitted"
+    assert all(line.endswith("\u2026") for line in cut), painted
+
+
+def test_a_short_title_is_left_alone(qapp: QApplication) -> None:
+    card = shown(qapp).findChild(SideCard, "claySide4")
+    assert card.painted_lines() == card._lines

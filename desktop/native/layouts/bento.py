@@ -205,7 +205,6 @@ class BentoView(LayoutView):
             note = label("Everything you added has a time.", "bentoWaitingNote", wrap=True)
             note.setProperty("role", "muted")
             inner.addWidget(note)
-        inner.addStretch(1)
         actions = QHBoxLayout()
         plan = button("Plan it" if len(waiting) == 1 else "Plan my week", "bentoPlan")
         plan.clicked.connect(self.plan_requested.emit)
@@ -215,6 +214,9 @@ class BentoView(LayoutView):
         actions.addWidget(add)
         actions.addStretch()
         inner.addLayout(actions)
+        # The stretch belongs under the buttons, not between them and the text. Above them it left
+        # a 165 pixel hole in a 297 pixel tile, worst on an empty week.
+        inner.addStretch(1)
         return tile
 
     def _tonight(self, scene: Scene) -> QFrame:

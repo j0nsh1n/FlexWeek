@@ -138,3 +138,16 @@ def test_option_colours_repaint_the_page(qapp: QApplication) -> None:
         return view.grab().toImage().pixelColor(5, 5).name()
 
     assert (corner(shown(qapp)), corner(shown(qapp, colour="night"))) == ("#f6f4ef", "#14161c")
+
+
+def test_a_load_bar_sits_in_a_track_of_its_own(qapp: QApplication) -> None:
+    """Bare stubs of different widths under each day read as debris, not as a chart."""
+    view = shown(qapp)
+    tracks = [item for item in view.findChildren(QFrame) if item.property("role") == "track"]
+    bars = [item for item in view.findChildren(QFrame) if item.property("role") == "load"]
+    assert len(tracks) == 7 and len(bars) == 7
+    widths = sorted(track.width() for track in tracks)
+    assert widths[-1] - widths[0] <= 2, f"tracks should share a width, got {widths}"
+    assert all(bar.width() <= track.width() for bar, track in zip(bars, tracks, strict=True))
+    busiest = max(range(7), key=lambda day: view.scene.week.load_min(day))
+    assert bars[busiest].width() == max(bar.width() for bar in bars)
