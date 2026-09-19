@@ -1,0 +1,276 @@
+"""The Blocks look knob on real Qt widgets: what each cell is given and what the delegate paints.
+
+A stylesheet cannot reach a table item, so this knob is the one most likely to be stored and ignored.
+Expected colours come from the palette and the category table, never from a grab of the current output.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import importlib.util
+import os
+import time
+from collections.abc import Iterator
+from pathlib import Path
+
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
+)
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+if importlib.util.find_spec("PySide6") is not None:
+    from PySide6.QtCore import QStandardPaths
+    from PySide6.QtGui import QColor
+    from PySide6.QtWidgets import QApplication, QComboBox, QPushButton
+
+    from desktop.native.calendar import CATEGORIES
+    from desktop.native.look import (
+        LOOK_DEFAULTS,
+        effective_look,
+        look_menu_token,
+        preset_knobs,
+        resolved_palette,
+    )
+    from desktop.native.settings import PrefsDialog
+    from desktop.native.widgets import EDGE_ROLE, ENDS_ROLE, OUTLINE_ROLE, MonthGrid, WeekTable
+    from desktop.native.window import NativeWindow
+    from desktop.server import LocalServer
+
+WEEK = "2026-09-14"
+SCHOOL = {
+    "id": "school",
+    "title": "School",
+    "kind": "locked",
+    "category": "class",
+    "start": "08:00",
+    "duration_min": 60,
+    "days": [0],
+}
+CLUB = {"id": "club", "title": "Club", "kind": "locked", "start": "10:00", "duration_min": 30, "days": [1]}
+PALE, STRONG = "#bfdbfe", "#3b82f6"
+
+
+@pytest.fixture(scope="module")
+def qapp() -> Iterator[QApplication]:
+    # The window reads flexweek-look.json from the user data folder on startup. Test mode points Qt at
+    # a scratch location, so these tests neither read nor write the look saved on this machine.
+    QStandardPaths.setTestModeEnabled(True)
+    application = QApplication.instance() or QApplication(["flexweek-look-test"])
+    yield application
+
+
+def look_of(**knobs: str) -> dict:
+    return {"preset": "default", "knobs": knobs}
+
+
+def week(qapp: QApplication, look: dict | None, pack: str = "nocturne") -> tuple[WeekTable, dict]:
+    palette = resolved_palette(pack, pack in {"nocturne", "dark-frost"}, look)
+    table = WeekTable()
+    table.resize(1000, 800)
+    table.set_look(look, palette)
+    table.set_week(WEEK, [SCHOOL, CLUB], None)
+    table.show()
+    qapp.processEvents()
+    return table, palette
+
+
+def rows_of(table: WeekTable, day: int) -> list[int]:
+    return [row for row in range(table.rowCount()) if table.item(row, day) is not None]
+
+
+def pixel(table: WeekTable, row: int, day: int, where: str) -> str:
+    rect = table.visualItemRect(table.item(row, day))
+    image = table.viewport().grab().toImage()
+    # "left" sits on the 4px edge or the 2px outline; "inside" is past the text, clear of both.
+    x = rect.left() + 1 if where == "left" else rect.right() - 8
+    return QColor(image.pixel(x, rect.center().y())).name()
+
+
+def test_the_category_table_is_what_these_tests_assume() -> None:
+    assert (CATEGORIES["class"]["color"], CATEGORIES["class"]["mark"]) == (PALE, STRONG)
+
+
+def test_a_filled_block_is_the_pale_category_colour_with_ink_that_reads(qapp: QApplication) -> None:
+    table, palette = week(qapp, look_of())
+    rows = rows_of(table, 0)
+    assert len(rows) == 4, "an hour is four 15-minute cells"
+    for row in rows:
+        item = table.item(row, 0)
+        assert item.background().color().name() == PALE
+        assert item.foreground().color().name() == "#000000"
+        assert item.data(OUTLINE_ROLE) is None and item.data(EDGE_ROLE) is None
+    # No category: the palette's own block colours, not a fixed light grey that glares on a dark pack.
+    club = table.item(rows_of(table, 1)[0], 1)
+    assert club.background().color().name() == palette["block_locked"]
+    assert club.foreground().color().name() == palette["block_locked_ink"]
+    assert pixel(table, rows[1], 0, "inside") == PALE
+
+
+def test_an_outlined_block_is_drawn_as_one_outline_in_the_strong_colour(qapp: QApplication) -> None:
+    table, palette = week(qapp, look_of(blocks="outlined"))
+    rows = rows_of(table, 0)
+    for row in rows:
+        item = table.item(row, 0)
+        assert item.background().color().name() == palette["grid"]
+        assert item.foreground().color().name() == palette["text"]
+        assert item.data(OUTLINE_ROLE) == STRONG
+    # A block is a run of cells: only the first closes the top and only the last the bottom.
+    assert [tuple(table.item(row, 0).data(ENDS_ROLE)) for row in rows] == [
+        (True, False),
+        (False, False),
+        (False, False),
+        (False, True),
+    ]
+    assert pixel(table, rows[1], 0, "left") == STRONG
+    assert pixel(table, rows[1], 0, "inside") == palette["grid"]
+
+
+def test_an_edge_block_is_a_plain_card_with_the_strong_colour_down_its_left(qapp: QApplication) -> None:
+    table, palette = week(qapp, look_of(blocks="edge"))
+    rows = rows_of(table, 0)
+    item = table.item(rows[1], 0)
+    assert item.background().color().name() == palette["panel"]
+    assert item.data(EDGE_ROLE) == STRONG
+    assert pixel(table, rows[1], 0, "left") == STRONG
+    assert pixel(table, rows[1], 0, "inside") == palette["panel"]
+
+
+def test_the_outline_stays_visible_on_a_light_pack(qapp: QApplication) -> None:
+    table, palette = week(qapp, look_of(blocks="outlined"), pack="slate")
+    assert pixel(table, rows_of(table, 0)[1], 0, "left") == STRONG
+    assert palette["grid"] == "#fbfcff"
+
+
+def test_changing_the_look_repaints_the_week_already_on_screen(qapp: QApplication) -> None:
+    table, palette = week(qapp, look_of())
+    row = rows_of(table, 0)[0]
+    assert table.item(row, 0).background().color().name() == PALE
+    table.set_look(look_of(blocks="edge"), palette)
+    assert table.item(row, 0).background().color().name() == palette["panel"]
+    assert table.item(row, 0).data(EDGE_ROLE) == STRONG
+
+
+def test_days_outside_the_month_use_the_palettes_muted_ink(qapp: QApplication) -> None:
+    day = {"due_ids": [], "session_count": 0, "locked_count": 0, "scheduled_min": 0, "focus_min": 0}
+    snapshot = {
+        "month": "2026-09",
+        "days": [
+            {**day, "date": "2026-08-31", "in_month": False},
+            {**day, "date": "2026-09-01", "in_month": True},
+        ],
+        "overdue": [],
+    }
+    grid = MonthGrid()
+    terminal = resolved_palette("slate", False, {"preset": "terminal", "knobs": {}})
+    grid.set_month(snapshot, False)
+    grid.set_palette(terminal)
+    assert grid.table.item(0, 0).foreground().color().name() == terminal["muted"] == "#7fbf7f"
+
+
+def settings(look: dict) -> PrefsDialog:
+    return PrefsDialog(None, {}, look, {})
+
+
+def choose(dialog: PrefsDialog, token: str) -> None:
+    index = dialog.look.findData(token)
+    assert index >= 0, token
+    dialog.look.setCurrentIndex(index)
+
+
+def move(dialog: PrefsDialog, knob: str, value: str) -> None:
+    dialog.knobs[knob].setCurrentIndex(dialog.knobs[knob].findData(value))
+
+
+def shown(dialog: PrefsDialog) -> dict:
+    return {knob: box.currentData() for knob, box in dialog.knobs.items()}
+
+
+def test_choosing_terminal_in_settings_applies_every_one_of_its_knobs(qapp: QApplication) -> None:
+    """The dialog once recorded all seven boxes as overrides.
+
+    Terminal then arrived with its colours, round corners and a sans font.
+    """
+    dialog = settings({"preset": "default", "knobs": {}})
+    assert shown(dialog) == LOOK_DEFAULTS
+    choose(dialog, look_menu_token("preset", "terminal"))
+    assert shown(dialog) == preset_knobs("terminal")
+    chosen = dialog.look_choice()
+    assert chosen == {"preset": "terminal", "knobs": {}}
+    assert effective_look(chosen) == preset_knobs("terminal")
+
+
+def test_a_knob_moved_by_hand_stays_when_the_look_changes(qapp: QApplication) -> None:
+    dialog = settings({"preset": "default", "knobs": {}})
+    move(dialog, "corners", "pill")
+    choose(dialog, look_menu_token("preset", "terminal"))
+    assert shown(dialog)["corners"] == "pill"
+    assert shown(dialog)["font"] == "mono"
+    assert dialog.look_choice() == {"preset": "terminal", "knobs": {"corners": "pill"}}
+    move(dialog, "depth", "hard")
+    assert dialog.look_choice() == {"preset": "terminal", "knobs": {"corners": "pill", "depth": "hard"}}
+    assert effective_look(dialog.look_choice())["font"] == "mono"
+    choose(dialog, look_menu_token("pack", "system"))
+    assert shown(dialog)["corners"] == "pill"
+    assert shown(dialog)["depth"] == "hard"
+    assert shown(dialog)["font"] == "sans"
+    assert dialog.look_choice() == {"preset": "default", "knobs": {"corners": "pill", "depth": "hard"}}
+
+
+def test_opening_settings_shows_the_look_on_screen_and_changes_nothing(qapp: QApplication) -> None:
+    stored = {"preset": "terminal", "knobs": {"text": "large", "corners": "pill"}}
+    dialog = settings(stored)
+    # Each box shows what the student sees, not the first value in its list.
+    assert shown(dialog) == {**preset_knobs("terminal"), "text": "large", "corners": "pill"}
+    # Pressing OK untouched must hand back exactly what was stored: the preset connection is made
+    # after the stored preset is selected, so opening the dialog never resets a student's own knobs.
+    assert dialog.look_choice() == stored
+    assert dialog.findChild(QComboBox, "lookPreset") is None
+    assert dialog.look.findData(look_menu_token("preset", "terminal")) >= 0
+    assert dialog.look.findData(look_menu_token("pack", "system")) >= 0
+
+
+def wait_until(qapp: QApplication, predicate, timeout: float = 8.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        qapp.processEvents()
+        if predicate():
+            return
+        time.sleep(0.02)
+    raise AssertionError("condition was still false")
+
+
+def test_a_look_chosen_in_the_window_reaches_the_calendar_not_only_the_stylesheet(
+    qapp: QApplication, tmp_path: Path
+) -> None:
+    server = LocalServer(tmp_path / "flexweek.db", serve_frontend=False)
+    server.start()
+    window = NativeWindow(server.origin)
+    try:
+        window.username.setText("look_student")
+        window.password.setText("a-long-test-password")
+        window.findChild(QPushButton, "createAccount").click()
+        wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "recoveryPage")
+        window.recovery_ack.setChecked(True)
+        window.recovery_continue.click()
+        wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "weekPage")
+        window.session.add_block(dict(SCHOOL))
+        window.session.save()
+        wait_until(qapp, lambda: window.session.revision == 1 and not window.session.busy)
+        row = rows_of(window.week_table, 0)[0]
+        assert window.week_table.item(row, 0).background().color().name() == PALE
+
+        # What Settings does when the student presses OK.
+        window._look = look_of(blocks="edge")
+        window._apply_appearance()
+        item = window.week_table.item(row, 0)
+        assert item.data(EDGE_ROLE) == STRONG
+        assert item.background().color().name() != PALE
+        assert "border: 1px solid" in window.styleSheet()
+    finally:
+        with contextlib.suppress(RuntimeError):
+            window.session.client.reset()
+        qapp.processEvents()
+        server.stop()

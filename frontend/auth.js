@@ -28,6 +28,7 @@ function signedOut(message = "Log in to open your week.", preserve = true, scree
   }
   epoch += 1;
   account = null;
+  reminderWeekFetch = null;
   syncReminderLoop();
   stopPhase7Loops();
   resetFocusTimer(false);

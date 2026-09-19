@@ -25,9 +25,28 @@ if importlib.util.find_spec("PySide6") is not None:
 @pytest.mark.parametrize(
     "case",
     [
-        "accounts", "calendar", "completion", "phase6", "phase7", "popup", "navigation", "download",
-        "tray", "no_icon", "instance", "rookie", "system_dark", "recovery", "stage1", "stage2",
-        "stage3", "stage3_mobile", "stage4", "stage5", "stage6", "stage7_month",
+        "accounts",
+        "calendar",
+        "completion",
+        "phase6",
+        "phase7",
+        "popup",
+        "navigation",
+        "download",
+        "tray",
+        "no_icon",
+        "instance",
+        "rookie",
+        "system_dark",
+        "recovery",
+        "stage1",
+        "stage2",
+        "stage3",
+        "stage3_mobile",
+        "stage4",
+        "stage5",
+        "stage6",
+        "stage7_month",
     ],
 )
 def test_webengine(case: str, tmp_path: Path) -> None:
@@ -71,7 +90,11 @@ def run_smoke(tmp_path: Path, **extra: str) -> tuple[subprocess.CompletedProcess
             env.pop(name, None)
     result = subprocess.run(
         [sys.executable, "-m", "desktop.main", "--smoke-test", str(report)],
-        env=env, capture_output=True, text=True, timeout=150, check=False,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=150,
+        check=False,
     )
     assert report.exists(), result.stdout + result.stderr
     return result, json.loads(report.read_text())
@@ -82,6 +105,7 @@ def test_smoke_mode_passes_once_setup_solve_paints_the_week(tmp_path: Path) -> N
     assert result.returncode == 0, report
     assert report["ok"] is True
     assert report["stage"] == "week shown after setup Solve"
+    assert int(report.get("block_count") or 0) >= 1
     assert cast(int, report["painted_colors"]) >= PAINTED_MIN_COLORS
     assert report["window_visible"] is True
     assert report["window_icon_loaded"] is True

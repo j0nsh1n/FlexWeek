@@ -33,8 +33,7 @@ def test_readelf_output_gives_sonames_and_the_newest_glibc() -> None:
 
 def test_fedora_python_tls_marker_counts_as_glibc_2_42() -> None:
     versions = (
-        "  0x0010:   Name: GLIBC_2.34  Flags: none\n"
-        "  0x0020:   Name: GLIBC_ABI_GNU2_TLS  Flags: none\n"
+        "  0x0010:   Name: GLIBC_2.34  Flags: none\n  0x0020:   Name: GLIBC_ABI_GNU2_TLS  Flags: none\n"
     )
     assert parse_readelf("", versions)[1] == ((2, 42), "GLIBC_ABI_GNU2_TLS")
     unknown = parse_readelf("", "  0x0010:   Name: GLIBC_ABI_SOMETHING_NEW  Flags: none\n")[1]
@@ -108,15 +107,18 @@ def minimal_pe(dll_names: list[str]) -> bytes:
     optional = bytearray(optional_size)
     struct.pack_into("<H", optional, 0, 0x20B)
     struct.pack_into("<II", optional, 112 + 8, section_rva, len(section))
-    table = struct.pack("<8sIIIIIIHHI", b".idata", len(section), section_rva, len(section), section_raw,
-                        0, 0, 0, 0, 0)
+    table = struct.pack(
+        "<8sIIIIIIHHI", b".idata", len(section), section_rva, len(section), section_raw, 0, 0, 0, 0, 0
+    )
     image = bytes(header) + coff + bytes(optional) + table
     return image + bytes(section_raw - len(image)) + section
 
 
 def test_pe_import_table_is_read_from_the_file_bytes() -> None:
     assert pe_imports(minimal_pe(["KERNEL32.dll", "icuuc.dll", "Qt6Core.dll"])) == [
-        "KERNEL32.dll", "icuuc.dll", "Qt6Core.dll",
+        "KERNEL32.dll",
+        "icuuc.dll",
+        "Qt6Core.dll",
     ]
 
 

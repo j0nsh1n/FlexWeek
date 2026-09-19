@@ -26,6 +26,7 @@ const defaultPrefs = {
 };
 
 function harness(options = {}) {
+  const stored = new Map(Object.entries(options.stored || {}));
   const elements = new Map();
   const all = [];
   const requests = [];
@@ -101,7 +102,11 @@ function harness(options = {}) {
       querySelectorAll: selector => connected().filter(item => selector.split(',').some(part => matches(item, part.trim()))),
     },
     window: { addEventListener() {}, AudioContext, open: () => ({}) },
-    localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
+    localStorage: {
+      getItem: key => (stored.has(key) ? stored.get(key) : null),
+      setItem: (key, value) => stored.set(key, String(value)),
+      removeItem: key => stored.delete(key),
+    },
     sessionStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
     fetch: async (path, request) => { requests.push({ path, request }); return handler(path, request); },
     getComputedStyle: () => ({ getPropertyValue: () => '2.75rem' }),
@@ -309,6 +314,98 @@ test('an unknown stored motion level falls back to Normal rather than breaking',
   assert.equal(h.run('applyMotion("sideways")'), 'normal');
   assert.equal(h.run('document.documentElement.dataset.motion'), 'normal');
   assert.equal(h.run('applyMotion("off")'), 'off');
+});
+
+test('Look and Text size sit up front, the other look knobs inside Customize', () => {
+  const appearance = html.slice(html.indexOf('<summary>Appearance</summary>'), html.indexOf('<summary>Focus</summary>'));
+  const customize = appearance.slice(appearance.indexOf('id="appearance-customize"'));
+  const front = appearance.slice(0, appearance.indexOf('id="appearance-customize"'));
+  assert.match(front, /id="pref-theme"/);
+  assert.match(front, /id="pref-text"/);
+  assert.doesNotMatch(front, /id="pref-preset"/);
+  for (const knob of ['surface', 'corners', 'depth', 'font', 'blocks', 'density']) {
+    assert.match(customize, new RegExp(`id="pref-${knob}"`), `${knob} belongs inside Customize`);
+    assert.doesNotMatch(front, new RegExp(`id="pref-${knob}"`));
+  }
+});
+
+test('the preset and look knobs change this device only and never enter the account payload', async () => {
+  const h = harness();
+  await h.login();
+  const before = h.requests.length;
+  h.elements.get('pref-theme').value = 'terminal';
+  h.elements.get('pref-theme').listeners.change();
+  // theme.js and motion.js write their own attributes beside these; only the look keys are under test.
+  const LOOK_KEYS = ['preset', 'surface', 'corners', 'depth', 'font', 'blocks', 'density', 'text'];
+  const root = JSON.parse(h.run('JSON.stringify(document.documentElement.dataset)'));
+  assert.deepEqual(Object.fromEntries(LOOK_KEYS.filter(key => key in root).map(key => [key, root[key]])), {
+    preset: 'terminal', surface: 'flat', corners: 'sharp', depth: 'flat',
+    font: 'mono', blocks: 'outlined', density: 'compact',
+  });
+  assert.equal(h.requests.length, before, 'changing the look must not talk to the server');
+  // Two builders reach /api/preferences: the layout save uses preferencesPayload(), and the
+  // Save button submits the form, which spreads readComfortEdit(). Both must stay clean.
+  const leaked = ['preset', 'surface', 'corners', 'depth', 'font', 'blocks', 'density', 'text', 'look'];
+  const layout = JSON.parse(h.run('JSON.stringify(preferencesPayload())'));
+  for (const key of leaked) assert.ok(!(key in layout), `${key} leaks through the layout save`);
+  let saved;
+  h.handle(async (path, request) => {
+    assert.equal(path, '/api/preferences');
+    saved = JSON.parse(request.body);
+    return response(200, saved);
+  });
+  await h.elements.get('prefs-form').listeners.submit({ submitter: { value: 'save' }, preventDefault() {} });
+  assert.ok(saved, 'the Save button did not send preferences');
+  for (const key of leaked) assert.ok(!(key in saved), `${key} leaks through the Save button`);
+});
+
+test('a knob set by hand stays when a look is chosen', async () => {
+  const h = harness();
+  await h.login();
+  h.elements.get('pref-corners').value = 'pill';
+  h.elements.get('pref-corners').listeners.change();
+  assert.equal(h.run('document.documentElement.dataset.corners'), 'pill');
+  h.elements.get('pref-theme').value = 'terminal';
+  h.elements.get('pref-theme').listeners.change();
+  assert.equal(h.run('document.documentElement.dataset.corners'), 'pill');
+  assert.equal(h.run('document.documentElement.dataset.font'), 'mono');
+  h.elements.get('pref-depth').value = 'hard';
+  h.elements.get('pref-depth').listeners.change();
+  assert.equal(h.run('document.documentElement.dataset.depth'), 'hard');
+  assert.equal(h.run('document.documentElement.dataset.font'), 'mono', 'other knobs keep the preset value');
+  assert.equal(h.elements.get('pref-depth').value, 'hard');
+  assert.equal(h.elements.get('pref-corners').value, 'pill');
+});
+
+test('a stored look is applied before the body paints, and a bad one falls back to the pack', async () => {
+  const kept = harness({ stored: { 'flexweek-look': JSON.stringify({ preset: 'default', knobs: { font: 'serif', text: 'large' } }) } });
+  assert.equal(kept.run('document.documentElement.dataset.font'), 'serif');
+  assert.equal(kept.run('document.documentElement.dataset.text'), 'large');
+  assert.equal(kept.run('document.documentElement.dataset.preset'), undefined);
+  await kept.login();
+  assert.equal(kept.elements.get('pref-font').value, 'serif');
+  assert.equal(kept.elements.get('pref-text').value, 'large');
+
+  const broken = harness({ stored: { 'flexweek-look': '{not json' } });
+  const brokenRoot = JSON.parse(broken.run('JSON.stringify(document.documentElement.dataset)'));
+  for (const key of ['preset', 'surface', 'corners', 'depth', 'font', 'blocks', 'density', 'text']) {
+    assert.ok(!(key in brokenRoot), `${key} leaked from an unreadable stored look`);
+  }
+  const unknown = harness({ stored: { 'flexweek-look': JSON.stringify({ preset: 'neon', knobs: { corners: 'hexagonal', font: 'mono' } }) } });
+  assert.equal(unknown.run('document.documentElement.dataset.preset'), undefined);
+  assert.equal(unknown.run('document.documentElement.dataset.corners'), undefined);
+  assert.equal(unknown.run('document.documentElement.dataset.font'), 'mono', 'a valid knob beside a bad one still applies');
+});
+
+test('a knob at its default leaves no attribute behind', async () => {
+  const h = harness();
+  await h.login();
+  h.elements.get('pref-density').value = 'compact';
+  h.elements.get('pref-density').listeners.change();
+  assert.equal(h.run('document.documentElement.dataset.density'), 'compact');
+  h.elements.get('pref-density').value = 'comfortable';
+  h.elements.get('pref-density').listeners.change();
+  assert.equal(h.run('document.documentElement.dataset.density'), undefined);
 });
 
 test('alert previews stay local, honor unsaved volume, and never consume a reminder key', async () => {

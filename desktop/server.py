@@ -27,7 +27,7 @@ SHUTDOWN_TIMEOUT_S = 5.0
 class LocalServer:
     """The backend on a loopback port, in a background thread."""
 
-    def __init__(self, database: Path) -> None:
+    def __init__(self, database: Path, *, serve_frontend: bool = True) -> None:
         # Imported here, not at module scope: backend.app builds an app on import
         # and would raise on a bad FLEXWEEK_ORIGIN before main() can report it.
         from backend.app import create_app
@@ -40,7 +40,7 @@ class LocalServer:
         self.origin = f"http://127.0.0.1:{self.port}"
 
         config = uvicorn.Config(
-            create_app(database=database, origin=self.origin),
+            create_app(database=database, origin=self.origin, serve_frontend=serve_frontend),
             log_level="warning",
             # Explicit pure-Python loop and parser: uvloop/httptools are optional
             # native extras that need not survive being frozen into a bundle.

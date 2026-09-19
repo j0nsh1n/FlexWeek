@@ -50,7 +50,8 @@ function harness() {
     const classes = new Set();
     const el = {
       value: '', textContent: '', hidden: false, disabled: false, checked: false,
-      dataset: {}, style: {}, children: [], listeners: {}, open: false,
+      dataset: {}, children: [], listeners: {}, open: false,
+      style: { setProperty(name, value) { this[name] = value; }, removeProperty(name) { delete this[name]; } },
       get className() { return Array.from(classes).join(' '); },
       set className(value) {
         classes.clear();
@@ -542,4 +543,21 @@ test('a failed re-plan after accept keeps the error instead of a success status'
   assert.equal(await h.run('acceptRunningLate()'), true);
   assert.match(h.elements.get('status').textContent, /Could not plan\. Planner busy/);
   assert.doesNotMatch(h.elements.get('status').textContent, /Saved the late start/);
+});
+
+test('a calendar block carries its category colour as --block-color, and no colour when it has none', async () => {
+  const h = harness();
+  await h.login({ blocks: [school({ category: 'class' }), school({ id: 'plain', days: [1] })] });
+  const blocks = gridBlocks(h);
+  const colored = blocks.filter(el => el.dataset.id === 'school');
+  assert.ok(colored.length >= 1);
+  for (const el of colored) {
+    assert.equal(el.style['--block-color'], '#3b82f6');
+    assert.equal(el.classList.contains('is-colored'), true);
+    assert.equal(el.style.borderLeftColor, undefined, 'the colour goes through the property, not inline');
+  }
+  const plain = blocks.find(el => el.dataset.id === 'plain');
+  assert.ok(plain);
+  assert.equal(plain.style['--block-color'], undefined);
+  assert.equal(plain.classList.contains('is-colored'), false);
 });

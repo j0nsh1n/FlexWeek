@@ -27,6 +27,15 @@ const THEME_SELECTORS = {
   light: ':root[data-theme="slate"]',
   'dark-frost': ':root[data-theme="dark-frost"]',
   'light-frost': ':root[data-theme="light-frost"]',
+  // A preset palette is audited exactly like a pack: same tokens, AA text, accent distance.
+  terminal: ':root[data-preset="terminal"]',
+  poster: ':root[data-preset="poster"]',
+  'high-contrast': ':root[data-preset="high-contrast"]',
+  ink: ':root[data-preset="ink"]',
+  'ink-light': ':root[data-theme="slate"][data-preset="ink"]',
+  'ink-light-frost': ':root[data-theme="light-frost"][data-preset="ink"]',
+  paper: ':root[data-preset="paper"]',
+  pastel: ':root[data-preset="pastel"]',
 };
 const ACCENT_NAMES = ['sky', 'gold', 'sea', 'sand'];
 const themes = Object.fromEntries(Object.entries(THEME_SELECTORS).map(([name, selector]) => [name, tokens(selector)]));
@@ -82,7 +91,7 @@ test('light, dark and both frost packs define exactly the same tokens', () => {
 });
 
 test('every var() in styles.css is a theme token, and the legacy names are gone', () => {
-  const setByScript = new Set(['--chip-color']);
+  const setByScript = new Set(['--chip-color', '--block-color']);
   const used = new Set(Array.from(css.matchAll(/var\((--[a-z0-9-]+)/g), match => match[1]));
   const undefinedTokens = [...used].filter(name => !themes.dark.has(name) && !setByScript.has(name)).sort();
   assert.deepEqual(undefinedTokens, []);
@@ -162,17 +171,19 @@ test('text stays readable with frost composited straight over the page, no blur'
   }
 });
 
-test('the page resolves the look in <head> and menus offer the five packs', () => {
+test('the page resolves the look in <head> and Look offers packs then presets', () => {
   assert.match(html, /<html lang="en" data-theme="slate">/);
   assert.ok(html.indexOf('<script src="/static/theme.js"></script>') < html.indexOf('</head>'),
     'theme.js must run before the body paints');
   const packs = [['system', 'System'], ['light-frost', 'Light frost'], ['dark-frost', 'Dark frost'],
     ['nocturne', 'Nocturne'], ['slate', 'Slate']];
+  const looks = packs.concat([['terminal', 'Terminal'], ['poster', 'Poster'], ['ink', 'Ink'],
+    ['high-contrast', 'High contrast'], ['paper', 'Paper'], ['pastel', 'Pastel']]);
   for (const id of ['theme', 'pref-theme']) {
     const select = new RegExp(`<select id="${id}">(.*?)</select>`).exec(html);
     assert.ok(select, `no #${id} select`);
     assert.deepEqual(Array.from(select[1].matchAll(/<option value="([a-z-]+)">([^<]+)<\/option>/g), m => [m[1], m[2]]),
-      packs);
+      looks);
   }
 });
 
@@ -254,4 +265,128 @@ test('the accepted late block draws on at Normal, not only at Extra', () => {
 test('Extra is the level that adds the pop-in, and Normal only fades', () => {
   assert.match(motionBlock, /\[data-motion="extra"\][^{]*\.block\.is-new/);
   assert.match(motionBlock, /:not\(\[data-motion="off"\]\)[^{]*#week[\s\S]*?animation:\s*view-fade-in/);
+});
+
+// Look knobs, added after 0.11.0. Each attribute on <html> may move one kind of
+// thing only, so a preset cannot smuggle a colour or an animation in through a
+// knob, and Customize stays a set of independent switches.
+function knobRules(knob) {
+  const rules = [];
+  const pattern = new RegExp(`\n(:root\\[data-${knob}="([a-z]+)"\\][^{]*)\\{([^}]*)\\}`, 'g');
+  for (const match of css.matchAll(pattern)) rules.push({ selector: match[1].trim(), value: match[2], body: match[3] });
+  assert.ok(rules.length > 0, `styles.css has no data-${knob} rule`);
+  return rules;
+}
+const properties = body => Array.from(body.matchAll(/(?:^|;|\s)([a-z-]+|--[a-z0-9-]+)\s*:/g), match => match[1]);
+
+test('each look knob moves only the properties it names', () => {
+  const allowed = {
+    corners: name => name.startsWith('--radius'),
+    depth: name => name.startsWith('--shadow'),
+    font: name => name === 'font-family',
+    text: name => name === 'font-size',
+    density: name => name === '--hour-h' || name.startsWith('--space-'),
+    surface: name => name.startsWith('--surface') || name.endsWith('backdrop-filter'),
+    blocks: name => ['background', 'color', 'border-color', 'border-left-width'].includes(name),
+  };
+  for (const [knob, ok] of Object.entries(allowed)) {
+    for (const rule of knobRules(knob)) {
+      for (const name of properties(rule.body)) {
+        assert.ok(ok(name), `${rule.selector} moves ${name}, which is not this knob's job`);
+      }
+    }
+  }
+});
+
+test('the flat surface turns solid and clears blur on exactly the frosted panels', () => {
+  const frosted = /\n([^{}@]+)\{\s*-webkit-backdrop-filter: blur\(var\(--frost\)\)/.exec(css)[1]
+    .split(',').map(item => item.trim()).filter(Boolean);
+  assert.match(css, /:root\[data-surface="flat"\]\s*\{[^}]*--surface: var\(--surface-solid\)/);
+  const cleared = /:root\[data-surface="flat"\] :is\(([^)]*)\), :root\[data-surface="flat"\] \.prefs-dialog::backdrop \{\s*-webkit-backdrop-filter: none;\s*backdrop-filter: none;/.exec(css);
+  assert.ok(cleared, 'the flat surface does not remove backdrop filters');
+  assert.deepEqual(cleared[1].split(',').map(item => item.trim()).sort(), [...frosted].sort());
+});
+
+test('a block takes its category colour from --block-color, so a look can decide where it lands', () => {
+  assert.match(appJs, /el\.style\.setProperty\("--block-color", color\)/);
+  assert.match(css, /\.block \{[^}]*border-left: 3px solid var\(--block-color, var\(--block-edge\)\)/);
+  assert.match(css, /\.flex-block \{[^}]*border-left-color: var\(--block-color, var\(--flex\)\)/);
+  assert.match(css, /:root\[data-blocks="outlined"\] \.block \{[^}]*background: transparent/);
+});
+
+test('pill corners cannot turn a calendar block into a capsule that clips its title', () => {
+  // Seen in a real grab: 999px on a tall School block rounded the text away.
+  assert.match(css, /\.block \{[^}]*border-radius: min\(var\(--radius-sm\), 0\.5rem\)/);
+  const pill = /:root\[data-corners="pill"\] \{([^}]*)\}/.exec(css);
+  assert.ok(pill && /--radius-sm: 999px/.test(pill[1]), 'chips still get true pill corners');
+});
+
+test('the Terminal preset changes every knob the frost packs leave at default', () => {
+  const lookJs = readFileSync(new URL('../look.js', import.meta.url), 'utf8');
+  const preset = /terminal: \{([\s\S]*?)\}/.exec(lookJs);
+  assert.ok(preset, 'look.js has no terminal preset');
+  const values = Object.fromEntries(Array.from(preset[1].matchAll(/(\w+): "([a-z]+)"/g), m => [m[1], m[2]]));
+  assert.deepEqual(values, {
+    surface: 'flat', corners: 'sharp', depth: 'flat', font: 'mono',
+    blocks: 'outlined', density: 'compact', text: 'normal',
+  });
+  assert.ok(html.indexOf('<script src="/static/look.js"></script>') < html.indexOf('</head>'),
+    'look.js must run before the body paints');
+});
+
+test('Poster, Ink and High contrast each name a full knob bundle', () => {
+  const lookJs = readFileSync(new URL('../look.js', import.meta.url), 'utf8');
+  const named = (name) => {
+    const match = new RegExp(`${name}: \\{([\\s\\S]*?)\\}`).exec(lookJs);
+    assert.ok(match, `look.js has no ${name} preset`);
+    return Object.fromEntries(Array.from(match[1].matchAll(/(\w+): "([a-z]+)"/g), m => [m[1], m[2]]));
+  };
+  assert.deepEqual(named('poster'), {
+    surface: 'flat', corners: 'sharp', depth: 'hard', font: 'sans',
+    blocks: 'filled', density: 'compact', text: 'large',
+  });
+  assert.deepEqual(named('ink'), {
+    surface: 'flat', corners: 'sharp', depth: 'flat', font: 'serif',
+    blocks: 'edge', density: 'comfortable', text: 'normal',
+  });
+  assert.deepEqual(named('"high-contrast"'), {
+    surface: 'flat', corners: 'sharp', depth: 'hard', font: 'sans',
+    blocks: 'outlined', density: 'comfortable', text: 'large',
+  });
+  const select = /<select id="pref-theme">(.*?)<\/select>/.exec(html);
+  assert.ok(select, 'no #pref-theme select');
+  assert.ok(select[1].includes('value="terminal"'), 'Terminal belongs in Look');
+  assert.ok(select[1].includes('value="high-contrast"'), 'High contrast belongs in Look');
+  assert.doesNotMatch(html, /id="pref-preset"/);
+});
+
+test('Paper and Pastel are the two soft looks: rounded, with depth, and full knob bundles', () => {
+  const lookJs = readFileSync(new URL('../look.js', import.meta.url), 'utf8');
+  const named = name => {
+    const match = new RegExp(`\\n  ${name}: \\{([\\s\\S]*?)\\}`).exec(lookJs);
+    assert.ok(match, `look.js has no ${name} preset`);
+    return Object.fromEntries(Array.from(match[1].matchAll(/(\w+): "([a-z]+)"/g), m => [m[1], m[2]]));
+  };
+  assert.deepEqual(named('paper'), {
+    surface: 'flat', corners: 'round', depth: 'soft', font: 'serif',
+    blocks: 'filled', density: 'comfortable', text: 'normal',
+  });
+  assert.deepEqual(named('pastel'), {
+    surface: 'frost', corners: 'pill', depth: 'soft', font: 'sans',
+    blocks: 'filled', density: 'comfortable', text: 'normal',
+  });
+  // Both are light looks on any pack, and neither borrows Ink's black-on-paper.
+  for (const look of ['paper', 'pastel']) {
+    assert.match(block(`:root[data-preset="${look}"]`), /color-scheme: light/);
+    assert.notEqual(themes[look].get('--text'), themes['ink-light'].get('--text'));
+    assert.notEqual(themes[look].get('--bg'), themes['ink-light'].get('--bg'));
+  }
+  // Pastel asks for pill corners, which the block rule caps so a tall block keeps its title.
+  assert.equal(themes.pastel.get('--radius-sm'), '999px');
+  assert.match(css, /\.block \{[^}]*border-radius: min\(var\(--radius-sm\), 0\.5rem\)/);
+});
+
+test('large text makes the More menu readable', () => {
+  assert.match(css, /html\[data-text="large"\] \.week-menu > summary/);
+  assert.match(css, /html\[data-text="large"\] \.week-menu-items \{\s*min-width: 18rem/);
 });

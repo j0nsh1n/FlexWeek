@@ -5,6 +5,72 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- Native desktop layouts (2026-09-18, device-only). A layout is a whole way of
+  showing the week, where a look is only its colours. **Layout** in the top bar
+  picks a main view to plan in (Today's app, Timeline, Mission control, Bento,
+  Retro desktop, Clay deck) and a day screen to watch once the plan is made (One
+  thing, Day dial). **My day**, or T, opens the day screen; Back to planning, B
+  or Escape leaves it. Each design has its own colourways plus *Match my look*,
+  and Fine-tune options behind one checkbox. Risk is shown in the solver's own
+  words. A design of its own gets the window: the planning controls move into a
+  **Tools** menu. Every layout fits 1366 by 768. See Amendment C of
+  `docs/stage8-appearance-contract.md`. The web client has no layouts yet, and
+  the choice does not sync to the account until the owner approves the fields.
+- Native desktop (`python -m desktop.main`, 2026-09-17). Qt widgets talk to the
+  same local Python API with no WebEngine and no JavaScript on the default
+  path. Create account, recovery codes, sign-in, a dated week, fixed times,
+  homework, Solve and Save work. Week, Day and Month share that week; dragging
+  empty time adds a block of the armed type, dragging a one-day block moves or
+  resizes it, and a repeating commitment refuses the drag so it is not silently
+  retimed. Homework keeps the exact due minute, notes, links, a checklist and
+  Finished. Undo and Redo walk the last saved change on the week on screen
+  (Ctrl+Z). Copy, paste, duplicate and copy-day stay on an internal clipboard
+  (Ctrl+C/V/D). Routines, unfinished homework, missed recovery, running late,
+  spread and availability talk to the same Stage 3/4 API. Focus timers credit
+  homework once when a work phase ends and forget the timer on sign-out.
+  Settings round-trip packs, timers, reminders and alarms. Forgotten-password
+  recovery, restore points, week/day files and account transfer use the existing
+  account APIs. `--smoke-test` walks a native week without Chromium.
+  `--database` points at a file for isolated checks.
+- Look knobs and presets (2026-09-18, shared frontend and native Qt). Settings
+  Look lists the five account packs and the device presets Terminal, Poster,
+  Ink, High contrast, Paper and Pastel. Customize still has Surface, Corners,
+  Depth, Font, Calendar blocks and Density. Terminal is true black, phosphor,
+  amber, monospace; Poster is yellow, navy and dark red with hard shadows and
+  large type; Ink is near-monochrome serif with light and dark maps; High
+  contrast is black, white and yellow with outlined blocks and large text, and
+  it turns on only from this menu. Paper is a warm cream planner page with
+  serif type and a sepia accent; Pastel is pink and lavender with pill corners,
+  raised panels and a deep orchid accent. Those two are the soft looks, rounded
+  and with depth, where the other four are flat and sharp, and both stay light
+  over a dark pack. Knobs you set by hand stay when you change Look. All of it
+  stays on this computer until the contract amendment is approved.
+- Pill corners keep calendar blocks readable (2026-09-17, shared frontend).
+  Chips become capsules; a block's corners stop at 8px so a tall School block
+  cannot round its own title away.
+
+### Changed
+- Calendar blocks take their category colour through a stylesheet property
+  instead of an inline border colour (2026-09-17, shared frontend), so a look
+  can decide whether the colour lands on the edge, the outline or nowhere.
+  Nothing changes on screen with the default look.
+- Unsaved weeks stay as drafts when another week opens (2026-09-18, native).
+  The weekday you were on stays selected. Reminders for today still fire if
+  you are looking at another week or another page.
+- Large text enlarges the More menu (2026-09-18, web and native). Overflow
+  actions on the native window sit under More.
+
+### Fixed
+- Native week navigation, undo, focus credit and calendar shortcuts (2026-09-18).
+  A failed week load no longer leaves the previous week's blocks under the new
+  date. Undo after a conflict keeps live focus minutes. W, D, M, T, Delete and
+  Ctrl+C/V/D/Z/Y reach the window from the week grid. T opens My day the way W
+  opens the week. Day Previous and Next move one day. Recovery Continue is the
+  only path off the recovery codes page.
+- Tools keeps Copy, Paste and Duplicate when a layout owns the window (2026-09-18).
+  Those three sat only in the planning bar, which a design of its own hides.
+
 ## [0.11.0] - 2026-09-17
 
 ### Added

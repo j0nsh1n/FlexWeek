@@ -133,6 +133,257 @@
   --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
   --hour-h: 2.75rem; --gutter: 3.5rem;
 }
+/* Terminal preset: true black, phosphor text, amber accent. A full map, so the
+   same-tokens, readability and accent-distance tests audit it like a pack. It
+   sits before the accent maps so a chosen accent still wins. */
+:root[data-preset="terminal"] {
+  --sidebar-width: 20rem;
+  color-scheme: dark;
+  --bg: #000000; --bg-accent: #050505; --bg-glow: rgba(0, 0, 0, 0);
+  --surface: #0a0a0a;
+  --surface-elevated: #0f0f0f;
+  --surface-card: #111111;
+  --surface-solid: #0a0a0a;
+  --field: #000000;
+  --scrim: rgba(0, 0, 0, 0.72);
+  --frost: 0px; --frost-strong: 0px;
+  --hairline: rgba(120, 255, 120, 0.25); --hairline-strong: rgba(120, 255, 120, 0.45);
+  --shadow: none;
+  --shadow-lg: none;
+  --text: #d6ffd6; --muted: #7fbf7f;
+  --accent: #ffb000; --accent-strong: #ffc94d; --accent-ink: #000000; --accent-soft: rgba(255, 176, 0, 0.16);
+  --error: #ff6b6b; --error-soft: rgba(255, 107, 107, 0.12);
+  --danger-bg: #7a1f1f; --danger-ink: #ffecec;
+  --ok: #7fff7f; --warn: #ffe066; --risk: #ff8080; --badge-ink: #000000;
+  --now: #ff5555;
+  --grid-cell: #050505; --grid-line: rgba(120, 255, 120, 0.12);
+  --block-locked: #0a0a0a; --block-locked-ink: #d6ffd6;
+  --block-flex: #0a0a0a; --block-flex-ink: #ffe9a8;
+  --block-border: rgba(120, 255, 120, 0.35); --block-edge: #7fbf7f;
+  --flex: #ffb000;
+  --icon-primary: #d6ffd6; --icon-secondary: rgba(120, 255, 120, 0.30);
+  --radius-sm: 0; --radius: 0; --radius-lg: 0;
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+  --hour-h: 2.75rem; --gutter: 3.5rem;
+}
+/* Poster: yellow field, navy ink, dark red accent, hard offset shadows. */
+:root[data-preset="poster"] {
+  --sidebar-width: 20rem;
+  color-scheme: light;
+  --bg: #ffd60a; --bg-accent: #ffbf00; --bg-glow: rgba(139, 0, 0, 0.16);
+  --surface: #ffd60a;
+  --surface-elevated: #ffd60a;
+  --surface-card: #ffd60a;
+  --surface-solid: #ffd60a;
+  --field: #ffd60a;
+  --scrim: rgba(11, 19, 43, 0.45);
+  --frost: 0px; --frost-strong: 0px;
+  --hairline: rgba(11, 19, 43, 0.75); --hairline-strong: rgba(11, 19, 43, 1);
+  --shadow: 3px 3px 0 #0b132b;
+  --shadow-lg: 6px 6px 0 #0b132b;
+  --text: #0b132b; --muted: #5c3d2e;
+  --accent: #8b0000; --accent-strong: #a80000; --accent-ink: #ffd60a; --accent-soft: rgba(139, 0, 0, 0.16);
+  --error: #6b0000; --error-soft: rgba(107, 0, 0, 0.12);
+  --danger-bg: #8b0000; --danger-ink: #ffd60a;
+  --ok: #0b132b; --warn: #8b0000; --risk: #111111; --badge-ink: #ffd60a;
+  --now: #8b0000;
+  --grid-cell: #ffe14d; --grid-line: rgba(11, 19, 43, 0.22);
+  --block-locked: #0b132b; --block-locked-ink: #ffd60a;
+  --block-flex: #8b0000; --block-flex-ink: #ffd60a;
+  --block-border: rgba(11, 19, 43, 0.85); --block-edge: #0b132b;
+  --flex: #8b0000;
+  --icon-primary: #0b132b; --icon-secondary: rgba(11, 19, 43, 0.30);
+  --radius-sm: 0; --radius: 0; --radius-lg: 0;
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+  --hour-h: 2.75rem; --gutter: 3.5rem;
+}
+/* High contrast: black, white and yellow. Large text and outlined blocks are knobs. */
+:root[data-preset="high-contrast"] {
+  --sidebar-width: 20rem;
+  color-scheme: dark;
+  --bg: #000000; --bg-accent: #000000; --bg-glow: rgba(0, 0, 0, 0);
+  --surface: #000000;
+  --surface-elevated: #000000;
+  --surface-card: #000000;
+  --surface-solid: #000000;
+  --field: #000000;
+  --scrim: rgba(0, 0, 0, 0.85);
+  --frost: 0px; --frost-strong: 0px;
+  --hairline: rgba(255, 255, 255, 0.95); --hairline-strong: rgba(255, 255, 255, 1);
+  --shadow: 3px 3px 0 #ffff00;
+  --shadow-lg: 6px 6px 0 #ffff00;
+  --text: #ffffff; --muted: #ffff00;
+  --accent: #ffff00; --accent-strong: #ffff66; --accent-ink: #000000; --accent-soft: rgba(255, 255, 0, 0.20);
+  --error: #ffff00; --error-soft: rgba(255, 255, 0, 0.16);
+  --danger-bg: #ffff00; --danger-ink: #000000;
+  --ok: #00ff00; --warn: #ffff00; --risk: #ffffff; --badge-ink: #000000;
+  --now: #ffff00;
+  --grid-cell: #000000; --grid-line: rgba(255, 255, 255, 0.45);
+  --block-locked: #000000; --block-locked-ink: #ffffff;
+  --block-flex: #000000; --block-flex-ink: #ffff00;
+  --block-border: rgba(255, 255, 255, 0.95); --block-edge: #ffff00;
+  --flex: #ffff00;
+  --icon-primary: #ffffff; --icon-secondary: rgba(255, 255, 255, 0.40);
+  --radius-sm: 0; --radius: 0; --radius-lg: 0;
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+  --hour-h: 2.75rem; --gutter: 3.5rem;
+}
+/* Ink: near-monochrome, hairlines instead of fills. Dark map first; light packs override. */
+:root[data-preset="ink"] {
+  --sidebar-width: 20rem;
+  color-scheme: dark;
+  --bg: #111111; --bg-accent: #161616; --bg-glow: rgba(0, 0, 0, 0);
+  --surface: #111111;
+  --surface-elevated: #111111;
+  --surface-card: #111111;
+  --surface-solid: #111111;
+  --field: #111111;
+  --scrim: rgba(0, 0, 0, 0.72);
+  --frost: 0px; --frost-strong: 0px;
+  --hairline: rgba(234, 234, 234, 0.28); --hairline-strong: rgba(234, 234, 234, 0.50);
+  --shadow: none;
+  --shadow-lg: none;
+  --text: #eaeaea; --muted: #9a9a9a;
+  --accent: #eaeaea; --accent-strong: #ffffff; --accent-ink: #111111; --accent-soft: rgba(234, 234, 234, 0.16);
+  --error: #ff6b6b; --error-soft: rgba(255, 107, 107, 0.12);
+  --danger-bg: #7a1f1f; --danger-ink: #ffecec;
+  --ok: #7fff7f; --warn: #ffe066; --risk: #ff8080; --badge-ink: #000000;
+  --now: #eaeaea;
+  --grid-cell: #161616; --grid-line: rgba(234, 234, 234, 0.12);
+  --block-locked: #111111; --block-locked-ink: #eaeaea;
+  --block-flex: #111111; --block-flex-ink: #eaeaea;
+  --block-border: rgba(234, 234, 234, 0.28); --block-edge: #9a9a9a;
+  --flex: #eaeaea;
+  --icon-primary: #eaeaea; --icon-secondary: rgba(234, 234, 234, 0.30);
+  --radius-sm: 0; --radius: 0; --radius-lg: 0;
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+  --hour-h: 2.75rem; --gutter: 3.5rem;
+}
+:root[data-theme="slate"][data-preset="ink"] {
+  --sidebar-width: 20rem;
+  color-scheme: light;
+  --bg: #f4f1ea; --bg-accent: #efece4; --bg-glow: rgba(0, 0, 0, 0);
+  --surface: #f4f1ea;
+  --surface-elevated: #f4f1ea;
+  --surface-card: #f4f1ea;
+  --surface-solid: #f4f1ea;
+  --field: #f4f1ea;
+  --scrim: rgba(26, 26, 26, 0.28);
+  --frost: 0px; --frost-strong: 0px;
+  --hairline: rgba(26, 26, 26, 0.12); --hairline-strong: rgba(26, 26, 26, 0.22);
+  --shadow: none;
+  --shadow-lg: none;
+  --text: #1a1a1a; --muted: #5a5a5a;
+  --accent: #1a1a1a; --accent-strong: #000000; --accent-ink: #f4f1ea; --accent-soft: rgba(26, 26, 26, 0.12);
+  --error: #9b1b30; --error-soft: rgba(155, 27, 48, 0.10);
+  --danger-bg: #9b1b30; --danger-ink: #fff4f4;
+  --ok: #1a1a1a; --warn: #5a5a5a; --risk: #9b1b30; --badge-ink: #f4f1ea;
+  --now: #1a1a1a;
+  --grid-cell: #efece4; --grid-line: rgba(26, 26, 26, 0.10);
+  --block-locked: #f4f1ea; --block-locked-ink: #1a1a1a;
+  --block-flex: #f4f1ea; --block-flex-ink: #1a1a1a;
+  --block-border: rgba(26, 26, 26, 0.22); --block-edge: #1a1a1a;
+  --flex: #1a1a1a;
+  --icon-primary: #1a1a1a; --icon-secondary: rgba(26, 26, 26, 0.28);
+  --radius-sm: 0; --radius: 0; --radius-lg: 0;
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+  --hour-h: 2.75rem; --gutter: 3.5rem;
+}
+:root[data-theme="light-frost"][data-preset="ink"] {
+  --sidebar-width: 20rem;
+  color-scheme: light;
+  --bg: #f4f1ea; --bg-accent: #efece4; --bg-glow: rgba(0, 0, 0, 0);
+  --surface: #f4f1ea;
+  --surface-elevated: #f4f1ea;
+  --surface-card: #f4f1ea;
+  --surface-solid: #f4f1ea;
+  --field: #f4f1ea;
+  --scrim: rgba(26, 26, 26, 0.28);
+  --frost: 0px; --frost-strong: 0px;
+  --hairline: rgba(26, 26, 26, 0.12); --hairline-strong: rgba(26, 26, 26, 0.22);
+  --shadow: none;
+  --shadow-lg: none;
+  --text: #1a1a1a; --muted: #5a5a5a;
+  --accent: #1a1a1a; --accent-strong: #000000; --accent-ink: #f4f1ea; --accent-soft: rgba(26, 26, 26, 0.12);
+  --error: #9b1b30; --error-soft: rgba(155, 27, 48, 0.10);
+  --danger-bg: #9b1b30; --danger-ink: #fff4f4;
+  --ok: #1a1a1a; --warn: #5a5a5a; --risk: #9b1b30; --badge-ink: #f4f1ea;
+  --now: #1a1a1a;
+  --grid-cell: #efece4; --grid-line: rgba(26, 26, 26, 0.10);
+  --block-locked: #f4f1ea; --block-locked-ink: #1a1a1a;
+  --block-flex: #f4f1ea; --block-flex-ink: #1a1a1a;
+  --block-border: rgba(26, 26, 26, 0.22); --block-edge: #1a1a1a;
+  --flex: #1a1a1a;
+  --icon-primary: #1a1a1a; --icon-secondary: rgba(26, 26, 26, 0.28);
+  --radius-sm: 0; --radius: 0; --radius-lg: 0;
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+  --hour-h: 2.75rem; --gutter: 3.5rem;
+}
+/* Paper preset: a planner notebook. Warm cream, brown ink, a sepia accent, soft
+   shadows. Warmer than Ink's light sheet on purpose, and rounded where Ink is sharp. */
+:root[data-preset="paper"] {
+  --sidebar-width: 20rem;
+  color-scheme: light;
+  --bg: #f7ecd2; --bg-accent: #f0e2c0; --bg-glow: rgba(138, 75, 42, 0.10);
+  --surface: #fbf4e2;
+  --surface-elevated: #fdf8ea;
+  --surface-card: #fdf8ea;
+  --surface-solid: #fdf8ea;
+  --field: #fffcf2;
+  --scrim: rgba(60, 40, 20, 0.30);
+  --frost: 0px; --frost-strong: 0px;
+  --hairline: rgba(74, 52, 30, 0.16); --hairline-strong: rgba(74, 52, 30, 0.30);
+  --shadow: 0 1px 2px rgba(74, 52, 30, 0.10), 0 6px 16px rgba(74, 52, 30, 0.10);
+  --shadow-lg: 0 2px 6px rgba(74, 52, 30, 0.12), 0 16px 40px rgba(74, 52, 30, 0.18);
+  --text: #2f2418; --muted: #6a5a45;
+  --accent: #8a4b2a; --accent-strong: #723c20; --accent-ink: #fdf8ea; --accent-soft: rgba(138, 75, 42, 0.12);
+  --error: #9b1b30; --error-soft: rgba(155, 27, 48, 0.08);
+  --danger-bg: #8f2a2a; --danger-ink: #fff6ee;
+  --ok: #cfe3c3; --warn: #f2dfa0; --risk: #f0c4b4; --badge-ink: #2f2418;
+  --now: #b5452f;
+  --grid-cell: #fffcf2; --grid-line: rgba(74, 52, 30, 0.08);
+  --block-locked: #eadfc6; --block-locked-ink: #2f2418;
+  --block-flex: #f3dca6; --block-flex-ink: #3b2a05;
+  --block-border: rgba(74, 52, 30, 0.14); --block-edge: #a08a68;
+  --flex: #b07a1e;
+  --icon-primary: #4a3a28; --icon-secondary: rgba(138, 75, 42, 0.22);
+  --radius-sm: 3px; --radius: 5px; --radius-lg: 8px;
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+  --hour-h: 2.75rem; --gutter: 3.5rem;
+}
+/* Pastel preset: soft candy surfaces and pill corners. The softness lives in the
+   surfaces; the accent is a deep orchid, because a pale lavender cannot pass as
+   text and would sit too near the violet and indigo category colours. */
+:root[data-preset="pastel"] {
+  --sidebar-width: 20rem;
+  color-scheme: light;
+  --bg: #fdf2f8; --bg-accent: #f3e8ff; --bg-glow: rgba(167, 139, 250, 0.18);
+  --surface: #fff7fb;
+  --surface-elevated: #ffffff;
+  --surface-card: #ffffff;
+  --surface-solid: #ffffff;
+  --field: #fffafd;
+  --scrim: rgba(76, 29, 149, 0.25);
+  --frost: 0px; --frost-strong: 0px;
+  --hairline: rgba(122, 62, 157, 0.16); --hairline-strong: rgba(122, 62, 157, 0.30);
+  --shadow: 0 1px 2px rgba(122, 62, 157, 0.08), 0 8px 22px rgba(122, 62, 157, 0.12);
+  --shadow-lg: 0 2px 6px rgba(122, 62, 157, 0.10), 0 18px 48px rgba(122, 62, 157, 0.20);
+  --text: #3b2a4a; --muted: #6b5a7a;
+  --accent: #7a3e9d; --accent-strong: #63308a; --accent-ink: #ffffff; --accent-soft: rgba(122, 62, 157, 0.12);
+  --error: #b42318; --error-soft: rgba(180, 35, 24, 0.07);
+  --danger-bg: #b93434; --danger-ink: #ffffff;
+  --ok: #bde7cd; --warn: #f9e3a1; --risk: #f7c6c1; --badge-ink: #1b2433;
+  --now: #e5484d;
+  --grid-cell: #fffafd; --grid-line: rgba(122, 62, 157, 0.08);
+  --block-locked: #ede4fb; --block-locked-ink: #2e1f47;
+  --block-flex: #ffe4ef; --block-flex-ink: #4a1230;
+  --block-border: rgba(122, 62, 157, 0.14); --block-edge: #a78bda;
+  --flex: #c0447f;
+  --icon-primary: #4b3a5e; --icon-secondary: rgba(122, 62, 157, 0.22);
+  --radius-sm: 999px; --radius: 14px; --radius-lg: 20px;
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+  --hour-h: 2.75rem; --gutter: 3.5rem;
+}
 :root[data-accent="sky"] {
   --accent: #38bdf8; --accent-strong: #7dd3fc; --accent-ink: #0b1224; --accent-soft: rgba(56, 189, 248, 0.16);
 }
@@ -208,6 +459,45 @@
   .context-menu, .reminder-toast), :root[data-frost="off"] .prefs-dialog::backdrop {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+}
+
+/* Look knobs (look.js). Each attribute moves one thing and nothing else, and
+   none of them names a colour: the palette stays in the token maps. */
+:root[data-corners="sharp"] { --radius-sm: 0; --radius: 0; --radius-lg: 0; }
+:root[data-corners="pill"] { --radius-sm: 999px; --radius: 14px; --radius-lg: 20px; }
+:root[data-depth="flat"] { --shadow: none; --shadow-lg: none; }
+:root[data-depth="hard"] { --shadow: 3px 3px 0 var(--hairline-strong); --shadow-lg: 6px 6px 0 var(--hairline-strong); }
+/* Font and size go on both html and body: body declares its own font, and rem
+   units measure html. */
+:root[data-font="mono"], :root[data-font="mono"] body {
+  font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+:root[data-font="serif"], :root[data-font="serif"] body {
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, "Times New Roman", serif;
+}
+:root[data-text="small"], :root[data-text="small"] body { font-size: 13px; }
+:root[data-text="large"], :root[data-text="large"] body { font-size: 16px; }
+:root[data-density="compact"] { --hour-h: 2.1rem; --space-2: 0.35rem; --space-3: 0.5rem; --space-4: 0.7rem; }
+:root[data-surface="flat"] {
+  --surface: var(--surface-solid); --surface-elevated: var(--surface-solid); --surface-card: var(--surface-solid);
+}
+:root[data-surface="flat"] :is(.top, .week-nav, .side, .auth-panel, .save-actions, .empty-week, .prefs-dialog,
+  .context-menu, .reminder-toast), :root[data-surface="flat"] .prefs-dialog::backdrop {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+/* Where a category's colour lands on a calendar block: the edge (default), the
+   whole outline, or only the edge on a plain card. */
+:root[data-blocks="outlined"] .block {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--block-color, var(--block-edge));
+  border-left-width: 2px;
+}
+:root[data-blocks="edge"] .block {
+  background: var(--surface-card);
+  color: var(--text);
+  border-color: var(--hairline);
 }
 
 * { box-sizing: border-box; }
@@ -469,8 +759,9 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   background: var(--block-locked);
   color: var(--block-locked-ink);
   border: 1px solid var(--block-border);
-  border-left: 3px solid var(--block-edge);
-  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--block-color, var(--block-edge));
+  /* Pill corners are 999px so chips become capsules; a tall block would clip its own title. */
+  border-radius: min(var(--radius-sm), 0.5rem);
   padding: 0.18rem 0.35rem;
   font-size: 0.7rem;
   line-height: 1.2;
@@ -479,6 +770,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   cursor: grab;
 }
 
+.block.is-colored { border-left-width: 4px; }
 .block .title { font-weight: 650; }
 .block .sub { opacity: 0.8; font-size: 0.65rem; }
 .block:active { cursor: grabbing; }
@@ -498,7 +790,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .flex-block {
   background: var(--block-flex);
   color: var(--block-flex-ink);
-  border-left-color: var(--flex);
+  border-left-color: var(--block-color, var(--flex));
 }
 
 .slack-badge {
@@ -820,6 +1112,22 @@ button.danger {
 .week-menu-items { position: absolute; z-index: 30; margin-top: var(--space-1); padding: var(--space-1); background: var(--surface-elevated); border: 1px solid var(--hairline-strong); border-radius: var(--radius); box-shadow: var(--shadow-lg); }
 .week-menu-items { min-width: 12.5rem; }
 .week-menu-items button { display: block; width: 100%; margin: 0.12rem 0; text-align: left; }
+html[data-text="large"] .week-menu > summary,
+html[data-text="large"] .week-menu-items button,
+html[data-text="large"] .advanced > summary {
+  font-size: 1rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+}
+html[data-text="large"] .week-menu-items {
+  min-width: 18rem;
+  max-height: min(24rem, 70vh);
+  overflow: auto;
+}
+html[data-text="large"] .editor-actions {
+  flex-direction: column;
+  align-items: stretch;
+}
 .menu-note { margin: 0.15rem 0 0.35rem; padding: 0 0.25rem; color: var(--muted); font-size: 0.72rem; }
 .save-actions { padding: 0.6rem 1.1rem; border-bottom: 1px solid var(--hairline); background: var(--surface); }
 .save-actions button { margin: var(--space-1); }

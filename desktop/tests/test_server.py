@@ -38,6 +38,20 @@ def test_it_serves_the_api_and_the_frontend(server: LocalServer) -> None:
         assert b"FlexWeek" in response.read()
 
 
+def test_native_mode_serves_the_api_without_the_browser_page(tmp_path: Path) -> None:
+    running = LocalServer(tmp_path / "flexweek.db", serve_frontend=False)
+    try:
+        running.start()
+        with urllib.request.urlopen(f"{running.origin}/api/health", timeout=10) as response:
+            assert response.status == 200
+        request = urllib.request.Request(f"{running.origin}/")
+        with pytest.raises(urllib.error.HTTPError) as caught:
+            urllib.request.urlopen(request, timeout=10)
+        assert caught.value.code == 404
+    finally:
+        running.stop()
+
+
 def test_the_origin_check_still_applies_to_the_bundled_server(server: LocalServer) -> None:
     # A write claiming a different origin must be refused, exactly as when hosted.
     request = urllib.request.Request(

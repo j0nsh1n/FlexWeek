@@ -1,0 +1,22 @@
+"""The widget behind each layout id. Kept apart from the registry so that stays free of Qt."""
+
+from __future__ import annotations
+
+from desktop.native.layouts.base import LayoutView
+from desktop.native.layouts.bento import BentoView
+from desktop.native.layouts.clay import ClayDeckView
+from desktop.native.layouts.dial import DayDialView
+from desktop.native.layouts.mission import MissionView
+from desktop.native.layouts.one_thing import OneThingView
+from desktop.native.layouts.retro import RetroView
+from desktop.native.layouts.timeline import TimelineView
+
+VIEW_CLASSES: dict[str, type[LayoutView]] = {
+    "timeline": TimelineView,
+    "mission": MissionView,
+    "bento": BentoView,
+    "retro": RetroView,
+    "clay": ClayDeckView,
+    "one": OneThingView,
+    "dial": DayDialView,
+}

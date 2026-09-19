@@ -5,8 +5,9 @@ Congressional App Challenge 2026. Submit **Sunday, Oct 25, 2026, 8:00 p.m. PDT**
 phase may span several implementation slices. The original Sep 6 contest brief
 (working title Reslot) is archived in [docs/cac-build-plan.md](docs/cac-build-plan.md).
 
-The active next-work plan is [release polish](#release-polish-2026-09-16-0101-then-011)
-— 0.11.0 is tagged; leftover P2 copy and desktop motion checks remain. The [student experience revision](#student-experience-revision-2026-09-12)
+The active next-work plan is [native Python desktop](#native-python-desktop-2026-09-17)
+on `feat/native-python`. 0.11.0 is tagged; leftover P2 copy and desktop motion
+checks remain on the WebEngine app. The [student experience revision](#student-experience-revision-2026-09-12)
 stays the stage map for everything still open. Earlier phase descriptions and the
 first implementation slice retain their dated planning history.
 
@@ -420,6 +421,37 @@ painting remain outside this plan. More category chips, a social feed, streaks a
 productivity scores are not proposed. Existing alarms, Spotify links and themes
 receive targeted improvements rather than a wholesale replacement.
 
+## Native Python desktop (2026-09-17)
+
+Jonathan chose a full Python desktop: Qt widgets, no WebEngine, no JavaScript.
+The existing FastAPI app still owns accounts and the database on a loopback
+port; the browser page is optional. Plan: `docs/native-python-migration.md`.
+Launch: `python -m desktop.main` (native widgets). `python -m desktop.native`
+is the same entry.
+
+- Unit 1 foundation: [x] 2026-09-17. Register, recovery codes, login, dated
+  week, fixed time, homework, Solve, atomic save, restart, isolation, stale
+  replies, 409 drafts, no WebEngine import.
+- Unit 2 calendar and homework parity: [x] 2026-09-17. Day, Month, drag
+  create/move/resize, series refuse, occurrence vs series, type chips, exact
+  due times, notes/links/checklist, completion, W/D/M and Delete.
+- Unit 3 planning and reuse: [x] 2026-09-17. Undo/redo, internal clipboard and
+  collision previews, locked-only routines, unfinished homework, missed
+  recovery, running late, spread, availability. Native session is one week at
+  a time (undo of another week is refused).
+- Unit 4 focus and preferences: [x] 2026-09-17. Timers, once-only credit, packs,
+  device-only look knobs, reminders, alarms/snooze, Spotify, tray.
+  Layouts (2026-09-18): six main views and two day screens with per-design
+  options, device-only, native only; see Amendment C of the appearance contract.
+- Unit 5 account recovery and files: [x] 2026-09-17. Forgotten-password recovery,
+  password/code replacement, deletion, week/day files, restore points, transfer.
+- Unit 6 retirement: [x] 2026-09-17. Native is the default launcher. Smoke is
+  native widgets. Chromium remains only in leftover probe tests.
+
+Complete when unit 6 has switched the normal launcher and packaging smoke uses
+native widgets. Executables stay unbuilt until Jonathan asks. Packaging scripts
+still mention WebEngine; they were left alone.
+
 ## Release polish (2026-09-16): 0.10.1, then 0.11
 
 v0.10.0 is published, so classmates can install FlexWeek and hit its rough
@@ -527,6 +559,30 @@ the design, and the sentence should say so.
   Customize and account motion shipped. The P2 account copy remains. A Qt
   WebEngine pass with `prefers-reduced-motion` forced on and a Windows flicker
   hand-check are still open.
+
+### Looks and knobs (owner request, 2026-09-17)
+
+After 0.11.0 the owner asked for more control over the interface and for
+presets that look drastically different from the frost family. The plan is one
+idea: a preset is a bundle of knob values plus a palette, and Customize edits
+the same knobs, so more presets and more control are the same work.
+
+- Knobs, each one attribute on `<html>`, one control, one field, one test:
+  surface, corners, depth, font, blocks, density, text. Accent and motion
+  already exist on the account.
+- Presets: Terminal first as the proof, then Poster, Ink and High contrast for
+  the contest, Paper and Pastel after, subject to the owner's choice.
+- Complete when: the owner has picked the presets from a real example, the
+  seven fields and the new pack values are approved in Amendment A of
+  `docs/stage8-appearance-contract.md`, the knobs persist on the account, and
+  every preset palette passes the same-tokens, AA and accent-distance audits.
+- Status: [~] Architecture and all six presets landed device-only on
+  `feat/native-python` (2026-09-18): Terminal, Poster, Ink, High contrast, then
+  Paper and Pastel, the two soft looks, in both clients. Preset is folded into
+  Look. A look keeps knobs set by hand. High contrast is menu-only. Settings
+  still says the look stays on this computer.
+  Approval of the `look_*` fields is still required before anything is saved
+  to the account.
 
 ## First implementation slice — approved 2026-09-06
 

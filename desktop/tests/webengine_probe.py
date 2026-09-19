@@ -19,7 +19,8 @@ from PySide6.QtWebEngineCore import QWebEnginePage, QWebEnginePermission
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 from backend.assignments import migrated_assignment_id
-from desktop.main import (
+from desktop.server import LocalServer
+from desktop.webengine import (
     OFFLINE_HEADING,
     PAGE_STOPPED_HEADING,
     PAINTED_MIN_COLORS,
@@ -28,7 +29,6 @@ from desktop.main import (
     painted_colors,
     show_running_instance,
 )
-from desktop.server import LocalServer
 
 
 def run(case: str, root: Path) -> None:
@@ -79,10 +79,15 @@ def run(case: str, root: Path) -> None:
         if action == "register":
             wait_for("document.getElementById('recovery-codes-dialog').open")
             wait_for("document.querySelectorAll('#recovery-codes-list code').length === 8")
-            codes = cast(list[str], json.loads(evaluate(
-                "JSON.stringify(Array.from(document.querySelectorAll('#recovery-codes-list code'), "
-                "node => node.textContent))"
-            )))
+            codes = cast(
+                list[str],
+                json.loads(
+                    evaluate(
+                        "JSON.stringify(Array.from(document.querySelectorAll('#recovery-codes-list code'), "
+                        "node => node.textContent))"
+                    )
+                ),
+            )
             if acknowledge_codes:
                 evaluate("""document.getElementById('recovery-codes-ack').checked=true;
                     document.getElementById('recovery-codes-ack').dispatchEvent(new Event('change'));
@@ -102,9 +107,11 @@ def run(case: str, root: Path) -> None:
 
     def api_json(path: str) -> dict:
         """GET an API path with the page's session; a failed request comes back as {"status": code}."""
-        evaluate(f"window.__apiReply = undefined; api({json.dumps(path)}).then("
-                 "data => { window.__apiReply = JSON.stringify(data); }, "
-                 "error => { window.__apiReply = JSON.stringify({status: error.status}); })")
+        evaluate(
+            f"window.__apiReply = undefined; api({json.dumps(path)}).then("
+            "data => { window.__apiReply = JSON.stringify(data); }, "
+            "error => { window.__apiReply = JSON.stringify({status: error.status}); })"
+        )
         wait_for("typeof window.__apiReply === 'string'")
         return cast(dict, json.loads(evaluate("window.__apiReply")))
 
@@ -136,10 +143,14 @@ def run(case: str, root: Path) -> None:
 
     def add_item(category: str, fields: str, days: list[int] | None = None) -> None:
         """Pick a type chip, open Add without dragging, fill the dialog and save it."""
-        only_days = "" if days is None else (
-            f"document.getElementById('f-when-day').value='{days[0]}';"
-            f"[0,1,2,3,4,5,6].forEach(d => document.getElementById('f-day-'+d).checked = "
-            f"{json.dumps(days)}.includes(d));"
+        only_days = (
+            ""
+            if days is None
+            else (
+                f"document.getElementById('f-when-day').value='{days[0]}';"
+                f"[0,1,2,3,4,5,6].forEach(d => document.getElementById('f-day-'+d).checked = "
+                f"{json.dumps(days)}.includes(d));"
+            )
         )
         evaluate(f"""document.querySelector('#type-chips [data-category={category}]').click();
             document.getElementById('add-block').click();
@@ -158,8 +169,10 @@ def run(case: str, root: Path) -> None:
         assert evaluate("document.getElementById('login-screen').hidden"), "Log in shown on first launch"
         if case == "accounts":
             # The vendored Figtree face must actually load, not fall back to a system font.
-            wait_for("Array.from(document.fonts).some(face => face.family.replace(/\"/g, '') === 'Figtree' "
-                     "&& face.status === 'loaded')")
+            wait_for(
+                "Array.from(document.fonts).some(face => face.family.replace(/\"/g, '') === 'Figtree' "
+                "&& face.status === 'loaded')"
+            )
             submit_identity("first_student", "register")
             add_item("class", "document.getElementById('f-title').value='School';", days=[0])
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")
@@ -243,8 +256,10 @@ def run(case: str, root: Path) -> None:
             assert evaluate("document.querySelectorAll('.flex-block').length") == 1, "Homework was not placed"
             stats = evaluate("document.getElementById('debug-stats').textContent")
             assert stats == "1 task fits.", stats
-            assert not evaluate("Array.from(document.querySelectorAll('.slack-badge'))"
-                                ".some(b => /slack/i.test(b.textContent))"), "Raw slack jargon on the grid"
+            assert not evaluate(
+                "Array.from(document.querySelectorAll('.slack-badge'))"
+                ".some(b => /slack/i.test(b.textContent))"
+            ), "Raw slack jargon on the grid"
             assert not evaluate("document.getElementById('focus-section').hidden")
             window.grab().save(str(root / "rookie-solved.png"))
             assert_painted("After the setup Solve")
@@ -298,20 +313,26 @@ def run(case: str, root: Path) -> None:
                     pointerId, button:0, clientX:rect.left+20,
                     clientY:rect.top + (minute-360)/1020*rect.height}));
             };""")
+
             def gesture(start: int, end: int, *, block: bool = False, cancel: bool = False) -> None:
                 event = "pointercancel" if cancel else "pointerup"
-                evaluate(f"__point('pointerdown', {start}, {json.dumps(block)}); "
-                         f"__point('pointermove', {end}); __point('{event}', {end})")
+                evaluate(
+                    f"__point('pointerdown', {start}, {json.dumps(block)}); "
+                    f"__point('pointermove', {end}); __point('{event}', {end})"
+                )
 
             def edit_card() -> None:
-                evaluate("document.querySelector('.block').dispatchEvent("
-                         "new MouseEvent('dblclick', {bubbles:true}))")
+                evaluate(
+                    "document.querySelector('.block').dispatchEvent("
+                    "new MouseEvent('dblclick', {bubbles:true}))"
+                )
 
             evaluate("document.querySelector('#type-chips [data-category=class]').click()")
             # 0.11: picking a type chip is the whole gesture, so Add opens with it chosen.
             wait_for("document.getElementById('block-dialog').open")
-            assert evaluate("document.getElementById('f-category').value") == "class", \
+            assert evaluate("document.getElementById('f-category').value") == "class", (
                 "Chip did not choose the type"
+            )
             evaluate("document.getElementById('form-cancel').click()")
             assert not evaluate("document.getElementById('block-dialog').open"), "Cancel left the editor open"
             gesture(600, 660, cancel=True)
@@ -319,8 +340,10 @@ def run(case: str, root: Path) -> None:
             assert evaluate("document.querySelectorAll('.block').length") == 0, "Cancelled create"
             assert not evaluate("document.getElementById('block-dialog').open"), "Cancel opened editor"
             assert evaluate("document.querySelector('.drag-ghost').hidden")
-            evaluate("__point('pointerdown', 600); __point('pointermove', 643, false, 2); "
-                     "__point('pointerup', 643, false, 2)")
+            evaluate(
+                "__point('pointerdown', 600); __point('pointermove', 643, false, 2); "
+                "__point('pointerup', 643, false, 2)"
+            )
             assert evaluate("document.querySelectorAll('.block').length") == 0, "Second pointer committed"
             evaluate("__point('pointercancel', 600)")
             gesture(600, 643)
@@ -345,13 +368,16 @@ def run(case: str, root: Path) -> None:
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")
             gesture(674, 704, block=True)
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")
-            evaluate("document.querySelector('.block').dispatchEvent(new MouseEvent('contextmenu', "
-                     "{bubbles:true, clientX:100, clientY:100}))")
+            evaluate(
+                "document.querySelector('.block').dispatchEvent(new MouseEvent('contextmenu', "
+                "{bubbles:true, clientX:100, clientY:100}))"
+            )
             assert evaluate("!document.getElementById('block-context-menu').hidden")
             evaluate("window.__beforeCalendarReload=true")
             window.reload()
-            wait_for("typeof window.__beforeCalendarReload === 'undefined' && "
-                     "document.querySelector('.block')")
+            wait_for(
+                "typeof window.__beforeCalendarReload === 'undefined' && document.querySelector('.block')"
+            )
             edit_card()
             assert evaluate("document.getElementById('f-start').value") == "10:30"
             assert evaluate("document.getElementById('f-end').value") == "11:45"
@@ -359,20 +385,28 @@ def run(case: str, root: Path) -> None:
             print("PASS: DOM create, cancel, pointer ownership, move, resize, edit, context and reload")
         elif case == "completion":
             submit_identity("completion_student", "register")
-            add_item("assignments", "document.getElementById('f-title').value='Essay';"
-                     "document.getElementById('f-energy').value='high';", days=[0])
+            add_item(
+                "assignments",
+                "document.getElementById('f-title').value='Essay';"
+                "document.getElementById('f-energy').value='high';",
+                days=[0],
+            )
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")
             evaluate("document.getElementById('solve').click()")
             wait_for("document.querySelector('.flex-block')")
-            evaluate("document.querySelector('.flex-block').dispatchEvent("
-                     "new MouseEvent('dblclick', {bubbles:true}))")
+            evaluate(
+                "document.querySelector('.flex-block').dispatchEvent("
+                "new MouseEvent('dblclick', {bubbles:true}))"
+            )
             evaluate("""document.getElementById('f-completed').checked=true;
                 document.querySelector('#block-form button[type=submit]').click();""")
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")
             evaluate("window.__beforeCompletionReload=true")
             window.reload()
-            wait_for("typeof window.__beforeCompletionReload === 'undefined' && "
-                     "document.getElementById('planner') && !document.getElementById('planner').hidden")
+            wait_for(
+                "typeof window.__beforeCompletionReload === 'undefined' && "
+                "document.getElementById('planner') && !document.getElementById('planner').hidden"
+            )
             assert evaluate("document.querySelectorAll('.flex-block').length") == 1, "Completed slot was lost"
             evaluate("document.getElementById('solve').click()")
             wait_for("!document.getElementById('debug').hidden")
@@ -382,14 +416,22 @@ def run(case: str, root: Path) -> None:
             print("PASS: completing through the editor preserves spent work through save, reload and solve")
         elif case == "phase6":
             submit_identity("phase6_student", "register")
-            add_item("class", "document.getElementById('f-title').value='School';"
-                     "document.getElementById('f-start').value='06:00';"
-                     "document.getElementById('f-end').value='23:00';", days=[0])
+            add_item(
+                "class",
+                "document.getElementById('f-title').value='School';"
+                "document.getElementById('f-start').value='06:00';"
+                "document.getElementById('f-end').value='23:00';",
+                days=[0],
+            )
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")
-            add_item("assignments", "document.getElementById('f-title').value='Homework';"
-                     "document.getElementById('f-energy').value='high';"
-                     "document.getElementById('f-due-date').value=dateForDay(selectedWeek, 1);"
-                     "document.getElementById('f-due-time').value='09:00';", days=[0, 1])
+            add_item(
+                "assignments",
+                "document.getElementById('f-title').value='Homework';"
+                "document.getElementById('f-energy').value='high';"
+                "document.getElementById('f-due-date').value=dateForDay(selectedWeek, 1);"
+                "document.getElementById('f-due-time').value='09:00';",
+                days=[0, 1],
+            )
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")
             evaluate("document.getElementById('solve').click()")
             wait_for("document.querySelector('.slack-tight')")
@@ -434,8 +476,10 @@ def run(case: str, root: Path) -> None:
             evaluate("document.getElementById('setup-close').click()")
 
             def fetch_json(path: str) -> Any:
-                evaluate(f"window.__reply = undefined; api({json.dumps(path)})"
-                         ".then(data => { window.__reply = JSON.stringify(data); })")
+                evaluate(
+                    f"window.__reply = undefined; api({json.dumps(path)})"
+                    ".then(data => { window.__reply = JSON.stringify(data); })"
+                )
                 wait_for("typeof window.__reply === 'string'")
                 return json.loads(evaluate("window.__reply"))
 
@@ -444,9 +488,13 @@ def run(case: str, root: Path) -> None:
             homework_path = f"/api/assignments?week_start={this_week}&include_completed=true"
             week_path = f"/api/week?week_start={this_week}"
             due = evaluate("dateForDay(shiftWeek(selectedWeek, 1), 2)") + "T21:00"
-            add_item("assignments", "document.getElementById('f-title').value='Essay';"
-                     f"document.getElementById('f-due-date').value={json.dumps(due[:10])};"
-                     "document.getElementById('f-due-time').value='21:00';", days=[0])
+            add_item(
+                "assignments",
+                "document.getElementById('f-title').value='Essay';"
+                f"document.getElementById('f-due-date').value={json.dumps(due[:10])};"
+                "document.getElementById('f-due-time').value='21:00';",
+                days=[0],
+            )
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")
             homework = fetch_json(homework_path)["assignments"]
             assert [(item["title"], item["due"]) for item in homework] == [("Essay", due)], homework
@@ -498,8 +546,10 @@ def run(case: str, root: Path) -> None:
             ), stored
             imported = fetch_json(f"/api/week?week_start={next_week}")["blocks"]
             assert [block["assignment_id"] for block in imported] == [copy_id], imported
-            print("PASS: homework saves as an assignment, Solve, whole-homework delete and undo, "
-                  "undo and redo of adding it, and a format 2 import into another week")
+            print(
+                "PASS: homework saves as an assignment, Solve, whole-homework delete and undo, "
+                "undo and redo of adding it, and a format 2 import into another week"
+            )
         elif case == "stage2":
             # At 390px the day agenda comes first and the whole path runs without a context menu.
             window.resize(390, 800)
@@ -513,8 +563,10 @@ def run(case: str, root: Path) -> None:
             assert on_screen, "Add homework is off screen"
 
             def click_agenda(label: str) -> None:
-                evaluate("Array.from(document.querySelectorAll('#day-agenda .agenda-row button'))"
-                         f".find(b => b.textContent === {json.dumps(label)}).click()")
+                evaluate(
+                    "Array.from(document.querySelectorAll('#day-agenda .agenda-row button'))"
+                    f".find(b => b.textContent === {json.dumps(label)}).click()"
+                )
 
             tomorrow = evaluate("addDaysIso(currentDateInfo().iso, 1)")
             evaluate("document.getElementById('add-homework').click()")
@@ -539,10 +591,12 @@ def run(case: str, root: Path) -> None:
             click_agenda("Finished")
             wait_for("document.getElementById('status').textContent.startsWith('Finished Essay')")
             # Pass the reply back as JSON text; runJavaScript does not hand arrays to Python reliably.
-            evaluate("window.__done = undefined; "
-                     "api('/api/assignments?week_start=' + selectedWeek + '&include_completed=true')"
-                     ".then(data => { window.__done = JSON.stringify("
-                     "data.assignments.map(a => a.completed)); })")
+            evaluate(
+                "window.__done = undefined; "
+                "api('/api/assignments?week_start=' + selectedWeek + '&include_completed=true')"
+                ".then(data => { window.__done = JSON.stringify("
+                "data.assignments.map(a => a.completed)); })"
+            )
             wait_for("typeof window.__done === 'string'")
             done = json.loads(evaluate("window.__done"))
             assert done == [True], done
@@ -555,8 +609,10 @@ def run(case: str, root: Path) -> None:
             assert evaluate("document.querySelectorAll('.day-head').length") == 7
             assert evaluate("document.getElementById('add-homework').getBoundingClientRect().width > 0")
             assert evaluate("document.querySelector('.week-nav #export-week') === null")
-            print("PASS: 390px day agenda, Add homework, plan, start focus and finish without "
-                  "a context menu; 1280px week of seven days")
+            print(
+                "PASS: 390px day agenda, Add homework, plan, start focus and finish without "
+                "a context menu; 1280px week of seven days"
+            )
         elif case == "stage3":
             submit_identity("stage3_student", "register")
             evaluate("document.getElementById('setup-close').click()")
@@ -577,8 +633,7 @@ def run(case: str, root: Path) -> None:
             # Save the current fixed commitments as a routine, then apply only
             # Monday to next week. Applying snapshots the account first.
             evaluate(
-                "window.__routineOpen=undefined; "
-                "openRoutineDialog().then(ok => { window.__routineOpen=ok; })"
+                "window.__routineOpen=undefined; openRoutineDialog().then(ok => { window.__routineOpen=ok; })"
             )
             wait_for("window.__routineOpen !== undefined")
             evaluate("""document.getElementById('routine-name').value='School week';
@@ -599,8 +654,10 @@ def run(case: str, root: Path) -> None:
             assert evaluate("selectedWeek") == next_week
             assert evaluate("weekState().blocks.length") == 1
 
-            evaluate("window.__points=undefined; api('/api/restore-points').then(data => { "
-                     "window.__points=JSON.stringify(data.restore_points); })")
+            evaluate(
+                "window.__points=undefined; api('/api/restore-points').then(data => { "
+                "window.__points=JSON.stringify(data.restore_points); })"
+            )
             wait_for("typeof window.__points === 'string'")
             points = json.loads(evaluate("window.__points"))
             assert len(points) == 1, points
@@ -609,23 +666,28 @@ def run(case: str, root: Path) -> None:
             # Restore the pre-apply snapshot. It removes the destination week,
             # clears ephemeral clipboard/history, and leaves the saved routine.
             point_id = points[0]["id"]
-            evaluate(f"window.__restorePreview=undefined; previewRestorePoint({json.dumps(point_id)})"
-                     ".then(ok => {{ window.__restorePreview=ok; }})")
+            evaluate(
+                f"window.__restorePreview=undefined; previewRestorePoint({json.dumps(point_id)})"
+                ".then(ok => {{ window.__restorePreview=ok; }})"
+            )
             wait_for("window.__restorePreview !== undefined")
             assert evaluate("window.__restorePreview") is True
             evaluate(
-                "window.__restored=undefined; "
-                "restoreFromPreview().then(ok => { window.__restored=ok; })"
+                "window.__restored=undefined; restoreFromPreview().then(ok => { window.__restored=ok; })"
             )
             wait_for("window.__restored !== undefined", timeout=20)
             assert evaluate("window.__restored") is True
-            evaluate(f"window.__nextWeek=undefined; api('/api/week?week_start={next_week}')"
-                     ".then(data => {{ window.__nextWeek=JSON.stringify(data.blocks); }})")
+            evaluate(
+                f"window.__nextWeek=undefined; api('/api/week?week_start={next_week}')"
+                ".then(data => {{ window.__nextWeek=JSON.stringify(data.blocks); }})"
+            )
             wait_for("typeof window.__nextWeek === 'string'")
             assert json.loads(evaluate("window.__nextWeek")) == []
             assert evaluate("stage3Clipboard === null && undoSteps.length === 0")
-            evaluate("window.__routines=undefined; api('/api/routines').then(data => { "
-                     "window.__routines=JSON.stringify(data.routines); })")
+            evaluate(
+                "window.__routines=undefined; api('/api/routines').then(data => { "
+                "window.__routines=JSON.stringify(data.routines); })"
+            )
             wait_for("typeof window.__routines === 'string'")
             assert len(json.loads(evaluate("window.__routines"))) == 1
 
@@ -714,8 +776,10 @@ def run(case: str, root: Path) -> None:
             homework = api_json(homework_path)["assignments"]
             kept = [(item["id"], item["due"]) for item in homework]
             assert kept == [(assignment_id, due + "T23:59")], homework
-            print("PASS: at 390px in the dark theme, unfinished homework goes into next week once, "
-                  "keeping its id and deadline")
+            print(
+                "PASS: at 390px in the dark theme, unfinished homework goes into next week once, "
+                "keeping its id and deadline"
+            )
         elif case == "stage4":
             submit_identity("stage4_student", "register")
             evaluate("document.getElementById('setup-close').click()")
@@ -757,9 +821,7 @@ def run(case: str, root: Path) -> None:
             )
             wait_for("window.__spreadSaved !== undefined")
             assert evaluate("window.__spreadSaved") is True
-            sessions_before = evaluate(
-                "weekState().blocks.filter(block => block.assignment_id).length"
-            )
+            sessions_before = evaluate("weekState().blocks.filter(block => block.assignment_id).length")
             assert sessions_before >= 1
 
             evaluate("""window.__late=undefined;
@@ -772,10 +834,7 @@ def run(case: str, root: Path) -> None:
                 " || document.getElementById('status').textContent"
             )
             assert evaluate("window.__late") is True, late_error
-            evaluate(
-                "window.__accepted=undefined; "
-                "acceptRunningLate().then(ok => { window.__accepted=ok; })"
-            )
+            evaluate("window.__accepted=undefined; acceptRunningLate().then(ok => { window.__accepted=ok; })")
             wait_for("window.__accepted !== undefined", timeout=20)
             assert evaluate("window.__accepted") is True
             late_kept = "weekState().blocks.filter(block => block.title === 'Running late').length"
@@ -814,6 +873,38 @@ def run(case: str, root: Path) -> None:
             evaluate("document.getElementById('timer-use-rounded').click()")
             assert evaluate("document.getElementById('pref-timer-work').value") == "30"
             assert evaluate("document.getElementById('pref-timer-break').value") == "15"
+
+            # Look knobs reach real layout: the Terminal preset changes the font the
+            # page computes and the hour height the grid measures, and choosing the
+            # pack default puts both back. Device-only, so no request goes out.
+            root_token = "getComputedStyle(document.documentElement).getPropertyValue('{}').trim()"
+            body_font = "getComputedStyle(document.body).fontFamily"
+
+            def pick_look(name: str) -> None:
+                evaluate(
+                    f"document.getElementById('pref-theme').value='{name}';"
+                    "document.getElementById('pref-theme').dispatchEvent(new Event('change'))"
+                )
+
+            evaluate(
+                "window.__lookFetches=0; window.__lookFetch=fetch;"
+                "fetch=function(){window.__lookFetches+=1;"
+                " return window.__lookFetch.apply(this, arguments);}"
+            )
+            pick_look("terminal")
+            assert evaluate("document.documentElement.dataset.preset") == "terminal"
+            assert "mono" in evaluate(body_font).lower()
+            assert evaluate(root_token.format("--hour-h")) == "2.1rem"
+            assert evaluate(root_token.format("--radius")) == "0"
+            assert evaluate("JSON.parse(localStorage.getItem('flexweek-look')).preset") == "terminal"
+            assert evaluate("window.__lookFetches") == 0
+            pick_look("system")
+            evaluate("fetch=window.__lookFetch")
+            # A removed attribute reads as undefined, which the bridge does not map to None.
+            assert evaluate("'preset' in document.documentElement.dataset") is False
+            assert evaluate("'font' in document.documentElement.dataset") is False
+            assert evaluate(root_token.format("--hour-h")) == "2.75rem"
+            assert "figtree" in evaluate(body_font).lower()
 
             # Preview uses the unsaved sound controls and does not make an HTTP request or
             # spend a real reminder's once-per-start key.
@@ -880,8 +971,7 @@ def run(case: str, root: Path) -> None:
             evaluate("document.getElementById('prefs-open').click()")
             wait_for("document.getElementById('account-location-label').textContent === 'On this device'")
             wait_for(
-                "document.getElementById('recovery-status').textContent === "
-                "'8 unused recovery codes remain.'"
+                "document.getElementById('recovery-status').textContent === '8 unused recovery codes remain.'"
             )
             assert evaluate("document.getElementById('prefs-account').textContent") == (
                 "Signed in as access_student"
@@ -920,8 +1010,7 @@ def run(case: str, root: Path) -> None:
             assert snapshot["username"] == "access_student"
             assert len(cast(list[Any], snapshot["weeks"])) == 1
             evaluate(
-                "downloadText=window.__stage6Download; "
-                "document.getElementById('transfer-close').click()"
+                "downloadText=window.__stage6Download; document.getElementById('transfer-close').click()"
             )
 
             evaluate("document.getElementById('logout').click()")
@@ -960,25 +1049,60 @@ def run(case: str, root: Path) -> None:
             submit_identity("month_student", "register")
             evaluate("document.getElementById('setup-close').click()")
             assignment = {
-                "id": "month-project", "title": "History essay", "course": "History",
-                "category": "Homework", "priority": 3, "energy": "medium", "spotify_url": None,
-                "due": "2026-09-16T23:59", "estimate_min": 120, "focus_minutes": 0,
-                "focus_sessions": 0, "completed": False, "completed_at": None, "revision": 0,
-                "notes": "Private outline", "links": [{"label": "Sources", "url": "https://example.test"}],
+                "id": "month-project",
+                "title": "History essay",
+                "course": "History",
+                "category": "Homework",
+                "priority": 3,
+                "energy": "medium",
+                "spotify_url": None,
+                "due": "2026-09-16T23:59",
+                "estimate_min": 120,
+                "focus_minutes": 0,
+                "focus_sessions": 0,
+                "completed": False,
+                "completed_at": None,
+                "revision": 0,
+                "notes": "Private outline",
+                "links": [{"label": "Sources", "url": "https://example.test"}],
                 "checklist": [{"id": "draft", "text": "Draft", "done": True}],
             }
             overdue = {
-                **assignment, "id": "late-lab", "title": "Late lab", "course": "Science",
-                "due": "2026-08-15T17:00", "estimate_min": 45, "notes": "", "links": [],
+                **assignment,
+                "id": "late-lab",
+                "title": "Late lab",
+                "course": "Science",
+                "due": "2026-08-15T17:00",
+                "estimate_min": 45,
+                "notes": "",
+                "links": [],
                 "checklist": [],
             }
             sessions = [
-                {"id": "essay-tue", "title": "History essay", "kind": "flexible",
-                 "duration_min": 60, "days": [1], "priority": 3, "energy": "medium",
-                 "start": "16:00", "assignment_id": "month-project", "category": "Homework"},
-                {"id": "essay-wed", "title": "History essay", "kind": "flexible",
-                 "duration_min": 60, "days": [2], "priority": 3, "energy": "medium",
-                 "start": "16:00", "assignment_id": "month-project", "category": "Homework"},
+                {
+                    "id": "essay-tue",
+                    "title": "History essay",
+                    "kind": "flexible",
+                    "duration_min": 60,
+                    "days": [1],
+                    "priority": 3,
+                    "energy": "medium",
+                    "start": "16:00",
+                    "assignment_id": "month-project",
+                    "category": "Homework",
+                },
+                {
+                    "id": "essay-wed",
+                    "title": "History essay",
+                    "kind": "flexible",
+                    "duration_min": 60,
+                    "days": [2],
+                    "priority": 3,
+                    "energy": "medium",
+                    "start": "16:00",
+                    "assignment_id": "month-project",
+                    "category": "Homework",
+                },
             ]
             assignment_json = json.dumps(assignment)
             overdue_json = json.dumps(overdue)
@@ -997,8 +1121,7 @@ def run(case: str, root: Path) -> None:
             wait_for("window.__monthSeeded || window.__monthSeedError")
             assert evaluate("window.__monthSeedError || ''") == ""
             evaluate(
-                "selectedDay='2026-09-16'; plannerView='day'; "
-                "document.getElementById('view-month').click()"
+                "selectedDay='2026-09-16'; plannerView='day'; document.getElementById('view-month').click()"
             )
             wait_for("plannerView === 'month' && monthSnapshot && monthSnapshot.month === '2026-09'")
             assert evaluate("document.getElementById('week-label').textContent") == "September 2026"
@@ -1035,8 +1158,12 @@ def run(case: str, root: Path) -> None:
             )
         elif case == "phase7":
             submit_identity("focus_student", "register")
-            add_item("assignments", "document.getElementById('f-title').value='Maths';"
-                     "document.getElementById('f-duration').value='60';", days=[0])
+            add_item(
+                "assignments",
+                "document.getElementById('f-title').value='Maths';"
+                "document.getElementById('f-duration').value='60';",
+                days=[0],
+            )
             wait_for("document.getElementById('status').textContent.startsWith('Saved')")
             evaluate("document.getElementById('solve').click()")
             wait_for("document.querySelector('.flex-block')")
@@ -1114,7 +1241,7 @@ def run(case: str, root: Path) -> None:
             print("PASS: unsaved offline draft downloads through the desktop save dialog")
         elif case == "popup":
             with patch(
-                "desktop.main.QDesktopServices.openUrl",
+                "desktop.webengine.QDesktopServices.openUrl",
                 side_effect=record_external,
             ):
                 evaluate("""const link=document.createElement('a'); link.href='https://example.com/help';
@@ -1131,7 +1258,7 @@ def run(case: str, root: Path) -> None:
             print("PASS: external popup handed off once without hidden page")
         elif case == "navigation":
             with patch(
-                "desktop.main.QDesktopServices.openUrl",
+                "desktop.webengine.QDesktopServices.openUrl",
                 side_effect=record_external,
             ):
                 for target in ("file:///tmp/private.txt", "javascript:alert(1)", "data:text/html,hello"):
@@ -1178,9 +1305,7 @@ def run(case: str, root: Path) -> None:
             same_origin = FakePermission(QWebEnginePermission.PermissionType.Notifications, origin)
             page._handle_permission(cast(QWebEnginePermission, same_origin))
             assert same_origin.granted and not same_origin.denied
-            foreign = FakePermission(
-                QWebEnginePermission.PermissionType.Notifications, "https://example.com"
-            )
+            foreign = FakePermission(QWebEnginePermission.PermissionType.Notifications, "https://example.com")
             page._handle_permission(cast(QWebEnginePermission, foreign))
             assert foreign.denied and not foreign.granted
             unrelated = FakePermission(QWebEnginePermission.PermissionType.Geolocation, origin)
@@ -1231,7 +1356,7 @@ def run(case: str, root: Path) -> None:
             assert quit_event.isAccepted(), "Explicit Quit was intercepted as close-to-tray"
             print("PASS: notification permission, tray presentation, quick-open, close and quit")
         elif case == "no_icon":
-            with patch("desktop.main.app_icon_path", return_value=root / "missing.png"):
+            with patch("desktop.webengine.app_icon_path", return_value=root / "missing.png"):
                 iconless = MainWindow(origin, tray_enabled=True)
             assert iconless._tray_icon is None, "Installed a tray entry that cannot be seen"
             iconless.show()

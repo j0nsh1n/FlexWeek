@@ -261,3 +261,297 @@ Waits until after the contest:
 
 The backend tests land with the preference fields. The frontend tests land with
 the pack UI.
+
+## Amendment A (proposed 2026-09-17): presets and look knobs
+
+Status: proposed. Needs owner approval before any of the fields below reach
+spec.md or the preferences model. Until then everything in this amendment is
+device-only: stored in the browser under `flexweek-look`, applied from
+`frontend/look.js` in `<head>`, and never sent to `/api/preferences`. A test
+asserts that.
+
+The owner asked for more control over the interface and for presets that look
+drastically different from the frost family rather than palette swaps of it.
+Both come from one idea: a preset is a bundle of knob values plus a palette, and
+Customize edits the same knobs. Adding a preset is then a token map and seven
+values, and adding a knob is one attribute, one control, one field, one test.
+
+### A1. Knobs
+
+A knob is one attribute on `<html>` that the stylesheet reads. Each moves one
+kind of thing and nothing else; a static test enforces that, so a knob can
+never smuggle in a colour or an animation. Accent and motion are already knobs
+on the account (sections 3.2 and 3.4) and stay as they are.
+
+| Knob | Values | Default | What it moves |
+| --- | --- | --- | --- |
+| surface | frost, flat | frost | frosted panels, or solid ones with no blur |
+| corners | round, sharp, pill | round | the three radius tokens |
+| depth | soft, flat, hard | soft | diffuse shadows, none, or hard offset ones |
+| font | sans, mono, serif | sans | Figtree, the system monospace, the system serif |
+| blocks | filled, outlined, edge | filled | where a category's colour lands on a calendar block |
+| density | comfortable, compact | comfortable | hour height and spacing |
+| text | small, normal, large | normal | the base size; rem scales with it |
+
+The font and text knobs use system faces and sizes only. No new font files
+ship with them.
+
+### A2. Presets
+
+A preset names a palette, which is a complete token map audited by the same
+tests as a pack (same tokens, AA text, accent distance), and sets every knob
+the student has not moved by hand. Customize then edits from there.
+
+Built as device-only presets, audited like packs (same tokens, AA text, accent
+distance). Nothing here is saved on the account until Amendment A is approved.
+
+Look is one menu: the five account packs, then Terminal, Poster, Ink, High
+contrast, Paper and Pastel on this device. Pack default is choosing the pack itself.
+
+- **Terminal**. True black, phosphor text, amber accent; flat surface, sharp
+  corners, no shadows, monospace, outlined blocks, compact.
+- **Poster**. Yellow field, navy ink, dark red accent; flat surface, sharp
+  corners, hard offset shadows, filled blocks, compact, large type.
+- **Ink**. Near-monochrome; category colour only as a thin edge; hairlines
+  instead of fills; no shadows; serif type. Light packs get the paper map,
+  dark packs the charcoal map.
+- **High contrast**. Black, white and yellow; thick borders; outlined blocks;
+  large text. It turns on only from this menu, never from the operating
+  system's contrast setting, in case that signal is wrong.
+  `prefers-contrast: more` still only turns frosted panels solid.
+- **Paper**. A planner notebook: warm cream, brown ink, a sepia accent, serif
+  type; flat surface, round corners, soft shadows, filled blocks. It is warmer
+  than Ink's light sheet on purpose, and rounded where Ink is sharp.
+- **Pastel**. Pink and lavender surfaces, pill corners, soft shadows and raised
+  panels; sans type, filled blocks. The softness lives in the surfaces. The
+  accent is a deep orchid, because a pale lavender cannot pass as text at 4.5
+  to 1 and would sit too near the violet and indigo category colours.
+
+Paper and Pastel are the two soft looks: every other preset is flat and sharp.
+Both are light whatever pack sits underneath, as Poster is, so a chosen accent
+takes its light-axis colour even over a dark pack. Pill corners are capped at
+half a rem on calendar blocks, so a tall block keeps its title. Claude built
+both on 2026-09-18, in both clients, under the same audits as the others.
+
+Relationship to packs: a pack is a palette with the knobs at their defaults; a
+preset is a palette with its own knob values. Once Amendment A is approved they
+join `theme_pack` with an axis for the existing validator (Terminal is dark).
+
+### A3. Proposed preference fields
+
+```python
+look_surface: Literal["frost", "flat"] | None = Field(default=None, exclude_if=lambda value: value is None)
+look_corners: Literal["round", "sharp", "pill"] | None = Field(default=None, exclude_if=lambda value: value is None)
+look_depth: Literal["soft", "flat", "hard"] | None = Field(default=None, exclude_if=lambda value: value is None)
+look_font: Literal["sans", "mono", "serif"] | None = Field(default=None, exclude_if=lambda value: value is None)
+look_blocks: Literal["filled", "outlined", "edge"] | None = Field(default=None, exclude_if=lambda value: value is None)
+look_density: Literal["comfortable", "compact"] | None = Field(default=None, exclude_if=lambda value: value is None)
+look_text: Literal["small", "normal", "large"] | None = Field(default=None, exclude_if=lambda value: value is None)
+```
+
+`None` means "whatever the pack or preset says", so an old client that omits
+them keeps the look it has, and an explicit value is a deliberate override.
+Choosing a look keeps knobs the student set by hand; only those overrides are
+stored, and the rest stay `None`. `extra="forbid"` is unchanged.
+
+### A4. On a phone
+
+Look, Text size and Motion sit up front. The other knobs stay inside
+Customize, which is hidden on phones as today.
+
+### A5. Verification
+
+Static, in `frontend/tests/theme-tokens.test.mjs`: each knob rule moves only
+the properties it names; the flat surface clears `backdrop-filter` on exactly
+the frosted panels; the Terminal, Poster, Ink and High contrast maps pass the
+same-tokens, readability and accent-distance audits; blocks take their colour
+through `--block-color`.
+
+Behaviour, in `frontend/tests/stage5_comfort.test.mjs`: the look and knobs
+change nothing on the server and never enter the payload; a look fills in only
+the knobs the student left alone; a hand-set knob stays when the look changes;
+a stored look applies before the body paints; a bad stored value falls back to
+the pack.
+
+Backend, once approved: a round-trip with all seven omitted still validates and
+returns none of them; a value outside a Literal is a 422; the pack-axis
+validator still holds for every new preset.
+
+### Owner answers 2026-09-18
+
+1. Fold Preset into Look. One menu: packs, then the device presets.
+2. High contrast turns on only from that menu. It must not follow
+   `prefers-contrast: more`, in case the operating system reports it by
+   mistake. Paper and Pastel stay for Claude.
+3. A look acclimates to knobs set by hand. Choosing Terminal, Poster, Ink or
+   High contrast keeps those overrides and fills in the rest.
+
+## Amendment B — Native Qt client
+
+Drafted 2026-09-18 against `feat/native-python`. The default desktop launcher
+is Qt widgets (`python -m desktop.main`), not the HTML frontend named in the
+Goal. Packs, knobs and presets still share one contract: the same ids, the
+same knob values, and the same audited hex for the colours Qt can draw.
+`desktop/native/look.py` is the native table. `frontend/look.js` and the token
+maps in `frontend/styles.css` are the web table.
+`desktop/tests/test_look.py` fails if those hex values drift.
+
+What Qt cannot copy from CSS:
+
+- `backdrop-filter`. Frost vs flat is a panel colour. Frost uses the solid
+  panel token as a raised surface. Flat paints the panel and the field in the
+  page colour.
+- Drop shadows. Soft depth is a 1px hairline, flat is no border, hard is a
+  heavy bottom and right edge in the strong hairline colour.
+- Translucent hairlines. The web states them as `rgba`. Native mixes the tint
+  over the panel and stores the solid.
+
+Look stays on this device. Native writes `flexweek-look.json` under the Qt
+app data folder. The web client still uses `localStorage` key `flexweek-look`.
+Neither `PUT /api/preferences` payload includes look keys until Amendment A
+is approved.
+
+Ink is the only preset with two palettes. Light packs (Slate, Light frost, or
+System on a light device) get the light map. Dark packs get the dark map.
+Poster, Terminal and High contrast are one look on every pack.
+
+Large text enlarges the More menu: web `#week-menu` items, and the native More
+button's menu, so overflow actions stay tappable.
+
+spec.md drift: the native launcher, the four device-only presets, and the
+proposed `look_*` fields are not in spec.md. Do not edit spec.md until the
+owner approves them.
+
+## Amendment C (proposed 2026-09-18): layouts
+
+Status: the native client ships this device-only. The account fields in C5 are
+proposed and need owner approval before they reach `PUT /api/preferences` or
+`spec.md`. The web client has no layouts yet.
+
+A look is paint. A layout is a whole way of showing the week. The owner picked
+eight from a fifteen-concept mock-up (`docs/mockups/look-concepts/`) and drew the
+line this amendment is built on: not every design is good enough to be the main
+view, and some are screens for the day after planning is done.
+
+### C1. Two roles
+
+A **main view** is where planning happens. It stands in for the week grid when
+Week is chosen. Day and Month stay as they are.
+
+| id | Name |
+| --- | --- |
+| `classic` | Today's app, the week grid. The shipped default. |
+| `timeline` | Timeline |
+| `mission` | Mission control |
+| `bento` | Bento |
+| `retro` | Retro desktop |
+| `clay` | Clay deck |
+
+A **day screen** is what the student watches once the plan is made. My day, or
+the T key, opens it. Back to planning, B or Escape leaves it, and so do Day, Week
+and Month.
+
+| id | Name |
+| --- | --- |
+| `one` | One thing. The shipped default. |
+| `dial` | Day dial |
+
+A day screen cannot be stored as the main view, nor the other way round.
+
+### C2. What each role owes the student
+
+A main view offers these by itself, in every combination of its options: add
+homework, run the plan, reach the day screen, show every piece of homework that
+has no time yet, open any block on screen, and reach every day of the week.
+
+A day screen says what is on now, or what is next, and offers Homework finished,
+Start focus, Running late and Back to planning. It cannot plan.
+
+Homework finished finishes the whole homework and saves, as the focus timer
+does. The product has no way to finish one session of several, and a day screen
+does not add one. Running late is only offered while homework is left today.
+
+A layout is presentation only. It raises a request and the window answers with
+behaviour it already has. No layout adds, plans or finishes anything itself.
+
+### C3. Three levels of customising
+
+1. **Pick** a main view and a day screen.
+2. **Style** the picked design. Every design but Today's app has its own
+   colourways and also offers *Match my look*, which paints it in the pack,
+   preset and accent the rest of the app is wearing. Today's app has no layout
+   options: it is the week grid, and its colours are the Look menu.
+3. **Fine-tune** what the design shows. These options wait behind one checkbox,
+   which opens by itself when a fine-tune option is already in use.
+
+| Design | Style | Fine-tune |
+| --- | --- | --- |
+| Timeline | Colours (Paper, Night), Spacing | Week strip, Finished and past items |
+| Mission control | Colours (Cyan, Amber, Green) | Hours shown, Deadline radar and load |
+| Bento | Colours (Indigo, Sunset, Mono), Tile corners | Tiles |
+| Retro desktop | Colours (Teal desktop, Plum desktop, Slate desktop) | Windows open at start |
+| Clay deck | Colours (Pastel, Mint, Sunset) | Cards in the deck, Tilted cards |
+| One thing | Colours (Black and orange, Paper and ink) | Lead with, Buttons, Day bar |
+| Day dial | Colours (Midnight, Daylight) | Hours shown, Hour by hour list, Small dials for the week |
+
+Defaults: the first colourway named in each row. Every show or hide option is
+shown. Spacing is comfortable, Week strip is with load bars, Hours shown is
+06:00 to 22:00, Tile corners are soft, Tiles is all tiles, Windows open at start
+is all three, Cards in the deck is five, Tilted cards is tilted, and Lead with is
+what is on now.
+
+An option never costs a design something C2 says it owes. No option hides
+homework that has no time yet: Bento's essentials keep that tile, and Retro
+desktop lists it in the week window as well as the notepad. Timeline's week strip
+is "with load bars" (`bars`) or "day names only" (`names`). It has no hidden
+value, because the strip is how a day is picked.
+
+Only what differs from a design's own settings is stored, so an improved default
+still reaches everyone.
+
+### C4. Rules every design keeps
+
+- Risk is the solver's verdict (`slack_status`) in the solver's words: Very
+  little room, Limited room, Room. Work with no time yet carries the solver's
+  reason. No design invents a threshold.
+- Every colourway passes WCAG AA for the text it carries, and so does Match my
+  look in all 700 combinations of pack, light or dark, preset, accent and
+  surface. Colours a colourway leaves out are derived from its own colours.
+- A design with a painted surface (Day dial's face, Mission control's lanes,
+  Clay deck's neighbours) has a keyboard twin: the same blocks as buttons.
+- A design of its own gets the window. The planning controls step aside into a
+  Tools menu in the top bar, which carries the real buttons' enabled states.
+- With any layout the window fits 1366 by 768. What does not fit scrolls.
+- Text size scales every design. No design animates `backdrop-filter`.
+- No streaks, points, scores or levels.
+
+### C5. Storage, and the proposed account fields
+
+Device-only today, in the native client's `flexweek-look.json` beside the look:
+
+```json
+{"preset": "paper", "knobs": {},
+ "layout": {"main": "bento", "day": "dial",
+            "options": {"bento": {"colour": "sunset"}}}}
+```
+
+A file from before layouts loads with the defaults. Unknown designs, options and
+values are dropped on load.
+
+Proposed for the account, to follow Amendment A's fields:
+
+| Field | Values | Default |
+| --- | --- | --- |
+| `layout_main` | the ids in C1's first table | `classic` |
+| `layout_day` | the ids in C1's second table | `one` |
+| `layout_options` | object keyed by design id, then option key | `{}` |
+
+### C6. Verification
+
+`desktop/tests/test_weekmodel.py`, `test_layouts_registry.py`,
+`test_layouts_main_views.py`, `test_layouts_window.py` and one
+`test_layout_<design>.py` per design. `test_layouts_main_views.py` holds every
+main view to C2 in every combination of its options.
+
+spec.md drift: layouts, My day and the Tools menu are not in spec.md. Do not edit
+spec.md until the owner approves them.

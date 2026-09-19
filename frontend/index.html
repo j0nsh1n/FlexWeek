@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="/static/styles.css">
   <script src="/static/theme.js"></script>
   <script src="/static/motion.js"></script>
+  <script src="/static/look.js"></script>
 </head>
 <body>
   <!-- Duotone icons: the outline follows the text color, the fill reads --icon-secondary. -->
@@ -37,7 +38,7 @@
     </div>
     <div class="controls" id="account-controls" hidden>
       <span id="account-name"></span>
-      <label>Look <select id="theme"><option value="system">System</option><option value="light-frost">Light frost</option><option value="dark-frost">Dark frost</option><option value="nocturne">Nocturne</option><option value="slate">Slate</option></select></label>
+      <label>Look <select id="theme"><option value="system">System</option><option value="light-frost">Light frost</option><option value="dark-frost">Dark frost</option><option value="nocturne">Nocturne</option><option value="slate">Slate</option><option value="terminal">Terminal</option><option value="poster">Poster</option><option value="ink">Ink</option><option value="high-contrast">High contrast</option><option value="paper">Paper</option><option value="pastel">Pastel</option></select></label>
       <button type="button" id="prefs-open" class="secondary"><svg class="icon" aria-hidden="true"><use href="#i-gear"/></svg>Settings</button>
       <button type="button" id="logout" class="secondary"><svg class="icon" aria-hidden="true"><use href="#i-logout"/></svg>Log out</button>
       <button type="button" id="solve"><svg class="icon" aria-hidden="true"><use href="#i-solve"/></svg><span id="solve-label">Plan my homework</span></button>
@@ -478,7 +479,7 @@
         <fieldset>
           <legend>Look and layout</legend>
         <label>Look
-          <select id="pref-theme"><option value="system">System</option><option value="light-frost">Light frost</option><option value="dark-frost">Dark frost</option><option value="nocturne">Nocturne</option><option value="slate">Slate</option></select>
+          <select id="pref-theme"><option value="system">System</option><option value="light-frost">Light frost</option><option value="dark-frost">Dark frost</option><option value="nocturne">Nocturne</option><option value="slate">Slate</option><option value="terminal">Terminal</option><option value="poster">Poster</option><option value="ink">Ink</option><option value="high-contrast">High contrast</option><option value="paper">Paper</option><option value="pastel">Pastel</option></select>
         </label>
           <label>Motion
             <select id="pref-motion">
@@ -486,6 +487,9 @@
               <option value="normal">Normal</option>
               <option value="extra">Extra</option>
             </select>
+          </label>
+          <label>Text size
+            <select id="pref-text"><option value="small">Small</option><option value="normal">Normal</option><option value="large">Large</option></select>
           </label>
           <details id="appearance-customize">
             <summary>Customize</summary>
@@ -499,11 +503,30 @@
               </select>
             </label>
             <label class="completed-toggle"><input type="checkbox" id="pref-accent-chips" /> Use the accent for category chips</label>
+            <label>Surface
+              <select id="pref-surface"><option value="frost">Frosted</option><option value="flat">Flat</option></select>
+            </label>
+            <label>Corners
+              <select id="pref-corners"><option value="round">Round</option><option value="sharp">Sharp</option><option value="pill">Pill</option></select>
+            </label>
+            <label>Depth
+              <select id="pref-depth"><option value="soft">Soft shadows</option><option value="flat">No shadows</option><option value="hard">Hard shadows</option></select>
+            </label>
+            <label>Font
+              <select id="pref-font"><option value="sans">Figtree</option><option value="mono">Monospace</option><option value="serif">Serif</option></select>
+            </label>
+            <label>Calendar blocks
+              <select id="pref-blocks"><option value="filled">Filled</option><option value="outlined">Outlined</option><option value="edge">Edge only</option></select>
+            </label>
+            <label>Density
+              <select id="pref-density"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select>
+            </label>
+            <p class="note">Text size and the choices above stay on this computer for now. Knobs you set by hand stay when you change Look. High contrast is only this menu, never the system's contrast setting.</p>
           </details>
           <label>Open my calendar in
             <select id="pref-preferred-view"><option value="">Automatic for screen size</option><option value="week">Week view</option><option value="day">Day view</option></select>
           </label>
-          <p class="note">Look, motion and accent are kept on your account, so they follow you to another computer. A copy of motion also stays on this device for the sign-in screen. If your system asks for reduced motion, nothing animates.</p>
+          <p class="note">System, Light frost, Dark frost, Nocturne and Slate follow you to another computer. Terminal, Poster, Ink, High contrast, Paper and Pastel stay on this device for now. A copy of motion also stays here for the sign-in screen. If your system asks for reduced motion, nothing animates.</p>
           <p class="note">The sidebar width and whether it is open are remembered when you change them on the calendar.</p>
         </fieldset>
       </details>
