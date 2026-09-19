@@ -6,8 +6,8 @@ phase may span several implementation slices. The original Sep 6 contest brief
 (working title Reslot) is archived in [docs/cac-build-plan.md](docs/cac-build-plan.md).
 
 The active next-work plan is [native Python desktop](#native-python-desktop-2026-09-17)
-on `feat/native-python`. 0.11.0 is tagged; leftover P2 copy and desktop motion
-checks remain on the WebEngine app. The [student experience revision](#student-experience-revision-2026-09-12)
+on `main` as v0.12.0. 0.11.0 leftovers (P2 copy and desktop motion checks) remain
+on the retired WebEngine path. The [student experience revision](#student-experience-revision-2026-09-12)
 stays the stage map for everything still open. Earlier phase descriptions and the
 first implementation slice retain their dated planning history.
 
@@ -449,8 +449,9 @@ is the same entry.
   native widgets. Chromium remains only in leftover probe tests.
 
 Complete when unit 6 has switched the normal launcher and packaging smoke uses
-native widgets. Executables stay unbuilt until Jonathan asks. Packaging scripts
-still mention WebEngine; they were left alone.
+native widgets. Executables stay unbuilt until Jonathan asks. Packaging for
+0.12.0 compiles `desktop/main.py` and skips `desktop.webengine`, so the Windows
+and Linux downloads are the native client.
 
 ## Release polish (2026-09-16): 0.10.1, then 0.11
 

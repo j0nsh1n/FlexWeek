@@ -25,11 +25,13 @@ system_library() {
     ldconfig -p | awk -v soname="$1" '$1 == soname && /x86-64/ && !found { found = $NF } END { print found }'
 }
 
-# Qt tool translations (Designer, Linguist...) are never loaded, and Chromium
-# only needs its en-US locale pack; removing the whole locale folder instead
-# makes WebEngine warn at every start. DevTools resources serve DevTools only.
+# Qt tool translations (Designer, Linguist...) are never loaded. Native builds
+# have no Chromium locale packs; leftover WebEngine files are trimmed only if
+# a follow-import leaked them.
 find "$BUNDLE" -maxdepth 1 -name '*.qm' -delete
-find "$BUNDLE/qtwebengine_locales" -name '*.pak' ! -name 'en-US.pak' -delete
+if [[ -d "$BUNDLE/qtwebengine_locales" ]]; then
+    find "$BUNDLE/qtwebengine_locales" -name '*.pak' ! -name 'en-US.pak' -delete
+fi
 rm -f "$BUNDLE/qtwebengine_devtools_resources.pak"
 
 # Upstream COPYING texts live in desktop/linux/licenses, because distro

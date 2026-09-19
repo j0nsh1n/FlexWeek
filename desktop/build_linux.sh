@@ -3,9 +3,9 @@
 #
 # Produces dist/FlexWeek/FlexWeek — runs without a Python install and without a
 # separate server: the FastAPI backend is bundled and started in-process.
-# frontend/ ships as data because backend/app.py serves it from <bundle>/frontend.
-# Qt WebEngine cannot be statically linked, so the Chromium libraries ship
-# alongside the binary; --onefile is deliberately not used (see DESKTOP.md).
+# frontend/ ships as data because backend/app.py can still serve it from
+# <bundle>/frontend. The window is native Qt widgets; Chromium is not compiled
+# in. --onefile is not used because Qt plugins ship as a folder (see DESKTOP.md).
 #
 # Nuitka is what pyside6-deploy shells out to. It is driven directly here
 # because pyside6-deploy rewrites its own .spec with absolute paths on every
@@ -36,9 +36,10 @@ trap 'echo "Build staging retained at $STAGING" >&2' ERR
     --standalone \
     --follow-imports \
     --enable-plugin=pyside6 \
-    --include-package=desktop \
+    --include-package=desktop.native \
     --include-package=backend \
-    --nofollow-import-to=desktop.tests,backend.tests \
+    --nofollow-import-to=desktop.tests,desktop.webengine,backend.tests \
+    --nofollow-import-to=PySide6.QtWebEngineCore,PySide6.QtWebEngineWidgets,PySide6.QtWebEngineQuick \
     --nofollow-import-to=mypy,pydantic.mypy,uvloop,httptools,watchfiles,websockets,yaml \
     --nofollow-import-to=curses,readline,termios \
     --include-data-dir="$ROOT/frontend"=frontend \

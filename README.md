@@ -95,20 +95,19 @@ or frontend build step.
 ## Progress
 
 Phases 3 and 4 are complete: accounts, saved weeks and Daily Scheduler themes
-are verified in the real desktop web engine. See the [roadmap](roadmap.md) for
+are verified in the native desktop app. See the [roadmap](roadmap.md) for
 the separate desktop app, calendar interaction port, later design work and
 contest delivery. Windows/Linux are desktop targets. Windows packages are
 built on GitHub Actions when a release is published; a Windows machine still
 needs a person to run the installer and click through SmartScreen.
 
-A Linux desktop build exists: a PySide6 `QWebEngineView` window with the FastAPI
-backend bundled inside it. It needs no separate server and no Python install.
-Build it with `pip install -r requirements-desktop.txt` then
+A Linux desktop build exists: a native Qt window with the FastAPI backend
+bundled inside it. It needs no separate server, no Python install and no
+Chromium. Build it with `pip install -r requirements-desktop.txt` then
 `./desktop/build_linux.sh`. Package the download with
 `./desktop/package_linux.sh` to get `FlexWeek-Linux-x86_64.tar.gz` (and a
 `.sha256`) containing README, icon, `.desktop` file and the app. Releases
-attach that archive rather than committing `dist/`, because the bundled Qt
-WebEngine library exceeds GitHub's per-file limit; see [DESKTOP.md](DESKTOP.md).
+attach that archive rather than committing `dist/`; see [DESKTOP.md](DESKTOP.md).
 The paste-ready GitHub release text is in [docs/github-release.md](docs/github-release.md).
 Set `FLEXWEEK_DESKTOP_ORIGIN` to point the window at a hosted deployment instead;
 local and hosted accounts are separate, without automatic synchronization.

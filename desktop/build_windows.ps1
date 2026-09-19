@@ -3,8 +3,8 @@
 #
 # Mirror of desktop/build_linux.sh: the FastAPI backend is compiled into the
 # desktop process and frontend/ ships as bundle data, so dist\FlexWeek-Windows
-# runs with no Python install and no separate server. Onefile is deliberately
-# not used because Qt WebEngine cannot be statically linked (see DESKTOP.md).
+# runs with no Python install and no separate server. The window is native Qt
+# widgets. Onefile is not used because Qt plugins ship as a folder (see DESKTOP.md).
 #
 # This script never deletes or overwrites existing artifacts. Nuitka compiles
 # into a unique staging folder under build\, and the finished onedir is only
@@ -80,9 +80,10 @@ $NuitkaArgs = @(
     '--mode=standalone',
     '--follow-imports',
     '--enable-plugins=pyside6',
-    '--include-package=desktop',
+    '--include-package=desktop.native',
     '--include-package=backend',
-    '--nofollow-import-to=desktop.tests,backend.tests',
+    '--nofollow-import-to=desktop.tests,desktop.webengine,backend.tests',
+    '--nofollow-import-to=PySide6.QtWebEngineCore,PySide6.QtWebEngineWidgets,PySide6.QtWebEngineQuick',
     # Type-checking tools and uvicorn extras desktop/server.py never enables;
     # the same list as build_linux.sh.
     '--nofollow-import-to=mypy,pydantic.mypy,uvloop,httptools,watchfiles,websockets,yaml',
@@ -103,7 +104,7 @@ if ($AssumeYesForDownloads) {
     $NuitkaArgs += '--assume-yes-for-downloads'
 }
 
-Write-Host "Compiling into $Stage (Qt WebEngine makes this a long build)..."
+Write-Host "Compiling into $Stage..."
 try {
     $env:PYTHONPATH = $Root
     & $VenvPython -m nuitka (Join-Path $PSScriptRoot 'main.py') @NuitkaArgs
@@ -133,8 +134,8 @@ if (-not (Test-Path -LiteralPath $BuiltExe -PathType Leaf)) {
 }
 
 # Same trimming as desktop/finish_linux_bundle.sh: Qt tool translations are never
-# loaded, Chromium needs only its en-US locale pack, DevTools resources serve
-# DevTools only, and .debug.pak files belong to debug builds of Qt.
+# loaded. Native builds have no Chromium locale packs; leftover WebEngine files
+# are trimmed only if a follow-import leaked them.
 Get-ChildItem -LiteralPath $Built -Recurse -File -Filter '*.qm' | Remove-Item
 Get-ChildItem -LiteralPath $Built -Recurse -File -Filter '*.pak' |
     Where-Object { $_.Directory.Name -eq 'qtwebengine_locales' -and $_.Name -ne 'en-US.pak' } | Remove-Item
