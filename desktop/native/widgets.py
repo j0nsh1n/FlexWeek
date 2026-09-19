@@ -90,6 +90,8 @@ from desktop.native.weekmodel import due_label, length_label
 
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 DETAIL_BOX_HEIGHT = 84
+# Two hours: the name of a block is never more than that far above where you are looking.
+LABEL_EVERY = 8
 DAY_FULL = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 MONTH_FULL = (
     "January",
@@ -284,12 +286,16 @@ class WeekTable(QTableWidget):
                     # A cell is one 15-minute row, too short for two lines. Qt elided the title to
                     # "School…" and dropped the second line, which is where Missed and Done are said.
                     # So the title takes the first row, the detail the second, and the rest stay blank.
+                    # Repeated down a long block, because the grid now opens on the current time
+                    # rather than at dawn. With the name only on the first row, a student scrolled
+                    # into the middle of School saw an anonymous blue wash.
+                    step = (row - first) % LABEL_EVERY
                     if first == last:
                         visible = f"{block['title']} · {detail}"
-                    elif row == first:
+                    elif step == 0:
                         visible = block["title"]
                     else:
-                        visible = detail if row == first + 1 else ""
+                        visible = detail if step == 1 else ""
                     cells.setdefault((row, day), []).append((block, text, visible))
                     spans.setdefault((row, day), (first, last))
         for (row, day), entries in cells.items():

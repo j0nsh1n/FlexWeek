@@ -22,7 +22,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtWidgets import QApplication
 
-    from backend.slots import DAY_START_MIN, SLOT_MIN
+    from backend.slots import DAY_START_MIN, SLOT_MIN, duration_to_slots, hhmm_to_slot
     from desktop.native.widgets import WeekTable
 
 WEEK = "2026-09-14"
@@ -124,3 +124,34 @@ def test_blocks_sharing_a_cell_are_named_from_the_blocks_not_from_the_cell(qapp:
     assert shared.text() == "08:30 · Fixed"
     assert table.block_titles(shared.data(0x0100)) == ["School", "Chess club"]
     assert table.item(rows[2], 0).text() == "Chess club"
+
+
+def test_a_long_block_says_its_name_more_than_once(qapp) -> None:
+    """The grid opens on the current time now, so a student lands in the middle of School. With the
+    name only on the first row that was an anonymous blue wash."""
+    table = WeekTable()
+    table.set_week(
+        "2026-09-14",
+        [
+            {
+                "id": "school",
+                "title": "School",
+                "kind": "locked",
+                "category": "class",
+                "start": "08:00",
+                "duration_min": 390,
+                "days": [0],
+            }
+        ],
+        None,
+    )
+    first = hhmm_to_slot("08:00")
+    last = first + duration_to_slots(390) - 1
+    named = [
+        row
+        for row in range(first, last + 1)
+        if table.item(row, 0) is not None and "School" in table.item(row, 0).text()
+    ]
+    assert len(named) >= 3, f"School names itself on rows {named} of {first}..{last}"
+    gaps = [b - a for a, b in zip(named, named[1:], strict=False)]
+    assert max(gaps) <= 8, f"a gap of {max(gaps)} rows between names"
