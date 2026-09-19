@@ -557,3 +557,39 @@ def test_no_chrome_button_spreads_across_the_window(qapp: QApplication, window: 
     qapp.processEvents()
     action = window.day_agenda.next_action
     assert action.width() <= action.sizeHint().width() + 8, f"day action is {action.width()}px"
+
+
+def test_every_dialog_fits_a_laptop_screen(qapp: QApplication, window: NativeWindow) -> None:
+    """Settings stood 1056px tall and Account claimed 1338px wide. Both are opened on a 1366x768
+    laptop, so both have to fit one."""
+    from PySide6.QtWidgets import QDialog
+
+    sizes: dict[str, tuple[int, int]] = {}
+    original = QDialog.exec
+
+    def measure(dialog: QDialog) -> int:
+        dialog.show()
+        qapp.processEvents()
+        dialog.adjustSize()
+        qapp.processEvents()
+        sizes[measure.name] = (dialog.width(), dialog.height())
+        dialog.hide()
+        return QDialog.DialogCode.Rejected
+
+    QDialog.exec = measure
+    try:
+        for name, call in (
+            ("Settings", window._open_settings),
+            ("Add homework", window._add_homework),
+            ("Add fixed time", window._add_fixed),
+            ("Account", window._open_account),
+        ):
+            measure.name = name
+            call()
+    finally:
+        QDialog.exec = original
+    assert sorted(sizes) == ["Account", "Add fixed time", "Add homework", "Settings"], sizes
+    # A settings or account dialog is a panel, not a window. 1338x260 technically fitted a 1366
+    # screen, which is why a screen-sized bound caught nothing; 700 square is the real rule.
+    wrong = {name: size for name, size in sizes.items() if size[0] > 700 or size[1] > 768 or size[0] < 320}
+    assert wrong == {}

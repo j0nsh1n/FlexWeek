@@ -89,6 +89,7 @@ from desktop.native.reuse import (
 from desktop.native.weekmodel import due_label, length_label
 
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+DETAIL_BOX_HEIGHT = 84
 DAY_FULL = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 MONTH_FULL = (
     "January",
@@ -1018,6 +1019,8 @@ class HomeworkDialog(QDialog):
         form.addRow("", self.completed)
         self.notes = QPlainTextEdit(self._original.get("notes") or "")
         self.notes.setObjectName("homeworkNotes")
+        # Three boxes at their 192px default made this dialog taller than a laptop screen.
+        self.notes.setMaximumHeight(DETAIL_BOX_HEIGHT)
         self.notes.setPlaceholderText("Notes")
         layout.addWidget(self.notes)
         link_row = QHBoxLayout()
@@ -1034,6 +1037,7 @@ class HomeworkDialog(QDialog):
         layout.addLayout(link_row)
         self.links = QListWidget()
         self.links.setObjectName("homeworkLinks")
+        self.links.setMaximumHeight(DETAIL_BOX_HEIGHT)
         layout.addWidget(self.links)
         for link in self._original.get("links") or []:
             self._append_link(link["label"], link["url"])

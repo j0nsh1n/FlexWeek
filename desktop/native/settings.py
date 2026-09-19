@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -20,6 +21,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QTimeEdit,
     QVBoxLayout,
@@ -42,6 +44,18 @@ from desktop.native.look import (
     sanitize_look,
 )
 from desktop.native.reuse import format_duration
+
+PREFS_MAX_BODY = 560
+PREFS_MIN_WIDTH = 560
+ACCOUNT_MAX_WIDTH = 520
+ACCOUNT_MIN_WIDTH = 560
+
+
+def _heading(words: str) -> QLabel:
+    """A section label inside a form, so eighteen settings stop reading as one list."""
+    made = QLabel(words.upper())
+    made.setObjectName("prefsHeading")
+    return made
 
 
 class FocusPanel(QWidget):
@@ -177,6 +191,15 @@ class PrefsDialog(QDialog):
         self._look = sanitize_look(look)
         self._alarms = [deepcopy(item) for item in preferences.get("alarms") or []]
         layout = QVBoxLayout(self)
+        # Eighteen rows in one undivided column stood 1056 pixels tall, taller than the laptop the
+        # app is built for. Everything but the buttons scrolls, and the rows sit under headings.
+        # The width has to be set too: a scroll area does not claim its content's width, so capping
+        # only the height left the dialog 400 pixels wide with the fields cut off and scrolling
+        # sideways.
+        self.setMinimumWidth(PREFS_MIN_WIDTH)
+        body = QWidget()
+        inner = QVBoxLayout(body)
+        inner.setContentsMargins(0, 0, 0, 0)
         form = QFormLayout()
         self._pack = known_pack(preferences.get("theme_pack"))
         self.look = QComboBox()
@@ -185,6 +208,7 @@ class PrefsDialog(QDialog):
             self.look.addItem(label, look_menu_token(kind, name))
         index = self.look.findData(look_menu_value(self._pack, self._look))
         self.look.setCurrentIndex(max(0, index))
+        form.addRow(_heading("Appearance"))
         form.addRow("Look", self.look)
         self.accent = QComboBox()
         for name in ACCENTS:
@@ -211,6 +235,7 @@ class PrefsDialog(QDialog):
         self.work.setRange(1, 180)
         self.work.setSingleStep(1)
         self.work.setValue(int(preferences.get("timer_work_min") or 30))
+        form.addRow(_heading("Focus timer"))
         form.addRow("Focus minutes", self.work)
         self.break_min = QSpinBox()
         self.break_min.setRange(1, 60)
@@ -242,6 +267,7 @@ class PrefsDialog(QDialog):
         self.reminders = QCheckBox("Reminders")
         self.reminders.setObjectName("prefReminders")
         self.reminders.setChecked(bool(preferences.get("reminders_enabled")))
+        form.addRow(_heading("Reminders"))
         form.addRow(self.reminders)
         self.lead = QSpinBox()
         self.lead.setRange(0, 120)
@@ -254,16 +280,17 @@ class PrefsDialog(QDialog):
         self.spotify = QLineEdit(preferences.get("default_spotify_url") or "")
         self.spotify.setObjectName("prefSpotify")
         form.addRow("Default Spotify link", self.spotify)
-        layout.addLayout(form)
+        inner.addLayout(form)
         keys = ("desktop_background", "spotify", "duplicate")
         limits = QLabel(" ".join(reminder_limits.get(key, "") for key in keys))
         limits.setWordWrap(True)
         limits.setObjectName("reminderLimits")
-        layout.addWidget(limits)
-        layout.addWidget(QLabel("Alarms"))
+        inner.addWidget(limits)
+        inner.addWidget(_heading("Alarms"))
         self.alarm_list = QListWidget()
         self.alarm_list.setObjectName("alarmList")
-        layout.addWidget(self.alarm_list)
+        self.alarm_list.setMaximumHeight(110)
+        inner.addWidget(self.alarm_list)
         alarm_row = QHBoxLayout()
         self.alarm_name = QLineEdit()
         self.alarm_name.setPlaceholderText("Alarm name")
@@ -276,7 +303,14 @@ class PrefsDialog(QDialog):
         remove_alarm.clicked.connect(self._remove_alarm)
         for widget in (self.alarm_name, self.alarm_time, add_alarm, remove_alarm):
             alarm_row.addWidget(widget)
-        layout.addLayout(alarm_row)
+        inner.addLayout(alarm_row)
+        area = QScrollArea()
+        area.setObjectName("prefsScroll")
+        area.setWidgetResizable(True)
+        area.setFrameShape(QFrame.Shape.NoFrame)
+        area.setWidget(body)
+        area.setMaximumHeight(PREFS_MAX_BODY)
+        layout.addWidget(area)
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
@@ -479,6 +513,10 @@ class AccountDialog(QDialog):
             + ((storage or {}).get("label") or "")
         )
         info.setWordWrap(True)
+        # Word wrap alone does not bound a label: it still claims the width of its longest
+        # unwrapped line, which made this dialog 1338 pixels wide. The button row was not the
+        # cause; with the label bounded a plain row measures 560 by 260.
+        info.setMaximumWidth(ACCOUNT_MAX_WIDTH)
         info.setObjectName("accountLocation")
         layout.addWidget(info)
         remaining_text = "Recovery-code status unavailable."
@@ -501,6 +539,7 @@ class AccountDialog(QDialog):
         self.new_password.setObjectName("newPassword")
         form.addRow("New password", self.new_password)
         layout.addLayout(form)
+        self.setMinimumWidth(ACCOUNT_MIN_WIDTH)
         row = QHBoxLayout()
         change = QPushButton("Replace password")
         change.setObjectName("changePassword")
