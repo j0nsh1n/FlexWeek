@@ -110,6 +110,10 @@ PACKS = ("system", "light-frost", "dark-frost", "nocturne", "slate")
 ACCENTS = ("default", "sky", "gold", "sea", "sand")
 MONO_FAMILY = "DejaVu Sans Mono, Noto Sans Mono, monospace"
 TEXT_PT = {"small": 10, "normal": 12, "large": 15}
+# The shortest a field may be drawn. A layout under pressure squeezes its rows, and a combo box or a
+# line edit has no minimum of its own worth the name, so the text inside gets sliced in half rather
+# than the dialog refusing to shrink. Measured against the app's own font at each size.
+FIELD_MIN_PX = {"small": 22, "normal": 26, "large": 34}
 DENSITY_PAD = {"comfortable": 8, "compact": 4}
 CORNER_RADIUS = {"round": 8, "sharp": 0, "pill": 16}
 FONT_FAMILIES = {
@@ -610,13 +614,17 @@ def pack_stylesheet(
     edges = _depth_rules(knobs["depth"], palette)
     item_h = 36 if knobs["text"] == "large" else 22
     button_min = f" min-height: {item_h}px;" if knobs["text"] == "large" else ""
+    field_min = FIELD_MIN_PX[knobs["text"]]
     return (
         f"QMainWindow, QDialog, QWidget {{ background: {palette['window']}; color: {palette['text']}; "
         f"font-family: {family}; font-size: {size}pt; }}"
         f"QFrame, QGroupBox, QTableWidget, QListWidget {{ background: {palette['panel']}; "
         f"color: {palette['text']}; padding: {pad}px; border-radius: {radius}px; {edges} }}"
-        f"QPlainTextEdit, QLineEdit, QComboBox, QSpinBox {{ background: {palette['field']}; "
-        f"color: {palette['text']}; padding: {pad}px; border-radius: {radius}px; {edges} }}"
+        f"QLineEdit, QComboBox, QSpinBox, QTimeEdit, QDateTimeEdit {{ background: {palette['field']}; "
+        f"color: {palette['text']}; padding: {pad}px; border-radius: {radius}px; "
+        f"min-height: {field_min}px; {edges} }}"
+        f"QPlainTextEdit {{ background: {palette['field']}; color: {palette['text']}; "
+        f"padding: {pad}px; border-radius: {radius}px; {edges} }}"
         f"QTableWidget {{ gridline-color: {palette['hairline']}; "
         f"selection-background-color: {palette['accent']}; selection-color: {palette['accent_ink']}; }}"
         # Headers and the view stack are QFrames too. Left to the panel rule, each header is padded and
@@ -637,7 +645,14 @@ def pack_stylesheet(
         f"QLabel#focusTime {{ font-family: {MONO_FAMILY}; font-weight: 700; }}"
         f"QWidget#authCard {{ background: {palette['panel']}; border-radius: {radius}px; {edges} }}"
         f"QLabel#authBrand {{ font-size: {size + 8}pt; font-weight: 700; color: {palette['accent']}; }}"
-        f"QLabel#authHeading {{ font-weight: 600; }}"
+        f"QLabel#authHeading {{ font-weight: 600; font-size: {size + 3}pt; }}"
+        f"QLabel#authNote {{ color: {palette['muted']}; }}"
+        # The way in is a button; the way to a new account is small print, so it is drawn as a link.
+        f"QPushButton#authSwitch, QPushButton#forgotPassword {{ background: transparent; "
+        f"color: {palette['accent']}; border: none; padding: {pad}px 0; "
+        f"font-size: {size - 1}pt; text-align: left; min-height: 0; }}"
+        f"QPushButton#authSwitch:hover, QPushButton#forgotPassword:hover {{ "
+        f"color: {palette['text']}; text-decoration: underline; }}"
         # A ringing alarm is the one thing in the app that has to be read from across a room.
         f"QLabel#alarmTitle {{ font-size: {size + 8}pt; font-weight: 700; }}"
         f"QLabel#alarmDetail {{ font-size: {size + 2}pt; color: {palette['muted']}; }}"

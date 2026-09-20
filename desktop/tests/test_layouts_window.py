@@ -963,3 +963,72 @@ def test_dismissing_one_alert_reveals_the_next_rather_than_losing_it(
     window.alert_strip.dismiss.click()
     qapp.processEvents()
     assert window.alert_strip.isVisible() is False
+
+
+def test_a_field_keeps_its_floor_at_every_text_size(qapp: QApplication) -> None:
+    """The Layout dialog came up a few pixels under its natural height on a real KDE desktop and the
+    rows were squeezed until "Colours" and "Soft" were slivers of their letters. A combo box has no
+    useful minimum of its own there, so the floor comes from the look.
+
+    Asserted on the stylesheet rather than on a live widget: the offscreen platform this runs on
+    gives a combo box a generous native minimum, so a widget-level check passes with or without the
+    fix and would prove nothing."""
+    from desktop.native.look import FIELD_MIN_PX, pack_stylesheet
+
+    for size in ("small", "normal", "large"):
+        sheet = pack_stylesheet("light-frost", False, {"preset": "default", "knobs": {"text": size}})
+        # The floor has to be on the field rule itself. Menu items carry a min-height of their own,
+        # so looking for the number anywhere in the sheet would pass without the fields having one.
+        rule = next(part for part in sheet.split("}") if part.lstrip().startswith("QLineEdit"))
+        assert f"min-height: {FIELD_MIN_PX[size]}px" in rule, (size, rule)
+
+
+def test_the_way_in_is_signing_in_not_a_choice_between_two_buttons(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Create account and Sign in sat side by side as equals, so every arrival had to choose before
+    reading anything. A student creates an account once and signs in from then on."""
+    window._making_account = False
+    window._sync_auth_mode()
+    qapp.processEvents()
+    assert window.auth_heading.text() == "Sign in"
+    # isHidden, not isVisible: the fixture is signed in, so every child of the auth page reports
+    # not visible whatever mode it is in.
+    assert window.sign_in_button.isHidden() is False
+    assert window.create_button.isHidden() is True
+    assert "Create an account" in window.auth_switch.text()
+
+
+def test_the_small_print_switches_to_making_an_account_and_back(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    window._making_account = False
+    window._sync_auth_mode()
+    window.auth_switch.click()
+    qapp.processEvents()
+    assert window.auth_heading.text() == "Create your account"
+    assert window.create_button.isHidden() is False
+    assert window.sign_in_button.isHidden() is True
+    assert "Sign in" in window.auth_switch.text()
+    window.auth_switch.click()
+    qapp.processEvents()
+    assert window.auth_heading.text() == "Sign in"
+
+
+def test_pressing_return_does_the_thing_the_screen_is_for(qapp: QApplication, window: NativeWindow) -> None:
+    """Whichever mode is showing, its own button is the default, so Return never does the other one."""
+    window._making_account = False
+    window._sync_auth_mode()
+    assert window.sign_in_button.isDefault() is True
+    window._making_account = True
+    window._sync_auth_mode()
+    assert window.create_button.isDefault() is True
+
+
+def test_signing_out_comes_back_to_the_sign_in_screen(qapp: QApplication, window: NativeWindow) -> None:
+    window._making_account = True
+    window._sync_auth_mode()
+    window._on_account(None)
+    qapp.processEvents()
+    assert window._making_account is False
+    assert window.auth_heading.text() == "Sign in"

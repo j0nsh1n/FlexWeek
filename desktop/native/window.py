@@ -101,6 +101,7 @@ class NativeWindow(QMainWindow):
         self._day_mode = False
         self._opened_on_preference = False
         self._views: dict[str, LayoutView] = {}
+        self._making_account = False
         self._build_auth()
         self._build_recovery()
         self._build_week()
@@ -141,7 +142,30 @@ class NativeWindow(QMainWindow):
         self._apply_appearance()
         if QSystemTrayIcon.isSystemTrayAvailable() and not self._icon.isNull():
             self._install_tray()
+        self._sync_auth_mode()
         self._show_page("authPage")
+
+    def _toggle_auth_mode(self) -> None:
+        self._making_account = not self._making_account
+        self._sync_auth_mode()
+
+    def _sync_auth_mode(self) -> None:
+        """Sign in is the door, and creating an account is the small print under it: a student signs
+        in many times and creates an account once."""
+        making = self._making_account
+        self.auth_heading.setText("Create your account" if making else "Sign in")
+        self.auth_note.setText(
+            "FlexWeek fits homework around school and sports. Your week is saved to your account."
+            if making
+            else "Welcome back."
+        )
+        self.create_button.setVisible(making)
+        self.sign_in_button.setVisible(not making)
+        self.auth_switch.setText(
+            "Already have an account? Sign in" if making else "New here? Create an account"
+        )
+        self.sign_in_button.setDefault(not making)
+        self.create_button.setDefault(making)
 
     def listen_for_instances(self, name: str) -> bool:
         server = QLocalServer(self)
@@ -192,12 +216,13 @@ class NativeWindow(QMainWindow):
         brand = QLabel("FlexWeek")
         brand.setObjectName("authBrand")
         layout.addWidget(brand)
-        heading = QLabel("Create your account")
-        heading.setObjectName("authHeading")
-        layout.addWidget(heading)
-        note = QLabel("FlexWeek fits homework around school and sports. Your week is saved to your account.")
-        note.setWordWrap(True)
-        layout.addWidget(note)
+        self.auth_heading = QLabel()
+        self.auth_heading.setObjectName("authHeading")
+        layout.addWidget(self.auth_heading)
+        self.auth_note = QLabel()
+        self.auth_note.setObjectName("authNote")
+        self.auth_note.setWordWrap(True)
+        layout.addWidget(self.auth_note)
         self.username = QLineEdit()
         self.username.setObjectName("username")
         self.username.setMaxLength(32)
@@ -209,20 +234,29 @@ class NativeWindow(QMainWindow):
         self.password.setMaxLength(128)
         self.password.setPlaceholderText("Password")
         layout.addWidget(self.password)
-        buttons = QHBoxLayout()
-        create = QPushButton("Create account")
-        create.setObjectName("createAccount")
-        create.clicked.connect(self._create_account)
-        sign_in = QPushButton("Sign in")
-        sign_in.setObjectName("signIn")
-        sign_in.clicked.connect(self._sign_in)
-        buttons.addWidget(create)
-        buttons.addWidget(sign_in)
-        layout.addLayout(buttons)
+        # One way in at a time. Offering Create account and Sign in as equal buttons made the student
+        # choose between them before reading anything, and most arrivals after the first are sign-ins.
+        self.sign_in_button = QPushButton("Sign in")
+        self.sign_in_button.setObjectName("signIn")
+        self.sign_in_button.setDefault(True)
+        self.sign_in_button.clicked.connect(self._sign_in)
+        layout.addWidget(self.sign_in_button)
+        self.create_button = QPushButton("Create account")
+        self.create_button.setObjectName("createAccount")
+        self.create_button.clicked.connect(self._create_account)
+        layout.addWidget(self.create_button)
         forgot = QPushButton("Forgot password")
         forgot.setObjectName("forgotPassword")
+        forgot.setFlat(True)
+        forgot.setCursor(Qt.CursorShape.PointingHandCursor)
         forgot.clicked.connect(self._toggle_recover)
         layout.addWidget(forgot)
+        self.auth_switch = QPushButton()
+        self.auth_switch.setObjectName("authSwitch")
+        self.auth_switch.setFlat(True)
+        self.auth_switch.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.auth_switch.clicked.connect(self._toggle_auth_mode)
+        layout.addWidget(self.auth_switch)
         self.recovery_code = QLineEdit()
         self.recovery_code.setObjectName("recoveryCode")
         self.recovery_code.setPlaceholderText("Recovery code")
@@ -611,6 +645,8 @@ class NativeWindow(QMainWindow):
         if account is None:
             self._day_mode = False
             self._opened_on_preference = False
+            self._making_account = False
+            self._sync_auth_mode()
             self.username.clear()
             self.password.clear()
             self._show_page("authPage")
