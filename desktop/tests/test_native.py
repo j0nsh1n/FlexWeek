@@ -1237,3 +1237,81 @@ def test_the_solver_is_asked_to_reserve_the_breaks_as_well(qapp: QApplication, s
     asked = {block["title"]: block["duration_min"] for block in sent[0]["blocks"]}
     # 90 minutes of work plus the two 15-minute breaks that will sit between the chunks.
     assert asked["Essay"] == 120
+
+
+def test_a_chunk_of_plain_homework_keeps_its_number(qapp: QApplication, server: LocalServer) -> None:
+    """A flexible block with no assignment behind it keeps the numbering the split gave it."""
+    session = signed_in(qapp, server.origin, "numbered", create=True)
+    wait_until(qapp, lambda: session.preferences is not None)
+    session.save_preferences(
+        {
+            "auto_split_pomodoro": True,
+            "timer_work_min": 30,
+            "timer_break_min": 15,
+            "timer_long_break_min": 30,
+            "timer_long_break_every": 4,
+        }
+    )
+    wait_until(qapp, lambda: bool((session.preferences or {}).get("auto_split_pomodoro")))
+    session.add_block(
+        {
+            "id": "rev",
+            "title": "Revision",
+            "kind": "flexible",
+            "duration_min": 90,
+            "days": [0, 1, 2, 3, 4],
+            "category": "study",
+        }
+    )
+    session.save()
+    wait_until(qapp, lambda: session.revision >= 1 and not session.busy and not session.dirty)
+    session.solve()
+    wait_until(qapp, lambda: session.trace is not None and not session.busy)
+    wait_until(qapp, lambda: any(b.get("pomodoro_role") for b in session.blocks))
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    assert [b["title"] for b in session.blocks if b.get("pomodoro_role") == "work"] == [
+        "Revision · focus 1/3",
+        "Revision · focus 2/3",
+        "Revision · focus 3/3",
+    ]
+
+
+def test_a_chunk_of_a_tracked_assignment_takes_the_assignment_title_back(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    """Not a defect in the split, and not something to fix here: the server rewrites the title of
+    every block carrying an assignment_id (rewrite_session in backend/assignments.py), so the web's
+    chunks are renamed in exactly the same way. Dropping the id to keep the number would stop focus
+    time being credited to the assignment, which matters more than the label."""
+    session = signed_in(qapp, server.origin, "tracked", create=True)
+    wait_until(qapp, lambda: session.preferences is not None)
+    session.save_preferences(
+        {
+            "auto_split_pomodoro": True,
+            "timer_work_min": 30,
+            "timer_break_min": 15,
+            "timer_long_break_min": 30,
+            "timer_long_break_every": 4,
+        }
+    )
+    wait_until(qapp, lambda: bool((session.preferences or {}).get("auto_split_pomodoro")))
+    session.add_homework(
+        {
+            "id": "essay",
+            "title": "History essay",
+            "due": sunday_due(session.week_start),
+            "estimate_min": 90,
+            "revision": 0,
+        }
+    )
+    session.save()
+    wait_until(qapp, lambda: session.revision >= 1 and not session.busy and not session.dirty)
+    session.solve()
+    wait_until(qapp, lambda: session.trace is not None and not session.busy)
+    wait_until(qapp, lambda: any(b.get("pomodoro_role") for b in session.blocks))
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    chunks = [b for b in session.blocks if b.get("pomodoro_role") == "work"]
+    assert len(chunks) == 3
+    assert {b["title"] for b in chunks} == {"History essay"}
+    # What the split is actually for still holds: the chunks are real placed blocks on one day.
+    assert all(b["kind"] == "locked" and len(b["days"]) == 1 for b in chunks)
