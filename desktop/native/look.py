@@ -648,6 +648,15 @@ def pack_stylesheet(
         f"QLabel#authHeading {{ font-weight: 600; font-size: {size + 3}pt; }}"
         f"QLabel#authNote {{ color: {palette['muted']}; }}"
         # The way in is a button; the way to a new account is small print, so it is drawn as a link.
+        # The first-week card sits on top of the week rather than in a layout, so it has to read as
+        # something laid over the calendar rather than printed onto it.
+        f"QWidget#setupCard {{ background: {palette['panel']}; border-radius: {radius}px; "
+        f"padding: {pad * 2}px; {edges} }}"
+        # The rows inside it are bare QWidgets, which the rule above would paint in the page colour,
+        # putting a band of the background across the middle of a white card.
+        f"QWidget#setupRow {{ background: transparent; border: none; padding: 0; }}"
+        f"QLabel#setupKicker {{ color: {palette['muted']}; font-weight: 600; }}"
+        f"QLabel#setupHeading {{ font-size: {size + 3}pt; font-weight: 700; }}"
         f"QPushButton#authSwitch, QPushButton#forgotPassword {{ background: transparent; "
         f"color: {palette['accent']}; border: none; padding: {pad}px 0; "
         f"font-size: {size - 1}pt; text-align: left; min-height: 0; }}"

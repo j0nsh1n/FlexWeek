@@ -601,6 +601,10 @@ class SetupCard(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("setupCard")
+        # A QWidget honours a stylesheet background; a subclass of one does not unless it is told
+        # to. Without this the card is transparent, and it floats over the week grid with the day
+        # headings and the hour lines showing through its own text.
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._step = 0
         self._payload: dict = {}
         layout = QVBoxLayout(self)
@@ -624,6 +628,7 @@ class SetupCard(QWidget):
         school.addWidget(QLabel("Ends"))
         school.addWidget(self.school_end)
         self.school_row = QWidget()
+        self.school_row.setObjectName("setupRow")
         self.school_row.setLayout(school)
         layout.addWidget(self.school_row)
         self.sport_title = QLineEdit("Soccer")
@@ -637,6 +642,7 @@ class SetupCard(QWidget):
         sport.addRow("Starts", self.sport_start)
         sport.addRow("Ends", self.sport_end)
         self.sport_row = QWidget()
+        self.sport_row.setObjectName("setupRow")
         self.sport_row.setLayout(sport)
         layout.addWidget(self.sport_row)
         self.homework_title = QLineEdit()
@@ -655,6 +661,7 @@ class SetupCard(QWidget):
         work.addRow("Minutes", self.homework_minutes)
         work.addRow("Due", self.homework_due)
         self.work_row = QWidget()
+        self.work_row.setObjectName("setupRow")
         self.work_row.setLayout(work)
         layout.addWidget(self.work_row)
         actions = QHBoxLayout()
