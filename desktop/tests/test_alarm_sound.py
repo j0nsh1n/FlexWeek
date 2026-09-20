@@ -161,3 +161,55 @@ def test_the_snooze_button_says_how_long_it_snoozes_for(qapp: Any) -> None:
     dialog = AlarmRingDialog(None, {"name": "Wake up", "time": "06:45"}, "")
     button = dialog.findChild(QPushButton, "alarmSnooze")
     assert button is not None and str(ALARM_SNOOZE_MIN) in button.text()
+
+
+def test_auto_split_with_off_grid_lengths_is_caught_before_the_save(
+    qapp: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The server refuses this combination, so a dialog that closed on it lost the save with an
+    error the student could not act on from the week screen."""
+    from PySide6.QtWidgets import QMessageBox
+
+    dialog = prefs_dialog(qapp, timer_work_min=25)
+    dialog.auto_split.setChecked(True)
+    dialog.work.setValue(25)
+    monkeypatch.setattr(
+        QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Cancel)
+    )
+    dialog.accept()
+    assert dialog.result() != dialog.DialogCode.Accepted
+
+
+def test_agreeing_to_round_puts_the_lengths_on_the_grid_and_saves(
+    qapp: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from PySide6.QtWidgets import QMessageBox
+
+    dialog = prefs_dialog(qapp)
+    dialog.auto_split.setChecked(True)
+    dialog.work.setValue(25)
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes))
+    dialog.accept()
+    assert dialog.updates()["timer_work_min"] % 15 == 0
+    assert dialog.result() == dialog.DialogCode.Accepted
+
+
+def test_off_grid_lengths_are_fine_when_splitting_is_off(qapp: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Nothing rounds the timers when the student is not splitting, and they are never asked to."""
+    from PySide6.QtWidgets import QMessageBox
+
+    asked: list[object] = []
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        staticmethod(
+            lambda *a, **k: asked.append(a) or QMessageBox.StandardButton.Cancel  # noqa: FBT003
+        ),
+    )
+    dialog = prefs_dialog(qapp)
+    dialog.auto_split.setChecked(False)
+    dialog.work.setValue(25)
+    dialog.accept()
+    assert asked == []
+    assert dialog.updates()["timer_work_min"] == 25
+    assert dialog.result() == dialog.DialogCode.Accepted

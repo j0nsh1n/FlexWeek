@@ -25,6 +25,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtGui import QGuiApplication
     from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QPushButton
 
+    from backend.slots import hhmm_to_minutes
     from desktop.native.calendar import sunday_due
     from desktop.native.client import NativeClient
     from desktop.native.controller import NativeSession, session_days
@@ -1131,3 +1132,108 @@ def test_going_back_to_work_says_so_with_the_work_tone(qapp: QApplication, serve
     assert focus, heard
     assert focus[0]["tone"] == "bright"
     assert session.focus is not None and session.focus["phase"] == "work"
+
+
+def test_planning_with_auto_split_leaves_focus_chunks_on_the_grid(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    """The whole feature lived in the web client; the desktop could tick the box and nothing split.
+    This goes through a real solve and a real save, because the chunks have to survive validation."""
+    session = signed_in(qapp, server.origin, "splitter", create=True)
+    wait_until(qapp, lambda: session.preferences is not None)
+    session.save_preferences(
+        {
+            "auto_split_pomodoro": True,
+            "timer_work_min": 30,
+            "timer_break_min": 15,
+            "timer_long_break_min": 30,
+            "timer_long_break_every": 4,
+        }
+    )
+    wait_until(qapp, lambda: bool((session.preferences or {}).get("auto_split_pomodoro")))
+    session.add_homework(
+        {
+            "id": "essay",
+            "title": "Essay",
+            "due": sunday_due(session.week_start),
+            "estimate_min": 90,
+            "revision": 0,
+        }
+    )
+    session.save()
+    wait_until(qapp, lambda: session.revision >= 1 and not session.busy and not session.dirty)
+    session.solve()
+    wait_until(qapp, lambda: not session.busy and session.trace is not None)
+    wait_until(qapp, lambda: any(b.get("pomodoro_role") for b in session.blocks))
+    chunks = [b for b in session.blocks if b.get("pomodoro_role") == "work"]
+    breaks = [b for b in session.blocks if b.get("pomodoro_role") == "break"]
+    assert len(chunks) == 3, [b["title"] for b in session.blocks]
+    assert len(breaks) == 2
+    assert all(b["kind"] == "locked" and len(b["days"]) == 1 for b in chunks + breaks)
+    # Every chunk sits on the 15-minute grid the server enforces.
+    assert all(hhmm_to_minutes(b["start"]) % 15 == 0 for b in chunks + breaks)
+    wait_until(qapp, lambda: not session.busy)
+    assert session.conflict is False
+
+
+def test_planning_without_auto_split_leaves_one_block(qapp: QApplication, server: LocalServer) -> None:
+    session = signed_in(qapp, server.origin, "nosplit", create=True)
+    wait_until(qapp, lambda: session.preferences is not None)
+    session.add_homework(
+        {
+            "id": "essay",
+            "title": "Essay",
+            "due": sunday_due(session.week_start),
+            "estimate_min": 90,
+            "revision": 0,
+        }
+    )
+    session.save()
+    wait_until(qapp, lambda: session.revision >= 1 and not session.busy and not session.dirty)
+    session.solve()
+    wait_until(qapp, lambda: not session.busy and session.trace is not None)
+    assert not any(b.get("pomodoro_role") for b in session.blocks)
+
+
+def test_the_solver_is_asked_to_reserve_the_breaks_as_well(qapp: QApplication, server: LocalServer) -> None:
+    """Splitting after the solve without asking for the extra time first would lay the chunks and
+    breaks over whatever the solver placed next, because it only reserved the homework's own length."""
+    session = signed_in(qapp, server.origin, "reserve", create=True)
+    wait_until(qapp, lambda: session.preferences is not None)
+    session.save_preferences(
+        {
+            "auto_split_pomodoro": True,
+            "timer_work_min": 30,
+            "timer_break_min": 15,
+            "timer_long_break_min": 30,
+            "timer_long_break_every": 4,
+        }
+    )
+    wait_until(qapp, lambda: bool((session.preferences or {}).get("auto_split_pomodoro")))
+    session.add_homework(
+        {
+            "id": "essay",
+            "title": "Essay",
+            "due": sunday_due(session.week_start),
+            "estimate_min": 90,
+            "revision": 0,
+        }
+    )
+    session.save()
+    wait_until(qapp, lambda: session.revision >= 1 and not session.busy and not session.dirty)
+    sent: list[dict] = []
+    original = session.client.request
+
+    def spy(method: str, path: str, body: object, *args: object, **kwargs: object) -> object:
+        if path == "/api/solve" and isinstance(body, dict):
+            sent.append(body)
+        return original(method, path, body, *args, **kwargs)
+
+    session.client.request = spy  # type: ignore[method-assign]
+    session.solve()
+    wait_until(qapp, lambda: not session.busy and session.trace is not None)
+    session.client.request = original  # type: ignore[method-assign]
+    assert sent, "the solve never went out"
+    asked = {block["title"]: block["duration_min"] for block in sent[0]["blocks"]}
+    # 90 minutes of work plus the two 15-minute breaks that will sit between the chunks.
+    assert asked["Essay"] == 120

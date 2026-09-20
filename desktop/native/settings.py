@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
@@ -28,8 +29,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from backend.comfort import TIMER_PRESETS
+from backend.comfort import TIMER_PRESETS, snap_minutes
 from backend.models import valid_spotify_url
+from backend.slots import SLOT_MIN
 from desktop.native import autostart
 from desktop.native.calendar import DAY_FULL
 from desktop.native.focus import FOCUS_PHASE_LABEL, format_countdown, more_time_choices, remaining_ms
@@ -418,6 +420,25 @@ class PrefsDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self._render_alarms()
+
+    def accept(self) -> None:
+        """The server refuses auto-splitting with off-grid lengths, so the refusal is met here where
+        the numbers are, rather than as a failed save after the dialog has closed."""
+        off_grid = [
+            box.value() for box in (self.work, self.break_min, self.long_break) if box.value() % SLOT_MIN
+        ]
+        if self.auto_split.isChecked() and off_grid:
+            answer = QMessageBox.question(
+                self,
+                "Focus splitting",
+                f"Splitting into focus sessions needs {SLOT_MIN}-minute lengths. Round them and save?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            for box, ceiling in ((self.work, 180), (self.break_min, 60), (self.long_break, 120)):
+                box.setValue(snap_minutes(box.value(), 1, ceiling))
+        super().accept()
 
     def _apply_timer_preset(self, _index: int = 0) -> None:
         chosen = self.preset_timer.currentData()

@@ -55,6 +55,7 @@ from desktop.native.focus import (
 )
 from desktop.native.history import capture_step, mark_stale, push_step
 from desktop.native.look import pack_axis, sanitize_look
+from desktop.native.pomodoro import inflate_for_solve, split_solved
 from desktop.native.remind import clock_parts, due_alarms, due_reminders, reminder_lead_min, snooze_until
 from desktop.native.reuse import (
     MAX_WEEK_BLOCKS,
@@ -1004,16 +1005,34 @@ class NativeSession(QObject):
             # The status line takes the count. Every explanation the solver gave goes to the
             # review panel, because explaining what moved and why is what this app is for.
             self._fresh_plan = True
-            self._say(f"Placed {placed} of {placed + unplaced}.")
+            split_note = self._apply_auto_split(data)
+            self._say(f"Placed {placed} of {placed + unplaced}.{split_note}")
             self.week_changed.emit()
+            if split_note:
+                self.save()
 
         self.client.request(
             "POST",
             "/api/solve",
-            {"blocks": self.blocks, "week_start": self.week_start},
+            {
+                "blocks": inflate_for_solve(self.blocks, self.preferences),
+                "week_start": self.week_start,
+            },
             ok,
             lambda error: self._fail(ticket, error),
         )
+
+    def _apply_auto_split(self, trace: dict) -> str:
+        """Turn each placed homework block into focus chunks and breaks, when the student asked for
+        it. The solver was given room for the breaks before it ran, so the chunks fit where it put
+        the block rather than landing on whatever came next."""
+        split, count = split_solved(self.blocks, trace, self.preferences)
+        if not count:
+            return ""
+        self.blocks = split
+        self._history_label = "the focus split"
+        self.dirty = True
+        return f" Split {count} into focus chunks."
 
     def _operation(self, key: str) -> str:
         if key not in self._attempts:
