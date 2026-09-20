@@ -104,10 +104,15 @@ LINUX_SYSTEM_LIBS = frozenset(
 
 # DLLs that are part of Windows 10 1809 and later. icuuc/icuin have been system
 # DLLs since 1703, so Qt6Core's import of icuuc.dll is satisfied by Windows.
+# avrt, dxva2, evr and the mf* trio arrived with QtMultimedia for the alarm sounds. All are Windows
+# components in System32. Media Foundation (mf*) is absent on "N" editions until the Media Feature
+# Pack is installed; there the media plugins fail to load, sound.py catches it, and the alarm shows
+# its dialog without a sound. avrt, which is what QAudioSink itself needs, is present everywhere.
 WINDOWS_SYSTEM_DLLS = frozenset(
     {
         "advapi32.dll",
         "authz.dll",
+        "avrt.dll",
         "bcrypt.dll",
         "bcryptprimitives.dll",
         "bthprops.cpl",
@@ -125,6 +130,8 @@ WINDOWS_SYSTEM_DLLS = frozenset(
         "dwmapi.dll",
         "dwrite.dll",
         "dxgi.dll",
+        "dxva2.dll",
+        "evr.dll",
         "fontsub.dll",
         "gdi32.dll",
         "hid.dll",
@@ -134,6 +141,9 @@ WINDOWS_SYSTEM_DLLS = frozenset(
         "imm32.dll",
         "iphlpapi.dll",
         "kernel32.dll",
+        "mf.dll",
+        "mfplat.dll",
+        "mfreadwrite.dll",
         "mmdevapi.dll",
         "mpr.dll",
         "msimg32.dll",
