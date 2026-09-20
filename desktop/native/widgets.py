@@ -91,6 +91,7 @@ from desktop.native.weekmodel import due_label, length_label
 
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 DETAIL_BOX_HEIGHT = 84
+PLAN_REVIEW_MAX = 132
 # Two hours: the name of a block is never more than that far above where you are looking.
 LABEL_EVERY = 8
 DAY_FULL = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
@@ -1400,7 +1401,6 @@ class PlanReview(QWidget):
         layout.addWidget(self.heading)
         self.list = QListWidget()
         self.list.setObjectName("planReviewList")
-        self.list.setMaximumHeight(132)
         layout.addWidget(self.list)
         row = QHBoxLayout()
         dismiss = QPushButton("Got it")
@@ -1429,7 +1429,13 @@ class PlanReview(QWidget):
                 "There was no room for it this week.",
             )
             said.append(f"{name} has no time yet. {why}")
+        stranded = {block["id"] for block in trace.get("unplaced") or []}
         for move in trace.get("moves") or []:
+            # A "move" with no time at either end is the solver recording that something stayed
+            # unplaced. Said out loud it read "moved from no time to no time", under a line that
+            # had already explained the same block.
+            if move["block_id"] in stranded or not move.get("to_start") or not move.get("from_start"):
+                continue
             name = titles.get(move["block_id"], "Homework")
             been = _when(move.get("from_day"), move.get("from_start"))
             now = _when(move.get("to_day"), move.get("to_start"))
@@ -1451,6 +1457,9 @@ class PlanReview(QWidget):
         self.heading.setText(f"Your plan: {placed} placed, {unplaced} without a time")
         for line in said:
             self.list.addItem(QListWidgetItem(line))
+        # As tall as it needs and no taller. One line in a box four lines deep reads as an error.
+        row = self.list.sizeHintForRow(0) if self.list.count() else 0
+        self.list.setFixedHeight(min(row * len(said) + 2 * self.list.frameWidth() + 4, PLAN_REVIEW_MAX))
         self.show()
 
 

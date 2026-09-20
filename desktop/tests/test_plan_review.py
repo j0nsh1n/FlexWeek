@@ -127,3 +127,74 @@ def test_an_unplaced_task_with_no_explanation_still_says_something(qapp: QApplic
     assert PlanReview().rows_for(bare, TITLES, WEEK) == [
         "Science fair poster has no time yet. There was no room for it this week."
     ]
+
+
+def test_a_block_that_never_moved_is_not_announced_as_moving(qapp: QApplication) -> None:
+    """The solver records a move with no times for work that stayed unplaced. Said out loud that
+    read "moved from no time to no time", under a line that had already explained the same block."""
+    trace = {
+        "placed": [],
+        "unplaced": [{"id": "poster", "title": "Science fair poster"}],
+        "moves": [
+            {
+                "block_id": "poster",
+                "reason": "DEADLINE_MISS",
+                "from_day": None,
+                "from_start": None,
+                "to_day": None,
+                "to_start": None,
+            }
+        ],
+        "explanations": [
+            {
+                "block_id": "poster",
+                "reason": "DEADLINE_MISS",
+                "message": "There is no slot left before this deadline.",
+            }
+        ],
+    }
+    said = PlanReview().rows_for(trace, TITLES, WEEK)
+    assert said == ["Science fair poster has no time yet. There is no slot left before this deadline."]
+    assert not any("no time to no time" in line for line in said)
+
+
+def test_a_half_known_move_is_not_announced_either(qapp: QApplication) -> None:
+    trace = {
+        "placed": [{"id": "essay"}],
+        "unplaced": [],
+        "moves": [
+            {
+                "block_id": "essay",
+                "reason": "NO_SLOT_LEFT",
+                "from_day": 3,
+                "from_start": "18:45",
+                "to_day": None,
+                "to_start": None,
+            }
+        ],
+        "explanations": [],
+    }
+    assert PlanReview().rows_for(trace, TITLES, WEEK) == []
+
+
+def test_the_box_is_as_tall_as_it_needs_and_no_taller(qapp: QApplication) -> None:
+    """One line in a box four lines deep reads as an error."""
+    one = PlanReview()
+    one.show()
+    one.set_trace(
+        {
+            "placed": [],
+            "unplaced": [{"id": "poster", "title": "Science fair poster"}],
+            "moves": [],
+            "explanations": [],
+        },
+        TITLES,
+        WEEK,
+    )
+    qapp.processEvents()
+    many = PlanReview()
+    many.show()
+    many.set_trace(TRACE, TITLES, WEEK)
+    qapp.processEvents()
+    assert one.list.height() < many.list.height()
+    assert many.list.height() <= 132
