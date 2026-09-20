@@ -1157,8 +1157,13 @@ class NativeWindow(QMainWindow):
     def _present_alerts(self, notices: list) -> None:
         prefs = self.session.preferences or {}
         if notices and prefs.get("reminder_sound", True) is not False:
-            # The web rings reminders on a fixed chime; only alarms carry a chosen sound.
-            self._bell.once(FALLBACK, prefs.get("alert_volume", 80))
+            # Reminders ring on a fixed chime; only alarms carry a chosen sound. A focus notice brings
+            # its own tone and answers to the end-of-session chime setting as well, as it does on the web.
+            focus = [notice for notice in notices if notice.get("kind") == "focus"]
+            if len(focus) < len(notices):
+                self._bell.once(FALLBACK, prefs.get("alert_volume", 80))
+            elif prefs.get("end_chime"):
+                self._bell.once(str(focus[0].get("tone") or FALLBACK), prefs.get("alert_volume", 80))
         for notice in notices:
             title = notice.get("title") or "FlexWeek"
             body = notice.get("body") or ""

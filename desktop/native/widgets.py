@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -91,6 +92,9 @@ from desktop.native.weekmodel import due_label, length_label
 
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 DETAIL_BOX_HEIGHT = 84
+# A scroll area reports its own modest size hint rather than its content's, which is what keeps the
+# homework editor on a laptop screen. It does not claim the content's width either, so that is set.
+HOMEWORK_MIN_WIDTH = 520
 PLAN_REVIEW_MAX = 132
 # Two hours: the name of a block is never more than that far above where you are looking.
 LABEL_EVERY = 8
@@ -876,6 +880,11 @@ class BlockDialog(QDialog):
             self.category.addItem(chosen, chosen)
         self.category.setCurrentIndex(max(0, self.category.findData(chosen)))
         form.addRow("Category", self.category)
+        # A block could carry a Spotify link from the web, and the Spotify button already opens it,
+        # but there was no way to set one here. The link is validated with the rest of the block.
+        self.spotify = _line("blockSpotify", self._original.get("spotify_url") or "", 500)
+        self.spotify.setPlaceholderText("https://open.spotify.com/…")
+        form.addRow("Spotify link", self.spotify)
         self.missed = QCheckBox("This day was missed")
         self.missed.setObjectName("blockMissed")
         already = occurrence_day in (self._original.get("missed_days") or [])
@@ -949,6 +958,7 @@ class BlockDialog(QDialog):
             start=self.start.time().toString("HH:mm"),
             duration_min=self.duration.value(),
             category=self.category.currentData(),
+            spotify_url=self.spotify.text().strip() or None,
         )
         # Unticking a day that was missed restores it, as the web's "Restore Wed" button does.
         unticked = not self.missed.isHidden() and not self.missed.isChecked()
@@ -1004,8 +1014,13 @@ class HomeworkDialog(QDialog):
         self.setWindowTitle("Edit homework" if assignment else "Add homework")
         self.setObjectName("homeworkDialog")
         layout = QVBoxLayout(self)
+        # The body scrolls so the dialog cannot outgrow a laptop screen. It already carried notes,
+        # links and a checklist; one more row took it to 815px, past the bottom of a 768px display.
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
         form = QFormLayout()
-        layout.addLayout(form)
+        body_layout.addLayout(form)
         self.title = _line("homeworkTitle", self._original["title"])
         form.addRow("Title", self.title)
         self.due = QDateTimeEdit(QDateTime.fromString(self._original["due"], "yyyy-MM-dd'T'HH:mm"))
@@ -1031,6 +1046,9 @@ class HomeworkDialog(QDialog):
             self.energy.addItem(label, value)
         self.energy.setCurrentIndex(self.energy.findData(self._original.get("energy", "medium")))
         form.addRow("Energy preference", self.energy)
+        self.spotify = _line("homeworkSpotify", self._original.get("spotify_url") or "", 500)
+        self.spotify.setPlaceholderText("https://open.spotify.com/…")
+        form.addRow("Spotify link", self.spotify)
         self.completed = QCheckBox("Finished")
         self.completed.setObjectName("homeworkCompleted")
         self.completed.setChecked(bool(self._original.get("completed")))
@@ -1040,7 +1058,7 @@ class HomeworkDialog(QDialog):
         # Three boxes at their 192px default made this dialog taller than a laptop screen.
         self.notes.setMaximumHeight(DETAIL_BOX_HEIGHT)
         self.notes.setPlaceholderText("Notes")
-        layout.addWidget(self.notes)
+        body_layout.addWidget(self.notes)
         link_row = QHBoxLayout()
         self.link_label = _line("homeworkLinkLabel", "", 80)
         self.link_label.setPlaceholderText("Link label")
@@ -1052,11 +1070,11 @@ class HomeworkDialog(QDialog):
         link_row.addWidget(self.link_label)
         link_row.addWidget(self.link_url)
         link_row.addWidget(add_link)
-        layout.addLayout(link_row)
+        body_layout.addLayout(link_row)
         self.links = QListWidget()
         self.links.setObjectName("homeworkLinks")
         self.links.setMaximumHeight(DETAIL_BOX_HEIGHT)
-        layout.addWidget(self.links)
+        body_layout.addWidget(self.links)
         for link in self._original.get("links") or []:
             self._append_link(link["label"], link["url"])
         check_row = QHBoxLayout()
@@ -1067,20 +1085,20 @@ class HomeworkDialog(QDialog):
         add_check.clicked.connect(self._add_check)
         check_row.addWidget(self.check_text)
         check_row.addWidget(add_check)
-        layout.addLayout(check_row)
+        body_layout.addLayout(check_row)
         self.checks = QListWidget()
         self.checks.setObjectName("homeworkChecklist")
-        layout.addWidget(self.checks)
+        body_layout.addWidget(self.checks)
         for step in self._original.get("checklist") or []:
             self._append_check(step["id"], step["text"], step.get("done", False))
         self.error = _error_label()
-        layout.addWidget(self.error)
+        body_layout.addWidget(self.error)
         if assignment is not None:
             spread = QPushButton("Spread across days")
             spread.setObjectName("spreadHomework")
             spread.clicked.connect(self._request_spread)
             spread.setToolTip("Save these edits first, then spread.")
-            layout.addWidget(spread)
+            body_layout.addWidget(spread)
             self._spread_button = spread
             self.title.textChanged.connect(self._disable_spread)
             self.notes.textChanged.connect(self._disable_spread)
@@ -1089,6 +1107,14 @@ class HomeworkDialog(QDialog):
             self.course.textChanged.connect(self._disable_spread)
         else:
             self._spread_button = None
+        area = QScrollArea()
+        area.setObjectName("homeworkScroll")
+        area.setWidgetResizable(True)
+        area.setFrameShape(QFrame.Shape.NoFrame)
+        area.setWidget(body)
+        layout.addWidget(area)
+        # A scroll area does not claim its content's width, so without this the dialog comes up narrow.
+        self.setMinimumWidth(HOMEWORK_MIN_WIDTH)
         buttons = _buttons()
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -1169,6 +1195,7 @@ class HomeworkDialog(QDialog):
             course=self.course.text() or None,
             priority=self.priority.currentData(),
             energy=self.energy.currentData(),
+            spotify_url=self.spotify.text().strip() or None,
             notes=self.notes.toPlainText(),
             links=links,
             checklist=checklist,

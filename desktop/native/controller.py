@@ -39,6 +39,7 @@ from desktop.native.files import (
 )
 from desktop.native.focus import (
     DEFAULT_TIMERS,
+    FOCUS_PHASE_LABEL,
     begin_state,
     break_phase,
     credit_target,
@@ -1960,21 +1961,41 @@ class NativeSession(QObject):
                     self._persist_focus()
                     self.focus_changed.emit()
                     self.alerts.emit(
-                        [{"title": "Focus session done", "body": self.focus["title"], "kind": "focus"}]
+                        [
+                            {
+                                "title": "Focus session done",
+                                "body": self.focus["title"],
+                                "kind": "focus",
+                                "tone": "soft",
+                            }
+                        ]
                     )
                     return
-                self.focus = set_phase(
-                    self.focus,
-                    break_phase(int(self.focus.get("cycles") or 0), self.preferences),
-                    self.preferences,
-                    self.now_ms(),
+                self.focus = self._enter_phase(
+                    self.focus, break_phase(int(self.focus.get("cycles") or 0), self.preferences)
                 )
             else:
-                self.focus = set_phase(self.focus, "work", self.preferences, self.now_ms())
+                self.focus = self._enter_phase(self.focus, "work")
             self._persist_focus()
             self.focus_changed.emit()
         finally:
             self._focus_busy = False
+
+    def _enter_phase(self, state: dict, phase: str) -> dict:
+        """Move to a phase and announce it, which is what the web's setFocusPhase does. The tone is
+        the web's: bright going into work, soft going into a break."""
+        moved = set_phase(state, phase, self.preferences, self.now_ms())
+        self.alerts.emit(
+            [
+                {
+                    "title": FOCUS_PHASE_LABEL.get(phase, "Focus"),
+                    "body": moved.get("title") or "",
+                    "kind": "focus",
+                    "tone": "bright" if phase == "work" else "soft",
+                }
+            ]
+        )
+        return moved
 
     def credit_focus_session(self) -> None:
         state = self.focus
@@ -2040,12 +2061,7 @@ class NativeSession(QObject):
             return False
         assignment["estimate_min"] = int(assignment["estimate_min"]) + minutes
         self.dirty_assignments.add(assignment["id"])
-        self.focus = set_phase(
-            state,
-            break_phase(int(state.get("cycles") or 0), self.preferences),
-            self.preferences,
-            self.now_ms(),
-        )
+        self.focus = self._enter_phase(state, break_phase(int(state.get("cycles") or 0), self.preferences))
         self._history_label = "adding time to " + assignment["title"]
         self.dirty = True
         self.pending_save = None
@@ -2058,12 +2074,7 @@ class NativeSession(QObject):
         state = self.focus
         if state is None or state.get("phase") != "ended" or self._focus_busy:
             return False
-        self.focus = set_phase(
-            state,
-            break_phase(int(state.get("cycles") or 0), self.preferences),
-            self.preferences,
-            self.now_ms(),
-        )
+        self.focus = self._enter_phase(state, break_phase(int(state.get("cycles") or 0), self.preferences))
         self._persist_focus()
         self.focus_changed.emit()
         return True

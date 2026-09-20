@@ -806,3 +806,47 @@ def test_a_reminder_is_silent_when_the_student_turned_sound_off(
     window.session.preferences = {**(window.session.preferences or {}), "reminder_sound": False}
     window._present_alerts([{"title": "Essay starts soon", "body": "19:00 · Thu"}])
     assert window._bell.started == []
+
+
+def test_the_end_of_session_chime_answers_to_its_own_setting(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """The setting saved a value and played nothing. A focus notice is not a reminder: it uses the
+    tone the phase carries and only sounds when the student asked for an end-of-session chime."""
+    window._bell = RingRecorder()
+    window.session.preferences = {
+        **(window.session.preferences or {}),
+        "reminder_sound": True,
+        "end_chime": True,
+        "alert_volume": 70,
+    }
+    window._present_alerts([{"title": "Focus session", "body": "Essay", "kind": "focus", "tone": "bright"}])
+    assert window._bell.started == [("bright", 70)]
+
+
+def test_no_chime_at_the_end_of_a_session_when_that_setting_is_off(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    window._bell = RingRecorder()
+    window.session.preferences = {
+        **(window.session.preferences or {}),
+        "reminder_sound": True,
+        "end_chime": False,
+    }
+    window._present_alerts([{"title": "Break", "body": "Essay", "kind": "focus", "tone": "soft"}])
+    assert window._bell.started == []
+
+
+def test_a_reminder_still_rings_when_the_end_of_session_chime_is_off(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """The two settings are separate, so gating one on the other would silence reminders."""
+    window._bell = RingRecorder()
+    window.session.preferences = {
+        **(window.session.preferences or {}),
+        "reminder_sound": True,
+        "end_chime": False,
+        "alert_volume": 80,
+    }
+    window._present_alerts([{"title": "Essay starts soon", "body": "19:00 · Thu"}])
+    assert window._bell.started == [("chime", 80)]

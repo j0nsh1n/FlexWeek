@@ -1095,3 +1095,39 @@ def test_unsaved_changes_block_account_import(qapp: QApplication, server: LocalS
     session.preview_account_import({"format": 3})
     assert session.transfer_preview is None
     assert "unsaved" in session.message
+
+
+def test_moving_into_a_break_says_so_with_the_break_tone(qapp: QApplication, server: LocalServer) -> None:
+    """The web announces every phase change. Without this the end-of-session chime setting has
+    nothing to fire on, because a quick focus session rolls straight into a break in silence."""
+    session = signed_in(qapp, server.origin, "phase", create=True)
+    heard: list[dict] = []
+    session.alerts.connect(lambda notices: heard.extend(notices))
+    session.now_ms = lambda: 1_000_000
+    assert session.start_quick_focus() is True
+    heard.clear()
+    session.now_ms = lambda: 1_000_000 + 30 * 60_000
+    session.tick_focus()
+    wait_until(qapp, lambda: not session.busy)
+    focus = [notice for notice in heard if notice.get("kind") == "focus"]
+    assert focus, heard
+    assert focus[0]["tone"] == "soft"
+    assert session.focus is not None and session.focus["phase"] in ("break", "long_break")
+
+
+def test_going_back_to_work_says_so_with_the_work_tone(qapp: QApplication, server: LocalServer) -> None:
+    session = signed_in(qapp, server.origin, "phase2", create=True)
+    session.now_ms = lambda: 1_000_000
+    assert session.start_quick_focus() is True
+    session.now_ms = lambda: 1_000_000 + 30 * 60_000
+    session.tick_focus()
+    wait_until(qapp, lambda: not session.busy)
+    heard: list[dict] = []
+    session.alerts.connect(lambda notices: heard.extend(notices))
+    session.now_ms = lambda: 1_000_000 + 90 * 60_000
+    session.tick_focus()
+    wait_until(qapp, lambda: not session.busy)
+    focus = [notice for notice in heard if notice.get("kind") == "focus"]
+    assert focus, heard
+    assert focus[0]["tone"] == "bright"
+    assert session.focus is not None and session.focus["phase"] == "work"
