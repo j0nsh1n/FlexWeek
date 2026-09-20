@@ -5,7 +5,80 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-20
+
+### Removed
+- The web client (2026-09-19). `frontend/` is gone: 11,677 lines of JavaScript,
+  CSS and HTML, and 6,982 lines of Node tests. FlexWeek was two clients over one
+  backend, kept at parity by hand, and most of the app's half-built controls
+  turned out to be the desktop side of a pair whose web side worked. The backend
+  serves the API and nothing else, Node has left CI, and `--web-only` is now
+  `--backend-only`. **There is no browser way in: FlexWeek is the desktop app.**
+- Retired Qt WebEngine desktop shell (2026-09-19). The Chromium window, Linux
+  renderer sandbox helper, and leftover probe tests are gone. The look-concepts
+  mock-up opens in the system browser.
+
+### Added
+- Alarms that make a sound (2026-09-19). The desktop app stored six sound names,
+  a volume and a "Play a sound" box, and had no audio in it at all: every alarm
+  was a silent dialog. The five tones are synthesised as PCM and played through
+  `QAudioSink`, repeating every 2.5 seconds until the alarm is answered. An alarm
+  set to Spotify opens its linked track and falls back to a chime if that does
+  not open. Audio is best-effort throughout: a machine with no sound card shows
+  the alarm in silence rather than failing.
+- The alarm editor reaches all of it (2026-09-19). Sound, days and a per-alarm
+  Spotify link, an alarm on no days refused because it could never ring, a bad
+  link caught where it is typed, and a **Test** button beside the volume.
+- A Spotify link on any block (2026-09-19). Both editors have the field the web
+  had, so the Spotify button is no longer limited to the default link.
+- Focus splitting on the desktop (2026-09-19). "Split long homework into focus
+  sessions" works: the solver is asked to reserve the breaks before it runs, and
+  each placed block becomes chunks and breaks laid end to end on the day it
+  chose. Off-grid timer lengths are caught in Settings with an offer to round.
+- Start FlexWeek at login (2026-09-19) writes a real autostart entry, or a Run
+  key on Windows. The box shows what this machine will do, not what the account
+  remembers.
+- Alerts that stay until handled (2026-09-19). The preference was mislabelled
+  "Alert even in Do Not Disturb", which the app cannot promise; it now says what
+  the web says and does it, in a strip inside the window.
+- Category chips carry their category's colour, or the accent when "Colour chips
+  with my accent" is on (2026-09-19).
+- A plan review panel (2026-09-19). Solve says what moved and why, in the
+  solver's own words, instead of dropping one explanation in the status line.
+
 ### Fixed
+- Day and Month wear the design you picked (2026-09-20). The design was read off
+  whichever widget was on screen, so it dressed the week and nothing else and
+  the app looked like two programs. The choice now decides the colours wherever
+  you are in the planner.
+- Signing in is the sign-in screen (2026-09-20). Create account and Sign in sat
+  side by side as equals; making an account is now a line of small print that
+  switches the card over, and whichever mode is showing owns Return.
+- A squeezed dialog no longer slices text in half (2026-09-20). Fields have a
+  minimum height at every text size.
+- The ringing alarm is 380px wide with buttons you can hit, not 209 (2026-09-19).
+- The end-of-session chime answers to its own setting, and focus phase changes
+  announce themselves (2026-09-19).
+- "Open on: Day" opens on Day (2026-09-19). It was saved and never read.
+- Ten preferences the desktop could not set are settable, so it is a peer of the
+  account rather than a subset (2026-09-19).
+- The week's actions are grouped instead of spilling across two rows
+  (2026-09-19). Six buttons stay out; the rest are under More and Tools, built
+  from one table so they cannot drift apart. Nothing was removed.
+- Every dialog fits a 1366x768 laptop (2026-09-18).
+- Three designs get a narrow arrangement at 1150px instead of a sideways scroll
+  (2026-09-18).
+- Long blocks repeat their name, the month reveals after layout, the dial's week
+  strip stays on screen, and no surface speaks in raw timestamps (2026-09-18).
+- Bento's tiles close their gap, Clay's cards elide, and Timeline's bars sit in
+  a track (2026-09-18).
+- The sign-in page has a card, and chrome buttons stop filling the window
+  (2026-09-18).
+- The window chrome follows whichever design is on screen (2026-09-18).
+- The Linux and Windows packages carry what the alarms need (2026-09-20).
+  QtMultimedia arrived with dependencies neither bundle check allowed; both
+  lists now name them, and a missing one means a silent alarm rather than an app
+  that will not start.
 - The week grid opens on the current time, not empty dawn (2026-09-19).
 - Retro Week.exe stays on the desk, and Saturday and Sunday scroll into view
   (2026-09-19).
@@ -13,10 +86,11 @@ All notable changes to FlexWeek are documented here. Format follows
 - Card tints stay visible against the page, so Terminal Bento load bars
   no longer vanish into black (2026-09-19).
 
-### Removed
-- Retired Qt WebEngine desktop shell (2026-09-19). The Chromium window,
-  Linux renderer sandbox helper, and leftover probe tests are gone. The
-  look-concepts mock-up opens in the system browser.
+### Security
+- The Spotify link check is proven, not assumed (2026-09-20). Nine bypasses that
+  put `open.spotify.com` where a substring check would accept it — in userinfo,
+  a path segment, a query parameter, a subdomain, plain http, an explicit port,
+  a `javascript:` scheme — each have a test showing they are refused.
 
 ## [0.12.0] - 2026-09-19
 
