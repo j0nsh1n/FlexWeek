@@ -174,6 +174,14 @@ def settings(look: dict) -> PrefsDialog:
     return PrefsDialog(None, {}, look, {})
 
 
+def test_settings_opens_on_appearance_with_fine_tune_closed(qapp: QApplication) -> None:
+    dialog = settings({})
+    assert dialog.nav.currentRow() == 0
+    assert dialog.fine_host.isHidden() is True
+    dialog.fine_tune.setChecked(True)
+    assert dialog.fine_host.isHidden() is False
+
+
 def choose(dialog: PrefsDialog, token: str) -> None:
     index = dialog.look.findData(token)
     assert index >= 0, token

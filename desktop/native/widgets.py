@@ -74,6 +74,7 @@ from desktop.native.calendar import (
     is_series,
     local_stamp,
     monday_of,
+    month_chips,
     move_range,
     occupied_intervals,
     resize_bottom_range,
@@ -91,6 +92,8 @@ from desktop.native.reuse import (
 from desktop.native.weekmodel import due_label, length_label
 
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+CHIP_ROLE = int(Qt.ItemDataRole.UserRole) + 1
+TODAY_ROLE = int(Qt.ItemDataRole.UserRole) + 2
 DETAIL_BOX_HEIGHT = 84
 # A scroll area reports its own modest size hint rather than its content's, which is what keeps the
 # homework editor on a laptop screen. It does not claim the content's width either, so that is set.
@@ -587,7 +590,28 @@ class DayAgenda(QWidget):
             )
             work.setFlags(Qt.ItemFlag.NoItemFlags)
             self.list.addItem(work)
-        self._section("Due soon", agenda["due_soon"])
+        unplaced = [row for row in agenda["sessions"] if not row["start"]]
+        timeline = [("session", row) for row in agenda["sessions"] if row["start"]]
+        timeline.extend(("fixed", row) for row in agenda["fixed"])
+        timeline.sort(key=lambda pair: str(pair[1]["start"]))
+        for row in unplaced:
+            block = row["block"]
+            item = self._row(
+                f"not placed yet · {block['title']} · {length_label(block.get('duration_min') or 0)}",
+                block.get("category") or "assignments",
+            )
+            item.setData(Qt.ItemDataRole.UserRole, {"kind": "block", "id": block["id"]})
+            self.list.addItem(item)
+        for _kind, row in timeline:
+            block = row["block"]
+            duration = int(block.get("duration_min") or 0)
+            item = self._row(
+                f"{row['start']} · {block['title']} · {length_label(duration)}",
+                block.get("category") or "",
+            )
+            item.setData(Qt.ItemDataRole.UserRole, {"kind": "block", "id": block["id"]})
+            item.setSizeHint(QSize(0, max(28, min(160, duration // 3))))
+            self.list.addItem(item)
         for item in agenda["due_soon"]:
             # A student reads "Thu 23:59", not "2026-09-17T23:59". due_label is what every other
             # surface in the app already uses.
@@ -597,25 +621,6 @@ class DayAgenda(QWidget):
             )
             row.setData(Qt.ItemDataRole.UserRole, {"kind": "homework", "id": item["id"]})
             self.list.addItem(row)
-        self._section("Homework", agenda["sessions"])
-        for row in agenda["sessions"]:
-            block = row["block"]
-            when = row["start"] or "not placed yet"
-            item = self._row(
-                f"{when} · {block['title']} · {length_label(block.get('duration_min') or 0)}",
-                block.get("category") or "assignments",
-            )
-            item.setData(Qt.ItemDataRole.UserRole, {"kind": "block", "id": block["id"]})
-            self.list.addItem(item)
-        self._section("Fixed", agenda["fixed"])
-        for row in agenda["fixed"]:
-            block = row["block"]
-            item = self._row(
-                f"{row['start']} · {block['title']} · {length_label(block.get('duration_min') or 0)}",
-                block.get("category") or "",
-            )
-            item.setData(Qt.ItemDataRole.UserRole, {"kind": "block", "id": block["id"]})
-            self.list.addItem(item)
 
     def _section(self, title: str, rows: list) -> None:
         if not rows:
@@ -656,6 +661,47 @@ class DayAgenda(QWidget):
             self.item_activated.emit(data["id"])
 
 
+class MonthChipDelegate(QStyledItemDelegate):
+    """Date number plus named chips. Counts like '2 sessions' hid what the day actually held."""
+
+    def paint(
+        self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex | QPersistentModelIndex
+    ) -> None:
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        box = option.rect.adjusted(4, 4, -4, -4)
+        today = bool(index.data(TODAY_ROLE))
+        if today:
+            painter.setPen(QColor(option.palette.highlight().color()))
+            painter.setBrush(option.palette.base().color())
+            painter.drawRoundedRect(box, 8, 8)
+        painter.setPen(option.palette.text().color())
+        painter.drawText(
+            box.adjusted(4, 2, -4, 0),
+            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft,
+            index.data() or "",
+        )
+        chips = index.data(CHIP_ROLE) or []
+        y = box.top() + option.fontMetrics.height() + 6
+        for title, colour in chips:
+            if y + 16 > box.bottom():
+                break
+            chip = QRect(box.left() + 4, y, max(24, box.width() - 8), 16)
+            fill = QColor(colour)
+            fill.setAlpha(90)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(fill)
+            painter.drawRoundedRect(chip, 8, 8)
+            painter.setPen(option.palette.text().color())
+            painter.drawText(
+                chip.adjusted(6, 0, -6, 0),
+                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                option.fontMetrics.elidedText(title, Qt.TextElideMode.ElideRight, chip.width() - 12),
+            )
+            y += 18
+        painter.restore()
+
+
 class MonthGrid(QWidget):
     day_activated = Signal(str)
 
@@ -678,6 +724,7 @@ class MonthGrid(QWidget):
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.setHorizontalHeaderLabels(DAYS)
+        self.table.setItemDelegate(MonthChipDelegate(self.table))
         self.table.cellClicked.connect(self._activate)
         layout.addWidget(self.table)
         self.overdue = QLabel()
@@ -685,10 +732,41 @@ class MonthGrid(QWidget):
         self.overdue.setWordWrap(True)
         layout.addWidget(self.overdue)
         self._palette = resolved_palette("system", False, None)
+        self._tokens: dict[str, str] | None = None
+        self._placed: list[tuple[str, str, str]] = []
         self._shown: tuple[dict | None, bool] | None = None
 
     def set_palette(self, palette: dict) -> None:
         self._palette = palette
+        if self._shown is not None:
+            self.set_month(*self._shown)
+
+    def set_tokens(self, tokens: dict[str, str]) -> None:
+        """A layout's own colours, so Month is not the pack's calendar sitting inside Bento."""
+        self._tokens = tokens
+        radius = 8
+        if tokens.get("cta"):
+            radius = 16
+        self.setStyleSheet(
+            f"#monthPageInner, #monthGrid {{ background: {tokens['bg']}; color: {tokens['bg_ink']}; }}"
+            f"#monthTitle {{ color: {tokens['bg_ink']}; font-weight: 800; }}"
+            f"#monthOverdue, #monthSavedWarning {{ color: {tokens['bg_muted']}; }}"
+            f"QHeaderView::section {{ background: {tokens['bg']}; color: {tokens['bg_muted']};"
+            f" border: none; padding: 4px; }}"
+            f"QTableWidget {{ gridline-color: {tokens['line']}; border: none; }}"
+            f"QTableWidget::item {{ background: {tokens['surface']}; border-radius: {radius}px; }}"
+        )
+        self._palette = {
+            "muted": tokens["bg_muted"],
+            "text": tokens["bg_ink"],
+            "panel": tokens["surface"],
+            "accent": tokens["accent"],
+        }
+        if self._shown is not None:
+            self.set_month(*self._shown)
+
+    def set_placed(self, placed: list[tuple[str, str, str]]) -> None:
+        self._placed = placed
         if self._shown is not None:
             self.set_month(*self._shown)
 
@@ -707,6 +785,7 @@ class MonthGrid(QWidget):
         # The API sends whole weeks, four to six of them. Five fixed rows lost the last week of August.
         self.table.setRowCount((len(days) + 6) // 7)
         tallest = 1
+        today = date.today().isoformat()
         for index in range(self.table.rowCount() * 7):
             row, column = divmod(index, 7)
             if index >= len(days):
@@ -714,23 +793,23 @@ class MonthGrid(QWidget):
                 continue
             cell = days[index]
             stamp = date.fromisoformat(cell["date"])
-            lines = [str(stamp.day)]
-            if cell.get("due_ids"):
-                lines.append(f"{len(cell['due_ids'])} due")
-            if cell.get("session_count"):
-                lines.append(f"{cell['session_count']} sessions")
-            if cell.get("locked_count"):
-                lines.append(f"{cell['locked_count']} fixed")
-            tallest = max(tallest, len(lines))
-            item = QTableWidgetItem("\n".join(lines))
+            chips = month_chips(cell, snapshot, self._placed)
+            tallest = max(tallest, 1 + len(chips))
+            item = QTableWidgetItem(str(stamp.day))
             item.setData(Qt.ItemDataRole.UserRole, cell["date"])
+            marks = [
+                (title, (CATEGORIES.get(category) or {}).get("mark") or "#94a3b8")
+                for title, category in chips
+            ]
+            item.setData(CHIP_ROLE, marks)
+            item.setData(TODAY_ROLE, cell["date"] == today)
             if not cell.get("in_month"):
                 item.setForeground(QColor(self._palette["muted"]))
             self.table.setItem(row, column, item)
         # Rows share the height on offer but never shrink below the busiest day, or Qt draws "14…"
         # where the counts should be. Past that the table scrolls.
         line = self.table.fontMetrics().lineSpacing()
-        self.table.verticalHeader().setMinimumSectionSize(tallest * line + 8)
+        self.table.verticalHeader().setMinimumSectionSize(tallest * line + 16)
         overdue = snapshot.get("overdue") or []
         if overdue:
             titles = ", ".join(item.get("title") or item.get("id", "") for item in overdue[:8])

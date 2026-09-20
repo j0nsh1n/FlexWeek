@@ -27,6 +27,10 @@ class Scene:
     options: dict[str, str] = field(default_factory=dict)
     tokens: dict[str, str] = field(default_factory=dict)
     scale: float = 1.0
+    surface: str = "week"
+    month: dict | None = None
+    iso_day: str = ""
+    dirty: bool = False
 
     def px(self, size: float) -> int:
         """A size in pixels that follows the student's Text size knob."""
@@ -126,6 +130,7 @@ class LayoutView(QWidget):
     late_requested = Signal()
     my_day_requested = Signal()
     back_requested = Signal()
+    day_activated = Signal(str)
 
     layout_id = ""
 
@@ -149,7 +154,13 @@ class LayoutView(QWidget):
         held = QApplication.focusWidget()
         name = held.objectName() if held is not None and held is not self and self.isAncestorOf(held) else ""
         self._was_cramped = self.cramped
-        self.render(scene, week_changed)
+        if scene.surface == "month":
+            self.render_month(scene, week_changed)
+        else:
+            board = getattr(self, "_month_board", None)
+            if board is not None:
+                board.hide()
+            self.render(scene, week_changed)
         again = self.findChild(QWidget, name) if name else None
         if again is not None:
             again.setFocus()
@@ -161,13 +172,42 @@ class LayoutView(QWidget):
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)
+        board = getattr(self, "_month_board", None)
+        if board is not None and board.isVisible():
+            board.setGeometry(self.rect())
         # Only when the answer changes, so an ordinary resize does not rebuild the whole view.
         if self._scene is not None and self.cramped != self._was_cramped:
             self._was_cramped = self.cramped
-            self.render(self._scene, False)
+            if self._scene.surface == "month":
+                self.render_month(self._scene, False)
+            else:
+                self.render(self._scene, False)
 
     def render(self, scene: Scene, week_changed: bool) -> None:
         raise NotImplementedError
+
+    def render_month(self, scene: Scene, week_changed: bool) -> None:
+        """A chip calendar in this design's colours. Retro and Mission keep this; they only paint."""
+        from desktop.native.widgets import MonthGrid
+
+        board = getattr(self, "_month_board", None)
+        if board is None:
+            board = MonthGrid(self)
+            board.setObjectName("layoutMonthBoard")
+            board.day_activated.connect(self.day_activated.emit)
+            self._month_board = board
+        placed = [
+            (scene.week.date_of(item.day).isoformat(), item.title, item.category)
+            for item in scene.week.occurrences
+        ]
+        board.set_tokens(scene.tokens)
+        board.set_placed(placed)
+        board.set_month(scene.month, scene.dirty)
+        if scene.iso_day:
+            board.reveal(scene.iso_day)
+        board.setGeometry(self.rect())
+        board.show()
+        board.raise_()
 
 
 def day_buttons(

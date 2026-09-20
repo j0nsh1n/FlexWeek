@@ -388,15 +388,32 @@ def test_a_tool_does_what_its_button_does(qapp: QApplication, window: NativeWind
     assert len(window.session.blocks) != before or window.session.can_redo() is True
 
 
-def test_day_and_month_keep_the_planning_controls(qapp: QApplication, window: NativeWindow) -> None:
+def test_day_and_month_follow_the_week_layout(qapp: QApplication, window: NativeWindow) -> None:
     window._layout = {"main": "bento", "day": "one", "options": {}}
     click(window, "viewDay")
-    assert window.planner.currentWidget() is window.day_agenda
-    assert (window.plan_chrome.isVisible(), window.tools_button.isVisible()) == (True, False)
+    assert type(window.planner.currentWidget()).__name__ == "BentoView"
+    assert window.planner.currentWidget().scene.surface == "day"
+    assert (window.plan_chrome.isVisible(), window.tools_button.isVisible()) == (False, True)
+    click(window, "viewMonth")
+    settled(qapp, window)
+    shown = window.planner.currentWidget()
+    assert type(shown).__name__ == "BentoView"
+    assert shown.scene.surface == "month"
     click(window, "viewWeek")
     assert (window.plan_chrome.isVisible(), window.tools_button.isVisible()) == (False, True)
     click(window, "viewMyDay")
+    assert type(window.planner.currentWidget()).__name__ == "OneThingView"
     assert (window.plan_chrome.isVisible(), window.tools_button.isVisible()) == (False, False)
+
+
+def test_todays_app_keeps_the_clock_day_and_chip_month(qapp: QApplication, window: NativeWindow) -> None:
+    window._layout = {"main": "classic", "day": "one", "options": {}}
+    click(window, "viewDay")
+    assert window.planner.currentWidget() is window.day_agenda
+    assert window.plan_chrome.isVisible() is True
+    click(window, "viewMonth")
+    settled(qapp, window)
+    assert window.planner.currentWidget() is window.month_grid
 
 
 def test_bentos_buttons_reach_the_products_own_add_and_plan(
@@ -563,9 +580,11 @@ def test_no_chrome_button_spreads_across_the_window(qapp: QApplication, window: 
     window.session.reset_focus()
     wait_until(qapp, lambda: window.session.focus is None)
 
+    window._layout = {"main": "classic", "day": "one", "options": {}}
     click(window, "viewDay")
     qapp.processEvents()
     action = window.day_agenda.next_action
+    assert action.isVisible()
     assert action.width() <= action.sizeHint().width() + 8, f"day action is {action.width()}px"
 
 

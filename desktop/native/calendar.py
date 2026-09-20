@@ -108,6 +108,43 @@ def sunday_due(week_start: str) -> str:
     return date_for_day(week_start, 6) + "T23:59"
 
 
+def month_chips(
+    cell: dict,
+    snapshot: dict | None,
+    placed: list[tuple[str, str, str]] | None = None,
+) -> list[tuple[str, str]]:
+    """Names on a month cell: homework that is due, then what is already on that date in the open week."""
+    found: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    iso = cell.get("date") or ""
+    titles: dict[str, tuple[str, str]] = {}
+    if snapshot:
+        for item in list(snapshot.get("deadlines") or []) + list(snapshot.get("overdue") or []):
+            ident = str(item.get("id") or "")
+            title = str(item.get("title") or ident)
+            category = str(item.get("category") or "assignments")
+            if ident:
+                titles[ident] = (title, category)
+        for aid in cell.get("due_ids") or []:
+            title, category = titles.get(str(aid), (str(aid), "assignments"))
+            if title not in seen:
+                seen.add(title)
+                found.append((title, category))
+        for item in snapshot.get("overdue") or []:
+            due = str(item.get("due") or "")[:10]
+            if due != iso:
+                continue
+            title = str(item.get("title") or item.get("id") or "")
+            if title and title not in seen:
+                seen.add(title)
+                found.append((title, str(item.get("category") or "assignments")))
+    for stamp, title, category in placed or ():
+        if stamp == iso and title not in seen:
+            seen.add(title)
+            found.append((title, category))
+    return found[:4]
+
+
 def local_stamp(now: datetime | None = None) -> str:
     moment = now or datetime.now()
     return moment.strftime("%Y-%m-%dT%H:%M")

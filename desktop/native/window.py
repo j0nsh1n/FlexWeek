@@ -6,9 +6,18 @@ import contextlib
 import json
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from uuid import uuid4
 
 from PySide6.QtCore import QEvent, QObject, QStandardPaths, Qt, QTimer, QUrl
-from PySide6.QtGui import QCloseEvent, QDesktopServices, QGuiApplication, QIcon, QKeyEvent, QPalette
+from PySide6.QtGui import (
+    QCloseEvent,
+    QDesktopServices,
+    QGuiApplication,
+    QIcon,
+    QKeyEvent,
+    QPalette,
+    QResizeEvent,
+)
 from PySide6.QtNetwork import QLocalServer
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
@@ -31,9 +40,17 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from backend.slots import minutes_to_hhmm
+from backend.slots import SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm
 from desktop.native import autostart
-from desktop.native.calendar import DAY_FULL, FLEX_CATEGORIES, agenda_for, monday_of, sunday_due
+from desktop.native.calendar import (
+    DAY_FULL,
+    FLEX_CATEGORIES,
+    WEEKDAYS,
+    agenda_for,
+    date_for_day,
+    monday_of,
+    sunday_due,
+)
 from desktop.native.controller import NativeSession
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
 from desktop.native.layouts.base import LayoutView, Scene
@@ -56,6 +73,7 @@ from desktop.native.settings import (
     FocusPanel,
     PrefsDialog,
     RestoreDialog,
+    SetupCard,
     TransferPreviewDialog,
 )
 from desktop.native.sound import Bell
@@ -102,6 +120,7 @@ class NativeWindow(QMainWindow):
         self._opened_on_preference = False
         self._views: dict[str, LayoutView] = {}
         self._making_account = False
+        self._setup_dismissed = False
         self._build_auth()
         self._build_recovery()
         self._build_week()
@@ -282,14 +301,27 @@ class NativeWindow(QMainWindow):
     def _build_recovery(self) -> None:
         page = QWidget()
         page.setObjectName("recoveryPage")
-        layout = QVBoxLayout(page)
+        outer = QVBoxLayout(page)
+        outer.addStretch(1)
+        middle = QHBoxLayout()
+        middle.addStretch(1)
+        card = QWidget()
+        card.setObjectName("authCard")
+        card.setMaximumWidth(AUTH_CARD_WIDTH)
+        card.setMinimumWidth(AUTH_CARD_WIDTH)
+        layout = QVBoxLayout(card)
+        brand = QLabel("FlexWeek")
+        brand.setObjectName("authBrand")
+        layout.addWidget(brand)
         heading = QLabel("Save these recovery codes")
+        heading.setObjectName("authHeading")
         layout.addWidget(heading)
         note = QLabel(
             "They are the only way to reset your password. FlexWeek cannot email you. "
             "Copy them somewhere you will still have if this computer is gone."
         )
         note.setWordWrap(True)
+        note.setObjectName("authNote")
         layout.addWidget(note)
         self.recovery_list = QLabel()
         self.recovery_list.setObjectName("recoveryList")
@@ -299,12 +331,15 @@ class NativeWindow(QMainWindow):
         self.recovery_ack.setObjectName("recoveryAck")
         self.recovery_ack.toggled.connect(self._on_recovery_ack)
         layout.addWidget(self.recovery_ack)
-        self.recovery_continue = QPushButton("Continue")
+        self.recovery_continue = QPushButton("Continue to my week")
         self.recovery_continue.setObjectName("recoveryContinue")
         self.recovery_continue.setEnabled(False)
         self.recovery_continue.clicked.connect(self._finish_recovery)
         layout.addWidget(self.recovery_continue)
-        layout.addStretch()
+        middle.addWidget(card)
+        middle.addStretch(1)
+        outer.addLayout(middle)
+        outer.addStretch(1)
         self._stack.addWidget(page)
 
     def _build_week(self) -> None:
@@ -355,6 +390,11 @@ class NativeWindow(QMainWindow):
         chrome = QVBoxLayout(self.plan_chrome)
         chrome.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.plan_chrome)
+        self.setup_card = SetupCard(page)
+        self.setup_card.finished.connect(self._apply_setup)
+        self.setup_card.dismissed.connect(self._dismiss_setup)
+        self.setup_card.hide()
+        self.setup_card.setFixedWidth(420)
         self.chips = CategoryChips()
         self.chips.category_chosen.connect(self._add_from_chip)
         chrome.addWidget(self.chips)
@@ -518,11 +558,17 @@ class NativeWindow(QMainWindow):
         self._stack.addWidget(page)
 
     def _planner_widget(self, view: str) -> QWidget:
-        """The chosen main view stands in for the week grid; Day and Month stay what they were."""
+        """The chosen main view stands in for the week grid, and for Day and Month too.
+
+        Today's app keeps the clock-order Day list and the chip Month. My day is still its own
+        screen. A design of its own rebuilds Day and Month in that design, so the app is not two
+        programs once you leave the week.
+        """
         if self._day_mode:
             return self._layout_view(self._layout["day"])
-        if view == "week" and self._layout["main"] in VIEW_CLASSES:
-            return self._layout_view(self._layout["main"])
+        main = self._layout["main"]
+        if main in VIEW_CLASSES and view in {"week", "day", "month"}:
+            return self._layout_view(main)
         return {"day": self.day_agenda, "month": self.month_grid}.get(view, self.week_table)
 
     def _layout_view(self, layout_id: str) -> LayoutView:
@@ -540,6 +586,7 @@ class NativeWindow(QMainWindow):
             view.late_requested.connect(self._open_late)
             view.my_day_requested.connect(self._enter_day)
             view.back_requested.connect(self._leave_day)
+            view.day_activated.connect(self.session.open_day)
             self.planner.addWidget(view)
             self._views[layout_id] = view
         view.show_week(self._scene_for(layout_id))
@@ -563,6 +610,9 @@ class NativeWindow(QMainWindow):
         pack, system_dark, accent = self._look_inputs()
         palette = resolved_palette(pack, system_dark, self._look, accent)
         session = self.session
+        surface = "week"
+        if not self._day_mode and layout_id in VIEW_CLASSES and session.planner_view in {"day", "month"}:
+            surface = session.planner_view
         return Scene(
             week=build_week(session.week_start, session.blocks, session.assignments, session.trace),
             today=clock["day"] if monday_of(clock["iso"]) == session.week_start else None,
@@ -570,6 +620,10 @@ class NativeWindow(QMainWindow):
             options=options,
             tokens=tokens_for(layout_id, options["colour"], palette),
             scale=TEXT_PT[effective_look(self._look)["text"]] / TEXT_PT["normal"],
+            surface=surface,
+            month=session.month_data,
+            iso_day=session.selected_day,
+            dirty=session.dirty,
         )
 
     def _chrome_palette(self, palette: dict) -> dict:
@@ -653,6 +707,7 @@ class NativeWindow(QMainWindow):
             self._day_mode = False
             self._opened_on_preference = False
             self._making_account = False
+            self._setup_dismissed = False
             self._sync_auth_mode()
             self.username.clear()
             self.password.clear()
@@ -666,6 +721,88 @@ class NativeWindow(QMainWindow):
     def _finish_recovery(self) -> None:
         self._allow_week_page = True
         self.session.finish_recovery()
+
+    def _sync_setup(self) -> None:
+        empty = not self.session.blocks and not self.session.assignments
+        show = self.session.account is not None and empty and not self._setup_dismissed
+        self.setup_card.setVisible(bool(show))
+        if show:
+            self._place_setup()
+
+    def _place_setup(self) -> None:
+        card = self.setup_card
+        page = card.parentWidget()
+        if page is None or not card.isVisible():
+            return
+        card.adjustSize()
+        x = max(0, (page.width() - card.width()) // 2)
+        y = max(0, (page.height() - card.height()) // 3)
+        card.move(x, y)
+        card.raise_()
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._place_setup()
+
+    def _dismiss_setup(self) -> None:
+        self._setup_dismissed = True
+        self.setup_card.hide()
+
+    def _apply_setup(self, payload: dict) -> None:
+        self._setup_dismissed = True
+        self.setup_card.hide()
+        school = payload.get("school")
+        if school:
+            start, end = school
+            try:
+                begin, stop = hhmm_to_minutes(start), hhmm_to_minutes(end)
+            except (TypeError, ValueError):
+                begin, stop = 8 * 60, 14 * 60 + 30
+            duration = max(SLOT_MIN, stop - begin)
+            self.session.add_block(
+                {
+                    "id": "school",
+                    "title": "School",
+                    "kind": "locked",
+                    "category": "class",
+                    "start": minutes_to_hhmm(begin),
+                    "duration_min": duration,
+                    "days": list(WEEKDAYS),
+                }
+            )
+        sport = payload.get("sport")
+        if sport:
+            title, start, end = sport
+            try:
+                begin, stop = hhmm_to_minutes(start), hhmm_to_minutes(end)
+            except (TypeError, ValueError):
+                begin, stop = 15 * 60 + 30, 17 * 60
+            duration = max(SLOT_MIN, stop - begin)
+            self.session.add_block(
+                {
+                    "id": "sport",
+                    "title": title or "Soccer",
+                    "kind": "locked",
+                    "category": "exercise",
+                    "start": minutes_to_hhmm(begin),
+                    "duration_min": duration,
+                    "days": [3],
+                }
+            )
+        homework = payload.get("homework")
+        if homework:
+            title, minutes, due = homework
+            self.session.add_homework(
+                {
+                    "id": str(uuid4()),
+                    "title": title or "Homework",
+                    "due": due or sunday_due(self.session.week_start),
+                    "estimate_min": int(minutes),
+                    "revision": 0,
+                }
+            )
+        if payload:
+            self.session.save()
 
     def _show_recovery(self, codes: list) -> None:
         self._allow_week_page = False
@@ -691,6 +828,16 @@ class NativeWindow(QMainWindow):
             self.session.day_data,
         )
         self.day_agenda.set_agenda(self.session.selected_day, agenda, self.session.day_data)
+        placed = [
+            (
+                date_for_day(self.session.week_start, int(day)),
+                str(block.get("title") or ""),
+                str(block.get("category") or ""),
+            )
+            for block in self.session.blocks
+            for day in block.get("days") or []
+        ]
+        self.month_grid.set_placed(placed)
         self.month_grid.set_month(self.session.month_data, self.session.dirty)
         # After the table has been laid out, or scrollToItem has nothing to measure against and the
         # month stays on its first row.
@@ -713,6 +860,7 @@ class NativeWindow(QMainWindow):
         else:
             self.prev_nav.setText("Previous week")
             self.next_nav.setText("Next week")
+        self._sync_setup()
         self._show_page("weekPage")
         retry = self.findChild(QPushButton, "retrySave")
         if retry is not None:

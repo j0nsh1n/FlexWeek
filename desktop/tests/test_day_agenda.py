@@ -100,17 +100,20 @@ def test_every_row_carries_its_category_colour(qapp: QApplication) -> None:
     view.set_agenda(THURSDAY, agenda(), None)
     assert swatches(view) == [
         CATEGORIES["assignments"]["mark"],
-        CATEGORIES["study"]["mark"],
-        CATEGORIES["assignments"]["mark"],
-        CATEGORIES["assignments"]["mark"],
         CATEGORIES["class"]["mark"],
+        CATEGORIES["assignments"]["mark"],
+        CATEGORIES["assignments"]["mark"],
+        CATEGORIES["study"]["mark"],
     ]
 
 
-def test_the_day_is_grouped_instead_of_one_flat_list(qapp: QApplication) -> None:
+def test_the_day_is_in_clock_order(qapp: QApplication) -> None:
     view = DayAgenda()
     view.set_agenda(THURSDAY, agenda(), None)
-    assert [row for row in rows(view) if row.isupper()] == ["DUE SOON", "HOMEWORK", "FIXED"]
+    text = "\n".join(rows(view))
+    assert [row for row in rows(view) if row.isupper()] == []
+    assert text.index("08:00 · School") < text.index("18:45 · History essay")
+    assert "not placed yet · Science fair poster" in text
 
 
 def test_lengths_and_unplaced_work_are_said_in_words(qapp: QApplication) -> None:
