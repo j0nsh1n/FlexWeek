@@ -220,6 +220,10 @@ class PrefsDialog(QDialog):
         index = self.accent.findData(preferences.get("accent") or "default")
         self.accent.setCurrentIndex(max(0, index))
         form.addRow("Accent", self.accent)
+        self.accent_chips = QCheckBox("Use the accent on category chips")
+        self.accent_chips.setObjectName("prefAccentChips")
+        self.accent_chips.setChecked(bool(preferences.get("accent_chips")))
+        form.addRow(self.accent_chips)
         self.knobs = {}
         # Each box shows what is on screen now: the preset's value unless the student moved that knob.
         shown = effective_look(self._look)
@@ -268,6 +272,15 @@ class PrefsDialog(QDialog):
         self.preset_timer.setCurrentIndex(max(0, self.preset_timer.findData(chosen)))
         self.preset_timer.activated.connect(self._apply_timer_preset)
         form.addRow("Timer preset", self.preset_timer)
+        self.long_every = QSpinBox()
+        self.long_every.setObjectName("prefLongEvery")
+        self.long_every.setRange(2, 12)
+        self.long_every.setValue(int(preferences.get("timer_long_break_every") or 4))
+        form.addRow("Long break after", self.long_every)
+        self.auto_split = QCheckBox("Split long homework into focus sessions")
+        self.auto_split.setObjectName("prefAutoSplit")
+        self.auto_split.setChecked(bool(preferences.get("auto_split_pomodoro")))
+        form.addRow(self.auto_split)
         self.reminders = QCheckBox("Reminders")
         self.reminders.setObjectName("prefReminders")
         self.reminders.setChecked(bool(preferences.get("reminders_enabled")))
@@ -278,9 +291,40 @@ class PrefsDialog(QDialog):
         lead = preferences.get("reminder_lead_min")
         self.lead.setValue(5 if lead is None else int(lead))
         form.addRow("Lead minutes", self.lead)
+        self.reminder_sound = QCheckBox("Play a sound")
+        self.reminder_sound.setObjectName("prefReminderSound")
+        self.reminder_sound.setChecked(preferences.get("reminder_sound", True) is not False)
+        form.addRow(self.reminder_sound)
+        self.dnd_override = QCheckBox("Alert even in Do Not Disturb")
+        self.dnd_override.setObjectName("prefDndOverride")
+        self.dnd_override.setChecked(bool(preferences.get("reminder_dnd_override")))
+        form.addRow(self.dnd_override)
+        self.volume = QSpinBox()
+        self.volume.setObjectName("prefAlertVolume")
+        self.volume.setRange(0, 100)
+        self.volume.setValue(int(preferences.get("alert_volume", 80)))
+        form.addRow("Alert volume", self.volume)
+        self.end_chime = QCheckBox("Chime when a session ends")
+        self.end_chime.setObjectName("prefEndChime")
+        self.end_chime.setChecked(bool(preferences.get("end_chime")))
+        form.addRow(self.end_chime)
         self.tray = QCheckBox("Stay in the tray")
         self.tray.setChecked(preferences.get("tray_notifications", True) is not False)
         form.addRow(self.tray)
+        form.addRow(_heading("This app"))
+        self.start_at_login = QCheckBox("Start FlexWeek when I log in")
+        self.start_at_login.setObjectName("prefStartAtLogin")
+        self.start_at_login.setChecked(bool(preferences.get("start_at_login")))
+        form.addRow(self.start_at_login)
+        self.preferred_view = QComboBox()
+        self.preferred_view.setObjectName("prefPreferredView")
+        self.preferred_view.addItem("Whatever I had open", None)
+        self.preferred_view.addItem("Week", "week")
+        self.preferred_view.addItem("Day", "day")
+        self.preferred_view.setCurrentIndex(
+            max(0, self.preferred_view.findData(preferences.get("preferred_view")))
+        )
+        form.addRow("Open on", self.preferred_view)
         self.spotify = QLineEdit(preferences.get("default_spotify_url") or "")
         self.spotify.setObjectName("prefSpotify")
         form.addRow("Default Spotify link", self.spotify)
@@ -377,6 +421,17 @@ class PrefsDialog(QDialog):
             "tray_notifications": self.tray.isChecked(),
             "default_spotify_url": spotify,
             "alarms": deepcopy(self._alarms),
+            # These eight could only be set from the web client, which stopped being the way most
+            # students meet FlexWeek when the browser shell was retired.
+            "timer_long_break_every": self.long_every.value(),
+            "auto_split_pomodoro": self.auto_split.isChecked(),
+            "reminder_sound": self.reminder_sound.isChecked(),
+            "reminder_dnd_override": self.dnd_override.isChecked(),
+            "alert_volume": self.volume.value(),
+            "end_chime": self.end_chime.isChecked(),
+            "accent_chips": self.accent_chips.isChecked(),
+            "start_at_login": self.start_at_login.isChecked(),
+            "preferred_view": self.preferred_view.currentData(),
         }
 
     def _apply_look_menu(self) -> None:
