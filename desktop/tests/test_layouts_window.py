@@ -30,7 +30,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.calendar import sunday_due
     from desktop.native.layouts.dialog import LayoutDialog
     from desktop.native.layouts.one_thing import OneThingView
-    from desktop.native.layouts.registry import LAYOUTS
+    from desktop.native.layouts.registry import LAYOUTS, sanitize_layout
     from desktop.native.layouts.views import VIEW_CLASSES
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
@@ -1032,3 +1032,47 @@ def test_signing_out_comes_back_to_the_sign_in_screen(qapp: QApplication, window
     qapp.processEvents()
     assert window._making_account is False
     assert window.auth_heading.text() == "Sign in"
+
+
+def test_day_and_month_wear_the_same_design_as_the_week(qapp: QApplication, window: NativeWindow) -> None:
+    """The design used to be read off whichever widget was on screen, so it dressed the week and
+    nothing else: pressing Day or Month dropped back to the pack's own blue and the app looked like
+    two programs. A layout is a whole way of showing a week, not a skin for one page of it."""
+    from desktop.native.look import resolved_palette
+
+    window._layout = sanitize_layout({"main": "bento", "day": "one"})
+    window._day_mode = False
+    pack, system_dark, accent = window._look_inputs()
+    plain = resolved_palette(pack, system_dark, window._look, accent)
+    seen = {}
+    for view in ("week", "day", "month"):
+        window.session.set_view(view)
+        qapp.processEvents()
+        seen[view] = window._chrome_palette(plain)["accent"]
+    assert len(set(seen.values())) == 1, seen
+    assert seen["week"] != plain["accent"], "the design never took effect at all"
+
+
+def test_classic_keeps_the_pack_it_is_made_of(qapp: QApplication, window: NativeWindow) -> None:
+    """Classic is the app's own look, so there is no design palette to derive."""
+    from desktop.native.look import resolved_palette
+
+    window._layout = sanitize_layout({"main": "classic", "day": "one"})
+    window._day_mode = False
+    pack, system_dark, accent = window._look_inputs()
+    plain = resolved_palette(pack, system_dark, window._look, accent)
+    assert window._chrome_palette(plain) == plain
+
+
+def test_the_day_screen_brings_its_own_design_with_it(qapp: QApplication, window: NativeWindow) -> None:
+    """My day picks a design of its own, and that one wins while it is showing."""
+    from desktop.native.look import resolved_palette
+
+    window._layout = sanitize_layout({"main": "bento", "day": "dial"})
+    pack, system_dark, accent = window._look_inputs()
+    plain = resolved_palette(pack, system_dark, window._look, accent)
+    window._day_mode = False
+    planning = window._chrome_palette(plain)["accent"]
+    window._day_mode = True
+    watching = window._chrome_palette(plain)["accent"]
+    assert planning != watching

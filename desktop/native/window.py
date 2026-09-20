@@ -573,12 +573,19 @@ class NativeWindow(QMainWindow):
         )
 
     def _chrome_palette(self, palette: dict) -> dict:
-        """The colours for the window around the planner. A design of its own dresses the whole
-        window, so the top bar, the dialogs and the focus timer stop arriving in the pack's blue."""
-        shown = self.planner.currentWidget()
-        if isinstance(shown, LayoutView) and shown.scene is not None:
-            return palette_from_tokens(shown.scene.tokens, palette)
-        return palette
+        """The colours of the design the student picked, for the whole window.
+
+        This used to read whichever widget was on screen, which meant the design dressed the week and
+        nothing else: pressing Day or Month dropped back to the pack's own blue, and the app looked
+        like two different programs. A layout is a whole way of showing a week, not a skin for one
+        page of it, so the choice decides the colours wherever you are in the planner.
+        """
+        layout_id = self._layout["day"] if self._day_mode else self._layout["main"]
+        if layout_id not in VIEW_CLASSES:
+            # Classic is the app's own look, which is the pack, so there is nothing to derive.
+            return palette
+        options = options_for(self._layout, layout_id)
+        return palette_from_tokens(tokens_for(layout_id, options["colour"], palette), palette)
 
     def _refresh_layout(self) -> None:
         shown = self.planner.currentWidget()
@@ -1423,12 +1430,13 @@ class NativeWindow(QMainWindow):
         pack, system_dark, accent = self._look_inputs()
         # Blocks and month cells are painted per item, which a stylesheet cannot reach.
         palette = resolved_palette(pack, system_dark, self._look, accent)
-        self.setStyleSheet(
-            pack_stylesheet(pack, system_dark, self._look, accent, self._chrome_palette(palette))
-        )
-        self.week_table.set_look(self._look, palette)
-        self.month_grid.set_palette(palette)
-        self.chips.set_palette(palette, bool((self.session.preferences or {}).get("accent_chips")))
+        design = self._chrome_palette(palette)
+        self.setStyleSheet(pack_stylesheet(pack, system_dark, self._look, accent, design))
+        # Day, Month and the week grid are dressed by the same design as the main view, so moving
+        # between them is moving around one app rather than between two.
+        self.week_table.set_look(self._look, design)
+        self.month_grid.set_palette(design)
+        self.chips.set_palette(design, bool((self.session.preferences or {}).get("accent_chips")))
         self._refresh_layout()
 
     def _install_tray(self) -> None:
