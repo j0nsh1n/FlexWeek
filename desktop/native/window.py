@@ -67,6 +67,7 @@ from desktop.native.widgets import (
     HomeworkDialog,
     LateDialog,
     MonthGrid,
+    PlanReview,
     PreviewDialog,
     RoutineDialog,
     SpreadDialog,
@@ -468,6 +469,10 @@ class NativeWindow(QMainWindow):
         self.unfinished_panel = UnfinishedPanel()
         self.unfinished_panel.plan_requested.connect(self._plan_unfinished)
         chrome.addWidget(self.unfinished_panel)
+        # Not inside the planning chrome: Plan can be pressed from any design, and what the solver
+        # says about the result is the point of pressing it.
+        self.plan_review = PlanReview()
+        layout.addWidget(self.plan_review)
         self.planner = QStackedWidget()
         self.planner.setObjectName("plannerStack")
         self.week_table = WeekTable()
@@ -714,6 +719,10 @@ class NativeWindow(QMainWindow):
             titles = {block["id"]: block["title"] for block in self.session.blocks}
             self._late_dialog.show_trace(self.session.late_preview["trace"], titles)
         self.focus_panel.set_state(self.session)
+        fresh = self.session.consume_plan_review()
+        if fresh is not None:
+            titles = {block["id"]: block["title"] for block in self.session.blocks}
+            self.plan_review.set_trace(fresh, titles, self.session.week_start)
         self._sync_chrome()
         self._apply_appearance()
         if self._pending_spread_ui and self.session.spread_preview:

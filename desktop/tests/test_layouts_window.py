@@ -614,3 +614,44 @@ def test_the_focus_timer_reads_as_one_status_line(qapp: QApplication, window: Na
     assert lefts == sorted(lefts), "the parts should read left to right"
     window.session.reset_focus()
     wait_until(qapp, lambda: window.session.focus is None)
+
+
+def test_a_real_solve_explains_itself_once(qapp: QApplication, window: NativeWindow) -> None:
+    """Driven through the real solver, not a fixture trace. The panel opens when there is something
+    to say, and a later week load must not reopen it."""
+    # Ten hours due at the start of the week: there is no room before that deadline, so the solver
+    # has something to say. Given a comfortable week it says nothing, which is the point of it.
+    window.session.add_homework(
+        {
+            "id": "poster",
+            "title": "Science fair poster",
+            "due": f"{window.session.week_start}T08:00",
+            "estimate_min": 600,
+            "revision": 0,
+        }
+    )
+    window.session.save()
+    settled(qapp, window)
+    window.session.solve()
+    wait_until(qapp, lambda: window.session.trace is not None and not window.session.busy)
+    qapp.processEvents()
+    assert window.session.trace is not None
+    said = [window.plan_review.list.item(i).text() for i in range(window.plan_review.list.count())]
+    trace = window.session.trace
+    assert trace.get("unplaced"), "the fixture should give the solver something it cannot place"
+    assert said, "the solver had something to say and the panel showed nothing"
+    assert any("Science fair poster" in line for line in said)
+    assert window.plan_review.isVisible() is True
+
+    # Reading the week again is not a new plan.
+    window.plan_review.hide()
+    window._on_week()
+    qapp.processEvents()
+    assert window.plan_review.isVisible() is False
+
+
+def test_the_status_line_no_longer_swallows_the_explanation(qapp: QApplication, window: NativeWindow) -> None:
+    window.session.solve()
+    wait_until(qapp, lambda: not window.session.busy)
+    qapp.processEvents()
+    assert window.week_status.text().startswith("Placed ")

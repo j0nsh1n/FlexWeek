@@ -171,6 +171,7 @@ class NativeSession(QObject):
         self._preview_attempt: str | None = None
         self._solve_after_save = False
         self.focus: dict | None = None
+        self._fresh_plan = False
         self.focus_store: dict[int, dict | None] = {}
         self.look: dict = sanitize_look(None)
         self.now_ms = lambda: int(time.time() * 1000)
@@ -999,11 +1000,10 @@ class NativeSession(QObject):
             self.trace = data
             placed = len(data.get("placed") or [])
             unplaced = len(data.get("unplaced") or [])
-            notes = [item["message"] for item in data.get("explanations") or [] if item.get("message")]
-            summary = f"Placed {placed} of {placed + unplaced}."
-            if notes:
-                summary += " " + notes[0]
-            self._say(summary)
+            # The status line takes the count. Every explanation the solver gave goes to the
+            # review panel, because explaining what moved and why is what this app is for.
+            self._fresh_plan = True
+            self._say(f"Placed {placed} of {placed + unplaced}.")
             self.week_changed.emit()
 
         self.client.request(
@@ -1095,6 +1095,13 @@ class NativeSession(QObject):
             ok,
             lambda _error: None,
         )
+
+    def consume_plan_review(self) -> dict | None:
+        """The solver's trace, once, for the review panel. Reading a week again must not reopen it."""
+        if not self._fresh_plan:
+            return None
+        self._fresh_plan = False
+        return self.trace
 
     def remaining_for(self, assignment_id: str) -> int:
         return available_homework_minutes(

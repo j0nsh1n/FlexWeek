@@ -52,6 +52,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from backend.explain import REASON_COPY
 from backend.models import Assignment, TimeBlock, WeekRequest
 from backend.slots import (
     DAY_END_MIN,
@@ -1378,6 +1379,85 @@ class UnfinishedPanel(QWidget):
             self.list.addItem(wrapper)
             self.list.setItemWidget(wrapper, row)
         self.setVisible(bool(items))
+
+
+class PlanReview(QWidget):
+    """What the plan just did, in the solver's own words.
+
+    The client used to take one explanation out of however many the solver gave and drop it in the
+    status line, and never mentioned a move at all outside Running late. Explaining what could not
+    be placed, and what had to move, is the thing FlexWeek is for.
+    """
+
+    dismissed = Signal()
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("planReview")
+        layout = QVBoxLayout(self)
+        self.heading = QLabel()
+        self.heading.setObjectName("planReviewHeading")
+        layout.addWidget(self.heading)
+        self.list = QListWidget()
+        self.list.setObjectName("planReviewList")
+        self.list.setMaximumHeight(132)
+        layout.addWidget(self.list)
+        row = QHBoxLayout()
+        dismiss = QPushButton("Got it")
+        dismiss.setObjectName("planReviewDismiss")
+        dismiss.clicked.connect(self._dismiss)
+        row.addWidget(dismiss)
+        row.addStretch(1)
+        layout.addLayout(row)
+        self.hide()
+
+    def _dismiss(self) -> None:
+        self.hide()
+        self.dismissed.emit()
+
+    def rows_for(self, trace: dict, titles: dict[str, str], week_start: str) -> list[str]:
+        """Every unplaced task, every move, and every deadline the solver called tight."""
+        said: list[str] = []
+        for block in trace.get("unplaced") or []:
+            name = titles.get(block["id"], block.get("title") or "Homework")
+            why = next(
+                (
+                    item.get("message")
+                    for item in trace.get("explanations") or []
+                    if item.get("block_id") == block["id"] and item.get("message")
+                ),
+                "There was no room for it this week.",
+            )
+            said.append(f"{name} has no time yet. {why}")
+        for move in trace.get("moves") or []:
+            name = titles.get(move["block_id"], "Homework")
+            been = _when(move.get("from_day"), move.get("from_start"))
+            now = _when(move.get("to_day"), move.get("to_start"))
+            why = REASON_COPY.get(move.get("reason") or "", "")
+            said.append(f"{name} moved from {been} to {now}." + (f" {why}" if why else ""))
+        for item in trace.get("explanations") or []:
+            if item.get("slack_status") in {"tight", "danger"} and item.get("message"):
+                said.append(f"{titles.get(item['block_id'], 'Homework')}: {item['message']}")
+        return said
+
+    def set_trace(self, trace: dict | None, titles: dict[str, str], week_start: str) -> None:
+        self.list.clear()
+        said = self.rows_for(trace or {}, titles, week_start) if trace else []
+        if not said:
+            self.hide()
+            return
+        placed = len(trace.get("placed") or [])
+        unplaced = len(trace.get("unplaced") or [])
+        self.heading.setText(f"Your plan: {placed} placed, {unplaced} without a time")
+        for line in said:
+            self.list.addItem(QListWidgetItem(line))
+        self.show()
+
+
+def _when(day: object, start: object) -> str:
+    if not isinstance(day, int) or not start:
+        return "no time"
+    return f"{DAYS[day]} {start}"
 
 
 class RoutineDialog(QDialog):
