@@ -132,12 +132,12 @@ def test_my_day_puts_planning_away_and_back_brings_it_back(qapp: QApplication, w
     assert window.planner.currentWidget() is window.week_table
     click(window, "viewMyDay")
     assert isinstance(window.planner.currentWidget(), OneThingView)
-    assert window.plan_chrome.isVisible() is False
+    assert window.solve_button.isVisible() is False
     assert window.findChild(QPushButton, "viewMyDay").isChecked() is True
     assert window.findChild(QPushButton, "viewWeek").isChecked() is False
     click(window, "oneBack")
     assert window.planner.currentWidget() is window.week_table
-    assert window.plan_chrome.isVisible() is True
+    assert window.solve_button.isVisible() is True
     assert window.findChild(QPushButton, "viewWeek").isChecked() is True
 
 
@@ -171,7 +171,7 @@ def test_start_focus_keeps_the_timer_in_view_on_a_day_screen(
     wait_until(qapp, lambda: window.session.focus is not None)
     assert window.session.focus["title"] == "History essay"
     assert window.focus_panel.isVisible() is True
-    assert window.plan_chrome.isVisible() is False
+    assert window.solve_button.isVisible() is False
 
 
 def test_running_late_opens_the_products_own_running_late(
@@ -197,7 +197,7 @@ def test_the_keyboard_reaches_my_day_and_back(qapp: QApplication, window: Native
     QTest.keyClick(window.week_table, Qt.Key.Key_T)
     QTest.keyClick(window.planner.currentWidget(), Qt.Key.Key_M)
     wait_until(qapp, lambda: window.planner.currentWidget() is window.month_grid)
-    assert window.plan_chrome.isVisible() is True
+    assert window.solve_button.isVisible() is True
     QTest.keyClick(window.month_grid.table, Qt.Key.Key_T)
     assert isinstance(window.planner.currentWidget(), OneThingView)
 
@@ -206,7 +206,7 @@ def test_the_view_buttons_leave_a_day_screen(qapp: QApplication, window: NativeW
     click(window, "viewMyDay")
     click(window, "viewDay")
     assert window.planner.currentWidget() is window.day_agenda
-    assert window.plan_chrome.isVisible() is True
+    assert window.solve_button.isVisible() is True
 
 
 def test_signing_out_of_a_day_screen_does_not_leave_the_next_student_in_one(
@@ -366,14 +366,23 @@ def test_a_design_of_its_own_gets_the_window_and_tools_holds_the_controls(
     window._layout = {"main": "bento", "day": "one", "options": {}}
     window._on_week()
     assert type(window.planner.currentWidget()).__name__ == "BentoView"
-    assert window.plan_chrome.isVisible() is False
+    assert window.solve_button.isVisible() is False
     assert window.tools_button.isVisible() is True
     qapp.processEvents()
     assert window.planner.height() > window.height() * 0.8
     # Grouped by the job each action does, rather than one flat list of twenty.
-    assert tool_sections(window) == ["Adding", "Planning", "Editing", "Your week", "Account"]
+    assert tool_sections(window) == [
+        "Planning the week",
+        "Adding",
+        "Planning",
+        "Editing",
+        "Your week",
+        "Account",
+    ]
     offered = tool_actions(window)
-    assert list(offered)[:3] == ["Add homework", "Add fixed time", "Plan my homework"]
+    # Plan leads, because it is the one thing the bar keeps when there is a bar.
+    assert list(offered)[0] == "Plan my homework"
+    assert {"Add homework", "Add fixed time"} <= set(offered)
     assert {"Settings", "Running late", "Routines", "Account", "Reload", "Undo", "Redo"} <= set(offered)
     assert (offered["Undo"], offered["Redo"]) == (True, False)
 
@@ -393,24 +402,24 @@ def test_day_and_month_follow_the_week_layout(qapp: QApplication, window: Native
     click(window, "viewDay")
     assert type(window.planner.currentWidget()).__name__ == "BentoView"
     assert window.planner.currentWidget().scene.surface == "day"
-    assert (window.plan_chrome.isVisible(), window.tools_button.isVisible()) == (False, True)
+    assert (window.solve_button.isVisible(), window.tools_button.isVisible()) == (False, True)
     click(window, "viewMonth")
     settled(qapp, window)
     shown = window.planner.currentWidget()
     assert type(shown).__name__ == "BentoView"
     assert shown.scene.surface == "month"
     click(window, "viewWeek")
-    assert (window.plan_chrome.isVisible(), window.tools_button.isVisible()) == (False, True)
+    assert (window.solve_button.isVisible(), window.tools_button.isVisible()) == (False, True)
     click(window, "viewMyDay")
     assert type(window.planner.currentWidget()).__name__ == "OneThingView"
-    assert (window.plan_chrome.isVisible(), window.tools_button.isVisible()) == (False, False)
+    assert (window.solve_button.isVisible(), window.tools_button.isVisible()) == (False, False)
 
 
 def test_todays_app_keeps_the_clock_day_and_chip_month(qapp: QApplication, window: NativeWindow) -> None:
     window._layout = {"main": "classic", "day": "one", "options": {}}
     click(window, "viewDay")
     assert window.planner.currentWidget() is window.day_agenda
-    assert window.plan_chrome.isVisible() is True
+    assert window.solve_button.isVisible() is True
     click(window, "viewMonth")
     settled(qapp, window)
     assert window.planner.currentWidget() is window.month_grid
@@ -694,16 +703,20 @@ def test_the_week_toolbar_keeps_only_what_is_reached_for(qapp: QApplication, win
     Retry save is not here: it appears only when a save has actually failed."""
     from PySide6.QtWidgets import QPushButton
 
+    page = window._stack.currentWidget()
     shown = [
         button.objectName()
-        for button in window.plan_chrome.findChildren(QPushButton)
+        for button in page.findChildren(QPushButton)
         if button.isVisible() and button.objectName()
     ]
     assert shown == [
-        "addButton",
+        "prevWeek",
+        "nextWeek",
+        "viewDay",
+        "viewWeek",
+        "viewMonth",
+        "viewMyDay",
         "solveButton",
-        "saveButton",
-        "quickFocusAction",
         "moreButton",
     ]
 
@@ -711,7 +724,7 @@ def test_the_week_toolbar_keeps_only_what_is_reached_for(qapp: QApplication, win
     menu.aboutToShow.emit()
     sections = [action.text() for action in menu.actions() if action.isSeparator() and action.text()]
     items = {action.text() for action in menu.actions() if action.text() and not action.isSeparator()}
-    assert sections == ["Planning", "Editing", "Your week", "Account"]
+    assert sections == ["Adding", "Planning", "Editing", "Your week", "Account"]
     assert {"Undo", "Redo", "Duplicate", "Running late", "Routines", "Account", "Settings"} <= items
 
 
@@ -1012,3 +1025,64 @@ def test_the_add_button_says_what_a_drag_will_make(qapp: QApplication, window: N
     assert button is not None
     assert "sport" in button.text().lower()
     assert not button.icon().isNull(), "no colour beside the armed type"
+
+
+def test_the_week_saves_itself_without_anyone_pressing_save(qapp: QApplication, window: NativeWindow) -> None:
+    """Save left the bar, so this is the only thing that writes a student's week. If it stops
+    working, work is lost silently, which is the worst failure this app has."""
+    from desktop.native.calendar import sunday_due
+
+    before = window.session.revision
+    window.session.add_homework(
+        {
+            "id": "auto",
+            "title": "Autosaved essay",
+            "due": sunday_due(window.session.week_start),
+            "estimate_min": 30,
+            "revision": 0,
+        }
+    )
+    assert window.session.dirty is True
+    # The clock the debounce reads is the session's, so move it rather than sleeping.
+    window._changed_ms = 0
+    window._last_try_ms = 0
+    window._autosave_tick()
+    wait_until(qapp, lambda: not window.session.busy and window.session.revision > before)
+    assert window.session.dirty is False
+
+
+def test_autosave_waits_until_the_student_stops_changing_things(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Dragging a block emits a change per step. Saving on each one would post continuously."""
+    window.session.dirty = True
+    window.session.pending_save = None
+    window._changed_ms = window.session.now_ms()
+    posted = []
+    window.session.save = lambda *a, **k: posted.append(1)
+    window._autosave_tick()
+    assert posted == [], "saved while the student was still changing things"
+
+
+def test_autosave_keeps_its_hands_off_a_conflict(qapp: QApplication, window: NativeWindow) -> None:
+    """A 409 means another window wrote this week. Answering that is the student's decision, and a
+    timer that retried would overwrite whichever copy lost the race."""
+    window.session.dirty = True
+    window.session.conflict = True
+    window._changed_ms = 0
+    posted = []
+    window.session.save = lambda *a, **k: posted.append(1)
+    window._autosave_tick()
+    assert posted == []
+
+
+def test_autosave_does_not_pile_requests_on_a_busy_session(qapp: QApplication, window: NativeWindow) -> None:
+    window.session.dirty = True
+    window.session.conflict = False
+    window.session.busy = True
+    window._changed_ms = 0
+    posted = []
+    window.session.save = lambda *a, **k: posted.append(1)
+    window._autosave_tick()
+    window.session.busy = False
+    assert posted == []
