@@ -1,4 +1,9 @@
-"""Fill the Chromebook / web-version lines in a packaged README. No Qt imports."""
+"""Fill the placeholder lines in a packaged README. No Qt imports.
+
+FLEXWEEK_WEB_URL used to point at a hosted browser version. That version was
+retired on 2026-09-19, so the variable is honoured only if someone sets it; with
+it unset, which is the normal case, the README says there is no web version.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +12,7 @@ import os
 from pathlib import Path
 
 ONLINE = "On a Chromebook or a computer that cannot run this app, use the web version: {url}"
-OFFLINE = "A web version for Chromebooks is not online yet."
+OFFLINE = "FlexWeek is a Windows and Linux desktop app. There is no web version."
 ONLINE_FALLBACK = "Use the web version instead: {url}"
 OFFLINE_FALLBACK = "Upgrade to one of the versions listed above."
 

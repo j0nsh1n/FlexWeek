@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPlainTextEdit,
+    QProgressBar,
     QPushButton,
     QScrollArea,
     QSpinBox,
@@ -52,6 +53,7 @@ from desktop.native.reuse import format_duration
 from desktop.native.sound import Bell
 from desktop.native.tones import FALLBACK, RECIPES, SOUNDS
 
+UPDATE_MIN_WIDTH = 420
 ALARM_MIN_WIDTH = 380
 ALARM_PAD = 20
 ALARM_GAP = 12
@@ -804,3 +806,93 @@ class TransferPreviewDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+
+class UpdateDialog(QDialog):
+    """A newer FlexWeek exists. Says what it is, and does nothing until the student chooses."""
+
+    def __init__(self, parent: QWidget | None, update: dict, current: str) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Update FlexWeek")
+        self.setModal(True)
+        self.setObjectName("updateDialog")
+        self.setMinimumWidth(UPDATE_MIN_WIDTH)
+        self.choice = "later"
+        self.skip_this = False
+        layout = QVBoxLayout(self)
+        heading = QLabel(f"FlexWeek {update['version']} is ready")
+        heading.setObjectName("updateHeading")
+        layout.addWidget(heading)
+        detail = QLabel(f"You have {current}. Updating keeps your account and your weeks.")
+        detail.setObjectName("updateDetail")
+        detail.setWordWrap(True)
+        layout.addWidget(detail)
+        notes = _first_lines(update.get("notes") or "")
+        if notes:
+            body = QLabel(notes)
+            body.setObjectName("updateNotes")
+            body.setWordWrap(True)
+            layout.addWidget(body)
+        self.status = QLabel("")
+        self.status.setObjectName("updateStatus")
+        self.status.setWordWrap(True)
+        layout.addWidget(self.status)
+        self.bar = QProgressBar()
+        self.bar.setObjectName("updateProgress")
+        self.bar.setVisible(False)
+        layout.addWidget(self.bar)
+        row = QHBoxLayout()
+        self.install = QPushButton("Update now")
+        self.install.setObjectName("updateInstall")
+        self.install.setDefault(True)
+        self.install.clicked.connect(self._install)
+        later = QPushButton("Not now")
+        later.setObjectName("updateLater")
+        later.clicked.connect(self.reject)
+        skip = QPushButton("Skip this version")
+        skip.setObjectName("updateSkip")
+        skip.setFlat(True)
+        skip.clicked.connect(self._skip)
+        for button in (self.install, later):
+            row.addWidget(button)
+        layout.addLayout(row)
+        layout.addWidget(skip)
+
+    def _install(self) -> None:
+        self.choice = "install"
+        self.install.setEnabled(False)
+        self.bar.setVisible(True)
+        self.status.setText("Downloading…")
+
+    def _skip(self) -> None:
+        self.skip_this = True
+        self.reject()
+
+    def show_progress(self, got: int, total: int) -> None:
+        self.bar.setMaximum(max(total, 0))
+        self.bar.setValue(got)
+
+    def show_problem(self, why: str) -> None:
+        self.bar.setVisible(False)
+        self.install.setEnabled(True)
+        self.status.setText(why)
+
+
+def _first_lines(notes: str, limit: int = 6) -> str:
+    """The top of the release notes, which is where what changed is written.
+
+    GitHub release bodies are Markdown, and a QLabel shows it raw, so the few markers that actually
+    appear in these notes are turned into something readable rather than left as "## What changed".
+    """
+    kept: list[str] = []
+    for raw in notes.splitlines():
+        line = raw.strip()
+        if not line or set(line) <= {"-", "="} and len(line) > 2:
+            continue
+        line = line.lstrip("#").strip()
+        if line.startswith(("- ", "* ")):
+            line = "•  " + line[2:]
+        kept.append(line.replace("**", ""))
+        if len(kept) == limit:
+            break
+    return "\n".join(kept)

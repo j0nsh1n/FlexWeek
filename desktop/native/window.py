@@ -57,9 +57,13 @@ from desktop.native.settings import (
     PrefsDialog,
     RestoreDialog,
     TransferPreviewDialog,
+    UpdateDialog,
 )
 from desktop.native.sound import Bell
 from desktop.native.tones import FALLBACK
+from desktop.native.update import due_for_check, sanitize_updates
+from desktop.native.updater import Updater, apply_update
+from desktop.native.version import VERSION
 from desktop.native.weekmodel import build_week
 from desktop.native.widgets import (
     AlertStrip,
@@ -81,6 +85,8 @@ from desktop.native.widgets import (
 
 WINDOW_SIZE = (1280, 800)
 AUTH_CARD_WIDTH = 380
+# Long enough for the student to read that the update installed before the window goes.
+UPDATE_QUIT_MS = 1200
 LAYOUT_TICK_MS = 20_000
 
 
@@ -102,6 +108,17 @@ class NativeWindow(QMainWindow):
         self._opened_on_preference = False
         self._views: dict[str, LayoutView] = {}
         self._making_account = False
+        self._updates = sanitize_updates(None)
+        self._update_asked = False
+        self._update_dialog: UpdateDialog | None = None
+        self._updater = Updater(self)
+        self._updater.found.connect(self._on_update_found)
+        self._updater.none_found.connect(self._no_update)
+        # Connected once here, not per dialog: a second check would otherwise wire them again and
+        # every later signal would arrive as many times as the dialog had been opened.
+        self._updater.progress.connect(self._on_update_progress)
+        self._updater.failed.connect(self._on_update_problem)
+        self._updater.ready.connect(self._on_update_ready)
         self._build_auth()
         self._build_recovery()
         self._build_week()
@@ -417,6 +434,9 @@ class NativeWindow(QMainWindow):
         account = QPushButton("Account")
         account.setObjectName("accountButton")
         account.clicked.connect(self._open_account)
+        updates = QPushButton("Check for updates")
+        updates.setObjectName("checkUpdates")
+        updates.clicked.connect(lambda: self._check_updates(asked=True))
         spotify = QPushButton("Spotify")
         spotify.setObjectName("openSpotify")
         spotify.clicked.connect(self._open_spotify)
@@ -433,7 +453,7 @@ class NativeWindow(QMainWindow):
             ("Planning", (late, unfinished, routines)),
             ("Editing", (undo, redo, copy_block, paste_block, duplicate, copy_day)),
             ("Your week", (availability, restore, reload_week)),
-            ("Account", (account, settings, spotify)),
+            ("Account", (account, settings, spotify, updates)),
         )
         for heading, buttons in self._groups:
             more_menu.addSection(heading)
@@ -680,6 +700,7 @@ class NativeWindow(QMainWindow):
         if self._on_recovery() and not self._allow_week_page:
             return
         self._honour_preferred_view()
+        self._check_updates(asked=False)
         self.week_table.set_week(self.session.week_start, self.session.blocks, self.session.trace)
         self.week_table.reveal(self.session.week_start, self.session.now_ms())
         agenda = agenda_for(
@@ -820,6 +841,7 @@ class NativeWindow(QMainWindow):
             "restoreButton",
             "accountButton",
             "openSpotify",
+            "checkUpdates",
             "forgotPassword",
             "recoverAccount",
             "moreButton",
@@ -1265,6 +1287,65 @@ class NativeWindow(QMainWindow):
             return
         self._bell.start(FALLBACK if tone == "spotify" else tone, volume)
 
+    def _check_updates(self, *, asked: bool) -> None:
+        """Look for a newer release. Asked for by the student, or once a day on its own.
+
+        A check that finds nothing says nothing unless the student asked, because an app that
+        interrupts to report that it is already up to date is an app people turn off.
+        """
+        if self._updater.busy:
+            return
+        if not asked and not due_for_check(self._updates, self.session.now_ms()):
+            return
+        self._update_asked = asked
+        self._updates["last_ms"] = self.session.now_ms()
+        self._save_look()
+        if asked:
+            self.session._say("Checking for updates…")
+        self._updater.check()
+
+    def _on_update_found(self, update: object) -> None:
+        if not isinstance(update, dict):
+            return
+        if not self._update_asked and update["version"] == self._updates.get("skip"):
+            return
+        dialog = UpdateDialog(self, update, VERSION)
+        self._update_dialog = dialog
+        dialog.install.clicked.connect(lambda: self._updater.download(update))
+        dialog.exec()
+        if dialog.skip_this:
+            self._updates["skip"] = update["version"]
+            self._save_look()
+        self._update_dialog = None
+
+    def _on_update_progress(self, got: int, total: int) -> None:
+        if self._update_dialog is not None:
+            self._update_dialog.show_progress(got, total)
+
+    def _on_update_problem(self, why: str) -> None:
+        if self._update_dialog is not None:
+            self._update_dialog.show_problem(why)
+        elif self._update_asked:
+            self.session._say(why)
+
+    def _on_update_ready(self, path: str) -> None:
+        """The download is verified and on disk. Putting it in place replaces the running app, so
+        the app is closed either way: on Windows the installer takes over, and on Linux the files
+        under it have just been swapped."""
+        problem = apply_update(path)
+        if problem is not None:
+            if self._update_dialog is not None:
+                self._update_dialog.show_problem(problem + " Open the release page to update by hand.")
+            return
+        if self._update_dialog is not None:
+            self._update_dialog.accept()
+        self.session._say("Update installed. FlexWeek will close so the new version can start.")
+        QTimer.singleShot(UPDATE_QUIT_MS, self.quit_app)
+
+    def _no_update(self) -> None:
+        if self._update_asked:
+            self.session._say(f"FlexWeek {VERSION} is the latest version.")
+
     def _open_spotify(self) -> None:
         url = self.session.spotify_url()
         if not url:
@@ -1415,6 +1496,7 @@ class NativeWindow(QMainWindow):
             stored = None
         self._look = sanitize_look(stored)
         self._layout = sanitize_layout(stored.get("layout") if isinstance(stored, dict) else None)
+        self._updates = sanitize_updates(stored.get("updates") if isinstance(stored, dict) else None)
 
     def _save_look(self) -> None:
         import json
@@ -1422,7 +1504,8 @@ class NativeWindow(QMainWindow):
         path = self._look_path()
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps({**self._look, "layout": self._layout}) + "\n")
+            body = {**self._look, "layout": self._layout, "updates": self._updates}
+            path.write_text(json.dumps(body) + "\n")
         except OSError:
             self.session._say("Could not save the look for this device.")
 

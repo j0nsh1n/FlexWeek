@@ -215,3 +215,35 @@ def test_off_grid_lengths_are_fine_when_splitting_is_off(qapp: Any, monkeypatch:
     assert asked == []
     assert dialog.updates()["timer_work_min"] == 25
     assert dialog.result() == dialog.DialogCode.Accepted
+
+
+def test_release_notes_are_readable_rather_than_raw_markdown(qapp: Any) -> None:
+    """GitHub release bodies are Markdown and a QLabel shows it raw, so "## What changed" and
+    "- Alarms make a sound" would appear with their markers."""
+    from desktop.native.settings import _first_lines
+
+    notes = "## What changed\n\n- Alarms make a sound.\n* Splitting works.\n**Bold** matters.\n---\n"
+    shown = _first_lines(notes)
+    assert "##" not in shown
+    assert "**" not in shown
+    assert shown.splitlines()[0] == "What changed"
+    assert shown.splitlines()[1].startswith("•")
+    assert "---" not in shown
+
+
+def test_the_notes_preview_stops_rather_than_filling_the_screen(qapp: Any) -> None:
+    from desktop.native.settings import _first_lines
+
+    assert len(_first_lines("\n".join(f"line {n}" for n in range(50))).splitlines()) == 6
+
+
+def test_the_update_dialog_does_nothing_until_a_button_is_pressed(qapp: Any) -> None:
+    """An updater that installs on its own is an updater that restarts the app mid-homework."""
+    from desktop.native.settings import UpdateDialog
+
+    update = {"version": "9.9.9", "asset": "a", "url": "u", "checksum_url": "c", "notes": ""}
+    dialog = UpdateDialog(None, update, "0.13.0")
+    assert dialog.choice == "later"
+    assert dialog.skip_this is False
+    dialog.findChild(QPushButton, "updateSkip").click()
+    assert dialog.skip_this is True

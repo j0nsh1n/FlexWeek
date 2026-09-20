@@ -222,11 +222,17 @@ def test_the_choice_is_saved_on_this_device_beside_the_look(qapp: QApplication, 
     window._look = {"preset": "paper", "knobs": {"corners": "pill"}}
     window._layout = {"main": "classic", "day": "one", "options": {"one": {"colour": "paper"}}}
     window._save_look()
-    assert json.loads(look_file().read_text()) == {
-        "preset": "paper",
-        "knobs": {"corners": "pill"},
-        "layout": {"main": "classic", "day": "one", "options": {"one": {"colour": "paper"}}},
+    stored = json.loads(look_file().read_text())
+    assert stored["preset"] == "paper"
+    assert stored["knobs"] == {"corners": "pill"}
+    assert stored["layout"] == {
+        "main": "classic",
+        "day": "one",
+        "options": {"one": {"colour": "paper"}},
     }
+    # Whether this computer checks for updates lives beside the look, because it is a property of
+    # the computer rather than the account.
+    assert set(stored["updates"]) == {"check", "last_ms", "skip"}
     window._look, window._layout = {}, {}
     window._load_look()
     assert window._look == {"preset": "paper", "knobs": {"corners": "pill"}}
@@ -1076,3 +1082,62 @@ def test_the_day_screen_brings_its_own_design_with_it(qapp: QApplication, window
     window._day_mode = True
     watching = window._chrome_palette(plain)["accent"]
     assert planning != watching
+
+
+class FakeUpdater:
+    """Stands in for the real one so no test reaches the network."""
+
+    def __init__(self) -> None:
+        self.checks = 0
+        self.downloads: list[dict] = []
+        self.busy = False
+
+    def check(self) -> None:
+        self.checks += 1
+
+    def download(self, update: dict) -> None:
+        self.downloads.append(update)
+
+
+def test_the_app_checks_for_updates_once_a_day_not_every_week_refresh(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """_on_week runs on every save, solve and week change. Checking there without a cadence would
+    ask GitHub dozens of times a session."""
+    fake = FakeUpdater()
+    window._updater = fake
+    window._updates = {"check": True, "last_ms": 0, "skip": ""}
+    window._on_week()
+    qapp.processEvents()
+    assert fake.checks == 1
+    window._on_week()
+    window._on_week()
+    qapp.processEvents()
+    assert fake.checks == 1, "a week refresh asked GitHub again"
+
+
+def test_turning_update_checks_off_is_obeyed(qapp: QApplication, window: NativeWindow) -> None:
+    fake = FakeUpdater()
+    window._updater = fake
+    window._updates = {"check": False, "last_ms": 0, "skip": ""}
+    window._on_week()
+    qapp.processEvents()
+    assert fake.checks == 0
+
+
+def test_asking_for_a_check_ignores_the_cadence(qapp: QApplication, window: NativeWindow) -> None:
+    """Check for updates has to check, whatever the daily timer says."""
+    fake = FakeUpdater()
+    window._updater = fake
+    window._updates = {"check": True, "last_ms": window.session.now_ms(), "skip": ""}
+    window._check_updates(asked=True)
+    assert fake.checks == 1
+
+
+def test_a_skipped_version_stays_quiet_until_asked(qapp: QApplication, window: NativeWindow) -> None:
+    window._updates = {"check": True, "last_ms": 0, "skip": "9.9.9"}
+    window._update_asked = False
+    shown: list = []
+    window._on_update_found({"version": "9.9.9", "asset": "x", "url": "u", "checksum_url": "c", "notes": ""})
+    assert shown == []
+    assert window._update_dialog is None
