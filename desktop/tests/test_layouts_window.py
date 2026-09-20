@@ -343,9 +343,20 @@ def test_my_day_opens_whichever_day_screen_was_picked(qapp: QApplication, window
 
 
 def tool_actions(window: NativeWindow) -> dict[str, bool]:
+    """The items, without the section headings. addSection makes a separator that carries text."""
     menu = window.tools_button.menu()
     menu.aboutToShow.emit()
-    return {action.text(): action.isEnabled() for action in menu.actions() if action.text()}
+    return {
+        action.text(): action.isEnabled()
+        for action in menu.actions()
+        if action.text() and not action.isSeparator()
+    }
+
+
+def tool_sections(window: NativeWindow) -> list[str]:
+    menu = window.tools_button.menu()
+    menu.aboutToShow.emit()
+    return [action.text() for action in menu.actions() if action.isSeparator() and action.text()]
 
 
 def test_a_design_of_its_own_gets_the_window_and_tools_holds_the_controls(
@@ -359,12 +370,11 @@ def test_a_design_of_its_own_gets_the_window_and_tools_holds_the_controls(
     assert window.tools_button.isVisible() is True
     qapp.processEvents()
     assert window.planner.height() > window.height() * 0.8
+    # Grouped by the job each action does, rather than one flat list of twenty.
+    assert tool_sections(window) == ["Adding", "Planning", "Editing", "Your week", "Account"]
     offered = tool_actions(window)
-    labels = list(offered)
-    assert labels[:6] == ["Add fixed time", "Add homework", "Plan my homework", "Undo", "Redo", "Copy"]
-    assert labels[7:10] == ["Duplicate", "Save", "Retry save"]
-    assert labels[6].startswith("Paste")
-    assert {"Settings", "Running late", "Routines", "Account", "Reload"} <= set(offered)
+    assert list(offered)[:3] == ["Add homework", "Add fixed time", "Plan my homework"]
+    assert {"Settings", "Running late", "Routines", "Account", "Reload", "Undo", "Redo"} <= set(offered)
     assert (offered["Undo"], offered["Redo"]) == (True, False)
 
 
@@ -655,3 +665,39 @@ def test_the_status_line_no_longer_swallows_the_explanation(qapp: QApplication, 
     wait_until(qapp, lambda: not window.session.busy)
     qapp.processEvents()
     assert window.week_status.text().startswith("Placed ")
+
+
+def test_the_week_toolbar_keeps_only_what_is_reached_for(qapp: QApplication, window: NativeWindow) -> None:
+    """Twelve buttons competed for one row while nine more hid in an overflow menu. The row keeps
+    adding, planning and saving; everything else sits under the heading for its job."""
+    from PySide6.QtWidgets import QPushButton
+
+    # The action row, not the category chips that sit above it.
+    shown = [
+        button.objectName()
+        for button in window.plan_chrome.findChildren(QPushButton)
+        if button.isVisible() and button.objectName() and not button.objectName().startswith("chip-")
+    ]
+    assert shown == ["addHomework", "addFixed", "solveButton", "saveButton", "retrySave", "moreButton"]
+
+    menu = window.findChild(QPushButton, "moreButton").menu()
+    menu.aboutToShow.emit()
+    sections = [action.text() for action in menu.actions() if action.isSeparator() and action.text()]
+    items = {action.text() for action in menu.actions() if action.text() and not action.isSeparator()}
+    assert sections == ["Planning", "Editing", "Your week", "Account"]
+    assert {"Undo", "Redo", "Duplicate", "Running late", "Routines", "Account", "Settings"} <= items
+
+
+def test_the_clipboard_line_only_appears_when_it_has_something_to_say(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    window._on_week()
+    qapp.processEvents()
+    assert window.clipboard_summary.isVisible() is False
+    block = next(b for b in window.session.blocks if b.get("kind") == "locked")
+    window.session.select_block(block["id"], 0)
+    window.session.copy_selected()
+    window._on_week()
+    qapp.processEvents()
+    assert window.clipboard_summary.isVisible() is True
+    assert window.clipboard_summary.text().startswith("Copied: ")

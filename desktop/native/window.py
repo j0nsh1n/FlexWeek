@@ -387,68 +387,36 @@ class NativeWindow(QMainWindow):
         overflow.hide()
         more_menu = QMenu(more)
         self._more_pairs = []
-        for button in (
-            copy_day,
-            routines,
-            unfinished,
-            late,
-            availability,
-            restore,
-            account,
-            spotify,
-            reload_week,
-        ):
-            button.setParent(overflow)
-            action = more_menu.addAction(button.text())
-            action.triggered.connect(button.click)
-            self._more_pairs.append((action, button))
+        # Four jobs, sixteen ways of doing them, twelve of them competing for the same row. The row
+        # keeps what a student reaches for; everything else sits under the heading for its job.
+        self._groups = (
+            ("Planning", (late, unfinished, routines)),
+            ("Editing", (undo, redo, copy_block, paste_block, duplicate, copy_day)),
+            ("Your week", (availability, restore, reload_week)),
+            ("Account", (account, settings, spotify)),
+        )
+        for heading, buttons in self._groups:
+            more_menu.addSection(heading)
+            for button in buttons:
+                if button.parent() is not overflow:
+                    button.setParent(overflow)
+                action = more_menu.addAction(button.text())
+                action.triggered.connect(button.click)
+                self._more_pairs.append((action, button))
         more_menu.aboutToShow.connect(self._sync_more_menu)
         more.setMenu(more_menu)
-        for button in (
-            add_fixed,
-            add_homework,
-            undo,
-            redo,
-            copy_block,
-            paste_block,
-            duplicate,
-            settings,
-            solve,
-            save,
-            retry,
-            more,
-        ):
+        for button in (add_homework, add_fixed, solve, save, retry, more):
             actions.addWidget(button)
         chrome.addLayout(actions)
         tools_menu = QMenu(self.tools_button)
         self._tool_pairs = []
-        for button in (
-            add_fixed,
-            add_homework,
-            solve,
-            undo,
-            redo,
-            copy_block,
-            paste_block,
-            duplicate,
-            save,
-            retry,
-            settings,
-        ):
+        tools_menu.addSection("Adding")
+        for button in (add_homework, add_fixed, solve, save, retry):
             self._tool_pairs.append((tools_menu.addAction(button.text()), button))
-        tools_menu.addSeparator()
-        for button in (
-            copy_day,
-            routines,
-            unfinished,
-            late,
-            availability,
-            restore,
-            account,
-            spotify,
-            reload_week,
-        ):
-            self._tool_pairs.append((tools_menu.addAction(button.text()), button))
+        for heading, buttons in self._groups:
+            tools_menu.addSection(heading)
+            for button in buttons:
+                self._tool_pairs.append((tools_menu.addAction(button.text()), button))
         for action, button in self._tool_pairs:
             action.triggered.connect(button.click)
         tools_menu.aboutToShow.connect(self._sync_tools_menu)
@@ -691,7 +659,10 @@ class NativeWindow(QMainWindow):
         if redo is not None:
             redo.setEnabled(self.session.can_redo())
         clip = self.session.clipboard
-        self.clipboard_summary.setText("Copied: " + clip["label"] if clip else "Nothing copied")
+        # A permanent line saying nothing has happened is noise. It appears when there is something
+        # on the clipboard and goes away again when there is not.
+        self.clipboard_summary.setVisible(clip is not None)
+        self.clipboard_summary.setText("Copied: " + clip["label"] if clip else "")
         destination = self.session.paste_destination()
         copy_day = self.findChild(QPushButton, "copyDay")
         paste = self.findChild(QPushButton, "pasteBlock")
