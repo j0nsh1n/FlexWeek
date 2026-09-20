@@ -5,10 +5,12 @@ Congressional App Challenge 2026. Submit **Sunday, Oct 25, 2026, 8:00 p.m. PDT**
 phase may span several implementation slices. The original Sep 6 contest brief
 (working title Reslot) is archived in [docs/cac-build-plan.md](docs/cac-build-plan.md).
 
-The active next-work plan is [native Python desktop](#native-python-desktop-2026-09-17)
-on `main` as v0.12.0. 0.11.0 leftovers (P2 copy and desktop motion checks) remain
-on the retired WebEngine path. The [student experience revision](#student-experience-revision-2026-09-12)
-stays the stage map for everything still open. Earlier phase descriptions and the
+FlexWeek is one Python desktop app: see [native Python desktop](#native-python-desktop-2026-09-17)
+and [web client retired](#web-client-retired-2026-09-19). The browser client is
+gone, so any `frontend/` path below is history and is marked where it stands.
+The one 0.11.0 leftover is the Windows `backdrop-filter` flicker hand-check.
+The [student experience revision](#student-experience-revision-2026-09-12) stays
+the stage map for everything still open. Earlier phase descriptions and the
 first implementation slice retain their dated planning history.
 
 ## Phase 1 — Skeleton (Sep 6–12, 2026)
@@ -18,7 +20,8 @@ first implementation slice retain their dated planning history.
   - Seed `demo_alex.json` and `demo_jordan.json` from partner data
   - `index.html` + `styles.css`: 7-column grid 06:00–23:00, locked blocks
     painted, flexible tasks in the sidebar
-  - `app.py` serves `frontend/` and `GET /api/demos`
+  - `app.py` serves `frontend/` and `GET /api/demos` (the browser client was
+    retired on 2026-09-19; `app.py` is an API only)
   - Governance files: spec.md, roadmap.md, context.md, CHANGELOG.md
   - Partner: interview 3 students; two anonymized weeks, 8 tasks each
   - Register for CAC; confirm congressional district and that the Member hosts
@@ -425,7 +428,8 @@ receive targeted improvements rather than a wholesale replacement.
 
 Jonathan chose a full Python desktop: Qt widgets, no WebEngine, no JavaScript.
 The existing FastAPI app still owns accounts and the database on a loopback
-port; the browser page is optional. Plan: `docs/native-python-migration.md`.
+port; the browser page was optional then and is gone now (see "Web client
+retired" below). Plan: `docs/native-python-migration.md`.
 Launch: `python -m desktop.main` (native widgets). `python -m desktop.native`
 is the same entry.
 
@@ -464,6 +468,10 @@ release adds a stage. Stage 7's open trials and Phase 8 delivery continue
 alongside them.
 
 ### 0.10.1 — hotfix, ship first
+
+Shipped. Every `frontend/` path below points into the web client, which was
+retired on 2026-09-19; the findings are kept as written because that is where
+they were found, not moved onto desktop files they were never about.
 
 - **P0. The assignment name field loses and duplicates letters.** Typing fast
   into the setup step 3 name box (`setup-homework-title`) and the Add homework
@@ -515,8 +523,10 @@ alongside them.
   does not touch key input, so the reported letter loss has no cause in this
   code. What landed is a guard against re-opening setup over a half-typed name
   plus regression tests that type a whole name one character at a time while
-  the timers and renders fire. Still open: reproduce the original symptom on a
-  real machine, and the Qt WebEngine walkthrough at both widths.
+  the timers and renders fire. Closed unfixed on 2026-09-19: the field, the
+  timers and the WebEngine text path it was reported against were all part of
+  the web client, which is retired. Whether fast typing drops characters in the
+  Qt dialogs is a separate question and has not been reported.
 
 ### 0.11 — seamless, motion and appearance
 
@@ -532,8 +542,8 @@ Windows. Honour `prefers-reduced-motion` everywhere.
 
 **Appearance: packs first, then a Customize submenu.**
 - One tap picks a theme pack: System, Light frost, Dark frost, plus Nocturne
-  and Slate while those still ship (`frontend/theme.js`). A pack sets the
-  background, the chrome, the accent and the default motion level.
+  and Slate while those still ship (now `desktop/native/look.py`). A pack sets
+  the background, the chrome, the accent and the default motion level.
 - "Customize…" stays collapsed and holds three things: accent colour, an
   optional "use the accent for category chips", and Motion set to Off, Normal
   or Extra. Extra means pop-in plus the view slide. Off behaves exactly like
@@ -547,19 +557,22 @@ Windows. Honour `prefers-reduced-motion` everywhere.
 
 **P2. Account copy.** Soften `frontend/access.js:45-46` so "It does not sync
 automatically" does not read as a defect. Storing the week on this device is
-the design, and the sentence should say so.
+the design, and the sentence should say so. Closed 2026-09-19: the sentence was
+browser-only and went with the web client. The desktop account dialog never
+carried it.
 
 - Complete when: a student picks a pack in one tap, sets Motion to Off and sees
   no animation anywhere, and both choices survive sign-out and a reinstall;
   Solve, Spread and Running late never flash blank and never look ignored.
-- Verification: node tests for the wait states, for date continuity across
-  Week/Day/Month, and for the persisted pack, accent and motion level; a real
-  Qt WebEngine pass with `prefers-reduced-motion` forced on; a hand check of the
-  Windows build for the `backdrop-filter` flicker, since Linux cannot show it.
+- Verification: desktop tests for the wait states, for date continuity across
+  Week/Day/Month, and for the persisted pack, accent and motion level; a hand
+  check of the Windows build for the `backdrop-filter` flicker, since Linux
+  cannot show it. The `prefers-reduced-motion` pass no longer applies: Qt has no
+  such media query, and the Motion setting is the app's own.
 - Status: [~] Code for 0.11.0 is tagged. Seamless, chip-opens-Add, packs,
-  Customize and account motion shipped. The P2 account copy remains. A Qt
-  WebEngine pass with `prefers-reduced-motion` forced on and a Windows flicker
-  hand-check are still open.
+  Customize and account motion shipped. The Windows flicker hand-check is still
+  open. The P2 account copy and the `prefers-reduced-motion` pass closed with
+  the web client on 2026-09-19: both were browser-only.
 
 ### Looks and knobs (owner request, 2026-09-17)
 
@@ -584,6 +597,33 @@ the same knobs, so more presets and more control are the same work.
   still says the look stays on this computer.
   Approval of the `look_*` fields is still required before anything is saved
   to the account.
+
+## Web client retired (2026-09-19)
+
+The owner chose one client. FlexWeek had been two over one backend: the Qt
+widgets desktop app, and a vanilla-JS browser client kept at parity by hand.
+Every feature landed twice, and the features/functions audit of 2026-09-19
+found that most of the app's half-built controls were the desktop half of a
+pair whose web half worked.
+
+Removed: `frontend/` (11,677 lines of JS, CSS and HTML; 6,982 lines of Node
+tests), the static mount and `serve_frontend`, the JavaScript steps in the
+gate, Node from CI and from CodeQL's languages, and `frontend` as bundle data
+in both installers. `backend/app.py` answers the API and 404s everything else.
+`logo.png` and `favicon.png` moved to `desktop/assets/`. `--web-only` became
+`--backend-only`.
+
+- Consequence, accepted by the owner: there is no browser way in. Anyone trying
+  FlexWeek, including Congressional App Challenge judges, installs the desktop
+  build.
+- Two parity tests died with their counterpart: native colours against
+  `styles.css`, and category marks against `app.js`. The colours live in
+  `look.py` and `calendar.py` either way, and the readability the web audit was
+  for is checked directly across all 700 looks.
+- `spec.md` updated with owner approval: User Experience, the language list,
+  the file map, and the validation commands.
+- Open: nothing from this work. Items above that were browser-only are marked
+  closed where they stand.
 
 ## First implementation slice — approved 2026-09-06
 
