@@ -106,7 +106,8 @@ class TimelineView(LayoutView):
                         color=tokens["muted"], text_decoration="line-through"
                     ),
                     "QPushButton:focus": css(border=f"3px solid {tokens['danger']}"),
-                    'QFrame[role="load"]': css(background=tokens["text"], border_radius="2px"),
+                    'QFrame[role="track"]': css(background=tokens["line"], border_radius="3px"),
+                    'QFrame[role="load"]': css(background=tokens["text"], border_radius="3px"),
                 },
             )
         )
@@ -169,11 +170,20 @@ class TimelineView(LayoutView):
             pick.clicked.connect(lambda _=False, target=day: self._show_day(target))
             cell.addWidget(pick)
             if scene.options.get("strip") != "names":
+                # A bare 4px stub under each button read as debris. The bar now sits in a track of
+                # its own, so a light day is a short bar in a slot rather than a stray mark.
+                track = QFrame()
+                track.setProperty("role", "track")
+                track.setFixedHeight(scene.px(6))
+                inside = QHBoxLayout(track)
+                inside.setContentsMargins(0, 0, 0, 0)
+                inside.setSpacing(0)
                 bar = QFrame()
                 bar.setProperty("role", "load")
-                bar.setFixedHeight(scene.px(4))
-                bar.setFixedWidth(max(round(scene.px(70) * scene.week.load_min(day) / most), scene.px(3)))
-                cell.addWidget(bar, 0, Qt.AlignmentFlag.AlignLeft)
+                share = scene.week.load_min(day) / most
+                inside.addWidget(bar, max(round(share * 100), 3))
+                inside.addStretch(max(round((1 - share) * 100), 0))
+                cell.addWidget(track)
             strip.addLayout(cell)
         return strip
 

@@ -328,10 +328,7 @@ def test_deadline_slack_is_classified_from_the_placed_block_end() -> None:
 
 def test_placed_task_explains_an_energy_mismatch() -> None:
     trace = solve([_flex("task", "Task", 60, [0], energy="low", latest="Monday 07:00")])
-    assert any(
-        item.block_id == "task" and item.reason == "ENERGY_MISMATCH"
-        for item in trace.explanations
-    )
+    assert any(item.block_id == "task" and item.reason == "ENERGY_MISMATCH" for item in trace.explanations)
 
 
 def test_reschedule_after_one_missed_occurrence_records_a_cross_day_move() -> None:
@@ -350,8 +347,7 @@ def test_reschedule_after_one_missed_occurrence_records_a_cross_day_move() -> No
     assert (move.block_id, move.from_day, move.from_start) == ("homework", 1, "06:00")
     assert (move.to_day, move.to_start) == (0, "06:00")
     assert any(
-        item.block_id == "homework" and item.reason == "RESHUFFLE_AFTER_MISS"
-        for item in after.explanations
+        item.block_id == "homework" and item.reason == "RESHUFFLE_AFTER_MISS" for item in after.explanations
     )
 
 

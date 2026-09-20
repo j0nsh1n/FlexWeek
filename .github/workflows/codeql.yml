@@ -1,4 +1,4 @@
-# CodeQL scans Python and the vanilla frontend JavaScript. It does not replace
+# CodeQL scans Python. It does not replace
 # .github/workflows/verify.yml. The generic kit CI (pyright, tests/ at repo
 # root) is not used in this repository.
 name: CodeQL
@@ -22,7 +22,7 @@ jobs:
 
       - uses: github/codeql-action/init@v3
         with:
-          languages: python, javascript-typescript
+          languages: python
 
       - uses: github/codeql-action/autobuild@v3
 

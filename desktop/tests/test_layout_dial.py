@@ -188,3 +188,43 @@ def test_option_colours_repaint_the_screen(qapp: QApplication) -> None:
 def test_the_face_is_described_for_a_screen_reader(qapp: QApplication) -> None:
     face = shown(qapp, "19:00").findChild(DialFace, "dialFace")
     assert face.accessibleName() == "Thursday: School 08:00, Dinner 18:00, Essay-1 18:45, Chem-1 20:00"
+
+
+def test_the_week_strip_survives_large_text(qapp: QApplication) -> None:
+    """The strip is how another day is reached. At High contrast's larger text it used to be
+    sliced in half by the scroller, with the day names off screen entirely."""
+    from PySide6.QtWidgets import QLabel, QWidget
+
+    options = options_for(None, "dial")
+    palette = resolved_palette("light-frost", False, None, "default")
+    view = DayDialView()
+    view.resize(1366, 700)
+    view.show()
+    qapp.processEvents()
+    view.show_week(
+        Scene(
+            build_week(WEEK, BLOCKS, HOMEWORK, TRACE),
+            3,
+            minute_of("13:40"),
+            options,
+            tokens_for("dial", options["colour"], palette),
+            1.25,
+        )
+    )
+    qapp.processEvents()
+    strip = view.findChild(QWidget, "dialStrip")
+    assert strip is not None and strip.isVisible()
+    bottom = strip.mapTo(view, strip.rect().bottomLeft()).y()
+    assert bottom <= view.height(), f"the strip runs {bottom - view.height()}px past the view"
+    names = [label for label in strip.findChildren(QLabel) if label.objectName() == "dialMiniName"]
+    assert len(names) == 7
+    for label in names:
+        edge = label.mapTo(view, label.rect().bottomLeft()).y()
+        assert edge <= view.height(), f"{label.text()} is cut off"
+
+
+def test_hiding_the_week_strip_still_works(qapp: QApplication) -> None:
+    from PySide6.QtWidgets import QWidget
+
+    assert shown(qapp, "19:00", week="hide").findChild(QWidget, "dialStrip").isVisible() is False
+    assert shown(qapp, "19:00").findChild(QWidget, "dialStrip").isVisible() is True

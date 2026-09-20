@@ -139,8 +139,10 @@ def test_system_theme_migration_keeps_chosen_themes_and_defaults_new_rows_to_sys
         db.executescript(PREFERENCES_BEFORE_SYSTEM)
         for user_id, name in ((1, "light-student"), (2, "dark-student"), (3, "new-student")):
             db.execute("INSERT INTO users VALUES (?, ?, 'scrypt$placeholder-hash')", (user_id, name))
-        db.execute("INSERT INTO preferences(user_id, theme, reminder_lead_min, alarms_json) VALUES (1, 'slate', 15, ?)",
-                   ('[{"id":"a"}]',))
+        db.execute(
+            "INSERT INTO preferences(user_id, theme, reminder_lead_min, alarms_json) VALUES (1, 'slate', 15, ?)",
+            ('[{"id":"a"}]',),
+        )
         db.execute("INSERT INTO preferences(user_id, theme) VALUES (2, 'nocturne')")
 
     initialize(path)
@@ -149,7 +151,9 @@ def test_system_theme_migration_keeps_chosen_themes_and_defaults_new_rows_to_sys
     with sqlite3.connect(path) as db:
         db.execute("INSERT INTO preferences(user_id) VALUES (3)")
         themes = dict(db.execute("SELECT user_id, theme FROM preferences").fetchall())
-        kept = db.execute("SELECT reminder_lead_min, alarms_json FROM preferences WHERE user_id = 1").fetchone()
+        kept = db.execute(
+            "SELECT reminder_lead_min, alarms_json FROM preferences WHERE user_id = 1"
+        ).fetchone()
         db.execute("UPDATE preferences SET theme = 'system' WHERE user_id = 1")
         leftovers = db.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'preferences_%'"

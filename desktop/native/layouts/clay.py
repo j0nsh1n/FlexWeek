@@ -7,7 +7,7 @@ deck is their keyboard twin: every day of the week is one button away.
 from __future__ import annotations
 
 from PySide6.QtCore import QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QMouseEvent, QPainter, QPaintEvent, QPen
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QMouseEvent, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QWidget
 
 from desktop.native.calendar import DAY_FULL, DAYS
@@ -86,16 +86,35 @@ class SideCard(QWidget):
         heading.setPixelSize(max(round(17 * scale), 11))
         heading.setBold(True)
         painter.setFont(heading)
+        head_box = body.adjusted(14, 12, -10, 0)
         painter.drawText(
-            body.adjusted(14, 12, -10, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, self._title
+            head_box,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
+            QFontMetrics(heading).elidedText(self._title, Qt.TextElideMode.ElideRight, int(head_box.width())),
         )
         small = QFont(self.font())
         small.setPixelSize(max(round(13 * scale), 10))
         painter.setFont(small)
-        for index, line in enumerate(self._lines[:6] or ["A free day."]):
+        for index, words in enumerate(self.painted_lines()):
             spot = body.adjusted(14, 44 + index * 22 * scale, -10, 0)
-            painter.drawText(spot, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, line)
+            painter.drawText(spot, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, words)
         painter.end()
+
+    def painted_lines(self) -> list[str]:
+        """The block lines as they will actually appear on the card.
+
+        Qt clips drawText to its rectangle, so a long title was not spilling over the edge, it was
+        being cut mid-word with nothing to say it had been cut. These end in an ellipsis instead.
+        """
+        scale = 0.9 if abs(self.offset) == 1 else 0.78
+        small = QFont(self.font())
+        small.setPixelSize(max(round(13 * scale), 10))
+        room = int(self.width() * scale * 0.92) - 24
+        metrics = QFontMetrics(small)
+        return [
+            metrics.elidedText(line, Qt.TextElideMode.ElideRight, max(room, 1))
+            for line in (self._lines[:6] or ["A free day."])
+        ]
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         self.day_clicked.emit(self.day)
@@ -192,6 +211,7 @@ class ClayDeckView(LayoutView):
             tray.addStretch(1)
             self._root.addLayout(tray)
         reach = 2 if scene.options.get("cards") != "three" else 1
+        reach = min(reach, 1) if self.cramped else reach
         tilted = scene.options.get("tilt") != "off"
         deck = QHBoxLayout()
         deck.setSpacing(0)

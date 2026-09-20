@@ -1,26 +1,24 @@
 """Look knobs, presets and palettes. Device-only knobs never become preference fields.
 
-Expected colours come from frontend/styles.css, where they already passed the web client's
-readability and accent-distance audits; expected behaviour comes from the appearance contract.
+The palettes began as the retired web client's CSS custom properties, which had already passed its
+readability and accent-distance audits. That client is gone, so there is nothing left to be in step
+with: the colours live in look.py now, and what is checked here is the property the audit was for,
+that every look a student can reach keeps its text readable. Expected behaviour comes from the
+appearance contract.
 """
 
 from __future__ import annotations
 
-import re
 from itertools import product
-from pathlib import Path
 
 from desktop.native.calendar import CATEGORIES
 from desktop.native.look import (
     AA_TEXT,
-    ACCENT_COLORS,
     ACCENTS,
     LOOK_DEFAULTS,
     LOOK_KNOBS,
     LOOK_PRESETS,
     PACKS,
-    PALETTES,
-    PRESET_PALETTES,
     block_paint,
     contrast,
     effective_look,
@@ -28,7 +26,6 @@ from desktop.native.look import (
     look_menu_token,
     look_menu_value,
     look_overrides,
-    mix,
     pack_axis,
     pack_stylesheet,
     parse_look_menu_token,
@@ -39,15 +36,8 @@ from desktop.native.look import (
     sanitize_look,
 )
 
-CSS = re.sub(r"/\*.*?\*/", "", (Path(__file__).parents[2] / "frontend/styles.css").read_text(), flags=re.S)
 # Every look a student can reach: pack, the device's light or dark setting, preset, accent, surface.
 EVERY_LOOK = list(product(PACKS, (False, True), LOOK_PRESETS, ACCENTS, LOOK_KNOBS["surface"]))
-
-
-def web_tokens(selector: str) -> dict[str, str]:
-    start = CSS.index(selector + " {")
-    body = CSS[CSS.index("{", start) + 1 : CSS.index("}", start)]
-    return {name: value.strip() for name, value in re.findall(r"(--[a-z0-9-]+)\s*:\s*([^;]+);", body)}
 
 
 def look_of(preset: str, **knobs: str) -> dict:
@@ -176,55 +166,6 @@ def test_choosing_a_preset_means_every_one_of_its_knobs() -> None:
     assert look_overrides("default", {**LOOK_DEFAULTS, "corners": "pill"}) == {"corners": "pill"}
 
 
-def test_native_colours_are_the_audited_web_tokens() -> None:
-    names = {
-        "window": "--bg",
-        "panel": "--surface-solid",
-        "field": "--field",
-        "grid": "--grid-cell",
-        "text": "--text",
-        "muted": "--muted",
-        "accent": "--accent",
-        "accent_ink": "--accent-ink",
-        "error": "--error",
-        "block_locked": "--block-locked",
-        "block_locked_ink": "--block-locked-ink",
-        "block_flex": "--block-flex",
-        "block_flex_ink": "--block-flex-ink",
-        "block_edge": "--block-edge",
-    }
-    selectors = {
-        "nocturne": ":root",
-        "slate": ':root[data-theme="slate"]',
-        "dark-frost": ':root[data-theme="dark-frost"]',
-        "light-frost": ':root[data-theme="light-frost"]',
-    }
-    tables = [(name, PALETTES[name], selector) for name, selector in selectors.items()]
-    tables.append(("terminal", PRESET_PALETTES["terminal"], ':root[data-preset="terminal"]'))
-    tables.append(("poster", PRESET_PALETTES["poster"], ':root[data-preset="poster"]'))
-    tables.append(("high-contrast", PRESET_PALETTES["high-contrast"], ':root[data-preset="high-contrast"]'))
-    tables.append(("paper", PRESET_PALETTES["paper"], ':root[data-preset="paper"]'))
-    tables.append(("pastel", PRESET_PALETTES["pastel"], ':root[data-preset="pastel"]'))
-    tables.append(("ink-dark", PRESET_PALETTES["ink"]["dark"], ':root[data-preset="ink"]'))
-    tables.append(
-        ("ink-light", PRESET_PALETTES["ink"]["light"], ':root[data-theme="slate"][data-preset="ink"]'),
-    )
-    for look, native, selector in tables:
-        web = web_tokens(selector)
-        for key, token in names.items():
-            assert native[key] == web[token], f"{look}: {key} differs from the web's {token}"
-        # The web states hairlines as a tint at an alpha; native settles them over the panel.
-        for key, token in (("hairline", "--hairline"), ("hairline_strong", "--hairline-strong")):
-            red, green, blue, alpha = (float(part) for part in re.findall(r"[\d.]+", web[token]))
-            tint = f"#{int(red):02x}{int(green):02x}{int(blue):02x}"
-            assert native[key] == mix(tint, native["panel"], alpha), f"{look}: {key}"
-    for accent, by_axis in ACCENT_COLORS.items():
-        dark = web_tokens(f':root[data-accent="{accent}"]')
-        light = web_tokens(f':root[data-theme="slate"][data-accent="{accent}"]')
-        assert by_axis["dark"] == (dark["--accent"], dark["--accent-ink"]), accent
-        assert by_axis["light"] == (light["--accent"], light["--accent-ink"]), accent
-
-
 def test_every_look_keeps_its_text_readable() -> None:
     pairs = [
         ("text", "window"),
@@ -334,11 +275,12 @@ def test_a_filled_block_is_readable_on_every_category_colour() -> None:
         assert ratio >= AA_TEXT, f"{name} {color}: best ink is only {ratio:.2f} to 1"
 
 
-def test_category_marks_are_the_web_clients_category_colours() -> None:
-    app_js = (Path(__file__).parents[2] / "frontend/app.js").read_text()
-    web = dict(re.findall(r'id: "([a-z]+)", label: "[^"]+", color: "(#[0-9a-f]{6})"', app_js))
-    assert len(web) == 8
-    assert {name: category["mark"] for name, category in CATEGORIES.items()} == web
+def test_every_category_has_a_mark_of_its_own() -> None:
+    """These began as the retired web client's category colours. What has to hold now that they live
+    only here is that there are eight and no two are the same, or two kinds of block look alike."""
+    marks = {name: category["mark"] for name, category in CATEGORIES.items()}
+    assert len(marks) == 8
+    assert len(set(marks.values())) == 8, marks
 
 
 def test_paper_and_pastel_are_light_looks_on_any_pack_and_close_the_menu() -> None:

@@ -36,13 +36,17 @@ def qapp() -> Iterator[QApplication]:
 
 
 def shown(
-    qapp: QApplication, blocks: list[dict] | None = None, today: int | None = 3, **chosen: str
+    qapp: QApplication,
+    blocks: list[dict] | None = None,
+    homework: dict | None = None,
+    today: int | None = 3,
+    **chosen: str,
 ) -> MissionView:
     options = {**options_for(None, "mission"), **chosen}
     palette = resolved_palette("light-frost", False, None, "default")
     view = MissionView()
     view.resize(1366, 760)
-    week = build_week(WEEK, blocks or BLOCKS, HOMEWORK, TRACE)
+    week = build_week(WEEK, blocks or BLOCKS, homework or HOMEWORK, TRACE)
     view.show_week(
         Scene(week, today, minute_of("13:40"), options, tokens_for("mission", options["colour"], palette))
     )
@@ -141,3 +145,55 @@ def test_option_colours_repaint_the_console(qapp: QApplication) -> None:
         "#0d0a04",
         "#040b06",
     ]
+
+
+def test_every_bar_has_visible_text_or_a_tooltip(qapp: QApplication) -> None:
+    skinny = [*BLOCKS, block("quiz", "locked", [4], "10:00", 15, title="Quiz")]
+    view = shown(qapp, blocks=skinny)
+    lanes = view.findChild(Lanes)
+    qapp.processEvents()
+    seen = []
+    for item in view.scene.week.occurrences:
+        if not lanes._in_view(item):
+            continue
+        drawn, hint = lanes.caption(item)
+        assert hint == item.title
+        assert drawn or hint
+        seen.append(item.block_id)
+    assert "quiz" in seen
+    quiz = next(item for item in view.scene.week.occurrences if item.block_id == "quiz")
+    assert lanes.bar_rect(quiz).width() <= 34
+    drawn, hint = lanes.caption(quiz)
+    assert hint == "Quiz"
+    assert drawn == "Q"
+
+
+def test_the_radar_elides_a_long_title_with_an_ellipsis(qapp: QApplication) -> None:
+    long_title = "History essay outline and annotated bibliography"
+    blocks = [{**item, "title": long_title} if item["id"] == "essay-1" else item for item in BLOCKS]
+    view = shown(qapp, blocks=blocks)
+    row = view.findChild(QPushButton, "missionRadar1")
+    assert "…" in row.text()
+    assert "annotated bibliography" not in row.text().split("\n")[0]
+    assert row.toolTip() == long_title
+
+
+def test_the_radar_steps_aside_on_a_narrow_window(qapp: QApplication) -> None:
+    """Mission wanted 1220px. The lanes are the point; the radar repeats what the unplaced strip
+    and the day row already say, so it is the first thing to go."""
+    wide = shown(qapp)
+    wide.resize(1366, 700)
+    qapp.processEvents()
+    assert wide.findChild(QFrame, "missionSide") is not None
+
+    tight = MissionView()
+    tight.resize(1024, 640)
+    tight.show()
+    qapp.processEvents()
+    tight.show_week(wide.scene)
+    qapp.processEvents()
+    assert tight.cramped is True
+    assert tight.findChild(QFrame, "missionSide") is None
+    for name in ("missionAdd", "missionPlan", "missionMyDay"):
+        button = tight.findChild(QPushButton, name)
+        assert button is not None and button.x() + button.width() <= tight.width()

@@ -60,11 +60,14 @@ def test_reminder_preferences_persist(tmp_path: Path) -> None:
         }
         assert client.put("/api/preferences", json=payload, headers=WRITE).status_code == 200
         assert client.get("/api/preferences").json() == payload
-        assert client.put(
-            "/api/preferences",
-            json={**payload, "reminder_lead_min": 121},
-            headers=WRITE,
-        ).status_code == 422
+        assert (
+            client.put(
+                "/api/preferences",
+                json={**payload, "reminder_lead_min": 121},
+                headers=WRITE,
+            ).status_code
+            == 422
+        )
 
 
 def test_reminder_preference_migration_on_legacy_db(tmp_path: Path) -> None:

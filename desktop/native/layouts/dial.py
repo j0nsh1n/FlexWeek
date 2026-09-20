@@ -196,7 +196,15 @@ class DayDialView(LayoutView):
         self._root = QHBoxLayout(self._page)
         self._root.setContentsMargins(22, 16, 22, 16)
         self._root.setSpacing(26)
-        outer.addWidget(scrolling(self._page, "dialScroll"))
+        outer.addWidget(scrolling(self._page, "dialScroll"), 1)
+        # The week strip is how another day is reached, so it is pinned below the scroller rather
+        # than left at the bottom of a column. At large text it used to be sliced in half, with the
+        # day names off screen entirely.
+        self._strip_host = QWidget()
+        self._strip_host.setObjectName("dialStrip")
+        self._strip = QVBoxLayout(self._strip_host)
+        self._strip.setContentsMargins(22, 0, 22, 10)
+        outer.addWidget(self._strip_host)
 
     def shown_day(self, scene: Scene) -> int:
         return self._day if self._day is not None else (scene.today if scene.today is not None else 0)
@@ -310,9 +318,12 @@ class DayDialView(LayoutView):
                 )
             )
         side.addStretch(1)
-        if scene.options.get("week") != "hide":
-            side.addLayout(self._minis(scene, day, span))
         self._root.addLayout(side, 5)
+        empty(self._strip)
+        wanted = scene.options.get("week") != "hide"
+        self._strip_host.setVisible(wanted)
+        if wanted:
+            self._strip.addLayout(self._minis(scene, day, span))
 
     def _card(self, scene: Scene, day: int, is_today: bool) -> QFrame:
         card = QFrame()

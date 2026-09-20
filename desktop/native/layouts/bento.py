@@ -118,7 +118,7 @@ class BentoView(LayoutView):
                         color=tokens["muted"], text_decoration="line-through"
                     ),
                     "QPushButton:focus": css(border=f"2px solid {tokens['text']}"),
-                    'QFrame[role="bar"]': css(background=tokens["card_c"], border_radius=f"{scene.px(6)}px"),
+                    'QFrame[role="bar"]': css(background=tokens["fill"], border_radius=f"{scene.px(6)}px"),
                     'QFrame[role="bar"][today="true"]': css(background=tokens["accent"]),
                 },
             )
@@ -127,6 +127,10 @@ class BentoView(LayoutView):
         self._grid.setContentsMargins(scene.px(20), scene.px(16), scene.px(20), scene.px(16))
         self._grid.setSpacing(scene.px(14))
         everything = scene.options.get("tiles") != "essentials"
+        if self.cramped:
+            # Two columns rather than a sideways scroll to reach Add and Plan.
+            self._narrow_board(scene, everything)
+            return
         self._grid.addWidget(self._hero(scene), 0, 0, 2, 2)
         self._grid.addWidget(self._deadlines(scene), 0, 2, 2, 1)
         self._grid.addWidget(
@@ -147,6 +151,30 @@ class BentoView(LayoutView):
         for found in self._board.findChildren(type(label("", ""))):
             role = found.objectName()
             found.setProperty("role", "kicker" if role.endswith("Kicker") else found.property("role"))
+
+    def _narrow_board(self, scene: Scene, everything: bool) -> None:
+        """The same tiles in two columns, for a window too narrow for four."""
+        tiles = [self._hero(scene), self._deadlines(scene), self._waiting(scene)]
+        if everything:
+            tiles += [self._tonight(scene), self._total(scene), self._load(scene), self._add(scene)]
+        tiles.append(self._strip(scene))
+        wide_names = {"bentoHero", "bentoStrip", "bentoLoad"}
+        row, column = 0, 0
+        for tile in tiles:
+            if tile.objectName() in wide_names:
+                if column:
+                    row, column = row + 1, 0
+                self._grid.addWidget(tile, row, 0, 1, 2)
+                row += 1
+                continue
+            self._grid.addWidget(tile, row, column, 1, 1)
+            column += 1
+            if column == 2:
+                row, column = row + 1, 0
+        for index in range(2):
+            self._grid.setColumnStretch(index, 1)
+        for index in range(self._grid.rowCount()):
+            self._grid.setRowMinimumHeight(index, scene.px(128))
 
     def _hero(self, scene: Scene) -> QFrame:
         tile, inner = self._tile(scene, "bentoHero", "Up next")
@@ -205,7 +233,6 @@ class BentoView(LayoutView):
             note = label("Everything you added has a time.", "bentoWaitingNote", wrap=True)
             note.setProperty("role", "muted")
             inner.addWidget(note)
-        inner.addStretch(1)
         actions = QHBoxLayout()
         plan = button("Plan it" if len(waiting) == 1 else "Plan my week", "bentoPlan")
         plan.clicked.connect(self.plan_requested.emit)
@@ -215,6 +242,9 @@ class BentoView(LayoutView):
         actions.addWidget(add)
         actions.addStretch()
         inner.addLayout(actions)
+        # The stretch belongs under the buttons, not between them and the text. Above them it left
+        # a 165 pixel hole in a 297 pixel tile, worst on an empty week.
+        inner.addStretch(1)
         return tile
 
     def _tonight(self, scene: Scene) -> QFrame:

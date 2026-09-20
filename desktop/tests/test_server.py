@@ -30,16 +30,15 @@ def test_start_returns_the_origin_it_is_actually_serving(tmp_path: Path) -> None
         running.stop()
 
 
-def test_it_serves_the_api_and_the_frontend(server: LocalServer) -> None:
+def test_it_serves_the_api(server: LocalServer) -> None:
     with urllib.request.urlopen(f"{server.origin}/api/health", timeout=10) as response:
         assert response.status == 200
-    with urllib.request.urlopen(f"{server.origin}/", timeout=10) as response:
-        assert response.status == 200
-        assert b"FlexWeek" in response.read()
 
 
-def test_native_mode_serves_the_api_without_the_browser_page(tmp_path: Path) -> None:
-    running = LocalServer(tmp_path / "flexweek.db", serve_frontend=False)
+def test_there_is_no_browser_page_to_serve(tmp_path: Path) -> None:
+    """The web client is gone, so the backend is an API and nothing else. A root that still answered
+    would mean a page had crept back in."""
+    running = LocalServer(tmp_path / "flexweek.db")
     try:
         running.start()
         with urllib.request.urlopen(f"{running.origin}/api/health", timeout=10) as response:

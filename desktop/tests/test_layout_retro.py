@@ -8,7 +8,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from desktop.tests.test_weekmodel import BLOCKS, HOMEWORK, TRACE, WEEK
+from desktop.tests.test_weekmodel import BLOCKS, HOMEWORK, TRACE, WEEK, block
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
@@ -19,7 +19,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QPoint, Qt
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QFrame, QLabel, QPushButton
+    from PySide6.QtWidgets import QApplication, QFrame, QLabel, QPushButton, QScrollArea, QWidget
 
     from desktop.native.layouts.base import Scene
     from desktop.native.layouts.registry import options_for, tokens_for
@@ -34,17 +34,23 @@ def qapp() -> Iterator[QApplication]:
     yield application
 
 
-def scene(clock: str = "13:40", **chosen: str) -> Scene:
+def scene(clock: str = "13:40", blocks: list[dict] | None = None, **chosen: str) -> Scene:
     options = {**options_for(None, "retro"), **chosen}
     palette = resolved_palette("light-frost", False, None, "default")
-    week = build_week(WEEK, BLOCKS, HOMEWORK, TRACE)
+    week = build_week(WEEK, blocks or BLOCKS, HOMEWORK, TRACE)
     return Scene(week, 3, minute_of(clock), options, tokens_for("retro", options["colour"], palette))
 
 
-def shown(qapp: QApplication, **chosen: str) -> RetroView:
+def shown(
+    qapp: QApplication,
+    width: int = 1366,
+    height: int = 720,
+    blocks: list[dict] | None = None,
+    **chosen: str,
+) -> RetroView:
     view = RetroView()
-    view.resize(1366, 720)
-    view.show_week(scene(**chosen))
+    view.resize(width, height)
+    view.show_week(scene(blocks=blocks, **chosen))
     view.show()
     qapp.processEvents()
     return view
@@ -107,6 +113,45 @@ def test_a_window_cannot_be_dragged_off_the_desktop(qapp: QApplication) -> None:
     QTest.mouseRelease(bar, Qt.MouseButton.LeftButton, pos=QPoint(-5000, -5000))
     spot = view.findChild(QFrame, "retroWindow-next").pos()
     assert (spot.x(), spot.y()) == (0, 0)
+
+
+def test_every_weekday_is_reachable_when_the_desk_is_narrow(qapp: QApplication) -> None:
+    weekend = BLOCKS + [
+        block(
+            "shift",
+            "locked",
+            [5],
+            "09:00",
+            240,
+            title="Saturday shift at the cafe",
+            category="extra",
+        ),
+        block(
+            "choir",
+            "locked",
+            [6],
+            "10:00",
+            180,
+            title="Sunday choir practice and coffee",
+            category="extra",
+        ),
+    ]
+    view = shown(qapp, 1024, 640, blocks=weekend)
+    week = view.findChild(QFrame, "retroWindow-week")
+    desk = view.findChild(QWidget, "retroDesk")
+    assert week.width() <= desk.width()
+    assert 0 <= week.x() <= max(desk.width() - 60, 0)
+    pane = view.findChild(QScrollArea, "retroWeekPane")
+    assert pane is not None
+    assert pane.horizontalScrollBar().maximum() > 0
+    for day in range(7):
+        head = view.findChild(QLabel, f"retroDay{day}")
+        pane.ensureWidgetVisible(head)
+        qapp.processEvents()
+        port = pane.viewport()
+        left = head.mapTo(port, QPoint(0, 0)).x()
+        assert left < port.width()
+        assert left + head.width() > 0
 
 
 def test_the_notepad_flags_the_squeezed_and_the_unplaced(qapp: QApplication) -> None:

@@ -38,14 +38,10 @@ def diff_snapshots(current: dict, stored: dict) -> dict:
         if start in current_weeks and canonical(stored_weeks[start]) != canonical(current_weeks[start])
     )
     assignments_added = [
-        _ref(stored_assignments[key])
-        for key in sorted(stored_assignments)
-        if key not in current_assignments
+        _ref(stored_assignments[key]) for key in sorted(stored_assignments) if key not in current_assignments
     ]
     assignments_removed = [
-        _ref(current_assignments[key])
-        for key in sorted(current_assignments)
-        if key not in stored_assignments
+        _ref(current_assignments[key]) for key in sorted(current_assignments) if key not in stored_assignments
     ]
     assignments_changed = [
         _ref(stored_assignments[key])

@@ -198,7 +198,9 @@ def test_a_finished_task_on_several_candidate_days_holds_no_slot() -> None:
     done = _flex("done", "Reading", 60, [0, 1, 2], completed=True, start="09:00")
     names = ("Monday", "Tuesday", "Wednesday")
     wants = [
-        _flex(f"w{day}", f"Task {day}", 60, [day], earliest=f"{names[day]} 09:00", latest=f"{names[day]} 10:00")
+        _flex(
+            f"w{day}", f"Task {day}", 60, [day], earliest=f"{names[day]} 09:00", latest=f"{names[day]} 10:00"
+        )
         for day in (0, 1, 2)
     ]
     trace = solve([done, *wants])
@@ -209,9 +211,7 @@ def test_a_finished_task_on_several_candidate_days_holds_no_slot() -> None:
 
 
 def test_completed_day_keeps_candidate_days_but_occupies_only_the_finished_slot() -> None:
-    done = _flex(
-        "done", "Reading", 60, [0, 1, 2], completed=True, start="09:00", completed_day=1
-    )
+    done = _flex("done", "Reading", 60, [0, 1, 2], completed=True, start="09:00", completed_day=1)
     names = ("Monday", "Tuesday", "Wednesday")
     wants = [
         _flex(

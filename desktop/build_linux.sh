@@ -3,8 +3,7 @@
 #
 # Produces dist/FlexWeek/FlexWeek — runs without a Python install and without a
 # separate server: the FastAPI backend is bundled and started in-process.
-# frontend/ ships as data because backend/app.py can still serve it from
-# <bundle>/frontend. The window is native Qt widgets; Chromium is not compiled
+# The window is native Qt widgets; Chromium is not compiled
 # in. --onefile is not used because Qt plugins ship as a folder (see DESKTOP.md).
 #
 # Nuitka is what pyside6-deploy shells out to. It is driven directly here
@@ -42,17 +41,15 @@ trap 'echo "Build staging retained at $STAGING" >&2' ERR
     --nofollow-import-to=PySide6.QtWebEngineCore,PySide6.QtWebEngineWidgets,PySide6.QtWebEngineQuick \
     --nofollow-import-to=mypy,pydantic.mypy,uvloop,httptools,watchfiles,websockets,yaml \
     --nofollow-import-to=curses,readline,termios \
-    --include-data-dir="$ROOT/frontend"=frontend \
-    --noinclude-data-files='frontend/tests/*' \
     --output-filename=FlexWeek \
     --output-dir="$STAGING" \
-    --linux-icon="$ROOT/frontend/logo.png" \
+    --linux-icon="$ROOT/desktop/assets/logo.png" \
     --noinclude-dlls='*.cpp.o' \
     --noinclude-dlls='*.qsb' \
     --noinclude-dlls='libtinfo.so*' \
     --noinclude-dlls='libncursesw.so*' \
     --noinclude-dlls='libreadline.so*' \
-    --include-qt-plugins=networkinformation,platforminputcontexts,position,qmllint,qmltooling,vectorimageformats \
+    --include-qt-plugins=multimedia,networkinformation,platforminputcontexts,position,qmllint,qmltooling,vectorimageformats \
     --noinclude-qt-plugins=egldeviceintegrations,printsupport \
     --jobs="${FLEXWEEK_BUILD_JOBS:-4}"
 

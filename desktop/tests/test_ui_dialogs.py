@@ -119,3 +119,57 @@ def test_going_back_keeps_a_day_the_student_had_already_unticked(qapp: QApplicat
     dialog.scope_series.setChecked(True)
     dialog.accept()
     assert dialog.block()["days"] == [0, 1, 2, 3]
+
+
+TRACK = "https://open.spotify.com/playlist/37i9dQZF1DX0XUsuxWHRQd"
+
+
+def test_a_fixed_commitment_keeps_the_spotify_link_that_was_typed(qapp: QApplication) -> None:
+    """The Spotify button already opened a block's link, but nothing here could put one there."""
+    dialog = BlockDialog(None, school())
+    dialog.spotify.setText(TRACK)
+    dialog.accept()
+    assert dialog.block()["spotify_url"] == TRACK
+
+
+def test_an_existing_link_is_shown_so_it_can_be_changed_or_cleared(qapp: QApplication) -> None:
+    dialog = BlockDialog(None, school(spotify_url=TRACK))
+    assert dialog.spotify.text() == TRACK
+    dialog.spotify.clear()
+    dialog.accept()
+    assert dialog.block()["spotify_url"] is None
+
+
+def test_a_link_that_is_not_spotify_is_refused_with_a_message(qapp: QApplication) -> None:
+    dialog = BlockDialog(None, school())
+    dialog.spotify.setText("https://example.com/rickroll")
+    dialog.accept()
+    assert dialog.isVisible() is False  # never shown, so it cannot be visible either way
+    assert dialog.result() != dialog.DialogCode.Accepted
+    assert "spotify" in dialog.error.text().lower()
+
+
+def test_homework_keeps_its_spotify_link_too(qapp: QApplication) -> None:
+    from desktop.native.widgets import HomeworkDialog
+
+    dialog = HomeworkDialog(None, None, "2026-09-14")
+    dialog.title.setText("Essay")
+    dialog.spotify.setText(TRACK)
+    dialog.accept()
+    assert dialog.assignment()["spotify_url"] == TRACK
+
+
+def test_the_homework_editor_is_wide_enough_to_read_after_it_was_made_to_scroll(
+    qapp: QApplication,
+) -> None:
+    """A scroll area reports its own width, not its content's, so the dialog came up too narrow to
+    read the fields until a minimum was set."""
+    from desktop.native.widgets import HomeworkDialog
+
+    dialog = HomeworkDialog(None, None, "2026-09-14")
+    dialog.show()
+    qapp.processEvents()
+    dialog.adjustSize()
+    qapp.processEvents()
+    assert dialog.width() >= 500
+    dialog.close()

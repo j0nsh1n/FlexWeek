@@ -25,6 +25,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtGui import QGuiApplication
     from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QPushButton
 
+    from backend.slots import hhmm_to_minutes
     from desktop.native.calendar import sunday_due
     from desktop.native.client import NativeClient
     from desktop.native.controller import NativeSession, session_days
@@ -43,7 +44,7 @@ def qapp() -> Iterator[QApplication]:
 
 @pytest.fixture()
 def server(qapp: QApplication, tmp_path: Path) -> Iterator[LocalServer]:
-    running = LocalServer(tmp_path / "flexweek.db", serve_frontend=False)
+    running = LocalServer(tmp_path / "flexweek.db")
     running.start()
     yield running
     for obj in list(HELD):
@@ -1095,3 +1096,222 @@ def test_unsaved_changes_block_account_import(qapp: QApplication, server: LocalS
     session.preview_account_import({"format": 3})
     assert session.transfer_preview is None
     assert "unsaved" in session.message
+
+
+def test_moving_into_a_break_says_so_with_the_break_tone(qapp: QApplication, server: LocalServer) -> None:
+    """The web announces every phase change. Without this the end-of-session chime setting has
+    nothing to fire on, because a quick focus session rolls straight into a break in silence."""
+    session = signed_in(qapp, server.origin, "phase", create=True)
+    heard: list[dict] = []
+    session.alerts.connect(lambda notices: heard.extend(notices))
+    session.now_ms = lambda: 1_000_000
+    assert session.start_quick_focus() is True
+    heard.clear()
+    session.now_ms = lambda: 1_000_000 + 30 * 60_000
+    session.tick_focus()
+    wait_until(qapp, lambda: not session.busy)
+    focus = [notice for notice in heard if notice.get("kind") == "focus"]
+    assert focus, heard
+    assert focus[0]["tone"] == "soft"
+    assert session.focus is not None and session.focus["phase"] in ("break", "long_break")
+
+
+def test_going_back_to_work_says_so_with_the_work_tone(qapp: QApplication, server: LocalServer) -> None:
+    session = signed_in(qapp, server.origin, "phase2", create=True)
+    session.now_ms = lambda: 1_000_000
+    assert session.start_quick_focus() is True
+    session.now_ms = lambda: 1_000_000 + 30 * 60_000
+    session.tick_focus()
+    wait_until(qapp, lambda: not session.busy)
+    heard: list[dict] = []
+    session.alerts.connect(lambda notices: heard.extend(notices))
+    session.now_ms = lambda: 1_000_000 + 90 * 60_000
+    session.tick_focus()
+    wait_until(qapp, lambda: not session.busy)
+    focus = [notice for notice in heard if notice.get("kind") == "focus"]
+    assert focus, heard
+    assert focus[0]["tone"] == "bright"
+    assert session.focus is not None and session.focus["phase"] == "work"
+
+
+def test_planning_with_auto_split_leaves_focus_chunks_on_the_grid(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    """The whole feature lived in the web client; the desktop could tick the box and nothing split.
+    This goes through a real solve and a real save, because the chunks have to survive validation."""
+    session = signed_in(qapp, server.origin, "splitter", create=True)
+    wait_until(qapp, lambda: session.preferences is not None)
+    session.save_preferences(
+        {
+            "auto_split_pomodoro": True,
+            "timer_work_min": 30,
+            "timer_break_min": 15,
+            "timer_long_break_min": 30,
+            "timer_long_break_every": 4,
+        }
+    )
+    wait_until(qapp, lambda: bool((session.preferences or {}).get("auto_split_pomodoro")))
+    session.add_homework(
+        {
+            "id": "essay",
+            "title": "Essay",
+            "due": sunday_due(session.week_start),
+            "estimate_min": 90,
+            "revision": 0,
+        }
+    )
+    session.save()
+    wait_until(qapp, lambda: session.revision >= 1 and not session.busy and not session.dirty)
+    session.solve()
+    wait_until(qapp, lambda: not session.busy and session.trace is not None)
+    wait_until(qapp, lambda: any(b.get("pomodoro_role") for b in session.blocks))
+    chunks = [b for b in session.blocks if b.get("pomodoro_role") == "work"]
+    breaks = [b for b in session.blocks if b.get("pomodoro_role") == "break"]
+    assert len(chunks) == 3, [b["title"] for b in session.blocks]
+    assert len(breaks) == 2
+    assert all(b["kind"] == "locked" and len(b["days"]) == 1 for b in chunks + breaks)
+    # Every chunk sits on the 15-minute grid the server enforces.
+    assert all(hhmm_to_minutes(b["start"]) % 15 == 0 for b in chunks + breaks)
+    wait_until(qapp, lambda: not session.busy)
+    assert session.conflict is False
+
+
+def test_planning_without_auto_split_leaves_one_block(qapp: QApplication, server: LocalServer) -> None:
+    session = signed_in(qapp, server.origin, "nosplit", create=True)
+    wait_until(qapp, lambda: session.preferences is not None)
+    session.add_homework(
+        {
+            "id": "essay",
+            "title": "Essay",
+            "due": sunday_due(session.week_start),
+            "estimate_min": 90,
+            "revision": 0,
+        }
+    )
+    session.save()
+    wait_until(qapp, lambda: session.revision >= 1 and not session.busy and not session.dirty)
+    session.solve()
+    wait_until(qapp, lambda: not session.busy and session.trace is not None)
+    assert not any(b.get("pomodoro_role") for b in session.blocks)
+
+
+def test_the_solver_is_asked_to_reserve_the_breaks_as_well(qapp: QApplication, server: LocalServer) -> None:
+    """Splitting after the solve without asking for the extra time first would lay the chunks and
+    breaks over whatever the solver placed next, because it only reserved the homework's own length."""
+    session = signed_in(qapp, server.origin, "reserve", create=True)
+    wait_until(qapp, lambda: session.preferences is not None)
+    session.save_preferences(
+        {
+            "auto_split_pomodoro": True,
+            "timer_work_min": 30,
+            "timer_break_min": 15,
+            "timer_long_break_min": 30,
+            "timer_long_break_every": 4,
+        }
+    )
+    wait_until(qapp, lambda: bool((session.preferences or {}).get("auto_split_pomodoro")))
+    session.add_homework(
+        {
+            "id": "essay",
+            "title": "Essay",
+            "due": sunday_due(session.week_start),
+            "estimate_min": 90,
+            "revision": 0,
+        }
+    )
+    session.save()
+    wait_until(qapp, lambda: session.revision >= 1 and not session.busy and not session.dirty)
+    sent: list[dict] = []
+    original = session.client.request
+
+    def spy(method: str, path: str, body: object, *args: object, **kwargs: object) -> object:
+        if path == "/api/solve" and isinstance(body, dict):
+            sent.append(body)
+        return original(method, path, body, *args, **kwargs)
+
+    session.client.request = spy  # type: ignore[method-assign]
+    session.solve()
+    wait_until(qapp, lambda: not session.busy and session.trace is not None)
+    session.client.request = original  # type: ignore[method-assign]
+    assert sent, "the solve never went out"
+    asked = {block["title"]: block["duration_min"] for block in sent[0]["blocks"]}
+    # 90 minutes of work plus the two 15-minute breaks that will sit between the chunks.
+    assert asked["Essay"] == 120
+
+
+def test_a_chunk_of_plain_homework_keeps_its_number(qapp: QApplication, server: LocalServer) -> None:
+    """A flexible block with no assignment behind it keeps the numbering the split gave it."""
+    session = signed_in(qapp, server.origin, "numbered", create=True)
+    wait_until(qapp, lambda: session.preferences is not None)
+    session.save_preferences(
+        {
+            "auto_split_pomodoro": True,
+            "timer_work_min": 30,
+            "timer_break_min": 15,
+            "timer_long_break_min": 30,
+            "timer_long_break_every": 4,
+        }
+    )
+    wait_until(qapp, lambda: bool((session.preferences or {}).get("auto_split_pomodoro")))
+    session.add_block(
+        {
+            "id": "rev",
+            "title": "Revision",
+            "kind": "flexible",
+            "duration_min": 90,
+            "days": [0, 1, 2, 3, 4],
+            "category": "study",
+        }
+    )
+    session.save()
+    wait_until(qapp, lambda: session.revision >= 1 and not session.busy and not session.dirty)
+    session.solve()
+    wait_until(qapp, lambda: session.trace is not None and not session.busy)
+    wait_until(qapp, lambda: any(b.get("pomodoro_role") for b in session.blocks))
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    assert [b["title"] for b in session.blocks if b.get("pomodoro_role") == "work"] == [
+        "Revision · focus 1/3",
+        "Revision · focus 2/3",
+        "Revision · focus 3/3",
+    ]
+
+
+def test_a_chunk_of_a_tracked_assignment_takes_the_assignment_title_back(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    """Not a defect in the split, and not something to fix here: the server rewrites the title of
+    every block carrying an assignment_id (rewrite_session in backend/assignments.py), so the web's
+    chunks are renamed in exactly the same way. Dropping the id to keep the number would stop focus
+    time being credited to the assignment, which matters more than the label."""
+    session = signed_in(qapp, server.origin, "tracked", create=True)
+    wait_until(qapp, lambda: session.preferences is not None)
+    session.save_preferences(
+        {
+            "auto_split_pomodoro": True,
+            "timer_work_min": 30,
+            "timer_break_min": 15,
+            "timer_long_break_min": 30,
+            "timer_long_break_every": 4,
+        }
+    )
+    wait_until(qapp, lambda: bool((session.preferences or {}).get("auto_split_pomodoro")))
+    session.add_homework(
+        {
+            "id": "essay",
+            "title": "History essay",
+            "due": sunday_due(session.week_start),
+            "estimate_min": 90,
+            "revision": 0,
+        }
+    )
+    session.save()
+    wait_until(qapp, lambda: session.revision >= 1 and not session.busy and not session.dirty)
+    session.solve()
+    wait_until(qapp, lambda: session.trace is not None and not session.busy)
+    wait_until(qapp, lambda: any(b.get("pomodoro_role") for b in session.blocks))
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    chunks = [b for b in session.blocks if b.get("pomodoro_role") == "work"]
+    assert len(chunks) == 3
+    assert {b["title"] for b in chunks} == {"History essay"}
+    # What the split is actually for still holds: the chunks are real placed blocks on one day.
+    assert all(b["kind"] == "locked" and len(b["days"]) == 1 for b in chunks)

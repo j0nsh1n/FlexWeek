@@ -2,7 +2,7 @@
 # Build the FlexWeek Windows desktop shell (onedir standalone).
 #
 # Mirror of desktop/build_linux.sh: the FastAPI backend is compiled into the
-# desktop process and frontend/ ships as bundle data, so dist\FlexWeek-Windows
+# desktop process, so dist\FlexWeek-Windows
 # runs with no Python install and no separate server. The window is native Qt
 # widgets. Onefile is not used because Qt plugins ship as a folder (see DESKTOP.md).
 #
@@ -88,16 +88,14 @@ $NuitkaArgs = @(
     # the same list as build_linux.sh.
     '--nofollow-import-to=mypy,pydantic.mypy,uvloop,httptools,watchfiles,websockets,yaml',
     '--msvc=latest',
-    "--include-data-dir=$(Join-Path $Root 'frontend')=frontend",
-    '--noinclude-data-files=frontend/tests/*',
     '--noinclude-dlls=*.cpp.o',
     '--noinclude-dlls=*.qsb',
-    '--include-qt-plugins=networkinformation,platforminputcontexts,position,qmllint,qmltooling,vectorimageformats',
+    '--include-qt-plugins=multimedia,networkinformation,platforminputcontexts,position,qmllint,qmltooling,vectorimageformats',
     '--noinclude-qt-plugins=printsupport',
     '--include-windows-runtime-dlls=yes',
     '--output-filename=FlexWeek.exe',
     "--output-dir=$Stage",
-    "--windows-icon-from-ico=$(Join-Path $Root 'frontend\logo.png')",
+    "--windows-icon-from-ico=$(Join-Path $Root 'desktop\assets\logo.png')",
     '--windows-console-mode=disable'
 )
 if ($AssumeYesForDownloads) {
@@ -164,7 +162,7 @@ try {
 }
 $Exe = Join-Path $Destination 'FlexWeek.exe'
 Copy-Item -LiteralPath (Join-Path $Root 'LICENSE') -Destination (Join-Path $Destination 'LICENSE.txt')
-Copy-Item -LiteralPath (Join-Path $Root 'frontend\logo.png') -Destination (Join-Path $Destination 'flexweek.png')
+Copy-Item -LiteralPath (Join-Path $Root 'desktop\assets\logo.png') -Destination (Join-Path $Destination 'flexweek.png')
 try {
     $env:PYTHONPATH = $Root
     & $VenvPython -m desktop.readme (Join-Path $Root 'desktop\windows\README.txt') (Join-Path $Destination 'README.txt')

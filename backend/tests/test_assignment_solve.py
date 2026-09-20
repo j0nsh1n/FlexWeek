@@ -97,7 +97,9 @@ def test_solve_rejects_another_accounts_assignment_id(app: FastAPI, alice: TestC
     put_assignment(alice, assignment())
     with TestClient(app) as bob:
         assert (
-            bob.post("/api/auth/register", json={"username": "bob", "password": PASSWORD}, headers=WRITE).status_code
+            bob.post(
+                "/api/auth/register", json={"username": "bob", "password": PASSWORD}, headers=WRITE
+            ).status_code
             == 201
         )
         response = solve(bob, [session("sun", days=[6])])

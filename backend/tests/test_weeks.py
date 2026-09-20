@@ -11,7 +11,15 @@ from backend.weeks import is_month_label, is_week_start, monday_of, month_grid, 
 
 def test_monday_of_maps_every_day_of_one_week_to_its_monday() -> None:
     # 2026-09-07..2026-09-13 is one Monday..Sunday week.
-    for day in ("2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-12", "2026-09-13"):
+    for day in (
+        "2026-09-07",
+        "2026-09-08",
+        "2026-09-09",
+        "2026-09-10",
+        "2026-09-11",
+        "2026-09-12",
+        "2026-09-13",
+    ):
         assert monday_of(day) == "2026-09-07"
 
 

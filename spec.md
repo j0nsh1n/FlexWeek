@@ -154,12 +154,14 @@ Contract for the finished app:
   solver's choice is never stored. Details live in `docs/stage7-contract.md`.
 
 ## User Experience
-Web app, one page, desktop-first (designed at 1280px) and usable on a phone at
-390px. Vanilla JavaScript, HTML5 and CSS. **No npm, no build step, no
-framework**. FastAPI serves `frontend/` as static files, so there is one origin
-and no CORS.
+Native desktop app, one window, designed at 1280px and usable down to 1150px,
+where the layouts switch to a narrow arrangement. PySide6 Qt widgets over a
+FastAPI backend started in-process on a loopback port. **No HTML, CSS or
+JavaScript, no npm, no build step, no framework.** There is no browser client:
+the web app was retired in September 2026 and `frontend/` deleted.
 
-First paint with no session is Create account. Log in is a separate screen.
+First paint with no session is Sign in, with creating an account offered as a
+line of small print that switches the same card over.
 A new account must acknowledge its eight recovery codes, then is offered a
 short first-week setup (school hours, one sport, then homework). Every setup
 step can be skipped. Dragging or clicking empty grid space opens an Add dialog
@@ -277,8 +279,8 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
 - Language/runtime: **Python 3.14**. PINNED. Verified against the local
   interpreter (3.14.7) and `.github/workflows/verify.yml` (`python-version: '3.14'`).
   Never downgrade.
-- Current languages: Python, JavaScript, HTML5, CSS, and SQL for account storage.
-  The desktop shell is PySide6 (Qt WebEngine); see DESKTOP.md.
+- Current languages: Python, and SQL for account storage. The client is PySide6
+  Qt widgets; see DESKTOP.md.
 - Frameworks, pinned in `requirements.txt`: FastAPI 0.141.1,
   uvicorn[standard] 0.52.4, pytest 9.1.1, httpx 0.28.1, ruff 0.16.6, mypy 2.3.1, Pydantic 2.13.5.
 - Storage: SQLite at `FLEXWEEK_DATABASE` (default `var/flexweek.db`), with users,
@@ -305,16 +307,14 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
   - `backend/storage.py`. SQLite transactions, password hashing and sessions.
   - `backend/data/demo_*.json`. Test-only anonymized seed weeks.
   - `backend/tests/`. Pytest suite; the source of truth for solver behavior.
-  - `frontend/`. `index.html`, `styles.css`, and deferred scripts sharing one
-    global scope: `app.js` (week state, grid, saves, solve, alarms), `auth.js`
-    (Create account / Log in), `editor.js` (Add/Edit dialog), `setup.js`
-    (first-week setup), `focus.js` (timer and Now / Next), `reuse.js`
-    (clipboard, conflict preview and unfinished work), `routines.js`,
-    `restore.js` and `access.js` (recovery codes, storage identity and previewed
-    account transfer). The browser owns
-    interaction and explanation display and **never reimplements placement**.
-  - `desktop/`. PySide6 window, bundled uvicorn, packaging scripts, and
-    isolated WebEngine probes.
+  - `desktop/native/`. The client: `window.py` (chrome, pages and dialogs),
+    `controller.py` (session, saves, solve, focus and alarms), `widgets.py`
+    (week grid, day agenda, month and editors), `layouts/` (the eight designs
+    and the registry they are built from), `look.py` (packs, presets and
+    palettes), `weekmodel.py`, `pomodoro.py`, `tones.py` and `sound.py`. The
+    client owns interaction and explanation display and **never reimplements
+    placement**.
+  - `desktop/`. PySide6 window, bundled uvicorn, packaging scripts and assets.
 - Time model: local `HH:MM` strings and Mon–Sun day indices, plus naive local
   `YYYY-MM-DDTHH:MM` assignment deadlines, assumed America/Los_Angeles. No
   timezone conversion math anywhere in v1.
@@ -333,7 +333,7 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
   uninstalls each one; running them on a real PC is unverified here. Production requires HTTPS via FLEXWEEK_ORIGIN and
   persistent SQLite storage.
 - GitHub Actions: `.github/workflows/verify.yml` is the source gate (mypy, not
-  pyright). `.github/workflows/codeql.yml` runs CodeQL on Python and JavaScript.
+  pyright). `.github/workflows/codeql.yml` runs CodeQL on Python.
   The generic kit `ci.yml` is not installed: it ran pyright and looked for
   `tests/` at the repo root. Dependabot stays off.
 
@@ -389,9 +389,9 @@ The full source gate from the repo root, inside `.venv`, is:
 .venv/bin/python scripts/verify.py
 ```
 
-`--web-only` omits desktop tests and reports desktop as unverified.
+`--backend-only` omits desktop tests and reports desktop as unverified.
 `.github/workflows/verify.yml` runs that variant on every push and pull
-request (Python 3.14, Node 24, `contents: read`). It installs nothing and does
+request (Python 3.14, `contents: read`). It installs nothing and does
 not build a binary.
 
 The commands it runs, each of which must exit 0:
@@ -403,11 +403,9 @@ The commands it runs, each of which must exit 0:
 - Types: `mypy backend`. This repo's type checker is mypy. Do not install
   pyright.
 - Tests: `pytest -q`. Run from the repo root so `backend` imports resolve.
-  `--web-only` limits pytest to `backend/tests`.
-- Frontend behavior tests: `node --test frontend/tests/*.test.mjs` (the shell
-  glob; the directory form is broken on Node 24);
-  syntax: `node --check` on every `frontend/*.js` file. Node is development-only,
-  with no npm packages or frontend build step. Browser layout needs a separate
+  `--backend-only` limits pytest to `backend/tests`.
+- Desktop behavior tests are part of the pytest suite and run offscreen against
+  a real loopback backend. Window layout on a real display needs a separate
   manual check.
 - Preserve existing solver fixture coverage; include account isolation, expiry,
   CSRF, atomic saves, revision conflict and import/retry tests.

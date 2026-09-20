@@ -75,16 +75,12 @@ def test_old_client_round_trip_still_omits_appearance_fields(alice: TestClient) 
 
 
 def test_unknown_preference_key_is_rejected(alice: TestClient) -> None:
-    rejected = alice.put(
-        "/api/preferences", json={**defaults(), "linen": "graphite"}, headers=WRITE
-    )
+    rejected = alice.put("/api/preferences", json={**defaults(), "linen": "graphite"}, headers=WRITE)
     assert rejected.status_code == 422
 
 
 def test_accent_outside_the_set_is_rejected(alice: TestClient) -> None:
-    rejected = alice.put(
-        "/api/preferences", json={**defaults(), "accent": "indigo"}, headers=WRITE
-    )
+    rejected = alice.put("/api/preferences", json={**defaults(), "accent": "indigo"}, headers=WRITE)
     assert rejected.status_code == 422
 
 
@@ -139,8 +135,11 @@ def test_a_set_pack_keeps_theme_on_its_axis(alice: TestClient) -> None:
     )
     assert light.status_code == 200, light.text
     assert light.json()["theme_pack"] == "light-frost"
-    assert alice.put(
-        "/api/preferences",
-        json={**defaults(), "theme": "nocturne", "theme_pack": "light-frost"},
-        headers=WRITE,
-    ).status_code == 422
+    assert (
+        alice.put(
+            "/api/preferences",
+            json={**defaults(), "theme": "nocturne", "theme_pack": "light-frost"},
+            headers=WRITE,
+        ).status_code
+        == 422
+    )

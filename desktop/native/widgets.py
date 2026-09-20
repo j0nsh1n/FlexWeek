@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from uuid import uuid4
 
 from pydantic import ValidationError
@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -52,6 +53,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from backend.explain import REASON_COPY
 from backend.models import Assignment, TimeBlock, WeekRequest
 from backend.slots import (
     DAY_END_MIN,
@@ -77,7 +79,7 @@ from desktop.native.calendar import (
     resize_bottom_range,
     resize_top_range,
 )
-from desktop.native.look import block_paint, resolved_palette
+from desktop.native.look import block_paint, mix, readable_ink, resolved_palette
 from desktop.native.reuse import (
     AVAILABILITY_LIMIT,
     LATE_MINUTES,
@@ -86,8 +88,16 @@ from desktop.native.reuse import (
     routine_source_blocks,
     row_conflict,
 )
+from desktop.native.weekmodel import due_label, length_label
 
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+DETAIL_BOX_HEIGHT = 84
+# A scroll area reports its own modest size hint rather than its content's, which is what keeps the
+# homework editor on a laptop screen. It does not claim the content's width either, so that is set.
+HOMEWORK_MIN_WIDTH = 520
+PLAN_REVIEW_MAX = 132
+# Two hours: the name of a block is never more than that far above where you are looking.
+LABEL_EVERY = 8
 DAY_FULL = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 MONTH_FULL = (
     "January",
@@ -238,6 +248,7 @@ class WeekTable(QTableWidget):
         self._look: dict | None = None
         self._palette = resolved_palette("system", False, None)
         self._shown: tuple[str, list[dict], dict | None] | None = None
+        self._revealed: str | None = None
         self.setItemDelegate(BlockDelegate(self))
 
     def set_look(self, look: dict | None, palette: dict) -> None:
@@ -281,12 +292,16 @@ class WeekTable(QTableWidget):
                     # A cell is one 15-minute row, too short for two lines. Qt elided the title to
                     # "School…" and dropped the second line, which is where Missed and Done are said.
                     # So the title takes the first row, the detail the second, and the rest stay blank.
+                    # Repeated down a long block, because the grid now opens on the current time
+                    # rather than at dawn. With the name only on the first row, a student scrolled
+                    # into the middle of School saw an anonymous blue wash.
+                    step = (row - first) % LABEL_EVERY
                     if first == last:
                         visible = f"{block['title']} · {detail}"
-                    elif row == first:
+                    elif step == 0:
                         visible = block["title"]
                     else:
-                        visible = detail if row == first + 1 else ""
+                        visible = detail if step == 1 else ""
                     cells.setdefault((row, day), []).append((block, text, visible))
                     spans.setdefault((row, day), (first, last))
         for (row, day), entries in cells.items():
@@ -305,6 +320,26 @@ class WeekTable(QTableWidget):
             first, last = spans[(row, day)]
             item.setData(ENDS_ROLE, (row == first, row == last))
             self.setItem(row, day, item)
+
+    def reveal(self, week_start: str, now_ms: int) -> None:
+        """Open this week on the time that matters: now, or the first block, not 06:00."""
+        if self._revealed == week_start:
+            return
+        self._revealed = week_start
+        moment = datetime.fromtimestamp(now_ms / 1000.0)
+        if monday_of(moment.date().isoformat()) == week_start:
+            row = min(
+                max((moment.hour * 60 + moment.minute - DAY_START_MIN) // SLOT_MIN, 0),
+                SLOTS_PER_DAY - 1,
+            )
+        else:
+            row = self._first_block_row()
+        lead = min(2, row)
+        self.scrollTo(self.model().index(row - lead, 0), QAbstractItemView.ScrollHint.PositionAtTop)
+
+    def _first_block_row(self) -> int:
+        starts = [hhmm_to_slot(block["start"]) for block in self._week_blocks if block.get("start")]
+        return min(starts) if starts else 0
 
     def block_titles(self, ids: list[str]) -> list[str]:
         """Names for the blocks sharing a cell, taken from the blocks: the cell's own text may be blank."""
@@ -479,6 +514,23 @@ class CategoryChips(QWidget):
             if button is not None:
                 button.setChecked(key == category)
 
+    def set_palette(self, palette: dict, accent_chips: bool) -> None:
+        """Colour each chip like the blocks it makes, or all of them in the accent when the student
+        asked for that. The chips carried no colour at all, so they said nothing about what they arm."""
+        for key, info in CATEGORIES.items():
+            button = self.findChild(QPushButton, f"chip-{key}")
+            if button is None:
+                continue
+            face = palette["accent"] if accent_chips else info["mark"]
+            ink = palette["accent_ink"] if accent_chips else readable_ink(face)
+            # An unchecked chip is a quiet tint of its colour; the armed one wears it outright.
+            quiet = mix(face, palette["panel"], 0.18)
+            button.setStyleSheet(
+                f"QPushButton#chip-{key} {{ background: {quiet}; color: {readable_ink(quiet)}; }}"
+                f"QPushButton#chip-{key}:checked {{ background: {face}; color: {ink}; "
+                f"font-weight: 700; }}"
+            )
+
 
 class DayAgenda(QWidget):
     item_activated = Signal(str)
@@ -496,7 +548,10 @@ class DayAgenda(QWidget):
         self.next_action = QPushButton()
         self.next_action.setObjectName("dayNextAction")
         self.next_action.clicked.connect(self._on_next)
-        layout.addWidget(self.next_action)
+        action_row = QHBoxLayout()
+        action_row.addWidget(self.next_action)
+        action_row.addStretch(1)
+        layout.addLayout(action_row)
         self.list = QListWidget()
         self.list.setObjectName("dayList")
         self.list.itemDoubleClicked.connect(self._on_item)
@@ -523,26 +578,60 @@ class DayAgenda(QWidget):
             empty.setFlags(Qt.ItemFlag.NoItemFlags)
             self.list.addItem(empty)
             return
+        week_start = monday_of(iso_day)
         load = (day_data or {}).get("workload") or {}
         if load:
             work = QListWidgetItem(
-                f"Scheduled {load.get('scheduled_min', 0)} min · {load.get('available_min', 0)} min free"
+                f"{length_label(load.get('scheduled_min', 0))} planned"
+                f" · {length_label(load.get('available_min', 0))} free"
             )
             work.setFlags(Qt.ItemFlag.NoItemFlags)
             self.list.addItem(work)
+        self._section("Due soon", agenda["due_soon"])
         for item in agenda["due_soon"]:
-            row = QListWidgetItem(f"Due {item['due']}: {item['title']}")
+            # A student reads "Thu 23:59", not "2026-09-17T23:59". due_label is what every other
+            # surface in the app already uses.
+            row = self._row(
+                f"{item['title']} · due {due_label(item.get('due'), week_start)}",
+                item.get("category") or "assignments",
+            )
             row.setData(Qt.ItemDataRole.UserRole, {"kind": "homework", "id": item["id"]})
             self.list.addItem(row)
+        self._section("Homework", agenda["sessions"])
         for row in agenda["sessions"]:
-            start = row["start"] or "unplanned"
-            item = QListWidgetItem(f"{row['block']['title']} · {start}")
-            item.setData(Qt.ItemDataRole.UserRole, {"kind": "block", "id": row["block"]["id"]})
+            block = row["block"]
+            when = row["start"] or "not placed yet"
+            item = self._row(
+                f"{when} · {block['title']} · {length_label(block.get('duration_min') or 0)}",
+                block.get("category") or "assignments",
+            )
+            item.setData(Qt.ItemDataRole.UserRole, {"kind": "block", "id": block["id"]})
             self.list.addItem(item)
+        self._section("Fixed", agenda["fixed"])
         for row in agenda["fixed"]:
-            item = QListWidgetItem(f"{row['block']['title']} · {row['start']}")
-            item.setData(Qt.ItemDataRole.UserRole, {"kind": "block", "id": row["block"]["id"]})
+            block = row["block"]
+            item = self._row(
+                f"{row['start']} · {block['title']} · {length_label(block.get('duration_min') or 0)}",
+                block.get("category") or "",
+            )
+            item.setData(Qt.ItemDataRole.UserRole, {"kind": "block", "id": block["id"]})
             self.list.addItem(item)
+
+    def _section(self, title: str, rows: list) -> None:
+        if not rows:
+            return
+        head = QListWidgetItem(title.upper())
+        head.setFlags(Qt.ItemFlag.NoItemFlags)
+        self.list.addItem(head)
+
+    @staticmethod
+    def _row(words: str, category: str) -> QListWidgetItem:
+        """One agenda row, with the category's own colour beside it, as every other surface paints it."""
+        item = QListWidgetItem(words)
+        mark = (CATEGORIES.get(category) or {}).get("mark")
+        if mark:
+            item.setData(Qt.ItemDataRole.DecorationRole, QColor(mark))
+        return item
 
     def _on_next(self) -> None:
         if self._next_kind == "plan":
@@ -648,6 +737,16 @@ class MonthGrid(QWidget):
             self.overdue.setText("Overdue: " + titles)
         else:
             self.overdue.setText("")
+
+    def reveal(self, iso_day: str) -> None:
+        """Open the month on the week the student is in. It opened on the first row, so on the 19th
+        the current week sat below the fold behind a fortnight of empty cells."""
+        for row in range(self.table.rowCount()):
+            for column in range(7):
+                cell = self.table.item(row, column)
+                if cell is not None and cell.data(Qt.ItemDataRole.UserRole) == iso_day:
+                    self.table.scrollToItem(cell, QAbstractItemView.ScrollHint.PositionAtCenter)
+                    return
 
     def _activate(self, row: int, column: int) -> None:
         item = self.table.item(row, column)
@@ -798,6 +897,11 @@ class BlockDialog(QDialog):
             self.category.addItem(chosen, chosen)
         self.category.setCurrentIndex(max(0, self.category.findData(chosen)))
         form.addRow("Category", self.category)
+        # A block could carry a Spotify link from the web, and the Spotify button already opens it,
+        # but there was no way to set one here. The link is validated with the rest of the block.
+        self.spotify = _line("blockSpotify", self._original.get("spotify_url") or "", 500)
+        self.spotify.setPlaceholderText("https://open.spotify.com/…")
+        form.addRow("Spotify link", self.spotify)
         self.missed = QCheckBox("This day was missed")
         self.missed.setObjectName("blockMissed")
         already = occurrence_day in (self._original.get("missed_days") or [])
@@ -871,6 +975,7 @@ class BlockDialog(QDialog):
             start=self.start.time().toString("HH:mm"),
             duration_min=self.duration.value(),
             category=self.category.currentData(),
+            spotify_url=self.spotify.text().strip() or None,
         )
         # Unticking a day that was missed restores it, as the web's "Restore Wed" button does.
         unticked = not self.missed.isHidden() and not self.missed.isChecked()
@@ -926,8 +1031,13 @@ class HomeworkDialog(QDialog):
         self.setWindowTitle("Edit homework" if assignment else "Add homework")
         self.setObjectName("homeworkDialog")
         layout = QVBoxLayout(self)
+        # The body scrolls so the dialog cannot outgrow a laptop screen. It already carried notes,
+        # links and a checklist; one more row took it to 815px, past the bottom of a 768px display.
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
         form = QFormLayout()
-        layout.addLayout(form)
+        body_layout.addLayout(form)
         self.title = _line("homeworkTitle", self._original["title"])
         form.addRow("Title", self.title)
         self.due = QDateTimeEdit(QDateTime.fromString(self._original["due"], "yyyy-MM-dd'T'HH:mm"))
@@ -953,14 +1063,19 @@ class HomeworkDialog(QDialog):
             self.energy.addItem(label, value)
         self.energy.setCurrentIndex(self.energy.findData(self._original.get("energy", "medium")))
         form.addRow("Energy preference", self.energy)
+        self.spotify = _line("homeworkSpotify", self._original.get("spotify_url") or "", 500)
+        self.spotify.setPlaceholderText("https://open.spotify.com/…")
+        form.addRow("Spotify link", self.spotify)
         self.completed = QCheckBox("Finished")
         self.completed.setObjectName("homeworkCompleted")
         self.completed.setChecked(bool(self._original.get("completed")))
         form.addRow("", self.completed)
         self.notes = QPlainTextEdit(self._original.get("notes") or "")
         self.notes.setObjectName("homeworkNotes")
+        # Three boxes at their 192px default made this dialog taller than a laptop screen.
+        self.notes.setMaximumHeight(DETAIL_BOX_HEIGHT)
         self.notes.setPlaceholderText("Notes")
-        layout.addWidget(self.notes)
+        body_layout.addWidget(self.notes)
         link_row = QHBoxLayout()
         self.link_label = _line("homeworkLinkLabel", "", 80)
         self.link_label.setPlaceholderText("Link label")
@@ -972,10 +1087,11 @@ class HomeworkDialog(QDialog):
         link_row.addWidget(self.link_label)
         link_row.addWidget(self.link_url)
         link_row.addWidget(add_link)
-        layout.addLayout(link_row)
+        body_layout.addLayout(link_row)
         self.links = QListWidget()
         self.links.setObjectName("homeworkLinks")
-        layout.addWidget(self.links)
+        self.links.setMaximumHeight(DETAIL_BOX_HEIGHT)
+        body_layout.addWidget(self.links)
         for link in self._original.get("links") or []:
             self._append_link(link["label"], link["url"])
         check_row = QHBoxLayout()
@@ -986,20 +1102,20 @@ class HomeworkDialog(QDialog):
         add_check.clicked.connect(self._add_check)
         check_row.addWidget(self.check_text)
         check_row.addWidget(add_check)
-        layout.addLayout(check_row)
+        body_layout.addLayout(check_row)
         self.checks = QListWidget()
         self.checks.setObjectName("homeworkChecklist")
-        layout.addWidget(self.checks)
+        body_layout.addWidget(self.checks)
         for step in self._original.get("checklist") or []:
             self._append_check(step["id"], step["text"], step.get("done", False))
         self.error = _error_label()
-        layout.addWidget(self.error)
+        body_layout.addWidget(self.error)
         if assignment is not None:
             spread = QPushButton("Spread across days")
             spread.setObjectName("spreadHomework")
             spread.clicked.connect(self._request_spread)
             spread.setToolTip("Save these edits first, then spread.")
-            layout.addWidget(spread)
+            body_layout.addWidget(spread)
             self._spread_button = spread
             self.title.textChanged.connect(self._disable_spread)
             self.notes.textChanged.connect(self._disable_spread)
@@ -1008,6 +1124,14 @@ class HomeworkDialog(QDialog):
             self.course.textChanged.connect(self._disable_spread)
         else:
             self._spread_button = None
+        area = QScrollArea()
+        area.setObjectName("homeworkScroll")
+        area.setWidgetResizable(True)
+        area.setFrameShape(QFrame.Shape.NoFrame)
+        area.setWidget(body)
+        layout.addWidget(area)
+        # A scroll area does not claim its content's width, so without this the dialog comes up narrow.
+        self.setMinimumWidth(HOMEWORK_MIN_WIDTH)
         buttons = _buttons()
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -1088,6 +1212,7 @@ class HomeworkDialog(QDialog):
             course=self.course.text() or None,
             priority=self.priority.currentData(),
             energy=self.energy.currentData(),
+            spotify_url=self.spotify.text().strip() or None,
             notes=self.notes.toPlainText(),
             links=links,
             checklist=checklist,
@@ -1301,6 +1426,144 @@ class UnfinishedPanel(QWidget):
         self.setVisible(bool(items))
 
 
+class AlertStrip(QWidget):
+    """Alerts that stay put until the student deals with them.
+
+    A tray message is gone in eight seconds, and on a machine that suppresses notifications it is
+    never seen at all. "Keep alerts visible until handled" promises the opposite, so when it is on the
+    alert is also shown here, in the window, where nothing outside the app can take it away.
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("alertStrip")
+        self._notices: list[dict] = []
+        layout = QHBoxLayout(self)
+        self.text = QLabel()
+        self.text.setObjectName("alertStripText")
+        self.text.setWordWrap(True)
+        layout.addWidget(self.text, 1)
+        self.dismiss = QPushButton("Got it")
+        self.dismiss.setObjectName("alertStripDismiss")
+        self.dismiss.clicked.connect(self._drop)
+        layout.addWidget(self.dismiss)
+        self.setVisible(False)
+
+    def add(self, notices: list[dict]) -> None:
+        self._notices.extend(notices)
+        self._render()
+
+    def clear(self) -> None:
+        self._notices.clear()
+        self._render()
+
+    def pending(self) -> int:
+        return len(self._notices)
+
+    def _drop(self) -> None:
+        """One at a time, so a second alert that arrived while the first sat there is still seen."""
+        if self._notices:
+            self._notices.pop(0)
+        self._render()
+
+    def _render(self) -> None:
+        self.setVisible(bool(self._notices))
+        if not self._notices:
+            self.text.clear()
+            return
+        notice = self._notices[0]
+        body = notice.get("body") or ""
+        more = f"  (+{len(self._notices) - 1} more)" if len(self._notices) > 1 else ""
+        self.text.setText(f"{notice.get('title') or 'FlexWeek'}{' — ' + body if body else ''}{more}")
+
+
+class PlanReview(QWidget):
+    """What the plan just did, in the solver's own words.
+
+    The client used to take one explanation out of however many the solver gave and drop it in the
+    status line, and never mentioned a move at all outside Running late. Explaining what could not
+    be placed, and what had to move, is the thing FlexWeek is for.
+    """
+
+    dismissed = Signal()
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("planReview")
+        layout = QVBoxLayout(self)
+        self.heading = QLabel()
+        self.heading.setObjectName("planReviewHeading")
+        layout.addWidget(self.heading)
+        self.list = QListWidget()
+        self.list.setObjectName("planReviewList")
+        layout.addWidget(self.list)
+        row = QHBoxLayout()
+        dismiss = QPushButton("Got it")
+        dismiss.setObjectName("planReviewDismiss")
+        dismiss.clicked.connect(self._dismiss)
+        row.addWidget(dismiss)
+        row.addStretch(1)
+        layout.addLayout(row)
+        self.hide()
+
+    def _dismiss(self) -> None:
+        self.hide()
+        self.dismissed.emit()
+
+    def rows_for(self, trace: dict, titles: dict[str, str], week_start: str) -> list[str]:
+        """Every unplaced task, every move, and every deadline the solver called tight."""
+        said: list[str] = []
+        for block in trace.get("unplaced") or []:
+            name = titles.get(block["id"], block.get("title") or "Homework")
+            why = next(
+                (
+                    item.get("message")
+                    for item in trace.get("explanations") or []
+                    if item.get("block_id") == block["id"] and item.get("message")
+                ),
+                "There was no room for it this week.",
+            )
+            said.append(f"{name} has no time yet. {why}")
+        stranded = {block["id"] for block in trace.get("unplaced") or []}
+        for move in trace.get("moves") or []:
+            # A "move" with no time at either end is the solver recording that something stayed
+            # unplaced. Said out loud it read "moved from no time to no time", under a line that
+            # had already explained the same block.
+            if move["block_id"] in stranded or not move.get("to_start") or not move.get("from_start"):
+                continue
+            name = titles.get(move["block_id"], "Homework")
+            been = _when(move.get("from_day"), move.get("from_start"))
+            now = _when(move.get("to_day"), move.get("to_start"))
+            why = REASON_COPY.get(move.get("reason") or "", "")
+            said.append(f"{name} moved from {been} to {now}." + (f" {why}" if why else ""))
+        for item in trace.get("explanations") or []:
+            if item.get("slack_status") in {"tight", "danger"} and item.get("message"):
+                said.append(f"{titles.get(item['block_id'], 'Homework')}: {item['message']}")
+        return said
+
+    def set_trace(self, trace: dict | None, titles: dict[str, str], week_start: str) -> None:
+        self.list.clear()
+        said = self.rows_for(trace or {}, titles, week_start) if trace else []
+        if not said:
+            self.hide()
+            return
+        placed = len(trace.get("placed") or [])
+        unplaced = len(trace.get("unplaced") or [])
+        self.heading.setText(f"Your plan: {placed} placed, {unplaced} without a time")
+        for line in said:
+            self.list.addItem(QListWidgetItem(line))
+        # As tall as it needs and no taller. One line in a box four lines deep reads as an error.
+        row = self.list.sizeHintForRow(0) if self.list.count() else 0
+        self.list.setFixedHeight(min(row * len(said) + 2 * self.list.frameWidth() + 4, PLAN_REVIEW_MAX))
+        self.show()
+
+
+def _when(day: object, start: object) -> str:
+    if not isinstance(day, int) or not start:
+        return "no time"
+    return f"{DAYS[day]} {start}"
+
+
 class RoutineDialog(QDialog):
     def __init__(
         self,
@@ -1494,7 +1757,10 @@ class SpreadDialog(QDialog):
         self.setObjectName("spreadDialog")
         self.setWindowTitle("Spread " + assignment["title"])
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel(f"{assignment['estimate_min']} minutes total · due {assignment['due']}"))
+        # The same vocabulary as every other surface: "1 h 30 min total · due Thu 23:59".
+        due = due_label(assignment.get("due"), monday_of(from_date))
+        total = length_label(int(assignment.get("estimate_min") or 0))
+        layout.addWidget(QLabel(f"{total} total · due {due}"))
         self.session = QComboBox()
         self.session.setObjectName("spreadSession")
         remaining = max(SLOT_MIN, int(assignment.get("unplanned_min") or SLOT_MIN))

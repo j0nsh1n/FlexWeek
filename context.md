@@ -1,6 +1,16 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-19 (native UI screenshot audit). Branch `grok/ui-fixes` off
+  `origin/main` at 4ad2855, local only in `~/.worktrees/flexweek-ui-grok`. Four
+  native fixes: the week grid opens on now, Retro Week.exe stays on the desk
+  with a scrollable weekend, Mission bars get an initial or a tooltip and the
+  radar elides, and `contrast_failures` now fails a `card_*` that matches `bg`.
+  Fill contrast is held at 1.01 so a vanished bar is caught without asking
+  4.5:1 of a tint (muted-on-card 4.5 and fill-on-bg 3 cannot both hold for
+  every look). Claude still owns bento/clay/timeline/dial/one_thing/base/
+  settings. spec.md still describes a WebEngine desktop shell; that drift is
+  unchanged and was not edited. Next: Claude reviews the native layout work.
 - Date: 2026-09-19 (retire Chromium shell). Branch `feat/retire-webengine` off
   `main` at the 0.12.0 merge. `desktop/webengine.py`, `desktop/sandbox.py`, and
   the leftover probe tests are deleted. Native `--smoke-test` stays in
@@ -470,6 +480,9 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-19, `grok/ui-fixes`: four native screenshot-audit fixes, one commit
+  each, worktree `~/.worktrees/flexweek-ui-grok`. Next: Claude reviews the
+  frontend. spec.md still says WebEngine desktop.
 - 2026-09-19, `feat/retire-webengine`: deleted the retired Chromium shell and
   leftover probes. Native smoke stays. Next: merge, then delete merged remote
   branches. spec.md still says WebEngine desktop.

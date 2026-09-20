@@ -68,8 +68,8 @@ chmod +x "$APPDIR/AppRun"
 # Desktop entry + icon (appimagetool wants these at AppDir root too).
 cp "$ROOT/packaging/flexweek.desktop" "$APPDIR/flexweek.desktop"
 cp "$ROOT/packaging/flexweek.desktop" "$APPDIR/usr/share/applications/flexweek.desktop"
-cp "$ROOT/frontend/logo.png" "$APPDIR/flexweek.png"
-cp "$ROOT/frontend/logo.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/flexweek.png"
+cp "$ROOT/desktop/assets/logo.png" "$APPDIR/flexweek.png"
+cp "$ROOT/desktop/assets/logo.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/flexweek.png"
 # Symlink without extension — some appimagetool versions look for this.
 ln -sf flexweek.png "$APPDIR/.DirIcon"
 

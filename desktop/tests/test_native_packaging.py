@@ -42,3 +42,10 @@ def test_release_jobs_fail_if_chromium_lands_in_the_package() -> None:
     assert "Native package must not ship WebEngine" in WORKFLOW
     assert WORKFLOW.count("Native package must not ship WebEngine") == 2
     assert "WebEngine core DLL missing" not in WORKFLOW
+
+
+def test_both_builds_ship_the_plugin_that_makes_an_alarm_audible() -> None:
+    """QtMultimedia reaches the sound card through a Qt plugin. Trim it and the app still starts, the
+    alarm still shows its dialog, and it rings silently, which is the one thing an alarm must not do."""
+    for text in (LINUX, WINDOWS):
+        assert "include-qt-plugins=multimedia," in text

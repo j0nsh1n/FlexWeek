@@ -159,10 +159,18 @@ class RetroView(LayoutView):
             frame = self._frame(scene, key, title)
             builders[key](scene, frame.layout())
             frame.setParent(self._desk)
+            frame.setMaximumWidth(max(self.width(), self._desk.width(), 280) - 16)
             frame.adjustSize()
-            frame.move(self._spots.get(frame.objectName(), home))
+            self._place(frame, home)
             frame.show()
         self._taskbar(scene)
+
+    def _place(self, frame: QFrame, home: QPoint) -> None:
+        desk = self._desk
+        spot = self._spots.get(frame.objectName(), home)
+        limit_x = max(desk.width() - 60, 0)
+        limit_y = max(desk.height() - 30, 0)
+        frame.move(min(max(spot.x(), 0), limit_x), min(max(spot.y(), 0), limit_y))
 
     def _frame(self, scene: Scene, key: str, title: str) -> QFrame:
         frame = QFrame()
@@ -210,7 +218,12 @@ class RetroView(LayoutView):
                 made.setProperty("state", "" if item.live else "past")
                 grid.addWidget(made, row, day)
         grid.setRowStretch(grid.rowCount(), 1)
-        body.addWidget(sunken)
+        pane = scrolling(sunken, "retroWeekPane")
+        pane.setWidgetResizable(False)
+        pane.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        sunken.adjustSize()
+        pane.setMinimumSize(520, 220)
+        body.addWidget(pane, 1)
         if scene.week.waiting:
             waiting = QHBoxLayout()
             waiting.addWidget(label("Not placed yet:", "retroWaitingLabel"))

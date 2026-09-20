@@ -64,7 +64,7 @@ def on_page(window: NativeWindow, name: str) -> bool:
 @pytest.fixture()
 def registering(qapp: QApplication, tmp_path: Path) -> Iterator[NativeWindow]:
     """A window that has just created an account and is showing the recovery codes."""
-    server = LocalServer(tmp_path / "flexweek.db", serve_frontend=False)
+    server = LocalServer(tmp_path / "flexweek.db")
     server.start()
     window = NativeWindow(server.origin)
     window.show()

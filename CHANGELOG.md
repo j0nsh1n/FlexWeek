@@ -5,6 +5,14 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+- The week grid opens on the current time, not empty dawn (2026-09-19).
+- Retro Week.exe stays on the desk, and Saturday and Sunday scroll into view
+  (2026-09-19).
+- Mission control names skinny bars and elides radar titles (2026-09-19).
+- Card tints stay visible against the page, so Terminal Bento load bars
+  no longer vanish into black (2026-09-19).
+
 ### Removed
 - Retired Qt WebEngine desktop shell (2026-09-19). The Chromium window,
   Linux renderer sandbox helper, and leftover probe tests are gone. The

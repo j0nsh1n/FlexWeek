@@ -1,4 +1,49 @@
-# FlexWeek desktop packaging recommendation
+# FlexWeek desktop
+
+## What FlexWeek is (current, 2026-09-19)
+
+One Python application. PySide6 **Qt widgets** draw the window; the FastAPI
+backend runs in the same process on a loopback port and owns accounts, the week
+and the database. There is no Chromium, no `QWebEngineView`, and since
+2026-09-19 no browser client at all: `frontend/` was deleted and `backend/app.py`
+answers the API and 404s everything else.
+
+Run from a checkout: `python -m desktop.main` (`python -m desktop.native` is the
+same entry).
+
+**Builds.** Nuitka standalone, driven directly rather than through
+`pyside6-deploy`, which rewrites its own spec on every run.
+
+| | Linux | Windows |
+| --- | --- | --- |
+| Script | `desktop/build_linux.sh` | `desktop/build_windows.ps1` |
+| Output | `dist/FlexWeek/FlexWeek` | `dist\FlexWeek-Windows\FlexWeek.exe` |
+| Installer | `packaging/make-appimage.sh` | `packaging/windows/flexweek.iss` (Inno), `flexweek.wxs` (WiX) |
+
+Both exclude `PySide6.QtWebEngineCore`, `QtWebEngineWidgets` and
+`QtWebEngineQuick`, and both ship the Qt plugins the app actually needs:
+`multimedia` (alarms are synthesised PCM through `QAudioSink`; without this
+plugin the app starts, shows the alarm and makes no sound), plus
+`networkinformation`, `platforminputcontexts`, `position`, `qmllint`,
+`qmltooling` and `vectorimageformats`. `--onefile` is not used, because Qt
+plugins ship as a folder.
+
+Icons come from `desktop/assets/logo.png`. The SQLite database lives under the
+user data directory, never inside the read-only bundle.
+
+**What is still true below.** Sections 6 onward are the implementation record:
+the Linux build, the bundled server, the Windows build and installers, the
+release process, reminders, and window/tray/quit behaviour. Read those.
+
+**What is superseded.** Sections 1 to 5 recommended a `QWebEngineView` window
+pointed at a hosted origin. That decision was reversed on 2026-09-17 in favour
+of native widgets, and the browser client it assumed was retired on 2026-09-19.
+They are kept because they record why the choice was made and what the evidence
+was at the time. Do not build from them. Where later sections mention WebEngine
+probes, Chromium size or `target=_blank` handling, they are describing the shell
+that was replaced.
+
+---
 
 Date: 2026-09-07. Sources are official docs (links dated below). This is a
 packaging choice, not a UI redesign or security audit.
@@ -8,6 +53,10 @@ The Chromium shell and its probe tests are gone. The sections below are the
 2026-09-07 packaging recommendation that led to the first desktop builds.
 
 ## 1. Recommendation
+
+> **Superseded 2026-09-17.** Reversed in favour of native Qt widgets with the
+> backend in-process. Sections 1 to 5 are kept as the record of the original
+> decision and its evidence. See the top of this file for what FlexWeek is now.
 
 Use a **minimal PySide6 `QWebEngineView` window** that loads the hosted FlexWeek
 origin. Do not embed a second FastAPI process in v1.
@@ -84,15 +133,19 @@ reopening the app restores the session until the seven-day cookie expiry.
 ## 5. Unresolved product decisions
 
 - Production origin URL (local vs hosted) and whether the desktop build may
-  ever target localhost.
+  ever target localhost. *Settled: the backend runs in-process on loopback;
+  `FLEXWEEK_DESKTOP_ORIGIN` remains for pointing at another deployment.*
 - Windows WebEngine onedir size vs asking users to install WebView2 (that would
-  be a pywebview revisit, not this slice).
+  be a pywebview revisit, not this slice). *Moot: no Chromium ships.*
 - Code signing / SmartScreen: Windows README tells a student to use More info,
   then Run anyway. Linux ships a tar.gz (not AppImage) so the executable bit
   survives; `.desktop` + icon go in the archive.
-- Whether a future slice bundles a local server; v1 should not.
+- Whether a future slice bundles a local server; v1 should not. *Settled
+  2026-09-07 the other way: section 7 bundles it, and it is how the app runs.*
 
 ---
+
+<!-- End of the superseded WebEngine recommendation. Sections 6 onward are current. -->
 
 ## 6. Linux build — implemented 2026-09-07
 
@@ -161,10 +214,10 @@ How it works:
 - uvicorn runs with `loop="asyncio"` and `http="h11"`: uvloop and httptools are
   optional native extras and there is no reason to depend on them surviving
   being frozen.
-- The SQLite database lives next to the browser profile under the user data
-  directory, never inside the read-only application bundle.
-- `frontend/` ships as bundle data, because `backend/app.py` serves it from
-  `<bundle>/frontend`.
+- The SQLite database lives under the user data directory, never inside the
+  read-only application bundle.
+- No web assets ship in the bundle. The web client was retired in September 2026
+  and `backend/app.py` serves an API only.
 - The window closing stops the server via `aboutToQuit`.
 
 Setting `FLEXWEEK_DESKTOP_ORIGIN` (or `FLEXWEEK_ORIGIN`) still points the window
@@ -224,8 +277,9 @@ check is build → open → register → save → restart → sign out, plus ext
 and draft-download checks on a machine without the development virtualenv.
 
 The default self-contained desktop mode stores accounts locally. Hosted mode
-(`FLEXWEEK_DESKTOP_ORIGIN`) uses that deployment's accounts and weeks in both the
-desktop app and browser. There is no automatic local-to-hosted synchronization.
+(`FLEXWEEK_DESKTOP_ORIGIN`) points the desktop app at another deployment's
+accounts and weeks. There is no automatic local-to-hosted synchronization, and
+since 2026-09-19 no browser client on either side.
 
 ### Windows release build — CI, same method as Daily Scheduler (2026-09-09)
 
@@ -235,7 +289,7 @@ Nuitka cannot cross-compile: the Windows package is built on a GitHub Actions
 release is published (or by hand against an existing tag), installs both
 requirements files into a fresh Python 3.14, runs `desktop/build_windows.ps1`
 (MSVC is preinstalled on the runner), smoke-checks the freeze layout
-(`FlexWeek.exe`, `frontend/index.html`, `QtWebEngineCore.dll`), copies
+(`FlexWeek.exe`), copies
 `README.txt`, `LICENSE.txt` and `flexweek.png` into the folder, and uploads the
 installers to the release (see "Windows installers" below). ICU (`icuuc.dll` / `icuin.dll`) is treated as a Windows 10 1809+
 system library and is not copied out of System32. The paste-ready release
@@ -356,7 +410,7 @@ API while the window is open). Phase 7 added the tray presenter described below.
   instead of starting a second copy on the same database. One copy runs per
   user data directory.
 
-The tray icon is loaded from `frontend/logo.png` next to the bundled backend.
+The tray icon is loaded from `desktop/assets/logo.png` next to the bundled backend.
 Before this fix the path was taken from `desktop/main.py`. Nuitka places that file
 at the bundle root, so the path pointed one directory above the bundle. Qt logged
 `QSystemTrayIcon::setVisible: No Icon set`, the tray entry was invisible, and a

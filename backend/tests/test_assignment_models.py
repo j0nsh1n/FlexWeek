@@ -150,3 +150,29 @@ def test_models_module_does_not_import_fastapi() -> None:
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported.append(node.module.split(".", 1)[0])
     assert "fastapi" not in imported
+
+
+def test_a_spotify_link_cannot_be_faked_by_putting_the_host_somewhere_else() -> None:
+    """The link is handed to the desktop to open externally, so the host has to be the real host and
+    not merely present in the string. Each of these puts open.spotify.com somewhere a substring
+    check would accept."""
+    from backend.models import valid_spotify_url
+
+    for attack in (
+        "https://open.spotify.com@evil.com/track/abc",
+        "https://evil.com/open.spotify.com/track/abc",
+        "https://evil.com/?x=https://open.spotify.com/track/abc",
+        "https://open.spotify.com.evil.com/track/abc",
+        "http://open.spotify.com/track/abc",
+        "https://open.spotify.com:8080/track/abc",
+        "javascript:alert(1)//open.spotify.com/track/abc",
+    ):
+        with pytest.raises(ValueError):
+            valid_spotify_url(attack)
+
+
+def test_a_real_share_link_still_passes() -> None:
+    from backend.models import valid_spotify_url
+
+    assert valid_spotify_url("https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT")
+    assert valid_spotify_url("https://open.spotify.com/track/abc?si=xyz")

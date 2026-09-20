@@ -9,6 +9,7 @@ from __future__ import annotations
 import importlib.util
 import os
 from collections.abc import Iterator
+from datetime import datetime
 
 import pytest
 
@@ -21,6 +22,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtWidgets import QApplication
 
+    from backend.slots import DAY_START_MIN, SLOT_MIN, duration_to_slots, hhmm_to_slot
     from desktop.native.widgets import WeekTable
 
 WEEK = "2026-09-14"
@@ -95,6 +97,23 @@ def test_double_clicking_any_row_of_a_block_opens_it_even_a_blank_one(qapp: QApp
     assert opened == ["school"]
 
 
+def test_the_current_week_opens_scrolled_to_now_not_dawn(qapp: QApplication) -> None:
+    table = WeekTable()
+    table.resize(960, 320)
+    table.show()
+    qapp.processEvents()
+    table.set_week(WEEK, [block()], None)
+    now = datetime(2026, 9, 17, 13, 40)
+    table.reveal(WEEK, int(now.timestamp() * 1000))
+    qapp.processEvents()
+    now_row = (now.hour * 60 + now.minute - DAY_START_MIN) // SLOT_MIN
+    bar = table.verticalScrollBar()
+    top = table.rowAt(1)
+    bottom = table.rowAt(table.viewport().height() - 1)
+    assert bar.value() > 0
+    assert top <= now_row <= bottom
+
+
 def test_blocks_sharing_a_cell_are_named_from_the_blocks_not_from_the_cell(qapp: QApplication) -> None:
     table = WeekTable()
     club = block(id="club", title="Chess club", start="08:30", duration_min=30)
@@ -105,3 +124,34 @@ def test_blocks_sharing_a_cell_are_named_from_the_blocks_not_from_the_cell(qapp:
     assert shared.text() == "08:30 · Fixed"
     assert table.block_titles(shared.data(0x0100)) == ["School", "Chess club"]
     assert table.item(rows[2], 0).text() == "Chess club"
+
+
+def test_a_long_block_says_its_name_more_than_once(qapp) -> None:
+    """The grid opens on the current time now, so a student lands in the middle of School. With the
+    name only on the first row that was an anonymous blue wash."""
+    table = WeekTable()
+    table.set_week(
+        "2026-09-14",
+        [
+            {
+                "id": "school",
+                "title": "School",
+                "kind": "locked",
+                "category": "class",
+                "start": "08:00",
+                "duration_min": 390,
+                "days": [0],
+            }
+        ],
+        None,
+    )
+    first = hhmm_to_slot("08:00")
+    last = first + duration_to_slots(390) - 1
+    named = [
+        row
+        for row in range(first, last + 1)
+        if table.item(row, 0) is not None and "School" in table.item(row, 0).text()
+    ]
+    assert len(named) >= 3, f"School names itself on rows {named} of {first}..{last}"
+    gaps = [b - a for a, b in zip(named, named[1:], strict=False)]
+    assert max(gaps) <= 8, f"a gap of {max(gaps)} rows between names"

@@ -155,17 +155,11 @@ def migrate_preferences(db: sqlite3.Connection) -> None:
     """Add preference columns introduced after the original account schema."""
     cols = {row[1] for row in db.execute("PRAGMA table_info(preferences)").fetchall()}
     if "reminders_enabled" not in cols:
-        db.execute(
-            "ALTER TABLE preferences ADD COLUMN reminders_enabled INTEGER NOT NULL DEFAULT 0"
-        )
+        db.execute("ALTER TABLE preferences ADD COLUMN reminders_enabled INTEGER NOT NULL DEFAULT 0")
     if "reminder_lead_min" not in cols:
-        db.execute(
-            "ALTER TABLE preferences ADD COLUMN reminder_lead_min INTEGER NOT NULL DEFAULT 5"
-        )
+        db.execute("ALTER TABLE preferences ADD COLUMN reminder_lead_min INTEGER NOT NULL DEFAULT 5")
     if "reminder_sound" not in cols:
-        db.execute(
-            "ALTER TABLE preferences ADD COLUMN reminder_sound INTEGER NOT NULL DEFAULT 1"
-        )
+        db.execute("ALTER TABLE preferences ADD COLUMN reminder_sound INTEGER NOT NULL DEFAULT 1")
     phase7_columns = {
         "reminder_dnd_override": "INTEGER NOT NULL DEFAULT 0",
         "timer_work_min": "INTEGER NOT NULL DEFAULT 30",
@@ -193,8 +187,11 @@ def allow_system_theme(db: sqlite3.Connection) -> None:
     row = db.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'preferences'").fetchone()
     if row is None or "'system'" in row["sql"]:
         return
-    kept = [name for name in (column["name"] for column in db.execute("PRAGMA table_info('preferences')"))
-            if name != "theme"]
+    kept = [
+        name
+        for name in (column["name"] for column in db.execute("PRAGMA table_info('preferences')"))
+        if name != "theme"
+    ]
     columns = ", ".join(kept)
     # One transaction: a crash between the rename and the copy would leave no preferences table.
     db.execute("BEGIN IMMEDIATE")

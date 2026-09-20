@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 )
 
 from backend.slots import minutes_to_hhmm
+from desktop.native import autostart
 from desktop.native.calendar import DAY_FULL, FLEX_CATEGORIES, agenda_for, monday_of, sunday_due
 from desktop.native.controller import NativeSession
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
@@ -39,7 +40,14 @@ from desktop.native.layouts.base import LayoutView, Scene
 from desktop.native.layouts.dialog import LayoutDialog
 from desktop.native.layouts.registry import options_for, sanitize_layout, tokens_for
 from desktop.native.layouts.views import VIEW_CLASSES
-from desktop.native.look import TEXT_PT, effective_look, pack_stylesheet, resolved_palette, sanitize_look
+from desktop.native.look import (
+    TEXT_PT,
+    effective_look,
+    pack_stylesheet,
+    palette_from_tokens,
+    resolved_palette,
+    sanitize_look,
+)
 from desktop.native.remind import REMINDER_POLL_MS, clock_parts
 from desktop.native.reuse import late_from_start, restore_point_label, running_late_refusal, week_label
 from desktop.native.settings import (
@@ -50,8 +58,11 @@ from desktop.native.settings import (
     RestoreDialog,
     TransferPreviewDialog,
 )
+from desktop.native.sound import Bell
+from desktop.native.tones import FALLBACK
 from desktop.native.weekmodel import build_week
 from desktop.native.widgets import (
+    AlertStrip,
     AvailabilityDialog,
     BlockDialog,
     CategoryChips,
@@ -60,6 +71,7 @@ from desktop.native.widgets import (
     HomeworkDialog,
     LateDialog,
     MonthGrid,
+    PlanReview,
     PreviewDialog,
     RoutineDialog,
     SpreadDialog,
@@ -68,6 +80,7 @@ from desktop.native.widgets import (
 )
 
 WINDOW_SIZE = (1280, 800)
+AUTH_CARD_WIDTH = 380
 LAYOUT_TICK_MS = 20_000
 
 
@@ -86,7 +99,9 @@ class NativeWindow(QMainWindow):
         self._more_pairs = []
         self._layout = sanitize_layout(None)
         self._day_mode = False
+        self._opened_on_preference = False
         self._views: dict[str, LayoutView] = {}
+        self._making_account = False
         self._build_auth()
         self._build_recovery()
         self._build_week()
@@ -102,6 +117,7 @@ class NativeWindow(QMainWindow):
         self._tray_hinted = False
         self._icon = icon or QIcon()
         self._alarm_dialog: AlarmRingDialog | None = None
+        self._bell = Bell(self)
         self._look = sanitize_look(None)
         self._allow_week_page = True
         self._load_look()
@@ -126,7 +142,30 @@ class NativeWindow(QMainWindow):
         self._apply_appearance()
         if QSystemTrayIcon.isSystemTrayAvailable() and not self._icon.isNull():
             self._install_tray()
+        self._sync_auth_mode()
         self._show_page("authPage")
+
+    def _toggle_auth_mode(self) -> None:
+        self._making_account = not self._making_account
+        self._sync_auth_mode()
+
+    def _sync_auth_mode(self) -> None:
+        """Sign in is the door, and creating an account is the small print under it: a student signs
+        in many times and creates an account once."""
+        making = self._making_account
+        self.auth_heading.setText("Create your account" if making else "Sign in")
+        self.auth_note.setText(
+            "FlexWeek fits homework around school and sports. Your week is saved to your account."
+            if making
+            else "Welcome back."
+        )
+        self.create_button.setVisible(making)
+        self.sign_in_button.setVisible(not making)
+        self.auth_switch.setText(
+            "Already have an account? Sign in" if making else "New here? Create an account"
+        )
+        self.sign_in_button.setDefault(not making)
+        self.create_button.setDefault(making)
 
     def listen_for_instances(self, name: str) -> bool:
         server = QLocalServer(self)
@@ -158,13 +197,32 @@ class NativeWindow(QMainWindow):
     def _build_auth(self) -> None:
         page = QWidget()
         page.setObjectName("authPage")
-        layout = QVBoxLayout(page)
-        heading = QLabel("Create your account")
-        heading.setObjectName("authHeading")
-        layout.addWidget(heading)
-        note = QLabel("FlexWeek fits homework around school and sports. Your week is saved to your account.")
-        note.setWordWrap(True)
-        layout.addWidget(note)
+        # The first screen anyone sees. Left to a plain page layout it stretched every field and
+        # button the full width of the window, so it read as an unstyled form with a lot of nothing
+        # under it. The content sits in a card of its own, centred.
+        outer = QVBoxLayout(page)
+        outer.addStretch(1)
+        middle = QHBoxLayout()
+        middle.addStretch(1)
+        card = QWidget()
+        card.setObjectName("authCard")
+        card.setMaximumWidth(AUTH_CARD_WIDTH)
+        card.setMinimumWidth(AUTH_CARD_WIDTH)
+        middle.addWidget(card)
+        middle.addStretch(1)
+        outer.addLayout(middle)
+        outer.addStretch(1)
+        layout = QVBoxLayout(card)
+        brand = QLabel("FlexWeek")
+        brand.setObjectName("authBrand")
+        layout.addWidget(brand)
+        self.auth_heading = QLabel()
+        self.auth_heading.setObjectName("authHeading")
+        layout.addWidget(self.auth_heading)
+        self.auth_note = QLabel()
+        self.auth_note.setObjectName("authNote")
+        self.auth_note.setWordWrap(True)
+        layout.addWidget(self.auth_note)
         self.username = QLineEdit()
         self.username.setObjectName("username")
         self.username.setMaxLength(32)
@@ -176,20 +234,29 @@ class NativeWindow(QMainWindow):
         self.password.setMaxLength(128)
         self.password.setPlaceholderText("Password")
         layout.addWidget(self.password)
-        buttons = QHBoxLayout()
-        create = QPushButton("Create account")
-        create.setObjectName("createAccount")
-        create.clicked.connect(self._create_account)
-        sign_in = QPushButton("Sign in")
-        sign_in.setObjectName("signIn")
-        sign_in.clicked.connect(self._sign_in)
-        buttons.addWidget(create)
-        buttons.addWidget(sign_in)
-        layout.addLayout(buttons)
+        # One way in at a time. Offering Create account and Sign in as equal buttons made the student
+        # choose between them before reading anything, and most arrivals after the first are sign-ins.
+        self.sign_in_button = QPushButton("Sign in")
+        self.sign_in_button.setObjectName("signIn")
+        self.sign_in_button.setDefault(True)
+        self.sign_in_button.clicked.connect(self._sign_in)
+        layout.addWidget(self.sign_in_button)
+        self.create_button = QPushButton("Create account")
+        self.create_button.setObjectName("createAccount")
+        self.create_button.clicked.connect(self._create_account)
+        layout.addWidget(self.create_button)
         forgot = QPushButton("Forgot password")
         forgot.setObjectName("forgotPassword")
+        forgot.setFlat(True)
+        forgot.setCursor(Qt.CursorShape.PointingHandCursor)
         forgot.clicked.connect(self._toggle_recover)
         layout.addWidget(forgot)
+        self.auth_switch = QPushButton()
+        self.auth_switch.setObjectName("authSwitch")
+        self.auth_switch.setFlat(True)
+        self.auth_switch.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.auth_switch.clicked.connect(self._toggle_auth_mode)
+        layout.addWidget(self.auth_switch)
         self.recovery_code = QLineEdit()
         self.recovery_code.setObjectName("recoveryCode")
         self.recovery_code.setPlaceholderText("Recovery code")
@@ -210,7 +277,6 @@ class NativeWindow(QMainWindow):
         self.auth_status.setObjectName("authStatus")
         self.auth_status.setWordWrap(True)
         layout.addWidget(self.auth_status)
-        layout.addStretch()
         self._stack.addWidget(page)
 
     def _build_recovery(self) -> None:
@@ -361,68 +427,36 @@ class NativeWindow(QMainWindow):
         overflow.hide()
         more_menu = QMenu(more)
         self._more_pairs = []
-        for button in (
-            copy_day,
-            routines,
-            unfinished,
-            late,
-            availability,
-            restore,
-            account,
-            spotify,
-            reload_week,
-        ):
-            button.setParent(overflow)
-            action = more_menu.addAction(button.text())
-            action.triggered.connect(button.click)
-            self._more_pairs.append((action, button))
+        # Four jobs, sixteen ways of doing them, twelve of them competing for the same row. The row
+        # keeps what a student reaches for; everything else sits under the heading for its job.
+        self._groups = (
+            ("Planning", (late, unfinished, routines)),
+            ("Editing", (undo, redo, copy_block, paste_block, duplicate, copy_day)),
+            ("Your week", (availability, restore, reload_week)),
+            ("Account", (account, settings, spotify)),
+        )
+        for heading, buttons in self._groups:
+            more_menu.addSection(heading)
+            for button in buttons:
+                if button.parent() is not overflow:
+                    button.setParent(overflow)
+                action = more_menu.addAction(button.text())
+                action.triggered.connect(button.click)
+                self._more_pairs.append((action, button))
         more_menu.aboutToShow.connect(self._sync_more_menu)
         more.setMenu(more_menu)
-        for button in (
-            add_fixed,
-            add_homework,
-            undo,
-            redo,
-            copy_block,
-            paste_block,
-            duplicate,
-            settings,
-            solve,
-            save,
-            retry,
-            more,
-        ):
+        for button in (add_homework, add_fixed, solve, save, retry, more):
             actions.addWidget(button)
         chrome.addLayout(actions)
         tools_menu = QMenu(self.tools_button)
         self._tool_pairs = []
-        for button in (
-            add_fixed,
-            add_homework,
-            solve,
-            undo,
-            redo,
-            copy_block,
-            paste_block,
-            duplicate,
-            save,
-            retry,
-            settings,
-        ):
+        tools_menu.addSection("Adding")
+        for button in (add_homework, add_fixed, solve, save, retry):
             self._tool_pairs.append((tools_menu.addAction(button.text()), button))
-        tools_menu.addSeparator()
-        for button in (
-            copy_day,
-            routines,
-            unfinished,
-            late,
-            availability,
-            restore,
-            account,
-            spotify,
-            reload_week,
-        ):
-            self._tool_pairs.append((tools_menu.addAction(button.text()), button))
+        for heading, buttons in self._groups:
+            tools_menu.addSection(heading)
+            for button in buttons:
+                self._tool_pairs.append((tools_menu.addAction(button.text()), button))
         for action, button in self._tool_pairs:
             action.triggered.connect(button.click)
         tools_menu.aboutToShow.connect(self._sync_tools_menu)
@@ -443,6 +477,12 @@ class NativeWindow(QMainWindow):
         self.unfinished_panel = UnfinishedPanel()
         self.unfinished_panel.plan_requested.connect(self._plan_unfinished)
         chrome.addWidget(self.unfinished_panel)
+        # Not inside the planning chrome: Plan can be pressed from any design, and what the solver
+        # says about the result is the point of pressing it.
+        self.plan_review = PlanReview()
+        layout.addWidget(self.plan_review)
+        self.alert_strip = AlertStrip()
+        layout.addWidget(self.alert_strip)
         self.planner = QStackedWidget()
         self.planner.setObjectName("plannerStack")
         self.week_table = WeekTable()
@@ -532,6 +572,21 @@ class NativeWindow(QMainWindow):
             scale=TEXT_PT[effective_look(self._look)["text"]] / TEXT_PT["normal"],
         )
 
+    def _chrome_palette(self, palette: dict) -> dict:
+        """The colours of the design the student picked, for the whole window.
+
+        This used to read whichever widget was on screen, which meant the design dressed the week and
+        nothing else: pressing Day or Month dropped back to the pack's own blue, and the app looked
+        like two different programs. A layout is a whole way of showing a week, not a skin for one
+        page of it, so the choice decides the colours wherever you are in the planner.
+        """
+        layout_id = self._layout["day"] if self._day_mode else self._layout["main"]
+        if layout_id not in VIEW_CLASSES:
+            # Classic is the app's own look, which is the pack, so there is nothing to derive.
+            return palette
+        options = options_for(self._layout, layout_id)
+        return palette_from_tokens(tokens_for(layout_id, options["colour"], palette), palette)
+
     def _refresh_layout(self) -> None:
         shown = self.planner.currentWidget()
         if isinstance(shown, LayoutView) and self.session.account is not None:
@@ -562,6 +617,18 @@ class NativeWindow(QMainWindow):
         self._day_mode = False
         self.session.set_view(view)
 
+    def _honour_preferred_view(self) -> None:
+        """Open on whatever "Open on" says, once per sign-in. The web reads the same preference at
+        startup; here it was saved and never looked at, so the app always came up on the week."""
+        if self._opened_on_preference or self.session.preferences is None:
+            return
+        self._opened_on_preference = True
+        wanted = (self.session.preferences or {}).get("preferred_view")
+        if wanted == "day":
+            self._day_mode = True
+        elif wanted == "week":
+            self._day_mode = False
+
     def _enter_day(self) -> None:
         if self.session.account is None:
             return
@@ -584,6 +651,9 @@ class NativeWindow(QMainWindow):
     def _on_account(self, account: object) -> None:
         if account is None:
             self._day_mode = False
+            self._opened_on_preference = False
+            self._making_account = False
+            self._sync_auth_mode()
             self.username.clear()
             self.password.clear()
             self._show_page("authPage")
@@ -609,7 +679,9 @@ class NativeWindow(QMainWindow):
             return
         if self._on_recovery() and not self._allow_week_page:
             return
+        self._honour_preferred_view()
         self.week_table.set_week(self.session.week_start, self.session.blocks, self.session.trace)
+        self.week_table.reveal(self.session.week_start, self.session.now_ms())
         agenda = agenda_for(
             self.session.week_start,
             self.session.selected_day,
@@ -620,6 +692,9 @@ class NativeWindow(QMainWindow):
         )
         self.day_agenda.set_agenda(self.session.selected_day, agenda, self.session.day_data)
         self.month_grid.set_month(self.session.month_data, self.session.dirty)
+        # After the table has been laid out, or scrollToItem has nothing to measure against and the
+        # month stays on its first row.
+        QTimer.singleShot(0, lambda day=self.session.selected_day: self.month_grid.reveal(day))
         self.chips.set_armed(self.session.armed_category)
         view = self.session.planner_view
         self.planner.setCurrentWidget(self._planner_widget(view))
@@ -649,7 +724,10 @@ class NativeWindow(QMainWindow):
         if redo is not None:
             redo.setEnabled(self.session.can_redo())
         clip = self.session.clipboard
-        self.clipboard_summary.setText("Copied: " + clip["label"] if clip else "Nothing copied")
+        # A permanent line saying nothing has happened is noise. It appears when there is something
+        # on the clipboard and goes away again when there is not.
+        self.clipboard_summary.setVisible(clip is not None)
+        self.clipboard_summary.setText("Copied: " + clip["label"] if clip else "")
         destination = self.session.paste_destination()
         copy_day = self.findChild(QPushButton, "copyDay")
         paste = self.findChild(QPushButton, "pasteBlock")
@@ -677,6 +755,10 @@ class NativeWindow(QMainWindow):
             titles = {block["id"]: block["title"] for block in self.session.blocks}
             self._late_dialog.show_trace(self.session.late_preview["trace"], titles)
         self.focus_panel.set_state(self.session)
+        fresh = self.session.consume_plan_review()
+        if fresh is not None:
+            titles = {block["id"]: block["title"] for block in self.session.blocks}
+            self.plan_review.set_trace(fresh, titles, self.session.week_start)
         self._sync_chrome()
         self._apply_appearance()
         if self._pending_spread_ui and self.session.spread_preview:
@@ -1135,6 +1217,15 @@ class NativeWindow(QMainWindow):
         self._refresh_layout()
 
     def _present_alerts(self, notices: list) -> None:
+        prefs = self.session.preferences or {}
+        if notices and prefs.get("reminder_sound", True) is not False:
+            # Reminders ring on a fixed chime; only alarms carry a chosen sound. A focus notice brings
+            # its own tone and answers to the end-of-session chime setting as well, as it does on the web.
+            focus = [notice for notice in notices if notice.get("kind") == "focus"]
+            if len(focus) < len(notices):
+                self._bell.once(FALLBACK, prefs.get("alert_volume", 80))
+            elif prefs.get("end_chime"):
+                self._bell.once(str(focus[0].get("tone") or FALLBACK), prefs.get("alert_volume", 80))
         for notice in notices:
             title = notice.get("title") or "FlexWeek"
             body = notice.get("body") or ""
@@ -1142,6 +1233,10 @@ class NativeWindow(QMainWindow):
                 self._tray_icon.showMessage(title, body, QSystemTrayIcon.MessageIcon.Information, 8000)
             else:
                 self.session._say(title + (" — " + body if body else ""))
+        if notices and prefs.get("reminder_dnd_override"):
+            # A tray message is gone in eight seconds and a machine may suppress it outright. This
+            # one sits in the window until it is dealt with, which is what the setting promises.
+            self.alert_strip.add(notices)
 
     def _on_alarm(self, alarm: object) -> None:
         if not isinstance(alarm, dict):
@@ -1151,10 +1246,24 @@ class NativeWindow(QMainWindow):
         url = self.session.spotify_url(alarm.get("spotify_url"))
         dialog = AlarmRingDialog(self, alarm, url)
         self._alarm_dialog = dialog
-        dialog.exec()
+        self._ring(alarm, url)
+        try:
+            dialog.exec()
+        finally:
+            # Whatever closed the dialog, including the window shutting, the noise stops with it.
+            self._bell.stop()
         snoozed = dialog.snoozed
         self._alarm_dialog = None
         self.session.finish_alarm(snoozed)
+
+    def _ring(self, alarm: dict, url: str) -> None:
+        """Play the alarm's own sound. "spotify" means the linked track, and the web falls back to a
+        tone when that does not open, so this does too: a silent alarm is not an alarm."""
+        volume = (self.session.preferences or {}).get("alert_volume", 80)
+        tone = str(alarm.get("sound") or FALLBACK)
+        if tone == "spotify" and url and QDesktopServices.openUrl(QUrl(url)):
+            return
+        self._bell.start(FALLBACK if tone == "spotify" else tone, volume)
 
     def _open_spotify(self) -> None:
         url = self.session.spotify_url()
@@ -1173,8 +1282,16 @@ class NativeWindow(QMainWindow):
         self._look = dialog.look_choice()
         self.session.look = self._look
         self._save_look()
-        self.session.save_preferences(dialog.updates())
+        updates = dialog.updates()
+        self._apply_start_at_login(bool(updates.get("start_at_login")))
+        self.session.save_preferences(updates)
         self._apply_appearance()
+
+    def _apply_start_at_login(self, wanted: bool) -> None:
+        """The setting used to be stored on the account and obeyed by nothing. It is applied to this
+        machine, since starting at login is a property of the machine rather than of the account."""
+        if autostart.sync(wanted) is None and wanted:
+            self.session._say("This machine does not support starting at login.")
 
     def _open_restore(self) -> None:
         dialog = RestoreDialog(
@@ -1311,11 +1428,15 @@ class NativeWindow(QMainWindow):
 
     def _apply_appearance(self) -> None:
         pack, system_dark, accent = self._look_inputs()
-        self.setStyleSheet(pack_stylesheet(pack, system_dark, self._look, accent))
         # Blocks and month cells are painted per item, which a stylesheet cannot reach.
         palette = resolved_palette(pack, system_dark, self._look, accent)
-        self.week_table.set_look(self._look, palette)
-        self.month_grid.set_palette(palette)
+        design = self._chrome_palette(palette)
+        self.setStyleSheet(pack_stylesheet(pack, system_dark, self._look, accent, design))
+        # Day, Month and the week grid are dressed by the same design as the main view, so moving
+        # between them is moving around one app rather than between two.
+        self.week_table.set_look(self._look, design)
+        self.month_grid.set_palette(design)
+        self.chips.set_palette(design, bool((self.session.preferences or {}).get("accent_chips")))
         self._refresh_layout()
 
     def _install_tray(self) -> None:

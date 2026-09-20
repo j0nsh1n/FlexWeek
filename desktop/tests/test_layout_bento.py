@@ -165,3 +165,58 @@ def test_option_corners_and_colours_repaint_the_board(qapp: QApplication) -> Non
     assert (
         hero(shown(qapp, colour="match")) == resolved_palette("light-frost", False, None, "default")["accent"]
     )
+
+
+def test_a_tile_does_not_hold_its_buttons_a_screen_away_from_its_text(qapp: QApplication) -> None:
+    """The stretch belongs under the buttons. Above them it left a 165px hole in a 297px tile."""
+    for blocks in (None, []):
+        view = shown(qapp, blocks=blocks)
+        tile = view.findChild(QFrame, "bentoWaiting")
+        labels = tile.findChildren(QLabel)
+        buttons = tile.findChildren(QPushButton)
+        assert labels and buttons
+        lowest_text = max(x.mapTo(tile, x.rect().bottomLeft()).y() for x in labels)
+        highest_button = min(x.mapTo(tile, x.rect().topLeft()).y() for x in buttons)
+        assert highest_button - lowest_text < 40, f"gap is {highest_button - lowest_text}px"
+
+
+def narrow(qapp: QApplication, width: int) -> BentoView:
+    options = options_for(None, "bento")
+    palette = resolved_palette("light-frost", False, None, "default")
+    view = BentoView()
+    view.resize(width, 640)
+    view.show()
+    qapp.processEvents()
+    view.show_week(
+        Scene(
+            build_week(WEEK, BLOCKS, HOMEWORK, TRACE),
+            3,
+            minute_of("13:40"),
+            options,
+            tokens_for("bento", options["colour"], palette),
+        )
+    )
+    qapp.processEvents()
+    return view
+
+
+def test_a_narrow_window_gets_two_columns_not_four(qapp: QApplication) -> None:
+    """Bento wanted 1130px. On a 1024 window that pushed Add and Plan off the side."""
+    wide = narrow(qapp, 1366)
+    assert wide.cramped is False
+    assert wide._grid.columnCount() == 4
+
+    tight = narrow(qapp, 1024)
+    assert tight.cramped is True
+    assert tight._grid.columnCount() == 2
+
+
+def test_no_two_tiles_land_on_top_of_each_other_when_narrow(qapp: QApplication) -> None:
+    """The first two-column arrangement overlapped the hero and the deadlines tile."""
+    view = narrow(qapp, 1024)
+    boxes = [
+        (tile.objectName(), tile.geometry()) for tile in view.findChildren(QFrame) if tile.property("tile")
+    ]
+    for index, (name, box) in enumerate(boxes):
+        for other_name, other in boxes[index + 1 :]:
+            assert not box.intersects(other), f"{name} overlaps {other_name}"

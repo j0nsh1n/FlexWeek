@@ -6,9 +6,9 @@ a day and every block on it is a button that opens the same block.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QEvent, QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QMouseEvent, QPainter, QPaintEvent, QPen
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QToolTip, QVBoxLayout, QWidget
 
 from desktop.native.calendar import DAY_FULL, DAYS
 from desktop.native.layouts.base import (
@@ -97,6 +97,27 @@ class Lanes(QWidget):
         under.sort(key=lambda item: not item.work)
         return under[0] if under else None
 
+    def caption(self, item: Occurrence) -> tuple[str, str]:
+        """Letters drawn in the bar, and the hover name."""
+        box = self.bar_rect(item)
+        small = QFont(self.font())
+        small.setPixelSize(11)
+        metrics = QFontMetrics(small)
+        if box.width() > 34:
+            words = metrics.elidedText(item.title, Qt.TextElideMode.ElideRight, max(int(box.width()) - 8, 1))
+        elif box.width() >= 10:
+            words = item.title[:1]
+        else:
+            words = ""
+        return words, item.title
+
+    def event(self, event: QEvent) -> bool:  # noqa: N802
+        if event.type() == QEvent.Type.ToolTip:
+            found = self.block_at(QPointF(event.pos()))
+            QToolTip.showText(event.globalPos(), found.title if found is not None else "", self)
+            return True
+        return super().event(event)
+
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
         if self._week is None or not self._tokens:
             return
@@ -106,7 +127,6 @@ class Lanes(QWidget):
         small = QFont(self.font())
         small.setPixelSize(11)
         painter.setFont(small)
-        metrics = QFontMetrics(small)
         step = 120 if self._span == HOURS["day"] else 180
         painter.setPen(QColor(tokens["bg_muted"]))
         for minute in range(self._span[0], self._span[1] + 1, step):
@@ -136,9 +156,9 @@ class Lanes(QWidget):
                 painter.setBrush(fill)
                 ink = QColor(readable_ink(fill.name()))
             painter.drawRoundedRect(box, 3, 3)
-            if box.width() > 34:
+            words, _hint = self.caption(item)
+            if words:
                 painter.setPen(ink)
-                words = metrics.elidedText(item.title, Qt.TextElideMode.ElideRight, int(box.width()) - 8)
                 painter.drawText(box.adjusted(4, 0, -4, 0), Qt.AlignmentFlag.AlignVCenter, words)
         if self._today is not None and self._span[0] <= self._minute <= self._span[1]:
             lane = self._lane(self._today)
@@ -271,7 +291,9 @@ class MissionView(LayoutView):
         left.addWidget(lanes, 1)
         left.addLayout(self._day_row(scene, day))
         body.addLayout(left, 1)
-        if scene.options.get("side") != "hide":
+        # The radar is the first thing to go when there is no room: the lanes are the point, and
+        # everything the radar says is also in the unplaced strip and the day row.
+        if scene.options.get("side") != "hide" and not self.cramped:
             body.addWidget(self._side(scene))
         self._root.addLayout(body, 1)
 
@@ -315,12 +337,15 @@ class MissionView(LayoutView):
         inner.addWidget(label("DEADLINE RADAR", "missionRadarTitle"))
         work = scene.week.open_work()
         for index, item in enumerate(work):
-            words = f"{item.title}\n{due_label(item.due, scene.week.week_start)}"
-            if item.slack_words:
-                words += f" · {item.slack_words.upper()}"
-            row = block_button(self, words, f"missionRadar{index}", item.block_id)
+            due = due_label(item.due, scene.week.week_start)
+            extra = f" · {item.slack_words.upper()}" if item.slack_words else ""
+            row = block_button(self, f"{item.title}\n{due}{extra}", f"missionRadar{index}", item.block_id)
             row.setProperty("risk", item.slack or "")
             row.setStyleSheet(f"min-height: {scene.px(40)}px;")
+            room = scene.px(220)
+            title = QFontMetrics(row.font()).elidedText(item.title, Qt.TextElideMode.ElideRight, room)
+            row.setText(f"{title}\n{due}{extra}")
+            row.setToolTip(item.title)
             inner.addWidget(row)
         if not work:
             inner.addWidget(label("ALL CLEAR", "missionRadarEmpty"))

@@ -39,6 +39,7 @@ from desktop.native.files import (
 )
 from desktop.native.focus import (
     DEFAULT_TIMERS,
+    FOCUS_PHASE_LABEL,
     begin_state,
     break_phase,
     credit_target,
@@ -54,6 +55,7 @@ from desktop.native.focus import (
 )
 from desktop.native.history import capture_step, mark_stale, push_step
 from desktop.native.look import pack_axis, sanitize_look
+from desktop.native.pomodoro import inflate_for_solve, split_solved
 from desktop.native.remind import clock_parts, due_alarms, due_reminders, reminder_lead_min, snooze_until
 from desktop.native.reuse import (
     MAX_WEEK_BLOCKS,
@@ -171,6 +173,7 @@ class NativeSession(QObject):
         self._preview_attempt: str | None = None
         self._solve_after_save = False
         self.focus: dict | None = None
+        self._fresh_plan = False
         self.focus_store: dict[int, dict | None] = {}
         self.look: dict = sanitize_look(None)
         self.now_ms = lambda: int(time.time() * 1000)
@@ -999,20 +1002,37 @@ class NativeSession(QObject):
             self.trace = data
             placed = len(data.get("placed") or [])
             unplaced = len(data.get("unplaced") or [])
-            notes = [item["message"] for item in data.get("explanations") or [] if item.get("message")]
-            summary = f"Placed {placed} of {placed + unplaced}."
-            if notes:
-                summary += " " + notes[0]
-            self._say(summary)
+            # The status line takes the count. Every explanation the solver gave goes to the
+            # review panel, because explaining what moved and why is what this app is for.
+            self._fresh_plan = True
+            split_note = self._apply_auto_split(data)
+            self._say(f"Placed {placed} of {placed + unplaced}.{split_note}")
             self.week_changed.emit()
+            if split_note:
+                self.save()
 
         self.client.request(
             "POST",
             "/api/solve",
-            {"blocks": self.blocks, "week_start": self.week_start},
+            {
+                "blocks": inflate_for_solve(self.blocks, self.preferences),
+                "week_start": self.week_start,
+            },
             ok,
             lambda error: self._fail(ticket, error),
         )
+
+    def _apply_auto_split(self, trace: dict) -> str:
+        """Turn each placed homework block into focus chunks and breaks, when the student asked for
+        it. The solver was given room for the breaks before it ran, so the chunks fit where it put
+        the block rather than landing on whatever came next."""
+        split, count = split_solved(self.blocks, trace, self.preferences)
+        if not count:
+            return ""
+        self.blocks = split
+        self._history_label = "the focus split"
+        self.dirty = True
+        return f" Split {count} into focus chunks."
 
     def _operation(self, key: str) -> str:
         if key not in self._attempts:
@@ -1095,6 +1115,13 @@ class NativeSession(QObject):
             ok,
             lambda _error: None,
         )
+
+    def consume_plan_review(self) -> dict | None:
+        """The solver's trace, once, for the review panel. Reading a week again must not reopen it."""
+        if not self._fresh_plan:
+            return None
+        self._fresh_plan = False
+        return self.trace
 
     def remaining_for(self, assignment_id: str) -> int:
         return available_homework_minutes(
@@ -1953,21 +1980,41 @@ class NativeSession(QObject):
                     self._persist_focus()
                     self.focus_changed.emit()
                     self.alerts.emit(
-                        [{"title": "Focus session done", "body": self.focus["title"], "kind": "focus"}]
+                        [
+                            {
+                                "title": "Focus session done",
+                                "body": self.focus["title"],
+                                "kind": "focus",
+                                "tone": "soft",
+                            }
+                        ]
                     )
                     return
-                self.focus = set_phase(
-                    self.focus,
-                    break_phase(int(self.focus.get("cycles") or 0), self.preferences),
-                    self.preferences,
-                    self.now_ms(),
+                self.focus = self._enter_phase(
+                    self.focus, break_phase(int(self.focus.get("cycles") or 0), self.preferences)
                 )
             else:
-                self.focus = set_phase(self.focus, "work", self.preferences, self.now_ms())
+                self.focus = self._enter_phase(self.focus, "work")
             self._persist_focus()
             self.focus_changed.emit()
         finally:
             self._focus_busy = False
+
+    def _enter_phase(self, state: dict, phase: str) -> dict:
+        """Move to a phase and announce it, which is what the web's setFocusPhase does. The tone is
+        the web's: bright going into work, soft going into a break."""
+        moved = set_phase(state, phase, self.preferences, self.now_ms())
+        self.alerts.emit(
+            [
+                {
+                    "title": FOCUS_PHASE_LABEL.get(phase, "Focus"),
+                    "body": moved.get("title") or "",
+                    "kind": "focus",
+                    "tone": "bright" if phase == "work" else "soft",
+                }
+            ]
+        )
+        return moved
 
     def credit_focus_session(self) -> None:
         state = self.focus
@@ -2033,12 +2080,7 @@ class NativeSession(QObject):
             return False
         assignment["estimate_min"] = int(assignment["estimate_min"]) + minutes
         self.dirty_assignments.add(assignment["id"])
-        self.focus = set_phase(
-            state,
-            break_phase(int(state.get("cycles") or 0), self.preferences),
-            self.preferences,
-            self.now_ms(),
-        )
+        self.focus = self._enter_phase(state, break_phase(int(state.get("cycles") or 0), self.preferences))
         self._history_label = "adding time to " + assignment["title"]
         self.dirty = True
         self.pending_save = None
@@ -2051,12 +2093,7 @@ class NativeSession(QObject):
         state = self.focus
         if state is None or state.get("phase") != "ended" or self._focus_busy:
             return False
-        self.focus = set_phase(
-            state,
-            break_phase(int(state.get("cycles") or 0), self.preferences),
-            self.preferences,
-            self.now_ms(),
-        )
+        self.focus = self._enter_phase(state, break_phase(int(state.get("cycles") or 0), self.preferences))
         self._persist_focus()
         self.focus_changed.emit()
         return True

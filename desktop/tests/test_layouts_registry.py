@@ -125,13 +125,10 @@ def test_a_design_can_ask_for_a_colour_its_colourway_does_not_name() -> None:
     tokens = tokens_for("one", "black", palette)
     assert (tokens["bg"], tokens["cta"], tokens["cta_ink"]) == ("#000000", "#fb923c", "#000000")
     # Derived from the colourway itself. Borrowed from the student's light look it was white on pale.
-    assert [tokens[key] for key in ("card_a", "card_b", "card_c", "card_d")] == [
-        "#190f06",
-        "#28170a",
-        "#37200d",
-        "#211308",
-    ]
-    assert contrast(tokens["text"], tokens["card_c"]) >= 4.5
+    for key in ("card_a", "card_b", "card_c", "card_d"):
+        assert contrast(tokens["text"], tokens[key]) >= 4.5
+        assert contrast(tokens["muted"], tokens[key]) >= 4.5
+        assert contrast(tokens[key], tokens["bg"]) >= 1.01
 
 
 def test_an_unknown_colourway_falls_back_to_the_students_look() -> None:
@@ -151,3 +148,25 @@ def test_the_audit_names_each_unreadable_pair() -> None:
         "text on card_b 1.00",
         "muted on card_b 1.93",
     ]
+    assert contrast_failures({**good, "card_c": good["bg"]}) == ["card_c on bg 1.00"]
+
+
+def test_a_bar_that_carries_no_text_is_free_to_be_seen() -> None:
+    """Bento's load bars used a card tint, which is held down by the text that sits on a card.
+    Measured across every look that left them at 1.27 to 1 against their tile in the median and
+    1.01 at worst, so Terminal's came out dark brown on black. A bar has no text on it."""
+    worst = 99.0
+    for pack, dark, preset, accent, surface in itertools.product(
+        PACKS, (False, True), LOOK_PRESETS, ACCENT_COLORS, ("frost", "flat")
+    ):
+        look = {"preset": preset, "knobs": {"surface": surface}}
+        tokens = tokens_for("bento", MATCH, resolved_palette(pack, dark, look, accent))
+        worst = min(worst, contrast(tokens["fill"], tokens["surface"]))
+    assert worst >= 1.8, f"a load bar sank to {worst:.2f} against its tile"
+
+
+def test_the_audit_holds_a_fill_to_its_own_floor() -> None:
+    palette = resolved_palette("light-frost", False, None, "default")
+    good = tokens_for("bento", "indigo", palette)
+    assert contrast_failures(good) == []
+    assert contrast_failures({**good, "fill": good["surface"]}) == ["fill on surface 1.00"]

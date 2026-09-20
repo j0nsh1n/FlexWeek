@@ -12,8 +12,7 @@ from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -71,11 +70,8 @@ from backend.weeks import (
 )
 
 ROOT = Path(__file__).resolve().parent.parent
-FRONTEND = ROOT / "frontend"
 COOKIE = "flexweek_session"
-WEEK_START_RULE = (
-    "week_start must be a Monday from 2000-01-03 through 2099-12-28, or 1999-12-27"
-)
+WEEK_START_RULE = "week_start must be a Monday from 2000-01-03 through 2099-12-28, or 1999-12-27"
 DATE_RULE = "date must be YYYY-MM-DD between 2000-01-01 and 2099-12-31"
 MONTH_RULE = "month must be YYYY-MM between 2000-01 and 2099-12"
 ASSIGNMENT_UNKNOWN = "assignment_id must name an assignment of this account"
@@ -106,9 +102,7 @@ def assignment_ids_of(blocks: list[TimeBlock]) -> set[str]:
     return {block.assignment_id for block in blocks if block.assignment_id}
 
 
-def load_assignment_rows(
-    db: sqlite3.Connection, user_id: int, ids: set[str]
-) -> dict[str, tuple[str, int]]:
+def load_assignment_rows(db: sqlite3.Connection, user_id: int, ids: set[str]) -> dict[str, tuple[str, int]]:
     if not ids:
         return {}
     placeholders = ",".join("?" * len(ids))
@@ -332,9 +326,7 @@ def prune_restore_points(db: sqlite3.Connection, user_id: int, keep_ids: set[str
 
 
 def prune_operations(db: sqlite3.Connection, user_id: int) -> None:
-    count = db.execute(
-        "SELECT COUNT(*) AS n FROM operations WHERE user_id = ?", (user_id,)
-    ).fetchone()
+    count = db.execute("SELECT COUNT(*) AS n FROM operations WHERE user_id = ?", (user_id,)).fetchone()
     extra = int(count["n"]) - MAX_OPERATIONS
     if extra <= 0:
         return
@@ -621,9 +613,7 @@ class Preferences(BaseModel):
         default=None, exclude_if=lambda value: value is None
     )
     sidebar_collapsed: bool = Field(default=False, exclude_if=lambda value: value is False)
-    sidebar_width_px: int | None = Field(
-        default=None, ge=200, le=640, exclude_if=lambda value: value is None
-    )
+    sidebar_width_px: int | None = Field(default=None, ge=200, le=640, exclude_if=lambda value: value is None)
     theme_pack: Literal["system", "light-frost", "dark-frost", "nocturne", "slate"] = Field(
         default="system", exclude_if=lambda value: value == "system"
     )
@@ -955,9 +945,7 @@ def solve_availability(row: sqlite3.Row | None) -> tuple[list[int], list[GridWin
     return occupancy_from_windows(protected, availability.get("day_cutoff")), study
 
 
-def create_app(
-    database: Path | None = None, origin: str | None = None, *, serve_frontend: bool = True,
-) -> FastAPI:
+def create_app(database: Path | None = None, origin: str | None = None) -> FastAPI:
     path = database or Path(os.environ.get("FLEXWEEK_DATABASE", str(ROOT / "var" / "flexweek.db")))
     public_origin = (origin or os.environ.get("FLEXWEEK_ORIGIN", "http://127.0.0.1:8000")).rstrip("/")
     parsed = urlsplit(public_origin)
@@ -1277,9 +1265,7 @@ def create_app(
             incoming = adopt_legacy_deadlines(db, account["id"], week.week_start, week.blocks)
             owned = require_own_assignments(db, account["id"], assignment_ids_of(incoming))
             blocks = dump_blocks(rewrite_blocks(incoming, owned))
-            stored_blocks, revision = save_week_row(
-                db, account["id"], week.week_start, blocks, week.revision
-            )
+            stored_blocks, revision = save_week_row(db, account["id"], week.week_start, blocks, week.revision)
         return {"week_start": week.week_start, "blocks": stored_blocks, "revision": revision}
 
     @app.get("/api/assignments")
@@ -1433,9 +1419,7 @@ def create_app(
         return {"routines": [routine_view(row) for row in rows]}
 
     @app.put("/api/routines/{routine_id}")
-    def put_routine(
-        routine_id: str, payload: Routine, account: Annotated[dict, Depends(user)]
-    ) -> dict:
+    def put_routine(routine_id: str, payload: Routine, account: Annotated[dict, Depends(user)]) -> dict:
         if payload.id != routine_id:
             raise HTTPException(422, "routine id in the path and body must match")
         with connect(path) as db:
@@ -1511,9 +1495,7 @@ def create_app(
         }
 
     @app.post("/api/account-import")
-    def apply_account_import(
-        payload: TransferApplyRequest, account: Annotated[dict, Depends(user)]
-    ) -> dict:
+    def apply_account_import(payload: TransferApplyRequest, account: Annotated[dict, Depends(user)]) -> dict:
         incoming = payload.snapshot.model_dump()
         digest_value = payload_digest(payload.model_dump())
         with connect(path) as db:
@@ -1562,9 +1544,7 @@ def create_app(
         return {"restore_points": [restore_point_view(row) for row in rows]}
 
     @app.post("/api/restore-points")
-    def post_restore_point(
-        payload: RestoreCreate, account: Annotated[dict, Depends(user)]
-    ) -> dict:
+    def post_restore_point(payload: RestoreCreate, account: Annotated[dict, Depends(user)]) -> dict:
         digest_value = payload_digest(payload.model_dump())
         with connect(path) as db:
             db.execute("BEGIN IMMEDIATE")
@@ -1672,12 +1652,6 @@ def create_app(
     def health() -> dict[str, bool]:
         return {"ok": True}
 
-    if serve_frontend:
-        @app.get("/")
-        def index() -> FileResponse:
-            return FileResponse(FRONTEND / "index.html")
-
-        app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
     return app
 
 
