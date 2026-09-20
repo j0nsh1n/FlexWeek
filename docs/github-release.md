@@ -24,7 +24,7 @@ Extract, then open the file named FlexWeek. Needs a 64-bit Linux desktop (GNOME,
 `FlexWeek-x86_64.AppImage` is the same app in one file. If it won't start (missing FUSE), run `chmod +x FlexWeek-x86_64.AppImage && ./FlexWeek-x86_64.AppImage --appimage-extract`, which unpacks a `squashfs-root` folder, then run `./squashfs-root/AppRun`. Without FUSE, the tarball above is the reliable choice.
 
 ## Chromebooks
-A hosted web version is not online yet. From the source tree: `uvicorn backend.app:app --reload` then open http://127.0.0.1:8000.
+Not supported. FlexWeek is a Windows and Linux desktop app, and there is no longer a web version to open in a browser.
 
 ## Checksums
 Optional. `FlexWeek-Windows-x64-Setup.exe.sha256`, `FlexWeek-Windows-x64.msi.sha256`, `FlexWeek-Linux-x86_64.tar.gz.sha256` and `FlexWeek-x86_64.AppImage.sha256` on this page. Each names only its file, so `sha256sum -c` works in the folder you downloaded to.

@@ -21,9 +21,9 @@ Checksum files (`.sha256`) sit next to those downloads if you want to confirm th
 
 **Linux AppImage.** If `FlexWeek-x86_64.AppImage` won't start (missing FUSE), run `chmod +x FlexWeek-x86_64.AppImage && ./FlexWeek-x86_64.AppImage --appimage-extract`, which unpacks a `squashfs-root` folder, then run `./squashfs-root/AppRun`. Without FUSE, the tarball above is the reliable choice.
 
-**Chromebooks.** Use the web version when it is online. It is not online yet. From this source tree you can run the web app locally (see below).
+**Chromebooks.** Not supported. FlexWeek is a Windows and Linux desktop app; there is no web version.
 
-Open FlexWeek, choose Create account, and follow the short first-week setup (school hours, a sport, then homework). You can skip any step.
+Open FlexWeek. The first screen is Sign in; choose "New here? Create an account" under it, then follow the short first-week setup (school hours, a sport, then homework). You can skip any step.
 
 ## Screenshots
 
@@ -39,13 +39,16 @@ Requires Python 3.14.
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn backend.app:app --reload
+pip install -r requirements-desktop.txt
+python -m desktop.main
 ```
 
-Open **http://127.0.0.1:8000**. The first screen is Create account; returning
-users choose Log in. Usernames use 3–32 letters, numbers or underscores;
-passwords use 12–128 characters. A new account opens a short setup for school
-hours, one sport and the first homework, then runs Solve. You can skip it.
+The backend starts inside the app on a loopback port; there is no separate
+server to run and no page to open in a browser. The first screen is Sign in,
+with "New here? Create an account" under it. Usernames use 3–32 letters,
+numbers or underscores; passwords use 12–128 characters. A new account opens a
+short setup for school hours, one sport and the first homework, then runs
+Solve. You can skip it.
 
 To add more, pick a type in the sidebar and drag on the calendar, or click for a
 1-hour block. The dialog asks whether the item is a **Fixed time** (school,
