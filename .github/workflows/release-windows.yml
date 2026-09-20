@@ -65,7 +65,7 @@ jobs:
           $root = "dist\FlexWeek-Windows"
           $exe = Join-Path $root "FlexWeek.exe"
           if (-not (Test-Path $exe)) { throw "FlexWeek.exe missing after build" }
-          foreach ($name in @("README.txt", "LICENSE.txt", "flexweek.png", "frontend\index.html")) {
+          foreach ($name in @("README.txt", "LICENSE.txt", "flexweek.png")) {
             if (-not (Test-Path (Join-Path $root $name))) { throw "$name missing under $root" }
           }
           if (Get-ChildItem -Path $root -Recurse -Filter "*WebEngineCore*" -ErrorAction SilentlyContinue) {

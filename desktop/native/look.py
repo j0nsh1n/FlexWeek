@@ -6,7 +6,7 @@ bring its own palette. Every knob has to change something a student can see:
 a control that stores a value nothing reads is the bug this module exists to
 prevent, and desktop/tests/test_look.py proves each value moves the output.
 
-Colours mirror frontend/styles.css, where the same names already passed the
+Colours began as the retired web client's CSS custom properties, where they already passed the
 readability and accent-distance audits, so both clients show the same look.
 """
 

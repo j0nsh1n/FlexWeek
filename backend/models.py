@@ -25,7 +25,7 @@ ReasonCode = Literal[
 PomodoroRole = Literal["work", "break"]
 
 
-# Kept in step with safeSpotifyUrl in frontend/app.js; the two must agree.
+# The only Spotify link check there is, now that the web client it mirrored is gone.
 SPOTIFY_SHARE = re.compile(
     r"https://open\.spotify\.com/(track|playlist|album|episode|show)/[A-Za-z0-9]+/?(?:[?#].*)?"
 )
@@ -525,9 +525,7 @@ class SolveRequest(WeekRequest):
     @classmethod
     def week_start_is_a_monday(cls, value: str | None) -> str | None:
         if value is not None and not is_week_start(value):
-            raise ValueError(
-                "week_start must be a Monday from 2000-01-03 through 2099-12-28, or 1999-12-27"
-            )
+            raise ValueError("week_start must be a Monday from 2000-01-03 through 2099-12-28, or 1999-12-27")
         return value
 
     @model_validator(mode="after")

@@ -59,16 +59,16 @@ account. If a save fails, keep the page open and use Retry save. A conflicting
 save from another window offers a draft download and reload of the saved week.
 Password recovery is planned for the later hardening phase.
 
-Existing browser-only weeks can be explicitly imported after logging in. Import
-replaces the account's current week after confirmation; invalid legacy data is
-left untouched. Private account weeks are not stored in localStorage.
+Weeks exported from an older browser-based build can be explicitly imported
+after logging in. Import replaces the account's current week after confirmation;
+invalid legacy data is left untouched.
 
 ## Storage and hosting configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `FLEXWEEK_DATABASE` | `var/flexweek.db` | SQLite account, session, week and theme storage |
-| `FLEXWEEK_ORIGIN` | `http://127.0.0.1:8000` | Exact browser origin, including port |
+| `FLEXWEEK_ORIGIN` | `http://127.0.0.1:8000` | Exact API origin, including port |
 
 For a different local port, set `FLEXWEEK_ORIGIN` to match. Non-local origins
 require HTTPS. HTTPS deployments use Secure session cookies. A hosted release
@@ -86,11 +86,10 @@ backup API or with the app stopped; protect backups as private account data.
 .venv/bin/python scripts/verify.py
 ```
 
-This runs all frontend, backend and desktop source checks. For a web-only
-environment, use `--web-only`; desktop is then explicitly unverified. See the
+This runs the backend and desktop source checks. Where PySide6 is absent, use
+`--backend-only`; desktop is then explicitly unverified. See the
 [coverage map and feature verification guide](docs/verification.md) for focused
-checks and release limitations. Node is development-only, with no npm packages
-or frontend build step.
+checks and release limitations.
 
 ## Progress
 
@@ -120,8 +119,7 @@ ICU (`icuuc`/`icuin`) is part of Windows 10 1809+; the bundle check requires
 those imports to be satisfied without copying Microsoft's DLLs. The saved
 theme names `nocturne` and `slate` come from Daily Scheduler (the GPL-3.0
 `Local-Schedule-Assistant` project); the hybrid frost colors replaced its
-palette in September 2026. The Figtree typeface in `frontend/fonts/` is under
-the SIL Open Font License (`Figtree-OFL.txt`). AI assistance was used in development,
+palette in September 2026. AI assistance was used in development,
 including Codex and GLM-5.3 Flash test contribution; the runtime uses no AI
 service.
 

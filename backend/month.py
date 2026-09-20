@@ -142,9 +142,7 @@ def build_month(
                 "session_count": len(sessions),
                 "locked_count": len(locked),
                 "scheduled_min": sum(int(block["duration_min"]) for block in sessions + locked),
-                "focus_min": sum(
-                    int(block["duration_min"]) for block in sessions if block.get("completed")
-                ),
+                "focus_min": sum(int(block["duration_min"]) for block in sessions if block.get("completed")),
             }
         )
 

@@ -124,9 +124,9 @@ def test_empty_day_is_add_with_seventeen_free_hours(alice: TestClient) -> None:
 
 
 def test_school_and_a_finished_session_leave_570_minutes_free(alice: TestClient) -> None:
-    assert put_assignment(
-        alice, assignment(completed=True, completed_at="2026-09-15T17:00")
-    ).status_code == 200
+    assert (
+        put_assignment(alice, assignment(completed=True, completed_at="2026-09-15T17:00")).status_code == 200
+    )
     done = session("w1", start="16:00", completed=True, completed_day=1)
     saved = save_week(alice, [school(), done])
     assert saved.status_code == 200, saved.text
@@ -147,7 +147,9 @@ def test_school_and_a_finished_session_leave_570_minutes_free(alice: TestClient)
 
 def test_due_tomorrow_is_plan_and_due_in_three_days_is_not(alice: TestClient) -> None:
     assert put_assignment(alice, assignment()).status_code == 200
-    assert put_assignment(alice, assignment("later", title="Later", due="2026-09-18T12:00")).status_code == 200
+    assert (
+        put_assignment(alice, assignment("later", title="Later", due="2026-09-18T12:00")).status_code == 200
+    )
     body = get_day(alice).json()
     assert [item["id"] for item in body["due_soon"]] == ["hw-essay"]
     assert body["due_soon"][0]["due"] == "2026-09-16T23:59"
@@ -212,9 +214,9 @@ def test_day_does_not_show_another_accounts_week(app: FastAPI, alice: TestClient
 
 def test_a_completed_session_counts_only_on_the_day_it_was_completed(alice: TestClient) -> None:
     """One finished hour is one hour, not one per candidate day (docs/stage2-contract.md)."""
-    assert put_assignment(
-        alice, assignment(completed=True, completed_at="2026-09-15T17:00")
-    ).status_code == 200
+    assert (
+        put_assignment(alice, assignment(completed=True, completed_at="2026-09-15T17:00")).status_code == 200
+    )
     done = session("w1", days=[0, 1, 2], start="16:00", completed=True, completed_day=1)
     assert save_week(alice, [done]).status_code == 200
 
@@ -232,9 +234,9 @@ def test_a_completed_session_counts_only_on_the_day_it_was_completed(alice: Test
 
 def test_a_completed_session_with_no_named_day_counts_nowhere(alice: TestClient) -> None:
     """Without completed_day the slot it held is unknown, so no day may claim it."""
-    assert put_assignment(
-        alice, assignment(completed=True, completed_at="2026-09-15T17:00")
-    ).status_code == 200
+    assert (
+        put_assignment(alice, assignment(completed=True, completed_at="2026-09-15T17:00")).status_code == 200
+    )
     done = session("w1", days=[0, 1, 2], completed=True)
     assert save_week(alice, [done]).status_code == 200
 

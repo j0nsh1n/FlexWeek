@@ -79,12 +79,14 @@ def test_comfort_fields_round_trip_and_reject_out_of_range(alice: TestClient) ->
     restored = alice.put("/api/preferences", json=defaults(), headers=WRITE)
     assert restored.status_code == 200, restored.text
     assert restored.json() == defaults()
-    assert alice.put(
-        "/api/preferences", json={**defaults(), "alert_volume": 101}, headers=WRITE
-    ).status_code == 422
-    assert alice.put(
-        "/api/preferences", json={**defaults(), "sidebar_width_px": 50}, headers=WRITE
-    ).status_code == 422
+    assert (
+        alice.put("/api/preferences", json={**defaults(), "alert_volume": 101}, headers=WRITE).status_code
+        == 422
+    )
+    assert (
+        alice.put("/api/preferences", json={**defaults(), "sidebar_width_px": 50}, headers=WRITE).status_code
+        == 422
+    )
 
 
 def test_auto_split_rejects_a_25_minute_work_length(alice: TestClient) -> None:
@@ -186,13 +188,16 @@ def test_timer_presets_and_reminder_limits_match_the_contract(alice: TestClient)
 def test_comfort_routes_require_a_session(client: TestClient) -> None:
     assert client.get("/api/timer-presets").status_code == 401
     assert client.get("/api/reminder-limits").status_code == 401
-    assert client.post(
-        "/api/timer-split-preview",
-        json={
-            "timer_work_min": 30,
-            "timer_break_min": 15,
-            "timer_long_break_min": 30,
-            "timer_long_break_every": 4,
-        },
-        headers=WRITE,
-    ).status_code == 401
+    assert (
+        client.post(
+            "/api/timer-split-preview",
+            json={
+                "timer_work_min": 30,
+                "timer_break_min": 15,
+                "timer_long_break_min": 30,
+                "timer_long_break_every": 4,
+            },
+            headers=WRITE,
+        ).status_code
+        == 401
+    )

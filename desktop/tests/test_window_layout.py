@@ -52,7 +52,7 @@ def wait_until(qapp: QApplication, predicate, timeout: float = 8.0) -> None:
 
 @pytest.fixture()
 def week_page(qapp: QApplication, tmp_path: Path) -> Iterator[NativeWindow]:
-    server = LocalServer(tmp_path / "flexweek.db", serve_frontend=False)
+    server = LocalServer(tmp_path / "flexweek.db")
     server.start()
     window = NativeWindow(server.origin)
     window.username.setText("layout_student")

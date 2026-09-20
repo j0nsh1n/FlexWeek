@@ -69,7 +69,7 @@ def window(qapp: QApplication, tmp_path: Path) -> Iterator[NativeWindow]:
     """Signed in on this week with school, dinner and an essay planned for Thursday evening, and the
     clock held at Thursday 19:00 so the tests do not depend on the day they run."""
     look_file().unlink(missing_ok=True)
-    server = LocalServer(tmp_path / "flexweek.db", serve_frontend=False)
+    server = LocalServer(tmp_path / "flexweek.db")
     server.start()
     made = NativeWindow(server.origin)
     made.show()

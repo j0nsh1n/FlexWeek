@@ -289,10 +289,7 @@ def test_overdue_open_homework_is_not_a_september_deadline(alice: TestClient) ->
 
 def test_completed_deadline_stays_on_its_date(alice: TestClient) -> None:
     assert (
-        put_assignment(
-            alice, assignment(completed=True, completed_at="2026-09-16T20:00")
-        ).status_code
-        == 200
+        put_assignment(alice, assignment(completed=True, completed_at="2026-09-16T20:00")).status_code == 200
     )
     body = get_month(alice).json()
     assert body["deadlines"][0]["completed"] is True

@@ -49,15 +49,17 @@ def test_phase7_preferences_and_alarms_round_trip(tmp_path: Path) -> None:
             "auto_split_pomodoro": True,
             "reminder_dnd_override": True,
             "default_spotify_url": "https://open.spotify.com/playlist/abc123",
-            "alarms": [{
-                "id": "wake",
-                "name": "Wake up",
-                "time": "07:30",
-                "days": [0, 2, 4],
-                "enabled": True,
-                "sound": "spotify",
-                "spotify_url": "https://open.spotify.com/track/track123",
-            }],
+            "alarms": [
+                {
+                    "id": "wake",
+                    "name": "Wake up",
+                    "time": "07:30",
+                    "days": [0, 2, 4],
+                    "enabled": True,
+                    "sound": "spotify",
+                    "spotify_url": "https://open.spotify.com/track/track123",
+                }
+            ],
         }
         saved = client.put("/api/preferences", json=payload, headers=WRITE)
         assert saved.status_code == 200
@@ -69,19 +71,34 @@ def test_phase7_rejects_unsafe_spotify_and_bad_alarm(tmp_path: Path) -> None:
     with TestClient(create_app(database=tmp_path / "phase7.db", origin="http://testserver")) as client:
         register(client)
         defaults = client.get("/api/preferences").json()
-        assert client.put(
-            "/api/preferences",
-            json={**defaults, "default_spotify_url": "javascript:alert(1)"},
-            headers=WRITE,
-        ).status_code == 422
-        assert client.put(
-            "/api/preferences",
-            json={**defaults, "alarms": [{
-                "id": "bad", "name": "Bad", "time": "25:00", "days": [0],
-                "enabled": True, "sound": "chime",
-            }]},
-            headers=WRITE,
-        ).status_code == 422
+        assert (
+            client.put(
+                "/api/preferences",
+                json={**defaults, "default_spotify_url": "javascript:alert(1)"},
+                headers=WRITE,
+            ).status_code
+            == 422
+        )
+        assert (
+            client.put(
+                "/api/preferences",
+                json={
+                    **defaults,
+                    "alarms": [
+                        {
+                            "id": "bad",
+                            "name": "Bad",
+                            "time": "25:00",
+                            "days": [0],
+                            "enabled": True,
+                            "sound": "chime",
+                        }
+                    ],
+                },
+                headers=WRITE,
+            ).status_code
+            == 422
+        )
 
 
 def test_focus_and_pomodoro_fields_survive_week_save(tmp_path: Path) -> None:
@@ -112,11 +129,14 @@ def test_focus_and_pomodoro_fields_survive_week_save(tmp_path: Path) -> None:
         loaded = client.get(f"/api/week?week_start={WEEK}").json()["blocks"][0]
         assert {key: loaded[key] for key in block} == block
         unsafe = {**block, "spotify_url": "https://evil.example/track/album123"}
-        assert client.put(
-            "/api/week",
-            json={"week_start": WEEK, "blocks": [unsafe], "revision": 1},
-            headers=WRITE,
-        ).status_code == 422
+        assert (
+            client.put(
+                "/api/week",
+                json={"week_start": WEEK, "blocks": [unsafe], "revision": 1},
+                headers=WRITE,
+            ).status_code
+            == 422
+        )
         parent = {
             "id": "essay",
             "title": "Essay",

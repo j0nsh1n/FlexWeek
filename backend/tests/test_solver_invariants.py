@@ -16,24 +16,49 @@ from backend.solver import solve
 def test_generated_weeks_preserve_grid_bounds_occupancy_and_input(seed: int) -> None:
     rng = random.Random(seed)
     blocks = [
-        TimeBlock(id="school", title="School", kind="locked", days=[0, 1],
-                  start="08:00", duration_min=180, missed_days=[0]),
-        TimeBlock(id="spent", title="Finished work", kind="flexible", days=[1],
-                  start="12:00", duration_min=60, completed=True),
-        TimeBlock(id="done", title="Done without placement", kind="flexible", days=[0],
-                  duration_min=60, completed=True),
+        TimeBlock(
+            id="school",
+            title="School",
+            kind="locked",
+            days=[0, 1],
+            start="08:00",
+            duration_min=180,
+            missed_days=[0],
+        ),
+        TimeBlock(
+            id="spent",
+            title="Finished work",
+            kind="flexible",
+            days=[1],
+            start="12:00",
+            duration_min=60,
+            completed=True,
+        ),
+        TimeBlock(
+            id="done",
+            title="Done without placement",
+            kind="flexible",
+            days=[0],
+            duration_min=60,
+            completed=True,
+        ),
     ]
     for i in range(6):
         day = rng.randrange(2)
         days = sorted(rng.sample([0, 1], rng.randint(1, 2)))
         earliest = rng.randrange(6, 10)
         latest = rng.randrange(11, 18)
-        blocks.append(TimeBlock(
-            id=f"task-{i}", title=f"Task {i}", kind="flexible", days=days,
-            duration_min=rng.choice([15, 30, 60, 90]),
-            earliest=f"{['Monday', 'Tuesday'][day]} {earliest:02}:00",
-            latest=f"{['Monday', 'Tuesday'][day]} {latest:02}:00",
-        ))
+        blocks.append(
+            TimeBlock(
+                id=f"task-{i}",
+                title=f"Task {i}",
+                kind="flexible",
+                days=days,
+                duration_min=rng.choice([15, 30, 60, 90]),
+                earliest=f"{['Monday', 'Tuesday'][day]} {earliest:02}:00",
+                latest=f"{['Monday', 'Tuesday'][day]} {latest:02}:00",
+            )
+        )
     WeekRequest(blocks=blocks)
     before = [block.model_dump() for block in blocks]
     trace = solve(blocks)
@@ -88,12 +113,33 @@ def test_priority_wins_even_when_reading_has_fewer_candidate_slots() -> None:
 def test_one_exam_block_wins_capacity_over_two_reading_blocks() -> None:
     blocks = [
         TimeBlock(id="rest", title="Rest", kind="locked", days=[0], start="07:00", duration_min=960),
-        TimeBlock(id="exam", title="Exam prep", kind="flexible", days=[0], duration_min=60,
-                  priority=1, energy="high"),
-        TimeBlock(id="read-1", title="Read one", kind="flexible", days=[0], duration_min=30,
-                  priority=4, energy="high"),
-        TimeBlock(id="read-2", title="Read two", kind="flexible", days=[0], duration_min=30,
-                  priority=4, energy="high"),
+        TimeBlock(
+            id="exam",
+            title="Exam prep",
+            kind="flexible",
+            days=[0],
+            duration_min=60,
+            priority=1,
+            energy="high",
+        ),
+        TimeBlock(
+            id="read-1",
+            title="Read one",
+            kind="flexible",
+            days=[0],
+            duration_min=30,
+            priority=4,
+            energy="high",
+        ),
+        TimeBlock(
+            id="read-2",
+            title="Read two",
+            kind="flexible",
+            days=[0],
+            duration_min=30,
+            priority=4,
+            energy="high",
+        ),
     ]
     trace = solve(blocks)
     assert {block.id for block in trace.placed} == {"rest", "exam"}
@@ -105,8 +151,9 @@ def test_budget_expiry_returns_the_best_partial_placement(monkeypatch: pytest.Mo
     ticks = iter([0.0, 0.0, 0.0, 0.0, 0.151])
     monkeypatch.setattr(solver, "time", SimpleNamespace(perf_counter=lambda: next(ticks, 0.151)))
     blocks = [
-        TimeBlock(id="exam", title="Exam", kind="flexible", days=[0], duration_min=60,
-                  priority=1, energy="high"),
+        TimeBlock(
+            id="exam", title="Exam", kind="flexible", days=[0], duration_min=60, priority=1, energy="high"
+        ),
         TimeBlock(id="reading", title="Reading", kind="flexible", days=[0], duration_min=60, priority=4),
     ]
     trace = solve(blocks)
@@ -138,15 +185,32 @@ def test_feasible_mixed_priorities_finish_within_budget() -> None:
         (90, 2, [0, 2, 3, 4], 3, 1050),
     ]
     occupied = {(day, minute) for day in range(5) for minute in range(480, 870, 15)}
-    blocks = [{"id": "school", "title": "School", "kind": "locked", "days": [0, 1, 2, 3, 4],
-               "start": "08:00", "duration_min": 390}]
+    blocks = [
+        {
+            "id": "school",
+            "title": "School",
+            "kind": "locked",
+            "days": [0, 1, 2, 3, 4],
+            "start": "08:00",
+            "duration_min": 390,
+        }
+    ]
     for i, (duration, priority, days, day, start) in enumerate(cases):
         assert day in days and 360 <= start < start + duration <= 1260
         slots = {(day, minute) for minute in range(start, start + duration, 15)}
         assert occupied.isdisjoint(slots)
         occupied |= slots
-        blocks.append({"id": f"t{i}", "title": f"Task {i}", "kind": "flexible", "days": days,
-                       "duration_min": duration, "priority": priority, "latest": "Friday 21:00"})
+        blocks.append(
+            {
+                "id": f"t{i}",
+                "title": f"Task {i}",
+                "kind": "flexible",
+                "days": days,
+                "duration_min": duration,
+                "priority": priority,
+                "latest": "Friday 21:00",
+            }
+        )
     trace = solve(WeekRequest.model_validate({"blocks": blocks}).blocks)
     assert trace.complete is True
     assert {block.id for block in trace.placed} == {"school", *(f"t{i}" for i in range(16))}
@@ -156,18 +220,27 @@ def test_feasible_mixed_priorities_finish_within_budget() -> None:
 def test_feasible_energy_ordering_does_not_spend_budget_on_optional_skips() -> None:
     blocks: list[TimeBlock] = []
     for day in range(3):
-        blocks.extend([
-            TimeBlock(id=f"am{day}", title="AM", kind="locked", days=[day],
-                      start="06:00", duration_min=510),
-            TimeBlock(id=f"pm{day}", title="PM", kind="locked", days=[day],
-                      start="18:30", duration_min=270),
-        ])
+        blocks.extend(
+            [
+                TimeBlock(
+                    id=f"am{day}", title="AM", kind="locked", days=[day], start="06:00", duration_min=510
+                ),
+                TimeBlock(
+                    id=f"pm{day}", title="PM", kind="locked", days=[day], start="18:30", duration_min=270
+                ),
+            ]
+        )
     cases = [
-        ("t0", 150, [0], 4, "medium"), ("t1", 30, [0], 2, "low"),
-        ("t2", 60, [0, 1, 2], 1, "medium"), ("t3", 120, [1], 4, "low"),
-        ("t4", 30, [1], 3, "low"), ("t5", 90, [0, 1, 2], 3, "high"),
-        ("t6", 90, [1, 2], 4, "low"), ("t7", 30, [2], 3, "high"),
-        ("t8", 30, [0, 1, 2], 4, "high"), ("t9", 90, [0, 1, 2], 2, "low"),
+        ("t0", 150, [0], 4, "medium"),
+        ("t1", 30, [0], 2, "low"),
+        ("t2", 60, [0, 1, 2], 1, "medium"),
+        ("t3", 120, [1], 4, "low"),
+        ("t4", 30, [1], 3, "low"),
+        ("t5", 90, [0, 1, 2], 3, "high"),
+        ("t6", 90, [1, 2], 4, "low"),
+        ("t7", 30, [2], 3, "high"),
+        ("t8", 30, [0, 1, 2], 4, "high"),
+        ("t9", 90, [0, 1, 2], 2, "low"),
     ]
     blocks.extend(
         TimeBlock(
@@ -184,7 +257,5 @@ def test_feasible_energy_ordering_does_not_spend_budget_on_optional_skips() -> N
     )
     trace = solve(blocks)
     assert trace.complete is True
-    assert {block.id for block in trace.placed if block.kind == "flexible"} == {
-        f"t{i}" for i in range(10)
-    }
+    assert {block.id for block in trace.placed if block.kind == "flexible"} == {f"t{i}" for i in range(10)}
     assert trace.solve_ms < 150

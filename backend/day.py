@@ -112,9 +112,7 @@ def _by_category(sessions: list[dict], locked: list[dict]) -> list[dict]:
 
 
 def _next_action(sessions: list[dict], due_soon: list[dict]) -> dict:
-    starters = [
-        block for block in sessions if block.get("start") and not block.get("completed")
-    ]
+    starters = [block for block in sessions if block.get("start") and not block.get("completed")]
     starters.sort(key=lambda block: (block["start"], block["id"]))
     if starters:
         return {"kind": "start", "block_id": starters[0]["id"]}

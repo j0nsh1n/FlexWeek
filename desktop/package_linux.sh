@@ -37,7 +37,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 exec "$HERE/app/FlexWeek" "$@"
 EOF
 cp "$ROOT/desktop/linux/flexweek.desktop" "$ROOT/desktop/linux/install-menu-entry.sh" "$TOP/"
-cp "$ROOT/frontend/logo.png" "$TOP/flexweek.png"
+cp "$ROOT/desktop/assets/logo.png" "$TOP/flexweek.png"
 cp "$ROOT/LICENSE" "$TOP/LICENSE.txt"
 PYTHONPATH="$ROOT" python3 -m desktop.readme "$ROOT/desktop/linux/README.txt" "$TOP/README.txt"
 chmod +x "$TOP/FlexWeek" "$TOP/install-menu-entry.sh" "$TOP/app/FlexWeek"

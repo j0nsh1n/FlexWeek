@@ -1,5 +1,10 @@
 # FlexWeek desktop packaging recommendation
 
+> **Out of date below the packaging sections.** The WebEngine shell this document
+> was written for was retired: the client is Qt widgets and there is no browser
+> client at all. The packaging, bundle-layout and installer sections are current;
+> the `QWebEngineView` design notes are kept as the record of what was replaced.
+
 Date: 2026-09-07. Sources are official docs (links dated below). This is a
 packaging choice, not a UI redesign or security audit.
 
@@ -161,10 +166,10 @@ How it works:
 - uvicorn runs with `loop="asyncio"` and `http="h11"`: uvloop and httptools are
   optional native extras and there is no reason to depend on them surviving
   being frozen.
-- The SQLite database lives next to the browser profile under the user data
-  directory, never inside the read-only application bundle.
-- `frontend/` ships as bundle data, because `backend/app.py` serves it from
-  `<bundle>/frontend`.
+- The SQLite database lives under the user data directory, never inside the
+  read-only application bundle.
+- No web assets ship in the bundle. The web client was retired in September 2026
+  and `backend/app.py` serves an API only.
 - The window closing stops the server via `aboutToQuit`.
 
 Setting `FLEXWEEK_DESKTOP_ORIGIN` (or `FLEXWEEK_ORIGIN`) still points the window
@@ -235,7 +240,7 @@ Nuitka cannot cross-compile: the Windows package is built on a GitHub Actions
 release is published (or by hand against an existing tag), installs both
 requirements files into a fresh Python 3.14, runs `desktop/build_windows.ps1`
 (MSVC is preinstalled on the runner), smoke-checks the freeze layout
-(`FlexWeek.exe`, `frontend/index.html`, `QtWebEngineCore.dll`), copies
+(`FlexWeek.exe`), copies
 `README.txt`, `LICENSE.txt` and `flexweek.png` into the folder, and uploads the
 installers to the release (see "Windows installers" below). ICU (`icuuc.dll` / `icuin.dll`) is treated as a Windows 10 1809+
 system library and is not copied out of System32. The paste-ready release
@@ -356,7 +361,7 @@ API while the window is open). Phase 7 added the tray presenter described below.
   instead of starting a second copy on the same database. One copy runs per
   user data directory.
 
-The tray icon is loaded from `frontend/logo.png` next to the bundled backend.
+The tray icon is loaded from `desktop/assets/logo.png` next to the bundled backend.
 Before this fix the path was taken from `desktop/main.py`. Nuitka places that file
 at the bundle root, so the path pointed one directory above the bundle. Qt logged
 `QSystemTrayIcon::setVisible: No Icon set`, the tray entry was invisible, and a

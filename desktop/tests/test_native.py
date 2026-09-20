@@ -44,7 +44,7 @@ def qapp() -> Iterator[QApplication]:
 
 @pytest.fixture()
 def server(qapp: QApplication, tmp_path: Path) -> Iterator[LocalServer]:
-    running = LocalServer(tmp_path / "flexweek.db", serve_frontend=False)
+    running = LocalServer(tmp_path / "flexweek.db")
     running.start()
     yield running
     for obj in list(HELD):

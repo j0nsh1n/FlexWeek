@@ -63,14 +63,24 @@ def flex(block_id: str, **overrides) -> dict:
 
 
 def save(client: TestClient, week_start: str, blocks: list[dict], revision: int):
-    return client.put("/api/week", json={"week_start": week_start, "blocks": blocks, "revision": revision}, headers=WRITE)
+    return client.put(
+        "/api/week", json={"week_start": week_start, "blocks": blocks, "revision": revision}, headers=WRITE
+    )
 
 
 def test_two_weeks_of_one_account_hold_independent_blocks_and_revisions(account: TestClient) -> None:
     math = flex("a-math", title="Algebra homework")
     reading = flex("a-read", title="Reading", duration_min=30, days=[3], priority=4)
-    assert save(account, WEEK_ONE, [math], 0).json() == {"week_start": WEEK_ONE, "blocks": [math], "revision": 1}
-    assert save(account, WEEK_TWO, [reading], 0).json() == {"week_start": WEEK_TWO, "blocks": [reading], "revision": 1}
+    assert save(account, WEEK_ONE, [math], 0).json() == {
+        "week_start": WEEK_ONE,
+        "blocks": [math],
+        "revision": 1,
+    }
+    assert save(account, WEEK_TWO, [reading], 0).json() == {
+        "week_start": WEEK_TWO,
+        "blocks": [reading],
+        "revision": 1,
+    }
 
     saved_one = account.get(f"/api/week?week_start={WEEK_ONE}")
     saved_two = account.get(f"/api/week?week_start={WEEK_TWO}")
@@ -98,7 +108,9 @@ def test_get_rejects_non_monday_and_malformed_week_starts(account: TestClient) -
 
 def test_only_the_monday_containing_the_lower_date_edge_is_allowed(account: TestClient) -> None:
     assert account.get("/api/week?week_start=1999-12-27").json() == {
-        "week_start": "1999-12-27", "blocks": [], "revision": 0,
+        "week_start": "1999-12-27",
+        "blocks": [],
+        "revision": 0,
     }
     assert save(account, "1999-12-27", [], 0).status_code == 200
     assert account.get("/api/week?week_start=1999-12-20").status_code == 422
@@ -164,7 +176,9 @@ def test_weeks_listing_is_ascending_and_per_account(app: FastAPI, account: TestC
 
     with TestClient(app) as bob:
         assert (
-            bob.post("/api/auth/register", json={"username": "bob", "password": PASSWORD}, headers=WRITE).status_code
+            bob.post(
+                "/api/auth/register", json={"username": "bob", "password": PASSWORD}, headers=WRITE
+            ).status_code
             == 201
         )
         assert bob.get("/api/weeks").json() == {"weeks": []}

@@ -2,7 +2,7 @@
 
 The web client synthesises its alerts with a WebAudio oscillator. There is no oscillator here, so the
 same five recipes are written out as 16-bit mono PCM and handed to an audio sink. The recipes, the
-gains and the timing are kept in step with soundOnce in frontend/app.js: a student who sets "glass" on
+gains and the timing came from the retired web client's soundOnce: a student who set "glass" on
 their phone and hears it on the laptop is hearing the same two notes.
 """
 

@@ -6,7 +6,6 @@ import argparse
 import importlib.util
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -35,22 +34,16 @@ def diff_base() -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--web-only", action="store_true", help="Explicitly omit desktop tests")
+    parser.add_argument("--backend-only", action="store_true", help="Explicitly omit desktop tests")
     args = parser.parse_args()
     if sys.version_info[:2] != (3, 14):
         print("Verification needs the project's Python 3.14 interpreter.", file=sys.stderr)
         return 1
-    node = shutil.which("node")
-    if node is None:
-        print("Node is required for frontend verification.", file=sys.stderr)
-        return 1
-    if not args.web_only and importlib.util.find_spec("PySide6") is None:
-        print("Full verification needs requirements-desktop.txt. --web-only omits desktop explicitly.",
-              file=sys.stderr)
-        return 1
-    tests = sorted(str(path.relative_to(ROOT)) for path in (ROOT / "frontend/tests").glob("*.test.mjs"))
-    if not tests:
-        print("No frontend tests found.", file=sys.stderr)
+    if not args.backend_only and importlib.util.find_spec("PySide6") is None:
+        print(
+            "Full verification needs requirements-desktop.txt. --web-only omits desktop explicitly.",
+            file=sys.stderr,
+        )
         return 1
     with tempfile.TemporaryDirectory(prefix="flexweek-verify-") as directory:
         report = Path(directory) / "pytest.xml"
@@ -60,13 +53,19 @@ def main() -> int:
             print(f"FAILED: {error}", file=sys.stderr)
             return 1
         steps = [
-            *((f"JavaScript syntax {script.name}", [node, "--check", str(script.relative_to(ROOT))])
-              for script in sorted((ROOT / "frontend").glob("*.js"))),
-            ("Frontend behavior", [node, "--test", "--test-reporter=tap", *tests]),
             ("Python lint", [sys.executable, "-m", "ruff", "check", "."]),
             ("Backend types", [sys.executable, "-m", "mypy", "backend"]),
-            ("Python behavior", [sys.executable, "-m", "pytest", "-q", f"--junitxml={report}",
-                                 *(["backend/tests"] if args.web_only else [])]),
+            (
+                "Python behavior",
+                [
+                    sys.executable,
+                    "-m",
+                    "pytest",
+                    "-q",
+                    f"--junitxml={report}",
+                    *(["backend/tests"] if args.backend_only else []),
+                ],
+            ),
             ("Working diff whitespace", ["git", "diff", "--check"]),
             ("Staged diff whitespace", ["git", "diff", "--cached", "--check"]),
             ("Committed range whitespace", ["git", "diff", "--check", f"{base}...HEAD"]),
@@ -74,7 +73,7 @@ def main() -> int:
         for name, command in steps:
             print(f"\n{name}", flush=True)
             try:
-                capture = name == "Frontend behavior"
+                capture = False
                 result = subprocess.run(
                     command,
                     cwd=ROOT,
@@ -97,10 +96,16 @@ def main() -> int:
                 print(result.stderr, end="", file=sys.stderr)
                 tests_match = re.search(r"^# tests (\d+)$", result.stdout, re.MULTILINE)
                 skipped_match = re.search(r"^# skipped (\d+)$", result.stdout, re.MULTILINE)
-                if not tests_match or not skipped_match or int(tests_match.group(1)) == 0 \
-                        or int(skipped_match.group(1)) != 0:
-                    print("FAILED: Frontend suite ran no tests, skipped tests, or emitted unknown TAP.",
-                          file=sys.stderr)
+                if (
+                    not tests_match
+                    or not skipped_match
+                    or int(tests_match.group(1)) == 0
+                    or int(skipped_match.group(1)) != 0
+                ):
+                    print(
+                        "FAILED: Frontend suite ran no tests, skipped tests, or emitted unknown TAP.",
+                        file=sys.stderr,
+                    )
                     return 1
         suites = list(ET.parse(report).getroot().iter("testsuite"))
         count = sum(int(suite.get("tests", "0")) for suite in suites)
@@ -108,7 +113,7 @@ def main() -> int:
         if count == 0 or skipped:
             print(f"FAILED: Python suite ran {count} tests with {skipped} skipped.", file=sys.stderr)
             return 1
-    scope = "Web only; desktop NOT VERIFIED" if args.web_only else "Web and desktop source"
+    scope = "Backend only; desktop NOT VERIFIED" if args.backend_only else "Backend and desktop"
     print(f"\nVERIFIED: {scope}. Packaged binaries and other platforms need separate checks.")
     return 0
 

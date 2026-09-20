@@ -46,7 +46,9 @@ def alice(client: TestClient) -> TestClient:
 
 def register(client: TestClient, username: str) -> None:
     assert (
-        client.post("/api/auth/register", json={"username": username, "password": PASSWORD}, headers=WRITE).status_code
+        client.post(
+            "/api/auth/register", json={"username": username, "password": PASSWORD}, headers=WRITE
+        ).status_code
         == 201
     )
 
@@ -99,7 +101,9 @@ def put_assignment(client: TestClient, body: dict):
     return client.put(f"/api/assignments/{body['id']}", json=body, headers=WRITE)
 
 
-def test_put_revision_zero_creates_at_revision_one_and_identical_body_does_not_bump(alice: TestClient) -> None:
+def test_put_revision_zero_creates_at_revision_one_and_identical_body_does_not_bump(
+    alice: TestClient,
+) -> None:
     created = put_assignment(alice, assignment())
     assert created.status_code == 200, created.text
     assert created.json() == assignment(revision=1)
@@ -121,18 +125,25 @@ def test_stale_assignment_revision_conflicts(alice: TestClient) -> None:
 
 
 def test_list_orders_open_by_due_and_include_completed_adds_finished_ones(alice: TestClient) -> None:
-    assert put_assignment(alice, assignment("later", title="Later", due="2026-09-16T12:00")).status_code == 200
-    assert put_assignment(alice, assignment("sooner", title="Sooner", due="2026-09-14T08:00")).status_code == 200
-    assert put_assignment(
-        alice,
-        assignment(
-            "done",
-            title="Done",
-            due="2026-09-08T09:00",
-            completed=True,
-            completed_at="2026-09-08T10:00",
-        ),
-    ).status_code == 200
+    assert (
+        put_assignment(alice, assignment("later", title="Later", due="2026-09-16T12:00")).status_code == 200
+    )
+    assert (
+        put_assignment(alice, assignment("sooner", title="Sooner", due="2026-09-14T08:00")).status_code == 200
+    )
+    assert (
+        put_assignment(
+            alice,
+            assignment(
+                "done",
+                title="Done",
+                due="2026-09-08T09:00",
+                completed=True,
+                completed_at="2026-09-08T10:00",
+            ),
+        ).status_code
+        == 200
+    )
     open_only = alice.get(f"/api/assignments?week_start={WEEK_ONE}")
     assert [item["id"] for item in open_only.json()["assignments"]] == ["sooner", "later"]
     with_done = alice.get(f"/api/assignments?week_start={WEEK_ONE}&include_completed=true")
@@ -245,7 +256,9 @@ def test_delete_stale_revision_is_409(alice: TestClient) -> None:
 
 def test_changes_with_one_stale_revision_stores_nothing(alice: TestClient) -> None:
     assert put_assignment(alice, assignment()).status_code == 200
-    assert put_assignment(alice, assignment("other", title="Other", due="2026-09-16T12:00")).status_code == 200
+    assert (
+        put_assignment(alice, assignment("other", title="Other", due="2026-09-16T12:00")).status_code == 200
+    )
     moved = assignment(title="Moved")
     moved.pop("revision")
     nope = assignment("other", title="Nope")
@@ -262,7 +275,10 @@ def test_changes_with_one_stale_revision_stores_nothing(alice: TestClient) -> No
         headers=WRITE,
     )
     assert response.status_code == 409
-    titles = {item["id"]: item["title"] for item in alice.get(f"/api/assignments?week_start={WEEK_ONE}").json()["assignments"]}
+    titles = {
+        item["id"]: item["title"]
+        for item in alice.get(f"/api/assignments?week_start={WEEK_ONE}").json()["assignments"]
+    }
     assert titles == {"hw-essay": "Essay", "other": "Other"}
 
 

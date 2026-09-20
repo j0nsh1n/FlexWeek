@@ -2,7 +2,7 @@
 
 "Split long homework into focus sessions" was a checkbox the desktop could set and never acted on:
 the whole feature lived in the web client. This is that feature, ported, and kept in step with
-pomodoroPlan, buildPomodoroBlocks, solveInputBlocks and autoSplitSolvedBlocks in frontend/app.js.
+pomodoroPlan, buildPomodoroBlocks, solveInputBlocks and autoSplitSolvedBlocks in the retired web client.
 
 Two things happen around a solve. Before it, each long flexible block asks for the time its breaks
 will need as well, so the solver leaves room for them. After it, each placed block is replaced by its

@@ -222,9 +222,7 @@ def test_changes_snapshot_label_rolls_back_when_the_week_is_stale(alice: TestCli
     )
     assert failed.status_code == 409
     assert alice.get("/api/restore-points").json() == {"restore_points": []}
-    assert [block["id"] for block in alice.get(f"/api/week?week_start={WEEK}").json()["blocks"]] == [
-        "school"
-    ]
+    assert [block["id"] for block in alice.get(f"/api/week?week_start={WEEK}").json()["blocks"]] == ["school"]
 
 
 def test_changes_snapshot_label_creates_a_point_then_writes(alice: TestClient) -> None:
@@ -310,11 +308,14 @@ def test_restore_points_require_a_session(client: TestClient) -> None:
     assert client.get("/api/restore-points").status_code == 401
     assert create_point(client, "Nope", "op-no").status_code == 401
     assert client.get("/api/restore-points/rp-1/preview").status_code == 401
-    assert client.post(
-        "/api/restore-points/rp-1/restore",
-        json={"state_token": "x", "operation_id": "op-no"},
-        headers=WRITE,
-    ).status_code == 401
+    assert (
+        client.post(
+            "/api/restore-points/rp-1/restore",
+            json={"state_token": "x", "operation_id": "op-no"},
+            headers=WRITE,
+        ).status_code
+        == 401
+    )
 
 
 def test_operation_id_does_not_leak_across_accounts(app: FastAPI, alice: TestClient) -> None:
@@ -372,9 +373,12 @@ def test_restore_points_are_not_visible_to_another_account(app: FastAPI, alice: 
         )
         assert bob.get("/api/restore-points").json() == {"restore_points": []}
         assert bob.get(f"/api/restore-points/{point_id}/preview").status_code == 404
-        assert bob.post(
-            f"/api/restore-points/{point_id}/restore",
-            json={"state_token": "nope", "operation_id": "op-bob"},
-            headers=WRITE,
-        ).status_code == 404
+        assert (
+            bob.post(
+                f"/api/restore-points/{point_id}/restore",
+                json={"state_token": "nope", "operation_id": "op-bob"},
+                headers=WRITE,
+            ).status_code
+            == 404
+        )
         assert alice.get("/api/restore-points").json()["restore_points"][0]["id"] == point_id

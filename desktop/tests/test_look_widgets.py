@@ -245,7 +245,7 @@ def wait_until(qapp: QApplication, predicate, timeout: float = 8.0) -> None:
 def test_a_look_chosen_in_the_window_reaches_the_calendar_not_only_the_stylesheet(
     qapp: QApplication, tmp_path: Path
 ) -> None:
-    server = LocalServer(tmp_path / "flexweek.db", serve_frontend=False)
+    server = LocalServer(tmp_path / "flexweek.db")
     server.start()
     window = NativeWindow(server.origin)
     try:

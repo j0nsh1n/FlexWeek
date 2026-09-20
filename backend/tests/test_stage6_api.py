@@ -140,9 +140,7 @@ def test_register_returns_eight_codes_that_are_not_stored_plaintext(
 ) -> None:
     client, codes = registered
     body = client.get("/api/auth/me").json()
-    created = client.post(
-        "/api/auth/login", json={"username": "alice", "password": PASSWORD}, headers=WRITE
-    )
+    created = client.post("/api/auth/login", json={"username": "alice", "password": PASSWORD}, headers=WRITE)
     assert created.status_code == 200, created.text
     assert created.json() == {"id": body["id"], "username": "alice"}
     assert len(codes) == 8
@@ -282,12 +280,20 @@ def test_delete_account_removes_only_that_user(
     app: FastAPI, database: Path, registered: tuple[TestClient, list[str]]
 ) -> None:
     alice, _codes = registered
-    assert alice.put("/api/week", json={"week_start": WEEK, "blocks": [school()], "revision": 0}, headers=WRITE).status_code == 200
+    assert (
+        alice.put(
+            "/api/week", json={"week_start": WEEK, "blocks": [school()], "revision": 0}, headers=WRITE
+        ).status_code
+        == 200
+    )
     assert alice.put("/api/assignments/hw-essay", json=assignment(), headers=WRITE).status_code == 200
     assert alice.put("/api/routines/r-1", json=routine(), headers=WRITE).status_code == 200
-    assert alice.post(
-        "/api/restore-points", json={"label": "Keep me", "operation_id": "op-keep"}, headers=WRITE
-    ).status_code == 200
+    assert (
+        alice.post(
+            "/api/restore-points", json={"label": "Keep me", "operation_id": "op-keep"}, headers=WRITE
+        ).status_code
+        == 200
+    )
     alice_id = alice.get("/api/auth/me").json()["id"]
     with TestClient(app) as bob:
         assert (
@@ -296,13 +302,14 @@ def test_delete_account_removes_only_that_user(
             ).status_code
             == 201
         )
-        assert bob.put(
-            "/api/week", json={"week_start": WEEK, "blocks": [school()], "revision": 0}, headers=WRITE
-        ).status_code == 200
-        bob_id = bob.get("/api/auth/me").json()["id"]
-        removed = alice.request(
-            "DELETE", "/api/auth/account", json={"password": PASSWORD}, headers=WRITE
+        assert (
+            bob.put(
+                "/api/week", json={"week_start": WEEK, "blocks": [school()], "revision": 0}, headers=WRITE
+            ).status_code
+            == 200
         )
+        bob_id = bob.get("/api/auth/me").json()["id"]
+        removed = alice.request("DELETE", "/api/auth/account", json={"password": PASSWORD}, headers=WRITE)
         assert removed.status_code == 204, removed.text
         assert alice.get("/api/auth/me").status_code == 401
         assert bob.get("/api/auth/me").json()["username"] == "bob"
@@ -316,9 +323,7 @@ def test_delete_account_removes_only_that_user(
         assert table_count(database, "recovery_codes", alice_id) == 0
         assert table_count(database, "preferences", alice_id) == 0
         assert table_count(database, "weeks", bob_id) == 1
-    again = alice.post(
-        "/api/auth/register", json={"username": "alice", "password": PASSWORD}, headers=WRITE
-    )
+    again = alice.post("/api/auth/register", json={"username": "alice", "password": PASSWORD}, headers=WRITE)
     assert again.status_code == 201, again.text
     assert alice.get(f"/api/assignments?week_start={WEEK}").json() == {"assignments": []}
 
@@ -342,9 +347,11 @@ def test_storage_info_includes_username_and_origin_not_the_database_path(
 def test_export_requires_password_and_import_copies_onto_another_database(tmp_path: Path) -> None:
     local_app = create_app(tmp_path / "local.db", "http://testserver")
     hosted_app = create_app(tmp_path / "hosted.db", "https://flexweek.example")
-    with TestClient(local_app) as local, TestClient(
-        hosted_app, base_url="https://flexweek.example"
-    ) as hosted, TestClient(hosted_app, base_url="https://flexweek.example") as eve:
+    with (
+        TestClient(local_app) as local,
+        TestClient(hosted_app, base_url="https://flexweek.example") as hosted,
+        TestClient(hosted_app, base_url="https://flexweek.example") as eve,
+    ):
         assert (
             local.post(
                 "/api/auth/register", json={"username": "alice", "password": PASSWORD}, headers=WRITE
@@ -364,9 +371,14 @@ def test_export_requires_password_and_import_copies_onto_another_database(tmp_pa
             "energy": "medium",
             "assignment_id": "hw-essay",
         }
-        assert local.put(
-            "/api/week", json={"week_start": WEEK, "blocks": [school(), session], "revision": 0}, headers=WRITE
-        ).status_code == 200
+        assert (
+            local.put(
+                "/api/week",
+                json={"week_start": WEEK, "blocks": [school(), session], "revision": 0},
+                headers=WRITE,
+            ).status_code
+            == 200
+        )
         assert local.put("/api/routines/r-1", json=routine(), headers=WRITE).status_code == 200
         denied = local.post("/api/account-export", json={"password": "wrong-password-12"}, headers=WRITE)
         assert denied.status_code == 401
@@ -437,9 +449,12 @@ def test_stale_import_token_is_conflict(registered: tuple[TestClient, list[str]]
     snapshot = exported.json()
     preview = client.post("/api/account-import/preview", json={"snapshot": snapshot}, headers=WRITE)
     assert preview.status_code == 200, preview.text
-    assert client.put(
-        "/api/week", json={"week_start": WEEK, "blocks": [school()], "revision": 0}, headers=WRITE
-    ).status_code == 200
+    assert (
+        client.put(
+            "/api/week", json={"week_start": WEEK, "blocks": [school()], "revision": 0}, headers=WRITE
+        ).status_code
+        == 200
+    )
     stale = client.post(
         "/api/account-import",
         json={
@@ -481,20 +496,29 @@ def test_hostile_snapshot_assignment_is_rejected(registered: tuple[TestClient, l
 
 def test_csrf_rejects_account_writes(registered: tuple[TestClient, list[str]]) -> None:
     client, codes = registered
-    assert client.post(
-        "/api/auth/recover", json={"username": "alice", "code": codes[0], "password": REPLACEMENT}
-    ).status_code == 403
+    assert (
+        client.post(
+            "/api/auth/recover", json={"username": "alice", "code": codes[0], "password": REPLACEMENT}
+        ).status_code
+        == 403
+    )
     assert client.post("/api/account-export", json={"password": PASSWORD}).status_code == 403
     assert client.request("DELETE", "/api/auth/account", json={"password": PASSWORD}).status_code == 403
     assert client.post("/api/auth/recovery-codes", json={"password": PASSWORD}).status_code == 403
-    assert client.post(
-        "/api/auth/password", json={"current_password": PASSWORD, "new_password": REPLACEMENT}
-    ).status_code == 403
+    assert (
+        client.post(
+            "/api/auth/password", json={"current_password": PASSWORD, "new_password": REPLACEMENT}
+        ).status_code
+        == 403
+    )
     exported = client.post("/api/account-export", json={"password": PASSWORD}, headers=WRITE).json()
     assert client.post("/api/account-import/preview", json={"snapshot": exported}).status_code == 403
-    assert client.post(
-        "/api/account-import", json={"snapshot": exported, "state_token": "x", "operation_id": "op"}
-    ).status_code == 403
+    assert (
+        client.post(
+            "/api/account-import", json={"snapshot": exported, "state_token": "x", "operation_id": "op"}
+        ).status_code
+        == 403
+    )
 
 
 def test_wrong_password_rejects_every_gated_write_without_side_effects(
@@ -555,9 +579,10 @@ def test_recover_drops_every_other_session(app: FastAPI, registered: tuple[TestC
 
 def test_two_hosted_sessions_share_a_week_and_conflict_on_stale_revision(tmp_path: Path) -> None:
     app = create_app(tmp_path / "hosted.db", "https://flexweek.example")
-    with TestClient(app, base_url="https://flexweek.example") as browser, TestClient(
-        app, base_url="https://flexweek.example"
-    ) as desktop:
+    with (
+        TestClient(app, base_url="https://flexweek.example") as browser,
+        TestClient(app, base_url="https://flexweek.example") as desktop,
+    ):
         assert (
             browser.post(
                 "/api/auth/register", json={"username": "alice", "password": PASSWORD}, headers=HOSTED_WRITE

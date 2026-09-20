@@ -36,8 +36,7 @@ def test_stale_browser_identity_cannot_read_write_or_logout_new_account(tmp_path
         client.headers["X-FlexWeek-Account"] = str(first["id"])
         assert client.get("/api/week").status_code == 401
         assert (
-            client.put("/api/week", json={"week_start": WEEK, "blocks": [], "revision": 0}).status_code
-            == 401
+            client.put("/api/week", json={"week_start": WEEK, "blocks": [], "revision": 0}).status_code == 401
         )
         assert client.post("/api/auth/logout").status_code == 401
         del client.headers["X-FlexWeek-Account"]
@@ -86,7 +85,9 @@ def test_identical_save_retry_is_idempotent_and_invalid_input_never_replaces_it(
         ]
         for blocks in invalid:
             assert (
-                client.put("/api/week", json={"week_start": WEEK, "blocks": blocks, "revision": 1}).status_code
+                client.put(
+                    "/api/week", json={"week_start": WEEK, "blocks": blocks, "revision": 1}
+                ).status_code
                 == 422
             )
         assert client.put("/api/week", content=b"x" * (256 * 1024 + 1)).status_code == 413

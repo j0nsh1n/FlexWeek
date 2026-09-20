@@ -39,7 +39,7 @@ DESKTOP_FILE_NAME = "flexweek"
 
 
 def app_icon_path() -> Path:
-    return Path(backend.__file__).resolve().parents[1] / "frontend" / "logo.png"
+    return Path(backend.__file__).resolve().parents[1] / "desktop" / "assets" / "logo.png"
 
 
 def instance_name(root: str) -> str:
@@ -243,7 +243,7 @@ def main(argv: list[str] | None = None) -> int:
         database = database_arg if database_arg is not None else Path(root) / "flexweek.db"
         try:
             database.parent.mkdir(parents=True, exist_ok=True)
-            server = LocalServer(database, serve_frontend=False)
+            server = LocalServer(database)
             origin = server.start()
         except (OSError, RuntimeError, TimeoutError) as error:
             QMessageBox.critical(None, "FlexWeek", f"Could not start FlexWeek: {error}")
