@@ -52,7 +52,7 @@ trap 'echo "Build staging retained at $STAGING" >&2' ERR
     --noinclude-dlls='libtinfo.so*' \
     --noinclude-dlls='libncursesw.so*' \
     --noinclude-dlls='libreadline.so*' \
-    --include-qt-plugins=networkinformation,platforminputcontexts,position,qmllint,qmltooling,vectorimageformats \
+    --include-qt-plugins=multimedia,networkinformation,platforminputcontexts,position,qmllint,qmltooling,vectorimageformats \
     --noinclude-qt-plugins=egldeviceintegrations,printsupport \
     --jobs="${FLEXWEEK_BUILD_JOBS:-4}"
 

@@ -57,6 +57,8 @@ from desktop.native.settings import (
     RestoreDialog,
     TransferPreviewDialog,
 )
+from desktop.native.sound import Bell
+from desktop.native.tones import FALLBACK
 from desktop.native.weekmodel import build_week
 from desktop.native.widgets import (
     AvailabilityDialog,
@@ -111,6 +113,7 @@ class NativeWindow(QMainWindow):
         self._tray_hinted = False
         self._icon = icon or QIcon()
         self._alarm_dialog: AlarmRingDialog | None = None
+        self._bell = Bell(self)
         self._look = sanitize_look(None)
         self._allow_week_page = True
         self._load_look()
@@ -1152,6 +1155,10 @@ class NativeWindow(QMainWindow):
         self._refresh_layout()
 
     def _present_alerts(self, notices: list) -> None:
+        prefs = self.session.preferences or {}
+        if notices and prefs.get("reminder_sound", True) is not False:
+            # The web rings reminders on a fixed chime; only alarms carry a chosen sound.
+            self._bell.once(FALLBACK, prefs.get("alert_volume", 80))
         for notice in notices:
             title = notice.get("title") or "FlexWeek"
             body = notice.get("body") or ""
@@ -1168,10 +1175,24 @@ class NativeWindow(QMainWindow):
         url = self.session.spotify_url(alarm.get("spotify_url"))
         dialog = AlarmRingDialog(self, alarm, url)
         self._alarm_dialog = dialog
-        dialog.exec()
+        self._ring(alarm, url)
+        try:
+            dialog.exec()
+        finally:
+            # Whatever closed the dialog, including the window shutting, the noise stops with it.
+            self._bell.stop()
         snoozed = dialog.snoozed
         self._alarm_dialog = None
         self.session.finish_alarm(snoozed)
+
+    def _ring(self, alarm: dict, url: str) -> None:
+        """Play the alarm's own sound. "spotify" means the linked track, and the web falls back to a
+        tone when that does not open, so this does too: a silent alarm is not an alarm."""
+        volume = (self.session.preferences or {}).get("alert_volume", 80)
+        tone = str(alarm.get("sound") or FALLBACK)
+        if tone == "spotify" and url and QDesktopServices.openUrl(QUrl(url)):
+            return
+        self._bell.start(FALLBACK if tone == "spotify" else tone, volume)
 
     def _open_spotify(self) -> None:
         url = self.session.spotify_url()

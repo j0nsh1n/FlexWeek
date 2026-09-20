@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from backend.comfort import TIMER_PRESETS
+from backend.models import valid_spotify_url
 from desktop.native.calendar import DAY_FULL
 from desktop.native.focus import FOCUS_PHASE_LABEL, format_countdown, more_time_choices, remaining_ms
 from desktop.native.look import (
@@ -44,6 +45,8 @@ from desktop.native.look import (
     sanitize_look,
 )
 from desktop.native.reuse import format_duration
+from desktop.native.sound import Bell
+from desktop.native.tones import FALLBACK, RECIPES, SOUNDS
 
 PREFS_MAX_BODY = 560
 PREFS_MIN_WIDTH = 560
@@ -194,6 +197,7 @@ class PrefsDialog(QDialog):
         self._preferences = deepcopy(preferences)
         self._look = sanitize_look(look)
         self._alarms = [deepcopy(item) for item in preferences.get("alarms") or []]
+        self._bell = Bell(self)
         layout = QVBoxLayout(self)
         # Eighteen rows in one undivided column stood 1056 pixels tall, taller than the laptop the
         # app is built for. Everything but the buttons scrolls, and the rows sit under headings.
@@ -303,7 +307,19 @@ class PrefsDialog(QDialog):
         self.volume.setObjectName("prefAlertVolume")
         self.volume.setRange(0, 100)
         self.volume.setValue(int(preferences.get("alert_volume", 80)))
-        form.addRow("Alert volume", self.volume)
+        volume_row = QHBoxLayout()
+        volume_row.addWidget(self.volume)
+        self.preview_tone = QComboBox()
+        self.preview_tone.setObjectName("prefPreviewTone")
+        for name in RECIPES:
+            self.preview_tone.addItem(name.title(), name)
+        volume_row.addWidget(self.preview_tone)
+        # A volume with no way to hear it is set by guessing. The web has the same button.
+        self.preview = QPushButton("Test")
+        self.preview.setObjectName("prefPreviewAlert")
+        self.preview.clicked.connect(self._preview_alert)
+        volume_row.addWidget(self.preview)
+        form.addRow("Alert volume", volume_row)
         self.end_chime = QCheckBox("Chime when a session ends")
         self.end_chime.setObjectName("prefEndChime")
         self.end_chime.setChecked(bool(preferences.get("end_chime")))
@@ -344,14 +360,42 @@ class PrefsDialog(QDialog):
         self.alarm_name.setPlaceholderText("Alarm name")
         self.alarm_time = QTimeEdit()
         self.alarm_time.setDisplayFormat("HH:mm")
+        self.alarm_sound = QComboBox()
+        self.alarm_sound.setObjectName("alarmSound")
+        self.alarm_name.setMinimumWidth(120)
+        self.alarm_sound.setMinimumContentsLength(8)
+        for name in SOUNDS:
+            self.alarm_sound.addItem("Spotify link" if name == "spotify" else name.title(), name)
+        for widget in (self.alarm_name, self.alarm_time, self.alarm_sound):
+            alarm_row.addWidget(widget)
+        inner.addLayout(alarm_row)
+        self.alarm_spotify = QLineEdit()
+        self.alarm_spotify.setObjectName("alarmSpotify")
+        self.alarm_spotify.setPlaceholderText("Spotify link for this alarm (optional)")
+        inner.addWidget(self.alarm_spotify)
+        # Without these an alarm can only ever be Monday to Friday, which is where the defaults sat.
+        day_row = QHBoxLayout()
+        self.alarm_days: list[QCheckBox] = []
+        for index, name in enumerate(DAY_FULL):
+            day_box = QCheckBox(name[:3])
+            day_box.setObjectName(f"alarmDay{index}")
+            day_box.setChecked(index < 5)
+            self.alarm_days.append(day_box)
+            day_row.addWidget(day_box)
         add_alarm = QPushButton("Add alarm")
         add_alarm.setObjectName("addAlarm")
         add_alarm.clicked.connect(self._add_alarm)
         remove_alarm = QPushButton("Remove alarm")
+        remove_alarm.setObjectName("removeAlarm")
         remove_alarm.clicked.connect(self._remove_alarm)
-        for widget in (self.alarm_name, self.alarm_time, add_alarm, remove_alarm):
-            alarm_row.addWidget(widget)
-        inner.addLayout(alarm_row)
+        day_row.addStretch(1)
+        inner.addLayout(day_row)
+        # Their own row: with the buttons beside seven day boxes the dialog needed a sideways scroll.
+        button_row = QHBoxLayout()
+        button_row.addStretch(1)
+        button_row.addWidget(add_alarm)
+        button_row.addWidget(remove_alarm)
+        inner.addLayout(button_row)
         area = QScrollArea()
         area.setObjectName("prefsScroll")
         area.setWidgetResizable(True)
@@ -378,27 +422,53 @@ class PrefsDialog(QDialog):
         self.break_min.setValue(preset["timer_break_min"])
         self.long_break.setValue(preset["timer_long_break_min"])
 
+    def _preview_alert(self) -> None:
+        """Sound the alert at the volume currently in the box, not the saved one, so the slider can be
+        set by ear."""
+        if not self.reminder_sound.isChecked():
+            self.preview.setText("Sound is off")
+            return
+        tone = str(self.preview_tone.currentData() or FALLBACK)
+        self.preview.setText("Test" if self._bell.once(tone, self.volume.value()) else "No sound card")
+
     def _render_alarms(self) -> None:
         self.alarm_list.clear()
         for alarm in self._alarms:
             days = ",".join(DAY_FULL[day][:3] for day in alarm.get("days") or [])
-            self.alarm_list.addItem(f"{alarm.get('name')} {alarm.get('time')} {days}")
+            sound = str(alarm.get("sound") or FALLBACK)
+            label = "Spotify" if sound == "spotify" else sound.title()
+            self.alarm_list.addItem(f"{alarm.get('name')} {alarm.get('time')} {days} · {label}")
 
     def _add_alarm(self) -> None:
         if len(self._alarms) >= 20:
             return
-        name = self.alarm_name.text().strip() or "Alarm"
-        time = self.alarm_time.time().toString("HH:mm")
+        days = [index for index, box in enumerate(self.alarm_days) if box.isChecked()]
+        if not days:
+            # An alarm on no days never rings, so say so rather than storing one that cannot fire.
+            self.alarm_name.setPlaceholderText("Pick at least one day")
+            return
+        link = self.alarm_spotify.text().strip()
+        if link:
+            # valid_spotify_url raises on a bad link rather than returning None.
+            try:
+                link = valid_spotify_url(link) or ""
+            except ValueError:
+                self.alarm_spotify.setPlaceholderText("Use an https://open.spotify.com share link.")
+                self.alarm_spotify.clear()
+                return
         self._alarms.append(
             {
                 "id": str(uuid4()),
-                "name": name,
-                "time": time,
-                "days": [0, 1, 2, 3, 4],
+                "name": self.alarm_name.text().strip() or "Alarm",
+                "time": self.alarm_time.time().toString("HH:mm"),
+                "days": days,
                 "enabled": True,
-                "sound": "chime",
+                "sound": str(self.alarm_sound.currentData() or FALLBACK),
+                "spotify_url": link or None,
             }
         )
+        self.alarm_name.clear()
+        self.alarm_spotify.clear()
         self._render_alarms()
 
     def _remove_alarm(self) -> None:

@@ -701,3 +701,108 @@ def test_the_clipboard_line_only_appears_when_it_has_something_to_say(
     qapp.processEvents()
     assert window.clipboard_summary.isVisible() is True
     assert window.clipboard_summary.text().startswith("Copied: ")
+
+
+class RingRecorder:
+    """Stands in for the window's Bell so the ringing decision is visible without a sound card."""
+
+    def __init__(self) -> None:
+        self.started: list[tuple[str, object]] = []
+        self.stops = 0
+        self.ringing = False
+
+    def start(self, tone: str, volume: object) -> bool:
+        self.started.append((tone, volume))
+        self.ringing = True
+        return True
+
+    def once(self, tone: str, volume: object) -> bool:
+        self.started.append((tone, volume))
+        return True
+
+    def stop(self) -> None:
+        self.stops += 1
+        self.ringing = False
+
+
+SPOTIFY_TRACK = "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT"
+
+
+def no_spotify(monkeypatch: pytest.MonkeyPatch, opened: list) -> None:
+    """Nothing in a test may hand a URL to the real desktop, which would open a browser."""
+    from PySide6.QtGui import QDesktopServices
+
+    monkeypatch.setattr(
+        QDesktopServices,
+        "openUrl",
+        staticmethod(lambda url: bool(opened.append(url.toString())) or True),
+    )
+
+
+def test_an_alarm_rings_with_the_sound_it_was_given(qapp: QApplication, window: NativeWindow) -> None:
+    window._bell = RingRecorder()
+    window.session.preferences = {**(window.session.preferences or {}), "alert_volume": 45}
+    window._ring({"name": "Practice", "sound": "glass"}, "")
+    assert window._bell.started == [("glass", 45)]
+
+
+def test_an_alarm_set_to_spotify_plays_the_track_instead_of_a_tone(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    opened: list = []
+    no_spotify(monkeypatch, opened)
+    window._bell = RingRecorder()
+    window._ring({"name": "Wake up", "sound": "spotify"}, SPOTIFY_TRACK)
+    assert opened == [SPOTIFY_TRACK]
+    assert window._bell.started == []
+
+
+def test_a_spotify_alarm_with_no_link_still_makes_a_noise(qapp: QApplication, window: NativeWindow) -> None:
+    """A best-effort link that is not there must not turn the alarm into a silent dialog."""
+    window._bell = RingRecorder()
+    window._ring({"name": "Wake up", "sound": "spotify"}, "")
+    assert [tone for tone, _volume in window._bell.started] == ["chime"]
+
+
+def test_a_spotify_alarm_falls_back_to_a_tone_when_the_link_will_not_open(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from PySide6.QtGui import QDesktopServices
+
+    monkeypatch.setattr(QDesktopServices, "openUrl", staticmethod(lambda _url: False))
+    window._bell = RingRecorder()
+    window._ring({"name": "Wake up", "sound": "spotify"}, SPOTIFY_TRACK)
+    assert [tone for tone, _volume in window._bell.started] == ["chime"]
+
+
+def test_answering_an_alarm_stops_the_noise(qapp: QApplication, window: NativeWindow) -> None:
+    from PySide6.QtCore import QTimer
+
+    window._bell = RingRecorder()
+    QTimer.singleShot(0, lambda: window._alarm_dialog and window._alarm_dialog.accept())
+    window._on_alarm({"id": "a1", "name": "Practice", "time": "07:00", "sound": "low"})
+    assert [tone for tone, _volume in window._bell.started] == ["low"]
+    assert window._bell.ringing is False
+    assert window._bell.stops >= 1
+
+
+def test_a_reminder_makes_its_sound_when_the_student_asked_for_one(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    window._bell = RingRecorder()
+    window.session.preferences = {
+        **(window.session.preferences or {}),
+        "reminder_sound": True,
+        "alert_volume": 60,
+    }
+    window._present_alerts([{"title": "Essay starts soon", "body": "19:00 · Thu"}])
+    assert window._bell.started == [("chime", 60)]
+
+
+def test_a_reminder_is_silent_when_the_student_turned_sound_off(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    window._bell = RingRecorder()
+    window.session.preferences = {**(window.session.preferences or {}), "reminder_sound": False}
+    window._present_alerts([{"title": "Essay starts soon", "body": "19:00 · Thu"}])
+    assert window._bell.started == []
