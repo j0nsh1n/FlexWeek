@@ -878,3 +878,88 @@ def test_open_on_is_a_starting_point_not_a_lock(qapp: QApplication, window: Nati
     window._on_week()
     qapp.processEvents()
     assert window._day_mode is False
+
+
+def chip_faces(window: NativeWindow) -> dict:
+    """The colour each chip wears when it is the armed one."""
+    from desktop.native.calendar import CATEGORIES
+
+    faces = {}
+    for key in CATEGORIES:
+        button = window.chips.findChild(QPushButton, f"chip-{key}")
+        assert button is not None, key
+        checked = [part for part in button.styleSheet().split("}") if ":checked" in part]
+        assert checked, key
+        faces[key] = checked[0].split("background:")[1].split(";")[0].strip()
+    return faces
+
+
+def test_the_chips_say_which_category_they_arm(qapp: QApplication, window: NativeWindow) -> None:
+    """They carried no colour at all, so nothing tied a chip to the blocks it makes."""
+    from desktop.native.calendar import CATEGORIES
+
+    window.session.preferences = {**(window.session.preferences or {}), "accent_chips": False}
+    window._on_week()
+    qapp.processEvents()
+    faces = chip_faces(window)
+    assert len(set(faces.values())) == len(CATEGORIES)
+
+
+def test_accent_chips_paints_them_all_in_the_accent(qapp: QApplication, window: NativeWindow) -> None:
+    """The setting was saved and never read here; the web has painted its chips this way all along."""
+    window.session.preferences = {**(window.session.preferences or {}), "accent_chips": True}
+    window._on_week()
+    qapp.processEvents()
+    assert len(set(chip_faces(window).values())) == 1
+
+
+def test_saving_start_at_login_changes_this_machine_not_just_the_account(
+    qapp: QApplication, window: NativeWindow, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The preference synced to the account and no machine ever acted on it."""
+    from desktop.native import autostart
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    entry = tmp_path / "autostart" / autostart.ENTRY_NAME
+    window._apply_start_at_login(True)
+    assert entry.exists()
+    window._apply_start_at_login(False)
+    assert not entry.exists()
+
+
+def test_alerts_stay_on_screen_when_the_student_asked_them_to(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """A tray message is gone in eight seconds and a machine may suppress it entirely. The setting
+    saved a value and nothing anywhere acted on it."""
+    window.session.preferences = {**(window.session.preferences or {}), "reminder_dnd_override": True}
+    window.alert_strip.clear()
+    window._present_alerts([{"title": "Essay starts soon", "body": "19:00 · Thu"}])
+    qapp.processEvents()
+    assert window.alert_strip.isVisible() is True
+    assert "Essay starts soon" in window.alert_strip.text.text()
+
+
+def test_alerts_do_not_pile_up_in_the_window_when_it_is_off(qapp: QApplication, window: NativeWindow) -> None:
+    window.session.preferences = {**(window.session.preferences or {}), "reminder_dnd_override": False}
+    window.alert_strip.clear()
+    window._present_alerts([{"title": "Essay starts soon", "body": "19:00 · Thu"}])
+    qapp.processEvents()
+    assert window.alert_strip.isVisible() is False
+
+
+def test_dismissing_one_alert_reveals_the_next_rather_than_losing_it(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    window.session.preferences = {**(window.session.preferences or {}), "reminder_dnd_override": True}
+    window.alert_strip.clear()
+    window._present_alerts([{"title": "First", "body": "a"}, {"title": "Second", "body": "b"}])
+    qapp.processEvents()
+    assert "First" in window.alert_strip.text.text()
+    assert "+1 more" in window.alert_strip.text.text()
+    window.alert_strip.dismiss.click()
+    qapp.processEvents()
+    assert "Second" in window.alert_strip.text.text()
+    window.alert_strip.dismiss.click()
+    qapp.processEvents()
+    assert window.alert_strip.isVisible() is False

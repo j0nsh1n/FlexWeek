@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 )
 
 from backend.slots import minutes_to_hhmm
+from desktop.native import autostart
 from desktop.native.calendar import DAY_FULL, FLEX_CATEGORIES, agenda_for, monday_of, sunday_due
 from desktop.native.controller import NativeSession
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
@@ -61,6 +62,7 @@ from desktop.native.sound import Bell
 from desktop.native.tones import FALLBACK
 from desktop.native.weekmodel import build_week
 from desktop.native.widgets import (
+    AlertStrip,
     AvailabilityDialog,
     BlockDialog,
     CategoryChips,
@@ -445,6 +447,8 @@ class NativeWindow(QMainWindow):
         # says about the result is the point of pressing it.
         self.plan_review = PlanReview()
         layout.addWidget(self.plan_review)
+        self.alert_strip = AlertStrip()
+        layout.addWidget(self.alert_strip)
         self.planner = QStackedWidget()
         self.planner.setObjectName("plannerStack")
         self.week_table = WeekTable()
@@ -1186,6 +1190,10 @@ class NativeWindow(QMainWindow):
                 self._tray_icon.showMessage(title, body, QSystemTrayIcon.MessageIcon.Information, 8000)
             else:
                 self.session._say(title + (" — " + body if body else ""))
+        if notices and prefs.get("reminder_dnd_override"):
+            # A tray message is gone in eight seconds and a machine may suppress it outright. This
+            # one sits in the window until it is dealt with, which is what the setting promises.
+            self.alert_strip.add(notices)
 
     def _on_alarm(self, alarm: object) -> None:
         if not isinstance(alarm, dict):
@@ -1231,8 +1239,16 @@ class NativeWindow(QMainWindow):
         self._look = dialog.look_choice()
         self.session.look = self._look
         self._save_look()
-        self.session.save_preferences(dialog.updates())
+        updates = dialog.updates()
+        self._apply_start_at_login(bool(updates.get("start_at_login")))
+        self.session.save_preferences(updates)
         self._apply_appearance()
+
+    def _apply_start_at_login(self, wanted: bool) -> None:
+        """The setting used to be stored on the account and obeyed by nothing. It is applied to this
+        machine, since starting at login is a property of the machine rather than of the account."""
+        if autostart.sync(wanted) is None and wanted:
+            self.session._say("This machine does not support starting at login.")
 
     def _open_restore(self) -> None:
         dialog = RestoreDialog(
@@ -1376,6 +1392,7 @@ class NativeWindow(QMainWindow):
         )
         self.week_table.set_look(self._look, palette)
         self.month_grid.set_palette(palette)
+        self.chips.set_palette(palette, bool((self.session.preferences or {}).get("accent_chips")))
         self._refresh_layout()
 
     def _install_tray(self) -> None:

@@ -21,7 +21,7 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QPushButton
 
     from desktop.native.settings import PrefsDialog
     from desktop.native.sound import Bell
@@ -135,3 +135,29 @@ def test_the_test_button_says_so_when_sound_is_switched_off(qapp: Any) -> None:
     dialog._preview_alert()
     assert dialog._bell.started == []
     assert dialog.preview.text() == "Sound is off"
+
+
+def test_a_ringing_alarm_is_big_enough_to_notice(qapp: Any) -> None:
+    """It came up 209px wide, narrower than the notification it replaces. An alarm is the one thing
+    in the app meant to interrupt, so it is the one thing that must not be easy to miss."""
+    from desktop.native.settings import ALARM_BUTTON_HEIGHT, AlarmRingDialog
+
+    dialog = AlarmRingDialog(None, {"name": "Wake up", "time": "06:45", "sound": "chime"}, "")
+    dialog.show()
+    qapp.processEvents()
+    dialog.adjustSize()
+    qapp.processEvents()
+    assert dialog.width() >= 380
+    for name in ("alarmSnooze", "alarmDismiss"):
+        button = dialog.findChild(QPushButton, name)
+        assert button is not None and button.height() >= ALARM_BUTTON_HEIGHT, name
+    dialog.close()
+
+
+def test_the_snooze_button_says_how_long_it_snoozes_for(qapp: Any) -> None:
+    from desktop.native.remind import ALARM_SNOOZE_MIN
+    from desktop.native.settings import AlarmRingDialog
+
+    dialog = AlarmRingDialog(None, {"name": "Wake up", "time": "06:45"}, "")
+    button = dialog.findChild(QPushButton, "alarmSnooze")
+    assert button is not None and str(ALARM_SNOOZE_MIN) in button.text()

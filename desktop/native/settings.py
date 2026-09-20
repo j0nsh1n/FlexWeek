@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 
 from backend.comfort import TIMER_PRESETS
 from backend.models import valid_spotify_url
+from desktop.native import autostart
 from desktop.native.calendar import DAY_FULL
 from desktop.native.focus import FOCUS_PHASE_LABEL, format_countdown, more_time_choices, remaining_ms
 from desktop.native.look import (
@@ -44,10 +45,15 @@ from desktop.native.look import (
     parse_look_menu_token,
     sanitize_look,
 )
+from desktop.native.remind import ALARM_SNOOZE_MIN
 from desktop.native.reuse import format_duration
 from desktop.native.sound import Bell
 from desktop.native.tones import FALLBACK, RECIPES, SOUNDS
 
+ALARM_MIN_WIDTH = 380
+ALARM_PAD = 20
+ALARM_GAP = 12
+ALARM_BUTTON_HEIGHT = 44
 PREFS_MAX_BODY = 560
 PREFS_MIN_WIDTH = 560
 ACCOUNT_MAX_WIDTH = 520
@@ -299,7 +305,7 @@ class PrefsDialog(QDialog):
         self.reminder_sound.setObjectName("prefReminderSound")
         self.reminder_sound.setChecked(preferences.get("reminder_sound", True) is not False)
         form.addRow(self.reminder_sound)
-        self.dnd_override = QCheckBox("Alert even in Do Not Disturb")
+        self.dnd_override = QCheckBox("Keep alerts visible until handled")
         self.dnd_override.setObjectName("prefDndOverride")
         self.dnd_override.setChecked(bool(preferences.get("reminder_dnd_override")))
         form.addRow(self.dnd_override)
@@ -330,7 +336,9 @@ class PrefsDialog(QDialog):
         form.addRow(_heading("This app"))
         self.start_at_login = QCheckBox("Start FlexWeek when I log in")
         self.start_at_login.setObjectName("prefStartAtLogin")
-        self.start_at_login.setChecked(bool(preferences.get("start_at_login")))
+        # Starting at login is a property of this machine, so the box shows what this machine will
+        # actually do. The account value can say yes because another device was set up that way.
+        self.start_at_login.setChecked(autostart.enabled_on_disk())
         form.addRow(self.start_at_login)
         self.preferred_view = QComboBox()
         self.preferred_view.setObjectName("prefPreferredView")
@@ -714,27 +722,38 @@ class AlarmRingDialog(QDialog):
         self.snoozed = False
         self.open_spotify = False
         self._url = spotify
+        # It came up 209px wide, which is smaller than a notification and easy to miss. An alarm is
+        # the one thing in the app that is meant to interrupt, so it is given room to be seen.
+        self.setMinimumWidth(ALARM_MIN_WIDTH)
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(ALARM_PAD, ALARM_PAD, ALARM_PAD, ALARM_PAD)
+        layout.setSpacing(ALARM_GAP)
         title = QLabel(alarm.get("name") or "Alarm")
         title.setObjectName("alarmTitle")
+        title.setWordWrap(True)
         layout.addWidget(title)
         detail = QLabel((alarm.get("time") or "") + " · Alarm is ringing")
         detail.setObjectName("alarmDetail")
         layout.addWidget(detail)
+        layout.addSpacing(ALARM_GAP)
         if spotify:
             link = QPushButton("Open Spotify")
             link.setObjectName("alarmOpenSpotify")
+            link.setMinimumHeight(ALARM_BUTTON_HEIGHT)
             link.clicked.connect(self._spotify)
             layout.addWidget(link)
-        snooze = QPushButton("Snooze")
+        snooze = QPushButton(f"Snooze {ALARM_SNOOZE_MIN} minutes")
         snooze.setObjectName("alarmSnooze")
         snooze.clicked.connect(self._snooze)
         dismiss = QPushButton("Dismiss")
         dismiss.setObjectName("alarmDismiss")
+        dismiss.setDefault(True)
         dismiss.clicked.connect(self.accept)
         row = QHBoxLayout()
-        row.addWidget(snooze)
-        row.addWidget(dismiss)
+        row.setSpacing(ALARM_GAP)
+        for button in (snooze, dismiss):
+            button.setMinimumHeight(ALARM_BUTTON_HEIGHT)
+            row.addWidget(button)
         layout.addLayout(row)
 
     def _snooze(self) -> None:

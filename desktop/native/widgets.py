@@ -79,7 +79,7 @@ from desktop.native.calendar import (
     resize_bottom_range,
     resize_top_range,
 )
-from desktop.native.look import block_paint, resolved_palette
+from desktop.native.look import block_paint, mix, readable_ink, resolved_palette
 from desktop.native.reuse import (
     AVAILABILITY_LIMIT,
     LATE_MINUTES,
@@ -513,6 +513,23 @@ class CategoryChips(QWidget):
             button = self.findChild(QPushButton, f"chip-{key}")
             if button is not None:
                 button.setChecked(key == category)
+
+    def set_palette(self, palette: dict, accent_chips: bool) -> None:
+        """Colour each chip like the blocks it makes, or all of them in the accent when the student
+        asked for that. The chips carried no colour at all, so they said nothing about what they arm."""
+        for key, info in CATEGORIES.items():
+            button = self.findChild(QPushButton, f"chip-{key}")
+            if button is None:
+                continue
+            face = palette["accent"] if accent_chips else info["mark"]
+            ink = palette["accent_ink"] if accent_chips else readable_ink(face)
+            # An unchecked chip is a quiet tint of its colour; the armed one wears it outright.
+            quiet = mix(face, palette["panel"], 0.18)
+            button.setStyleSheet(
+                f"QPushButton#chip-{key} {{ background: {quiet}; color: {readable_ink(quiet)}; }}"
+                f"QPushButton#chip-{key}:checked {{ background: {face}; color: {ink}; "
+                f"font-weight: 700; }}"
+            )
 
 
 class DayAgenda(QWidget):
@@ -1407,6 +1424,57 @@ class UnfinishedPanel(QWidget):
             self.list.addItem(wrapper)
             self.list.setItemWidget(wrapper, row)
         self.setVisible(bool(items))
+
+
+class AlertStrip(QWidget):
+    """Alerts that stay put until the student deals with them.
+
+    A tray message is gone in eight seconds, and on a machine that suppresses notifications it is
+    never seen at all. "Keep alerts visible until handled" promises the opposite, so when it is on the
+    alert is also shown here, in the window, where nothing outside the app can take it away.
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("alertStrip")
+        self._notices: list[dict] = []
+        layout = QHBoxLayout(self)
+        self.text = QLabel()
+        self.text.setObjectName("alertStripText")
+        self.text.setWordWrap(True)
+        layout.addWidget(self.text, 1)
+        self.dismiss = QPushButton("Got it")
+        self.dismiss.setObjectName("alertStripDismiss")
+        self.dismiss.clicked.connect(self._drop)
+        layout.addWidget(self.dismiss)
+        self.setVisible(False)
+
+    def add(self, notices: list[dict]) -> None:
+        self._notices.extend(notices)
+        self._render()
+
+    def clear(self) -> None:
+        self._notices.clear()
+        self._render()
+
+    def pending(self) -> int:
+        return len(self._notices)
+
+    def _drop(self) -> None:
+        """One at a time, so a second alert that arrived while the first sat there is still seen."""
+        if self._notices:
+            self._notices.pop(0)
+        self._render()
+
+    def _render(self) -> None:
+        self.setVisible(bool(self._notices))
+        if not self._notices:
+            self.text.clear()
+            return
+        notice = self._notices[0]
+        body = notice.get("body") or ""
+        more = f"  (+{len(self._notices) - 1} more)" if len(self._notices) > 1 else ""
+        self.text.setText(f"{notice.get('title') or 'FlexWeek'}{' — ' + body if body else ''}{more}")
 
 
 class PlanReview(QWidget):

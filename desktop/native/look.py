@@ -638,6 +638,9 @@ def pack_stylesheet(
         f"QWidget#authCard {{ background: {palette['panel']}; border-radius: {radius}px; {edges} }}"
         f"QLabel#authBrand {{ font-size: {size + 8}pt; font-weight: 700; color: {palette['accent']}; }}"
         f"QLabel#authHeading {{ font-weight: 600; }}"
+        # A ringing alarm is the one thing in the app that has to be read from across a room.
+        f"QLabel#alarmTitle {{ font-size: {size + 8}pt; font-weight: 700; }}"
+        f"QLabel#alarmDetail {{ font-size: {size + 2}pt; color: {palette['muted']}; }}"
     )
 
 
