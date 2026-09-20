@@ -108,7 +108,9 @@ def test_a_bad_spotify_link_is_refused_at_the_editor_not_at_the_server(qapp: Any
     dialog.alarm_spotify.setText("https://example.com/not-spotify")
     dialog._add_alarm()
     assert dialog.updates()["alarms"] == []
-    assert "open.spotify.com" in dialog.alarm_spotify.placeholderText()
+    # The whole refusal, not a substring of the host in it: a substring check here reads to a
+    # scanner as URL sanitisation, and it is a placeholder, not a guard.
+    assert dialog.alarm_spotify.placeholderText() == "Use an https://open.spotify.com share link."
 
 
 def test_a_good_spotify_link_is_kept_on_the_alarm(qapp: Any) -> None:

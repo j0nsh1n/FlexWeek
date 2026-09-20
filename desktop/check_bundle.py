@@ -78,6 +78,13 @@ LINUX_SYSTEM_LIBS = frozenset(
         "libgobject-2.0.so.0",
         "libgthread-2.0.so.0",
         "libasound.so.2",
+        # QtMultimedia arrived with the alarm sounds and brought these two. libpulse is the peer of
+        # libasound above: every desktop Linux runs PulseAudio or PipeWire's pulse shim. libbz2 comes
+        # in under FFmpeg, and is base on every distribution that ships a desktop. If either is
+        # somehow absent the QtMultimedia import fails, desktop/native/sound.py catches it, and the
+        # alarm shows its dialog without a sound rather than the app failing to start.
+        "libpulse.so.0",
+        "libbz2.so.1",
         "libnss3.so",
         "libnssutil3.so",
         "libsmime3.so",
