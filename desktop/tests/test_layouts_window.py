@@ -850,3 +850,31 @@ def test_a_reminder_still_rings_when_the_end_of_session_chime_is_off(
     }
     window._present_alerts([{"title": "Essay starts soon", "body": "19:00 · Thu"}])
     assert window._bell.started == [("chime", 80)]
+
+
+def test_open_on_day_is_honoured_instead_of_always_coming_up_on_the_week(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """The setting could be saved from the desktop but only the web read it."""
+    window._day_mode = False
+    window._opened_on_preference = False
+    window.session.preferences = {**(window.session.preferences or {}), "preferred_view": "day"}
+    window._on_week()
+    qapp.processEvents()
+    assert window._day_mode is True
+
+
+def test_open_on_is_a_starting_point_not_a_lock(qapp: QApplication, window: NativeWindow) -> None:
+    """Every week refresh runs through the same path, so applying it more than once would drag the
+    student back to the day screen whenever the week reloaded."""
+    window._day_mode = False
+    window._opened_on_preference = False
+    window.session.preferences = {**(window.session.preferences or {}), "preferred_view": "day"}
+    window._on_week()
+    qapp.processEvents()
+    window._leave_day()
+    qapp.processEvents()
+    assert window._day_mode is False
+    window._on_week()
+    qapp.processEvents()
+    assert window._day_mode is False

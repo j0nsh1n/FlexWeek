@@ -97,6 +97,7 @@ class NativeWindow(QMainWindow):
         self._more_pairs = []
         self._layout = sanitize_layout(None)
         self._day_mode = False
+        self._opened_on_preference = False
         self._views: dict[str, LayoutView] = {}
         self._build_auth()
         self._build_recovery()
@@ -571,6 +572,18 @@ class NativeWindow(QMainWindow):
         self._day_mode = False
         self.session.set_view(view)
 
+    def _honour_preferred_view(self) -> None:
+        """Open on whatever "Open on" says, once per sign-in. The web reads the same preference at
+        startup; here it was saved and never looked at, so the app always came up on the week."""
+        if self._opened_on_preference or self.session.preferences is None:
+            return
+        self._opened_on_preference = True
+        wanted = (self.session.preferences or {}).get("preferred_view")
+        if wanted == "day":
+            self._day_mode = True
+        elif wanted == "week":
+            self._day_mode = False
+
     def _enter_day(self) -> None:
         if self.session.account is None:
             return
@@ -593,6 +606,7 @@ class NativeWindow(QMainWindow):
     def _on_account(self, account: object) -> None:
         if account is None:
             self._day_mode = False
+            self._opened_on_preference = False
             self.username.clear()
             self.password.clear()
             self._show_page("authPage")
@@ -618,6 +632,7 @@ class NativeWindow(QMainWindow):
             return
         if self._on_recovery() and not self._allow_week_page:
             return
+        self._honour_preferred_view()
         self.week_table.set_week(self.session.week_start, self.session.blocks, self.session.trace)
         self.week_table.reveal(self.session.week_start, self.session.now_ms())
         agenda = agenda_for(
