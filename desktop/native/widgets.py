@@ -19,7 +19,7 @@ from PySide6.QtCore import (
     QTime,
     Signal,
 )
-from PySide6.QtGui import QColor, QMouseEvent, QPainter
+from PySide6.QtGui import QAction, QColor, QIcon, QMouseEvent, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -80,7 +80,7 @@ from desktop.native.calendar import (
     resize_bottom_range,
     resize_top_range,
 )
-from desktop.native.look import block_paint, mix, readable_ink, resolved_palette
+from desktop.native.look import block_paint, resolved_palette
 from desktop.native.reuse import (
     AVAILABILITY_LIMIT,
     LATE_MINUTES,
@@ -94,6 +94,7 @@ from desktop.native.weekmodel import due_label, length_label
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 CHIP_ROLE = int(Qt.ItemDataRole.UserRole) + 1
 TODAY_ROLE = int(Qt.ItemDataRole.UserRole) + 2
+SWATCH_PX = 12
 DETAIL_BOX_HEIGHT = 84
 # A scroll area reports its own modest size hint rather than its content's, which is what keeps the
 # homework editor on a laptop screen. It does not claim the content's width either, so that is set.
@@ -495,44 +496,60 @@ class WeekTable(QTableWidget):
         event.accept()
 
 
-class CategoryChips(QWidget):
+class AddMenu(QMenu):
+    """Everything that adds something to the week, in one menu.
+
+    This was a strip of eight chips above the calendar, which armed a type for dragging, plus two Add
+    buttons beside it. Ten controls, always on screen, for something a student does a few times a
+    week. The types live here now, with their colours, and the button that opens this menu says which
+    one a drag will make.
+    """
+
     category_chosen = Signal(str)
+    homework_requested = Signal()
+    fixed_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setObjectName("categoryChips")
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        self.setObjectName("addMenu")
+        homework = self.addAction("Homework…")
+        homework.setObjectName("addMenuHomework")
+        homework.triggered.connect(self.homework_requested.emit)
+        fixed = self.addAction("Fixed time…")
+        fixed.setObjectName("addMenuFixed")
+        fixed.triggered.connect(self.fixed_requested.emit)
+        self.addSection("Then drag on the calendar")
+        self._actions: dict[str, QAction] = {}
         for key, info in CATEGORIES.items():
-            button = QPushButton(info["label"])
-            button.setObjectName(f"chip-{key}")
-            button.setCheckable(True)
-            button.clicked.connect(lambda checked=False, value=key: self.category_chosen.emit(value))
-            layout.addWidget(button)
-        layout.addStretch()
+            action = self.addAction(info["label"])
+            action.setObjectName(f"addMenu-{key}")
+            action.setCheckable(True)
+            action.triggered.connect(lambda _checked=False, value=key: self.category_chosen.emit(value))
+            self._actions[key] = action
 
     def set_armed(self, category: str) -> None:
-        for key in CATEGORIES:
-            button = self.findChild(QPushButton, f"chip-{key}")
-            if button is not None:
-                button.setChecked(key == category)
+        for key, action in self._actions.items():
+            action.setChecked(key == category)
 
     def set_palette(self, palette: dict, accent_chips: bool) -> None:
-        """Colour each chip like the blocks it makes, or all of them in the accent when the student
-        asked for that. The chips carried no colour at all, so they said nothing about what they arm."""
-        for key, info in CATEGORIES.items():
-            button = self.findChild(QPushButton, f"chip-{key}")
-            if button is None:
-                continue
-            face = palette["accent"] if accent_chips else info["mark"]
-            ink = palette["accent_ink"] if accent_chips else readable_ink(face)
-            # An unchecked chip is a quiet tint of its colour; the armed one wears it outright.
-            quiet = mix(face, palette["panel"], 0.18)
-            button.setStyleSheet(
-                f"QPushButton#chip-{key} {{ background: {quiet}; color: {readable_ink(quiet)}; }}"
-                f"QPushButton#chip-{key}:checked {{ background: {face}; color: {ink}; "
-                f"font-weight: 700; }}"
-            )
+        """A colour beside each type, so the menu says what a block of it will look like. "Colour
+        chips with my accent" paints them all in the accent, as it did the chips."""
+        for key, action in self._actions.items():
+            face = palette["accent"] if accent_chips else CATEGORIES[key]["mark"]
+            action.setIcon(QIcon(swatch(face)))
+
+
+def swatch(colour: str, size: int = SWATCH_PX) -> QPixmap:
+    """A rounded square of one colour, for a menu row or a button."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setBrush(QColor(colour))
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.drawRoundedRect(0, 0, size, size, size // 4, size // 4)
+    painter.end()
+    return pixmap
 
 
 class DayAgenda(QWidget):

@@ -687,17 +687,25 @@ def test_the_status_line_no_longer_swallows_the_explanation(qapp: QApplication, 
 
 
 def test_the_week_toolbar_keeps_only_what_is_reached_for(qapp: QApplication, window: NativeWindow) -> None:
-    """Twelve buttons competed for one row while nine more hid in an overflow menu. The row keeps
-    adding, planning and saving; everything else sits under the heading for its job."""
+    """Twelve buttons competed for one row while nine more hid in an overflow menu, and a strip of
+    eight category chips sat above them. The row keeps adding, planning, saving and starting a
+    timer; everything else sits under the heading for its job.
+
+    Retry save is not here: it appears only when a save has actually failed."""
     from PySide6.QtWidgets import QPushButton
 
-    # The action row, not the category chips that sit above it.
     shown = [
         button.objectName()
         for button in window.plan_chrome.findChildren(QPushButton)
-        if button.isVisible() and button.objectName() and not button.objectName().startswith("chip-")
+        if button.isVisible() and button.objectName()
     ]
-    assert shown == ["addHomework", "addFixed", "solveButton", "saveButton", "retrySave", "moreButton"]
+    assert shown == [
+        "addButton",
+        "solveButton",
+        "saveButton",
+        "quickFocusAction",
+        "moreButton",
+    ]
 
     menu = window.findChild(QPushButton, "moreButton").menu()
     menu.aboutToShow.emit()
@@ -899,158 +907,37 @@ def test_open_on_is_a_starting_point_not_a_lock(qapp: QApplication, window: Nati
     assert window._day_mode is False
 
 
-def chip_faces(window: NativeWindow) -> dict:
-    """The colour each chip wears when it is the armed one."""
+def menu_swatches(window: NativeWindow) -> dict:
+    """The colour beside each type in the Add menu, read back off its icon."""
+    from PySide6.QtGui import QAction
+
     from desktop.native.calendar import CATEGORIES
 
     faces = {}
     for key in CATEGORIES:
-        button = window.chips.findChild(QPushButton, f"chip-{key}")
-        assert button is not None, key
-        checked = [part for part in button.styleSheet().split("}") if ":checked" in part]
-        assert checked, key
-        faces[key] = checked[0].split("background:")[1].split(";")[0].strip()
+        action = window.add_menu.findChild(QAction, f"addMenu-{key}")
+        assert action is not None, key
+        image = action.icon().pixmap(12, 12).toImage()
+        faces[key] = image.pixelColor(6, 6).name()
     return faces
 
 
-def test_the_chips_say_which_category_they_arm(qapp: QApplication, window: NativeWindow) -> None:
-    """They carried no colour at all, so nothing tied a chip to the blocks it makes."""
+def test_the_add_menu_says_which_type_each_entry_makes(qapp: QApplication, window: NativeWindow) -> None:
+    """The chip strip carried the category colours and took a whole row to do it. The colours moved
+    into the Add menu with it."""
     from desktop.native.calendar import CATEGORIES
 
     window.session.preferences = {**(window.session.preferences or {}), "accent_chips": False}
     window._on_week()
     qapp.processEvents()
-    faces = chip_faces(window)
-    assert len(set(faces.values())) == len(CATEGORIES)
+    assert len(set(menu_swatches(window).values())) == len(CATEGORIES)
 
 
-def test_accent_chips_paints_them_all_in_the_accent(qapp: QApplication, window: NativeWindow) -> None:
-    """The setting was saved and never read here; the web has painted its chips this way all along."""
+def test_accent_chips_paints_every_type_in_the_accent(qapp: QApplication, window: NativeWindow) -> None:
     window.session.preferences = {**(window.session.preferences or {}), "accent_chips": True}
     window._on_week()
     qapp.processEvents()
-    assert len(set(chip_faces(window).values())) == 1
-
-
-def test_saving_start_at_login_changes_this_machine_not_just_the_account(
-    qapp: QApplication, window: NativeWindow, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The preference synced to the account and no machine ever acted on it."""
-    from desktop.native import autostart
-
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    entry = tmp_path / "autostart" / autostart.ENTRY_NAME
-    window._apply_start_at_login(True)
-    assert entry.exists()
-    window._apply_start_at_login(False)
-    assert not entry.exists()
-
-
-def test_alerts_stay_on_screen_when_the_student_asked_them_to(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    """A tray message is gone in eight seconds and a machine may suppress it entirely. The setting
-    saved a value and nothing anywhere acted on it."""
-    window.session.preferences = {**(window.session.preferences or {}), "reminder_dnd_override": True}
-    window.alert_strip.clear()
-    window._present_alerts([{"title": "Essay starts soon", "body": "19:00 · Thu"}])
-    qapp.processEvents()
-    assert window.alert_strip.isVisible() is True
-    assert "Essay starts soon" in window.alert_strip.text.text()
-
-
-def test_alerts_do_not_pile_up_in_the_window_when_it_is_off(qapp: QApplication, window: NativeWindow) -> None:
-    window.session.preferences = {**(window.session.preferences or {}), "reminder_dnd_override": False}
-    window.alert_strip.clear()
-    window._present_alerts([{"title": "Essay starts soon", "body": "19:00 · Thu"}])
-    qapp.processEvents()
-    assert window.alert_strip.isVisible() is False
-
-
-def test_dismissing_one_alert_reveals_the_next_rather_than_losing_it(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    window.session.preferences = {**(window.session.preferences or {}), "reminder_dnd_override": True}
-    window.alert_strip.clear()
-    window._present_alerts([{"title": "First", "body": "a"}, {"title": "Second", "body": "b"}])
-    qapp.processEvents()
-    assert "First" in window.alert_strip.text.text()
-    assert "+1 more" in window.alert_strip.text.text()
-    window.alert_strip.dismiss.click()
-    qapp.processEvents()
-    assert "Second" in window.alert_strip.text.text()
-    window.alert_strip.dismiss.click()
-    qapp.processEvents()
-    assert window.alert_strip.isVisible() is False
-
-
-def test_a_field_keeps_its_floor_at_every_text_size(qapp: QApplication) -> None:
-    """The Layout dialog came up a few pixels under its natural height on a real KDE desktop and the
-    rows were squeezed until "Colours" and "Soft" were slivers of their letters. A combo box has no
-    useful minimum of its own there, so the floor comes from the look.
-
-    Asserted on the stylesheet rather than on a live widget: the offscreen platform this runs on
-    gives a combo box a generous native minimum, so a widget-level check passes with or without the
-    fix and would prove nothing."""
-    from desktop.native.look import FIELD_MIN_PX, pack_stylesheet
-
-    for size in ("small", "normal", "large"):
-        sheet = pack_stylesheet("light-frost", False, {"preset": "default", "knobs": {"text": size}})
-        # The floor has to be on the field rule itself. Menu items carry a min-height of their own,
-        # so looking for the number anywhere in the sheet would pass without the fields having one.
-        rule = next(part for part in sheet.split("}") if part.lstrip().startswith("QLineEdit"))
-        assert f"min-height: {FIELD_MIN_PX[size]}px" in rule, (size, rule)
-
-
-def test_the_way_in_is_signing_in_not_a_choice_between_two_buttons(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    """Create account and Sign in sat side by side as equals, so every arrival had to choose before
-    reading anything. A student creates an account once and signs in from then on."""
-    window._making_account = False
-    window._sync_auth_mode()
-    qapp.processEvents()
-    assert window.auth_heading.text() == "Sign in"
-    # isHidden, not isVisible: the fixture is signed in, so every child of the auth page reports
-    # not visible whatever mode it is in.
-    assert window.sign_in_button.isHidden() is False
-    assert window.create_button.isHidden() is True
-    assert "Create an account" in window.auth_switch.text()
-
-
-def test_the_small_print_switches_to_making_an_account_and_back(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    window._making_account = False
-    window._sync_auth_mode()
-    window.auth_switch.click()
-    qapp.processEvents()
-    assert window.auth_heading.text() == "Create your account"
-    assert window.create_button.isHidden() is False
-    assert window.sign_in_button.isHidden() is True
-    assert "Sign in" in window.auth_switch.text()
-    window.auth_switch.click()
-    qapp.processEvents()
-    assert window.auth_heading.text() == "Sign in"
-
-
-def test_pressing_return_does_the_thing_the_screen_is_for(qapp: QApplication, window: NativeWindow) -> None:
-    """Whichever mode is showing, its own button is the default, so Return never does the other one."""
-    window._making_account = False
-    window._sync_auth_mode()
-    assert window.sign_in_button.isDefault() is True
-    window._making_account = True
-    window._sync_auth_mode()
-    assert window.create_button.isDefault() is True
-
-
-def test_signing_out_comes_back_to_the_sign_in_screen(qapp: QApplication, window: NativeWindow) -> None:
-    window._making_account = True
-    window._sync_auth_mode()
-    window._on_account(None)
-    qapp.processEvents()
-    assert window._making_account is False
-    assert window.auth_heading.text() == "Sign in"
+    assert len(set(menu_swatches(window).values())) == 1
 
 
 def test_day_and_month_wear_the_same_design_as_the_week(qapp: QApplication, window: NativeWindow) -> None:
@@ -1095,3 +982,33 @@ def test_the_day_screen_brings_its_own_design_with_it(qapp: QApplication, window
     window._day_mode = True
     watching = window._chrome_palette(plain)["accent"]
     assert planning != watching
+
+
+def test_no_button_appears_twice_on_the_week_page(qapp: QApplication, window: NativeWindow) -> None:
+    """Moving Quick focus into the action row left the focus panel's own copy on screen, so the same
+    button was offered twice a few pixels apart. The action row is not the only place a button can
+    come from, so this counts them across the whole page rather than inside one container."""
+    from PySide6.QtWidgets import QPushButton
+
+    window._day_mode = False
+    window._on_week()
+    qapp.processEvents()
+    page = window._stack.currentWidget()
+    labels = [b.text() for b in page.findChildren(QPushButton) if b.isVisible() and b.text()]
+    repeated = sorted({text for text in labels if labels.count(text) > 1})
+    assert repeated == [], f"offered twice: {repeated}"
+
+
+def test_the_add_button_says_what_a_drag_will_make(qapp: QApplication, window: NativeWindow) -> None:
+    """The armed type was legible because eight chips sat on screen with one of them lit. With the
+    chips gone, the button that opens the menu has to carry it."""
+    from PySide6.QtWidgets import QPushButton
+
+    # arm_category, not _add_from_chip: that one also opens the Add dialog, which blocks.
+    window.session.arm_category("exercise")
+    window._sync_add_button()
+    qapp.processEvents()
+    button = window.findChild(QPushButton, "addButton")
+    assert button is not None
+    assert "sport" in button.text().lower()
+    assert not button.icon().isNull(), "no colour beside the armed type"

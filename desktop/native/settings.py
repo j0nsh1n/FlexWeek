@@ -191,6 +191,7 @@ class FocusPanel(QWidget):
                 self.tasks.addItem(row)
         for label in (self.task, self.phase, self.time):
             label.setVisible(bool(label.text()))
+        self.now_next.setVisible(bool(self.now_next.text()))
         # An empty list still asks for about 190 pixels, and a long one would bury the calendar, so it
         # is hidden when empty and never taller than four rows; the rest scrolls.
         shown = min(self.tasks.count(), 4)
