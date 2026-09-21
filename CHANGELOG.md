@@ -5,18 +5,58 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
-### Changed
+## [0.14.0] - 2026-09-20
+
+### Added
+- FlexWeek updates itself (2026-09-20). It checks for a newer release at most
+  once a day, says what changed, and installs it when you press Update now.
+  Nothing installs on its own. A download that does not match the checksum
+  published beside it is discarded rather than run, a directory that cannot be
+  written is reported rather than half-written, and a tarball is unpacked beside
+  the bundle and swapped in, so a failure part way leaves the working app alone.
+  Checking can be turned off and a version can be skipped; both settings live on
+  the device. **0.13.0 has no updater, so the step to 0.14.0 is the last one you
+  download by hand.**
 - Day and Month follow the week layout (2026-09-20). Timeline, Mission, Bento,
   Retro and Clay rebuild those tabs in their own furniture. Today's app keeps
   the clock-order Day list and a Month of named chips instead of "2 due /
   3 sessions". My day is unchanged.
-- Settings is a left rail: Appearance, Focus, Alerts, This computer. The seven
-  look knobs wait behind Fine-tune. Account actions wrap instead of slicing.
-
-### Added
+- A dark colourway for every design (2026-09-20). Bento gains Midnight and Clay
+  gains Dusk, which were light-only. Every design now offers dark, every dark
+  colourway passes the same AA check as the rest, and Match my look carries any
+  dark pack or preset into any design.
+- The week saves itself (2026-09-20), a second and a half after the last change,
+  and retries a failed save on its own. It never writes over a week another
+  window changed: that conflict is still yours to answer. Save stays under More
+  and on Ctrl+S.
 - First-week setup after recovery codes (2026-09-20): school hours, one sport,
   then the first homework. Each step can be skipped. Recovery codes sit in the
   same card as sign-in.
+
+### Changed
+- Today's app is one row (2026-09-20). Twenty-three buttons of identical weight
+  and no title at all is what made it feel cluttered, so this is hierarchy
+  rather than deletion: the week you are on is a heading, Previous and Next are
+  arrows, Day/Week/Month/My day are one control, and Plan my homework is the one
+  filled button. Adding is the calendar and the Add menu; Layout and Log out are
+  under More.
+- Settings is a left rail: Appearance, Focus, Alerts, This computer. The seven
+  look knobs wait behind Fine-tune. Account actions wrap instead of slicing.
+
+### Fixed
+- Opening Day did nothing on a real week (2026-09-20). Two sentinels built with
+  object() in different functions could never match, so an opaque value was
+  stored as a block's start time and sorting those starts raised. The exception
+  took down the redraw before it reached the line that switches view, and Qt
+  swallowed it, so the button simply looked dead. **This is in 0.13.0.**
+- The first-week card was see-through, and the week was drawn through its own
+  text (2026-09-20).
+- The packaged README no longer offers a web version that does not exist
+  (2026-09-20).
+
+### Security
+- The Spotify link check refuses nine ways of putting open.spotify.com where a
+  substring check would accept it, each with a test (2026-09-20).
 
 ## [0.13.0] - 2026-09-20
 

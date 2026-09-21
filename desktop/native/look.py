@@ -648,6 +648,8 @@ def pack_stylesheet(
         f"QLabel#authHeading {{ font-weight: 600; font-size: {size + 3}pt; }}"
         f"QLabel#authNote {{ color: {palette['muted']}; }}"
         # The way in is a button; the way to a new account is small print, so it is drawn as a link.
+        f"QLabel#updateHeading {{ font-size: {size + 4}pt; font-weight: 700; }}"
+        f"QLabel#updateDetail, QLabel#updateStatus {{ color: {palette['muted']}; }}"
         # The first-week card sits on top of the week rather than in a layout, so it has to read as
         # something laid over the calendar rather than printed onto it.
         # The week you are on, said once and said large.
@@ -675,10 +677,12 @@ def pack_stylesheet(
         f"QWidget#setupRow {{ background: transparent; border: none; padding: 0; }}"
         f"QLabel#setupKicker {{ color: {palette['muted']}; font-weight: 600; }}"
         f"QLabel#setupHeading {{ font-size: {size + 3}pt; font-weight: 700; }}"
-        f"QPushButton#authSwitch, QPushButton#forgotPassword {{ background: transparent; "
+        f"QPushButton#authSwitch, QPushButton#forgotPassword, QPushButton#updateSkip {{ "
+        f"background: transparent; "
         f"color: {palette['accent']}; border: none; padding: {pad}px 0; "
         f"font-size: {size - 1}pt; text-align: left; min-height: 0; }}"
-        f"QPushButton#authSwitch:hover, QPushButton#forgotPassword:hover {{ "
+        f"QPushButton#authSwitch:hover, QPushButton#forgotPassword:hover, "
+        f"QPushButton#updateSkip:hover {{ "
         f"color: {palette['text']}; text-decoration: underline; }}"
         # A ringing alarm is the one thing in the app that has to be read from across a room.
         f"QLabel#alarmTitle {{ font-size: {size + 8}pt; font-weight: 700; }}"
