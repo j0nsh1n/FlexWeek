@@ -526,6 +526,10 @@ class NativeWindow(QMainWindow):
         add_homework.setObjectName("addHomework")
         add_homework.clicked.connect(self._add_homework)
         add_homework.setVisible(False)
+        school_hours = QPushButton("School hours")
+        school_hours.setObjectName("schoolHours")
+        school_hours.clicked.connect(self._school_hours)
+        school_hours.setVisible(False)
         undo = QPushButton("Undo")
         undo.setObjectName("undoButton")
         undo.clicked.connect(self.session.undo)
@@ -598,7 +602,7 @@ class NativeWindow(QMainWindow):
         self.quick_focus.setObjectName("quickFocusAction")
         self.quick_focus.clicked.connect(self.session.start_quick_focus)
         self._groups = (
-            ("Adding", (add_homework, add_fixed)),
+            ("Adding", (add_homework, school_hours, add_fixed)),
             ("Planning", (late, unfinished, routines, self.quick_focus, spotify, replan)),
         )
         self._advanced = (
@@ -1266,6 +1270,15 @@ class NativeWindow(QMainWindow):
         if category in FLEX_CATEGORIES:
             category = "class"
         self._commit_block(BlockDialog(self, category=category))
+
+    def _school_hours(self) -> None:
+        """School for a student who skipped it at setup, when nothing on the menu said school: their
+        School if they have one, otherwise School already filled in, Monday to Friday 08:00-14:30."""
+        locked = [item for item in self.session.blocks if item.get("kind") == "locked"]
+        school = next((item for item in locked if item["id"] == "school"), None) or next(
+            (item for item in locked if item.get("category") == "class"), None
+        )
+        self._commit_block(BlockDialog(self, school) if school else BlockDialog(self, category="class"))
 
     def _add_homework(self) -> None:
         category = self.session.armed_category
