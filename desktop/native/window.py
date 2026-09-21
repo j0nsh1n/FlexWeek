@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
-from PySide6.QtCore import QEvent, QObject, QStandardPaths, Qt, QTimer, QUrl
+from PySide6.QtCore import QEvent, QObject, QPoint, QStandardPaths, Qt, QTimer, QUrl
 from PySide6.QtGui import (
     QCloseEvent,
     QDesktopServices,
@@ -123,6 +123,8 @@ AUTOSAVE_AFTER_MS = 1500
 AUTOSAVE_RETRY_MS = 6000
 AUTOSAVE_TICK_MS = 500
 LAYOUT_TICK_MS = 20_000
+# Space between the top bar and a notice under it.
+TOAST_GAP = 8
 
 
 class NativeWindow(QMainWindow):
@@ -668,7 +670,14 @@ class NativeWindow(QMainWindow):
         self.week_status.setWordWrap(True)
         layout.addWidget(self.week_status)
         self._stack.addWidget(page)
-        self.toast = Toast(self)
+        self.toast = Toast(self, self._toast_top)
+
+    def _toast_top(self) -> int:
+        """Just under the top bar, however tall large text makes it."""
+        page = self._top_bar.parentWidget()
+        if page is None:
+            return TOAST_GAP
+        return page.mapTo(self, QPoint(0, self._top_bar.geometry().bottom())).y() + TOAST_GAP
 
     def _planner_widget(self, view: str) -> QWidget:
         """The chosen main view stands in for the week grid, and for Day and Month too.

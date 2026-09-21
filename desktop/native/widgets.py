@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
 from datetime import date, datetime, timedelta
 from uuid import uuid4
@@ -127,13 +128,18 @@ def _validation_text(error: Exception) -> str:
 
 
 TOAST_MS = 6000
+TOAST_MARGIN = 24
+TOAST_MIN_WIDTH = 280
 
 
 class Toast(QLabel):
-    """A one-line notice under the top bar. The status line still holds the same words."""
+    """A one-line notice under the top bar. The status line still holds the same words.
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    `top` says where the bar ends, since that moves with the text size."""
+
+    def __init__(self, parent: QWidget, top: Callable[[], int]) -> None:
         super().__init__(parent)
+        self._top = top
         self.setObjectName("toast")
         self.setWordWrap(True)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -148,7 +154,6 @@ class Toast(QLabel):
         self.setText(text)
         self.setAccessibleName(text)
         self.setAccessibleDescription(text)
-        self.adjustSize()
         self.reposition()
         self.show()
         self.raise_()
@@ -158,10 +163,14 @@ class Toast(QLabel):
         host = self.parentWidget()
         if host is None:
             return
-        self.adjustSize()
-        width = min(max(self.sizeHint().width(), 280), max(120, host.width() - 48))
-        self.resize(width, self.sizeHint().height())
-        self.move(max(24, (host.width() - self.width()) // 2), 52)
+        # A wrapped label asks for a narrow width, which broke short notices after their
+        # second-last word. Measured unwrapped, a notice keeps one line until the window runs out.
+        self.setWordWrap(False)
+        natural = self.sizeHint().width()
+        self.setWordWrap(True)
+        width = min(max(natural, TOAST_MIN_WIDTH), max(120, host.width() - 2 * TOAST_MARGIN))
+        self.resize(width, self.heightForWidth(width))
+        self.move(max(TOAST_MARGIN, (host.width() - width) // 2), self._top())
 
 
 class FlowLayout(QLayout):
