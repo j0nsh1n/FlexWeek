@@ -36,7 +36,6 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
-    QSizePolicy,
     QStackedWidget,
     QSystemTrayIcon,
     QVBoxLayout,
@@ -101,6 +100,7 @@ from desktop.native.widgets import (
     AvailabilityDialog,
     BlockDialog,
     DayAgenda,
+    FittedLabel,
     FlowLayout,
     HomeworkDialog,
     LateDialog,
@@ -444,10 +444,8 @@ class NativeWindow(QMainWindow):
         bar = QHBoxLayout()
         # Where you are, said once and said large. Thirteen buttons of equal weight and no title at
         # all was the clutter: nothing told the eye where to land.
-        self.week_title = QLabel()
+        self.week_title = FittedLabel()
         self.week_title.setObjectName("weekTitle")
-        self.week_title.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-        self.week_title.setMinimumWidth(96)
         bar.addWidget(self.week_title)
         self.prev_nav = QPushButton("‹")
         self.prev_nav.setObjectName("prevWeek")
@@ -1035,7 +1033,7 @@ class NativeWindow(QMainWindow):
         period = "month" if month else ("day" if day else "week")
         self.prev_nav.setToolTip(f"Previous {period}")
         self.next_nav.setToolTip(f"Next {period}")
-        self.week_title.setText(planner_title(self.session, view))
+        self.week_title.set_full_text(planner_title(self.session, view))
         self._sync_setup()
         self._show_page("weekPage")
         can_retry = self.session.pending_save is not None and not self.session.conflict

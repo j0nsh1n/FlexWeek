@@ -1061,6 +1061,26 @@ def test_today_jumps_the_planner_to_this_week(qapp: QApplication, window: Native
     assert window.session.week_start == monday_of(date.today().isoformat())
 
 
+def test_the_week_title_sits_beside_its_arrows_and_is_whole_when_there_is_room(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """The title was given 96 of the 217 pixels "21 – 27 September" needs, and Qt laid the arrows
+    out as if it had none, so it read "21 – 27 S" under the ‹ and › buttons at every width, half an
+    empty bar beside it."""
+    for width in (1280, 1024):
+        window.resize(width, 768)
+        qapp.processEvents()
+        title, previous = window.week_title, window.prev_nav
+        title_right = title.mapTo(window, title.rect().topRight()).x()
+        previous_left = previous.mapTo(window, previous.rect().topLeft()).x()
+        assert title_right < previous_left, (width, title_right, previous_left)
+    window.resize(1280, 768)
+    qapp.processEvents()
+    shown = window.week_title.text()
+    assert not shown.endswith("…"), shown
+    assert window.week_title.fontMetrics().horizontalAdvance(shown) <= window.week_title.width()
+
+
 def test_the_top_bar_keeps_the_gear_on_a_1024_window(qapp: QApplication, window: NativeWindow) -> None:
     """Mutation that turns this red: week_title keeps its full sizeHint as a minimum width."""
     window.resize(1024, 768)

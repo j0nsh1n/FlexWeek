@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from PySide6.QtCore import (
     QDate,
     QDateTime,
+    QEvent,
     QModelIndex,
     QPersistentModelIndex,
     QPoint,
@@ -21,7 +22,7 @@ from PySide6.QtCore import (
     QTimer,
     Signal,
 )
-from PySide6.QtGui import QAction, QColor, QIcon, QMouseEvent, QPainter, QPixmap, QShowEvent
+from PySide6.QtGui import QAction, QColor, QIcon, QMouseEvent, QPainter, QPixmap, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -155,6 +156,49 @@ def fit_scroll_dialog(dialog: QDialog, *, min_height: int = DIALOG_USABLE_HEIGHT
 TOAST_MS = 6000
 TOAST_MARGIN = 24
 TOAST_MIN_WIDTH = 280
+
+
+class FittedLabel(QLabel):
+    """A heading that asks for the room its whole text needs and shortens with an ellipsis only when
+    the row has none left. Given a fixed 96 pixels instead, the week title read "21 – 27 S" at every
+    width, and Qt laid the buttons after it out as if it had no width at all, on top of it."""
+
+    def __init__(self, parent: QWidget | None = None, minimum: int = 96) -> None:
+        super().__init__(parent)
+        self._full = ""
+        self._minimum = minimum
+
+    def set_full_text(self, text: str) -> None:
+        self._full = text
+        self.setAccessibleName(text)
+        self.updateGeometry()
+        self._fit()
+
+    def full_text(self) -> str:
+        return self._full
+
+    def sizeHint(self) -> QSize:  # noqa: N802
+        margins = self.contentsMargins()
+        width = self.fontMetrics().horizontalAdvance(self._full) + margins.left() + margins.right() + 2
+        return QSize(width, super().sizeHint().height())
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802
+        return QSize(self._minimum, super().minimumSizeHint().height())
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._fit()
+
+    def changeEvent(self, event: QEvent) -> None:  # noqa: N802
+        super().changeEvent(event)
+        # The stylesheet's larger font arrives after construction, and it changes the width needed.
+        if event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange):
+            self.updateGeometry()
+            self._fit()
+
+    def _fit(self) -> None:
+        room = max(0, self.contentsRect().width())
+        super().setText(self.fontMetrics().elidedText(self._full, Qt.TextElideMode.ElideRight, room))
 
 
 class Toast(QLabel):
