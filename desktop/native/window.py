@@ -1035,7 +1035,9 @@ class NativeWindow(QMainWindow):
         period = "month" if month else ("day" if day else "week")
         self.prev_nav.setToolTip(f"Previous {period}")
         self.next_nav.setToolTip(f"Next {period}")
-        self.week_title.set_full_text(planner_title(self.session, view))
+        self.week_title.set_full_text(
+            planner_title(self.session, view), planner_title(self.session, view, short=True)
+        )
         self._sync_setup()
         self._show_page("weekPage")
         can_retry = self.session.pending_save is not None and not self.session.conflict

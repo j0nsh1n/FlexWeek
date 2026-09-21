@@ -660,13 +660,19 @@ MONTHS = (
 )
 
 
-def planner_title(session: object, view: str) -> str:
+def planner_title(session: object, view: str, *, short: bool = False) -> str:
     """Where you are, in words: "15 – 21 September", "Thursday 18 September", "September 2026".
+
+    `short` abbreviates the names ("28 Sep – 4 Oct") for a bar with no room for them, so the whole
+    range still reads rather than being cut after the first month.
 
     The top bar used to say none of this. It had two buttons reading "Previous week" and "Next week"
     and no statement of which week you were on at all.
     """
     from datetime import date, timedelta
+
+    def name(names: tuple[str, ...], index: int) -> str:
+        return names[index][:3] if short else names[index]
 
     start = date.fromisoformat(session.week_start)
     # selected_day is an ISO date, not an index into the week. Reading it as one raised on a real
@@ -685,10 +691,10 @@ def planner_title(session: object, view: str) -> str:
             )
         except ValueError:
             anchor = chosen
-        return f"{MONTHS[anchor.month - 1]} {anchor.year}"
+        return f"{name(MONTHS, anchor.month - 1)} {anchor.year}"
     if view == "day":
-        return f"{DAYS_LONG[chosen.weekday()]} {chosen.day} {MONTHS[chosen.month - 1]}"
+        return f"{name(DAYS_LONG, chosen.weekday())} {chosen.day} {name(MONTHS, chosen.month - 1)}"
     end = start + timedelta(days=6)
     if start.month == end.month:
-        return f"{start.day} – {end.day} {MONTHS[start.month - 1]}"
-    return f"{start.day} {MONTHS[start.month - 1]} – {end.day} {MONTHS[end.month - 1]}"
+        return f"{start.day} – {end.day} {name(MONTHS, start.month - 1)}"
+    return f"{start.day} {name(MONTHS, start.month - 1)} – {end.day} {name(MONTHS, end.month - 1)}"

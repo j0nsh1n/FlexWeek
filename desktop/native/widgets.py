@@ -165,10 +165,14 @@ class FittedLabel(QLabel):
     def __init__(self, parent: QWidget | None = None, minimum: int = 96) -> None:
         super().__init__(parent)
         self._full = ""
+        self._short = ""
         self._minimum = minimum
 
-    def set_full_text(self, text: str) -> None:
+    def set_full_text(self, text: str, short: str = "") -> None:
+        """`short` is shown before any ellipsis: "28 Sep – 4 Oct" says the whole week where
+        "28 Septemb…" lost its end."""
         self._full = text
+        self._short = short
         self.setAccessibleName(text)
         self.updateGeometry()
         self._fit()
@@ -197,7 +201,11 @@ class FittedLabel(QLabel):
 
     def _fit(self) -> None:
         room = max(0, self.contentsRect().width())
-        super().setText(self.fontMetrics().elidedText(self._full, Qt.TextElideMode.ElideRight, room))
+        metrics = self.fontMetrics()
+        text = self._full
+        if self._short and metrics.horizontalAdvance(text) > room:
+            text = self._short
+        super().setText(metrics.elidedText(text, Qt.TextElideMode.ElideRight, room))
 
 
 class Toast(QLabel):

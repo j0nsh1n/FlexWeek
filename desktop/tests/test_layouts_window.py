@@ -1125,6 +1125,22 @@ def test_the_week_title_sits_beside_its_arrows_and_is_whole_when_there_is_room(
     assert window.week_title.fontMetrics().horizontalAdvance(shown) <= window.week_title.width()
 
 
+def test_a_week_across_two_months_shortens_to_month_abbreviations_not_an_ellipsis(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """At 1024 px "28 September – 4 October" does not fit, and cut short it read "28 Septemb…": no end
+    date at all. The short form keeps the whole range."""
+    window.session.load_week("2026-09-28")
+    wait_until(qapp, lambda: not window.session.busy and window.session.week_start == "2026-09-28")
+    window.resize(1280, 768)
+    qapp.processEvents()
+    assert window.week_title.text() == "28 September – 4 October"
+    window.resize(1024, 768)
+    qapp.processEvents()
+    assert window.week_title.text() == "28 Sep – 4 Oct"
+    assert window.week_title.accessibleName() == "28 September – 4 October"
+
+
 def test_the_top_bar_keeps_the_gear_on_a_1024_window(qapp: QApplication, window: NativeWindow) -> None:
     """Mutation that turns this red: week_title keeps its full sizeHint as a minimum width."""
     window.resize(1024, 768)
