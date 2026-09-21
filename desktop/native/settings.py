@@ -5,8 +5,8 @@ from __future__ import annotations
 from copy import deepcopy
 from uuid import uuid4
 
-from PySide6.QtCore import Qt, QUrl, Signal
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import QDesktopServices, QFocusEvent, QMouseEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -64,6 +64,19 @@ PREFS_MAX_BODY = 560
 PREFS_MIN_WIDTH = 560
 ACCOUNT_MAX_WIDTH = 520
 ACCOUNT_MIN_WIDTH = 560
+SPORT_FALLBACK = "Sport or club"
+
+
+class _SelectOnFocus(QLineEdit):
+    """Clicking or tabbing in selects the default, so the next keystroke replaces it."""
+
+    def focusInEvent(self, event: QFocusEvent) -> None:  # noqa: N802
+        super().focusInEvent(event)
+        QTimer.singleShot(0, self.selectAll)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        super().mouseReleaseEvent(event)
+        self.selectAll()
 
 
 def _heading(words: str) -> QLabel:
@@ -621,29 +634,36 @@ class SetupCard(QWidget):
         self.note.setWordWrap(True)
         self.note.setObjectName("setupNote")
         layout.addWidget(self.note)
-        self.school_start = QLineEdit("08:00")
+        self.school_start = _SelectOnFocus("08:00")
         self.school_start.setObjectName("setupSchoolStart")
-        self.school_end = QLineEdit("14:30")
+        self.school_end = _SelectOnFocus("14:30")
         self.school_end.setObjectName("setupSchoolEnd")
         school = QHBoxLayout()
-        school.addWidget(QLabel("Starts"))
+        school.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        starts = QLabel("Starts")
+        starts.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        ends = QLabel("Ends")
+        ends.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        school.addWidget(starts)
         school.addWidget(self.school_start)
-        school.addWidget(QLabel("Ends"))
+        school.addWidget(ends)
         school.addWidget(self.school_end)
         self.school_row = QWidget()
         self.school_row.setObjectName("setupRow")
         self.school_row.setLayout(school)
         layout.addWidget(self.school_row)
-        self.sport_title = QLineEdit("Soccer")
+        self.sport_title = QLineEdit()
         self.sport_title.setObjectName("setupSportTitle")
-        self.sport_start = QLineEdit("15:30")
+        self.sport_title.setPlaceholderText("Soccer, band, karate…")
+        self.sport_start = _SelectOnFocus("15:30")
         self.sport_start.setObjectName("setupSportStart")
-        self.sport_end = QLineEdit("17:00")
+        self.sport_end = _SelectOnFocus("17:00")
         self.sport_end.setObjectName("setupSportEnd")
-        sport = QFormLayout()
-        sport.addRow("Name", self.sport_title)
-        sport.addRow("Starts", self.sport_start)
-        sport.addRow("Ends", self.sport_end)
+        sport = QVBoxLayout()
+        sport.setContentsMargins(0, 0, 0, 0)
+        sport.addWidget(self._labelled("Name", self.sport_title))
+        sport.addWidget(self._labelled("Starts", self.sport_start))
+        sport.addWidget(self._labelled("Ends", self.sport_end))
         self.sport_row = QWidget()
         self.sport_row.setObjectName("setupRow")
         self.sport_row.setLayout(sport)
@@ -660,6 +680,7 @@ class SetupCard(QWidget):
         self.homework_due.setObjectName("setupHomeworkDue")
         self.homework_due.setPlaceholderText("2026-09-18T23:59")
         work = QFormLayout()
+        work.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         work.addRow("Name", self.homework_title)
         work.addRow("Minutes", self.homework_minutes)
         work.addRow("Due", self.homework_due)
@@ -695,6 +716,21 @@ class SetupCard(QWidget):
         self.sport_row.setVisible(self._step == 1)
         self.work_row.setVisible(self._step == 2)
 
+    def _labelled(self, caption: str, field: QWidget) -> QWidget:
+        """A caption and its field on one row, centres matching so Name cannot sit above the letters."""
+        row = QWidget()
+        row.setObjectName("setupRow")
+        line = QHBoxLayout(row)
+        line.setContentsMargins(0, 0, 0, 0)
+        line.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        label = QLabel(caption)
+        label.setObjectName("setupFieldLabel")
+        label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        label.setFixedWidth(56)
+        line.addWidget(label)
+        line.addWidget(field, 1)
+        return row
+
     def _skip(self) -> None:
         self._advance(keep=False)
 
@@ -706,7 +742,7 @@ class SetupCard(QWidget):
             self._payload["school"] = (self.school_start.text().strip(), self.school_end.text().strip())
         if keep and self._step == 1:
             self._payload["sport"] = (
-                self.sport_title.text().strip() or "Soccer",
+                self.sport_title.text().strip() or SPORT_FALLBACK,
                 self.sport_start.text().strip(),
                 self.sport_end.text().strip(),
             )

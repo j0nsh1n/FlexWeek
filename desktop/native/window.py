@@ -75,6 +75,7 @@ from desktop.native.reuse import (
     week_label,
 )
 from desktop.native.settings import (
+    SPORT_FALLBACK,
     AccountDialog,
     AlarmRingDialog,
     FocusPanel,
@@ -892,7 +893,7 @@ class NativeWindow(QMainWindow):
             self.session.add_block(
                 {
                     "id": "sport",
-                    "title": title or "Soccer",
+                    "title": title or SPORT_FALLBACK,
                     "kind": "locked",
                     "category": "exercise",
                     "start": minutes_to_hhmm(begin),
