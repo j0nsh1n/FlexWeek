@@ -272,3 +272,14 @@ def test_only_homework_with_a_time_counts_as_planned(alice: TestClient) -> None:
     monday = get_day(alice, "2026-09-14").json()
     assert [block["id"] for block in monday["sessions"]] == ["w2"]
     assert monday["workload"]["scheduled_min"] == 390
+
+
+
+def test_work_finished_without_a_time_still_counts_as_planned_that_day(alice: TestClient) -> None:
+    """Otherwise the day showed an hour done and nothing planned."""
+    assert (
+        put_assignment(alice, assignment(completed=True, completed_at="2026-09-15T17:00")).status_code == 200
+    )
+    assert save_week(alice, [session("w1", completed=True)]).status_code == 200
+    tuesday = get_day(alice).json()["workload"]
+    assert (tuesday["scheduled_min"], tuesday["focus_min"]) == (60, 60)
