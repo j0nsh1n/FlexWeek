@@ -132,6 +132,8 @@ TOAST_GAP = 8
 # How long Settings waits after the last change before saving it to the account. Long enough that
 # typing a number or clicking through a menu is one save.
 SETTINGS_SAVE_MS = 600
+# Homework named on a Find a new time notice before the rest is counted.
+NOTICE_LINES = 3
 
 
 class NativeWindow(QMainWindow):
@@ -1321,8 +1323,10 @@ class NativeWindow(QMainWindow):
         self.action_notice_text.setText(text)
         self.action_notice_button.setText(button)
         self._notice_callback = callback
+        # The notice stays until the student acts on it. A toast of the same words on top of it
+        # said everything twice.
+        self.toast.hide()
         self.action_notice.show()
-        self.toast.show_message(text)
 
     def _undo_from_notice(self) -> None:
         self.action_notice.hide()
@@ -1332,7 +1336,12 @@ class NativeWindow(QMainWindow):
         if not lost:
             return
         self._notice_ids = {item["block_id"] for item in lost}
-        self._set_notice(lost[0]["message"], "Find a new time", self._find_new_time)
+        # Every homework that lost its time is named. Find a new time moves all of them, and the notice
+        # showed only the first.
+        said = [item["message"] for item in lost[:NOTICE_LINES]]
+        if len(lost) > NOTICE_LINES:
+            said.append(f"And {len(lost) - NOTICE_LINES} more.")
+        self._set_notice("\n".join(said), "Find a new time", self._find_new_time)
 
     def _find_new_time(self) -> None:
         ids = getattr(self, "_notice_ids", set())

@@ -1019,6 +1019,32 @@ def test_a_commitment_over_planned_homework_offers_find_a_new_time(
     assert "History essay" in window.action_notice_text.text()
 
 
+def test_a_conflict_is_said_once_on_the_notice_not_again_in_a_toast(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    window.session.add_block(
+        {"id": "club", "title": "Club", "kind": "locked", "start": "18:00", "duration_min": 120, "days": [3]}
+    )
+    qapp.processEvents()
+    assert window.action_notice.isVisible()
+    assert window.toast.isVisible() is False
+
+
+def test_every_homework_that_lost_its_time_is_named_on_the_notice(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """The notice showed the first note only, so a second assignment that lost its time went unnamed
+    while Find a new time moved it too."""
+    notes = [
+        {"block_id": "a", "message": "Math worksheet no longer fits Monday at 15:15: Club is there now."},
+        {"block_id": "b", "message": "English essay no longer fits Monday at 15:45: Club is there now."},
+    ]
+    window._on_plan_conflicts(notes)
+    qapp.processEvents()
+    shown = window.action_notice_text.text()
+    assert "Math worksheet" in shown and "English essay" in shown
+
+
 def test_the_status_line_counts_homework_blocks(qapp: QApplication, window: NativeWindow) -> None:
     """Mutation that turns this red: plan_sentence says 'Placed 4 of 4'."""
     window.session.solve(everything=True)
