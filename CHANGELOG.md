@@ -48,12 +48,33 @@ All notable changes to FlexWeek are documented here. Format follows
   a pop-up, and names every homework that lost its time.
 - If Find a new time cannot place homework either, the reason shown is the new
   one, not the sentence from when its old time was taken.
+- Settings and the homework editor keep a readable height when the desktop
+  gives them less. On 0.14.1 they could be squeezed to 154 px, their minimum,
+  which is what the audit saw.
+- Day's summary counts only work with a time as planned. Homework still waiting
+  for one was billed to every day it could go ("9 h 15 min planned").
+- The reason homework has no time says what stopped it, such as "Your fixed
+  plans and finished work leave no gap long enough for it before it is due.",
+  instead of "That time is already taken" or "Kept out of the sleep window".
+  A tight deadline reads "Finishes only 29 min before it is due.", and a move
+  after Running late no longer says a day was missed.
+- Settings shows Look, Accent, Surface, Corners and Blocks only where they do
+  something: Today's app, or a design set to Match my look for Look and Accent.
+  Elsewhere a line says where that design's colours are.
+- Bento's Up next no longer says "No homework added" twice.
+
+### Added
+- School hours under More > Adding, for a student who skipped school at setup.
+  It opens their School if they have one, and otherwise School filled in as
+  Monday to Friday, 08:00 to 14:30.
 
 ### Changed
 - After a plan, the status line says how many homework blocks were planned.
 - The Main view and Day screen menus say what each view is for first:
   Calendar · Today's app, Agenda · Timeline, Dashboard · Bento, Focus · One
   thing, and so on.
+- Deadline tags read Plenty of time, Tight and Cutting it close, not Room,
+  Limited room and Very little room.
 
 ## [0.14.1] - 2026-09-21
 

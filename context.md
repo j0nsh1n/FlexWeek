@@ -21,9 +21,21 @@
   its arrows with a short form, fixed activities are Start and End only, views
   say what they are for, notices speak once and name every lost session, and
   a failed replan keeps the newest reason. Gate after that: 987 Python tests,
-  `scripts/verify.py` exit 0. Still unverified: the audit's ~150 px dialogs
-  and the packaged app. Next: owner review, then a 0.14.2 bump and package
-  when asked.
+  `scripts/verify.py` exit 0.
+  Third round (Claude, same day): the audit's ~150 px dialogs are explained
+  and fixed. 154 px was the 0.14.1 minimum height of Settings and the homework
+  editor; the audit's desktop gave them that minimum. Reproduced on the real
+  KDE desktop with the shipped AppImage, and the fixed source holds 480 px
+  there. The dialog test now squeezes each dialog and fails on 0.14.1. Also:
+  Day counts only work with a time as planned (stage 2 contract line updated),
+  solver reasons and deadline tags reworded with Jev, Running late moves no
+  longer say a day was missed, School hours under More > Adding, Settings
+  hides Look/Accent/Surface/Corners/Blocks where they change nothing, and
+  Bento's empty Up next says its title once. Still open for the owner: spec.md
+  drift (Running late, Month decision 7, "Update my plan", stored plans), and
+  whether the Month API should stop counting a one-candidate unplaced session
+  as scheduled. The packaged app is not rebuilt. Next: owner review, then a
+  0.14.2 bump and package when asked.
 - Date: 2026-09-21 (IA harden). 0.14.1 shipped: Plan my homework and More stay
   in every design; Settings is a gear; Appearance & layout is one Settings
   section; summaries speak minutes; Running late toasts the reason or the
