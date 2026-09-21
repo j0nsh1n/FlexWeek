@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFormLayout,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLayout,
@@ -450,21 +451,23 @@ class PrefsDialog(QDialog):
         self.alarm_spotify.setObjectName("alarmSpotify")
         self.alarm_spotify.setPlaceholderText("Spotify link for this alarm (optional)")
         alerts_form.addRow(self.alarm_spotify)
-        day_row = QHBoxLayout()
+        # Two rows, Monday to Thursday and Friday to Sunday. Seven in a line were the widest thing in
+        # Settings and pushed the dialog past the 700 pixels a settings panel is allowed.
+        day_row = QGridLayout()
         self.alarm_days: list[QCheckBox] = []
         for index, name in enumerate(DAY_FULL):
             day_box = QCheckBox(name[:3])
             day_box.setObjectName(f"alarmDay{index}")
             day_box.setChecked(index < 5)
             self.alarm_days.append(day_box)
-            day_row.addWidget(day_box)
+            day_row.addWidget(day_box, index // 4, index % 4)
         add_alarm = QPushButton("Add alarm")
         add_alarm.setObjectName("addAlarm")
         add_alarm.clicked.connect(self._add_alarm)
         remove_alarm = QPushButton("Remove alarm")
         remove_alarm.setObjectName("removeAlarm")
         remove_alarm.clicked.connect(self._remove_alarm)
-        day_row.addStretch(1)
+        day_row.setColumnStretch(4, 1)
         alerts_form.addRow(day_row)
         button_row = QHBoxLayout()
         button_row.addStretch(1)
