@@ -71,6 +71,11 @@ Contract for the finished app:
 - Cascade: marking a locked occurrence as missed re-solves remaining flexible
   blocks and lists the resulting diffs as moves. Sleep stays intact. Details
   live in `docs/scheduling-recovery.md`.
+- Plans are stored: an accepted plan saves each session's start and day on the
+  week. After any edit, only homework whose time no longer works (a fixed
+  commitment over it, a deadline moved earlier, or outside planning hours)
+  loses its time. The app names it, says why and offers "Find a new time" for
+  just that work. Every other session keeps its time.
 - Deadline slack is shown as ok / tight / danger.
 - Edge cases: an unsolvable week returns `complete: false` with reasons rather
   than an error; a duration that is not a positive multiple of 15 is rejected in
@@ -106,18 +111,21 @@ Contract for the finished app:
   compact import apply envelope would exceed the 256 KiB write cap.
 - Day view lists one date: homework due soon, that day's work sessions and fixed
   commitments, one next action, and a workload summary that separates scheduled
-  time, recorded focus time and time still free before 23:00, with a breakdown by
-  category. Due soon is open homework due that day or the next, plus anything
+  time (work that has a time), recorded focus time and time still free before
+  23:00, with a breakdown by category. Due soon is open homework due that day or the next, plus anything
   already overdue. Below 800px Day is the default view and Week stays one control
   away. Quick Add homework asks only for title, due date and estimated time, with
-  "Choose a time myself" for anything more. The planning button reads "Plan my
-  homework", and "Update my plan" once that week has been planned. Details live
+  "Choose a time myself" for anything more. "Plan my homework" places only
+  homework that has no time yet and keeps the times already planned; "Replan
+  all my homework", under More and in the plan review, plans every unfinished
+  session again. Details live
   in `docs/stage2-contract.md`.
 - Running late is a solve preview of a 15, 30 or 60 minute delay from a
   15-minute cutoff on one day of the open week. Fixed commitments and sleep stay
   put, and work that no longer fits stays unplaced rather than being dropped.
-  Accepting it stores one locked "Running late" block through `/api/changes` and
-  re-solves, so reload and one-step Undo act on a real saved change. Details
+  Accepting it stores one locked "Running late" block and the previewed times in
+  one save through `/api/changes`, without planning again, so reload and
+  one-step Undo act on a real saved change. Details
   live in `docs/stage4-contract.md`.
 - Spreading a project previews flexible sessions of a chosen length across the
   dates from a start date through the due date. It writes nothing until the
@@ -150,9 +158,9 @@ Contract for the finished app:
 - Month view shows one calendar month of deadlines, projects, overdue homework
   and study time, planned and completed, and any date opens Day view. A session
   pins to a date only when that date is certain: the day it was completed, or
-  its only candidate day. Open work with several candidate days is reported as
-  an unscheduled total instead of being painted across all of them, because the
-  solver's choice is never stored. Details live in `docs/stage7-contract.md`.
+  the day its saved plan gives it. Open work with no time yet is reported as an
+  unscheduled total instead of being painted across its candidate days. Details
+  live in `docs/stage7-contract.md`.
 
 ## User Experience
 Native desktop app, one window, designed at 1280px and usable down to 1150px,
@@ -165,7 +173,7 @@ First paint with no session is Sign in, with creating an account offered as a
 line of small print that switches the same card over.
 A new account must acknowledge its eight recovery codes, then is offered a
 short first-week setup (school hours, one sport, then homework). Every setup
-step can be skipped. Dragging or clicking empty grid space opens an Add dialog
+step can be skipped; School hours stays under More for later. Dragging or clicking empty grid space opens an Add dialog
 for that range.
 
 Downloads from GitHub Releases:
