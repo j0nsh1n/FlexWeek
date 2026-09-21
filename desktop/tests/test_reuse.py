@@ -13,6 +13,7 @@ from desktop.native.reuse import (
     clipboard_fingerprint,
     copied_fixed_block,
     copied_homework_block,
+    late_locked_line,
     merge_preview_rows,
     occurrence_days,
     proposals_from_clipboard,
@@ -257,7 +258,20 @@ def test_running_late_occupies_from_a_snapped_start_until_the_day_end() -> None:
             or ""
         ).lower()
     )
-    assert running_late_refusal(week_start="2026-09-14", now=now, dirty=True, conflict=False, block_count=0)
+    dirty = running_late_refusal(
+        week_start="2026-09-14", now=now, dirty=True, conflict=False, block_count=0
+    )
+    assert dirty == "Your last change is still saving. Try again in a moment."
+    conflict = running_late_refusal(
+        week_start="2026-09-14", now=now, dirty=False, conflict=True, block_count=0
+    )
+    assert conflict == "This week was changed somewhere else. Reload it first."
+
+
+def test_late_locked_line_names_the_interval_and_what_moved() -> None:
+    block = running_late_block(0, "19:00", 30, "b-late-1")
+    assert late_locked_line(block, 2) == "Running late: 19:00–19:30 is now locked. 2 moved."
+    assert late_locked_line(block, 0) == "Running late: 19:00–19:30 is now locked. Nothing had to move."
 
 
 def test_restore_point_labels_fit_eighty_characters() -> None:

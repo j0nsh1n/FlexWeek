@@ -17,6 +17,7 @@ from PySide6.QtCore import (
     QSize,
     Qt,
     QTime,
+    QTimer,
     Signal,
 )
 from PySide6.QtGui import QAction, QColor, QIcon, QMouseEvent, QPainter, QPixmap
@@ -123,6 +124,44 @@ def _validation_text(error: Exception) -> str:
     if isinstance(error, ValidationError) and error.errors():
         return str(error.errors()[0].get("msg") or error)
     return str(error)
+
+
+TOAST_MS = 6000
+
+
+class Toast(QLabel):
+    """A one-line notice under the top bar. The status line still holds the same words."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("toast")
+        self.setWordWrap(True)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.hide()
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.setInterval(TOAST_MS)
+        self._timer.timeout.connect(self.hide)
+
+    def show_message(self, text: str) -> None:
+        self.setText(text)
+        self.setAccessibleName(text)
+        self.setAccessibleDescription(text)
+        self.adjustSize()
+        self.reposition()
+        self.show()
+        self.raise_()
+        self._timer.start()
+
+    def reposition(self) -> None:
+        host = self.parentWidget()
+        if host is None:
+            return
+        self.adjustSize()
+        width = min(max(self.sizeHint().width(), 280), max(120, host.width() - 48))
+        self.resize(width, self.sizeHint().height())
+        self.move(max(24, (host.width() - self.width()) // 2), 52)
 
 
 class FlowLayout(QLayout):

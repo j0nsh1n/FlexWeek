@@ -68,6 +68,7 @@ from desktop.native.look import (
 from desktop.native.remind import REMINDER_POLL_MS, clock_parts
 from desktop.native.reuse import (
     late_from_start,
+    late_locked_line,
     planner_title,
     restore_point_label,
     running_late_refusal,
@@ -104,6 +105,7 @@ from desktop.native.widgets import (
     PreviewDialog,
     RoutineDialog,
     SpreadDialog,
+    Toast,
     UnfinishedPanel,
     WeekTable,
     swatch,
@@ -666,6 +668,7 @@ class NativeWindow(QMainWindow):
         self.week_status.setWordWrap(True)
         layout.addWidget(self.week_status)
         self._stack.addWidget(page)
+        self.toast = Toast(self)
 
     def _planner_widget(self, view: str) -> QWidget:
         """The chosen main view stands in for the week grid, and for Day and Month too.
@@ -838,6 +841,8 @@ class NativeWindow(QMainWindow):
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)
         self._place_setup()
+        if self.toast.isVisible():
+            self.toast.reposition()
 
     def _dismiss_setup(self) -> None:
         self._setup_dismissed = True
@@ -1395,7 +1400,7 @@ class NativeWindow(QMainWindow):
         )
 
     def _open_late(self) -> None:
-        now = datetime.now()
+        now = datetime.fromtimestamp(self.session.now_ms() / 1000)
         refusal = running_late_refusal(
             week_start=self.session.week_start,
             now=now,
@@ -1405,6 +1410,7 @@ class NativeWindow(QMainWindow):
         )
         if refusal:
             self.session._say(refusal)
+            self.toast.show_message(refusal)
             return
         from_start = late_from_start(now.hour * 60 + now.minute)
         dialog = LateDialog(self, f"Starting from {from_start} today ({DAY_FULL[now.weekday()]}).")
@@ -1416,11 +1422,22 @@ class NativeWindow(QMainWindow):
         accepted = dialog.exec() == QDialog.DialogCode.Accepted
         with contextlib.suppress(RuntimeError, TypeError):
             self.session.status.disconnect(dialog.error.setText)
+        preview = self.session.late_preview
         self._late_dialog = None
         if accepted:
-            self.session.accept_running_late()
+            self._commit_late(preview)
         else:
             self.session.late_preview = None
+
+    def _commit_late(self, preview: dict | None) -> None:
+        block = None if preview is None else preview.get("block")
+        moved = len(((preview or {}).get("trace") or {}).get("moves") or [])
+        if not self.session.accept_running_late() or not isinstance(block, dict):
+            return
+        self.session.select_block(block["id"], (block.get("days") or [0])[0])
+        message = late_locked_line(block, moved)
+        self.session._say(message)
+        self.toast.show_message(message)
 
     def _open_spread(self, assignment_id: str) -> None:
         item = self.session.assignments.get(assignment_id)

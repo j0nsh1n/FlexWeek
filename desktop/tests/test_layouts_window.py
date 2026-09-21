@@ -184,6 +184,45 @@ def test_running_late_opens_the_products_own_running_late(
     assert opened == ["late"]
 
 
+def test_a_blocked_running_late_toasts_why(qapp: QApplication, window: NativeWindow) -> None:
+    from desktop.native.widgets import TOAST_MS
+
+    window.session.dirty = True
+    window._open_late()
+    saving = "Your last change is still saving. Try again in a moment."
+    assert window.toast.isVisible() is True
+    assert window.toast.text() == saving
+    assert window.week_status.text() == saving
+    assert window.toast._timer.interval() == TOAST_MS
+
+    window.session.dirty = False
+    window.session.conflict = True
+    window._open_late()
+    conflict = "This week was changed somewhere else. Reload it first."
+    assert window.toast.text() == conflict
+    assert window.week_status.text() == conflict
+
+
+def test_accepting_running_late_locks_the_start_and_toasts(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    from desktop.native.reuse import late_locked_line
+
+    now = datetime.fromtimestamp(window.session.now_ms() / 1000)
+    window.session.preview_running_late(30, now)
+    wait_until(qapp, lambda: window.session.late_preview is not None and not window.session.busy)
+    preview = window.session.late_preview
+    moved = len((preview.get("trace") or {}).get("moves") or [])
+    block = preview["block"]
+    window._commit_late(preview)
+    assert any(item["id"] == block["id"] for item in window.session.blocks)
+    assert window.session.selected_block_id == block["id"]
+    said = late_locked_line(block, moved)
+    assert window.toast.text() == said
+    assert window.toast.isVisible() is True
+    assert window.week_status.text() == said
+
+
 def test_the_keyboard_reaches_my_day_and_back(qapp: QApplication, window: NativeWindow) -> None:
     """The week grid keeps letter keys for type-ahead, so T has to be taken the way W, D and M are."""
     QTest.keyClick(window.week_table, Qt.Key.Key_T)

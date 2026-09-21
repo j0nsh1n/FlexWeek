@@ -687,6 +687,9 @@ def pack_stylesheet(
         # A ringing alarm is the one thing in the app that has to be read from across a room.
         f"QLabel#alarmTitle {{ font-size: {size + 8}pt; font-weight: 700; }}"
         f"QLabel#alarmDetail {{ font-size: {size + 2}pt; color: {palette['muted']}; }}"
+        f"QLabel#toast {{ background: {palette['panel']}; color: {palette['text']}; "
+        f"border: 1px solid {palette['hairline']}; padding: {pad * 2}px {pad * 3}px; "
+        f"border-radius: {radius}px; }}"
     )
 
 
