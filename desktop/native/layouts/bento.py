@@ -33,7 +33,8 @@ class BentoView(LayoutView):
         self._board = QWidget()
         self._board.setObjectName("bentoBoard")
         self._grid = QGridLayout(self._board)
-        outer.addWidget(scrolling(self._board, "bentoScroll"))
+        self._scroll = scrolling(self._board, "bentoScroll")
+        outer.addWidget(self._scroll)
 
     def shown_day(self, scene: Scene) -> int:
         return self._day if self._day is not None else (scene.today if scene.today is not None else 0)
@@ -196,19 +197,28 @@ class BentoView(LayoutView):
                 label(f"{clock_label(first.start)}–{clock_label(first.end)} · {kind}", "bentoHeroLine")
             )
         else:
-            inner.addWidget(label("Nothing else today", "bentoHeroTitle", wrap=True))
-            inner.addWidget(label("The rest of the day is yours.", "bentoHeroLine"))
+            heading, title, line = scene.week.leftover_parts(scene.today)
+            if scene.week.leftover_kind(scene.today) == "needs_time":
+                kicker.setText("DUE TODAY")
+            inner.addWidget(label(title, "bentoHeroTitle", wrap=True))
+            inner.addWidget(label(line or heading, "bentoHeroLine", wrap=True))
         return tile
 
     def _deadlines(self, scene: Scene) -> QFrame:
         tile, inner = self._tile(scene, "bentoDeadlines", "Deadlines")
-        work = scene.week.open_work()
+        work = list(scene.week.open_work())
+        seen = {item.block_id for item in work}
+        waiting = [item for item in scene.week.waiting if item.block_id not in seen]
         for index, item in enumerate(work):
             words = f"{item.title}\n{due_label(item.due, scene.week.week_start)}"
             if item.slack_words:
                 words += f" · {item.slack_words}"
             inner.addWidget(block_button(self, words, f"bentoDeadline{index}", item.block_id))
-        if not work:
+        offset = len(work)
+        for index, item in enumerate(waiting):
+            words = f"{item.title}\n{due_label(item.due, scene.week.week_start)} · Not placed yet"
+            inner.addWidget(block_button(self, words, f"bentoDeadline{offset + index}", item.block_id))
+        if not work and not waiting:
             inner.addWidget(
                 label("Nothing is due. Add homework when you get some.", "bentoDeadlinesEmpty", wrap=True)
             )
@@ -247,9 +257,7 @@ class BentoView(LayoutView):
         tile, inner = self._tile(scene, "bentoTonight", "Tonight")
         today = scene.week.on_day(scene.today) if scene.today is not None else ()
         session = next((item for item in today if item.work and item.live and item.end > scene.minute), None)
-        if session is None:
-            inner.addWidget(label("No homework tonight", "bentoTonightTitle", wrap=True))
-        else:
+        if session is not None:
             inner.addWidget(block_button(self, session.title, "bentoTonightTitle", session.block_id))
             note = label(
                 f"{clock_label(session.start)} · {length_label(session.minutes)}", "bentoTonightLine"
@@ -261,6 +269,20 @@ class BentoView(LayoutView):
                 lambda _=False, entry=session: self.focus_requested.emit(entry.block_id, entry.day)
             )
             inner.addWidget(focus, 0, Qt.AlignmentFlag.AlignLeft)
+        else:
+            due_today = scene.week.due_today_unplaced(scene.today)
+            if due_today:
+                item = due_today[0]
+                inner.addWidget(block_button(self, item.title, "bentoTonightTitle", item.block_id))
+                note = label(
+                    "Not placed yet · due " + due_label(item.due, scene.week.week_start),
+                    "bentoTonightLine",
+                    wrap=True,
+                )
+                note.setProperty("role", "muted")
+                inner.addWidget(note)
+            else:
+                inner.addWidget(label("No homework tonight", "bentoTonightTitle", wrap=True))
         inner.addStretch(1)
         return tile
 

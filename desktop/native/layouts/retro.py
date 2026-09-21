@@ -72,12 +72,18 @@ class RetroView(LayoutView):
         self._desk = QWidget()
         self._desk.setObjectName("retroDesk")
         self._desk.setMinimumSize(880, 470)
-        outer.addWidget(scrolling(self._desk, "retroScroll"), 1)
+        self._surface = QWidget()
+        self._surface.setObjectName("retroSurface")
+        surface = QVBoxLayout(self._surface)
+        surface.setContentsMargins(0, 0, 0, 0)
+        surface.setSpacing(0)
+        surface.addWidget(scrolling(self._desk, "retroScroll"), 1)
         self._bar = QFrame()
         self._bar.setObjectName("retroTaskbar")
         self._bar_row = QHBoxLayout(self._bar)
         self._bar_row.setContentsMargins(4, 3, 4, 3)
-        outer.addWidget(self._bar)
+        surface.addWidget(self._bar)
+        outer.addWidget(self._surface)
 
     def _toggle(self, key: str) -> None:
         if self._scene is not None:
@@ -274,7 +280,11 @@ class RetroView(LayoutView):
         if scene.today is None:
             words = "This is another week, so nothing is next."
         elif coming is None:
-            words = "Nothing else today."
+            heading, title, line = scene.week.leftover_parts(scene.today)
+            if scene.week.leftover_kind(scene.today) == "needs_time":
+                words = f"{title} {heading.lower()}."
+            else:
+                words = (line or heading) + ("." if not (line or heading).endswith(".") else "")
         else:
             wait = length_label(coming.start - scene.minute)
             words = f"{coming.title} starts at {clock_label(coming.start)}, in {wait}."

@@ -92,7 +92,11 @@ def test_between_blocks_it_says_what_is_next_and_in_how_long(qapp: QApplication)
 
 def test_when_the_day_is_over_it_says_what_tomorrow_starts_with(qapp: QApplication) -> None:
     view = shown(qapp, "22:30")
-    assert says(view) == ("DONE FOR TODAY", "NOTHING ELSE TODAY", "TOMORROW STARTS WITH SCHOOL AT 08:00")
+    assert says(view) == (
+        "NOTHING ELSE SCHEDULED TODAY",
+        "NOTHING ELSE SCHEDULED TODAY",
+        "TOMORROW STARTS WITH SCHOOL AT 08:00",
+    )
     assert buttons(view) == ["oneBack"]
 
 

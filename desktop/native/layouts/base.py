@@ -107,7 +107,7 @@ def mark_of(category: str) -> str:
 
 
 def work_left(scene: Scene) -> int:
-    """Homework minutes still ahead today. Running late is only offered while there are some."""
+    """Placed homework minutes still ahead today. Running late is only offered while there are some."""
     if scene.today is None:
         return 0
     total = 0
@@ -157,11 +157,17 @@ class LayoutView(QWidget):
         name = held.objectName() if held is not None and held is not self and self.isAncestorOf(held) else ""
         self._was_cramped = self.cramped
         if scene.surface == "month":
+            host = self._week_host()
+            if host is not None:
+                host.hide()
             self.render_month(scene, week_changed)
         else:
             board = getattr(self, "_month_board", None)
             if board is not None:
                 board.hide()
+            host = self._week_host()
+            if host is not None:
+                host.show()
             self.render(scene, week_changed)
         again = self.findChild(QWidget, name) if name else None
         if again is not None:
@@ -171,6 +177,21 @@ class LayoutView(QWidget):
     def cramped(self) -> bool:
         """Too narrow for this design's full arrangement. Measured on the view, not the window."""
         return 0 < self.width() < NARROW_WIDTH
+
+    def _week_host(self) -> QWidget | None:
+        """The week surface to put away when Month is on, so it cannot show through the calendar.
+
+        The first widget in the view's own layout is that surface. A layout that keeps a taskbar or
+        extra chrome wraps both in one child so Month hides the week, not one panel named `_board`.
+        """
+        manager = self.layout()
+        if manager is None:
+            return None
+        for index in range(manager.count()):
+            widget = manager.itemAt(index).widget()
+            if widget is not None:
+                return widget
+        return None
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)
