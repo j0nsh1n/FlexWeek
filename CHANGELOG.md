@@ -66,6 +66,9 @@ All notable changes to FlexWeek are documented here. Format follows
 - Bento's Up next no longer says "No homework added" twice.
 
 ### Added
+- Keep me signed in on this computer, on the sign-in card and on by default.
+  The next launch opens the week without signing in until the session ends
+  (seven days after sign-in) or you log out. Log out forgets it.
 - School hours under More > Adding, for a student who skipped school at setup.
   It opens their School if they have one, and otherwise School filled in as
   Monday to Friday, 08:00 to 14:30.

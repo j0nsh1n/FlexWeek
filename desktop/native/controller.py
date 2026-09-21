@@ -54,6 +54,7 @@ from desktop.native.focus import (
     set_phase,
 )
 from desktop.native.history import capture_step, mark_stale, push_step
+from desktop.native.kept import KeptSession
 from desktop.native.look import pack_axis, sanitize_look
 from desktop.native.pomodoro import inflate_for_solve, split_solved
 from desktop.native.remind import clock_parts, due_alarms, due_reminders, reminder_lead_min, snooze_until
@@ -129,11 +130,15 @@ class NativeSession(QObject):
     alerts = Signal(list)
     alarm_due = Signal(object)
 
-    def __init__(self, origin: str, parent: QObject | None = None) -> None:
+    def __init__(self, origin: str, parent: QObject | None = None, kept: KeptSession | None = None) -> None:
         super().__init__(parent)
         self.client = NativeClient(origin, self)
         self.client.expired.connect(self._on_expired)
         self.account: dict | None = None
+        # Keep me signed in: where this database's kept session lives, and the choice on the sign-in
+        # card at the last sign-in. A session resumed at launch was kept, so it stays kept.
+        self.kept = kept
+        self.keep_signed_in = True
         self.week_start = current_week_start()
         self.blocks: list[dict] = []
         self.revision = 0
@@ -473,7 +478,48 @@ class NativeSession(QObject):
 
         self.client.request("GET", f"/api/month?month={asked}", None, ok, err)
 
+    def _keep_session(self) -> None:
+        if self.kept is None:
+            return
+        token = self.client.session_token() if self.keep_signed_in else None
+        if token:
+            self.kept.keep(token)
+        else:
+            self.kept.forget()
+
+    def _forget_session(self) -> None:
+        if self.kept is not None:
+            self.kept.forget()
+
+    def resume(self) -> None:
+        """Open the week with the session kept at the last sign-in, when there is one and it still
+        works. One that the server has ended, by expiry or by signing out elsewhere, is forgotten."""
+        token = self.kept.token() if self.kept is not None else None
+        if token is None or self.account is not None or self.busy:
+            return
+        ticket = self._begin()
+        self._say("Signing in…")
+        self.client.adopt_session(token)
+
+        def ok(data: dict) -> None:
+            if not self._idle(ticket):
+                return
+            self.client.set_account(data)
+            self.account = {"id": data["id"], "username": data["username"]}
+            self.keep_signed_in = True
+            self.account_changed.emit(self.account)
+            self.load_week(self.week_start, discard=True)
+
+        def failed(error: ApiError) -> None:
+            if error.status == 401:
+                self._forget_session()
+            self.client.reset()
+            self._fail(ticket, error)
+
+        self.client.request("GET", "/api/auth/me", None, ok, failed)
+
     def _on_expired(self) -> None:
+        self._forget_session()
         self._ticket += 1
         self.busy = False
         self.busy_changed.emit(False)
@@ -515,6 +561,7 @@ class NativeSession(QObject):
                 return
             self.client.set_account(data)
             self.account = {"id": data["id"], "username": data["username"]}
+            self._keep_session()
             self.account_changed.emit(self.account)
             self.load_week(self.week_start, discard=True)
 
@@ -529,9 +576,14 @@ class NativeSession(QObject):
     def finish_recovery(self) -> None:
         if self.account is None:
             return
+        # Kept only now. Kept at registration, quitting before this page would open the week at the
+        # next launch and the recovery codes would never be shown again.
+        self._keep_session()
         self.load_week(current_week_start())
 
     def logout(self) -> None:
+        # Forgotten first, so a sign-out that fails to reach the server still leaves nothing to resume.
+        self._forget_session()
         account_id = None if self.account is None else self.account["id"]
         ticket = self._begin()
         self._say("Signing out…")
@@ -2402,6 +2454,7 @@ class NativeSession(QObject):
                 return
             self.client.set_account(data)
             self.account = {"id": data["id"], "username": data["username"]}
+            self._keep_session()
             self.account_changed.emit(self.account)
             self.load_week(self.week_start, discard=True)
 
@@ -2423,6 +2476,8 @@ class NativeSession(QObject):
             if data.get("id"):
                 self.client.set_account(data)
                 self.account = {"id": data["id"], "username": data["username"]}
+                # The new password came with a new session, and the kept one no longer works.
+                self._keep_session()
             self._say("Password replaced.")
             self.week_changed.emit()
 
@@ -2461,6 +2516,7 @@ class NativeSession(QObject):
         def ok(_data: dict) -> None:
             if not self._alive(ticket):
                 return
+            self._forget_session()
             self.client.reset()
             self._clear_local()
             self.busy = False

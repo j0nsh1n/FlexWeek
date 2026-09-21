@@ -57,11 +57,13 @@ from desktop.native.calendar import (
 from desktop.native.client import PASSWORD_LENGTH_HINT, USERNAME_ERROR, USERNAME_HINT
 from desktop.native.controller import NativeSession
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
+from desktop.native.kept import KeptSession
 from desktop.native.layouts.base import LayoutView, Scene
 from desktop.native.layouts.registry import options_for, sanitize_layout, tokens_for
 from desktop.native.layouts.views import VIEW_CLASSES
 from desktop.native.look import (
     TEXT_PT,
+    card_check_sheet,
     effective_look,
     pack_stylesheet,
     palette_from_tokens,
@@ -113,6 +115,7 @@ from desktop.native.widgets import (
     UnfinishedPanel,
     WeekTable,
     swatch,
+    tick_file,
 )
 
 WINDOW_SIZE = (1280, 800)
@@ -137,9 +140,15 @@ NOTICE_LINES = 3
 
 
 class NativeWindow(QMainWindow):
-    def __init__(self, origin: str, icon: QIcon | None = None, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        origin: str,
+        icon: QIcon | None = None,
+        parent: QWidget | None = None,
+        kept: KeptSession | None = None,
+    ) -> None:
         super().__init__(parent)
-        self.session = NativeSession(origin, self)
+        self.session = NativeSession(origin, self, kept)
         self._instance_server: QLocalServer | None = None
         self.setWindowTitle("FlexWeek")
         if icon is not None:
@@ -219,6 +228,8 @@ class NativeWindow(QMainWindow):
         self._sync_auth_mode()
         self._show_page("authPage")
         self.setMinimumWidth(640)
+        # After the window exists, so a kept session opens the week the ordinary way.
+        QTimer.singleShot(0, self.session.resume)
 
     def _autosave_tick(self) -> None:
         """Save the week without being asked.
@@ -350,6 +361,12 @@ class NativeWindow(QMainWindow):
         self.password_hint.setObjectName("passwordHint")
         self.password_hint.setWordWrap(True)
         layout.addWidget(self.password_hint)
+        # On by default: most students plan on their own laptop, and signing in was the first thing
+        # FlexWeek asked at every launch. Log out forgets it, for a shared computer.
+        self.keep_signed_in = QCheckBox("Keep me signed in on this computer")
+        self.keep_signed_in.setObjectName("keepSignedIn")
+        self.keep_signed_in.setChecked(True)
+        layout.addWidget(self.keep_signed_in)
         # One way in at a time. Offering Create account and Sign in as equal buttons made the student
         # choose between them before reading anything, and most arrivals after the first are sign-ins.
         self.sign_in_button = QPushButton("Sign in")
@@ -1194,9 +1211,11 @@ class NativeWindow(QMainWindow):
         if not 12 <= len(password) <= 128:
             self.session._say(PASSWORD_LENGTH_HINT)
             return
+        self.session.keep_signed_in = self.keep_signed_in.isChecked()
         self.session.register(name, password)
 
     def _sign_in(self) -> None:
+        self.session.keep_signed_in = self.keep_signed_in.isChecked()
         self.session.login(self.username.text().strip(), self.password.text())
 
     def _go_previous(self) -> None:
@@ -1664,6 +1683,7 @@ class NativeWindow(QMainWindow):
         self.recover_button.setVisible(visible)
 
     def _recover_account(self) -> None:
+        self.session.keep_signed_in = self.keep_signed_in.isChecked()
         self.session.recover(
             self.username.text().strip(),
             self.recovery_code.text().strip(),
@@ -2006,6 +2026,7 @@ class NativeWindow(QMainWindow):
         palette = resolved_palette(pack, system_dark, self._look, accent)
         design = self._chrome_palette(palette)
         self.setStyleSheet(pack_stylesheet(pack, system_dark, self._look, accent, design))
+        self.keep_signed_in.setStyleSheet(card_check_sheet(design, tick_file(design["accent_ink"])))
         # Day, Month and the week grid are dressed by the same design as the main view, so moving
         # between them is moving around one app rather than between two.
         self.week_table.set_look(self._look, design)

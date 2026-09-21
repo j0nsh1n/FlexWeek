@@ -37,9 +37,11 @@
   late's single save, Day/Month counting and School hours under More. The
   older GLM findings on overdue homework, "only" mode and finished sessions do
   not hold against the current code. A Jev copy sweep of the branch's 55 new
-  strings found nothing to change. Not built: staying signed in across
-  restarts (the cookie jar is in memory only). The packaged app is not
-  rebuilt. Next: owner review, then a 0.14.2 bump and package when asked.
+  strings found nothing to change. Keep me signed in on this computer is on
+  the sign-in card (on by default): the session token is kept per database in
+  `<data>/signed-in/<instance>.json` (0600), resumed through /api/auth/me at
+  launch, and forgotten on Log out, account deletion or a 401. Checked on the
+  real KDE desktop through `desktop.main`. The packaged app is not rebuilt. Next: owner review, then a 0.14.2 bump and package when asked.
 - Date: 2026-09-21 (IA harden). 0.14.1 shipped: Plan my homework and More stay
   in every design; Settings is a gear; Appearance & layout is one Settings
   section; summaries speak minutes; Running late toasts the reason or the

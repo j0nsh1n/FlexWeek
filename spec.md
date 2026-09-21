@@ -170,7 +170,10 @@ JavaScript, no npm, no build step, no framework.** There is no browser client:
 the web app was retired in September 2026 and `frontend/` deleted.
 
 First paint with no session is Sign in, with creating an account offered as a
-line of small print that switches the same card over.
+line of small print that switches the same card over. The card offers "Keep me
+signed in on this computer", on by default. A kept session opens the week at
+the next launch until the server ends it (seven days after sign-in) or the
+student logs out.
 A new account must acknowledge its eight recovery codes, then is offered a
 short first-week setup (school hours, one sport, then homework). Every setup
 step can be skipped; School hours stays under More for later. Dragging or clicking empty grid space opens an Add dialog
@@ -359,6 +362,10 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
   stored. Cookies are HttpOnly, SameSite=Strict, Secure on HTTPS deployments.
   Sign-out revokes the current session. Expired sessions are rejected on reads
   and cleaned when new sessions are created.
+- Keep me signed in stores the session token for one database in a file only
+  that user can read, in the app's data folder. It is kept once a new account's
+  recovery codes are acknowledged, replaced when the password changes, and
+  removed by Log out, account deletion, or the server ending the session.
 - Writes use custom-header/origin CSRF checks; endpoints derive ownership from
   the session. Queries are parameterized. No credentials or schedule payloads
   are logged; validation responses omit submitted input.

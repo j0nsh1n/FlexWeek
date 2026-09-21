@@ -21,6 +21,7 @@ from PySide6.QtNetwork import (
 )
 
 REQUEST_TIMEOUT_MS = 30_000
+SESSION_COOKIE = b"flexweek_session"
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 PASSWORD_LENGTH_HINT = "Password: use 12–128 characters."
 USERNAME_HINT = "Username: 3–32 letters, numbers or underscores."
@@ -177,6 +178,23 @@ class NativeClient(QObject):
         self._check_thread()
         self.account = None
         self._rotate([])
+
+    def session_token(self) -> str | None:
+        jar = self._manager.cookieJar()
+        for cookie in jar.cookiesForUrl(QUrl(self.origin + "/")):
+            if bytes(cookie.name().data()) == SESSION_COOKIE:
+                return bytes(cookie.value().data()).decode("ascii", "replace") or None
+        return None
+
+    def adopt_session(self, token: str) -> None:
+        """A session kept from an earlier launch. That launch's server was on another port, so the
+        cookie is set again for this origin; the next request says whether it still works."""
+        self._check_thread()
+        self.account = None
+        self._rotate([])
+        jar = self._manager.cookieJar()
+        cookie = QNetworkCookie(SESSION_COOKIE, token.encode("ascii"))
+        jar.setCookiesFromUrl([cookie], QUrl(self.origin + "/"))
 
     @staticmethod
     def _notify_error(callback: Callable[[ApiError], None], error: ApiError) -> None:

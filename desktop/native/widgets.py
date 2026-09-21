@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from copy import deepcopy
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from uuid import uuid4
 
 from pydantic import ValidationError
@@ -17,12 +18,23 @@ from PySide6.QtCore import (
     QPoint,
     QRect,
     QSize,
+    QStandardPaths,
     Qt,
     QTime,
     QTimer,
     Signal,
 )
-from PySide6.QtGui import QAction, QColor, QIcon, QMouseEvent, QPainter, QPixmap, QResizeEvent, QShowEvent
+from PySide6.QtGui import (
+    QAction,
+    QColor,
+    QIcon,
+    QMouseEvent,
+    QPainter,
+    QPen,
+    QPixmap,
+    QResizeEvent,
+    QShowEvent,
+)
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -674,6 +686,27 @@ def swatch(colour: str, size: int = SWATCH_PX) -> QPixmap:
     painter.drawRoundedRect(0, 0, size, size, size // 4, size // 4)
     painter.end()
     return pixmap
+
+
+def tick_file(colour: str) -> str:
+    """A tick in one colour as an image file, for a style sheet's `image:`. Drawn here rather than
+    shipped, so the packaged app needs no extra file; twice the box's size so it stays sharp."""
+    folder = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.CacheLocation))
+    path = folder / f"flexweek-tick-{QColor(colour).name()[1:]}.png"
+    if not path.is_file():
+        folder.mkdir(parents=True, exist_ok=True)
+        image = QPixmap(32, 32)
+        image.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(image)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        pen = QPen(QColor(colour), 4)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        painter.drawPolyline([QPoint(7, 17), QPoint(13, 23), QPoint(25, 9)])
+        painter.end()
+        image.save(str(path))
+    return path.as_posix()
 
 
 class DayAgenda(QWidget):

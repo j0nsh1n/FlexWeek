@@ -598,6 +598,19 @@ def palette_from_tokens(tokens: dict[str, str], base: dict) -> dict:
     }
 
 
+def card_check_sheet(palette: dict, tick: str) -> str:
+    """Keep me signed in, drawn in full. Fusion's own box is a faint line that vanished on the white
+    sign-in card on the KDE desktop, so a student could not see there was anything to tick. `tick` is
+    an image file of the tick in the accent's ink."""
+    return (
+        f"QCheckBox {{ background: {palette['panel']}; color: {palette['text']}; spacing: 8px; }}"
+        f"QCheckBox::indicator {{ width: 16px; height: 16px; border-radius: 4px; "
+        f"border: 1px solid {palette['muted']}; background: {palette['field']}; }}"
+        f"QCheckBox::indicator:checked {{ background: {palette['accent']}; "
+        f"border-color: {palette['accent']}; image: url({tick}); }}"
+    )
+
+
 def pack_stylesheet(
     pack: object,
     system_dark: bool,
