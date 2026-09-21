@@ -36,7 +36,10 @@ class LayoutSection(QGroupBox):
         self.setObjectName(f"layout{slot.title()}Section")
         self._options = {spec.id: options_for(choice, spec.id) for spec in layouts_for(role)}
         body = QVBoxLayout(self)
-        body.addWidget(QLabel(blurb))
+        # Wrapped, or its one long line sets the width of the whole Settings page.
+        intro = QLabel(blurb)
+        intro.setWordWrap(True)
+        body.addWidget(intro)
         self.pick = QComboBox()
         self.pick.setObjectName(f"layout{slot.title()}")
         self.pick.setAccessibleName(title)
@@ -50,6 +53,9 @@ class LayoutSection(QGroupBox):
         body.addWidget(self.summary)
         self._form_host = QWidget()
         self._form = QFormLayout(self._form_host)
+        # Settings is narrower than the old dialog, so a long option drops its menu under its name
+        # rather than pushing the page wider than the room it has.
+        self._form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         self._form.setContentsMargins(0, 0, 0, 0)
         body.addWidget(self._form_host)
         self.more = QCheckBox("Fine-tune this design")

@@ -6,7 +6,7 @@ from copy import deepcopy
 from uuid import uuid4
 
 from PySide6.QtCore import Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import QDesktopServices, QFocusEvent, QMouseEvent
+from PySide6.QtGui import QDesktopServices, QFocusEvent, QMouseEvent, QShowEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
@@ -65,6 +66,8 @@ ALARM_GAP = 12
 ALARM_BUTTON_HEIGHT = 44
 PREFS_MAX_BODY = 560
 PREFS_MIN_WIDTH = 640
+# Room beside the longest name in the Settings list, for its padding and selection edge.
+PREFS_NAV_PAD = 32
 ACCOUNT_MAX_WIDTH = 520
 ACCOUNT_MIN_WIDTH = 560
 SPORT_FALLBACK = "Sport or club"
@@ -80,6 +83,14 @@ class _SelectOnFocus(QLineEdit):
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         super().mouseReleaseEvent(event)
         self.selectAll()
+
+
+def _invalidate(layout: QLayout) -> None:
+    for index in range(layout.count()):
+        inner = layout.itemAt(index).layout()
+        if inner is not None:
+            _invalidate(inner)
+    layout.invalidate()
 
 
 def _heading(words: str) -> QLabel:
@@ -262,6 +273,7 @@ class PrefsDialog(QDialog):
         self.fine_host = QWidget()
         self.fine_host.setObjectName("prefFineHost")
         fine_form = QFormLayout(self.fine_host)
+        fine_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         fine_form.setContentsMargins(0, 0, 0, 0)
         for knob, values in LOOK_KNOBS.items():
             box = QComboBox()
@@ -357,6 +369,7 @@ class PrefsDialog(QDialog):
         appearance = QWidget()
         column = QVBoxLayout(appearance)
         appear = QFormLayout()
+        appear.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         appear.addRow(_heading("Appearance & layout"))
         appear.addRow("Look", self.look)
         appear.addRow("Accent", self.accent)
@@ -479,7 +492,6 @@ class PrefsDialog(QDialog):
             area = QScrollArea()
             area.setWidgetResizable(True)
             area.setFrameShape(QFrame.Shape.NoFrame)
-            area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             area.setWidget(page)
             self.stack.addWidget(area)
         self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
@@ -494,7 +506,6 @@ class PrefsDialog(QDialog):
         area.setObjectName("prefsScroll")
         area.setWidgetResizable(True)
         area.setFrameShape(QFrame.Shape.NoFrame)
-        area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         area.setWidget(body)
         area.setMaximumHeight(PREFS_MAX_BODY)
         layout.addWidget(area)
@@ -505,6 +516,28 @@ class PrefsDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self._render_alarms()
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
+        """Sized once the pack's font has arrived. At large text a fixed 190 pixel list cut
+        "Appearance & layout" off, and a page wider than its room lost every dropdown arrow, so the
+        list fits its longest name and the dialog grows until the widest page fits beside it."""
+        super().showEvent(event)
+        self.nav.setFixedWidth(self.nav.sizeHintForColumn(0) + 2 * self.nav.frameWidth() + PREFS_NAV_PAD)
+        # The room beside the list is only known after the first layout pass, which is after this.
+        QTimer.singleShot(0, self._fit_width)
+
+    def _fit_width(self) -> None:
+        pages = [self.stack.widget(index).widget() for index in range(self.stack.count())]
+        for page in pages:
+            # A page not opened yet keeps the sizes its rows had before the dialog was shown, which
+            # put Alerts 47 pixels narrower than it is on screen.
+            _invalidate(page.layout())
+        need = max(page.minimumSizeHint().width() for page in pages)
+        short = need - self.stack.currentWidget().viewport().width()
+        if short > 0:
+            screen = self.screen().availableGeometry().width() if self.screen() else self.width() + short
+            self.setMinimumWidth(min(self.width() + short, screen))
+            self.resize(self.minimumWidth(), self.height())
 
     def accept(self) -> None:
         """The server refuses auto-splitting with off-grid lengths, so the refusal is met here where

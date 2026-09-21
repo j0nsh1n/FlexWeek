@@ -620,6 +620,10 @@ def pack_stylesheet(
         f"font-family: {family}; font-size: {size}pt; }}"
         f"QFrame, QGroupBox, QTableWidget, QListWidget {{ background: {palette['panel']}; "
         f"color: {palette['text']}; padding: {pad}px; border-radius: {radius}px; {edges} }}"
+        # A group's title sits in the space above its frame. Without the room it was drawn on the
+        # frame line, over the first row of what it names.
+        f"QGroupBox {{ margin-top: {round(size * 1.9) + 4}px; }}"
+        f"QGroupBox::title {{ subcontrol-origin: margin; left: {pad + 4}px; padding: 0 4px; }}"
         f"QLineEdit, QComboBox, QSpinBox, QTimeEdit, QDateTimeEdit {{ background: {palette['field']}; "
         f"color: {palette['text']}; padding: {pad}px; border-radius: {radius}px; "
         f"min-height: {field_min}px; {edges} }}"
