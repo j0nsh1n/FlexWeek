@@ -132,7 +132,7 @@ def test_my_day_puts_planning_away_and_back_brings_it_back(qapp: QApplication, w
     assert window.planner.currentWidget() is window.week_table
     click(window, "viewMyDay")
     assert isinstance(window.planner.currentWidget(), OneThingView)
-    assert window.solve_button.isVisible() is False
+    assert window.solve_button.isVisible() is True
     assert window.findChild(QPushButton, "viewMyDay").isChecked() is True
     assert window.findChild(QPushButton, "viewWeek").isChecked() is False
     click(window, "oneBack")
@@ -171,7 +171,7 @@ def test_start_focus_keeps_the_timer_in_view_on_a_day_screen(
     wait_until(qapp, lambda: window.session.focus is not None)
     assert window.session.focus["title"] == "History essay"
     assert window.focus_panel.isVisible() is True
-    assert window.solve_button.isVisible() is False
+    assert window.solve_button.isVisible() is True
 
 
 def test_running_late_opens_the_products_own_running_late(
@@ -348,9 +348,9 @@ def test_my_day_opens_whichever_day_screen_was_picked(qapp: QApplication, window
     assert window.planner.currentWidget() is window.week_table
 
 
-def tool_actions(window: NativeWindow) -> dict[str, bool]:
+def more_actions(window: NativeWindow) -> dict[str, bool]:
     """The items, without the section headings. addSection makes a separator that carries text."""
-    menu = window.tools_button.menu()
+    menu = window.more_button.menu()
     menu.aboutToShow.emit()
     return {
         action.text(): action.isEnabled()
@@ -359,45 +359,47 @@ def tool_actions(window: NativeWindow) -> dict[str, bool]:
     }
 
 
-def tool_sections(window: NativeWindow) -> list[str]:
-    menu = window.tools_button.menu()
+def more_sections(window: NativeWindow) -> list[str]:
+    menu = window.more_button.menu()
     menu.aboutToShow.emit()
     return [action.text() for action in menu.actions() if action.isSeparator() and action.text()]
 
 
-def test_a_design_of_its_own_gets_the_window_and_tools_holds_the_controls(
+def test_plan_and_more_stay_on_the_bar_in_every_layout(
     qapp: QApplication, window: NativeWindow
 ) -> None:
-    assert window.tools_button.isVisible() is False
+    """A design of its own used to hide Plan my homework and More behind Tools. That rule is gone:
+    the same two buttons stay in the top bar in every layout, every view, and My day."""
+    assert window.findChild(QPushButton, "toolsButton") is None
+    sections = None
+    items = None
+    for main in ("classic", "bento", "timeline"):
+        window._layout = {"main": main, "day": "one", "options": {}}
+        window._on_week()
+        assert window.solve_button.isVisible() is True
+        assert window.more_button.isVisible() is True
+        assert window.more_button.text() == "More"
+        if sections is None:
+            sections, items = more_sections(window), set(more_actions(window))
+        else:
+            assert more_sections(window) == sections
+            assert set(more_actions(window)) == items
     window._layout = {"main": "bento", "day": "one", "options": {}}
     window._on_week()
-    assert type(window.planner.currentWidget()).__name__ == "BentoView"
-    assert window.solve_button.isVisible() is False
-    assert window.tools_button.isVisible() is True
     qapp.processEvents()
     assert window.planner.height() > window.height() * 0.8
-    # Grouped by the job each action does, rather than one flat list of twenty.
-    assert tool_sections(window) == [
-        "Planning the week",
-        "Adding",
-        "Planning",
-        "Editing",
-        "Your week",
-        "Account",
-    ]
-    offered = tool_actions(window)
-    # Plan leads, because it is the one thing the bar keeps when there is a bar.
-    assert list(offered)[0] == "Plan my homework"
+    offered = more_actions(window)
+    assert more_sections(window) == ["Adding", "Planning", "Editing", "Your week", "Account"]
     assert {"Add homework", "Add fixed time"} <= set(offered)
     assert {"Settings", "Running late", "Routines", "Account", "Reload", "Undo", "Redo"} <= set(offered)
     assert (offered["Undo"], offered["Redo"]) == (True, False)
 
 
-def test_a_tool_does_what_its_button_does(qapp: QApplication, window: NativeWindow) -> None:
+def test_a_more_item_does_what_its_button_does(qapp: QApplication, window: NativeWindow) -> None:
     window._layout = {"main": "bento", "day": "one", "options": {}}
     window._on_week()
     before = len(window.session.blocks)
-    menu = window.tools_button.menu()
+    menu = window.more_button.menu()
     next(action for action in menu.actions() if action.text() == "Undo").trigger()
     settled(qapp, window)
     assert len(window.session.blocks) != before or window.session.can_redo() is True
@@ -408,17 +410,17 @@ def test_day_and_month_follow_the_week_layout(qapp: QApplication, window: Native
     click(window, "viewDay")
     assert type(window.planner.currentWidget()).__name__ == "BentoView"
     assert window.planner.currentWidget().scene.surface == "day"
-    assert (window.solve_button.isVisible(), window.tools_button.isVisible()) == (False, True)
+    assert (window.solve_button.isVisible(), window.more_button.isVisible()) == (True, True)
     click(window, "viewMonth")
     settled(qapp, window)
     shown = window.planner.currentWidget()
     assert type(shown).__name__ == "BentoView"
     assert shown.scene.surface == "month"
     click(window, "viewWeek")
-    assert (window.solve_button.isVisible(), window.tools_button.isVisible()) == (False, True)
+    assert (window.solve_button.isVisible(), window.more_button.isVisible()) == (True, True)
     click(window, "viewMyDay")
     assert type(window.planner.currentWidget()).__name__ == "OneThingView"
-    assert (window.solve_button.isVisible(), window.tools_button.isVisible()) == (False, False)
+    assert (window.solve_button.isVisible(), window.more_button.isVisible()) == (True, True)
 
 
 def test_todays_app_keeps_the_clock_day_and_chip_month(qapp: QApplication, window: NativeWindow) -> None:
@@ -440,8 +442,8 @@ def test_bentos_buttons_reach_the_products_own_add_and_plan(
     window._layout = {"main": "bento", "day": "one", "options": {}}
     window._on_week()
     click(window, "bentoAdd")
-    click(window, "bentoPlan")
-    click(window, "bentoMyDay")
+    click(window, "solveButton")
+    click(window, "viewMyDay")
     assert asked == ["add", "plan"]
     assert type(window.planner.currentWidget()).__name__ == "OneThingView"
 

@@ -128,7 +128,7 @@ class TimelineView(LayoutView):
             )
         )
         actions = QHBoxLayout()
-        for made in plan_buttons(self, "timeline", ("+ Add homework", "Plan my week", "Go to my day")):
+        for made in plan_buttons(self, "timeline", "+ Add homework"):
             actions.addWidget(made)
         actions.addStretch(1)
         self._column.addLayout(actions)

@@ -194,7 +194,7 @@ class RetroView(LayoutView):
 
     def _week_window(self, scene: Scene, body: QVBoxLayout) -> None:
         menu = QHBoxLayout()
-        for made in plan_buttons(self, "retro", ("Add homework…", "Plan my week", "My day")):
+        for made in plan_buttons(self, "retro", "Add homework…"):
             made.setProperty("kind", "menu")
             menu.addWidget(made)
         menu.addStretch(1)

@@ -199,10 +199,6 @@ class BentoView(LayoutView):
         else:
             inner.addWidget(label("Nothing else today", "bentoHeroTitle", wrap=True))
             inner.addWidget(label("The rest of the day is yours.", "bentoHeroLine"))
-        my_day = button("Go to my day", "bentoMyDay")
-        my_day.clicked.connect(self.my_day_requested.emit)
-        inner.addSpacing(scene.px(8))
-        inner.addWidget(my_day, 0, Qt.AlignmentFlag.AlignLeft)
         return tile
 
     def _deadlines(self, scene: Scene) -> QFrame:
@@ -234,11 +230,12 @@ class BentoView(LayoutView):
             note.setProperty("role", "muted")
             inner.addWidget(note)
         actions = QHBoxLayout()
-        plan = button("Plan it" if len(waiting) == 1 else "Plan my week", "bentoPlan")
-        plan.clicked.connect(self.plan_requested.emit)
+        if waiting:
+            plan = button("Plan it" if len(waiting) == 1 else "Plan them", "bentoPlan")
+            plan.clicked.connect(self.plan_requested.emit)
+            actions.addWidget(plan)
         add = button("+ Add", "bentoAddSmall")
         add.clicked.connect(lambda _=False: self.add_requested.emit(""))
-        actions.addWidget(plan)
         actions.addWidget(add)
         actions.addStretch()
         inner.addLayout(actions)

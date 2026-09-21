@@ -194,6 +194,6 @@ def test_the_radar_steps_aside_on_a_narrow_window(qapp: QApplication) -> None:
     qapp.processEvents()
     assert tight.cramped is True
     assert tight.findChild(QFrame, "missionSide") is None
-    for name in ("missionAdd", "missionPlan", "missionMyDay"):
+    for name in ("missionAdd",):
         button = tight.findChild(QPushButton, name)
         assert button is not None and button.x() + button.width() <= tight.width()

@@ -444,11 +444,6 @@ class NativeWindow(QMainWindow):
         self.account_name.setObjectName("accountName")
         self.account_name.setVisible(False)
         bar.addWidget(self.account_name)
-        # With a design of its own on screen the planning controls step aside, and this holds them all.
-        self.tools_button = QPushButton("Tools")
-        self.tools_button.setObjectName("toolsButton")
-        self.tools_button.hide()
-        bar.addWidget(self.tools_button)
         layout_button = QPushButton("Layout")
         layout_button.setObjectName("layoutButton")
         layout_button.clicked.connect(self._open_layout)
@@ -594,21 +589,6 @@ class NativeWindow(QMainWindow):
             hidden.setVisible(False)
         chrome.addLayout(actions)
         self.retry_button = retry
-        tools_menu = QMenu(self.tools_button)
-        self._tool_pairs = []
-        # Plan and Retry only: adding and saving are in the groups below, which Tools shares with
-        # More so the two menus cannot drift apart.
-        tools_menu.addSection("Planning the week")
-        for button in (solve, retry):
-            self._tool_pairs.append((tools_menu.addAction(button.text()), button))
-        for heading, buttons in self._groups:
-            tools_menu.addSection(heading)
-            for button in buttons:
-                self._tool_pairs.append((tools_menu.addAction(button.text()), button))
-        for action, button in self._tool_pairs:
-            action.triggered.connect(button.click)
-        tools_menu.aboutToShow.connect(self._sync_tools_menu)
-        self.tools_button.setMenu(tools_menu)
         self.clipboard_summary = QLabel("Nothing copied")
         self.clipboard_summary.setObjectName("clipboardSummary")
         chrome.addWidget(self.clipboard_summary)
@@ -754,22 +734,11 @@ class NativeWindow(QMainWindow):
         if isinstance(shown, LayoutView) and self.session.account is not None:
             shown.show_week(self._scene_for(shown.layout_id))
 
-    def _sync_tools_menu(self) -> None:
-        for action, button in self._tool_pairs:
-            action.setText(button.text())
-            action.setEnabled(button.isEnabled())
-
     def _sync_chrome(self) -> None:
-        """A design of its own gets the window. Under the week grid's toolbar, chips and task picker
-        Bento was a 300 pixel letterbox, so the planning controls step aside into the Tools menu.
-        The focus timer stays while it is running, or Start focus would look as if it did nothing."""
+        """Planning chips and the clipboard line step aside for a design of its own. Plan my
+        homework and More stay in the top bar in every layout, every view, and My day."""
         own = isinstance(self.planner.currentWidget(), LayoutView)
         self.plan_chrome.setVisible(not own)
-        # The planning controls live in the top bar now, so that is what steps aside for a design of
-        # its own; plan_chrome below it holds the clipboard line and the unfinished panel.
-        self.solve_button.setVisible(not own)
-        self.more_button.setVisible(not own)
-        self.tools_button.setVisible(own and not self._day_mode)
         self.focus_panel.setVisible(not own or self.session.focus is not None)
         if own:
             # Picking what to focus on is planning. Left in, the picker took the height and the day

@@ -267,7 +267,7 @@ class MissionView(LayoutView):
         head.addWidget(label(f"LOCAL {clock_label(scene.minute)}", "missionClock"))
         head.addWidget(label(f"PLAN {placed}/{placed + len(week.waiting)} PLACED", "missionPlaced"))
         head.addStretch(1)
-        for made in plan_buttons(self, "mission", ("+ ADD", "RUN PLAN", "MY DAY")):
+        for made in plan_buttons(self, "mission", "+ ADD"):
             head.addWidget(made)
         self._root.addLayout(head)
         if week.waiting:

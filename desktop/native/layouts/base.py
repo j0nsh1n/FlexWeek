@@ -240,15 +240,11 @@ def day_buttons(
     return [*made, back]
 
 
-def plan_buttons(view: LayoutView, prefix: str, words: tuple[str, str, str]) -> list[QPushButton]:
-    """What every main view has to offer by itself: add homework, run the plan, go to the day screen."""
-    add = button(words[0], f"{prefix}Add", "main")
+def plan_buttons(view: LayoutView, prefix: str, add_words: str) -> list[QPushButton]:
+    """Add homework. Plan my homework and My day live in the top bar in every layout."""
+    add = button(add_words, f"{prefix}Add", "main")
     add.clicked.connect(lambda _=False: view.add_requested.emit(""))
-    plan = button(words[1], f"{prefix}Plan")
-    plan.clicked.connect(view.plan_requested.emit)
-    my_day = button(words[2], f"{prefix}MyDay")
-    my_day.clicked.connect(view.my_day_requested.emit)
-    return [add, plan, my_day]
+    return [add]
 
 
 def block_button(view: LayoutView, text: str, name: str, block_id: str, kind: str = "row") -> QPushButton:

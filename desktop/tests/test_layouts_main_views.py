@@ -76,7 +76,7 @@ def test_a_main_view_can_plan_by_itself_whatever_its_options(qapp: QApplication,
     for options in every_choice(layout_id):
         view = shown(layout_id, options)
         found = names(view)
-        for need in ("Add", "Plan", "MyDay"):
+        for need in ("Add",):
             assert any(name.endswith(need) or need + "Small" in name for name in found), (options, need)
         assert {"poster-1", "second-wait"} <= blocks_offered(view), options
 
@@ -98,10 +98,9 @@ def test_a_main_views_buttons_ask_for_the_right_thing(qapp: QApplication, layout
     view.plan_requested.connect(lambda: asked.append("plan"))
     view.my_day_requested.connect(lambda: asked.append("my day"))
     view.block_activated.connect(asked.append)
-    for need in ("Add", "Plan", "MyDay"):
-        next(item for item in view.findChildren(QPushButton) if item.objectName().endswith(need)).click()
+    next(item for item in view.findChildren(QPushButton) if item.objectName().endswith("Add")).click()
     next(item for item in view.findChildren(QPushButton) if item.property("block_id") == "poster-1").click()
-    assert asked == ["add", "plan", "my day", "poster-1"]
+    assert asked == ["add", "poster-1"]
 
 
 @pytest.mark.parametrize("layout_id", MAIN_VIEWS)
@@ -112,4 +111,5 @@ def test_a_main_view_survives_an_empty_week_and_another_week(qapp: QApplication,
     for today in (3, None):
         view = VIEW_CLASSES[layout_id]()
         view.show_week(Scene(build_week(WEEK, [], {}, None), today, minute_of("13:40"), options, tokens))
-        assert {"Add", "Plan"} <= {name[-4:] if name.endswith("Plan") else name[-3:] for name in names(view)}
+        found = names(view)
+        assert any(name.endswith("Add") or "AddSmall" in name for name in found), found
