@@ -479,7 +479,9 @@ Recorded `operation_id` values make a retried write return the first result.
 
 ## Session Handoff
 - 2026-09-21, `claude/0-14-1-ia-fixes` on `grok/0-14-1-ia`: review fixes for
-  0.14.1 plus the spread-preview wording, worktree
+  0.14.1, the spread-preview wording, and Settings that apply as they change
+  (Jonathan's addition to 0.14.1: no OK/Cancel, account prefs saved 600 ms
+  after the last change and on Close), worktree
   `~/.worktrees/flexweek-ui-claude`. No push, no spec.md edit, VERSION still
   0.14.0. Next: Jonathan decides on push/PR for both branches together, then
   the 0.14.1 version bump and release when asked.

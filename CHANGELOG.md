@@ -22,6 +22,13 @@ All notable changes to FlexWeek are documented here. Format follows
 - Spreading homework across days says how much time is ready to add and when it
   is due ("3 h ready to add before Sun 23:59."), not how many sessions.
 - Alarm days sit in two rows, Monday to Thursday and Friday to Sunday.
+- Settings applies each change as you make it. There is no OK or Cancel, only
+  Close, and a line beside it says when a change is saved. Look and layout change
+  the window at once; the rest saves a moment after your last change, and
+  closing saves anything still waiting. Turning on focus splitting rounds the
+  focus lengths to 15 minutes straight away instead of asking when you press OK.
+  A Spotify link that is not a share link is not saved, and Settings says why.
+  Account and Availability keep their own Save.
 
 ### Fixed
 - The first-week sport name is an empty field with a placeholder, not the word

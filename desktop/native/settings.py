@@ -21,7 +21,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
-    QMessageBox,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
@@ -244,6 +243,10 @@ class FocusPanel(QWidget):
 
 
 class PrefsDialog(QDialog):
+    """Settings apply as they change: there is no OK to press and no Cancel to undo with. The dialog
+    says a choice changed; the window shows it and saves it."""
+
+    changed = Signal()
     account_requested = Signal()
     availability_requested = Signal()
     updates_requested = Signal()
@@ -528,13 +531,41 @@ class PrefsDialog(QDialog):
         area.setWidget(body)
         area.setMaximumHeight(PREFS_MAX_BODY)
         layout.addWidget(area)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(self.accept)
+        footer = QHBoxLayout()
+        self.save_state = QLabel("Changes are saved as you make them.")
+        self.save_state.setObjectName("prefsSaveState")
+        self.save_state.setWordWrap(True)
+        footer.addWidget(self.save_state, 1)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        footer.addWidget(buttons)
+        layout.addLayout(footer)
         self._render_alarms()
+        self._split_lengths(self.auto_split.isChecked(), say=False)
+        self.auto_split.toggled.connect(self._split_lengths)
+        for box in (self.work, self.break_min, self.long_break):
+            box.editingFinished.connect(self._round_if_splitting)
+        self.spotify.editingFinished.connect(self._check_spotify)
+        # Every choice says it changed. Connected last, so building the dialog says nothing, and after
+        # the handlers above, so a look or a timer preset has filled in its knobs by then.
+        for box in (self.look, self.accent, self.preferred_view, *self.knobs.values()):
+            box.currentIndexChanged.connect(self._announce)
+        for spin in (self.work, self.break_min, self.long_break, self.long_every, self.lead, self.volume):
+            spin.valueChanged.connect(self._announce)
+        for check in (
+            self.accent_chips,
+            self.auto_split,
+            self.reminders,
+            self.reminder_sound,
+            self.dnd_override,
+            self.end_chime,
+            self.tray,
+            self.start_at_login,
+        ):
+            check.toggled.connect(self._announce)
+        self.spotify.editingFinished.connect(self.changed.emit)
+        for section in self.layout_sections:
+            section.changed.connect(self.changed.emit)
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         """Sized once the pack's font has arrived. At large text a fixed 190 pixel list cut
@@ -558,24 +589,62 @@ class PrefsDialog(QDialog):
             self.setMinimumWidth(min(self.width() + short, screen))
             self.resize(self.minimumWidth(), self.height())
 
-    def accept(self) -> None:
-        """The server refuses auto-splitting with off-grid lengths, so the refusal is met here where
-        the numbers are, rather than as a failed save after the dialog has closed."""
-        off_grid = [
-            box.value() for box in (self.work, self.break_min, self.long_break) if box.value() % SLOT_MIN
-        ]
-        if self.auto_split.isChecked() and off_grid:
-            answer = QMessageBox.question(
-                self,
-                "Focus splitting",
-                f"Splitting into focus sessions needs {SLOT_MIN}-minute lengths. Round them and save?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
-            )
-            if answer != QMessageBox.StandardButton.Yes:
-                return
-            for box, ceiling in ((self.work, 180), (self.break_min, 60), (self.long_break, 120)):
-                box.setValue(snap_minutes(box.value(), 1, ceiling))
-        super().accept()
+    def _announce(self, *_value: object) -> None:
+        """Takes and drops the value a box sends. Wired straight to `changed.emit`, that value made
+        every emit raise inside Qt, which swallows it, so nothing showed until Settings closed."""
+        self.changed.emit()
+
+    def reject(self) -> None:
+        """Closing is the end of any typing, so a length typed while splitting is on is rounded now,
+        before the window saves what is left."""
+        self._round_if_splitting()
+        super().reject()
+
+    def _split_lengths(self, on: bool, say: bool = True) -> None:
+        """The server refuses splitting with lengths off the 15-minute grid. There is no OK left to
+        ask at, so turning splitting on rounds them, and says so, and they then step in 15s."""
+        for box in (self.work, self.break_min, self.long_break):
+            box.setSingleStep(SLOT_MIN if on else 1)
+        if on and self._round_if_splitting() and say:
+            self.save_state.setText(f"Focus lengths rounded to {SLOT_MIN} minutes, which splitting needs.")
+
+    def _round_if_splitting(self) -> bool:
+        if not self.auto_split.isChecked():
+            return False
+        moved = False
+        for box, ceiling in ((self.work, 180), (self.break_min, 60), (self.long_break, 120)):
+            snapped = snap_minutes(box.value(), 1, ceiling)
+            if snapped != box.value():
+                box.setValue(snapped)
+                moved = True
+        return moved
+
+    def _lengths(self) -> tuple[int, int, int]:
+        """What is saved. While splitting is on, a length typed halfway ("4" on the way to "45") is
+        saved rounded, so a pause mid-number never sends the server a length it refuses."""
+        values = (self.work.value(), self.break_min.value(), self.long_break.value())
+        if not self.auto_split.isChecked():
+            return values
+        work, rest, long_rest = values
+        return (snap_minutes(work, 1, 180), snap_minutes(rest, 1, 60), snap_minutes(long_rest, 1, 120))
+
+    def _spotify_link(self) -> str | None:
+        """The link to save: the one typed if it is a Spotify share link, else the one already saved."""
+        typed = self.spotify.text().strip()
+        if not typed:
+            return None
+        try:
+            return valid_spotify_url(typed) or None
+        except ValueError:
+            return self._preferences.get("default_spotify_url") or None
+
+    def _check_spotify(self) -> None:
+        typed = self.spotify.text().strip()
+        try:
+            if typed:
+                valid_spotify_url(typed)
+        except ValueError:
+            self.save_state.setText("That link was not saved. Use an https://open.spotify.com link.")
 
     def _apply_timer_preset(self, _index: int = 0) -> None:
         chosen = self.preset_timer.currentData()
@@ -636,6 +705,7 @@ class PrefsDialog(QDialog):
         self.alarm_name.clear()
         self.alarm_spotify.clear()
         self._render_alarms()
+        self.changed.emit()
 
     def _remove_alarm(self) -> None:
         row = self.alarm_list.currentRow()
@@ -643,19 +713,20 @@ class PrefsDialog(QDialog):
             return
         self._alarms.pop(row)
         self._render_alarms()
+        self.changed.emit()
 
     def updates(self) -> dict:
-        spotify = self.spotify.text().strip() or None
+        work, rest, long_rest = self._lengths()
         return {
             "theme_pack": self._pack,
             "accent": self.accent.currentData(),
-            "timer_work_min": self.work.value(),
-            "timer_break_min": self.break_min.value(),
-            "timer_long_break_min": self.long_break.value(),
+            "timer_work_min": work,
+            "timer_break_min": rest,
+            "timer_long_break_min": long_rest,
             "reminders_enabled": self.reminders.isChecked(),
             "reminder_lead_min": self.lead.value(),
             "tray_notifications": self.tray.isChecked(),
-            "default_spotify_url": spotify,
+            "default_spotify_url": self._spotify_link(),
             "alarms": deepcopy(self._alarms),
             # These eight could only be set from the web client, which stopped being the way most
             # students meet FlexWeek when the browser shell was retired.

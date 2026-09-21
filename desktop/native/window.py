@@ -125,6 +125,9 @@ AUTOSAVE_TICK_MS = 500
 LAYOUT_TICK_MS = 20_000
 # Space between the top bar and a notice under it.
 TOAST_GAP = 8
+# How long Settings waits after the last change before saving it to the account. Long enough that
+# typing a number or clicking through a menu is one save.
+SETTINGS_SAVE_MS = 600
 
 
 class NativeWindow(QMainWindow):
@@ -1634,6 +1637,9 @@ class NativeWindow(QMainWindow):
         QDesktopServices.openUrl(QUrl(url))
 
     def _open_settings(self) -> None:
+        """Every change shows the moment it is made; there is no OK. The look and layout live on this
+        device and are written at once. The account's choices are saved a moment after the last
+        change, so typing "45" saves once rather than twice, and closing saves whatever is left."""
         if self.session.preferences is None:
             self.session._say("Still loading your settings…")
             return
@@ -1643,17 +1649,49 @@ class NativeWindow(QMainWindow):
         dialog.account_requested.connect(self._open_account)
         dialog.availability_requested.connect(self._open_availability)
         dialog.updates_requested.connect(lambda: self._check_updates(asked=True))
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._look = dialog.look_choice()
-        self._layout = dialog.layout_choice()
-        self.session.look = self._look
-        self._save_look()
-        self._on_week()
-        updates = dialog.updates()
-        self._apply_start_at_login(bool(updates.get("start_at_login")))
-        self.session.save_preferences(updates)
-        self._apply_appearance()
+        stored = dialog.updates()
+        login = bool(stored["start_at_login"])
+
+        def save() -> None:
+            nonlocal stored
+            wanted = dialog.updates()
+            if wanted != stored and self.session.save_preferences(wanted):
+                stored = wanted
+
+        def apply() -> None:
+            nonlocal login
+            look, layout = dialog.look_choice(), dialog.layout_choice()
+            if look != self._look or layout != self._layout:
+                self._look = look
+                self.session.look = look
+                self._layout = layout
+                self._save_look()
+                self._on_week()
+            wanted = dialog.updates()
+            if self.session.preferences is not None:
+                # Pack and accent belong to the account but are seen like the look: at once. The save
+                # that follows stores them.
+                shown = {key: wanted[key] for key in ("theme_pack", "accent", "accent_chips")}
+                self.session.preferences = {**self.session.preferences, **shown}
+            if bool(wanted["start_at_login"]) != login:
+                login = bool(wanted["start_at_login"])
+                self._apply_start_at_login(login)
+            self._apply_appearance()
+            saver.start()
+
+        saver = QTimer(dialog)
+        saver.setSingleShot(True)
+        saver.setInterval(SETTINGS_SAVE_MS)
+        saver.timeout.connect(save)
+        dialog.changed.connect(apply)
+        self.session.status.connect(dialog.save_state.setText)
+        try:
+            dialog.exec()
+        finally:
+            with contextlib.suppress(RuntimeError, TypeError):
+                self.session.status.disconnect(dialog.save_state.setText)
+        saver.stop()
+        save()
 
     def _apply_start_at_login(self, wanted: bool) -> None:
         """The setting used to be stored on the account and obeyed by nothing. It is applied to this

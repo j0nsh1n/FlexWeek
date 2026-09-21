@@ -6,6 +6,7 @@ first look stays short.
 
 from __future__ import annotations
 
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -29,6 +30,8 @@ SLOTS = (
 class LayoutSection(QGroupBox):
     """One pick and the options of whatever is picked. Each design keeps its own settings while the
     dialog is open, so trying another design and coming back loses nothing."""
+
+    changed = Signal()
 
     def __init__(self, slot: str, role: str, title: str, blurb: str, choice: dict) -> None:
         super().__init__(title)
@@ -64,7 +67,7 @@ class LayoutSection(QGroupBox):
         self.reset = QPushButton("Reset this layout's options")
         self.reset.setObjectName(f"layout{slot.title()}Reset")
         body.addWidget(self.reset)
-        self.pick.currentIndexChanged.connect(lambda _index: self._rebuild(True))
+        self.pick.currentIndexChanged.connect(lambda _index: (self._rebuild(True), self.changed.emit()))
         self.more.toggled.connect(lambda _on: self._rebuild(False))
         self.reset.clicked.connect(self._reset)
         self._rebuild(True)
@@ -86,6 +89,7 @@ class LayoutSection(QGroupBox):
     def _reset(self) -> None:
         self._options[self.chosen()] = options_for(None, self.chosen())
         self._rebuild(True)
+        self.changed.emit()
 
     def _rebuild(self, fresh: bool) -> None:
         spec = LAYOUTS[self.chosen()]
@@ -120,4 +124,5 @@ class LayoutSection(QGroupBox):
                         target
                     ].__setitem__(key, str(source.currentData()))
                 )
+                box.currentIndexChanged.connect(lambda _index: self.changed.emit())
                 self._form.addRow(option.label, box)

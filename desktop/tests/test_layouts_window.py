@@ -671,39 +671,81 @@ def test_a_design_with_nothing_to_change_offers_no_fine_tune_or_reset(qapp: QApp
     assert offered() == (False, False)
 
 
-def test_cancelling_settings_leaves_the_layout_alone(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    before = dict(window._layout)
+def preference_puts(window: NativeWindow) -> list[dict]:
+    """Every preferences save the session sends, with what it sent."""
+    sent: list[dict] = []
+    real = window.session.client.request
 
-    def reject_after_bento(dialog: PrefsDialog) -> int:
+    def spy(method, path, payload, on_success, on_error):  # type: ignore[no-untyped-def]
+        if method == "PUT" and path == "/api/preferences":
+            sent.append(dict(payload))
+        return real(method, path, payload, on_success, on_error)
+
+    window.session.client.request = spy  # type: ignore[method-assign]
+    return sent
+
+
+def test_a_settings_change_shows_before_settings_closes(qapp: QApplication, window: NativeWindow) -> None:
+    """No OK: picking Bento changes the window behind the dialog while it is still open, and so does
+    an accent, and closing keeps both."""
+    seen: dict[str, object] = {}
+
+    def choose_while_open(dialog: PrefsDialog) -> int:
         pick = dialog.findChild(QComboBox, "layoutMain")
         pick.setCurrentIndex(pick.findData("bento"))
+        seen["view"] = type(window.planner.currentWidget()).__name__
+        dialog.accent.setCurrentIndex(dialog.accent.findData("sea"))
+        seen["accent"] = (window.session.preferences or {}).get("accent")
         return QDialog.DialogCode.Rejected
 
-    PrefsDialog.exec = reject_after_bento
+    PrefsDialog.exec = choose_while_open
     try:
         window._open_settings()
     finally:
         del PrefsDialog.exec
-    assert window._layout == before
-    assert type(window.planner.currentWidget()).__name__ != "BentoView"
-
-
-def test_accepting_settings_applies_the_layout(qapp: QApplication, window: NativeWindow) -> None:
-    def accept_bento(dialog: PrefsDialog) -> int:
-        pick = dialog.findChild(QComboBox, "layoutMain")
-        pick.setCurrentIndex(pick.findData("bento"))
-        return QDialog.DialogCode.Accepted
-
-    PrefsDialog.exec = accept_bento
-    try:
-        window._open_settings()
-    finally:
-        del PrefsDialog.exec
-    settled(qapp, window)
+    assert seen == {"view": "BentoView", "accent": "sea"}
     assert window._layout["main"] == "bento"
-    assert type(window.planner.currentWidget()).__name__ == "BentoView"
+
+
+def test_settings_saves_once_after_a_burst_and_closing_saves_it_at_once(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Typing 2, 25, 45 is one save of 45, sent as the dialog closes rather than lost with it."""
+    sent = preference_puts(window)
+
+    def type_then_close(dialog: PrefsDialog) -> int:
+        for value in (2, 25, 45):
+            dialog.work.setValue(value)
+        return QDialog.DialogCode.Rejected
+
+    PrefsDialog.exec = type_then_close
+    try:
+        window._open_settings()
+    finally:
+        del PrefsDialog.exec
+    assert [payload["timer_work_min"] for payload in sent] == [45]
+    wait_until(qapp, lambda: not window.session.busy)
+    # What the server sent back, not what the dialog showed: the timers are not shown ahead of the save.
+    assert (window.session.preferences or {})["timer_work_min"] == 45
+
+
+def test_a_pause_saves_without_closing_settings(qapp: QApplication, window: NativeWindow) -> None:
+    sent = preference_puts(window)
+
+    def change_then_wait(dialog: PrefsDialog) -> int:
+        dialog.volume.setValue(35)
+        wait_until(qapp, lambda: bool(sent))
+        seen = [payload["alert_volume"] for payload in sent]
+        assert seen == [35], seen
+        return QDialog.DialogCode.Rejected
+
+    PrefsDialog.exec = change_then_wait
+    try:
+        window._open_settings()
+    finally:
+        del PrefsDialog.exec
+    # Nothing changed after that save, so closing sends nothing more.
+    assert [payload["alert_volume"] for payload in sent] == [35]
 
 
 def test_settings_fits_its_width_in_every_layout_and_text_size(

@@ -165,56 +165,59 @@ def test_the_snooze_button_says_how_long_it_snoozes_for(qapp: Any) -> None:
     assert button is not None and str(ALARM_SNOOZE_MIN) in button.text()
 
 
-def test_auto_split_with_off_grid_lengths_is_caught_before_the_save(
-    qapp: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The server refuses this combination, so a dialog that closed on it lost the save with an
-    error the student could not act on from the week screen."""
-    from PySide6.QtWidgets import QMessageBox
-
+def test_turning_on_splitting_rounds_the_lengths_and_says_so(qapp: Any) -> None:
+    """The server refuses splitting with lengths off the 15-minute grid. With no OK to ask at, turning
+    splitting on is the moment: 25 becomes 30, the dialog says why, and the lengths step in 15s."""
     dialog = prefs_dialog(qapp, timer_work_min=25)
     dialog.auto_split.setChecked(True)
-    dialog.work.setValue(25)
-    monkeypatch.setattr(
-        QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Cancel)
-    )
-    dialog.accept()
-    assert dialog.result() != dialog.DialogCode.Accepted
+    assert dialog.work.value() == 30
+    assert dialog.work.singleStep() == 15
+    assert dialog.save_state.text() == "Focus lengths rounded to 15 minutes, which splitting needs."
+    assert dialog.updates()["timer_work_min"] == 30
 
 
-def test_agreeing_to_round_puts_the_lengths_on_the_grid_and_saves(
-    qapp: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from PySide6.QtWidgets import QMessageBox
-
-    dialog = prefs_dialog(qapp)
-    dialog.auto_split.setChecked(True)
-    dialog.work.setValue(25)
-    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes))
-    dialog.accept()
-    assert dialog.updates()["timer_work_min"] % 15 == 0
-    assert dialog.result() == dialog.DialogCode.Accepted
+def test_a_half_typed_length_is_saved_rounded_while_splitting(qapp: Any) -> None:
+    """"4" on the way to "45" can be what a pause saves, so it is saved on the grid, and leaving the
+    box puts it there too."""
+    dialog = prefs_dialog(qapp, auto_split_pomodoro=True, timer_work_min=30)
+    dialog.work.setValue(4)
+    assert dialog.updates()["timer_work_min"] == 15
+    dialog.work.editingFinished.emit()
+    assert dialog.work.value() == 15
 
 
-def test_off_grid_lengths_are_fine_when_splitting_is_off(qapp: Any, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Nothing rounds the timers when the student is not splitting, and they are never asked to."""
-    from PySide6.QtWidgets import QMessageBox
+def test_closing_settings_rounds_a_length_typed_while_splitting(qapp: Any) -> None:
+    dialog = prefs_dialog(qapp, auto_split_pomodoro=True, timer_work_min=30)
+    dialog.work.setValue(40)
+    dialog.reject()
+    assert dialog.work.value() == 45
 
-    asked: list[object] = []
-    monkeypatch.setattr(
-        QMessageBox,
-        "question",
-        staticmethod(
-            lambda *a, **k: asked.append(a) or QMessageBox.StandardButton.Cancel  # noqa: FBT003
-        ),
-    )
+
+def test_off_grid_lengths_are_fine_when_splitting_is_off(qapp: Any) -> None:
+    """Nothing rounds the timers when the student is not splitting, not even closing Settings."""
     dialog = prefs_dialog(qapp)
     dialog.auto_split.setChecked(False)
     dialog.work.setValue(25)
-    dialog.accept()
-    assert asked == []
+    dialog.reject()
+    assert dialog.work.value() == 25
     assert dialog.updates()["timer_work_min"] == 25
-    assert dialog.result() == dialog.DialogCode.Accepted
+
+
+def test_a_bad_default_spotify_link_is_not_saved_and_says_why(qapp: Any) -> None:
+    kept = "https://open.spotify.com/playlist/37i9dQZF1DX8NTLI2TtZa6"
+    dialog = prefs_dialog(qapp, default_spotify_url=kept)
+    dialog.spotify.setText("my study mix")
+    dialog.spotify.editingFinished.emit()
+    assert dialog.updates()["default_spotify_url"] == kept
+    assert dialog.save_state.text() == "That link was not saved. Use an https://open.spotify.com link."
+
+
+def test_settings_has_one_close_button_and_no_ok_or_cancel(qapp: Any) -> None:
+    from PySide6.QtWidgets import QDialogButtonBox
+
+    dialog = prefs_dialog(qapp)
+    boxes = dialog.findChildren(QDialogButtonBox)
+    assert [box.standardButtons() for box in boxes] == [QDialogButtonBox.StandardButton.Close]
 
 
 def test_release_notes_are_readable_rather_than_raw_markdown(qapp: Any) -> None:
