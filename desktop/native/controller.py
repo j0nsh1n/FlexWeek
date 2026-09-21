@@ -1065,9 +1065,18 @@ class NativeSession(QObject):
             self.trace = data
             placed = sum(1 for item in data["placed"] if item["id"] in targets and item.get("start"))
             waiting = sum(1 for item in data.get("unplaced") or [] if item["id"] in targets)
+            # Why each target still has no time is what this plan found, not what the edit that first
+            # took its time said: kept, that sentence came back after the next edit and was wrong.
+            reasons = {
+                item["block_id"]: item["message"]
+                for item in data.get("explanations") or []
+                if item.get("reason") and item.get("message")
+            }
             for block_id in targets:
                 if sources.get(block_id, {}).get("start"):
                     self.needs_time.pop(block_id, None)
+                elif block_id in reasons:
+                    self.needs_time[block_id] = reasons[block_id]
             self._fresh_plan = True
             split_note = self._apply_auto_split(data)
             self.dirty = True

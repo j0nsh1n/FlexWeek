@@ -794,6 +794,41 @@ def test_running_late_saves_on_a_week_that_already_has_a_missed_day(
     assert _stored(session, "school")["days"] == [0, 1, 2, 3, 4]
 
 
+def test_the_reason_homework_has_no_time_is_the_latest_one(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    """A club over Monday afternoon takes Math's 15:15, and "no longer fits Monday at 15:15" is right.
+    If Find a new time then finds nothing either, that sentence was kept and came back after the next
+    edit, although the real reason by then was that Monday had no room before the deadline."""
+    session = signed_in(qapp, server.origin, "alice", create=True)
+    _planned_school_week(qapp, session)
+    for block_id, title, start, minutes in (("club", "Club", "15:00", 360), ("swim", "Swim", "06:00", 120)):
+        session.add_block(
+            {
+                "id": block_id,
+                "title": title,
+                "kind": "locked",
+                "start": start,
+                "duration_min": minutes,
+                "days": [0],
+            }
+        )
+    math = next(block["id"] for block in session.blocks if block.get("assignment_id") == "math")
+    assert "no longer fits" in session.needs_time[math]
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    session.solve(only={math})
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    assert _stored(session, math).get("start") is None
+    session.add_block(
+        {"id": "gym", "title": "Gym", "kind": "locked", "start": "10:00", "duration_min": 60, "days": [5]}
+    )
+    explained = (session.plan_notes() or {}).get("explanations") or []
+    notes = {item["block_id"]: item["message"] for item in explained}
+    assert math in notes
+    assert "no longer fits" not in notes[math], notes[math]
+
+
 def test_missed_recovery_stores_the_missed_day(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     session.add_block(soccer())
