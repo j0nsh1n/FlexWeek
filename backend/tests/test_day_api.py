@@ -254,5 +254,21 @@ def test_an_unfinished_session_still_offers_every_candidate_day(alice: TestClien
     for day in ("2026-09-14", "2026-09-15", "2026-09-16"):
         body = get_day(alice, day).json()
         assert [block["id"] for block in body["sessions"]] == ["w1"], day
-        assert body["workload"]["scheduled_min"] == 60, day
+        assert body["workload"]["scheduled_min"] == 0, day
         assert body["workload"]["focus_min"] == 0, day
+
+
+def test_only_homework_with_a_time_counts_as_planned(alice: TestClient) -> None:
+    """The audit's Day said "9 h 15 min planned" for homework that had no time on any day."""
+    assert put_assignment(alice, assignment()).status_code == 200
+    placed = session("w1", start="16:00")
+    waiting = session("w2", days=[0, 1, 2])
+    assert save_week(alice, [school(), placed, waiting]).status_code == 200
+
+    tuesday = get_day(alice).json()
+    assert {block["id"] for block in tuesday["sessions"]} == {"w1", "w2"}
+    assert tuesday["workload"]["scheduled_min"] == 390 + 60
+    assert sum(group["scheduled_min"] for group in tuesday["workload"]["by_category"]) == 390 + 60
+    monday = get_day(alice, "2026-09-14").json()
+    assert [block["id"] for block in monday["sessions"]] == ["w2"]
+    assert monday["workload"]["scheduled_min"] == 390

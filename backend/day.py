@@ -97,7 +97,8 @@ def _by_category(sessions: list[dict], locked: list[dict]) -> list[dict]:
         category = block.get("category")
         group = groups.setdefault(category, {"scheduled_min": 0, "focus_min": 0})
         duration = int(block["duration_min"])
-        group["scheduled_min"] += duration
+        if block.get("start"):
+            group["scheduled_min"] += duration
         if is_work_session(block) and block.get("completed"):
             group["focus_min"] += duration
     ordered = sorted(
@@ -138,7 +139,9 @@ def build_day(
         if block.get("kind") == "locked" and not is_work_session(block) and _on_day(block, day_index)
     ]
     due_soon = _due_soon(assignment_rows, agenda, week_start, weeks)
-    scheduled = sum(int(block["duration_min"]) for block in sessions + locked)
+    # Only work with a time is planned. Homework still waiting for one is offered on every day it
+    # could go, and counting it there billed one hour to each of them as "planned".
+    scheduled = sum(int(block["duration_min"]) for block in sessions + locked if block.get("start"))
     focus = sum(int(block["duration_min"]) for block in sessions if block.get("completed"))
     return {
         "date": date_str,
