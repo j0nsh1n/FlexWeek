@@ -33,9 +33,27 @@ All notable changes to FlexWeek are documented here. Format follows
 - Today sits beside the week arrows. Fixed activities have a Start and an End,
   with the length underneath. The gear stays on a 1024 px wide window in the
   offscreen tests.
+- Marking one day of a repeating commitment missed (Monday's school) no longer
+  stops the week from saving. It showed "FlexWeek could not display this
+  response", and every save after it failed, so later changes were lost on
+  restart. Running late on a week with a missed day failed the same way. The
+  replan after a missed day is now kept after a reload.
+- The week title shows in full beside its arrows instead of being cut to
+  "21 – 27 S" underneath them. When the window is too narrow it shortens the
+  month names ("28 Sep – 4 Oct") rather than cutting off the end date.
+- Fixed activities are only a Start and an End. The Duration box that could
+  disagree with them is gone; the length is worked out and shown as "6 h 30 min",
+  or as the problem ("End must be after Start.") in red beside the times.
+- A Find a new time or Finished notice is said once, on the notice, not again in
+  a pop-up, and names every homework that lost its time.
+- If Find a new time cannot place homework either, the reason shown is the new
+  one, not the sentence from when its old time was taken.
 
 ### Changed
 - After a plan, the status line says how many homework blocks were planned.
+- The Main view and Day screen menus say what each view is for first:
+  Calendar · Today's app, Agenda · Timeline, Dashboard · Bento, Focus · One
+  thing, and so on.
 
 ## [0.14.1] - 2026-09-21
 

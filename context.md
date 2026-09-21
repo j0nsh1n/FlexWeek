@@ -16,7 +16,14 @@
   still says it re-solves after the locked block is saved. The native app now
   stores placements and applies the Running late preview in the same save.
   spec.md does not still describe a web app or a WebEngine shell (PR #22).
-  Next: owner review, then a 0.14.2 bump and package when asked.
+  Second review round (Claude): a missed day no longer stops the week saving
+  (apply_plan writes only unfinished homework), the week title fits beside
+  its arrows with a short form, fixed activities are Start and End only, views
+  say what they are for, notices speak once and name every lost session, and
+  a failed replan keeps the newest reason. Gate after that: 987 Python tests,
+  `scripts/verify.py` exit 0. Still unverified: the audit's ~150 px dialogs
+  and the packaged app. Next: owner review, then a 0.14.2 bump and package
+  when asked.
 - Date: 2026-09-21 (IA harden). 0.14.1 shipped: Plan my homework and More stay
   in every design; Settings is a gear; Appearance & layout is one Settings
   section; summaries speak minutes; Running late toasts the reason or the
@@ -483,6 +490,13 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-21, `fix/0-14-1-trust`: Claude's fixes from the second review of
+  Grok's run, one commit each: missed-day and Running late saves (apply_plan
+  writes only unfinished homework), the week title (FittedLabel with a short
+  form), Start/End-only fixed activities, view names with a purpose, notices
+  said once and naming everyone, and the latest reason after a failed plan.
+  No push, no executable, VERSION 0.14.1, spec.md not edited. GLM skipped on
+  Jonathan's instruction; Jev used. Next: owner review, then 0.14.2 when asked.
 - 2026-09-21, `fix/0-14-1-trust`: Claude's trust-review items on the 0.14.1
   audit branch. Leftover copy, one-step Running late undo, settle/keep-plan,
   Month host, username/estimate/More details/Today/Start+End, offscreen 1024
