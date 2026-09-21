@@ -5,6 +5,8 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-09-21
+
 ### Changed
 - Plan my homework and More stay in the top bar in every design, including My day.
   Designs no longer hide them behind a Tools button, and they no longer draw their

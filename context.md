@@ -478,6 +478,11 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-21, `feat/0-14-1-release`: 0.14.1 release prep (VERSION, CHANGELOG
+  heading, `docs/release-notes-v0.14.1.md`) after PR #23 merged. The release is
+  published as a pre-release first so 0.14.0 installs are not offered it until
+  it is marked latest (the updater reads /releases/latest and skips
+  pre-releases); Windows installers still want a hand-check on a real PC.
 - 2026-09-21, `claude/0-14-1-ia-fixes` on `grok/0-14-1-ia`: review fixes for
   0.14.1, the spread-preview wording, and Settings that apply as they change
   (Jonathan's addition to 0.14.1: no OK/Cancel, account prefs saved 600 ms
