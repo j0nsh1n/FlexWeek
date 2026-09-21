@@ -224,9 +224,7 @@ def test_the_notice_sits_under_the_bar_on_one_line(qapp: QApplication, window: N
         assert window.toast.y() > bar_bottom, text
 
 
-def test_accepting_running_late_locks_the_start_and_toasts(
-    qapp: QApplication, window: NativeWindow
-) -> None:
+def accept_late(qapp: QApplication, window: NativeWindow) -> tuple[dict, str]:
     from desktop.native.reuse import late_locked_line
 
     now = datetime.fromtimestamp(window.session.now_ms() / 1000)
@@ -234,14 +232,42 @@ def test_accepting_running_late_locks_the_start_and_toasts(
     wait_until(qapp, lambda: window.session.late_preview is not None and not window.session.busy)
     preview = window.session.late_preview
     moved = len((preview.get("trace") or {}).get("moves") or [])
-    block = preview["block"]
     window._commit_late(preview)
-    assert any(item["id"] == block["id"] for item in window.session.blocks)
+    return preview["block"], late_locked_line(preview["block"], moved)
+
+
+def test_accepting_running_late_says_locked_once_it_is_saved(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    block, said = accept_late(qapp, window)
     assert window.session.selected_block_id == block["id"]
-    said = late_locked_line(block, moved)
+    # Nothing is said before the save answers: until then the late start is not kept anywhere.
+    assert window.toast.isVisible() is False
+    wait_until(qapp, lambda: window.toast.isVisible())
     assert window.toast.text() == said
-    assert window.toast.isVisible() is True
-    assert window.week_status.text() == said
+    assert window.session.dirty is False
+    assert any(item["id"] == block["id"] for item in window.session.blocks)
+
+
+def test_a_save_without_the_late_start_does_not_confirm_it(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """A save already in flight when Running late was accepted stores the week without it."""
+    window._late_waiting = ("b-late-not-stored-yet", "Running late: 19:00–19:30 is now locked.")
+    window.session.save_finished.emit(True, "Saved.")
+    qapp.processEvents()
+    assert window.toast.isVisible() is False
+
+
+def test_a_late_start_that_fails_to_save_says_so_instead(qapp: QApplication, window: NativeWindow) -> None:
+    from desktop.tests.logic_support import fail_once
+
+    fail_once(window.session, "POST", "/api/changes", 409)
+    _block, said = accept_late(qapp, window)
+    wait_until(qapp, lambda: window.toast.isVisible())
+    assert window.toast.text() != said
+    assert window.toast.text().startswith("Not saved.")
+    assert window.session.conflict is True
 
 
 def test_the_keyboard_reaches_my_day_and_back(qapp: QApplication, window: NativeWindow) -> None:

@@ -171,7 +171,10 @@ class NativeWindow(QMainWindow):
         self.session.week_changed.connect(self._on_week)
         self.session.status.connect(self._on_status)
         self.session.busy_changed.connect(self._on_busy)
+        self.session.save_finished.connect(self._on_save_finished)
         self._late_dialog: LateDialog | None = None
+        # The late start accepted but not stored yet, and the sentence its save will confirm.
+        self._late_waiting: tuple[str, str] | None = None
         self._pending_spread_ui = False
         self._quitting = False
         self._tray_icon: QSystemTrayIcon | None = None
@@ -1444,9 +1447,23 @@ class NativeWindow(QMainWindow):
         if not self.session.accept_running_late() or not isinstance(block, dict):
             return
         self.session.select_block(block["id"], (block.get("days") or [0])[0])
-        message = late_locked_line(block, moved)
-        self.session._say(message)
-        self.toast.show_message(message)
+        # "Is now locked" waits for the save that stores it. Said at once, it stood on screen for six
+        # seconds even when that save failed and the late start was never kept.
+        self._late_waiting = (block["id"], late_locked_line(block, moved))
+
+    def _on_save_finished(self, stored: bool, said: str) -> None:
+        if self._late_waiting is None:
+            return
+        block_id, message = self._late_waiting
+        if not stored:
+            self._late_waiting = None
+            self.toast.show_message(said)
+        elif any(item["id"] == block_id for item in self.session.blocks):
+            # A save already in flight when Running late was accepted finishes without the late start;
+            # the wait is for the one that carries it.
+            self._late_waiting = None
+            self.session._say(message)
+            self.toast.show_message(message)
 
     def _open_spread(self, assignment_id: str) -> None:
         item = self.session.assignments.get(assignment_id)

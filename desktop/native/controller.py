@@ -118,6 +118,8 @@ class NativeSession(QObject):
     week_changed = Signal()
     busy_changed = Signal(bool)
     status = Signal(str)
+    # Each save's outcome, for words that must wait for it: (stored, what the status line says).
+    save_finished = Signal(bool, str)
     focus_changed = Signal()
     focus_replace_needed = Signal(str, str)
     alerts = Signal(list)
@@ -951,6 +953,7 @@ class NativeSession(QObject):
             if self._preview_attempt:
                 self._attempts.pop(self._preview_attempt, None)
                 self._preview_attempt = None
+            self.save_finished.emit(True, self.message)
             if destination is not None:
                 self.load_week(destination)
                 return
@@ -984,6 +987,7 @@ class NativeSession(QObject):
                 self._attempts.pop(self._preview_attempt, None)
                 self._preview_attempt = None
             self._say("Not saved. " + error.message)
+            self.save_finished.emit(False, self.message)
             self.week_changed.emit()
 
         self.client.request("POST", "/api/changes", deepcopy(self.pending_save), ok, err)
