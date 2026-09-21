@@ -126,9 +126,32 @@ def test_tabbing_into_a_time_field_selects_the_default(qapp: QApplication) -> No
     card = SetupCard()
     card.show()
     qapp.processEvents()
-    card.school_start.setFocus()
+    card.school_end.setFocus()
+    qapp.processEvents()
+    card.school_start.setFocus(Qt.FocusReason.TabFocusReason)
     qapp.processEvents()
     assert card.school_start.selectedText() == card.school_start.text() == "08:00"
+    card.close()
+
+
+def test_a_second_click_in_a_time_field_places_the_caret(qapp: QApplication) -> None:
+    """Only the click that brings the focus selects the default. After that a click puts the caret
+    where it lands, so "08:00" can be corrected to "08:30" without retyping it."""
+    card = SetupCard()
+    card.show()
+    qapp.processEvents()
+    field = card.school_start
+    middle = QPoint(3, max(field.height() // 2, 1))
+    QTest.mouseClick(field, Qt.MouseButton.LeftButton, pos=middle)
+    qapp.processEvents()
+    assert field.selectedText() == "08:00"
+    QTest.mouseClick(field, Qt.MouseButton.LeftButton, pos=middle)
+    qapp.processEvents()
+    assert field.selectedText() == ""
+    field.setCursorPosition(4)
+    QTest.keyClick(field, Qt.Key.Key_Backspace)
+    QTest.keyClicks(field, "3")
+    assert field.text() == "08:30"
     card.close()
 
 
@@ -195,3 +218,22 @@ def test_setup_labels_sit_beside_their_fields_at_every_text_size(qapp: QApplicat
             )
         card.grab().save(str(out / f"setup-sport-{size}.png"))
         page.close()
+
+
+def test_a_time_the_student_typed_is_not_selected_again(qapp: QApplication) -> None:
+    """Coming back to a field that holds the student's own time is editing it, not replacing a
+    default, so the click places the caret."""
+    card = SetupCard()
+    card.show()
+    qapp.processEvents()
+    field = card.school_start
+    edge = QPoint(3, max(field.height() // 2, 1))
+    QTest.mouseClick(field, Qt.MouseButton.LeftButton, pos=edge)
+    QTest.keyClicks(field, "07:30")
+    card.school_end.setFocus()
+    qapp.processEvents()
+    QTest.mouseClick(field, Qt.MouseButton.LeftButton, pos=edge)
+    qapp.processEvents()
+    assert field.text() == "07:30"
+    assert field.selectedText() == ""
+    card.close()

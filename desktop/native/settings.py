@@ -74,15 +74,31 @@ SPORT_FALLBACK = "Sport or club"
 
 
 class _SelectOnFocus(QLineEdit):
-    """Clicking or tabbing in selects the default, so the next keystroke replaces it."""
+    """A field holding a default, like the "08:00" school start. Tabbing in, or the first click in,
+    selects the default so the next keystroke replaces it: left alone, a click at its left edge and
+    "07:30" made "07:3008:00". Only the default, and only that first click: selecting on every click
+    meant the caret could never be put inside "08:00" with the mouse."""
+
+    _KEYBOARD = (Qt.FocusReason.TabFocusReason, Qt.FocusReason.BacktabFocusReason)
+
+    def __init__(self, default: str) -> None:
+        super().__init__(default)
+        self._default = default
+        self._armed = False
 
     def focusInEvent(self, event: QFocusEvent) -> None:  # noqa: N802
         super().focusInEvent(event)
-        QTimer.singleShot(0, self.selectAll)
+        untouched = self.text() == self._default
+        if untouched and event.reason() in self._KEYBOARD:
+            self.selectAll()
+        self._armed = untouched and event.reason() not in self._KEYBOARD
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         super().mouseReleaseEvent(event)
-        self.selectAll()
+        # A drag on that first click is a selection the student made, so it stays.
+        if self._armed and not self.hasSelectedText():
+            self.selectAll()
+        self._armed = False
 
 
 def _invalidate(layout: QLayout) -> None:
