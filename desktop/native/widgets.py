@@ -88,7 +88,6 @@ from desktop.native.reuse import (
     AVAILABILITY_LIMIT,
     LATE_MINUTES,
     PROTECTED_KINDS,
-    format_duration,
     preview_conflict_message,
     routine_source_blocks,
     row_conflict,
@@ -1098,20 +1097,19 @@ class BlockDialog(QDialog):
         self.start.setDisplayFormat("HH:mm")
         self.start.setObjectName("blockStart")
         form.addRow("Start", self.start)
-        self.end = QTimeEdit()
+        # Start and End are what a student knows ("08:00 to 14:30"); the length is worked out from
+        # them. A Duration box beside End was a second way to say the same thing, and could disagree.
+        self._length = int(self._original["duration_min"])
+        self.end = QTimeEdit(self._minutes_clock(self._clock_minutes(self.start.time()) + self._length))
         self.end.setDisplayFormat("HH:mm")
         self.end.setObjectName("blockEnd")
         form.addRow("End", self.end)
-        self.duration = _minutes("blockDuration", self._original["duration_min"], 1020)
-        form.addRow("Duration", self.duration)
         self.duration_line = QLabel()
         self.duration_line.setObjectName("blockDurationLine")
         form.addRow("", self.duration_line)
-        self._syncing_times = False
-        self.start.timeChanged.connect(self._sync_end_from_start)
-        self.duration.valueChanged.connect(self._sync_end_from_start)
-        self.end.timeChanged.connect(self._sync_duration_from_end)
-        self._sync_end_from_start()
+        self.start.timeChanged.connect(self._keep_length)
+        self.end.timeChanged.connect(self._show_length)
+        self._show_length()
         self.category = QComboBox()
         self.category.setObjectName("blockCategory")
         self.category.addItem("None", None)
@@ -1170,29 +1168,31 @@ class BlockDialog(QDialog):
         minutes %= 24 * 60
         return QTime(minutes // 60, minutes % 60)
 
-    def _sync_end_from_start(self, *_args: object) -> None:
-        if self._syncing_times:
-            return
-        self._syncing_times = True
-        end = self._clock_minutes(self.start.time()) + self.duration.value()
-        self.end.setTime(self._minutes_clock(end))
-        self.duration_line.setText(f"That's {format_duration(self.duration.value())}.")
-        self._syncing_times = False
+    def _span(self) -> int:
+        return self._clock_minutes(self.end.time()) - self._clock_minutes(self.start.time())
 
-    def _sync_duration_from_end(self, *_args: object) -> None:
-        if self._syncing_times:
-            return
-        self._syncing_times = True
-        start = self._clock_minutes(self.start.time())
-        span = self._clock_minutes(self.end.time()) - start
+    def _span_problem(self) -> str:
+        span = self._span()
         if span <= 0:
-            span += 24 * 60
-        span = max(15, (span // 15) * 15)
-        span = min(span, self.duration.maximum())
-        self.duration.setValue(span)
-        self.end.setTime(self._minutes_clock(start + span))
-        self.duration_line.setText(f"That's {format_duration(span)}.")
-        self._syncing_times = False
+            return "End must be after Start."
+        if span % SLOT_MIN:
+            return "Use quarter hours, such as 15:00 or 15:15."
+        return ""
+
+    def _keep_length(self, *_args: object) -> None:
+        """Moving the start moves the end with it, as a calendar does, so the length stays."""
+        self.end.setTime(self._minutes_clock(self._clock_minutes(self.start.time()) + self._length))
+
+    def _show_length(self, *_args: object) -> None:
+        problem = self._span_problem()
+        if not problem:
+            self._length = self._span()
+        # The problem is said here, beside the times, in the error colour; nowhere else, so it is
+        # not the same sentence twice.
+        self.duration_line.setText(problem or length_label(self._span()))
+        self.duration_line.setProperty("problem", bool(problem))
+        self.duration_line.style().unpolish(self.duration_line)
+        self.duration_line.style().polish(self.duration_line)
 
     def scope(self) -> str:
         if self.scope_occurrence.isChecked() and self._occurrence_day is not None:
@@ -1223,13 +1223,16 @@ class BlockDialog(QDialog):
         if self._deleted:
             super().accept()
             return
+        if self._span_problem():
+            self.end.setFocus()
+            return
         candidate = deepcopy(self._original)
         chosen_days = [index for index, check in enumerate(self.days) if check.isChecked()]
         candidate.update(
             title=self.title.text().strip(),
             days=chosen_days,
             start=self.start.time().toString("HH:mm"),
-            duration_min=self.duration.value(),
+            duration_min=self._span(),
             category=self.category.currentData(),
             spotify_url=self.spotify.text().strip() or None,
         )

@@ -226,16 +226,45 @@ def test_homework_optional_fields_sit_behind_more_details(qapp: QApplication) ->
     filled.close()
 
 
-def test_a_fixed_activity_has_a_start_and_an_end(qapp: QApplication) -> None:
+def test_a_fixed_activity_is_a_start_and_an_end_with_the_length_worked_out(qapp: QApplication) -> None:
+    """School is 08:00 to 14:30, not 390 minutes. An editable Duration beside End was a second way to
+    say the same thing, and the two could disagree."""
+    from PySide6.QtCore import QTime
+    from PySide6.QtWidgets import QAbstractSpinBox
+
     dialog = BlockDialog(None, school())
     dialog.show()
     qapp.processEvents()
-    assert dialog.start.time().toString("HH:mm") == "08:00"
-    assert dialog.end.time().toString("HH:mm") == "14:30"
-    assert "6h 30m" in dialog.duration_line.text()
-    dialog.end.setTime(dialog.end.time().addSecs(30 * 60))
+    assert (dialog.start.time().toString("HH:mm"), dialog.end.time().toString("HH:mm")) == ("08:00", "14:30")
+    assert dialog.duration_line.text() == "6 h 30 min"
+    assert dialog.findChild(QAbstractSpinBox, "blockDuration") is None
+    dialog.end.setTime(QTime(15, 0))
     qapp.processEvents()
-    assert dialog.duration.value() == 420
+    assert dialog.duration_line.text() == "7 h"
+    dialog.accept()
+    assert dialog.block()["duration_min"] == 420
+    dialog.close()
+
+
+def test_a_fixed_activity_that_ends_before_it_starts_is_refused_beside_the_times(qapp: QApplication) -> None:
+    from PySide6.QtCore import QTime
+
+    dialog = BlockDialog(None, school())
+    dialog.show()
+    qapp.processEvents()
+    dialog.end.setTime(QTime(7, 30))
+    qapp.processEvents()
+    assert dialog.duration_line.text() == "End must be after Start."
+    dialog.accept()
+    assert dialog.result() != dialog.DialogCode.Accepted
+    # Said once, beside the times, as an error; not repeated at the bottom of the form.
+    assert dialog.duration_line.property("problem") is True
+    assert dialog.error.text() == ""
+    dialog.end.setTime(QTime(15, 10))
+    qapp.processEvents()
+    assert dialog.duration_line.text() == "Use quarter hours, such as 15:00 or 15:15."
+    dialog.accept()
+    assert dialog.result() != dialog.DialogCode.Accepted
     dialog.close()
 
 

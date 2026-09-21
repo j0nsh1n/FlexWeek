@@ -676,6 +676,7 @@ def pack_stylesheet(
         f"QPushButton#prevWeek:hover, QPushButton#nextWeek:hover {{ color: {palette['text']}; }}"
         # One filled button on the page: the thing the app is for.
         f"QLabel#blockDurationLine {{ color: {palette['muted']}; }}"
+        f"QLabel#blockDurationLine[problem=\"true\"] {{ color: {palette['error']}; font-weight: 600; }}"
         f"QPushButton#moreButton, QPushButton#settingsGear {{ background: transparent; "
         f"color: {palette['muted']}; {edges} }}"
         f"QWidget#setupCard {{ background: {palette['panel']}; border-radius: {radius}px; {edges} }}"
