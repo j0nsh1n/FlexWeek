@@ -343,41 +343,40 @@
   server; there is no automatic synchronization between them.
 
 ## Repo Landmarks
+The web client was deleted on 2026-09-19; there is no `frontend/`. FlexWeek is the
+Qt widgets app below, over the FastAPI backend it starts in-process.
 ```
 docs/cac-build-plan.md   original Sep 6 contest brief (working title Reslot)
-.github/workflows/       verify.yml (mypy), codeql.yml, release packages
-DESKTOP.md               PySide6 QWebEngineView recommendation + build status
-desktop/origin.py        origin resolution, no Qt imports (unit-tested)
+.github/workflows/       verify.yml (mypy), codeql.yml (Python), release packages
+DESKTOP.md               packaging now at the top; WebEngine-era sections marked
+desktop/main.py          launcher: starts the backend, then the native window
 desktop/server.py        bundled uvicorn on a loopback port, no Qt imports
-desktop/main.py          native Qt window; default launcher after unit 6
-desktop/native/          widgets, session, focus/remind/files/look
+desktop/origin.py        origin resolution, no Qt imports (unit-tested)
+desktop/native/window.py     chrome, pages, dialogs, autosave, updater wiring
+desktop/native/controller.py session: saves, solve, focus, alarms, reminders
+desktop/native/widgets.py    week grid, day agenda, month, editors, Add menu
+desktop/native/layouts/      the eight designs; registry.py builds the dialog
+desktop/native/look.py       packs, presets, palettes, the one stylesheet
+desktop/native/weekmodel.py  one shared reading of the week for every design
+desktop/native/pomodoro.py   focus-session splitting around a solve, no Qt
+desktop/native/tones.py      alarm tones as PCM, no Qt; sound.py plays them
+desktop/native/update.py     update decisions, no Qt; updater.py fetches/swaps
+desktop/native/version.py    VERSION, kept equal to the newest CHANGELOG heading
+desktop/native/autostart.py  start-at-login entry (XDG file / Windows Run key)
+desktop/assets/          logo.png and favicon.png for the window and installers
 desktop/build_linux.sh   staged Linux build, previous artifacts preserved
 desktop/package_linux.sh release tar.gz with README, icon and .desktop
 desktop/check_bundle.py  glibc and missing-library check, no Qt imports
-desktop/build_windows.ps1 Windows standalone build preparation
+desktop/build_windows.ps1 Windows standalone build
+packaging/               AppImage script, Inno Setup and WiX installers
 desktop/tests/           native helpers, widget tests, `--smoke-test`
+backend/app.py           account/session/ownership APIs; serves no pages
+backend/storage.py       SQLite, scrypt, hashed sessions
 backend/weeks.py         week-date helpers, no framework import
 backend/recovery.py      one-time recovery codes, no HTTP
 backend/limits.py        256 KiB write-body cap
 backend/transfer.py      import apply envelope size, no HTTP
 backend/restore.py       restore-point snapshot diff and token, no HTTP
-backend/app.py           account/session/ownership APIs and static frontend
-backend/storage.py       SQLite, scrypt, hashed sessions
-frontend/app.js          week state, grid, saves, solve, alarms, CATEGORIES table
-frontend/month.js        read-only Month state, navigation and calendar rendering
-frontend/editor.js       Add/Edit dialog: draft -> draftProblem -> draftPatch
-frontend/setup.js        first-week setup, built on editor drafts
-frontend/focus.js        focus timer, Now / Next line
-frontend/reuse.js        clipboard, duplicate, copy-day and homework carry-forward
-frontend/routines.js     fixed-only weekly routine templates and apply preview
-frontend/restore.js      clear-week recovery and restore-point controls
-frontend/auth.js         Create account / Log in screens, session start (loads last)
-frontend/tests/app-scripts.mjs  loads index.html's scripts in order for DOM-stub tests
-frontend/tests/stage3.test.mjs  Stage 3 retry, identity, conflict and rollback cases
-frontend/styles.css      both theme token maps, then components that only read tokens
-frontend/fonts/          Figtree variable font + OFL license, served from /static
-frontend/theme.js        System/Light/Dark choice -> data-theme, loaded in <head>
-frontend/tests/theme-tokens.test.mjs  token parity, no raw colors, no-blur contrast, accent vs categories
 ```
 
 ## Domain Model
@@ -419,22 +418,12 @@ Recorded `operation_id` values make a retried write return the first result.
   on uvloop/httptools surviving being frozen.
 - An invalid FLEXWEEK_*_ORIGIN is an error, not a silent fall back to local:
   a typo must not quietly open a different, empty database.
-- The Qt profile is parented to the QApplication, not the window: parenting it to
-  the window makes Qt warn "Release of profile requested but WebEnginePage still
-  not deleted" and can crash on close.
 - `profile_root()` reads QStandardPaths AppDataLocation, which derives from the
-  application name, so main() sets that before building the profile.
+  application name, so main() sets the name before reading the data folder.
 - Nuitka is called directly instead of via pyside6-deploy, which rewrites its own
   spec with absolute machine paths on every run.
-- Qt translations are included; stripping them made WebEngine warn about a
-  missing en-US.pak at every start.
-- PySide6 6.10+ documents Python 3.14. pywebview classifiers stop at 3.13.
-- Qt WebEngine cannot be statically linked; onedir Chromium libs are expected.
-- No Qt WebChannel / pywebview js_api in v1 (cookies and CSRF stay on the page).
+- PySide6 6.10+ documents Python 3.14.
 - License file is GPL-3.0. Qt for Python is LGPLv3/GPLv2/commercial.
-- Frontend scripts are classic deferred scripts sharing one global scope, not
-  modules, so there is still no build step. A script's top-level code can only
-  reach scripts loaded before it. The tests run them in index.html order.
 - The tray icon path is anchored on the `backend` package, because Nuitka puts
   `desktop/main.py` at the bundle root as `__main__`.
 - A new flexible task in the week on screen may use today onward. The solver
@@ -453,41 +442,24 @@ Recorded `operation_id` values make a retried write return the first result.
   System32 would redistribute Microsoft's files; the bundle check requires the
   import to be satisfied by Windows 10 1809+ instead.
 - `theme` is `system|slate|nocturne` (default `system`, owner decision
-  2026-09-10). CSS only knows slate and nocturne on `<html data-theme>`;
-  `frontend/theme.js` runs in `<head>` so first paint already matches the
-  device, and re-resolves on device changes only while the choice is system.
-  Signed-out screens always follow the device.
+  2026-09-10). System follows the device light or dark setting. Signed-out
+  screens always follow the device.
 - SQLite cannot alter a CHECK, so `allow_system_theme()` rebuilds an older
   preferences table once in one transaction; stored slate/nocturne are kept.
-- Offscreen Qt ignores `setColorScheme`; the `system_dark` probe forces a dark
-  device with `--blink-settings=preferredColorScheme=0`. A real KDE dark
-  session does reach `prefers-color-scheme: dark`.
-- Frost alphas are chosen so text passes WCAG AA composited straight over the
-  page gradient with no blur; that is the case Qt WebEngine hits when blur is
-  not drawn. The theme-tokens test computes it, so do not lower an alpha without
-  rerunning it.
 - The accent must stay at least CIE76 distance 15 from every category color
-  (School blue is the near miss), enforced by the same test.
-- Icons are an inline `<symbol>` sprite, not a file: `<use>` inherits
-  `--icon-secondary` into the symbol only when the sprite is in the page.
+  (School blue is the near miss, about 18). Enforced by
+  `test_every_accent_stays_clearly_apart_from_every_category_colour` in
+  desktop/tests/test_look.py; the web test that used to guard it was deleted
+  with the web client, and for a day nothing did.
 - Linux leads with a tar.gz so the executable bit survives and no extra runtime
   is required. The AppImage ships too, but needs FUSE (libfuse2); without it
   the docs say `--appimage-extract` then `squashfs-root/AppRun`, or the tarball.
-  Unused Qt `.qm` files are dropped; the Chromium en-US locale pack stays.
-- A dead page renderer leaves Qt's view one flat near-white color, and a lost
-  GPU context leaves it the page background color; neither reaches the page or
-  shows a dialog. A GPU-process crash kills the whole app instead (Qt runs GPU
-  in-process). Hence `renderProcessTerminated` recovery in `desktop/main.py` and
-  the smoke's window-grab color count (a blank page is 1 color, the bare page
-  gradient under 100, a solved week 400 or more on an 8 px grid).
-- The 0.9.0 blank window was not reproduced on: source offscreen, the published
-  v0.9.0 Linux build on Xvfb/llvmpipe with GPU compositing, tray and
-  notifications on, accessibility on, or eight clock times across the week.
-  Trigger still unknown; likely GPU/driver specific (0.9.0 added the only
-  backdrop-filter rules) or Windows.
-- Smoke runs use a temporary data folder. WebEngine writes profile files until
-  its page and profile are destroyed, so `MainWindow.discard()` runs before the
-  folder is removed, or empty cache folders come back.
+  Unused Qt `.qm` files are dropped.
+- The smoke test decides a week was really drawn by counting colours in a grab of
+  the window (`PAINTED_MIN_COLORS`, on an 8 px grid): a blank window is one flat
+  colour. The WebEngine renderer recovery that used to sit beside it went with
+  the WebEngine shell, and so did the 0.9.0 blank-window investigation, whose
+  suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
 - 2026-09-20, `feat/layout-surfaces`: Day/Month follow the week layout,

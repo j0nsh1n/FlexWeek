@@ -8,7 +8,8 @@ phase may span several implementation slices. The original Sep 6 contest brief
 FlexWeek is one Python desktop app: see [native Python desktop](#native-python-desktop-2026-09-17)
 and [web client retired](#web-client-retired-2026-09-19). The browser client is
 gone, so any `frontend/` path below is history and is marked where it stands.
-The one 0.11.0 leftover is the Windows `backdrop-filter` flicker hand-check.
+0.11.0 has no open leftovers: its Windows `backdrop-filter` flicker check went
+with the web client, because Qt widgets have no `backdrop-filter` to flicker.
 The [student experience revision](#student-experience-revision-2026-09-12) stays
 the stage map for everything still open. Earlier phase descriptions and the
 first implementation slice retain their dated planning history.
@@ -565,14 +566,15 @@ carried it.
   no animation anywhere, and both choices survive sign-out and a reinstall;
   Solve, Spread and Running late never flash blank and never look ignored.
 - Verification: desktop tests for the wait states, for date continuity across
-  Week/Day/Month, and for the persisted pack, accent and motion level; a hand
-  check of the Windows build for the `backdrop-filter` flicker, since Linux
-  cannot show it. The `prefers-reduced-motion` pass no longer applies: Qt has no
-  such media query, and the Motion setting is the app's own.
+  Week/Day/Month, and for the persisted pack, accent and motion level. Neither
+  the `backdrop-filter` flicker hand-check nor the `prefers-reduced-motion` pass
+  applies any more: both were about the browser client's CSS, and Qt widgets have
+  no `backdrop-filter` and no such media query. The Motion setting is the app's
+  own.
 - Status: [~] Code for 0.11.0 is tagged. Seamless, chip-opens-Add, packs,
-  Customize and account motion shipped. The Windows flicker hand-check is still
-  open. The P2 account copy and the `prefers-reduced-motion` pass closed with
-  the web client on 2026-09-19: both were browser-only.
+  Customize and account motion shipped. The Windows flicker hand-check, the P2
+  account copy and the `prefers-reduced-motion` pass all closed with
+  the web client on 2026-09-19: all three were browser-only.
 
 ### Looks and knobs (owner request, 2026-09-17)
 

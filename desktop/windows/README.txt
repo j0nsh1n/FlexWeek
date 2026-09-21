@@ -13,8 +13,9 @@ Install and start FlexWeek
    shortcut" if you want one.
 2. If Windows shows "Windows protected your PC", choose More info, then
    Run anyway. See "Why Windows warns you" below.
-3. Open FlexWeek from the Start menu. Choose Create account. A new account
-   starts with a short setup: school hours, a sport, then your first homework.
+3. Open FlexWeek from the Start menu. The first screen is Sign in; choose
+   "New here? Create an account" under it. A new account starts with a short
+   setup: school hours, a sport, then your first homework.
 
 Schools and IT: FlexWeek-Windows-x64.msi installs FlexWeek for every account on
 the PC, in Program Files, and needs an administrator. Use one installer or the

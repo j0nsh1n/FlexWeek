@@ -12,8 +12,9 @@ Start FlexWeek
 2. Double-click the file named FlexWeek.
    If your file manager opens it as text or asks what to do, choose Run.
    Or open a terminal in this folder and type:  ./FlexWeek
-3. A window opens. Choose Create account. The first account on this computer
-   starts with a short setup: school hours, a sport, then your first homework.
+3. A window opens on Sign in. Choose "New here? Create an account" under it.
+   The first account on this computer starts with a short setup: school hours,
+   a sport, then your first homework.
 
 
 Add FlexWeek to your app menu (optional)
@@ -69,13 +70,9 @@ Open a terminal in this folder and type ./FlexWeek to see the error.
   @WEB_FALLBACK@
 - "error while loading shared libraries": a desktop library is missing. On
   Ubuntu, Mint or Debian install it with:
-      sudo apt install libnss3 libxkbcommon-x11-0 libegl1 libgl1
+      sudo apt install libxkbcommon-x11-0 libegl1 libgl1
   On Fedora:
-      sudo dnf install nss libxkbcommon-x11 mesa-libEGL mesa-libGL
-- "Chromium sandbox unavailable": this is expected on Ubuntu 24.04 and newer.
-  FlexWeek turns the browser sandbox off because Ubuntu blocks it for apps
-  without a security profile. FlexWeek only shows its own pages; other links
-  open in your normal browser.
+      sudo dnf install libxkbcommon-x11 mesa-libEGL mesa-libGL
 
 
 License

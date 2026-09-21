@@ -30,5 +30,5 @@ Not supported. FlexWeek is a Windows and Linux desktop app, and there is no long
 Optional. `FlexWeek-Windows-x64-Setup.exe.sha256`, `FlexWeek-Windows-x64.msi.sha256`, `FlexWeek-Linux-x86_64.tar.gz.sha256` and `FlexWeek-x86_64.AppImage.sha256` on this page. Each names only its file, so `sha256sum -c` works in the folder you downloaded to.
 
 ## First open
-Choose Create account. A short setup asks for school hours, a sport, and the first homework, then runs Solve. You can skip any step.
+The first screen is Sign in. Choose "New here? Create an account" under it. A short setup asks for school hours, a sport, and the first homework, then runs Solve. You can skip any step.
 ```

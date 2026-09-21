@@ -50,17 +50,20 @@ numbers or underscores; passwords use 12–128 characters. A new account opens a
 short setup for school hours, one sport and the first homework, then runs
 Solve. You can skip it.
 
-To add more, pick a type in the sidebar and drag on the calendar, or click for a
-1-hour block. The dialog asks whether the item is a **Fixed time** (school,
-practice: Solve never moves it) or **Flexible** (homework: Solve picks a free
-time before it is due). Every save goes to your account; Solve previews placement
-without replacing your entered blocks.
+To add more, open **Add** and choose **Homework…** or **Fixed time…**, or pick a
+type there and drag on the calendar. A **Fixed time** (school, practice) never
+moves when you plan; **Homework** is placed by Plan my homework in a free time
+before it is due. The type you picked determines which you get. Every change
+saves to your account on its own; planning previews placement without replacing
+what you entered.
 
-Theme starts on System, which follows your device's light or dark setting.
-Choose Light or Dark from Theme to keep one. The choice is saved to your
-account. If a save fails, keep the page open and use Retry save. A conflicting
-save from another window offers a draft download and reload of the saved week.
-Password recovery is planned for the later hardening phase.
+The look starts on System, which follows your device's light or dark setting;
+Settings and Layout offer the rest, and every design can be dark: Today's app
+through its pack, the others through a dark colourway of their own. The
+week saves itself a moment after each change and retries on its own if a save
+fails. A conflicting save from another window is never overwritten: it offers a
+draft download and a reload of the saved week. A forgotten password is recovered
+with one of the eight recovery codes shown when the account was made.
 
 Weeks exported from an older browser-based build can be explicitly imported
 after logging in. Import replaces the account's current week after confirmation;

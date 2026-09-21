@@ -31,17 +31,19 @@ plugins ship as a folder.
 Icons come from `desktop/assets/logo.png`. The SQLite database lives under the
 user data directory, never inside the read-only bundle.
 
-**What is still true below.** Sections 6 onward are the implementation record:
-the Linux build, the bundled server, the Windows build and installers, the
-release process, reminders, and window/tray/quit behaviour. Read those.
+**What is still true below.** Section 7 (the bundled server), section 9 and the
+sections after it (the Windows build and installers, releasing the Linux build,
+reminders, and window/tray/quit behaviour). Read those.
 
 **What is superseded.** Sections 1 to 5 recommended a `QWebEngineView` window
 pointed at a hosted origin. That decision was reversed on 2026-09-17 in favour
 of native widgets, and the browser client it assumed was retired on 2026-09-19.
 They are kept because they record why the choice was made and what the evidence
-was at the time. Do not build from them. Where later sections mention WebEngine
-probes, Chromium size or `target=_blank` handling, they are describing the shell
-that was replaced.
+was at the time. Do not build from them. Sections 6 and 8 are WebEngine-era
+records as well: section 6 describes the Chromium build (the "1 GB dependency",
+the ~390 MB artifact and its checklist) and section 8 the WebEngine wrapper's
+defects and API references. The current Linux bundle is about 250 MB with no
+Chromium in it.
 
 ---
 
