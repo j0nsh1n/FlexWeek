@@ -6,9 +6,18 @@ import contextlib
 import json
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from uuid import uuid4
 
 from PySide6.QtCore import QEvent, QObject, QStandardPaths, Qt, QTimer, QUrl
-from PySide6.QtGui import QCloseEvent, QDesktopServices, QGuiApplication, QIcon, QKeyEvent, QPalette
+from PySide6.QtGui import (
+    QCloseEvent,
+    QDesktopServices,
+    QGuiApplication,
+    QIcon,
+    QKeyEvent,
+    QPalette,
+    QResizeEvent,
+)
 from PySide6.QtNetwork import QLocalServer
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
@@ -31,9 +40,18 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from backend.slots import minutes_to_hhmm
+from backend.slots import SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm
 from desktop.native import autostart
-from desktop.native.calendar import DAY_FULL, FLEX_CATEGORIES, agenda_for, monday_of, sunday_due
+from desktop.native.calendar import (
+    CATEGORIES,
+    DAY_FULL,
+    FLEX_CATEGORIES,
+    WEEKDAYS,
+    agenda_for,
+    date_for_day,
+    monday_of,
+    sunday_due,
+)
 from desktop.native.controller import NativeSession
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
 from desktop.native.layouts.base import LayoutView, Scene
@@ -49,13 +67,20 @@ from desktop.native.look import (
     sanitize_look,
 )
 from desktop.native.remind import REMINDER_POLL_MS, clock_parts
-from desktop.native.reuse import late_from_start, restore_point_label, running_late_refusal, week_label
+from desktop.native.reuse import (
+    late_from_start,
+    planner_title,
+    restore_point_label,
+    running_late_refusal,
+    week_label,
+)
 from desktop.native.settings import (
     AccountDialog,
     AlarmRingDialog,
     FocusPanel,
     PrefsDialog,
     RestoreDialog,
+    SetupCard,
     TransferPreviewDialog,
     UpdateDialog,
 )
@@ -66,10 +91,10 @@ from desktop.native.updater import Updater, apply_update
 from desktop.native.version import VERSION
 from desktop.native.weekmodel import build_week
 from desktop.native.widgets import (
+    AddMenu,
     AlertStrip,
     AvailabilityDialog,
     BlockDialog,
-    CategoryChips,
     DayAgenda,
     FlowLayout,
     HomeworkDialog,
@@ -81,12 +106,20 @@ from desktop.native.widgets import (
     SpreadDialog,
     UnfinishedPanel,
     WeekTable,
+    swatch,
 )
 
 WINDOW_SIZE = (1280, 800)
+NAV_ARROW_PX = 34
 AUTH_CARD_WIDTH = 380
 # Long enough for the student to read that the update installed before the window goes.
 UPDATE_QUIT_MS = 1200
+# How long after the last change the week saves itself. Long enough that dragging a block does not
+# post on every pixel, short enough that closing the laptop straight after a change keeps it.
+AUTOSAVE_AFTER_MS = 1500
+# A failed save keeps its payload and its operation id, so trying again writes the same thing once.
+AUTOSAVE_RETRY_MS = 6000
+AUTOSAVE_TICK_MS = 500
 LAYOUT_TICK_MS = 20_000
 
 
@@ -119,6 +152,13 @@ class NativeWindow(QMainWindow):
         self._updater.progress.connect(self._on_update_progress)
         self._updater.failed.connect(self._on_update_problem)
         self._updater.ready.connect(self._on_update_ready)
+        self._setup_dismissed = False
+        self._changed_ms = 0
+        self._last_try_ms = 0
+        self._autosave = QTimer(self)
+        self._autosave.setInterval(AUTOSAVE_TICK_MS)
+        self._autosave.timeout.connect(self._autosave_tick)
+        self._autosave.start()
         self._build_auth()
         self._build_recovery()
         self._build_week()
@@ -161,6 +201,30 @@ class NativeWindow(QMainWindow):
             self._install_tray()
         self._sync_auth_mode()
         self._show_page("authPage")
+
+    def _autosave_tick(self) -> None:
+        """Save the week without being asked.
+
+        Save stopped being a button, so this has to be dependable rather than clever. It waits for
+        the student to stop changing things, refuses while a request is in flight, and never touches
+        a week whose save came back 409: a conflict means another window wrote this week, and
+        answering that is the student's decision, not a timer's.
+        """
+        session = self.session
+        if session.account is None or session.busy or session.conflict:
+            return
+        now = session.now_ms()
+        if session.pending_save is not None:
+            # A save that failed. Its payload and operation id are kept, so this writes the same
+            # thing once however many times it is tried.
+            if now - self._last_try_ms >= AUTOSAVE_RETRY_MS:
+                self._last_try_ms = now
+                session.save()
+            return
+        if not session.dirty or now - self._changed_ms < AUTOSAVE_AFTER_MS:
+            return
+        self._last_try_ms = now
+        session.save()
 
     def _toggle_auth_mode(self) -> None:
         self._making_account = not self._making_account
@@ -299,14 +363,27 @@ class NativeWindow(QMainWindow):
     def _build_recovery(self) -> None:
         page = QWidget()
         page.setObjectName("recoveryPage")
-        layout = QVBoxLayout(page)
+        outer = QVBoxLayout(page)
+        outer.addStretch(1)
+        middle = QHBoxLayout()
+        middle.addStretch(1)
+        card = QWidget()
+        card.setObjectName("authCard")
+        card.setMaximumWidth(AUTH_CARD_WIDTH)
+        card.setMinimumWidth(AUTH_CARD_WIDTH)
+        layout = QVBoxLayout(card)
+        brand = QLabel("FlexWeek")
+        brand.setObjectName("authBrand")
+        layout.addWidget(brand)
         heading = QLabel("Save these recovery codes")
+        heading.setObjectName("authHeading")
         layout.addWidget(heading)
         note = QLabel(
             "They are the only way to reset your password. FlexWeek cannot email you. "
             "Copy them somewhere you will still have if this computer is gone."
         )
         note.setWordWrap(True)
+        note.setObjectName("authNote")
         layout.addWidget(note)
         self.recovery_list = QLabel()
         self.recovery_list.setObjectName("recoveryList")
@@ -316,12 +393,15 @@ class NativeWindow(QMainWindow):
         self.recovery_ack.setObjectName("recoveryAck")
         self.recovery_ack.toggled.connect(self._on_recovery_ack)
         layout.addWidget(self.recovery_ack)
-        self.recovery_continue = QPushButton("Continue")
+        self.recovery_continue = QPushButton("Continue to my week")
         self.recovery_continue.setObjectName("recoveryContinue")
         self.recovery_continue.setEnabled(False)
         self.recovery_continue.clicked.connect(self._finish_recovery)
         layout.addWidget(self.recovery_continue)
-        layout.addStretch()
+        middle.addWidget(card)
+        middle.addStretch(1)
+        outer.addLayout(middle)
+        outer.addStretch(1)
         self._stack.addWidget(page)
 
     def _build_week(self) -> None:
@@ -329,20 +409,28 @@ class NativeWindow(QMainWindow):
         page.setObjectName("weekPage")
         layout = QVBoxLayout(page)
         bar = QHBoxLayout()
-        self.account_name = QLabel()
-        self.account_name.setObjectName("accountName")
-        bar.addWidget(self.account_name)
-        self.prev_nav = QPushButton("Previous week")
+        # Where you are, said once and said large. Thirteen buttons of equal weight and no title at
+        # all was the clutter: nothing told the eye where to land.
+        self.week_title = QLabel()
+        self.week_title.setObjectName("weekTitle")
+        bar.addWidget(self.week_title)
+        self.prev_nav = QPushButton("‹")
         self.prev_nav.setObjectName("prevWeek")
+        self.prev_nav.setToolTip("Previous week")
         self.prev_nav.clicked.connect(self._go_previous)
-        self.next_nav = QPushButton("Next week")
+        self.next_nav = QPushButton("›")
         self.next_nav.setObjectName("nextWeek")
+        self.next_nav.setToolTip("Next week")
         self.next_nav.clicked.connect(self._go_next)
-        bar.addWidget(self.prev_nav)
-        bar.addWidget(self.next_nav)
+        for arrow in (self.prev_nav, self.next_nav):
+            arrow.setFixedWidth(NAV_ARROW_PX)
+            bar.addWidget(arrow)
+        bar.addStretch()
+        # One control, not four loose buttons: switching view is one decision.
         for view, label in (("day", "Day"), ("week", "Week"), ("month", "Month")):
             button = QPushButton(label)
             button.setObjectName(f"view{view.title()}")
+            button.setProperty("segment", "middle" if view == "week" else view)
             button.setCheckable(True)
             button.clicked.connect(lambda checked=False, value=view: self._choose_view(value))
             bar.addWidget(button)
@@ -351,7 +439,10 @@ class NativeWindow(QMainWindow):
         my_day.setCheckable(True)
         my_day.clicked.connect(self._enter_day)
         bar.addWidget(my_day)
-        bar.addStretch()
+        self.account_name = QLabel()
+        self.account_name.setObjectName("accountName")
+        self.account_name.setVisible(False)
+        bar.addWidget(self.account_name)
         # With a design of its own on screen the planning controls step aside, and this holds them all.
         self.tools_button = QPushButton("Tools")
         self.tools_button.setObjectName("toolsButton")
@@ -360,11 +451,15 @@ class NativeWindow(QMainWindow):
         layout_button = QPushButton("Layout")
         layout_button.setObjectName("layoutButton")
         layout_button.clicked.connect(self._open_layout)
-        bar.addWidget(layout_button)
         sign_out = QPushButton("Log out")
         sign_out.setObjectName("signOut")
         sign_out.clicked.connect(self.session.logout)
-        bar.addWidget(sign_out)
+        # Changing the look and signing out are things a student does rarely, so they sit under More
+        # with everything else rare. They stay real buttons so the shortcuts still reach them.
+        for rare in (layout_button, sign_out):
+            rare.setVisible(False)
+            bar.addWidget(rare)
+        self._top_bar = bar
         layout.addLayout(bar)
         # Everything between the bar and the calendar is for planning, so a day screen can put it away.
         self.plan_chrome = QWidget()
@@ -372,17 +467,30 @@ class NativeWindow(QMainWindow):
         chrome = QVBoxLayout(self.plan_chrome)
         chrome.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.plan_chrome)
-        self.chips = CategoryChips()
-        self.chips.category_chosen.connect(self._add_from_chip)
-        chrome.addWidget(self.chips)
+        self.setup_card = SetupCard(page)
+        self.setup_card.finished.connect(self._apply_setup)
+        self.setup_card.dismissed.connect(self._dismiss_setup)
+        self.setup_card.hide()
+        self.setup_card.setFixedWidth(420)
         # Wrapping, because twenty buttons in one row made the window wider than any laptop screen.
         actions = FlowLayout()
+        self.add_menu = AddMenu(self)
+        self.add_menu.homework_requested.connect(self._add_homework)
+        self.add_menu.fixed_requested.connect(self._add_fixed)
+        self.add_menu.category_chosen.connect(self._add_from_chip)
+        add_button = QPushButton("Add")
+        add_button.setObjectName("addButton")
+        add_button.setMenu(self.add_menu)
+        # Kept so the shortcuts and the tests that press them still have something to press; the
+        # calendar's own context menu reaches them too.
         add_fixed = QPushButton("Add fixed time")
         add_fixed.setObjectName("addFixed")
         add_fixed.clicked.connect(self._add_fixed)
+        add_fixed.setVisible(False)
         add_homework = QPushButton("Add homework")
         add_homework.setObjectName("addHomework")
         add_homework.clicked.connect(self._add_homework)
+        add_homework.setVisible(False)
         undo = QPushButton("Undo")
         undo.setObjectName("undoButton")
         undo.clicked.connect(self.session.undo)
@@ -449,11 +557,17 @@ class NativeWindow(QMainWindow):
         self._more_pairs = []
         # Four jobs, sixteen ways of doing them, twelve of them competing for the same row. The row
         # keeps what a student reaches for; everything else sits under the heading for its job.
+        self.quick_focus = QPushButton("Quick focus")
+        self.quick_focus.setObjectName("quickFocusAction")
+        self.quick_focus.clicked.connect(self.session.start_quick_focus)
+        # Adding and saving are here because the bar holds one action now. Adding is mostly done by
+        # dragging on the calendar; saving mostly happens on its own.
         self._groups = (
-            ("Planning", (late, unfinished, routines)),
+            ("Adding", (add_homework, add_fixed)),
+            ("Planning", (late, unfinished, routines, self.quick_focus)),
             ("Editing", (undo, redo, copy_block, paste_block, duplicate, copy_day)),
-            ("Your week", (availability, restore, reload_week)),
-            ("Account", (account, settings, spotify, updates)),
+            ("Your week", (save, availability, restore, reload_week)),
+            ("Account", (account, settings, spotify, layout_button, sign_out, updates)),
         )
         for heading, buttons in self._groups:
             more_menu.addSection(heading)
@@ -465,13 +579,26 @@ class NativeWindow(QMainWindow):
                 self._more_pairs.append((action, button))
         more_menu.aboutToShow.connect(self._sync_more_menu)
         more.setMenu(more_menu)
-        for button in (add_homework, add_fixed, solve, save, retry, more):
-            actions.addWidget(button)
+        # The week saves itself now, so Save is not a thing to press; it stays reachable under More
+        # and on Ctrl+S for anyone who wants to be sure. Retry appears only when a save has failed.
+        # These go in the top bar: one row, with the one filled button at the end of it.
+        self._top_bar.addWidget(solve)
+        self._top_bar.addWidget(retry)
+        self._top_bar.addWidget(more)
+        self.solve_button = solve
+        self.more_button = more
+        for hidden in (add_button, add_homework, add_fixed, save, self.quick_focus):
+            actions.addWidget(hidden)
+        for hidden in (add_button, add_homework, add_fixed, save, self.quick_focus):
+            hidden.setVisible(False)
         chrome.addLayout(actions)
+        self.retry_button = retry
         tools_menu = QMenu(self.tools_button)
         self._tool_pairs = []
-        tools_menu.addSection("Adding")
-        for button in (add_homework, add_fixed, solve, save, retry):
+        # Plan and Retry only: adding and saving are in the groups below, which Tools shares with
+        # More so the two menus cannot drift apart.
+        tools_menu.addSection("Planning the week")
+        for button in (solve, retry):
             self._tool_pairs.append((tools_menu.addAction(button.text()), button))
         for heading, buttons in self._groups:
             tools_menu.addSection(heading)
@@ -538,11 +665,17 @@ class NativeWindow(QMainWindow):
         self._stack.addWidget(page)
 
     def _planner_widget(self, view: str) -> QWidget:
-        """The chosen main view stands in for the week grid; Day and Month stay what they were."""
+        """The chosen main view stands in for the week grid, and for Day and Month too.
+
+        Today's app keeps the clock-order Day list and the chip Month. My day is still its own
+        screen. A design of its own rebuilds Day and Month in that design, so the app is not two
+        programs once you leave the week.
+        """
         if self._day_mode:
             return self._layout_view(self._layout["day"])
-        if view == "week" and self._layout["main"] in VIEW_CLASSES:
-            return self._layout_view(self._layout["main"])
+        main = self._layout["main"]
+        if main in VIEW_CLASSES and view in {"week", "day", "month"}:
+            return self._layout_view(main)
         return {"day": self.day_agenda, "month": self.month_grid}.get(view, self.week_table)
 
     def _layout_view(self, layout_id: str) -> LayoutView:
@@ -560,6 +693,7 @@ class NativeWindow(QMainWindow):
             view.late_requested.connect(self._open_late)
             view.my_day_requested.connect(self._enter_day)
             view.back_requested.connect(self._leave_day)
+            view.day_activated.connect(self.session.open_day)
             self.planner.addWidget(view)
             self._views[layout_id] = view
         view.show_week(self._scene_for(layout_id))
@@ -583,6 +717,9 @@ class NativeWindow(QMainWindow):
         pack, system_dark, accent = self._look_inputs()
         palette = resolved_palette(pack, system_dark, self._look, accent)
         session = self.session
+        surface = "week"
+        if not self._day_mode and layout_id in VIEW_CLASSES and session.planner_view in {"day", "month"}:
+            surface = session.planner_view
         return Scene(
             week=build_week(session.week_start, session.blocks, session.assignments, session.trace),
             today=clock["day"] if monday_of(clock["iso"]) == session.week_start else None,
@@ -590,6 +727,10 @@ class NativeWindow(QMainWindow):
             options=options,
             tokens=tokens_for(layout_id, options["colour"], palette),
             scale=TEXT_PT[effective_look(self._look)["text"]] / TEXT_PT["normal"],
+            surface=surface,
+            month=session.month_data,
+            iso_day=session.selected_day,
+            dirty=session.dirty,
         )
 
     def _chrome_palette(self, palette: dict) -> dict:
@@ -623,15 +764,19 @@ class NativeWindow(QMainWindow):
         The focus timer stays while it is running, or Start focus would look as if it did nothing."""
         own = isinstance(self.planner.currentWidget(), LayoutView)
         self.plan_chrome.setVisible(not own)
+        # The planning controls live in the top bar now, so that is what steps aside for a design of
+        # its own; plan_chrome below it holds the clipboard line and the unfinished panel.
+        self.solve_button.setVisible(not own)
+        self.more_button.setVisible(not own)
         self.tools_button.setVisible(own and not self._day_mode)
         self.focus_panel.setVisible(not own or self.session.focus is not None)
         if own:
             # Picking what to focus on is planning. Left in, the picker took the height and the day
             # screen's title was cut off after its first line.
             self.focus_panel.tasks.hide()
-            self.focus_panel.quick.hide()
-        else:
-            self.focus_panel.quick.show()
+        # Quick focus is in the action row whenever there is one, so the panel's own copy would be
+        # the same button twice; it belongs to the panel only where no action row is shown.
+        self.focus_panel.quick.setVisible(own and self._day_mode)
 
     def _choose_view(self, view: str) -> None:
         self._day_mode = False
@@ -673,6 +818,7 @@ class NativeWindow(QMainWindow):
             self._day_mode = False
             self._opened_on_preference = False
             self._making_account = False
+            self._setup_dismissed = False
             self._sync_auth_mode()
             self.username.clear()
             self.password.clear()
@@ -687,6 +833,88 @@ class NativeWindow(QMainWindow):
         self._allow_week_page = True
         self.session.finish_recovery()
 
+    def _sync_setup(self) -> None:
+        empty = not self.session.blocks and not self.session.assignments
+        show = self.session.account is not None and empty and not self._setup_dismissed
+        self.setup_card.setVisible(bool(show))
+        if show:
+            self._place_setup()
+
+    def _place_setup(self) -> None:
+        card = self.setup_card
+        page = card.parentWidget()
+        if page is None or not card.isVisible():
+            return
+        card.adjustSize()
+        x = max(0, (page.width() - card.width()) // 2)
+        y = max(0, (page.height() - card.height()) // 3)
+        card.move(x, y)
+        card.raise_()
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._place_setup()
+
+    def _dismiss_setup(self) -> None:
+        self._setup_dismissed = True
+        self.setup_card.hide()
+
+    def _apply_setup(self, payload: dict) -> None:
+        self._setup_dismissed = True
+        self.setup_card.hide()
+        school = payload.get("school")
+        if school:
+            start, end = school
+            try:
+                begin, stop = hhmm_to_minutes(start), hhmm_to_minutes(end)
+            except TypeError, ValueError:
+                begin, stop = 8 * 60, 14 * 60 + 30
+            duration = max(SLOT_MIN, stop - begin)
+            self.session.add_block(
+                {
+                    "id": "school",
+                    "title": "School",
+                    "kind": "locked",
+                    "category": "class",
+                    "start": minutes_to_hhmm(begin),
+                    "duration_min": duration,
+                    "days": list(WEEKDAYS),
+                }
+            )
+        sport = payload.get("sport")
+        if sport:
+            title, start, end = sport
+            try:
+                begin, stop = hhmm_to_minutes(start), hhmm_to_minutes(end)
+            except TypeError, ValueError:
+                begin, stop = 15 * 60 + 30, 17 * 60
+            duration = max(SLOT_MIN, stop - begin)
+            self.session.add_block(
+                {
+                    "id": "sport",
+                    "title": title or "Soccer",
+                    "kind": "locked",
+                    "category": "exercise",
+                    "start": minutes_to_hhmm(begin),
+                    "duration_min": duration,
+                    "days": [3],
+                }
+            )
+        homework = payload.get("homework")
+        if homework:
+            title, minutes, due = homework
+            self.session.add_homework(
+                {
+                    "id": str(uuid4()),
+                    "title": title or "Homework",
+                    "due": due or sunday_due(self.session.week_start),
+                    "estimate_min": int(minutes),
+                    "revision": 0,
+                }
+            )
+        if payload:
+            self.session.save()
+
     def _show_recovery(self, codes: list) -> None:
         self._allow_week_page = False
         self.recovery_list.setText("\n".join(str(code) for code in codes))
@@ -697,6 +925,9 @@ class NativeWindow(QMainWindow):
     def _on_week(self) -> None:
         if self.session.account is None:
             return
+        if self.session.dirty:
+            # Every change reaches here, so this is where the clock on "stopped changing" restarts.
+            self._changed_ms = self.session.now_ms()
         if self._on_recovery() and not self._allow_week_page:
             return
         self._honour_preferred_view()
@@ -712,11 +943,21 @@ class NativeWindow(QMainWindow):
             self.session.day_data,
         )
         self.day_agenda.set_agenda(self.session.selected_day, agenda, self.session.day_data)
+        placed = [
+            (
+                date_for_day(self.session.week_start, int(day)),
+                str(block.get("title") or ""),
+                str(block.get("category") or ""),
+            )
+            for block in self.session.blocks
+            for day in block.get("days") or []
+        ]
+        self.month_grid.set_placed(placed)
         self.month_grid.set_month(self.session.month_data, self.session.dirty)
         # After the table has been laid out, or scrollToItem has nothing to measure against and the
         # month stays on its first row.
         QTimer.singleShot(0, lambda day=self.session.selected_day: self.month_grid.reveal(day))
-        self.chips.set_armed(self.session.armed_category)
+        self._sync_add_button()
         view = self.session.planner_view
         self.planner.setCurrentWidget(self._planner_widget(view))
         for name in ("viewDay", "viewWeek", "viewMonth", "viewMyDay"):
@@ -725,19 +966,17 @@ class NativeWindow(QMainWindow):
                 button.setChecked(name == ("viewMyDay" if self._day_mode else f"view{view.title()}"))
         month = view == "month"
         day = view == "day"
-        if month:
-            self.prev_nav.setText("Previous month")
-            self.next_nav.setText("Next month")
-        elif day:
-            self.prev_nav.setText("Previous day")
-            self.next_nav.setText("Next day")
-        else:
-            self.prev_nav.setText("Previous week")
-            self.next_nav.setText("Next week")
+        period = "month" if month else ("day" if day else "week")
+        self.prev_nav.setToolTip(f"Previous {period}")
+        self.next_nav.setToolTip(f"Next {period}")
+        self.week_title.setText(planner_title(self.session, view))
+        self._sync_setup()
         self._show_page("weekPage")
-        retry = self.findChild(QPushButton, "retrySave")
-        if retry is not None:
-            retry.setEnabled(self.session.pending_save is not None and not self.session.conflict)
+        can_retry = self.session.pending_save is not None and not self.session.conflict
+        # Hidden, not merely greyed: a button that is never pressable is a permanent piece of
+        # furniture that says a save failed when none has.
+        self.retry_button.setVisible(can_retry)
+        self.retry_button.setEnabled(can_retry)
         undo = self.findChild(QPushButton, "undoButton")
         redo = self.findChild(QPushButton, "redoButton")
         if undo is not None:
@@ -941,9 +1180,20 @@ class NativeWindow(QMainWindow):
             category = "assignments"
         self._commit_homework(HomeworkDialog(self, week_start=self.session.week_start, category=category))
 
+    def _sync_add_button(self) -> None:
+        """The Add button carries the type a drag on the calendar will make, so the armed type is
+        still visible now that the chip strip is gone."""
+        armed = self.session.armed_category
+        self.add_menu.set_armed(armed)
+        button = self.findChild(QPushButton, "addButton")
+        info = CATEGORIES.get(armed)
+        if button is not None and info is not None:
+            button.setText(f"Add {info['label'].lower()}")
+            button.setIcon(QIcon(swatch(info["mark"])))
+
     def _add_from_chip(self, category: str) -> None:
         self.session.arm_category(category)
-        self.chips.set_armed(category)
+        self._sync_add_button()
         if category in FLEX_CATEGORIES:
             self._commit_homework(HomeworkDialog(self, week_start=self.session.week_start, category=category))
             return
@@ -1519,7 +1769,8 @@ class NativeWindow(QMainWindow):
         # between them is moving around one app rather than between two.
         self.week_table.set_look(self._look, design)
         self.month_grid.set_palette(design)
-        self.chips.set_palette(design, bool((self.session.preferences or {}).get("accent_chips")))
+        self.add_menu.set_palette(design, bool((self.session.preferences or {}).get("accent_chips")))
+        self._sync_add_button()
         self._refresh_layout()
 
     def _install_tray(self) -> None:

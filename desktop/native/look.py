@@ -650,6 +650,33 @@ def pack_stylesheet(
         # The way in is a button; the way to a new account is small print, so it is drawn as a link.
         f"QLabel#updateHeading {{ font-size: {size + 4}pt; font-weight: 700; }}"
         f"QLabel#updateDetail, QLabel#updateStatus {{ color: {palette['muted']}; }}"
+        # The first-week card sits on top of the week rather than in a layout, so it has to read as
+        # something laid over the calendar rather than printed onto it.
+        # The week you are on, said once and said large.
+        f"QLabel#weekTitle {{ font-size: {size + 6}pt; font-weight: 700; color: {palette['text']}; }}"
+        # Day / Week / Month read as one control rather than three buttons of equal weight.
+        f"QPushButton#viewDay, QPushButton#viewWeek, QPushButton#viewMonth, QPushButton#viewMyDay {{ "
+        f"background: transparent; color: {palette['muted']}; font-weight: 400; "
+        f"padding: {pad}px {pad * 2}px; {edges} }}"
+        f"QPushButton#viewDay:checked, QPushButton#viewWeek:checked, QPushButton#viewMonth:checked, "
+        f"QPushButton#viewMyDay:checked {{ background: {palette['panel']}; color: {palette['text']}; "
+        f"font-weight: 700; }}"
+        # The arrows are navigation, not actions, so they carry no fill.
+        f"QPushButton#prevWeek, QPushButton#nextWeek {{ background: transparent; "
+        f"color: {palette['text']}; font-size: {size + 3}pt; font-weight: 700; "
+        f"padding: 0; {edges} }}"
+        f"QPushButton#prevWeek:hover, QPushButton#nextWeek:hover {{ color: {palette['text']}; }}"
+        # One filled button on the page: the thing the app is for.
+        f"QPushButton#solveButton {{ font-weight: 700; }}"
+        f"QPushButton#toolsButton, QPushButton#moreButton {{ background: transparent; "
+        f"color: {palette['muted']}; {edges} }}"
+        f"QWidget#setupCard {{ background: {palette['panel']}; border-radius: {radius}px; "
+        f"padding: {pad * 2}px; {edges} }}"
+        # The rows inside it are bare QWidgets, which the rule above would paint in the page colour,
+        # putting a band of the background across the middle of a white card.
+        f"QWidget#setupRow {{ background: transparent; border: none; padding: 0; }}"
+        f"QLabel#setupKicker {{ color: {palette['muted']}; font-weight: 600; }}"
+        f"QLabel#setupHeading {{ font-size: {size + 3}pt; font-weight: 700; }}"
         f"QPushButton#authSwitch, QPushButton#forgotPassword, QPushButton#updateSkip {{ "
         f"background: transparent; "
         f"color: {palette['accent']}; border: none; padding: {pad}px 0; "

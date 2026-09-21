@@ -1,6 +1,16 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-20 (layout surfaces). Branch `feat/layout-surfaces` off
+  `origin/main` at 993c003, local only in `~/.worktrees/flexweek-layout-surfaces`.
+  Day and Month rebuild for the chosen week layout (classic stays the clock
+  Day and chip Month). Settings is a four-pane rail with Fine-tune. First-week
+  setup is a card over an empty week after recovery codes. My day was not
+  changed. Gate: 835 Python tests, ruff, mypy 48 files. Cartographer skipped
+  (project venv cannot import traceworks). spec.md still describes a web app
+  and WebEngine shell; first-week setup now exists on the native app, which
+  closes part of that drift without editing spec.md. Next: owner review, then
+  push/PR if asked.
 - Date: 2026-09-19 (native UI screenshot audit). Branch `grok/ui-fixes` off
   `origin/main` at 4ad2855, local only in `~/.worktrees/flexweek-ui-grok`. Four
   native fixes: the week grid opens on now, Retro Week.exe stays on the desk
@@ -480,6 +490,10 @@ Recorded `operation_id` values make a retried write return the first result.
   folder is removed, or empty cache folders come back.
 
 ## Session Handoff
+- 2026-09-20, `feat/layout-surfaces`: Day/Month follow the week layout,
+  Settings rail, first-week setup card. Worktree
+  `~/.worktrees/flexweek-layout-surfaces`. Nothing pushed. Next: owner
+  feedback, then PR if asked.
 - 2026-09-19, `grok/ui-fixes`: four native screenshot-audit fixes, one commit
   each, worktree `~/.worktrees/flexweek-ui-grok`. Next: Claude reviews the
   frontend. spec.md still says WebEngine desktop.

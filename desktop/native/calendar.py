@@ -108,6 +108,43 @@ def sunday_due(week_start: str) -> str:
     return date_for_day(week_start, 6) + "T23:59"
 
 
+def month_chips(
+    cell: dict,
+    snapshot: dict | None,
+    placed: list[tuple[str, str, str]] | None = None,
+) -> list[tuple[str, str]]:
+    """Names on a month cell: homework that is due, then what is already on that date in the open week."""
+    found: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    iso = cell.get("date") or ""
+    titles: dict[str, tuple[str, str]] = {}
+    if snapshot:
+        for item in list(snapshot.get("deadlines") or []) + list(snapshot.get("overdue") or []):
+            ident = str(item.get("id") or "")
+            title = str(item.get("title") or ident)
+            category = str(item.get("category") or "assignments")
+            if ident:
+                titles[ident] = (title, category)
+        for aid in cell.get("due_ids") or []:
+            title, category = titles.get(str(aid), (str(aid), "assignments"))
+            if title not in seen:
+                seen.add(title)
+                found.append((title, category))
+        for item in snapshot.get("overdue") or []:
+            due = str(item.get("due") or "")[:10]
+            if due != iso:
+                continue
+            title = str(item.get("title") or item.get("id") or "")
+            if title and title not in seen:
+                seen.add(title)
+                found.append((title, str(item.get("category") or "assignments")))
+    for stamp, title, category in placed or ():
+        if stamp == iso and title not in seen:
+            seen.add(title)
+            found.append((title, category))
+    return found[:4]
+
+
 def local_stamp(now: datetime | None = None) -> str:
     moment = now or datetime.now()
     return moment.strftime("%Y-%m-%dT%H:%M")
@@ -310,13 +347,21 @@ def _is_work_session(block: dict) -> bool:
     )
 
 
+# One sentinel, at module scope, because it is compared by identity. Built inside each function it
+# would be a different object every call, so "is NOT_TODAY" was never true: the sentinel escaped into
+# the agenda as a block's start time and the sort of those starts raised, which took the whole Day
+# view down with it.
+NOT_TODAY = object()
+
+
 def placement_on(block: dict, day: int, trace: dict | None) -> str | None | object:
+    """Where this block sits on this day: a time, None if it has none, or NOT_TODAY if it is not on
+    this day at all."""
     placed = next((item for item in (trace or {}).get("placed", []) if item["id"] == block["id"]), None)
-    missing = object()
     if placed and placed.get("start"):
-        return placed["start"] if day in placed["days"] else missing
+        return placed["start"] if day in placed["days"] else NOT_TODAY
     if block.get("start"):
-        return block["start"] if day in (block.get("days") or []) else missing
+        return block["start"] if day in (block.get("days") or []) else NOT_TODAY
     return None
 
 
@@ -331,7 +376,6 @@ def agenda_for(
     day_index = (date.fromisoformat(iso_day) - date.fromisoformat(week_start)).days
     sessions: list[dict] = []
     fixed: list[dict] = []
-    missing = object()
     if 0 <= day_index <= 6:
         for block in blocks:
             if day_index not in (block.get("days") or []):
@@ -339,15 +383,20 @@ def agenda_for(
             if day_index in (block.get("missed_days") or []):
                 continue
             start = placement_on(block, day_index, trace)
-            if start is missing:
+            if start is NOT_TODAY:
                 continue
             row = {"block": block, "start": start}
             if _is_work_session(block):
                 sessions.append(row)
             elif block.get("kind") == "locked":
                 fixed.append(row)
-    sessions.sort(key=lambda row: (row["start"] or "99:99", row["block"]["id"]))
-    fixed.sort(key=lambda row: (row["start"] or "99:99", row["block"]["id"]))
+
+    def in_clock_order(row: dict) -> tuple[str, str]:
+        start = row["start"]
+        return (start if isinstance(start, str) and start else "99:99", str(row["block"]["id"]))
+
+    sessions.sort(key=in_clock_order)
+    fixed.sort(key=in_clock_order)
     due_soon = due_soon_for(iso_day, assignments)
     return {
         "day_index": day_index,

@@ -5,6 +5,19 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+- Day and Month follow the week layout (2026-09-20). Timeline, Mission, Bento,
+  Retro and Clay rebuild those tabs in their own furniture. Today's app keeps
+  the clock-order Day list and a Month of named chips instead of "2 due /
+  3 sessions". My day is unchanged.
+- Settings is a left rail: Appearance, Focus, Alerts, This computer. The seven
+  look knobs wait behind Fine-tune. Account actions wrap instead of slicing.
+
+### Added
+- First-week setup after recovery codes (2026-09-20): school hours, one sport,
+  then the first homework. Each step can be skipped. Recovery codes sit in the
+  same card as sign-in.
+
 ## [0.13.0] - 2026-09-20
 
 ### Removed

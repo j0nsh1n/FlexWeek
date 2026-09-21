@@ -100,17 +100,20 @@ def test_every_row_carries_its_category_colour(qapp: QApplication) -> None:
     view.set_agenda(THURSDAY, agenda(), None)
     assert swatches(view) == [
         CATEGORIES["assignments"]["mark"],
-        CATEGORIES["study"]["mark"],
-        CATEGORIES["assignments"]["mark"],
-        CATEGORIES["assignments"]["mark"],
         CATEGORIES["class"]["mark"],
+        CATEGORIES["assignments"]["mark"],
+        CATEGORIES["assignments"]["mark"],
+        CATEGORIES["study"]["mark"],
     ]
 
 
-def test_the_day_is_grouped_instead_of_one_flat_list(qapp: QApplication) -> None:
+def test_the_day_is_in_clock_order(qapp: QApplication) -> None:
     view = DayAgenda()
     view.set_agenda(THURSDAY, agenda(), None)
-    assert [row for row in rows(view) if row.isupper()] == ["DUE SOON", "HOMEWORK", "FIXED"]
+    text = "\n".join(rows(view))
+    assert [row for row in rows(view) if row.isupper()] == []
+    assert text.index("08:00 · School") < text.index("18:45 · History essay")
+    assert "not placed yet · Science fair poster" in text
 
 
 def test_lengths_and_unplaced_work_are_said_in_words(qapp: QApplication) -> None:
@@ -160,3 +163,35 @@ def test_the_month_opens_on_the_week_the_student_is_in(qapp: QApplication) -> No
         if grid.table.item(row, column) is not None
     ]
     assert "2026-09-19" in found
+
+
+def test_a_block_that_is_not_on_this_day_is_left_out_rather_than_breaking_the_day() -> None:
+    """placement_on says "not on this day" with a sentinel compared by identity. Built fresh inside
+    each function it was a different object every call, so the check never matched: the sentinel was
+    stored as a block's start time, sorting those starts raised, and the whole Day view went down
+    with it. The app looked as though Day simply did nothing."""
+    from desktop.native.calendar import agenda_for
+
+    # A block offered on Monday and Tuesday that the solver put on Monday. Tuesday has to leave it
+    # out, and that decision is the one the sentinel makes.
+    blocks = [
+        {"id": "essay", "title": "Essay", "kind": "flexible", "days": [0, 1], "duration_min": 60},
+        {"id": "tue", "title": "Tuesday only", "kind": "locked", "start": "09:00", "days": [1]},
+    ]
+    trace = {"placed": [{"id": "essay", "start": "16:00", "days": [0], "kind": "flexible"}]}
+    tuesday = agenda_for("2026-09-14", "2026-09-15", blocks, {}, trace, None)
+    assert [row["block"]["id"] for row in tuesday["sessions"]] == []
+    assert all(isinstance(row["start"], str) for row in tuesday["fixed"])
+    monday = agenda_for("2026-09-14", "2026-09-14", blocks, {}, trace, None)
+    assert [row["block"]["id"] for row in monday["sessions"]] == ["essay"]
+
+
+def test_the_day_stays_in_clock_order_when_something_has_no_time() -> None:
+    from desktop.native.calendar import agenda_for
+
+    blocks = [
+        {"id": "late", "title": "Late", "kind": "locked", "start": "18:00", "days": [0]},
+        {"id": "early", "title": "Early", "kind": "locked", "start": "07:00", "days": [0]},
+    ]
+    agenda = agenda_for("2026-09-14", "2026-09-14", blocks, {}, None, None)
+    assert [row["block"]["id"] for row in agenda["fixed"]] == ["early", "late"]

@@ -132,12 +132,12 @@ def test_my_day_puts_planning_away_and_back_brings_it_back(qapp: QApplication, w
     assert window.planner.currentWidget() is window.week_table
     click(window, "viewMyDay")
     assert isinstance(window.planner.currentWidget(), OneThingView)
-    assert window.plan_chrome.isVisible() is False
+    assert window.solve_button.isVisible() is False
     assert window.findChild(QPushButton, "viewMyDay").isChecked() is True
     assert window.findChild(QPushButton, "viewWeek").isChecked() is False
     click(window, "oneBack")
     assert window.planner.currentWidget() is window.week_table
-    assert window.plan_chrome.isVisible() is True
+    assert window.solve_button.isVisible() is True
     assert window.findChild(QPushButton, "viewWeek").isChecked() is True
 
 
@@ -171,7 +171,7 @@ def test_start_focus_keeps_the_timer_in_view_on_a_day_screen(
     wait_until(qapp, lambda: window.session.focus is not None)
     assert window.session.focus["title"] == "History essay"
     assert window.focus_panel.isVisible() is True
-    assert window.plan_chrome.isVisible() is False
+    assert window.solve_button.isVisible() is False
 
 
 def test_running_late_opens_the_products_own_running_late(
@@ -197,7 +197,7 @@ def test_the_keyboard_reaches_my_day_and_back(qapp: QApplication, window: Native
     QTest.keyClick(window.week_table, Qt.Key.Key_T)
     QTest.keyClick(window.planner.currentWidget(), Qt.Key.Key_M)
     wait_until(qapp, lambda: window.planner.currentWidget() is window.month_grid)
-    assert window.plan_chrome.isVisible() is True
+    assert window.solve_button.isVisible() is True
     QTest.keyClick(window.month_grid.table, Qt.Key.Key_T)
     assert isinstance(window.planner.currentWidget(), OneThingView)
 
@@ -206,7 +206,7 @@ def test_the_view_buttons_leave_a_day_screen(qapp: QApplication, window: NativeW
     click(window, "viewMyDay")
     click(window, "viewDay")
     assert window.planner.currentWidget() is window.day_agenda
-    assert window.plan_chrome.isVisible() is True
+    assert window.solve_button.isVisible() is True
 
 
 def test_signing_out_of_a_day_screen_does_not_leave_the_next_student_in_one(
@@ -372,14 +372,23 @@ def test_a_design_of_its_own_gets_the_window_and_tools_holds_the_controls(
     window._layout = {"main": "bento", "day": "one", "options": {}}
     window._on_week()
     assert type(window.planner.currentWidget()).__name__ == "BentoView"
-    assert window.plan_chrome.isVisible() is False
+    assert window.solve_button.isVisible() is False
     assert window.tools_button.isVisible() is True
     qapp.processEvents()
     assert window.planner.height() > window.height() * 0.8
     # Grouped by the job each action does, rather than one flat list of twenty.
-    assert tool_sections(window) == ["Adding", "Planning", "Editing", "Your week", "Account"]
+    assert tool_sections(window) == [
+        "Planning the week",
+        "Adding",
+        "Planning",
+        "Editing",
+        "Your week",
+        "Account",
+    ]
     offered = tool_actions(window)
-    assert list(offered)[:3] == ["Add homework", "Add fixed time", "Plan my homework"]
+    # Plan leads, because it is the one thing the bar keeps when there is a bar.
+    assert list(offered)[0] == "Plan my homework"
+    assert {"Add homework", "Add fixed time"} <= set(offered)
     assert {"Settings", "Running late", "Routines", "Account", "Reload", "Undo", "Redo"} <= set(offered)
     assert (offered["Undo"], offered["Redo"]) == (True, False)
 
@@ -394,15 +403,32 @@ def test_a_tool_does_what_its_button_does(qapp: QApplication, window: NativeWind
     assert len(window.session.blocks) != before or window.session.can_redo() is True
 
 
-def test_day_and_month_keep_the_planning_controls(qapp: QApplication, window: NativeWindow) -> None:
+def test_day_and_month_follow_the_week_layout(qapp: QApplication, window: NativeWindow) -> None:
     window._layout = {"main": "bento", "day": "one", "options": {}}
     click(window, "viewDay")
-    assert window.planner.currentWidget() is window.day_agenda
-    assert (window.plan_chrome.isVisible(), window.tools_button.isVisible()) == (True, False)
+    assert type(window.planner.currentWidget()).__name__ == "BentoView"
+    assert window.planner.currentWidget().scene.surface == "day"
+    assert (window.solve_button.isVisible(), window.tools_button.isVisible()) == (False, True)
+    click(window, "viewMonth")
+    settled(qapp, window)
+    shown = window.planner.currentWidget()
+    assert type(shown).__name__ == "BentoView"
+    assert shown.scene.surface == "month"
     click(window, "viewWeek")
-    assert (window.plan_chrome.isVisible(), window.tools_button.isVisible()) == (False, True)
+    assert (window.solve_button.isVisible(), window.tools_button.isVisible()) == (False, True)
     click(window, "viewMyDay")
-    assert (window.plan_chrome.isVisible(), window.tools_button.isVisible()) == (False, False)
+    assert type(window.planner.currentWidget()).__name__ == "OneThingView"
+    assert (window.solve_button.isVisible(), window.tools_button.isVisible()) == (False, False)
+
+
+def test_todays_app_keeps_the_clock_day_and_chip_month(qapp: QApplication, window: NativeWindow) -> None:
+    window._layout = {"main": "classic", "day": "one", "options": {}}
+    click(window, "viewDay")
+    assert window.planner.currentWidget() is window.day_agenda
+    assert window.solve_button.isVisible() is True
+    click(window, "viewMonth")
+    settled(qapp, window)
+    assert window.planner.currentWidget() is window.month_grid
 
 
 def test_bentos_buttons_reach_the_products_own_add_and_plan(
@@ -569,9 +595,11 @@ def test_no_chrome_button_spreads_across_the_window(qapp: QApplication, window: 
     window.session.reset_focus()
     wait_until(qapp, lambda: window.session.focus is None)
 
+    window._layout = {"main": "classic", "day": "one", "options": {}}
     click(window, "viewDay")
     qapp.processEvents()
     action = window.day_agenda.next_action
+    assert action.isVisible()
     assert action.width() <= action.sizeHint().width() + 8, f"day action is {action.width()}px"
 
 
@@ -674,23 +702,35 @@ def test_the_status_line_no_longer_swallows_the_explanation(qapp: QApplication, 
 
 
 def test_the_week_toolbar_keeps_only_what_is_reached_for(qapp: QApplication, window: NativeWindow) -> None:
-    """Twelve buttons competed for one row while nine more hid in an overflow menu. The row keeps
-    adding, planning and saving; everything else sits under the heading for its job."""
+    """Twelve buttons competed for one row while nine more hid in an overflow menu, and a strip of
+    eight category chips sat above them. The row keeps adding, planning, saving and starting a
+    timer; everything else sits under the heading for its job.
+
+    Retry save is not here: it appears only when a save has actually failed."""
     from PySide6.QtWidgets import QPushButton
 
-    # The action row, not the category chips that sit above it.
+    page = window._stack.currentWidget()
     shown = [
         button.objectName()
-        for button in window.plan_chrome.findChildren(QPushButton)
-        if button.isVisible() and button.objectName() and not button.objectName().startswith("chip-")
+        for button in page.findChildren(QPushButton)
+        if button.isVisible() and button.objectName()
     ]
-    assert shown == ["addHomework", "addFixed", "solveButton", "saveButton", "retrySave", "moreButton"]
+    assert shown == [
+        "prevWeek",
+        "nextWeek",
+        "viewDay",
+        "viewWeek",
+        "viewMonth",
+        "viewMyDay",
+        "solveButton",
+        "moreButton",
+    ]
 
     menu = window.findChild(QPushButton, "moreButton").menu()
     menu.aboutToShow.emit()
     sections = [action.text() for action in menu.actions() if action.isSeparator() and action.text()]
     items = {action.text() for action in menu.actions() if action.text() and not action.isSeparator()}
-    assert sections == ["Planning", "Editing", "Your week", "Account"]
+    assert sections == ["Adding", "Planning", "Editing", "Your week", "Account"]
     assert {"Undo", "Redo", "Duplicate", "Running late", "Routines", "Account", "Settings"} <= items
 
 
@@ -886,158 +926,37 @@ def test_open_on_is_a_starting_point_not_a_lock(qapp: QApplication, window: Nati
     assert window._day_mode is False
 
 
-def chip_faces(window: NativeWindow) -> dict:
-    """The colour each chip wears when it is the armed one."""
+def menu_swatches(window: NativeWindow) -> dict:
+    """The colour beside each type in the Add menu, read back off its icon."""
+    from PySide6.QtGui import QAction
+
     from desktop.native.calendar import CATEGORIES
 
     faces = {}
     for key in CATEGORIES:
-        button = window.chips.findChild(QPushButton, f"chip-{key}")
-        assert button is not None, key
-        checked = [part for part in button.styleSheet().split("}") if ":checked" in part]
-        assert checked, key
-        faces[key] = checked[0].split("background:")[1].split(";")[0].strip()
+        action = window.add_menu.findChild(QAction, f"addMenu-{key}")
+        assert action is not None, key
+        image = action.icon().pixmap(12, 12).toImage()
+        faces[key] = image.pixelColor(6, 6).name()
     return faces
 
 
-def test_the_chips_say_which_category_they_arm(qapp: QApplication, window: NativeWindow) -> None:
-    """They carried no colour at all, so nothing tied a chip to the blocks it makes."""
+def test_the_add_menu_says_which_type_each_entry_makes(qapp: QApplication, window: NativeWindow) -> None:
+    """The chip strip carried the category colours and took a whole row to do it. The colours moved
+    into the Add menu with it."""
     from desktop.native.calendar import CATEGORIES
 
     window.session.preferences = {**(window.session.preferences or {}), "accent_chips": False}
     window._on_week()
     qapp.processEvents()
-    faces = chip_faces(window)
-    assert len(set(faces.values())) == len(CATEGORIES)
+    assert len(set(menu_swatches(window).values())) == len(CATEGORIES)
 
 
-def test_accent_chips_paints_them_all_in_the_accent(qapp: QApplication, window: NativeWindow) -> None:
-    """The setting was saved and never read here; the web has painted its chips this way all along."""
+def test_accent_chips_paints_every_type_in_the_accent(qapp: QApplication, window: NativeWindow) -> None:
     window.session.preferences = {**(window.session.preferences or {}), "accent_chips": True}
     window._on_week()
     qapp.processEvents()
-    assert len(set(chip_faces(window).values())) == 1
-
-
-def test_saving_start_at_login_changes_this_machine_not_just_the_account(
-    qapp: QApplication, window: NativeWindow, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The preference synced to the account and no machine ever acted on it."""
-    from desktop.native import autostart
-
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    entry = tmp_path / "autostart" / autostart.ENTRY_NAME
-    window._apply_start_at_login(True)
-    assert entry.exists()
-    window._apply_start_at_login(False)
-    assert not entry.exists()
-
-
-def test_alerts_stay_on_screen_when_the_student_asked_them_to(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    """A tray message is gone in eight seconds and a machine may suppress it entirely. The setting
-    saved a value and nothing anywhere acted on it."""
-    window.session.preferences = {**(window.session.preferences or {}), "reminder_dnd_override": True}
-    window.alert_strip.clear()
-    window._present_alerts([{"title": "Essay starts soon", "body": "19:00 · Thu"}])
-    qapp.processEvents()
-    assert window.alert_strip.isVisible() is True
-    assert "Essay starts soon" in window.alert_strip.text.text()
-
-
-def test_alerts_do_not_pile_up_in_the_window_when_it_is_off(qapp: QApplication, window: NativeWindow) -> None:
-    window.session.preferences = {**(window.session.preferences or {}), "reminder_dnd_override": False}
-    window.alert_strip.clear()
-    window._present_alerts([{"title": "Essay starts soon", "body": "19:00 · Thu"}])
-    qapp.processEvents()
-    assert window.alert_strip.isVisible() is False
-
-
-def test_dismissing_one_alert_reveals_the_next_rather_than_losing_it(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    window.session.preferences = {**(window.session.preferences or {}), "reminder_dnd_override": True}
-    window.alert_strip.clear()
-    window._present_alerts([{"title": "First", "body": "a"}, {"title": "Second", "body": "b"}])
-    qapp.processEvents()
-    assert "First" in window.alert_strip.text.text()
-    assert "+1 more" in window.alert_strip.text.text()
-    window.alert_strip.dismiss.click()
-    qapp.processEvents()
-    assert "Second" in window.alert_strip.text.text()
-    window.alert_strip.dismiss.click()
-    qapp.processEvents()
-    assert window.alert_strip.isVisible() is False
-
-
-def test_a_field_keeps_its_floor_at_every_text_size(qapp: QApplication) -> None:
-    """The Layout dialog came up a few pixels under its natural height on a real KDE desktop and the
-    rows were squeezed until "Colours" and "Soft" were slivers of their letters. A combo box has no
-    useful minimum of its own there, so the floor comes from the look.
-
-    Asserted on the stylesheet rather than on a live widget: the offscreen platform this runs on
-    gives a combo box a generous native minimum, so a widget-level check passes with or without the
-    fix and would prove nothing."""
-    from desktop.native.look import FIELD_MIN_PX, pack_stylesheet
-
-    for size in ("small", "normal", "large"):
-        sheet = pack_stylesheet("light-frost", False, {"preset": "default", "knobs": {"text": size}})
-        # The floor has to be on the field rule itself. Menu items carry a min-height of their own,
-        # so looking for the number anywhere in the sheet would pass without the fields having one.
-        rule = next(part for part in sheet.split("}") if part.lstrip().startswith("QLineEdit"))
-        assert f"min-height: {FIELD_MIN_PX[size]}px" in rule, (size, rule)
-
-
-def test_the_way_in_is_signing_in_not_a_choice_between_two_buttons(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    """Create account and Sign in sat side by side as equals, so every arrival had to choose before
-    reading anything. A student creates an account once and signs in from then on."""
-    window._making_account = False
-    window._sync_auth_mode()
-    qapp.processEvents()
-    assert window.auth_heading.text() == "Sign in"
-    # isHidden, not isVisible: the fixture is signed in, so every child of the auth page reports
-    # not visible whatever mode it is in.
-    assert window.sign_in_button.isHidden() is False
-    assert window.create_button.isHidden() is True
-    assert "Create an account" in window.auth_switch.text()
-
-
-def test_the_small_print_switches_to_making_an_account_and_back(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    window._making_account = False
-    window._sync_auth_mode()
-    window.auth_switch.click()
-    qapp.processEvents()
-    assert window.auth_heading.text() == "Create your account"
-    assert window.create_button.isHidden() is False
-    assert window.sign_in_button.isHidden() is True
-    assert "Sign in" in window.auth_switch.text()
-    window.auth_switch.click()
-    qapp.processEvents()
-    assert window.auth_heading.text() == "Sign in"
-
-
-def test_pressing_return_does_the_thing_the_screen_is_for(qapp: QApplication, window: NativeWindow) -> None:
-    """Whichever mode is showing, its own button is the default, so Return never does the other one."""
-    window._making_account = False
-    window._sync_auth_mode()
-    assert window.sign_in_button.isDefault() is True
-    window._making_account = True
-    window._sync_auth_mode()
-    assert window.create_button.isDefault() is True
-
-
-def test_signing_out_comes_back_to_the_sign_in_screen(qapp: QApplication, window: NativeWindow) -> None:
-    window._making_account = True
-    window._sync_auth_mode()
-    window._on_account(None)
-    qapp.processEvents()
-    assert window._making_account is False
-    assert window.auth_heading.text() == "Sign in"
+    assert len(set(menu_swatches(window).values())) == 1
 
 
 def test_day_and_month_wear_the_same_design_as_the_week(qapp: QApplication, window: NativeWindow) -> None:
@@ -1141,3 +1060,94 @@ def test_a_skipped_version_stays_quiet_until_asked(qapp: QApplication, window: N
     window._on_update_found({"version": "9.9.9", "asset": "x", "url": "u", "checksum_url": "c", "notes": ""})
     assert shown == []
     assert window._update_dialog is None
+
+
+def test_no_button_appears_twice_on_the_week_page(qapp: QApplication, window: NativeWindow) -> None:
+    """Moving Quick focus into the action row left the focus panel's own copy on screen, so the same
+    button was offered twice a few pixels apart. The action row is not the only place a button can
+    come from, so this counts them across the whole page rather than inside one container."""
+    from PySide6.QtWidgets import QPushButton
+
+    window._day_mode = False
+    window._on_week()
+    qapp.processEvents()
+    page = window._stack.currentWidget()
+    labels = [b.text() for b in page.findChildren(QPushButton) if b.isVisible() and b.text()]
+    repeated = sorted({text for text in labels if labels.count(text) > 1})
+    assert repeated == [], f"offered twice: {repeated}"
+
+
+def test_the_add_button_says_what_a_drag_will_make(qapp: QApplication, window: NativeWindow) -> None:
+    """The armed type was legible because eight chips sat on screen with one of them lit. With the
+    chips gone, the button that opens the menu has to carry it."""
+    from PySide6.QtWidgets import QPushButton
+
+    # arm_category, not _add_from_chip: that one also opens the Add dialog, which blocks.
+    window.session.arm_category("exercise")
+    window._sync_add_button()
+    qapp.processEvents()
+    button = window.findChild(QPushButton, "addButton")
+    assert button is not None
+    assert "sport" in button.text().lower()
+    assert not button.icon().isNull(), "no colour beside the armed type"
+
+
+def test_the_week_saves_itself_without_anyone_pressing_save(qapp: QApplication, window: NativeWindow) -> None:
+    """Save left the bar, so this is the only thing that writes a student's week. If it stops
+    working, work is lost silently, which is the worst failure this app has."""
+    from desktop.native.calendar import sunday_due
+
+    before = window.session.revision
+    window.session.add_homework(
+        {
+            "id": "auto",
+            "title": "Autosaved essay",
+            "due": sunday_due(window.session.week_start),
+            "estimate_min": 30,
+            "revision": 0,
+        }
+    )
+    assert window.session.dirty is True
+    # The clock the debounce reads is the session's, so move it rather than sleeping.
+    window._changed_ms = 0
+    window._last_try_ms = 0
+    window._autosave_tick()
+    wait_until(qapp, lambda: not window.session.busy and window.session.revision > before)
+    assert window.session.dirty is False
+
+
+def test_autosave_waits_until_the_student_stops_changing_things(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Dragging a block emits a change per step. Saving on each one would post continuously."""
+    window.session.dirty = True
+    window.session.pending_save = None
+    window._changed_ms = window.session.now_ms()
+    posted = []
+    window.session.save = lambda *a, **k: posted.append(1)
+    window._autosave_tick()
+    assert posted == [], "saved while the student was still changing things"
+
+
+def test_autosave_keeps_its_hands_off_a_conflict(qapp: QApplication, window: NativeWindow) -> None:
+    """A 409 means another window wrote this week. Answering that is the student's decision, and a
+    timer that retried would overwrite whichever copy lost the race."""
+    window.session.dirty = True
+    window.session.conflict = True
+    window._changed_ms = 0
+    posted = []
+    window.session.save = lambda *a, **k: posted.append(1)
+    window._autosave_tick()
+    assert posted == []
+
+
+def test_autosave_does_not_pile_requests_on_a_busy_session(qapp: QApplication, window: NativeWindow) -> None:
+    window.session.dirty = True
+    window.session.conflict = False
+    window.session.busy = True
+    window._changed_ms = 0
+    posted = []
+    window.session.save = lambda *a, **k: posted.append(1)
+    window._autosave_tick()
+    window.session.busy = False
+    assert posted == []

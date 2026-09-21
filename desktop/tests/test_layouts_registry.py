@@ -12,6 +12,7 @@ import pytest
 from desktop.native.layouts.registry import (
     LAYOUTS,
     MATCH,
+    complete,
     contrast_failures,
     layouts_for,
     options_for,
@@ -170,3 +171,44 @@ def test_the_audit_holds_a_fill_to_its_own_floor() -> None:
     good = tokens_for("bento", "indigo", palette)
     assert contrast_failures(good) == []
     assert contrast_failures({**good, "fill": good["surface"]}) == ["fill on surface 1.00"]
+
+
+def relative_luminance(colour: str) -> float:
+    raw = colour.lstrip("#")
+    red, green, blue = (int(raw[index : index + 2], 16) for index in (0, 2, 4))
+    return (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255
+
+
+def test_every_design_offers_a_dark_colourway() -> None:
+    """A student who works at night should not have to give up the design they picked. Bento and
+    Clay shipped with three colourways each and every one of them light."""
+    for layout_id, spec in LAYOUTS.items():
+        if not spec.colourways:
+            continue  # Today's app wears the pack, which has dark packs of its own.
+        darks = [
+            label for _value, label, tokens in spec.colourways if relative_luminance(tokens["bg"]) < 0.35
+        ]
+        assert darks, f"{layout_id} has no dark colourway"
+
+
+def test_every_design_offers_a_light_colourway_too() -> None:
+    """The same argument the other way: Mission control is three shades of dark."""
+    missing = [
+        layout_id
+        for layout_id, spec in LAYOUTS.items()
+        if spec.colourways
+        and not [
+            label for _value, label, tokens in spec.colourways if relative_luminance(tokens["bg"]) >= 0.35
+        ]
+    ]
+    assert missing == ["mission"], (
+        "Mission control is the known exception and reaches light through Match my look; "
+        f"these now have no light colourway either: {missing}"
+    )
+
+
+def test_a_dark_colourway_is_readable_like_any_other() -> None:
+    for layout_id, spec in LAYOUTS.items():
+        for value, _label, tokens in spec.colourways:
+            if relative_luminance(tokens["bg"]) < 0.35:
+                assert contrast_failures(complete(tokens)) == [], (layout_id, value)
