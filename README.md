@@ -61,27 +61,32 @@ The look starts on System, which follows your device's light or dark setting;
 Settings and Layout offer the rest, and every design can be dark: Today's app
 through its pack, the others through a dark colourway of their own. The
 week saves itself a moment after each change and retries on its own if a save
-fails. A conflicting save from another window is never overwritten: it offers a
-draft download and a reload of the saved week. A forgotten password is recovered
+fails. A save that conflicts with another window is never written over: saving
+stops and FlexWeek asks you to reload the saved week. A forgotten password is recovered
 with one of the eight recovery codes shown when the account was made.
 
 Weeks exported from an older browser-based build can be explicitly imported
 after logging in. Import replaces the account's current week after confirmation;
 invalid legacy data is left untouched.
 
-## Storage and hosting configuration
+## Data and configuration
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `FLEXWEEK_DATABASE` | `var/flexweek.db` | SQLite account, session, week and theme storage |
-| `FLEXWEEK_ORIGIN` | `http://127.0.0.1:8000` | Exact API origin, including port |
+FlexWeek keeps its database in your user data folder (on Linux,
+`~/.local/share/FlexWeek/flexweek.db`) and starts its own backend on a private
+loopback port. Nothing needs configuring to use it.
 
-For a different local port, set `FLEXWEEK_ORIGIN` to match. Non-local origins
-require HTTPS. HTTPS deployments use Secure session cookies. A hosted release
-needs a persistent database directory and backups; an ephemeral filesystem
-loses accounts and schedules. Configure trusted reverse proxies explicitly so
-client-address throttling sees the intended source. Full deployment, account
-recovery, deletion/retention policy and security audits remain later work.
+| Setting | Effect |
+|---|---|
+| `--database FILE` | Use this database file instead of the one in your data folder |
+| `FLEXWEEK_DESKTOP_ORIGIN` (or `FLEXWEEK_ORIGIN`) | Use a FlexWeek API running elsewhere instead of starting one; an invalid value is an error, never a quiet fall back to local |
+
+The API can also run on its own, for development or as a server other copies
+point at: `uvicorn backend.app:app` reads `FLEXWEEK_DATABASE` (default
+`var/flexweek.db`) and `FLEXWEEK_ORIGIN` (default `http://127.0.0.1:8000`) and
+serves the API only, no pages. Non-local origins require HTTPS, and HTTPS uses
+Secure session cookies. A hosted API needs a persistent database directory and
+backups, and trusted reverse proxies configured explicitly so client-address
+throttling sees the real source.
 
 The database and its journals are gitignored. Back up the database with SQLite's
 backup API or with the app stopped; protect backups as private account data.

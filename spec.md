@@ -12,8 +12,8 @@ is archived in `docs/cac-build-plan.md`. Living schedule and remaining work live
 in `roadmap.md`.
 
 ## Intended Users
-High-school students using individual accounts through the web app and the
-separate desktop app. New accounts start with an empty week; no anonymous demo
+High-school students using individual accounts through the FlexWeek desktop app
+for Windows and Linux. New accounts start with an empty week; no anonymous demo
 mode or sample-data fallback. Secondary audience: CAC judges, who create an
 account and can inspect the GitHub repository.
 
@@ -74,10 +74,11 @@ Contract for the finished app:
 - Deadline slack is shown as ok / tight / danger.
 - Edge cases: an unsolvable week returns `complete: false` with reasons rather
   than an error; a duration that is not a positive multiple of 15 is rejected in
-  both the browser form and the API. Legacy browser data is explicitly imported
-  into a signed-in account; invalid data stays untouched and never loads a demo.
-- Copy, paste, duplicate and copy-day use a page-memory clipboard that clears
-  on account change. Fixed-time conflicts are previewed and must be resolved;
+  both the app's editor and the API. Files exported by earlier builds, including
+  the retired browser client, import into a signed-in account; invalid data
+  stays untouched and never loads a demo.
+- Copy, paste, duplicate and copy-day use an in-memory clipboard that clears on
+  sign-out, session expiry and account deletion. Fixed-time conflicts are previewed and must be resolved;
   pasted homework keeps the same assignment identity, stays flexible and never
   exceeds its remaining unplanned minutes.
 - Account-owned weekly routines contain fixed commitments only. Applying one
@@ -129,7 +130,7 @@ Contract for the finished app:
 - Preferences carry availability: up to 21 `protected` windows (downtime,
   commute or meal), up to 21 soft `study_windows`, and an optional `day_cutoff`
   that flexible work must finish by. `POST /api/solve` loads them for the
-  signed-in account, so the browser never re-sends occupancy.
+  signed-in account, so the client never re-sends occupancy.
 - Comfort preferences persist per account: `alert_volume` (0-100), `end_chime`,
   `tray_notifications`, `start_at_login`, `preferred_view` (`week` or `day`),
   `sidebar_collapsed` and `sidebar_width_px` (200-640). Defaults stay omitted
@@ -179,14 +180,14 @@ info, then Run anyway.
 Linux: 64-bit desktop (GNOME, KDE Plasma, Cinnamon, Xfce), glibc 2.38 or
 newer, OpenGL or EGL. The X11 cursor helper is inside the archive. A shippable
 Linux tarball is built on Ubuntu 24.04, not on a newer-glibc Fedora host.
-Chromebooks use the web app when a hosted URL exists.
+Chromebooks are not supported: there is no web version.
 
 Run locally:
 
 ```
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn backend.app:app --reload    # then open http://127.0.0.1:8000/
+pip install -r requirements.txt -r requirements-desktop.txt
+python -m desktop.main    # starts the backend inside the app; nothing to open in a browser
 ```
 
 Current account/API contract:
@@ -229,9 +230,9 @@ optional `running_late` object for a delayed start, never both. `week_start` is
 required when any block carries `assignment_id`. The solve trace contains `placed`,
 `unplaced`, `moves`, `explanations`, `failed_constraints`, `solve_ms`,
 `complete`. Demo endpoints are removed. Test-only seed JSON remains.
-Writes require `X-FlexWeek-Request: 1`; browser origins must match
-`FLEXWEEK_ORIGIN`. Clients send `X-FlexWeek-Account` to reject requests after a
-cross-tab account change. No CORS is enabled.
+Writes require `X-FlexWeek-Request: 1`; the request `Origin` must match the
+API's origin. Clients send `X-FlexWeek-Account` so a request made before an
+account change is rejected after it. No CORS is enabled.
 
 Registration: normalized case-insensitive ASCII username (3–32 letters, digits,
 underscores), password 12–128 characters. New accounts have an empty week, eight
@@ -283,7 +284,8 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
   Qt widgets; see DESKTOP.md.
 - Frameworks, pinned in `requirements.txt`: FastAPI 0.141.1,
   uvicorn[standard] 0.52.4, pytest 9.1.1, httpx 0.28.1, ruff 0.16.6, mypy 2.3.1, Pydantic 2.13.5.
-- Storage: SQLite at `FLEXWEEK_DATABASE` (default `var/flexweek.db`), with users,
+- Storage: SQLite, in the user data folder for the app (`FLEXWEEK_DATABASE`,
+  default `var/flexweek.db`, only when the API runs on its own), with users,
   sessions, weeks keyed `(user_id, week_start)`, assignments keyed
   `(user_id, id)`, preferences, routines, restore points, hashed recovery codes,
   bounded idempotency records and short-lived auth-attempt counters. Schema
@@ -322,11 +324,10 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
   Overlap uses half-open ranges `[start, end)`. One `overlaps()` helper. There
   is no duplicate date math.
 - External APIs/services: none. No OAuth, no calendar sync, no LLM at runtime.
-- Deployment: hosted web backend plus a separate desktop client. The Linux
-  desktop build ships as a PySide6 Qt WebEngine window that runs the FastAPI
-  backend in-process on a loopback port, so it needs no separate server and no
-  Python install; its database sits beside the browser profile in the user data
-  directory. `FLEXWEEK_DESKTOP_ORIGIN` (or `FLEXWEEK_ORIGIN`) points that window
+- Deployment: the desktop client is the product; there is no web client. The
+  Windows and Linux builds are PySide6 Qt widgets that run the FastAPI backend
+  in-process on a loopback port, so they need no separate server and no Python
+  install; the database sits in the user data directory. `FLEXWEEK_DESKTOP_ORIGIN` (or `FLEXWEEK_ORIGIN`) points that window
   at a hosted deployment instead, and an invalid value is an error rather than a
   silent fall back to local. The Windows installers are built on GitHub
   Actions (`.github/workflows/release-windows.yml`), which installs, opens and
@@ -360,15 +361,19 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
   Stage 6 recovery codes, password change, account deletion and previewed
   format-3 transfer are the supported access flows (`docs/stage6-contract.md`).
   Advanced hardening and audits remain later release work.
-- Failed saves retain in-memory drafts with retry, download and reload controls.
-  Stale revisions never silently overwrite newer data. Session loss hides all
-  private content; a draft can restore only after the same account signs in.
-  Explicit sign-out discards drafts after confirmation. A running focus timer is
-  kept in `sessionStorage` per account with ids and times only, never assignment
-  text; undo history lives in page memory and clears on sign-out or account
-  change.
-- The Stage 3 clipboard also lives only in page memory and clears on sign-out,
-  account change and reload. Routine, restore and transfer routes derive
+- The week saves itself shortly after each change. A failed save keeps its
+  payload and operation id and is retried automatically, so a retry writes the
+  same change once; Retry save appears while one is pending. A save that comes
+  back 409 because another window changed the week is never written over:
+  saving stops and the student is asked to reload the saved week, which
+  discards the unsaved change. Stale revisions never silently overwrite newer
+  data. Session loss hides all private content. Opening another week parks an
+  unsaved week as a draft for that account. A running focus timer is kept in
+  memory per account with ids and times only, never assignment text; undo
+  history lives in memory and clears on sign-out, session expiry or account
+  deletion.
+- The Stage 3 clipboard also lives only in memory and clears on sign-out,
+  session expiry and account deletion. Routine, restore and transfer routes derive
   ownership from the session; another account's opaque ID is treated as not
   found. Restore and import previews use a state token so a later edit cannot
   be overwritten silently. Password-gated export, code replacement, password
@@ -423,7 +428,8 @@ The commands it runs, each of which must exit 0:
 - [ ] Deadline before the only free window: unplaced with `DEADLINE_MISS` (T5).
 - [ ] A flexible block's domain excludes slots covered by a sport block (T6).
 - [ ] The packed fixture reports `solve_ms < 150` (T7).
-- [ ] Corrupt legacy localStorage does not replace the account week or load demos.
+- [ ] A malformed, oversized or newer-version import file is refused without
+      touching the account week.
 - [ ] Two accounts independently create, solve, save and reload weeks.
 - [ ] Sign-out hides private data; expired sessions cannot read/write/solve.
 - [ ] A new account follows the device's light or dark setting, and a chosen
@@ -431,7 +437,8 @@ The commands it runs, each of which must exit 0:
 - [ ] Failed saves preserve drafts; stale saves return a recoverable conflict.
 - [ ] No output block overlaps another, and no flexible block starts after its
       deadline (property tests).
-- [ ] First paint with no session is Create account, not Log in.
+- [ ] First paint with no session is Sign in, with creating an account offered
+      under it.
 - [ ] A pomodoro parent cannot be stored with the chunks split from it.
 - [ ] Marking a locked occurrence missed reshuffles remaining flexible work and
       leaves sleep intact.
@@ -451,13 +458,13 @@ The commands it runs, each of which must exit 0:
       undoes it in one step; spreading a project adds sessions only after a
       preview.
 - [ ] Protected downtime, preferred study hours and a day cutoff change where
-      the solver places work without the browser re-sending occupancy.
+      the solver places work without the client re-sending occupancy.
 - [ ] A student opens Month, sees deadlines with planned and completed study
       time, and clicks a date to open Day view.
 - [ ] Download names are `FlexWeek-Windows-x64-Setup.exe` (with
       `FlexWeek-Windows-x64.msi` for schools) and
       `FlexWeek-Linux-x86_64.tar.gz`.
-- [ ] A public Render URL loads the app and a judge can follow the README.
+- [ ] A judge can install the Windows or Linux download and follow the README.
 - [ ] `scripts/verify.py` exits 0 (`ruff check .`, `mypy backend`, and
       `pytest -q` included).
 - [ ] CHANGELOG.md updated for user-visible changes.
