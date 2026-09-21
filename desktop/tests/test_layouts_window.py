@@ -25,7 +25,16 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QStandardPaths, Qt
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialog, QLabel, QPushButton
+    from PySide6.QtWidgets import (
+        QApplication,
+        QCheckBox,
+        QComboBox,
+        QDialog,
+        QDialogButtonBox,
+        QLabel,
+        QPushButton,
+        QWidget,
+    )
 
     from desktop.native.calendar import sunday_due
     from desktop.native.layouts.one_thing import OneThingView
@@ -159,7 +168,7 @@ def test_homework_finished_finishes_it_the_way_the_product_does(
     assert window.session.assignments["essay"]["completed"] is True
     assert window.session.can_undo() is True
     view = window.planner.currentWidget()
-    assert view.findChild(QLabel, "oneTitle").text() == "NOTHING ELSE TODAY"
+    assert view.findChild(QLabel, "oneTitle").text() == "ALL HOMEWORK FINISHED"
 
 
 def test_start_focus_keeps_the_timer_in_view_on_a_day_screen(
@@ -911,6 +920,10 @@ def test_every_dialog_fits_a_laptop_screen(qapp: QApplication, window: NativeWin
     # screen, which is why a screen-sized bound caught nothing; 700 square is the real rule.
     wrong = {name: size for name, size in sizes.items() if size[0] > 700 or size[1] > 768 or size[0] < 320}
     assert wrong == {}
+    short = {
+        name: size for name, size in sizes.items() if name in {"Settings", "Add homework"} and size[1] < 400
+    }
+    assert short == {}
 
 
 def test_the_focus_timer_reads_as_one_status_line(qapp: QApplication, window: NativeWindow) -> None:
@@ -968,11 +981,33 @@ def test_a_real_solve_explains_itself_once(qapp: QApplication, window: NativeWin
     assert window.plan_review.isVisible() is False
 
 
-def test_the_status_line_no_longer_swallows_the_explanation(qapp: QApplication, window: NativeWindow) -> None:
-    window.session.solve()
+def test_a_commitment_over_planned_homework_offers_find_a_new_time(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Mutation that turns this red: plan_conflicts is never connected to the notice."""
+    window.session.add_block(
+        {
+            "id": "club",
+            "title": "Club",
+            "kind": "locked",
+            "start": "18:00",
+            "duration_min": 120,
+            "days": [3],
+        }
+    )
+    qapp.processEvents()
+    assert window.action_notice.isVisible()
+    assert window.action_notice_button.text() == "Find a new time"
+    assert "History essay" in window.action_notice_text.text()
+
+
+def test_the_status_line_counts_homework_blocks(qapp: QApplication, window: NativeWindow) -> None:
+    """Mutation that turns this red: plan_sentence says 'Placed 4 of 4'."""
+    window.session.solve(everything=True)
     wait_until(qapp, lambda: not window.session.busy)
     qapp.processEvents()
-    assert window.week_status.text().startswith("Placed ")
+    assert window.week_status.text().startswith("Planned ")
+    assert " of " not in window.week_status.text()
 
 
 def test_the_week_toolbar_keeps_only_what_is_reached_for(qapp: QApplication, window: NativeWindow) -> None:
@@ -992,6 +1027,7 @@ def test_the_week_toolbar_keeps_only_what_is_reached_for(qapp: QApplication, win
     assert shown == [
         "prevWeek",
         "nextWeek",
+        "todayWeek",
         "viewDay",
         "viewWeek",
         "viewMonth",
@@ -1009,6 +1045,33 @@ def test_the_week_toolbar_keeps_only_what_is_reached_for(qapp: QApplication, win
     assert {"Undo", "Redo", "Duplicate", "Running late", "Routines", "Advanced", "Log out"} <= set(items)
     assert "Settings" not in items
     assert "Account" not in items
+    assert "Replan all my homework" in items
+
+
+def test_today_jumps_the_planner_to_this_week(qapp: QApplication, window: NativeWindow) -> None:
+    from datetime import date
+
+    from desktop.native.calendar import monday_of
+
+    click(window, "nextWeek")
+    settled(qapp, window)
+    assert window.session.week_start != monday_of(date.today().isoformat())
+    click(window, "todayWeek")
+    settled(qapp, window)
+    assert window.session.week_start == monday_of(date.today().isoformat())
+
+
+def test_the_top_bar_keeps_the_gear_on_a_1024_window(qapp: QApplication, window: NativeWindow) -> None:
+    """Mutation that turns this red: week_title keeps its full sizeHint as a minimum width."""
+    window.resize(1024, 768)
+    window.show()
+    qapp.processEvents()
+    gear = window.findChild(QPushButton, "settingsGear")
+    today = window.findChild(QPushButton, "todayWeek")
+    assert today is not None and today.isVisible()
+    assert gear is not None and gear.isVisible()
+    right = gear.mapTo(window, gear.rect().topRight()).x()
+    assert right <= window.width(), (right, window.width(), window.minimumSizeHint().width())
 
 
 def test_the_gear_opens_settings(qapp: QApplication, window: NativeWindow) -> None:
@@ -1498,3 +1561,185 @@ def test_autosave_does_not_pile_requests_on_a_busy_session(qapp: QApplication, w
     window._autosave_tick()
     window.session.busy = False
     assert posted == []
+
+
+def _dialog_shows(dialog: QDialog, widget) -> bool:
+    top = widget.mapTo(dialog, widget.rect().topLeft())
+    return 0 <= top.y() < dialog.height() - 8
+
+
+@pytest.mark.parametrize("size", [(1024, 768), (1280, 800)])
+@pytest.mark.parametrize("pack", ["light-frost", "dark-frost"])
+def test_settings_and_homework_open_tall_enough_to_read(
+    qapp: QApplication, window: NativeWindow, size: tuple[int, int], pack: str
+) -> None:
+    from desktop.native.widgets import HomeworkDialog
+
+    window.resize(*size)
+    window.session.preferences = {**window.session.preferences, "theme_pack": pack}
+    window._apply_appearance()
+    qapp.processEvents()
+    prefs = PrefsDialog(
+        window, window.session.preferences, window._look, window.session.reminder_limits, window._layout
+    )
+    prefs.setStyleSheet(window.styleSheet())
+    prefs.show()
+    for _ in range(30):
+        qapp.processEvents()
+    assert prefs.height() >= 400, (pack, size, prefs.width(), prefs.height())
+    look = prefs.findChild(QComboBox, "prefTheme")
+    close = prefs.findChild(QDialogButtonBox)
+    assert look is not None and _dialog_shows(prefs, look)
+    assert close is not None and _dialog_shows(prefs, close)
+    prefs.close()
+
+    homework = HomeworkDialog(window, week_start=window.session.week_start)
+    homework.setStyleSheet(window.styleSheet())
+    homework.show()
+    qapp.processEvents()
+    assert homework.height() >= 400, (pack, size, homework.width(), homework.height())
+    for field in (homework.title, homework.due, homework.estimate):
+        assert _dialog_shows(homework, field)
+    buttons = homework.findChild(QDialogButtonBox, "dialogButtons")
+    assert buttons is not None and _dialog_shows(homework, buttons)
+    homework.close()
+
+    edited = HomeworkDialog(window, window.session.assignments["essay"], window.session.week_start)
+    edited.setStyleSheet(window.styleSheet())
+    edited.show()
+    qapp.processEvents()
+    assert edited.height() >= 400
+    assert _dialog_shows(edited, edited.title)
+    assert _dialog_shows(edited, edited.findChild(QDialogButtonBox, "dialogButtons"))
+    edited.close()
+
+
+def test_bento_month_hides_the_week_up_next_card(qapp: QApplication, window: NativeWindow) -> None:
+    window._layout = {"main": "bento", "day": "one", "options": {}}
+    window._on_week()
+    qapp.processEvents()
+    view = window.planner.currentWidget()
+    scroll = view.findChild(QWidget, "bentoScroll")
+    assert scroll is not None and scroll.isVisible()
+    click(window, "viewMonth")
+    settled(qapp, window)
+    view = window.planner.currentWidget()
+    scroll = view.findChild(QWidget, "bentoScroll")
+    assert scroll is not None
+    assert scroll.isVisible() is False
+    hero = view.findChild(QLabel, "bentoHeroTitle")
+    if hero is not None:
+        assert hero.isVisible() is False
+    board = view.findChild(QWidget, "layoutMonthBoard")
+    assert board is not None and board.isVisible()
+
+
+@pytest.mark.parametrize("layout_id", ["timeline", "mission", "bento", "retro", "clay"])
+def test_month_hides_the_whole_week_surface(
+    qapp: QApplication, window: NativeWindow, layout_id: str
+) -> None:
+    """Mutation that turns this red: LayoutView._week_host returns None."""
+    window._layout = {"main": layout_id, "day": "one", "options": {}}
+    window._day_mode = False
+    window.session.set_view("week")
+    window._on_week()
+    qapp.processEvents()
+    view = window.planner.currentWidget()
+    host = view._week_host()
+    assert host is not None and host.isVisible()
+    click(window, "viewMonth")
+    settled(qapp, window)
+    view = window.planner.currentWidget()
+    host = view._week_host()
+    assert host is not None
+    assert host.isVisible() is False
+    board = view.findChild(QWidget, "layoutMonthBoard")
+    assert board is not None and board.isVisible()
+
+
+def test_finishing_from_my_day_offers_undo_on_the_notice(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Mutation that turns this red: _finish_homework never calls _set_notice."""
+    click(window, "viewMyDay")
+    click(window, "oneFinished")
+    settled(qapp, window)
+    assert window.session.assignments["essay"]["completed"] is True
+    assert window.action_notice.isVisible()
+    assert window.action_notice_text.text() == "Finished History essay."
+    assert window.action_notice_button.text() == "Undo"
+
+
+FREE_TODAY = (
+    "done for today",
+    "nothing else today",
+    "all clear",
+    "the rest of the day is yours",
+    "a free day",
+    "0 min left today",
+    "nothing on this day",
+    "no homework tonight",
+)
+
+SCREENS = (
+    ("classic", "week"),
+    ("timeline", "week"),
+    ("mission", "week"),
+    ("bento", "week"),
+    ("retro", "week"),
+    ("clay", "week"),
+    ("one", "day"),
+    ("dial", "day"),
+)
+
+
+def visible_copy(root: QWidget) -> str:
+    bits = []
+    for child in [root, *root.findChildren(QWidget)]:
+        if not child.isVisible():
+            continue
+        if isinstance(child, (QLabel, QPushButton)):
+            text = child.text().strip()
+            if text:
+                bits.append(text)
+    return "\n".join(bits)
+
+
+@pytest.mark.parametrize(("layout_id", "surface"), SCREENS)
+def test_unplaced_homework_due_today_is_named_on_every_screen(
+    qapp: QApplication, window: NativeWindow, layout_id: str, surface: str
+) -> None:
+    """Math worksheet due tonight with no time. No screen may say the day is free, and each names it.
+
+    Mutation that turns this red: WeekModel.due_today_unplaced always returns ().
+    """
+    session = window.session
+    thursday = datetime.fromisoformat(session.week_start) + timedelta(days=3, hours=16)
+    session.now_ms = lambda: int(thursday.timestamp() * 1000)
+    session.blocks = [item for item in session.blocks if item.get("assignment_id") != "essay"]
+    session._touch("clearing the placed essay")
+    due = (datetime.fromisoformat(session.week_start) + timedelta(days=3)).strftime("%Y-%m-%dT21:00")
+    session.add_homework(
+        {
+            "id": "math",
+            "title": "Math worksheet",
+            "due": due,
+            "estimate_min": 45,
+            "revision": 0,
+        }
+    )
+    session.save()
+    settled(qapp, window)
+    if surface == "day":
+        window._layout = {"main": "classic", "day": layout_id, "options": {}}
+        window._day_mode = True
+    else:
+        window._layout = {"main": layout_id, "day": "one", "options": {}}
+        window._day_mode = False
+        session.set_view("week")
+    window._on_week()
+    qapp.processEvents()
+    said = visible_copy(window).lower()
+    assert "math worksheet" in said, said
+    for phrase in FREE_TODAY:
+        assert phrase not in said, f"{layout_id} still says {phrase!r} in:\n{said}"

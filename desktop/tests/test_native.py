@@ -21,7 +21,7 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import Qt, QTimer
+    from PySide6.QtCore import QStandardPaths, Qt, QTimer
     from PySide6.QtGui import QAction, QGuiApplication
     from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QPushButton
 
@@ -151,6 +151,28 @@ def test_create_account_shows_eight_codes_then_an_empty_week(qapp: QApplication,
     assert table_text(window) == ""
 
 
+def test_the_password_can_be_shown(qapp: QApplication, server: LocalServer) -> None:
+    window = NativeWindow(server.origin)
+    HELD.append(window)
+    window.password.setText(PASSWORD)
+    assert window.password.echoMode() == QLineEdit.EchoMode.Password
+    window.password_reveal.setChecked(True)
+    assert window.password.echoMode() == QLineEdit.EchoMode.Normal
+    assert window.password_reveal.text() == "Hide"
+
+
+def test_a_short_username_is_named_before_the_request(qapp: QApplication, server: LocalServer) -> None:
+    from desktop.native.client import USERNAME_ERROR
+
+    window = NativeWindow(server.origin)
+    HELD.append(window)
+    window.username.setText("ab")
+    window.password.setText(PASSWORD)
+    window.findChild(QPushButton, "createAccount").click()
+    assert window.session.account is None
+    assert window.session.message == USERNAME_ERROR
+
+
 def test_saved_fixed_time_survives_sign_out_and_sign_in(qapp: QApplication, server: LocalServer) -> None:
     first = NativeWindow(server.origin)
     HELD.append(first)
@@ -266,6 +288,8 @@ def test_homework_solve_places_the_session_and_explains(qapp: QApplication, serv
     assert placed_titles == {"Soccer", "Essay"}
     assert session.trace["unplaced"] == []
     assert session.trace["complete"] is True
+    essay = next(block for block in session.blocks if block["title"] == "Essay")
+    assert essay.get("start")
 
 
 def test_notes_links_and_checklist_survive_a_reload(qapp: QApplication, server: LocalServer) -> None:
@@ -720,6 +744,11 @@ def test_running_late_saves_a_locked_occupancy_block(qapp: QApplication, server:
     assert session.accept_running_late()
     wait_until(qapp, lambda: not session.busy and not session.dirty)
     assert any(block["title"] == "Running late" for block in session.blocks)
+    wait_until(qapp, lambda: session.can_undo())
+    session.undo()
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    assert not any(block["title"] == "Running late" for block in session.blocks)
+    # One Undo is the whole late start. A second solve after the save used to leave the block.
 
 
 def test_spread_keeps_assignment_identity_across_sessions(qapp: QApplication, server: LocalServer) -> None:
@@ -1319,3 +1348,158 @@ def test_a_chunk_of_a_tracked_assignment_takes_the_assignment_title_back(
     assert {b["title"] for b in chunks} == {"History essay"}
     # What the split is actually for still holds: the chunks are real placed blocks on one day.
     assert all(b["kind"] == "locked" and len(b["days"]) == 1 for b in chunks)
+
+
+def _two_assignments(session: NativeSession) -> None:
+    session.add_block(soccer())
+    monday = date.fromisoformat(session.week_start)
+    session.add_homework(
+        {
+            "id": "math",
+            "title": "Math worksheet",
+            "due": (monday + timedelta(days=4)).isoformat() + "T21:00",
+            "estimate_min": 60,
+            "revision": 0,
+        }
+    )
+    session.add_homework(
+        {
+            "id": "english",
+            "title": "English essay",
+            "due": (monday + timedelta(days=5)).isoformat() + "T21:00",
+            "estimate_min": 60,
+            "revision": 0,
+        }
+    )
+
+
+def _work_starts(session: NativeSession) -> dict[str, str | None]:
+    return {
+        item["title"]: item.get("start")
+        for item in session.blocks
+        if item.get("kind") == "flexible" and item.get("assignment_id")
+    }
+
+
+def test_accepted_homework_placements_survive_save_and_a_new_session(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    session = signed_in(qapp, server.origin, "alice", create=True)
+    _two_assignments(session)
+    session.save()
+    wait_until(qapp, lambda: session.revision >= 1 and not session.busy and not session.dirty)
+    session.solve()
+    wait_until(qapp, lambda: session.trace is not None and not session.busy and not session.dirty)
+    starts = _work_starts(session)
+    assert starts["Math worksheet"]
+    assert starts["English essay"]
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    session.client.reset()
+
+    again = signed_in(qapp, server.origin, "alice", create=False)
+    wait_until(qapp, lambda: not again.busy and len(again.assignments) >= 2)
+    later = _work_starts(again)
+    assert later == starts
+    assert again.trace is None
+
+
+def test_accepted_plan_is_on_the_grid_after_close_and_sign_in(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    QStandardPaths.setTestModeEnabled(True)
+    first = NativeWindow(server.origin)
+    HELD.append(first)
+    first.show()
+    first.username.setText("alice")
+    first.password.setText(PASSWORD)
+    first.findChild(QPushButton, "createAccount").click()
+    wait_until(qapp, lambda: first._stack.currentWidget().objectName() == "recoveryPage")
+    first.recovery_ack.setChecked(True)
+    first.recovery_continue.click()
+    wait_until(
+        qapp, lambda: first._stack.currentWidget().objectName() == "weekPage" and not first.session.busy
+    )
+    _two_assignments(first.session)
+    first.session.save()
+    wait_until(qapp, lambda: not first.session.busy and not first.session.dirty)
+    first.findChild(QPushButton, "solveButton").click()
+    wait_until(
+        qapp, lambda: first.session.trace is not None and not first.session.busy and not first.session.dirty
+    )
+    starts = _work_starts(first.session)
+    assert starts["Math worksheet"] and starts["English essay"]
+    first.session.save()
+    wait_until(qapp, lambda: not first.session.busy and not first.session.dirty)
+    grid = table_text(first)
+    assert "Math worksheet" in grid
+    assert "English essay" in grid
+    first.session.client.reset()
+    first.hide()
+
+    second = NativeWindow(server.origin)
+    HELD.append(second)
+    second.show()
+    second.username.setText("alice")
+    second.password.setText(PASSWORD)
+    second.findChild(QPushButton, "signIn").click()
+    wait_until(
+        qapp,
+        lambda: second._stack.currentWidget().objectName() == "weekPage"
+        and not second.session.busy
+        and len(second.session.assignments) >= 2,
+    )
+    later = _work_starts(second.session)
+    assert later == starts
+    shown = table_text(second)
+    assert "Math worksheet" in shown
+    assert "English essay" in shown
+
+
+def test_unrelated_edits_keep_other_homework_where_it_was(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    session = signed_in(qapp, server.origin, "alice", create=True)
+    _two_assignments(session)
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    session.solve()
+    wait_until(qapp, lambda: session.trace is not None and not session.busy and not session.dirty)
+    before = {item["title"]: dict(item) for item in session.blocks if item.get("assignment_id")}
+    assert before["Math worksheet"].get("start")
+    assert before["English essay"].get("start")
+
+    session.complete_homework("math")
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    english = next(item for item in session.blocks if item.get("assignment_id") == "english")
+    assert english.get("start") == before["English essay"].get("start")
+    assert list(english.get("days") or []) == list(before["English essay"].get("days") or [])
+    math = next(item for item in session.blocks if item.get("assignment_id") == "math")
+    assert math.get("completed") is True
+
+    wait_until(qapp, lambda: session.can_undo())
+    session.undo()
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    math = next(item for item in session.blocks if item.get("assignment_id") == "math")
+    english = next(item for item in session.blocks if item.get("assignment_id") == "english")
+    assert math.get("completed") is not True
+    assert math.get("start") == before["Math worksheet"].get("start")
+    assert english.get("start") == before["English essay"].get("start")
+
+    session.add_block(
+        {
+            "id": "saturday",
+            "title": "Meet friends",
+            "kind": "locked",
+            "category": "social",
+            "start": "14:00",
+            "duration_min": 120,
+            "days": [5],
+        }
+    )
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    later = {item["title"]: item.get("start") for item in session.blocks if item.get("assignment_id")}
+    assert later["Math worksheet"] == before["Math worksheet"].get("start")
+    assert later["English essay"] == before["English essay"].get("start")

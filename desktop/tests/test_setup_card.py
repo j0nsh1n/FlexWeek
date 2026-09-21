@@ -19,8 +19,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QPoint, QStandardPaths, Qt
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QPushButton, QWidget
+    from PySide6.QtWidgets import QApplication, QDateTimeEdit, QLabel, QLineEdit, QPushButton, QWidget
 
+    from desktop.native.calendar import monday_of, sunday_due
     from desktop.native.look import pack_stylesheet
     from desktop.native.settings import SetupCard
     from desktop.native.window import NativeWindow
@@ -237,3 +238,137 @@ def test_a_time_the_student_typed_is_not_selected_again(qapp: QApplication) -> N
     assert field.text() == "07:30"
     assert field.selectedText() == ""
     card.close()
+
+
+def _on_card(card: SetupCard, widget: QWidget) -> tuple[int, int, int, int]:
+    """A child's box in the card's coordinates. `.y()` is the parent, so Skip and a nested
+    field cannot be compared until both are mapped here."""
+    top = widget.mapTo(card, QPoint(0, 0))
+    return top.x(), top.y(), widget.width(), widget.height()
+
+
+def _step_keeps_fields_above_the_buttons(card: SetupCard, fields: list[QWidget]) -> None:
+    skip = card.findChild(QPushButton, "setupSkip")
+    nxt = card.findChild(QPushButton, "setupNext")
+    assert skip is not None and nxt is not None
+    skip_box = _on_card(card, skip)
+    next_box = _on_card(card, nxt)
+    for field in fields:
+        assert field is not None and field.isVisible(), field
+        left, top, width, height = _on_card(card, field)
+        assert card.rect().contains(left, top)
+        assert card.rect().contains(left + width - 1, top + height - 1)
+        assert top + height <= skip_box[1]
+        assert top + height <= next_box[1]
+
+
+def test_sport_step_keeps_fields_above_the_buttons(qapp: QApplication) -> None:
+    page = QWidget()
+    page.resize(800, 600)
+    page.setStyleSheet(pack_stylesheet("light-frost", False, None, "default"))
+    card = SetupCard(page)
+    card.setFixedWidth(420)
+    card.show()
+    page.show()
+    qapp.processEvents()
+    _step_keeps_fields_above_the_buttons(card, [card.school_start, card.school_end])
+    card.findChild(QPushButton, "setupNext").click()
+    qapp.processEvents()
+    _step_keeps_fields_above_the_buttons(card, [card.sport_title, card.sport_start, card.sport_end])
+    card.findChild(QPushButton, "setupNext").click()
+    qapp.processEvents()
+    _step_keeps_fields_above_the_buttons(
+        card, [card.homework_title, card.homework_minutes, card.homework_due]
+    )
+    page.close()
+
+
+def test_homework_due_is_this_weeks_sunday_and_opens_a_calendar(qapp: QApplication) -> None:
+    from datetime import date
+
+    card = SetupCard()
+    card.show()
+    qapp.processEvents()
+    card.findChild(QPushButton, "setupNext").click()
+    card.findChild(QPushButton, "setupNext").click()
+    qapp.processEvents()
+    due = card.findChild(QDateTimeEdit, "setupHomeworkDue")
+    assert due is not None
+    assert due.calendarPopup() is True
+    assert due.dateTime().toString("yyyy-MM-dd'T'HH:mm") == sunday_due(monday_of(date.today().isoformat()))
+    card.close()
+
+
+def test_a_new_account_opens_setup_on_school_not_the_previous_last_step(
+    qapp: QApplication, tmp_path: Path
+) -> None:
+    QStandardPaths.setTestModeEnabled(True)
+    server = LocalServer(Path(tmp_path) / "setup-reset.db")
+    server.start()
+    window = NativeWindow(server.origin)
+    window.show()
+    qapp.processEvents()
+    window.username.setText("first_setup")
+    window.password.setText("a-long-test-password")
+    window.findChild(QPushButton, "createAccount").click()
+    deadline = time.monotonic() + 8
+    while time.monotonic() < deadline:
+        qapp.processEvents()
+        if window._stack.currentWidget().objectName() == "recoveryPage":
+            break
+        time.sleep(0.02)
+    window.recovery_ack.setChecked(True)
+    window.recovery_continue.click()
+    deadline = time.monotonic() + 8
+    while time.monotonic() < deadline:
+        qapp.processEvents()
+        if window._stack.currentWidget().objectName() == "weekPage" and not window.session.busy:
+            break
+        time.sleep(0.02)
+    card = window.setup_card
+    card.findChild(QPushButton, "setupNext").click()
+    card.findChild(QPushButton, "setupNext").click()
+    qapp.processEvents()
+    card.homework_title.setText("History essay")
+    card.findChild(QPushButton, "setupNext").click()
+    deadline = time.monotonic() + 8
+    while time.monotonic() < deadline:
+        qapp.processEvents()
+        if not window.session.busy:
+            break
+        time.sleep(0.02)
+    window.session.logout()
+    deadline = time.monotonic() + 8
+    while time.monotonic() < deadline:
+        qapp.processEvents()
+        if window._stack.currentWidget().objectName() == "authPage":
+            break
+        time.sleep(0.02)
+    window.findChild(QPushButton, "authSwitch").click()
+    qapp.processEvents()
+    window.username.setText("second_setup")
+    window.password.setText("a-long-test-password")
+    window.findChild(QPushButton, "createAccount").click()
+    deadline = time.monotonic() + 8
+    while time.monotonic() < deadline:
+        qapp.processEvents()
+        if window._stack.currentWidget().objectName() == "recoveryPage":
+            break
+        time.sleep(0.02)
+    window.recovery_ack.setChecked(True)
+    window.recovery_continue.click()
+    deadline = time.monotonic() + 8
+    while time.monotonic() < deadline:
+        qapp.processEvents()
+        if window._stack.currentWidget().objectName() == "weekPage" and not window.session.busy:
+            break
+        time.sleep(0.02)
+    card = window.setup_card
+    assert card.isVisible()
+    assert card.heading.text() == "When is school?"
+    assert card.school_row.isVisible()
+    assert card.homework_title.text() == ""
+    window.session.client.reset()
+    qapp.processEvents()
+    server.stop()
+    window.close()

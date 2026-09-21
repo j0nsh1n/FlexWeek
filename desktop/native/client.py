@@ -22,6 +22,9 @@ from PySide6.QtNetwork import (
 
 REQUEST_TIMEOUT_MS = 30_000
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+PASSWORD_LENGTH_HINT = "Password: use 12–128 characters."
+USERNAME_HINT = "Username: 3–32 letters, numbers or underscores."
+USERNAME_ERROR = "That username is not 3–32 letters, numbers or underscores."
 logger = logging.getLogger(__name__)
 
 
@@ -74,6 +77,25 @@ def _api_path(path: str) -> None:
         raise ValueError("Only relative /api/ requests are allowed.")
 
 
+def _field_error(detail: object, names: tuple[str, ...], message: str) -> str | None:
+    items = detail if isinstance(detail, list) else []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        loc = [str(part).lower() for part in (item.get("loc") or [])]
+        if any(name in loc for name in names):
+            return message
+    return None
+
+
+def _password_error(detail: object) -> str | None:
+    return _field_error(detail, ("password", "new_password", "current_password"), PASSWORD_LENGTH_HINT)
+
+
+def _username_error(detail: object) -> str | None:
+    return _field_error(detail, ("username",), USERNAME_ERROR)
+
+
 def _error(status: int, detail: object = None) -> ApiError:
     if status == 401 and detail == "Incorrect password":
         return ApiError(status, "Incorrect password. Try again.")
@@ -81,6 +103,10 @@ def _error(status: int, detail: object = None) -> ApiError:
         return ApiError(status, "Incorrect username or password. Try again.")
     if status == 401 and detail == "Incorrect username or recovery code":
         return ApiError(status, "Incorrect username or recovery code.")
+    if status == 422:
+        named = _password_error(detail) or _username_error(detail)
+        if named:
+            return ApiError(status, named)
     messages = {
         0: "Could not reach FlexWeek. Your changes may not have been saved. Try again.",
         401: "Please sign in again, or check your username and password.",

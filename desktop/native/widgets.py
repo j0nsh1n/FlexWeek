@@ -21,7 +21,7 @@ from PySide6.QtCore import (
     QTimer,
     Signal,
 )
-from PySide6.QtGui import QAction, QColor, QIcon, QMouseEvent, QPainter, QPixmap
+from PySide6.QtGui import QAction, QColor, QIcon, QMouseEvent, QPainter, QPixmap, QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -87,6 +87,7 @@ from desktop.native.reuse import (
     AVAILABILITY_LIMIT,
     LATE_MINUTES,
     PROTECTED_KINDS,
+    format_duration,
     preview_conflict_message,
     routine_source_blocks,
     row_conflict,
@@ -101,6 +102,10 @@ DETAIL_BOX_HEIGHT = 84
 # A scroll area reports its own modest size hint rather than its content's, which is what keeps the
 # homework editor on a laptop screen. It does not claim the content's width either, so that is set.
 HOMEWORK_MIN_WIDTH = 520
+DIALOG_USABLE_HEIGHT = 480
+DIALOG_MAX_HEIGHT = 700
+SLOT_HINT = "Use a multiple of 15 minutes, such as 15, 30, or 45."
+ESTIMATE_ERROR = "That time is not a multiple of 15 minutes."
 PLAN_REVIEW_MAX = 132
 # Two hours: the name of a block is never more than that far above where you are looking.
 LABEL_EVERY = 8
@@ -122,9 +127,29 @@ MONTH_FULL = (
 
 
 def _validation_text(error: Exception) -> str:
+    loc: tuple[object, ...] = ()
+    message = str(error)
     if isinstance(error, ValidationError) and error.errors():
-        return str(error.errors()[0].get("msg") or error)
-    return str(error)
+        first = error.errors()[0]
+        loc = tuple(first.get("loc") or ())
+        message = str(first.get("msg") or error)
+    names = {str(part) for part in loc}
+    if names & {"estimate_min", "duration_min"} or "multiple of 15" in message:
+        return ESTIMATE_ERROR
+    return message
+
+
+def fit_scroll_dialog(dialog: QDialog, *, min_height: int = DIALOG_USABLE_HEIGHT) -> None:
+    """A QScrollArea reports a short size hint, so a dialog that only sets a minimum width
+    opened as a strip too short to read the fields or the Save button."""
+    screen = dialog.screen().availableGeometry() if dialog.screen() else None
+    max_h = min(DIALOG_MAX_HEIGHT, screen.height() - 48) if screen else DIALOG_MAX_HEIGHT
+    max_w = (screen.width() - 48) if screen else 1280
+    min_h = min(max(min_height, 240), max_h)
+    dialog.setMinimumHeight(min_h)
+    width = min(max(dialog.minimumWidth(), dialog.sizeHint().width()), max_w)
+    height = min(max(min_h, dialog.sizeHint().height()), max_h)
+    dialog.resize(width, height)
 
 
 TOAST_MS = 6000
@@ -1029,8 +1054,20 @@ class BlockDialog(QDialog):
         self.start.setDisplayFormat("HH:mm")
         self.start.setObjectName("blockStart")
         form.addRow("Start", self.start)
+        self.end = QTimeEdit()
+        self.end.setDisplayFormat("HH:mm")
+        self.end.setObjectName("blockEnd")
+        form.addRow("End", self.end)
         self.duration = _minutes("blockDuration", self._original["duration_min"], 1020)
         form.addRow("Duration", self.duration)
+        self.duration_line = QLabel()
+        self.duration_line.setObjectName("blockDurationLine")
+        form.addRow("", self.duration_line)
+        self._syncing_times = False
+        self.start.timeChanged.connect(self._sync_end_from_start)
+        self.duration.valueChanged.connect(self._sync_end_from_start)
+        self.end.timeChanged.connect(self._sync_duration_from_end)
+        self._sync_end_from_start()
         self.category = QComboBox()
         self.category.setObjectName("blockCategory")
         self.category.addItem("None", None)
@@ -1081,6 +1118,37 @@ class BlockDialog(QDialog):
                 check.setEnabled(True)
         if not occurrence:
             self._series_days = None
+
+    def _clock_minutes(self, clock: QTime) -> int:
+        return clock.hour() * 60 + clock.minute()
+
+    def _minutes_clock(self, minutes: int) -> QTime:
+        minutes %= 24 * 60
+        return QTime(minutes // 60, minutes % 60)
+
+    def _sync_end_from_start(self, *_args: object) -> None:
+        if self._syncing_times:
+            return
+        self._syncing_times = True
+        end = self._clock_minutes(self.start.time()) + self.duration.value()
+        self.end.setTime(self._minutes_clock(end))
+        self.duration_line.setText(f"That's {format_duration(self.duration.value())}.")
+        self._syncing_times = False
+
+    def _sync_duration_from_end(self, *_args: object) -> None:
+        if self._syncing_times:
+            return
+        self._syncing_times = True
+        start = self._clock_minutes(self.start.time())
+        span = self._clock_minutes(self.end.time()) - start
+        if span <= 0:
+            span += 24 * 60
+        span = max(15, (span // 15) * 15)
+        span = min(span, self.duration.maximum())
+        self.duration.setValue(span)
+        self.end.setTime(self._minutes_clock(start + span))
+        self.duration_line.setText(f"That's {format_duration(span)}.")
+        self._syncing_times = False
 
     def scope(self) -> str:
         if self.scope_occurrence.isChecked() and self._occurrence_day is not None:
@@ -1193,33 +1261,50 @@ class HomeworkDialog(QDialog):
         form.addRow("Due", self.due)
         self.estimate = _minutes("homeworkEstimate", self._original["estimate_min"], 7140)
         form.addRow("Estimated time", self.estimate)
+        self.estimate_hint = QLabel(SLOT_HINT)
+        self.estimate_hint.setObjectName("homeworkEstimateHint")
+        self.estimate_hint.setWordWrap(True)
+        form.addRow("", self.estimate_hint)
+        self.error = _error_label()
+        self.error.hide()
+        form.addRow("", self.error)
+        self.completed = QCheckBox("Finished")
+        self.completed.setObjectName("homeworkCompleted")
+        self.completed.setChecked(bool(self._original.get("completed")))
+        form.addRow("", self.completed)
+        self.more_details = QPushButton("More details")
+        self.more_details.setObjectName("homeworkMoreDetails")
+        self.more_details.setCheckable(True)
+        form.addRow("", self.more_details)
+        details = QWidget()
+        details.setObjectName("homeworkDetails")
+        details_layout = QVBoxLayout(details)
+        details_layout.setContentsMargins(0, 0, 0, 0)
+        extra = QFormLayout()
+        details_layout.addLayout(extra)
         self.course = _line("homeworkCourse", self._original.get("course") or "", 40)
-        form.addRow("Course", self.course)
+        extra.addRow("Course", self.course)
         self.priority = QComboBox()
         self.priority.setObjectName("homeworkPriority")
         for value, label in enumerate(("Test", "Quiz", "Homework", "Reading"), 1):
             self.priority.addItem(label, value)
         self.priority.setCurrentIndex(self.priority.findData(self._original.get("priority", 3)))
-        form.addRow("Priority", self.priority)
+        extra.addRow("Priority", self.priority)
         self.energy = QComboBox()
         self.energy.setObjectName("homeworkEnergy")
         for value, label in (("high", "Morning"), ("medium", "Afternoon"), ("low", "Evening")):
             self.energy.addItem(label, value)
         self.energy.setCurrentIndex(self.energy.findData(self._original.get("energy", "medium")))
-        form.addRow("Energy preference", self.energy)
+        extra.addRow("Energy preference", self.energy)
         self.spotify = _line("homeworkSpotify", self._original.get("spotify_url") or "", 500)
         self.spotify.setPlaceholderText("https://open.spotify.com/…")
-        form.addRow("Spotify link", self.spotify)
-        self.completed = QCheckBox("Finished")
-        self.completed.setObjectName("homeworkCompleted")
-        self.completed.setChecked(bool(self._original.get("completed")))
-        form.addRow("", self.completed)
+        extra.addRow("Spotify link", self.spotify)
         self.notes = QPlainTextEdit(self._original.get("notes") or "")
         self.notes.setObjectName("homeworkNotes")
         # Three boxes at their 192px default made this dialog taller than a laptop screen.
         self.notes.setMaximumHeight(DETAIL_BOX_HEIGHT)
         self.notes.setPlaceholderText("Notes")
-        body_layout.addWidget(self.notes)
+        details_layout.addWidget(self.notes)
         link_row = QHBoxLayout()
         self.link_label = _line("homeworkLinkLabel", "", 80)
         self.link_label.setPlaceholderText("Link label")
@@ -1231,11 +1316,11 @@ class HomeworkDialog(QDialog):
         link_row.addWidget(self.link_label)
         link_row.addWidget(self.link_url)
         link_row.addWidget(add_link)
-        body_layout.addLayout(link_row)
+        details_layout.addLayout(link_row)
         self.links = QListWidget()
         self.links.setObjectName("homeworkLinks")
         self.links.setMaximumHeight(DETAIL_BOX_HEIGHT)
-        body_layout.addWidget(self.links)
+        details_layout.addWidget(self.links)
         for link in self._original.get("links") or []:
             self._append_link(link["label"], link["url"])
         check_row = QHBoxLayout()
@@ -1246,20 +1331,18 @@ class HomeworkDialog(QDialog):
         add_check.clicked.connect(self._add_check)
         check_row.addWidget(self.check_text)
         check_row.addWidget(add_check)
-        body_layout.addLayout(check_row)
+        details_layout.addLayout(check_row)
         self.checks = QListWidget()
         self.checks.setObjectName("homeworkChecklist")
-        body_layout.addWidget(self.checks)
+        details_layout.addWidget(self.checks)
         for step in self._original.get("checklist") or []:
             self._append_check(step["id"], step["text"], step.get("done", False))
-        self.error = _error_label()
-        body_layout.addWidget(self.error)
         if assignment is not None:
             spread = QPushButton("Spread across days")
             spread.setObjectName("spreadHomework")
             spread.clicked.connect(self._request_spread)
             spread.setToolTip("Save these edits first, then spread.")
-            body_layout.addWidget(spread)
+            details_layout.addWidget(spread)
             self._spread_button = spread
             self.title.textChanged.connect(self._disable_spread)
             self.notes.textChanged.connect(self._disable_spread)
@@ -1268,18 +1351,42 @@ class HomeworkDialog(QDialog):
             self.course.textChanged.connect(self._disable_spread)
         else:
             self._spread_button = None
+        body_layout.addWidget(details)
+        self._details = details
+        self.more_details.toggled.connect(details.setVisible)
+        open_details = bool(
+            self._original.get("course")
+            or self._original.get("notes")
+            or self._original.get("links")
+            or self._original.get("checklist")
+            or self._original.get("spotify_url")
+        )
+        self.more_details.setChecked(open_details)
+        details.setVisible(open_details)
         area = QScrollArea()
         area.setObjectName("homeworkScroll")
         area.setWidgetResizable(True)
         area.setFrameShape(QFrame.Shape.NoFrame)
         area.setWidget(body)
+        area.setMinimumHeight(320)
         layout.addWidget(area)
         # A scroll area does not claim its content's width, so without this the dialog comes up narrow.
         self.setMinimumWidth(HOMEWORK_MIN_WIDTH)
+        self._scroll = area
         buttons = _buttons()
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
+        super().showEvent(event)
+        fit_scroll_dialog(self)
+
+    def _show_error(self, text: str) -> None:
+        self.error.setText(text)
+        self.error.setVisible(bool(text))
+        if text:
+            self._scroll.ensureWidgetVisible(self.error)
 
     def _disable_spread(self, *_args: object) -> None:
         if self._spread_button is None:
@@ -1301,17 +1408,17 @@ class HomeworkDialog(QDialog):
 
     def _add_link(self) -> None:
         if self.links.count() >= 20:
-            self.error.setText("Up to 20 links.")
+            self._show_error("Up to 20 links.")
             return
         label = self.link_label.text().strip()
         url = self.link_url.text().strip()
         if not label or not url:
-            self.error.setText("A link needs a label and an http(s) address.")
+            self._show_error("A link needs a label and an http(s) address.")
             return
         self._append_link(label, url)
         self.link_label.clear()
         self.link_url.clear()
-        self.error.setText("")
+        self._show_error("")
 
     def _append_check(self, item_id: str, text: str, done: bool) -> None:
         item = QListWidgetItem(text)
@@ -1322,15 +1429,15 @@ class HomeworkDialog(QDialog):
 
     def _add_check(self) -> None:
         if self.checks.count() >= 40:
-            self.error.setText("Up to 40 steps.")
+            self._show_error("Up to 40 steps.")
             return
         text = self.check_text.text().strip()
         if not text:
-            self.error.setText("A checklist step needs text.")
+            self._show_error("A checklist step needs text.")
             return
         self._append_check(str(uuid4()), text, False)
         self.check_text.clear()
-        self.error.setText("")
+        self._show_error("")
 
     def accept(self) -> None:
         candidate = deepcopy(self._original)
@@ -1368,7 +1475,7 @@ class HomeworkDialog(QDialog):
                 {key: value for key, value in candidate.items() if key in Assignment.model_fields}
             )
         except ValueError as error:
-            self.error.setText(_validation_text(error))
+            self._show_error(_validation_text(error))
             return
         self._result = candidate
         super().accept()
@@ -1630,6 +1737,7 @@ class PlanReview(QWidget):
     """
 
     dismissed = Signal()
+    replan_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -1645,7 +1753,11 @@ class PlanReview(QWidget):
         dismiss = QPushButton("Got it")
         dismiss.setObjectName("planReviewDismiss")
         dismiss.clicked.connect(self._dismiss)
+        replan = QPushButton("Replan all my homework")
+        replan.setObjectName("planReviewReplan")
+        replan.clicked.connect(self.replan_requested.emit)
         row.addWidget(dismiss)
+        row.addWidget(replan)
         row.addStretch(1)
         layout.addLayout(row)
         self.hide()

@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import date
 from uuid import uuid4
 
-from PySide6.QtCore import Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import QDate, QDateTime, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QFocusEvent, QMouseEvent, QShowEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDateTimeEdit,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -36,7 +38,7 @@ from backend.comfort import TIMER_PRESETS, snap_minutes
 from backend.models import valid_spotify_url
 from backend.slots import SLOT_MIN
 from desktop.native import autostart
-from desktop.native.calendar import DAY_FULL
+from desktop.native.calendar import DAY_FULL, monday_of, sunday_due
 from desktop.native.focus import FOCUS_PHASE_LABEL, format_countdown, more_time_choices, remaining_ms
 from desktop.native.layouts.dialog import SLOTS, LayoutSection
 from desktop.native.layouts.registry import sanitize_layout
@@ -57,7 +59,7 @@ from desktop.native.reuse import format_duration
 from desktop.native.sound import Bell
 from desktop.native.tones import FALLBACK, RECIPES, SOUNDS
 from desktop.native.version import VERSION
-from desktop.native.widgets import FlowLayout
+from desktop.native.widgets import DIALOG_USABLE_HEIGHT, FlowLayout, fit_scroll_dialog
 
 UPDATE_MIN_WIDTH = 420
 ALARM_MIN_WIDTH = 380
@@ -273,6 +275,7 @@ class PrefsDialog(QDialog):
         # only the height left the dialog 400 pixels wide with the fields cut off and scrolling
         # sideways.
         self.setMinimumWidth(PREFS_MIN_WIDTH)
+        self.setMinimumHeight(DIALOG_USABLE_HEIGHT)
         self._pack = known_pack(preferences.get("theme_pack"))
         self.look = QComboBox()
         self.look.setObjectName("prefTheme")
@@ -530,6 +533,7 @@ class PrefsDialog(QDialog):
         area.setFrameShape(QFrame.Shape.NoFrame)
         area.setWidget(body)
         area.setMaximumHeight(PREFS_MAX_BODY)
+        area.setMinimumHeight(360)
         layout.addWidget(area)
         footer = QHBoxLayout()
         self.save_state = QLabel("Changes are saved as you make them.")
@@ -574,7 +578,11 @@ class PrefsDialog(QDialog):
         super().showEvent(event)
         self.nav.setFixedWidth(self.nav.sizeHintForColumn(0) + 2 * self.nav.frameWidth() + PREFS_NAV_PAD)
         # The room beside the list is only known after the first layout pass, which is after this.
-        QTimer.singleShot(0, self._fit_width)
+        QTimer.singleShot(0, self._fit)
+
+    def _fit(self) -> None:
+        self._fit_width()
+        fit_scroll_dialog(self)
 
     def _fit_width(self) -> None:
         pages = [self.stack.widget(index).widget() for index in range(self.stack.count())]
@@ -792,6 +800,8 @@ class SetupCard(QWidget):
         self._step = 0
         self._payload: dict = {}
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(8)
         self.kicker = QLabel()
         self.kicker.setObjectName("setupKicker")
         layout.addWidget(self.kicker)
@@ -844,9 +854,12 @@ class SetupCard(QWidget):
         self.homework_minutes.setRange(15, 600)
         self.homework_minutes.setSingleStep(15)
         self.homework_minutes.setValue(60)
-        self.homework_due = QLineEdit()
+        self.homework_due = QDateTimeEdit()
         self.homework_due.setObjectName("setupHomeworkDue")
-        self.homework_due.setPlaceholderText("2026-09-18T23:59")
+        self.homework_due.setDisplayFormat("yyyy-MM-dd HH:mm")
+        self.homework_due.setCalendarPopup(True)
+        self.homework_due.setMinimumDate(QDate(2000, 1, 1))
+        self.homework_due.setMaximumDate(QDate(2099, 12, 31))
         work = QFormLayout()
         work.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         work.addRow("Name", self.homework_title)
@@ -868,7 +881,7 @@ class SetupCard(QWidget):
         actions.addStretch(1)
         actions.addWidget(nxt)
         layout.addLayout(actions)
-        self._show_step()
+        self.reset()
 
     def _show_step(self) -> None:
         pages = (
@@ -883,6 +896,40 @@ class SetupCard(QWidget):
         self.school_row.setVisible(self._step == 0)
         self.sport_row.setVisible(self._step == 1)
         self.work_row.setVisible(self._step == 2)
+        self._fit()
+
+    def reset(self, week_start: str | None = None) -> None:
+        """A new empty week starts at school hours. Left on step 3, the next account
+        opened on leftover homework instead of 'When is school?'."""
+        self._step = 0
+        self._payload = {}
+        self.school_start.setText(self.school_start._default)
+        self.school_end.setText(self.school_end._default)
+        self.sport_title.clear()
+        self.sport_start.setText(self.sport_start._default)
+        self.sport_end.setText(self.sport_end._default)
+        self.homework_title.clear()
+        self.homework_minutes.setValue(60)
+        due = sunday_due(week_start or monday_of(date.today().isoformat()))
+        self.homework_due.setDateTime(QDateTime.fromString(due, "yyyy-MM-dd'T'HH:mm"))
+        self._show_step()
+
+    def _fit(self) -> None:
+        """The card is a floating overlay, so hiding a step does not get a layout pass from a parent.
+        After Next it kept the first step's height and the extra fields sat under Skip and Next."""
+        self.setMinimumHeight(0)
+        laid = self.layout()
+        if laid is not None:
+            laid.activate()
+        self.adjustSize()
+        self.setMinimumHeight(max(self.sizeHint().height(), 220))
+        page = self.parentWidget()
+        if page is None or not self.isVisible():
+            return
+        x = max(0, (page.width() - self.width()) // 2)
+        y = max(0, (page.height() - self.height()) // 3)
+        self.move(x, y)
+        self.raise_()
 
     def _labelled(self, caption: str, field: QWidget) -> QWidget:
         """A caption and its field on one row, centres matching so Name cannot sit above the letters."""
@@ -918,7 +965,7 @@ class SetupCard(QWidget):
             self._payload["homework"] = (
                 self.homework_title.text().strip() or "Homework",
                 self.homework_minutes.value(),
-                self.homework_due.text().strip(),
+                self.homework_due.dateTime().toString("yyyy-MM-dd'T'HH:mm"),
             )
         if self._step >= 2:
             self.finished.emit(self._payload)

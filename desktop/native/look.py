@@ -650,7 +650,11 @@ def pack_stylesheet(
         f"QWidget#authCard {{ background: {palette['panel']}; border-radius: {radius}px; {edges} }}"
         f"QLabel#authBrand {{ font-size: {size + 8}pt; font-weight: 700; color: {palette['accent']}; }}"
         f"QLabel#authHeading {{ font-weight: 600; font-size: {size + 3}pt; }}"
-        f"QLabel#authNote {{ color: {palette['muted']}; }}"
+        f"QLabel#authNote, QLabel#passwordHint, QLabel#usernameHint {{ color: {palette['muted']}; }}"
+        f"QLabel#validationError {{ color: {palette['error']}; font-weight: 600; }}"
+        f"QLabel#homeworkEstimateHint {{ color: {palette['muted']}; }}"
+        f"QPushButton#todayWeek {{ background: transparent; color: {palette['text']}; "
+        f"font-weight: 600; padding: {pad}px {pad * 2}px; {edges} }}"
         # The way in is a button; the way to a new account is small print, so it is drawn as a link.
         f"QLabel#updateHeading {{ font-size: {size + 4}pt; font-weight: 700; }}"
         f"QLabel#updateDetail, QLabel#updateStatus {{ color: {palette['muted']}; }}"
@@ -671,11 +675,10 @@ def pack_stylesheet(
         f"padding: 0; {edges} }}"
         f"QPushButton#prevWeek:hover, QPushButton#nextWeek:hover {{ color: {palette['text']}; }}"
         # One filled button on the page: the thing the app is for.
-        f"QPushButton#solveButton {{ font-weight: 700; }}"
+        f"QLabel#blockDurationLine {{ color: {palette['muted']}; }}"
         f"QPushButton#moreButton, QPushButton#settingsGear {{ background: transparent; "
         f"color: {palette['muted']}; {edges} }}"
-        f"QWidget#setupCard {{ background: {palette['panel']}; border-radius: {radius}px; "
-        f"padding: {pad * 2}px; {edges} }}"
+        f"QWidget#setupCard {{ background: {palette['panel']}; border-radius: {radius}px; {edges} }}"
         # The rows inside it are bare QWidgets, which the rule above would paint in the page colour,
         # putting a band of the background across the middle of a white card.
         f"QWidget#setupRow {{ background: transparent; border: none; padding: 0; }}"
