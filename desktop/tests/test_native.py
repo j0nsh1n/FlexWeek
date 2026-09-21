@@ -707,6 +707,93 @@ def test_unfinished_homework_keeps_the_same_assignment(qapp: QApplication, serve
     assert any(block.get("assignment_id") == "lab" for block in session.blocks)
 
 
+# A week of 2026-09-28 (a Monday): school Monday to Friday until 15:15, and two assignments due
+# Monday and Tuesday evening, so the plan sits on Monday afternoon.
+PLANNED_WEEK = "2026-09-28"
+
+
+def _planned_school_week(qapp: QApplication, session: NativeSession) -> None:
+    session.load_week(PLANNED_WEEK)
+    wait_until(qapp, lambda: not session.busy and session.week_start == PLANNED_WEEK)
+    session.add_block(
+        {
+            "id": "school",
+            "title": "School",
+            "kind": "locked",
+            "duration_min": 435,
+            "days": [0, 1, 2, 3, 4],
+            "start": "08:00",
+            "category": "class",
+        }
+    )
+    for item_id, title, minutes, due in (
+        ("math", "Math worksheet", 30, "2026-09-28T21:00"),
+        ("english", "English essay", 90, "2026-09-29T21:00"),
+    ):
+        session.add_homework(
+            {"id": item_id, "title": title, "estimate_min": minutes, "due": due, "revision": 0}
+        )
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    session.solve()
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+
+
+def _stored(session: NativeSession, block_id: str) -> dict:
+    return next(block for block in session.blocks if block["id"] == block_id)
+
+
+def _placement(session: NativeSession, block_id: str) -> tuple[list[int], str | None]:
+    block = _stored(session, block_id)
+    return block["days"], block.get("start")
+
+
+def test_a_missed_school_day_is_saved_and_the_week_still_saves_after_it(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    """Missing Monday's school replans the week. The recovery used to copy the solver's list of the
+    days school still runs onto the block, so Monday was missed but no longer one of its days, and
+    every save after that failed: the replan, and anything the student changed later."""
+    session = signed_in(qapp, server.origin, "alice", create=True)
+    _planned_school_week(qapp, session)
+    session.recover_missed("school", 0)
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    sessions = [block["id"] for block in session.blocks if block.get("assignment_id")]
+    replanned = {block_id: _placement(session, block_id) for block_id in sessions}
+    assert all(start for _days, start in replanned.values())
+    session.load_week(PLANNED_WEEK, discard=True)
+    wait_until(qapp, lambda: not session.busy)
+    school = _stored(session, "school")
+    assert (school["days"], school.get("missed_days")) == ([0, 1, 2, 3, 4], [0])
+    after = {block_id: _placement(session, block_id) for block_id in replanned}
+    assert after == replanned
+    session.add_block(
+        {"id": "gym", "title": "Gym", "kind": "locked", "duration_min": 60, "days": [5], "start": "10:00"}
+    )
+    session.save()
+    wait_until(qapp, lambda: not session.busy)
+    assert session.dirty is False
+    assert session.message == "Saved."
+
+
+def test_running_late_saves_on_a_week_that_already_has_a_missed_day(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    session = signed_in(qapp, server.origin, "alice", create=True)
+    _planned_school_week(qapp, session)
+    session.add_block({**_stored(session, "school"), "missed_days": [0]})
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    tuesday = datetime(2026, 9, 29, 15, 5)
+    session.now_ms = lambda: int(tuesday.timestamp() * 1000)
+    session.preview_running_late(30, now=tuesday)
+    wait_until(qapp, lambda: session.late_preview is not None and not session.busy)
+    assert session.accept_running_late()
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    assert any(block["title"] == "Running late" for block in session.blocks)
+    assert _stored(session, "school")["days"] == [0, 1, 2, 3, 4]
+
+
 def test_missed_recovery_stores_the_missed_day(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     session.add_block(soccer())

@@ -99,13 +99,18 @@ def apply_plan(
     blocks without starts, and any later edit dropped the trace, so homework vanished
     until the student planned again. With `targets`, only those sessions change: a plan for part of
     the week never touches the rest of it.
+
+    Only unfinished homework is written. The solver lists a fixed block without its missed days, and
+    copying that back left Monday missed on a block that no longer ran on Monday, which no save
+    accepts; a finished session keeps the time it was done in.
     """
     placed = {item["id"]: item for item in (trace or {}).get("placed") or []}
     unplaced_ids = {item["id"] for item in (trace or {}).get("unplaced") or []}
     out = []
     for block in blocks:
         copy = dict(block)
-        if targets is not None and copy["id"] not in targets:
+        unplanned_work = copy.get("kind") == "flexible" and not copy.get("completed")
+        if not unplanned_work or (targets is not None and copy["id"] not in targets):
             out.append(copy)
             continue
         winner = placed.get(copy["id"])
@@ -113,7 +118,7 @@ def apply_plan(
             copy["start"] = winner["start"]
             if winner.get("days"):
                 copy["days"] = list(winner["days"])
-        elif copy["id"] in unplaced_ids and copy.get("kind") == "flexible" and not copy.get("completed"):
+        elif copy["id"] in unplaced_ids:
             if copy.pop("start", None) and assignments is not None and week_start is not None:
                 copy["days"] = planning_days(copy, assignments, week_start)
         out.append(copy)

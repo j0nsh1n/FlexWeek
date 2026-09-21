@@ -476,3 +476,11 @@ def test_a_plan_for_part_of_the_week_changes_only_that_part() -> None:
     assert times(out)["s-eng"] == ([1], "15:15")
     assert times(out)["s-read"] == ([0, 1, 2, 3, 4, 5, 6], None)
     assert times(out)["s-math"] == ([0], "15:15")
+
+
+def test_a_plan_never_rewrites_a_fixed_block() -> None:
+    """The solver lists a fixed block with its missed days left out. Copying that list back made
+    Monday a missed day of a block that no longer ran on Monday, and the week stopped saving."""
+    school = {**planned_week()[0], "missed_days": [0]}
+    trace = {"placed": [{**school, "days": [1, 2, 3, 4], "missed_days": []}], "unplaced": []}
+    assert apply_plan([school], trace) == [school]
