@@ -50,35 +50,43 @@ numbers or underscores; passwords use 12–128 characters. A new account opens a
 short setup for school hours, one sport and the first homework, then runs
 Solve. You can skip it.
 
-To add more, pick a type in the sidebar and drag on the calendar, or click for a
-1-hour block. The dialog asks whether the item is a **Fixed time** (school,
-practice: Solve never moves it) or **Flexible** (homework: Solve picks a free
-time before it is due). Every save goes to your account; Solve previews placement
-without replacing your entered blocks.
+To add more, open **Add** and choose **Homework…** or **Fixed time…**, or pick a
+type there and drag on the calendar. A **Fixed time** (school, practice) never
+moves when you plan; **Homework** is placed by Plan my homework in a free time
+before it is due. The type you picked determines which you get. Every change
+saves to your account on its own; planning previews placement without replacing
+what you entered.
 
-Theme starts on System, which follows your device's light or dark setting.
-Choose Light or Dark from Theme to keep one. The choice is saved to your
-account. If a save fails, keep the page open and use Retry save. A conflicting
-save from another window offers a draft download and reload of the saved week.
-Password recovery is planned for the later hardening phase.
+The look starts on System, which follows your device's light or dark setting;
+Settings and Layout offer the rest, and every design can be dark: Today's app
+through its pack, the others through a dark colourway of their own. The
+week saves itself a moment after each change and retries on its own if a save
+fails. A save that conflicts with another window is never written over: saving
+stops and FlexWeek asks you to reload the saved week. A forgotten password is recovered
+with one of the eight recovery codes shown when the account was made.
 
 Weeks exported from an older browser-based build can be explicitly imported
 after logging in. Import replaces the account's current week after confirmation;
 invalid legacy data is left untouched.
 
-## Storage and hosting configuration
+## Data and configuration
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `FLEXWEEK_DATABASE` | `var/flexweek.db` | SQLite account, session, week and theme storage |
-| `FLEXWEEK_ORIGIN` | `http://127.0.0.1:8000` | Exact API origin, including port |
+FlexWeek keeps its database in your user data folder (on Linux,
+`~/.local/share/FlexWeek/flexweek.db`) and starts its own backend on a private
+loopback port. Nothing needs configuring to use it.
 
-For a different local port, set `FLEXWEEK_ORIGIN` to match. Non-local origins
-require HTTPS. HTTPS deployments use Secure session cookies. A hosted release
-needs a persistent database directory and backups; an ephemeral filesystem
-loses accounts and schedules. Configure trusted reverse proxies explicitly so
-client-address throttling sees the intended source. Full deployment, account
-recovery, deletion/retention policy and security audits remain later work.
+| Setting | Effect |
+|---|---|
+| `--database FILE` | Use this database file instead of the one in your data folder |
+| `FLEXWEEK_DESKTOP_ORIGIN` (or `FLEXWEEK_ORIGIN`) | Use a FlexWeek API running elsewhere instead of starting one; an invalid value is an error, never a quiet fall back to local |
+
+The API can also run on its own, for development or as a server other copies
+point at: `uvicorn backend.app:app` reads `FLEXWEEK_DATABASE` (default
+`var/flexweek.db`) and `FLEXWEEK_ORIGIN` (default `http://127.0.0.1:8000`) and
+serves the API only, no pages. Non-local origins require HTTPS, and HTTPS uses
+Secure session cookies. A hosted API needs a persistent database directory and
+backups, and trusted reverse proxies configured explicitly so client-address
+throttling sees the real source.
 
 The database and its journals are gitignored. Back up the database with SQLite's
 backup API or with the app stopped; protect backups as private account data.

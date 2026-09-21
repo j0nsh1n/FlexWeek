@@ -317,3 +317,35 @@ def test_paper_and_pastel_are_the_soft_looks_and_are_not_ink() -> None:
     ink = resolved_palette("slate", False, look_of("ink"))
     assert (paper["text"], paper["window"]) != (ink["text"], ink["window"])
     assert preset_knobs("paper")["blocks"] == "filled" and preset_knobs("ink")["blocks"] == "edge"
+
+
+def _lab(colour: str) -> tuple[float, float, float]:
+    """sRGB to CIE Lab, as the retired web client's theme-tokens test computed it."""
+
+    def channel(value: float) -> float:
+        return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+
+    raw = colour.lstrip("#")
+    red, green, blue = (channel(int(raw[index : index + 2], 16) / 255) for index in (0, 2, 4))
+    x = (red * 0.4124 + green * 0.3576 + blue * 0.1805) / 0.95047
+    y = red * 0.2126 + green * 0.7152 + blue * 0.0722
+    z = (red * 0.0193 + green * 0.1192 + blue * 0.9505) / 1.08883
+    fx, fy, fz = (t ** (1 / 3) if t > 0.008856 else 7.787 * t + 16 / 116 for t in (x, y, z))
+    return (116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz))
+
+
+def test_every_accent_stays_clearly_apart_from_every_category_colour() -> None:
+    """An accent close to a category colour makes a selected button look like a block of that
+    category. The web client's theme-tokens test enforced this and was deleted with the client;
+    nothing native replaced it until a documentation sweep noticed the rule's only guard was gone.
+    School blue against the default light accent is the near miss, at about 18."""
+    import math
+
+    reached = {}
+    for pack, system_dark, preset, accent, surface in EVERY_LOOK:
+        colour = resolved_palette(pack, system_dark, look_of(preset, surface=surface), accent)["accent"]
+        reached.setdefault(colour, (pack, system_dark, preset, accent))
+    for colour, where in reached.items():
+        for name, category in CATEGORIES.items():
+            gap = math.dist(_lab(colour), _lab(category["mark"]))
+            assert gap >= 15, f"{where} accent {colour} is {gap:.1f} from the {name} category"

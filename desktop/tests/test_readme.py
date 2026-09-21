@@ -14,7 +14,10 @@ def test_linux_readme_names_the_machine_requirements() -> None:
     assert "libxcb-cursor" in text
     assert "OpenGL or EGL" in text
     assert "@WEB_VERSION@" in text
-    assert "Create account" in text
+    # Sign in is the first screen, with making an account as a line under it. Both READMEs
+    # used to be pinned to "Choose Create account", which kept that stale instruction shipping.
+    assert "Create an account" in text
+    assert "Choose Create account" not in text
 
 
 def test_windows_readme_covers_smartscreen_and_icu_by_the_os() -> None:
@@ -27,7 +30,10 @@ def test_windows_readme_covers_smartscreen_and_icu_by_the_os() -> None:
     assert "Windows protected your PC" in text
     assert "SmartScreen" in text
     assert "icuuc" in text
-    assert "Create account" in text
+    # Sign in is the first screen, with making an account as a line under it. Both READMEs
+    # used to be pinned to "Choose Create account", which kept that stale instruction shipping.
+    assert "Create an account" in text
+    assert "Choose Create account" not in text
     assert "@WEB_VERSION@" in text
 
 
