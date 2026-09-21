@@ -425,3 +425,62 @@ def copy_label(block: dict, source_day: int, scope: str) -> str:
     if series:
         return f"{title} ({DAY_FULL[source_day]} only)"
     return title
+
+
+DAYS_LONG = (
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+)
+MONTHS = (
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+)
+
+
+def planner_title(session: object, view: str) -> str:
+    """Where you are, in words: "15 – 21 September", "Thursday 18 September", "September 2026".
+
+    The top bar used to say none of this. It had two buttons reading "Previous week" and "Next week"
+    and no statement of which week you were on at all.
+    """
+    from datetime import date, timedelta
+
+    start = date.fromisoformat(session.week_start)
+    # selected_day is an ISO date, not an index into the week. Reading it as one raised on a real
+    # run and left the title blank.
+    chosen_iso = getattr(session, "selected_day", None) or session.week_start
+    try:
+        chosen = date.fromisoformat(str(chosen_iso))
+    except ValueError:
+        chosen = start
+    if view == "month":
+        # Month has an anchor of its own, which is what the grid is showing.
+        anchor_iso = getattr(session, "selected_month", None) or chosen_iso
+        try:
+            anchor = date.fromisoformat(
+                str(anchor_iso) + "-01" if len(str(anchor_iso)) == 7 else str(anchor_iso)
+            )
+        except ValueError:
+            anchor = chosen
+        return f"{MONTHS[anchor.month - 1]} {anchor.year}"
+    if view == "day":
+        return f"{DAYS_LONG[chosen.weekday()]} {chosen.day} {MONTHS[chosen.month - 1]}"
+    end = start + timedelta(days=6)
+    if start.month == end.month:
+        return f"{start.day} – {end.day} {MONTHS[start.month - 1]}"
+    return f"{start.day} {MONTHS[start.month - 1]} – {end.day} {MONTHS[end.month - 1]}"

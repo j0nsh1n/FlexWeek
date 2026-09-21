@@ -24,7 +24,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtWidgets import QApplication
 
     from backend.month import build_month
-    from desktop.native.widgets import MonthGrid
+    from desktop.native.widgets import CHIP_ROLE, MonthGrid
 
 
 @pytest.fixture(scope="module")
@@ -72,6 +72,7 @@ def test_every_line_of_a_day_fits_in_its_row(qapp: QApplication) -> None:
     snapshot = build_month("2026-08", [], [])
     busy = snapshot["days"][15]
     busy.update(due_ids=["essay"], session_count=2, locked_count=1)
+    snapshot["deadlines"] = [{"id": "essay", "title": "History essay", "category": "assignments"}]
     grid = MonthGrid()
     # About the space the month gets inside the default 1280 x 800 window.
     grid.resize(1240, 420)
@@ -80,7 +81,8 @@ def test_every_line_of_a_day_fits_in_its_row(qapp: QApplication) -> None:
     qapp.processEvents()
     table = grid.table
     item = table.item(2, 1)
-    assert item.text().splitlines() == [busy["date"][-2:].lstrip("0"), "1 due", "2 sessions", "1 fixed"]
+    assert item.text() == busy["date"][-2:].lstrip("0")
+    assert item.data(CHIP_ROLE)[0][0] == "History essay"
     line = table.fontMetrics().lineSpacing()
     for row in range(table.rowCount()):
         for column in range(table.columnCount()):

@@ -22,7 +22,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import Qt, QTimer
-    from PySide6.QtGui import QGuiApplication
+    from PySide6.QtGui import QAction, QGuiApplication
     from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QPushButton
 
     from backend.slots import hhmm_to_minutes
@@ -473,7 +473,7 @@ def test_keyboard_switches_week_day_and_month(qapp: QApplication, server: LocalS
     wait_until(qapp, lambda: window.session.planner_view == "week")
 
 
-def test_a_type_chip_opens_add_with_that_category(qapp: QApplication, server: LocalServer) -> None:
+def test_picking_a_type_opens_add_with_that_category(qapp: QApplication, server: LocalServer) -> None:
     window = NativeWindow(server.origin)
     HELD.append(window)
     window.username.setText("alice")
@@ -493,7 +493,8 @@ def test_a_type_chip_opens_add_with_that_category(qapp: QApplication, server: Lo
         dialog.accept()
 
     QTimer.singleShot(0, fill_and_save)
-    window.findChild(QPushButton, "chip-exercise").click()
+    # The chip strip became the Add menu; picking a type there still opens Add for that type.
+    window.add_menu.findChild(QAction, "addMenu-exercise").trigger()
     wait_until(qapp, lambda: any(block["title"] == "Soccer practice" for block in window.session.blocks))
     block = next(item for item in window.session.blocks if item["title"] == "Soccer practice")
     assert block["kind"] == "locked"

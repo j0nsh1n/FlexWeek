@@ -161,6 +161,25 @@ BENTO = (
             cta_ink="#ffffff",
         ),
     ),
+    (
+        "midnight",
+        "Midnight",
+        _tokens(
+            bg="#0b1020",
+            bg_ink="#e6ebf5",
+            bg_muted="#a2aec9",
+            surface="#151b2e",
+            text="#e6ebf5",
+            muted="#a2aec9",
+            accent="#818cf8",
+            accent_ink="#0b1020",
+            line="#26304a",
+            danger="#fca5a5",
+            danger_ink="#0b1020",
+            cta="#fb923c",
+            cta_ink="#0b1020",
+        ),
+    ),
 )
 RETRO = (
     (
@@ -277,6 +296,25 @@ CLAY = (
             card_b="#ffc2c2",
             card_c="#ffe7a3",
             card_d="#f7c6e0",
+        ),
+    ),
+    (
+        "dusk",
+        "Dusk",
+        _tokens(
+            bg="#17151f",
+            bg_ink="#efe9f5",
+            bg_muted="#b4a9c4",
+            surface="#231f2e",
+            text="#efe9f5",
+            muted="#b4a9c4",
+            accent="#c4b5fd",
+            accent_ink="#17151f",
+            line="#342e44",
+            danger="#fca5a5",
+            danger_ink="#17151f",
+            cta="#f0abfc",
+            cta_ink="#17151f",
         ),
     ),
 )
