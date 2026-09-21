@@ -47,11 +47,21 @@ TRACE = {
     "placed": [block("chem-1", "flexible", [3], "20:00", 90, assignment_id="chem")],
     "unplaced": [block("poster-1", "flexible", [], None, 120, assignment_id="poster")],
     "explanations": [
-        {"block_id": "chem-1", "message": "Very little room.", "slack_min": 149, "slack_status": "danger"},
-        {"block_id": "essay-1", "message": "Limited room.", "slack_min": 1515, "slack_status": "tight"},
+        {
+            "block_id": "chem-1",
+            "message": "Finishes only 2 h 29 min before it is due.",
+            "slack_min": 149,
+            "slack_status": "danger",
+        },
+        {
+            "block_id": "essay-1",
+            "message": "Finishes 25 h 15 min before it is due.",
+            "slack_min": 1515,
+            "slack_status": "tight",
+        },
         {
             "block_id": "poster-1",
-            "message": "There is no slot left before this deadline.",
+            "message": "There is not enough time left before it is due, even with nothing else planned.",
             "reason": "DEADLINE_MISS",
         },
     ],
@@ -89,7 +99,7 @@ def test_a_solver_placement_never_moves_finished_work() -> None:
 def test_work_with_no_time_waits_with_the_solvers_reason() -> None:
     week = build_week(WEEK, BLOCKS, HOMEWORK, TRACE)
     assert [(item.title, item.minutes, item.reason) for item in week.waiting] == [
-        ("Poster-1", 120, "There is no slot left before this deadline.")
+        ("Poster-1", 120, "There is not enough time left before it is due, even with nothing else planned.")
     ]
 
 
@@ -104,8 +114,8 @@ def test_work_nobody_has_planned_yet_says_so() -> None:
 def test_risk_is_the_solvers_verdict_and_the_most_squeezed_comes_first() -> None:
     week = build_week(WEEK, BLOCKS, HOMEWORK, TRACE)
     assert [(item.block_id, item.slack, item.slack_words) for item in week.open_work()] == [
-        ("chem-1", "danger", "Very little room"),
-        ("essay-1", "tight", "Limited room"),
+        ("chem-1", "danger", "Cutting it close"),
+        ("essay-1", "tight", "Tight"),
     ]
 
 

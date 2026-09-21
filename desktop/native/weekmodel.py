@@ -14,7 +14,7 @@ from datetime import date, timedelta
 
 from desktop.native.calendar import DAYS, _is_work_session
 
-SLACK_WORDS = {"danger": "Very little room", "tight": "Limited room", "ok": "Room"}
+SLACK_WORDS = {"danger": "Cutting it close", "tight": "Tight", "ok": "Plenty of time"}
 _SLACK_ORDER = {"danger": 0, "tight": 1, None: 2, "ok": 3}
 NOT_PLANNED = "Not planned yet."
 # A homework session is saved with no category unless the student picked one. It is still homework.

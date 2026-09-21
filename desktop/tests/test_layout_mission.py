@@ -112,14 +112,14 @@ def test_the_radar_lists_open_homework_most_squeezed_first_with_the_verdict(qapp
     view = shown(qapp)
     rows = [view.findChild(QPushButton, f"missionRadar{index}") for index in range(2)]
     assert [(row.text(), row.property("risk")) for row in rows] == [
-        ("Chem-1\nThu 23:59 · VERY LITTLE ROOM", "danger"),
-        ("Essay-1\nFri 21:00 · LIMITED ROOM", "tight"),
+        ("Chem-1\nThu 23:59 · CUTTING IT CLOSE", "danger"),
+        ("Essay-1\nFri 21:00 · TIGHT", "tight"),
     ]
 
 
 def test_what_has_no_time_is_named_with_the_solvers_reason(qapp: QApplication) -> None:
     assert shown(qapp).findChild(QPushButton, "missionWaiting0").text() == (
-        "Poster-1 · There is no slot left before this deadline."
+        "Poster-1 · There is not enough time left before it is due, even with nothing else planned."
     )
 
 

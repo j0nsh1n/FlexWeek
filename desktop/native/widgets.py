@@ -1845,7 +1845,18 @@ class PlanReview(QWidget):
             name = titles.get(move["block_id"], "Homework")
             been = _when(move.get("from_day"), move.get("from_start"))
             now = _when(move.get("to_day"), move.get("to_start"))
-            why = REASON_COPY.get(move.get("reason") or "", "")
+            # Running late files its moves under the missed-day code with a sentence of its own, so
+            # the code alone told a student who ran late that they had missed a day.
+            why = next(
+                (
+                    item["message"]
+                    for item in trace.get("explanations") or []
+                    if item.get("block_id") == move["block_id"]
+                    and item.get("reason") == move.get("reason")
+                    and item.get("message")
+                ),
+                REASON_COPY.get(move.get("reason") or "", ""),
+            )
             said.append(f"{name} moved from {been} to {now}." + (f" {why}" if why else ""))
         for item in trace.get("explanations") or []:
             if item.get("slack_status") in {"tight", "danger"} and item.get("message"):

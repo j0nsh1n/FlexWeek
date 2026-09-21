@@ -91,8 +91,8 @@ def test_late_at_night_the_big_tile_says_the_day_is_done(qapp: QApplication) -> 
 def test_deadlines_come_most_squeezed_first_in_the_solvers_words(qapp: QApplication) -> None:
     view = shown(qapp)
     assert [view.findChild(QPushButton, f"bentoDeadline{index}").text() for index in range(2)] == [
-        "Chem-1\nThu 23:59 · Very little room",
-        "Essay-1\nFri 21:00 · Limited room",
+        "Chem-1\nThu 23:59 · Cutting it close",
+        "Essay-1\nFri 21:00 · Tight",
     ]
 
 
@@ -100,7 +100,7 @@ def test_what_has_no_time_is_listed_with_the_solvers_reason(qapp: QApplication) 
     view = shown(qapp)
     assert text(view, "bentoWaitingKicker") == "NOT PLACED YET (1)"
     assert view.findChild(QPushButton, "bentoWaiting0").text() == (
-        "Poster-1 · 2 h\nThere is no slot left before this deadline."
+        "Poster-1 · 2 h\nThere is not enough time left before it is due, even with nothing else planned."
     )
     assert view.findChild(QPushButton, "bentoPlan").text() == "Plan it"
 

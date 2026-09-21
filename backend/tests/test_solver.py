@@ -308,7 +308,7 @@ def test_moves_record_unplaced_reasons() -> None:
     assert any(
         item.block_id == "quiz"
         and item.reason == "DEADLINE_MISS"
-        and item.message == "There is no slot left before this deadline."
+        and item.message == "There is not enough time left before it is due, even with nothing else planned."
         for item in trace.explanations
     )
 
