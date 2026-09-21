@@ -1329,6 +1329,25 @@ def test_the_gear_opens_settings(qapp: QApplication, window: NativeWindow) -> No
     assert opened == ["Settings"]
 
 
+def test_an_update_check_that_fails_says_so_only_when_asked(qapp: QApplication, window: NativeWindow) -> None:
+    """GitHub refused the check (403, its hourly limit for a shared address) and the app said nothing,
+    so "Checking for updates…" stayed on screen as if the check were still going."""
+    from desktop.native.updater import CHECK_FAILED
+
+    window._update_asked = False
+    window._updater.unreachable.emit(CHECK_FAILED)
+    qapp.processEvents()
+    assert window.action_notice.isVisible() is False, "a daily check that fails stays quiet"
+
+    window._update_asked = True
+    window._updater.unreachable.emit(CHECK_FAILED)
+    qapp.processEvents()
+    assert window.week_status.text() == CHECK_FAILED
+    assert window.action_notice.isVisible() is True
+    assert window.action_notice_text.text() == CHECK_FAILED
+    assert window.action_notice_button.text() == "Open release page"
+
+
 def test_more_hides_spotify_until_there_is_a_link(qapp: QApplication, window: NativeWindow) -> None:
     assert "Open Spotify link" not in more_actions(window)
     window.session.preferences = {

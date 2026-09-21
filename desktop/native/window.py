@@ -92,7 +92,7 @@ from desktop.native.settings import (
 )
 from desktop.native.sound import Bell
 from desktop.native.tones import FALLBACK
-from desktop.native.update import due_for_check, sanitize_updates
+from desktop.native.update import RELEASE_PAGE, due_for_check, sanitize_updates
 from desktop.native.updater import Updater, apply_update
 from desktop.native.version import VERSION
 from desktop.native.weekmodel import build_week
@@ -169,6 +169,7 @@ class NativeWindow(QMainWindow):
         self._updater = Updater(self)
         self._updater.found.connect(self._on_update_found)
         self._updater.none_found.connect(self._no_update)
+        self._updater.unreachable.connect(self._update_unreachable)
         # Connected once here, not per dialog: a second check would otherwise wire them again and
         # every later signal would arrive as many times as the dialog had been opened.
         self._updater.progress.connect(self._on_update_progress)
@@ -1814,6 +1815,14 @@ class NativeWindow(QMainWindow):
     def _no_update(self) -> None:
         if self._update_asked:
             self.session._say(f"FlexWeek {VERSION} is the latest version.")
+
+    def _update_unreachable(self, why: str) -> None:
+        """A check nobody asked for fails quietly and tries again tomorrow. One the student asked for
+        says so; saying nothing left "Checking for updates…" on screen as if it were still going."""
+        if not self._update_asked:
+            return
+        self.session._say(why)
+        self._set_notice(why, "Open release page", lambda: QDesktopServices.openUrl(QUrl(RELEASE_PAGE)))
 
     def _open_spotify(self) -> None:
         url = self.session.spotify_url()

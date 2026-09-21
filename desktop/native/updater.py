@@ -25,16 +25,24 @@ from PySide6.QtCore import QObject, QUrl, Signal
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 
 from desktop.native.update import (
+    RELEASE_PAGE,
     RELEASES_URL,
     Update,
     available,
     expected_digest,
     install_kind,
+    release_from_page,
     verified,
 )
 
 USER_AGENT = b"FlexWeek-Updater"
 DOWNLOAD_LIMIT = 400 * 1024 * 1024
+# A check that hears nothing gives up rather than showing "Checking for updates…" for good. A download
+# is only stopped when no data arrives for this long, so a slow connection still finishes.
+CHECK_TIMEOUT_MS = 15_000
+DOWNLOAD_STALL_MS = 30_000
+CHECK_FAILED = "FlexWeek could not check for updates right now. Try again later, or open the release page."
+DOWNLOAD_STOPPED = "The download stopped before it finished. Try again, or open the release page."
 
 
 class Updater(QObject):
@@ -42,6 +50,8 @@ class Updater(QObject):
 
     found = Signal(object)
     none_found = Signal()
+    # The check could not be completed. Said only when the student asked for it.
+    unreachable = Signal(str)
     progress = Signal(int, int)
     failed = Signal(str)
     ready = Signal(str)
@@ -60,7 +70,7 @@ class Updater(QObject):
         if self._busy:
             return
         self._busy = True
-        self._get(RELEASES_URL, self._on_release)
+        self._get(RELEASES_URL, self._on_release, fallback=self._check_page)
 
     def download(self, update: Update) -> None:
         if self._busy:
@@ -71,25 +81,37 @@ class Updater(QObject):
             lambda text: self._on_checksum(update, text),
         )
 
-    def _get(self, url: str, then: object, binary: bool = False) -> None:
+    def _request(self, url: str, timeout_ms: int, *, follow: bool = True) -> QNetworkRequest:
         request = QNetworkRequest(QUrl(url))
         request.setRawHeader(b"User-Agent", USER_AGENT)
+        request.setTransferTimeout(timeout_ms)
         request.setAttribute(
             QNetworkRequest.Attribute.RedirectPolicyAttribute,
-            QNetworkRequest.RedirectPolicy.NoLessSafeRedirectPolicy,
+            QNetworkRequest.RedirectPolicy.NoLessSafeRedirectPolicy
+            if follow
+            else QNetworkRequest.RedirectPolicy.ManualRedirectPolicy,
         )
-        reply = self._manager.get(request)
+        return request
+
+    def _get(self, url: str, then: object, binary: bool = False, fallback: object = None) -> None:
+        timeout = CHECK_TIMEOUT_MS if fallback is not None else DOWNLOAD_STALL_MS
+        reply = self._manager.get(self._request(url, timeout))
         if binary:
             reply.downloadProgress.connect(lambda got, total: self.progress.emit(got, max(total, 0)))
-        reply.finished.connect(lambda: self._finish(reply, then, binary))
+        reply.finished.connect(lambda: self._finish(reply, then, binary, fallback))
 
-    def _finish(self, reply: QNetworkReply, then: object, binary: bool) -> None:
+    def _finish(self, reply: QNetworkReply, then: object, binary: bool, fallback: object = None) -> None:
         data = bytes(reply.readAll().data())
         error = reply.error()
         reply.deleteLater()
         if error != QNetworkReply.NetworkError.NoError:
-            # A check that cannot reach GitHub is not news. Say nothing and try again tomorrow.
-            self._stop()
+            # The API refuses unsigned checks past 60 an hour per address (403), which a shared school
+            # or phone network reaches; the release page is asked instead. A download that fails is
+            # reported: stopping quietly left the update dialog waiting for good.
+            if callable(fallback):
+                fallback()
+            else:
+                self._give_up(DOWNLOAD_STOPPED)
             return
         if len(data) > DOWNLOAD_LIMIT:
             self._give_up("That download was larger than any FlexWeek release.")
@@ -99,6 +121,20 @@ class Updater(QObject):
     def _stop(self) -> None:
         self._busy = False
 
+    def _check_page(self) -> None:
+        reply = self._manager.get(self._request(RELEASE_PAGE, CHECK_TIMEOUT_MS, follow=False))
+        reply.finished.connect(lambda: self._on_page(reply))
+
+    def _on_page(self, reply: QNetworkReply) -> None:
+        target = reply.attribute(QNetworkRequest.Attribute.RedirectionTargetAttribute)
+        reply.deleteLater()
+        release = release_from_page(target.toString() if isinstance(target, QUrl) else "")
+        if release is None:
+            self._busy = False
+            self.unreachable.emit(CHECK_FAILED)
+            return
+        self._decide(release)
+
     def _give_up(self, why: str) -> None:
         self._busy = False
         self.failed.emit(why)
@@ -107,8 +143,11 @@ class Updater(QObject):
         try:
             payload = json.loads(text)
         except ValueError:
-            self._stop()
+            self._check_page()
             return
+        self._decide(payload)
+
+    def _decide(self, payload: object) -> None:
         update = available(payload, self.kind)
         self._busy = False
         if update is None:

@@ -41,7 +41,11 @@
   the sign-in card (on by default): the session token is kept per database in
   `<data>/signed-in/<instance>.json` (0600), resumed through /api/auth/me at
   launch, and forgotten on Log out, account deletion or a 401. Checked on the
-  real KDE desktop through `desktop.main`. The packaged app is not rebuilt. Next: owner review, then a 0.14.2 bump and package when asked.
+  real KDE desktop through `desktop.main`. Check for updates hung on the
+  installed 0.14.0 AppImage because GitHub's API answered 403 (rate limit for a
+  shared carrier address) and the updater stopped silently; it now falls back
+  to the releases/latest redirect, times out, and reports failure when asked.
+  The packaged app is not rebuilt. Next: owner review, then a 0.14.2 bump and package when asked.
 - Date: 2026-09-21 (IA harden). 0.14.1 shipped: Plan my homework and More stay
   in every design; Settings is a gear; Appearance & layout is one Settings
   section; summaries speak minutes; Running late toasts the reason or the

@@ -64,6 +64,12 @@ All notable changes to FlexWeek are documented here. Format follows
   something: Today's app, or a design set to Match my look for Look and Accent.
   Elsewhere a line says where that design's colours are.
 - Bento's Up next no longer says "No homework added" twice.
+- Check for updates no longer sits on "Checking for updates…" for good. GitHub
+  refuses unsigned checks past 60 an hour per address, which a school or phone
+  network shares, and the app said nothing when it did. The check now falls back
+  to the release page, gives up after 15 seconds of silence, and when it cannot
+  check, says so with a button to open the release page. A download that stops
+  says so in the update dialog.
 
 ### Added
 - Keep me signed in on this computer, on the sign-in card and on by default.

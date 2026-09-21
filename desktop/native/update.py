@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import sys
 from pathlib import Path
 from typing import TypedDict
@@ -22,6 +23,9 @@ from desktop.native.version import VERSION, is_newer
 
 RELEASES_URL = "https://api.github.com/repos/j0nsh1n/FlexWeek/releases/latest"
 RELEASE_PAGE = "https://github.com/j0nsh1n/FlexWeek/releases/latest"
+RELEASE_TAG_PAGE = "https://github.com/j0nsh1n/FlexWeek/releases/tag/"
+RELEASE_DOWNLOAD = "https://github.com/j0nsh1n/FlexWeek/releases/download/"
+_TAG = re.compile(r"v?[0-9]+(\.[0-9]+){1,3}")
 CHECK_EVERY_HOURS = 24
 
 WINDOWS_SETUP = "FlexWeek-Windows-x64-Setup.exe"
@@ -106,6 +110,29 @@ def available(release: object, kind: str, current: str = VERSION) -> Update | No
         checksum_url=checksum_url,
         notes=body if isinstance(body, str) else "",
     )
+
+
+def release_from_page(location: str) -> dict | None:
+    """The newest release as the API would describe it, from where the release page redirects.
+
+    GitHub's API answers 60 unsigned requests an hour per address, and a school or a phone carrier
+    puts many students behind one address, so the check could be refused with the app still asking.
+    The release page is not counted that way and redirects to the newest release's tag, which is
+    never a draft or a pre-release. File names are fixed, so their addresses follow from the tag.
+    There are no notes, and a file a failed build never uploaded is found out by downloading it.
+    """
+    if not location.startswith(RELEASE_TAG_PAGE):
+        return None
+    tag = location.removeprefix(RELEASE_TAG_PAGE)
+    if not _TAG.fullmatch(tag):
+        return None
+    names = (WINDOWS_SETUP, WINDOWS_MSI, LINUX_TARBALL, LINUX_APPIMAGE)
+    assets = [
+        {"name": name, "browser_download_url": f"{RELEASE_DOWNLOAD}{tag}/{name}"}
+        for base in names
+        for name in (base, base + ".sha256")
+    ]
+    return {"tag_name": tag, "assets": assets, "body": ""}
 
 
 def expected_digest(checksum_text: str, asset: str) -> str | None:
