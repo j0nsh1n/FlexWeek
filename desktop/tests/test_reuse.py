@@ -8,6 +8,7 @@ from backend.slots import SLOT_MIN
 from desktop.native.calendar import days_through, due_day_in_week, first_plannable_day
 from desktop.native.reuse import (
     MAX_WEEK_BLOCKS,
+    apply_plan,
     available_homework_minutes,
     capacity_problem,
     clipboard_fingerprint,
@@ -24,6 +25,8 @@ from desktop.native.reuse import (
     row_conflict,
     running_late_block,
     running_late_refusal,
+    settle_placements,
+    solve_request,
     unfinished_items,
 )
 
@@ -285,3 +288,191 @@ def test_clipboard_fingerprint_ignores_group_ids() -> None:
     right = [{"block": soccer(), "source_day": 0, "scope": "occurrence", "group_id": "b"}]
     assert clipboard_fingerprint(left) == clipboard_fingerprint(right)
     assert SLOT_MIN == 15
+
+
+def test_apply_plan_writes_solver_starts_onto_the_week() -> None:
+    blocks = [
+        {"id": "essay", "title": "Essay", "kind": "flexible", "days": [0, 1, 2], "duration_min": 60},
+        {
+            "id": "school",
+            "title": "School",
+            "kind": "locked",
+            "days": [0],
+            "start": "08:00",
+            "duration_min": 390,
+        },
+    ]
+    trace = {
+        "placed": [
+            {
+                "id": "essay",
+                "title": "Essay",
+                "kind": "flexible",
+                "days": [1],
+                "start": "16:00",
+                "duration_min": 60,
+            },
+            {
+                "id": "school",
+                "title": "School",
+                "kind": "locked",
+                "days": [0],
+                "start": "08:00",
+                "duration_min": 390,
+            },
+        ],
+        "unplaced": [],
+    }
+    essay = next(item for item in apply_plan(blocks, trace) if item["id"] == "essay")
+    assert essay["start"] == "16:00"
+    assert essay["days"] == [1]
+
+
+def test_apply_plan_clears_a_start_the_solver_could_not_keep() -> None:
+    blocks = [{"id": "essay", "kind": "flexible", "days": [0], "start": "16:00", "duration_min": 60}]
+    out = apply_plan(blocks, {"placed": [], "unplaced": [{"id": "essay"}]})
+    assert "start" not in out[0]
+
+
+# A planned week to change: school Monday to Friday until 15:15, Math and English after it on
+# Monday, Reading on Saturday. The week of 2026-09-28 starts on a Monday.
+PLAN_WEEK = "2026-09-28"
+PLAN_HOMEWORK = {
+    "math": {"id": "math", "title": "Math worksheet", "due": "2026-09-28T21:00"},
+    "eng": {"id": "eng", "title": "English essay", "due": "2026-09-29T21:00"},
+    "read": {"id": "read", "title": "Reading", "due": "2026-10-04T21:00"},
+}
+
+
+def planned_week() -> list[dict]:
+    def session(block_id: str, title: str, minutes: int, day: int, start: str) -> dict:
+        return {
+            "id": "s-" + block_id,
+            "title": title,
+            "kind": "flexible",
+            "duration_min": minutes,
+            "days": [day],
+            "start": start,
+            "assignment_id": block_id,
+        }
+
+    school = {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 435,
+        "days": [0, 1, 2, 3, 4],
+        "start": "08:00",
+    }
+    return [
+        school,
+        session("math", "Math worksheet", 30, 0, "15:15"),
+        session("eng", "English essay", 90, 0, "15:45"),
+        session("read", "Reading", 60, 5, "12:00"),
+    ]
+
+
+def game(start: str) -> dict:
+    return {"id": "game", "title": "Game", "kind": "locked", "duration_min": 120, "days": [5], "start": start}
+
+
+def times(blocks: list[dict]) -> dict[str, tuple[list[int], str | None]]:
+    return {block["id"]: (block["days"], block.get("start")) for block in blocks}
+
+
+def test_a_saturday_event_elsewhere_moves_no_homework() -> None:
+    week = [*planned_week(), game("15:00")]
+    settled, lost = settle_placements(week, PLAN_HOMEWORK, PLAN_WEEK)
+    assert lost == []
+    assert times(settled) == times(week)
+
+
+def test_a_saturday_event_over_reading_takes_only_readings_time() -> None:
+    settled, lost = settle_placements([*planned_week(), game("11:30")], PLAN_HOMEWORK, PLAN_WEEK)
+    assert [note["message"] for note in lost] == [
+        "Reading no longer fits Saturday at 12:00: Game is there now."
+    ]
+    after = times(settled)
+    # Every day up to Sunday's deadline is open to it again; Monday's homework has not moved.
+    assert after["s-read"] == ([0, 1, 2, 3, 4, 5, 6], None)
+    assert after["s-math"] == ([0], "15:15")
+    assert after["s-eng"] == ([0], "15:45")
+
+
+def test_a_deadline_moved_earlier_takes_the_time_away_and_says_why() -> None:
+    homework = {**PLAN_HOMEWORK, "eng": {**PLAN_HOMEWORK["eng"], "due": "2026-09-28T16:00"}}
+    settled, lost = settle_placements(planned_week(), homework, PLAN_WEEK)
+    assert [note["message"] for note in lost] == [
+        "English essay no longer fits Monday at 15:45: that is after it is due."
+    ]
+    assert times(settled)["s-eng"] == ([0], None)
+    assert times(settled)["s-math"] == ([0], "15:15")
+
+
+def test_homework_moved_onto_other_homework_pushes_the_other_one_out() -> None:
+    week = planned_week()
+    week[1] = {**week[1], "start": "16:00"}
+    settled, lost = settle_placements(week, PLAN_HOMEWORK, PLAN_WEEK, keep={"s-math"})
+    assert [note["message"] for note in lost] == [
+        "English essay no longer fits Monday at 15:45: Math worksheet is there now."
+    ]
+    assert times(settled)["s-math"] == ([0], "16:00")
+
+
+def test_a_missed_school_day_frees_time_rather_than_taking_any() -> None:
+    week = planned_week()
+    week[0] = {**week[0], "missed_days": [0]}
+    week[1] = {**week[1], "start": "09:00"}
+    _settled, lost = settle_placements(week, PLAN_HOMEWORK, PLAN_WEEK)
+    assert lost == []
+
+
+def test_planning_holds_planned_homework_in_place_and_places_the_rest() -> None:
+    week = planned_week()
+    week[3] = {**week[3], "days": [5, 6]}
+    week[3].pop("start")
+    payload, targets = solve_request(week, PLAN_HOMEWORK, PLAN_WEEK)
+    assert targets == {"s-read"}
+    held = {block["id"]: block for block in payload}
+    assert held["s-math"] == {
+        "id": "s-math",
+        "title": "Math worksheet",
+        "kind": "locked",
+        "duration_min": 30,
+        "days": [0],
+        "start": "15:15",
+    }
+    assert held["s-read"]["kind"] == "flexible"
+    assert held["s-read"]["days"] == [5, 6]
+
+
+def test_replanning_everything_reopens_every_day_up_to_each_deadline() -> None:
+    payload, targets = solve_request(planned_week(), PLAN_HOMEWORK, PLAN_WEEK, everything=True)
+    assert targets == {"s-math", "s-eng", "s-read"}
+    sent = {block["id"]: block for block in payload}
+    english = sent["s-eng"]
+    assert (english["kind"], english["days"], "start" in english) == ("flexible", [0, 1], False)
+    assert sent["s-math"]["days"] == [0]
+
+
+def test_finding_a_new_time_places_only_the_named_work() -> None:
+    week = planned_week()
+    week.append({"id": "s-new", "title": "Lab report", "kind": "flexible", "duration_min": 60, "days": [2]})
+    payload, targets = solve_request(week, PLAN_HOMEWORK, PLAN_WEEK, only={"s-eng"})
+    assert targets == {"s-eng"}
+    sent = {block["id"]: block for block in payload}
+    assert "s-new" not in sent
+    assert sent["s-math"]["kind"] == "locked"
+
+
+def test_a_plan_for_part_of_the_week_changes_only_that_part() -> None:
+    trace = {
+        "placed": [{"id": "s-eng", "kind": "flexible", "days": [1], "start": "15:15"}],
+        "unplaced": [{"id": "s-read"}],
+    }
+    out = apply_plan(
+        planned_week(), trace, targets={"s-eng", "s-read"}, assignments=PLAN_HOMEWORK, week_start=PLAN_WEEK
+    )
+    assert times(out)["s-eng"] == ([1], "15:15")
+    assert times(out)["s-read"] == ([0, 1, 2, 3, 4, 5, 6], None)
+    assert times(out)["s-math"] == ([0], "15:15")
