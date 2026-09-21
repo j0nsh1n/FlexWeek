@@ -17,7 +17,6 @@ from desktop.native.layouts.base import (
     day_buttons,
     empty,
     label,
-    plural,
     rules,
     work_left,
 )
@@ -167,7 +166,7 @@ class OneThingView(LayoutView):
         self._fit_title()
 
     def _left_text(self, scene: Scene) -> str:
-        return "" if scene.today is None else plural(work_left(scene), "homework session") + " left today"
+        return "" if scene.today is None else f"{length_label(work_left(scene))} left today"
 
     def _empty_title(self, scene: Scene) -> str:
         return "Day screens show today" if scene.today is None else "Nothing else today"

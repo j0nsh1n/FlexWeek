@@ -353,6 +353,49 @@ def test_my_day_opens_whichever_day_screen_was_picked(qapp: QApplication, window
     assert window.planner.currentWidget() is window.week_table
 
 
+def test_summaries_speak_minutes_not_session_counts(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    import re
+
+    from PySide6.QtWidgets import QListWidget
+
+    sessions = re.compile(r"\b0 sessions?\b")
+
+    def labels() -> list[str]:
+        found = [lab.text() for lab in window.findChildren(QLabel) if lab.text()]
+        for box in window.findChildren(QListWidget):
+            found.extend(box.item(index).text() for index in range(box.count()))
+        return found
+
+    window.focus_panel.set_state(window.session)
+
+    window._layout = {"main": "bento", "day": "one", "options": {}}
+    window._on_week()
+    qapp.processEvents()
+    shown = labels()
+    assert "1 h planned · 0 done" in shown
+    assert not any(sessions.search(text) for text in shown)
+
+    window._layout = {"main": "timeline", "day": "one", "options": {}}
+    window._on_week()
+    qapp.processEvents()
+    shown = labels()
+    assert any("1 h planned · 0 done" in text for text in shown)
+    assert not any(sessions.search(text) for text in shown)
+
+    click(window, "viewMyDay")
+    click(window, "oneFinished")
+    settled(qapp, window)
+    click(window, "viewWeek")
+    window._layout = {"main": "bento", "day": "one", "options": {}}
+    window._on_week()
+    qapp.processEvents()
+    shown = labels()
+    assert any("1 h planned · 1 h done" in text for text in shown)
+    assert not any(sessions.search(text) for text in shown)
+
+
 def more_actions(window: NativeWindow) -> dict[str, bool]:
     """The items, without the section headings. addSection makes a separator that carries text.
     Advanced is a submenu, so its entries are included under their own names."""

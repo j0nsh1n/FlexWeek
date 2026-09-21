@@ -70,7 +70,7 @@ def test_during_school_it_says_school_and_how_long_is_left(qapp: QApplication) -
     view = shown(qapp, "13:40")
     assert says(view) == ("NOW", "SCHOOL", "UNTIL 14:30 · 50 MIN LEFT")
     assert view.findChild(QProgressBar, "oneProgress").value() == 340
-    assert view.findChild(QLabel, "oneLeft").text() == "2 HOMEWORK SESSIONS LEFT TODAY"
+    assert view.findChild(QLabel, "oneLeft").text() == "2 H 30 MIN LEFT TODAY"
     assert view.findChild(QLabel, "oneThen").text() == "THEN: DINNER 18:00, ESSAY-1 18:45"
 
 

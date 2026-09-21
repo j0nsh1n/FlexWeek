@@ -27,7 +27,7 @@ from desktop.native.layouts.base import (
     rules,
     scrolling,
 )
-from desktop.native.weekmodel import Occurrence, clock_label, length_label
+from desktop.native.weekmodel import Occurrence, clock_label, length_label, planned_line
 
 HOURS = {"day": (6 * 60, 22 * 60), "full": (0, 24 * 60)}
 SWEEP = 300.0
@@ -360,12 +360,21 @@ class DayDialView(LayoutView):
                 )
             made = day_buttons(self, scene, item, "dial")
         else:
-            sessions = sum(1 for item in scene.week.on_day(day) if item.work and item.live)
+            work = [item for item in scene.week.on_day(day) if item.work]
             date = scene.week.date_of(day)
             inner.addWidget(
                 label(f"{DAY_FULL[day].upper()}, {date.strftime('%B').upper()} {date.day}", "dialKicker")
             )
-            inner.addWidget(label(plural(sessions, "homework session"), "dialTitle", wrap=True))
+            inner.addWidget(
+                label(
+                    planned_line(
+                        sum(item.minutes for item in work),
+                        sum(item.minutes for item in work if item.done),
+                    ),
+                    "dialTitle",
+                    wrap=True,
+                )
+            )
             made = []
             if scene.today is not None:
                 today = button("Back to today", "dialToday", "main")

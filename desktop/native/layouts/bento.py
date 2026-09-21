@@ -16,11 +16,10 @@ from desktop.native.layouts.base import (
     empty,
     label,
     mark_of,
-    plural,
     rules,
     scrolling,
 )
-from desktop.native.weekmodel import clock_label, due_label, length_label
+from desktop.native.weekmodel import clock_label, due_label, length_label, planned_line
 
 
 class BentoView(LayoutView):
@@ -271,8 +270,13 @@ class BentoView(LayoutView):
         big = label(length_label(sum(item.minutes for item in work)), "bentoTotalBig")
         big.setProperty("role", "big")
         inner.addWidget(big)
-        done = sum(1 for item in work if item.done)
-        note = label(f"{plural(len(work), 'session')}, {done} done", "bentoTotalLine")
+        note = label(
+            planned_line(
+                sum(item.minutes for item in work),
+                sum(item.minutes for item in work if item.done),
+            ),
+            "bentoTotalLine",
+        )
         note.setProperty("role", "muted")
         inner.addWidget(note)
         inner.addStretch(1)

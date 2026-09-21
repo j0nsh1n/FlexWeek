@@ -194,17 +194,13 @@ class FocusPanel(QWidget):
         for widget in self._ended_widgets:
             widget.setVisible(ended)
         self.more.setEnabled(bool(choices))
-        tasks = [
-            (item.get("id"), item.get("start"), item.get("focus_sessions"), item.get("title"))
-            for item in session.focus_tasks()
-        ]
+        tasks = [(item.get("id"), item.get("start"), item.get("title")) for item in session.focus_tasks()]
         if tasks != getattr(self, "_shown_tasks", None):
             self._shown_tasks = tasks
             self.tasks.clear()
             for item in session.focus_tasks():
-                row = QListWidgetItem(
-                    f"{item['title']}  {item.get('start') or ''} · {item.get('focus_sessions') or 0} sessions"
-                )
+                start = item.get("start") or ""
+                row = QListWidgetItem(f"{item['title']}  {start}".rstrip())
                 row.setData(Qt.ItemDataRole.UserRole, item)
                 self.tasks.addItem(row)
         for label in (self.task, self.phase, self.time):

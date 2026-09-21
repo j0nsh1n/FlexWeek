@@ -139,7 +139,7 @@ def test_a_small_dial_opens_that_day_and_today_is_one_press_back(qapp: QApplicat
     view = shown(qapp, "19:00")
     QTest.mouseClick(view.findChild(DialFace, "dialMini0"), Qt.MouseButton.LeftButton)
     assert text(view, "dialKicker") == "MONDAY, SEPTEMBER 14"
-    assert text(view, "dialTitle") == "0 homework sessions"
+    assert text(view, "dialTitle") == "45 min planned · 45 min done"
     assert rows(view) == [("School", "past"), ("Math-1", "past"), ("Dinner", "past")]
     view.findChild(QPushButton, "dialToday").click()
     assert text(view, "dialKicker") == "NOW · UNTIL 19:45 · 45 MIN LEFT"

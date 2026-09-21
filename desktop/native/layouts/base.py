@@ -107,12 +107,14 @@ def mark_of(category: str) -> str:
 
 
 def work_left(scene: Scene) -> int:
-    """Homework sessions still ahead today. Running late is only offered while there are some."""
+    """Homework minutes still ahead today. Running late is only offered while there are some."""
     if scene.today is None:
         return 0
-    return sum(
-        1 for item in scene.week.on_day(scene.today) if item.work and item.live and item.end > scene.minute
-    )
+    total = 0
+    for item in scene.week.on_day(scene.today):
+        if item.work and item.live and item.end > scene.minute:
+            total += item.end - max(item.start, scene.minute)
+    return total
 
 
 # Mission control wanted 1220 pixels, Clay deck 1148 and Bento 1130. Below this a design gives up a
