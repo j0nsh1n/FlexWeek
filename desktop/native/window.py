@@ -55,7 +55,6 @@ from desktop.native.calendar import (
 from desktop.native.controller import NativeSession
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
 from desktop.native.layouts.base import LayoutView, Scene
-from desktop.native.layouts.dialog import LayoutDialog
 from desktop.native.layouts.registry import options_for, sanitize_layout, tokens_for
 from desktop.native.layouts.views import VIEW_CLASSES
 from desktop.native.look import (
@@ -444,17 +443,11 @@ class NativeWindow(QMainWindow):
         self.account_name.setObjectName("accountName")
         self.account_name.setVisible(False)
         bar.addWidget(self.account_name)
-        layout_button = QPushButton("Layout")
-        layout_button.setObjectName("layoutButton")
-        layout_button.clicked.connect(self._open_layout)
         sign_out = QPushButton("Log out")
         sign_out.setObjectName("signOut")
         sign_out.clicked.connect(self.session.logout)
-        # Changing the look and signing out are things a student does rarely, so they sit under More
-        # with everything else rare. They stay real buttons so the shortcuts still reach them.
-        for rare in (layout_button, sign_out):
-            rare.setVisible(False)
-            bar.addWidget(rare)
+        sign_out.setVisible(False)
+        bar.addWidget(sign_out)
         self._top_bar = bar
         layout.addLayout(bar)
         # Everything between the bar and the calendar is for planning, so a day screen can put it away.
@@ -802,14 +795,6 @@ class NativeWindow(QMainWindow):
 
     def _leave_day(self) -> None:
         self._day_mode = False
-        self._on_week()
-
-    def _open_layout(self) -> None:
-        dialog = LayoutDialog(self, self._layout)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._layout = dialog.choice()
-        self._save_look()
         self._on_week()
 
     def _on_account(self, account: object) -> None:
@@ -1609,15 +1594,19 @@ class NativeWindow(QMainWindow):
         if self.session.preferences is None:
             self.session._say("Still loading your settings…")
             return
-        dialog = PrefsDialog(self, self.session.preferences, self._look, self.session.reminder_limits)
+        dialog = PrefsDialog(
+            self, self.session.preferences, self._look, self.session.reminder_limits, self._layout
+        )
         dialog.account_requested.connect(self._open_account)
         dialog.availability_requested.connect(self._open_availability)
         dialog.updates_requested.connect(lambda: self._check_updates(asked=True))
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         self._look = dialog.look_choice()
+        self._layout = dialog.layout_choice()
         self.session.look = self._look
         self._save_look()
+        self._on_week()
         updates = dialog.updates()
         self._apply_start_at_login(bool(updates.get("start_at_login")))
         self.session.save_preferences(updates)

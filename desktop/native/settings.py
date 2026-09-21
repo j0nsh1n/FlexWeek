@@ -37,6 +37,8 @@ from backend.slots import SLOT_MIN
 from desktop.native import autostart
 from desktop.native.calendar import DAY_FULL
 from desktop.native.focus import FOCUS_PHASE_LABEL, format_countdown, more_time_choices, remaining_ms
+from desktop.native.layouts.dialog import SLOTS, LayoutSection
+from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.look import (
     ACCENTS,
     LOOK_KNOBS,
@@ -62,7 +64,7 @@ ALARM_PAD = 20
 ALARM_GAP = 12
 ALARM_BUTTON_HEIGHT = 44
 PREFS_MAX_BODY = 560
-PREFS_MIN_WIDTH = 560
+PREFS_MIN_WIDTH = 640
 ACCOUNT_MAX_WIDTH = 520
 ACCOUNT_MIN_WIDTH = 560
 SPORT_FALLBACK = "Sport or club"
@@ -222,11 +224,19 @@ class PrefsDialog(QDialog):
     availability_requested = Signal()
     updates_requested = Signal()
 
-    def __init__(self, parent: QWidget | None, preferences: dict, look: dict, reminder_limits: dict) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None,
+        preferences: dict,
+        look: dict,
+        reminder_limits: dict,
+        week_layout: dict | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self._preferences = deepcopy(preferences)
         self._look = sanitize_look(look)
+        chosen_layout = sanitize_layout(week_layout)
         self._alarms = [deepcopy(item) for item in preferences.get("alarms") or []]
         self._bell = Bell(self)
         layout = QVBoxLayout(self)
@@ -349,16 +359,21 @@ class PrefsDialog(QDialog):
         self.spotify = QLineEdit(preferences.get("default_spotify_url") or "")
         self.spotify.setObjectName("prefSpotify")
         appearance = QWidget()
-        appear = QFormLayout(appearance)
-        appear.addRow(_heading("Look"))
+        column = QVBoxLayout(appearance)
+        appear = QFormLayout()
+        appear.addRow(_heading("Appearance & layout"))
         appear.addRow("Look", self.look)
         appear.addRow("Accent", self.accent)
         appear.addRow(self.accent_chips)
-        appear.addRow(
-            QLabel("Layout stays in the Layout dialog. It is how the week is drawn, not these colours.")
-        )
         appear.addRow(self.fine_tune)
         appear.addRow(self.fine_host)
+        column.addLayout(appear)
+        self.layout_sections = [
+            LayoutSection(slot, role, title, blurb, chosen_layout)
+            for slot, role, title, blurb in SLOTS
+        ]
+        for section in self.layout_sections:
+            column.addWidget(section)
         focus = QWidget()
         focus_form = QFormLayout(focus)
         focus_form.addRow(_heading("Focus timer"))
@@ -459,8 +474,8 @@ class PrefsDialog(QDialog):
         computer_form.addRow("Updates", update_col)
         self.nav = QListWidget()
         self.nav.setObjectName("prefsNav")
-        self.nav.setFixedWidth(160)
-        for name in ("Appearance", "Focus", "Alerts", "This computer"):
+        self.nav.setFixedWidth(190)
+        for name in ("Appearance & layout", "Focus", "Alerts", "This computer"):
             self.nav.addItem(name)
         self.stack = QStackedWidget()
         self.stack.setObjectName("prefsStack")
@@ -468,6 +483,7 @@ class PrefsDialog(QDialog):
             area = QScrollArea()
             area.setWidgetResizable(True)
             area.setFrameShape(QFrame.Shape.NoFrame)
+            area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             area.setWidget(page)
             self.stack.addWidget(area)
         self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
@@ -482,6 +498,7 @@ class PrefsDialog(QDialog):
         area.setObjectName("prefsScroll")
         area.setWidgetResizable(True)
         area.setFrameShape(QFrame.Shape.NoFrame)
+        area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         area.setWidget(body)
         area.setMaximumHeight(PREFS_MAX_BODY)
         layout.addWidget(area)
@@ -631,6 +648,13 @@ class PrefsDialog(QDialog):
         preset = parsed[1] if parsed and parsed[0] == "preset" else "default"
         shown = {knob: box.currentData() for knob, box in self.knobs.items()}
         return sanitize_look({"preset": preset, "knobs": look_overrides(preset, shown)})
+
+    def layout_choice(self) -> dict:
+        picked: dict = {"options": {}}
+        for section in self.layout_sections:
+            picked[section.slot] = section.chosen()
+            picked["options"].update(section.options())
+        return sanitize_layout(picked)
 
 
 class SetupCard(QWidget):

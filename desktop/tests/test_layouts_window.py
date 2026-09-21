@@ -1,6 +1,6 @@
 """Layouts in the real window, against a real local backend: My day puts planning away and brings it
 back, a day screen's buttons reach the behaviour the product already has, the choice survives a
-restart, and the Layout dialog shows its three levels.
+restart, and Settings holds Main view and Day screen with their three levels.
 """
 
 from __future__ import annotations
@@ -25,13 +25,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QStandardPaths, Qt
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QLabel, QPushButton
+    from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialog, QLabel, QPushButton
 
     from desktop.native.calendar import sunday_due
-    from desktop.native.layouts.dialog import LayoutDialog
     from desktop.native.layouts.one_thing import OneThingView
     from desktop.native.layouts.registry import LAYOUTS, sanitize_layout
     from desktop.native.layouts.views import VIEW_CLASSES
+    from desktop.native.settings import PrefsDialog
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
 
@@ -271,11 +271,11 @@ def test_a_changed_look_repaints_a_design_that_matches_it(qapp: QApplication, wi
     assert after == view.scene.tokens["bg"]
 
 
-def combo(dialog: LayoutDialog, name: str) -> QComboBox:
+def combo(dialog: PrefsDialog, name: str) -> QComboBox:
     return dialog.findChild(QComboBox, name)
 
 
-def rows(dialog: LayoutDialog, slot: str) -> list[str]:
+def rows(dialog: PrefsDialog, slot: str) -> list[str]:
     return sorted(
         box.objectName()
         for box in dialog.findChildren(QComboBox)
@@ -283,8 +283,12 @@ def rows(dialog: LayoutDialog, slot: str) -> list[str]:
     )
 
 
+def prefs_layout(choice: dict | None = None) -> PrefsDialog:
+    return PrefsDialog(None, {}, {}, {}, choice)
+
+
 def test_the_dialog_shows_style_first_and_fine_tune_on_request(qapp: QApplication) -> None:
-    dialog = LayoutDialog(None, None)
+    dialog = prefs_layout()
     assert [combo(dialog, "layoutDay").itemText(index) for index in range(2)] == ["One thing", "Day dial"]
     assert rows(dialog, "Day") == ["layoutDay-colour"]
     dialog.findChild(QCheckBox, "layoutDayMore").setChecked(True)
@@ -299,37 +303,38 @@ def test_the_dialog_shows_style_first_and_fine_tune_on_request(qapp: QApplicatio
 
 
 def test_the_dialog_stores_only_what_the_student_changed(qapp: QApplication) -> None:
-    dialog = LayoutDialog(None, None)
-    assert dialog.choice() == {"main": "classic", "day": "one", "options": {}}
+    dialog = prefs_layout()
+    assert dialog.layout_choice() == {"main": "classic", "day": "one", "options": {}}
     colour = combo(dialog, "layoutDay-colour")
     colour.setCurrentIndex(colour.findData("paper"))
-    assert dialog.choice() == {"main": "classic", "day": "one", "options": {"one": {"colour": "paper"}}}
+    assert dialog.layout_choice()["options"] == {"one": {"colour": "paper"}}
     colour = combo(dialog, "layoutDay-colour")
     colour.setCurrentIndex(colour.findData("black"))
-    assert dialog.choice()["options"] == {}
+    assert dialog.layout_choice()["options"] == {}
 
 
 def test_fine_tuning_already_in_use_is_not_hidden(qapp: QApplication) -> None:
-    dialog = LayoutDialog(None, {"options": {"one": {"daybar": "hide"}}})
+    dialog = prefs_layout({"options": {"one": {"daybar": "hide"}}})
     assert dialog.findChild(QCheckBox, "layoutDayMore").isChecked() is True
     assert combo(dialog, "layoutDay-daybar").currentData() == "hide"
 
 
 def test_trying_another_design_and_coming_back_loses_nothing(qapp: QApplication) -> None:
-    dialog = LayoutDialog(None, {"options": {"one": {"colour": "paper"}}})
+    dialog = prefs_layout({"options": {"one": {"colour": "paper"}}})
     pick = combo(dialog, "layoutDay")
     pick.setCurrentIndex(pick.findData("dial"))
     assert combo(dialog, "layoutDay-colour").currentData() == "midnight"
     pick.setCurrentIndex(pick.findData("one"))
     assert combo(dialog, "layoutDay-colour").currentData() == "paper"
-    assert dialog.choice()["options"] == {"one": {"colour": "paper"}}
+    assert dialog.layout_choice()["options"] == {"one": {"colour": "paper"}}
 
 
 def test_a_design_can_be_put_back_to_its_own_settings(qapp: QApplication) -> None:
-    dialog = LayoutDialog(None, {"options": {"one": {"colour": "paper", "lead": "next"}}})
+    dialog = prefs_layout({"options": {"one": {"colour": "paper", "lead": "next"}}})
     dialog.findChild(QPushButton, "layoutDayReset").click()
-    assert dialog.choice()["options"] == {}
+    assert dialog.layout_choice()["options"] == {}
     assert dialog.findChild(QCheckBox, "layoutDayMore").isChecked() is False
+    assert dialog.findChild(QPushButton, "layoutDayReset").text() == "Reset this layout's options"
 
 
 def test_every_built_view_is_a_design_in_the_registry(qapp: QApplication) -> None:
@@ -507,17 +512,19 @@ def test_the_dialog_fits_a_laptop_with_every_level_open(qapp: QApplication) -> N
         "day": "dial",
         "options": {"timeline": {"finished": "hide"}, "dial": {"list": "hide"}},
     }
-    dialog = LayoutDialog(None, busiest)
+    dialog = prefs_layout(busiest)
     for name in ("layoutMainMore", "layoutDayMore"):
         assert dialog.findChild(QCheckBox, name).isChecked() is True
     dialog.show()
     qapp.processEvents()
-    assert dialog.sizeHint().height() <= 700
-    assert dialog.sizeHint().width() <= 1300
+    assert dialog.height() <= 768
+    assert dialog.width() <= 1366
+    assert dialog.sizeHint().height() <= 768
+    assert dialog.sizeHint().width() <= 1366
 
 
 def test_a_design_with_nothing_to_change_offers_no_fine_tune_or_reset(qapp: QApplication) -> None:
-    dialog = LayoutDialog(None, None)
+    dialog = prefs_layout()
     dialog.show()
     qapp.processEvents()
 
@@ -533,6 +540,41 @@ def test_a_design_with_nothing_to_change_offers_no_fine_tune_or_reset(qapp: QApp
     assert offered() == (True, True)
     pick.setCurrentIndex(pick.findData("classic"))
     assert offered() == (False, False)
+
+
+def test_cancelling_settings_leaves_the_layout_alone(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    before = dict(window._layout)
+
+    def reject_after_bento(dialog: PrefsDialog) -> int:
+        pick = dialog.findChild(QComboBox, "layoutMain")
+        pick.setCurrentIndex(pick.findData("bento"))
+        return QDialog.DialogCode.Rejected
+
+    PrefsDialog.exec = reject_after_bento
+    try:
+        window._open_settings()
+    finally:
+        del PrefsDialog.exec
+    assert window._layout == before
+    assert type(window.planner.currentWidget()).__name__ != "BentoView"
+
+
+def test_accepting_settings_applies_the_layout(qapp: QApplication, window: NativeWindow) -> None:
+    def accept_bento(dialog: PrefsDialog) -> int:
+        pick = dialog.findChild(QComboBox, "layoutMain")
+        pick.setCurrentIndex(pick.findData("bento"))
+        return QDialog.DialogCode.Accepted
+
+    PrefsDialog.exec = accept_bento
+    try:
+        window._open_settings()
+    finally:
+        del PrefsDialog.exec
+    settled(qapp, window)
+    assert window._layout["main"] == "bento"
+    assert type(window.planner.currentWidget()).__name__ == "BentoView"
 
 
 def chrome_colour(window: NativeWindow) -> str:
