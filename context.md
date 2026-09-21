@@ -1,22 +1,27 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-21 (IA harden). Branch `grok/0-14-1-ia` off `origin/main` at
-  c6b487c, local only in `~/.worktrees/flexweek-ui-grok`. Native chrome: Plan
-  my homework and More stay in every layout; Settings is a gear; Appearance &
-  layout is one Settings section; summaries speak minutes; Running late toasts
-  the reason or the locked start; first-week sport name is a placeholder.
-  VERSION stays 0.14.0. Nothing pushed. Next: Claude reviews, then Jonathan.
-- Date: 2026-09-21 (IA harden review fixes). Branch `claude/0-14-1-ia-fixes`
-  on top of `grok/0-14-1-ia` (7cd7288), local only in
-  `~/.worktrees/flexweek-ui-claude`. Fixes Claude's review of Grok's branch:
-  every Settings page fits (measured page by page at normal and large text;
-  the dialog stays within 700 px at normal), a setup time is selected only on
-  the entering click, the notice is one line under the bar, and Running late
-  confirms only after its save. A TypeSafe (Jev) sweep of student-facing strings
-  found one more session count (the spread preview), now in time. spec.md
-  drift: none new; spec.md never described the top bar, More, Settings or
-  layouts (noted in the stage 8 contract). Nothing pushed.
+- Date: 2026-09-21 (0.14.1 trust). Branch `fix/0-14-1-trust` off `origin/main`
+  at the 0.14.1 merge. The 0.14.1 AppImage audit and Claude's review of that
+  run: leftover homework is one WeekModel rule on every layout and both day
+  screens; Running late undoes in one step; a covering commitment takes only
+  the blocked homework and offers Find a new time; Plan my homework keeps
+  working times; Month hides the whole week surface; username, estimate error,
+  More details, Today, and Start/End are in. Dialog height from the audit
+  (~150 px) was not reproduced, so it is not claimed as fixed. Gate: 977
+  Python tests, `scripts/verify.py` VERIFIED. Development window driven
+  offscreen at 1024×768 and 1280×800. Packaged AppImage not rebuilt. Nothing
+  pushed. VERSION stays 0.14.1. spec.md was not edited. Drift to flag: Month's
+  decision 7 still says the solver's choice is never stored, and Running late
+  still says it re-solves after the locked block is saved. The native app now
+  stores placements and applies the Running late preview in the same save.
+  spec.md does not still describe a web app or a WebEngine shell (PR #22).
+  Next: owner review, then a 0.14.2 bump and package when asked.
+- Date: 2026-09-21 (IA harden). 0.14.1 shipped: Plan my homework and More stay
+  in every design; Settings is a gear; Appearance & layout is one Settings
+  section; summaries speak minutes; Running late toasts the reason or the
+  locked start; first-week sport name is a placeholder; Settings saves as you
+  go. PRs #23 and #24.
 - Date: 2026-09-20 (layout surfaces). Branch `feat/layout-surfaces` off
   `origin/main` at 993c003, local only in `~/.worktrees/flexweek-layout-surfaces`.
   Day and Month rebuild for the chosen week layout (classic stays the clock
@@ -478,11 +483,16 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
-- 2026-09-21, `feat/0-14-1-release`: 0.14.1 release prep (VERSION, CHANGELOG
-  heading, `docs/release-notes-v0.14.1.md`) after PR #23 merged. The release is
-  published as a pre-release first so 0.14.0 installs are not offered it until
-  it is marked latest (the updater reads /releases/latest and skips
-  pre-releases); Windows installers still want a hand-check on a real PC.
+- 2026-09-21, `fix/0-14-1-trust`: Claude's trust-review items on the 0.14.1
+  audit branch. Leftover copy, one-step Running late undo, settle/keep-plan,
+  Month host, username/estimate/More details/Today/Start+End, offscreen 1024
+  gear. Dialog 150 px still unverified. spec.md not edited; flagged Month
+  decision 7 and Running late re-solve drift. Gate: 977 Python tests,
+  `scripts/verify.py` VERIFIED. No push, no executable, VERSION
+  0.14.1. Next: owner review.
+- 2026-09-21, `feat/0-14-1-release`: 0.14.1 shipped (PRs #23 and #24). It was
+  published as a pre-release first, then marked latest so 0.14.0 installs can
+  be offered it. Windows installers still want a hand-check on a real PC.
 - 2026-09-21, `claude/0-14-1-ia-fixes` on `grok/0-14-1-ia`: review fixes for
   0.14.1, the spread-preview wording, and Settings that apply as they change
   (Jonathan's addition to 0.14.1: no OK/Cancel, account prefs saved 600 ms

@@ -5,6 +5,38 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+- The first-week setup card grows with each step so Skip and Next no longer
+  cover the sport and homework fields. A new account opens on school hours,
+  not the previous account's last step. Homework due is this week's Sunday
+  with a calendar, not a typed ISO date.
+- Plan my homework writes the chosen times onto the week and saves them, so an
+  accepted plan is still on the calendar after Save, a normal exit, and signing
+  in again. Finishing one assignment, undoing that, or adding an unrelated
+  Saturday event leaves other homework where it was.
+- Every week layout and both day screens name homework that is due today and
+  still needs a time, instead of saying the day is free. Today's app lists that
+  work above the week.
+- A commitment that covers planned homework takes only that homework's time,
+  names it, and offers Find a new time. The rest of the plan stays put. Plan my
+  homework keeps times that already work. Replan all my homework is a separate
+  action under More and in the plan review.
+- Running late stores the delayed start and the new times in one save, so Undo
+  once takes both away.
+- Month hides the whole week surface in every layout, not only Bento's board.
+- Creating an account shows the username rule and names a username that does
+  not match. The password can be shown or hidden.
+- An estimate that is not a multiple of 15 minutes is an error, not a repeat of
+  the hint under the field.
+- Optional homework fields sit behind More details, which opens when those
+  fields already have values.
+- Today sits beside the week arrows. Fixed activities have a Start and an End,
+  with the length underneath. The gear stays on a 1024 px wide window in the
+  offscreen tests.
+
+### Changed
+- After a plan, the status line says how many homework blocks were planned.
+
 ## [0.14.1] - 2026-09-21
 
 ### Changed
