@@ -75,6 +75,10 @@ class LayoutSection(QGroupBox):
     def chosen(self) -> str:
         return str(self.pick.currentData())
 
+    def values(self) -> dict[str, str]:
+        """Every option of the design picked now, defaults included."""
+        return dict(self._options[self.chosen()])
+
     def options(self) -> dict[str, dict[str, str]]:
         """Only what the student changed. Writing a design's defaults down would freeze them, and a
         default that later improves would never reach anyone who had opened this dialog."""

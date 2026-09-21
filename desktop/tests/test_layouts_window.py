@@ -24,6 +24,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QStandardPaths, Qt
+    from PySide6.QtGui import QImage
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import (
         QApplication,
@@ -395,6 +396,77 @@ def test_every_view_says_what_it_is_for_before_its_style_name(qapp: QApplication
         "Dashboard · Retro desktop",
         "Agenda · Clay deck",
     ]
+
+
+def test_settings_shows_only_what_the_main_view_uses(qapp: QApplication) -> None:
+    """Look, Accent, Surface, Corners and Blocks stayed on screen for every design, though only
+    Today's app reads them, so a student changed them in Bento and nothing happened."""
+    from desktop.native.settings import FINE_TUNE_LOOK, FINE_TUNE_OTHER, TODAYS_APP_KNOBS
+
+    dialog = prefs_layout({"main": "classic", "day": "one", "options": {}})
+    dialog.fine_tune.setChecked(True)
+    dialog.show()
+    qapp.processEvents()
+
+    def shown() -> dict[str, bool]:
+        fields = {"look": dialog.look, "accent": dialog.accent, "chips": dialog.accent_chips}
+        fields.update(dialog.knobs)
+        return {name: field.isVisibleTo(dialog) for name, field in fields.items()} | {
+            "note": dialog.own_colours.isVisibleTo(dialog)
+        }
+
+    everything = shown()
+    assert everything.pop("note") is False and all(everything.values())
+    assert dialog.fine_tune.text() == FINE_TUNE_LOOK
+
+    main = combo(dialog, "layoutMain")
+    main.setCurrentIndex(main.findData("bento"))
+    qapp.processEvents()
+    bento = shown()
+    assert {name for name, on in bento.items() if not on} == {"look", "accent", "chips", *TODAYS_APP_KNOBS}
+    assert dialog.own_colours.text() == (
+        "Bento has its own colours, under Main view. Set them to Match my look to use Look and Accent."
+    )
+    assert dialog.fine_tune.text() == FINE_TUNE_OTHER
+
+    colour = combo(dialog, "layoutMain-colour")
+    colour.setCurrentIndex(colour.findData("match"))
+    qapp.processEvents()
+    matched = shown()
+    assert {name for name, on in matched.items() if not on} == {"note", *TODAYS_APP_KNOBS}
+    assert dialog.fine_tune.text() == FINE_TUNE_LOOK
+
+    main.setCurrentIndex(main.findData("classic"))
+    qapp.processEvents()
+    assert all(on for name, on in shown().items() if name != "note")
+    dialog.close()
+
+
+@pytest.mark.parametrize("main", ["timeline", "mission", "bento", "retro", "clay"])
+def test_the_knobs_settings_hides_for_a_design_change_nothing_in_it(
+    qapp: QApplication, window: NativeWindow, main: str
+) -> None:
+    """The reason Settings hides them. If a design starts reading one, show it again for that design."""
+    from desktop.native.look import LOOK_DEFAULTS, LOOK_KNOBS, sanitize_look
+    from desktop.native.settings import TODAYS_APP_KNOBS
+
+    def view_with(knobs: dict[str, str], prefs: dict | None = None) -> QImage:
+        window.session.preferences = {**base, **(prefs or {})}
+        window._look = sanitize_look({"preset": "default", "knobs": knobs})
+        window._layout = sanitize_layout({"main": main, "day": "one"})
+        window._apply_appearance()
+        window._on_week()
+        for _ in range(20):
+            qapp.processEvents()
+        return window.planner.currentWidget().grab().toImage()
+
+    base = dict(window.session.preferences or {})
+    plain = view_with({})
+    for knob in TODAYS_APP_KNOBS:
+        other = next(value for value in LOOK_KNOBS[knob] if value != LOOK_DEFAULTS[knob])
+        assert view_with({knob: other}) == plain, knob
+    assert view_with({}, {"theme_pack": "dark-frost"}) == plain, "look"
+    assert view_with({}, {"accent": "gold"}) == plain, "accent"
 
 
 def test_the_dialog_shows_style_first_and_fine_tune_on_request(qapp: QApplication) -> None:

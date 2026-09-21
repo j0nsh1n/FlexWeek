@@ -41,7 +41,7 @@ from desktop.native import autostart
 from desktop.native.calendar import DAY_FULL, monday_of, sunday_due
 from desktop.native.focus import FOCUS_PHASE_LABEL, format_countdown, more_time_choices, remaining_ms
 from desktop.native.layouts.dialog import SLOTS, LayoutSection
-from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.layouts.registry import LAYOUTS, MATCH, sanitize_layout
 from desktop.native.look import (
     ACCENTS,
     LOOK_KNOBS,
@@ -73,6 +73,11 @@ PREFS_NAV_PAD = 32
 ACCOUNT_MAX_WIDTH = 520
 ACCOUNT_MIN_WIDTH = 560
 SPORT_FALLBACK = "Sport or club"
+# What only Today's app reads. Every other design has its own colours and shapes, so these changed
+# nothing there (measured 2026-09-21: not the view, not the top bar, apart from Corners on the bar).
+TODAYS_APP_KNOBS = ("surface", "corners", "blocks")
+FINE_TUNE_LOOK = "Fine-tune this look"
+FINE_TUNE_OTHER = "Fine-tune fonts, spacing and shadows"
 
 
 class _SelectOnFocus(QLineEdit):
@@ -296,6 +301,7 @@ class PrefsDialog(QDialog):
         self.fine_host = QWidget()
         self.fine_host.setObjectName("prefFineHost")
         fine_form = QFormLayout(self.fine_host)
+        self._fine_form = fine_form
         fine_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         fine_form.setContentsMargins(0, 0, 0, 0)
         for knob, values in LOOK_KNOBS.items():
@@ -306,7 +312,7 @@ class PrefsDialog(QDialog):
             box.setCurrentIndex(max(0, box.findData(shown[knob])))
             self.knobs[knob] = box
             fine_form.addRow(knob.title(), box)
-        self.fine_tune = QCheckBox("Fine-tune this look")
+        self.fine_tune = QCheckBox(FINE_TUNE_LOOK)
         self.fine_tune.setObjectName("prefFineTune")
         self.fine_tune.setChecked(bool(self._look.get("knobs")))
         self.fine_host.setVisible(self.fine_tune.isChecked())
@@ -394,8 +400,14 @@ class PrefsDialog(QDialog):
         appear = QFormLayout()
         appear.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         appear.addRow(_heading("Appearance & layout"))
+        # Where Look and Accent were, when the main view has colours of its own.
+        self.own_colours = QLabel()
+        self.own_colours.setObjectName("prefOwnColours")
+        self.own_colours.setWordWrap(True)
+        appear.addRow(self.own_colours)
         appear.addRow("Look", self.look)
         appear.addRow("Accent", self.accent)
+        self._appear_form = appear
         appear.addRow(self.accent_chips)
         appear.addRow(self.fine_tune)
         appear.addRow(self.fine_host)
@@ -570,6 +582,27 @@ class PrefsDialog(QDialog):
         self.spotify.editingFinished.connect(self.changed.emit)
         for section in self.layout_sections:
             section.changed.connect(self.changed.emit)
+            section.changed.connect(self._show_what_applies)
+        self._show_what_applies()
+
+    def _show_what_applies(self) -> None:
+        """Only the settings that change the chosen views. Look, Accent, Surface, Corners and Blocks
+        stayed on screen for every design while only Today's app read them, so a student changed them
+        in Bento and saw nothing happen. Look and Accent come back when a design matches the look."""
+        main = next(section for section in self.layout_sections if section.slot == "main")
+        todays_app = main.chosen() == "classic"
+        matched = any(section.values().get("colour") == MATCH for section in self.layout_sections)
+        coloured = todays_app or matched
+        self._appear_form.setRowVisible(self.own_colours, not coloured)
+        self.own_colours.setText(
+            f"{LAYOUTS[main.chosen()].label} has its own colours, under Main view."
+            " Set them to Match my look to use Look and Accent."
+        )
+        for field in (self.look, self.accent, self.accent_chips):
+            self._appear_form.setRowVisible(field, coloured)
+        for knob in TODAYS_APP_KNOBS:
+            self._fine_form.setRowVisible(self.knobs[knob], todays_app)
+        self.fine_tune.setText(FINE_TUNE_LOOK if coloured else FINE_TUNE_OTHER)
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         """Sized once the pack's font has arrived. At large text a fixed 190 pixel list cut
