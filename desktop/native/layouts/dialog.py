@@ -47,7 +47,7 @@ class LayoutSection(QGroupBox):
         self.pick.setObjectName(f"layout{slot.title()}")
         self.pick.setAccessibleName(title)
         for spec in layouts_for(role):
-            self.pick.addItem(spec.label, spec.id)
+            self.pick.addItem(f"{spec.purpose} · {spec.label}" if spec.purpose else spec.label, spec.id)
         self.pick.setCurrentIndex(max(self.pick.findData(choice[slot]), 0))
         body.addWidget(self.pick)
         self.summary = QLabel()

@@ -382,9 +382,27 @@ def prefs_layout(choice: dict | None = None) -> PrefsDialog:
     return PrefsDialog(None, {}, {}, {}, choice)
 
 
+def test_every_view_says_what_it_is_for_before_its_style_name(qapp: QApplication) -> None:
+    """"Today's app" turned out to be the plain calendar; nothing in the menu said so. A student picks
+    by what the view does, so that comes first and the style name after it."""
+    dialog = prefs_layout()
+    main = combo(dialog, "layoutMain")
+    assert [main.itemText(index) for index in range(main.count())] == [
+        "Calendar · Today's app",
+        "Agenda · Timeline",
+        "Dashboard · Mission control",
+        "Dashboard · Bento",
+        "Dashboard · Retro desktop",
+        "Agenda · Clay deck",
+    ]
+
+
 def test_the_dialog_shows_style_first_and_fine_tune_on_request(qapp: QApplication) -> None:
     dialog = prefs_layout()
-    assert [combo(dialog, "layoutDay").itemText(index) for index in range(2)] == ["One thing", "Day dial"]
+    assert [combo(dialog, "layoutDay").itemText(index) for index in range(2)] == [
+        "Focus · One thing",
+        "Clock · Day dial",
+    ]
     assert rows(dialog, "Day") == ["layoutDay-colour"]
     dialog.findChild(QCheckBox, "layoutDayMore").setChecked(True)
     assert rows(dialog, "Day") == [
