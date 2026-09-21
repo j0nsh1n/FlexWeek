@@ -1648,6 +1648,13 @@ def _dialog_shows(dialog: QDialog, widget) -> bool:
     return 0 <= top.y() < dialog.height() - 8
 
 
+def _squeeze(qapp: QApplication, dialog: QDialog) -> None:
+    """The audit's desktop gave Settings and the homework editor their minimum height, 154 pixels
+    on 0.14.1, not the height they asked for. Offscreen they open at their size hint, which hid it."""
+    dialog.resize(dialog.width(), 10)
+    qapp.processEvents()
+
+
 @pytest.mark.parametrize("size", [(1024, 768), (1280, 800)])
 @pytest.mark.parametrize("pack", ["light-frost", "dark-frost"])
 def test_settings_and_homework_open_tall_enough_to_read(
@@ -1666,6 +1673,7 @@ def test_settings_and_homework_open_tall_enough_to_read(
     prefs.show()
     for _ in range(30):
         qapp.processEvents()
+    _squeeze(qapp, prefs)
     assert prefs.height() >= 400, (pack, size, prefs.width(), prefs.height())
     look = prefs.findChild(QComboBox, "prefTheme")
     close = prefs.findChild(QDialogButtonBox)
@@ -1677,6 +1685,7 @@ def test_settings_and_homework_open_tall_enough_to_read(
     homework.setStyleSheet(window.styleSheet())
     homework.show()
     qapp.processEvents()
+    _squeeze(qapp, homework)
     assert homework.height() >= 400, (pack, size, homework.width(), homework.height())
     for field in (homework.title, homework.due, homework.estimate):
         assert _dialog_shows(homework, field)
@@ -1688,6 +1697,7 @@ def test_settings_and_homework_open_tall_enough_to_read(
     edited.setStyleSheet(window.styleSheet())
     edited.show()
     qapp.processEvents()
+    _squeeze(qapp, edited)
     assert edited.height() >= 400
     assert _dialog_shows(edited, edited.title)
     assert _dialog_shows(edited, edited.findChild(QDialogButtonBox, "dialogButtons"))
