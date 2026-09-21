@@ -541,7 +541,7 @@ class NativeWindow(QMainWindow):
         updates = QPushButton("Check for updates")
         updates.setObjectName("checkUpdates")
         updates.clicked.connect(lambda: self._check_updates(asked=True))
-        spotify = QPushButton("Spotify")
+        spotify = QPushButton("Open Spotify link")
         spotify.setObjectName("openSpotify")
         spotify.clicked.connect(self._open_spotify)
         more = QPushButton("More")
@@ -551,20 +551,28 @@ class NativeWindow(QMainWindow):
         overflow.hide()
         more_menu = QMenu(more)
         self._more_pairs = []
-        # Four jobs, sixteen ways of doing them, twelve of them competing for the same row. The row
-        # keeps what a student reaches for; everything else sits under the heading for its job.
+        self._spotify_action = None
         self.quick_focus = QPushButton("Quick focus")
         self.quick_focus.setObjectName("quickFocusAction")
         self.quick_focus.clicked.connect(self.session.start_quick_focus)
-        # Adding and saving are here because the bar holds one action now. Adding is mostly done by
-        # dragging on the calendar; saving mostly happens on its own.
         self._groups = (
             ("Adding", (add_homework, add_fixed)),
-            ("Planning", (late, unfinished, routines, self.quick_focus)),
-            ("Editing", (undo, redo, copy_block, paste_block, duplicate, copy_day)),
-            ("Your week", (save, availability, restore, reload_week)),
-            ("Account", (account, settings, spotify, layout_button, sign_out, updates)),
+            ("Planning", (late, unfinished, routines, self.quick_focus, spotify)),
         )
+        self._advanced = (
+            undo,
+            redo,
+            copy_block,
+            paste_block,
+            duplicate,
+            copy_day,
+            save,
+            restore,
+            reload_week,
+        )
+        for leftover in (availability, settings, account, updates):
+            leftover.setParent(overflow)
+            leftover.hide()
         for heading, buttons in self._groups:
             more_menu.addSection(heading)
             for button in buttons:
@@ -573,16 +581,37 @@ class NativeWindow(QMainWindow):
                 action = more_menu.addAction(button.text())
                 action.triggered.connect(button.click)
                 self._more_pairs.append((action, button))
+                if button is spotify:
+                    self._spotify_action = action
+        advanced_menu = more_menu.addMenu("Advanced")
+        for button in self._advanced:
+            if button.parent() is not overflow:
+                button.setParent(overflow)
+            action = advanced_menu.addAction(button.text())
+            action.triggered.connect(button.click)
+            self._more_pairs.append((action, button))
+        if sign_out.parent() is not overflow:
+            sign_out.setParent(overflow)
+        more_menu.addSeparator()
+        logout = more_menu.addAction(sign_out.text())
+        logout.triggered.connect(sign_out.click)
+        self._more_pairs.append((logout, sign_out))
         more_menu.aboutToShow.connect(self._sync_more_menu)
         more.setMenu(more_menu)
+        gear = QPushButton("⚙\uFE0E")
+        gear.setObjectName("settingsGear")
+        gear.setToolTip("Settings")
+        gear.setAccessibleName("Settings")
+        gear.clicked.connect(self._open_settings)
         # The week saves itself now, so Save is not a thing to press; it stays reachable under More
         # and on Ctrl+S for anyone who wants to be sure. Retry appears only when a save has failed.
-        # These go in the top bar: one row, with the one filled button at the end of it.
         self._top_bar.addWidget(solve)
         self._top_bar.addWidget(retry)
         self._top_bar.addWidget(more)
+        self._top_bar.addWidget(gear)
         self.solve_button = solve
         self.more_button = more
+        self.settings_gear = gear
         for hidden in (add_button, add_homework, add_fixed, save, self.quick_focus):
             actions.addWidget(hidden)
         for hidden in (add_button, add_homework, add_fixed, save, self.quick_focus):
@@ -1019,6 +1048,9 @@ class NativeWindow(QMainWindow):
     def _sync_more_menu(self) -> None:
         for action, button in self._more_pairs:
             action.setEnabled(button.isEnabled())
+            action.setText(button.text())
+        if self._spotify_action is not None:
+            self._spotify_action.setVisible(bool(self.session.spotify_url()))
 
     def _on_busy(self, busy: bool) -> None:
         names = (
@@ -1578,6 +1610,9 @@ class NativeWindow(QMainWindow):
             self.session._say("Still loading your settings…")
             return
         dialog = PrefsDialog(self, self.session.preferences, self._look, self.session.reminder_limits)
+        dialog.account_requested.connect(self._open_account)
+        dialog.availability_requested.connect(self._open_availability)
+        dialog.updates_requested.connect(lambda: self._check_updates(asked=True))
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         self._look = dialog.look_choice()
@@ -1826,6 +1861,10 @@ class NativeWindow(QMainWindow):
                 self._duplicate_selected()
                 event.accept()
                 return
+            if key == Qt.Key.Key_S:
+                self.session.save()
+                event.accept()
+                return
         if key == Qt.Key.Key_Delete:
             if self.session.delete_selected():
                 self.session.save()
@@ -1868,7 +1907,14 @@ class NativeWindow(QMainWindow):
         ):
             self.keyPressEvent(event)
             return True
-        if control and key in (Qt.Key.Key_C, Qt.Key.Key_V, Qt.Key.Key_D, Qt.Key.Key_Z, Qt.Key.Key_Y):
+        if control and key in (
+            Qt.Key.Key_C,
+            Qt.Key.Key_V,
+            Qt.Key.Key_D,
+            Qt.Key.Key_Z,
+            Qt.Key.Key_Y,
+            Qt.Key.Key_S,
+        ):
             self.keyPressEvent(event)
             return True
         return super().eventFilter(watched, event)

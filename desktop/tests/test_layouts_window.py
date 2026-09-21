@@ -349,14 +349,23 @@ def test_my_day_opens_whichever_day_screen_was_picked(qapp: QApplication, window
 
 
 def more_actions(window: NativeWindow) -> dict[str, bool]:
-    """The items, without the section headings. addSection makes a separator that carries text."""
+    """The items, without the section headings. addSection makes a separator that carries text.
+    Advanced is a submenu, so its entries are included under their own names."""
     menu = window.more_button.menu()
     menu.aboutToShow.emit()
-    return {
-        action.text(): action.isEnabled()
-        for action in menu.actions()
-        if action.text() and not action.isSeparator()
-    }
+    offered: dict[str, bool] = {}
+    for action in menu.actions():
+        if action.isSeparator() or not action.text() or not action.isVisible():
+            continue
+        submenu = action.menu()
+        if submenu is None:
+            offered[action.text()] = action.isEnabled()
+            continue
+        offered[action.text()] = action.isEnabled()
+        for inner in submenu.actions():
+            if inner.text() and not inner.isSeparator() and inner.isVisible():
+                offered[inner.text()] = inner.isEnabled()
+    return offered
 
 
 def more_sections(window: NativeWindow) -> list[str]:
@@ -389,9 +398,11 @@ def test_plan_and_more_stay_on_the_bar_in_every_layout(
     qapp.processEvents()
     assert window.planner.height() > window.height() * 0.8
     offered = more_actions(window)
-    assert more_sections(window) == ["Adding", "Planning", "Editing", "Your week", "Account"]
+    assert more_sections(window) == ["Adding", "Planning"]
     assert {"Add homework", "Add fixed time"} <= set(offered)
-    assert {"Settings", "Running late", "Routines", "Account", "Reload", "Undo", "Redo"} <= set(offered)
+    assert {"Running late", "Routines", "Reload", "Undo", "Redo", "Advanced", "Log out"} <= set(offered)
+    assert "Settings" not in offered
+    assert "Account" not in offered
     assert (offered["Undo"], offered["Redo"]) == (True, False)
 
 
@@ -400,7 +411,9 @@ def test_a_more_item_does_what_its_button_does(qapp: QApplication, window: Nativ
     window._on_week()
     before = len(window.session.blocks)
     menu = window.more_button.menu()
-    next(action for action in menu.actions() if action.text() == "Undo").trigger()
+    menu.aboutToShow.emit()
+    advanced = next(action.menu() for action in menu.actions() if action.text() == "Advanced")
+    next(action for action in advanced.actions() if action.text() == "Undo").trigger()
     settled(qapp, window)
     assert len(window.session.blocks) != before or window.session.can_redo() is True
 
@@ -726,14 +739,87 @@ def test_the_week_toolbar_keeps_only_what_is_reached_for(qapp: QApplication, win
         "viewMyDay",
         "solveButton",
         "moreButton",
+        "settingsGear",
     ]
 
     menu = window.findChild(QPushButton, "moreButton").menu()
     menu.aboutToShow.emit()
     sections = [action.text() for action in menu.actions() if action.isSeparator() and action.text()]
-    items = {action.text() for action in menu.actions() if action.text() and not action.isSeparator()}
-    assert sections == ["Adding", "Planning", "Editing", "Your week", "Account"]
-    assert {"Undo", "Redo", "Duplicate", "Running late", "Routines", "Account", "Settings"} <= items
+    items = more_actions(window)
+    assert sections == ["Adding", "Planning"]
+    assert {"Undo", "Redo", "Duplicate", "Running late", "Routines", "Advanced", "Log out"} <= set(items)
+    assert "Settings" not in items
+    assert "Account" not in items
+
+
+def test_the_gear_opens_settings(qapp: QApplication, window: NativeWindow) -> None:
+    from PySide6.QtWidgets import QDialog
+
+    gear = window.findChild(QPushButton, "settingsGear")
+    assert gear is not None
+    assert gear.text() == "⚙\uFE0E"
+    assert gear.toolTip() == "Settings"
+    assert gear.accessibleName() == "Settings"
+    opened: list[str] = []
+    original = QDialog.exec
+
+    def measure(dialog: QDialog) -> int:
+        opened.append(dialog.windowTitle())
+        return QDialog.DialogCode.Rejected
+
+    QDialog.exec = measure
+    try:
+        click(window, "settingsGear")
+    finally:
+        QDialog.exec = original
+    assert opened == ["Settings"]
+
+
+def test_more_hides_spotify_until_there_is_a_link(qapp: QApplication, window: NativeWindow) -> None:
+    assert "Open Spotify link" not in more_actions(window)
+    window.session.preferences = {
+        **(window.session.preferences or {}),
+        "default_spotify_url": SPOTIFY_TRACK,
+    }
+    assert "Open Spotify link" in more_actions(window)
+
+
+def test_advanced_shortcuts_still_act(qapp: QApplication, window: NativeWindow) -> None:
+    before = len(window.session.blocks)
+    QTest.keyClick(window.week_table, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
+    settled(qapp, window)
+    assert len(window.session.blocks) != before or window.session.can_redo() is True
+    window.session.select_block("school", 0)
+    QTest.keyClick(window.week_table, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
+    assert (window.session.clipboard or {}).get("kind") == "block"
+    window.session.clipboard = None
+    QTest.keyClick(window.week_table, Qt.Key.Key_V, Qt.KeyboardModifier.ControlModifier)
+    # Ctrl+S is how Save is reached now that it lives under Advanced.
+    window.session.dirty = True
+    QTest.keyClick(window.week_table, Qt.Key.Key_S, Qt.KeyboardModifier.ControlModifier)
+    settled(qapp, window)
+    assert window.session.dirty is False or window.session.busy is True
+
+
+def test_settings_holds_account_availability_and_updates(qapp: QApplication, window: NativeWindow) -> None:
+    from desktop.native.settings import PrefsDialog
+    from desktop.native.version import VERSION
+
+    prefs = window.session.preferences or {}
+    dialog = PrefsDialog(window, prefs, window._look, window.session.reminder_limits)
+    assert dialog.findChild(QPushButton, "prefsAccount") is not None
+    assert dialog.findChild(QPushButton, "prefsAvailability") is not None
+    assert dialog.findChild(QLabel, "prefsVersion").text() == f"FlexWeek {VERSION}"
+    assert dialog.findChild(QPushButton, "prefsCheckUpdates") is not None
+    asked: list[str] = []
+    dialog.account_requested.connect(lambda: asked.append("account"))
+    dialog.availability_requested.connect(lambda: asked.append("availability"))
+    dialog.updates_requested.connect(lambda: asked.append("updates"))
+    dialog.findChild(QPushButton, "prefsAccount").click()
+    dialog.findChild(QPushButton, "prefsAvailability").click()
+    dialog.findChild(QPushButton, "prefsCheckUpdates").click()
+    assert asked == ["account", "availability", "updates"]
+    dialog.close()
 
 
 def test_the_clipboard_line_only_appears_when_it_has_something_to_say(

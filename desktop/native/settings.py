@@ -53,6 +53,7 @@ from desktop.native.remind import ALARM_SNOOZE_MIN
 from desktop.native.reuse import format_duration
 from desktop.native.sound import Bell
 from desktop.native.tones import FALLBACK, RECIPES, SOUNDS
+from desktop.native.version import VERSION
 from desktop.native.widgets import FlowLayout
 
 UPDATE_MIN_WIDTH = 420
@@ -217,6 +218,10 @@ class FocusPanel(QWidget):
 
 
 class PrefsDialog(QDialog):
+    account_requested = Signal()
+    availability_requested = Signal()
+    updates_requested = Signal()
+
     def __init__(self, parent: QWidget | None, preferences: dict, look: dict, reminder_limits: dict) -> None:
         super().__init__(parent)
         self.setWindowTitle("Settings")
@@ -432,6 +437,26 @@ class PrefsDialog(QDialog):
         computer_form.addRow(self.start_at_login)
         computer_form.addRow("Open on", self.preferred_view)
         computer_form.addRow("Default Spotify link", self.spotify)
+        account_row = QHBoxLayout()
+        open_account = QPushButton("Account…")
+        open_account.setObjectName("prefsAccount")
+        open_account.clicked.connect(self.account_requested.emit)
+        open_availability = QPushButton("Availability…")
+        open_availability.setObjectName("prefsAvailability")
+        open_availability.clicked.connect(self.availability_requested.emit)
+        account_row.addWidget(open_account)
+        account_row.addWidget(open_availability)
+        account_row.addStretch(1)
+        computer_form.addRow(account_row)
+        update_col = QVBoxLayout()
+        version = QLabel(f"FlexWeek {VERSION}")
+        version.setObjectName("prefsVersion")
+        check_updates = QPushButton("Check for updates")
+        check_updates.setObjectName("prefsCheckUpdates")
+        check_updates.clicked.connect(self.updates_requested.emit)
+        update_col.addWidget(version)
+        update_col.addWidget(check_updates)
+        computer_form.addRow("Updates", update_col)
         self.nav = QListWidget()
         self.nav.setObjectName("prefsNav")
         self.nav.setFixedWidth(160)

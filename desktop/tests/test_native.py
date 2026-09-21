@@ -967,6 +967,7 @@ def test_native_window_exposes_recovery_and_focus_controls(qapp: QApplication, s
     assert window.findChild(QPushButton, "restoreButton") is not None
     assert window.findChild(QPushButton, "accountButton") is not None
     assert window.findChild(QPushButton, "moreButton") is not None
+    assert window.findChild(QPushButton, "settingsGear") is not None
     copy_day = window.findChild(QPushButton, "copyDay")
     assert copy_day is not None
     assert copy_day.parent().objectName() == "moreOverflow"
