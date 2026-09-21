@@ -31,11 +31,15 @@
   solver reasons and deadline tags reworded with Jev, Running late moves no
   longer say a day was missed, School hours under More > Adding, Settings
   hides Look/Accent/Surface/Corners/Blocks where they change nothing, and
-  Bento's empty Up next says its title once. Still open for the owner: spec.md
-  drift (Running late, Month decision 7, "Update my plan", stored plans), and
-  whether the Month API should stop counting a one-candidate unplaced session
-  as scheduled. The packaged app is not rebuilt. Next: owner review, then a
-  0.14.2 bump and package when asked.
+  Bento's empty Up next says its title once. Close-out (Jonathan: "finish up
+  the work"): Month pins open work only where its plan put it (decision 7
+  updated), spec.md now describes stored plans, Plan vs Replan all, Running
+  late's single save, Day/Month counting and School hours under More. The
+  older GLM findings on overdue homework, "only" mode and finished sessions do
+  not hold against the current code. A Jev copy sweep of the branch's 55 new
+  strings found nothing to change. Not built: staying signed in across
+  restarts (the cookie jar is in memory only). The packaged app is not
+  rebuilt. Next: owner review, then a 0.14.2 bump and package when asked.
 - Date: 2026-09-21 (IA harden). 0.14.1 shipped: Plan my homework and More stay
   in every design; Settings is a gear; Appearance & layout is one Settings
   section; summaries speak minutes; Running late toasts the reason or the

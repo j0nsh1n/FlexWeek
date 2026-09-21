@@ -51,8 +51,10 @@ All notable changes to FlexWeek are documented here. Format follows
 - Settings and the homework editor keep a readable height when the desktop
   gives them less. On 0.14.1 they could be squeezed to 154 px, their minimum,
   which is what the audit saw.
-- Day's summary counts only work with a time as planned. Homework still waiting
-  for one was billed to every day it could go ("9 h 15 min planned").
+- Day's summary counts only work with a time, or already done, as planned.
+  Homework still waiting for a time was billed to every day it could go ("9 h
+  15 min planned"). Month's counts follow the same rule: homework with one
+  possible day but no time is in the unscheduled total, not on that day.
 - The reason homework has no time says what stopped it, such as "Your fixed
   plans and finished work leave no gap long enough for it before it is due.",
   instead of "That time is already taken" or "Kept out of the sleep window".
