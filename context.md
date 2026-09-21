@@ -1,6 +1,12 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-21 (IA harden). Branch `grok/0-14-1-ia` off `origin/main` at
+  c6b487c, local only in `~/.worktrees/flexweek-ui-grok`. Native chrome: Plan
+  my homework and More stay in every layout; Settings is a gear; Appearance &
+  layout is one Settings section; summaries speak minutes; Running late toasts
+  the reason or the locked start; first-week sport name is a placeholder.
+  VERSION stays 0.14.0. Nothing pushed. Next: Claude reviews, then Jonathan.
 - Date: 2026-09-20 (layout surfaces). Branch `feat/layout-surfaces` off
   `origin/main` at 993c003, local only in `~/.worktrees/flexweek-layout-surfaces`.
   Day and Month rebuild for the chosen week layout (classic stays the clock
@@ -462,6 +468,9 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-21, `grok/0-14-1-ia`: 0.14.1 IA harden, seven local commits, worktree
+  `~/.worktrees/flexweek-ui-grok`. Chrome, Settings, minutes, Running late
+  toast, setup placeholder. No push, no spec.md edit. Next: Claude review.
 - 2026-09-20, `feat/layout-surfaces`: Day/Month follow the week layout,
   Settings rail, first-week setup card. Worktree
   `~/.worktrees/flexweek-layout-surfaces`. Nothing pushed. Next: owner

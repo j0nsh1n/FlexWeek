@@ -50,18 +50,17 @@ numbers or underscores; passwords use 12–128 characters. A new account opens a
 short setup for school hours, one sport and the first homework, then runs
 Solve. You can skip it.
 
-To add more, open **Add** and choose **Homework…** or **Fixed time…**, or pick a
-type there and drag on the calendar. A **Fixed time** (school, practice) never
-moves when you plan; **Homework** is placed by Plan my homework in a free time
-before it is due. The type you picked determines which you get. Every change
-saves to your account on its own; planning previews placement without replacing
-what you entered.
+To add more, open **More** and choose **Add homework** or **Add fixed time**, or
+drag on the calendar. A **Fixed time** (school, practice) never moves when you
+plan; **Homework** is placed by Plan my homework in a free time before it is due.
+The type you picked determines which you get. Every change saves to your account
+on its own; planning previews placement without replacing what you entered.
 
-The look starts on System, which follows your device's light or dark setting;
-Settings and Layout offer the rest, and every design can be dark: Today's app
-through its pack, the others through a dark colourway of their own. The
-week saves itself a moment after each change and retries on its own if a save
-fails. A save that conflicts with another window is never written over: saving
+The look starts on System, which follows your device's light or dark setting.
+The gear opens Settings, where look and layout live together, and every design
+can be dark: Today's app through its pack, the others through a dark colourway
+of their own. The week saves itself a moment after each change and retries on
+its own if a save fails. A save that conflicts with another window is never written over: saving
 stops and FlexWeek asks you to reload the saved week. A forgotten password is recovered
 with one of the eight recovery codes shown when the account was made.
 
