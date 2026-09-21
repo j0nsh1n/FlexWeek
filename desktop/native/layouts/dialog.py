@@ -1,20 +1,17 @@
-"""The Layout dialog, built from the registry so a new design or option needs no code here.
+"""Main view and Day screen pickers, built from the registry so a new design needs no code here.
 
-The three levels are the dialog's shape: the pick is a menu, a design's Style options are always in
-view under it, and its Fine-tune options wait behind one checkbox so the first look stays short.
+A design's Style options stay in view under the pick. Fine-tune waits behind one checkbox so the
+first look stays short.
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QDialog,
-    QDialogButtonBox,
     QFormLayout,
     QGroupBox,
-    QHBoxLayout,
     QLabel,
     QPushButton,
     QVBoxLayout,
@@ -22,7 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from desktop.native.layouts.base import empty
-from desktop.native.layouts.registry import LAYOUTS, LEVELS, layouts_for, options_for, sanitize_layout
+from desktop.native.layouts.registry import LAYOUTS, LEVELS, layouts_for, options_for
 
 SLOTS = (
     ("main", "plan", "Main view", "Where you plan your week."),
@@ -34,13 +31,18 @@ class LayoutSection(QGroupBox):
     """One pick and the options of whatever is picked. Each design keeps its own settings while the
     dialog is open, so trying another design and coming back loses nothing."""
 
+    changed = Signal()
+
     def __init__(self, slot: str, role: str, title: str, blurb: str, choice: dict) -> None:
         super().__init__(title)
         self.slot = slot
         self.setObjectName(f"layout{slot.title()}Section")
         self._options = {spec.id: options_for(choice, spec.id) for spec in layouts_for(role)}
         body = QVBoxLayout(self)
-        body.addWidget(QLabel(blurb))
+        # Wrapped, or its one long line sets the width of the whole Settings page.
+        intro = QLabel(blurb)
+        intro.setWordWrap(True)
+        body.addWidget(intro)
         self.pick = QComboBox()
         self.pick.setObjectName(f"layout{slot.title()}")
         self.pick.setAccessibleName(title)
@@ -54,15 +56,18 @@ class LayoutSection(QGroupBox):
         body.addWidget(self.summary)
         self._form_host = QWidget()
         self._form = QFormLayout(self._form_host)
+        # Settings is narrower than the old dialog, so a long option drops its menu under its name
+        # rather than pushing the page wider than the room it has.
+        self._form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         self._form.setContentsMargins(0, 0, 0, 0)
         body.addWidget(self._form_host)
         self.more = QCheckBox("Fine-tune this design")
         self.more.setObjectName(f"layout{slot.title()}More")
         body.addWidget(self.more)
-        self.reset = QPushButton("Back to this design's own settings")
+        self.reset = QPushButton("Reset this layout's options")
         self.reset.setObjectName(f"layout{slot.title()}Reset")
         body.addWidget(self.reset)
-        self.pick.currentIndexChanged.connect(lambda _index: self._rebuild(True))
+        self.pick.currentIndexChanged.connect(lambda _index: (self._rebuild(True), self.changed.emit()))
         self.more.toggled.connect(lambda _on: self._rebuild(False))
         self.reset.clicked.connect(self._reset)
         self._rebuild(True)
@@ -84,6 +89,7 @@ class LayoutSection(QGroupBox):
     def _reset(self) -> None:
         self._options[self.chosen()] = options_for(None, self.chosen())
         self._rebuild(True)
+        self.changed.emit()
 
     def _rebuild(self, fresh: bool) -> None:
         spec = LAYOUTS[self.chosen()]
@@ -110,48 +116,13 @@ class LayoutSection(QGroupBox):
                 box.setObjectName(f"layout{self.slot.title()}-{option.key}")
                 for entry in option.choices:
                     box.addItem(entry.label, entry.value)
+                box.blockSignals(True)
                 box.setCurrentIndex(max(box.findData(values[option.key]), 0))
+                box.blockSignals(False)
                 box.currentIndexChanged.connect(
                     lambda _index, key=option.key, source=box, target=spec.id: self._options[
                         target
                     ].__setitem__(key, str(source.currentData()))
                 )
+                box.currentIndexChanged.connect(lambda _index: self.changed.emit())
                 self._form.addRow(option.label, box)
-
-
-class LayoutDialog(QDialog):
-    def __init__(self, parent: QWidget | None, choice: dict | None) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("Layout")
-        self.setObjectName("layoutDialog")
-        clean = sanitize_layout(choice)
-        body = QVBoxLayout(self)
-        intro = QLabel(
-            "A layout is a whole way of showing your week, where a look is only its colours. "
-            "These choices stay on this device."
-        )
-        intro.setWordWrap(True)
-        body.addWidget(intro)
-        self.sections = [LayoutSection(slot, role, title, blurb, clean) for slot, role, title, blurb in SLOTS]
-        # Side by side: stacked, with both designs fine-tuned, the dialog was 976 pixels tall.
-        columns = QHBoxLayout()
-        for section in self.sections:
-            columns.addWidget(section, 1, Qt.AlignmentFlag.AlignTop)
-        body.addLayout(columns)
-        self.setStyleSheet(
-            "QGroupBox { margin-top: 16px; font-weight: 700; }"
-            "QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }"
-        )
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        body.addWidget(buttons)
-
-    def choice(self) -> dict:
-        picked: dict = {"options": {}}
-        for section in self.sections:
-            picked[section.slot] = section.chosen()
-            picked["options"].update(section.options())
-        return sanitize_layout(picked)

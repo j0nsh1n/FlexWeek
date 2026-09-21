@@ -9,7 +9,7 @@ import os
 
 import pytest
 
-from desktop.native.weekmodel import build_week, clock_label, due_label, length_label
+from desktop.native.weekmodel import build_week, clock_label, due_label, length_label, planned_line
 
 WEEK = "2026-09-14"
 HOMEWORK = {
@@ -119,6 +119,12 @@ def test_without_a_verdict_no_risk_is_claimed() -> None:
 def test_load_counts_homework_minutes_only() -> None:
     week = build_week(WEEK, BLOCKS, HOMEWORK, TRACE)
     assert [week.load_min(day) for day in range(7)] == [45, 0, 0, 150, 0, 0, 0]
+
+
+def test_planned_line_uses_length_label() -> None:
+    assert planned_line(60, 0) == "1 h planned · 0 done"
+    assert planned_line(90, 45) == "1 h 30 min planned · 45 min done"
+    assert planned_line(0, 0) == "Nothing planned yet"
 
 
 def test_the_day_queue_is_what_is_on_now_then_the_rest_in_order() -> None:

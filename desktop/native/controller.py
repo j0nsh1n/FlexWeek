@@ -80,6 +80,7 @@ from desktop.native.reuse import (
     unfinished_items,
     week_label,
 )
+from desktop.native.weekmodel import due_label, length_label
 
 
 def session_days(week_start: str, due: str) -> list[int]:
@@ -118,6 +119,8 @@ class NativeSession(QObject):
     week_changed = Signal()
     busy_changed = Signal(bool)
     status = Signal(str)
+    # Each save's outcome, for words that must wait for it: (stored, what the status line says).
+    save_finished = Signal(bool, str)
     focus_changed = Signal()
     focus_replace_needed = Signal(str, str)
     alerts = Signal(list)
@@ -951,6 +954,7 @@ class NativeSession(QObject):
             if self._preview_attempt:
                 self._attempts.pop(self._preview_attempt, None)
                 self._preview_attempt = None
+            self.save_finished.emit(True, self.message)
             if destination is not None:
                 self.load_week(destination)
                 return
@@ -984,6 +988,7 @@ class NativeSession(QObject):
                 self._attempts.pop(self._preview_attempt, None)
                 self._preview_attempt = None
             self._say("Not saved. " + error.message)
+            self.save_finished.emit(False, self.message)
             self.week_changed.emit()
 
         self.client.request("POST", "/api/changes", deepcopy(self.pending_save), ok, err)
@@ -1671,7 +1676,9 @@ class NativeSession(QObject):
             remaining = int(data.get("remaining_min") or 0)
             if not sessions:
                 if remaining:
-                    self._say(f"{remaining} minutes remain, but they do not fit the 15-minute planning grid.")
+                    self._say(
+                        f"{length_label(remaining)} remains, but it does not fit the 15-minute planning grid."
+                    )
                 else:
                     self._say("All of this homework is already focused or planned.")
                 self.spread_preview = None
@@ -1694,10 +1701,12 @@ class NativeSession(QObject):
                         "invalid": "",
                     }
                 )
-            summary = f"{len(rows)} sessions · {total} minutes ready to add before {item['due']}."
+            # Time, not a count of sessions, and the deadline as a student says it: this read
+            # "3 sessions · 180 minutes ready to add before 2026-09-27T23:59."
+            summary = f"{length_label(total)} ready to add before {due_label(item['due'], self.week_start)}."
             if remaining:
                 summary += (
-                    f" {remaining} minutes cannot fit the 15-minute grid and have not been "
+                    f" {length_label(remaining)} cannot fit the 15-minute grid and has not been "
                     "dropped from the homework total."
                 )
             self.spread_preview = {

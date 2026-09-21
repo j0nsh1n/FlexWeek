@@ -10,6 +10,7 @@ import importlib.util
 import os
 from collections.abc import Iterator
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 
@@ -20,9 +21,11 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication, QWidget
 
     from backend.slots import DAY_START_MIN, SLOT_MIN, duration_to_slots, hhmm_to_slot
+    from desktop.native.look import pack_stylesheet
     from desktop.native.widgets import WeekTable
 
 WEEK = "2026-09-14"
@@ -155,3 +158,41 @@ def test_a_long_block_says_its_name_more_than_once(qapp) -> None:
     assert len(named) >= 3, f"School names itself on rows {named} of {first}..{last}"
     gaps = [b - a for a, b in zip(named, named[1:], strict=False)]
     assert max(gaps) <= 8, f"a gap of {max(gaps)} rows between names"
+
+
+def test_a_repeated_title_does_not_overlap_itself_or_the_first(qapp: QApplication) -> None:
+    out = Path("/tmp/ia141-grok")
+    out.mkdir(parents=True, exist_ok=True)
+    name = "International baccalaureate biology"
+    for size in ("small", "normal", "large"):
+        for minutes in (30, 45, 60, 90, 120):
+            host = QWidget()
+            host.setStyleSheet(pack_stylesheet("light-frost", False, {"knobs": {"text": size}}, "default"))
+            table = WeekTable(host)
+            table.resize(720, 640)
+            host.resize(760, 680)
+            host.show()
+            table.show()
+            qapp.processEvents()
+            table.set_week(WEEK, [block(title=name, duration_min=minutes)], None)
+            qapp.processEvents()
+            first = hhmm_to_slot("08:00")
+            last = first + duration_to_slots(minutes) - 1
+            inks = []
+            for row in range(first, last + 1):
+                item = table.item(row, 0)
+                if item is None or item.text() != name:
+                    continue
+                cell = table.visualItemRect(item)
+                ink = table.fontMetrics().boundingRect(cell, int(Qt.AlignmentFlag.AlignVCenter), name)
+                assert ink.height() <= cell.height(), (
+                    f"{size} {minutes} min: title {ink.height()}px taller than its {cell.height()}px row"
+                )
+                inks.append(ink)
+            for i, a in enumerate(inks):
+                for b in inks[i + 1 :]:
+                    assert not a.intersects(b), f"{size} {minutes} min: titles overlap {a} and {b}"
+            table.scrollToTop()
+            qapp.processEvents()
+            table.grab().save(str(out / f"block-{minutes}m-{size}.png"))
+            host.close()

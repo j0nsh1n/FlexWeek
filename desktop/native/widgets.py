@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
 from datetime import date, datetime, timedelta
 from uuid import uuid4
@@ -17,6 +18,7 @@ from PySide6.QtCore import (
     QSize,
     Qt,
     QTime,
+    QTimer,
     Signal,
 )
 from PySide6.QtGui import QAction, QColor, QIcon, QMouseEvent, QPainter, QPixmap
@@ -123,6 +125,52 @@ def _validation_text(error: Exception) -> str:
     if isinstance(error, ValidationError) and error.errors():
         return str(error.errors()[0].get("msg") or error)
     return str(error)
+
+
+TOAST_MS = 6000
+TOAST_MARGIN = 24
+TOAST_MIN_WIDTH = 280
+
+
+class Toast(QLabel):
+    """A one-line notice under the top bar. The status line still holds the same words.
+
+    `top` says where the bar ends, since that moves with the text size."""
+
+    def __init__(self, parent: QWidget, top: Callable[[], int]) -> None:
+        super().__init__(parent)
+        self._top = top
+        self.setObjectName("toast")
+        self.setWordWrap(True)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.hide()
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.setInterval(TOAST_MS)
+        self._timer.timeout.connect(self.hide)
+
+    def show_message(self, text: str) -> None:
+        self.setText(text)
+        self.setAccessibleName(text)
+        self.setAccessibleDescription(text)
+        self.reposition()
+        self.show()
+        self.raise_()
+        self._timer.start()
+
+    def reposition(self) -> None:
+        host = self.parentWidget()
+        if host is None:
+            return
+        # A wrapped label asks for a narrow width, which broke short notices after their
+        # second-last word. Measured unwrapped, a notice keeps one line until the window runs out.
+        self.setWordWrap(False)
+        natural = self.sizeHint().width()
+        self.setWordWrap(True)
+        width = min(max(natural, TOAST_MIN_WIDTH), max(120, host.width() - 2 * TOAST_MARGIN))
+        self.resize(width, self.heightForWidth(width))
+        self.move(max(TOAST_MARGIN, (host.width() - width) // 2), self._top())
 
 
 class FlowLayout(QLayout):

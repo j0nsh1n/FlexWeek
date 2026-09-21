@@ -56,7 +56,7 @@ def test_the_heading_says_the_day_and_what_is_left_to_place(qapp: QApplication) 
     assert view.findChild(QLabel, "timelineDay").text() == "Thursday"
     assert (
         view.findChild(QLabel, "timelineSub").text()
-        == "September 17 · 2 homework sessions · 1 not placed yet"
+        == "September 17 · 2 h 30 min planned · 0 done"
     )
 
 

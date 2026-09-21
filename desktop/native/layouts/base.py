@@ -107,12 +107,14 @@ def mark_of(category: str) -> str:
 
 
 def work_left(scene: Scene) -> int:
-    """Homework sessions still ahead today. Running late is only offered while there are some."""
+    """Homework minutes still ahead today. Running late is only offered while there are some."""
     if scene.today is None:
         return 0
-    return sum(
-        1 for item in scene.week.on_day(scene.today) if item.work and item.live and item.end > scene.minute
-    )
+    total = 0
+    for item in scene.week.on_day(scene.today):
+        if item.work and item.live and item.end > scene.minute:
+            total += item.end - max(item.start, scene.minute)
+    return total
 
 
 # Mission control wanted 1220 pixels, Clay deck 1148 and Bento 1130. Below this a design gives up a
@@ -240,15 +242,11 @@ def day_buttons(
     return [*made, back]
 
 
-def plan_buttons(view: LayoutView, prefix: str, words: tuple[str, str, str]) -> list[QPushButton]:
-    """What every main view has to offer by itself: add homework, run the plan, go to the day screen."""
-    add = button(words[0], f"{prefix}Add", "main")
+def plan_buttons(view: LayoutView, prefix: str, add_words: str) -> list[QPushButton]:
+    """Add homework. Plan my homework and My day live in the top bar in every layout."""
+    add = button(add_words, f"{prefix}Add", "main")
     add.clicked.connect(lambda _=False: view.add_requested.emit(""))
-    plan = button(words[1], f"{prefix}Plan")
-    plan.clicked.connect(view.plan_requested.emit)
-    my_day = button(words[2], f"{prefix}MyDay")
-    my_day.clicked.connect(view.my_day_requested.emit)
-    return [add, plan, my_day]
+    return [add]
 
 
 def block_button(view: LayoutView, text: str, name: str, block_id: str, kind: str = "row") -> QPushButton:

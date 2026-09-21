@@ -5,6 +5,44 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+- Plan my homework and More stay in the top bar in every design, including My day.
+  Designs no longer hide them behind a Tools button, and they no longer draw their
+  own Plan my week or Go to my day buttons. Add homework stays on the design.
+- Settings opens from a gear at the right of the bar. More holds Adding, Planning,
+  Advanced (undo, copy, save, restore, reload) and Log out. Account, Availability
+  and Check for updates live in Settings. Look, Main view and Day screen share one
+  Appearance & layout page. The separate Layout dialog is gone.
+- Labels that counted homework sessions now say how many minutes are planned and
+  how many of those are done. One thing says how many minutes are left today.
+- Running late puts a notice under the top bar: why it cannot run yet, or the
+  locked start and whether anything moved. The status line still says the same
+  words. "Is now locked" waits until the save has kept it; if that save fails,
+  the notice says so instead.
+- Spreading homework across days says how much time is ready to add and when it
+  is due ("3 h ready to add before Sun 23:59."), not how many sessions.
+- Alarm days sit in two rows, Monday to Thursday and Friday to Sunday.
+- Settings applies each change as you make it. There is no OK or Cancel, only
+  Close, and a line beside it says when a change is saved. Look and layout change
+  the window at once; the rest saves a moment after your last change, and
+  closing saves anything still waiting. Turning on focus splitting rounds the
+  focus lengths to 15 minutes straight away instead of asking when you press OK.
+  A Spotify link that is not a share link is not saved, and Settings says why.
+  Account and Availability keep their own Save.
+
+### Fixed
+- The first-week sport name is an empty field with a placeholder, not the word
+  Soccer sitting in it. Times replace their default when you type. A blank sport
+  name is saved as Sport or club.
+- Every Settings page fits its window at normal and large text. The Appearance &
+  layout page had cut off its dropdown arrows and descriptions, Alerts had cut
+  off its Test button, and at large text the list of pages cut its own names
+  short. Group titles no longer sit on their frame line.
+- A setup time is selected only on the click that enters it, so a second click
+  puts the cursor inside "08:00" instead of selecting it all again.
+- A notice under the top bar stays on one line when it fits and no longer covers
+  the bottom of the Day, Week, Month and My day buttons at large text.
+
 ## [0.14.0] - 2026-09-20
 
 ### Added

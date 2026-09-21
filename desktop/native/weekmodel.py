@@ -38,6 +38,13 @@ def length_label(minutes: int) -> str:
     return f"{hours} h {rest} min" if rest else f"{hours} h"
 
 
+def planned_line(planned_min: int, done_min: int) -> str:
+    if planned_min <= 0:
+        return "Nothing planned yet"
+    done = "0 done" if done_min <= 0 else f"{length_label(done_min)} done"
+    return f"{length_label(planned_min)} planned · {done}"
+
+
 def due_label(due: str | None, week_start: str) -> str:
     """A deadline as a student says it: the weekday inside this week, the date outside it."""
     if not due:

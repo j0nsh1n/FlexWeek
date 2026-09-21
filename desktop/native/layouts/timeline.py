@@ -17,11 +17,10 @@ from desktop.native.layouts.base import (
     label,
     mark_of,
     plan_buttons,
-    plural,
     rules,
     scrolling,
 )
-from desktop.native.weekmodel import Occurrence, clock_label, due_label, length_label
+from desktop.native.weekmodel import Occurrence, clock_label, due_label, length_label, planned_line
 
 
 class TimelineView(LayoutView):
@@ -116,19 +115,17 @@ class TimelineView(LayoutView):
         day = self.shown_day(scene)
         is_today = day == scene.today
         blocks = scene.week.on_day(day)
-        sessions = sum(1 for item in blocks if item.work and item.live)
         date = scene.week.date_of(day)
         self._column.addWidget(label(DAY_FULL[day], "timelineDay"))
         waiting = scene.week.waiting
-        self._column.addWidget(
-            label(
-                f"{date.strftime('%B')} {date.day} · {plural(sessions, 'homework session')}"
-                f" · {len(waiting)} not placed yet",
-                "timelineSub",
-            )
+        work = [item for item in blocks if item.work]
+        load = planned_line(
+            sum(item.minutes for item in work),
+            sum(item.minutes for item in work if item.done),
         )
+        self._column.addWidget(label(f"{date.strftime('%B')} {date.day} · {load}", "timelineSub"))
         actions = QHBoxLayout()
-        for made in plan_buttons(self, "timeline", ("+ Add homework", "Plan my week", "Go to my day")):
+        for made in plan_buttons(self, "timeline", "+ Add homework"):
             actions.addWidget(made)
         actions.addStretch(1)
         self._column.addLayout(actions)

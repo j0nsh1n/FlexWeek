@@ -290,7 +290,7 @@ class ClayDeckView(LayoutView):
             move.clicked.connect(lambda _=False, chosen=target: self._show_day(chosen))
             nav.addWidget(move)
         nav.addSpacing(scene.px(18))
-        for made in plan_buttons(self, "clay", ("Add homework", "Plan my week", "My day")):
+        for made in plan_buttons(self, "clay", "Add homework"):
             nav.addWidget(made)
         nav.addStretch(1)
         holder.addLayout(nav)

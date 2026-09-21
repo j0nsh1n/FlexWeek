@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
-from PySide6.QtCore import QEvent, QObject, QStandardPaths, Qt, QTimer, QUrl
+from PySide6.QtCore import QEvent, QObject, QPoint, QStandardPaths, Qt, QTimer, QUrl
 from PySide6.QtGui import (
     QCloseEvent,
     QDesktopServices,
@@ -55,7 +55,6 @@ from desktop.native.calendar import (
 from desktop.native.controller import NativeSession
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
 from desktop.native.layouts.base import LayoutView, Scene
-from desktop.native.layouts.dialog import LayoutDialog
 from desktop.native.layouts.registry import options_for, sanitize_layout, tokens_for
 from desktop.native.layouts.views import VIEW_CLASSES
 from desktop.native.look import (
@@ -69,12 +68,14 @@ from desktop.native.look import (
 from desktop.native.remind import REMINDER_POLL_MS, clock_parts
 from desktop.native.reuse import (
     late_from_start,
+    late_locked_line,
     planner_title,
     restore_point_label,
     running_late_refusal,
     week_label,
 )
 from desktop.native.settings import (
+    SPORT_FALLBACK,
     AccountDialog,
     AlarmRingDialog,
     FocusPanel,
@@ -104,6 +105,7 @@ from desktop.native.widgets import (
     PreviewDialog,
     RoutineDialog,
     SpreadDialog,
+    Toast,
     UnfinishedPanel,
     WeekTable,
     swatch,
@@ -121,6 +123,11 @@ AUTOSAVE_AFTER_MS = 1500
 AUTOSAVE_RETRY_MS = 6000
 AUTOSAVE_TICK_MS = 500
 LAYOUT_TICK_MS = 20_000
+# Space between the top bar and a notice under it.
+TOAST_GAP = 8
+# How long Settings waits after the last change before saving it to the account. Long enough that
+# typing a number or clicking through a menu is one save.
+SETTINGS_SAVE_MS = 600
 
 
 class NativeWindow(QMainWindow):
@@ -167,7 +174,10 @@ class NativeWindow(QMainWindow):
         self.session.week_changed.connect(self._on_week)
         self.session.status.connect(self._on_status)
         self.session.busy_changed.connect(self._on_busy)
+        self.session.save_finished.connect(self._on_save_finished)
         self._late_dialog: LateDialog | None = None
+        # The late start accepted but not stored yet, and the sentence its save will confirm.
+        self._late_waiting: tuple[str, str] | None = None
         self._pending_spread_ui = False
         self._quitting = False
         self._tray_icon: QSystemTrayIcon | None = None
@@ -443,22 +453,11 @@ class NativeWindow(QMainWindow):
         self.account_name.setObjectName("accountName")
         self.account_name.setVisible(False)
         bar.addWidget(self.account_name)
-        # With a design of its own on screen the planning controls step aside, and this holds them all.
-        self.tools_button = QPushButton("Tools")
-        self.tools_button.setObjectName("toolsButton")
-        self.tools_button.hide()
-        bar.addWidget(self.tools_button)
-        layout_button = QPushButton("Layout")
-        layout_button.setObjectName("layoutButton")
-        layout_button.clicked.connect(self._open_layout)
         sign_out = QPushButton("Log out")
         sign_out.setObjectName("signOut")
         sign_out.clicked.connect(self.session.logout)
-        # Changing the look and signing out are things a student does rarely, so they sit under More
-        # with everything else rare. They stay real buttons so the shortcuts still reach them.
-        for rare in (layout_button, sign_out):
-            rare.setVisible(False)
-            bar.addWidget(rare)
+        sign_out.setVisible(False)
+        bar.addWidget(sign_out)
         self._top_bar = bar
         layout.addLayout(bar)
         # Everything between the bar and the calendar is for planning, so a day screen can put it away.
@@ -545,7 +544,7 @@ class NativeWindow(QMainWindow):
         updates = QPushButton("Check for updates")
         updates.setObjectName("checkUpdates")
         updates.clicked.connect(lambda: self._check_updates(asked=True))
-        spotify = QPushButton("Spotify")
+        spotify = QPushButton("Open Spotify link")
         spotify.setObjectName("openSpotify")
         spotify.clicked.connect(self._open_spotify)
         more = QPushButton("More")
@@ -555,20 +554,28 @@ class NativeWindow(QMainWindow):
         overflow.hide()
         more_menu = QMenu(more)
         self._more_pairs = []
-        # Four jobs, sixteen ways of doing them, twelve of them competing for the same row. The row
-        # keeps what a student reaches for; everything else sits under the heading for its job.
+        self._spotify_action = None
         self.quick_focus = QPushButton("Quick focus")
         self.quick_focus.setObjectName("quickFocusAction")
         self.quick_focus.clicked.connect(self.session.start_quick_focus)
-        # Adding and saving are here because the bar holds one action now. Adding is mostly done by
-        # dragging on the calendar; saving mostly happens on its own.
         self._groups = (
             ("Adding", (add_homework, add_fixed)),
-            ("Planning", (late, unfinished, routines, self.quick_focus)),
-            ("Editing", (undo, redo, copy_block, paste_block, duplicate, copy_day)),
-            ("Your week", (save, availability, restore, reload_week)),
-            ("Account", (account, settings, spotify, layout_button, sign_out, updates)),
+            ("Planning", (late, unfinished, routines, self.quick_focus, spotify)),
         )
+        self._advanced = (
+            undo,
+            redo,
+            copy_block,
+            paste_block,
+            duplicate,
+            copy_day,
+            save,
+            restore,
+            reload_week,
+        )
+        for leftover in (availability, settings, account, updates):
+            leftover.setParent(overflow)
+            leftover.hide()
         for heading, buttons in self._groups:
             more_menu.addSection(heading)
             for button in buttons:
@@ -577,37 +584,43 @@ class NativeWindow(QMainWindow):
                 action = more_menu.addAction(button.text())
                 action.triggered.connect(button.click)
                 self._more_pairs.append((action, button))
+                if button is spotify:
+                    self._spotify_action = action
+        advanced_menu = more_menu.addMenu("Advanced")
+        for button in self._advanced:
+            if button.parent() is not overflow:
+                button.setParent(overflow)
+            action = advanced_menu.addAction(button.text())
+            action.triggered.connect(button.click)
+            self._more_pairs.append((action, button))
+        if sign_out.parent() is not overflow:
+            sign_out.setParent(overflow)
+        more_menu.addSeparator()
+        logout = more_menu.addAction(sign_out.text())
+        logout.triggered.connect(sign_out.click)
+        self._more_pairs.append((logout, sign_out))
         more_menu.aboutToShow.connect(self._sync_more_menu)
         more.setMenu(more_menu)
+        gear = QPushButton("⚙\uFE0E")
+        gear.setObjectName("settingsGear")
+        gear.setToolTip("Settings")
+        gear.setAccessibleName("Settings")
+        gear.clicked.connect(self._open_settings)
         # The week saves itself now, so Save is not a thing to press; it stays reachable under More
         # and on Ctrl+S for anyone who wants to be sure. Retry appears only when a save has failed.
-        # These go in the top bar: one row, with the one filled button at the end of it.
         self._top_bar.addWidget(solve)
         self._top_bar.addWidget(retry)
         self._top_bar.addWidget(more)
+        self._top_bar.addWidget(gear)
         self.solve_button = solve
         self.more_button = more
+        self.settings_gear = gear
         for hidden in (add_button, add_homework, add_fixed, save, self.quick_focus):
             actions.addWidget(hidden)
         for hidden in (add_button, add_homework, add_fixed, save, self.quick_focus):
             hidden.setVisible(False)
         chrome.addLayout(actions)
         self.retry_button = retry
-        tools_menu = QMenu(self.tools_button)
-        self._tool_pairs = []
-        # Plan and Retry only: adding and saving are in the groups below, which Tools shares with
-        # More so the two menus cannot drift apart.
-        tools_menu.addSection("Planning the week")
-        for button in (solve, retry):
-            self._tool_pairs.append((tools_menu.addAction(button.text()), button))
-        for heading, buttons in self._groups:
-            tools_menu.addSection(heading)
-            for button in buttons:
-                self._tool_pairs.append((tools_menu.addAction(button.text()), button))
-        for action, button in self._tool_pairs:
-            action.triggered.connect(button.click)
-        tools_menu.aboutToShow.connect(self._sync_tools_menu)
-        self.tools_button.setMenu(tools_menu)
         self.clipboard_summary = QLabel("Nothing copied")
         self.clipboard_summary.setObjectName("clipboardSummary")
         chrome.addWidget(self.clipboard_summary)
@@ -663,6 +676,14 @@ class NativeWindow(QMainWindow):
         self.week_status.setWordWrap(True)
         layout.addWidget(self.week_status)
         self._stack.addWidget(page)
+        self.toast = Toast(self, self._toast_top)
+
+    def _toast_top(self) -> int:
+        """Just under the top bar, however tall large text makes it."""
+        page = self._top_bar.parentWidget()
+        if page is None:
+            return TOAST_GAP
+        return page.mapTo(self, QPoint(0, self._top_bar.geometry().bottom())).y() + TOAST_GAP
 
     def _planner_widget(self, view: str) -> QWidget:
         """The chosen main view stands in for the week grid, and for Day and Month too.
@@ -753,22 +774,11 @@ class NativeWindow(QMainWindow):
         if isinstance(shown, LayoutView) and self.session.account is not None:
             shown.show_week(self._scene_for(shown.layout_id))
 
-    def _sync_tools_menu(self) -> None:
-        for action, button in self._tool_pairs:
-            action.setText(button.text())
-            action.setEnabled(button.isEnabled())
-
     def _sync_chrome(self) -> None:
-        """A design of its own gets the window. Under the week grid's toolbar, chips and task picker
-        Bento was a 300 pixel letterbox, so the planning controls step aside into the Tools menu.
-        The focus timer stays while it is running, or Start focus would look as if it did nothing."""
+        """Planning chips and the clipboard line step aside for a design of its own. Plan my
+        homework and More stay in the top bar in every layout, every view, and My day."""
         own = isinstance(self.planner.currentWidget(), LayoutView)
         self.plan_chrome.setVisible(not own)
-        # The planning controls live in the top bar now, so that is what steps aside for a design of
-        # its own; plan_chrome below it holds the clipboard line and the unfinished panel.
-        self.solve_button.setVisible(not own)
-        self.more_button.setVisible(not own)
-        self.tools_button.setVisible(own and not self._day_mode)
         self.focus_panel.setVisible(not own or self.session.focus is not None)
         if own:
             # Picking what to focus on is planning. Left in, the picker took the height and the day
@@ -803,14 +813,6 @@ class NativeWindow(QMainWindow):
 
     def _leave_day(self) -> None:
         self._day_mode = False
-        self._on_week()
-
-    def _open_layout(self) -> None:
-        dialog = LayoutDialog(self, self._layout)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._layout = dialog.choice()
-        self._save_look()
         self._on_week()
 
     def _on_account(self, account: object) -> None:
@@ -854,6 +856,8 @@ class NativeWindow(QMainWindow):
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)
         self._place_setup()
+        if self.toast.isVisible():
+            self.toast.reposition()
 
     def _dismiss_setup(self) -> None:
         self._setup_dismissed = True
@@ -892,7 +896,7 @@ class NativeWindow(QMainWindow):
             self.session.add_block(
                 {
                     "id": "sport",
-                    "title": title or "Soccer",
+                    "title": title or SPORT_FALLBACK,
                     "kind": "locked",
                     "category": "exercise",
                     "start": minutes_to_hhmm(begin),
@@ -1049,6 +1053,9 @@ class NativeWindow(QMainWindow):
     def _sync_more_menu(self) -> None:
         for action, button in self._more_pairs:
             action.setEnabled(button.isEnabled())
+            action.setText(button.text())
+        if self._spotify_action is not None:
+            self._spotify_action.setVisible(bool(self.session.spotify_url()))
 
     def _on_busy(self, busy: bool) -> None:
         names = (
@@ -1408,7 +1415,7 @@ class NativeWindow(QMainWindow):
         )
 
     def _open_late(self) -> None:
-        now = datetime.now()
+        now = datetime.fromtimestamp(self.session.now_ms() / 1000)
         refusal = running_late_refusal(
             week_start=self.session.week_start,
             now=now,
@@ -1418,6 +1425,7 @@ class NativeWindow(QMainWindow):
         )
         if refusal:
             self.session._say(refusal)
+            self.toast.show_message(refusal)
             return
         from_start = late_from_start(now.hour * 60 + now.minute)
         dialog = LateDialog(self, f"Starting from {from_start} today ({DAY_FULL[now.weekday()]}).")
@@ -1429,11 +1437,36 @@ class NativeWindow(QMainWindow):
         accepted = dialog.exec() == QDialog.DialogCode.Accepted
         with contextlib.suppress(RuntimeError, TypeError):
             self.session.status.disconnect(dialog.error.setText)
+        preview = self.session.late_preview
         self._late_dialog = None
         if accepted:
-            self.session.accept_running_late()
+            self._commit_late(preview)
         else:
             self.session.late_preview = None
+
+    def _commit_late(self, preview: dict | None) -> None:
+        block = None if preview is None else preview.get("block")
+        moved = len(((preview or {}).get("trace") or {}).get("moves") or [])
+        if not self.session.accept_running_late() or not isinstance(block, dict):
+            return
+        self.session.select_block(block["id"], (block.get("days") or [0])[0])
+        # "Is now locked" waits for the save that stores it. Said at once, it stood on screen for six
+        # seconds even when that save failed and the late start was never kept.
+        self._late_waiting = (block["id"], late_locked_line(block, moved))
+
+    def _on_save_finished(self, stored: bool, said: str) -> None:
+        if self._late_waiting is None:
+            return
+        block_id, message = self._late_waiting
+        if not stored:
+            self._late_waiting = None
+            self.toast.show_message(said)
+        elif any(item["id"] == block_id for item in self.session.blocks):
+            # A save already in flight when Running late was accepted finishes without the late start;
+            # the wait is for the one that carries it.
+            self._late_waiting = None
+            self.session._say(message)
+            self.toast.show_message(message)
 
     def _open_spread(self, assignment_id: str) -> None:
         item = self.session.assignments.get(assignment_id)
@@ -1604,19 +1637,61 @@ class NativeWindow(QMainWindow):
         QDesktopServices.openUrl(QUrl(url))
 
     def _open_settings(self) -> None:
+        """Every change shows the moment it is made; there is no OK. The look and layout live on this
+        device and are written at once. The account's choices are saved a moment after the last
+        change, so typing "45" saves once rather than twice, and closing saves whatever is left."""
         if self.session.preferences is None:
             self.session._say("Still loading your settings…")
             return
-        dialog = PrefsDialog(self, self.session.preferences, self._look, self.session.reminder_limits)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._look = dialog.look_choice()
-        self.session.look = self._look
-        self._save_look()
-        updates = dialog.updates()
-        self._apply_start_at_login(bool(updates.get("start_at_login")))
-        self.session.save_preferences(updates)
-        self._apply_appearance()
+        dialog = PrefsDialog(
+            self, self.session.preferences, self._look, self.session.reminder_limits, self._layout
+        )
+        dialog.account_requested.connect(self._open_account)
+        dialog.availability_requested.connect(self._open_availability)
+        dialog.updates_requested.connect(lambda: self._check_updates(asked=True))
+        stored = dialog.updates()
+        login = bool(stored["start_at_login"])
+
+        def save() -> None:
+            nonlocal stored
+            wanted = dialog.updates()
+            if wanted != stored and self.session.save_preferences(wanted):
+                stored = wanted
+
+        def apply() -> None:
+            nonlocal login
+            look, layout = dialog.look_choice(), dialog.layout_choice()
+            if look != self._look or layout != self._layout:
+                self._look = look
+                self.session.look = look
+                self._layout = layout
+                self._save_look()
+                self._on_week()
+            wanted = dialog.updates()
+            if self.session.preferences is not None:
+                # Pack and accent belong to the account but are seen like the look: at once. The save
+                # that follows stores them.
+                shown = {key: wanted[key] for key in ("theme_pack", "accent", "accent_chips")}
+                self.session.preferences = {**self.session.preferences, **shown}
+            if bool(wanted["start_at_login"]) != login:
+                login = bool(wanted["start_at_login"])
+                self._apply_start_at_login(login)
+            self._apply_appearance()
+            saver.start()
+
+        saver = QTimer(dialog)
+        saver.setSingleShot(True)
+        saver.setInterval(SETTINGS_SAVE_MS)
+        saver.timeout.connect(save)
+        dialog.changed.connect(apply)
+        self.session.status.connect(dialog.save_state.setText)
+        try:
+            dialog.exec()
+        finally:
+            with contextlib.suppress(RuntimeError, TypeError):
+                self.session.status.disconnect(dialog.save_state.setText)
+        saver.stop()
+        save()
 
     def _apply_start_at_login(self, wanted: bool) -> None:
         """The setting used to be stored on the account and obeyed by nothing. It is applied to this
@@ -1856,6 +1931,10 @@ class NativeWindow(QMainWindow):
                 self._duplicate_selected()
                 event.accept()
                 return
+            if key == Qt.Key.Key_S:
+                self.session.save()
+                event.accept()
+                return
         if key == Qt.Key.Key_Delete:
             if self.session.delete_selected():
                 self.session.save()
@@ -1898,7 +1977,14 @@ class NativeWindow(QMainWindow):
         ):
             self.keyPressEvent(event)
             return True
-        if control and key in (Qt.Key.Key_C, Qt.Key.Key_V, Qt.Key.Key_D, Qt.Key.Key_Z, Qt.Key.Key_Y):
+        if control and key in (
+            Qt.Key.Key_C,
+            Qt.Key.Key_V,
+            Qt.Key.Key_D,
+            Qt.Key.Key_Z,
+            Qt.Key.Key_Y,
+            Qt.Key.Key_S,
+        ):
             self.keyPressEvent(event)
             return True
         return super().eventFilter(watched, event)

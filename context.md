@@ -1,6 +1,22 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-21 (IA harden). Branch `grok/0-14-1-ia` off `origin/main` at
+  c6b487c, local only in `~/.worktrees/flexweek-ui-grok`. Native chrome: Plan
+  my homework and More stay in every layout; Settings is a gear; Appearance &
+  layout is one Settings section; summaries speak minutes; Running late toasts
+  the reason or the locked start; first-week sport name is a placeholder.
+  VERSION stays 0.14.0. Nothing pushed. Next: Claude reviews, then Jonathan.
+- Date: 2026-09-21 (IA harden review fixes). Branch `claude/0-14-1-ia-fixes`
+  on top of `grok/0-14-1-ia` (7cd7288), local only in
+  `~/.worktrees/flexweek-ui-claude`. Fixes Claude's review of Grok's branch:
+  every Settings page fits (measured page by page at normal and large text;
+  the dialog stays within 700 px at normal), a setup time is selected only on
+  the entering click, the notice is one line under the bar, and Running late
+  confirms only after its save. A TypeSafe (Jev) sweep of student-facing strings
+  found one more session count (the spread preview), now in time. spec.md
+  drift: none new; spec.md never described the top bar, More, Settings or
+  layouts (noted in the stage 8 contract). Nothing pushed.
 - Date: 2026-09-20 (layout surfaces). Branch `feat/layout-surfaces` off
   `origin/main` at 993c003, local only in `~/.worktrees/flexweek-layout-surfaces`.
   Day and Month rebuild for the chosen week layout (classic stays the clock
@@ -462,6 +478,16 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-21, `claude/0-14-1-ia-fixes` on `grok/0-14-1-ia`: review fixes for
+  0.14.1, the spread-preview wording, and Settings that apply as they change
+  (Jonathan's addition to 0.14.1: no OK/Cancel, account prefs saved 600 ms
+  after the last change and on Close), worktree
+  `~/.worktrees/flexweek-ui-claude`. No push, no spec.md edit, VERSION still
+  0.14.0. Next: Jonathan decides on push/PR for both branches together, then
+  the 0.14.1 version bump and release when asked.
+- 2026-09-21, `grok/0-14-1-ia`: 0.14.1 IA harden, seven local commits, worktree
+  `~/.worktrees/flexweek-ui-grok`. Chrome, Settings, minutes, Running late
+  toast, setup placeholder. No push, no spec.md edit. Next: Claude review.
 - 2026-09-20, `feat/layout-surfaces`: Day/Month follow the week layout,
   Settings rail, first-week setup card. Worktree
   `~/.worktrees/flexweek-layout-surfaces`. Nothing pushed. Next: owner

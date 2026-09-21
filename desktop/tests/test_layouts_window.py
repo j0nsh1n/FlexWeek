@@ -1,6 +1,6 @@
 """Layouts in the real window, against a real local backend: My day puts planning away and brings it
 back, a day screen's buttons reach the behaviour the product already has, the choice survives a
-restart, and the Layout dialog shows its three levels.
+restart, and Settings holds Main view and Day screen with their three levels.
 """
 
 from __future__ import annotations
@@ -25,13 +25,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QStandardPaths, Qt
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QLabel, QPushButton
+    from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialog, QLabel, QPushButton
 
     from desktop.native.calendar import sunday_due
-    from desktop.native.layouts.dialog import LayoutDialog
     from desktop.native.layouts.one_thing import OneThingView
     from desktop.native.layouts.registry import LAYOUTS, sanitize_layout
     from desktop.native.layouts.views import VIEW_CLASSES
+    from desktop.native.settings import PrefsDialog
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
 
@@ -132,7 +132,7 @@ def test_my_day_puts_planning_away_and_back_brings_it_back(qapp: QApplication, w
     assert window.planner.currentWidget() is window.week_table
     click(window, "viewMyDay")
     assert isinstance(window.planner.currentWidget(), OneThingView)
-    assert window.solve_button.isVisible() is False
+    assert window.solve_button.isVisible() is True
     assert window.findChild(QPushButton, "viewMyDay").isChecked() is True
     assert window.findChild(QPushButton, "viewWeek").isChecked() is False
     click(window, "oneBack")
@@ -171,7 +171,7 @@ def test_start_focus_keeps_the_timer_in_view_on_a_day_screen(
     wait_until(qapp, lambda: window.session.focus is not None)
     assert window.session.focus["title"] == "History essay"
     assert window.focus_panel.isVisible() is True
-    assert window.solve_button.isVisible() is False
+    assert window.solve_button.isVisible() is True
 
 
 def test_running_late_opens_the_products_own_running_late(
@@ -182,6 +182,92 @@ def test_running_late_opens_the_products_own_running_late(
     click(window, "viewMyDay")
     click(window, "oneLate")
     assert opened == ["late"]
+
+
+def test_a_blocked_running_late_toasts_why(qapp: QApplication, window: NativeWindow) -> None:
+    from desktop.native.widgets import TOAST_MS
+
+    window.session.dirty = True
+    window._open_late()
+    saving = "Your last change is still saving. Try again in a moment."
+    assert window.toast.isVisible() is True
+    assert window.toast.text() == saving
+    assert window.week_status.text() == saving
+    assert window.toast._timer.interval() == TOAST_MS
+
+    window.session.dirty = False
+    window.session.conflict = True
+    window._open_late()
+    conflict = "This week was changed somewhere else. Reload it first."
+    assert window.toast.text() == conflict
+    assert window.week_status.text() == conflict
+
+
+def test_the_notice_sits_under_the_bar_on_one_line(qapp: QApplication, window: NativeWindow) -> None:
+    """A notice short enough for one line stays on one line, and it never covers the bar. Sized from
+    a wrapped label it broke after "locked. 2", and pinned 52 pixels down it covered the bottom of
+    Day, Week, Month and My day once large text made the bar taller."""
+    said = "Running late: 16:30–17:00 is now locked. 2 moved."
+    for text in ("normal", "large"):
+        window._look = {**window._look, "knobs": {**(window._look.get("knobs") or {}), "text": text}}
+        window._apply_appearance()
+        settled(qapp, window)
+        window.toast.show_message("OK")
+        one_line = window.toast.height()
+        window.toast.show_message(said)
+        settled(qapp, window)
+        bar_bottom = max(
+            button.mapTo(window, button.rect().bottomLeft()).y()
+            for button in (window.solve_button, window.more_button, window.settings_gear)
+        )
+        assert (text, window.toast.height()) == (text, one_line)
+        assert window.toast.y() > bar_bottom, text
+
+
+def accept_late(qapp: QApplication, window: NativeWindow) -> tuple[dict, str]:
+    from desktop.native.reuse import late_locked_line
+
+    now = datetime.fromtimestamp(window.session.now_ms() / 1000)
+    window.session.preview_running_late(30, now)
+    wait_until(qapp, lambda: window.session.late_preview is not None and not window.session.busy)
+    preview = window.session.late_preview
+    moved = len((preview.get("trace") or {}).get("moves") or [])
+    window._commit_late(preview)
+    return preview["block"], late_locked_line(preview["block"], moved)
+
+
+def test_accepting_running_late_says_locked_once_it_is_saved(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    block, said = accept_late(qapp, window)
+    assert window.session.selected_block_id == block["id"]
+    # Nothing is said before the save answers: until then the late start is not kept anywhere.
+    assert window.toast.isVisible() is False
+    wait_until(qapp, lambda: window.toast.isVisible())
+    assert window.toast.text() == said
+    assert window.session.dirty is False
+    assert any(item["id"] == block["id"] for item in window.session.blocks)
+
+
+def test_a_save_without_the_late_start_does_not_confirm_it(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """A save already in flight when Running late was accepted stores the week without it."""
+    window._late_waiting = ("b-late-not-stored-yet", "Running late: 19:00–19:30 is now locked.")
+    window.session.save_finished.emit(True, "Saved.")
+    qapp.processEvents()
+    assert window.toast.isVisible() is False
+
+
+def test_a_late_start_that_fails_to_save_says_so_instead(qapp: QApplication, window: NativeWindow) -> None:
+    from desktop.tests.logic_support import fail_once
+
+    fail_once(window.session, "POST", "/api/changes", 409)
+    _block, said = accept_late(qapp, window)
+    wait_until(qapp, lambda: window.toast.isVisible())
+    assert window.toast.text() != said
+    assert window.toast.text().startswith("Not saved.")
+    assert window.session.conflict is True
 
 
 def test_the_keyboard_reaches_my_day_and_back(qapp: QApplication, window: NativeWindow) -> None:
@@ -271,11 +357,11 @@ def test_a_changed_look_repaints_a_design_that_matches_it(qapp: QApplication, wi
     assert after == view.scene.tokens["bg"]
 
 
-def combo(dialog: LayoutDialog, name: str) -> QComboBox:
+def combo(dialog: PrefsDialog, name: str) -> QComboBox:
     return dialog.findChild(QComboBox, name)
 
 
-def rows(dialog: LayoutDialog, slot: str) -> list[str]:
+def rows(dialog: PrefsDialog, slot: str) -> list[str]:
     return sorted(
         box.objectName()
         for box in dialog.findChildren(QComboBox)
@@ -283,8 +369,12 @@ def rows(dialog: LayoutDialog, slot: str) -> list[str]:
     )
 
 
+def prefs_layout(choice: dict | None = None) -> PrefsDialog:
+    return PrefsDialog(None, {}, {}, {}, choice)
+
+
 def test_the_dialog_shows_style_first_and_fine_tune_on_request(qapp: QApplication) -> None:
-    dialog = LayoutDialog(None, None)
+    dialog = prefs_layout()
     assert [combo(dialog, "layoutDay").itemText(index) for index in range(2)] == ["One thing", "Day dial"]
     assert rows(dialog, "Day") == ["layoutDay-colour"]
     dialog.findChild(QCheckBox, "layoutDayMore").setChecked(True)
@@ -299,37 +389,38 @@ def test_the_dialog_shows_style_first_and_fine_tune_on_request(qapp: QApplicatio
 
 
 def test_the_dialog_stores_only_what_the_student_changed(qapp: QApplication) -> None:
-    dialog = LayoutDialog(None, None)
-    assert dialog.choice() == {"main": "classic", "day": "one", "options": {}}
+    dialog = prefs_layout()
+    assert dialog.layout_choice() == {"main": "classic", "day": "one", "options": {}}
     colour = combo(dialog, "layoutDay-colour")
     colour.setCurrentIndex(colour.findData("paper"))
-    assert dialog.choice() == {"main": "classic", "day": "one", "options": {"one": {"colour": "paper"}}}
+    assert dialog.layout_choice()["options"] == {"one": {"colour": "paper"}}
     colour = combo(dialog, "layoutDay-colour")
     colour.setCurrentIndex(colour.findData("black"))
-    assert dialog.choice()["options"] == {}
+    assert dialog.layout_choice()["options"] == {}
 
 
 def test_fine_tuning_already_in_use_is_not_hidden(qapp: QApplication) -> None:
-    dialog = LayoutDialog(None, {"options": {"one": {"daybar": "hide"}}})
+    dialog = prefs_layout({"options": {"one": {"daybar": "hide"}}})
     assert dialog.findChild(QCheckBox, "layoutDayMore").isChecked() is True
     assert combo(dialog, "layoutDay-daybar").currentData() == "hide"
 
 
 def test_trying_another_design_and_coming_back_loses_nothing(qapp: QApplication) -> None:
-    dialog = LayoutDialog(None, {"options": {"one": {"colour": "paper"}}})
+    dialog = prefs_layout({"options": {"one": {"colour": "paper"}}})
     pick = combo(dialog, "layoutDay")
     pick.setCurrentIndex(pick.findData("dial"))
     assert combo(dialog, "layoutDay-colour").currentData() == "midnight"
     pick.setCurrentIndex(pick.findData("one"))
     assert combo(dialog, "layoutDay-colour").currentData() == "paper"
-    assert dialog.choice()["options"] == {"one": {"colour": "paper"}}
+    assert dialog.layout_choice()["options"] == {"one": {"colour": "paper"}}
 
 
 def test_a_design_can_be_put_back_to_its_own_settings(qapp: QApplication) -> None:
-    dialog = LayoutDialog(None, {"options": {"one": {"colour": "paper", "lead": "next"}}})
+    dialog = prefs_layout({"options": {"one": {"colour": "paper", "lead": "next"}}})
     dialog.findChild(QPushButton, "layoutDayReset").click()
-    assert dialog.choice()["options"] == {}
+    assert dialog.layout_choice()["options"] == {}
     assert dialog.findChild(QCheckBox, "layoutDayMore").isChecked() is False
+    assert dialog.findChild(QPushButton, "layoutDayReset").text() == "Reset this layout's options"
 
 
 def test_every_built_view_is_a_design_in_the_registry(qapp: QApplication) -> None:
@@ -348,57 +439,115 @@ def test_my_day_opens_whichever_day_screen_was_picked(qapp: QApplication, window
     assert window.planner.currentWidget() is window.week_table
 
 
-def tool_actions(window: NativeWindow) -> dict[str, bool]:
-    """The items, without the section headings. addSection makes a separator that carries text."""
-    menu = window.tools_button.menu()
+def test_summaries_speak_minutes_not_session_counts(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    import re
+
+    from PySide6.QtWidgets import QListWidget
+
+    sessions = re.compile(r"\b0 sessions?\b")
+
+    def labels() -> list[str]:
+        found = [lab.text() for lab in window.findChildren(QLabel) if lab.text()]
+        for box in window.findChildren(QListWidget):
+            found.extend(box.item(index).text() for index in range(box.count()))
+        return found
+
+    window.focus_panel.set_state(window.session)
+
+    window._layout = {"main": "bento", "day": "one", "options": {}}
+    window._on_week()
+    qapp.processEvents()
+    shown = labels()
+    assert "1 h planned · 0 done" in shown
+    assert not any(sessions.search(text) for text in shown)
+
+    window._layout = {"main": "timeline", "day": "one", "options": {}}
+    window._on_week()
+    qapp.processEvents()
+    shown = labels()
+    assert any("1 h planned · 0 done" in text for text in shown)
+    assert not any(sessions.search(text) for text in shown)
+
+    click(window, "viewMyDay")
+    click(window, "oneFinished")
+    settled(qapp, window)
+    click(window, "viewWeek")
+    window._layout = {"main": "bento", "day": "one", "options": {}}
+    window._on_week()
+    qapp.processEvents()
+    shown = labels()
+    assert any("1 h planned · 1 h done" in text for text in shown)
+    assert not any(sessions.search(text) for text in shown)
+
+
+def more_actions(window: NativeWindow) -> dict[str, bool]:
+    """The items, without the section headings. addSection makes a separator that carries text.
+    Advanced is a submenu, so its entries are included under their own names."""
+    menu = window.more_button.menu()
     menu.aboutToShow.emit()
-    return {
-        action.text(): action.isEnabled()
-        for action in menu.actions()
-        if action.text() and not action.isSeparator()
-    }
+    offered: dict[str, bool] = {}
+    for action in menu.actions():
+        if action.isSeparator() or not action.text() or not action.isVisible():
+            continue
+        submenu = action.menu()
+        if submenu is None:
+            offered[action.text()] = action.isEnabled()
+            continue
+        offered[action.text()] = action.isEnabled()
+        for inner in submenu.actions():
+            if inner.text() and not inner.isSeparator() and inner.isVisible():
+                offered[inner.text()] = inner.isEnabled()
+    return offered
 
 
-def tool_sections(window: NativeWindow) -> list[str]:
-    menu = window.tools_button.menu()
+def more_sections(window: NativeWindow) -> list[str]:
+    menu = window.more_button.menu()
     menu.aboutToShow.emit()
     return [action.text() for action in menu.actions() if action.isSeparator() and action.text()]
 
 
-def test_a_design_of_its_own_gets_the_window_and_tools_holds_the_controls(
+def test_plan_and_more_stay_on_the_bar_in_every_layout(
     qapp: QApplication, window: NativeWindow
 ) -> None:
-    assert window.tools_button.isVisible() is False
+    """A design of its own used to hide Plan my homework and More behind Tools. That rule is gone:
+    the same two buttons stay in the top bar in every layout, every view, and My day."""
+    assert window.findChild(QPushButton, "toolsButton") is None
+    sections = None
+    items = None
+    for main in ("classic", "bento", "timeline"):
+        window._layout = {"main": main, "day": "one", "options": {}}
+        window._on_week()
+        assert window.solve_button.isVisible() is True
+        assert window.more_button.isVisible() is True
+        assert window.more_button.text() == "More"
+        if sections is None:
+            sections, items = more_sections(window), set(more_actions(window))
+        else:
+            assert more_sections(window) == sections
+            assert set(more_actions(window)) == items
     window._layout = {"main": "bento", "day": "one", "options": {}}
     window._on_week()
-    assert type(window.planner.currentWidget()).__name__ == "BentoView"
-    assert window.solve_button.isVisible() is False
-    assert window.tools_button.isVisible() is True
     qapp.processEvents()
     assert window.planner.height() > window.height() * 0.8
-    # Grouped by the job each action does, rather than one flat list of twenty.
-    assert tool_sections(window) == [
-        "Planning the week",
-        "Adding",
-        "Planning",
-        "Editing",
-        "Your week",
-        "Account",
-    ]
-    offered = tool_actions(window)
-    # Plan leads, because it is the one thing the bar keeps when there is a bar.
-    assert list(offered)[0] == "Plan my homework"
+    offered = more_actions(window)
+    assert more_sections(window) == ["Adding", "Planning"]
     assert {"Add homework", "Add fixed time"} <= set(offered)
-    assert {"Settings", "Running late", "Routines", "Account", "Reload", "Undo", "Redo"} <= set(offered)
+    assert {"Running late", "Routines", "Reload", "Undo", "Redo", "Advanced", "Log out"} <= set(offered)
+    assert "Settings" not in offered
+    assert "Account" not in offered
     assert (offered["Undo"], offered["Redo"]) == (True, False)
 
 
-def test_a_tool_does_what_its_button_does(qapp: QApplication, window: NativeWindow) -> None:
+def test_a_more_item_does_what_its_button_does(qapp: QApplication, window: NativeWindow) -> None:
     window._layout = {"main": "bento", "day": "one", "options": {}}
     window._on_week()
     before = len(window.session.blocks)
-    menu = window.tools_button.menu()
-    next(action for action in menu.actions() if action.text() == "Undo").trigger()
+    menu = window.more_button.menu()
+    menu.aboutToShow.emit()
+    advanced = next(action.menu() for action in menu.actions() if action.text() == "Advanced")
+    next(action for action in advanced.actions() if action.text() == "Undo").trigger()
     settled(qapp, window)
     assert len(window.session.blocks) != before or window.session.can_redo() is True
 
@@ -408,17 +557,17 @@ def test_day_and_month_follow_the_week_layout(qapp: QApplication, window: Native
     click(window, "viewDay")
     assert type(window.planner.currentWidget()).__name__ == "BentoView"
     assert window.planner.currentWidget().scene.surface == "day"
-    assert (window.solve_button.isVisible(), window.tools_button.isVisible()) == (False, True)
+    assert (window.solve_button.isVisible(), window.more_button.isVisible()) == (True, True)
     click(window, "viewMonth")
     settled(qapp, window)
     shown = window.planner.currentWidget()
     assert type(shown).__name__ == "BentoView"
     assert shown.scene.surface == "month"
     click(window, "viewWeek")
-    assert (window.solve_button.isVisible(), window.tools_button.isVisible()) == (False, True)
+    assert (window.solve_button.isVisible(), window.more_button.isVisible()) == (True, True)
     click(window, "viewMyDay")
     assert type(window.planner.currentWidget()).__name__ == "OneThingView"
-    assert (window.solve_button.isVisible(), window.tools_button.isVisible()) == (False, False)
+    assert (window.solve_button.isVisible(), window.more_button.isVisible()) == (True, True)
 
 
 def test_todays_app_keeps_the_clock_day_and_chip_month(qapp: QApplication, window: NativeWindow) -> None:
@@ -440,8 +589,8 @@ def test_bentos_buttons_reach_the_products_own_add_and_plan(
     window._layout = {"main": "bento", "day": "one", "options": {}}
     window._on_week()
     click(window, "bentoAdd")
-    click(window, "bentoPlan")
-    click(window, "bentoMyDay")
+    click(window, "solveButton")
+    click(window, "viewMyDay")
     assert asked == ["add", "plan"]
     assert type(window.planner.currentWidget()).__name__ == "OneThingView"
 
@@ -492,17 +641,19 @@ def test_the_dialog_fits_a_laptop_with_every_level_open(qapp: QApplication) -> N
         "day": "dial",
         "options": {"timeline": {"finished": "hide"}, "dial": {"list": "hide"}},
     }
-    dialog = LayoutDialog(None, busiest)
+    dialog = prefs_layout(busiest)
     for name in ("layoutMainMore", "layoutDayMore"):
         assert dialog.findChild(QCheckBox, name).isChecked() is True
     dialog.show()
     qapp.processEvents()
-    assert dialog.sizeHint().height() <= 700
-    assert dialog.sizeHint().width() <= 1300
+    assert dialog.height() <= 768
+    assert dialog.width() <= 1366
+    assert dialog.sizeHint().height() <= 768
+    assert dialog.sizeHint().width() <= 1366
 
 
 def test_a_design_with_nothing_to_change_offers_no_fine_tune_or_reset(qapp: QApplication) -> None:
-    dialog = LayoutDialog(None, None)
+    dialog = prefs_layout()
     dialog.show()
     qapp.processEvents()
 
@@ -518,6 +669,129 @@ def test_a_design_with_nothing_to_change_offers_no_fine_tune_or_reset(qapp: QApp
     assert offered() == (True, True)
     pick.setCurrentIndex(pick.findData("classic"))
     assert offered() == (False, False)
+
+
+def preference_puts(window: NativeWindow) -> list[dict]:
+    """Every preferences save the session sends, with what it sent."""
+    sent: list[dict] = []
+    real = window.session.client.request
+
+    def spy(method, path, payload, on_success, on_error):  # type: ignore[no-untyped-def]
+        if method == "PUT" and path == "/api/preferences":
+            sent.append(dict(payload))
+        return real(method, path, payload, on_success, on_error)
+
+    window.session.client.request = spy  # type: ignore[method-assign]
+    return sent
+
+
+def test_a_settings_change_shows_before_settings_closes(qapp: QApplication, window: NativeWindow) -> None:
+    """No OK: picking Bento changes the window behind the dialog while it is still open, and so does
+    an accent, and closing keeps both."""
+    seen: dict[str, object] = {}
+
+    def choose_while_open(dialog: PrefsDialog) -> int:
+        pick = dialog.findChild(QComboBox, "layoutMain")
+        pick.setCurrentIndex(pick.findData("bento"))
+        seen["view"] = type(window.planner.currentWidget()).__name__
+        dialog.accent.setCurrentIndex(dialog.accent.findData("sea"))
+        seen["accent"] = (window.session.preferences or {}).get("accent")
+        return QDialog.DialogCode.Rejected
+
+    PrefsDialog.exec = choose_while_open
+    try:
+        window._open_settings()
+    finally:
+        del PrefsDialog.exec
+    assert seen == {"view": "BentoView", "accent": "sea"}
+    assert window._layout["main"] == "bento"
+
+
+def test_settings_saves_once_after_a_burst_and_closing_saves_it_at_once(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Typing 2, 25, 45 is one save of 45, sent as the dialog closes rather than lost with it."""
+    sent = preference_puts(window)
+
+    def type_then_close(dialog: PrefsDialog) -> int:
+        for value in (2, 25, 45):
+            dialog.work.setValue(value)
+        return QDialog.DialogCode.Rejected
+
+    PrefsDialog.exec = type_then_close
+    try:
+        window._open_settings()
+    finally:
+        del PrefsDialog.exec
+    assert [payload["timer_work_min"] for payload in sent] == [45]
+    wait_until(qapp, lambda: not window.session.busy)
+    # What the server sent back, not what the dialog showed: the timers are not shown ahead of the save.
+    assert (window.session.preferences or {})["timer_work_min"] == 45
+
+
+def test_a_pause_saves_without_closing_settings(qapp: QApplication, window: NativeWindow) -> None:
+    sent = preference_puts(window)
+
+    def change_then_wait(dialog: PrefsDialog) -> int:
+        dialog.volume.setValue(35)
+        wait_until(qapp, lambda: bool(sent))
+        seen = [payload["alert_volume"] for payload in sent]
+        assert seen == [35], seen
+        return QDialog.DialogCode.Rejected
+
+    PrefsDialog.exec = change_then_wait
+    try:
+        window._open_settings()
+    finally:
+        del PrefsDialog.exec
+    # Nothing changed after that save, so closing sends nothing more.
+    assert [payload["alert_volume"] for payload in sent] == [35]
+
+
+def test_settings_fits_its_width_in_every_layout_and_text_size(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Settings scrolls down, never sideways. When a page was wider than its room the extra was cut
+    off: every dropdown lost its arrow and the layout blurbs stopped mid-word. At large text the
+    list beside it cut "Appearance & layout" short, and a group's title sat on its frame line over
+    its first row. Measured in the real window, because the pack's padding and font are the cause."""
+    choices = [{"main": main, "day": "one"} for main in LAYOUTS if LAYOUTS[main].role == "plan"]
+    choices += [{"main": "classic", "day": day} for day in LAYOUTS if LAYOUTS[day].role == "day"]
+    too_wide, cut_names, covered_titles = [], [], []
+    for text in ("normal", "large"):
+        window._look = {**window._look, "knobs": {**(window._look.get("knobs") or {}), "text": text}}
+        window._apply_appearance()
+        for choice in choices:
+            dialog = PrefsDialog(
+                window, window.session.preferences, window._look, window.session.reminder_limits, choice
+            )
+            dialog.show()
+            for name in ("prefFineTune", "layoutMainMore", "layoutDayMore"):
+                box = dialog.findChild(QCheckBox, name)
+                if box is not None:
+                    box.setChecked(True)
+            settled(qapp, window)
+            # Page by page, as a student opens them: a page that was never shown still has the
+            # default font and reports a width it will not have once it is on screen.
+            for index in range(dialog.stack.count()):
+                dialog.nav.setCurrentRow(index)
+                settled(qapp, window)
+                area = dialog.stack.currentWidget()
+                need, room = area.widget().minimumSizeHint().width(), area.viewport().width()
+                if need > room or area.horizontalScrollBar().isVisible():
+                    too_wide.append((text, choice["main"], choice["day"], index, need, room))
+            dialog.nav.setCurrentRow(0)
+            settled(qapp, window)
+            if dialog.nav.sizeHintForColumn(0) > dialog.nav.viewport().width():
+                cut_names.append((text, choice["main"], choice["day"]))
+            for section in dialog.layout_sections:
+                first = section.findChildren(QLabel)[0]
+                if first.y() < section.fontMetrics().height():
+                    covered_titles.append((text, section.slot, first.y()))
+            dialog.close()
+    assert too_wide == []
+    assert cut_names == []
+    assert covered_titles == []
 
 
 def chrome_colour(window: NativeWindow) -> str:
@@ -724,14 +998,87 @@ def test_the_week_toolbar_keeps_only_what_is_reached_for(qapp: QApplication, win
         "viewMyDay",
         "solveButton",
         "moreButton",
+        "settingsGear",
     ]
 
     menu = window.findChild(QPushButton, "moreButton").menu()
     menu.aboutToShow.emit()
     sections = [action.text() for action in menu.actions() if action.isSeparator() and action.text()]
-    items = {action.text() for action in menu.actions() if action.text() and not action.isSeparator()}
-    assert sections == ["Adding", "Planning", "Editing", "Your week", "Account"]
-    assert {"Undo", "Redo", "Duplicate", "Running late", "Routines", "Account", "Settings"} <= items
+    items = more_actions(window)
+    assert sections == ["Adding", "Planning"]
+    assert {"Undo", "Redo", "Duplicate", "Running late", "Routines", "Advanced", "Log out"} <= set(items)
+    assert "Settings" not in items
+    assert "Account" not in items
+
+
+def test_the_gear_opens_settings(qapp: QApplication, window: NativeWindow) -> None:
+    from PySide6.QtWidgets import QDialog
+
+    gear = window.findChild(QPushButton, "settingsGear")
+    assert gear is not None
+    assert gear.text() == "⚙\uFE0E"
+    assert gear.toolTip() == "Settings"
+    assert gear.accessibleName() == "Settings"
+    opened: list[str] = []
+    original = QDialog.exec
+
+    def measure(dialog: QDialog) -> int:
+        opened.append(dialog.windowTitle())
+        return QDialog.DialogCode.Rejected
+
+    QDialog.exec = measure
+    try:
+        click(window, "settingsGear")
+    finally:
+        QDialog.exec = original
+    assert opened == ["Settings"]
+
+
+def test_more_hides_spotify_until_there_is_a_link(qapp: QApplication, window: NativeWindow) -> None:
+    assert "Open Spotify link" not in more_actions(window)
+    window.session.preferences = {
+        **(window.session.preferences or {}),
+        "default_spotify_url": SPOTIFY_TRACK,
+    }
+    assert "Open Spotify link" in more_actions(window)
+
+
+def test_advanced_shortcuts_still_act(qapp: QApplication, window: NativeWindow) -> None:
+    before = len(window.session.blocks)
+    QTest.keyClick(window.week_table, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
+    settled(qapp, window)
+    assert len(window.session.blocks) != before or window.session.can_redo() is True
+    window.session.select_block("school", 0)
+    QTest.keyClick(window.week_table, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
+    assert (window.session.clipboard or {}).get("kind") == "block"
+    window.session.clipboard = None
+    QTest.keyClick(window.week_table, Qt.Key.Key_V, Qt.KeyboardModifier.ControlModifier)
+    # Ctrl+S is how Save is reached now that it lives under Advanced.
+    window.session.dirty = True
+    QTest.keyClick(window.week_table, Qt.Key.Key_S, Qt.KeyboardModifier.ControlModifier)
+    settled(qapp, window)
+    assert window.session.dirty is False or window.session.busy is True
+
+
+def test_settings_holds_account_availability_and_updates(qapp: QApplication, window: NativeWindow) -> None:
+    from desktop.native.settings import PrefsDialog
+    from desktop.native.version import VERSION
+
+    prefs = window.session.preferences or {}
+    dialog = PrefsDialog(window, prefs, window._look, window.session.reminder_limits)
+    assert dialog.findChild(QPushButton, "prefsAccount") is not None
+    assert dialog.findChild(QPushButton, "prefsAvailability") is not None
+    assert dialog.findChild(QLabel, "prefsVersion").text() == f"FlexWeek {VERSION}"
+    assert dialog.findChild(QPushButton, "prefsCheckUpdates") is not None
+    asked: list[str] = []
+    dialog.account_requested.connect(lambda: asked.append("account"))
+    dialog.availability_requested.connect(lambda: asked.append("availability"))
+    dialog.updates_requested.connect(lambda: asked.append("updates"))
+    dialog.findChild(QPushButton, "prefsAccount").click()
+    dialog.findChild(QPushButton, "prefsAvailability").click()
+    dialog.findChild(QPushButton, "prefsCheckUpdates").click()
+    assert asked == ["account", "availability", "updates"]
+    dialog.close()
 
 
 def test_the_clipboard_line_only_appears_when_it_has_something_to_say(

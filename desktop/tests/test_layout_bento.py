@@ -106,7 +106,10 @@ def test_tonight_offers_focus_on_the_next_homework(qapp: QApplication) -> None:
 
 def test_the_week_total_counts_planned_homework(qapp: QApplication) -> None:
     view = shown(qapp)
-    assert (text(view, "bentoTotalBig"), text(view, "bentoTotalLine")) == ("3 h 15 min", "3 sessions, 1 done")
+    assert (text(view, "bentoTotalBig"), text(view, "bentoTotalLine")) == (
+        "3 h 15 min",
+        "3 h 15 min planned · 45 min done",
+    )
 
 
 def test_picking_a_day_in_the_load_chart_moves_the_strip(qapp: QApplication) -> None:

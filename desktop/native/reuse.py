@@ -406,11 +406,20 @@ def running_late_refusal(
         return "Open this week before using Running late."
     if minute < DAY_START_MIN or minute >= DAY_END_MIN:
         return "Running late is available between 06:00 and 23:00."
-    if dirty or conflict:
-        return "Save or reload this week before previewing a late start."
+    if conflict:
+        return "This week was changed somewhere else. Reload it first."
+    if dirty:
+        return "Your last change is still saving. Try again in a moment."
     if block_count >= MAX_WEEK_BLOCKS:
         return "This week already has 100 blocks. Remove one before recording a late start."
     return None
+
+
+def late_locked_line(block: dict, moved: int) -> str:
+    start = str(block["start"])
+    end = minutes_to_hhmm(hhmm_to_minutes(start) + int(block["duration_min"]))
+    extra = f"{moved} moved." if moved else "Nothing had to move."
+    return f"Running late: {start}–{end} is now locked. {extra}"
 
 
 def late_id(operation_id: str) -> str:

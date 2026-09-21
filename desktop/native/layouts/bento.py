@@ -16,11 +16,10 @@ from desktop.native.layouts.base import (
     empty,
     label,
     mark_of,
-    plural,
     rules,
     scrolling,
 )
-from desktop.native.weekmodel import clock_label, due_label, length_label
+from desktop.native.weekmodel import clock_label, due_label, length_label, planned_line
 
 
 class BentoView(LayoutView):
@@ -199,10 +198,6 @@ class BentoView(LayoutView):
         else:
             inner.addWidget(label("Nothing else today", "bentoHeroTitle", wrap=True))
             inner.addWidget(label("The rest of the day is yours.", "bentoHeroLine"))
-        my_day = button("Go to my day", "bentoMyDay")
-        my_day.clicked.connect(self.my_day_requested.emit)
-        inner.addSpacing(scene.px(8))
-        inner.addWidget(my_day, 0, Qt.AlignmentFlag.AlignLeft)
         return tile
 
     def _deadlines(self, scene: Scene) -> QFrame:
@@ -234,11 +229,12 @@ class BentoView(LayoutView):
             note.setProperty("role", "muted")
             inner.addWidget(note)
         actions = QHBoxLayout()
-        plan = button("Plan it" if len(waiting) == 1 else "Plan my week", "bentoPlan")
-        plan.clicked.connect(self.plan_requested.emit)
+        if waiting:
+            plan = button("Plan it" if len(waiting) == 1 else "Plan them", "bentoPlan")
+            plan.clicked.connect(self.plan_requested.emit)
+            actions.addWidget(plan)
         add = button("+ Add", "bentoAddSmall")
         add.clicked.connect(lambda _=False: self.add_requested.emit(""))
-        actions.addWidget(plan)
         actions.addWidget(add)
         actions.addStretch()
         inner.addLayout(actions)
@@ -274,8 +270,13 @@ class BentoView(LayoutView):
         big = label(length_label(sum(item.minutes for item in work)), "bentoTotalBig")
         big.setProperty("role", "big")
         inner.addWidget(big)
-        done = sum(1 for item in work if item.done)
-        note = label(f"{plural(len(work), 'session')}, {done} done", "bentoTotalLine")
+        note = label(
+            planned_line(
+                sum(item.minutes for item in work),
+                sum(item.minutes for item in work if item.done),
+            ),
+            "bentoTotalLine",
+        )
         note.setProperty("role", "muted")
         inner.addWidget(note)
         inner.addStretch(1)
