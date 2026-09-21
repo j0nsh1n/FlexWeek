@@ -21,6 +21,14 @@ from desktop.native.layouts.base import (
 )
 from desktop.native.weekmodel import clock_label, due_label, length_label, planned_line
 
+# The line under an empty Up next. With none, the card repeated its title: "No homework added" twice.
+HERO_EMPTY_LINES = {
+    "no_homework": "Add homework and FlexWeek will find it a time.",
+    "all_finished": "Nothing else is due this week.",
+    "calendar_only": "The rest of the day is yours.",
+    "needs_time": "",
+}
+
 
 class BentoView(LayoutView):
     layout_id = "bento"
@@ -197,11 +205,12 @@ class BentoView(LayoutView):
                 label(f"{clock_label(first.start)}–{clock_label(first.end)} · {kind}", "bentoHeroLine")
             )
         else:
-            heading, title, line = scene.week.leftover_parts(scene.today)
-            if scene.week.leftover_kind(scene.today) == "needs_time":
+            _heading, title, line = scene.week.leftover_parts(scene.today)
+            kind = scene.week.leftover_kind(scene.today)
+            if kind == "needs_time":
                 kicker.setText("DUE TODAY")
             inner.addWidget(label(title, "bentoHeroTitle", wrap=True))
-            inner.addWidget(label(line or heading, "bentoHeroLine", wrap=True))
+            inner.addWidget(label(line or HERO_EMPTY_LINES[kind], "bentoHeroLine", wrap=True))
         return tile
 
     def _deadlines(self, scene: Scene) -> QFrame:

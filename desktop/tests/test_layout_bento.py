@@ -299,3 +299,24 @@ def test_month_puts_the_week_tiles_away(qapp: QApplication) -> None:
     board = view.findChild(QWidget, "layoutMonthBoard")
     assert board is not None and board.isVisible()
     assert view.findChild(QLabel, "bentoHeroTitle").isVisible() is False
+
+
+@pytest.mark.parametrize(
+    ("blocks", "homework", "title", "line"),
+    [
+        ([], {}, "No homework added", "Add homework and FlexWeek will find it a time."),
+        (
+            [{"id": "school", "title": "School", "kind": "locked", "start": "08:00", "duration_min": 390,
+              "days": [0, 1, 2, 3, 4], "category": "class"}],
+            {},
+            "Nothing else scheduled today",
+            "The rest of the day is yours.",
+        ),
+    ],
+)
+def test_an_empty_up_next_does_not_say_its_title_twice(
+    qapp: QApplication, blocks: list[dict], homework: dict, title: str, line: str
+) -> None:
+    """A new account read "No homework added" as the card's title and again as its line."""
+    view = shown(qapp, "22:30", blocks=blocks, homework=homework, trace={"placed": [], "explanations": []})
+    assert (text(view, "bentoHeroTitle"), text(view, "bentoHeroLine")) == (title, line)
