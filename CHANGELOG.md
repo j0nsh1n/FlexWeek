@@ -5,6 +5,8 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-09-21
+
 ### Fixed
 - The first-week setup card grows with each step so Skip and Next no longer
   cover the sport and homework fields. A new account opens on school hours,

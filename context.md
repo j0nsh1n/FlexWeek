@@ -512,6 +512,11 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-21, `fix/0-14-1-trust`: 0.14.2 release prep (VERSION, CHANGELOG
+  heading, `docs/release-notes-v0.14.2.md`). Published as the latest full
+  release, not a pre-release, so 0.14.x installs are offered it. 0.14.0 and
+  0.14.1 carry the old updater, which hangs when GitHub's API rate-limits the
+  address; the notes tell those students to download by hand if it seems stuck.
 - 2026-09-21, `fix/0-14-1-trust`: Claude's fixes from the second review of
   Grok's run, one commit each: missed-day and Running late saves (apply_plan
   writes only unfinished homework), the week title (FittedLabel with a short
