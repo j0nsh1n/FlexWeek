@@ -157,12 +157,14 @@ def solve_request(
     *,
     everything: bool = False,
     only: set[str] | None = None,
+    on_day: dict[str, int] | None = None,
 ) -> tuple[list[dict], set[str]]:
     """What to send the solver, and which sessions its answer may place.
 
     By default planned homework keeps its time and only homework without one is placed around it.
     `everything` places every unfinished session again, with every day up to its deadline open.
     `only` places just those sessions around everything else, for work whose time stopped working.
+    `on_day` keeps a session to one day, for homework dropped on a day: the planner picks the time.
     """
     payload: list[dict] = []
     targets: set[str] = set()
@@ -179,6 +181,8 @@ def solve_request(
             if planned:
                 session.pop("start")
                 session["days"] = planning_days(block, assignments, week_start)
+            if on_day is not None and block["id"] in on_day:
+                session["days"] = [on_day[block["id"]]]
             payload.append(session)
             targets.add(block["id"])
         elif planned:

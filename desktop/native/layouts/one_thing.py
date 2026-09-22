@@ -1,12 +1,24 @@
 """One thing: a day screen. The whole window is the thing that is on now, or next if nothing is.
 
 It deliberately cannot plan. Its value is that it shows less, so the only way out is back to planning.
+It can move the day's own blocks, though: drag one along the day bar, or drag the thing itself onto
+it, to put it later, as Running late does.
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import QRect, QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QKeyEvent, QPainter, QPaintEvent, QResizeEvent
+from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, Signal
+from PySide6.QtGui import (
+    QColor,
+    QFont,
+    QFontMetrics,
+    QKeyEvent,
+    QMouseEvent,
+    QPainter,
+    QPaintEvent,
+    QPen,
+    QResizeEvent,
+)
 from PySide6.QtWidgets import QHBoxLayout, QProgressBar, QVBoxLayout, QWidget
 
 from desktop.native.calendar import DAY_FULL
@@ -19,22 +31,30 @@ from desktop.native.layouts.base import (
     label,
     rules,
 )
+from desktop.native.layouts.drag import Carried, Mark, Pickup, Spot, Verdict, Zone, liftable, snap
 from desktop.native.weekmodel import Occurrence, clock_label, length_label
 
 DAY_START, DAY_END = 6 * 60, 22 * 60
 
 
 class DayBar(QWidget):
-    """The day as one thin bar: every block a segment, the chosen one in the accent, now as a tick."""
+    """The day as one thin bar: every block a segment, the chosen one in the accent, now as a tick.
+    A segment can be dragged along it to a new time, and a block dropped on it goes at that time."""
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    block_clicked = Signal(str)
+
+    def __init__(self, day: int = 0, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("oneDayBar")
         self.setFixedHeight(22)
+        self._day = day
         self._blocks: tuple[Occurrence, ...] = ()
         self._chosen: Occurrence | None = None
         self._minute: int | None = None
         self._colours = ("#2a2a2a", "#6b6b6b", "#fb923c", "#ffffff")
+        self._ghost_colours = ("#fb923c", "#ef4444")
+        self._drop: Verdict | None = None
+        self._pickup = Pickup(self, self.block_at, self.block_clicked.emit, self.minute_at)
 
     def set_day(
         self,
@@ -45,12 +65,38 @@ class DayBar(QWidget):
     ) -> None:
         self._blocks, self._chosen, self._minute = blocks, chosen, minute
         self._colours = (tokens["line"], tokens["bg_muted"], tokens["accent"], tokens["bg_ink"])
+        self._ghost_colours = (tokens["accent"], tokens["danger"])
         self.setAccessibleName(f"Today from {clock_label(DAY_START)} to {clock_label(DAY_END)}")
         self.update()
 
     def _x(self, minute: int) -> float:
         share = (min(max(minute, DAY_START), DAY_END) - DAY_START) / (DAY_END - DAY_START)
         return share * self.width()
+
+    def minute_at(self, spot: QPointF) -> int:
+        share = min(max(spot.x() / max(self.width(), 1), 0.0), 1.0)
+        return round(DAY_START + share * (DAY_END - DAY_START))
+
+    def block_at(self, spot: QPointF) -> Occurrence | None:
+        return next(
+            (item for item in self._blocks if self._x(item.start) <= spot.x() <= self._x(item.end)), None
+        )
+
+    def set_drop(self, verdict: Verdict | None) -> None:
+        self._drop = verdict
+        self.update()
+
+    def where(self, point: QPoint, thing: Carried) -> tuple[Spot, Mark]:
+        return Spot(self._day, snap(self.minute_at(QPointF(point)) - thing.grab)), Mark(paint=self.set_drop)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        self._pickup.press(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        self._pickup.move(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        self._pickup.release(event)
 
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
         track, other, chosen, tick = (QColor(colour) for colour in self._colours)
@@ -63,6 +109,13 @@ class DayBar(QWidget):
             )
         if self._minute is not None:
             painter.fillRect(QRectF(self._x(self._minute) - 1.5, 0, 3, 22), tick)
+        drop = self._drop
+        if drop is not None and drop.start is not None and drop.end is not None:
+            colour = QColor(self._ghost_colours[0 if drop.ok else 1])
+            left, right = self._x(drop.start), self._x(drop.end)
+            painter.setPen(QPen(colour, 2, Qt.PenStyle.DashLine))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRect(QRectF(left, 2, max(right - left, 4), 18))
         painter.end()
 
 
@@ -134,6 +187,8 @@ class OneThingView(LayoutView):
         self._title.setText((item.title if item else self._empty_title(scene)).upper())
         if item is not None:
             self._title.setAccessibleDescription("Press Enter to open it")
+            # The thing itself can be dragged onto the day bar, to a later time.
+            liftable(self._title, item.block_id)
         self._root.addWidget(self._title)
         self._root.addWidget(label(line.upper(), "oneLine", wrap=True))
         if is_now and item is not None:
@@ -152,8 +207,10 @@ class OneThingView(LayoutView):
         self._root.addLayout(self._actions(scene, item))
         self._root.addStretch(1)
         if scene.options.get("daybar") != "hide" and scene.today is not None:
-            bar = DayBar()
+            bar = DayBar(scene.today)
             bar.set_day(scene.week.on_day(scene.today), item, scene.minute, tokens)
+            bar.block_clicked.connect(self.block_activated.emit)
+            Zone(self, bar, bar.where)
             self._root.addWidget(bar)
         foot = QHBoxLayout()
         then = queue[self._skip + 1 : self._skip + 3]

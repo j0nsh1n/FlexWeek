@@ -11,7 +11,7 @@ from uuid import uuid4
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from backend.models import Assignment, GridWindow, ProtectedWindow, TimeBlock
-from backend.slots import minutes_to_hhmm
+from backend.slots import hhmm_to_minutes, minutes_to_hhmm
 from backend.weeks import current_week_start
 from desktop.native.calendar import (
     DAY_FULL,
@@ -878,6 +878,37 @@ class NativeSession(QObject):
         self._touch("placing " + block["title"], keep={block_id})
         return True
 
+    def place_on_day(self, block_id: str, day: int) -> bool:
+        """Homework that needs a time, dropped on a day rather than a time: the planner finds its best
+        time that day, by the same rules as Plan my homework, and it is pinned there, as a drop is."""
+        block = next((item for item in self.blocks if item["id"] == block_id), None)
+        if block is None or block.get("kind") != "flexible" or block.get("completed") or block.get("start"):
+            return False
+        self.solve(only={block_id}, on_day={block_id: day})
+        return True
+
+    def _pin_placed(self, on_day: dict[str, int]) -> None:
+        self.blocks = [
+            {**block, "pinned": True} if block["id"] in on_day and block.get("start") else block
+            for block in self.blocks
+        ]
+
+    def _day_drop_sentence(self, on_day: dict[str, int], reasons: dict[str, str]) -> str:
+        said = []
+        for block_id, day in on_day.items():
+            block = next((item for item in self.blocks if item["id"] == block_id), None)
+            if block is None:
+                continue
+            if block.get("start"):
+                begin = hhmm_to_minutes(block["start"])
+                end = minutes_to_hhmm(begin + int(block["duration_min"]))
+                said.append(f"{block['title']}: {DAY_FULL[day]} {block['start']}–{end}.")
+                self._history_label = "placing " + block["title"]
+            else:
+                why = reasons.get(block_id) or ""
+                said.append(f"No time on {DAY_FULL[day]} for {block['title']}. {why}".strip())
+        return " ".join(said)
+
     def unpin_assignment(self, assignment_id: str) -> bool:
         """Let FlexWeek move this homework's sessions again."""
         changed = False
@@ -1160,13 +1191,21 @@ class NativeSession(QObject):
         if self.pending_save is not None and not self.conflict:
             self.save()
 
-    def solve(self, *, everything: bool = False, only: set[str] | None = None, join: bool = False) -> None:
+    def solve(
+        self,
+        *,
+        everything: bool = False,
+        only: set[str] | None = None,
+        join: bool = False,
+        on_day: dict[str, int] | None = None,
+    ) -> None:
         """Plan my homework. Homework that already has a time keeps it.
 
-        `everything` is Replan all my homework. `only` finds new times for named work.
+        `everything` is Replan all my homework. `only` finds new times for named work. `on_day` keeps
+        each named session to one day and pins it where the planner puts it.
         """
         payload, targets = solve_request(
-            self.blocks, self.assignments, self.week_start, everything=everything, only=only
+            self.blocks, self.assignments, self.week_start, everything=everything, only=only, on_day=on_day
         )
         if not targets:
             self._say("All your homework already has a time.")
@@ -1180,6 +1219,8 @@ class NativeSession(QObject):
             self.blocks = apply_plan(
                 self.blocks, data, targets=targets, assignments=self.assignments, week_start=self.week_start
             )
+            if on_day:
+                self._pin_placed(on_day)
             sources = {block["id"]: block for block in self.blocks}
             data = {
                 **data,
@@ -1205,12 +1246,15 @@ class NativeSession(QObject):
                     self.needs_time.pop(block_id, None)
                 elif block_id in reasons:
                     self.needs_time[block_id] = reasons[block_id]
-            self._fresh_plan = True
+            # A drop on a day is one placement, not a plan to review.
+            self._fresh_plan = not on_day
             split_note = self._apply_auto_split(data)
             self.dirty = True
             if not split_note:
                 self._history_label = "planning the week"
             placed_note = plan_sentence(placed, waiting) + split_note
+            if on_day:
+                placed_note = self._day_drop_sentence(on_day, reasons) + split_note
             self._say(placed_note)
             self.week_changed.emit()
             self.save(status=placed_note, join=join)

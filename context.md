@@ -529,6 +529,13 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-22, `feat/ui-setup`: dragging in every design (Jonathan's ask before
+  the spec edit). `desktop/native/layouts/drag.py` holds the pick-up, the drop
+  zones and the view-owned outline, line and hint; the window's `_judge_drop`
+  is the one rule, `span_problem` as on the grid. A drop on a day plans waiting
+  homework through `solve(on_day=...)` and pins it; a placed block keeps its
+  time. Views hold re-renders while a drag is on (the minute tick would delete
+  the source). Gate: 1121 tests, pytest 252 s of the 300 s budget.
 - 2026-09-21, `feat/ui-setup`: the UI and setup plan, implemented on
   Jonathan's go with the Appendix E defaults (guided pages starting from a
   style, all three planning styles with Suggest as default, a drop pins, one

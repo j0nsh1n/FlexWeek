@@ -24,6 +24,7 @@ from desktop.native.layouts.base import (
     rules,
     scrolling,
 )
+from desktop.native.layouts.drag import column_zone
 from desktop.native.weekmodel import clock_label, due_label, length_label
 
 WINDOWS = (
@@ -210,6 +211,7 @@ class RetroView(LayoutView):
         grid = QGridLayout(sunken)
         grid.setContentsMargins(4, 4, 4, 4)
         grid.setHorizontalSpacing(scene.px(6))
+        columns = []
         for day, name in enumerate(DAYS):
             today = day == scene.today
             head = label(
@@ -217,13 +219,17 @@ class RetroView(LayoutView):
             )
             head.setProperty("role", "today" if today else "")
             grid.addWidget(head, 0, day)
+            placed = []
             for row, item in enumerate(scene.week.on_day(day), start=1):
                 made = block_button(
                     self, f"{clock_label(item.start)} {item.title}", f"retroBlock{day}-{row}", item.block_id
                 )
                 made.setProperty("state", "" if item.live else "past")
                 grid.addWidget(made, row, day)
+                placed.append((made, item))
+            columns.append((head, day, placed))
         grid.setRowStretch(grid.rowCount(), 1)
+        column_zone(self, sunken, columns)
         pane = scrolling(sunken, "retroWeekPane")
         pane.setWidgetResizable(False)
         pane.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)

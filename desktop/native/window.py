@@ -41,15 +41,19 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from backend.slots import minutes_to_hhmm
+from backend.slots import hhmm_to_minutes, minutes_to_hhmm
 from desktop.native import autostart
 from desktop.native.calendar import (
     CATEGORIES,
     DAY_FULL,
+    DAYS,
     FLEX_CATEGORIES,
+    SERIES_DRAG_MESSAGE,
     agenda_for,
     date_for_day,
+    is_series,
     monday_of,
+    span_problem,
     sunday_due,
 )
 from desktop.native.client import PASSWORD_LENGTH_HINT, USERNAME_ERROR, USERNAME_HINT
@@ -57,6 +61,7 @@ from desktop.native.controller import NativeSession
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
 from desktop.native.kept import KeptSession
 from desktop.native.layouts.base import LayoutView, Scene
+from desktop.native.layouts.drag import Spot, Verdict
 from desktop.native.layouts.registry import options_for, sanitize_layout, tokens_for
 from desktop.native.layouts.views import VIEW_CLASSES
 from desktop.native.look import (
@@ -194,6 +199,8 @@ class NativeWindow(QMainWindow):
         self._setup_checked = False
         self._setup_prefs: dict = {}
         self._setup_week = False
+        # Homework dropped on a day while a save was still under way, planned once it is done.
+        self._day_drop_waiting: tuple[str, int] | None = None
         self._changed_ms = 0
         self._last_try_ms = 0
         self._autosave = QTimer(self)
@@ -817,6 +824,8 @@ class NativeWindow(QMainWindow):
             view.my_day_requested.connect(self._enter_day)
             view.back_requested.connect(self._leave_day)
             view.day_activated.connect(self.session.open_day)
+            view.placement_requested.connect(self._place_from_view)
+            view.judge = self._judge_drop
             self.planner.addWidget(view)
             self._views[layout_id] = view
         view.show_week(self._scene_for(layout_id))
@@ -1298,6 +1307,9 @@ class NativeWindow(QMainWindow):
         on_recovery = self.findChild(QWidget, "recoveryPage") is self._stack.currentWidget()
         if not busy and self.session.account is not None and on_recovery:
             self.recovery_continue.setEnabled(self.recovery_ack.isChecked())
+        if not busy and self._day_drop_waiting is not None:
+            waiting, self._day_drop_waiting = self._day_drop_waiting, None
+            QTimer.singleShot(0, lambda: self.session.place_on_day(*waiting))
         if not busy and (self._setup_prefs or self._setup_week):
             # A moment later, so a plan that finished just now saves its week before setup writes.
             QTimer.singleShot(0, self._flush_setup)
@@ -1615,6 +1627,53 @@ class NativeWindow(QMainWindow):
             return
         day, start = dialog.choice()
         if self.session.place_session(block["id"], day, start):
+            self.session.save()
+
+    def _judge_drop(self, block_id: str, spot: Spot) -> Verdict:
+        """Whether a block can go where it is being dragged in a design, and the words for it: the
+        rule Today's app's grid uses, so a design refuses what the grid refuses, in the same words."""
+        block = next((item for item in self.session.blocks if item["id"] == block_id), None)
+        if block is None:
+            return Verdict(False, "")
+        if is_series(block):
+            return Verdict(False, SERIES_DRAG_MESSAGE.format(title=block["title"], count=len(block["days"])))
+        due = self._due_point(block_id)
+        start = spot.start
+        if start is None and block.get("start"):
+            # Dropped on a day, a block keeps its time there.
+            start = hhmm_to_minutes(block["start"])
+        if start is None:
+            if due is not None and spot.day > due[0]:
+                return Verdict(False, f"{DAY_FULL[spot.day]} is after it is due.")
+            clock = clock_parts(self.session.now_ms())
+            if monday_of(clock["iso"]) == self.session.week_start and spot.day < clock["day"]:
+                return Verdict(False, f"{DAY_FULL[spot.day]} has already gone by.")
+            return Verdict(True, f"Plan it on {DAY_FULL[spot.day]}")
+        end = start + int(block["duration_min"])
+        problem = span_problem(self.session.blocks, block_id, spot.day, start, end, due)
+        if problem is not None:
+            return Verdict(False, problem, start, end)
+        return Verdict(True, f"{DAYS[spot.day]} {minutes_to_hhmm(start)}–{minutes_to_hhmm(end)}", start, end)
+
+    def _place_from_view(self, block_id: str, day: int, start_min: int) -> None:
+        """A block let go over a design: at that time, or with no time given, where the planner puts it
+        that day. Refused, it stays where it was and the status line says why."""
+        verdict = self._judge_drop(block_id, Spot(day, None if start_min < 0 else start_min))
+        if not verdict.ok:
+            if verdict.words:
+                self.session._say(verdict.words)
+            return
+        if verdict.start is None:
+            if self.session.busy:
+                # Planning now would replace the reply to the save still under way.
+                self._day_drop_waiting = (block_id, day)
+                return
+            self.session.place_on_day(block_id, day)
+            return
+        block = next((item for item in self.session.blocks if item["id"] == block_id), None)
+        if block is not None and block.get("start"):
+            self._apply_times(block_id, day, verdict.start, int(verdict.end or verdict.start))
+        elif self.session.place_session(block_id, day, verdict.start):
             self.session.save()
 
     def _place_dropped(self, block_id: str, day: int, start_min: int) -> None:

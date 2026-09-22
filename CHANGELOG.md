@@ -26,6 +26,16 @@ All notable changes to FlexWeek are documented here. Format follows
   onto a day and time, or given one with Choose a time in the homework editor.
   Homework placed by hand is pinned: every plan, Replan all included, leaves
   it where you put it, and Let FlexWeek move it clears the pin.
+- Dragging works in every design, not only Today's app. Anything a design shows
+  as a block can be picked up. Mission control's lanes, the Day dial's face and
+  One thing's day bar take an exact day and time; Timeline, Clay deck, Retro
+  desktop and the day rows of Bento and Mission take a drop between two items,
+  which starts right after the one above; and any day button, day card or
+  column heading takes the day. A block keeps its time on the day it is dropped
+  on, and homework still waiting for a time gets the planner's best time that
+  day. While a block is dragged, the design shows where it would land and says
+  the time, or why not in the same words as the week grid. Anything placed by
+  dragging is pinned.
 - A study window can be kept for one subject. Plans try a session in its own
   subject's window first, then in a window for any subject, then anywhere.
 - One alarm sound, in Settings > Alerts: Chime, Soft, Bright, Low, Glass, or a

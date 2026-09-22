@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QMouseEvent, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QWidget
 
@@ -26,6 +26,17 @@ from desktop.native.layouts.base import (
     plural,
     rules,
     scrolling,
+)
+from desktop.native.layouts.drag import (
+    Carried,
+    Mark,
+    Pickup,
+    Spot,
+    Verdict,
+    Zone,
+    liftable,
+    painted_day_zone,
+    snap,
 )
 from desktop.native.weekmodel import Occurrence, clock_label, length_label, planned_line
 
@@ -47,10 +58,13 @@ class DialFace(QWidget):
         self._span = HOURS["day"]
         self._tokens: dict[str, str] = {}
         self._chosen = False
+        # A block being dragged over this face: where it would go, or, on a small dial, just the day.
+        self._drop: Verdict | None = None
         self.setObjectName(f"dialMini{day}" if mini else "dialFace")
         self.setMinimumSize(64, 64) if mini else self.setMinimumSize(280, 280)
         if mini:
             self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._pickup = None if mini else Pickup(self, self.block_at, self.block_clicked.emit, self.minute_at)
 
     def set_day(
         self,
@@ -80,11 +94,39 @@ class DialFace(QWidget):
         share = (min(max(minute, start), end) - start) / (end - start)
         return -SWEEP / 2 + share * SWEEP
 
+    def turn_at(self, spot: QPointF) -> float:
+        """Degrees clockwise from the top of the face to a point."""
+        centre, _radius, _width = self._geometry()
+        return math.degrees(math.atan2(spot.x() - centre.x(), -(spot.y() - centre.y())))
+
+    def minute_at(self, spot: QPointF) -> int:
+        start, end = self._span
+        turn = min(max(self.turn_at(spot), -SWEEP / 2), SWEEP / 2)
+        return round(start + (turn + SWEEP / 2) / SWEEP * (end - start))
+
+    def set_drop(self, verdict: Verdict | None) -> None:
+        self._drop = verdict
+        self.update()
+
+    def where(self, point: QPoint, thing: Carried) -> tuple[Spot, Mark] | None:
+        """Round the face is round the clock: the angle is the time, on the day this face is."""
+        spot = QPointF(point)
+        if abs(self.turn_at(spot)) > SWEEP / 2:
+            return None
+        return Spot(self.day, snap(self.minute_at(spot) - thing.grab)), Mark(paint=self.set_drop)
+
     def _arc(
-        self, painter: QPainter, radius: float, width: float, first: int, last: int, colour: QColor
+        self,
+        painter: QPainter,
+        radius: float,
+        width: float,
+        first: int,
+        last: int,
+        colour: QColor,
+        style: Qt.PenStyle = Qt.PenStyle.SolidLine,
     ) -> None:
         centre, _, _ = self._geometry()
-        pen = QPen(colour, width)
+        pen = QPen(colour, width, style)
         pen.setCapStyle(Qt.PenCapStyle.FlatCap)
         painter.setPen(pen)
         box = QRectF(centre.x() - radius, centre.y() - radius, radius * 2, radius * 2)
@@ -113,8 +155,21 @@ class DialFace(QWidget):
                 painter.setPen(QPen(QColor(tokens["accent"]), 2))
                 painter.setBrush(Qt.BrushStyle.NoBrush)
                 painter.drawEllipse(centre, radius * 0.55, radius * 0.55)
+            if self._drop is not None:
+                ring = QPen(QColor(tokens["accent" if self._drop.ok else "danger"]), 2, Qt.PenStyle.DashLine)
+                painter.setPen(ring)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawEllipse(centre, radius + width * 1.6, radius + width * 1.6)
             painter.end()
             return
+        drop = self._drop
+        if drop is not None and drop.start is not None and drop.end is not None:
+            # Where the dragged block would go, on the homework ring, dashed as on the week grid.
+            colour = QColor(tokens["accent" if drop.ok else "danger"])
+            # See-through, so it reads as where a block would go rather than a block already there.
+            colour.setAlphaF(0.6)
+            dashed = Qt.PenStyle.DashLine
+            self._arc(painter, radius + width * 0.8, width * 0.7, drop.start, drop.end, colour, dashed)
         painter.setPen(QColor(tokens["bg_muted"]))
         small = QFont(self.font())
         small.setPixelSize(max(round(radius * 0.085), 10))
@@ -176,9 +231,16 @@ class DialFace(QWidget):
         if self.mini:
             self.day_clicked.emit(self.day)
             return
-        found = self.block_at(event.position())
-        if found is not None:
-            self.block_clicked.emit(found.block_id)
+        if self._pickup is not None:
+            self._pickup.press(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if self._pickup is not None:
+            self._pickup.move(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if self._pickup is not None:
+            self._pickup.release(event)
 
 
 class DayDialView(LayoutView):
@@ -282,6 +344,7 @@ class DayDialView(LayoutView):
         face = DialFace(day, False)
         face.set_day(scene.week.on_day(day), scene.minute if is_today else None, span, tokens)
         face.block_clicked.connect(self.block_activated.emit)
+        Zone(self, face, face.where)
         self._root.addWidget(face, 6)
         side = QVBoxLayout()
         side.setSpacing(scene.px(10))
@@ -304,6 +367,7 @@ class DayDialView(LayoutView):
                 row.setProperty("state", "now" if item == current else "past" if past else "")
                 row.setStyleSheet(f"border-left-color: {mark_of(item.category)};")
                 row.clicked.connect(lambda _=False, key=item.block_id: self.block_activated.emit(key))
+                liftable(row, item.block_id)
                 side.addWidget(row)
             if not blocks:
                 if is_today:
@@ -412,6 +476,7 @@ class DayDialView(LayoutView):
             mini.setFixedHeight(scene.px(72))
             mini.set_day(scene.week.on_day(index), None, span, scene.tokens, chosen=index == day)
             mini.day_clicked.connect(self._show_day)
+            painted_day_zone(self, mini, index, mini.set_drop)
             cell.addWidget(mini)
             cell.addWidget(
                 label(f"{name} {scene.week.date_of(index).day}", "dialMiniName"),

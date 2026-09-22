@@ -25,6 +25,7 @@ from desktop.native.layouts.base import (
     rules,
     scrolling,
 )
+from desktop.native.layouts.drag import Verdict, day_zone, list_zone, painted_day_zone
 from desktop.native.weekmodel import Occurrence, clock_label, due_label, length_label
 
 CARD_KEYS = ("card_a", "card_b", "card_c", "card_d")
@@ -48,6 +49,7 @@ class SideCard(QWidget):
         self._lines: list[str] = []
         self._tokens: dict[str, str] = {}
         self._tilt = 0.0
+        self._drop: Verdict | None = None
 
     def set_day(
         self, title: str, blocks: tuple[Occurrence, ...], tokens: dict[str, str], tilted: bool
@@ -61,6 +63,11 @@ class SideCard(QWidget):
     @property
     def tilt(self) -> float:
         return self._tilt
+
+    def set_drop(self, verdict: Verdict | None) -> None:
+        """A block being dragged over this day: its outline, drawn on the card, which leans."""
+        self._drop = verdict
+        self.update()
 
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
         if not self._tokens:
@@ -81,6 +88,11 @@ class SideCard(QWidget):
         painter.setPen(QPen(QColor(tokens["surface"]), 4))
         painter.setBrush(QColor(card_colour(tokens, self.day)))
         painter.drawRoundedRect(body, 22, 22)
+        if self._drop is not None:
+            ring = QPen(QColor(tokens["accent" if self._drop.ok else "danger"]), 3, Qt.PenStyle.DashLine)
+            painter.setPen(ring)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(body.adjusted(-5, -5, 5, 5), 26, 26)
         painter.setPen(QColor(tokens["text"]))
         heading = QFont(self.font())
         heading.setPixelSize(max(round(17 * scale), 11))
@@ -229,6 +241,7 @@ class ClayDeckView(LayoutView):
             )
             side.setMinimumSize(scene.px(170), scene.px(240))
             side.day_clicked.connect(self._show_day)
+            painted_day_zone(self, side, target, side.set_drop)
             deck.addWidget(side, 4 if abs(offset) == 1 else 3)
         deck.addStretch(1)
         self._root.addLayout(deck, 1)
@@ -242,7 +255,9 @@ class ClayDeckView(LayoutView):
         inner.setContentsMargins(scene.px(16), scene.px(14), scene.px(16), scene.px(14))
         inner.setSpacing(scene.px(8))
         today = " · today" if day == scene.today else ""
-        inner.addWidget(label(f"{DAY_FULL[day]} {scene.week.date_of(day).day}{today}", "clayCentreTitle"))
+        title = label(f"{DAY_FULL[day]} {scene.week.date_of(day).day}{today}", "clayCentreTitle")
+        inner.addWidget(title)
+        placed = []
         for index, item in enumerate(scene.week.on_day(day)):
             words = f"{item.title}\n{clock_label(item.start)} · {length_label(item.minutes)}"
             if item.work and item.live:
@@ -258,6 +273,7 @@ class ClayDeckView(LayoutView):
             pill.setProperty("state", "past" if over or not item.live else "")
             pill.setStyleSheet(f"border-left-color: {mark_of(item.category)}; min-height: {scene.px(46)}px;")
             inner.addWidget(pill)
+            placed.append((pill, item))
         if not scene.week.on_day(day):
             if day == scene.today:
                 heading, title, line = scene.week.leftover_parts(day)
@@ -270,6 +286,8 @@ class ClayDeckView(LayoutView):
             else:
                 inner.addWidget(label("A free day.", "clayCentreEmpty"))
         inner.addStretch(1)
+        # The day's name is the day; under it, a drop goes between two of its blocks.
+        list_zone(self, card, day, placed, top=lambda: title.geometry().bottom(), heading=title)
         return card
 
     def _pager(self, scene: Scene, day: int) -> QVBoxLayout:
@@ -282,6 +300,7 @@ class ClayDeckView(LayoutView):
             pick.setProperty("day_target", target)
             pick.setAccessibleName(f"Show {DAY_FULL[target]}")
             pick.clicked.connect(lambda _=False, chosen=target: self._show_day(chosen))
+            day_zone(self, pick, target)
             days.addWidget(pick)
         days.addStretch(1)
         holder.addLayout(days)

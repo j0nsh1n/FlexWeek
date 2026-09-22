@@ -19,6 +19,7 @@ from desktop.native.layouts.base import (
     rules,
     scrolling,
 )
+from desktop.native.layouts.drag import day_zone, list_zone
 from desktop.native.weekmodel import clock_label, due_label, length_label, planned_line
 
 # The line under an empty Up next. With none, the card repeated its title: "No homework added" twice.
@@ -320,7 +321,11 @@ class BentoView(LayoutView):
         most = max([scene.week.load_min(day) for day in range(7)] + [1])
         shown = self.shown_day(scene)
         for day, name in enumerate(DAYS):
-            column = QVBoxLayout()
+            # The bar and its button together are the day, for a drop as for a click.
+            holder = QFrame()
+            holder.setObjectName(f"bentoLoadDay{day}")
+            column = QVBoxLayout(holder)
+            column.setContentsMargins(0, 0, 0, 0)
             column.addStretch(1)
             bar = QFrame()
             bar.setProperty("role", "bar")
@@ -333,7 +338,8 @@ class BentoView(LayoutView):
             pick.setAccessibleName(f"Show {DAY_FULL[day]}, {scene.week.load_min(day)} minutes of homework")
             pick.clicked.connect(lambda _=False, target=day: self._show_day(target))
             column.addWidget(pick)
-            bars.addLayout(column)
+            day_zone(self, holder, day)
+            bars.addWidget(holder)
         inner.addLayout(bars)
         return tile
 
@@ -360,16 +366,22 @@ class BentoView(LayoutView):
                 pick.setProperty("day_target", target)
                 pick.setAccessibleName(f"Show {DAY_FULL[target]}")
                 pick.clicked.connect(lambda _=False, chosen=target: self._show_day(chosen))
+                day_zone(self, pick, target)
                 picker.addWidget(pick)
             picker.addStretch(1)
             inner.addLayout(picker)
-        row = QHBoxLayout()
+        strip = QFrame()
+        strip.setObjectName("bentoStripRow")
+        row = QHBoxLayout(strip)
+        row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(scene.px(8))
         blocks = scene.week.on_day(day)
+        placed = []
         for index, item in enumerate(blocks):
             chip = block_button(
                 self, f"{clock_label(item.start)}\n{item.title}", f"bentoChip{index}", item.block_id, "chip"
             )
+            placed.append((chip, item))
             over = (
                 item.end <= scene.minute
                 if day == scene.today
@@ -381,5 +393,6 @@ class BentoView(LayoutView):
         if not blocks:
             row.addWidget(label("A free day.", "bentoStripEmpty"))
         row.addStretch(1)
-        inner.addLayout(row)
+        list_zone(self, strip, day, placed, vertical=False)
+        inner.addWidget(strip)
         return tile
