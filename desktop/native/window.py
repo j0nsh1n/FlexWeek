@@ -164,6 +164,8 @@ class NativeWindow(QMainWindow):
         # The Animations level, set from the look in _apply_appearance, and the picture of the planner
         # held while the student moves to another week.
         self._motion = "normal"
+        # What the window was last dressed in, so a change that leaves the look alone skips restyling.
+        self._dressed: tuple = ()
         self._travel_picture: QLabel | None = None
         self._travel_direction = 0
         self._stack.setObjectName("nativeStack")
@@ -2222,15 +2224,22 @@ class NativeWindow(QMainWindow):
         palette = resolved_palette(pack, system_dark, self._look, accent)
         design = self._chrome_palette(palette)
         art = control_art(design)
-        self.setStyleSheet(pack_stylesheet(pack, system_dark, self._look, accent, design, art))
+        sheet = pack_stylesheet(pack, system_dark, self._look, accent, design, art)
+        chips = bool((self.session.preferences or {}).get("accent_chips"))
         self._motion = motion_level((self.session.preferences or {}).get("motion"), pack_motion(pack))
-        apply_ui_effects(self._motion)
-        self.toast.motion = self._motion
-        # Day, Month and the week grid are dressed by the same design as the main view, so moving
-        # between them is moving around one app rather than between two.
-        self.week_table.set_look(self._look, design)
-        self.month_grid.set_palette(design)
-        self.add_menu.set_palette(design, bool((self.session.preferences or {}).get("accent_chips")))
+        dressed = (sheet, repr(self._look), repr(design), chips, self._motion)
+        # Every change to the week comes through here. Restyling the whole window each time, when the
+        # look had not changed, cost about 26 ms a change and repainted everything on screen.
+        if dressed != self._dressed:
+            self._dressed = dressed
+            self.setStyleSheet(sheet)
+            apply_ui_effects(self._motion)
+            self.toast.motion = self._motion
+            # Day, Month and the week grid are dressed by the same design as the main view, so moving
+            # between them is moving around one app rather than between two.
+            self.week_table.set_look(self._look, design)
+            self.month_grid.set_palette(design)
+            self.add_menu.set_palette(design, chips)
         self._sync_add_button()
         self._refresh_layout()
 

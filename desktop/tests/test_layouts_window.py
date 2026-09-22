@@ -2328,3 +2328,17 @@ def test_a_study_window_can_be_kept_for_one_subject(qapp: QApplication) -> None:
     assert len(dialog.study_windows()) == 1
     assert "ends after it starts" in dialog.error.text()
 
+
+def test_a_change_to_the_week_does_not_restyle_the_window_when_the_look_is_the_same(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every change to the week re-dressed the whole window, about 26 ms a time, for nothing."""
+    dressed: list[str] = []
+    original = window.setStyleSheet
+    monkeypatch.setattr(window, "setStyleSheet", lambda sheet: (dressed.append(sheet), original(sheet)))
+    window._on_week()
+    window._on_week()
+    assert dressed == []
+    window.session.preferences = {**window.session.preferences, "theme_pack": "dark-frost"}
+    window._on_week()
+    assert len(dressed) == 1, "a new look is still put on at once"

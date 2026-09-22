@@ -48,6 +48,8 @@ All notable changes to FlexWeek are documented here. Format follows
   animation: the new page is live at once.
 - The More menu shows its Adding and Planning headings. Due dates read
   "Sun 27 Sep 2026, 23:59" instead of "2026-09-27 23:59".
+- A change to the week no longer restyles the whole window when the look is
+  the same, which cost about 26 ms and a full repaint on every change.
 
 ## [0.14.2] - 2026-09-21
 

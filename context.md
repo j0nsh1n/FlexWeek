@@ -14,7 +14,7 @@
   the session. Tests that create an account call `past_setup` from
   `desktop/tests/logic_support.py`. Plan corrections: `prepare_solve` copies
   the course, the plan-review drag was not built, and due dates show the year.
-  Gate: 1097 Python tests, `scripts/verify.py` VERIFIED (pytest 225 s of its
+  Gate: 1098 Python tests, `scripts/verify.py` VERIFIED (pytest 225 s of its
   300 s budget, after `_apply_appearance` stopped restyling an unchanged
   look on every week change). Nothing pushed, no PR, no executable. VERSION stays
   0.14.2. spec.md not edited; proposed lines are in the session report.
