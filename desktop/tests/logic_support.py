@@ -54,6 +54,24 @@ def wait_until(qapp: QApplication, predicate, timeout: float = 8.0) -> None:
     raise AssertionError("condition was still false")
 
 
+def past_setup(qapp: QApplication, window: object) -> None:
+    """A new account opens on setup. A test about the week skips it, and waits for the skip to be
+    saved, since a save still in flight turns the test's own save away."""
+
+    def on(name: str) -> bool:
+        return window._stack.currentWidget().objectName() == name  # type: ignore[attr-defined]
+
+    wait_until(qapp, lambda: on("setupPage"))
+    window.setup_page.skip_all.click()  # type: ignore[attr-defined]
+    wait_until(
+        qapp,
+        lambda: on("weekPage")
+        and window.session.preferences is not None  # type: ignore[attr-defined]
+        and not window._setup_prefs  # type: ignore[attr-defined]
+        and not window.session.busy,  # type: ignore[attr-defined]
+    )
+
+
 def settled(qapp: QApplication, session: NativeSession) -> None:
     """Wait for the foreground request and the background refreshes it starts."""
     wait_until(qapp, lambda: not session.busy)

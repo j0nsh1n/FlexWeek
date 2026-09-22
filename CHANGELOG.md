@@ -5,6 +5,50 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- First-run setup replaces the first-week card. A new account goes from its
+  recovery codes to a page at a time, with a step rail, Back, Skip this step
+  and Next: a starting style (Plain calendar, Dashboard, Night owl, Retro,
+  each a real picture of the design) or Choose my own look, then colours and
+  text size; your week, with school days and hours, any number of sports,
+  clubs and jobs each on its own days, and No homework after; how homework
+  gets a time, with study times that can be kept for one subject; reminders
+  and the alarm sound, with Send a test reminder; up to three first homework;
+  and a summary with Change links. Each page is kept when you leave it, so a
+  quit resumes on the same step. Finishing or skipping is remembered, and
+  Settings > This computer > Run setup again opens it filled in with what you
+  have now.
+- Settings > Planning chooses how homework gets a time: as it is added (one
+  Undo takes back the homework and its time), when Plan my homework is pressed
+  (the default, as before), or by dragging it yourself, which turns the button
+  into Suggest times.
+- Homework that needs a time can be dragged from the chips above the Calendar
+  onto a day and time, or given one with Choose a time in the homework editor.
+  Homework placed by hand is pinned: every plan, Replan all included, leaves
+  it where you put it, and Let FlexWeek move it clears the pin.
+- A study window can be kept for one subject. Plans try a session in its own
+  subject's window first, then in a window for any subject, then anywhere.
+- One alarm sound, in Settings > Alerts: Chime, Soft, Bright, Low, Glass, or a
+  Spotify song or playlist, each with Play. Reminders ring it; a Spotify sound
+  opens the link for alarms only, so a reminder never starts music.
+- Settings > Appearance & layout > Animations: Normal, More movement or Off.
+
+### Changed
+- Scrollbars, dropdowns and their lists, spin and time boxes, check boxes,
+  radio buttons, menus, tooltips, the date picker and progress bars take the
+  colours of the chosen design. On a dark palette on KDE an unticked box, an
+  unselected radio button and the spin arrows could not be seen at all.
+- A dragged block shows a dashed outline where it will land, can move to
+  another day, turns the error colour over a fixed block or past the due time,
+  and says why a drop there was refused. Escape lets go without moving it.
+- Views and pages cross-fade, and moving to another week, day or month slides
+  the old one away in the direction you went. Notices rise into place, setup's
+  pages slide in from the side you are heading, its step marker glides between
+  steps, and Settings slides between its sections. Nothing waits for an
+  animation: the new page is live at once.
+- The More menu shows its Adding and Planning headings. Due dates read
+  "Sun 27 Sep 2026, 23:59" instead of "2026-09-27 23:59".
+
 ## [0.14.2] - 2026-09-21
 
 ### Fixed

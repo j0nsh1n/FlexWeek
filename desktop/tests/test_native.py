@@ -31,6 +31,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.controller import NativeSession, session_days
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
+    from desktop.tests.logic_support import past_setup
 
 PASSWORD = "a-long-test-password"
 HELD: list[object] = []
@@ -145,7 +146,7 @@ def test_create_account_shows_eight_codes_then_an_empty_week(qapp: QApplication,
     assert all(len(code) >= 8 for code in codes)
     window.recovery_ack.setChecked(True)
     window.recovery_continue.click()
-    wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "weekPage")
+    past_setup(qapp, window)
     assert window.session.blocks == []
     assert window.session.revision == 0
     assert table_text(window) == ""
@@ -182,7 +183,7 @@ def test_saved_fixed_time_survives_sign_out_and_sign_in(qapp: QApplication, serv
     wait_until(qapp, lambda: first._stack.currentWidget().objectName() == "recoveryPage")
     first.recovery_ack.setChecked(True)
     first.recovery_continue.click()
-    wait_until(qapp, lambda: first._stack.currentWidget().objectName() == "weekPage")
+    past_setup(qapp, first)
     first.session.add_block(soccer())
     first.session.save()
     wait_until(qapp, lambda: first.session.revision == 1 and not first.session.busy)
@@ -485,7 +486,7 @@ def test_keyboard_switches_week_day_and_month(qapp: QApplication, server: LocalS
     wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "recoveryPage")
     window.recovery_ack.setChecked(True)
     window.recovery_continue.click()
-    wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "weekPage")
+    past_setup(qapp, window)
     window.setFocus()
     from PySide6.QtTest import QTest
 
@@ -506,7 +507,7 @@ def test_picking_a_type_opens_add_with_that_category(qapp: QApplication, server:
     wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "recoveryPage")
     window.recovery_ack.setChecked(True)
     window.recovery_continue.click()
-    wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "weekPage")
+    past_setup(qapp, window)
 
     def fill_and_save() -> None:
         dialog = window.findChild(QDialog, "blockDialog")
@@ -928,7 +929,7 @@ def test_preview_dialog_leaves_a_collision_unchecked(qapp: QApplication, server:
     wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "recoveryPage")
     window.recovery_ack.setChecked(True)
     window.recovery_continue.click()
-    wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "weekPage")
+    past_setup(qapp, window)
     window.session.add_block(soccer())
     window.session.save()
     wait_until(qapp, lambda: window.session.revision == 1 and not window.session.busy)
@@ -1539,9 +1540,7 @@ def test_accepted_plan_is_on_the_grid_after_close_and_sign_in(
     wait_until(qapp, lambda: first._stack.currentWidget().objectName() == "recoveryPage")
     first.recovery_ack.setChecked(True)
     first.recovery_continue.click()
-    wait_until(
-        qapp, lambda: first._stack.currentWidget().objectName() == "weekPage" and not first.session.busy
-    )
+    past_setup(qapp, first)
     _two_assignments(first.session)
     first.session.save()
     wait_until(qapp, lambda: not first.session.busy and not first.session.dirty)

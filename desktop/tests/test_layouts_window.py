@@ -45,6 +45,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.settings import PrefsDialog
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
+    from desktop.tests.logic_support import past_setup
 
 PASSWORD = "a-long-test-password"
 
@@ -91,9 +92,7 @@ def window(qapp: QApplication, tmp_path: Path) -> Iterator[NativeWindow]:
         wait_until(qapp, lambda: made._stack.currentWidget().objectName() == "recoveryPage")
         made.recovery_ack.setChecked(True)
         made.recovery_continue.click()
-        wait_until(
-            qapp, lambda: made._stack.currentWidget().objectName() == "weekPage" and not made.session.busy
-        )
+        past_setup(qapp, made)
         wait_until(qapp, lambda: made.session.preferences is not None)
         session = made.session
         thursday = datetime.fromisoformat(session.week_start) + timedelta(days=3, hours=19)
@@ -2225,6 +2224,8 @@ def test_choose_a_time_places_homework_without_dragging(
     seen: list[str] = []
 
     def pick(dialog: ChooseTimeDialog) -> int:
+        # The clock is held at Thursday, so that is where it opens, not on Monday.
+        seen.append(f"opened on {dialog.day.currentData()}")
         dialog.day.setCurrentIndex(dialog.day.findData(1))
         dialog.start.setTime(QTime(10, 0))
         seen.append(dialog.problem.text())
@@ -2237,7 +2238,7 @@ def test_choose_a_time_places_homework_without_dragging(
     monkeypatch.setattr(HomeworkDialog, "exec", lambda dialog: _press(dialog, "homeworkChooseTime"))
     window._edit_homework("math")
     settled(qapp, window)
-    assert seen == ["School is at that time.", "refused"]
+    assert seen == ["opened on 3", "School is at that time.", "refused"]
     placed = next(block for block in window.session.blocks if block["id"] == waiting["id"])
     assert (placed["days"], placed["start"], placed.get("pinned")) == ([1], "16:00", True)
     item = window.week_table.item((16 * 60 - 360) // 15, 1)
@@ -2326,3 +2327,4 @@ def test_a_study_window_can_be_kept_for_one_subject(qapp: QApplication) -> None:
     dialog.findChild(QPushButton, "studyAdd").click()
     assert len(dialog.study_windows()) == 1
     assert "ends after it starts" in dialog.error.text()
+

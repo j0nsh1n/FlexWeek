@@ -38,6 +38,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.widgets import EDGE_ROLE, ENDS_ROLE, OUTLINE_ROLE, MonthGrid, WeekTable
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
+    from desktop.tests.logic_support import past_setup
 
 WEEK = "2026-09-14"
 SCHOOL = {
@@ -263,7 +264,7 @@ def test_a_look_chosen_in_the_window_reaches_the_calendar_not_only_the_styleshee
         wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "recoveryPage")
         window.recovery_ack.setChecked(True)
         window.recovery_continue.click()
-        wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "weekPage")
+        past_setup(qapp, window)
         window.session.add_block(dict(SCHOOL))
         window.session.save()
         wait_until(qapp, lambda: window.session.revision == 1 and not window.session.busy)

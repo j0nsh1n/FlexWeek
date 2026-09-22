@@ -431,6 +431,17 @@ def next_action_for(
     return {"kind": "add"}
 
 
+# The blocks setup makes, found again by id when setup runs a second time. "sport" is the one the
+# first-week card made before setup had pages.
+SETUP_SCHOOL_ID = "school"
+SETUP_ACTIVITY_PREFIX = "activity-"
+
+
+def is_setup_block(block: dict) -> bool:
+    block_id = str(block.get("id") or "")
+    return block_id in {SETUP_SCHOOL_ID, "sport"} or block_id.startswith(SETUP_ACTIVITY_PREFIX)
+
+
 def span_problem(
     blocks: list[dict],
     block_id: str,

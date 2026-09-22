@@ -30,6 +30,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.widgets import BlockDialog
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
+    from desktop.tests.logic_support import past_setup
 
 PASSWORD = "a-long-test-password"
 
@@ -87,7 +88,7 @@ def window(qapp: QApplication, registering: NativeWindow) -> NativeWindow:
     """Signed in, on the week page, with preferences loaded."""
     registering.recovery_ack.setChecked(True)
     registering.recovery_continue.click()
-    wait_until(qapp, lambda: on_page(registering, "weekPage") and not registering.session.busy)
+    past_setup(qapp, registering)
     wait_until(qapp, lambda: registering.session.preferences is not None)
     return registering
 

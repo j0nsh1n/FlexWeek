@@ -7,7 +7,6 @@ import json
 import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from uuid import uuid4
 
 from PySide6.QtCore import QEvent, QObject, QPoint, QStandardPaths, Qt, QTimer, QUrl
 from PySide6.QtGui import (
@@ -42,13 +41,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from backend.slots import SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm
+from backend.slots import minutes_to_hhmm
 from desktop.native import autostart
 from desktop.native.calendar import (
     CATEGORIES,
     DAY_FULL,
     FLEX_CATEGORIES,
-    WEEKDAYS,
     agenda_for,
     date_for_day,
     monday_of,
@@ -82,16 +80,15 @@ from desktop.native.reuse import (
     week_label,
 )
 from desktop.native.settings import (
-    SPORT_FALLBACK,
     AccountDialog,
     AlarmRingDialog,
     FocusPanel,
     PrefsDialog,
     RestoreDialog,
-    SetupCard,
     TransferPreviewDialog,
     UpdateDialog,
 )
+from desktop.native.setup import REMINDERS, SETUP_VERSION, STYLE, SetupPage, SetupState
 from desktop.native.sound import Bell
 from desktop.native.tones import FALLBACK
 from desktop.native.update import RELEASE_PAGE, due_for_check, sanitize_updates
@@ -189,7 +186,12 @@ class NativeWindow(QMainWindow):
         self._updater.progress.connect(self._on_update_progress)
         self._updater.failed.connect(self._on_update_problem)
         self._updater.ready.connect(self._on_update_ready)
-        self._setup_dismissed = False
+        # Setup is on screen; this sign-in has decided whether it should be; and what setup has kept
+        # that is still to be written, one request at a time.
+        self._setup_active = False
+        self._setup_checked = False
+        self._setup_prefs: dict = {}
+        self._setup_week = False
         self._changed_ms = 0
         self._last_try_ms = 0
         self._autosave = QTimer(self)
@@ -199,6 +201,7 @@ class NativeWindow(QMainWindow):
         self._build_auth()
         self._build_recovery()
         self._build_week()
+        self._build_setup()
         self.session.account_changed.connect(self._on_account)
         self.session.recovery_codes.connect(self._show_recovery)
         self.session.week_changed.connect(self._on_week)
@@ -534,11 +537,6 @@ class NativeWindow(QMainWindow):
         chrome = QVBoxLayout(self.plan_chrome)
         chrome.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.plan_chrome)
-        self.setup_card = SetupCard(page)
-        self.setup_card.finished.connect(self._apply_setup)
-        self.setup_card.dismissed.connect(self._dismiss_setup)
-        self.setup_card.hide()
-        self.setup_card.setFixedWidth(420)
         # Wrapping, because twenty buttons in one row made the window wider than any laptop screen.
         actions = FlowLayout()
         self.add_menu = AddMenu(self)
@@ -926,7 +924,10 @@ class NativeWindow(QMainWindow):
             self._day_mode = False
             self._opened_on_preference = False
             self._making_account = False
-            self._setup_dismissed = False
+            self._setup_active = False
+            self._setup_checked = False
+            self._setup_prefs = {}
+            self._setup_week = False
             self._sync_auth_mode()
             self.username.clear()
             self.password.clear()
@@ -941,88 +942,157 @@ class NativeWindow(QMainWindow):
         self._allow_week_page = True
         self.session.finish_recovery()
 
-    def _sync_setup(self) -> None:
-        empty = not self.session.blocks and not self.session.assignments
-        show = self.session.account is not None and empty and not self._setup_dismissed
-        card = self.setup_card
-        if show and not card.isVisible():
-            card.reset(self.session.week_start)
-        card.setVisible(bool(show))
-        if show:
-            self._place_setup()
-
-    def _place_setup(self) -> None:
-        card = self.setup_card
-        page = card.parentWidget()
-        if page is None or not card.isVisible():
-            return
-        card._fit()
-
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)
-        self._place_setup()
         if self.toast.isVisible():
             self.toast.reposition()
 
-    def _dismiss_setup(self) -> None:
-        self._setup_dismissed = True
-        self.setup_card.hide()
+    def _build_setup(self) -> None:
+        self.setup_page = SetupPage()
+        self.setup_page.previewed.connect(self._preview_setup_look)
+        self.setup_page.left.connect(self._setup_step_left)
+        self.setup_page.finished.connect(self._finish_setup)
+        self.setup_page.test_requested.connect(self._test_reminder)
+        self._stack.addWidget(self.setup_page)
 
-    def _apply_setup(self, payload: dict) -> None:
-        self._setup_dismissed = True
-        self.setup_card.hide()
-        school = payload.get("school")
-        if school:
-            start, end = school
-            try:
-                begin, stop = hhmm_to_minutes(start), hhmm_to_minutes(end)
-            except (TypeError, ValueError):
-                begin, stop = 8 * 60, 14 * 60 + 30
-            duration = max(SLOT_MIN, stop - begin)
-            self.session.add_block(
-                {
-                    "id": "school",
-                    "title": "School",
-                    "kind": "locked",
-                    "category": "class",
-                    "start": minutes_to_hhmm(begin),
-                    "duration_min": duration,
-                    "days": list(WEEKDAYS),
-                }
-            )
-        sport = payload.get("sport")
-        if sport:
-            title, start, end = sport
-            try:
-                begin, stop = hhmm_to_minutes(start), hhmm_to_minutes(end)
-            except (TypeError, ValueError):
-                begin, stop = 15 * 60 + 30, 17 * 60
-            duration = max(SLOT_MIN, stop - begin)
-            self.session.add_block(
-                {
-                    "id": "sport",
-                    "title": title or SPORT_FALLBACK,
-                    "kind": "locked",
-                    "category": "exercise",
-                    "start": minutes_to_hhmm(begin),
-                    "duration_min": duration,
-                    "days": [3],
-                }
-            )
-        homework = payload.get("homework")
-        if homework:
-            title, minutes, due = homework
-            self.session.add_homework(
-                {
-                    "id": str(uuid4()),
-                    "title": title or "Homework",
-                    "due": due or sunday_due(self.session.week_start),
-                    "estimate_min": int(minutes),
-                    "revision": 0,
-                }
-            )
-        if payload:
-            self.session.save()
+    def _maybe_open_setup(self) -> None:
+        """Setup opens once a sign-in, for an account that has neither finished nor skipped it.
+
+        A new account opens it at once. Any other waits for its preferences, which say whether setup
+        was finished and, if not, the step to resume on. An account from before setup kept its place
+        opens it only when it has nothing in it yet, as the first-week card did.
+        """
+        session = self.session
+        if self._setup_active or self._setup_checked or session.account is None:
+            return
+        prefs = session.preferences
+        if prefs is None and not session.new_account:
+            return
+        self._setup_checked = True
+        progress = (prefs or {}).get("setup")
+        if progress is None:
+            if session.new_account or (not session.blocks and not session.assignments):
+                self._open_setup(STYLE, first_run=True)
+            return
+        if not progress.get("finished_at"):
+            step = int(progress.get("step") or STYLE)
+            self._open_setup(step, first_run=step <= REMINDERS)
+
+    def _setup_state(self, first_run: bool) -> SetupState:
+        session = self.session
+        prefs = session.preferences or {}
+        courses = {str(item.get("course") or "").strip() for item in session.assignments.values()}
+        return SetupState(
+            pack=str(prefs.get("theme_pack") or "system"),
+            look=self._look,
+            layout=self._layout,
+            preferences=dict(prefs),
+            blocks=list(session.blocks),
+            week_start=session.week_start,
+            subjects=sorted(course for course in courses if course),
+            first_run=first_run,
+        )
+
+    def _open_setup(self, step: int, *, first_run: bool) -> None:
+        self._setup_active = True
+        self.setup_page.motion = self._motion
+        self.setup_page.open(self._setup_state(first_run), step)
+        self._show_page("setupPage")
+
+    def _run_setup_again(self) -> None:
+        self._setup_checked = True
+        self._open_setup(STYLE, first_run=False)
+
+    def _preview_setup_look(self, choice: dict) -> None:
+        """Dress the whole window in a look the student is trying, without keeping it. The old look
+        fades out over the new one rather than snapping."""
+        picture = hold_picture(self._stack, self._motion)
+        self._look = choice["look"]
+        self.session.look = self._look
+        self._layout = choice["layout"]
+        if self.session.preferences is not None:
+            self.session.preferences = {**self.session.preferences, "theme_pack": choice["pack"]}
+        self._apply_appearance()
+        self.setup_page.motion = self._motion
+        fade_away(picture, self._motion)
+
+    def _setup_step_left(self, _step: int, destination: int, answer: object) -> None:
+        """Keep what a page answered, and where the student went, so a quit resumes there."""
+        updates: dict = {"setup": {"version": SETUP_VERSION, "step": destination}}
+        if isinstance(answer, dict):
+            if "layout" in answer:
+                self._look = answer["look"]
+                self.session.look = self._look
+                self._layout = answer["layout"]
+                self._save_look()
+                updates["theme_pack"] = answer["pack"]
+            if "blocks" in answer:
+                self.session.set_setup_blocks(answer["blocks"])
+                updates["day_cutoff"] = answer["day_cutoff"]
+                self._setup_week = True
+            if "homework" in answer:
+                auto = (self.session.preferences or {}).get("planning_style") == "auto"
+                for item in answer["homework"]:
+                    self.session.add_homework(item)
+                    if auto:
+                        self.session.plan_after_save(item["id"])
+                self._setup_week = True
+            for key in (
+                "planning_style",
+                "study_windows",
+                "reminders_enabled",
+                "reminder_lead_min",
+                "alarm_tone",
+                "default_spotify_url",
+            ):
+                if key in answer:
+                    updates[key] = answer[key]
+        self._setup_prefs.update(updates)
+        if self.session.preferences is not None:
+            # Seen at once, as Settings does: the save that follows stores them.
+            self.session.preferences = {**self.session.preferences, **self._setup_prefs}
+        self._flush_setup()
+
+    def _flush_setup(self) -> None:
+        """Write what setup kept, one request at a time. A second request replaces the first on the
+        session, so two at once would drop the first one's reply, and an answer typed a moment
+        before a quit would be lost. The preferences go first: the week's save can start a plan."""
+        session = self.session
+        if session.account is None or session.busy:
+            return
+        if self._setup_prefs and session.preferences is not None:
+            updates, self._setup_prefs = self._setup_prefs, {}
+            session.save_preferences(updates)
+            return
+        if self._setup_week:
+            self._setup_week = False
+            session.save()
+
+    def _finish_setup(self) -> None:
+        stamp = datetime.now().strftime("%Y-%m-%dT%H:%M")
+        progress = {"version": SETUP_VERSION, "step": self.setup_page.step, "finished_at": stamp}
+        self._setup_prefs["setup"] = progress
+        if self.session.preferences is not None:
+            self.session.preferences = {**self.session.preferences, **self._setup_prefs}
+        self._setup_active = False
+        self._flush_setup()
+        self._sync_chrome()
+        self._on_week()
+
+    def _test_reminder(self, tone: str, link: str) -> None:
+        """A reminder now, in the sound on screen, so the student hears and sees what they chose."""
+        volume = (self.session.preferences or {}).get("alert_volume", 80)
+        opened = tone == "spotify" and bool(link) and QDesktopServices.openUrl(QUrl(link))
+        self._bell.once(FALLBACK if tone == "spotify" else tone, volume)
+        title, body = "Test reminder", "This is how a reminder from FlexWeek looks."
+        if self._tray_icon is not None and self._tray_icon.supportsMessages():
+            self._tray_icon.showMessage(title, body, QSystemTrayIcon.MessageIcon.Information, 8000)
+            said = "Sent. It shows in the corner of your screen."
+        else:
+            said = "Sent. This computer shows no notifications, so reminders appear in FlexWeek instead."
+        if opened:
+            said += " Alarms open your Spotify link, which just opened."
+        self.setup_page.show_test_result(said)
 
     def _show_recovery(self, codes: list) -> None:
         self._allow_week_page = False
@@ -1083,8 +1153,13 @@ class NativeWindow(QMainWindow):
         self.week_title.set_full_text(
             planner_title(self.session, view), planner_title(self.session, view, short=True)
         )
-        self._sync_setup()
-        self._show_page("weekPage")
+        self._maybe_open_setup()
+        if self._setup_prefs or self._setup_week:
+            # The account's preferences may only now have arrived, and what setup kept before they did,
+            # a skip included, is written with them.
+            QTimer.singleShot(0, self._flush_setup)
+        if not self._setup_active:
+            self._show_page("weekPage")
         can_retry = self.session.pending_save is not None and not self.session.conflict
         # Hidden, not merely greyed: a button that is never pressable is a permanent piece of
         # furniture that says a save failed when none has.
@@ -1221,6 +1296,9 @@ class NativeWindow(QMainWindow):
         on_recovery = self.findChild(QWidget, "recoveryPage") is self._stack.currentWidget()
         if not busy and self.session.account is not None and on_recovery:
             self.recovery_continue.setEnabled(self.recovery_ack.isChecked())
+        if not busy and (self._setup_prefs or self._setup_week):
+            # A moment later, so a plan that finished just now saves its week before setup writes.
+            QTimer.singleShot(0, self._flush_setup)
 
     def _on_recovery_ack(self, checked: bool) -> None:
         self.recovery_continue.setEnabled(checked and not self.session.busy)
@@ -1528,7 +1606,9 @@ class NativeWindow(QMainWindow):
         block = waiting[0]
         due = self._due_point(block["id"])
         days = list(block["days"])
-        dialog = ChooseTimeDialog(self, block, self.session.week_start, days, self.session.blocks, due)
+        clock = clock_parts(self.session.now_ms())
+        today = clock["day"] if monday_of(clock["iso"]) == self.session.week_start else None
+        dialog = ChooseTimeDialog(self, block, self.session.week_start, days, self.session.blocks, due, today)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         day, start = dialog.choice()
@@ -1941,9 +2021,12 @@ class NativeWindow(QMainWindow):
         dialog = PrefsDialog(
             self, self.session.preferences, self._look, self.session.reminder_limits, self._layout
         )
+        dialog.motion_level = self._motion
         dialog.account_requested.connect(self._open_account)
         dialog.availability_requested.connect(self._open_availability)
         dialog.updates_requested.connect(lambda: self._check_updates(asked=True))
+        rerun: list[bool] = []
+        dialog.setup_requested.connect(lambda: (rerun.append(True), dialog.reject()))
         stored = dialog.updates()
         login = bool(stored["start_at_login"])
 
@@ -1989,6 +2072,8 @@ class NativeWindow(QMainWindow):
                 self.session.status.disconnect(dialog.save_state.setText)
         saver.stop()
         save()
+        if rerun:
+            self._run_setup_again()
 
     def _apply_start_at_login(self, wanted: bool) -> None:
         """The setting used to be stored on the account and obeyed by nothing. It is applied to this

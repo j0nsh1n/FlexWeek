@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import date
 from uuid import uuid4
 
-from PySide6.QtCore import QDate, QDateTime, Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import QDesktopServices, QFocusEvent, QMouseEvent, QShowEvent
+from PySide6.QtCore import Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import QDesktopServices, QShowEvent
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
     QComboBox,
-    QDateTimeEdit,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -40,7 +38,7 @@ from backend.comfort import TIMER_PRESETS, snap_minutes
 from backend.models import valid_spotify_url
 from backend.slots import SLOT_MIN
 from desktop.native import autostart
-from desktop.native.calendar import DAY_FULL, monday_of, sunday_due
+from desktop.native.calendar import DAY_FULL
 from desktop.native.focus import FOCUS_PHASE_LABEL, format_countdown, more_time_choices, remaining_ms
 from desktop.native.layouts.dialog import SLOTS, LayoutSection
 from desktop.native.layouts.registry import LAYOUTS, MATCH, sanitize_layout
@@ -57,12 +55,13 @@ from desktop.native.look import (
     parse_look_menu_token,
     sanitize_look,
 )
+from desktop.native.motion import slide_page
 from desktop.native.remind import ALARM_SNOOZE_MIN
 from desktop.native.reuse import format_duration
 from desktop.native.sound import Bell
 from desktop.native.tones import FALLBACK, RECIPES, SOUNDS
 from desktop.native.version import VERSION
-from desktop.native.widgets import DIALOG_USABLE_HEIGHT, DUE_FORMAT, FlowLayout, fit_scroll_dialog
+from desktop.native.widgets import DIALOG_USABLE_HEIGHT, FlowLayout, fit_scroll_dialog
 
 UPDATE_MIN_WIDTH = 420
 ALARM_MIN_WIDTH = 380
@@ -94,34 +93,6 @@ SPOTIFY_TONE_NOTE = (
 TODAYS_APP_KNOBS = ("surface", "corners", "blocks")
 FINE_TUNE_LOOK = "Fine-tune this look"
 FINE_TUNE_OTHER = "Fine-tune fonts, spacing and shadows"
-
-
-class _SelectOnFocus(QLineEdit):
-    """A field holding a default, like the "08:00" school start. Tabbing in, or the first click in,
-    selects the default so the next keystroke replaces it: left alone, a click at its left edge and
-    "07:30" made "07:3008:00". Only the default, and only that first click: selecting on every click
-    meant the caret could never be put inside "08:00" with the mouse."""
-
-    _KEYBOARD = (Qt.FocusReason.TabFocusReason, Qt.FocusReason.BacktabFocusReason)
-
-    def __init__(self, default: str) -> None:
-        super().__init__(default)
-        self._default = default
-        self._armed = False
-
-    def focusInEvent(self, event: QFocusEvent) -> None:  # noqa: N802
-        super().focusInEvent(event)
-        untouched = self.text() == self._default
-        if untouched and event.reason() in self._KEYBOARD:
-            self.selectAll()
-        self._armed = untouched and event.reason() not in self._KEYBOARD
-
-    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
-        super().mouseReleaseEvent(event)
-        # A drag on that first click is a selection the student made, so it stays.
-        if self._armed and not self.hasSelectedText():
-            self.selectAll()
-        self._armed = False
 
 
 def _invalidate(layout: QLayout) -> None:
@@ -273,6 +244,7 @@ class PrefsDialog(QDialog):
     account_requested = Signal()
     availability_requested = Signal()
     updates_requested = Signal()
+    setup_requested = Signal()
 
     def __init__(
         self,
@@ -582,6 +554,11 @@ class PrefsDialog(QDialog):
         account_row.addWidget(open_availability)
         account_row.addStretch(1)
         computer_form.addRow(account_row)
+        run_setup = QPushButton("Run setup again")
+        run_setup.setObjectName("prefsRunSetup")
+        run_setup.setToolTip("Style, your week, homework time and reminders, filled in as they are now.")
+        run_setup.clicked.connect(self.setup_requested.emit)
+        computer_form.addRow("Setup", run_setup)
         update_col = QVBoxLayout()
         version = QLabel(f"FlexWeek {VERSION}")
         version.setObjectName("prefsVersion")
@@ -604,7 +581,9 @@ class PrefsDialog(QDialog):
             area.setFrameShape(QFrame.Shape.NoFrame)
             area.setWidget(page)
             self.stack.addWidget(area)
-        self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
+        # Set by the window from the Animations setting.
+        self.motion_level = "off"
+        self.nav.currentRowChanged.connect(self._show_section)
         self.nav.setCurrentRow(0)
         body = QWidget()
         body.setObjectName("prefsBody")
@@ -723,6 +702,13 @@ class PrefsDialog(QDialog):
             screen = self.screen().availableGeometry().width() if self.screen() else self.width() + short
             self.setMinimumWidth(min(self.width() + short, screen))
             self.resize(self.minimumWidth(), self.height())
+
+    def _show_section(self, row: int) -> None:
+        """The section picked, sliding in from the side the student moved toward in the list."""
+        page = self.stack.widget(row)
+        if page is None:
+            return
+        slide_page(self.stack, page, self.motion_level, 1 if row > self.stack.currentIndex() else -1)
 
     def _announce(self, *_value: object) -> None:
         """Takes and drops the value a box sends. Wired straight to `changed.emit`, that value made
@@ -916,196 +902,6 @@ class PrefsDialog(QDialog):
             picked[section.slot] = section.chosen()
             picked["options"].update(section.options())
         return sanitize_layout(picked)
-
-
-class SetupCard(QWidget):
-    """School hours, one sport, then the first homework. Each step can be skipped."""
-
-    finished = Signal(dict)
-    dismissed = Signal()
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setObjectName("setupCard")
-        # A QWidget honours a stylesheet background; a subclass of one does not unless it is told
-        # to. Without this the card is transparent, and it floats over the week grid with the day
-        # headings and the hour lines showing through its own text.
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self._step = 0
-        self._payload: dict = {}
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(8)
-        self.kicker = QLabel()
-        self.kicker.setObjectName("setupKicker")
-        layout.addWidget(self.kicker)
-        self.heading = QLabel()
-        self.heading.setObjectName("setupHeading")
-        layout.addWidget(self.heading)
-        self.note = QLabel()
-        self.note.setWordWrap(True)
-        self.note.setObjectName("setupNote")
-        layout.addWidget(self.note)
-        self.school_start = _SelectOnFocus("08:00")
-        self.school_start.setObjectName("setupSchoolStart")
-        self.school_end = _SelectOnFocus("14:30")
-        self.school_end.setObjectName("setupSchoolEnd")
-        school = QHBoxLayout()
-        school.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-        starts = QLabel("Starts")
-        starts.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-        ends = QLabel("Ends")
-        ends.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-        school.addWidget(starts)
-        school.addWidget(self.school_start)
-        school.addWidget(ends)
-        school.addWidget(self.school_end)
-        self.school_row = QWidget()
-        self.school_row.setObjectName("setupRow")
-        self.school_row.setLayout(school)
-        layout.addWidget(self.school_row)
-        self.sport_title = QLineEdit()
-        self.sport_title.setObjectName("setupSportTitle")
-        self.sport_title.setPlaceholderText("Soccer, band, karate…")
-        self.sport_start = _SelectOnFocus("15:30")
-        self.sport_start.setObjectName("setupSportStart")
-        self.sport_end = _SelectOnFocus("17:00")
-        self.sport_end.setObjectName("setupSportEnd")
-        sport = QVBoxLayout()
-        sport.setContentsMargins(0, 0, 0, 0)
-        sport.addWidget(self._labelled("Name", self.sport_title))
-        sport.addWidget(self._labelled("Starts", self.sport_start))
-        sport.addWidget(self._labelled("Ends", self.sport_end))
-        self.sport_row = QWidget()
-        self.sport_row.setObjectName("setupRow")
-        self.sport_row.setLayout(sport)
-        layout.addWidget(self.sport_row)
-        self.homework_title = QLineEdit()
-        self.homework_title.setObjectName("setupHomeworkTitle")
-        self.homework_title.setPlaceholderText("History essay")
-        self.homework_minutes = QSpinBox()
-        self.homework_minutes.setObjectName("setupHomeworkMinutes")
-        self.homework_minutes.setRange(15, 600)
-        self.homework_minutes.setSingleStep(15)
-        self.homework_minutes.setValue(60)
-        self.homework_due = QDateTimeEdit()
-        self.homework_due.setObjectName("setupHomeworkDue")
-        self.homework_due.setDisplayFormat(DUE_FORMAT)
-        self.homework_due.setCalendarPopup(True)
-        self.homework_due.setMinimumDate(QDate(2000, 1, 1))
-        self.homework_due.setMaximumDate(QDate(2099, 12, 31))
-        work = QFormLayout()
-        work.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        work.addRow("Name", self.homework_title)
-        work.addRow("Minutes", self.homework_minutes)
-        work.addRow("Due", self.homework_due)
-        self.work_row = QWidget()
-        self.work_row.setObjectName("setupRow")
-        self.work_row.setLayout(work)
-        layout.addWidget(self.work_row)
-        actions = QHBoxLayout()
-        skip = QPushButton("Skip")
-        skip.setObjectName("setupSkip")
-        skip.setFlat(True)
-        skip.clicked.connect(self._skip)
-        nxt = QPushButton("Next")
-        nxt.setObjectName("setupNext")
-        nxt.clicked.connect(self._next)
-        actions.addWidget(skip)
-        actions.addStretch(1)
-        actions.addWidget(nxt)
-        layout.addLayout(actions)
-        self.reset()
-
-    def _show_step(self) -> None:
-        pages = (
-            ("FIRST WEEK · 1 OF 3", "When is school?", "Locked time the planner will not move."),
-            ("FIRST WEEK · 2 OF 3", "One sport or club?", "Skip if you do not have one."),
-            ("FIRST WEEK · 3 OF 3", "What homework is due first?", "You can add the rest later."),
-        )
-        kicker, heading, note = pages[self._step]
-        self.kicker.setText(kicker)
-        self.heading.setText(heading)
-        self.note.setText(note)
-        self.school_row.setVisible(self._step == 0)
-        self.sport_row.setVisible(self._step == 1)
-        self.work_row.setVisible(self._step == 2)
-        self._fit()
-
-    def reset(self, week_start: str | None = None) -> None:
-        """A new empty week starts at school hours. Left on step 3, the next account
-        opened on leftover homework instead of 'When is school?'."""
-        self._step = 0
-        self._payload = {}
-        self.school_start.setText(self.school_start._default)
-        self.school_end.setText(self.school_end._default)
-        self.sport_title.clear()
-        self.sport_start.setText(self.sport_start._default)
-        self.sport_end.setText(self.sport_end._default)
-        self.homework_title.clear()
-        self.homework_minutes.setValue(60)
-        due = sunday_due(week_start or monday_of(date.today().isoformat()))
-        self.homework_due.setDateTime(QDateTime.fromString(due, "yyyy-MM-dd'T'HH:mm"))
-        self._show_step()
-
-    def _fit(self) -> None:
-        """The card is a floating overlay, so hiding a step does not get a layout pass from a parent.
-        After Next it kept the first step's height and the extra fields sat under Skip and Next."""
-        self.setMinimumHeight(0)
-        laid = self.layout()
-        if laid is not None:
-            laid.activate()
-        self.adjustSize()
-        self.setMinimumHeight(max(self.sizeHint().height(), 220))
-        page = self.parentWidget()
-        if page is None or not self.isVisible():
-            return
-        x = max(0, (page.width() - self.width()) // 2)
-        y = max(0, (page.height() - self.height()) // 3)
-        self.move(x, y)
-        self.raise_()
-
-    def _labelled(self, caption: str, field: QWidget) -> QWidget:
-        """A caption and its field on one row, centres matching so Name cannot sit above the letters."""
-        row = QWidget()
-        row.setObjectName("setupRow")
-        line = QHBoxLayout(row)
-        line.setContentsMargins(0, 0, 0, 0)
-        line.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-        label = QLabel(caption)
-        label.setObjectName("setupFieldLabel")
-        label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        label.setFixedWidth(56)
-        line.addWidget(label)
-        line.addWidget(field, 1)
-        return row
-
-    def _skip(self) -> None:
-        self._advance(keep=False)
-
-    def _next(self) -> None:
-        self._advance(keep=True)
-
-    def _advance(self, keep: bool) -> None:
-        if keep and self._step == 0:
-            self._payload["school"] = (self.school_start.text().strip(), self.school_end.text().strip())
-        if keep and self._step == 1:
-            self._payload["sport"] = (
-                self.sport_title.text().strip() or SPORT_FALLBACK,
-                self.sport_start.text().strip(),
-                self.sport_end.text().strip(),
-            )
-        if keep and self._step == 2:
-            self._payload["homework"] = (
-                self.homework_title.text().strip() or "Homework",
-                self.homework_minutes.value(),
-                self.homework_due.dateTime().toString("yyyy-MM-dd'T'HH:mm"),
-            )
-        if self._step >= 2:
-            self.finished.emit(self._payload)
-            return
-        self._step += 1
-        self._show_step()
 
 
 class RestoreDialog(QDialog):

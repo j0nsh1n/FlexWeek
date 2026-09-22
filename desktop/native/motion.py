@@ -7,12 +7,17 @@ Animations setting picks the level, and Off turns every one of them off.
 
 from __future__ import annotations
 
+import contextlib
+from collections.abc import Callable
+
 from PySide6.QtCore import (
     QAbstractAnimation,
     QEasingCurve,
     QParallelAnimationGroup,
     QPoint,
     QPropertyAnimation,
+    QRect,
+    QSequentialAnimationGroup,
     Qt,
 )
 from PySide6.QtWidgets import QApplication, QGraphicsOpacityEffect, QLabel, QStackedWidget, QWidget
@@ -24,6 +29,10 @@ DURATION_MS = {"off": 0, "normal": 180, "extra": 260}
 DRIFT_PX = {"off": 0, "normal": 16, "extra": 32}
 # How far a notice rises as it appears.
 RISE_PX = {"off": 0, "normal": 8, "extra": 14}
+# How far a page of setup travels as it comes in, from the side the student is heading.
+SLIDE_PX = {"off": 0, "normal": 28, "extra": 48}
+# How much of a slide the old page takes to fade, and how far in the new one starts to appear.
+FADE_THROUGH_OUT, FADE_THROUGH_DELAY = 0.6, 0.3
 FADE_NAME = "motionFade"
 
 
@@ -69,11 +78,12 @@ def hold_picture(host: QWidget, level: str) -> QLabel | None:
     return picture
 
 
-def fade_away(picture: QLabel | None, level: str, direction: int = 0) -> None:
-    """Fade `picture` out, drifting it by `direction` (-1 left, 1 right, 0 still), then delete it."""
+def fade_away(picture: QLabel | None, level: str, direction: int = 0, share: float = 1.0) -> None:
+    """Fade `picture` out, drifting it by `direction` (-1 left, 1 right, 0 still), then delete it.
+    `share` shortens the fade to that part of the level's duration."""
     if picture is None:
         return
-    duration = DURATION_MS.get(level, 0)
+    duration = round(DURATION_MS.get(level, 0) * share)
     if duration == 0:
         picture.deleteLater()
         return
@@ -106,31 +116,99 @@ def switch_page(stack: QStackedWidget, page: QWidget, level: str) -> None:
     fade_away(picture, level)
 
 
-def appear(widget: QWidget, level: str, *, rise: bool = False) -> None:
-    """Fade `widget` in where it already is. A free-floating widget can also rise into place."""
+def slide_page(stack: QStackedWidget, page: QWidget, level: str, direction: int) -> None:
+    """Show `page` at once. It comes in from the side the student is heading (1 forward, -1 back)
+    while the page it replaces fades away toward the other side."""
+    if stack.currentWidget() is page:
+        return
+    picture = hold_picture(stack, level)
+    stack.setCurrentWidget(page)
+    # Fade through rather than cross-fade: the old page is mostly gone before the new one shows, so
+    # the two are never read on top of each other.
+    fade_away(picture, level, -direction, share=FADE_THROUGH_OUT)
+    delay = round(DURATION_MS.get(level, 0) * FADE_THROUGH_DELAY)
+    appear(page, level, shift=direction * SLIDE_PX.get(level, 0), delay_ms=delay)
+
+
+def settle(widget: QWidget) -> None:
+    """End an animation still moving `widget` where it would have ended, so a second one starts from
+    where the widget belongs. Stopping one does not emit `finished`, so its tidying runs here."""
+    running = getattr(widget, "_motion_running", None)
+    widget._motion_running = None  # type: ignore[attr-defined]
+    if running is None:
+        return
+    animation, done = running
+    with contextlib.suppress(RuntimeError):
+        animation.finished.disconnect(done)
+        animation.stop()
+    done()
+
+
+def _track(widget: QWidget, animation: QAbstractAnimation, done: Callable[[], None]) -> None:
+    def finish() -> None:
+        widget._motion_running = None  # type: ignore[attr-defined]
+        done()
+
+    animation.finished.connect(finish)
+    widget._motion_running = (animation, finish)  # type: ignore[attr-defined]
+    animation.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
+
+
+def appear(widget: QWidget, level: str, *, rise: bool = False, shift: int = 0, delay_ms: int = 0) -> None:
+    """Fade `widget` in where it already is. A free-floating widget can also rise into place, and a
+    page can come in from `shift` pixels to the side. `delay_ms` staggers a list of them."""
     duration = DURATION_MS.get(level, 0)
     if duration == 0 or not widget.isVisible():
         return
+    settle(widget)
     effect = QGraphicsOpacityEffect(widget)
+    effect.setOpacity(0.0 if delay_ms else 1.0)
     widget.setGraphicsEffect(effect)
-    group = QParallelAnimationGroup(widget)
-    fade = QPropertyAnimation(effect, b"opacity", group)
+    group = QSequentialAnimationGroup(widget)
+    if delay_ms:
+        group.addPause(delay_ms)
+    moves = QParallelAnimationGroup(group)
+    fade = QPropertyAnimation(effect, b"opacity", moves)
     fade.setDuration(duration)
     fade.setStartValue(0.0)
     fade.setEndValue(1.0)
     fade.setEasingCurve(QEasingCurve.Type.OutCubic)
-    group.addAnimation(fade)
-    if rise:
-        end = widget.pos()
-        slide = QPropertyAnimation(widget, b"pos", group)
+    moves.addAnimation(fade)
+    end = widget.pos()
+    offset = QPoint(shift, RISE_PX[level] if rise else 0)
+    if not offset.isNull():
+        slide = QPropertyAnimation(widget, b"pos", moves)
         slide.setDuration(duration)
-        slide.setStartValue(end + QPoint(0, RISE_PX[level]))
+        slide.setStartValue(end + offset)
         slide.setEndValue(end)
         slide.setEasingCurve(QEasingCurve.Type.OutCubic)
-        group.addAnimation(slide)
-    # An opacity effect left in place makes every later repaint of the widget go through it.
-    group.finished.connect(lambda: widget.setGraphicsEffect(None))
-    group.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
+        moves.addAnimation(slide)
+        widget.move(end + offset)
+    group.addAnimation(moves)
+
+    def done() -> None:
+        # An opacity effect left in place makes every later repaint of the widget go through it.
+        widget.setGraphicsEffect(None)
+        if not offset.isNull():
+            widget.move(end)
+
+    _track(widget, group, done)
+
+
+def glide(widget: QWidget, target: QRect, level: str) -> None:
+    """Move and resize `widget` to `target`, easing there rather than jumping."""
+    settle(widget)
+    duration = DURATION_MS.get(level, 0)
+    if duration == 0 or not widget.isVisible() or widget.geometry() == target:
+        widget.setGeometry(target)
+        return
+    move = QPropertyAnimation(widget, b"geometry", widget)
+    move.setDuration(duration + 60)
+    move.setStartValue(widget.geometry())
+    move.setEndValue(target)
+    move.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+    _track(widget, move, lambda: widget.setGeometry(target))
 
 
 def vanish(widget: QWidget, level: str) -> None:

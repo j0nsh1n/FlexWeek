@@ -684,6 +684,75 @@ def control_rules(palette: dict, radius: int, size: int, art: dict[str, str]) ->
     )
 
 
+def setup_rules(palette: dict, radius: int, size: int, pad: int, depth: str) -> str:
+    """First-run setup: a rail of steps beside one question at a time, and cards to pick from.
+
+    Groups, chips and Back take the depth's edges like every other control. A card keeps a ring of
+    one width whether or not it is picked, so picking one never nudges its picture: the ring is the
+    accent when picked and, except on a flat look, a soft line otherwise.
+    """
+    edges = _depth_rules(depth, palette)
+    card_radius = max(radius, 10)
+    ring = "transparent" if depth == "flat" else mix(palette["hairline_strong"], palette["panel"], 0.6)
+    lift = mix(palette["accent"], palette["panel"], 0.08)
+    quiet = (
+        "setupQuiet", "setupSkip", "setupSkipAll", "setupOwnLook", "setupAddActivity", "setupAddHomework",
+        "setupSuggest", "setupPlay", "setupChange", "setupFineTune",
+    )
+    quiet_rule = ", ".join(f"QPushButton#{name}" for name in quiet)
+    quiet_hover = ", ".join(f"QPushButton#{name}:hover" for name in quiet)
+    pills = "QPushButton#setupChip, QPushButton#setupDay, QPushButton#setupStudyChip"
+    pills_hover = "QPushButton#setupChip:hover, QPushButton#setupDay:hover, QPushButton#setupStudyChip:hover"
+    return (
+        f"QWidget#setupRail {{ background: {palette['panel']}; }}"
+        f"QWidget#setupNav {{ background: {palette['window']}; }}"
+        # The rows inside the pages are bare QWidgets, which the app-wide rule paints in the page
+        # colour. On a card that is a band of background across the middle of it.
+        f"QWidget#setupRow, QWidget#setupBody {{ background: transparent; border: none; padding: 0; }}"
+        f"QScrollArea#setupScroll {{ background: transparent; border: none; padding: 0; }}"
+        f"QLabel#setupBrand {{ font-size: {size + 2}pt; font-weight: 700; color: {palette['accent']}; }}"
+        f"QPushButton#setupRailItem {{ background: transparent; color: {palette['muted']}; border: none; "
+        f"text-align: left; padding: {pad + 2}px {pad}px; font-weight: 500; min-height: 0; }}"
+        f"QPushButton#setupRailItem:hover {{ color: {palette['text']}; }}"
+        f"QPushButton#setupRailItem[done=\"true\"] {{ color: {palette['text']}; }}"
+        f"QPushButton#setupRailItem[current=\"true\"] {{ color: {palette['text']}; font-weight: 700; }}"
+        f"QPushButton#setupRailItem:disabled {{ background: transparent; "
+        f"color: {mix(palette['muted'], palette['panel'], 0.55)}; }}"
+        f"QFrame#setupRailMarker {{ background: {palette['accent']}; border: none; padding: 0; "
+        f"border-radius: 1px; }}"
+        f"QLabel#setupTitle {{ font-size: {size + 8}pt; font-weight: 700; }}"
+        f"QLabel#setupNote {{ color: {palette['muted']}; font-size: {size + 1}pt; }}"
+        f"QLabel#setupHint, QLabel#setupFieldLabel {{ color: {palette['muted']}; }}"
+        f"QLabel#setupSection {{ font-size: {size + 1}pt; font-weight: 700; margin-top: 8px; }}"
+        f"QLabel#setupError {{ color: {palette['error']}; font-weight: 600; }}"
+        f"QLabel#setupSummaryName {{ font-weight: 700; }}"
+        f"QFrame#setupChoice {{ background: {palette['panel']}; border: 2px solid {ring}; "
+        f"border-radius: {card_radius}px; padding: 0; }}"
+        f"QFrame#setupChoice:hover {{ background: {lift}; }}"
+        f"QFrame#setupChoice:focus {{ border-color: {mix(palette['accent'], palette['panel'], 0.5)}; }}"
+        f"QFrame#setupChoice[selected=\"true\"] {{ border-color: {palette['accent']}; background: {lift}; }}"
+        f"QLabel#setupChoiceName {{ font-weight: 700; font-size: {size + 1}pt; }}"
+        f"QLabel#setupChoiceNote {{ color: {palette['muted']}; }}"
+        f"QFrame#setupGroup {{ background: {palette['panel']}; border-radius: {card_radius}px; {edges} }}"
+        f"{pills} {{ background: {palette['field']}; color: {palette['text']}; {edges} "
+        f"border-radius: 14px; padding: 4px 12px; font-weight: 500; min-height: 0; }}"
+        f"QPushButton#setupDay {{ padding: 4px 9px; }}"
+        f"{pills_hover} {{ background: {mix(palette['accent'], palette['field'], 0.14)}; }}"
+        f"QPushButton#setupChip:checked, QPushButton#setupDay:checked {{ background: {palette['accent']}; "
+        f"color: {palette['accent_ink']}; }}"
+        f"{quiet_rule} {{ background: transparent; color: {palette['accent']}; border: none; "
+        f"padding: {pad}px 2px; font-weight: 600; min-height: 0; }}"
+        f"{quiet_hover} {{ color: {palette['text']}; text-decoration: underline; }}"
+        f"QPushButton#setupAddActivity:disabled, QPushButton#setupAddHomework:disabled {{ "
+        f"background: transparent; color: {palette['muted']}; }}"
+        # Level with the name beside it, which a button's padding pushed a few pixels below.
+        f"QPushButton#setupChange {{ padding: 0 2px; }}"
+        f"QPushButton#setupBack {{ background: transparent; color: {palette['text']}; {edges} }}"
+        f"QPushButton#setupBack:hover {{ background: {mix(palette['accent'], palette['window'], 0.1)}; }}"
+        f"QPushButton#setupNext {{ padding: {pad}px {pad * 3}px; font-weight: 700; }}"
+    )
+
+
 def pack_stylesheet(
     pack: object,
     system_dark: bool,
@@ -766,13 +835,8 @@ def pack_stylesheet(
         f"QLabel#blockDurationLine[problem=\"true\"] {{ color: {palette['error']}; font-weight: 600; }}"
         f"QPushButton#moreButton, QPushButton#settingsGear {{ background: transparent; "
         f"color: {palette['muted']}; {edges} }}"
-        f"QWidget#setupCard {{ background: {palette['panel']}; border-radius: {radius}px; {edges} }}"
-        # The rows inside it are bare QWidgets, which the rule above would paint in the page colour,
-        # putting a band of the background across the middle of a white card.
-        f"QWidget#setupRow {{ background: transparent; border: none; padding: 0; }}"
-        f"QLabel#setupKicker {{ color: {palette['muted']}; font-weight: 600; }}"
-        f"QLabel#setupHeading {{ font-size: {size + 3}pt; font-weight: 700; }}"
-        f"QPushButton#authSwitch, QPushButton#forgotPassword, QPushButton#updateSkip {{ "
+        + setup_rules(palette, radius, size, pad, knobs["depth"])
+        + f"QPushButton#authSwitch, QPushButton#forgotPassword, QPushButton#updateSkip {{ "
         f"background: transparent; "
         f"color: {palette['accent']}; border: none; padding: {pad}px 0; "
         f"font-size: {size - 1}pt; text-align: left; min-height: 0; }}"

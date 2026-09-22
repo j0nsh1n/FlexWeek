@@ -107,7 +107,7 @@ from desktop.native.calendar import (
     span_problem,
 )
 from desktop.native.look import block_paint, resolved_palette
-from desktop.native.motion import appear, vanish
+from desktop.native.motion import appear, settle, vanish
 from desktop.native.reuse import (
     AVAILABILITY_LIMIT,
     LATE_MINUTES,
@@ -261,6 +261,8 @@ class Toast(QLabel):
         self.setText(text)
         self.setAccessibleName(text)
         self.setAccessibleDescription(text)
+        # A rise still running would carry the notice back to where the last one was meant to go.
+        settle(self)
         self.reposition()
         # A notice that arrives while the last one fades out takes its place instead of vanishing too.
         if self.graphicsEffect() is not None:
@@ -2168,6 +2170,7 @@ class ChooseTimeDialog(QDialog):
         days: list[int],
         blocks: list[dict],
         due: tuple[int, int] | None,
+        today: int | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(f"Choose a time for {block.get('title') or 'homework'}")
@@ -2181,6 +2184,9 @@ class ChooseTimeDialog(QDialog):
         monday = date.fromisoformat(week_start)
         for day in days:
             self.day.addItem((monday + timedelta(days=day)).strftime("%a %-d %b"), day)
+        # Today rather than the first day the homework could go, which on a Wednesday was Monday.
+        if today in days:
+            self.day.setCurrentIndex(days.index(today))
         form.addRow("Day", self.day)
         self.start = QTimeEdit(QTime(16, 0))
         self.start.setObjectName("chooseTimeStart")

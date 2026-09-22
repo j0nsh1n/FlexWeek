@@ -24,6 +24,7 @@ from desktop.native.calendar import (
     due_day_in_week,
     first_plannable_day,
     is_series,
+    is_setup_block,
     local_stamp,
     monday_of,
     month_anchor_date,
@@ -191,6 +192,8 @@ class NativeSession(QObject):
         self.focus: dict | None = None
         self._fresh_plan = False
         self.needs_time: dict[str, str] = {}
+        # Registered in this sitting, so setup can open before the account's preferences arrive.
+        self.new_account = False
         self.focus_store: dict[int, dict | None] = {}
         self.look: dict = sanitize_look(None)
         self.now_ms = lambda: int(time.time() * 1000)
@@ -277,6 +280,7 @@ class NativeSession(QObject):
         self.routines = {}
         self.saved_weeks = []
         self.preferences = None
+        self.new_account = False
         self.late_preview = None
         self.spread_preview = None
         self._seen_unfinished.clear()
@@ -543,6 +547,7 @@ class NativeSession(QObject):
                 return
             self.client.set_account(data)
             self.account = {"id": data["id"], "username": data["username"]}
+            self.new_account = True
             self.busy = False
             self.busy_changed.emit(False)
             self.account_changed.emit(self.account)
@@ -841,6 +846,14 @@ class NativeSession(QObject):
             updated["pinned"] = True
         self.add_block(updated)
         return True
+
+    def set_setup_blocks(self, blocks: list[dict]) -> None:
+        """Replace the school and activities setup made with `blocks`, as one Undo step. Anything the
+        student added another way stays where it is."""
+        kept = [block for block in self.blocks if not is_setup_block(block)]
+        made = [TimeBlock.model_validate(block).model_dump(mode="json") for block in blocks]
+        self.blocks = kept + made
+        self._touch("setting up your week")
 
     def plan_after_save(self, assignment_id: str) -> None:
         """Give this homework's sessions that need a time one once the save now under way lands."""

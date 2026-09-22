@@ -1,0 +1,1611 @@
+"""First-run setup: one question a page, every page skippable, remembered as the student goes.
+
+A new account arrives here from its recovery codes. Each page is kept when the student leaves it with
+Next, so a quit resumes where they were and nothing is asked twice. Look and layout belong to this
+computer; everything else belongs to the account. The window does the writing: this page says what
+was chosen. Once setup is finished or skipped it never returns unless the student asks for it again
+in Settings.
+"""
+
+from __future__ import annotations
+
+from copy import deepcopy
+from dataclasses import dataclass, field
+from uuid import uuid4
+
+from PySide6.QtCore import QDate, QDateTime, QRect, QRectF, Qt, QTime, QTimer, Signal
+from PySide6.QtGui import QKeyEvent, QMouseEvent, QPainter, QPainterPath, QPixmap, QResizeEvent, QShowEvent
+from PySide6.QtWidgets import (
+    QAbstractSpinBox,
+    QButtonGroup,
+    QCheckBox,
+    QComboBox,
+    QDateTimeEdit,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QRadioButton,
+    QScrollArea,
+    QSizePolicy,
+    QSpinBox,
+    QStackedWidget,
+    QTimeEdit,
+    QVBoxLayout,
+    QWidget,
+)
+
+from backend.models import valid_spotify_url
+from backend.slots import DAY_END_MIN, DAY_START_MIN, SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm
+from desktop.native.calendar import (
+    DAY_FULL,
+    SETUP_ACTIVITY_PREFIX,
+    SETUP_SCHOOL_ID,
+    is_setup_block,
+    sunday_due,
+)
+from desktop.native.layouts.registry import LAYOUTS, layouts_for, options_for, sanitize_layout
+from desktop.native.look import PACK_LABELS, PACKS, effective_look, sanitize_look
+from desktop.native.motion import appear, fade_away, glide, hold_picture, slide_page
+from desktop.native.previews import Previews
+from desktop.native.settings import PLANNING_STYLES, SPORT_FALLBACK, SPOTIFY_TONE_NOTE
+from desktop.native.sound import Bell
+from desktop.native.tones import FALLBACK, RECIPES
+from desktop.native.widgets import DAYS, DUE_FORMAT, FlowLayout
+
+SETUP_VERSION = 1
+STYLE, LOOK, COLOURS, WEEK, HOMEWORK, REMINDERS, FIRST, DONE = range(8)
+# The rail names six steps. Style has two more pages behind it for a student who builds their own.
+RAIL = (
+    ("Style", (STYLE, LOOK, COLOURS)),
+    ("Your week", (WEEK,)),
+    ("Homework time", (HOMEWORK,)),
+    ("Reminders and alarm", (REMINDERS,)),
+    ("First homework", (FIRST,)),
+    ("Done", (DONE,)),
+)
+LOOK_STEPS = (STYLE, LOOK, COLOURS)
+TITLES = {
+    STYLE: "Start from a style",
+    LOOK: "How do you want to see your week?",
+    COLOURS: "Colours and size",
+    WEEK: "Your week",
+    HOMEWORK: "How should homework get a time?",
+    REMINDERS: "Reminders and your alarm sound",
+    FIRST: "What homework is due first?",
+    DONE: "You're set",
+}
+NOTES = {
+    STYLE: "Each sets the view, the colours and the text size together. Change any of it later in Settings.",
+    LOOK: "Each one shows the same week its own way.",
+    COLOURS: "The picture follows what you pick.",
+    WEEK: "Fixed times the planner works around. Skip anything you don't have.",
+    HOMEWORK: "You can change this any time in Settings, under Planning.",
+    REMINDERS: "One sound for reminders, alarms and the end of a focus session.",
+    FIRST: "Add up to three. You can add the rest any time.",
+    DONE: "Everything here is also in Settings. Run setup again from Settings, under This computer.",
+}
+NEXT_LABEL, FINISH_LABEL = "Next", "Open my week"
+SKIP_STEP_LABEL, SKIP_ALL_LABEL = "Skip this step", "Skip setup"
+OWN_LOOK_LABEL = "Choose my own look instead"
+MAX_ACTIVITIES = 8
+MAX_FIRST_HOMEWORK = 3
+MAX_STUDY_WINDOWS = 21
+CUTOFFS = ("20:00", "20:30", "21:00", "21:30", "22:00", "22:30", "23:00")
+STUDY_DAYS = (("Weekdays", [0, 1, 2, 3, 4]), ("Every day", [0, 1, 2, 3, 4, 5, 6]), ("Weekends", [5, 6]))
+# A tap adds one of these rather than making the student type hours for the usual answers.
+STUDY_SUGGESTIONS = (
+    ("After school", [0, 1, 2, 3, 4], "15:30", "18:00"),
+    ("Evenings", [0, 1, 2, 3, 4], "19:00", "21:00"),
+    ("Weekend mornings", [5, 6], "10:00", "12:00"),
+)
+TEXT_SIZES = (("small", "Small"), ("normal", "Normal"), ("large", "Large"))
+SPACINGS = (("comfortable", "Comfortable"), ("compact", "Compact"))
+FONTS = (("sans", "Sans"), ("serif", "Serif"), ("mono", "Mono"))
+SHADOWS = (("soft", "Soft"), ("flat", "Flat"), ("hard", "Hard"))
+TONE_NAMES = {tone: tone.title() for tone in RECIPES}
+STYLE_THUMB, LOOK_THUMB, COLOUR_THUMB = 264, 206, 400
+
+
+@dataclass(frozen=True)
+class Style:
+    key: str
+    name: str
+    note: str
+    main: str
+    colour: str | None
+    pack: str
+    knobs: dict = field(default_factory=dict)
+    options: dict = field(default_factory=dict)
+
+
+STYLES = (
+    Style(
+        "plain",
+        "Plain calendar",
+        "Calendar · Today's app. Your week as a grid, like a timetable.",
+        "classic",
+        None,
+        "light-frost",
+    ),
+    Style(
+        "dashboard",
+        "Dashboard",
+        "Dashboard · Bento in indigo. What's next and what's due, as tiles.",
+        "bento",
+        "indigo",
+        "light-frost",
+    ),
+    Style(
+        "night",
+        "Night owl",
+        "Agenda · Timeline at night, with compact spacing.",
+        "timeline",
+        "night",
+        "dark-frost",
+        {"density": "compact"},
+        {"density": "compact"},
+    ),
+    Style(
+        "retro",
+        "Retro",
+        "Dashboard · Retro desktop in teal, with large text.",
+        "retro",
+        "teal",
+        "light-frost",
+        {"text": "large"},
+    ),
+)
+
+
+@dataclass
+class SetupState:
+    """What is in place now: setup opens on it, and keeps it up to date as pages are kept."""
+
+    pack: str
+    look: dict
+    layout: dict
+    preferences: dict
+    blocks: list[dict]
+    week_start: str
+    subjects: list[str] = field(default_factory=list)
+    first_run: bool = True
+    homework: list[str] = field(default_factory=list)
+
+
+def style_layout(style: Style, layout: dict) -> dict:
+    options = deepcopy(sanitize_layout(layout)["options"])
+    if style.colour is not None or style.options:
+        chosen = dict(options.get(style.main, {}))
+        if style.colour is not None:
+            chosen["colour"] = style.colour
+        chosen.update(style.options)
+        options[style.main] = chosen
+    return sanitize_layout({"main": style.main, "day": sanitize_layout(layout)["day"], "options": options})
+
+
+def style_look(style: Style) -> dict:
+    return sanitize_look({"preset": "default", "knobs": dict(style.knobs)})
+
+
+def matching_style(pack: str, look: dict, layout: dict) -> str | None:
+    """The style these choices amount to, so running setup again shows it picked."""
+    for style in STYLES:
+        if (
+            style_layout(style, layout)["main"] == layout["main"]
+            and style_layout(style, layout)["options"].get(style.main) == layout["options"].get(style.main)
+            and (style.main != "classic" or pack == style.pack)
+            and effective_look(style_look(style)) == effective_look(look)
+        ):
+            return style.key
+    return None
+
+
+def days_label(days: list[int]) -> str:
+    """Mon–Fri for a run of days, Tue, Thu for the rest."""
+    ordered = sorted(set(days))
+    if len(ordered) == 7:
+        return "every day"
+    if len(ordered) > 2 and ordered == list(range(ordered[0], ordered[-1] + 1)):
+        return f"{DAYS[ordered[0]]}–{DAYS[ordered[-1]]}"
+    return ", ".join(DAYS[day] for day in ordered)
+
+
+def span_label(start: str, minutes: int) -> str:
+    return f"{start}–{minutes_to_hhmm(hhmm_to_minutes(start) + minutes)}"
+
+
+def window_label(window: dict) -> str:
+    days = window.get("days") or []
+    named = next((name for name, wanted in STUDY_DAYS if sorted(days) == wanted), days_label(days))
+    text = f"{named} {span_label(window['start'], window['duration_min'])}"
+    return text + (f" · {window['subject']}" if window.get("subject") else "")
+
+
+def _label(text: str, name: str = "", wrap: bool = True) -> QLabel:
+    made = QLabel(text)
+    if name:
+        made.setObjectName(name)
+    made.setWordWrap(wrap)
+    return made
+
+
+def _repolish(widget: QWidget) -> None:
+    widget.style().unpolish(widget)
+    widget.style().polish(widget)
+
+
+def _rounded(picture: QPixmap, radius: int) -> QPixmap:
+    """The picture with its corners rounded to match the card it sits in."""
+    ratio = picture.devicePixelRatio()
+    out = QPixmap(picture.size())
+    out.setDevicePixelRatio(ratio)
+    out.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(out)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    path = QPainterPath()
+    path.addRoundedRect(QRectF(0, 0, picture.width() / ratio, picture.height() / ratio), radius, radius)
+    painter.setClipPath(path)
+    painter.drawPixmap(0, 0, picture)
+    painter.end()
+    return out
+
+
+def _quiet(text: str, name: str = "setupQuiet") -> QPushButton:
+    button = QPushButton(text)
+    button.setObjectName(name)
+    button.setCursor(Qt.CursorShape.PointingHandCursor)
+    return button
+
+
+def _row(*widgets: QWidget, stretch: bool = True) -> QWidget:
+    holder = QWidget()
+    holder.setObjectName("setupRow")
+    line = QHBoxLayout(holder)
+    line.setContentsMargins(0, 0, 0, 0)
+    line.setSpacing(8)
+    for widget in widgets:
+        line.addWidget(widget)
+    if stretch:
+        line.addStretch(1)
+    return holder
+
+
+class ChoiceCard(QFrame):
+    """A picture and a name the student picks by clicking, or by Space or Enter."""
+
+    chosen = Signal()
+
+    def __init__(self, name: str, note: str, width: int) -> None:
+        super().__init__()
+        self.setObjectName("setupChoice")
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAccessibleName(name)
+        self.setAccessibleDescription(note)
+        self._width = width
+        box = QVBoxLayout(self)
+        box.setContentsMargins(10, 10, 10, 12)
+        box.setSpacing(6)
+        self.picture = QLabel()
+        self.picture.setObjectName("setupChoicePicture")
+        self.picture.setFixedSize(width, round(width * 0.625))
+        box.addWidget(self.picture)
+        box.addWidget(_label(name, "setupChoiceName"))
+        self.note = _label(note, "setupChoiceNote")
+        box.addWidget(self.note)
+        box.addStretch(1)
+        self.setFixedWidth(width + 22)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        self.select(False)
+
+    def set_picture(self, picture: QPixmap) -> None:
+        self.picture.setPixmap(_rounded(picture, 6))
+
+    def select(self, on: bool) -> None:
+        self.setProperty("selected", on)
+        _repolish(self)
+
+    def is_selected(self) -> bool:
+        return bool(self.property("selected"))
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton and self.rect().contains(event.position().toPoint()):
+            self.setFocus(Qt.FocusReason.MouseFocusReason)
+            self.chosen.emit()
+            return
+        super().mouseReleaseEvent(event)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+        if event.key() in (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self.chosen.emit()
+            return
+        super().keyPressEvent(event)
+
+
+class Chips(QWidget):
+    """One of a few choices, as a row of pills."""
+
+    changed = Signal()
+
+    def __init__(self, choices: tuple[tuple[str, str], ...], name: str) -> None:
+        super().__init__()
+        self.setObjectName("setupRow")
+        self._line = FlowLayout(self, gap=6)
+        self._line.setContentsMargins(0, 0, 0, 0)
+        self._group = QButtonGroup(self)
+        self._group.setExclusive(True)
+        self._name = name
+        self.set_choices(choices)
+
+    def set_choices(self, choices: tuple[tuple[str, str], ...]) -> None:
+        for button in self._group.buttons():
+            self._group.removeButton(button)
+            self._line.removeWidget(button)
+            button.setParent(None)
+            button.deleteLater()
+        for value, text in choices:
+            button = QPushButton(text)
+            button.setObjectName("setupChip")
+            button.setCheckable(True)
+            button.setProperty("value", value)
+            button.setAccessibleName(f"{self._name}: {text}")
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.clicked.connect(self.changed)
+            self._group.addButton(button)
+            self._line.addWidget(button)
+        self.updateGeometry()
+
+    def value(self) -> str | None:
+        checked = self._group.checkedButton()
+        return None if checked is None else str(checked.property("value"))
+
+    def set_value(self, value: object) -> None:
+        for button in self._group.buttons():
+            if button.property("value") == value:
+                button.setChecked(True)
+                return
+        buttons = self._group.buttons()
+        if buttons:
+            buttons[0].setChecked(True)
+
+    def buttons(self) -> list[QPushButton]:
+        return [button for button in self._group.buttons() if isinstance(button, QPushButton)]
+
+
+class DayPicker(QWidget):
+    changed = Signal()
+
+    def __init__(self, days: list[int] | tuple[int, ...] = ()) -> None:
+        super().__init__()
+        self.setObjectName("setupRow")
+        line = QHBoxLayout(self)
+        line.setContentsMargins(0, 0, 0, 0)
+        line.setSpacing(4)
+        self.buttons: list[QPushButton] = []
+        for index, name in enumerate(DAYS):
+            button = QPushButton(name)
+            button.setObjectName("setupDay")
+            button.setCheckable(True)
+            button.setChecked(index in days)
+            button.setAccessibleName(DAY_FULL[index])
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.toggled.connect(self.changed)
+            line.addWidget(button)
+            self.buttons.append(button)
+
+    def days(self) -> list[int]:
+        return [index for index, button in enumerate(self.buttons) if button.isChecked()]
+
+    def set_days(self, days: list[int]) -> None:
+        for index, button in enumerate(self.buttons):
+            button.setChecked(index in days)
+
+
+class QuarterTime(QTimeEdit):
+    """A time on the 15-minute grid the planner works in. The arrows and the wheel move the minutes a
+    quarter hour at a time, and a time typed between quarters moves to the nearest one."""
+
+    def __init__(self, hhmm: str) -> None:
+        super().__init__(QTime.fromString(hhmm, "HH:mm"))
+        self.setObjectName("setupTime")
+        self.setDisplayFormat("HH:mm")
+        self.setCorrectionMode(QAbstractSpinBox.CorrectionMode.CorrectToNearestValue)
+        self.editingFinished.connect(self._snap)
+
+    def minutes(self) -> int:
+        time = self.time()
+        return time.hour() * 60 + time.minute()
+
+    def set_minutes(self, minutes: int) -> None:
+        minutes = max(0, min(minutes, 24 * 60 - SLOT_MIN))
+        self.setTime(QTime(minutes // 60, minutes % 60))
+
+    def stepBy(self, steps: int) -> None:  # noqa: N802
+        if self.currentSection() == QDateTimeEdit.Section.MinuteSection:
+            base = self.minutes() - self.minutes() % SLOT_MIN
+            self.set_minutes(base + steps * SLOT_MIN)
+            return
+        super().stepBy(steps)
+
+    def _snap(self) -> None:
+        self.set_minutes(round(self.minutes() / SLOT_MIN) * SLOT_MIN)
+
+    def hhmm(self) -> str:
+        return minutes_to_hhmm(round(self.minutes() / SLOT_MIN) * SLOT_MIN)
+
+
+class TimeRange(QWidget):
+    def __init__(self, start: str, end: str, name: str) -> None:
+        super().__init__()
+        self.setObjectName("setupRow")
+        line = QHBoxLayout(self)
+        line.setContentsMargins(0, 0, 0, 0)
+        line.setSpacing(6)
+        self.start = QuarterTime(start)
+        self.start.setAccessibleName(f"{name} starts")
+        self.end = QuarterTime(end)
+        self.end.setAccessibleName(f"{name} ends")
+        line.addWidget(_label("from", "setupFieldLabel", wrap=False))
+        line.addWidget(self.start)
+        line.addWidget(_label("to", "setupFieldLabel", wrap=False))
+        line.addWidget(self.end)
+
+    def span(self) -> tuple[str, int]:
+        start = hhmm_to_minutes(self.start.hhmm())
+        return self.start.hhmm(), hhmm_to_minutes(self.end.hhmm()) - start
+
+    def set_span(self, start: str, minutes: int) -> None:
+        begin = hhmm_to_minutes(start)
+        self.start.set_minutes(begin)
+        self.end.set_minutes(begin + minutes)
+
+
+class ActivityRow(QFrame):
+    removed = Signal(object)
+
+    def __init__(
+        self, title: str = "", days: list[int] | None = None, start: str = "15:30", minutes: int = 90
+    ) -> None:
+        super().__init__()
+        self.setObjectName("setupGroup")
+        box = QVBoxLayout(self)
+        box.setContentsMargins(12, 10, 12, 10)
+        box.setSpacing(8)
+        self.name = QLineEdit(title)
+        self.name.setObjectName("setupActivityName")
+        self.name.setPlaceholderText("Soccer, band, a job…")
+        self.name.setMaxLength(80)
+        self.name.setAccessibleName("Activity name")
+        remove = _quiet("Remove")
+        remove.setAccessibleName("Remove this activity")
+        remove.clicked.connect(lambda: self.removed.emit(self))
+        top = QHBoxLayout()
+        top.addWidget(self.name, 1)
+        top.addWidget(remove)
+        box.addLayout(top)
+        self.days = DayPicker(days or [])
+        self.times = TimeRange(start, minutes_to_hhmm(hhmm_to_minutes(start) + minutes), "Activity")
+        bottom = FlowLayout(gap=12)
+        bottom.addWidget(self.days)
+        bottom.addWidget(self.times)
+        box.addLayout(bottom)
+
+
+class HomeworkRow(QFrame):
+    removed = Signal(object)
+
+    def __init__(self, due: str) -> None:
+        super().__init__()
+        self.setObjectName("setupGroup")
+        grid = QGridLayout(self)
+        grid.setContentsMargins(12, 10, 12, 10)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(8)
+        self.name = QLineEdit()
+        self.name.setObjectName("setupHomeworkName")
+        self.name.setPlaceholderText("History essay")
+        self.name.setMaxLength(80)
+        self.name.setAccessibleName("Homework name")
+        self.minutes = QSpinBox()
+        self.minutes.setObjectName("setupHomeworkMinutes")
+        self.minutes.setRange(15, 600)
+        self.minutes.setSingleStep(15)
+        self.minutes.setValue(60)
+        self.minutes.setSuffix(" min")
+        self.minutes.setAccessibleName("How long it takes")
+        self.due = QDateTimeEdit(QDateTime.fromString(due, "yyyy-MM-dd'T'HH:mm"))
+        self.due.setObjectName("setupHomeworkDue")
+        self.due.setDisplayFormat(DUE_FORMAT)
+        self.due.setCalendarPopup(True)
+        self.due.setMinimumDate(QDate(2000, 1, 1))
+        self.due.setMaximumDate(QDate(2099, 12, 31))
+        self.due.setAccessibleName("Due")
+        remove = _quiet("Remove")
+        remove.setAccessibleName("Remove this homework")
+        remove.clicked.connect(lambda: self.removed.emit(self))
+        grid.addWidget(_label("Name", "setupFieldLabel", wrap=False), 0, 0)
+        grid.addWidget(self.name, 0, 1, 1, 3)
+        grid.addWidget(remove, 0, 4)
+        grid.addWidget(_label("Takes", "setupFieldLabel", wrap=False), 1, 0)
+        grid.addWidget(self.minutes, 1, 1)
+        grid.addWidget(_label("Due", "setupFieldLabel", wrap=False), 1, 2)
+        grid.addWidget(self.due, 1, 3, 1, 2)
+        grid.setColumnStretch(3, 1)
+
+
+class SetupPage(QWidget):
+    """The whole window, from the recovery codes to the first week."""
+
+    # Show this look now without keeping it: {"pack", "look", "layout"}.
+    previewed = Signal(dict)
+    # A page left: its step, where the student went, and what to keep (None when nothing is kept).
+    left = Signal(int, int, object)
+    finished = Signal()
+    # The alarm sound and Spotify link on screen, for a reminder sent now.
+    test_requested = Signal(str, str)
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("setupPage")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.motion = "normal"
+        self.volume = 80
+        self._previews = Previews()
+        self._bell = Bell(self)
+        self._step = STYLE
+        self._furthest = STYLE
+        self._own_look = False
+        self._state = SetupState("system", sanitize_look(None), sanitize_layout(None), {}, [], "")
+        self._pack, self._look, self._layout = self._state.pack, self._state.look, self._state.layout
+        self._entered: tuple[str, dict, dict] = (self._pack, deepcopy(self._look), deepcopy(self._layout))
+        self._style_key: str | None = None
+        # Homework this run of setup made, by name, so Back and Next again edits it rather than adding
+        # it twice.
+        self._made: dict[str, str] = {}
+        self._pending_pictures: list[tuple[ChoiceCard, str, str | None, str, int]] = []
+        self._warm = QTimer(self)
+        self._warm.setSingleShot(True)
+        self._warm.setInterval(0)
+        self._warm.timeout.connect(self._draw_next_picture)
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        outer.addWidget(self._build_rail())
+        column = QVBoxLayout()
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(0)
+        self.stack = QStackedWidget()
+        self.stack.setObjectName("setupStack")
+        self.pages: dict[int, QWidget] = {}
+        builders = (
+            (STYLE, self._build_style),
+            (LOOK, self._build_look),
+            (COLOURS, self._build_colours),
+            (WEEK, self._build_week),
+            (HOMEWORK, self._build_homework),
+            (REMINDERS, self._build_reminders),
+            (FIRST, self._build_first),
+            (DONE, self._build_done),
+        )
+        for step, builder in builders:
+            self.pages[step] = self._page(step, builder())
+            self.stack.addWidget(self.pages[step])
+        column.addWidget(self.stack, 1)
+        nav = QWidget()
+        nav.setObjectName("setupNav")
+        nav.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        line = QHBoxLayout(nav)
+        line.setContentsMargins(32, 12, 32, 16)
+        line.setSpacing(10)
+        self.back = QPushButton("Back")
+        self.back.setObjectName("setupBack")
+        self.back.clicked.connect(self._go_back)
+        self.error = _label("", "setupError")
+        self.skip = _quiet(SKIP_STEP_LABEL, "setupSkip")
+        self.skip.clicked.connect(self._skip_step)
+        self.next = QPushButton(NEXT_LABEL)
+        self.next.setObjectName("setupNext")
+        self.next.setDefault(True)
+        self.next.clicked.connect(self._go_next)
+        line.addWidget(self.back)
+        line.addWidget(self.error, 1)
+        line.addWidget(self.skip)
+        line.addWidget(self.next)
+        column.addWidget(nav)
+        outer.addLayout(column, 1)
+        self._sync_chrome()
+
+    # Building
+
+    def _build_rail(self) -> QWidget:
+        rail = QWidget()
+        rail.setObjectName("setupRail")
+        rail.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        rail.setMinimumWidth(210)
+        box = QVBoxLayout(rail)
+        box.setContentsMargins(22, 28, 16, 20)
+        box.setSpacing(2)
+        box.addWidget(_label("Set up FlexWeek", "setupBrand", wrap=False))
+        box.addSpacing(14)
+        self.rail_items: list[QPushButton] = []
+        for index, (name, steps) in enumerate(RAIL):
+            item = QPushButton(f"{index + 1}   {name}")
+            item.setObjectName("setupRailItem")
+            item.setCursor(Qt.CursorShape.PointingHandCursor)
+            item.setAccessibleName(f"Step {index + 1}: {name}")
+            item.clicked.connect(lambda _checked=False, step=steps[0]: self._jump(step))
+            box.addWidget(item)
+            self.rail_items.append(item)
+        box.addStretch(1)
+        self.skip_all = _quiet(SKIP_ALL_LABEL, "setupSkipAll")
+        self.skip_all.clicked.connect(self._skip_all)
+        box.addWidget(self.skip_all, 0, Qt.AlignmentFlag.AlignLeft)
+        box.addWidget(_label("You can run it again from Settings.", "setupHint"))
+        # The bar beside the current step. It glides from step to step rather than jumping.
+        self.marker = QFrame(rail)
+        self.marker.setObjectName("setupRailMarker")
+        self.marker.setFixedWidth(3)
+        self._rail = rail
+        return rail
+
+    def _page(self, step: int, content: QWidget) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setObjectName("setupScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        body = QWidget()
+        body.setObjectName("setupBody")
+        around = QHBoxLayout(body)
+        around.setContentsMargins(32, 28, 32, 12)
+        column = QWidget()
+        column.setObjectName("setupRow")
+        column.setMaximumWidth(900)
+        box = QVBoxLayout(column)
+        box.setContentsMargins(0, 0, 0, 0)
+        box.setSpacing(10)
+        title = _label(TITLES[step], "setupTitle")
+        box.addWidget(title)
+        box.addWidget(_label(NOTES[step], "setupNote"))
+        box.addSpacing(6)
+        box.addWidget(content)
+        box.addStretch(1)
+        around.addWidget(column, 1)
+        around.addStretch(0)
+        scroll.setWidget(body)
+        return scroll
+
+    def _section(self, box: QVBoxLayout, text: str) -> None:
+        box.addSpacing(6)
+        box.addWidget(_label(text, "setupSection"))
+
+    def _build_style(self) -> QWidget:
+        content = QWidget()
+        content.setObjectName("setupRow")
+        box = QVBoxLayout(content)
+        box.setContentsMargins(0, 0, 0, 0)
+        cards = QWidget()
+        cards.setObjectName("setupRow")
+        # A grid, not a flow: a flow sizes each card by its hint and cannot give a name that wraps its
+        # second line, so the name was drawn over the picture.
+        grid = QGridLayout(cards)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setSpacing(14)
+        self.style_cards: dict[str, ChoiceCard] = {}
+        for index, style in enumerate(STYLES):
+            card = ChoiceCard(style.name, style.note, STYLE_THUMB)
+            card.chosen.connect(lambda style=style: self._choose_style(style))
+            grid.addWidget(card, index // 2, index % 2)
+            self.style_cards[style.key] = card
+        grid.setColumnStretch(2, 1)
+        box.addWidget(cards)
+        own = _quiet(OWN_LOOK_LABEL + "  →", "setupOwnLook")
+        own.clicked.connect(self._choose_own_look)
+        box.addWidget(own, 0, Qt.AlignmentFlag.AlignLeft)
+        return content
+
+    def _build_look(self) -> QWidget:
+        content = QWidget()
+        content.setObjectName("setupRow")
+        grid = QGridLayout(content)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setSpacing(14)
+        self.look_cards: dict[str, ChoiceCard] = {}
+        for index, spec in enumerate(layouts_for("plan")):
+            card = ChoiceCard(f"{spec.purpose} · {spec.label}", spec.summary, LOOK_THUMB)
+            card.chosen.connect(lambda layout_id=spec.id: self._choose_main(layout_id))
+            grid.addWidget(card, index // 3, index % 3)
+            self.look_cards[spec.id] = card
+        grid.setColumnStretch(3, 1)
+        return content
+
+    def _build_colours(self) -> QWidget:
+        content = QWidget()
+        content.setObjectName("setupRow")
+        line = QHBoxLayout(content)
+        line.setContentsMargins(0, 0, 0, 0)
+        line.setSpacing(24)
+        left = QVBoxLayout()
+        left.setSpacing(8)
+        left.addWidget(_label("Colours", "setupSection"))
+        self.colours = Chips((), "Colours")
+        self.colours.changed.connect(self._colours_changed)
+        left.addWidget(self.colours)
+        left.addWidget(_label("Text size", "setupSection"))
+        self.text_size = Chips(TEXT_SIZES, "Text size")
+        self.text_size.changed.connect(self._colours_changed)
+        left.addWidget(self.text_size)
+        left.addWidget(_label("Spacing", "setupSection"))
+        self.spacing = Chips(SPACINGS, "Spacing")
+        self.spacing.changed.connect(self._colours_changed)
+        left.addWidget(self.spacing)
+        fine = _quiet("Fine-tune fonts and shadows", "setupFineTune")
+        fine.setCheckable(True)
+        left.addWidget(fine, 0, Qt.AlignmentFlag.AlignLeft)
+        self.fine = QWidget()
+        self.fine.setObjectName("setupRow")
+        fine_box = QVBoxLayout(self.fine)
+        fine_box.setContentsMargins(0, 0, 0, 0)
+        fine_box.addWidget(_label("Font", "setupFieldLabel"))
+        self.font_choice = Chips(FONTS, "Font")
+        self.font_choice.changed.connect(self._colours_changed)
+        fine_box.addWidget(self.font_choice)
+        fine_box.addWidget(_label("Shadows", "setupFieldLabel"))
+        self.shadows = Chips(SHADOWS, "Shadows")
+        self.shadows.changed.connect(self._colours_changed)
+        fine_box.addWidget(self.shadows)
+        self.fine.setVisible(False)
+        fine.toggled.connect(self.fine.setVisible)
+        left.addWidget(self.fine)
+        left.addWidget(_label("Day screen, for when you are doing the plan", "setupSection"))
+        self.day_screen = Chips(
+            tuple((spec.id, f"{spec.purpose} · {spec.label}") for spec in layouts_for("day")), "Day screen"
+        )
+        self.day_screen.changed.connect(self._colours_changed)
+        left.addWidget(self.day_screen)
+        left.addStretch(1)
+        line.addLayout(left, 1)
+        frame = QFrame()
+        frame.setObjectName("setupGroup")
+        framed = QVBoxLayout(frame)
+        framed.setContentsMargins(8, 8, 8, 8)
+        self.colour_preview = QLabel()
+        self.colour_preview.setObjectName("setupPreview")
+        self.colour_preview.setFixedSize(COLOUR_THUMB, round(COLOUR_THUMB * 0.625))
+        self.colour_preview.setAccessibleName("Preview of your week")
+        framed.addWidget(self.colour_preview)
+        line.addWidget(frame, 0, Qt.AlignmentFlag.AlignTop)
+        return content
+
+    def _build_week(self) -> QWidget:
+        content = QWidget()
+        content.setObjectName("setupRow")
+        box = QVBoxLayout(content)
+        box.setContentsMargins(0, 0, 0, 0)
+        box.setSpacing(8)
+        box.addWidget(_label("School", "setupSection"))
+        self.school_days = DayPicker([0, 1, 2, 3, 4])
+        self.school_times = TimeRange("08:00", "14:30", "School")
+        school = QWidget()
+        school.setObjectName("setupRow")
+        school_line = FlowLayout(school, gap=12)
+        school_line.setContentsMargins(0, 0, 0, 0)
+        school_line.addWidget(self.school_days)
+        school_line.addWidget(self.school_times)
+        box.addWidget(school)
+        box.addWidget(_label("No school days picked means no school on the calendar.", "setupHint"))
+        self._section(box, "Sports, clubs and jobs")
+        self.activity_box = QVBoxLayout()
+        self.activity_box.setSpacing(8)
+        box.addLayout(self.activity_box)
+        self.activities: list[ActivityRow] = []
+        self.add_activity = _quiet("+ Add a sport, club or job", "setupAddActivity")
+        self.add_activity.clicked.connect(lambda: self._add_activity(focus=True))
+        box.addWidget(self.add_activity, 0, Qt.AlignmentFlag.AlignLeft)
+        self._section(box, "Bedtime")
+        self.cutoff = QComboBox()
+        self.cutoff.setObjectName("setupCutoff")
+        self.cutoff.setAccessibleName("No homework after")
+        self.cutoff.addItem("No limit", None)
+        for hhmm in CUTOFFS:
+            self.cutoff.addItem(hhmm, hhmm)
+        box.addWidget(_row(_label("No homework after", "setupFieldLabel", wrap=False), self.cutoff))
+        return content
+
+    def _build_homework(self) -> QWidget:
+        content = QWidget()
+        content.setObjectName("setupRow")
+        box = QVBoxLayout(content)
+        box.setContentsMargins(0, 0, 0, 0)
+        box.setSpacing(6)
+        self.planning = QButtonGroup(content)
+        self.planning_buttons: dict[str, QRadioButton] = {}
+        for value, text, note in PLANNING_STYLES:
+            button = QRadioButton(text)
+            button.setObjectName(f"setupPlanning-{value}")
+            self.planning.addButton(button)
+            self.planning_buttons[value] = button
+            box.addWidget(button)
+            hint = _label(note, "setupHint")
+            hint.setContentsMargins(28, 0, 0, 6)
+            box.addWidget(hint)
+        self._section(box, "When do you like to do homework?")
+        box.addWidget(
+            _label(
+                "Plans put homework in these times first. Leave it empty to use any free time.", "setupHint"
+            )
+        )
+        self.study_chips = QWidget()
+        self.study_chips.setObjectName("setupRow")
+        self._study_line = FlowLayout(self.study_chips, gap=6)
+        self._study_line.setContentsMargins(0, 0, 0, 0)
+        box.addWidget(self.study_chips)
+        self.study_windows: list[dict] = []
+        suggestions = QWidget()
+        suggestions.setObjectName("setupRow")
+        suggest_line = FlowLayout(suggestions, gap=6)
+        suggest_line.setContentsMargins(0, 0, 0, 0)
+        for name, days, start, end in STUDY_SUGGESTIONS:
+            quick = _quiet(f"+ {name} {start}–{end}", "setupSuggest")
+            quick.clicked.connect(
+                lambda _checked=False, days=days, start=start, end=end: self._add_study(
+                    days, start, end, None
+                )
+            )
+            suggest_line.addWidget(quick)
+        box.addWidget(suggestions)
+        own = QFrame()
+        own.setObjectName("setupGroup")
+        own_line = FlowLayout(own, gap=8)
+        own_line.setContentsMargins(12, 10, 12, 10)
+        self.study_days = QComboBox()
+        self.study_days.setObjectName("setupStudyDays")
+        self.study_days.setAccessibleName("Study days")
+        for name, days in STUDY_DAYS:
+            self.study_days.addItem(name, days)
+        self.study_times = TimeRange("16:00", "18:00", "Study time")
+        self.study_subject = QComboBox()
+        self.study_subject.setObjectName("setupStudySubject")
+        self.study_subject.setEditable(True)
+        self.study_subject.setAccessibleName("Only for this subject")
+        self.study_subject.setMinimumWidth(150)
+        add = QPushButton("Add this time")
+        add.setObjectName("setupStudyAdd")
+        add.clicked.connect(self._add_own_study)
+        own_line.addWidget(self.study_days)
+        own_line.addWidget(self.study_times)
+        own_line.addWidget(self.study_subject)
+        own_line.addWidget(add)
+        self._section(box, "A time of your own, or one kept for a subject")
+        box.addWidget(own)
+        return content
+
+    def _build_reminders(self) -> QWidget:
+        content = QWidget()
+        content.setObjectName("setupRow")
+        box = QVBoxLayout(content)
+        box.setContentsMargins(0, 0, 0, 0)
+        box.setSpacing(8)
+        self.reminders = QCheckBox("Remind me before things start")
+        self.reminders.setObjectName("setupReminders")
+        box.addWidget(self.reminders)
+        self.lead = QSpinBox()
+        self.lead.setObjectName("setupLead")
+        self.lead.setRange(0, 120)
+        self.lead.setSingleStep(5)
+        self.lead.setSuffix(" min before")
+        self.lead.setAccessibleName("How long before")
+        box.addWidget(_row(self.lead))
+        self.reminders.toggled.connect(self.lead.setEnabled)
+        self._section(box, "Alarm sound")
+        self.tones = QButtonGroup(content)
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(6)
+        grid.setVerticalSpacing(6)
+        self.tone_buttons: dict[str, QRadioButton] = {}
+        for index, tone in enumerate(RECIPES):
+            button = QRadioButton(TONE_NAMES[tone])
+            button.setObjectName(f"setupTone-{tone}")
+            button.setMinimumWidth(96)
+            self.tones.addButton(button)
+            self.tone_buttons[tone] = button
+            play = _quiet("▶ Play", "setupPlay")
+            play.setAccessibleName(f"Play {TONE_NAMES[tone]}")
+            play.clicked.connect(lambda _checked=False, tone=tone: self._bell.once(tone, self.volume))
+            grid.addWidget(_row(button, play), index // 3, index % 3)
+        grid.setColumnStretch(3, 1)
+        box.addLayout(grid)
+        spotify = QRadioButton("A Spotify song or playlist")
+        spotify.setObjectName("setupTone-spotify")
+        self.tones.addButton(spotify)
+        self.tone_buttons["spotify"] = spotify
+        box.addWidget(spotify)
+        self.spotify = QLineEdit()
+        self.spotify.setObjectName("setupSpotify")
+        self.spotify.setPlaceholderText("Paste a link from Spotify: open.spotify.com/track/… or /playlist/…")
+        self.spotify.setAccessibleName("Spotify link")
+        self.spotify_note = _label(SPOTIFY_TONE_NOTE, "setupHint")
+        box.addWidget(self.spotify)
+        box.addWidget(self.spotify_note)
+        self.tones.buttonToggled.connect(lambda *_args: self._follow_tone())
+        self.test = QPushButton("Send a test reminder")
+        self.test.setObjectName("setupTest")
+        self.test.clicked.connect(self._send_test)
+        self.test_result = _label("", "setupHint")
+        box.addSpacing(6)
+        box.addWidget(self.test, 0, Qt.AlignmentFlag.AlignLeft)
+        box.addWidget(self.test_result)
+        return content
+
+    def _build_first(self) -> QWidget:
+        content = QWidget()
+        content.setObjectName("setupRow")
+        box = QVBoxLayout(content)
+        box.setContentsMargins(0, 0, 0, 0)
+        box.setSpacing(8)
+        self.homework_box = QVBoxLayout()
+        self.homework_box.setSpacing(8)
+        box.addLayout(self.homework_box)
+        self.homework_rows: list[HomeworkRow] = []
+        self.add_homework = _quiet("+ Add another", "setupAddHomework")
+        self.add_homework.clicked.connect(lambda: self._add_homework_row(focus=True))
+        box.addWidget(self.add_homework, 0, Qt.AlignmentFlag.AlignLeft)
+        return content
+
+    def _build_done(self) -> QWidget:
+        content = QWidget()
+        content.setObjectName("setupRow")
+        self.summary = QGridLayout(content)
+        self.summary.setContentsMargins(0, 0, 0, 0)
+        self.summary.setHorizontalSpacing(18)
+        self.summary.setVerticalSpacing(12)
+        self.summary.setColumnStretch(1, 1)
+        self.summary_rows: list[tuple[QLabel, QLabel, QPushButton]] = []
+        for row, (name, steps) in enumerate(RAIL[:-1]):
+            heading = _label(name, "setupSummaryName", wrap=False)
+            value = _label("", "setupSummaryValue")
+            change = _quiet("Change", "setupChange")
+            change.setAccessibleName(f"Change {name.lower()}")
+            change.clicked.connect(lambda _checked=False, step=steps[0]: self._jump(step))
+            self.summary.addWidget(heading, row, 0, Qt.AlignmentFlag.AlignTop)
+            self.summary.addWidget(value, row, 1, Qt.AlignmentFlag.AlignTop)
+            self.summary.addWidget(change, row, 2, Qt.AlignmentFlag.AlignTop)
+            self.summary_rows.append((heading, value, change))
+        return content
+
+    # Opening
+
+    @property
+    def step(self) -> int:
+        return self._step
+
+    def open(self, state: SetupState, step: int = STYLE) -> None:
+        """Fill every page from what is in place now and show `step`, without animating."""
+        self._state = deepcopy(state)
+        self._pack, self._look, self._layout = (
+            state.pack,
+            sanitize_look(state.look),
+            sanitize_layout(state.layout),
+        )
+        self._made = {}
+        self._fill_style()
+        self._fill_week()
+        self._fill_homework()
+        self._fill_reminders()
+        self._fill_first()
+        step = step if step in self.pages else STYLE
+        self._own_look = step in (LOOK, COLOURS)
+        self._step = step
+        self._furthest = step
+        self._entered = (self._pack, deepcopy(self._look), deepcopy(self._layout))
+        self.error.clear()
+        self.test_result.clear()
+        self._prepare(step)
+        self.stack.setCurrentWidget(self.pages[step])
+        self._sync_chrome()
+        QTimer.singleShot(0, lambda: self._place_marker(animate=False))
+
+    def _fill_style(self) -> None:
+        self._style_key = (
+            matching_style(self._pack, self._look, self._layout) if not self._state.first_run else None
+        )
+        for key, card in self.style_cards.items():
+            card.select(key == self._style_key)
+        for layout_id, card in self.look_cards.items():
+            card.select(layout_id == self._layout["main"])
+        # The first page's pictures before it shows; the rest one at a time once it has.
+        for style in STYLES:
+            card = self.style_cards[style.key]
+            card.set_picture(
+                self._previews.get(style.main, style.colour, style.pack, style_look(style), STYLE_THUMB)
+            )
+        self._pending_pictures = []
+        for spec in layouts_for("plan"):
+            colour = spec.colourways[0][0] if spec.colourways else None
+            self._pending_pictures.append((self.look_cards[spec.id], spec.id, colour, self._pack, LOOK_THUMB))
+        self._warm.start()
+
+    def _draw_next_picture(self) -> None:
+        if not self._pending_pictures:
+            return
+        card, main, colour, pack, width = self._pending_pictures.pop(0)
+        card.set_picture(self._previews.get(main, colour, pack, None, width))
+        if self._pending_pictures:
+            self._warm.start()
+
+    def _fill_week(self) -> None:
+        blocks = self._state.blocks
+        school = next((block for block in blocks if block.get("id") == SETUP_SCHOOL_ID), None)
+        if school is not None and school.get("start"):
+            self.school_days.set_days(list(school.get("days") or []))
+            self.school_times.set_span(str(school["start"]), int(school["duration_min"]))
+        else:
+            self.school_days.set_days([0, 1, 2, 3, 4])
+            self.school_times.set_span("08:00", 390)
+        for row in list(self.activities):
+            self._remove_activity(row)
+        for block in blocks:
+            if is_setup_block(block) and block.get("id") != SETUP_SCHOOL_ID and block.get("start"):
+                self._add_activity(
+                    title=str(block.get("title") or ""),
+                    days=list(block.get("days") or []),
+                    start=str(block["start"]),
+                    minutes=int(block["duration_min"]),
+                )
+        if not self.activities:
+            self._add_activity()
+        cutoff = self._state.preferences.get("day_cutoff")
+        self.cutoff.setCurrentIndex(max(0, self.cutoff.findData(cutoff)))
+
+    def _fill_homework(self) -> None:
+        style = self._state.preferences.get("planning_style") or "suggest"
+        self.planning_buttons.get(style, self.planning_buttons["suggest"]).setChecked(True)
+        self.study_windows = deepcopy(self._state.preferences.get("study_windows") or [])
+        self._render_study()
+        self.study_subject.clear()
+        self.study_subject.addItem("Any subject", "")
+        for subject in self._state.subjects:
+            self.study_subject.addItem(subject, subject)
+
+    def _fill_reminders(self) -> None:
+        prefs = self._state.preferences
+        # Reminders are off for an account until it says otherwise. Setup is where it says so.
+        self.reminders.setChecked(True if self._state.first_run else bool(prefs.get("reminders_enabled")))
+        self.lead.setValue(int(prefs.get("reminder_lead_min", 10) if not self._state.first_run else 10))
+        self.lead.setEnabled(self.reminders.isChecked())
+        tone = str(prefs.get("alarm_tone") or FALLBACK)
+        self.tone_buttons.get(tone, self.tone_buttons[FALLBACK]).setChecked(True)
+        self.spotify.setText(str(prefs.get("default_spotify_url") or ""))
+        self.volume = int(prefs.get("alert_volume", 80))
+        self._follow_tone()
+
+    def _fill_first(self) -> None:
+        for row in list(self.homework_rows):
+            self._remove_homework_row(row)
+        self._add_homework_row()
+
+    # Moving between pages
+
+    def _after(self, step: int) -> int:
+        if step == STYLE:
+            return WEEK
+        return min(step + 1, DONE)
+
+    def _before(self, step: int) -> int:
+        if step == WEEK:
+            return COLOURS if self._own_look else STYLE
+        return max(step - 1, STYLE)
+
+    def _go_next(self) -> None:
+        if self._step == DONE:
+            self.finished.emit()
+            return
+        self._leave(self._after(self._step), keep=True)
+
+    def _skip_step(self) -> None:
+        self._leave(self._after(self._step), keep=False)
+
+    def _go_back(self) -> None:
+        if self._step != STYLE:
+            self._leave(self._before(self._step), keep=False)
+
+    def _jump(self, step: int) -> None:
+        if step == self._step:
+            return
+        if step > self._furthest and step != DONE:
+            return
+        if step == DONE and self._furthest < DONE:
+            return
+        self._leave(step, keep=step > self._step)
+
+    def _choose_own_look(self) -> None:
+        self._own_look = True
+        self._leave(LOOK, keep=False)
+
+    def _skip_all(self) -> None:
+        if self._step in LOOK_STEPS:
+            self._restore_entered()
+        self.finished.emit()
+
+    def _leave(self, destination: int, keep: bool) -> None:
+        step = self._step
+        answer = None
+        if keep:
+            problem = self._problem(step)
+            if problem:
+                self.error.setText(problem)
+                return
+            answer = self._answer(step)
+        elif step in LOOK_STEPS and destination not in LOOK_STEPS:
+            # A look tried and then skipped is not kept, so the app goes back to the one it had.
+            self._restore_entered()
+        self.error.clear()
+        if answer is not None:
+            self._absorb(step, answer)
+        self.left.emit(step, destination, answer)
+        self._show(destination)
+
+    def _show(self, step: int) -> None:
+        direction = 1 if step > self._step else -1
+        if step in LOOK_STEPS and self._step not in LOOK_STEPS:
+            # What a skip on the look pages goes back to.
+            self._entered = (self._pack, deepcopy(self._look), deepcopy(self._layout))
+        self._step = step
+        self._furthest = max(self._furthest, step)
+        self._prepare(step)
+        slide_page(self.stack, self.pages[step], self.motion, direction)
+        self._sync_chrome()
+        self._place_marker(animate=True)
+        if step == DONE:
+            self._reveal_summary()
+        page = self.pages[step]
+        if isinstance(page, QScrollArea):
+            page.verticalScrollBar().setValue(0)
+
+    def _prepare(self, step: int) -> None:
+        if step == LOOK:
+            for layout_id, card in self.look_cards.items():
+                card.select(layout_id == self._layout["main"])
+        if step == COLOURS:
+            self._fill_colours()
+        if step == DONE:
+            self._fill_summary()
+
+    def _sync_chrome(self) -> None:
+        self.back.setVisible(self._step != STYLE)
+        self.skip.setVisible(self._step != DONE)
+        self.next.setText(FINISH_LABEL if self._step == DONE else NEXT_LABEL)
+        for index, (_name, steps) in enumerate(RAIL):
+            item = self.rail_items[index]
+            item.setProperty("current", self._step in steps)
+            item.setProperty("done", max(steps) < self._step or (self._furthest >= DONE and steps[0] != DONE))
+            reachable = steps[0] <= self._furthest or (steps[0] == DONE and self._furthest >= DONE)
+            item.setEnabled(reachable)
+            _repolish(item)
+
+    def _place_marker(self, animate: bool) -> None:
+        current = next(
+            (item for item, (_name, steps) in zip(self.rail_items, RAIL, strict=True) if self._step in steps),
+            None,
+        )
+        if current is None:
+            return
+        self.marker.show()
+        self.marker.raise_()
+        target = QRect(current.x() - 12, current.y() + 6, 3, max(current.height() - 12, 8))
+        if animate:
+            glide(self.marker, target, self.motion)
+        else:
+            self.marker.setGeometry(target)
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
+        super().showEvent(event)
+        QTimer.singleShot(0, lambda: self._place_marker(animate=False))
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        QTimer.singleShot(0, lambda: self._place_marker(animate=False))
+
+    # The look pages
+
+    def _preview(self) -> None:
+        self.previewed.emit(
+            {"pack": self._pack, "look": deepcopy(self._look), "layout": deepcopy(self._layout)}
+        )
+
+    def _restore_entered(self) -> None:
+        pack, look, layout = self._entered
+        if (pack, look, layout) != (self._pack, self._look, self._layout):
+            self._pack, self._look, self._layout = pack, deepcopy(look), deepcopy(layout)
+            self._style_key = matching_style(pack, look, layout) if not self._state.first_run else None
+            for key, card in self.style_cards.items():
+                card.select(key == self._style_key)
+            self._preview()
+
+    def _choose_style(self, style: Style) -> None:
+        self._own_look = False
+        self._style_key = style.key
+        for key, card in self.style_cards.items():
+            card.select(key == style.key)
+        self._pack = style.pack
+        self._look = style_look(style)
+        self._layout = style_layout(style, self._layout)
+        self._preview()
+
+    def _choose_main(self, layout_id: str) -> None:
+        for key, card in self.look_cards.items():
+            card.select(key == layout_id)
+        self._layout = sanitize_layout({**self._layout, "main": layout_id})
+        self._preview()
+
+    def _colour_choices(self) -> tuple[tuple[str, str], ...]:
+        main = self._layout["main"]
+        spec = LAYOUTS[main]
+        if not spec.colourways:
+            return tuple((pack, PACK_LABELS[pack]) for pack in PACKS)
+        return tuple((value, label) for value, label, _tokens in spec.colourways)
+
+    def _fill_colours(self) -> None:
+        main = self._layout["main"]
+        self.colours.set_choices(self._colour_choices())
+        if LAYOUTS[main].colourways:
+            self.colours.set_value(options_for(self._layout, main).get("colour"))
+        else:
+            self.colours.set_value(self._pack)
+        knobs = effective_look(self._look)
+        self.text_size.set_value(knobs["text"])
+        self.spacing.set_value(knobs["density"])
+        self.font_choice.set_value(knobs["font"])
+        self.shadows.set_value(knobs["depth"])
+        self.day_screen.set_value(self._layout["day"])
+        self._draw_colour_preview(fade=False)
+
+    def _colours_changed(self) -> None:
+        main = self._layout["main"]
+        colour = self.colours.value()
+        options = deepcopy(self._layout["options"])
+        if LAYOUTS[main].colourways and colour:
+            options[main] = {**options.get(main, {}), "colour": colour}
+            if main == "timeline":
+                options[main]["density"] = self.spacing.value() or "comfortable"
+        elif colour in PACKS:
+            self._pack = colour
+        knobs = dict(sanitize_look(self._look)["knobs"])
+        for knob, chips in (
+            ("text", self.text_size),
+            ("density", self.spacing),
+            ("font", self.font_choice),
+            ("depth", self.shadows),
+        ):
+            if chips.value():
+                knobs[knob] = chips.value()
+        self._look = sanitize_look({"preset": "default", "knobs": knobs})
+        self._layout = sanitize_layout({**self._layout, "options": options, "day": self.day_screen.value()})
+        self._draw_colour_preview(fade=True)
+        self._preview()
+
+    def _draw_colour_preview(self, fade: bool) -> None:
+        main = self._layout["main"]
+        colour = options_for(self._layout, main).get("colour") if LAYOUTS[main].colourways else None
+        picture = hold_picture(self.colour_preview, self.motion) if fade else None
+        self.colour_preview.setPixmap(
+            _rounded(self._previews.get(main, colour, self._pack, self._look, COLOUR_THUMB), 8)
+        )
+        fade_away(picture, self.motion)
+
+    # Your week
+
+    def _add_activity(
+        self,
+        title: str = "",
+        days: list[int] | None = None,
+        start: str = "15:30",
+        minutes: int = 90,
+        focus: bool = False,
+    ) -> None:
+        if len(self.activities) >= MAX_ACTIVITIES:
+            return
+        row = ActivityRow(title, days, start, minutes)
+        row.removed.connect(self._remove_activity)
+        self.activity_box.addWidget(row)
+        self.activities.append(row)
+        self.add_activity.setEnabled(len(self.activities) < MAX_ACTIVITIES)
+        if focus:
+            row.name.setFocus(Qt.FocusReason.OtherFocusReason)
+            appear(row, self.motion, rise=False)
+
+    def _remove_activity(self, row: object) -> None:
+        if not isinstance(row, ActivityRow) or row not in self.activities:
+            return
+        self.activities.remove(row)
+        self.activity_box.removeWidget(row)
+        row.setParent(None)
+        row.deleteLater()
+        self.add_activity.setEnabled(True)
+
+    def week_blocks(self) -> list[dict]:
+        blocks: list[dict] = []
+        days = self.school_days.days()
+        start, minutes = self.school_times.span()
+        if days and minutes > 0:
+            blocks.append(
+                {
+                    "id": SETUP_SCHOOL_ID,
+                    "title": "School",
+                    "kind": "locked",
+                    "category": "class",
+                    "start": start,
+                    "duration_min": minutes,
+                    "days": days,
+                }
+            )
+        for index, row in enumerate(self.activities):
+            days = row.days.days()
+            start, minutes = row.times.span()
+            if not days or minutes <= 0:
+                continue
+            blocks.append(
+                {
+                    "id": f"{SETUP_ACTIVITY_PREFIX}{index + 1}",
+                    "title": row.name.text().strip() or SPORT_FALLBACK,
+                    "kind": "locked",
+                    "category": "extra",
+                    "start": start,
+                    "duration_min": minutes,
+                    "days": days,
+                }
+            )
+        return blocks
+
+    # Homework time
+
+    def _render_study(self) -> None:
+        while self._study_line.count():
+            item = self._study_line.takeAt(0)
+            widget = item.widget() if item is not None else None
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+        for index, window in enumerate(self.study_windows):
+            chip = QPushButton(f"{window_label(window)}  ×")
+            chip.setObjectName("setupStudyChip")
+            chip.setAccessibleName(f"Remove {window_label(window)}")
+            chip.setCursor(Qt.CursorShape.PointingHandCursor)
+            chip.clicked.connect(lambda _checked=False, index=index: self._remove_study(index))
+            self._study_line.addWidget(chip)
+        self.study_chips.setVisible(bool(self.study_windows))
+
+    def _add_study(self, days: list[int], start: str, end: str, subject: str | None) -> bool:
+        if len(self.study_windows) >= MAX_STUDY_WINDOWS:
+            self.error.setText("Up to 21 study times.")
+            return False
+        begin, finish = hhmm_to_minutes(start), hhmm_to_minutes(end)
+        if finish - begin < SLOT_MIN or begin < DAY_START_MIN or finish > DAY_END_MIN:
+            self.error.setText("A study time runs between 06:00 and 23:00 and ends after it starts.")
+            return False
+        window: dict = {"days": list(days), "start": start, "duration_min": finish - begin}
+        if subject:
+            window["subject"] = subject[:40]
+        if window in self.study_windows:
+            return False
+        self.error.clear()
+        self.study_windows.append(window)
+        self._render_study()
+        return True
+
+    def _add_own_study(self) -> None:
+        start, minutes = self.study_times.span()
+        typed = self.study_subject.currentText().strip()
+        subject = typed if typed and typed != "Any subject" else None
+        days = self.study_days.currentData() or [0, 1, 2, 3, 4]
+        self._add_study(list(days), start, minutes_to_hhmm(hhmm_to_minutes(start) + minutes), subject)
+
+    def _remove_study(self, index: int) -> None:
+        if 0 <= index < len(self.study_windows):
+            self.study_windows.pop(index)
+            self._render_study()
+
+    # Reminders and alarm
+
+    def _tone(self) -> str:
+        checked = self.tones.checkedButton()
+        for tone, button in self.tone_buttons.items():
+            if button is checked:
+                return tone
+        return FALLBACK
+
+    def _follow_tone(self) -> None:
+        spotify = self._tone() == "spotify"
+        self.spotify.setEnabled(spotify)
+        self.spotify_note.setVisible(spotify)
+
+    def _spotify_link(self) -> str | None:
+        typed = self.spotify.text().strip()
+        if not typed:
+            return None
+        try:
+            return valid_spotify_url(typed) or None
+        except ValueError:
+            return None
+
+    def _send_test(self) -> None:
+        if self._tone() == "spotify" and self._spotify_link() is None:
+            self.test_result.setText("Paste a Spotify link first.")
+            return
+        self.test_requested.emit(self._tone(), self._spotify_link() or "")
+
+    def show_test_result(self, text: str) -> None:
+        self.test_result.setText(text)
+        appear(self.test_result, self.motion)
+
+    # First homework
+
+    def _add_homework_row(self, focus: bool = False) -> None:
+        if len(self.homework_rows) >= MAX_FIRST_HOMEWORK:
+            return
+        row = HomeworkRow(
+            sunday_due(self._state.week_start) if self._state.week_start else "2026-01-04T23:59"
+        )
+        row.removed.connect(self._remove_homework_row)
+        self.homework_box.addWidget(row)
+        self.homework_rows.append(row)
+        self.add_homework.setEnabled(len(self.homework_rows) < MAX_FIRST_HOMEWORK)
+        if focus:
+            row.name.setFocus(Qt.FocusReason.OtherFocusReason)
+            appear(row, self.motion)
+
+    def _remove_homework_row(self, row: object) -> None:
+        if not isinstance(row, HomeworkRow) or row not in self.homework_rows:
+            return
+        self.homework_rows.remove(row)
+        self.homework_box.removeWidget(row)
+        row.setParent(None)
+        row.deleteLater()
+        self.add_homework.setEnabled(True)
+        if not self.homework_rows:
+            self._add_homework_row()
+
+    def first_homework(self) -> list[dict]:
+        made = []
+        for row in self.homework_rows:
+            title = row.name.text().strip()
+            if not title:
+                continue
+            made.append(
+                {
+                    "id": self._made.get(title) or str(uuid4()),
+                    "title": title,
+                    "estimate_min": row.minutes.value(),
+                    "due": row.due.dateTime().toString("yyyy-MM-dd'T'HH:mm"),
+                    "revision": 0,
+                }
+            )
+        return made
+
+    # Answers
+
+    def _problem(self, step: int) -> str | None:
+        if step == WEEK:
+            if self.school_days.days() and self.school_times.span()[1] <= 0:
+                return "School has to end after it starts."
+            for row in self.activities:
+                if row.days.days() and row.times.span()[1] <= 0:
+                    name = row.name.text().strip() or "An activity"
+                    return f"{name} has to end after it starts."
+        if step == REMINDERS and self._tone() == "spotify" and self._spotify_link() is None:
+            return "Paste a link that starts with https://open.spotify.com, or pick another sound."
+        return None
+
+    def _answer(self, step: int) -> dict | None:
+        if step == STYLE and self._style_key is None:
+            return None
+        if step in LOOK_STEPS:
+            return {"pack": self._pack, "look": deepcopy(self._look), "layout": deepcopy(self._layout)}
+        if step == WEEK:
+            return {"blocks": self.week_blocks(), "day_cutoff": self.cutoff.currentData()}
+        if step == HOMEWORK:
+            checked = next(
+                (value for value, button in self.planning_buttons.items() if button.isChecked()), "suggest"
+            )
+            return {"planning_style": checked, "study_windows": deepcopy(self.study_windows)}
+        if step == REMINDERS:
+            return {
+                "reminders_enabled": self.reminders.isChecked(),
+                "reminder_lead_min": self.lead.value(),
+                "alarm_tone": self._tone(),
+                "default_spotify_url": self._spotify_link()
+                or self._state.preferences.get("default_spotify_url"),
+            }
+        if step == FIRST:
+            homework = self.first_homework()
+            for item in homework:
+                self._made[item["title"]] = item["id"]
+            return {"homework": homework} if homework else None
+        return None
+
+    def _absorb(self, step: int, answer: dict) -> None:
+        """Keep the state in step with what was kept, so the summary says what is actually saved."""
+        if step in LOOK_STEPS:
+            self._state.pack, self._state.look, self._state.layout = (
+                answer["pack"],
+                deepcopy(answer["look"]),
+                deepcopy(answer["layout"]),
+            )
+            self._entered = (self._pack, deepcopy(self._look), deepcopy(self._layout))
+        elif step == WEEK:
+            kept = [block for block in self._state.blocks if not is_setup_block(block)]
+            self._state.blocks = kept + deepcopy(answer["blocks"])
+            self._state.preferences["day_cutoff"] = answer["day_cutoff"]
+        elif step in (HOMEWORK, REMINDERS):
+            self._state.preferences.update(deepcopy(answer))
+        elif step == FIRST:
+            for item in answer["homework"]:
+                if item["title"] not in self._state.homework:
+                    self._state.homework.append(item["title"])
+
+    # Done
+
+    def _fill_summary(self) -> None:
+        state = self._state
+        main = state.layout["main"]
+        spec = LAYOUTS[main]
+        if spec.colourways:
+            colour = options_for(state.layout, main).get("colour")
+            colour_name = next(
+                (label for value, label, _ in spec.colourways if value == colour), "your colours"
+            )
+        else:
+            colour_name = PACK_LABELS.get(state.pack, "your colours")
+        text = effective_look(state.look)["text"]
+        look = f"{spec.purpose} · {spec.label} in {colour_name}"
+        if text != "normal":
+            look += f", {text} text"
+        week_parts = []
+        for block in state.blocks:
+            if is_setup_block(block) and block.get("start"):
+                when = span_label(block["start"], block["duration_min"])
+                week_parts.append(f"{block['title']} {days_label(block['days'])} {when}")
+        cutoff = state.preferences.get("day_cutoff")
+        if cutoff:
+            week_parts.append(f"no homework after {cutoff}")
+        prefs = state.preferences
+        planning = next(
+            (
+                text
+                for value, text, _note in PLANNING_STYLES
+                if value == (prefs.get("planning_style") or "suggest")
+            ),
+            PLANNING_STYLES[1][1],
+        )
+        windows = prefs.get("study_windows") or []
+        if windows:
+            planning += " · " + ", ".join(window_label(window) for window in windows[:3])
+            if len(windows) > 3:
+                planning += f" and {len(windows) - 3} more"
+        tone = str(prefs.get("alarm_tone") or FALLBACK)
+        sound = "Spotify" if tone == "spotify" else TONE_NAMES.get(tone, tone.title())
+        if prefs.get("reminders_enabled"):
+            reminders = f"{prefs.get('reminder_lead_min', 5)} min before things start · {sound}"
+        else:
+            reminders = f"Off · alarms ring {sound}"
+        values = (
+            look,
+            "; ".join(week_parts) or "Nothing fixed yet",
+            planning,
+            reminders,
+            ", ".join(state.homework) or "None yet",
+        )
+        for (_heading, value, _change), text_value in zip(self.summary_rows, values, strict=True):
+            value.setText(text_value)
+
+    def _reveal_summary(self) -> None:
+        # One line after another, so the eye reads down the list rather than taking it in as a block.
+        for index, (heading, value, change) in enumerate(self.summary_rows):
+            for widget in (heading, value, change):
+                appear(widget, self.motion, delay_ms=90 + index * 45)
+
+    def summary_text(self) -> list[str]:
+        return [value.text() for _heading, value, _change in self.summary_rows]

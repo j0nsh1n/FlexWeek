@@ -27,6 +27,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.kept import KeptSession
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
+    from desktop.tests.logic_support import past_setup
 
 PASSWORD = "a-long-test-password"
 TOKEN_LIKE = "A" * 43
@@ -100,7 +101,7 @@ def create_account(qapp: QApplication, window: NativeWindow, name: str, *, keep:
     wait_until(qapp, lambda: page(window) == "recoveryPage")
     window.recovery_ack.setChecked(True)
     window.recovery_continue.click()
-    wait_until(qapp, lambda: page(window) == "weekPage" and not window.session.busy)
+    past_setup(qapp, window)
 
 
 def sign_in(qapp: QApplication, window: NativeWindow, name: str, *, keep: bool = True) -> None:

@@ -26,6 +26,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton
 import backend
 from desktop.native.calendar import sunday_due
 from desktop.native.kept import KeptSession
+from desktop.native.setup import DONE as SETUP_DONE
 from desktop.native.window import NativeWindow
 from desktop.origin import configured_origin
 from desktop.server import LocalServer
@@ -152,10 +153,21 @@ class NativeSmoke:
                 return
             window.recovery_ack.setChecked(True)
             window.recovery_continue.click()
-            self._stage = "week"
+            self._stage = "setup"
+            return
+        if self._stage == "setup":
+            # One page per poll, each skipped, so every page of setup is drawn in the build under test.
+            if page == "setupPage":
+                setup = window.setup_page
+                (setup.next if setup.step == SETUP_DONE else setup.skip).click()
+                return
+            if page == "weekPage":
+                self._stage = "week"
             return
         if self._stage == "week":
             if page != "weekPage" or window.session.account is None or window.session.busy:
+                return
+            if window._setup_prefs or window._setup_week:
                 return
             session = window.session
             session.add_block(
