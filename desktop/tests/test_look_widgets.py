@@ -83,6 +83,18 @@ def shape(canvas: WeekCanvas, block_id: str) -> Shape:
     return next(item for item in canvas.body.shapes if item.block_id == block_id)
 
 
+def painted(window: NativeWindow, block_id: str) -> tuple[str, str | None]:
+    hours = window.week_table.hours
+    if not hours.tracks:
+        window.show()
+        hours.resize(980, 640)
+        hours.relayout()
+    track = hours.track_for(0, 8 * 60)
+    drawn = next(item for item, _rect in hours.drawn(track) if item.block_id == block_id)
+    fill, _ink, _outline, edge = hours.painter.fills(drawn)
+    return fill.name(), None if edge is None else edge.name()
+
+
 def pixel(canvas: WeekCanvas, block_id: str, where: str) -> str:
     rect = next(rect for item, rect, _count, _held in canvas.body.laid_out() if item.block_id == block_id)
     image = canvas.body.grab().toImage()
@@ -249,14 +261,14 @@ def test_a_look_chosen_in_the_window_reaches_the_calendar_not_only_the_styleshee
         window.session.add_block(dict(SCHOOL))
         window.session.save()
         wait_until(qapp, lambda: window.session.revision == 1 and not window.session.busy)
-        assert shape(window.week_table, "school").fill == PALE
+        assert painted(window, "school")[0] == PALE
 
         # What Settings does when the student presses OK.
         window._look = look_of(blocks="edge")
         window._apply_appearance()
-        school = shape(window.week_table, "school")
-        assert school.edge == STRONG
-        assert school.fill != PALE
+        fill, edge = painted(window, "school")
+        assert edge == STRONG
+        assert fill != PALE
         assert "border: 1px solid" in window.styleSheet()
     finally:
         with contextlib.suppress(RuntimeError):

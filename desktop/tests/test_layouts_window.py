@@ -299,7 +299,7 @@ def test_the_keyboard_reaches_my_day_and_back(qapp: QApplication, window: Native
 def test_the_view_buttons_leave_a_day_screen(qapp: QApplication, window: NativeWindow) -> None:
     click(window, "viewMyDay")
     click(window, "viewDay")
-    assert window.planner.currentWidget() is window.day_agenda
+    assert window.planner.currentWidget() is window.day_view
     assert window.solve_button.isVisible() is True
 
 
@@ -753,7 +753,7 @@ def test_day_and_month_follow_the_week_layout(qapp: QApplication, window: Native
 def test_todays_app_keeps_the_clock_day_and_chip_month(qapp: QApplication, window: NativeWindow) -> None:
     window._layout = {"main": "classic", "day": "one", "options": {}}
     click(window, "viewDay")
-    assert window.planner.currentWidget() is window.day_agenda
+    assert window.planner.currentWidget() is window.day_view
     assert window.solve_button.isVisible() is True
     click(window, "viewMonth")
     settled(qapp, window)
@@ -1052,9 +1052,14 @@ def test_no_chrome_button_spreads_across_the_window(qapp: QApplication, window: 
     window._layout = {"main": "classic", "day": "one", "options": {}}
     click(window, "viewDay")
     qapp.processEvents()
-    action = window.day_agenda.next_action
-    assert action.isVisible()
-    assert action.width() <= action.sizeHint().width() + 8, f"day action is {action.width()}px"
+    assert window.planner.currentWidget() is window.day_view
+    assert window.day_view.hours.isVisible()
+    stretched = [
+        f"{button.objectName()} {button.width()}px vs {button.sizeHint().width()}px natural"
+        for button in window.day_view.findChildren(QPushButton)
+        if button.isVisible() and button.width() > button.sizeHint().width() + 8
+    ]
+    assert stretched == []
 
 
 def test_every_dialog_fits_a_laptop_screen(qapp: QApplication, window: NativeWindow) -> None:
@@ -2143,27 +2148,52 @@ def _waiting_math(qapp: QApplication, window: NativeWindow) -> dict:
     return next(block for block in window.session.blocks if block.get("assignment_id") == "math")
 
 
-def _drop(qapp: QApplication, window: NativeWindow, block_id: str, hhmm: str, day: int) -> None:
-    from PySide6.QtCore import QByteArray, QMimeData, QPoint, QPointF
-    from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
+def _hours(window: NativeWindow):
+    hours = window.week_table.hours
+    if not hours.tracks:
+        hours.resize(980, 640)
+        hours.relayout()
+    return hours
 
-    from desktop.native.widgets import SESSION_MIME
+
+def _drop(qapp: QApplication, window: NativeWindow, block_id: str, hhmm: str, day: int) -> None:
+    from PySide6.QtCore import QEvent, QPoint, QPointF
+    from PySide6.QtGui import QMouseEvent
 
     click(window, "viewWeek")
+    window.move(0, 0)
+    window.resize(760, 720)
     for _ in range(5):
         qapp.processEvents()
-    canvas = window.week_table
-    point = canvas.point_of(day, int(hhmm[:2]) * 60 + int(hhmm[3:])) + QPoint(0, 2)
-    canvas.scroll.ensureVisible(point.x(), point.y(), 0, 120)
-    qapp.processEvents()
-    data = QMimeData()
-    data.setData(SESSION_MIME, QByteArray(block_id.encode()))
-    actions = Qt.DropAction.MoveAction
-    held, keys = Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier
-    # As a real drag does: Qt ignores a move over a widget the drag never entered.
-    QApplication.sendEvent(canvas.body, QDragEnterEvent(point, actions, data, held, keys))
-    QApplication.sendEvent(canvas.body, QDragMoveEvent(point, actions, data, held, keys))
-    QApplication.sendEvent(canvas.body, QDropEvent(QPointF(point), actions, data, held, keys))
+    hours = _hours(window)
+    chip = next(
+        widget
+        for widget in window.findChildren(QPushButton)
+        if widget.property("block_id") == block_id and widget.property("tray") and widget.isVisible()
+    )
+    start = chip.mapToGlobal(chip.rect().center())
+    end = hours.point_for(day, int(hhmm[:2]) * 60 + int(hhmm[3:]))
+
+    def send(widget, kind: QEvent.Type, at, held: bool) -> None:
+        buttons = Qt.MouseButton.LeftButton if held else Qt.MouseButton.NoButton
+        event = QMouseEvent(
+            kind,
+            QPointF(widget.mapFromGlobal(at)),
+            QPointF(at),
+            Qt.MouseButton.LeftButton,
+            buttons,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        QApplication.sendEvent(widget, event)
+
+    send(chip, QEvent.Type.MouseButtonPress, start, True)
+    for step in range(1, 9):
+        moved = QPoint(
+            start.x() + (end.x() - start.x()) * step // 8,
+            start.y() + (end.y() - start.y()) * step // 8,
+        )
+        send(hours, QEvent.Type.MouseMove, moved, True)
+    send(hours, QEvent.Type.MouseButtonRelease, end, False)
     qapp.processEvents()
 
 
@@ -2171,24 +2201,25 @@ def _drag_on_the_week(
     qapp: QApplication, window: NativeWindow, day: int, hhmm: str, to_day: int, to: str
 ) -> None:
     """Press on the week's hours, move and let go, as a mouse does."""
-    from PySide6.QtCore import QEvent, QPointF
+    from PySide6.QtCore import QEvent, QPoint, QPointF
     from PySide6.QtGui import QMouseEvent
 
     click(window, "viewWeek")
+    window.move(0, 0)
+    window.resize(760, 720)
     for _ in range(5):
         qapp.processEvents()
-    canvas = window.week_table
-    hours = canvas.body
+    hours = _hours(window)
 
-    def point(on: int, when: str) -> QPointF:
-        return QPointF(canvas.point_of(on, int(when[:2]) * 60 + int(when[3:])))
+    def point(on: int, when: str):
+        return hours.point_for(on, int(when[:2]) * 60 + int(when[3:]))
 
-    def send(kind: QEvent.Type, at: QPointF, held: bool) -> None:
+    def send(kind: QEvent.Type, at, held: bool) -> None:
         buttons = Qt.MouseButton.LeftButton if held else Qt.MouseButton.NoButton
         event = QMouseEvent(
             kind,
-            at,
-            QPointF(hours.mapToGlobal(at.toPoint())),
+            QPointF(hours.mapFromGlobal(at)),
+            QPointF(at),
             Qt.MouseButton.LeftButton,
             buttons,
             Qt.KeyboardModifier.NoModifier,
@@ -2197,7 +2228,8 @@ def _drag_on_the_week(
 
     start, end = point(day, hhmm), point(to_day, to)
     send(QEvent.Type.MouseButtonPress, start, True)
-    send(QEvent.Type.MouseMove, (start + end) / 2, True)
+    middle = QPoint((start.x() + end.x()) // 2, (start.y() + end.y()) // 2)
+    send(QEvent.Type.MouseMove, middle, True)
     send(QEvent.Type.MouseMove, end, True)
     send(QEvent.Type.MouseButtonRelease, end, False)
     qapp.processEvents()
@@ -2235,9 +2267,8 @@ def test_a_drop_over_school_sits_beside_it_and_no_plan_moves_it_off(
     placed = next(block for block in window.session.blocks if block["id"] == waiting["id"])
     assert (placed["days"], placed["start"], placed.get("pinned")) == ([1], "10:00", True)
     tuesday = {
-        shape.block_id: count
-        for shape, _rect, count, _held in window.week_table.body.laid_out()
-        if shape.day == 1
+        item.block_id: item.columns
+        for item, _rect in _hours(window).drawn(_hours(window).track_for(1, 10 * 60))
     }
     assert tuesday == {"school": 2, waiting["id"]: 2}, "side by side, each marked"
     window.session.solve(everything=True)
@@ -2318,8 +2349,11 @@ def test_choose_a_time_places_homework_without_dragging(
     ]
     placed = next(block for block in window.session.blocks if block["id"] == waiting["id"])
     assert (placed["days"], placed["start"], placed.get("pinned")) == ([1], "16:00", True)
-    shown = next(shape for shape in window.week_table.body.shapes if shape.block_id == waiting["id"])
-    assert "Pinned" in shown.tip
+    hours = _hours(window)
+    shown = next(
+        item for item, _rect in hours.drawn(hours.track_for(1, 16 * 60)) if item.block_id == waiting["id"]
+    )
+    assert "Pinned" in shown.detail
 
 
 def test_let_flexweek_move_it_takes_the_pin_away(

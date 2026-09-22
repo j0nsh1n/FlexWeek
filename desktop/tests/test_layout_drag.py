@@ -321,8 +321,14 @@ def test_a_drop_on_school_sits_beside_it_and_stays_there(qapp: QApplication, win
     window.session.save()
     settled(qapp, window)
     assert placed(window, "math") == ([4], "10:00", True)
-    friday = [shape for shape, _rect, count, _held in window.week_table.body.laid_out() if shape.day == 4]
-    assert {shape.block_id for shape in friday} >= {"school", session_of(window, "math")["id"]}
+    friday = window.week_table.hours
+    if not friday.tracks:
+        friday.resize(980, 640)
+        friday.relayout()
+    track = friday.track_for(4)
+    assert track is not None
+    drawn = {item.block_id for item, _rect in friday.drawn(track)}
+    assert drawn >= {"school", session_of(window, "math")["id"]}
 
 
 def test_a_repeating_block_dragged_in_a_design_moves_only_that_day(

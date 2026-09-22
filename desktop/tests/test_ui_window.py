@@ -167,9 +167,9 @@ def test_w_d_and_m_switch_views_while_the_calendar_has_the_keyboard(
     window. The older test sends the key straight to the window, which no student can do.
     """
     session = window.session
-    QTest.keyClick(window.week_table, Qt.Key.Key_D)
+    QTest.keyClick(window.week_table.hours, Qt.Key.Key_D)
     wait_until(qapp, lambda: session.planner_view == "day" and not session.busy)
-    QTest.keyClick(window.day_agenda.list, Qt.Key.Key_M)
+    QTest.keyClick(window.day_view.hours, Qt.Key.Key_M)
     wait_until(qapp, lambda: session.planner_view == "month" and not session.busy)
     QTest.keyClick(window.month_grid.table, Qt.Key.Key_W)
     wait_until(qapp, lambda: session.planner_view == "week" and not session.busy)
@@ -185,8 +185,8 @@ def test_ctrl_c_in_the_week_grid_copies_the_block_and_leaves_the_os_clipboard_al
     window.session.select_block("soccer", 0)
     QGuiApplication.clipboard().setText("the student's own text")
     # Pressed on the week itself, where a block was just clicked: the window's copy, not the system's.
-    window.week_table.body.setFocus()
-    QTest.keyClick(window.week_table.body, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
+    window.week_table.hours.setFocus()
+    QTest.keyClick(window.week_table.hours, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
     assert QGuiApplication.clipboard().text() == "the student's own text"
     assert (window.session.clipboard or {}).get("kind") == "block"
     assert "Soccer" in window.session.clipboard["label"]

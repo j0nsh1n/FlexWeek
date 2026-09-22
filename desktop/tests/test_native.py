@@ -102,7 +102,15 @@ def soccer() -> dict:
 
 def table_text(window: NativeWindow) -> str:
     """What the week says: each block's name and the line under it."""
-    return "\n".join(f"{shape.title}\n{shape.detail}" for shape in window.week_table.body.shapes)
+    hours = window.week_table.hours
+    if not hours.tracks:
+        hours.resize(980, 640)
+        hours.relayout()
+    lines = []
+    for track in hours.tracks:
+        for drawn, _rect in hours.drawn(track):
+            lines.append(f"{drawn.title}\n{drawn.detail}")
+    return "\n".join(lines)
 
 
 def test_native_modules_do_not_import_webengine(qapp: QApplication) -> None:
@@ -796,6 +804,18 @@ def test_the_reason_homework_has_no_time_is_the_latest_one(qapp: QApplication, s
     If Find a new time then finds nothing either, that sentence was kept and came back after the next
     edit, although the real reason by then was that Monday had no room before the deadline."""
     session = signed_in(qapp, server.origin, "alice", create=True)
+    wait_until(qapp, lambda: session.preferences is not None)
+    # Monday is full from 06:00 to 23:00. Without this, the open night would give the homework a time.
+    assert session.save_availability(
+        [],
+        [],
+        None,
+        [{"days": [0, 1, 2, 3, 4, 5, 6], "start": "06:00", "end": "23:00"}],
+    )
+    wait_until(
+        qapp,
+        lambda: not session.busy and (session.preferences or {}).get("work_windows"),
+    )
     _planned_school_week(qapp, session)
     for block_id, title, start, minutes in (("club", "Club", "15:00", 360), ("swim", "Swim", "06:00", 120)):
         session.add_block(
