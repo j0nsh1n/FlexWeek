@@ -37,6 +37,7 @@ from backend.models import (
     StudyWindow,
     TimeBlock,
     WeekRequest,
+    WorkWindow,
     valid_naive_stamp,
     valid_spotify_url,
 )
@@ -48,6 +49,7 @@ from backend.recovery import (
     recovery_code_matches,
 )
 from backend.restore import canonical, diff_snapshots, diff_transfer, state_token
+from backend.slots import DAY_END_MIN, SLOT_MIN
 from backend.solver import reschedule_after_miss, reschedule_running_late, solve
 from backend.storage import (
     SESSION_SECONDS,
@@ -620,6 +622,9 @@ class Preferences(BaseModel):
     study_windows: list[StudyWindow] = Field(
         default_factory=list, max_length=21, exclude_if=lambda value: not value
     )
+    work_windows: list[WorkWindow] = Field(
+        default_factory=list, max_length=21, exclude_if=lambda value: not value
+    )
     day_cutoff: str | None = Field(default=None, exclude_if=lambda value: value is None)
     alert_volume: int = Field(default=80, ge=0, le=100, exclude_if=lambda value: value == 80)
     end_chime: bool = Field(default=False, exclude_if=lambda value: value is False)
@@ -662,8 +667,8 @@ class Preferences(BaseModel):
             raise ValueError("day_cutoff must be HH:MM on the 15-minute grid")
         hour, minute = map(int, value.split(":"))
         start = hour * 60 + minute
-        if minute % 15 or start < 375 or start > 1380:
-            raise ValueError("day_cutoff must be between 06:15 and 23:00 on the 15-minute grid")
+        if minute % 15 or start < SLOT_MIN or start > DAY_END_MIN - SLOT_MIN:
+            raise ValueError("day_cutoff must be between 00:15 and 23:45 on the 15-minute grid")
         return value
 
     @model_validator(mode="after")
@@ -856,6 +861,7 @@ def encode_availability(preferences: Preferences) -> str:
         {
             "protected": [window.model_dump() for window in preferences.protected],
             "study_windows": [window.model_dump() for window in preferences.study_windows],
+            "work_windows": [window.model_dump() for window in preferences.work_windows],
             "day_cutoff": preferences.day_cutoff,
         },
         separators=(",", ":"),
@@ -902,6 +908,7 @@ def preferences_from_row(row: sqlite3.Row) -> dict:
         alarms=json.loads(row["alarms_json"]),
         protected=availability.get("protected") or [],
         study_windows=availability.get("study_windows") or [],
+        work_windows=availability.get("work_windows") or [],
         day_cutoff=availability.get("day_cutoff"),
         alert_volume=comfort.get("alert_volume", 80),
         end_chime=bool(comfort.get("end_chime", False)),
@@ -968,13 +975,16 @@ def write_preferences(db: sqlite3.Connection, user_id: int, preferences: Prefere
     return preferences.model_dump()
 
 
-def solve_availability(row: sqlite3.Row | None) -> tuple[list[int], list[StudyWindow]]:
+def solve_availability(
+    row: sqlite3.Row | None,
+) -> tuple[list[int], list[StudyWindow], list[WorkWindow]]:
     if row is None:
-        return [0] * 7, []
+        return [0] * 7, [], []
     availability = json.loads(row["availability_json"] or "{}")
     protected = [ProtectedWindow.model_validate(item) for item in availability.get("protected") or []]
     study = [StudyWindow.model_validate(item) for item in availability.get("study_windows") or []]
-    return occupancy_from_windows(protected, availability.get("day_cutoff")), study
+    work = [WorkWindow.model_validate(item) for item in availability.get("work_windows") or []]
+    return occupancy_from_windows(protected, availability.get("day_cutoff")), study, work
 
 
 def create_app(database: Path | None = None, origin: str | None = None) -> FastAPI:
@@ -1641,7 +1651,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             prefs = db.execute(
                 "SELECT availability_json FROM preferences WHERE user_id = ?", (account["id"],)
             ).fetchone()
-        extra_occ, study_windows = solve_availability(prefs)
+        extra_occ, study_windows, work_windows = solve_availability(prefs)
         blocks = week.blocks
         extra_deadlines = None
         extra_slack = None
@@ -1659,6 +1669,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 slack_deadlines=extra_slack,
                 extra_occ=extra_occ,
                 study_windows=study_windows,
+                work_windows=work_windows,
             ).model_dump()
         if week.running_late is not None:
             return reschedule_running_late(
@@ -1671,6 +1682,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 slack_deadlines=extra_slack,
                 extra_occ=extra_occ,
                 study_windows=study_windows,
+                work_windows=work_windows,
             ).model_dump()
         return solve(
             blocks,
@@ -1678,6 +1690,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             slack_deadlines=extra_slack,
             extra_occ=extra_occ,
             study_windows=study_windows,
+            work_windows=work_windows,
         ).model_dump()
 
     @app.get("/api/health")

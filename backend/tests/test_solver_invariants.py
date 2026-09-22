@@ -8,8 +8,14 @@ from types import SimpleNamespace
 import pytest
 
 from backend import solver
+from backend.availability import LEGACY_WORK_WINDOWS
 from backend.models import TimeBlock, WeekRequest
-from backend.solver import solve
+from backend.solver import solve as run_solve
+
+
+def solve(blocks, **kwargs):
+    kwargs.setdefault("work_windows", LEGACY_WORK_WINDOWS)
+    return run_solve(blocks, **kwargs)
 
 
 @pytest.mark.parametrize("seed", range(20))

@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
-from backend.models import Assignment, GridWindow, ProtectedWindow, TimeBlock
+from backend.models import Assignment, GridWindow, ProtectedWindow, TimeBlock, WorkWindow
 from backend.slots import DAY_END_MIN, DAY_START_MIN, SLOT_MIN, minutes_to_hhmm
 from backend.weeks import current_week_start
 from desktop.native.calendar import (
@@ -1977,6 +1977,7 @@ class NativeSession(QObject):
         protected: list[dict],
         study_windows: list[dict],
         day_cutoff: str | None,
+        work_windows: list[dict] | None = None,
     ) -> bool:
         if self.account is None or self.preferences is None:
             return False
@@ -1985,6 +1986,9 @@ class NativeSession(QObject):
                 ProtectedWindow.model_validate(window)
             for window in study_windows:
                 GridWindow.model_validate(window)
+            if work_windows is not None:
+                for window in work_windows:
+                    WorkWindow.model_validate(window)
         except ValueError as error:
             self._say(str(error))
             return False
@@ -1992,6 +1996,8 @@ class NativeSession(QObject):
         body["protected"] = protected
         body["study_windows"] = study_windows
         body["day_cutoff"] = day_cutoff or None
+        if work_windows is not None:
+            body["work_windows"] = work_windows
         ticket = self._begin()
         self._say("Saving availability…")
 

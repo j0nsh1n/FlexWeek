@@ -248,9 +248,10 @@ def test_the_rig_interface_points_at_what_is_drawn(qapp: QApplication) -> None:
 
 
 def test_an_edge_held_a_few_pixels_in_does_not_jump_on_the_first_move(qapp: QApplication) -> None:
-    """On a week that fits, seven pixels is a quarter hour or so. Pressed six pixels inside the end,
-    the end still moves by exactly what the pointer moves, rather than first snapping back."""
-    rig = Rig(qapp, height=520)
+    """On a 24-hour week that still has room for edges, six pixels is a dozen minutes or so. Pressed
+    six pixels inside the end, the end still moves by exactly what the pointer moves, rather than
+    first snapping back."""
+    rig = Rig(qapp, height=680)
     per_minute = rig.canvas.tracks[0].per_minute()
     assert 10 <= 6 / per_minute <= 14, "six pixels is about twelve minutes at this scale"
     press = rig.at(2, 19 * 60, -6)

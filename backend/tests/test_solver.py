@@ -7,9 +7,23 @@ from pathlib import Path
 
 import pytest
 
+from backend.availability import LEGACY_WORK_WINDOWS
 from backend.models import TimeBlock
 from backend.slots import hhmm_to_minutes, overlaps
-from backend.solver import SOLVE_BUDGET_MS, reschedule_after_miss, solve
+from backend.solver import SOLVE_BUDGET_MS
+from backend.solver import reschedule_after_miss as run_reschedule_after_miss
+from backend.solver import solve as run_solve
+
+
+def solve(blocks, **kwargs):
+    kwargs.setdefault("work_windows", LEGACY_WORK_WINDOWS)
+    return run_solve(blocks, **kwargs)
+
+
+def reschedule_after_miss(*args, **kwargs):
+    kwargs.setdefault("work_windows", LEGACY_WORK_WINDOWS)
+    return run_reschedule_after_miss(*args, **kwargs)
+
 
 DATA = Path(__file__).resolve().parent.parent / "data"
 
@@ -234,11 +248,18 @@ def test_touching_endpoints_do_not_overlap() -> None:
     assert starts == [6 * 60, 7 * 60]
 
 
-def test_sleep_guard_rejects_overflow_past_23() -> None:
+def test_sleep_guard_rejects_overflow_past_the_day() -> None:
+    late = _flex("late", "Too late", 120, [0], earliest="Monday 23:00")
+    trace = solve([late], work_windows=[])
+    assert [block.id for block in trace.unplaced] == ["late"]
+    assert "SLEEP_GUARD" in trace.failed_constraints
+
+
+def test_a_session_that_runs_past_work_windows_is_unplaced() -> None:
     late = _flex("late", "Too late", 120, [0], earliest="Monday 22:00")
     trace = solve([late])
     assert [block.id for block in trace.unplaced] == ["late"]
-    assert "SLEEP_GUARD" in trace.failed_constraints
+    assert "WORK_WINDOW_MISS" in trace.failed_constraints
 
 
 def test_block_may_end_at_23() -> None:

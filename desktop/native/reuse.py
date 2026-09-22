@@ -625,7 +625,7 @@ def running_late_refusal(
     if week_start != this_week:
         return "Open this week before using Running late."
     if minute < DAY_START_MIN or minute >= DAY_END_MIN:
-        return "Running late is available between 06:00 and 23:00."
+        return "Running late is available between 00:00 and 24:00."
     if conflict:
         return "This week was changed somewhere else. Reload it first."
     if dirty:

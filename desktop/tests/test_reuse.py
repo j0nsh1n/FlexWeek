@@ -248,7 +248,7 @@ def test_running_late_occupies_from_a_snapped_start_until_the_day_end() -> None:
     assert block["title"] == "Running late"
     assert block["kind"] == "locked"
     assert block["start"] == "22:30"
-    assert block["duration_min"] == 30
+    assert block["duration_min"] == 60
     assert block["category"] == "downtime"
     now = datetime(2026, 9, 14, 14, 7)
     assert (
@@ -551,3 +551,49 @@ def test_a_pin_goes_when_its_time_does() -> None:
     unplaced = {**blocks[0], "start": None, "days": [0, 1, 2, 3]}
     assert "pinned" not in clear_stale_pins([unplaced])[0]
     assert clear_stale_pins([blocks[0]])[0]["pinned"] is True
+
+
+def test_settle_keeps_a_hand_placed_night_block() -> None:
+    night = {
+        "id": "s-essay",
+        "title": "Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [0],
+        "start": "03:00",
+        "pinned": True,
+        "assignment_id": "essay",
+    }
+    homework = {"essay": {"id": "essay", "title": "Essay", "due": "2026-09-15T23:59"}}
+    settled, lost = settle_placements([night], homework, "2026-09-14")
+    assert lost == []
+    kept = next(block for block in settled if block["id"] == "s-essay")
+    assert (kept["start"], kept["pinned"]) == ("03:00", True)
+
+
+def test_planning_an_old_week_still_asks_the_solver_for_unplaced_homework() -> None:
+    week = [
+        {
+            "id": "school",
+            "title": "School",
+            "kind": "locked",
+            "duration_min": 390,
+            "days": [0, 1, 2, 3, 4],
+            "start": "08:00",
+        },
+        {
+            "id": "s-essay",
+            "title": "Essay",
+            "kind": "flexible",
+            "duration_min": 60,
+            "days": [0, 1],
+            "assignment_id": "essay",
+        },
+    ]
+    homework = {"essay": {"id": "essay", "title": "Essay", "due": "2026-09-16T23:59"}}
+    payload, targets = solve_request(week, homework, "2026-09-14")
+    assert targets == {"s-essay"}
+    held = {block["id"]: block for block in payload}
+    assert held["school"]["start"] == "08:00"
+    assert held["s-essay"]["kind"] == "flexible"
+    assert "start" not in held["s-essay"]

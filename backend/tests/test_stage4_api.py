@@ -78,6 +78,12 @@ def defaults(client: TestClient) -> dict:
 
 
 def test_running_late_preview_does_not_write_the_week(alice: TestClient) -> None:
+    prefs = defaults(alice)
+    windows = [{"days": [0, 1, 2, 3, 4, 5, 6], "start": "06:00", "end": "23:00"}]
+    assert (
+        alice.put("/api/preferences", json={**prefs, "work_windows": windows}, headers=WRITE).status_code
+        == 200
+    )
     wind = {
         "id": "wind",
         "title": "Wind-down",
@@ -162,6 +168,12 @@ def test_running_late_rejects_recover_together_and_illegal_minutes(alice: TestCl
 
 
 def test_running_late_explanation_uses_the_late_sentence(alice: TestClient) -> None:
+    prefs = defaults(alice)
+    windows = [{"days": [0, 1, 2, 3, 4, 5, 6], "start": "06:00", "end": "23:00"}]
+    assert (
+        alice.put("/api/preferences", json={**prefs, "work_windows": windows}, headers=WRITE).status_code
+        == 200
+    )
     school = {
         "id": "school",
         "title": "School",
@@ -310,7 +322,9 @@ def test_preferences_reject_off_grid_windows_and_solve_honors_cutoff(alice: Test
     }
     solved = alice.post("/api/solve", json={"blocks": [homework]}, headers=WRITE)
     assert solved.status_code == 200, solved.text
-    assert [block["id"] for block in solved.json()["unplaced"]] == ["hw"]
+    placed = next(block for block in solved.json()["placed"] if block["id"] == "hw")
+    hour, minute = map(int, placed["start"].split(":"))
+    assert hour * 60 + minute + int(placed["duration_min"]) <= 6 * 60 + 15
 
 
 def test_preferences_reject_overlapping_protected_windows_and_accept_adjacent_ones(

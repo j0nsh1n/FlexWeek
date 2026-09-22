@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from backend.models import TimeBlock
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from backend.models import TimeBlock
 
 SLOT_MIN = 15
-DAY_START_MIN = 6 * 60
-DAY_END_MIN = 23 * 60
+DAY_START_MIN = 0
+DAY_END_MIN = 24 * 60
 SLOTS_PER_DAY = (DAY_END_MIN - DAY_START_MIN) // SLOT_MIN
 
 DAY_NAME_TO_INDEX = {
@@ -38,15 +41,35 @@ def hhmm_to_minutes(hhmm: str) -> int:
     return hour * 60 + minute
 
 
+def clock_to_minutes(hhmm: str) -> int:
+    """Minutes from midnight, including 24:00 as the exclusive end of the day."""
+    if hhmm == "24:00":
+        return DAY_END_MIN
+    return hhmm_to_minutes(hhmm)
+
+
 def minutes_to_hhmm(minutes: int) -> str:
     hour, minute = divmod(minutes, 60)
     return f"{hour:02d}:{minute:02d}"
 
 
+def start_fits_day(start_min: int) -> bool:
+    return start_min % SLOT_MIN == 0 and DAY_START_MIN <= start_min < DAY_END_MIN
+
+
+def span_fits_day(start_min: int, duration_min: int) -> bool:
+    return (
+        duration_min > 0
+        and duration_min % SLOT_MIN == 0
+        and start_fits_day(start_min)
+        and start_min + duration_min <= DAY_END_MIN
+    )
+
+
 def minutes_to_slot(minutes: int) -> int:
-    # Grid is half-open [06:00, 23:00); 23:00 is the end of the last slot, not a start.
+    # Grid is half-open [00:00, 24:00); 24:00 is the end of the last slot, not a start.
     if minutes < DAY_START_MIN or minutes >= DAY_END_MIN:
-        raise ValueError("time is outside 06:00–23:00")
+        raise ValueError("time is outside 00:00–24:00")
     offset = minutes - DAY_START_MIN
     if offset % SLOT_MIN:
         raise ValueError("time must land on a 15-minute slot")
@@ -107,5 +130,5 @@ def parse_deadline(latest: str | None, days: list[int]) -> tuple[int, int] | Non
 
 def occupancy_mask(start_slot: int, n_slots: int) -> int:
     if n_slots <= 0 or start_slot < 0 or start_slot + n_slots > SLOTS_PER_DAY:
-        raise ValueError("occupancy range is outside the 06:00–23:00 grid")
+        raise ValueError("occupancy range is outside the 00:00–24:00 grid")
     return ((1 << n_slots) - 1) << start_slot

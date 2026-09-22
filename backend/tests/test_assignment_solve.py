@@ -129,6 +129,12 @@ def test_next_tuesday_due_places_sunday_this_week_and_monday_next_week(alice: Te
 
 
 def test_sunday_2359_allows_a_session_that_ends_at_the_grid_end(alice: TestClient) -> None:
+    prefs = alice.get("/api/preferences").json()
+    windows = [{"days": [0, 1, 2, 3, 4, 5, 6], "start": "06:00", "end": "23:00"}]
+    assert (
+        alice.put("/api/preferences", json={**prefs, "work_windows": windows}, headers=WRITE).status_code
+        == 200
+    )
     put_assignment(alice, assignment(due="2026-09-13T23:59"))
     response = solve(alice, [session("sun", days=[6], earliest="Sunday 22:00")], WEEK_ONE)
     assert response.status_code == 200, response.text

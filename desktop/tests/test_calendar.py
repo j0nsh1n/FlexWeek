@@ -24,8 +24,8 @@ from desktop.native.calendar import (
 def test_snap_minute_rounds_to_fifteen_and_clamps_to_the_grid() -> None:
     assert snap_minute(367) == 360
     assert snap_minute(368) == 375
-    assert snap_minute(0) == 360
-    assert snap_minute(2000) == 1380
+    assert snap_minute(0) == 0
+    assert snap_minute(2000) == 1440
 
 
 def test_create_drag_and_click_ranges_follow_the_daily_scheduler() -> None:
@@ -33,17 +33,17 @@ def test_create_drag_and_click_ranges_follow_the_daily_scheduler() -> None:
     assert create_drag_range(400, 360) == (360, 405)
     assert create_click_range(900, [(930, 960)]) == (900, 930)
     assert create_click_range(900, []) == (900, 960)
-    assert create_click_range(1365, [(1370, 1380)]) is None
+    assert create_click_range(1425, [(1430, 1440)]) is None
 
 
 def test_move_and_resize_keep_minimum_duration_and_day_bounds() -> None:
     assert move_range(600, 660, 20) == (615, 675)
-    assert move_range(360, 420, -60) == (360, 420)
-    assert move_range(1300, 1360, 60) == (1320, 1380)
+    assert move_range(0, 60, -60) == (0, 60)
+    assert move_range(1380, 1440, 60) == (1380, 1440)
     assert resize_top_range(600, 660, 50) == (645, 660)
     assert resize_top_range(600, 660, 200) == (645, 660)
     assert resize_bottom_range(600, 660, -50) == (600, 615)
-    assert resize_bottom_range(1320, 1365, 60) == (1320, 1380)
+    assert resize_bottom_range(1380, 1425, 60) == (1380, 1440)
 
 
 def test_a_repeating_locked_block_cannot_be_retimed_from_one_day() -> None:
@@ -164,10 +164,11 @@ def test_a_time_on_another_block_is_allowed_and_named_but_not_outside_the_day_or
         "finished work sits on the day it was done"
     )
     assert span_clash(blocks, "essay", 2, 17 * 60, 18 * 60) == "Done work"
-    assert span_problem(blocks, "essay", 1, 5 * 60 + 45, 6 * 60 + 45, None) == (
+    assert span_problem(blocks, "essay", 1, 3 * 60, 4 * 60, None) is None
+    assert span_problem(blocks, "essay", 1, 22 * 60 + 30, 23 * 60 + 30, None) is None
+    assert span_problem(blocks, "essay", 1, 23 * 60 + 30, 24 * 60 + 30, None) == (
         "That is outside the hours FlexWeek plans in, so it stayed where it was."
     )
-    assert span_problem(blocks, "essay", 1, 22 * 60 + 30, 23 * 60 + 30, None) is not None
     assert span_problem(blocks, "essay", 3, 19 * 60, 20 * 60, (3, 19 * 60 + 30)) == (
         "That ends after it is due, so it stayed where it was."
     )

@@ -12,3 +12,5 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 [lint.per-file-ignores]
 # Tests read better with long, literal timestamp assertions on one line.
 "backend/tests/*" = ["E501"]
+# Playwright mock-up driver is not shipped runtime.
+"docs/0.15/mockup/*" = ["E", "F", "I", "SIM"]

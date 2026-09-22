@@ -79,7 +79,7 @@ def test_identical_save_retry_is_idempotent_and_invalid_input_never_replaces_it(
             [{**block, "days": [7]}],
             [{**block, "title": "x" * 81}],
             [{**block, "latest": "invalid"}],
-            [{**block, "kind": "locked", "start": "22:30", "duration_min": 60}],
+            [{**block, "kind": "locked", "start": "23:30", "duration_min": 60}],
             [block, block],
             [{**block, "id": str(index)} for index in range(101)],
         ]

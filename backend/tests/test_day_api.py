@@ -1,4 +1,4 @@
-"""GET /api/day from docs/stage2-contract.md. Expected minutes are from the 06:00-23:00 grid, not a recorded run."""
+"""GET /api/day from docs/stage2-contract.md. Expected minutes are from the 00:00-24:00 grid, not a recorded run."""
 
 from __future__ import annotations
 
@@ -117,7 +117,7 @@ def test_empty_day_is_add_with_seventeen_free_hours(alice: TestClient) -> None:
         "workload": {
             "scheduled_min": 0,
             "focus_min": 0,
-            "available_min": 1020,
+            "available_min": 1440,
             "by_category": [],
         },
     }
@@ -134,7 +134,7 @@ def test_school_and_a_finished_session_leave_570_minutes_free(alice: TestClient)
     assert body["next_action"] == {"kind": "add"}
     assert body["workload"]["scheduled_min"] == 450
     assert body["workload"]["focus_min"] == 60
-    assert body["workload"]["available_min"] == 570
+    assert body["workload"]["available_min"] == 990
     assert body["workload"]["by_category"] == [
         {"category": "School", "scheduled_min": 390, "focus_min": 0},
         {"category": "Homework", "scheduled_min": 60, "focus_min": 60},
@@ -167,7 +167,7 @@ def test_a_placed_unfinished_session_is_start(alice: TestClient) -> None:
     assert body["sessions"][0]["start"] == "16:00"
     assert body["workload"]["scheduled_min"] == 60
     assert body["workload"]["focus_min"] == 0
-    assert body["workload"]["available_min"] == 960
+    assert body["workload"]["available_min"] == 1380
 
 
 def test_overdue_open_homework_is_due_soon(alice: TestClient) -> None:
