@@ -7,9 +7,23 @@ from pathlib import Path
 
 import pytest
 
+from backend.availability import LEGACY_WORK_WINDOWS
 from backend.models import TimeBlock
 from backend.slots import hhmm_to_minutes, overlaps
-from backend.solver import SOLVE_BUDGET_MS, reschedule_after_miss, solve
+from backend.solver import SOLVE_BUDGET_MS
+from backend.solver import reschedule_after_miss as run_reschedule_after_miss
+from backend.solver import solve as run_solve
+
+
+def solve(blocks, **kwargs):
+    kwargs.setdefault("work_windows", LEGACY_WORK_WINDOWS)
+    return run_solve(blocks, **kwargs)
+
+
+def reschedule_after_miss(*args, **kwargs):
+    kwargs.setdefault("work_windows", LEGACY_WORK_WINDOWS)
+    return run_reschedule_after_miss(*args, **kwargs)
+
 
 DATA = Path(__file__).resolve().parent.parent / "data"
 

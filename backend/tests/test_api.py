@@ -108,9 +108,9 @@ def test_reschedule_marks_one_locked_occurrence_and_reports_changed_placements(
         "block_id": "hw",
         "reason": "RESHUFFLE_AFTER_MISS",
         "from_day": 1,
-        "from_start": "06:00",
+        "from_start": "07:00",
         "to_day": 0,
-        "to_start": "06:00",
+        "to_start": "07:00",
     }
 
 

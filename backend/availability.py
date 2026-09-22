@@ -5,9 +5,26 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from backend.assignments import unplanned_minutes
-from backend.models import GridWindow, ProtectedWindow, StudyWindow, parse_naive_stamp
-from backend.slots import DAY_END_MIN, DAY_START_MIN, SLOT_MIN, SLOTS_PER_DAY, occupancy_mask
+from backend.models import GridWindow, ProtectedWindow, StudyWindow, WorkWindow, parse_naive_stamp
+from backend.slots import (
+    DAY_END_MIN,
+    DAY_START_MIN,
+    SLOT_MIN,
+    SLOTS_PER_DAY,
+    clock_to_minutes,
+    occupancy_mask,
+)
 from backend.weeks import monday_of
+
+DEFAULT_WORK_WINDOWS = [
+    WorkWindow(days=[0, 1, 2, 3, 4, 5, 6], start="07:00", end="22:00"),
+]
+OPEN_WORK_WINDOWS = [
+    WorkWindow(days=[0, 1, 2, 3, 4, 5, 6], start="00:00", end="24:00"),
+]
+LEGACY_WORK_WINDOWS = [
+    WorkWindow(days=[0, 1, 2, 3, 4, 5, 6], start="06:00", end="23:00"),
+]
 
 LATE_COPY = "Moved after you ran late so the rest of the day still fits."
 CLUSTER_COPY = (
@@ -77,6 +94,30 @@ def study_rank(
         elif wanted is not None and window.subject.casefold() == wanted:
             return 0
     return best
+
+
+def resolve_work_windows(windows: list[WorkWindow] | None) -> tuple[list[WorkWindow], bool]:
+    if windows:
+        return list(windows), False
+    return [window.model_copy() for window in DEFAULT_WORK_WINDOWS], True
+
+
+def session_inside_work_windows(
+    windows: list[WorkWindow], course: str | None, day: int, start_min: int, duration_min: int
+) -> bool:
+    """True when the whole session sits inside some applicable work window."""
+    wanted = course.strip().casefold() if course and course.strip() else None
+    end_min = start_min + duration_min
+    for window in windows:
+        if day not in window.days:
+            continue
+        if window.subject is not None and (wanted is None or window.subject.casefold() != wanted):
+            continue
+        begin = clock_to_minutes(window.start)
+        finish = clock_to_minutes(window.end)
+        if begin <= start_min and end_min <= finish:
+            return True
+    return False
 
 
 def merge_occupancy(base: list[int], extra: list[int]) -> list[int]:

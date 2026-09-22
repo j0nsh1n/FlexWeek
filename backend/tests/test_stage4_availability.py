@@ -5,10 +5,22 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from backend.availability import occupancy_from_windows, spread_sessions
+from backend.availability import LEGACY_WORK_WINDOWS, occupancy_from_windows, spread_sessions
 from backend.models import Assignment, ProtectedWindow, StudyWindow, TimeBlock
 from backend.slots import hhmm_to_minutes
-from backend.solver import SOLVE_BUDGET_MS, reschedule_running_late, solve
+from backend.solver import SOLVE_BUDGET_MS
+from backend.solver import reschedule_running_late as run_reschedule_running_late
+from backend.solver import solve as run_solve
+
+
+def solve(blocks, **kwargs):
+    kwargs.setdefault("work_windows", LEGACY_WORK_WINDOWS)
+    return run_solve(blocks, **kwargs)
+
+
+def reschedule_running_late(*args, **kwargs):
+    kwargs.setdefault("work_windows", LEGACY_WORK_WINDOWS)
+    return run_reschedule_running_late(*args, **kwargs)
 
 CLUSTER_MESSAGE = (
     "Several tasks are short on time. Shorten a session, pick another day, "

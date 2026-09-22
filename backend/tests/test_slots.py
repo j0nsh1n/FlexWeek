@@ -13,15 +13,19 @@ from backend.slots import (
 )
 
 
-def test_slots_per_day_is_68() -> None:
-    assert SLOTS_PER_DAY == 68
+def test_slots_per_day_is_96() -> None:
+    assert SLOTS_PER_DAY == 96
 
 
 def test_hhmm_roundtrip() -> None:
+    assert minutes_to_hhmm(hhmm_to_minutes("00:00")) == "00:00"
     assert minutes_to_hhmm(hhmm_to_minutes("06:00")) == "06:00"
     assert minutes_to_hhmm(hhmm_to_minutes("23:00")) == "23:00"
+    assert minutes_to_hhmm(1440) == "24:00"
+    assert slot_to_hhmm(hhmm_to_slot("00:00")) == "00:00"
     assert slot_to_hhmm(hhmm_to_slot("06:00")) == "06:00"
     assert slot_to_hhmm(hhmm_to_slot("16:00")) == "16:00"
+    assert slot_to_hhmm(hhmm_to_slot("23:45")) == "23:45"
 
 
 def test_rejects_off_grid_time() -> None:
@@ -29,14 +33,14 @@ def test_rejects_off_grid_time() -> None:
         hhmm_to_slot("08:10")
 
 
-def test_rejects_before_day_start() -> None:
-    with pytest.raises(ValueError):
-        hhmm_to_slot("05:45")
+def test_midnight_is_a_legal_start() -> None:
+    assert hhmm_to_slot("00:00") == 0
+    assert hhmm_to_slot("05:45") == 23
 
 
 def test_rejects_day_end_as_start() -> None:
     with pytest.raises(ValueError):
-        hhmm_to_slot("23:00")
+        hhmm_to_minutes("24:00")
     with pytest.raises(ValueError):
         slot_to_hhmm(SLOTS_PER_DAY)
 
