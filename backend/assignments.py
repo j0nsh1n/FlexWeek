@@ -33,7 +33,12 @@ def completed_at_for_block(week_start: str, block: dict) -> str:
             day = days[0]
         if day is not None:
             end = hhmm_to_minutes(start) + int(block["duration_min"])
-            return f"{(monday + timedelta(days=int(day))).isoformat()}T{minutes_to_hhmm(end)}"
+            # 24:00 is the next date at 00:00. A stamp of T24:00 is not a time the API accepts.
+            day_date = monday + timedelta(days=int(day))
+            if end >= 24 * 60:
+                day_date += timedelta(days=end // (24 * 60))
+                end %= 24 * 60
+            return f"{day_date.isoformat()}T{minutes_to_hhmm(end)}"
     return f"{(monday + timedelta(days=6)).isoformat()}T23:59"
 
 

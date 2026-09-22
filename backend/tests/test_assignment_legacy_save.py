@@ -131,3 +131,74 @@ def test_a_stale_latest_save_leaves_no_new_assignment(client: TestClient) -> Non
 def test_assignment_id_and_latest_together_are_rejected(client: TestClient) -> None:
     response = save(client, [flex_with_latest(assignment_id=AID)], 0)
     assert response.status_code == 422
+
+
+def test_a_completed_block_ending_at_midnight_saves_and_reloads(tmp_path: Path) -> None:
+    """23:45 for 15 minutes ends at 24:00. That instant is the next date at 00:00, not T24:00."""
+    path = tmp_path / "midnight.db"
+    origin = "http://testserver"
+    legacy = {
+        "id": "night",
+        "title": "Night reading",
+        "kind": "flexible",
+        "duration_min": 15,
+        "days": [0],
+        "start": "23:45",
+        "priority": 3,
+        "energy": "low",
+        "latest": "Monday 23:59",
+        "completed": True,
+        "completed_day": 0,
+    }
+    pomo = {
+        "id": "essay-1",
+        "title": "Essay chunk",
+        "kind": "locked",
+        "duration_min": 15,
+        "days": [0],
+        "start": "23:45",
+        "priority": 3,
+        "energy": "medium",
+        "pomodoro_parent_id": "essay",
+        "pomodoro_role": "work",
+        "pomodoro_index": 1,
+        "completed": True,
+    }
+    with TestClient(create_app(database=path, origin=origin)) as client:
+        assert (
+            client.post(
+                "/api/auth/register", json={"username": "alice", "password": PASSWORD}, headers=WRITE
+            ).status_code
+            == 201
+        )
+        saved = client.put(
+            "/api/week", json={"week_start": WEEK, "blocks": [legacy], "revision": 0}, headers=WRITE
+        )
+        assert saved.status_code == 200, saved.text
+        reloaded = client.get(f"/api/week?week_start={WEEK}")
+        assert reloaded.status_code == 200, reloaded.text
+        assert reloaded.json()["blocks"][0]["start"] == "23:45"
+        listed = client.get(f"/api/assignments?week_start={WEEK}&include_completed=true")
+        night = next(item for item in listed.json()["assignments"] if item["title"] == "Night reading")
+        assert night["completed_at"] == "2026-09-08T00:00"
+        replaced = client.put(
+            "/api/week",
+            json={"week_start": WEEK, "blocks": [pomo], "revision": saved.json()["revision"]},
+            headers=WRITE,
+        )
+        assert replaced.status_code == 200, replaced.text
+    with TestClient(create_app(database=path, origin=origin)) as client:
+        assert (
+            client.post(
+                "/api/auth/login", json={"username": "alice", "password": PASSWORD}, headers=WRITE
+            ).status_code
+            == 200
+        )
+        listed = client.get(f"/api/assignments?week_start={WEEK}&include_completed=true")
+        assert listed.status_code == 200, listed.text
+        chunk = next(item for item in listed.json()["assignments"] if item["title"] == "Essay chunk")
+        assert chunk["completed_at"] == "2026-09-08T00:00"
+        week = client.get(f"/api/week?week_start={WEEK}").json()
+        assert week["blocks"][0]["start"] == "23:45"
+        assert week["blocks"][0]["completed"] is True
+        assert week["blocks"][0]["assignment_id"] == chunk["id"]
