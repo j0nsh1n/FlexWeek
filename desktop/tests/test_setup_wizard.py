@@ -548,7 +548,9 @@ def test_a_spotify_alarm_needs_a_spotify_link(qapp: QApplication) -> None:
     setup.spotify.setText("https://example.com/song")
     setup.next.click()
     assert setup.step == REMINDERS
-    assert "open.spotify.com" in setup.error.text()
+    assert setup.error.text() == (
+        "Paste a link that starts with https://open.spotify.com, or pick another sound."
+    )
     setup.spotify.setText(SPOTIFY)
     setup.next.click()
     assert setup.step == FIRST
