@@ -4,6 +4,7 @@ import time
 
 from backend.availability import (
     CLUSTER_COPY,
+    DEFAULT_WORK_WINDOWS,
     LATE_COPY,
     lateness_occupancy,
     merge_occupancy,
@@ -465,6 +466,8 @@ def _reason_for(
     if not unconstrained:
         if deadline is not None and _domain(block, empty, None, earliest_pt, work_windows):
             return "DEADLINE_MISS"
+        if _domain(block, empty, deadline, earliest_pt, DEFAULT_WORK_WINDOWS):
+            return "WORK_WINDOW_MISS"
         return "SLEEP_GUARD"
 
     n = duration_to_slots(block.duration_min)

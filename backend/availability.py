@@ -17,9 +17,6 @@ from backend.slots import (
 from backend.weeks import monday_of
 
 DEFAULT_WORK_WINDOWS = [
-    WorkWindow(days=[0, 1, 2, 3, 4, 5, 6], start="07:00", end="22:00"),
-]
-OPEN_WORK_WINDOWS = [
     WorkWindow(days=[0, 1, 2, 3, 4, 5, 6], start="00:00", end="24:00"),
 ]
 LEGACY_WORK_WINDOWS = [
@@ -102,12 +99,12 @@ def resolve_work_windows(windows: list[WorkWindow] | None) -> tuple[list[WorkWin
     return [window.model_copy() for window in DEFAULT_WORK_WINDOWS], True
 
 
-def session_inside_work_windows(
-    windows: list[WorkWindow], course: str | None, day: int, start_min: int, duration_min: int
-) -> bool:
-    """True when the whole session sits inside some applicable work window."""
+def _merged_work_spans(
+    windows: list[WorkWindow], course: str | None, day: int
+) -> list[tuple[int, int]]:
+    """One day's applicable windows, merged where they touch or overlap."""
     wanted = course.strip().casefold() if course and course.strip() else None
-    end_min = start_min + duration_min
+    spans: list[tuple[int, int]] = []
     for window in windows:
         if day not in window.days:
             continue
@@ -115,9 +112,30 @@ def session_inside_work_windows(
             continue
         begin = clock_to_minutes(window.start)
         finish = clock_to_minutes(window.end)
-        if begin <= start_min and end_min <= finish:
-            return True
-    return False
+        if begin < finish:
+            spans.append((begin, finish))
+    if not spans:
+        return []
+    spans.sort()
+    merged = [spans[0]]
+    for begin, finish in spans[1:]:
+        last_begin, last_finish = merged[-1]
+        if begin <= last_finish:
+            merged[-1] = (last_begin, max(last_finish, finish))
+        else:
+            merged.append((begin, finish))
+    return merged
+
+
+def session_inside_work_windows(
+    windows: list[WorkWindow], course: str | None, day: int, start_min: int, duration_min: int
+) -> bool:
+    """True when the whole session sits inside the day's merged applicable windows."""
+    end_min = start_min + duration_min
+    return any(
+        begin <= start_min and end_min <= finish
+        for begin, finish in _merged_work_spans(windows, course, day)
+    )
 
 
 def merge_occupancy(base: list[int], extra: list[int]) -> list[int]:

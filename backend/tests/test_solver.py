@@ -248,11 +248,18 @@ def test_touching_endpoints_do_not_overlap() -> None:
     assert starts == [6 * 60, 7 * 60]
 
 
-def test_sleep_guard_rejects_overflow_past_23() -> None:
+def test_sleep_guard_rejects_overflow_past_the_day() -> None:
+    late = _flex("late", "Too late", 120, [0], earliest="Monday 23:00")
+    trace = solve([late], work_windows=[])
+    assert [block.id for block in trace.unplaced] == ["late"]
+    assert "SLEEP_GUARD" in trace.failed_constraints
+
+
+def test_a_session_that_runs_past_work_windows_is_unplaced() -> None:
     late = _flex("late", "Too late", 120, [0], earliest="Monday 22:00")
     trace = solve([late])
     assert [block.id for block in trace.unplaced] == ["late"]
-    assert "SLEEP_GUARD" in trace.failed_constraints
+    assert "WORK_WINDOW_MISS" in trace.failed_constraints
 
 
 def test_block_may_end_at_23() -> None:

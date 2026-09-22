@@ -21,6 +21,7 @@ ReasonCode = Literal[
     "PRIORITY_PREEMPT",
     "ENERGY_MISMATCH",
     "SLEEP_GUARD",
+    "WORK_WINDOW_MISS",
     "RESHUFFLE_AFTER_MISS",
 ]
 PomodoroRole = Literal["work", "break"]

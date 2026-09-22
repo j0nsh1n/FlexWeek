@@ -116,16 +116,16 @@ def test_next_tuesday_due_places_sunday_this_week_and_monday_next_week(alice: Te
     mon = monday.json()
     assert [block["id"] for block in sun["placed"]] == ["sun"]
     assert sun["placed"][0]["days"] == [6]
-    assert sun["placed"][0]["start"] == "07:00"
+    assert sun["placed"][0]["start"] == "06:00"
     assert sun["unplaced"] == []
     slack = next(item for item in sun["explanations"] if item.get("slack_min") is not None)
-    assert slack["slack_min"] == 3839
+    assert slack["slack_min"] == 3899
     assert slack["slack_status"] == "ok"
     assert [block["id"] for block in mon["placed"]] == ["mon"]
     assert mon["placed"][0]["days"] == [0]
-    assert mon["placed"][0]["start"] == "07:00"
+    assert mon["placed"][0]["start"] == "06:00"
     next_slack = next(item for item in mon["explanations"] if item.get("slack_min") is not None)
-    assert next_slack["slack_min"] == 2399
+    assert next_slack["slack_min"] == 2459
 
 
 def test_sunday_2359_allows_a_session_that_ends_at_the_grid_end(alice: TestClient) -> None:
@@ -154,7 +154,7 @@ def test_monday_0000_next_week_has_no_in_week_bound(alice: TestClient) -> None:
     assert [block["id"] for block in body["placed"]] == ["sun"]
     assert body["placed"][0]["days"] == [6]
     slack = next(item for item in body["explanations"] if item.get("slack_min") is not None)
-    assert slack["slack_min"] == 960
+    assert slack["slack_min"] == 1020
 
 
 def test_due_before_the_week_is_deadline_miss(alice: TestClient) -> None:

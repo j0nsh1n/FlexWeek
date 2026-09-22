@@ -9,7 +9,8 @@ REASON_COPY: dict[ReasonCode, str] = {
     "NO_SLOT_LEFT": "Your plans and other homework already fill every gap long enough for it.",
     "PRIORITY_PREEMPT": "Work with a higher priority used the free time before it is due.",
     "ENERGY_MISMATCH": "Planned outside its preferred time of day.",
-    "SLEEP_GUARD": "It does not fit between 06:00 and 23:00 on the days left for it.",
+    "SLEEP_GUARD": "It does not fit in the day on the days left for it.",
+    "WORK_WINDOW_MISS": "That does not fit in the times you set aside for work.",
     "RESHUFFLE_AFTER_MISS": "Moved because you missed a day, so the rest of the week still fits.",
 }
 

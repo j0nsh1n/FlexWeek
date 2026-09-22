@@ -322,7 +322,9 @@ def test_preferences_reject_off_grid_windows_and_solve_honors_cutoff(alice: Test
     }
     solved = alice.post("/api/solve", json={"blocks": [homework]}, headers=WRITE)
     assert solved.status_code == 200, solved.text
-    assert [block["id"] for block in solved.json()["unplaced"]] == ["hw"]
+    placed = next(block for block in solved.json()["placed"] if block["id"] == "hw")
+    hour, minute = map(int, placed["start"].split(":"))
+    assert hour * 60 + minute + int(placed["duration_min"]) <= 6 * 60 + 15
 
 
 def test_preferences_reject_overlapping_protected_windows_and_accept_adjacent_ones(
