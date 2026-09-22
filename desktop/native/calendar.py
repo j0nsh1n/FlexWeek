@@ -450,18 +450,26 @@ def span_problem(
     end_min: int,
     due: tuple[int, int] | None,
 ) -> str | None:
-    """Why a block cannot go at this time, in words, or None. A fixed block there would take the time
-    straight back, and so would a due time before it ends."""
+    """Why a block cannot go at this time, in words, or None. Landing on another block is allowed, as
+    in Daily Scheduler: the two sit side by side. What cannot stand is time FlexWeek does not plan in,
+    and homework that would end after it is due."""
     if start_min < DAY_START_MIN or end_min > DAY_END_MIN:
         return "That is outside the hours FlexWeek plans in, so it stayed where it was."
+    if due is not None and (day, end_min) > due:
+        return "That ends after it is due, so it stayed where it was."
+    return None
+
+
+def span_clash(blocks: list[dict], block_id: str, day: int, start_min: int, end_min: int) -> str | None:
+    """The name of a block this time would sit beside, for the words that go with a drop."""
     for other in blocks:
-        if other["id"] == block_id or other.get("kind") != "locked" or not other.get("start"):
+        if other["id"] == block_id or not other.get("start"):
             continue
         if day not in (other.get("days") or []) or day in (other.get("missed_days") or []):
             continue
+        if other.get("completed") and other.get("completed_day") not in (None, day):
+            continue
         begin = hhmm_to_minutes(other["start"])
         if start_min < begin + int(other["duration_min"]) and begin < end_min:
-            return f"{other.get('title') or 'A fixed block'} is at that time, so it stayed where it was."
-    if due is not None and (day, end_min) > due:
-        return "That ends after it is due, so it stayed where it was."
+            return str(other.get("title") or "another block")
     return None

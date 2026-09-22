@@ -259,9 +259,7 @@ def test_accepting_running_late_says_locked_once_it_is_saved(
     assert any(item["id"] == block["id"] for item in window.session.blocks)
 
 
-def test_a_save_without_the_late_start_does_not_confirm_it(
-    qapp: QApplication, window: NativeWindow
-) -> None:
+def test_a_save_without_the_late_start_does_not_confirm_it(qapp: QApplication, window: NativeWindow) -> None:
     """A save already in flight when Running late was accepted stores the week without it."""
     window._late_waiting = ("b-late-not-stored-yet", "Running late: 19:00–19:30 is now locked.")
     window.session.save_finished.emit(True, "Saved.")
@@ -384,7 +382,7 @@ def prefs_layout(choice: dict | None = None) -> PrefsDialog:
 
 
 def test_every_view_says_what_it_is_for_before_its_style_name(qapp: QApplication) -> None:
-    """"Today's app" turned out to be the plain calendar; nothing in the menu said so. A student picks
+    """ "Today's app" turned out to be the plain calendar; nothing in the menu said so. A student picks
     by what the view does, so that comes first and the style name after it."""
     dialog = prefs_layout()
     main = combo(dialog, "layoutMain")
@@ -538,9 +536,7 @@ def test_my_day_opens_whichever_day_screen_was_picked(qapp: QApplication, window
     assert window.planner.currentWidget() is window.week_table
 
 
-def test_summaries_speak_minutes_not_session_counts(
-    qapp: QApplication, window: NativeWindow
-) -> None:
+def test_summaries_speak_minutes_not_session_counts(qapp: QApplication, window: NativeWindow) -> None:
     import re
 
     from PySide6.QtWidgets import QListWidget
@@ -614,9 +610,7 @@ def more_sections(window: NativeWindow) -> list[str]:
     ]
 
 
-def test_plan_and_more_stay_on_the_bar_in_every_layout(
-    qapp: QApplication, window: NativeWindow
-) -> None:
+def test_plan_and_more_stay_on_the_bar_in_every_layout(qapp: QApplication, window: NativeWindow) -> None:
     """A design of its own used to hide Plan my homework and More behind Tools. That rule is gone:
     the same two buttons stay in the top bar in every layout, every view, and My day."""
     assert window.findChild(QPushButton, "toolsButton") is None
@@ -1318,7 +1312,7 @@ def test_the_gear_opens_settings(qapp: QApplication, window: NativeWindow) -> No
 
     gear = window.findChild(QPushButton, "settingsGear")
     assert gear is not None
-    assert gear.text() == "⚙\uFE0E"
+    assert gear.text() == "⚙\ufe0e"
     assert gear.toolTip() == "Settings"
     assert gear.accessibleName() == "Settings"
     opened: list[str] = []
@@ -1904,9 +1898,7 @@ def test_bento_month_hides_the_week_up_next_card(qapp: QApplication, window: Nat
 
 
 @pytest.mark.parametrize("layout_id", ["timeline", "mission", "bento", "retro", "clay"])
-def test_month_hides_the_whole_week_surface(
-    qapp: QApplication, window: NativeWindow, layout_id: str
-) -> None:
+def test_month_hides_the_whole_week_surface(qapp: QApplication, window: NativeWindow, layout_id: str) -> None:
     """Mutation that turns this red: LayoutView._week_host returns None."""
     window._layout = {"main": layout_id, "day": "one", "options": {}}
     window._day_mode = False
@@ -1926,9 +1918,7 @@ def test_month_hides_the_whole_week_surface(
     assert board is not None and board.isVisible()
 
 
-def test_finishing_from_my_day_offers_undo_on_the_notice(
-    qapp: QApplication, window: NativeWindow
-) -> None:
+def test_finishing_from_my_day_offers_undo_on_the_notice(qapp: QApplication, window: NativeWindow) -> None:
     """Mutation that turns this red: _finish_homework never calls _set_notice."""
     click(window, "viewMyDay")
     click(window, "oneFinished")
@@ -2020,9 +2010,7 @@ def _fades(host: QWidget) -> list[QLabel]:
     return [label for label in host.findChildren(QLabel, FADE_NAME) if label.isVisible()]
 
 
-def test_a_new_view_is_live_at_once_while_the_old_one_fades(
-    qapp: QApplication, window: NativeWindow
-) -> None:
+def test_a_new_view_is_live_at_once_while_the_old_one_fades(qapp: QApplication, window: NativeWindow) -> None:
     from desktop.native.motion import DURATION_MS
 
     window._motion = "normal"
@@ -2156,29 +2144,62 @@ def _waiting_math(qapp: QApplication, window: NativeWindow) -> dict:
 
 
 def _drop(qapp: QApplication, window: NativeWindow, block_id: str, hhmm: str, day: int) -> None:
-    from PySide6.QtCore import QByteArray, QMimeData, QPointF
+    from PySide6.QtCore import QByteArray, QMimeData, QPoint, QPointF
     from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
 
     from desktop.native.widgets import SESSION_MIME
 
     click(window, "viewWeek")
-    table = window.week_table
     for _ in range(5):
         qapp.processEvents()
-    row = (int(hhmm[:2]) * 60 + int(hhmm[3:]) - 360) // 15
-    index = table.model().index(row, day)
-    table.scrollTo(index, table.ScrollHint.PositionAtCenter)
+    canvas = window.week_table
+    point = canvas.point_of(day, int(hhmm[:2]) * 60 + int(hhmm[3:])) + QPoint(0, 2)
+    canvas.scroll.ensureVisible(point.x(), point.y(), 0, 120)
     qapp.processEvents()
-    point = QPointF(table.visualRect(index).center())
     data = QMimeData()
     data.setData(SESSION_MIME, QByteArray(block_id.encode()))
     actions = Qt.DropAction.MoveAction
     held, keys = Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier
     # As a real drag does: Qt ignores a move over a widget the drag never entered.
-    QApplication.sendEvent(table.viewport(), QDragEnterEvent(point.toPoint(), actions, data, held, keys))
-    QApplication.sendEvent(table.viewport(), QDragMoveEvent(point.toPoint(), actions, data, held, keys))
-    drop = QDropEvent(point, actions, data, held, keys)
-    QApplication.sendEvent(table.viewport(), drop)
+    QApplication.sendEvent(canvas.body, QDragEnterEvent(point, actions, data, held, keys))
+    QApplication.sendEvent(canvas.body, QDragMoveEvent(point, actions, data, held, keys))
+    QApplication.sendEvent(canvas.body, QDropEvent(QPointF(point), actions, data, held, keys))
+    qapp.processEvents()
+
+
+def _drag_on_the_week(
+    qapp: QApplication, window: NativeWindow, day: int, hhmm: str, to_day: int, to: str
+) -> None:
+    """Press on the week's hours, move and let go, as a mouse does."""
+    from PySide6.QtCore import QEvent, QPointF
+    from PySide6.QtGui import QMouseEvent
+
+    click(window, "viewWeek")
+    for _ in range(5):
+        qapp.processEvents()
+    canvas = window.week_table
+    hours = canvas.body
+
+    def point(on: int, when: str) -> QPointF:
+        return QPointF(canvas.point_of(on, int(when[:2]) * 60 + int(when[3:])))
+
+    def send(kind: QEvent.Type, at: QPointF, held: bool) -> None:
+        buttons = Qt.MouseButton.LeftButton if held else Qt.MouseButton.NoButton
+        event = QMouseEvent(
+            kind,
+            at,
+            QPointF(hours.mapToGlobal(at.toPoint())),
+            Qt.MouseButton.LeftButton,
+            buttons,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        QApplication.sendEvent(hours, event)
+
+    start, end = point(day, hhmm), point(to_day, to)
+    send(QEvent.Type.MouseButtonPress, start, True)
+    send(QEvent.Type.MouseMove, (start + end) / 2, True)
+    send(QEvent.Type.MouseMove, end, True)
+    send(QEvent.Type.MouseButtonRelease, end, False)
     qapp.processEvents()
 
 
@@ -2203,14 +2224,65 @@ def test_homework_dropped_on_the_calendar_gets_that_time_and_keeps_it(
     assert (replanned["days"], replanned["start"]) == ([2], "16:00"), "Replan all leaves it where it was put"
 
 
-def test_a_drop_over_school_is_refused_and_still_needs_a_time(
+def test_a_drop_over_school_sits_beside_it_and_no_plan_moves_it_off(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """As in Daily Scheduler: two blocks at one time is allowed, side by side, and said. It was put
+    there by hand, so the planner that makes way for School leaves it where it is."""
+    waiting = _waiting_math(qapp, window)
+    _drop(qapp, window, waiting["id"], "10:00", 1)
+    settled(qapp, window)
+    placed = next(block for block in window.session.blocks if block["id"] == waiting["id"])
+    assert (placed["days"], placed["start"], placed.get("pinned")) == ([1], "10:00", True)
+    tuesday = {
+        shape.block_id: count
+        for shape, _rect, count, _held in window.week_table.body.laid_out()
+        if shape.day == 1
+    }
+    assert tuesday == {"school": 2, waiting["id"]: 2}, "side by side, each marked"
+    window.session.solve(everything=True)
+    settled(qapp, window)
+    replanned = next(block for block in window.session.blocks if block["id"] == waiting["id"])
+    assert (replanned["days"], replanned["start"]) == ([1], "10:00")
+
+
+def test_dragging_one_day_of_school_moves_that_day_only(qapp: QApplication, window: NativeWindow) -> None:
+    _drag_on_the_week(qapp, window, 2, "10:00", 2, "11:00")
+    settled(qapp, window)
+    school = [block for block in window.session.blocks if block["title"] == "School"]
+    assert sorted((tuple(block["days"]), block["start"]) for block in school) == [
+        ((0, 1, 3, 4), "08:00"),
+        ((2,), "09:00"),
+    ]
+    window.session.undo()
+    settled(qapp, window)
+    school = [block for block in window.session.blocks if block["title"] == "School"]
+    assert [(block["days"], block["start"]) for block in school] == [([0, 1, 2, 3, 4], "08:00")], (
+        "one Undo step"
+    )
+
+
+def test_a_block_moved_on_the_week_while_a_save_is_under_way_is_not_lost(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     waiting = _waiting_math(qapp, window)
-    _drop(qapp, window, waiting["id"], "10:00", 1)
-    assert window.session.message == "School is at that time, so it still needs a time."
-    still = next(block for block in window.session.blocks if block["id"] == waiting["id"])
-    assert not still.get("start")
+    assert window.session.place_session(waiting["id"], 2, 16 * 60)
+    window.session.save()
+    settled(qapp, window)
+    window.session.add_homework(
+        {"id": "poster", "title": "Poster", "due": sunday_due(window.session.week_start), "estimate_min": 30}
+    )
+    window.session.save()
+    assert window.session.busy
+    _drag_on_the_week(qapp, window, 2, "16:30", 3, "17:30")
+    settled(qapp, window)
+    wait_until(
+        qapp, lambda: next(b for b in window.session.blocks if b["id"] == waiting["id"])["days"] == [3]
+    )
+    settled(qapp, window)
+    moved = next(block for block in window.session.blocks if block["id"] == waiting["id"])
+    assert (moved["days"], moved["start"]) == ([3], "17:00")
+    assert "poster" in window.session.assignments, "the save under way went through too"
 
 
 def test_choose_a_time_places_homework_without_dragging(
@@ -2229,7 +2301,7 @@ def test_choose_a_time_places_homework_without_dragging(
         seen.append(f"opened on {dialog.day.currentData()}")
         dialog.day.setCurrentIndex(dialog.day.findData(1))
         dialog.start.setTime(QTime(10, 0))
-        seen.append(dialog.problem.text())
+        seen.append(dialog.beside.text())
         ok = dialog.buttons.button(dialog.buttons.StandardButton.Ok)
         seen.append("ok" if ok.isEnabled() else "refused")
         dialog.start.setTime(QTime(16, 0))
@@ -2239,11 +2311,15 @@ def test_choose_a_time_places_homework_without_dragging(
     monkeypatch.setattr(HomeworkDialog, "exec", lambda dialog: _press(dialog, "homeworkChooseTime"))
     window._edit_homework("math")
     settled(qapp, window)
-    assert seen == ["opened on 3", "School is at that time.", "refused"]
+    assert seen == [
+        "opened on 3",
+        "School is at that time too. Both will show, side by side.",
+        "ok",
+    ]
     placed = next(block for block in window.session.blocks if block["id"] == waiting["id"])
     assert (placed["days"], placed["start"], placed.get("pinned")) == ([1], "16:00", True)
-    item = window.week_table.item((16 * 60 - 360) // 15, 1)
-    assert "Pinned" in item.toolTip()
+    shown = next(shape for shape in window.week_table.body.shapes if shape.block_id == waiting["id"])
+    assert "Pinned" in shown.tip
 
 
 def test_let_flexweek_move_it_takes_the_pin_away(

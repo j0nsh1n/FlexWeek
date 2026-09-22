@@ -1,21 +1,21 @@
-"""Dragging in every design: homework onto a time or a day, and a block to another one.
+"""Dragging in every design: a block picked up wherever a design shows it, and put down at a time.
 
-A design says two things: where a block can be picked up, and what a point on it means. That is an
-exact day and time on a painted time axis, a place between two items in a list, or just a day. The
-window says whether that works, by the rule Today's app's grid uses, and the design shows the answer
+Designs with hours of their own, Mission control's lanes, the Day dial's face and One thing's day bar,
+take a drop at the time under the pointer. The others open a day's hours beside themselves while a
+block is dragged (layouts/drawer.py), so every drop, in every design, is at a time. The window says
+whether it can go there, by the rule Today's app's calendar uses, and the design shows the answer
 while the pointer is still moving. Nothing changes until the drop, and then only through the window.
 """
 
 from __future__ import annotations
 
-import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QByteArray, QEvent, QMimeData, QObject, QPoint, QPointF, QRect, QRectF, Qt
+from PySide6.QtCore import QByteArray, QEvent, QMimeData, QObject, QPoint, QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QDrag, QDropEvent, QFont, QFontMetrics, QMouseEvent, QPainter, QPixmap
-from PySide6.QtWidgets import QApplication, QFrame, QLabel, QScrollArea, QWidget
+from PySide6.QtWidgets import QApplication, QLabel, QScrollArea, QWidget
 
 from backend.slots import DAY_END_MIN, DAY_START_MIN, SLOT_MIN
 from desktop.native.widgets import SESSION_MIME
@@ -27,15 +27,17 @@ if TYPE_CHECKING:
 # Minutes between a block's start and the point it was held by, so a bar dragged by its middle lands
 # where its middle is let go rather than jumping its start to the pointer.
 GRAB_MIME = "application/x-flexweek-grab"
+# The day it was lifted from. A block that repeats moves only that day's copy.
+DAY_MIME = "application/x-flexweek-day"
 EDGE_SCROLL_PX, EDGE_SCROLL_STEP = 28, 14
 
 
 @dataclass(frozen=True)
 class Spot:
-    """Where a drop would put a block: a day, and a start, or None for the planner's pick that day."""
+    """Where a drop would put a block: a day and a start."""
 
     day: int
-    start: int | None = None
+    start: int
 
 
 @dataclass(frozen=True)
@@ -52,19 +54,24 @@ class Verdict:
 class Carried:
     block_id: str
     grab: int = 0
+    from_day: int = -1
 
 
 @dataclass(frozen=True)
 class Mark:
-    """How a design shows where a drop would land: a widget outlined, a line between two items, or a
-    ghost the widget paints itself."""
+    """How a painted time axis shows where a drop would land: it paints the ghost itself."""
 
-    widget: QWidget | None = None
-    line: QRect | None = None
-    paint: Callable[[Verdict | None], None] | None = None
+    paint: Callable[[Verdict | None], None]
 
 
 Where = Callable[[QPoint, Carried], "tuple[Spot, Mark] | None"]
+
+
+def _number(data: QMimeData, kind: str, fallback: int) -> int:
+    if not data.hasFormat(kind):
+        return fallback
+    words = bytes(data.data(kind).data()).decode()
+    return int(words) if words.lstrip("-").isdigit() else fallback
 
 
 def carried(event: QEvent) -> Carried | None:
@@ -72,21 +79,12 @@ def carried(event: QEvent) -> Carried | None:
     if not data.hasFormat(SESSION_MIME):
         return None
     block_id = bytes(data.data(SESSION_MIME).data()).decode()
-    grab = bytes(data.data(GRAB_MIME).data()).decode() if data.hasFormat(GRAB_MIME) else ""
-    return Carried(block_id, int(grab) if grab.lstrip("-").isdigit() else 0)
+    return Carried(block_id, _number(data, GRAB_MIME, 0), _number(data, DAY_MIME, -1))
 
 
 def snap(minute: float) -> int:
     """The nearest quarter hour inside the hours FlexWeek plans in."""
     return min(max(round(minute / SLOT_MIN) * SLOT_MIN, DAY_START_MIN), DAY_END_MIN - SLOT_MIN)
-
-
-def slot_up(minute: int) -> int:
-    return math.ceil(minute / SLOT_MIN) * SLOT_MIN
-
-
-def slot_down(minute: int) -> int:
-    return math.floor(minute / SLOT_MIN) * SLOT_MIN
 
 
 def host_view(widget: QWidget) -> LayoutView | None:
@@ -124,18 +122,19 @@ def chip_picture(title: str, tokens: dict[str, str], ratio: float) -> QPixmap:
     return picture
 
 
-def start_drag(view: LayoutView, block_id: str, grab: int = 0) -> None:
+def start_drag(view: LayoutView, block_id: str, grab: int = 0, from_day: int = -1) -> None:
     """Pick a block up. The drag belongs to the view, which outlives the button it started on."""
     data = QMimeData()
     data.setData(SESSION_MIME, QByteArray(block_id.encode()))
     data.setData(GRAB_MIME, QByteArray(str(grab).encode()))
+    data.setData(DAY_MIME, QByteArray(str(from_day).encode()))
     drag = QDrag(view)
     drag.setMimeData(data)
     tokens = view.scene.tokens if view.scene is not None else {}
     picture = chip_picture(view.title_of(block_id), tokens, view.devicePixelRatioF())
     drag.setPixmap(picture)
     drag.setHotSpot(QPoint(16, round(picture.height() / picture.devicePixelRatio() / 2)))
-    view.drag_began()
+    view.drag_began(block_id, from_day)
     try:
         drag.exec(Qt.DropAction.MoveAction)
     finally:
@@ -145,9 +144,9 @@ def start_drag(view: LayoutView, block_id: str, grab: int = 0) -> None:
 class Lift(QObject):
     """Picks a block up off a button once the pointer has moved far enough. A click still opens it."""
 
-    def __init__(self, target: QWidget, block_id: str) -> None:
+    def __init__(self, target: QWidget, block_id: str, day: int = -1) -> None:
         super().__init__(target)
-        self._target, self._block_id = target, block_id
+        self._target, self._block_id, self._day = target, block_id, day
         self._at: QPoint | None = None
         target.installEventFilter(self)
 
@@ -164,20 +163,20 @@ class Lift(QObject):
                 down = getattr(self._target, "setDown", None)
                 if down is not None:
                     down(False)
-                start_drag(view, self._block_id)
+                start_drag(view, self._block_id, 0, self._day)
                 return True
         elif kind == QEvent.Type.MouseButtonRelease:
             self._at = None
         return False
 
 
-def liftable(target: QWidget, block_id: str) -> None:
-    Lift(target, block_id)
+def liftable(target: QWidget, block_id: str, day: int = -1) -> None:
+    Lift(target, block_id, day)
 
 
 class Pickup:
     """A painted surface's items, picked up the way a button is: press and move to drag, or press and
-    let go to open. The open happens on release now, since a press alone may be the start of a drag.
+    let go to open. The open happens on release, since a press alone may be the start of a drag.
     `minute_at` is the time under a point on a time axis, so a bar keeps where it was held."""
 
     def __init__(
@@ -209,7 +208,7 @@ class Pickup:
         if view is None:
             return
         grab = self._minute_at(at) - item.start if self._minute_at is not None else 0
-        start_drag(view, item.block_id, max(0, min(grab, item.minutes)))
+        start_drag(view, item.block_id, max(0, min(grab, item.minutes)), item.day)
 
     def release(self, event: QMouseEvent) -> bool:
         held, self._held = self._held, None
@@ -220,18 +219,11 @@ class Pickup:
 
 
 class Zone(QObject):
-    """Lets `target` take a dropped block. `where` says what a point on it means and how to show it."""
+    """Lets a painted time axis take a dropped block. `where` says what a point on it means."""
 
     def __init__(self, view: LayoutView, target: QWidget, where: Where) -> None:
         super().__init__(target)
         self._view, self._target, self._where = view, target, where
-        # A widget that outlives a render gets a new zone each time. The last one's answers were about
-        # widgets that render deleted, so it goes.
-        earlier = getattr(target, "_drop_zone", None)
-        if isinstance(earlier, Zone):
-            target.removeEventFilter(earlier)
-            earlier.deleteLater()
-        target._drop_zone = self  # type: ignore[attr-defined]
         target.setAcceptDrops(True)
         target.installEventFilter(self)
 
@@ -261,169 +253,34 @@ class Zone(QObject):
         if kind == QEvent.Type.Drop:
             self._view.clear_drop()
             event.acceptProposedAction()
-            start = -1 if spot.start is None else spot.start
-            self._view.placement_requested.emit(thing.block_id, spot.day, start)
+            self._view.placement_requested.emit(thing.block_id, thing.from_day, spot.day, spot.start)
             return True
-        verdict = self._view.judge_drop(thing.block_id, spot)
+        verdict = self._view.judge_drop(thing.block_id, thing.from_day, spot)
         self._view.show_drop(verdict, mark, self._target.mapTo(self._view, point))
         event.acceptProposedAction()
         return True
 
 
-def day_zone(view: LayoutView, target: QWidget, day: int) -> None:
-    """A day: a block keeps its time there, and homework waiting for one gets the planner's pick."""
-    Zone(view, target, lambda _point, _thing: (Spot(day), Mark(widget=target)))
-
-
-def painted_day_zone(
-    view: LayoutView, target: QWidget, day: int, show: Callable[[Verdict | None], None]
-) -> None:
-    Zone(view, target, lambda _point, _thing: (Spot(day), Mark(paint=show)))
-
-
-Items = list[tuple[QWidget, "Occurrence"]]
-
-
-def list_zone(
-    view: LayoutView,
-    target: QWidget,
-    day: int,
-    items: Items,
-    *,
-    vertical: bool = True,
-    top: Callable[[], int] | None = None,
-    heading: QWidget | None = None,
-) -> None:
-    """A day's items in time order. A drop between two starts right after the one above; before the
-    first, it ends as the first begins. On a list with nothing in it, it is a drop on the day.
-
-    `top` is where the list starts on `target`. Above it a point means nothing, or, when the day's
-    `heading` is up there, the day."""
-
-    def where(point: QPoint, thing: Carried) -> tuple[Spot, Mark] | None:
-        if top is not None and (point.y() if vertical else point.x()) < top():
-            return (Spot(day), Mark(widget=heading)) if heading is not None else None
-        return between(view, target, day, items, point, thing, vertical)
-
-    Zone(view, target, where)
-
-
-def column_zone(view: LayoutView, target: QWidget, columns: list[tuple[QWidget, int, Items]]) -> None:
-    """Days side by side, each a heading over its items: the heading is the day, and below it a drop
-    goes between two of that day's items. Each column runs from its heading to the next one's."""
-
-    def where(point: QPoint, thing: Carried) -> tuple[Spot, Mark] | None:
-        lefts = [heading.mapTo(target, QPoint(0, 0)).x() for heading, _day, _items in columns]
-        found = None
-        for index, (heading, day, items) in enumerate(columns):
-            right = lefts[index + 1] if index + 1 < len(columns) else target.width()
-            if lefts[index] <= point.x() < right:
-                found = heading, day, items
-        if found is None:
-            return None
-        heading, day, items = found
-        if point.y() < heading.mapTo(target, QPoint(0, heading.height())).y():
-            return Spot(day), Mark(widget=heading)
-        return between(view, target, day, items, point, thing, True)
-
-    Zone(view, target, where)
-
-
-def between(
-    view: LayoutView,
-    target: QWidget,
-    day: int,
-    items: Items,
-    point: QPoint,
-    thing: Carried,
-    vertical: bool,
-) -> tuple[Spot, Mark]:
-    """The two items a point falls between, and the start that means. A block already in that gap, as
-    it is when it is let go where it was, keeps its time. Anything else starts right after the item
-    above, or before the first ends as it begins."""
-    own = next((item for _widget, item in items if item.block_id == thing.block_id), None)
-    # The block being moved is not a neighbour of itself.
-    shown = [
-        (widget, item) for widget, item in items if item.block_id != thing.block_id and not widget.isHidden()
-    ]
-    if not shown and own is None:
-        return Spot(day), Mark(widget=target)
-    spans = [(widget.mapTo(target, QPoint(0, 0)), widget) for widget, _item in shown]
-    along = point.y() if vertical else point.x()
-    index = len(shown)
-    for position, (corner, widget) in enumerate(spans):
-        middle = (corner.y() + widget.height() / 2) if vertical else (corner.x() + widget.width() / 2)
-        if along < middle:
-            index = position
-            break
-    after = shown[index - 1][1].end if index > 0 else DAY_START_MIN
-    before = shown[index][1].start if index < len(shown) else DAY_END_MIN
-    if own is not None and after <= own.start and own.end <= before:
-        start = own.start
-    elif index == 0 and shown:
-        start = slot_down(shown[0][1].start - view.minutes_of(thing.block_id))
-    else:
-        start = slot_up(after)
-    start = min(max(start, DAY_START_MIN), DAY_END_MIN - SLOT_MIN)
-    line = gap_line(view, target, spans, index, vertical) if spans else QRect()
-    return Spot(day, start), (Mark(line=line) if spans else Mark(widget=target))
-
-
-def gap_line(
-    view: LayoutView, target: QWidget, spans: list[tuple[QPoint, QWidget]], index: int, vertical: bool
-) -> QRect:
-    """The line just after the item a drop would follow, in the view's coordinates. Just after it, not
-    halfway to the next: that is what the drop means, and halfway could fall across a label."""
-    thick = 4
-    if index == 0:
-        corner, widget = spans[0]
-        edge = (corner.y() if vertical else corner.x()) - 4
-    else:
-        corner, widget = spans[index - 1]
-        edge = (corner.y() + widget.height() if vertical else corner.x() + widget.width()) + 3
-    if vertical:
-        left = target.mapTo(view, QPoint(corner.x(), edge))
-        return QRect(left.x(), left.y() - thick // 2, widget.width(), thick)
-    top = target.mapTo(view, QPoint(edge, corner.y()))
-    return QRect(top.x() - thick // 2, top.y(), thick, widget.height())
-
-
 class DropShow:
-    """What a view shows during a drag: the answer in a bubble by the pointer, and where it would land.
-
-    The outline, the line and the bubble are the view's own, laid over the design rather than set on
-    its buttons, whose own rules would win over any outline given to them."""
+    """The answer by the pointer while a block is dragged over a painted time axis. The bubble is the
+    view's own, laid over the design, so no rule of the design's can hide it."""
 
     def __init__(self, view: QWidget) -> None:
         self._view = view
-        self.outline = self._part(QFrame(view), "dropOutline")
-        self.line = self._part(QFrame(view), "dropLine")
-        self.hint = self._part(QLabel(view), "dropHint")
-        self._mark: Mark | None = None
-
-    @staticmethod
-    def _part(widget: QWidget, name: str) -> QWidget:
-        widget.setObjectName(name)
+        self.hint = QLabel(view)
+        self.hint.setObjectName("dropHint")
         # Never in the way of the drop it is showing: childAt, and so the drag, looks straight through.
-        widget.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        widget.hide()
-        return widget
+        self.hint.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.hint.hide()
+        self._mark: Mark | None = None
 
     def show(self, verdict: Verdict, mark: Mark, point: QPoint) -> None:
         if mark != self._mark:
             self.clear()
         self._mark = mark
-        state = "ok" if verdict.ok else "refused"
-        if mark.widget is not None:
-            corner = mark.widget.mapTo(self._view, QPoint(0, 0))
-            self._lay(self.outline, QRect(corner, mark.widget.size()).adjusted(-3, -3, 3, 3), state)
-        if mark.line is not None:
-            self._lay(self.line, mark.line, state)
-        if mark.paint is not None:
-            mark.paint(verdict)
-        assert isinstance(self.hint, QLabel)
+        mark.paint(verdict)
         self.hint.setText(verdict.words)
-        restyle(self.hint, state)
+        restyle(self.hint, "ok" if verdict.ok else "refused")
         self.hint.adjustSize()
         room = self._view.rect()
         left = min(point.x() + 18, room.right() - self.hint.width() - 4)
@@ -433,29 +290,15 @@ class DropShow:
         self.hint.setVisible(bool(verdict.words))
         self.hint.raise_()
 
-    @staticmethod
-    def _lay(widget: QWidget, where: QRect, state: str) -> None:
-        widget.setGeometry(where)
-        restyle(widget, state)
-        widget.show()
-        widget.raise_()
-
     def clear(self) -> None:
         mark, self._mark = self._mark, None
-        if mark is not None and mark.paint is not None:
+        if mark is not None:
             mark.paint(None)
-        for part in (self.outline, self.line, self.hint):
-            part.hide()
+        self.hint.hide()
 
     def showing(self) -> str:
         """The bubble's words while it is up, for tests and screen readers."""
-        return self.hint.text() if self.hint.isVisible() else ""  # type: ignore[attr-defined]
-
-    def outlined(self) -> QRect | None:
-        return self.outline.geometry() if self.outline.isVisible() else None
-
-    def lined(self) -> QRect | None:
-        return self.line.geometry() if self.line.isVisible() else None
+        return self.hint.text() if self.hint.isVisible() else ""
 
 
 def restyle(widget: QWidget, state: str) -> None:

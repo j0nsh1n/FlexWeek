@@ -157,14 +157,12 @@ def solve_request(
     *,
     everything: bool = False,
     only: set[str] | None = None,
-    on_day: dict[str, int] | None = None,
 ) -> tuple[list[dict], set[str]]:
     """What to send the solver, and which sessions its answer may place.
 
     By default planned homework keeps its time and only homework without one is placed around it.
     `everything` places every unfinished session again, with every day up to its deadline open.
     `only` places just those sessions around everything else, for work whose time stopped working.
-    `on_day` keeps a session to one day, for homework dropped on a day: the planner picks the time.
     """
     payload: list[dict] = []
     targets: set[str] = set()
@@ -181,8 +179,6 @@ def solve_request(
             if planned:
                 session.pop("start")
                 session["days"] = planning_days(block, assignments, week_start)
-            if on_day is not None and block["id"] in on_day:
-                session["days"] = [on_day[block["id"]]]
             payload.append(session)
             targets.add(block["id"])
         elif planned:
@@ -212,6 +208,9 @@ def settle_placements(
     leave one session sitting where it can no longer be done. Every other session keeps its time. The
     one that lost it gets back every day up to its deadline and a sentence saying why. `keep` names
     homework the student just placed themselves; when two sessions collide, the other one gives way.
+
+    Homework the student placed by hand, pinned, is theirs: nothing sitting on it takes its time, and
+    it takes time from nothing, since the student chose to put the two side by side.
     """
     taken: dict[int, list[tuple[int, int, str]]] = {day: [] for day in range(7)}
     for block in blocks:
@@ -239,7 +238,9 @@ def settle_placements(
         end = start + int(block.get("duration_min") or 0)
         assignment = assignments.get(block.get("assignment_id") or "") or {}
         due = due_point(assignment.get("due"), week_start)
-        clash = next((title for low, high, title in taken[day] if start < high and low < end), None)
+        pinned = bool(block.get("pinned"))
+        clashes = (title for low, high, title in taken[day] if start < high and low < end)
+        clash = None if pinned else next(clashes, None)
         why = None
         if start < DAY_START_MIN or end > DAY_END_MIN:
             why = "that is outside the hours FlexWeek plans in"
@@ -248,7 +249,8 @@ def settle_placements(
         elif clash is not None:
             why = f"{clash} is there now"
         if why is None:
-            taken[day].append((start, end, block.get("title") or "homework"))
+            if not pinned:
+                taken[day].append((start, end, block.get("title") or "homework"))
             continue
         title = block.get("title") or "Homework"
         lost[block["id"]] = {

@@ -35,7 +35,6 @@ from desktop.native.layouts.drag import (
     Verdict,
     Zone,
     liftable,
-    painted_day_zone,
     snap,
 )
 from desktop.native.weekmodel import Occurrence, clock_label, length_label, planned_line
@@ -155,11 +154,6 @@ class DialFace(QWidget):
                 painter.setPen(QPen(QColor(tokens["accent"]), 2))
                 painter.setBrush(Qt.BrushStyle.NoBrush)
                 painter.drawEllipse(centre, radius * 0.55, radius * 0.55)
-            if self._drop is not None:
-                ring = QPen(QColor(tokens["accent" if self._drop.ok else "danger"]), 2, Qt.PenStyle.DashLine)
-                painter.setPen(ring)
-                painter.setBrush(Qt.BrushStyle.NoBrush)
-                painter.drawEllipse(centre, radius + width * 1.6, radius + width * 1.6)
             painter.end()
             return
         drop = self._drop
@@ -244,6 +238,8 @@ class DialFace(QWidget):
 
 
 class DayDialView(LayoutView):
+    # The face is the day's hours, so a block is dropped on it rather than in a drawer.
+    uses_drawer = False
     layout_id = "dial"
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -476,7 +472,6 @@ class DayDialView(LayoutView):
             mini.setFixedHeight(scene.px(72))
             mini.set_day(scene.week.on_day(index), None, span, scene.tokens, chosen=index == day)
             mini.day_clicked.connect(self._show_day)
-            painted_day_zone(self, mini, index, mini.set_drop)
             cell.addWidget(mini)
             cell.addWidget(
                 label(f"{name} {scene.week.date_of(index).day}", "dialMiniName"),

@@ -122,8 +122,8 @@ Contract for the finished app:
   time: `suggest` (the default) waits for Plan my homework, `auto` plans each
   new homework as it is saved, in the same Undo step, and `manual` leaves it to
   the student, with the button reading Suggest times. Homework dragged onto a
-  day or a time, or given one with Choose a time, is `pinned`: every plan,
-  Replan all included, keeps it where the student put it. Details live
+  time, or given one with Choose a time, is `pinned`: every plan, Replan all
+  included, keeps it where the student put it, even beside a fixed block. Details live
   in `docs/stage2-contract.md`.
 - Running late is a solve preview of a 15, 30 or 60 minute delay from a
   15-minute cutoff on one day of the open week. Fixed commitments and sleep stay
@@ -195,14 +195,17 @@ student leaves it, so a quit resumes on the same page. Finishing or skipping is
 stored in `setup`, and setup never returns unless the student picks Run setup
 again in Settings. School hours stays under More for later.
 
-Dragging or clicking empty grid space opens an Add dialog for that range.
-Dragging works in every design: a block can be picked up wherever a design
-shows it, and dropped on a time axis (the week grid, Mission control's lanes,
-the Day dial, One thing's day bar) at that time, between two items in a list,
-where it starts right after the one above, or on a day, where a block keeps its
-time and homework still waiting gets the planner's best time that day. While it
-is dragged the design shows where it would land, or why it cannot, in the same
-words everywhere.
+The week calendar is a painted timeline, as in Daily Scheduler: dragging a
+block moves it with the pointer in 15-minute steps and across days, its top or
+bottom edge resizes it, and dragging or clicking empty time opens an Add dialog
+for that range. Blocks may overlap; they sit side by side, each marked. A drop
+is refused only outside the day's hours or when homework would end after it is
+due. Dragging one day of a repeating block moves that day only. Dragging works
+in every design: a block can be picked up wherever a design shows it. Mission
+control's lanes, the Day dial and One thing's day bar take the drop at the time
+under the pointer; the other designs open that day's hours at the side while a
+block is dragged, where the drop lands at a time. Everywhere the drop says the
+day, the time and any block it would sit beside, in the same words.
 
 Downloads from GitHub Releases:
 
@@ -503,9 +506,9 @@ The commands it runs, each of which must exit 0:
       time, and clicks a date to open Day view.
 - [ ] A new account skips or finishes setup, and setup does not come back;
       quitting mid-way resumes on the same page.
-- [ ] In every design, a student drags homework onto a day or a time and a
-      block to another one, and the design refuses what the week grid refuses,
-      in the same words.
+- [ ] In every design, a student drags homework and blocks to a time on any
+      day, a drop beside another block is allowed and shown side by side, and
+      the design refuses what the week calendar refuses, in the same words.
 - [ ] Download names are `FlexWeek-Windows-x64-Setup.exe` (with
       `FlexWeek-Windows-x64.msi` for schools) and
       `FlexWeek-Linux-x86_64.tar.gz`.

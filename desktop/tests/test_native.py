@@ -100,13 +100,8 @@ def soccer() -> dict:
 
 
 def table_text(window: NativeWindow) -> str:
-    texts = []
-    for row in range(window.week_table.rowCount()):
-        for column in range(window.week_table.columnCount()):
-            item = window.week_table.item(row, column)
-            if item is not None and item.text():
-                texts.append(item.text())
-    return "\n".join(texts)
+    """What the week says: each block's name and the line under it."""
+    return "\n".join(f"{shape.title}\n{shape.detail}" for shape in window.week_table.body.shapes)
 
 
 def test_native_modules_do_not_import_webengine(qapp: QApplication) -> None:
@@ -795,9 +790,7 @@ def test_running_late_saves_on_a_week_that_already_has_a_missed_day(
     assert _stored(session, "school")["days"] == [0, 1, 2, 3, 4]
 
 
-def test_the_reason_homework_has_no_time_is_the_latest_one(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_the_reason_homework_has_no_time_is_the_latest_one(qapp: QApplication, server: LocalServer) -> None:
     """A club over Monday afternoon takes Math's 15:15, and "no longer fits Monday at 15:15" is right.
     If Find a new time then finds nothing either, that sentence was kept and came back after the next
     edit, although the real reason by then was that Monday had no room before the deadline."""
@@ -1566,9 +1559,11 @@ def test_accepted_plan_is_on_the_grid_after_close_and_sign_in(
     second.findChild(QPushButton, "signIn").click()
     wait_until(
         qapp,
-        lambda: second._stack.currentWidget().objectName() == "weekPage"
-        and not second.session.busy
-        and len(second.session.assignments) >= 2,
+        lambda: (
+            second._stack.currentWidget().objectName() == "weekPage"
+            and not second.session.busy
+            and len(second.session.assignments) >= 2
+        ),
     )
     later = _work_starts(second.session)
     assert later == starts
@@ -1577,9 +1572,7 @@ def test_accepted_plan_is_on_the_grid_after_close_and_sign_in(
     assert "English essay" in shown
 
 
-def test_unrelated_edits_keep_other_homework_where_it_was(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_unrelated_edits_keep_other_homework_where_it_was(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     _two_assignments(session)
     session.save()

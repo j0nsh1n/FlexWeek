@@ -26,6 +26,7 @@ from desktop.native.layouts.drag import (
     liftable,
     scroll_areas,
 )
+from desktop.native.layouts.drawer import DropDrawer, drawer_sheet
 from desktop.native.weekmodel import Occurrence, WeekModel
 
 
@@ -75,8 +76,8 @@ def base_sheet(name: str, tokens: dict[str, str]) -> str:
 
 
 def drop_sheet(name: str, tokens: dict[str, str]) -> str:
-    """Where a dragged block would land, in the design's own accent, and its danger colour where it
-    cannot. Two ids in each selector, so no design rule for its labels or frames outranks them."""
+    """The answer by the pointer, in the design's own accent, and its danger colour where a block
+    cannot go. Two ids in each selector, so no design rule for its labels outranks them."""
     accent, danger = tokens["accent"], tokens["danger"]
     return (
         # Ringed in the page colour, so the bubble stands clear of a card in its own colour.
@@ -84,12 +85,7 @@ def drop_sheet(name: str, tokens: dict[str, str]) -> str:
         f" border: 2px solid {tokens['bg']}; border-radius: 11px; padding: 5px 10px; font-weight: 700; }}"
         f"#{name} QLabel#dropHint[drop=\"refused\"] {{ background: {danger};"
         f" color: {tokens['danger_ink']}; }}"
-        f"#{name} QFrame#dropLine {{ background: {accent}; border: none; border-radius: 2px; }}"
-        f"#{name} QFrame#dropLine[drop=\"refused\"] {{ background: {danger}; }}"
-        f"#{name} QFrame#dropOutline {{ background: transparent; border: 2px dashed {accent};"
-        " border-radius: 10px; }"
-        f"#{name} QFrame#dropOutline[drop=\"refused\"] {{ border-color: {danger}; }}"
-    )
+    ) + drawer_sheet(name, tokens)
 
 
 def rules(name: str, entries: dict[str, str]) -> str:
@@ -164,10 +160,14 @@ class LayoutView(QWidget):
     my_day_requested = Signal()
     back_requested = Signal()
     day_activated = Signal(str)
-    # A block let go over a day: its id, the day, and the start minute, or -1 for any time that day.
-    placement_requested = Signal(str, int, int)
+    # A block let go at a time: its id, the day it came from (-1 when it had none), the day, the start.
+    placement_requested = Signal(str, int, int, int)
+    # Why a drop could not stand, for the status line.
+    refused = Signal(str)
 
     layout_id = ""
+    # Designs with no hours of their own open a day's hours beside themselves while a block is dragged.
+    uses_drawer = True
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -176,9 +176,12 @@ class LayoutView(QWidget):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._scene: Scene | None = None
         self._was_cramped: bool | None = None
-        # Whether a block can go where it is being dragged. The window's rule; a view only asks it.
-        self.judge: Callable[[str, Spot], Verdict] | None = None
+        # Whether a block can go at a day, start and end: the window's rule; a view only asks it.
+        self.judge: Callable[[str, int, int, int, int], Verdict] | None = None
         self.drops = DropShow(self)
+        self._drawer: DropDrawer | None = None
+        # The window's Animations level, for the drawer's slide.
+        self.motion = "normal"
         self._dragging = False
         self._held: Scene | None = None
         # Taken everywhere, so a drag over a part that means nothing still clears the last answer.
@@ -217,18 +220,34 @@ class LayoutView(QWidget):
         if again is not None:
             again.setFocus()
 
-    def drag_began(self) -> None:
+    def drag_began(self, block_id: str = "", from_day: int = -1) -> None:
         self._dragging = True
+        if self.uses_drawer:
+            if self._drawer is None:
+                self._drawer = DropDrawer(self)
+            self._drawer.open(block_id, from_day)
 
     def drag_ended(self) -> None:
         self._dragging = False
         self.clear_drop()
+        if self._drawer is not None:
+            self._drawer.close_drawer()
         held, self._held = self._held, None
         if held is not None:
             self.show_week(held)
 
-    def judge_drop(self, block_id: str, spot: Spot) -> Verdict:
-        return self.judge(block_id, spot) if self.judge is not None else Verdict(False, "")
+    @property
+    def drawer(self) -> DropDrawer | None:
+        return self._drawer
+
+    def judge_span(self, block_id: str, from_day: int, day: int, start: int, end: int) -> Verdict:
+        if self.judge is None:
+            return Verdict(False, "")
+        return self.judge(block_id, from_day, day, start, end)
+
+    def judge_drop(self, block_id: str, from_day: int, spot: Spot) -> Verdict:
+        end = spot.start + self.minutes_of(block_id)
+        return self.judge_span(block_id, from_day, spot.day, spot.start, end)
 
     def show_drop(self, verdict: Verdict, mark: Mark, point: QPoint) -> None:
         self.drops.show(verdict, mark, point)
@@ -377,14 +396,17 @@ def plan_buttons(view: LayoutView, prefix: str, add_words: str) -> list[QPushBut
     return [add]
 
 
-def block_button(view: LayoutView, text: str, name: str, block_id: str, kind: str = "row") -> QPushButton:
+def block_button(
+    view: LayoutView, text: str, name: str, block_id: str, kind: str = "row", day: int = -1
+) -> QPushButton:
     """A block as something a keyboard can reach. The `block_id` property is how a test, or a screen
     reader's script, can tell which block a button opens."""
     made = button(text, name, kind)
     made.setProperty("block_id", block_id)
     made.clicked.connect(lambda _=False: view.block_activated.emit(block_id))
-    # And something to pick up: every block a design shows can be dragged to another time or day.
-    liftable(made, block_id)
+    # And something to pick up: every block a design shows can be dragged to another time. `day` is the
+    # day this one shows, so a block that repeats moves only that day's copy.
+    liftable(made, block_id, day)
     return made
 
 

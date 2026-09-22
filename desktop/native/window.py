@@ -41,27 +41,27 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from backend.slots import hhmm_to_minutes, minutes_to_hhmm
+from backend.slots import minutes_to_hhmm
 from desktop.native import autostart
 from desktop.native.calendar import (
     CATEGORIES,
     DAY_FULL,
-    DAYS,
     FLEX_CATEGORIES,
-    SERIES_DRAG_MESSAGE,
     agenda_for,
     date_for_day,
     is_series,
     monday_of,
+    span_clash,
     span_problem,
     sunday_due,
 )
+from desktop.native.canvas import WeekCanvas, span_words
 from desktop.native.client import PASSWORD_LENGTH_HINT, USERNAME_ERROR, USERNAME_HINT
 from desktop.native.controller import NativeSession
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
 from desktop.native.kept import KeptSession
 from desktop.native.layouts.base import LayoutView, Scene
-from desktop.native.layouts.drag import Spot, Verdict
+from desktop.native.layouts.drag import Verdict
 from desktop.native.layouts.registry import options_for, sanitize_layout, tokens_for
 from desktop.native.layouts.views import VIEW_CLASSES
 from desktop.native.look import (
@@ -120,7 +120,6 @@ from desktop.native.widgets import (
     Toast,
     UnfinishedPanel,
     WaitingChip,
-    WeekTable,
     add_heading,
     control_art,
     swatch,
@@ -200,8 +199,9 @@ class NativeWindow(QMainWindow):
         self._setup_checked = False
         self._setup_prefs: dict = {}
         self._setup_week = False
-        # Homework dropped on a day while a save was still under way, planned once it is done.
-        self._day_drop_waiting: tuple[str, int] | None = None
+        # A block let go while a save is under way, moved once it is done: the save's reply replaces
+        # the week, so a move made before it arrived would be lost.
+        self._move_waiting: tuple[str, int, int, int, int] | None = None
         self._changed_ms = 0
         self._last_try_ms = 0
         self._autosave = QTimer(self)
@@ -691,7 +691,7 @@ class NativeWindow(QMainWindow):
         self._more_pairs.append((logout, sign_out))
         more_menu.aboutToShow.connect(self._sync_more_menu)
         more.setMenu(more_menu)
-        gear = QPushButton("⚙\uFE0E")
+        gear = QPushButton("⚙\ufe0e")
         gear.setObjectName("settingsGear")
         gear.setToolTip("Settings")
         gear.setAccessibleName("Settings")
@@ -736,16 +736,18 @@ class NativeWindow(QMainWindow):
         layout.addWidget(self.alert_strip)
         self.planner = QStackedWidget()
         self.planner.setObjectName("plannerStack")
-        self.week_table = WeekTable()
-        self.week_table.block_activated.connect(self._edit_block)
-        self.week_table.slot_activated.connect(self._create_at_slot)
-        self.week_table.range_created.connect(self._create_range)
-        self.week_table.times_changed.connect(self._apply_times)
-        self.week_table.move_refused.connect(self.session._say)
-        self.week_table.session_dropped.connect(self._place_dropped)
-        self.week_table.due_point = self._due_point
-        self.week_table.series_drag_refused.connect(self._refuse_series)
-        self.week_table.block_selected.connect(self.session.select_block)
+        # Today's app's week: Daily Scheduler's painted timeline, a column for each day.
+        self.week_table = WeekCanvas()
+        hours = self.week_table.body
+        hours.block_activated.connect(self._edit_block)
+        hours.block_selected.connect(self.session.select_block)
+        hours.range_created.connect(self._create_range)
+        hours.moved.connect(self._move_block)
+        hours.dropped.connect(self._drop_block)
+        hours.refused.connect(self.session._say)
+        hours.judge = self._judge_span
+        hours.minutes_of = self._minutes_of
+        hours.title_of = self._title_of
         self.planner.addWidget(self.week_table)
         self.day_agenda = DayAgenda()
         self.day_agenda.item_activated.connect(self._edit_block)
@@ -830,8 +832,10 @@ class NativeWindow(QMainWindow):
             view.my_day_requested.connect(self._enter_day)
             view.back_requested.connect(self._leave_day)
             view.day_activated.connect(self.session.open_day)
-            view.placement_requested.connect(self._place_from_view)
-            view.judge = self._judge_drop
+            view.placement_requested.connect(self._drop_block)
+            view.refused.connect(self.session._say)
+            view.judge = self._judge_span
+            view.motion = self._motion
             self.planner.addWidget(view)
             self._views[layout_id] = view
         view.show_week(self._scene_for(layout_id))
@@ -891,6 +895,9 @@ class NativeWindow(QMainWindow):
         shown = self.planner.currentWidget()
         if isinstance(shown, LayoutView) and self.session.account is not None:
             shown.show_week(self._scene_for(shown.layout_id))
+        elif shown is self.week_table and self.session.account is not None:
+            # The line that says now moves with the minute.
+            self.week_table.set_clock(self.session.week_start, self.session.now_ms())
 
     def _sync_chrome(self) -> None:
         """Planning chips and the clipboard line step aside for a design of its own. Plan my
@@ -1314,9 +1321,9 @@ class NativeWindow(QMainWindow):
         on_recovery = self.findChild(QWidget, "recoveryPage") is self._stack.currentWidget()
         if not busy and self.session.account is not None and on_recovery:
             self.recovery_continue.setEnabled(self.recovery_ack.isChecked())
-        if not busy and self._day_drop_waiting is not None:
-            waiting, self._day_drop_waiting = self._day_drop_waiting, None
-            QTimer.singleShot(0, lambda: self.session.place_on_day(*waiting))
+        if not busy and self._move_waiting is not None:
+            waiting, self._move_waiting = self._move_waiting, None
+            QTimer.singleShot(0, lambda: self._move_block(*waiting))
         if not busy and (self._setup_prefs or self._setup_week):
             # A moment later, so a plan that finished just now saves its week before setup writes.
             QTimer.singleShot(0, self._flush_setup)
@@ -1545,21 +1552,6 @@ class NativeWindow(QMainWindow):
             return
         self._commit_block(BlockDialog(self, category=category))
 
-    def _create_at_slot(self, day: int, start: str) -> None:
-        category = self.session.armed_category
-        if category in FLEX_CATEGORIES:
-            self._commit_homework(
-                HomeworkDialog(
-                    self,
-                    week_start=self.session.week_start,
-                    category=category,
-                    due=sunday_due(self.session.week_start),
-                ),
-                days=[day],
-            )
-            return
-        self._commit_block(BlockDialog(self, day=day, start=start, category=category, from_range=True))
-
     def _create_range(self, day: int, start_min: int, end_min: int) -> None:
         start = minutes_to_hhmm(start_min)
         duration = end_min - start_min
@@ -1587,10 +1579,6 @@ class NativeWindow(QMainWindow):
             )
         )
 
-    def _apply_times(self, block_id: str, day: int, start_min: int, end_min: int) -> None:
-        if self.session.apply_times(block_id, start_min, end_min, day):
-            self.session.save()
-
     def _due_point(self, block_id: str) -> tuple[int, int] | None:
         """The day and minute a homework session is due, for the calendar to refuse a drag past it."""
         block = next((item for item in self.session.blocks if item["id"] == block_id), None)
@@ -1598,10 +1586,6 @@ class NativeWindow(QMainWindow):
         if not assignment:
             return None
         return due_point(assignment.get("due"), self.session.week_start)
-
-    def _refuse_series(self, block_id: str, day: int) -> None:
-        self.session.select_block(block_id, day)
-        self.session.refuse_series_drag(block_id)
 
     def _edit_homework(self, assignment_id: str) -> None:
         assignment = self.session.assignments.get(assignment_id)
@@ -1636,56 +1620,56 @@ class NativeWindow(QMainWindow):
         if self.session.place_session(block["id"], day, start):
             self.session.save()
 
-    def _judge_drop(self, block_id: str, spot: Spot) -> Verdict:
-        """Whether a block can go where it is being dragged in a design, and the words for it: the
-        rule Today's app's grid uses, so a design refuses what the grid refuses, in the same words."""
+    def _judge_span(self, block_id: str, from_day: int, day: int, start: int, end: int) -> Verdict:
+        """Whether a block can go where it is being dragged, and the words for it. One rule for the
+        calendar and every design: another block there is allowed, and said, as in Daily Scheduler;
+        time FlexWeek does not plan in, and homework ending after it is due, are not."""
         block = next((item for item in self.session.blocks if item["id"] == block_id), None)
         if block is None:
             return Verdict(False, "")
-        if is_series(block):
-            return Verdict(False, SERIES_DRAG_MESSAGE.format(title=block["title"], count=len(block["days"])))
-        due = self._due_point(block_id)
-        start = spot.start
-        if start is None and block.get("start"):
-            # Dropped on a day, a block keeps its time there.
-            start = hhmm_to_minutes(block["start"])
-        if start is None:
-            if due is not None and spot.day > due[0]:
-                return Verdict(False, f"{DAY_FULL[spot.day]} is after it is due.")
-            clock = clock_parts(self.session.now_ms())
-            if monday_of(clock["iso"]) == self.session.week_start and spot.day < clock["day"]:
-                return Verdict(False, f"{DAY_FULL[spot.day]} has already gone by.")
-            return Verdict(True, f"Plan it on {DAY_FULL[spot.day]}")
-        end = start + int(block["duration_min"])
-        problem = span_problem(self.session.blocks, block_id, spot.day, start, end, due)
+        problem = span_problem(self.session.blocks, block_id, day, start, end, self._due_point(block_id))
         if problem is not None:
             return Verdict(False, problem, start, end)
-        return Verdict(True, f"{DAYS[spot.day]} {minutes_to_hhmm(start)}–{minutes_to_hhmm(end)}", start, end)
+        clash = span_clash(self.session.blocks, block_id, day, start, end)
+        return Verdict(
+            True, span_words(day, start, end) + (f" · beside {clash}" if clash else ""), start, end
+        )
 
-    def _place_from_view(self, block_id: str, day: int, start_min: int) -> None:
-        """A block let go over a design: at that time, or with no time given, where the planner puts it
-        that day. Refused, it stays where it was and the status line says why."""
-        verdict = self._judge_drop(block_id, Spot(day, None if start_min < 0 else start_min))
+    def _minutes_of(self, block_id: str) -> int:
+        block = next((item for item in self.session.blocks if item["id"] == block_id), None)
+        return int((block or {}).get("duration_min") or 60)
+
+    def _title_of(self, block_id: str) -> str:
+        block = next((item for item in self.session.blocks if item["id"] == block_id), None)
+        return str((block or {}).get("title") or "")
+
+    def _move_block(self, block_id: str, from_day: int, day: int, start: int, end: int) -> None:
+        """A block let go at a time, on the calendar or in a design. Homework that needed a time gets
+        this one; a block that repeats moves only the day it was dragged from; anything else moves.
+        Whatever moves by hand is pinned, so no plan moves it back."""
+        if self.session.busy:
+            self._move_waiting = (block_id, from_day, day, start, end)
+            return
+        block = next((item for item in self.session.blocks if item["id"] == block_id), None)
+        if block is None:
+            return
+        verdict = self._judge_span(block_id, from_day, day, start, end)
         if not verdict.ok:
             if verdict.words:
                 self.session._say(verdict.words)
             return
-        if verdict.start is None:
-            if self.session.busy:
-                # Planning now would replace the reply to the save still under way.
-                self._day_drop_waiting = (block_id, day)
-                return
-            self.session.place_on_day(block_id, day)
-            return
-        block = next((item for item in self.session.blocks if item["id"] == block_id), None)
-        if block is not None and block.get("start"):
-            self._apply_times(block_id, day, verdict.start, int(verdict.end or verdict.start))
-        elif self.session.place_session(block_id, day, verdict.start):
+        if not block.get("start"):
+            changed = self.session.place_session(block_id, day, start)
+        elif is_series(block):
+            origin = from_day if from_day in block["days"] else day
+            changed = self.session.move_occurrence(block_id, origin, day, start, end)
+        else:
+            changed = self.session.apply_times(block_id, start, end, day)
+        if changed:
             self.session.save()
 
-    def _place_dropped(self, block_id: str, day: int, start_min: int) -> None:
-        if self.session.place_session(block_id, day, start_min):
-            self.session.save()
+    def _drop_block(self, block_id: str, from_day: int, day: int, start: int) -> None:
+        self._move_block(block_id, from_day, day, start, start + self._minutes_of(block_id))
 
     def _edit_block(self, block_id: str) -> None:
         if self.session.planner_view == "day":
@@ -2313,6 +2297,8 @@ class NativeWindow(QMainWindow):
             self.setStyleSheet(sheet)
             apply_ui_effects(self._motion)
             self.toast.motion = self._motion
+            for view in self._views.values():
+                view.motion = self._motion
             # Day, Month and the week grid are dressed by the same design as the main view, so moving
             # between them is moving around one app rather than between two.
             self.week_table.set_look(self._look, design)

@@ -791,6 +791,9 @@ def pack_stylesheet(
         # rounded inside a fixed height, which slices its text in half, and the calendar sits in two boxes.
         f"QHeaderView, QStackedWidget {{ background: transparent; border: none; "
         f"padding: 0; border-radius: 0; }}"
+        # The week's hours paint their own background; as a frame the scroll area boxed them twice.
+        f"QScrollArea#weekScroll, QScrollArea#dropScroll {{ background: transparent; border: none; "
+        f"padding: 0; border-radius: 0; }}"
         f"QHeaderView::section, QTableCornerButton::section {{ background: {palette['panel']}; "
         f"color: {palette['muted']}; padding: 2px 6px; border: none; }}"
         # QLabel is a QFrame in Qt, so without this every label, even an empty one, is drawn as a panel.

@@ -27,17 +27,7 @@ from desktop.native.layouts.base import (
     rules,
     scrolling,
 )
-from desktop.native.layouts.drag import (
-    Carried,
-    Mark,
-    Pickup,
-    Spot,
-    Verdict,
-    Zone,
-    day_zone,
-    list_zone,
-    snap,
-)
+from desktop.native.layouts.drag import Carried, Mark, Pickup, Spot, Verdict, Zone, snap
 from desktop.native.look import readable_ink
 from desktop.native.weekmodel import Occurrence, WeekModel, clock_label, due_label
 
@@ -104,13 +94,11 @@ class Lanes(QWidget):
         self.update()
 
     def where(self, point: QPoint, thing: Carried) -> tuple[Spot, Mark] | None:
-        """A lane is a day and a point along it a time; a day's name is the day, at any time."""
+        """A lane is a day and a point along it a time."""
         spot = QPointF(point)
         day = self.day_at(spot)
-        if day is None:
+        if day is None or spot.x() < GUTTER:
             return None
-        if spot.x() < GUTTER:
-            return Spot(day), Mark(paint=self._shows[day])
         return Spot(day, snap(self.minute_at(spot) - thing.grab)), Mark(paint=self._shows[day])
 
     def _lane(self, day: int) -> QRectF:
@@ -243,6 +231,8 @@ class Lanes(QWidget):
 
 class MissionView(LayoutView):
     layout_id = "mission"
+    # The lanes are hours already, so a block is dropped on them rather than in a drawer.
+    uses_drawer = False
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -372,7 +362,6 @@ class MissionView(LayoutView):
             pick.setProperty("day_target", target)
             pick.setAccessibleName(f"Show {DAY_FULL[target]}")
             pick.clicked.connect(lambda _=False, chosen=target: self._show_day(chosen))
-            day_zone(self, pick, target)
             picker.addWidget(pick)
         picker.addStretch(1)
         holder.addLayout(picker)
@@ -381,12 +370,9 @@ class MissionView(LayoutView):
         row.setObjectName("missionChips")
         chips = QHBoxLayout(row)
         chips.setContentsMargins(0, 0, 0, 0)
-        placed: list[tuple[QWidget, Occurrence]] = []
         for index, item in enumerate(scene.week.on_day(day)):
-            chip = block_button(
-                self, f"{clock_label(item.start)} {item.title}", f"missionChip{index}", item.block_id, "chip"
-            )
-            placed.append((chip, item))
+            words = f"{clock_label(item.start)} {item.title}"
+            chip = block_button(self, words, f"missionChip{index}", item.block_id, "chip", day=day)
             over = (
                 item.end <= scene.minute
                 if day == scene.today
@@ -406,7 +392,6 @@ class MissionView(LayoutView):
             else:
                 chips.addWidget(label("NOTHING ON THIS DAY", "missionDayEmpty"))
         chips.addStretch(1)
-        list_zone(self, row, day, placed, vertical=False)
         holder.addWidget(row)
         return holder
 
@@ -423,7 +408,9 @@ class MissionView(LayoutView):
         for index, item in enumerate(work):
             due = due_label(item.due, scene.week.week_start)
             extra = f" · {item.slack_words.upper()}" if item.slack_words else ""
-            row = block_button(self, f"{item.title}\n{due}{extra}", f"missionRadar{index}", item.block_id)
+            row = block_button(
+                self, f"{item.title}\n{due}{extra}", f"missionRadar{index}", item.block_id, day=item.day
+            )
             row.setProperty("risk", item.slack or "")
             row.setStyleSheet(f"min-height: {scene.px(40)}px;")
             room = scene.px(220)

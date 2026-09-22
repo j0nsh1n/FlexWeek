@@ -519,8 +519,9 @@ def test_replan_all_leaves_homework_placed_by_hand_where_it_is() -> None:
     assert (held["kind"], held["start"], held["days"]) == ("locked", "16:00", [3])
 
 
-def test_a_pin_goes_with_the_time_it_held() -> None:
-    """The server refuses a pin with no time, so a left-over pin would stop every save."""
+def test_homework_placed_by_hand_stays_beside_a_fixed_block_and_planned_homework_gives_way() -> None:
+    """Two at one time is allowed, as in Daily Scheduler, when the student chose it: the essay was put
+    at 16:00 by hand. Math was only put at 18:00 by the planner, so it makes way for Band."""
     blocks, assignments = _pinned_week()
     school = {
         "id": "school",
@@ -530,7 +531,20 @@ def test_a_pin_goes_with_the_time_it_held() -> None:
         "days": [3],
         "start": "15:30",
     }
-    settled, lost = settle_placements([*blocks, school], assignments, "2026-09-14")
+    band = {**school, "id": "band", "title": "Band", "duration_min": 60, "start": "18:00"}
+    settled, lost = settle_placements([*blocks, school, band], assignments, "2026-09-14")
+    mine = next(block for block in settled if block["id"] == "mine")
+    assert (mine["start"], mine["pinned"]) == ("16:00", True)
+    assert [note["block_id"] for note in lost] == ["other"]
+    assert "Band is there now" in lost[0]["message"]
+
+
+def test_a_pin_goes_when_its_time_does() -> None:
+    """The server refuses a pin with no time, so a left-over pin would stop every save. Past its due
+    date a hand-placed session still loses its time, and its pin with it."""
+    blocks, assignments = _pinned_week()
+    late = {**assignments, "essay": {"id": "essay", "due": "2026-09-16T23:59"}}
+    settled, lost = settle_placements(blocks, late, "2026-09-14")
     mine = next(block for block in settled if block["id"] == "mine")
     assert [note["block_id"] for note in lost] == ["mine"]
     assert "start" not in mine and "pinned" not in mine

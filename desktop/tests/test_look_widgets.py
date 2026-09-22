@@ -1,6 +1,6 @@
-"""The Blocks look knob on real Qt widgets: what each cell is given and what the delegate paints.
+"""The Blocks look knob on real Qt widgets: what each block is given and what the calendar paints.
 
-A stylesheet cannot reach a table item, so this knob is the one most likely to be stored and ignored.
+A stylesheet cannot reach a painted block, so this knob is the one most likely to be stored and ignored.
 Expected colours come from the palette and the category table, never from a grab of the current output.
 """
 
@@ -27,6 +27,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtWidgets import QApplication, QComboBox, QPushButton
 
     from desktop.native.calendar import CATEGORIES
+    from desktop.native.canvas import Shape, WeekCanvas
     from desktop.native.look import (
         LOOK_DEFAULTS,
         effective_look,
@@ -35,7 +36,7 @@ if importlib.util.find_spec("PySide6") is not None:
         resolved_palette,
     )
     from desktop.native.settings import PrefsDialog
-    from desktop.native.widgets import EDGE_ROLE, ENDS_ROLE, OUTLINE_ROLE, MonthGrid, WeekTable
+    from desktop.native.widgets import MonthGrid
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
     from desktop.tests.logic_support import past_setup
@@ -67,27 +68,27 @@ def look_of(**knobs: str) -> dict:
     return {"preset": "default", "knobs": knobs}
 
 
-def week(qapp: QApplication, look: dict | None, pack: str = "nocturne") -> tuple[WeekTable, dict]:
+def week(qapp: QApplication, look: dict | None, pack: str = "nocturne") -> tuple[WeekCanvas, dict]:
     palette = resolved_palette(pack, pack in {"nocturne", "dark-frost"}, look)
-    table = WeekTable()
-    table.resize(1000, 800)
-    table.set_look(look, palette)
-    table.set_week(WEEK, [SCHOOL, CLUB], None)
-    table.show()
+    canvas = WeekCanvas()
+    canvas.resize(1000, 800)
+    canvas.set_look(look, palette)
+    canvas.set_week(WEEK, [SCHOOL, CLUB], None)
+    canvas.show()
     qapp.processEvents()
-    return table, palette
+    return canvas, palette
 
 
-def rows_of(table: WeekTable, day: int) -> list[int]:
-    return [row for row in range(table.rowCount()) if table.item(row, day) is not None]
+def shape(canvas: WeekCanvas, block_id: str) -> Shape:
+    return next(item for item in canvas.body.shapes if item.block_id == block_id)
 
 
-def pixel(table: WeekTable, row: int, day: int, where: str) -> str:
-    rect = table.visualItemRect(table.item(row, day))
-    image = table.viewport().grab().toImage()
+def pixel(canvas: WeekCanvas, block_id: str, where: str) -> str:
+    rect = next(rect for item, rect, _count, _held in canvas.body.laid_out() if item.block_id == block_id)
+    image = canvas.body.grab().toImage()
     # "left" sits on the 4px edge or the 2px outline; "inside" is past the text, clear of both.
-    x = rect.left() + 1 if where == "left" else rect.right() - 8
-    return QColor(image.pixel(x, rect.center().y())).name()
+    x = rect.left() + 1.5 if where == "left" else rect.right() - 8
+    return QColor(image.pixel(int(x), int(rect.center().y()))).name()
 
 
 def test_the_category_table_is_what_these_tests_assume() -> None:
@@ -95,63 +96,43 @@ def test_the_category_table_is_what_these_tests_assume() -> None:
 
 
 def test_a_filled_block_is_the_pale_category_colour_with_ink_that_reads(qapp: QApplication) -> None:
-    table, palette = week(qapp, look_of())
-    rows = rows_of(table, 0)
-    assert len(rows) == 4, "an hour is four 15-minute cells"
-    for row in rows:
-        item = table.item(row, 0)
-        assert item.background().color().name() == PALE
-        assert item.foreground().color().name() == "#000000"
-        assert item.data(OUTLINE_ROLE) is None and item.data(EDGE_ROLE) is None
+    canvas, palette = week(qapp, look_of())
+    school = shape(canvas, "school")
+    assert (school.fill, school.ink, school.outline, school.edge) == (PALE, "#000000", None, None)
     # No category: the palette's own block colours, not a fixed light grey that glares on a dark pack.
-    club = table.item(rows_of(table, 1)[0], 1)
-    assert club.background().color().name() == palette["block_locked"]
-    assert club.foreground().color().name() == palette["block_locked_ink"]
-    assert pixel(table, rows[1], 0, "inside") == PALE
+    club = shape(canvas, "club")
+    assert (club.fill, club.ink) == (palette["block_locked"], palette["block_locked_ink"])
+    assert pixel(canvas, "school", "inside") == PALE
 
 
 def test_an_outlined_block_is_drawn_as_one_outline_in_the_strong_colour(qapp: QApplication) -> None:
-    table, palette = week(qapp, look_of(blocks="outlined"))
-    rows = rows_of(table, 0)
-    for row in rows:
-        item = table.item(row, 0)
-        assert item.background().color().name() == palette["grid"]
-        assert item.foreground().color().name() == palette["text"]
-        assert item.data(OUTLINE_ROLE) == STRONG
-    # A block is a run of cells: only the first closes the top and only the last the bottom.
-    assert [tuple(table.item(row, 0).data(ENDS_ROLE)) for row in rows] == [
-        (True, False),
-        (False, False),
-        (False, False),
-        (False, True),
-    ]
-    assert pixel(table, rows[1], 0, "left") == STRONG
-    assert pixel(table, rows[1], 0, "inside") == palette["grid"]
+    canvas, palette = week(qapp, look_of(blocks="outlined"))
+    school = shape(canvas, "school")
+    assert (school.fill, school.ink, school.outline) == (palette["grid"], palette["text"], STRONG)
+    assert pixel(canvas, "school", "left") == STRONG
+    assert pixel(canvas, "school", "inside") == palette["grid"]
 
 
 def test_an_edge_block_is_a_plain_card_with_the_strong_colour_down_its_left(qapp: QApplication) -> None:
-    table, palette = week(qapp, look_of(blocks="edge"))
-    rows = rows_of(table, 0)
-    item = table.item(rows[1], 0)
-    assert item.background().color().name() == palette["panel"]
-    assert item.data(EDGE_ROLE) == STRONG
-    assert pixel(table, rows[1], 0, "left") == STRONG
-    assert pixel(table, rows[1], 0, "inside") == palette["panel"]
+    canvas, palette = week(qapp, look_of(blocks="edge"))
+    school = shape(canvas, "school")
+    assert (school.fill, school.edge) == (palette["panel"], STRONG)
+    assert pixel(canvas, "school", "left") == STRONG
+    assert pixel(canvas, "school", "inside") == palette["panel"]
 
 
 def test_the_outline_stays_visible_on_a_light_pack(qapp: QApplication) -> None:
-    table, palette = week(qapp, look_of(blocks="outlined"), pack="slate")
-    assert pixel(table, rows_of(table, 0)[1], 0, "left") == STRONG
+    canvas, palette = week(qapp, look_of(blocks="outlined"), pack="slate")
+    assert pixel(canvas, "school", "left") == STRONG
     assert palette["grid"] == "#fbfcff"
 
 
 def test_changing_the_look_repaints_the_week_already_on_screen(qapp: QApplication) -> None:
-    table, palette = week(qapp, look_of())
-    row = rows_of(table, 0)[0]
-    assert table.item(row, 0).background().color().name() == PALE
-    table.set_look(look_of(blocks="edge"), palette)
-    assert table.item(row, 0).background().color().name() == palette["panel"]
-    assert table.item(row, 0).data(EDGE_ROLE) == STRONG
+    canvas, palette = week(qapp, look_of())
+    assert shape(canvas, "school").fill == PALE
+    canvas.set_look(look_of(blocks="edge"), palette)
+    assert (shape(canvas, "school").fill, shape(canvas, "school").edge) == (palette["panel"], STRONG)
+    assert pixel(canvas, "school", "inside") == palette["panel"]
 
 
 def test_days_outside_the_month_use_the_palettes_muted_ink(qapp: QApplication) -> None:
@@ -268,15 +249,14 @@ def test_a_look_chosen_in_the_window_reaches_the_calendar_not_only_the_styleshee
         window.session.add_block(dict(SCHOOL))
         window.session.save()
         wait_until(qapp, lambda: window.session.revision == 1 and not window.session.busy)
-        row = rows_of(window.week_table, 0)[0]
-        assert window.week_table.item(row, 0).background().color().name() == PALE
+        assert shape(window.week_table, "school").fill == PALE
 
         # What Settings does when the student presses OK.
         window._look = look_of(blocks="edge")
         window._apply_appearance()
-        item = window.week_table.item(row, 0)
-        assert item.data(EDGE_ROLE) == STRONG
-        assert item.background().color().name() != PALE
+        school = shape(window.week_table, "school")
+        assert school.edge == STRONG
+        assert school.fill != PALE
         assert "border: 1px solid" in window.styleSheet()
     finally:
         with contextlib.suppress(RuntimeError):

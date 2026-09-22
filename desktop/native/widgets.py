@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from copy import deepcopy
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -30,12 +30,7 @@ from PySide6.QtGui import (
     QAction,
     QColor,
     QDrag,
-    QDragEnterEvent,
-    QDragLeaveEvent,
-    QDragMoveEvent,
-    QDropEvent,
     QIcon,
-    QKeyEvent,
     QMouseEvent,
     QPainter,
     QPen,
@@ -84,29 +79,20 @@ from backend.slots import (
     DAY_END_MIN,
     DAY_START_MIN,
     SLOT_MIN,
-    SLOTS_PER_DAY,
-    duration_to_slots,
     hhmm_to_minutes,
-    hhmm_to_slot,
     minutes_to_hhmm,
-    slot_to_hhmm,
 )
 from desktop.native.calendar import (
     CATEGORIES,
     MONTH_SAVED_ONLY,
-    create_click_range,
-    create_drag_range,
     is_series,
     local_stamp,
     monday_of,
     month_chips,
-    move_range,
-    occupied_intervals,
-    resize_bottom_range,
-    resize_top_range,
+    span_clash,
     span_problem,
 )
-from desktop.native.look import block_paint, resolved_palette
+from desktop.native.look import resolved_palette
 from desktop.native.motion import appear, settle, vanish
 from desktop.native.reuse import (
     AVAILABILITY_LIMIT,
@@ -136,8 +122,6 @@ DIALOG_MAX_HEIGHT = 700
 SLOT_HINT = "Use a multiple of 15 minutes, such as 15, 30, or 45."
 ESTIMATE_ERROR = "That time is not a multiple of 15 minutes."
 PLAN_REVIEW_MAX = 132
-# Two hours: the name of a block is never more than that far above where you are looking.
-LABEL_EVERY = 8
 DAY_FULL = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 MONTH_FULL = (
     "January",
@@ -352,427 +336,6 @@ class FlowLayout(QLayout):
             x += hint.width() + self._gap
             row_height = max(row_height, hint.height())
         return y + row_height - rect.y() + margins.bottom()
-
-
-# What a table cell cannot draw for itself, carried on the item for BlockDelegate.
-OUTLINE_ROLE = Qt.ItemDataRole.UserRole.value + 1
-EDGE_ROLE = Qt.ItemDataRole.UserRole.value + 2
-ENDS_ROLE = Qt.ItemDataRole.UserRole.value + 3
-
-
-class BlockDelegate(QStyledItemDelegate):
-    """Draws a block's outline or coloured edge over the cell, for the Blocks look knob."""
-
-    def paint(
-        self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex | QPersistentModelIndex
-    ) -> None:
-        super().paint(painter, option, index)
-        outline = index.data(OUTLINE_ROLE)
-        edge = index.data(EDGE_ROLE)
-        if not outline and not edge:
-            return
-        rect = option.rect
-        painter.save()
-        if outline:
-            # A block is a run of cells, so only its first cell closes the top and its last the bottom.
-            top, bottom = index.data(ENDS_ROLE) or (True, True)
-            color = QColor(outline)
-            painter.fillRect(rect.left(), rect.top(), 2, rect.height(), color)
-            painter.fillRect(rect.right() - 1, rect.top(), 2, rect.height(), color)
-            if top:
-                painter.fillRect(rect.left(), rect.top(), rect.width(), 2, color)
-            if bottom:
-                painter.fillRect(rect.left(), rect.bottom() - 1, rect.width(), 2, color)
-        if edge:
-            painter.fillRect(rect.left(), rect.top(), 4, rect.height(), QColor(edge))
-        painter.restore()
-
-
-class WeekTable(QTableWidget):
-    block_activated = Signal(str)
-    slot_activated = Signal(int, str)
-    range_created = Signal(int, int, int)
-    # Block id, day, start and end minute: where a dragged block was let go.
-    times_changed = Signal(str, int, int, int)
-    # Why a drag was not applied, in words for the status line.
-    move_refused = Signal(str)
-    # Homework that needs a time, dropped on a day and start minute.
-    session_dropped = Signal(str, int, int)
-    series_drag_refused = Signal(str, int)
-    block_selected = Signal(str, int)
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(SLOTS_PER_DAY, 7, parent)
-        self.setObjectName("weekTable")
-        self.setAccessibleName(
-            "Weekly calendar. Drag empty time to add, or drag a block to move or resize it."
-        )
-        self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.verticalHeader().setDefaultSectionSize(32)
-        self.setVerticalHeaderLabels([slot_to_hhmm(row) for row in range(SLOTS_PER_DAY)])
-        self.setHorizontalHeaderLabels(DAYS)
-        self.cellDoubleClicked.connect(self._activate)
-        self._blocks: dict[str, dict] = {}
-        self._week_blocks: list[dict] = []
-        self._gesture: dict | None = None
-        self._look: dict | None = None
-        self._palette = resolved_palette("system", False, None)
-        self._shown: tuple[str, list[dict], dict | None] | None = None
-        self._revealed: str | None = None
-        self.setItemDelegate(BlockDelegate(self))
-        # The outline of where a dragged block would land. The span used to be worked out and never
-        # drawn, so a block jumped only when it was let go.
-        self._ghost = QFrame(self.viewport())
-        self._ghost.setObjectName("dragGhost")
-        self._ghost.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self._ghost.hide()
-        self._ghost_colour = ""
-        # The (day, minute) a homework session is due in this week, or None. Set by the window.
-        self.due_point: Callable[[str], tuple[int, int] | None] = lambda _block_id: None
-        self._drop: tuple[str, int, int, str | None] | None = None
-        self.setAcceptDrops(True)
-        self.viewport().setAcceptDrops(True)
-
-    def set_look(self, look: dict | None, palette: dict) -> None:
-        """Repaint the week on screen with a new look; the blocks themselves do not change."""
-        self._look = look
-        self._palette = palette
-        if self._shown is not None:
-            self.set_week(*self._shown)
-
-    def set_week(self, week_start: str, blocks: list[dict], trace: dict | None = None) -> None:
-        monday = date.fromisoformat(week_start)
-        self._shown = (week_start, blocks, trace)
-        self._week_blocks = list(blocks)
-        self._blocks = {block["id"]: block for block in blocks}
-        self.clearContents()
-        self.setHorizontalHeaderLabels(
-            [f"{day} {(monday + timedelta(days=index)).strftime('%b %d')}" for index, day in enumerate(DAYS)]
-        )
-        placed = {block["id"]: block for block in (trace or {}).get("placed", [])}
-        cells: dict[tuple[int, int], list[tuple[dict, str, str]]] = {}
-        spans: dict[tuple[int, int], tuple[int, int]] = {}
-        for original in blocks:
-            block = placed.get(original["id"], original) if not original.get("completed") else original
-            if not block.get("start"):
-                continue
-            first = hhmm_to_slot(block["start"])
-            size = duration_to_slots(block["duration_min"])
-            days = block["days"]
-            if block.get("completed") and block.get("completed_day") is not None:
-                days = [block["completed_day"]]
-            for day in days:
-                label = "Fixed" if block["kind"] == "locked" else "Work"
-                if day in original.get("missed_days", []):
-                    label += " · Missed"
-                if block.get("completed"):
-                    label += " · Done"
-                elif block.get("pinned"):
-                    label += " · Pinned"
-                detail = f"{block['start']} · {label}"
-                text = f"{block['title']}\n{detail}"
-                last = min(first + size, SLOTS_PER_DAY) - 1
-                for row in range(first, last + 1):
-                    # A cell is one 15-minute row, too short for two lines. Qt elided the title to
-                    # "School…" and dropped the second line, which is where Missed and Done are said.
-                    # So the title takes the first row, the detail the second, and the rest stay blank.
-                    # Repeated down a long block, because the grid now opens on the current time
-                    # rather than at dawn. With the name only on the first row, a student scrolled
-                    # into the middle of School saw an anonymous blue wash.
-                    step = (row - first) % LABEL_EVERY
-                    if first == last:
-                        visible = f"{block['title']} · {detail}"
-                    elif step == 0:
-                        visible = block["title"]
-                    else:
-                        visible = detail if step == 1 else ""
-                    cells.setdefault((row, day), []).append((block, text, visible))
-                    spans.setdefault((row, day), (first, last))
-        for (row, day), entries in cells.items():
-            item = QTableWidgetItem(" / ".join(visible for _, _, visible in entries if visible))
-            item.setData(Qt.ItemDataRole.UserRole, [block["id"] for block, _, _ in entries])
-            item.setToolTip("\n".join(text for _, text, _ in entries))
-            shown = entries[0][0]
-            category = CATEGORIES.get(shown.get("category") or "", {})
-            paint = block_paint(
-                self._look, self._palette, category.get("color"), shown["kind"], category.get("mark")
-            )
-            item.setBackground(QColor(paint["fill"]))
-            item.setForeground(QColor(paint["ink"]))
-            item.setData(OUTLINE_ROLE, paint["outline"])
-            item.setData(EDGE_ROLE, paint["edge"])
-            first, last = spans[(row, day)]
-            item.setData(ENDS_ROLE, (row == first, row == last))
-            self.setItem(row, day, item)
-
-    def reveal(self, week_start: str, now_ms: int) -> None:
-        """Open this week on the time that matters: now, or the first block, not 06:00."""
-        if self._revealed == week_start:
-            return
-        self._revealed = week_start
-        moment = datetime.fromtimestamp(now_ms / 1000.0)
-        if monday_of(moment.date().isoformat()) == week_start:
-            row = min(
-                max((moment.hour * 60 + moment.minute - DAY_START_MIN) // SLOT_MIN, 0),
-                SLOTS_PER_DAY - 1,
-            )
-        else:
-            row = self._first_block_row()
-        lead = min(2, row)
-        self.scrollTo(self.model().index(row - lead, 0), QAbstractItemView.ScrollHint.PositionAtTop)
-
-    def _first_block_row(self) -> int:
-        starts = [hhmm_to_slot(block["start"]) for block in self._week_blocks if block.get("start")]
-        return min(starts) if starts else 0
-
-    def block_titles(self, ids: list[str]) -> list[str]:
-        """Names for the blocks sharing a cell, taken from the blocks: the cell's own text may be blank."""
-        return [self._blocks.get(block_id, {}).get("title") or block_id for block_id in ids]
-
-    def _activate(self, row: int, day: int) -> None:
-        item = self.item(row, day)
-        ids = item.data(Qt.ItemDataRole.UserRole) if item else []
-        if len(ids) == 1:
-            self.block_activated.emit(ids[0])
-        elif ids:
-            menu = QMenu(self)
-            for block_id, title in zip(ids, self.block_titles(ids), strict=True):
-                action = menu.addAction(title)
-                action.triggered.connect(
-                    lambda checked=False, value=block_id: self.block_activated.emit(value)
-                )
-            menu.exec(self.viewport().mapToGlobal(self.visualItemRect(item).center()))
-        else:
-            self.slot_activated.emit(day, slot_to_hhmm(row))
-
-    def _row_at(self, pos_y: int) -> int:
-        row = self.rowAt(pos_y)
-        if row >= 0:
-            return row
-        if pos_y < self.rowViewportPosition(0):
-            return 0
-        return SLOTS_PER_DAY - 1
-
-    def _edit_mode(self, block: dict, row: int) -> str:
-        first = hhmm_to_slot(block["start"])
-        size = duration_to_slots(block["duration_min"])
-        last = first + size - 1
-        if size < 3:
-            return "move"
-        if row <= first:
-            return "resize_top"
-        if row >= last:
-            return "resize_bottom"
-        return "move"
-
-    def mousePressEvent(self, event: QMouseEvent) -> None:
-        if event.button() != Qt.MouseButton.LeftButton:
-            super().mousePressEvent(event)
-            return
-        index = self.indexAt(event.position().toPoint())
-        if not index.isValid():
-            super().mousePressEvent(event)
-            return
-        row, day = index.row(), index.column()
-        item = self.item(row, day)
-        ids = item.data(Qt.ItemDataRole.UserRole) if item else []
-        press_min = DAY_START_MIN + row * SLOT_MIN
-        if len(ids) == 1:
-            block = self._blocks.get(ids[0])
-            if block is None or not block.get("start"):
-                super().mousePressEvent(event)
-                return
-            self.block_selected.emit(block["id"], day)
-            if is_series(block):
-                self.series_drag_refused.emit(block["id"], day)
-                event.accept()
-                return
-            start_min = hhmm_to_minutes(block["start"])
-            self._gesture = {
-                "type": self._edit_mode(block, row),
-                "day": day,
-                "block_id": block["id"],
-                "origin_start": start_min,
-                "origin_end": start_min + block["duration_min"],
-                "press_min": press_min,
-                "moved": False,
-            }
-            event.accept()
-            return
-        if ids:
-            self.block_selected.emit(ids[0], day)
-            super().mousePressEvent(event)
-            return
-        self._gesture = {
-            "type": "create",
-            "day": day,
-            "start_min": press_min,
-            "cur_min": press_min,
-            "moved": False,
-        }
-        event.accept()
-
-    def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        gesture = self._gesture
-        if gesture is None:
-            super().mouseMoveEvent(event)
-            return
-        row = self._row_at(int(event.position().y()))
-        cur_min = DAY_START_MIN + row * SLOT_MIN
-        if gesture["type"] == "create":
-            gesture["cur_min"] = cur_min
-            if abs(cur_min - gesture["start_min"]) >= SLOT_MIN:
-                gesture["moved"] = True
-                low, high = sorted((gesture["start_min"], cur_min))
-                self._show_ghost(gesture["day"], low, high + SLOT_MIN, None)
-            event.accept()
-            return
-        delta = cur_min - gesture["press_min"]
-        day = gesture["day"]
-        if gesture["type"] == "move":
-            span = move_range(gesture["origin_start"], gesture["origin_end"], delta)
-            column = self.columnAt(int(event.position().x()))
-            if column >= 0:
-                day = column
-        elif gesture["type"] == "resize_top":
-            span = resize_top_range(gesture["origin_start"], gesture["origin_end"], delta)
-        else:
-            span = resize_bottom_range(gesture["origin_start"], gesture["origin_end"], delta)
-        if span != (gesture["origin_start"], gesture["origin_end"]) or day != gesture["day"]:
-            gesture["moved"] = True
-        gesture["preview"] = span
-        gesture["target_day"] = day
-        gesture["problem"] = self._span_problem(gesture["block_id"], day, *span) if gesture["moved"] else None
-        if gesture["moved"]:
-            self._show_ghost(day, span[0], span[1], gesture["problem"])
-        event.accept()
-
-    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
-        gesture = self._gesture
-        self._gesture = None
-        self._ghost.hide()
-        if gesture is None or event.button() != Qt.MouseButton.LeftButton:
-            super().mouseReleaseEvent(event)
-            return
-        if gesture["type"] == "create":
-            if gesture["moved"]:
-                start = gesture["start_min"]
-                cur = gesture["cur_min"]
-                if cur >= start:
-                    span = create_drag_range(start, cur + SLOT_MIN)
-                else:
-                    span = create_drag_range(start + SLOT_MIN, cur)
-            else:
-                span = create_click_range(
-                    gesture["start_min"], occupied_intervals(self._week_blocks, gesture["day"])
-                )
-            if span is not None:
-                self.range_created.emit(gesture["day"], span[0], span[1])
-            event.accept()
-            return
-        if gesture.get("moved") and gesture.get("preview"):
-            start_min, end_min = gesture["preview"]
-            if gesture.get("problem"):
-                self.move_refused.emit(gesture["problem"])
-            else:
-                self.times_changed.emit(gesture["block_id"], gesture["target_day"], start_min, end_min)
-        event.accept()
-
-    def dragEnterEvent(self, event: QDragEnterEvent) -> None:  # noqa: N802
-        if event.mimeData().hasFormat(SESSION_MIME):
-            event.acceptProposedAction()
-            return
-        super().dragEnterEvent(event)
-
-    def dragMoveEvent(self, event: QDragMoveEvent) -> None:  # noqa: N802
-        """Homework dragged in from the waiting list, outlined where it would go."""
-        if not event.mimeData().hasFormat(SESSION_MIME):
-            super().dragMoveEvent(event)
-            return
-        block_id = bytes(event.mimeData().data(SESSION_MIME).data()).decode()
-        block = self._blocks.get(block_id)
-        point = event.position().toPoint()
-        day = self.columnAt(point.x())
-        if block is None or day < 0:
-            self._ghost.hide()
-            self._drop = None
-            event.ignore()
-            return
-        # Near the top or bottom edge, the grid scrolls so any hour of the day can be reached.
-        edge = 28
-        bar = self.verticalScrollBar()
-        if point.y() < edge:
-            bar.setValue(bar.value() - 16)
-        elif point.y() > self.viewport().height() - edge:
-            bar.setValue(bar.value() + 16)
-        duration = int(block.get("duration_min") or SLOT_MIN)
-        start = min(DAY_START_MIN + self._row_at(point.y()) * SLOT_MIN, DAY_END_MIN - duration)
-        problem = self._span_problem(block_id, day, start, start + duration)
-        self._show_ghost(day, start, start + duration, problem)
-        self._drop = (block_id, day, start, problem)
-        event.acceptProposedAction()
-
-    def dragLeaveEvent(self, event: QDragLeaveEvent) -> None:  # noqa: N802
-        self._ghost.hide()
-        self._drop = None
-        super().dragLeaveEvent(event)
-
-    def dropEvent(self, event: QDropEvent) -> None:  # noqa: N802
-        drop, self._drop = self._drop, None
-        self._ghost.hide()
-        if drop is None or not event.mimeData().hasFormat(SESSION_MIME):
-            super().dropEvent(event)
-            return
-        block_id, day, start, problem = drop
-        if problem:
-            self.move_refused.emit(problem.replace("so it stayed where it was", "so it still needs a time"))
-        else:
-            self.session_dropped.emit(block_id, day, start)
-        event.acceptProposedAction()
-
-    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
-        """Escape lets go of a drag without moving anything."""
-        if self._gesture is not None and event.key() == Qt.Key.Key_Escape:
-            self._gesture = None
-            self._ghost.hide()
-            event.accept()
-            return
-        super().keyPressEvent(event)
-
-    def _span_problem(self, block_id: str, day: int, start_min: int, end_min: int) -> str | None:
-        return span_problem(self._week_blocks, block_id, day, start_min, end_min, self.due_point(block_id))
-
-    def _show_ghost(self, day: int, start_min: int, end_min: int, problem: str | None) -> None:
-        first = (start_min - DAY_START_MIN) // SLOT_MIN
-        last = max(first, (end_min - DAY_START_MIN) // SLOT_MIN - 1)
-        top = self.visualRect(self.model().index(first, day))
-        bottom = self.visualRect(self.model().index(min(last, SLOTS_PER_DAY - 1), day))
-        colour = self._palette["error"] if problem else self._palette["accent"]
-        if colour != self._ghost_colour:
-            # Styled only when the colour changes: a style sheet per mouse move would re-polish
-            # the outline sixty times a second.
-            tint = QColor(colour)
-            self._ghost.setStyleSheet(
-                f"QFrame#dragGhost {{ border: 2px dashed {colour}; border-radius: 6px; "
-                f"background: rgba({tint.red()}, {tint.green()}, {tint.blue()}, 40); }}"
-            )
-            self._ghost_colour = colour
-        self._ghost.setGeometry(top.united(bottom).adjusted(2, 1, -2, -1))
-        self._ghost.show()
-        self._ghost.raise_()
-
-    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
-        # mousePressEvent keeps a press on a block from Qt, so Qt never records the pressed cell and
-        # would deliver this double-click as one more press. cellDoubleClicked then never fires.
-        index = self.indexAt(event.position().toPoint())
-        if event.button() != Qt.MouseButton.LeftButton or self.item(index.row(), index.column()) is None:
-            super().mouseDoubleClickEvent(event)
-            return
-        self._gesture = None
-        self._activate(index.row(), index.column())
-        event.accept()
 
 
 class WaitingChip(QPushButton):
@@ -2201,6 +1764,11 @@ class ChooseTimeDialog(QDialog):
         self.problem.setObjectName("validationError")
         self.problem.setWordWrap(True)
         layout.addWidget(self.problem)
+        # Another block at that time is allowed, as on the calendar; this says which, so it is a choice.
+        self.beside = QLabel()
+        self.beside.setObjectName("chooseTimeBeside")
+        self.beside.setWordWrap(True)
+        layout.addWidget(self.beside)
         choices = QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         self.buttons = QDialogButtonBox(choices)
         self.buttons.accepted.connect(self.accept)
@@ -2217,9 +1785,13 @@ class ChooseTimeDialog(QDialog):
 
     def _check(self, *_args: object) -> None:
         day, start = self.choice()
-        problem = span_problem(self._blocks, self._block["id"], day, start, start + self._duration, self._due)
+        end = start + self._duration
+        problem = span_problem(self._blocks, self._block["id"], day, start, end, self._due)
         self.problem.setText((problem or "").replace(", so it stayed where it was", ""))
         self.problem.setVisible(problem is not None)
+        clash = span_clash(self._blocks, self._block["id"], day, start, end) if problem is None else None
+        self.beside.setText(f"{clash} is at that time too. Both will show, side by side." if clash else "")
+        self.beside.setVisible(clash is not None)
         self.buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(problem is None)
 
 

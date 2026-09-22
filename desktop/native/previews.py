@@ -10,25 +10,24 @@ from datetime import date, timedelta
 
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QGuiApplication, QPalette, QPixmap
-from PySide6.QtWidgets import QAbstractItemView, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QWidget
 
-from backend.slots import DAY_START_MIN, SLOT_MIN
 from desktop.native.calendar import monday_of
+from desktop.native.canvas import WeekCanvas
 from desktop.native.layouts.base import Scene
 from desktop.native.layouts.registry import options_for, tokens_for
 from desktop.native.layouts.views import VIEW_CLASSES
-from desktop.native.look import TEXT_PT, effective_look, pack_stylesheet, resolved_palette
+from desktop.native.look import TEXT_PT, effective_look, resolved_palette
 from desktop.native.weekmodel import build_week
-from desktop.native.widgets import WeekTable
 
 # Drawn at a laptop's window size and scaled down, so each design lays out as it does in use.
 CANVAS = QSize(1040, 650)
 # Wednesday at ten past four: school is over, and there is homework to do and more due.
 SAMPLE_DAY, SAMPLE_MINUTE = 2, 16 * 60 + 10
 # The end of school, Soccer and the evening's homework, rather than a morning of one long block.
-SAMPLE_FIRST_ROW = (13 * 60 + 30 - DAY_START_MIN) // SLOT_MIN
-# Rows shorter than in use, so one picture holds an afternoon and an evening.
-SAMPLE_ROW_PX = 20
+SAMPLE_FIRST_MINUTE = 13 * 60 + 30
+# Hours shorter than in use, so one picture holds an afternoon and an evening.
+SAMPLE_HOUR_PX = 64
 
 
 def _block(
@@ -118,22 +117,14 @@ def render(main: str, colour: str | None, pack: str, look: dict | None, width: i
         )
         widget: QWidget = view
     else:
-        widget = QWidget()
-        widget.setStyleSheet(pack_stylesheet(pack, dark, look, "default", palette))
-        box = QVBoxLayout(widget)
-        box.setContentsMargins(12, 12, 12, 12)
-        grid = WeekTable()
-        grid.verticalHeader().setDefaultSectionSize(SAMPLE_ROW_PX)
-        # A picture cannot be scrolled, so a scrollbar in it is only clutter.
-        grid.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        grid.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        grid.set_look(look, palette)
-        grid.set_week(monday, blocks)
-        box.addWidget(grid)
+        widget = WeekCanvas()
+        widget.body.set_hour_px(SAMPLE_HOUR_PX)
+        widget.set_look(look, palette)
+        widget.set_week(monday, blocks)
     _settle(widget)
-    table = widget.findChild(WeekTable)
+    table = widget.findChild(WeekCanvas) if not isinstance(widget, WeekCanvas) else widget
     if table is not None:
-        table.scrollTo(table.model().index(SAMPLE_FIRST_ROW, 0), QAbstractItemView.ScrollHint.PositionAtTop)
+        table.scroll.verticalScrollBar().setValue(int(table.body.y_of(SAMPLE_FIRST_MINUTE)))
     picture = widget.grab()
     widget.close()
     widget.deleteLater()

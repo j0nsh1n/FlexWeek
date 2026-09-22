@@ -529,6 +529,17 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-22, `feat/ui-setup`: Daily Scheduler's drag, on Jonathan's four
+  answers (15-minute snap, overlaps side by side, a repeat moves one day,
+  other designs drop onto a day's hours). `desktop/native/canvas.py` is the
+  week (a port of `views.py` TimelineWidget; `WeekCanvas` replaced
+  `WeekTable`, `laid_out` applies the live preview). `layouts/drawer.py` is the
+  day drawer for Timeline, Bento, Retro and Clay; Mission, dial and One thing
+  keep their own hours. One judge, `NativeWindow._judge_span`: `span_problem`
+  refuses only outside hours and past due, `span_clash` names the neighbour.
+  Pinned sessions are exempt from `settle_placements` clashes. A move made
+  while a save is in flight is held in `_move_waiting` and replayed, since the
+  save's reply replaces `session.blocks`.
 - 2026-09-22, `feat/ui-setup`: dragging in every design (Jonathan's ask before
   the spec edit). `desktop/native/layouts/drag.py` holds the pick-up, the drop
   zones and the view-owned outline, line and hint; the window's `_judge_drop`

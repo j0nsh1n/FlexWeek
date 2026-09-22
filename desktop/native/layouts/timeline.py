@@ -20,7 +20,6 @@ from desktop.native.layouts.base import (
     rules,
     scrolling,
 )
-from desktop.native.layouts.drag import day_zone, list_zone
 from desktop.native.weekmodel import Occurrence, clock_label, due_label, length_label, planned_line
 
 
@@ -135,22 +134,13 @@ class TimelineView(LayoutView):
             self._column.addWidget(self._inbox(scene))
         queue = scene.week.day_queue(day, scene.minute) if is_today else None
         upcoming = next((item for item in (queue.queue if queue else ()) if item.start > scene.minute), None)
-        # The day's cards, for a drop between two of them. The list starts at the first of them.
-        cards: list[tuple[QWidget, Occurrence]] = []
-        first: QWidget | None = None
         for index, item in enumerate(blocks):
             past = not item.live or (item.end <= scene.minute if is_today else self._before_today(scene, day))
             if past and scene.options.get("finished") == "hide":
                 continue
             if item == upcoming:
-                now = label(f"NOW {clock_label(scene.minute)}", "timelineNow")
-                self._column.addWidget(now)
-                first = first or now
-            made = self._card(scene, item, index, past, item == upcoming, is_today)
-            self._column.addWidget(made)
-            first = first or made
-            card = made.findChild(QWidget, f"timelineRow{index}") or made
-            cards.append((card, item))
+                self._column.addWidget(label(f"NOW {clock_label(scene.minute)}", "timelineNow"))
+            self._column.addWidget(self._card(scene, item, index, past, item == upcoming, is_today))
         if not blocks:
             if is_today:
                 heading, title, line = scene.week.leftover_parts(day)
@@ -159,10 +149,9 @@ class TimelineView(LayoutView):
                     if scene.week.leftover_kind(day) == "needs_time"
                     else (line or heading)
                 )
-                first = label(words, "timelineSub")
+                self._column.addWidget(label(words, "timelineSub"))
             else:
-                first = label("A free day.", "timelineSub")
-            self._column.addWidget(first)
+                self._column.addWidget(label("A free day.", "timelineSub"))
         elif is_today and upcoming is None:
             heading, title, line = scene.week.leftover_parts(day)
             extra = (
@@ -174,12 +163,6 @@ class TimelineView(LayoutView):
                 label(f"NOW {clock_label(scene.minute)} · {extra.upper()}", "timelineNow")
             )
         self._column.addStretch(1)
-        marker = first
-
-        def top() -> int:
-            return marker.mapTo(self._page, marker.rect().topLeft()).y() - scene.px(8) if marker else 0
-
-        list_zone(self, self._page, day, cards, top=top)
 
     @staticmethod
     def _before_today(scene: Scene, day: int) -> bool:
@@ -197,7 +180,6 @@ class TimelineView(LayoutView):
             pick.setProperty("day_target", day)
             pick.setAccessibleName(f"Show {DAY_FULL[day]}, {scene.week.load_min(day)} minutes of homework")
             pick.clicked.connect(lambda _=False, target=day: self._show_day(target))
-            day_zone(self, pick, day)
             cell.addWidget(pick)
             if scene.options.get("strip") != "names":
                 # A bare 4px stub under each button read as debris. The bar now sits in a track of
@@ -249,6 +231,7 @@ class TimelineView(LayoutView):
             f"{lead}{clock_label(item.start)}   {item.title}\n{detail}",
             f"timelineRow{index}",
             item.block_id,
+            day=item.day,
         )
         card.setProperty("state", "next" if upcoming else "past" if past else "")
         # A button sizes itself for two lines here, and the up-next card has three: it lost the first and

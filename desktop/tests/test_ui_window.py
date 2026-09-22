@@ -184,17 +184,15 @@ def test_ctrl_c_in_the_week_grid_copies_the_block_and_leaves_the_os_clipboard_al
     saved(qapp, window, soccer())
     window.session.select_block("soccer", 0)
     QGuiApplication.clipboard().setText("the student's own text")
-    # Qt copies the current cell's text on Ctrl+C, and arrow keys or a click can make a cell current.
-    window.week_table.setCurrentCell(5, 0)
-    QTest.keyClick(window.week_table, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
+    # Pressed on the week itself, where a block was just clicked: the window's copy, not the system's.
+    window.week_table.body.setFocus()
+    QTest.keyClick(window.week_table.body, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
     assert QGuiApplication.clipboard().text() == "the student's own text"
     assert (window.session.clipboard or {}).get("kind") == "block"
     assert "Soccer" in window.session.clipboard["label"]
 
 
-def test_creating_an_account_shows_password_length_before_submit(
-    qapp: QApplication, tmp_path: Path
-) -> None:
+def test_creating_an_account_shows_password_length_before_submit(qapp: QApplication, tmp_path: Path) -> None:
     server = LocalServer(tmp_path / "flexweek.db")
     server.start()
     window = NativeWindow(server.origin)

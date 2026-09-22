@@ -120,6 +120,8 @@ class DayBar(QWidget):
 
 
 class OneThingView(LayoutView):
+    # The day bar is the day's hours, so a block is dropped on it rather than in a drawer.
+    uses_drawer = False
     layout_id = "one"
 
     def __init__(self, parent: QWidget | None = None) -> None:

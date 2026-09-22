@@ -19,7 +19,6 @@ from desktop.native.layouts.base import (
     rules,
     scrolling,
 )
-from desktop.native.layouts.drag import day_zone, list_zone
 from desktop.native.weekmodel import clock_label, due_label, length_label, planned_line
 
 # The line under an empty Up next. With none, the card repeated its title: "No homework added" twice.
@@ -223,7 +222,7 @@ class BentoView(LayoutView):
             words = f"{item.title}\n{due_label(item.due, scene.week.week_start)}"
             if item.slack_words:
                 words += f" · {item.slack_words}"
-            inner.addWidget(block_button(self, words, f"bentoDeadline{index}", item.block_id))
+            inner.addWidget(block_button(self, words, f"bentoDeadline{index}", item.block_id, day=item.day))
         offset = len(work)
         for index, item in enumerate(waiting):
             words = f"{item.title}\n{due_label(item.due, scene.week.week_start)} · Not placed yet"
@@ -268,7 +267,9 @@ class BentoView(LayoutView):
         today = scene.week.on_day(scene.today) if scene.today is not None else ()
         session = next((item for item in today if item.work and item.live and item.end > scene.minute), None)
         if session is not None:
-            inner.addWidget(block_button(self, session.title, "bentoTonightTitle", session.block_id))
+            inner.addWidget(
+                block_button(self, session.title, "bentoTonightTitle", session.block_id, day=session.day)
+            )
             note = label(
                 f"{clock_label(session.start)} · {length_label(session.minutes)}", "bentoTonightLine"
             )
@@ -321,7 +322,6 @@ class BentoView(LayoutView):
         most = max([scene.week.load_min(day) for day in range(7)] + [1])
         shown = self.shown_day(scene)
         for day, name in enumerate(DAYS):
-            # The bar and its button together are the day, for a drop as for a click.
             holder = QFrame()
             holder.setObjectName(f"bentoLoadDay{day}")
             column = QVBoxLayout(holder)
@@ -338,7 +338,6 @@ class BentoView(LayoutView):
             pick.setAccessibleName(f"Show {DAY_FULL[day]}, {scene.week.load_min(day)} minutes of homework")
             pick.clicked.connect(lambda _=False, target=day: self._show_day(target))
             column.addWidget(pick)
-            day_zone(self, holder, day)
             bars.addWidget(holder)
         inner.addLayout(bars)
         return tile
@@ -366,7 +365,6 @@ class BentoView(LayoutView):
                 pick.setProperty("day_target", target)
                 pick.setAccessibleName(f"Show {DAY_FULL[target]}")
                 pick.clicked.connect(lambda _=False, chosen=target: self._show_day(chosen))
-                day_zone(self, pick, target)
                 picker.addWidget(pick)
             picker.addStretch(1)
             inner.addLayout(picker)
@@ -376,12 +374,9 @@ class BentoView(LayoutView):
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(scene.px(8))
         blocks = scene.week.on_day(day)
-        placed = []
         for index, item in enumerate(blocks):
-            chip = block_button(
-                self, f"{clock_label(item.start)}\n{item.title}", f"bentoChip{index}", item.block_id, "chip"
-            )
-            placed.append((chip, item))
+            words = f"{clock_label(item.start)}\n{item.title}"
+            chip = block_button(self, words, f"bentoChip{index}", item.block_id, "chip", day=item.day)
             over = (
                 item.end <= scene.minute
                 if day == scene.today
@@ -393,6 +388,5 @@ class BentoView(LayoutView):
         if not blocks:
             row.addWidget(label("A free day.", "bentoStripEmpty"))
         row.addStretch(1)
-        list_zone(self, strip, day, placed, vertical=False)
         inner.addWidget(strip)
         return tile

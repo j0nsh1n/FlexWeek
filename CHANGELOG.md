@@ -28,14 +28,12 @@ All notable changes to FlexWeek are documented here. Format follows
   it where you put it, and Let FlexWeek move it clears the pin.
 - Dragging works in every design, not only Today's app. Anything a design shows
   as a block can be picked up. Mission control's lanes, the Day dial's face and
-  One thing's day bar take an exact day and time; Timeline, Clay deck, Retro
-  desktop and the day rows of Bento and Mission take a drop between two items,
-  which starts right after the one above; and any day button, day card or
-  column heading takes the day. A block keeps its time on the day it is dropped
-  on, and homework still waiting for a time gets the planner's best time that
-  day. While a block is dragged, the design shows where it would land and says
-  the time, or why not in the same words as the week grid. Anything placed by
-  dragging is pinned.
+  One thing's day bar take the drop at the time under the pointer. Timeline,
+  Bento, Retro desktop and Clay deck open the day's hours at the side while a
+  block is dragged: hold it over another day's name to turn to that day, and
+  let go on the hours to put it at that time. A drop anywhere says the day, the
+  time and the length, and names any block it would sit beside. Anything placed
+  by dragging is pinned.
 - A study window can be kept for one subject. Plans try a session in its own
   subject's window first, then in a window for any subject, then anywhere.
 - One alarm sound, in Settings > Alerts: Chime, Soft, Bright, Low, Glass, or a
@@ -56,9 +54,17 @@ All notable changes to FlexWeek are documented here. Format follows
   radio buttons, menus, tooltips, the date picker and progress bars take the
   colours of the chosen design. On a dark palette on KDE an unticked box, an
   unselected radio button and the spin arrows could not be seen at all.
-- A dragged block shows a dashed outline where it will land, can move to
-  another day, turns the error colour over a fixed block or past the due time,
-  and says why a drop there was refused. Escape lets go without moving it.
+- The Calendar's week works like Daily Scheduler's timeline. Each block is
+  one shape instead of a run of table cells, and dragging moves the block
+  itself: it follows the pointer a quarter hour at a time, into another day,
+  with its new times written on it. Its top or bottom edge resizes it. Empty
+  time lights up under the pointer, and dragging across it adds a block of
+  that length. Two blocks at one time are allowed and sit side by side, each
+  with a dot so the overlap is not missed; only time outside the day's hours
+  and homework ending after it is due are refused. Dragging one day of a
+  repeating block, such as Wednesday's School, moves only that day. Homework
+  placed by hand stays where it was put even beside a fixed block; homework
+  the planner placed still makes way. Escape lets go without moving anything.
 - Views and pages cross-fade, and moving to another week, day or month slides
   the old one away in the direction you went. Notices rise into place, setup's
   pages slide in from the side you are heading, its step marker glides between
@@ -68,6 +74,10 @@ All notable changes to FlexWeek are documented here. Format follows
   "Sun 27 Sep 2026, 23:59" instead of "2026-09-27 23:59".
 - A change to the week no longer restyles the whole window when the look is
   the same, which cost about 26 ms and a full repaint on every change.
+
+### Fixed
+- A block dragged or dropped while a save was still under way was put back
+  when the save finished. It now moves once the save is done.
 
 ## [0.14.2] - 2026-09-21
 
