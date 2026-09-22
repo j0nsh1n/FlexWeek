@@ -2070,3 +2070,71 @@ def test_homework_moved_by_hand_to_another_day_is_saved_pinned(
     settled(qapp, window)
     moved = next(block for block in window.session.blocks if block["id"] == work["id"])
     assert (moved["days"], moved["start"], moved.get("pinned")) == ([4], "19:00", True)
+
+
+def _rung(window: NativeWindow, monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
+    heard: list[tuple[str, str]] = []
+    monkeypatch.setattr(window._bell, "once", lambda tone, _volume: heard.append(("once", tone)) or True)
+    monkeypatch.setattr(window._bell, "start", lambda tone, _volume: heard.append(("start", tone)) or True)
+    return heard
+
+
+def test_a_reminder_rings_the_chosen_alarm_sound(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    heard = _rung(window, monkeypatch)
+    window.session.preferences = {**(window.session.preferences or {}), "alarm_tone": "glass"}
+    window._present_alerts([{"kind": "reminder", "title": "Math worksheet", "body": "in 10 min"}])
+    assert heard == [("once", "glass")]
+
+
+def test_a_spotify_sound_never_starts_music_for_a_reminder(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    heard = _rung(window, monkeypatch)
+    window.session.preferences = {**(window.session.preferences or {}), "alarm_tone": "spotify"}
+    window._present_alerts([{"kind": "reminder", "title": "Math worksheet", "body": "in 10 min"}])
+    assert heard == [("once", "chime")]
+
+
+def test_a_focus_ending_keeps_its_own_tone_until_a_sound_is_chosen(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    heard = _rung(window, monkeypatch)
+    base = {**(window.session.preferences or {}), "end_chime": True}
+    window.session.preferences = {key: value for key, value in base.items() if key != "alarm_tone"}
+    window._present_alerts([{"kind": "focus", "title": "Break", "tone": "bright"}])
+    window.session.preferences = {**window.session.preferences, "alarm_tone": "low"}
+    window._present_alerts([{"kind": "focus", "title": "Break", "tone": "bright"}])
+    assert heard == [("once", "bright"), ("once", "low")]
+
+
+def test_an_alarm_with_no_sound_of_its_own_rings_the_chosen_one(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    heard = _rung(window, monkeypatch)
+    window.session.preferences = {**(window.session.preferences or {}), "alarm_tone": "soft"}
+    window._ring({"name": "Wake up"}, "")
+    window._ring({"name": "Practice", "sound": "bright"}, "")
+    assert heard == [("start", "soft"), ("start", "bright")]
+
+
+def test_settings_picks_the_alarm_sound_and_new_alarms_start_with_it(qapp: QApplication) -> None:
+    dialog = PrefsDialog(None, {"alarm_tone": "low"}, {}, {}, None)
+    tone = combo(dialog, "prefAlarmTone")
+    assert tone.currentData() == "low"
+    assert combo(dialog, "alarmSound").currentData() == "low"
+    tone.setCurrentIndex(tone.findData("glass"))
+    assert combo(dialog, "alarmSound").currentData() == "glass"
+    assert dialog.updates()["alarm_tone"] == "glass"
+    dialog.show()
+    # On the Alerts page, which is not the page on screen, so the row's own state is what counts.
+    assert dialog.tone_note.isHidden() is True
+    tone.setCurrentIndex(tone.findData("spotify"))
+    assert dialog.tone_note.isHidden() is False
+    played: list[str] = []
+    tone.setCurrentIndex(tone.findData("bright"))
+    dialog._tone_bell.once = lambda name, _volume: played.append(name) or True
+    dialog.play_tone.click()
+    assert played == ["bright"]
+    dialog.close()

@@ -1754,13 +1754,16 @@ class NativeWindow(QMainWindow):
     def _present_alerts(self, notices: list) -> None:
         prefs = self.session.preferences or {}
         if notices and prefs.get("reminder_sound", True) is not False:
-            # Reminders ring on a fixed chime; only alarms carry a chosen sound. A focus notice brings
-            # its own tone and answers to the end-of-session chime setting as well, as it does on the web.
+            # Reminders ring the chosen alarm sound. A focus notice keeps its own two tones until the
+            # student picks a sound, then uses theirs. A Spotify sound never starts music for these.
+            tone = prefs.get("alarm_tone")
+            short = FALLBACK if tone in (None, "spotify") else str(tone)
             focus = [notice for notice in notices if notice.get("kind") == "focus"]
             if len(focus) < len(notices):
-                self._bell.once(FALLBACK, prefs.get("alert_volume", 80))
+                self._bell.once(short, prefs.get("alert_volume", 80))
             elif prefs.get("end_chime"):
-                self._bell.once(str(focus[0].get("tone") or FALLBACK), prefs.get("alert_volume", 80))
+                own = str(focus[0].get("tone") or FALLBACK)
+                self._bell.once(own if tone is None else short, prefs.get("alert_volume", 80))
         for notice in notices:
             title = notice.get("title") or "FlexWeek"
             body = notice.get("body") or ""
@@ -1794,8 +1797,11 @@ class NativeWindow(QMainWindow):
     def _ring(self, alarm: dict, url: str) -> None:
         """Play the alarm's own sound. "spotify" means the linked track, and the web falls back to a
         tone when that does not open, so this does too: a silent alarm is not an alarm."""
-        volume = (self.session.preferences or {}).get("alert_volume", 80)
-        tone = str(alarm.get("sound") or FALLBACK)
+        prefs = self.session.preferences or {}
+        volume = prefs.get("alert_volume", 80)
+        tone = str(alarm.get("sound") or prefs.get("alarm_tone") or FALLBACK)
+        if tone == "spotify" and not url:
+            url = self.session.spotify_url(prefs.get("default_spotify_url") or "")
         if tone == "spotify" and url and QDesktopServices.openUrl(QUrl(url)):
             return
         self._bell.start(FALLBACK if tone == "spotify" else tone, volume)

@@ -74,6 +74,10 @@ PREFS_NAV_PAD = 32
 ACCOUNT_MAX_WIDTH = 520
 ACCOUNT_MIN_WIDTH = 560
 SPORT_FALLBACK = "Sport or club"
+ALARM_TONE_LABELS = {"spotify": "A Spotify song or playlist"}
+SPOTIFY_TONE_NOTE = (
+    "Alarms open this link. Reminders and the end of a focus session play Chime, so they never start music."
+)
 # What only Today's app reads. Every other design has its own colours and shapes, so these changed
 # nothing there (measured 2026-09-21: not the view, not the top bar, apart from Corners on the bar).
 TODAYS_APP_KNOBS = ("surface", "corners", "blocks")
@@ -403,6 +407,21 @@ class PrefsDialog(QDialog):
         )
         self.spotify = QLineEdit(preferences.get("default_spotify_url") or "")
         self.spotify.setObjectName("prefSpotify")
+        self.spotify.setPlaceholderText("https://open.spotify.com/track/... or /playlist/...")
+        # One sound for reminders, the end of a focus session and new alarms.
+        self.alarm_tone = QComboBox()
+        self.alarm_tone.setObjectName("prefAlarmTone")
+        for name in SOUNDS:
+            self.alarm_tone.addItem(ALARM_TONE_LABELS.get(name, name.title()), name)
+        chosen_tone = preferences.get("alarm_tone") or FALLBACK
+        self.alarm_tone.setCurrentIndex(max(0, self.alarm_tone.findData(chosen_tone)))
+        self.play_tone = QPushButton("Play")
+        self.play_tone.setObjectName("prefPlayTone")
+        self.play_tone.clicked.connect(self._play_tone)
+        self.tone_note = QLabel(SPOTIFY_TONE_NOTE)
+        self.tone_note.setObjectName("prefToneNote")
+        self.tone_note.setWordWrap(True)
+        self._tone_bell = Bell(self)
         appearance = QWidget()
         column = QVBoxLayout(appearance)
         appear = QFormLayout()
@@ -441,6 +460,14 @@ class PrefsDialog(QDialog):
         # A long row puts its label above it, as Appearance does, so the page never needs more room
         # than Settings has once dropdowns and spin boxes carry their chevrons.
         alerts_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        alerts_form.addRow(_heading("Alarm sound"))
+        tone_row = QHBoxLayout()
+        tone_row.addWidget(self.alarm_tone, 1)
+        tone_row.addWidget(self.play_tone)
+        alerts_form.addRow("Sound", tone_row)
+        alerts_form.addRow("Spotify link", self.spotify)
+        alerts_form.addRow(self.tone_note)
+        self._alerts_form = alerts_form
         alerts_form.addRow(_heading("Reminders"))
         alerts_form.addRow(self.reminders)
         alerts_form.addRow("Lead minutes", self.lead)
@@ -513,7 +540,6 @@ class PrefsDialog(QDialog):
         computer_form.addRow(_heading("This computer"))
         computer_form.addRow(self.start_at_login)
         computer_form.addRow("Open on", self.preferred_view)
-        computer_form.addRow("Default Spotify link", self.spotify)
         account_row = QHBoxLayout()
         open_account = QPushButton("Account…")
         open_account.setObjectName("prefsAccount")
@@ -580,7 +606,8 @@ class PrefsDialog(QDialog):
         self.spotify.editingFinished.connect(self._check_spotify)
         # Every choice says it changed. Connected last, so building the dialog says nothing, and after
         # the handlers above, so a look or a timer preset has filled in its knobs by then.
-        for box in (self.look, self.accent, self.preferred_view, self.motion, *self.knobs.values()):
+        choices = (self.look, self.accent, self.preferred_view, self.motion, self.alarm_tone)
+        for box in (*choices, *self.knobs.values()):
             box.currentIndexChanged.connect(self._announce)
         for spin in (self.work, self.break_min, self.long_break, self.long_every, self.lead, self.volume):
             spin.valueChanged.connect(self._announce)
@@ -600,6 +627,25 @@ class PrefsDialog(QDialog):
             section.changed.connect(self.changed.emit)
             section.changed.connect(self._show_what_applies)
         self._show_what_applies()
+        self.alarm_tone.currentIndexChanged.connect(self._follow_tone)
+        self._follow_tone()
+
+    def _follow_tone(self, *_index: object) -> None:
+        """New alarms start with the chosen sound, and the note says what Spotify means for the rest."""
+        tone = self.alarm_tone.currentData()
+        self._alerts_form.setRowVisible(self.tone_note, tone == "spotify")
+        index = self.alarm_sound.findData(tone)
+        if index >= 0:
+            self.alarm_sound.setCurrentIndex(index)
+
+    def _play_tone(self) -> None:
+        tone = self.alarm_tone.currentData()
+        if tone == "spotify":
+            link = self._spotify_link()
+            if link and QDesktopServices.openUrl(QUrl(link)):
+                return
+            tone = FALLBACK
+        self._tone_bell.once(str(tone), self.volume.value())
 
     def _show_what_applies(self) -> None:
         """Only the settings that change the chosen views. Look, Accent, Surface, Corners and Blocks
@@ -797,6 +843,7 @@ class PrefsDialog(QDialog):
             "start_at_login": self.start_at_login.isChecked(),
             "preferred_view": self.preferred_view.currentData(),
             "motion": self.motion.currentData(),
+            "alarm_tone": self.alarm_tone.currentData(),
         }
 
     def _apply_look_menu(self) -> None:
