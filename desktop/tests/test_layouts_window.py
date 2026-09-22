@@ -2056,3 +2056,17 @@ def test_animations_off_turns_every_fade_off(qapp: QApplication, window: NativeW
     dialog = PrefsDialog(window, window.session.preferences, window._look, {}, window._layout)
     assert combo(dialog, "prefMotion").currentData() == "off"
     assert dialog.updates()["motion"] == "off"
+
+
+def test_homework_moved_by_hand_to_another_day_is_saved_pinned(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """The server accepts the pin, and it survives a reload."""
+    work = next(block for block in window.session.blocks if block.get("assignment_id") == "essay")
+    assert window.session.apply_times(work["id"], 19 * 60, 20 * 60, 4)
+    window.session.save()
+    settled(qapp, window)
+    window.session.load_week(window.session.week_start, discard=True)
+    settled(qapp, window)
+    moved = next(block for block in window.session.blocks if block["id"] == work["id"])
+    assert (moved["days"], moved["start"], moved.get("pinned")) == ([4], "19:00", True)

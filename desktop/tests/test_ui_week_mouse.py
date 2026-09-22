@@ -21,7 +21,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
     from PySide6.QtGui import QMouseEvent
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QApplication, QFrame
 
     from desktop.native.widgets import WeekTable
 
@@ -124,3 +125,62 @@ def test_double_clicking_a_shared_cell_asks_once_which_block(
     table = week(qapp, [fixed("band", "07:00", 60, day=2), fixed("tutoring", "07:00", 60, day=2)])
     double_click(table, cell(table, "07:15", 2))
     assert menus == [["Band", "Tutoring"]]
+
+
+def homework_block(block_id: str, start: str, day: int) -> dict:
+    return {**fixed(block_id, start, 60, day), "kind": "flexible", "assignment_id": "hw-" + block_id}
+
+
+def drag(table: WeekTable, start: QPoint, end: QPoint, *, release: bool = True) -> None:
+    send(table, QEvent.Type.MouseButtonPress, start, LEFT)
+    middle = QPoint((start.x() + end.x()) // 2, (start.y() + end.y()) // 2)
+    send(table, QEvent.Type.MouseMove, middle, LEFT)
+    send(table, QEvent.Type.MouseMove, end, LEFT)
+    if release:
+        send(table, QEvent.Type.MouseButtonRelease, end, NONE)
+
+
+def test_a_dragged_block_shows_where_it_will_land_and_can_change_day(qapp: QApplication) -> None:
+    """The span was worked out and never drawn, and a move could not leave its day."""
+    table = week(qapp, [homework_block("essay", "18:00", 2)])
+    moved: list[tuple] = []
+    table.times_changed.connect(lambda *args: moved.append(args))
+    # By its middle: the top and bottom rows are the resize handles.
+    drag(table, cell(table, "18:30", 2), cell(table, "19:30", 3), release=False)
+    ghost = table.findChild(QFrame, "dragGhost")
+    assert ghost is not None and ghost.isVisible()
+    assert ghost.geometry().intersects(table.visualRect(table.model().index(row_of("19:00"), 3)))
+    send(table, QEvent.Type.MouseButtonRelease, cell(table, "19:30", 3), NONE)
+    assert not ghost.isVisible()
+    assert moved == [("essay", 3, 19 * 60, 20 * 60)]
+
+
+def test_a_drop_over_a_fixed_block_is_refused_with_a_reason(qapp: QApplication) -> None:
+    table = week(qapp, [homework_block("essay", "18:00", 2), fixed("soccer", "16:00", 90, 3)])
+    moved: list[tuple] = []
+    refused: list[str] = []
+    table.times_changed.connect(lambda *args: moved.append(args))
+    table.move_refused.connect(refused.append)
+    drag(table, cell(table, "18:30", 2), cell(table, "16:30", 3))
+    assert moved == []
+    assert refused == ["Soccer is at that time, so it stayed where it was."]
+
+
+def test_a_drop_past_the_due_time_is_refused(qapp: QApplication) -> None:
+    table = week(qapp, [homework_block("essay", "18:00", 2)])
+    table.due_point = lambda block_id: (2, 20 * 60) if block_id == "essay" else None
+    refused: list[str] = []
+    table.move_refused.connect(refused.append)
+    drag(table, cell(table, "18:30", 2), cell(table, "18:30", 4))
+    assert refused == ["That ends after it is due, so it stayed where it was."]
+
+
+def test_escape_lets_go_of_a_drag(qapp: QApplication) -> None:
+    table = week(qapp, [homework_block("essay", "18:00", 2)])
+    moved: list[tuple] = []
+    table.times_changed.connect(lambda *args: moved.append(args))
+    drag(table, cell(table, "18:30", 2), cell(table, "19:30", 2), release=False)
+    QTest.keyClick(table, Qt.Key.Key_Escape)
+    send(table, QEvent.Type.MouseButtonRelease, cell(table, "19:30", 2), NONE)
+    assert moved == []
+    assert not table.findChild(QFrame, "dragGhost").isVisible()

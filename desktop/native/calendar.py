@@ -209,7 +209,8 @@ def resize_bottom_range(start_min: int, end_min: int, delta_min: int) -> tuple[i
     return start_min, nxt
 
 
-def apply_block_times(block: dict, start_min: int, end_min: int) -> dict | None:
+def apply_block_times(block: dict, start_min: int, end_min: int, day: int | None = None) -> dict | None:
+    """The block at a new time, and on `day` when it moved to another one."""
     if not block.get("start"):
         return None
     if is_series(block):
@@ -220,6 +221,10 @@ def apply_block_times(block: dict, start_min: int, end_min: int) -> dict | None:
     updated = deepcopy(block)
     updated["start"] = minutes_to_hhmm(start_min)
     updated["duration_min"] = duration
+    if day is not None and list(block.get("days") or []) != [day]:
+        updated["days"] = [day]
+        if updated.get("completed_day") is not None:
+            updated["completed_day"] = day
     return updated
 
 

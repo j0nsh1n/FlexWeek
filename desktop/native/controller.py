@@ -64,6 +64,7 @@ from desktop.native.reuse import (
     available_homework_minutes,
     block_occurs_on_day,
     capacity_problem,
+    clear_stale_pins,
     clipboard_fingerprint,
     clipboard_item,
     copied_homework_block,
@@ -718,6 +719,7 @@ class NativeSession(QObject):
         if label:
             self._history_label = label
         self.blocks, lost = settle_placements(self.blocks, self.assignments, self.week_start, keep)
+        self.blocks = clear_stale_pins(self.blocks)
         for note in lost:
             self.needs_time[note["block_id"]] = note["message"]
         self._forget_settled_notes()
@@ -819,16 +821,20 @@ class NativeSession(QObject):
         edited = {session["id"] for session in blocks if session.get("assignment_id") == body["id"]}
         self._touch(label, keep=edited)
 
-    def apply_times(self, block_id: str, start_min: int, end_min: int) -> bool:
+    def apply_times(self, block_id: str, start_min: int, end_min: int, day: int | None = None) -> bool:
         block = next((item for item in self.blocks if item["id"] == block_id), None)
         if block is None:
             return False
         if is_series(block):
             self._say(SERIES_DRAG_MESSAGE.format(title=block["title"], count=len(block["days"])))
             return False
-        updated = apply_block_times(block, start_min, end_min)
+        updated = apply_block_times(block, start_min, end_min, day)
         if updated is None:
             return False
+        # Homework moved by hand is the student's own time, so no plan moves it again.
+        homework = updated.get("assignment_id") and updated.get("kind") == "flexible"
+        if homework and not updated.get("completed"):
+            updated["pinned"] = True
         self.add_block(updated)
         return True
 

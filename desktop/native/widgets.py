@@ -28,6 +28,7 @@ from PySide6.QtGui import (
     QAction,
     QColor,
     QIcon,
+    QKeyEvent,
     QMouseEvent,
     QPainter,
     QPen,
@@ -378,7 +379,10 @@ class WeekTable(QTableWidget):
     block_activated = Signal(str)
     slot_activated = Signal(int, str)
     range_created = Signal(int, int, int)
-    times_changed = Signal(str, int, int)
+    # Block id, day, start and end minute: where a dragged block was let go.
+    times_changed = Signal(str, int, int, int)
+    # Why a drag was not applied, in words for the status line.
+    move_refused = Signal(str)
     series_drag_refused = Signal(str, int)
     block_selected = Signal(str, int)
 
@@ -403,6 +407,15 @@ class WeekTable(QTableWidget):
         self._shown: tuple[str, list[dict], dict | None] | None = None
         self._revealed: str | None = None
         self.setItemDelegate(BlockDelegate(self))
+        # The outline of where a dragged block would land. The span used to be worked out and never
+        # drawn, so a block jumped only when it was let go.
+        self._ghost = QFrame(self.viewport())
+        self._ghost.setObjectName("dragGhost")
+        self._ghost.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self._ghost.hide()
+        self._ghost_colour = ""
+        # The (day, minute) a homework session is due in this week, or None. Set by the window.
+        self.due_point: Callable[[str], tuple[int, int] | None] = lambda _block_id: None
 
     def set_look(self, look: dict | None, palette: dict) -> None:
         """Repaint the week on screen with a new look; the blocks themselves do not change."""
@@ -592,23 +605,34 @@ class WeekTable(QTableWidget):
             gesture["cur_min"] = cur_min
             if abs(cur_min - gesture["start_min"]) >= SLOT_MIN:
                 gesture["moved"] = True
+                low, high = sorted((gesture["start_min"], cur_min))
+                self._show_ghost(gesture["day"], low, high + SLOT_MIN, None)
             event.accept()
             return
         delta = cur_min - gesture["press_min"]
+        day = gesture["day"]
         if gesture["type"] == "move":
             span = move_range(gesture["origin_start"], gesture["origin_end"], delta)
+            column = self.columnAt(int(event.position().x()))
+            if column >= 0:
+                day = column
         elif gesture["type"] == "resize_top":
             span = resize_top_range(gesture["origin_start"], gesture["origin_end"], delta)
         else:
             span = resize_bottom_range(gesture["origin_start"], gesture["origin_end"], delta)
-        if span != (gesture["origin_start"], gesture["origin_end"]):
+        if span != (gesture["origin_start"], gesture["origin_end"]) or day != gesture["day"]:
             gesture["moved"] = True
         gesture["preview"] = span
+        gesture["target_day"] = day
+        gesture["problem"] = self._span_problem(gesture["block_id"], day, *span) if gesture["moved"] else None
+        if gesture["moved"]:
+            self._show_ghost(day, span[0], span[1], gesture["problem"])
         event.accept()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         gesture = self._gesture
         self._gesture = None
+        self._ghost.hide()
         if gesture is None or event.button() != Qt.MouseButton.LeftButton:
             super().mouseReleaseEvent(event)
             return
@@ -630,8 +654,55 @@ class WeekTable(QTableWidget):
             return
         if gesture.get("moved") and gesture.get("preview"):
             start_min, end_min = gesture["preview"]
-            self.times_changed.emit(gesture["block_id"], start_min, end_min)
+            if gesture.get("problem"):
+                self.move_refused.emit(gesture["problem"])
+            else:
+                self.times_changed.emit(gesture["block_id"], gesture["target_day"], start_min, end_min)
         event.accept()
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+        """Escape lets go of a drag without moving anything."""
+        if self._gesture is not None and event.key() == Qt.Key.Key_Escape:
+            self._gesture = None
+            self._ghost.hide()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def _span_problem(self, block_id: str, day: int, start_min: int, end_min: int) -> str | None:
+        """Why the block cannot go there, or None. A fixed block there would take the time straight
+        back, and so would a due time before the end."""
+        for other in self._week_blocks:
+            if other["id"] == block_id or other.get("kind") != "locked" or not other.get("start"):
+                continue
+            if day not in (other.get("days") or []) or day in (other.get("missed_days") or []):
+                continue
+            begin = hhmm_to_minutes(other["start"])
+            if start_min < begin + int(other["duration_min"]) and begin < end_min:
+                return f"{other.get('title') or 'A fixed block'} is at that time, so it stayed where it was."
+        due = self.due_point(block_id)
+        if due is not None and (day, end_min) > due:
+            return "That ends after it is due, so it stayed where it was."
+        return None
+
+    def _show_ghost(self, day: int, start_min: int, end_min: int, problem: str | None) -> None:
+        first = (start_min - DAY_START_MIN) // SLOT_MIN
+        last = max(first, (end_min - DAY_START_MIN) // SLOT_MIN - 1)
+        top = self.visualRect(self.model().index(first, day))
+        bottom = self.visualRect(self.model().index(min(last, SLOTS_PER_DAY - 1), day))
+        colour = self._palette["error"] if problem else self._palette["accent"]
+        if colour != self._ghost_colour:
+            # Styled only when the colour changes: a style sheet per mouse move would re-polish
+            # the outline sixty times a second.
+            tint = QColor(colour)
+            self._ghost.setStyleSheet(
+                f"QFrame#dragGhost {{ border: 2px dashed {colour}; border-radius: 6px; "
+                f"background: rgba({tint.red()}, {tint.green()}, {tint.blue()}, 40); }}"
+            )
+            self._ghost_colour = colour
+        self._ghost.setGeometry(top.united(bottom).adjusted(2, 1, -2, -1))
+        self._ghost.show()
+        self._ghost.raise_()
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         # mousePressEvent keeps a press on a block from Qt, so Qt never records the pressed cell and

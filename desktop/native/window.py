@@ -73,6 +73,7 @@ from desktop.native.look import (
 from desktop.native.motion import appear, apply_ui_effects, fade_away, hold_picture, motion_level, switch_page
 from desktop.native.remind import REMINDER_POLL_MS, clock_parts
 from desktop.native.reuse import (
+    due_point,
     late_from_start,
     late_locked_line,
     planner_title,
@@ -723,6 +724,8 @@ class NativeWindow(QMainWindow):
         self.week_table.slot_activated.connect(self._create_at_slot)
         self.week_table.range_created.connect(self._create_range)
         self.week_table.times_changed.connect(self._apply_times)
+        self.week_table.move_refused.connect(self.session._say)
+        self.week_table.due_point = self._due_point
         self.week_table.series_drag_refused.connect(self._refuse_series)
         self.week_table.block_selected.connect(self.session.select_block)
         self.planner.addWidget(self.week_table)
@@ -1466,9 +1469,17 @@ class NativeWindow(QMainWindow):
             )
         )
 
-    def _apply_times(self, block_id: str, start_min: int, end_min: int) -> None:
-        if self.session.apply_times(block_id, start_min, end_min):
+    def _apply_times(self, block_id: str, day: int, start_min: int, end_min: int) -> None:
+        if self.session.apply_times(block_id, start_min, end_min, day):
             self.session.save()
+
+    def _due_point(self, block_id: str) -> tuple[int, int] | None:
+        """The day and minute a homework session is due, for the calendar to refuse a drag past it."""
+        block = next((item for item in self.session.blocks if item["id"] == block_id), None)
+        assignment = self.session.assignments.get((block or {}).get("assignment_id") or "")
+        if not assignment:
+            return None
+        return due_point(assignment.get("due"), self.session.week_start)
 
     def _refuse_series(self, block_id: str, day: int) -> None:
         self.session.select_block(block_id, day)
