@@ -118,7 +118,12 @@ Contract for the finished app:
   "Choose a time myself" for anything more. "Plan my homework" places only
   homework that has no time yet and keeps the times already planned; "Replan
   all my homework", under More and in the plan review, plans every unfinished
-  session again. Details live
+  session again. The `planning_style` preference says when new homework gets a
+  time: `suggest` (the default) waits for Plan my homework, `auto` plans each
+  new homework as it is saved, in the same Undo step, and `manual` leaves it to
+  the student, with the button reading Suggest times. Homework dragged onto a
+  day or a time, or given one with Choose a time, is `pinned`: every plan,
+  Replan all included, keeps it where the student put it. Details live
   in `docs/stage2-contract.md`.
 - Running late is a solve preview of a 15, 30 or 60 minute delay from a
   15-minute cutoff on one day of the open week. Fixed commitments and sleep stay
@@ -137,11 +142,17 @@ Contract for the finished app:
   complete nothing.
 - Preferences carry availability: up to 21 `protected` windows (downtime,
   commute or meal), up to 21 soft `study_windows`, and an optional `day_cutoff`
-  that flexible work must finish by. `POST /api/solve` loads them for the
-  signed-in account, so the client never re-sends occupancy.
+  that flexible work must finish by. A study window may name one `subject`:
+  the solver tries a session in its own subject's window first, then in a
+  window for any subject, then anywhere else. `POST /api/solve` loads them for
+  the signed-in account, so the client never re-sends occupancy.
 - Comfort preferences persist per account: `alert_volume` (0-100), `end_chime`,
   `tray_notifications`, `start_at_login`, `preferred_view` (`week` or `day`),
-  `sidebar_collapsed` and `sidebar_width_px` (200-640). Defaults stay omitted
+  `sidebar_collapsed` and `sidebar_width_px` (200-640). One `alarm_tone`
+  (`chime`, `soft`, `bright`, `low`, `glass`, or `spotify`, which opens
+  `default_spotify_url` for alarms only) rings reminders, the end of a focus
+  session and new alarms. `setup` records where first-run setup stands: its
+  `step`, and `finished_at` once it is finished or skipped. Defaults stay omitted
   from stored JSON so older clients keep working, and timer rounding to the
   15-minute grid is previewed and explained rather than silent. Details live in
   `docs/stage5-contract.md`.
@@ -174,10 +185,23 @@ line of small print that switches the same card over. The card offers "Keep me
 signed in on this computer", on by default. A kept session opens the week at
 the next launch until the server ends it (seven days after sign-in) or the
 student logs out.
-A new account must acknowledge its eight recovery codes, then is offered a
-short first-week setup (school hours, one sport, then homework). Every setup
-step can be skipped; School hours stays under More for later. Dragging or clicking empty grid space opens an Add dialog
-for that range.
+A new account must acknowledge its eight recovery codes, then goes to first-run
+setup, one page at a time: a starting style or its own look, the week (school
+days and hours, activities on their own days, and No homework after), how
+homework gets a time, reminders and the alarm sound, up to three first
+homework, and a summary. Every page can be skipped and is kept when the
+student leaves it, so a quit resumes on the same page. Finishing or skipping is
+stored in `setup`, and setup never returns unless the student picks Run setup
+again in Settings. School hours stays under More for later.
+
+Dragging or clicking empty grid space opens an Add dialog for that range.
+Dragging works in every design: a block can be picked up wherever a design
+shows it, and dropped on a time axis (the week grid, Mission control's lanes,
+the Day dial, One thing's day bar) at that time, between two items in a list,
+where it starts right after the one above, or on a day, where a block keeps its
+time and homework still waiting gets the planner's best time that day. While it
+is dragged the design shows where it would land, or why it cannot, in the same
+words everywhere.
 
 Downloads from GitHub Releases:
 
@@ -222,7 +246,7 @@ Current account/API contract:
 | PUT/DELETE | `/api/assignments/{id}` | Revision-checked create, update and delete; delete removes its sessions from every week |
 | POST | `/api/assignments/{id}/spread` | Preview sessions of a chosen length from a start date through the due date; writes nothing |
 | POST | `/api/changes` | Several week and assignment writes, all or nothing; optional operation ID and pre-change recovery point |
-| GET/PUT | `/api/preferences` | Theme, appearance pack, accent, motion, reminders, timers, alarms, Spotify default, availability windows and comfort settings |
+| GET/PUT | `/api/preferences` | Theme, appearance pack, accent, motion, reminders, timers, alarms, alarm sound, Spotify default, planning style, setup progress, availability windows and comfort settings |
 | GET | `/api/timer-presets` | Named timer presets on the 15-minute grid |
 | GET | `/api/reminder-limits` | The reminder ceilings the settings dialog explains |
 | POST | `/api/timer-split-preview` | Explain how a timer splits and rounds before it is saved |
@@ -476,6 +500,11 @@ The commands it runs, each of which must exit 0:
       the solver places work without the client re-sending occupancy.
 - [ ] A student opens Month, sees deadlines with planned and completed study
       time, and clicks a date to open Day view.
+- [ ] A new account skips or finishes setup, and setup does not come back;
+      quitting mid-way resumes on the same page.
+- [ ] In every design, a student drags homework onto a day or a time and a
+      block to another one, and the design refuses what the week grid refuses,
+      in the same words.
 - [ ] Download names are `FlexWeek-Windows-x64-Setup.exe` (with
       `FlexWeek-Windows-x64.msi` for schools) and
       `FlexWeek-Linux-x86_64.tar.gz`.
