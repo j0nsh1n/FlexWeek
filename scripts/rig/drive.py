@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
+MARKER = "rig-week-marker"
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -50,6 +51,10 @@ class Scenario:
 
 class NoSurface(Exception):
     """The tab has no hours, chip or cell to do this on."""
+
+
+class Waited(AssertionError):
+    """Something the scenario waited for never happened. Never a pass."""
 
 
 def child_main(args: argparse.Namespace) -> int:
@@ -245,12 +250,9 @@ def child_main(args: argparse.Namespace) -> int:
             app's week canvas predates that interface and is read through its own methods."""
             shown = window.planner.currentWidget()
             finder = getattr(shown, "hours_surfaces" if kind == "hours" else "month_surfaces", None)
-            if finder is not None:
-                found = [item for item in finder() if item.isVisible()]
-                if found:
-                    return found[0]
-            if kind == "hours" and shown is window.week_table:
-                return LegacyWeek(shown)
+            found = [item for item in finder() if item.isVisible()] if finder is not None else []
+            if found:
+                return found[0]
             raise NoSurface(f"no {kind} on the {session.planner_view} tab of {self.design}")
 
         def reveal(self, day: int, first: int, last: int) -> Step:
@@ -280,13 +282,38 @@ def child_main(args: argparse.Namespace) -> int:
             raise NoSurface(f"nothing on screen stands for {block_id}")
 
         def settled(self) -> Step:
-            yield ("until", lambda: not session.busy and not session.dirty, 8000)
+            """Wait for the save, then read the week back from the server and prove it is fresh.
+
+            A marker is put in the loaded blocks first: only a real reload can remove it, so a
+            scenario can never check a week that never left memory."""
+            yield ("until", lambda: not session.busy and not session.dirty, 8000, "the change to save")
+            session.blocks = [
+                *session.blocks,
+                {
+                    "id": MARKER,
+                    "title": "rig marker",
+                    "kind": "locked",
+                    "start": "12:00",
+                    "duration_min": 15,
+                    "days": [],
+                },
+            ]
             session.load_week(session.week_start, discard=True)
             yield ("wait", 50)
-            yield ("until", lambda: not session.busy, 8000)
+            yield (
+                "until",
+                lambda: not session.busy and all(item["id"] != MARKER for item in session.blocks),
+                8000,
+                "the week to come back from the server",
+            )
 
         def accept_dialog(self, title: str) -> Step:
-            yield ("until", lambda: isinstance(QApplication.activeModalWidget(), QDialog), 3000)
+            yield (
+                "until",
+                lambda: isinstance(QApplication.activeModalWidget(), QDialog),
+                3000,
+                "the Add dialog",
+            )
             dialog = QApplication.activeModalWidget()
             if dialog is None:
                 raise AssertionError("no dialog opened")
@@ -297,33 +324,6 @@ def child_main(args: argparse.Namespace) -> int:
                 yield from self.type(title)
             yield from self.key("Return")
             yield ("wait", 300)
-
-    class LegacyWeek:
-        """Today's app's 0.14.3 week canvas, read through the methods it already had."""
-
-        def __init__(self, canvas: object) -> None:
-            self.canvas = canvas
-
-        def reveal(self, day: int, first: int, last: int) -> None:
-            top, bottom = self.canvas.point_of(day, first), self.canvas.point_of(day, last)
-            self.canvas.scroll.ensureVisible(bottom.x(), bottom.y(), 0, 40)
-            self.canvas.scroll.ensureVisible(top.x(), top.y(), 0, 40)
-
-        def point_for(self, day: int, minute: int) -> QPoint:
-            return self.canvas.body.mapToGlobal(self.canvas.point_of(day, minute))
-
-        def block_rect(self, block_id: str, day: int) -> QRect | None:
-            for shape, rect, _count, _held in self.canvas.body.laid_out():
-                if shape.block_id == block_id and shape.day == day:
-                    top_left = self.canvas.body.mapToGlobal(rect.topLeft().toPoint())
-                    return QRect(top_left, rect.size().toSize())
-            return None
-
-        def day_name(self, day: int) -> QPoint:
-            area = self.canvas.body.column_rect(self.canvas.body.days.index(day))
-            return self.canvas.header.mapToGlobal(
-                QPoint(int(area.center().x()), self.canvas.header.height() // 2)
-            )
 
     rig = Rig()
 
@@ -591,9 +591,29 @@ def child_main(args: argparse.Namespace) -> int:
     finished: list[bool] = []
 
     def drive(steps: Step) -> None:
-        def advance(value: object = None) -> None:
+        def dispatch(command: tuple) -> None:
+            if command[0] == "wait":
+                QTimer.singleShot(command[1], advance)
+                return
+            predicate, limit = command[1], command[2]
+            waited_for = command[3] if len(command) > 3 else "something to happen"
+            deadline = time.monotonic() + limit / 1000
+
+            def poll() -> None:
+                if predicate():
+                    advance(True)
+                elif time.monotonic() > deadline:
+                    # A wait that runs out is a failure. Carrying on would let a save that never
+                    # landed, or a week that never reloaded, pass as a result.
+                    fail(Waited(f"waited {limit} ms for {waited_for}"))
+                else:
+                    QTimer.singleShot(20, poll)
+
+            poll()
+
+        def carry(step: Callable[[], tuple]) -> None:
             try:
-                command = steps.send(value)
+                command = step()
             except StopIteration:
                 finished.append(True)
                 app.quit()
@@ -602,21 +622,13 @@ def child_main(args: argparse.Namespace) -> int:
                 traceback.print_exc()
                 app.quit()
                 return
-            if command[0] == "wait":
-                QTimer.singleShot(command[1], advance)
-            elif command[0] == "until":
-                predicate, limit = command[1], command[2]
-                deadline = time.monotonic() + limit / 1000
+            dispatch(command)
 
-                def poll() -> None:
-                    if predicate():
-                        advance(True)
-                    elif time.monotonic() > deadline:
-                        advance(False)
-                    else:
-                        QTimer.singleShot(20, poll)
+        def advance(value: object = None) -> None:
+            carry(lambda: steps.send(value))
 
-                poll()
+        def fail(error: BaseException) -> None:
+            carry(lambda: steps.throw(error))
 
         advance()
 
