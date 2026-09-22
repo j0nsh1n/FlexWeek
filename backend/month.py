@@ -6,7 +6,7 @@ from datetime import date, timedelta
 
 from backend.assignments import planned_minutes_by_id, unplanned_minutes
 from backend.day import is_work_session
-from backend.models import parse_naive_stamp
+from backend.models import parse_due
 from backend.weeks import monday_of, month_grid, parse_month
 
 
@@ -99,7 +99,7 @@ def build_month(
     overdue: list[dict] = []
     assignment_due: dict[str, date] = {}
     for body, revision in assignment_rows:
-        due_day, _minutes = parse_naive_stamp(body["due"])
+        due_day, _minutes = parse_due(body["due"])
         assignment_due[body["id"]] = due_day
         item = _deadline_item(body, revision, due_day, planned)
         key = due_day.isoformat()

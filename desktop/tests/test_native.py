@@ -29,6 +29,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.calendar import sunday_due
     from desktop.native.client import NativeClient
     from desktop.native.controller import NativeSession, session_days
+    from desktop.native.weekmodel import due_label
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
     from desktop.tests.logic_support import past_setup
@@ -891,7 +892,9 @@ def test_spread_keeps_assignment_identity_across_sessions(qapp: QApplication, se
     assert session.spread_preview["rows"]
     assert all(row["block"]["assignment_id"] == "project" for row in session.spread_preview["rows"])
     # Time, not a count of sessions, and the deadline as a student says it.
-    assert session.spread_preview["summary"] == "3 h ready to add before Sun 23:59."
+    assert session.spread_preview["summary"] == (
+        f"3 h ready to add before {due_label(due, session.week_start)}."
+    )
     assert session.confirm_spread()
     wait_until(qapp, lambda: not session.busy)
     sessions = [block for block in session.blocks if block.get("assignment_id") == "project"]

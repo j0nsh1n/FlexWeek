@@ -6,6 +6,7 @@ import json
 from copy import deepcopy
 from datetime import date, datetime, timedelta
 
+from backend.models import parse_due
 from backend.slots import DAY_END_MIN, DAY_START_MIN, SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm
 from desktop.native.calendar import DAY_FULL
 
@@ -190,10 +191,11 @@ def due_point(due: str | None, week_start: str) -> tuple[int, int] | None:
     """A deadline as (day index, minute) in this week: negative before it, None when it is later."""
     if not due:
         return None
-    offset = (date.fromisoformat(due[:10]) - date.fromisoformat(week_start)).days
+    due_day, minutes = parse_due(due)
+    offset = (due_day - date.fromisoformat(week_start)).days
     if offset > 6:
         return None
-    return offset, hhmm_to_minutes(due[11:16]) if len(due) >= 16 else DAY_END_MIN
+    return offset, minutes
 
 
 def settle_placements(

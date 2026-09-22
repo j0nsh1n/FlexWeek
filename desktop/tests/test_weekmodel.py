@@ -200,9 +200,11 @@ def test_a_block_cannot_run_past_midnight() -> None:
 
 def test_labels_read_the_way_a_student_says_them() -> None:
     assert [length_label(value) for value in (30, 60, 90, 0)] == ["30 min", "1 h", "1 h 30 min", "0 min"]
-    assert due_label("2026-09-17T23:59", WEEK) == "Thu 23:59"
-    assert due_label("2026-09-28T08:00", WEEK) == "Sep 28 08:00"
-    assert due_label("2026-09-20", WEEK) == "Sun"
+    assert due_label("2026-09-17T23:59", WEEK) == "Thu 17 Sep"
+    assert due_label("2026-09-27", WEEK) == "Sun 27 Sep"
+    assert due_label("2026-09-27T09:00", WEEK) == "Sun 27 Sep, 09:00"
+    assert due_label("2026-09-28T08:00", WEEK) == "Mon 28 Sep, 08:00"
+    assert due_label("2026-09-20", WEEK) == "Sun 20 Sep"
     assert due_label(None, WEEK) == ""
 
 
@@ -223,7 +225,7 @@ def test_due_today_unplaced_is_homework_that_still_needs_a_time() -> None:
     assert week.due_today_unplaced(2) == ()
     assert week.leftover_kind(3) == "needs_time"
     assert week.leftover_words(3) == "Needs a time"
-    assert week.leftover_parts(3) == ("Needs a time", "Math worksheet", "Due Thu 21:00")
+    assert week.leftover_parts(3) == ("Needs a time", "Math worksheet", "Due Thu 17 Sep, 21:00")
     assert week.minutes_left_today(3, 16 * 60) == 45
 
 

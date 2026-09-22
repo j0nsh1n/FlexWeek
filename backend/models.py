@@ -31,21 +31,55 @@ SPOTIFY_SHARE = re.compile(
 )
 # Naive local stamp: date, T, hour:minute. No seconds, no timezone, any minute.
 NAIVE_STAMP = re.compile(r"(\d{4}-\d{2}-\d{2})T((?:[01]\d|2[0-3]):[0-5]\d)\Z")
+NAIVE_DATE = re.compile(r"(\d{4}-\d{2}-\d{2})\Z")
+# Date-only due, and the old default T23:59, mean the end of that calendar day.
+END_OF_DAY_MIN = 24 * 60
+END_OF_DAY_CLOCK = "23:59"
+
+
+def _iso_day(text: str) -> date:
+    day = date.fromisoformat(text)
+    if not FIRST_DAY <= day <= LAST_DAY:
+        raise ValueError("date must be between 2000-01-01 and 2099-12-31")
+    return day
 
 
 def parse_naive_stamp(value: str) -> tuple[date, int]:
     match = NAIVE_STAMP.fullmatch(value)
     if not match:
         raise ValueError("must be YYYY-MM-DDTHH:MM with no seconds or timezone")
-    day = date.fromisoformat(match.group(1))
-    if not FIRST_DAY <= day <= LAST_DAY:
-        raise ValueError("date must be between 2000-01-01 and 2099-12-31")
     hour, minute = map(int, match.group(2).split(":"))
+    return _iso_day(match.group(1)), hour * 60 + minute
+
+
+def parse_due(value: str) -> tuple[date, int]:
+    """The due day, and the minute work must end by. Date-only and 23:59 are the end of that day."""
+    if NAIVE_DATE.fullmatch(value):
+        return _iso_day(value), END_OF_DAY_MIN
+    match = NAIVE_STAMP.fullmatch(value)
+    if not match:
+        raise ValueError("must be YYYY-MM-DD or YYYY-MM-DDTHH:MM with no seconds or timezone")
+    day = _iso_day(match.group(1))
+    clock = match.group(2)
+    if clock == END_OF_DAY_CLOCK:
+        return day, END_OF_DAY_MIN
+    hour, minute = map(int, clock.split(":"))
     return day, hour * 60 + minute
+
+
+def due_is_timed(value: str) -> bool:
+    """True when the due stamp names a clock other than the old end-of-day 23:59."""
+    match = NAIVE_STAMP.fullmatch(value)
+    return match is not None and match.group(2) != END_OF_DAY_CLOCK
 
 
 def valid_naive_stamp(value: str) -> str:
     parse_naive_stamp(value)
+    return value
+
+
+def valid_due(value: str) -> str:
+    parse_due(value)
     return value
 
 
@@ -226,7 +260,7 @@ class AssignmentContent(BaseModel):
     )
 
     _spotify_url = field_validator("spotify_url")(valid_spotify_url)
-    _due = field_validator("due")(valid_naive_stamp)
+    _due = field_validator("due")(valid_due)
 
     @field_validator("completed_at")
     @classmethod

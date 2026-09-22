@@ -91,8 +91,8 @@ def test_late_at_night_the_big_tile_says_the_day_is_done(qapp: QApplication) -> 
 def test_deadlines_come_most_squeezed_first_in_the_solvers_words(qapp: QApplication) -> None:
     view = shown(qapp)
     assert [view.findChild(QPushButton, f"bentoDeadline{index}").text() for index in range(2)] == [
-        "Chem-1\nThu 23:59 · Cutting it close",
-        "Essay-1\nFri 21:00 · Tight",
+        "Chem-1\nThu 17 Sep · Cutting it close",
+        "Essay-1\nFri 18 Sep, 21:00 · Tight",
     ]
 
 

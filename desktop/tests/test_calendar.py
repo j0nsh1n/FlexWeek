@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from backend.slots import DAY_END_MIN
 from desktop.native.calendar import (
     apply_block_edit,
     apply_block_times,
@@ -19,6 +20,7 @@ from desktop.native.calendar import (
     split_occurrence,
     sunday_due,
 )
+from desktop.native.reuse import due_point
 
 
 def test_snap_minute_rounds_to_fifteen_and_clamps_to_the_grid() -> None:
@@ -172,3 +174,26 @@ def test_a_time_on_another_block_is_allowed_and_named_but_not_outside_the_day_or
         "That ends after it is due, so it stayed where it was."
     )
     assert span_problem(blocks, "essay", 3, 18 * 60, 19 * 60 + 30, (3, 19 * 60 + 30)) is None
+
+
+def test_due_point_and_span_problem_cover_date_only_and_timed_dues() -> None:
+    week = "2026-09-14"
+    date_only = due_point("2026-09-15", week)
+    legacy = due_point("2026-09-15T23:59", week)
+    timed = due_point("2026-09-15T09:00", week)
+    assert date_only == (1, 24 * 60)
+    assert legacy == (1, 24 * 60)
+    assert timed == (1, 9 * 60)
+    assert due_day_in_week("2026-09-15", week) == 1
+    end_of_day = 23 * 60 + 45
+    after_due = "That ends after it is due, so it stayed where it was."
+    assert not ((1, end_of_day) > date_only)
+    assert not ((1, end_of_day) > legacy)
+    late = span_problem([], "essay", 1, 23 * 60, end_of_day, date_only)
+    assert late != after_due
+    if end_of_day <= DAY_END_MIN:
+        assert late is None
+    assert span_problem([], "essay", 1, DAY_END_MIN - 60, DAY_END_MIN, date_only) is None
+    assert span_problem([], "essay", 1, DAY_END_MIN - 60, DAY_END_MIN, legacy) is None
+    assert span_problem([], "essay", 1, 9 * 60, 9 * 60 + 15, timed) == after_due
+    assert span_problem([], "essay", 1, 8 * 60, 9 * 60, timed) is None

@@ -557,7 +557,7 @@ class DayAgenda(QWidget):
             item.setSizeHint(QSize(0, max(28, min(160, duration // 3))))
             self.list.addItem(item)
         for item in agenda["due_soon"]:
-            # A student reads "Thu 23:59", not "2026-09-17T23:59". due_label is what every other
+            # A student reads "Thu 17 Sep", not "2026-09-17T23:59". due_label is what every other
             # surface in the app already uses.
             row = self._row(
                 f"{item['title']} · due {due_label(item.get('due'), week_start)}",
@@ -1990,7 +1990,7 @@ class SpreadDialog(QDialog):
         self.setObjectName("spreadDialog")
         self.setWindowTitle("Spread " + assignment["title"])
         layout = QVBoxLayout(self)
-        # The same vocabulary as every other surface: "1 h 30 min total · due Thu 23:59".
+        # The same vocabulary as every other surface: "1 h 30 min total · due Thu 17 Sep".
         due = due_label(assignment.get("due"), monday_of(from_date))
         total = length_label(int(assignment.get("estimate_min") or 0))
         layout.addWidget(QLabel(f"{total} total · due {due}"))

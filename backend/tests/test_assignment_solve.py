@@ -119,13 +119,13 @@ def test_next_tuesday_due_places_sunday_this_week_and_monday_next_week(alice: Te
     assert sun["placed"][0]["start"] == "06:00"
     assert sun["unplaced"] == []
     slack = next(item for item in sun["explanations"] if item.get("slack_min") is not None)
-    assert slack["slack_min"] == 3899
+    assert slack["slack_min"] == 3900
     assert slack["slack_status"] == "ok"
     assert [block["id"] for block in mon["placed"]] == ["mon"]
     assert mon["placed"][0]["days"] == [0]
     assert mon["placed"][0]["start"] == "06:00"
     next_slack = next(item for item in mon["explanations"] if item.get("slack_min") is not None)
-    assert next_slack["slack_min"] == 2459
+    assert next_slack["slack_min"] == 2460
 
 
 def test_sunday_2359_allows_a_session_that_ends_at_the_grid_end(alice: TestClient) -> None:
@@ -137,7 +137,7 @@ def test_sunday_2359_allows_a_session_that_ends_at_the_grid_end(alice: TestClien
     assert body["placed"][0]["start"] == "22:00"
     assert body["complete"] is True
     slack = next(item for item in body["explanations"] if item.get("slack_min") is not None)
-    assert slack["slack_min"] == 59
+    assert slack["slack_min"] == 60
 
 
 def test_monday_0000_next_week_has_no_in_week_bound(alice: TestClient) -> None:
@@ -182,3 +182,33 @@ def test_finished_assignment_keeps_completed_slots_and_drops_open_sessions(alice
     assert skipped["placed"] == []
     assert skipped["unplaced"] == []
     assert skipped["complete"] is True
+
+
+def test_date_only_due_saves_loads_and_bounds_the_solver_at_the_end_of_that_day(alice: TestClient) -> None:
+    put_assignment(alice, assignment(due="2026-09-13"))
+    listed = alice.get(f"/api/assignments?week_start={WEEK_ONE}")
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["assignments"][0]["due"] == "2026-09-13"
+    response = solve(alice, [session("sun", days=[6], earliest="Sunday 22:00")], WEEK_ONE)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [block["id"] for block in body["placed"]] == ["sun"]
+    assert body["placed"][0]["start"] == "22:00"
+    assert body["complete"] is True
+    slack = next(item for item in body["explanations"] if item.get("slack_min") is not None)
+    assert slack["slack_min"] == 60
+
+
+def test_a_due_time_bounds_the_solver_at_that_minute(alice: TestClient) -> None:
+    put_assignment(alice, assignment(due="2026-09-07T09:00"))
+    late = solve(alice, [session("mon", days=[0], earliest="Monday 09:00")], WEEK_ONE)
+    assert late.status_code == 200, late.text
+    missed = late.json()
+    assert [block["id"] for block in missed["unplaced"]] == ["mon"]
+    assert {move["reason"] for move in missed["moves"]} == {"DEADLINE_MISS"}
+    on_time = solve(alice, [session("mon", days=[0], earliest="Monday 08:00")], WEEK_ONE)
+    assert on_time.status_code == 200, on_time.text
+    placed = on_time.json()
+    assert [block["id"] for block in placed["placed"]] == ["mon"]
+    assert placed["placed"][0]["start"] == "08:00"
+    assert placed["complete"] is True

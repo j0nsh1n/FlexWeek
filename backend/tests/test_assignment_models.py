@@ -59,6 +59,11 @@ def test_assignment_rejects_unknown_fields() -> None:
         Assignment.model_validate(assignment(planned_min=30))
 
 
+def test_assignment_due_accepts_a_date_without_a_time() -> None:
+    saved = Assignment.model_validate(assignment(due="2026-09-15"))
+    assert saved.due == "2026-09-15"
+
+
 def test_assignment_due_rejects_seconds_timezone_and_out_of_range_dates() -> None:
     for due in (
         "2026-09-15T23:59:00",
@@ -68,13 +73,16 @@ def test_assignment_due_rejects_seconds_timezone_and_out_of_range_dates() -> Non
         "1999-12-31T23:59",
         "2100-01-01T00:00",
         "20260915T23:59",
+        "2026-09-15T",
+        "2026-09-15 09:00",
+        "15-09-2026",
     ):
         with pytest.raises(ValidationError):
             Assignment.model_validate(assignment(due=due))
 
 
 def test_assignment_due_accepts_times_off_the_15_minute_grid() -> None:
-    for due in ("2026-09-15T23:59", "2026-09-14T00:00", "2026-09-08T05:01"):
+    for due in ("2026-09-15T23:59", "2026-09-14T00:00", "2026-09-08T05:01", "2026-09-15"):
         assert Assignment.model_validate(assignment(due=due)).due == due
 
 
@@ -176,3 +184,20 @@ def test_a_real_share_link_still_passes() -> None:
 
     assert valid_spotify_url("https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT")
     assert valid_spotify_url("https://open.spotify.com/track/abc?si=xyz")
+
+
+def test_parse_due_treats_a_date_and_2359_as_the_end_of_that_day() -> None:
+    from datetime import date
+
+    from backend.assignments import due_placement_bound, due_slack_point
+    from backend.models import END_OF_DAY_MIN, parse_due
+
+    tuesday = date(2026, 9, 15)
+    assert parse_due("2026-09-15") == (tuesday, END_OF_DAY_MIN)
+    assert parse_due("2026-09-15T23:59") == (tuesday, END_OF_DAY_MIN)
+    assert parse_due("2026-09-15T09:00") == (tuesday, 9 * 60)
+    week = "2026-09-14"
+    assert due_placement_bound(week, "2026-09-15") == (1, END_OF_DAY_MIN)
+    assert due_placement_bound(week, "2026-09-15T23:59") == (1, END_OF_DAY_MIN)
+    assert due_placement_bound(week, "2026-09-15T09:00") == (1, 9 * 60)
+    assert due_slack_point(week, "2026-09-15") == due_slack_point(week, "2026-09-15T23:59")
