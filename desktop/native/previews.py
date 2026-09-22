@@ -13,7 +13,8 @@ from PySide6.QtGui import QGuiApplication, QPalette, QPixmap
 from PySide6.QtWidgets import QWidget
 
 from desktop.native.calendar import monday_of
-from desktop.native.canvas import WeekCanvas
+from desktop.native.hours.classic import ClassicWeek
+from desktop.native.hours.hand import Hand, Verdict
 from desktop.native.layouts.base import Scene
 from desktop.native.layouts.registry import options_for, tokens_for
 from desktop.native.layouts.views import VIEW_CLASSES
@@ -24,10 +25,6 @@ from desktop.native.weekmodel import build_week
 CANVAS = QSize(1040, 650)
 # Wednesday at ten past four: school is over, and there is homework to do and more due.
 SAMPLE_DAY, SAMPLE_MINUTE = 2, 16 * 60 + 10
-# The end of school, Soccer and the evening's homework, rather than a morning of one long block.
-SAMPLE_FIRST_MINUTE = 13 * 60 + 30
-# Hours shorter than in use, so one picture holds an afternoon and an evening.
-SAMPLE_HOUR_PX = 64
 
 
 def _block(
@@ -117,14 +114,12 @@ def render(main: str, colour: str | None, pack: str, look: dict | None, width: i
         )
         widget: QWidget = view
     else:
-        widget = WeekCanvas()
-        widget.body.set_hour_px(SAMPLE_HOUR_PX)
+        # Today's app's week fits the whole day, as it does in use. A picture takes no gestures, so
+        # its hand never judges anything.
+        widget = ClassicWeek(Hand(lambda block_id, from_day, span: Verdict(False, ""), QWidget()))
         widget.set_look(look, palette)
-        widget.set_week(monday, blocks)
+        widget.set_week(build_week(monday, blocks, homework, None), SAMPLE_DAY, SAMPLE_MINUTE)
     _settle(widget)
-    table = widget.findChild(WeekCanvas) if not isinstance(widget, WeekCanvas) else widget
-    if table is not None:
-        table.scroll.verticalScrollBar().setValue(int(table.body.y_of(SAMPLE_FIRST_MINUTE)))
     picture = widget.grab()
     widget.close()
     widget.deleteLater()

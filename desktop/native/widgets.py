@@ -230,6 +230,8 @@ class Toast(QLabel):
         super().__init__(parent)
         self._top = top
         self.setObjectName("toast")
+        # A notice never stands between the pointer and what is under it, hours included.
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.setWordWrap(True)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)

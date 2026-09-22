@@ -220,6 +220,15 @@ class LayoutView(QWidget):
         if again is not None:
             again.setFocus()
 
+    def hold(self, holding: bool) -> None:
+        """While the pointer holds something, a new scene waits: a re-render would delete what the
+        press started on. Letting go shows the last scene that arrived."""
+        self._dragging = holding
+        if not holding:
+            held, self._held = self._held, None
+            if held is not None:
+                self.show_week(held)
+
     def drag_began(self, block_id: str = "", from_day: int = -1) -> None:
         self._dragging = True
         if self.uses_drawer:

@@ -598,6 +598,10 @@ def child_main(args: argparse.Namespace) -> int:
                 finished.append(True)
                 app.quit()
                 return
+            except Exception:  # noqa: BLE001 - the rig reports and stops rather than hanging
+                traceback.print_exc()
+                app.quit()
+                return
             if command[0] == "wait":
                 QTimer.singleShot(command[1], advance)
             elif command[0] == "until":

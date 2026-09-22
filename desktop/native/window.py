@@ -47,7 +47,6 @@ from desktop.native.calendar import (
     CATEGORIES,
     DAY_FULL,
     FLEX_CATEGORIES,
-    agenda_for,
     date_for_day,
     is_series,
     monday_of,
@@ -55,10 +54,14 @@ from desktop.native.calendar import (
     span_problem,
     sunday_due,
 )
-from desktop.native.canvas import WeekCanvas, span_words
 from desktop.native.client import PASSWORD_LENGTH_HINT, USERNAME_ERROR, USERNAME_HINT
 from desktop.native.controller import NativeSession
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
+from desktop.native.hours.chips import TrayChip
+from desktop.native.hours.classic import ClassicDay, ClassicWeek
+from desktop.native.hours.geometry import Span
+from desktop.native.hours.hand import Create, Hand, Move, MoveDate, Place, span_words
+from desktop.native.hours.hand import Verdict as HandVerdict
 from desktop.native.kept import KeptSession
 from desktop.native.layouts.base import LayoutView, Scene
 from desktop.native.layouts.drag import Verdict
@@ -107,7 +110,6 @@ from desktop.native.widgets import (
     AvailabilityDialog,
     BlockDialog,
     ChooseTimeDialog,
-    DayAgenda,
     FittedLabel,
     FlowLayout,
     HomeworkDialog,
@@ -119,7 +121,6 @@ from desktop.native.widgets import (
     SpreadDialog,
     Toast,
     UnfinishedPanel,
-    WaitingChip,
     add_heading,
     control_art,
     swatch,
@@ -736,31 +737,25 @@ class NativeWindow(QMainWindow):
         layout.addWidget(self.alert_strip)
         self.planner = QStackedWidget()
         self.planner.setObjectName("plannerStack")
-        # Today's app's week: Daily Scheduler's painted timeline, a column for each day.
-        self.week_table = WeekCanvas()
-        hours = self.week_table.body
-        hours.block_activated.connect(self._edit_block)
-        hours.block_selected.connect(self.session.select_block)
-        hours.range_created.connect(self._create_range)
-        hours.moved.connect(self._move_block)
-        hours.dropped.connect(self._drop_block)
-        hours.refused.connect(self.session._say)
-        hours.judge = self._judge_span
-        hours.minutes_of = self._minutes_of
-        hours.title_of = self._title_of
+        # One pointer for every gesture on every surface: it follows a drag and reports one change.
+        self.hand = Hand(self._hand_judge, self)
+        self.hand.committed.connect(self._apply_change)
+        self.hand.refused.connect(self.session._say)
+        self.hand.opened.connect(self._edit_block)
+        self.hand.selected.connect(self.session.select_block)
+        self.hand.active_changed.connect(self._hold_renders)
+        # Today's app, as Daily Scheduler draws it: a Week that fits and a full-width Day.
+        self.week_table = ClassicWeek(self.hand)
+        self.week_table.day_opened.connect(self._open_week_day)
         self.planner.addWidget(self.week_table)
-        self.day_agenda = DayAgenda()
-        self.day_agenda.item_activated.connect(self._edit_block)
-        self.day_agenda.homework_activated.connect(self._edit_homework)
-        self.day_agenda.plan_requested.connect(self.session.solve)
-        self.day_agenda.add_requested.connect(self._add_homework)
-        self.planner.addWidget(self.day_agenda)
+        self.day_view = ClassicDay(self.hand)
+        self.planner.addWidget(self.day_view)
         self.month_grid = MonthGrid()
         self.month_grid.day_activated.connect(self.session.open_day)
         self.planner.addWidget(self.month_grid)
         for widget in (
-            self.week_table,
-            self.day_agenda.list,
+            self.week_table.hours,
+            self.day_view.hours,
             self.month_grid.table,
             self.focus_panel.tasks,
         ):
@@ -814,7 +809,7 @@ class NativeWindow(QMainWindow):
         main = self._layout["main"]
         if main in VIEW_CLASSES and view in {"week", "day", "month"}:
             return self._layout_view(main)
-        return {"day": self.day_agenda, "month": self.month_grid}.get(view, self.week_table)
+        return {"day": self.day_view, "month": self.month_grid}.get(view, self.week_table)
 
     def _layout_view(self, layout_id: str) -> LayoutView:
         view = self._views.get(layout_id)
@@ -895,9 +890,11 @@ class NativeWindow(QMainWindow):
         shown = self.planner.currentWidget()
         if isinstance(shown, LayoutView) and self.session.account is not None:
             shown.show_week(self._scene_for(shown.layout_id))
-        elif shown is self.week_table and self.session.account is not None:
+        elif shown in (self.week_table, self.day_view) and self.session.account is not None:
             # The line that says now moves with the minute.
-            self.week_table.set_clock(self.session.week_start, self.session.now_ms())
+            today, minute = self._clock_in_week()
+            for hours in (self.week_table.hours, self.day_view.hours):
+                hours.set_clock(today, minute)
 
     def _sync_chrome(self) -> None:
         """Planning chips and the clipboard line step aside for a design of its own. Plan my
@@ -1136,17 +1133,7 @@ class NativeWindow(QMainWindow):
             return
         self._honour_preferred_view()
         self._check_updates(asked=False)
-        self.week_table.set_week(self.session.week_start, self.session.blocks, self.session.trace)
-        self.week_table.reveal(self.session.week_start, self.session.now_ms())
-        agenda = agenda_for(
-            self.session.week_start,
-            self.session.selected_day,
-            self.session.blocks,
-            self.session.assignments,
-            self.session.trace,
-            self.session.day_data,
-        )
-        self.day_agenda.set_agenda(self.session.selected_day, agenda, self.session.day_data)
+        self._fill_classic()
         placed = [
             (
                 date_for_day(self.session.week_start, int(day)),
@@ -1477,7 +1464,10 @@ class NativeWindow(QMainWindow):
             button.setIcon(QIcon(swatch(info["mark"])))
 
     def _sync_classic_waiting(self) -> None:
-        """Today's app week grid cannot show homework with no start. List it above the calendar."""
+        """Today's app's Week shows homework with no start above the hours, to drag onto them."""
+        if self.hand.busy:
+            # Rebuilding would delete the chip the pointer is holding. The release refreshes.
+            return
         row = self.classic_waiting_row
         while row.count():
             item = row.takeAt(0)
@@ -1506,12 +1496,63 @@ class NativeWindow(QMainWindow):
         kicker.setObjectName("classicWaitingLabel")
         row.addWidget(kicker)
         for index, item in enumerate(waiting):
-            made = WaitingChip(item.title, item.block_id)
+            made = TrayChip(self.hand, item)
             made.setObjectName(f"classicWaiting{index}")
-            made.setCursor(Qt.CursorShape.PointingHandCursor)
             made.clicked.connect(lambda _=False, key=item.block_id: self._edit_block(key))
             row.addWidget(made)
         row.addStretch(1)
+
+    def _clock_in_week(self) -> tuple[int | None, int | None]:
+        """Today's weekday and minute when the open week is this week, else nothing to mark."""
+        moment = datetime.fromtimestamp(self.session.now_ms() / 1000.0)
+        if monday_of(moment.date().isoformat()) != self.session.week_start:
+            return None, None
+        return moment.weekday(), moment.hour * 60 + moment.minute
+
+    def _fill_classic(self) -> None:
+        """Today's app's Day and Week from the open week. Held while the pointer holds something."""
+        if self.hand.busy:
+            return
+        week = build_week(
+            self.session.week_start, self.session.blocks, self.session.assignments, self.session.trace
+        )
+        today, minute = self._clock_in_week()
+        self.week_table.set_week(week, today, minute)
+        self.day_view.set_day(week, date.fromisoformat(self.session.selected_day).weekday(), today, minute)
+
+    def _open_week_day(self, day: int) -> None:
+        self.session.open_day(date_for_day(self.session.week_start, day))
+
+    def _hand_judge(self, block_id: str, from_day: int, span) -> HandVerdict:
+        verdict = self._judge_span(block_id, from_day, span.day, span.start, span.end)
+        return HandVerdict(verdict.ok, verdict.words)
+
+    def _apply_change(self, change: object) -> None:
+        """What the pointer did, turned into the change the week keeps."""
+        if isinstance(change, Move):
+            span = change.span
+            self._move_block(change.block_id, change.from_day, span.day, span.start, span.end)
+        elif isinstance(change, Place):
+            span = change.span
+            self._move_block(change.block_id, -1, span.day, span.start, span.end)
+        elif isinstance(change, Create):
+            span = change.span
+            # After the release has been handled: Add is a dialog with its own event loop.
+            QTimer.singleShot(0, lambda: self._create_range(span.day, span.start, span.end))
+        elif isinstance(change, MoveDate):
+            self.session._say("Moving between dates comes with the new Month.")
+
+    def _hold_renders(self, holding: bool) -> None:
+        """Nothing a drag started on is rebuilt while the pointer holds it."""
+        for view in self._views.values():
+            view.hold(holding)
+        if not holding:
+            QTimer.singleShot(0, self._refresh_after_hold)
+
+    def _refresh_after_hold(self) -> None:
+        if self.session.account is not None and not self.hand.busy:
+            self._fill_classic()
+            self._sync_classic_waiting()
 
     def _set_notice(self, text: str, button: str, callback) -> None:
         self.action_notice_text.setText(text)
@@ -1632,7 +1673,7 @@ class NativeWindow(QMainWindow):
             return Verdict(False, problem, start, end)
         clash = span_clash(self.session.blocks, block_id, day, start, end)
         return Verdict(
-            True, span_words(day, start, end) + (f" · beside {clash}" if clash else ""), start, end
+            True, span_words(Span(day, start, end)) + (f" · beside {clash}" if clash else ""), start, end
         )
 
     def _minutes_of(self, block_id: str) -> int:
@@ -2302,6 +2343,7 @@ class NativeWindow(QMainWindow):
             # Day, Month and the week grid are dressed by the same design as the main view, so moving
             # between them is moving around one app rather than between two.
             self.week_table.set_look(self._look, design)
+            self.day_view.set_look(self._look, design)
             self.month_grid.set_palette(design)
             self.add_menu.set_palette(design, chips)
         self._sync_add_button()

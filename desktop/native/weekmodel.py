@@ -77,6 +77,8 @@ class Occurrence:
     assignment_id: str | None
     due: str | None
     slack: str | None
+    # Put there by hand: no plan moves it.
+    pinned: bool = False
 
     @property
     def minutes(self) -> int:
@@ -240,6 +242,7 @@ def build_week(
                     assignment_id=original.get("assignment_id"),
                     due=assignment.get("due"),
                     slack=note.get("slack_status"),
+                    pinned=bool(block.get("pinned")),
                 )
             )
     occurrences.sort(key=lambda item: (item.day, item.start, item.block_id))

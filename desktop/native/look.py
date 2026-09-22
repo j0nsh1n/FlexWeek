@@ -792,8 +792,15 @@ def pack_stylesheet(
         f"QHeaderView, QStackedWidget {{ background: transparent; border: none; "
         f"padding: 0; border-radius: 0; }}"
         # The week's hours paint their own background; as a frame the scroll area boxed them twice.
-        f"QScrollArea#weekScroll, QScrollArea#dropScroll {{ background: transparent; border: none; "
-        f"padding: 0; border-radius: 0; }}"
+        f"QScrollArea#weekScroll, QScrollArea#dropScroll, QScrollArea#dayScroll {{ background: transparent; "
+        f"border: none; padding: 0; border-radius: 0; }}"
+        # Today's app's Day: the day's hours, then what still needs a time and a summary beside them.
+        f"QFrame#daySide {{ background: {palette['panel']}; border-radius: 0; border: none; "
+        f"border-left: 1px solid {palette['hairline']}; }}"
+        f"QLabel#dayWaitingLabel, QLabel#daySummaryLabel {{ color: {palette['accent']}; font-weight: 800; "
+        f"font-size: {max(size - 1, 7)}pt; }}"
+        f"QLabel#daySummaryLabel {{ margin-top: 10px; }}"
+        f"QLabel#dayWaitingHint {{ color: {palette['muted']}; font-size: {max(size - 1, 7)}pt; }}"
         f"QHeaderView::section, QTableCornerButton::section {{ background: {palette['panel']}; "
         f"color: {palette['muted']}; padding: 2px 6px; border: none; }}"
         # QLabel is a QFrame in Qt, so without this every label, even an empty one, is drawn as a panel.
@@ -801,6 +808,10 @@ def pack_stylesheet(
         f"QPushButton {{ background: {palette['accent']}; color: {palette['accent_ink']}; "
         f"padding: {pad}px {pad * 2}px; border-radius: {radius}px; {edges}{button_min} }}"
         f"QPushButton:disabled {{ background: {palette['hairline_strong']}; color: {palette['muted']}; }}"
+        # Homework that still needs a time, to be dragged onto the hours: it looks like homework, not
+        # like a button that does something when pressed.
+        f"QPushButton[tray=\"true\"] {{ background: {palette['panel']}; color: {palette['text']}; "
+        f"border: 1px solid {palette['hairline']}; border-left: 4px solid #ef4444; text-align: left; }}"
         f"QMenu::item {{ min-height: {item_h}px; padding: {pad}px {pad * 2}px; }}"
         f"QLabel#nowNext {{ font-weight: 600; }}"
         f"QLabel#focusTask {{ font-weight: 600; }}"
