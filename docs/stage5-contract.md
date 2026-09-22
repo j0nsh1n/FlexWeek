@@ -143,3 +143,20 @@ Authenticated GET `/api/reminder-limits`:
 - Preset ids and reminder-limit sentences match this file.
 - Unauthenticated GET of the new routes is 401.
 - `.venv/bin/python scripts/verify.py --web-only` from this worktree.
+
+## Addendum 2026-09-22: alarm sound, planning style and setup progress
+
+Three preferences join `comfort_json`. Each is omitted from `GET /api/preferences`
+while it holds its default, so older clients read an account unchanged.
+
+- `alarm_tone` is one of `chime`, `soft`, `bright`, `low`, `glass`, or `spotify`,
+  default `chime`. It is the sound for reminders, the end of a focus session, and
+  a new alarm. `spotify` opens `default_spotify_url` when the alert fires.
+- `planning_style` is one of `auto`, `suggest`, or `manual`, default `suggest`.
+  `auto` gives new homework a time as it is added. `suggest` is the behaviour
+  before this addendum, where homework waits until Plan my homework. `manual`
+  leaves homework waiting for the student to drag it onto the calendar.
+- `setup` is `{version, step, finished_at}` or absent. `version` is 1 to 100,
+  `step` is 0 to 20, and `finished_at` is `YYYY-MM-DDTHH:MM` or null. A finished or
+  skipped setup sets `finished_at`, and the desktop never shows setup again unless
+  the student asks.

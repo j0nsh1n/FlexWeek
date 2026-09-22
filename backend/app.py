@@ -583,6 +583,22 @@ class AlarmPreference(BaseModel):
     _spotify_url = field_validator("spotify_url")(valid_spotify_url)
 
 
+class SetupProgress(BaseModel):
+    """Where first-run setup stands, so a skip or a finish is remembered and a quit resumes."""
+
+    model_config = ConfigDict(extra="forbid")
+    version: int = Field(ge=1, le=100)
+    step: int = Field(default=0, ge=0, le=20)
+    finished_at: str | None = Field(default=None, max_length=32)
+
+    @field_validator("finished_at")
+    @classmethod
+    def finished_at_is_a_timestamp(cls, value: str | None) -> str | None:
+        if value is not None and not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?", value):
+            raise ValueError("finished_at must be YYYY-MM-DDTHH:MM")
+        return value
+
+
 class Preferences(BaseModel):
     model_config = ConfigDict(extra="forbid")
     # "system" follows the device light/dark setting; slate is Light and nocturne is Dark.
@@ -624,6 +640,16 @@ class Preferences(BaseModel):
     motion: Literal["off", "normal", "extra"] | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    # One sound for reminders, the end of a focus session and new alarms. "spotify" plays
+    # default_spotify_url instead.
+    alarm_tone: Literal["chime", "soft", "bright", "low", "glass", "spotify"] = Field(
+        default="chime", exclude_if=lambda value: value == "chime"
+    )
+    # How homework gets a time: as it is added, when Plan my homework is pressed, or by dragging.
+    planning_style: Literal["auto", "suggest", "manual"] = Field(
+        default="suggest", exclude_if=lambda value: value == "suggest"
+    )
+    setup: SetupProgress | None = Field(default=None, exclude_if=lambda value: value is None)
 
     _spotify_url = field_validator("default_spotify_url")(valid_spotify_url)
 
@@ -850,6 +876,9 @@ def encode_comfort(preferences: Preferences) -> str:
             "accent": preferences.accent,
             "accent_chips": preferences.accent_chips,
             "motion": preferences.motion,
+            "alarm_tone": preferences.alarm_tone,
+            "planning_style": preferences.planning_style,
+            "setup": preferences.setup.model_dump() if preferences.setup is not None else None,
         },
         separators=(",", ":"),
     )
@@ -885,6 +914,9 @@ def preferences_from_row(row: sqlite3.Row) -> dict:
         accent=comfort.get("accent", "default"),
         accent_chips=bool(comfort.get("accent_chips", False)),
         motion=comfort.get("motion"),
+        alarm_tone=comfort.get("alarm_tone", "chime"),
+        planning_style=comfort.get("planning_style", "suggest"),
+        setup=comfort.get("setup"),
     ).model_dump()
 
 
