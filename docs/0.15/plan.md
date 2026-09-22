@@ -20,8 +20,9 @@ app was broken in use.
 3. The day is the full 24 hours, 00:00 to 24:00. (22 September, replaces 06:00 to 23:00.)
 4. Hours scroll, and the student can zoom. No surface has to fit a whole day on screen.
    (22 September, replaces "Today's app Week fits without scrolling".)
-5. The planner places homework only inside work windows the student sets. It never invents a time
-   outside them. Placing a block by hand at any hour is always allowed. (22 September.)
+5. The planner places homework only inside work windows the student sets. Until they set any, the
+   whole day is open, 00:00 to 23:59. Setup asks them when they work, and Settings can change it
+   later. Placing a block by hand at any hour is always allowed. (22 September.)
 6. A homework's due date is required; its due time is optional, for work due at a set time that day.
    (22 September, replaces the mandatory 23:59.)
 7. Time snaps to 15 minutes.
@@ -79,6 +80,8 @@ storage, CI). Each unit ends green on the rig, on the source gate, and with its 
    keep working. Owner: Grok for backend and solver, Claude for the surfaces.
 3. **Zoom and scrolling on hours.** Pixels per hour per surface, a zoom control, a remembered level,
    and the reach checks at each level. Owner: Claude.
+3b. **Work windows in setup and Settings.** The screens that let a student say when they work.
+   Owner: ChatGPT. Brief: `handoffs/chatgpt-work-windows-ui.md`.
 4. **Optional due times.** Due date required, due time optional, through the model, the API, the
    planner, the judge, the dialogs and the words shown. Owner: Grok for model and API, Claude for
    the dialogs.
