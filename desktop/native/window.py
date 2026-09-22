@@ -103,6 +103,7 @@ from desktop.native.widgets import (
     AlertStrip,
     AvailabilityDialog,
     BlockDialog,
+    ChooseTimeDialog,
     DayAgenda,
     FittedLabel,
     FlowLayout,
@@ -115,6 +116,7 @@ from desktop.native.widgets import (
     SpreadDialog,
     Toast,
     UnfinishedPanel,
+    WaitingChip,
     WeekTable,
     add_heading,
     control_art,
@@ -725,6 +727,7 @@ class NativeWindow(QMainWindow):
         self.week_table.range_created.connect(self._create_range)
         self.week_table.times_changed.connect(self._apply_times)
         self.week_table.move_refused.connect(self.session._say)
+        self.week_table.session_dropped.connect(self._place_dropped)
         self.week_table.due_point = self._due_point
         self.week_table.series_drag_refused.connect(self._refuse_series)
         self.week_table.block_selected.connect(self.session.select_block)
@@ -1312,6 +1315,13 @@ class NativeWindow(QMainWindow):
         if dialog.spread_requested():
             self._open_spread(dialog.assignment()["id"])
             return
+        if dialog.requested() == "choose":
+            self._choose_time(dialog.assignment()["id"])
+            return
+        if dialog.requested() == "unpin":
+            if self.session.unpin_assignment(dialog.assignment()["id"]):
+                self.session.save()
+            return
         body = dialog.assignment()
         known = self.session.assignments.get(body.get("id") or "")
         self.session.add_homework(body, days=days)
@@ -1381,7 +1391,7 @@ class NativeWindow(QMainWindow):
         kicker.setObjectName("classicWaitingLabel")
         row.addWidget(kicker)
         for index, item in enumerate(waiting):
-            made = QPushButton(item.title)
+            made = WaitingChip(item.title, item.block_id)
             made.setObjectName(f"classicWaiting{index}")
             made.setCursor(Qt.CursorShape.PointingHandCursor)
             made.clicked.connect(lambda _=False, key=item.block_id: self._edit_block(key))
@@ -1489,7 +1499,36 @@ class NativeWindow(QMainWindow):
         assignment = self.session.assignments.get(assignment_id)
         if assignment is None:
             return
-        self._commit_homework(HomeworkDialog(self, assignment, self.session.week_start))
+        sessions = [block for block in self.session.blocks if block.get("assignment_id") == assignment_id]
+        waiting = any(not block.get("start") and not block.get("completed") for block in sessions)
+        pinned = any(block.get("pinned") for block in sessions)
+        dialog = HomeworkDialog(self, assignment, self.session.week_start, waiting=waiting, pinned=pinned)
+        self._commit_homework(dialog)
+
+    def _choose_time(self, assignment_id: str) -> None:
+        """A time for this homework's first session that needs one, picked rather than dragged."""
+        waiting = [
+            item
+            for item in self.session.blocks
+            if item.get("assignment_id") == assignment_id
+            and not item.get("start")
+            and not item.get("completed")
+        ]
+        if not waiting:
+            return
+        block = waiting[0]
+        due = self._due_point(block["id"])
+        days = list(block["days"])
+        dialog = ChooseTimeDialog(self, block, self.session.week_start, days, self.session.blocks, due)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        day, start = dialog.choice()
+        if self.session.place_session(block["id"], day, start):
+            self.session.save()
+
+    def _place_dropped(self, block_id: str, day: int, start_min: int) -> None:
+        if self.session.place_session(block_id, day, start_min):
+            self.session.save()
 
     def _edit_block(self, block_id: str) -> None:
         if self.session.planner_view == "day":

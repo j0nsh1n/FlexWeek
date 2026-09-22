@@ -429,3 +429,28 @@ def next_action_for(
         if unplanned.get(item["id"], 0) > 0:
             return {"kind": "plan", "id": item["id"]}
     return {"kind": "add"}
+
+
+def span_problem(
+    blocks: list[dict],
+    block_id: str,
+    day: int,
+    start_min: int,
+    end_min: int,
+    due: tuple[int, int] | None,
+) -> str | None:
+    """Why a block cannot go at this time, in words, or None. A fixed block there would take the time
+    straight back, and so would a due time before it ends."""
+    if start_min < DAY_START_MIN or end_min > DAY_END_MIN:
+        return "That is outside the hours FlexWeek plans in, so it stayed where it was."
+    for other in blocks:
+        if other["id"] == block_id or other.get("kind") != "locked" or not other.get("start"):
+            continue
+        if day not in (other.get("days") or []) or day in (other.get("missed_days") or []):
+            continue
+        begin = hhmm_to_minutes(other["start"])
+        if start_min < begin + int(other["duration_min"]) and begin < end_min:
+            return f"{other.get('title') or 'A fixed block'} is at that time, so it stayed where it was."
+    if due is not None and (day, end_min) > due:
+        return "That ends after it is due, so it stayed where it was."
+    return None

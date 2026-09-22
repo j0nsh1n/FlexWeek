@@ -11,6 +11,7 @@ from uuid import uuid4
 from PySide6.QtCore import QObject, Signal
 
 from backend.models import Assignment, GridWindow, ProtectedWindow, TimeBlock
+from backend.slots import minutes_to_hhmm
 from backend.weeks import current_week_start
 from desktop.native.calendar import (
     DAY_FULL,
@@ -836,6 +837,34 @@ class NativeSession(QObject):
         if homework and not updated.get("completed"):
             updated["pinned"] = True
         self.add_block(updated)
+        return True
+
+    def place_session(self, block_id: str, day: int, start_min: int) -> bool:
+        """Give homework that needs a time the one the student chose, dragged or picked. It is pinned,
+        so no plan moves it, and it is one Undo step."""
+        block = next((item for item in self.blocks if item["id"] == block_id), None)
+        if block is None or block.get("kind") != "flexible" or block.get("completed"):
+            return False
+        placed = {**block, "start": minutes_to_hhmm(start_min), "days": [day], "pinned": True}
+        self.blocks = [placed if item["id"] == block_id else item for item in self.blocks]
+        self.needs_time.pop(block_id, None)
+        self._touch("placing " + block["title"], keep={block_id})
+        return True
+
+    def unpin_assignment(self, assignment_id: str) -> bool:
+        """Let FlexWeek move this homework's sessions again."""
+        changed = False
+        blocks = []
+        for block in self.blocks:
+            if block.get("assignment_id") == assignment_id and block.get("pinned"):
+                block = {key: value for key, value in block.items() if key != "pinned"}
+                changed = True
+            blocks.append(block)
+        if not changed:
+            return False
+        self.blocks = blocks
+        title = (self.assignments.get(assignment_id) or {}).get("title") or "homework"
+        self._touch("letting FlexWeek move " + title)
         return True
 
     def refuse_series_drag(self, block_id: str) -> None:

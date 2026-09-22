@@ -2138,3 +2138,122 @@ def test_settings_picks_the_alarm_sound_and_new_alarms_start_with_it(qapp: QAppl
     dialog.play_tone.click()
     assert played == ["bright"]
     dialog.close()
+
+
+def _press(dialog: QDialog, name: str) -> int:
+    """What a student does in the homework editor: press one button, which closes it."""
+    dialog.findChild(QPushButton, name).click()
+    return QDialog.DialogCode.Accepted
+
+
+def _waiting_math(qapp: QApplication, window: NativeWindow) -> dict:
+    due = sunday_due(window.session.week_start)
+    window.session.add_homework({"id": "math", "title": "Math worksheet", "due": due, "estimate_min": 60})
+    window.session.save()
+    settled(qapp, window)
+    return next(block for block in window.session.blocks if block.get("assignment_id") == "math")
+
+
+def _drop(qapp: QApplication, window: NativeWindow, block_id: str, hhmm: str, day: int) -> None:
+    from PySide6.QtCore import QByteArray, QMimeData, QPointF
+    from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
+
+    from desktop.native.widgets import SESSION_MIME
+
+    click(window, "viewWeek")
+    table = window.week_table
+    for _ in range(5):
+        qapp.processEvents()
+    row = (int(hhmm[:2]) * 60 + int(hhmm[3:]) - 360) // 15
+    index = table.model().index(row, day)
+    table.scrollTo(index, table.ScrollHint.PositionAtCenter)
+    qapp.processEvents()
+    point = QPointF(table.visualRect(index).center())
+    data = QMimeData()
+    data.setData(SESSION_MIME, QByteArray(block_id.encode()))
+    actions = Qt.DropAction.MoveAction
+    held, keys = Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier
+    # As a real drag does: Qt ignores a move over a widget the drag never entered.
+    QApplication.sendEvent(table.viewport(), QDragEnterEvent(point.toPoint(), actions, data, held, keys))
+    QApplication.sendEvent(table.viewport(), QDragMoveEvent(point.toPoint(), actions, data, held, keys))
+    drop = QDropEvent(point, actions, data, held, keys)
+    QApplication.sendEvent(table.viewport(), drop)
+    qapp.processEvents()
+
+
+def test_homework_dropped_on_the_calendar_gets_that_time_and_keeps_it(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    waiting = _waiting_math(qapp, window)
+    assert not waiting.get("start")
+    _drop(qapp, window, waiting["id"], "16:00", 2)
+    settled(qapp, window)
+    placed = next(block for block in window.session.blocks if block["id"] == waiting["id"])
+    assert (placed["days"], placed["start"], placed.get("pinned")) == ([2], "16:00", True)
+    window.session.undo()
+    settled(qapp, window)
+    back = next(block for block in window.session.blocks if block["id"] == waiting["id"])
+    assert not back.get("start"), "the drop is one Undo step"
+    window.session.redo()
+    settled(qapp, window)
+    window.session.solve(everything=True)
+    settled(qapp, window)
+    replanned = next(block for block in window.session.blocks if block["id"] == waiting["id"])
+    assert (replanned["days"], replanned["start"]) == ([2], "16:00"), "Replan all leaves it where it was put"
+
+
+def test_a_drop_over_school_is_refused_and_still_needs_a_time(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    waiting = _waiting_math(qapp, window)
+    _drop(qapp, window, waiting["id"], "10:00", 1)
+    assert window.session.message == "School is at that time, so it still needs a time."
+    still = next(block for block in window.session.blocks if block["id"] == waiting["id"])
+    assert not still.get("start")
+
+
+def test_choose_a_time_places_homework_without_dragging(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """For the keyboard, and for the designs with no grid to drop on."""
+    from PySide6.QtCore import QTime
+
+    from desktop.native.widgets import ChooseTimeDialog, HomeworkDialog
+
+    waiting = _waiting_math(qapp, window)
+    seen: list[str] = []
+
+    def pick(dialog: ChooseTimeDialog) -> int:
+        dialog.day.setCurrentIndex(dialog.day.findData(1))
+        dialog.start.setTime(QTime(10, 0))
+        seen.append(dialog.problem.text())
+        ok = dialog.buttons.button(dialog.buttons.StandardButton.Ok)
+        seen.append("ok" if ok.isEnabled() else "refused")
+        dialog.start.setTime(QTime(16, 0))
+        return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(ChooseTimeDialog, "exec", pick)
+    monkeypatch.setattr(HomeworkDialog, "exec", lambda dialog: _press(dialog, "homeworkChooseTime"))
+    window._edit_homework("math")
+    settled(qapp, window)
+    assert seen == ["School is at that time.", "refused"]
+    placed = next(block for block in window.session.blocks if block["id"] == waiting["id"])
+    assert (placed["days"], placed["start"], placed.get("pinned")) == ([1], "16:00", True)
+    item = window.week_table.item((16 * 60 - 360) // 15, 1)
+    assert "Pinned" in item.toolTip()
+
+
+def test_let_flexweek_move_it_takes_the_pin_away(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from desktop.native.widgets import HomeworkDialog
+
+    waiting = _waiting_math(qapp, window)
+    assert window.session.place_session(waiting["id"], 2, 17 * 60)
+    window.session.save()
+    settled(qapp, window)
+    monkeypatch.setattr(HomeworkDialog, "exec", lambda dialog: _press(dialog, "homeworkUnpin"))
+    window._edit_homework("math")
+    settled(qapp, window)
+    released = next(block for block in window.session.blocks if block["id"] == waiting["id"])
+    assert released.get("pinned") is None and released["start"] == "17:00"

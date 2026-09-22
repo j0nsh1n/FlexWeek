@@ -10,9 +10,11 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 from PySide6.QtCore import (
+    QByteArray,
     QDate,
     QDateTime,
     QEvent,
+    QMimeData,
     QModelIndex,
     QPersistentModelIndex,
     QPoint,
@@ -27,6 +29,11 @@ from PySide6.QtCore import (
 from PySide6.QtGui import (
     QAction,
     QColor,
+    QDrag,
+    QDragEnterEvent,
+    QDragLeaveEvent,
+    QDragMoveEvent,
+    QDropEvent,
     QIcon,
     QKeyEvent,
     QMouseEvent,
@@ -38,6 +45,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QComboBox,
     QDateEdit,
@@ -96,6 +104,7 @@ from desktop.native.calendar import (
     occupied_intervals,
     resize_bottom_range,
     resize_top_range,
+    span_problem,
 )
 from desktop.native.look import block_paint, resolved_palette
 from desktop.native.motion import appear, vanish
@@ -118,6 +127,8 @@ DETAIL_BOX_HEIGHT = 84
 # homework editor on a laptop screen. It does not claim the content's width either, so that is set.
 HOMEWORK_MIN_WIDTH = 520
 DIALOG_USABLE_HEIGHT = 480
+# What a dragged waiting homework carries: its session id.
+SESSION_MIME = "application/x-flexweek-session"
 # Dates as a student reads them. "2026-09-27 23:59" made them work out which day that was.
 DUE_FORMAT = "ddd d MMM yyyy, HH:mm"
 DATE_FORMAT = "ddd d MMM yyyy"
@@ -383,6 +394,8 @@ class WeekTable(QTableWidget):
     times_changed = Signal(str, int, int, int)
     # Why a drag was not applied, in words for the status line.
     move_refused = Signal(str)
+    # Homework that needs a time, dropped on a day and start minute.
+    session_dropped = Signal(str, int, int)
     series_drag_refused = Signal(str, int)
     block_selected = Signal(str, int)
 
@@ -416,6 +429,9 @@ class WeekTable(QTableWidget):
         self._ghost_colour = ""
         # The (day, minute) a homework session is due in this week, or None. Set by the window.
         self.due_point: Callable[[str], tuple[int, int] | None] = lambda _block_id: None
+        self._drop: tuple[str, int, int, str | None] | None = None
+        self.setAcceptDrops(True)
+        self.viewport().setAcceptDrops(True)
 
     def set_look(self, look: dict | None, palette: dict) -> None:
         """Repaint the week on screen with a new look; the blocks themselves do not change."""
@@ -451,6 +467,8 @@ class WeekTable(QTableWidget):
                     label += " · Missed"
                 if block.get("completed"):
                     label += " · Done"
+                elif block.get("pinned"):
+                    label += " · Pinned"
                 detail = f"{block['start']} · {label}"
                 text = f"{block['title']}\n{detail}"
                 last = min(first + size, SLOTS_PER_DAY) - 1
@@ -660,6 +678,58 @@ class WeekTable(QTableWidget):
                 self.times_changed.emit(gesture["block_id"], gesture["target_day"], start_min, end_min)
         event.accept()
 
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:  # noqa: N802
+        if event.mimeData().hasFormat(SESSION_MIME):
+            event.acceptProposedAction()
+            return
+        super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event: QDragMoveEvent) -> None:  # noqa: N802
+        """Homework dragged in from the waiting list, outlined where it would go."""
+        if not event.mimeData().hasFormat(SESSION_MIME):
+            super().dragMoveEvent(event)
+            return
+        block_id = bytes(event.mimeData().data(SESSION_MIME).data()).decode()
+        block = self._blocks.get(block_id)
+        point = event.position().toPoint()
+        day = self.columnAt(point.x())
+        if block is None or day < 0:
+            self._ghost.hide()
+            self._drop = None
+            event.ignore()
+            return
+        # Near the top or bottom edge, the grid scrolls so any hour of the day can be reached.
+        edge = 28
+        bar = self.verticalScrollBar()
+        if point.y() < edge:
+            bar.setValue(bar.value() - 16)
+        elif point.y() > self.viewport().height() - edge:
+            bar.setValue(bar.value() + 16)
+        duration = int(block.get("duration_min") or SLOT_MIN)
+        start = min(DAY_START_MIN + self._row_at(point.y()) * SLOT_MIN, DAY_END_MIN - duration)
+        problem = self._span_problem(block_id, day, start, start + duration)
+        self._show_ghost(day, start, start + duration, problem)
+        self._drop = (block_id, day, start, problem)
+        event.acceptProposedAction()
+
+    def dragLeaveEvent(self, event: QDragLeaveEvent) -> None:  # noqa: N802
+        self._ghost.hide()
+        self._drop = None
+        super().dragLeaveEvent(event)
+
+    def dropEvent(self, event: QDropEvent) -> None:  # noqa: N802
+        drop, self._drop = self._drop, None
+        self._ghost.hide()
+        if drop is None or not event.mimeData().hasFormat(SESSION_MIME):
+            super().dropEvent(event)
+            return
+        block_id, day, start, problem = drop
+        if problem:
+            self.move_refused.emit(problem.replace("so it stayed where it was", "so it still needs a time"))
+        else:
+            self.session_dropped.emit(block_id, day, start)
+        event.acceptProposedAction()
+
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
         """Escape lets go of a drag without moving anything."""
         if self._gesture is not None and event.key() == Qt.Key.Key_Escape:
@@ -670,20 +740,7 @@ class WeekTable(QTableWidget):
         super().keyPressEvent(event)
 
     def _span_problem(self, block_id: str, day: int, start_min: int, end_min: int) -> str | None:
-        """Why the block cannot go there, or None. A fixed block there would take the time straight
-        back, and so would a due time before the end."""
-        for other in self._week_blocks:
-            if other["id"] == block_id or other.get("kind") != "locked" or not other.get("start"):
-                continue
-            if day not in (other.get("days") or []) or day in (other.get("missed_days") or []):
-                continue
-            begin = hhmm_to_minutes(other["start"])
-            if start_min < begin + int(other["duration_min"]) and begin < end_min:
-                return f"{other.get('title') or 'A fixed block'} is at that time, so it stayed where it was."
-        due = self.due_point(block_id)
-        if due is not None and (day, end_min) > due:
-            return "That ends after it is due, so it stayed where it was."
-        return None
+        return span_problem(self._week_blocks, block_id, day, start_min, end_min, self.due_point(block_id))
 
     def _show_ghost(self, day: int, start_min: int, end_min: int, problem: str | None) -> None:
         first = (start_min - DAY_START_MIN) // SLOT_MIN
@@ -714,6 +771,37 @@ class WeekTable(QTableWidget):
         self._gesture = None
         self._activate(index.row(), index.column())
         event.accept()
+
+
+class WaitingChip(QPushButton):
+    """Homework that needs a time. Click to open it, or drag it onto the Calendar to give it one."""
+
+    def __init__(self, text: str, block_id: str, parent: QWidget | None = None) -> None:
+        super().__init__(text, parent)
+        self.block_id = block_id
+        self._pressed_at: QPoint | None = None
+        self.setToolTip("Drag onto the calendar to give it a time")
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._pressed_at = event.position().toPoint()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        start = self._pressed_at
+        moved = start is not None and (event.position().toPoint() - start).manhattanLength()
+        if not moved or moved < QApplication.startDragDistance():
+            super().mouseMoveEvent(event)
+            return
+        self._pressed_at = None
+        self.setDown(False)
+        data = QMimeData()
+        data.setData(SESSION_MIME, QByteArray(self.block_id.encode()))
+        drag = QDrag(self)
+        drag.setMimeData(data)
+        drag.setPixmap(self.grab())
+        drag.setHotSpot(event.position().toPoint())
+        drag.exec(Qt.DropAction.MoveAction)
 
 
 class AddMenu(QMenu):
@@ -1421,6 +1509,9 @@ class HomeworkDialog(QDialog):
         category: str | None = None,
         estimate_min: int | None = None,
         due: str | None = None,
+        *,
+        waiting: bool = False,
+        pinned: bool = False,
     ) -> None:
         super().__init__(parent)
         info = CATEGORIES.get(category or "")
@@ -1443,6 +1534,8 @@ class HomeworkDialog(QDialog):
         )
         self._result: dict | None = None
         self._spread = False
+        # "choose" to pick a time for a session that needs one, "unpin" to let FlexWeek move it again.
+        self._request: str | None = None
         self.setWindowTitle("Edit homework" if assignment else "Add homework")
         self.setObjectName("homeworkDialog")
         layout = QVBoxLayout(self)
@@ -1475,6 +1568,24 @@ class HomeworkDialog(QDialog):
         self.completed.setObjectName("homeworkCompleted")
         self.completed.setChecked(bool(self._original.get("completed")))
         form.addRow("", self.completed)
+        # Placing by hand, for the keyboard and for designs with no time grid to drag onto.
+        self._session_buttons: list[QPushButton] = []
+        session_row = QHBoxLayout()
+        for shown, text, name, kind in (
+            (waiting, "Choose a time…", "homeworkChooseTime", "choose"),
+            (pinned, "Let FlexWeek move it", "homeworkUnpin", "unpin"),
+        ):
+            if not shown:
+                continue
+            button = QPushButton(text)
+            button.setObjectName(name)
+            button.setToolTip("Save these edits first.")
+            button.clicked.connect(lambda _=False, kind=kind: self._request_session(kind))
+            session_row.addWidget(button)
+            self._session_buttons.append(button)
+        if self._session_buttons:
+            session_row.addStretch(1)
+            form.addRow("", session_row)
         self.more_details = QPushButton("More details")
         self.more_details.setObjectName("homeworkMoreDetails")
         self.more_details.setCheckable(True)
@@ -1592,6 +1703,9 @@ class HomeworkDialog(QDialog):
             self._scroll.ensureWidgetVisible(self.error)
 
     def _disable_spread(self, *_args: object) -> None:
+        # Like Spread, placing acts on the saved homework, so an unsaved edit turns them off.
+        for button in self._session_buttons:
+            button.setEnabled(False)
         if self._spread_button is None:
             return
         self._spread_button.setEnabled(False)
@@ -1603,6 +1717,14 @@ class HomeworkDialog(QDialog):
 
     def spread_requested(self) -> bool:
         return self._spread
+
+    def _request_session(self, kind: str) -> None:
+        self._request = kind
+        self._result = deepcopy(self._original)
+        super().accept()
+
+    def requested(self) -> str | None:
+        return self._request
 
     def _append_link(self, label: str, url: str) -> None:
         item = QListWidgetItem(f"{label} — {url}")
@@ -2032,6 +2154,67 @@ def _when(day: object, start: object) -> str:
     if not isinstance(day, int) or not start:
         return "no time"
     return f"{DAYS[day]} {start}"
+
+
+class ChooseTimeDialog(QDialog):
+    """A time for homework that needs one, without dragging: for the keyboard, and for designs that have
+    no time grid to drop on. It refuses the same times a drop on the Calendar refuses."""
+
+    def __init__(
+        self,
+        parent: QWidget | None,
+        block: dict,
+        week_start: str,
+        days: list[int],
+        blocks: list[dict],
+        due: tuple[int, int] | None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(f"Choose a time for {block.get('title') or 'homework'}")
+        self.setObjectName("chooseTimeDialog")
+        self._block, self._blocks, self._due = block, blocks, due
+        self._duration = int(block.get("duration_min") or SLOT_MIN)
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self.day = QComboBox()
+        self.day.setObjectName("chooseTimeDay")
+        monday = date.fromisoformat(week_start)
+        for day in days:
+            self.day.addItem((monday + timedelta(days=day)).strftime("%a %-d %b"), day)
+        form.addRow("Day", self.day)
+        self.start = QTimeEdit(QTime(16, 0))
+        self.start.setObjectName("chooseTimeStart")
+        self.start.setDisplayFormat("HH:mm")
+        self.start.setMinimumTime(QTime(6, 0))
+        latest = DAY_END_MIN - self._duration
+        self.start.setMaximumTime(QTime(latest // 60, latest % 60))
+        form.addRow("Start", self.start)
+        form.addRow("Length", QLabel(length_label(self._duration)))
+        layout.addLayout(form)
+        self.problem = QLabel()
+        self.problem.setObjectName("validationError")
+        self.problem.setWordWrap(True)
+        layout.addWidget(self.problem)
+        choices = QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        self.buttons = QDialogButtonBox(choices)
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        layout.addWidget(self.buttons)
+        self.day.currentIndexChanged.connect(self._check)
+        self.start.timeChanged.connect(self._check)
+        self._check()
+
+    def choice(self) -> tuple[int, int]:
+        """The day and the start, on the 15-minute grid."""
+        minutes = self.start.time().hour() * 60 + self.start.time().minute()
+        return int(self.day.currentData()), minutes - minutes % SLOT_MIN
+
+    def _check(self, *_args: object) -> None:
+        day, start = self.choice()
+        problem = span_problem(self._blocks, self._block["id"], day, start, start + self._duration, self._due)
+        self.problem.setText((problem or "").replace(", so it stayed where it was", ""))
+        self.problem.setVisible(problem is not None)
+        self.buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(problem is None)
 
 
 class RoutineDialog(QDialog):
