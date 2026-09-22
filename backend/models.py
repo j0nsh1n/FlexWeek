@@ -454,6 +454,24 @@ class GridWindow(BaseModel):
         return self
 
 
+class StudyWindow(GridWindow):
+    """A preferred study time. With a subject, it is preferred for that subject's homework only."""
+
+    subject: str | None = Field(
+        default=None, min_length=1, max_length=40, exclude_if=lambda value: value is None
+    )
+
+    @field_validator("subject")
+    @classmethod
+    def subject_is_trimmed(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("subject must not be blank")
+        return trimmed
+
+
 class ProtectedWindow(GridWindow):
     kind: Literal["downtime", "commute", "meal"]
 

@@ -104,7 +104,9 @@ def prepare_solve(
         body = assignments[aid]
         if body["completed"] and not block.completed:
             continue
-        keep.append(block)
+        # The subject comes from the assignment, so a session the client has not saved yet still
+        # finds the study window kept for its subject.
+        keep.append(block.model_copy(update={"course": body.get("course")}))
         deadlines[block.id] = due_placement_bound(week_start, body["due"])
         slack[block.id] = due_slack_point(week_start, body["due"])
     return keep, deadlines, slack

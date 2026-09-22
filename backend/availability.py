@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from backend.assignments import unplanned_minutes
-from backend.models import GridWindow, ProtectedWindow, parse_naive_stamp
+from backend.models import GridWindow, ProtectedWindow, StudyWindow, parse_naive_stamp
 from backend.slots import DAY_END_MIN, DAY_START_MIN, SLOT_MIN, SLOTS_PER_DAY, occupancy_mask
 from backend.weeks import monday_of
 
@@ -56,16 +56,27 @@ def lateness_occupancy(day: int, from_start: str, minutes: int) -> list[int]:
     return occ
 
 
-def study_prefers(windows: list[GridWindow], day: int, start_min: int, duration_min: int) -> bool:
+def study_rank(
+    windows: list[StudyWindow], course: str | None, day: int, start_min: int, duration_min: int
+) -> int:
+    """How much a session wants this time: 0 inside a window for its own subject, 1 inside a window for
+    any subject, 2 anywhere else. Another subject's window is anywhere else, so Reading does not take
+    the time kept for Math."""
+    wanted = course.strip().casefold() if course and course.strip() else None
+    best = 2
     for window in windows:
         if day not in window.days:
             continue
         hour, minute = map(int, window.start.split(":"))
         begin = hour * 60 + minute
         # The whole session must fit inside the window, not just its start.
-        if begin <= start_min and start_min + duration_min <= begin + window.duration_min:
-            return True
-    return False
+        if not (begin <= start_min and start_min + duration_min <= begin + window.duration_min):
+            continue
+        if window.subject is None:
+            best = min(best, 1)
+        elif wanted is not None and window.subject.casefold() == wanted:
+            return 0
+    return best
 
 
 def merge_occupancy(base: list[int], extra: list[int]) -> list[int]:

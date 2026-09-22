@@ -30,11 +30,11 @@ from backend.limits import MAX_BODY
 from backend.models import (
     Assignment,
     AssignmentContent,
-    GridWindow,
     ProtectedWindow,
     Routine,
     SolveRequest,
     SpreadRequest,
+    StudyWindow,
     TimeBlock,
     WeekRequest,
     valid_naive_stamp,
@@ -617,7 +617,7 @@ class Preferences(BaseModel):
     protected: list[ProtectedWindow] = Field(
         default_factory=list, max_length=21, exclude_if=lambda value: not value
     )
-    study_windows: list[GridWindow] = Field(
+    study_windows: list[StudyWindow] = Field(
         default_factory=list, max_length=21, exclude_if=lambda value: not value
     )
     day_cutoff: str | None = Field(default=None, exclude_if=lambda value: value is None)
@@ -968,12 +968,12 @@ def write_preferences(db: sqlite3.Connection, user_id: int, preferences: Prefere
     return preferences.model_dump()
 
 
-def solve_availability(row: sqlite3.Row | None) -> tuple[list[int], list[GridWindow]]:
+def solve_availability(row: sqlite3.Row | None) -> tuple[list[int], list[StudyWindow]]:
     if row is None:
         return [0] * 7, []
     availability = json.loads(row["availability_json"] or "{}")
     protected = [ProtectedWindow.model_validate(item) for item in availability.get("protected") or []]
-    study = [GridWindow.model_validate(item) for item in availability.get("study_windows") or []]
+    study = [StudyWindow.model_validate(item) for item in availability.get("study_windows") or []]
     return occupancy_from_windows(protected, availability.get("day_cutoff")), study
 
 
