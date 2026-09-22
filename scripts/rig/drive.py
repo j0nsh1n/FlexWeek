@@ -336,10 +336,29 @@ def child_main(args: argparse.Namespace) -> int:
     def middle(rect: QRect) -> QPoint:
         return rect.center()
 
+    def show_day(iso: str) -> None:
+        shown = window.planner.currentWidget()
+        hours = getattr(shown, "hours", None)
+        if hours is None or not hours.isVisible():
+            finder = getattr(shown, "hours_surfaces", None)
+            found = [item for item in finder() if item.isVisible()] if finder is not None else []
+            hours = found[0] if found else None
+        expect(shown.isVisible() and hours is not None, f"Day canvas is {type(shown).__name__}")
+        expect(
+            (session.planner_view, session.selected_day) == ("day", iso),
+            f"showing {session.planner_view} {session.selected_day}",
+        )
+
     def day_tab(r: Rig) -> Step:
-        yield from r.tab("week")
-        session.open_day(thursday_iso)
-        yield ("wait", 500)
+        thursday_name = thursday.date().isoformat()
+        yield from r.tab("day")
+        yield ("wait", 400)
+        show_day(session.selected_day)
+        if session.selected_day != thursday_name:
+            yield from r.tab("week")
+            yield from r.click(r.surface("hours").day_name(3))
+            yield ("wait", 400)
+        show_day(thursday_name)
 
     def day_move(r: Rig) -> Step:
         yield from day_tab(r)
@@ -457,18 +476,7 @@ def child_main(args: argparse.Namespace) -> int:
         yield from r.click(surface.day_name(4))
         yield ("wait", 400)
         friday = (thursday + timedelta(days=1)).date().isoformat()
-        expect(
-            (session.planner_view, session.selected_day) == ("day", friday),
-            f"showing {session.planner_view} {session.selected_day}",
-        )
-
-    def week_fits(r: Rig) -> Step:
-        yield from r.tab("week")
-        surface = r.surface("hours")
-        top, bottom = surface.point_for(0, 6 * 60), surface.point_for(0, 23 * 60)
-        area = window.planner.mapToGlobal(window.planner.rect().topLeft())
-        visible = QRect(area, window.planner.size())
-        expect(visible.contains(top) and visible.contains(bottom), "06:00 to 23:00 does not fit on screen")
+        show_day(friday)
 
     def month_times(r: Rig) -> Step:
         yield from r.tab("month")
@@ -508,7 +516,8 @@ def child_main(args: argparse.Namespace) -> int:
         Scenario("week-beside", "week", week_beside),
         Scenario("week-past-due", "week", week_past_due),
         Scenario("week-open-day", "week", week_open_day),
-        Scenario("week-fits", "week", week_fits, only=("classic",)),
+        # week-fits used to pass when 06:00 and 23:00 both sat inside the planner. The day is now
+        # 00:00–24:00 and Unit 3 owns scroll, zoom and the reach checks. It is not counted here.
         Scenario("month-times", "month", month_times),
         Scenario("month-open-day", "month", month_open_day),
         Scenario("month-move-date", "month", month_move_date),
