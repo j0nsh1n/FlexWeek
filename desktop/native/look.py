@@ -795,8 +795,7 @@ def pack_stylesheet(
         f"QScrollArea#weekScroll, QScrollArea#dropScroll, QScrollArea#dayScroll {{ background: transparent; "
         f"border: none; padding: 0; border-radius: 0; }}"
         # Today's app's Day: the day's hours, then what still needs a time and a summary beside them.
-        f"QFrame#daySide {{ background: {palette['panel']}; border-radius: 0; border: none; "
-        f"border-left: 1px solid {palette['hairline']}; }}"
+        f"QFrame#daySide {{ background: {palette['panel']}; border-radius: 0; {edges} }}"
         f"QLabel#dayWaitingLabel, QLabel#daySummaryLabel {{ color: {palette['accent']}; font-weight: 800; "
         f"font-size: {max(size - 1, 7)}pt; }}"
         f"QLabel#daySummaryLabel {{ margin-top: 10px; }}"
@@ -811,7 +810,7 @@ def pack_stylesheet(
         # Homework that still needs a time, to be dragged onto the hours: it looks like homework, not
         # like a button that does something when pressed.
         f"QPushButton[tray=\"true\"] {{ background: {palette['panel']}; color: {palette['text']}; "
-        f"border: 1px solid {palette['hairline']}; border-left: 4px solid #ef4444; text-align: left; }}"
+        f"{edges} border-left: 4px solid #ef4444; text-align: left; }}"
         f"QMenu::item {{ min-height: {item_h}px; padding: {pad}px {pad * 2}px; }}"
         f"QLabel#nowNext {{ font-weight: 600; }}"
         f"QLabel#focusTask {{ font-weight: 600; }}"
