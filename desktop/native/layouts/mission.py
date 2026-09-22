@@ -6,7 +6,9 @@ a day and every block on it is a button that opens the same block.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QPointF, QRectF, Qt, Signal
+from functools import partial
+
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QMouseEvent, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QToolTip, QVBoxLayout, QWidget
 
@@ -25,6 +27,7 @@ from desktop.native.layouts.base import (
     rules,
     scrolling,
 )
+from desktop.native.layouts.drag import Carried, Mark, Pickup, Spot, Verdict, Zone, snap
 from desktop.native.look import readable_ink
 from desktop.native.weekmodel import Occurrence, WeekModel, clock_label, due_label
 
@@ -46,6 +49,10 @@ class Lanes(QWidget):
         self._span = HOURS["day"]
         self._tokens: dict[str, str] = {}
         self._chosen = 0
+        # Where a dragged block would land, and whether it can, while one is over the lanes.
+        self._ghost: tuple[int, Verdict] | None = None
+        self._shows = {day: partial(self.set_ghost, day) for day in range(7)}
+        self._pickup = Pickup(self, self.block_at, self.block_clicked.emit, self.minute_at)
 
     def set_week(
         self,
@@ -71,6 +78,28 @@ class Lanes(QWidget):
         start, end = self._span
         share = (min(max(minute, start), end) - start) / (end - start)
         return GUTTER + share * (self.width() - GUTTER - 4)
+
+    def minute_at(self, spot: QPointF) -> int:
+        start, end = self._span
+        share = (spot.x() - GUTTER) / max(self.width() - GUTTER - 4, 1)
+        return round(start + min(max(share, 0.0), 1.0) * (end - start))
+
+    def day_at(self, spot: QPointF) -> int | None:
+        if spot.y() < AXIS:
+            return None
+        return min(max(int((spot.y() - AXIS) / ((self.height() - AXIS) / 7)), 0), 6)
+
+    def set_ghost(self, day: int, verdict: Verdict | None) -> None:
+        self._ghost = (day, verdict) if verdict is not None else None
+        self.update()
+
+    def where(self, point: QPoint, thing: Carried) -> tuple[Spot, Mark] | None:
+        """A lane is a day and a point along it a time."""
+        spot = QPointF(point)
+        day = self.day_at(spot)
+        if day is None or spot.x() < GUTTER:
+            return None
+        return Spot(day, snap(self.minute_at(spot) - thing.grab)), Mark(paint=self._shows[day])
 
     def _lane(self, day: int) -> QRectF:
         height = (self.height() - AXIS) / 7
@@ -167,18 +196,43 @@ class Lanes(QWidget):
                 QPointF(self._x(self._minute), lane.top() - 2),
                 QPointF(self._x(self._minute), lane.bottom() + 2),
             )
+        if self._ghost is not None:
+            self._paint_ghost(painter, *self._ghost)
         painter.end()
 
+    def _paint_ghost(self, painter: QPainter, day: int, verdict: Verdict) -> None:
+        """The outline of where the block would go, dashed as on the week grid, in the danger colour
+        where it cannot. With no time yet, the whole lane: the planner picks the time."""
+        lane = self._lane(day)
+        if verdict.start is not None and verdict.end is not None:
+            left, right = self._x(verdict.start), self._x(verdict.end)
+            box = QRectF(left, lane.top() + 1, max(right - left, 6), lane.height() - 2)
+        else:
+            box = lane.adjusted(1, 1, -1, -1)
+        colour = QColor(self._tokens["accent" if verdict.ok else "danger"])
+        wash = QColor(colour)
+        wash.setAlphaF(0.18)
+        painter.setBrush(wash)
+        painter.setPen(QPen(colour, 2, Qt.PenStyle.DashLine))
+        painter.drawRoundedRect(box, 4, 4)
+
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
-        found = self.block_at(event.position())
-        if found is not None:
-            self.block_clicked.emit(found.block_id)
-        elif event.position().x() < GUTTER and event.position().y() > AXIS:
+        if self._pickup.press(event):
+            return
+        if event.position().x() < GUTTER and event.position().y() > AXIS:
             self.day_clicked.emit(min(int((event.position().y() - AXIS) / ((self.height() - AXIS) / 7)), 6))
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        self._pickup.move(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        self._pickup.release(event)
 
 
 class MissionView(LayoutView):
     layout_id = "mission"
+    # The lanes are hours already, so a block is dropped on them rather than in a drawer.
+    uses_drawer = False
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -288,6 +342,7 @@ class MissionView(LayoutView):
         lanes.set_week(week, scene.today, scene.minute, span, tokens, day)
         lanes.block_clicked.connect(self.block_activated.emit)
         lanes.day_clicked.connect(self._show_day)
+        Zone(self, lanes, lanes.where)
         left.addWidget(lanes, 1)
         left.addLayout(self._day_row(scene, day))
         body.addLayout(left, 1)
@@ -310,11 +365,14 @@ class MissionView(LayoutView):
             picker.addWidget(pick)
         picker.addStretch(1)
         holder.addLayout(picker)
-        chips = QHBoxLayout()
+        # A frame, which every design already clears; a bare widget would take the app's own background.
+        row = QFrame()
+        row.setObjectName("missionChips")
+        chips = QHBoxLayout(row)
+        chips.setContentsMargins(0, 0, 0, 0)
         for index, item in enumerate(scene.week.on_day(day)):
-            chip = block_button(
-                self, f"{clock_label(item.start)} {item.title}", f"missionChip{index}", item.block_id, "chip"
-            )
+            words = f"{clock_label(item.start)} {item.title}"
+            chip = block_button(self, words, f"missionChip{index}", item.block_id, "chip", day=day)
             over = (
                 item.end <= scene.minute
                 if day == scene.today
@@ -334,7 +392,7 @@ class MissionView(LayoutView):
             else:
                 chips.addWidget(label("NOTHING ON THIS DAY", "missionDayEmpty"))
         chips.addStretch(1)
-        holder.addLayout(chips)
+        holder.addWidget(row)
         return holder
 
     def _side(self, scene: Scene) -> QFrame:
@@ -350,7 +408,9 @@ class MissionView(LayoutView):
         for index, item in enumerate(work):
             due = due_label(item.due, scene.week.week_start)
             extra = f" · {item.slack_words.upper()}" if item.slack_words else ""
-            row = block_button(self, f"{item.title}\n{due}{extra}", f"missionRadar{index}", item.block_id)
+            row = block_button(
+                self, f"{item.title}\n{due}{extra}", f"missionRadar{index}", item.block_id, day=item.day
+            )
             row.setProperty("risk", item.slack or "")
             row.setStyleSheet(f"min-height: {scene.px(40)}px;")
             room = scene.px(220)

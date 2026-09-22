@@ -315,3 +315,14 @@ All client-side, using the endpoints above.
 - Hiding assignments completed more than 28 days ago was not accepted. The list
   leaves out completed assignments unless the client asks with
   `include_completed=true`, which returns all of them.
+
+## Addendum 2026-09-22: pinned sessions
+
+`TimeBlock.pinned` is a boolean, default `false` and omitted at its default. It is
+valid only on a flexible block with a `start` on exactly one day. The server refuses
+the week otherwise.
+
+A pinned session is homework the student placed by hand. The solver keeps its day
+and start, counts its time as taken, and books nothing over it, in every solve
+mode. A fixed block placed over a pinned session still takes its time on the
+desktop, which clears `pinned` along with `start`.

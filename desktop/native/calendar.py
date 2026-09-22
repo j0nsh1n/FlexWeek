@@ -209,7 +209,8 @@ def resize_bottom_range(start_min: int, end_min: int, delta_min: int) -> tuple[i
     return start_min, nxt
 
 
-def apply_block_times(block: dict, start_min: int, end_min: int) -> dict | None:
+def apply_block_times(block: dict, start_min: int, end_min: int, day: int | None = None) -> dict | None:
+    """The block at a new time, and on `day` when it moved to another one."""
     if not block.get("start"):
         return None
     if is_series(block):
@@ -220,6 +221,10 @@ def apply_block_times(block: dict, start_min: int, end_min: int) -> dict | None:
     updated = deepcopy(block)
     updated["start"] = minutes_to_hhmm(start_min)
     updated["duration_min"] = duration
+    if day is not None and list(block.get("days") or []) != [day]:
+        updated["days"] = [day]
+        if updated.get("completed_day") is not None:
+            updated["completed_day"] = day
     return updated
 
 
@@ -424,3 +429,47 @@ def next_action_for(
         if unplanned.get(item["id"], 0) > 0:
             return {"kind": "plan", "id": item["id"]}
     return {"kind": "add"}
+
+
+# The blocks setup makes, found again by id when setup runs a second time. "sport" is the one the
+# first-week card made before setup had pages.
+SETUP_SCHOOL_ID = "school"
+SETUP_ACTIVITY_PREFIX = "activity-"
+
+
+def is_setup_block(block: dict) -> bool:
+    block_id = str(block.get("id") or "")
+    return block_id in {SETUP_SCHOOL_ID, "sport"} or block_id.startswith(SETUP_ACTIVITY_PREFIX)
+
+
+def span_problem(
+    blocks: list[dict],
+    block_id: str,
+    day: int,
+    start_min: int,
+    end_min: int,
+    due: tuple[int, int] | None,
+) -> str | None:
+    """Why a block cannot go at this time, in words, or None. Landing on another block is allowed, as
+    in Daily Scheduler: the two sit side by side. What cannot stand is time FlexWeek does not plan in,
+    and homework that would end after it is due."""
+    if start_min < DAY_START_MIN or end_min > DAY_END_MIN:
+        return "That is outside the hours FlexWeek plans in, so it stayed where it was."
+    if due is not None and (day, end_min) > due:
+        return "That ends after it is due, so it stayed where it was."
+    return None
+
+
+def span_clash(blocks: list[dict], block_id: str, day: int, start_min: int, end_min: int) -> str | None:
+    """The name of a block this time would sit beside, for the words that go with a drop."""
+    for other in blocks:
+        if other["id"] == block_id or not other.get("start"):
+            continue
+        if day not in (other.get("days") or []) or day in (other.get("missed_days") or []):
+            continue
+        if other.get("completed") and other.get("completed_day") not in (None, day):
+            continue
+        begin = hhmm_to_minutes(other["start"])
+        if start_min < begin + int(other["duration_min"]) and begin < end_min:
+            return str(other.get("title") or "another block")
+    return None

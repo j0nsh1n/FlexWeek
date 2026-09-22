@@ -14,6 +14,8 @@ from desktop.native.calendar import (
     resize_bottom_range,
     resize_top_range,
     snap_minute,
+    span_clash,
+    span_problem,
     split_occurrence,
     sunday_due,
 )
@@ -129,3 +131,44 @@ def test_days_through_a_due_date_start_at_the_first_plannable_day() -> None:
     assert due_day_in_week("2026-09-11T08:10", "2026-09-07") == 4
     assert days_through(4, 2) == [2, 3, 4]
     assert days_through(1, 3) == [1]
+
+
+def test_a_time_on_another_block_is_allowed_and_named_but_not_outside_the_day_or_past_due() -> None:
+    """As in Daily Scheduler: two blocks may share a time. What cannot stand is time FlexWeek does not
+    plan in, and homework ending after it is due."""
+    school = {"id": "school", "title": "School", "start": "08:00", "duration_min": 390, "days": [0, 1, 2]}
+    missed = {
+        **school,
+        "id": "club",
+        "title": "Club",
+        "start": "16:00",
+        "duration_min": 60,
+        "missed_days": [1],
+    }
+    done = {
+        **school,
+        "id": "done",
+        "title": "Done work",
+        "start": "17:00",
+        "days": [1, 2],
+        "completed": True,
+        "completed_day": 2,
+    }
+    blocks = [school, missed, done]
+    assert span_problem(blocks, "essay", 1, 10 * 60, 11 * 60, None) is None
+    assert span_clash(blocks, "essay", 1, 10 * 60, 11 * 60) == "School"
+    assert span_clash(blocks, "school", 1, 10 * 60, 11 * 60) is None, "never beside itself"
+    assert span_clash(blocks, "essay", 1, 14 * 60 + 30, 15 * 60) is None, "touching is not sharing"
+    assert span_clash(blocks, "essay", 1, 16 * 60, 17 * 60) is None, "not on a day it was missed"
+    assert span_clash(blocks, "essay", 1, 17 * 60, 18 * 60) is None, (
+        "finished work sits on the day it was done"
+    )
+    assert span_clash(blocks, "essay", 2, 17 * 60, 18 * 60) == "Done work"
+    assert span_problem(blocks, "essay", 1, 5 * 60 + 45, 6 * 60 + 45, None) == (
+        "That is outside the hours FlexWeek plans in, so it stayed where it was."
+    )
+    assert span_problem(blocks, "essay", 1, 22 * 60 + 30, 23 * 60 + 30, None) is not None
+    assert span_problem(blocks, "essay", 3, 19 * 60, 20 * 60, (3, 19 * 60 + 30)) == (
+        "That ends after it is due, so it stayed where it was."
+    )
+    assert span_problem(blocks, "essay", 3, 18 * 60, 19 * 60 + 30, (3, 19 * 60 + 30)) is None

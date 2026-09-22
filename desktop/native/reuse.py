@@ -119,10 +119,22 @@ def apply_plan(
             if winner.get("days"):
                 copy["days"] = list(winner["days"])
         elif copy["id"] in unplaced_ids:
+            copy.pop("pinned", None)
             if copy.pop("start", None) and assignments is not None and week_start is not None:
                 copy["days"] = planning_days(copy, assignments, week_start)
         out.append(copy)
     return out
+
+
+def clear_stale_pins(blocks: list[dict]) -> list[dict]:
+    """Drop `pinned` from any session that no longer has one time on one day. The server refuses a
+    week with such a pin, so every save would fail after the first edit that took the time away."""
+    return [
+        {key: value for key, value in block.items() if key != "pinned"}
+        if block.get("pinned") and not (block.get("start") and len(block.get("days") or []) == 1)
+        else block
+        for block in blocks
+    ]
 
 
 def held_in_place(block: dict) -> dict:
@@ -159,7 +171,9 @@ def solve_request(
             payload.append(block)
             continue
         planned = is_planned(block)
-        wanted = block["id"] in only if only is not None else everything or not planned
+        # Homework the student placed by hand stays put in Replan all, like a fixed block.
+        pinned = planned and bool(block.get("pinned"))
+        wanted = block["id"] in only if only is not None else (everything and not pinned) or not planned
         if wanted:
             session = dict(block)
             if planned:
@@ -172,7 +186,7 @@ def solve_request(
     return payload, targets
 
 
-def _due_point(due: str | None, week_start: str) -> tuple[int, int] | None:
+def due_point(due: str | None, week_start: str) -> tuple[int, int] | None:
     """A deadline as (day index, minute) in this week: negative before it, None when it is later."""
     if not due:
         return None
@@ -194,6 +208,9 @@ def settle_placements(
     leave one session sitting where it can no longer be done. Every other session keeps its time. The
     one that lost it gets back every day up to its deadline and a sentence saying why. `keep` names
     homework the student just placed themselves; when two sessions collide, the other one gives way.
+
+    Homework the student placed by hand, pinned, is theirs: nothing sitting on it takes its time, and
+    it takes time from nothing, since the student chose to put the two side by side.
     """
     taken: dict[int, list[tuple[int, int, str]]] = {day: [] for day in range(7)}
     for block in blocks:
@@ -220,8 +237,10 @@ def settle_placements(
         start = hhmm_to_minutes(block["start"])
         end = start + int(block.get("duration_min") or 0)
         assignment = assignments.get(block.get("assignment_id") or "") or {}
-        due = _due_point(assignment.get("due"), week_start)
-        clash = next((title for low, high, title in taken[day] if start < high and low < end), None)
+        due = due_point(assignment.get("due"), week_start)
+        pinned = bool(block.get("pinned"))
+        clashes = (title for low, high, title in taken[day] if start < high and low < end)
+        clash = None if pinned else next(clashes, None)
         why = None
         if start < DAY_START_MIN or end > DAY_END_MIN:
             why = "that is outside the hours FlexWeek plans in"
@@ -230,7 +249,8 @@ def settle_placements(
         elif clash is not None:
             why = f"{clash} is there now"
         if why is None:
-            taken[day].append((start, end, block.get("title") or "homework"))
+            if not pinned:
+                taken[day].append((start, end, block.get("title") or "homework"))
             continue
         title = block.get("title") or "Homework"
         lost[block["id"]] = {
@@ -248,6 +268,7 @@ def settle_placements(
         if block["id"] in lost:
             block = dict(block)
             block.pop("start")
+            block.pop("pinned", None)
             block["days"] = planning_days(block, assignments, week_start)
         out.append(block)
     return out, [lost[block["id"]] for block in sessions if block["id"] in lost]

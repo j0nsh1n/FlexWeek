@@ -8,9 +8,10 @@ from datetime import date, datetime
 from urllib.parse import quote
 from uuid import uuid4
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, QTimer, Signal
 
 from backend.models import Assignment, GridWindow, ProtectedWindow, TimeBlock
+from backend.slots import DAY_END_MIN, DAY_START_MIN, SLOT_MIN, minutes_to_hhmm
 from backend.weeks import current_week_start
 from desktop.native.calendar import (
     DAY_FULL,
@@ -23,6 +24,7 @@ from desktop.native.calendar import (
     due_day_in_week,
     first_plannable_day,
     is_series,
+    is_setup_block,
     local_stamp,
     monday_of,
     month_anchor_date,
@@ -53,7 +55,7 @@ from desktop.native.focus import (
     restore_state,
     set_phase,
 )
-from desktop.native.history import capture_step, mark_stale, push_step
+from desktop.native.history import capture_step, join_step, mark_stale, push_step
 from desktop.native.kept import KeptSession
 from desktop.native.look import pack_axis, sanitize_look
 from desktop.native.pomodoro import inflate_for_solve, split_solved
@@ -64,6 +66,7 @@ from desktop.native.reuse import (
     available_homework_minutes,
     block_occurs_on_day,
     capacity_problem,
+    clear_stale_pins,
     clipboard_fingerprint,
     clipboard_item,
     copied_homework_block,
@@ -163,6 +166,9 @@ class NativeSession(QObject):
         self._day_ticket = 0
         self._month_ticket = 0
         self._undo: list[dict] = []
+        self._join_step = False
+        # New homework to give a time once its save lands, when the student plans as they add.
+        self._plan_after_save: set[str] = set()
         self._redo: list[dict] = []
         self._committed_blocks: list[dict] = []
         self._committed_assignments: dict[str, dict] = {}
@@ -186,6 +192,8 @@ class NativeSession(QObject):
         self.focus: dict | None = None
         self._fresh_plan = False
         self.needs_time: dict[str, str] = {}
+        # Registered in this sitting, so setup can open before the account's preferences arrive.
+        self.new_account = False
         self.focus_store: dict[int, dict | None] = {}
         self.look: dict = sanitize_look(None)
         self.now_ms = lambda: int(time.time() * 1000)
@@ -272,6 +280,7 @@ class NativeSession(QObject):
         self.routines = {}
         self.saved_weeks = []
         self.preferences = None
+        self.new_account = False
         self.late_preview = None
         self.spread_preview = None
         self._seen_unfinished.clear()
@@ -538,6 +547,7 @@ class NativeSession(QObject):
                 return
             self.client.set_account(data)
             self.account = {"id": data["id"], "username": data["username"]}
+            self.new_account = True
             self.busy = False
             self.busy_changed.emit(False)
             self.account_changed.emit(self.account)
@@ -718,6 +728,7 @@ class NativeSession(QObject):
         if label:
             self._history_label = label
         self.blocks, lost = settle_placements(self.blocks, self.assignments, self.week_start, keep)
+        self.blocks = clear_stale_pins(self.blocks)
         for note in lost:
             self.needs_time[note["block_id"]] = note["message"]
         self._forget_settled_notes()
@@ -819,24 +830,87 @@ class NativeSession(QObject):
         edited = {session["id"] for session in blocks if session.get("assignment_id") == body["id"]}
         self._touch(label, keep=edited)
 
-    def apply_times(self, block_id: str, start_min: int, end_min: int) -> bool:
+    def apply_times(self, block_id: str, start_min: int, end_min: int, day: int | None = None) -> bool:
         block = next((item for item in self.blocks if item["id"] == block_id), None)
         if block is None:
             return False
         if is_series(block):
             self._say(SERIES_DRAG_MESSAGE.format(title=block["title"], count=len(block["days"])))
             return False
-        updated = apply_block_times(block, start_min, end_min)
+        updated = apply_block_times(block, start_min, end_min, day)
         if updated is None:
             return False
+        # Homework moved by hand is the student's own time, so no plan moves it again.
+        homework = updated.get("assignment_id") and updated.get("kind") == "flexible"
+        if homework and not updated.get("completed"):
+            updated["pinned"] = True
         self.add_block(updated)
         return True
 
-    def refuse_series_drag(self, block_id: str) -> None:
+    def set_setup_blocks(self, blocks: list[dict]) -> None:
+        """Replace the school and activities setup made with `blocks`, as one Undo step. Anything the
+        student added another way stays where it is."""
+        kept = [block for block in self.blocks if not is_setup_block(block)]
+        made = [TimeBlock.model_validate(block).model_dump(mode="json") for block in blocks]
+        self.blocks = kept + made
+        self._touch("setting up your week")
+
+    def plan_after_save(self, assignment_id: str) -> None:
+        """Give this homework's sessions that need a time one once the save now under way lands."""
+        waiting = {
+            block["id"]
+            for block in self.blocks
+            if block.get("assignment_id") == assignment_id
+            and not block.get("start")
+            and not block.get("completed")
+        }
+        self._plan_after_save |= waiting
+
+    def place_session(self, block_id: str, day: int, start_min: int) -> bool:
+        """Give homework that needs a time the one the student chose, dragged or picked. It is pinned,
+        so no plan moves it, and it is one Undo step."""
         block = next((item for item in self.blocks if item["id"] == block_id), None)
-        if block is None:
-            return
-        self._say(SERIES_DRAG_MESSAGE.format(title=block["title"], count=len(block["days"])))
+        if block is None or block.get("kind") != "flexible" or block.get("completed"):
+            return False
+        placed = {**block, "start": minutes_to_hhmm(start_min), "days": [day], "pinned": True}
+        self.blocks = [placed if item["id"] == block_id else item for item in self.blocks]
+        self.needs_time.pop(block_id, None)
+        self._touch("placing " + block["title"], keep={block_id})
+        return True
+
+    def move_occurrence(
+        self, block_id: str, from_day: int, to_day: int, start_min: int, end_min: int
+    ) -> bool:
+        """One day's copy of a block that repeats, moved on its own, as Daily Scheduler moves its
+        separate copies. The other days keep the series; this day becomes a block of its own."""
+        block = next((item for item in self.blocks if item["id"] == block_id), None)
+        if block is None or not is_series(block) or from_day not in block["days"]:
+            return False
+        if end_min - start_min < SLOT_MIN or start_min < DAY_START_MIN or end_min > DAY_END_MIN:
+            return False
+        before = {item["id"] for item in self.blocks}
+        moved = {**block, "start": minutes_to_hhmm(start_min), "duration_min": end_min - start_min}
+        blocks = apply_block_edit(self.blocks, moved, scope="occurrence", day=from_day)
+        made = next((item["id"] for item in blocks if item["id"] not in before), block_id)
+        self.blocks = [{**item, "days": [to_day]} if item["id"] == made else item for item in blocks]
+        self._touch("moving " + block["title"] + " on one day", keep={made})
+        return True
+
+    def unpin_assignment(self, assignment_id: str) -> bool:
+        """Let FlexWeek move this homework's sessions again."""
+        changed = False
+        blocks = []
+        for block in self.blocks:
+            if block.get("assignment_id") == assignment_id and block.get("pinned"):
+                block = {key: value for key, value in block.items() if key != "pinned"}
+                changed = True
+            blocks.append(block)
+        if not changed:
+            return False
+        self.blocks = blocks
+        title = (self.assignments.get(assignment_id) or {}).get("title") or "homework"
+        self._touch("letting FlexWeek move " + title)
+        return True
 
     def delete_block(self, block_id: str, *, scope: str = "series", day: int | None = None) -> None:
         block = next((item for item in self.blocks if item["id"] == block_id), None)
@@ -950,11 +1024,14 @@ class NativeSession(QObject):
         operation_id: str | None = None,
         record_history: bool = True,
         status: str | None = None,
+        join: bool = False,
     ) -> None:
         if self.account is None or self.conflict:
             return
         if self.busy:
             return
+        # This save's change joins the Undo step before it, as automatic planning does after an add.
+        self._join_step = join
         if status is not None:
             self._save_status = status
         if self.pending_save is None:
@@ -1029,14 +1106,22 @@ class NativeSession(QObject):
                     for entry in self._pending_step["assignments"]:
                         stored = self.assignments.get(entry["id"])
                         entry["after"] = None if stored is None else deepcopy(stored)
-                    push_step(self._undo, self._pending_step)
+                    if self._join_step:
+                        join_step(self._undo, self._pending_step)
+                    else:
+                        push_step(self._undo, self._pending_step)
                     self._redo.clear()
                 self._say(held if held is not None else "Saved.")
             self._traveling = None
             self._travel_step = None
             self._pending_step = None
+            self._join_step = False
             self.pending_save = None
             self._save_status = None
+            planned_next, self._plan_after_save = self._plan_after_save, set()
+            if planned_next:
+                # Plan it for me as I add it: the new homework's time, joined to the add in one step.
+                QTimer.singleShot(0, lambda: self.solve(only=planned_next, join=True))
             if current is not None:
                 self._committed_blocks = deepcopy(self.blocks)
                 self._committed_assignments = deepcopy(self.assignments)
@@ -1055,6 +1140,9 @@ class NativeSession(QObject):
         def err(error: ApiError) -> None:
             if not self._idle(ticket):
                 return
+            # A plan waiting on this save must not fire after some later, unrelated one.
+            self._plan_after_save = set()
+            self._join_step = False
             if self._traveling and self._travel_step is not None:
                 if error.status != 409:
                     self.blocks = deepcopy(self._committed_blocks)
@@ -1084,7 +1172,7 @@ class NativeSession(QObject):
         if self.pending_save is not None and not self.conflict:
             self.save()
 
-    def solve(self, *, everything: bool = False, only: set[str] | None = None) -> None:
+    def solve(self, *, everything: bool = False, only: set[str] | None = None, join: bool = False) -> None:
         """Plan my homework. Homework that already has a time keeps it.
 
         `everything` is Replan all my homework. `only` finds new times for named work.
@@ -1137,7 +1225,7 @@ class NativeSession(QObject):
             placed_note = plan_sentence(placed, waiting) + split_note
             self._say(placed_note)
             self.week_changed.emit()
-            self.save(status=placed_note)
+            self.save(status=placed_note, join=join)
 
         self.client.request(
             "POST",

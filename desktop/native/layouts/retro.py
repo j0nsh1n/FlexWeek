@@ -105,6 +105,9 @@ class RetroView(LayoutView):
                     "#retroScroll, #retroDesk": css(background=tokens["bg"]),
                     "#retroTaskbar": css(background=tokens["surface"], border_top=raised),
                     'QFrame[role="window"]': css(background=tokens["surface"], border=raised),
+                    # The drop drawer is a window here too: square, raised, its days square keys.
+                    "QFrame#dropDrawer": css(border=raised, border_radius="0"),
+                    ", ".join(f"QPushButton#dropDay{day}" for day in range(7)): css(border_radius="0"),
                     'QFrame[role="sunken"]': css(background="#ffffff", border=f"2px inset {tokens['line']}"),
                     "QLabel": css(color=tokens["text"], font_size=f"{scene.px(13)}px"),
                     'QLabel[role="title"]': css(
@@ -218,9 +221,8 @@ class RetroView(LayoutView):
             head.setProperty("role", "today" if today else "")
             grid.addWidget(head, 0, day)
             for row, item in enumerate(scene.week.on_day(day), start=1):
-                made = block_button(
-                    self, f"{clock_label(item.start)} {item.title}", f"retroBlock{day}-{row}", item.block_id
-                )
+                words = f"{clock_label(item.start)} {item.title}"
+                made = block_button(self, words, f"retroBlock{day}-{row}", item.block_id, day=day)
                 made.setProperty("state", "" if item.live else "past")
                 grid.addWidget(made, row, day)
         grid.setRowStretch(grid.rowCount(), 1)
@@ -259,6 +261,7 @@ class RetroView(LayoutView):
                 f"{flag} {item.title:<26} {due_label(item.due, scene.week.week_start)}",
                 f"retroNote{index}",
                 item.block_id,
+                day=item.day,
             )
             made.setProperty("mono", "true")
             lines.addWidget(made)

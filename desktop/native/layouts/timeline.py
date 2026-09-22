@@ -231,6 +231,7 @@ class TimelineView(LayoutView):
             f"{lead}{clock_label(item.start)}   {item.title}\n{detail}",
             f"timelineRow{index}",
             item.block_id,
+            day=item.day,
         )
         card.setProperty("state", "next" if upcoming else "past" if past else "")
         # A button sizes itself for two lines here, and the up-next card has three: it lost the first and

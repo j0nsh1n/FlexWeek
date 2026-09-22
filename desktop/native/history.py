@@ -53,6 +53,25 @@ def push_step(stack: list[dict], step: dict) -> None:
         del stack[0]
 
 
+def join_step(stack: list[dict], step: dict) -> None:
+    """Fold `step` into the step before it, so one Undo takes both back: homework added and the time
+    FlexWeek gave it straight after. Each week and assignment keeps the earlier before and the later
+    after."""
+    if not stack or stack[-1].get("stale"):
+        push_step(stack, step)
+        return
+    earlier = stack[-1]
+    weeks = {entry["week_start"]: dict(entry) for entry in earlier["weeks"]}
+    for entry in step["weeks"]:
+        known = weeks.get(entry["week_start"])
+        weeks[entry["week_start"]] = {**entry, "before": known["before"]} if known else dict(entry)
+    assignments = {entry["id"]: dict(entry) for entry in earlier["assignments"]}
+    for entry in step["assignments"]:
+        known = assignments.get(entry["id"])
+        assignments[entry["id"]] = {**entry, "before": known["before"]} if known else dict(entry)
+    stack[-1] = {**earlier, "weeks": list(weeks.values()), "assignments": list(assignments.values())}
+
+
 def mark_stale(steps: list[dict], week_start: str) -> None:
     for step in steps:
         if any(entry["week_start"] == week_start for entry in step.get("weeks") or []):

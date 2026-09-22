@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from backend.availability import occupancy_from_windows, spread_sessions
-from backend.models import Assignment, GridWindow, ProtectedWindow, TimeBlock
+from backend.models import Assignment, ProtectedWindow, StudyWindow, TimeBlock
 from backend.slots import hhmm_to_minutes
 from backend.solver import SOLVE_BUDGET_MS, reschedule_running_late, solve
 
@@ -116,7 +116,7 @@ def test_packed_fixture_stays_under_budget_with_protected_hours() -> None:
         [ProtectedWindow(kind="meal", days=[0, 1, 2, 3, 4, 5, 6], start="18:00", duration_min=60)],
         "21:00",
     )
-    windows = [GridWindow(days=[0, 1, 2, 3, 4], start="15:00", duration_min=120)]
+    windows = [StudyWindow(days=[0, 1, 2, 3, 4], start="15:00", duration_min=120)]
     trace = solve(blocks, extra_occ=occ, study_windows=windows)
     assert trace.solve_ms < SOLVE_BUDGET_MS
 
@@ -179,7 +179,7 @@ def test_spread_reports_a_remainder_that_fits_no_grid_session() -> None:
 
 def test_study_windows_are_preferred_before_energy() -> None:
     homework = _flex("hw", 60, [0], energy="high")
-    windows = [GridWindow(days=[0], start="18:00", duration_min=120)]
+    windows = [StudyWindow(days=[0], start="18:00", duration_min=120)]
     trace = solve([homework], study_windows=windows)
     placed = {block.id: block for block in trace.placed}["hw"]
     assert placed.start == "18:00"
@@ -188,7 +188,7 @@ def test_study_windows_are_preferred_before_energy() -> None:
 
 def test_a_short_study_window_does_not_claim_a_longer_session() -> None:
     homework = _flex("hw", 60, [0], energy="high")
-    windows = [GridWindow(days=[0], start="21:00", duration_min=30)]
+    windows = [StudyWindow(days=[0], start="21:00", duration_min=30)]
     trace = solve([homework], study_windows=windows)
     placed = {block.id: block for block in trace.placed}["hw"]
     # A 60-minute session cannot fit a 30-minute window, so the energy-matched
@@ -267,3 +267,63 @@ def test_assignment_rejects_javascript_urls_and_duplicate_checklist_ids() -> Non
                 ],
             }
         )
+
+
+def _course(block: TimeBlock, course: str) -> TimeBlock:
+    return block.model_copy(update={"course": course})
+
+
+def test_a_subject_window_is_kept_for_that_subject() -> None:
+    math = _course(_flex("math", 60, [0], energy="high"), "Math")
+    reading = _course(_flex("reading", 60, [0], energy="high"), "reading")
+    windows = [
+        StudyWindow(days=[0], start="15:30", duration_min=90, subject="Math"),
+        StudyWindow(days=[0], start="19:00", duration_min=120, subject="Reading"),
+    ]
+    placed = {block.id: block for block in solve([math, reading], study_windows=windows).placed}
+    assert placed["math"].start == "15:30"
+    assert placed["reading"].start == "19:00", "subjects match without regard to case"
+
+
+def test_homework_without_its_own_window_prefers_an_untagged_one() -> None:
+    history = _course(_flex("history", 60, [0], energy="high"), "History")
+    windows = [
+        StudyWindow(days=[0], start="15:30", duration_min=90, subject="Math"),
+        StudyWindow(days=[0], start="19:00", duration_min=120),
+    ]
+    placed = {block.id: block for block in solve([history], study_windows=windows).placed}
+    assert placed["history"].start == "19:00"
+
+
+def test_another_subjects_window_is_not_a_preference() -> None:
+    """Reading does not take the time kept for Math just because it is a study window."""
+    reading = _course(_flex("reading", 60, [0], energy="high"), "Reading")
+    windows = [StudyWindow(days=[0], start="15:30", duration_min=90, subject="Math")]
+    placed = {block.id: block for block in solve([reading], study_windows=windows).placed}
+    assert placed["reading"].start == "06:00", "the energy-matched morning keeps its usual first place"
+
+
+@pytest.mark.parametrize("subject", ["   ", "x" * 41])
+def test_a_subject_must_be_a_real_name(subject: str) -> None:
+    with pytest.raises(ValueError):
+        StudyWindow(days=[0], start="15:30", duration_min=60, subject=subject)
+
+
+def test_solving_takes_the_subject_from_the_assignment() -> None:
+    """A session the client has not saved yet arrives without its course."""
+    from backend.assignments import prepare_solve
+
+    session = _flex("s1", 60, [0]).model_copy(update={"assignment_id": "hw-math"})
+    assignment = {"completed": False, "due": "2026-09-18T23:59", "course": "Math"}
+    kept, _deadlines, _slack = prepare_solve([session], "2026-09-14", {"hw-math": assignment})
+    assert kept[0].course == "Math"
+
+
+def test_a_subjects_own_window_beats_an_earlier_untagged_one() -> None:
+    math = _course(_flex("math", 60, [0], energy="high"), "Math")
+    windows = [
+        StudyWindow(days=[0], start="15:30", duration_min=90),
+        StudyWindow(days=[0], start="19:00", duration_min=90, subject="Math"),
+    ]
+    placed = {block.id: block for block in solve([math], study_windows=windows).placed}
+    assert placed["math"].start == "19:00"

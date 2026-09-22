@@ -257,24 +257,18 @@ def test_leftover_kind_splits_the_four_empty_days() -> None:
 
 
 @pytest.mark.skipif(importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent")
-def test_the_model_places_every_block_where_the_week_table_draws_it() -> None:
+def test_the_model_places_every_block_where_the_week_calendar_draws_it() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication
 
-    from desktop.native.widgets import ENDS_ROLE, WeekTable, hhmm_to_slot
+    from desktop.native.canvas import WeekCanvas
 
     app = QApplication.instance() or QApplication(["flexweek-weekmodel-test"])
-    table = WeekTable()
-    table.set_week(WEEK, BLOCKS, TRACE)
-    drawn = set()
-    for row in range(table.rowCount()):
-        for day in range(table.columnCount()):
-            item = table.item(row, day)
-            if item is not None and item.data(ENDS_ROLE)[0]:
-                drawn.update((block_id, day, row) for block_id in item.data(Qt.ItemDataRole.UserRole))
+    canvas = WeekCanvas()
+    canvas.set_week(WEEK, BLOCKS, TRACE)
+    drawn = {(shape.block_id, shape.day, shape.start) for shape in canvas.body.shapes}
     week = build_week(WEEK, BLOCKS, HOMEWORK, TRACE)
-    modelled = {(item.block_id, item.day, hhmm_to_slot(clock_label(item.start))) for item in week.occurrences}
+    modelled = {(item.block_id, item.day, item.start) for item in week.occurrences}
     assert modelled == drawn
     assert len(drawn) == 15
     del app

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import time
 
-from backend.availability import CLUSTER_COPY, LATE_COPY, lateness_occupancy, merge_occupancy, study_prefers
+from backend.availability import CLUSTER_COPY, LATE_COPY, lateness_occupancy, merge_occupancy, study_rank
 from backend.explain import sentence, slack_sentence
-from backend.models import Explanation, GridWindow, Move, ReasonCode, SlackStatus, SolveTrace, TimeBlock
+from backend.models import Explanation, Move, ReasonCode, SlackStatus, SolveTrace, StudyWindow, TimeBlock
 from backend.slots import (
     DAY_END_MIN,
     DAY_START_MIN,
@@ -34,7 +34,7 @@ def solve(
     deadlines: dict[str, tuple[int, int] | None] | None = None,
     slack_deadlines: dict[str, tuple[int, int]] | None = None,
     extra_occ: list[int] | None = None,
-    study_windows: list[GridWindow] | None = None,
+    study_windows: list[StudyWindow] | None = None,
 ) -> SolveTrace:
     """Place flexible blocks around locked ones. Pure and synchronous."""
     started = time.perf_counter()
@@ -56,9 +56,12 @@ def solve(
             completed_day = block.days[0]
         if completed_day is not None:
             spent.append(block.model_copy(update={"days": [completed_day]}))
-    flexible = [block for block in every_flexible if not block.completed]
+    # Homework the student placed by hand keeps its day and start. It takes its time like a lesson,
+    # and nothing new is booked over it.
+    held = [block for block in every_flexible if block.pinned and not block.completed and block.start]
+    flexible = [block for block in every_flexible if not block.completed and not block.pinned]
 
-    occ_locked = _locked_occupancy(locked + spent)
+    occ_locked = _locked_occupancy(locked + spent + held)
     if extra_occ is not None:
         occ_locked = merge_occupancy(occ_locked, extra_occ)
     windows = study_windows or []
@@ -206,7 +209,7 @@ def solve(
         )
 
     return SolveTrace(
-        placed=locked + spent + placed_flex,
+        placed=locked + spent + held + placed_flex,
         unplaced=unplaced,
         moves=moves,
         explanations=explanations,
@@ -225,7 +228,7 @@ def reschedule_after_miss(
     deadlines: dict[str, tuple[int, int] | None] | None = None,
     slack_deadlines: dict[str, tuple[int, int]] | None = None,
     extra_occ: list[int] | None = None,
-    study_windows: list[GridWindow] | None = None,
+    study_windows: list[StudyWindow] | None = None,
 ) -> SolveTrace:
     """Mark one locked occurrence missed, solve again, and describe changed flexible placements."""
     updated: list[TimeBlock] = []
@@ -262,7 +265,7 @@ def reschedule_running_late(
     deadlines: dict[str, tuple[int, int] | None] | None = None,
     slack_deadlines: dict[str, tuple[int, int]] | None = None,
     extra_occ: list[int] | None = None,
-    study_windows: list[GridWindow] | None = None,
+    study_windows: list[StudyWindow] | None = None,
 ) -> SolveTrace:
     """Occupy a late window on one day, solve again, and describe changed flexible placements."""
     late = lateness_occupancy(day, from_start, minutes)
@@ -392,14 +395,14 @@ def _domain(
 
 
 def _order_values(
-    block: TimeBlock, values: list[tuple[int, int]], windows: list[GridWindow]
+    block: TimeBlock, values: list[tuple[int, int]], windows: list[StudyWindow]
 ) -> list[tuple[int, int]]:
     low, high = ENERGY_WINDOW[block.energy]
 
     def key(item: tuple[int, int]) -> tuple[int, int, int, int]:
         day, slot = item
         start_min = DAY_START_MIN + slot * SLOT_MIN
-        study = 0 if study_prefers(windows, day, start_min, block.duration_min) else 1
+        study = study_rank(windows, block.course, day, start_min, block.duration_min)
         match = 0 if low <= start_min < high else 1
         return (study, match, day, slot)
 

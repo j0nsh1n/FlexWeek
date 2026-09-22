@@ -31,6 +31,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.controller import NativeSession, session_days
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
+    from desktop.tests.logic_support import past_setup
 
 PASSWORD = "a-long-test-password"
 HELD: list[object] = []
@@ -99,13 +100,8 @@ def soccer() -> dict:
 
 
 def table_text(window: NativeWindow) -> str:
-    texts = []
-    for row in range(window.week_table.rowCount()):
-        for column in range(window.week_table.columnCount()):
-            item = window.week_table.item(row, column)
-            if item is not None and item.text():
-                texts.append(item.text())
-    return "\n".join(texts)
+    """What the week says: each block's name and the line under it."""
+    return "\n".join(f"{shape.title}\n{shape.detail}" for shape in window.week_table.body.shapes)
 
 
 def test_native_modules_do_not_import_webengine(qapp: QApplication) -> None:
@@ -145,7 +141,7 @@ def test_create_account_shows_eight_codes_then_an_empty_week(qapp: QApplication,
     assert all(len(code) >= 8 for code in codes)
     window.recovery_ack.setChecked(True)
     window.recovery_continue.click()
-    wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "weekPage")
+    past_setup(qapp, window)
     assert window.session.blocks == []
     assert window.session.revision == 0
     assert table_text(window) == ""
@@ -182,7 +178,7 @@ def test_saved_fixed_time_survives_sign_out_and_sign_in(qapp: QApplication, serv
     wait_until(qapp, lambda: first._stack.currentWidget().objectName() == "recoveryPage")
     first.recovery_ack.setChecked(True)
     first.recovery_continue.click()
-    wait_until(qapp, lambda: first._stack.currentWidget().objectName() == "weekPage")
+    past_setup(qapp, first)
     first.session.add_block(soccer())
     first.session.save()
     wait_until(qapp, lambda: first.session.revision == 1 and not first.session.busy)
@@ -485,7 +481,7 @@ def test_keyboard_switches_week_day_and_month(qapp: QApplication, server: LocalS
     wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "recoveryPage")
     window.recovery_ack.setChecked(True)
     window.recovery_continue.click()
-    wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "weekPage")
+    past_setup(qapp, window)
     window.setFocus()
     from PySide6.QtTest import QTest
 
@@ -506,7 +502,7 @@ def test_picking_a_type_opens_add_with_that_category(qapp: QApplication, server:
     wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "recoveryPage")
     window.recovery_ack.setChecked(True)
     window.recovery_continue.click()
-    wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "weekPage")
+    past_setup(qapp, window)
 
     def fill_and_save() -> None:
         dialog = window.findChild(QDialog, "blockDialog")
@@ -794,9 +790,7 @@ def test_running_late_saves_on_a_week_that_already_has_a_missed_day(
     assert _stored(session, "school")["days"] == [0, 1, 2, 3, 4]
 
 
-def test_the_reason_homework_has_no_time_is_the_latest_one(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_the_reason_homework_has_no_time_is_the_latest_one(qapp: QApplication, server: LocalServer) -> None:
     """A club over Monday afternoon takes Math's 15:15, and "no longer fits Monday at 15:15" is right.
     If Find a new time then finds nothing either, that sentence was kept and came back after the next
     edit, although the real reason by then was that Monday had no room before the deadline."""
@@ -928,7 +922,7 @@ def test_preview_dialog_leaves_a_collision_unchecked(qapp: QApplication, server:
     wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "recoveryPage")
     window.recovery_ack.setChecked(True)
     window.recovery_continue.click()
-    wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "weekPage")
+    past_setup(qapp, window)
     window.session.add_block(soccer())
     window.session.save()
     wait_until(qapp, lambda: window.session.revision == 1 and not window.session.busy)
@@ -1539,9 +1533,7 @@ def test_accepted_plan_is_on_the_grid_after_close_and_sign_in(
     wait_until(qapp, lambda: first._stack.currentWidget().objectName() == "recoveryPage")
     first.recovery_ack.setChecked(True)
     first.recovery_continue.click()
-    wait_until(
-        qapp, lambda: first._stack.currentWidget().objectName() == "weekPage" and not first.session.busy
-    )
+    past_setup(qapp, first)
     _two_assignments(first.session)
     first.session.save()
     wait_until(qapp, lambda: not first.session.busy and not first.session.dirty)
@@ -1567,9 +1559,11 @@ def test_accepted_plan_is_on_the_grid_after_close_and_sign_in(
     second.findChild(QPushButton, "signIn").click()
     wait_until(
         qapp,
-        lambda: second._stack.currentWidget().objectName() == "weekPage"
-        and not second.session.busy
-        and len(second.session.assignments) >= 2,
+        lambda: (
+            second._stack.currentWidget().objectName() == "weekPage"
+            and not second.session.busy
+            and len(second.session.assignments) >= 2
+        ),
     )
     later = _work_starts(second.session)
     assert later == starts
@@ -1578,9 +1572,7 @@ def test_accepted_plan_is_on_the_grid_after_close_and_sign_in(
     assert "English essay" in shown
 
 
-def test_unrelated_edits_keep_other_homework_where_it_was(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_unrelated_edits_keep_other_homework_where_it_was(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     _two_assignments(session)
     session.save()

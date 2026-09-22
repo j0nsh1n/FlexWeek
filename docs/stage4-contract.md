@@ -167,3 +167,17 @@ not claim the solver made an impossible week fit.
 - Cluster explanation appears only when two or more tasks are in trouble.
 - Account isolation: another account's assignment spread is 404.
 - `.venv/bin/python scripts/verify.py --web-only` from this worktree.
+
+## Addendum 2026-09-22: study windows for one subject
+
+A study window may carry `subject`, 1 to 40 characters after trimming, omitted when
+absent. The solver ranks each candidate time for a session:
+
+1. inside a window whose subject matches the session's course, compared without
+   regard to case, first;
+2. inside a window with no subject, next;
+3. anywhere else, last. A window for another subject counts as anywhere else.
+
+Energy preference, then day and slot, break ties as before. `POST /api/solve` takes
+each session's course from its assignment, so an unsaved session still finds its
+window.

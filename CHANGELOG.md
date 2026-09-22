@@ -5,6 +5,83 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.14.3] - 2026-09-22
+
+### Added
+- First-run setup replaces the first-week card. A new account goes from its
+  recovery codes to a page at a time, with a step rail, Back, Skip this step
+  and Next: a starting style (Plain calendar, Dashboard, Night owl, Retro,
+  each a real picture of the design) or Choose my own look, then colours and
+  text size; your week, with school days and hours, any number of sports,
+  clubs and jobs each on its own days, and No homework after; how homework
+  gets a time, with study times that can be kept for one subject; reminders
+  and the alarm sound, with Send a test reminder; up to three first homework;
+  and a summary with Change links. Each page is kept when you leave it, so a
+  quit resumes on the same step. Finishing or skipping is remembered, and
+  Settings > This computer > Run setup again opens it filled in with what you
+  have now.
+- Settings > Planning chooses how homework gets a time: as it is added (one
+  Undo takes back the homework and its time), when Plan my homework is pressed
+  (the default, as before), or by dragging it yourself, which turns the button
+  into Suggest times.
+- Homework that needs a time can be dragged from the chips above the Calendar
+  onto a day and time, or given one with Choose a time in the homework editor.
+  Homework placed by hand is pinned: every plan, Replan all included, leaves
+  it where you put it, and Let FlexWeek move it clears the pin.
+- Dragging works in every design, not only Today's app. Anything a design shows
+  as a block can be picked up. Mission control's lanes, the Day dial's face and
+  One thing's day bar take the drop at the time under the pointer. Timeline,
+  Bento, Retro desktop and Clay deck open the day's hours at the side while a
+  block is dragged: hold it over another day's name to turn to that day, and
+  let go on the hours to put it at that time. A drop anywhere says the day, the
+  time and the length, and names any block it would sit beside. Anything placed
+  by dragging is pinned.
+- A study window can be kept for one subject. Plans try a session in its own
+  subject's window first, then in a window for any subject, then anywhere.
+- One alarm sound, in Settings > Alerts: Chime, Soft, Bright, Low, Glass, or a
+  Spotify song or playlist, each with Play. Reminders ring it; a Spotify sound
+  is for alarms only, so a reminder never starts music.
+- A Spotify alarm plays in the student's own Spotify app instead of opening a
+  browser tab, so whole songs play, free or Premium. On Linux FlexWeek tells
+  Spotify to play, names the song in the alarm, rings its own tone until the
+  music is heard, and pauses Spotify when the alarm is stopped or snoozed. On
+  Windows a track opens and starts in the Spotify app, and the media Stop key
+  stops it; a playlist, which Spotify will not start by itself there, rings the
+  tone too. Without the Spotify app, the link opens in the browser and the tone
+  rings.
+- Settings > Appearance & layout > Animations: Normal, More movement or Off.
+
+### Changed
+- Scrollbars, dropdowns and their lists, spin and time boxes, check boxes,
+  radio buttons, menus, tooltips, the date picker and progress bars take the
+  colours of the chosen design.
+- The Calendar's week works like Daily Scheduler's timeline. Each block is
+  one shape instead of a run of table cells, and dragging moves the block
+  itself: it follows the pointer a quarter hour at a time, into another day,
+  with its new times written on it. Its top or bottom edge resizes it. Empty
+  time lights up under the pointer, and dragging across it adds a block of
+  that length. Two blocks at one time are allowed and sit side by side, each
+  with a dot so the overlap is not missed; only time outside the day's hours
+  and homework ending after it is due are refused. Dragging one day of a
+  repeating block, such as Wednesday's School, moves only that day. Homework
+  placed by hand stays where it was put even beside a fixed block; homework
+  the planner placed still makes way. Escape lets go without moving anything.
+- Views and pages cross-fade, and moving to another week, day or month slides
+  the old one away in the direction you went. Notices rise into place, setup's
+  pages slide in from the side you are heading, its step marker glides between
+  steps, and Settings slides between its sections. Nothing waits for an
+  animation: the new page is live at once.
+- The More menu shows its Adding and Planning headings. Due dates read
+  "Sun 27 Sep 2026, 23:59" instead of "2026-09-27 23:59".
+- A change to the week no longer restyles the whole window when the look is
+  the same, which cost about 26 ms and a full repaint on every change.
+
+### Fixed
+- A block dragged or dropped while a save was still under way was put back
+  when the save finished. It now moves once the save is done.
+- On a dark palette on KDE an unticked box, an unselected radio button and the
+  spin arrows could not be seen at all.
+
 ## [0.14.2] - 2026-09-21
 
 ### Fixed

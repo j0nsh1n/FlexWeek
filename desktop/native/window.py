@@ -7,7 +7,6 @@ import json
 import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from uuid import uuid4
 
 from PySide6.QtCore import QEvent, QObject, QPoint, QStandardPaths, Qt, QTimer, QUrl
 from PySide6.QtGui import (
@@ -42,36 +41,42 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from backend.slots import SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm
+from backend.slots import minutes_to_hhmm
 from desktop.native import autostart
 from desktop.native.calendar import (
     CATEGORIES,
     DAY_FULL,
     FLEX_CATEGORIES,
-    WEEKDAYS,
     agenda_for,
     date_for_day,
+    is_series,
     monday_of,
+    span_clash,
+    span_problem,
     sunday_due,
 )
+from desktop.native.canvas import WeekCanvas, span_words
 from desktop.native.client import PASSWORD_LENGTH_HINT, USERNAME_ERROR, USERNAME_HINT
 from desktop.native.controller import NativeSession
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
 from desktop.native.kept import KeptSession
 from desktop.native.layouts.base import LayoutView, Scene
+from desktop.native.layouts.drag import Verdict
 from desktop.native.layouts.registry import options_for, sanitize_layout, tokens_for
 from desktop.native.layouts.views import VIEW_CLASSES
 from desktop.native.look import (
     TEXT_PT,
-    card_check_sheet,
     effective_look,
+    pack_motion,
     pack_stylesheet,
     palette_from_tokens,
     resolved_palette,
     sanitize_look,
 )
+from desktop.native.motion import appear, apply_ui_effects, fade_away, hold_picture, motion_level, switch_page
 from desktop.native.remind import REMINDER_POLL_MS, clock_parts
 from desktop.native.reuse import (
+    due_point,
     late_from_start,
     late_locked_line,
     planner_title,
@@ -80,17 +85,17 @@ from desktop.native.reuse import (
     week_label,
 )
 from desktop.native.settings import (
-    SPORT_FALLBACK,
     AccountDialog,
     AlarmRingDialog,
     FocusPanel,
     PrefsDialog,
     RestoreDialog,
-    SetupCard,
     TransferPreviewDialog,
     UpdateDialog,
 )
+from desktop.native.setup import REMINDERS, SETUP_VERSION, STYLE, SetupPage, SetupState
 from desktop.native.sound import Bell
+from desktop.native.spotify import LISTENING, STARTING, SpotifyPlayer, open_in_app
 from desktop.native.tones import FALLBACK
 from desktop.native.update import RELEASE_PAGE, due_for_check, sanitize_updates
 from desktop.native.updater import Updater, apply_update
@@ -101,6 +106,7 @@ from desktop.native.widgets import (
     AlertStrip,
     AvailabilityDialog,
     BlockDialog,
+    ChooseTimeDialog,
     DayAgenda,
     FittedLabel,
     FlowLayout,
@@ -113,12 +119,17 @@ from desktop.native.widgets import (
     SpreadDialog,
     Toast,
     UnfinishedPanel,
-    WeekTable,
+    WaitingChip,
+    add_heading,
+    control_art,
     swatch,
-    tick_file,
 )
 
 WINDOW_SIZE = (1280, 800)
+# The longest the old week's picture waits for the next one before it fades anyway.
+TRAVEL_WAIT_MS = 900
+PLAN_LABEL = "Plan my homework"
+SUGGEST_LABEL = "Suggest times"
 NAV_ARROW_PX = 34
 AUTH_CARD_WIDTH = 380
 # Long enough for the student to read that the update installed before the window goes.
@@ -155,6 +166,13 @@ class NativeWindow(QMainWindow):
             self.setWindowIcon(icon)
         self.resize(*WINDOW_SIZE)
         self._stack = QStackedWidget(self)
+        # The Animations level, set from the look in _apply_appearance, and the picture of the planner
+        # held while the student moves to another week.
+        self._motion = "normal"
+        # What the window was last dressed in, so a change that leaves the look alone skips restyling.
+        self._dressed: tuple = ()
+        self._travel_picture: QLabel | None = None
+        self._travel_direction = 0
         self._stack.setObjectName("nativeStack")
         self.setCentralWidget(self._stack)
         self._more_pairs = []
@@ -175,7 +193,15 @@ class NativeWindow(QMainWindow):
         self._updater.progress.connect(self._on_update_progress)
         self._updater.failed.connect(self._on_update_problem)
         self._updater.ready.connect(self._on_update_ready)
-        self._setup_dismissed = False
+        # Setup is on screen; this sign-in has decided whether it should be; and what setup has kept
+        # that is still to be written, one request at a time.
+        self._setup_active = False
+        self._setup_checked = False
+        self._setup_prefs: dict = {}
+        self._setup_week = False
+        # A block let go while a save is under way, moved once it is done: the save's reply replaces
+        # the week, so a move made before it arrived would be lost.
+        self._move_waiting: tuple[str, int, int, int, int] | None = None
         self._changed_ms = 0
         self._last_try_ms = 0
         self._autosave = QTimer(self)
@@ -185,6 +211,7 @@ class NativeWindow(QMainWindow):
         self._build_auth()
         self._build_recovery()
         self._build_week()
+        self._build_setup()
         self.session.account_changed.connect(self._on_account)
         self.session.recovery_codes.connect(self._show_recovery)
         self.session.week_changed.connect(self._on_week)
@@ -202,6 +229,11 @@ class NativeWindow(QMainWindow):
         self._icon = icon or QIcon()
         self._alarm_dialog: AlarmRingDialog | None = None
         self._bell = Bell(self)
+        # A Spotify alarm plays in the student's Spotify app. Until it is heard the tone rings, so an
+        # alarm is never silent, and once it is the tone stops.
+        self._spotify = SpotifyPlayer(self)
+        self._spotify.late.connect(self._spotify_late)
+        self._spotify.heard.connect(self._spotify_heard)
         self._look = sanitize_look(None)
         self._allow_week_page = True
         self._load_look()
@@ -304,7 +336,7 @@ class NativeWindow(QMainWindow):
         for index in range(self._stack.count()):
             page = self._stack.widget(index)
             if page.objectName() == name:
-                self._stack.setCurrentIndex(index)
+                switch_page(self._stack, page, self._motion)
                 return
 
     def _build_auth(self) -> None:
@@ -520,11 +552,6 @@ class NativeWindow(QMainWindow):
         chrome = QVBoxLayout(self.plan_chrome)
         chrome.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.plan_chrome)
-        self.setup_card = SetupCard(page)
-        self.setup_card.finished.connect(self._apply_setup)
-        self.setup_card.dismissed.connect(self._dismiss_setup)
-        self.setup_card.hide()
-        self.setup_card.setFixedWidth(420)
         # Wrapping, because twenty buttons in one row made the window wider than any laptop screen.
         actions = FlowLayout()
         self.add_menu = AddMenu(self)
@@ -637,8 +664,10 @@ class NativeWindow(QMainWindow):
         for leftover in (availability, settings, account, updates):
             leftover.setParent(overflow)
             leftover.hide()
-        for heading, buttons in self._groups:
-            more_menu.addSection(heading)
+        for index, (heading, buttons) in enumerate(self._groups):
+            if index:
+                more_menu.addSeparator()
+            add_heading(more_menu, heading)
             for button in buttons:
                 if button.parent() is not overflow:
                     button.setParent(overflow)
@@ -662,7 +691,7 @@ class NativeWindow(QMainWindow):
         self._more_pairs.append((logout, sign_out))
         more_menu.aboutToShow.connect(self._sync_more_menu)
         more.setMenu(more_menu)
-        gear = QPushButton("⚙\uFE0E")
+        gear = QPushButton("⚙\ufe0e")
         gear.setObjectName("settingsGear")
         gear.setToolTip("Settings")
         gear.setAccessibleName("Settings")
@@ -707,13 +736,18 @@ class NativeWindow(QMainWindow):
         layout.addWidget(self.alert_strip)
         self.planner = QStackedWidget()
         self.planner.setObjectName("plannerStack")
-        self.week_table = WeekTable()
-        self.week_table.block_activated.connect(self._edit_block)
-        self.week_table.slot_activated.connect(self._create_at_slot)
-        self.week_table.range_created.connect(self._create_range)
-        self.week_table.times_changed.connect(self._apply_times)
-        self.week_table.series_drag_refused.connect(self._refuse_series)
-        self.week_table.block_selected.connect(self.session.select_block)
+        # Today's app's week: Daily Scheduler's painted timeline, a column for each day.
+        self.week_table = WeekCanvas()
+        hours = self.week_table.body
+        hours.block_activated.connect(self._edit_block)
+        hours.block_selected.connect(self.session.select_block)
+        hours.range_created.connect(self._create_range)
+        hours.moved.connect(self._move_block)
+        hours.dropped.connect(self._drop_block)
+        hours.refused.connect(self.session._say)
+        hours.judge = self._judge_span
+        hours.minutes_of = self._minutes_of
+        hours.title_of = self._title_of
         self.planner.addWidget(self.week_table)
         self.day_agenda = DayAgenda()
         self.day_agenda.item_activated.connect(self._edit_block)
@@ -798,6 +832,10 @@ class NativeWindow(QMainWindow):
             view.my_day_requested.connect(self._enter_day)
             view.back_requested.connect(self._leave_day)
             view.day_activated.connect(self.session.open_day)
+            view.placement_requested.connect(self._drop_block)
+            view.refused.connect(self.session._say)
+            view.judge = self._judge_span
+            view.motion = self._motion
             self.planner.addWidget(view)
             self._views[layout_id] = view
         view.show_week(self._scene_for(layout_id))
@@ -857,10 +895,16 @@ class NativeWindow(QMainWindow):
         shown = self.planner.currentWidget()
         if isinstance(shown, LayoutView) and self.session.account is not None:
             shown.show_week(self._scene_for(shown.layout_id))
+        elif shown is self.week_table and self.session.account is not None:
+            # The line that says now moves with the minute.
+            self.week_table.set_clock(self.session.week_start, self.session.now_ms())
 
     def _sync_chrome(self) -> None:
         """Planning chips and the clipboard line step aside for a design of its own. Plan my
         homework and More stay in the top bar in every layout, every view, and My day."""
+        manual = (self.session.preferences or {}).get("planning_style") == "manual"
+        # A student who places homework by hand asks for ideas; the plan is theirs.
+        self.solve_button.setText(SUGGEST_LABEL if manual else PLAN_LABEL)
         own = isinstance(self.planner.currentWidget(), LayoutView)
         self.plan_chrome.setVisible(not own)
         self.focus_panel.setVisible(not own or self.session.focus is not None)
@@ -904,7 +948,10 @@ class NativeWindow(QMainWindow):
             self._day_mode = False
             self._opened_on_preference = False
             self._making_account = False
-            self._setup_dismissed = False
+            self._setup_active = False
+            self._setup_checked = False
+            self._setup_prefs = {}
+            self._setup_week = False
             self._sync_auth_mode()
             self.username.clear()
             self.password.clear()
@@ -919,88 +966,158 @@ class NativeWindow(QMainWindow):
         self._allow_week_page = True
         self.session.finish_recovery()
 
-    def _sync_setup(self) -> None:
-        empty = not self.session.blocks and not self.session.assignments
-        show = self.session.account is not None and empty and not self._setup_dismissed
-        card = self.setup_card
-        if show and not card.isVisible():
-            card.reset(self.session.week_start)
-        card.setVisible(bool(show))
-        if show:
-            self._place_setup()
-
-    def _place_setup(self) -> None:
-        card = self.setup_card
-        page = card.parentWidget()
-        if page is None or not card.isVisible():
-            return
-        card._fit()
-
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)
-        self._place_setup()
         if self.toast.isVisible():
             self.toast.reposition()
 
-    def _dismiss_setup(self) -> None:
-        self._setup_dismissed = True
-        self.setup_card.hide()
+    def _build_setup(self) -> None:
+        self.setup_page = SetupPage()
+        self.setup_page.previewed.connect(self._preview_setup_look)
+        self.setup_page.left.connect(self._setup_step_left)
+        self.setup_page.finished.connect(self._finish_setup)
+        self.setup_page.test_requested.connect(self._test_reminder)
+        self._stack.addWidget(self.setup_page)
 
-    def _apply_setup(self, payload: dict) -> None:
-        self._setup_dismissed = True
-        self.setup_card.hide()
-        school = payload.get("school")
-        if school:
-            start, end = school
-            try:
-                begin, stop = hhmm_to_minutes(start), hhmm_to_minutes(end)
-            except (TypeError, ValueError):
-                begin, stop = 8 * 60, 14 * 60 + 30
-            duration = max(SLOT_MIN, stop - begin)
-            self.session.add_block(
-                {
-                    "id": "school",
-                    "title": "School",
-                    "kind": "locked",
-                    "category": "class",
-                    "start": minutes_to_hhmm(begin),
-                    "duration_min": duration,
-                    "days": list(WEEKDAYS),
-                }
-            )
-        sport = payload.get("sport")
-        if sport:
-            title, start, end = sport
-            try:
-                begin, stop = hhmm_to_minutes(start), hhmm_to_minutes(end)
-            except (TypeError, ValueError):
-                begin, stop = 15 * 60 + 30, 17 * 60
-            duration = max(SLOT_MIN, stop - begin)
-            self.session.add_block(
-                {
-                    "id": "sport",
-                    "title": title or SPORT_FALLBACK,
-                    "kind": "locked",
-                    "category": "exercise",
-                    "start": minutes_to_hhmm(begin),
-                    "duration_min": duration,
-                    "days": [3],
-                }
-            )
-        homework = payload.get("homework")
-        if homework:
-            title, minutes, due = homework
-            self.session.add_homework(
-                {
-                    "id": str(uuid4()),
-                    "title": title or "Homework",
-                    "due": due or sunday_due(self.session.week_start),
-                    "estimate_min": int(minutes),
-                    "revision": 0,
-                }
-            )
-        if payload:
-            self.session.save()
+    def _maybe_open_setup(self) -> None:
+        """Setup opens once a sign-in, for an account that has neither finished nor skipped it.
+
+        A new account opens it at once. Any other waits for its preferences, which say whether setup
+        was finished and, if not, the step to resume on. An account from before setup kept its place
+        opens it only when it has nothing in it yet, as the first-week card did.
+        """
+        session = self.session
+        if self._setup_active or self._setup_checked or session.account is None:
+            return
+        prefs = session.preferences
+        if prefs is None and not session.new_account:
+            return
+        self._setup_checked = True
+        progress = (prefs or {}).get("setup")
+        if progress is None:
+            if session.new_account or (not session.blocks and not session.assignments):
+                self._open_setup(STYLE, first_run=True)
+            return
+        if not progress.get("finished_at"):
+            step = int(progress.get("step") or STYLE)
+            self._open_setup(step, first_run=step <= REMINDERS)
+
+    def _setup_state(self, first_run: bool) -> SetupState:
+        session = self.session
+        prefs = session.preferences or {}
+        courses = {str(item.get("course") or "").strip() for item in session.assignments.values()}
+        return SetupState(
+            pack=str(prefs.get("theme_pack") or "system"),
+            look=self._look,
+            layout=self._layout,
+            preferences=dict(prefs),
+            blocks=list(session.blocks),
+            week_start=session.week_start,
+            subjects=sorted(course for course in courses if course),
+            first_run=first_run,
+        )
+
+    def _open_setup(self, step: int, *, first_run: bool) -> None:
+        self._setup_active = True
+        self.setup_page.motion = self._motion
+        self.setup_page.open(self._setup_state(first_run), step)
+        self._show_page("setupPage")
+
+    def _run_setup_again(self) -> None:
+        self._setup_checked = True
+        self._open_setup(STYLE, first_run=False)
+
+    def _preview_setup_look(self, choice: dict) -> None:
+        """Dress the whole window in a look the student is trying, without keeping it. The old look
+        fades out over the new one rather than snapping."""
+        picture = hold_picture(self._stack, self._motion)
+        self._look = choice["look"]
+        self.session.look = self._look
+        self._layout = choice["layout"]
+        if self.session.preferences is not None:
+            self.session.preferences = {**self.session.preferences, "theme_pack": choice["pack"]}
+        self._apply_appearance()
+        self.setup_page.motion = self._motion
+        fade_away(picture, self._motion)
+
+    def _setup_step_left(self, _step: int, destination: int, answer: object) -> None:
+        """Keep what a page answered, and where the student went, so a quit resumes there."""
+        updates: dict = {"setup": {"version": SETUP_VERSION, "step": destination}}
+        if isinstance(answer, dict):
+            if "layout" in answer:
+                self._look = answer["look"]
+                self.session.look = self._look
+                self._layout = answer["layout"]
+                self._save_look()
+                updates["theme_pack"] = answer["pack"]
+            if "blocks" in answer:
+                self.session.set_setup_blocks(answer["blocks"])
+                updates["day_cutoff"] = answer["day_cutoff"]
+                self._setup_week = True
+            if "homework" in answer:
+                auto = (self.session.preferences or {}).get("planning_style") == "auto"
+                for item in answer["homework"]:
+                    self.session.add_homework(item)
+                    if auto:
+                        self.session.plan_after_save(item["id"])
+                self._setup_week = True
+            for key in (
+                "planning_style",
+                "study_windows",
+                "reminders_enabled",
+                "reminder_lead_min",
+                "alarm_tone",
+                "default_spotify_url",
+            ):
+                if key in answer:
+                    updates[key] = answer[key]
+        self._setup_prefs.update(updates)
+        if self.session.preferences is not None:
+            # Seen at once, as Settings does: the save that follows stores them.
+            self.session.preferences = {**self.session.preferences, **self._setup_prefs}
+        self._flush_setup()
+
+    def _flush_setup(self) -> None:
+        """Write what setup kept, one request at a time. A second request replaces the first on the
+        session, so two at once would drop the first one's reply, and an answer typed a moment
+        before a quit would be lost. The preferences go first: the week's save can start a plan."""
+        session = self.session
+        if session.account is None or session.busy:
+            return
+        if self._setup_prefs and session.preferences is not None:
+            updates, self._setup_prefs = self._setup_prefs, {}
+            session.save_preferences(updates)
+            return
+        if self._setup_week:
+            self._setup_week = False
+            session.save()
+
+    def _finish_setup(self) -> None:
+        stamp = datetime.now().strftime("%Y-%m-%dT%H:%M")
+        progress = {"version": SETUP_VERSION, "step": self.setup_page.step, "finished_at": stamp}
+        self._setup_prefs["setup"] = progress
+        if self.session.preferences is not None:
+            self.session.preferences = {**self.session.preferences, **self._setup_prefs}
+        self._setup_active = False
+        self._flush_setup()
+        self._sync_chrome()
+        self._on_week()
+
+    def _test_reminder(self, tone: str, link: str) -> None:
+        """A reminder now, in the sound on screen, so the student hears and sees what they chose."""
+        volume = (self.session.preferences or {}).get("alert_volume", 80)
+        # A reminder never starts music, so it chimes; the Spotify song is what an alarm will play.
+        opened = tone == "spotify" and bool(link) and bool(self._spotify.play(link))
+        self._bell.once(FALLBACK if tone == "spotify" else tone, volume)
+        title, body = "Test reminder", "This is how a reminder from FlexWeek looks."
+        if self._tray_icon is not None and self._tray_icon.supportsMessages():
+            self._tray_icon.showMessage(title, body, QSystemTrayIcon.MessageIcon.Information, 8000)
+            said = "Sent. It shows in the corner of your screen."
+        else:
+            said = "Sent. This computer shows no notifications, so reminders appear in FlexWeek instead."
+        if opened:
+            said += " Alarms play your Spotify link in the Spotify app, which it has just been given."
+        self.setup_page.show_test_result(said)
 
     def _show_recovery(self, codes: list) -> None:
         self._allow_week_page = False
@@ -1047,7 +1164,8 @@ class NativeWindow(QMainWindow):
         self._sync_add_button()
         self._sync_classic_waiting()
         view = self.session.planner_view
-        self.planner.setCurrentWidget(self._planner_widget(view))
+        switch_page(self.planner, self._planner_widget(view), self._motion)
+        self._release_travel()
         for name in ("viewDay", "viewWeek", "viewMonth", "viewMyDay"):
             button = self.findChild(QPushButton, name)
             if button is not None:
@@ -1060,8 +1178,13 @@ class NativeWindow(QMainWindow):
         self.week_title.set_full_text(
             planner_title(self.session, view), planner_title(self.session, view, short=True)
         )
-        self._sync_setup()
-        self._show_page("weekPage")
+        self._maybe_open_setup()
+        if self._setup_prefs or self._setup_week:
+            # The account's preferences may only now have arrived, and what setup kept before they did,
+            # a skip included, is written with them.
+            QTimer.singleShot(0, self._flush_setup)
+        if not self._setup_active:
+            self._show_page("weekPage")
         can_retry = self.session.pending_save is not None and not self.session.conflict
         # Hidden, not merely greyed: a button that is never pressable is a permanent piece of
         # furniture that says a save failed when none has.
@@ -1108,7 +1231,10 @@ class NativeWindow(QMainWindow):
         fresh = self.session.consume_plan_review()
         if fresh is not None:
             titles = {block["id"]: block["title"] for block in self.session.blocks}
+            was_open = self.plan_review.isVisible()
             self.plan_review.set_trace(fresh, titles, self.session.week_start)
+            if self.plan_review.isVisible() and not was_open:
+                appear(self.plan_review, self._motion)
         self._sync_chrome()
         self._apply_appearance()
         if self._pending_spread_ui and self.session.spread_preview:
@@ -1195,6 +1321,12 @@ class NativeWindow(QMainWindow):
         on_recovery = self.findChild(QWidget, "recoveryPage") is self._stack.currentWidget()
         if not busy and self.session.account is not None and on_recovery:
             self.recovery_continue.setEnabled(self.recovery_ack.isChecked())
+        if not busy and self._move_waiting is not None:
+            waiting, self._move_waiting = self._move_waiting, None
+            QTimer.singleShot(0, lambda: self._move_block(*waiting))
+        if not busy and (self._setup_prefs or self._setup_week):
+            # A moment later, so a plan that finished just now saves its week before setup writes.
+            QTimer.singleShot(0, self._flush_setup)
 
     def _on_recovery_ack(self, checked: bool) -> None:
         self.recovery_continue.setEnabled(checked and not self.session.busy)
@@ -1219,7 +1351,21 @@ class NativeWindow(QMainWindow):
         self.session.keep_signed_in = self.keep_signed_in.isChecked()
         self.session.login(self.username.text().strip(), self.password.text())
 
+    def _travel(self, direction: int) -> None:
+        """Hold a picture of the planner while the next week, day or month loads, then let it drift
+        away in the direction the student went. Without it the old week blinked to the new one."""
+        self._release_travel()
+        self._travel_picture = hold_picture(self.planner, self._motion)
+        self._travel_direction = direction
+        if self._travel_picture is not None:
+            QTimer.singleShot(TRAVEL_WAIT_MS, self._release_travel)
+
+    def _release_travel(self) -> None:
+        picture, self._travel_picture = self._travel_picture, None
+        fade_away(picture, self._motion, self._travel_direction)
+
     def _go_previous(self) -> None:
+        self._travel(1)
         if self.session.planner_view == "month":
             self.session.shift_month(-1)
             return
@@ -1230,6 +1376,7 @@ class NativeWindow(QMainWindow):
         self._shift_week(-7)
 
     def _go_next(self) -> None:
+        self._travel(-1)
         if self.session.planner_view == "month":
             self.session.shift_month(1)
             return
@@ -1240,6 +1387,7 @@ class NativeWindow(QMainWindow):
         self._shift_week(7)
 
     def _go_today(self) -> None:
+        self._travel(0)
         today = date.today()
         self.session.load_week(monday_of(today.isoformat()))
         if self.session.planner_view == "day" or self._day_mode:
@@ -1278,9 +1426,20 @@ class NativeWindow(QMainWindow):
         if dialog.spread_requested():
             self._open_spread(dialog.assignment()["id"])
             return
+        if dialog.requested() == "choose":
+            self._choose_time(dialog.assignment()["id"])
+            return
+        if dialog.requested() == "unpin":
+            if self.session.unpin_assignment(dialog.assignment()["id"]):
+                self.session.save()
+            return
         body = dialog.assignment()
         known = self.session.assignments.get(body.get("id") or "")
         self.session.add_homework(body, days=days)
+        style = (self.session.preferences or {}).get("planning_style")
+        if style == "auto" and known is None and not body.get("completed") and days is None:
+            # Plan it for me as I add it: new homework gets its time once it is saved, in the same step.
+            self.session.plan_after_save(body["id"])
         self.session.save()
         if body.get("completed") and not (known or {}).get("completed"):
             self._set_notice(f"Finished {body.get('title') or 'Homework'}.", "Undo", self._undo_from_notice)
@@ -1347,7 +1506,7 @@ class NativeWindow(QMainWindow):
         kicker.setObjectName("classicWaitingLabel")
         row.addWidget(kicker)
         for index, item in enumerate(waiting):
-            made = QPushButton(item.title)
+            made = WaitingChip(item.title, item.block_id)
             made.setObjectName(f"classicWaiting{index}")
             made.setCursor(Qt.CursorShape.PointingHandCursor)
             made.clicked.connect(lambda _=False, key=item.block_id: self._edit_block(key))
@@ -1362,6 +1521,7 @@ class NativeWindow(QMainWindow):
         # said everything twice.
         self.toast.hide()
         self.action_notice.show()
+        appear(self.action_notice, self._motion)
 
     def _undo_from_notice(self) -> None:
         self.action_notice.hide()
@@ -1392,21 +1552,6 @@ class NativeWindow(QMainWindow):
             return
         self._commit_block(BlockDialog(self, category=category))
 
-    def _create_at_slot(self, day: int, start: str) -> None:
-        category = self.session.armed_category
-        if category in FLEX_CATEGORIES:
-            self._commit_homework(
-                HomeworkDialog(
-                    self,
-                    week_start=self.session.week_start,
-                    category=category,
-                    due=sunday_due(self.session.week_start),
-                ),
-                days=[day],
-            )
-            return
-        self._commit_block(BlockDialog(self, day=day, start=start, category=category, from_range=True))
-
     def _create_range(self, day: int, start_min: int, end_min: int) -> None:
         start = minutes_to_hhmm(start_min)
         duration = end_min - start_min
@@ -1434,19 +1579,97 @@ class NativeWindow(QMainWindow):
             )
         )
 
-    def _apply_times(self, block_id: str, start_min: int, end_min: int) -> None:
-        if self.session.apply_times(block_id, start_min, end_min):
-            self.session.save()
-
-    def _refuse_series(self, block_id: str, day: int) -> None:
-        self.session.select_block(block_id, day)
-        self.session.refuse_series_drag(block_id)
+    def _due_point(self, block_id: str) -> tuple[int, int] | None:
+        """The day and minute a homework session is due, for the calendar to refuse a drag past it."""
+        block = next((item for item in self.session.blocks if item["id"] == block_id), None)
+        assignment = self.session.assignments.get((block or {}).get("assignment_id") or "")
+        if not assignment:
+            return None
+        return due_point(assignment.get("due"), self.session.week_start)
 
     def _edit_homework(self, assignment_id: str) -> None:
         assignment = self.session.assignments.get(assignment_id)
         if assignment is None:
             return
-        self._commit_homework(HomeworkDialog(self, assignment, self.session.week_start))
+        sessions = [block for block in self.session.blocks if block.get("assignment_id") == assignment_id]
+        waiting = any(not block.get("start") and not block.get("completed") for block in sessions)
+        pinned = any(block.get("pinned") for block in sessions)
+        dialog = HomeworkDialog(self, assignment, self.session.week_start, waiting=waiting, pinned=pinned)
+        self._commit_homework(dialog)
+
+    def _choose_time(self, assignment_id: str) -> None:
+        """A time for this homework's first session that needs one, picked rather than dragged."""
+        waiting = [
+            item
+            for item in self.session.blocks
+            if item.get("assignment_id") == assignment_id
+            and not item.get("start")
+            and not item.get("completed")
+        ]
+        if not waiting:
+            return
+        block = waiting[0]
+        due = self._due_point(block["id"])
+        days = list(block["days"])
+        clock = clock_parts(self.session.now_ms())
+        today = clock["day"] if monday_of(clock["iso"]) == self.session.week_start else None
+        dialog = ChooseTimeDialog(self, block, self.session.week_start, days, self.session.blocks, due, today)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        day, start = dialog.choice()
+        if self.session.place_session(block["id"], day, start):
+            self.session.save()
+
+    def _judge_span(self, block_id: str, from_day: int, day: int, start: int, end: int) -> Verdict:
+        """Whether a block can go where it is being dragged, and the words for it. One rule for the
+        calendar and every design: another block there is allowed, and said, as in Daily Scheduler;
+        time FlexWeek does not plan in, and homework ending after it is due, are not."""
+        block = next((item for item in self.session.blocks if item["id"] == block_id), None)
+        if block is None:
+            return Verdict(False, "")
+        problem = span_problem(self.session.blocks, block_id, day, start, end, self._due_point(block_id))
+        if problem is not None:
+            return Verdict(False, problem, start, end)
+        clash = span_clash(self.session.blocks, block_id, day, start, end)
+        return Verdict(
+            True, span_words(day, start, end) + (f" · beside {clash}" if clash else ""), start, end
+        )
+
+    def _minutes_of(self, block_id: str) -> int:
+        block = next((item for item in self.session.blocks if item["id"] == block_id), None)
+        return int((block or {}).get("duration_min") or 60)
+
+    def _title_of(self, block_id: str) -> str:
+        block = next((item for item in self.session.blocks if item["id"] == block_id), None)
+        return str((block or {}).get("title") or "")
+
+    def _move_block(self, block_id: str, from_day: int, day: int, start: int, end: int) -> None:
+        """A block let go at a time, on the calendar or in a design. Homework that needed a time gets
+        this one; a block that repeats moves only the day it was dragged from; anything else moves.
+        Whatever moves by hand is pinned, so no plan moves it back."""
+        if self.session.busy:
+            self._move_waiting = (block_id, from_day, day, start, end)
+            return
+        block = next((item for item in self.session.blocks if item["id"] == block_id), None)
+        if block is None:
+            return
+        verdict = self._judge_span(block_id, from_day, day, start, end)
+        if not verdict.ok:
+            if verdict.words:
+                self.session._say(verdict.words)
+            return
+        if not block.get("start"):
+            changed = self.session.place_session(block_id, day, start)
+        elif is_series(block):
+            origin = from_day if from_day in block["days"] else day
+            changed = self.session.move_occurrence(block_id, origin, day, start, end)
+        else:
+            changed = self.session.apply_times(block_id, start, end, day)
+        if changed:
+            self.session.save()
+
+    def _drop_block(self, block_id: str, from_day: int, day: int, start: int) -> None:
+        self._move_block(block_id, from_day, day, start, start + self._minutes_of(block_id))
 
     def _edit_block(self, block_id: str) -> None:
         if self.session.planner_view == "day":
@@ -1672,7 +1895,10 @@ class NativeWindow(QMainWindow):
         if self.session.preferences is None:
             self.session._say("Still loading your settings…")
             return
-        dialog = AvailabilityDialog(self, self.session.preferences)
+        subjects = sorted(
+            {str(item["course"]).strip() for item in self.session.assignments.values() if item.get("course")}
+        )
+        dialog = AvailabilityDialog(self, self.session.preferences, subjects)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         self.session.save_availability(dialog.protected(), dialog.study_windows(), dialog.day_cutoff())
@@ -1711,13 +1937,16 @@ class NativeWindow(QMainWindow):
     def _present_alerts(self, notices: list) -> None:
         prefs = self.session.preferences or {}
         if notices and prefs.get("reminder_sound", True) is not False:
-            # Reminders ring on a fixed chime; only alarms carry a chosen sound. A focus notice brings
-            # its own tone and answers to the end-of-session chime setting as well, as it does on the web.
+            # Reminders ring the chosen alarm sound. A focus notice keeps its own two tones until the
+            # student picks a sound, then uses theirs. A Spotify sound never starts music for these.
+            tone = prefs.get("alarm_tone")
+            short = FALLBACK if tone in (None, "spotify") else str(tone)
             focus = [notice for notice in notices if notice.get("kind") == "focus"]
             if len(focus) < len(notices):
-                self._bell.once(FALLBACK, prefs.get("alert_volume", 80))
+                self._bell.once(short, prefs.get("alert_volume", 80))
             elif prefs.get("end_chime"):
-                self._bell.once(str(focus[0].get("tone") or FALLBACK), prefs.get("alert_volume", 80))
+                own = str(focus[0].get("tone") or FALLBACK)
+                self._bell.once(own if tone is None else short, prefs.get("alert_volume", 80))
         for notice in notices:
             title = notice.get("title") or "FlexWeek"
             body = notice.get("body") or ""
@@ -1742,20 +1971,35 @@ class NativeWindow(QMainWindow):
         try:
             dialog.exec()
         finally:
-            # Whatever closed the dialog, including the window shutting, the noise stops with it.
+            # Whatever closed the dialog, including the window shutting, the noise stops with it,
+            # Spotify included.
             self._bell.stop()
+            self._spotify.stop()
         snoozed = dialog.snoozed
         self._alarm_dialog = None
         self.session.finish_alarm(snoozed)
 
     def _ring(self, alarm: dict, url: str) -> None:
-        """Play the alarm's own sound. "spotify" means the linked track, and the web falls back to a
-        tone when that does not open, so this does too: a silent alarm is not an alarm."""
-        volume = (self.session.preferences or {}).get("alert_volume", 80)
-        tone = str(alarm.get("sound") or FALLBACK)
-        if tone == "spotify" and url and QDesktopServices.openUrl(QUrl(url)):
+        """Play the alarm's own sound. "spotify" means the linked song or playlist in the student's
+        Spotify app. Whatever it cannot be sure will play gets the tone too: a silent alarm is not an
+        alarm."""
+        prefs = self.session.preferences or {}
+        tone = str(alarm.get("sound") or prefs.get("alarm_tone") or FALLBACK)
+        if tone == "spotify" and not url:
+            url = self.session.spotify_url(prefs.get("default_spotify_url") or "")
+        if tone == "spotify" and url and self._spotify.play(url) in (LISTENING, STARTING):
+            # Listening: the tone waits for `late`, and stops when Spotify is heard.
             return
-        self._bell.start(FALLBACK if tone == "spotify" else tone, volume)
+        self._bell.start(FALLBACK if tone == "spotify" else tone, prefs.get("alert_volume", 80))
+
+    def _spotify_late(self) -> None:
+        if self._alarm_dialog is not None:
+            self._bell.start(FALLBACK, (self.session.preferences or {}).get("alert_volume", 80))
+
+    def _spotify_heard(self, words: str) -> None:
+        if self._alarm_dialog is not None:
+            self._bell.stop()
+            self._alarm_dialog.show_playing(words)
 
     def _check_updates(self, *, asked: bool) -> None:
         """Look for a newer release. Asked for by the student, or once a day on its own.
@@ -1829,7 +2073,7 @@ class NativeWindow(QMainWindow):
         if not url:
             self.session._say("This item has no Spotify share link.")
             return
-        QDesktopServices.openUrl(QUrl(url))
+        open_in_app(url)
 
     def _open_settings(self) -> None:
         """Every change shows the moment it is made; there is no OK. The look and layout live on this
@@ -1841,9 +2085,12 @@ class NativeWindow(QMainWindow):
         dialog = PrefsDialog(
             self, self.session.preferences, self._look, self.session.reminder_limits, self._layout
         )
+        dialog.motion_level = self._motion
         dialog.account_requested.connect(self._open_account)
         dialog.availability_requested.connect(self._open_availability)
         dialog.updates_requested.connect(lambda: self._check_updates(asked=True))
+        rerun: list[bool] = []
+        dialog.setup_requested.connect(lambda: (rerun.append(True), dialog.reject()))
         stored = dialog.updates()
         login = bool(stored["start_at_login"])
 
@@ -1866,12 +2113,14 @@ class NativeWindow(QMainWindow):
             if self.session.preferences is not None:
                 # Pack and accent belong to the account but are seen like the look: at once. The save
                 # that follows stores them.
-                shown = {key: wanted[key] for key in ("theme_pack", "accent", "accent_chips")}
+                live = ("theme_pack", "accent", "accent_chips", "motion", "alarm_tone", "planning_style")
+                shown = {key: wanted[key] for key in live}
                 self.session.preferences = {**self.session.preferences, **shown}
             if bool(wanted["start_at_login"]) != login:
                 login = bool(wanted["start_at_login"])
                 self._apply_start_at_login(login)
             self._apply_appearance()
+            self._sync_chrome()
             saver.start()
 
         saver = QTimer(dialog)
@@ -1887,6 +2136,8 @@ class NativeWindow(QMainWindow):
                 self.session.status.disconnect(dialog.save_state.setText)
         saver.stop()
         save()
+        if rerun:
+            self._run_setup_again()
 
     def _apply_start_at_login(self, wanted: bool) -> None:
         """The setting used to be stored on the account and obeyed by nothing. It is applied to this
@@ -2034,13 +2285,25 @@ class NativeWindow(QMainWindow):
         # Blocks and month cells are painted per item, which a stylesheet cannot reach.
         palette = resolved_palette(pack, system_dark, self._look, accent)
         design = self._chrome_palette(palette)
-        self.setStyleSheet(pack_stylesheet(pack, system_dark, self._look, accent, design))
-        self.keep_signed_in.setStyleSheet(card_check_sheet(design, tick_file(design["accent_ink"])))
-        # Day, Month and the week grid are dressed by the same design as the main view, so moving
-        # between them is moving around one app rather than between two.
-        self.week_table.set_look(self._look, design)
-        self.month_grid.set_palette(design)
-        self.add_menu.set_palette(design, bool((self.session.preferences or {}).get("accent_chips")))
+        art = control_art(design)
+        sheet = pack_stylesheet(pack, system_dark, self._look, accent, design, art)
+        chips = bool((self.session.preferences or {}).get("accent_chips"))
+        self._motion = motion_level((self.session.preferences or {}).get("motion"), pack_motion(pack))
+        dressed = (sheet, repr(self._look), repr(design), chips, self._motion)
+        # Every change to the week comes through here. Restyling the whole window each time, when the
+        # look had not changed, cost about 26 ms a change and repainted everything on screen.
+        if dressed != self._dressed:
+            self._dressed = dressed
+            self.setStyleSheet(sheet)
+            apply_ui_effects(self._motion)
+            self.toast.motion = self._motion
+            for view in self._views.values():
+                view.motion = self._motion
+            # Day, Month and the week grid are dressed by the same design as the main view, so moving
+            # between them is moving around one app rather than between two.
+            self.week_table.set_look(self._look, design)
+            self.month_grid.set_palette(design)
+            self.add_menu.set_palette(design, chips)
         self._sync_add_button()
         self._refresh_layout()
 

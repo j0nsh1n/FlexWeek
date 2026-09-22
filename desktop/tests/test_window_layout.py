@@ -29,6 +29,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.widgets import FlowLayout
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
+    from desktop.tests.logic_support import past_setup
 
 LAPTOP = (1366, 768)
 
@@ -61,7 +62,7 @@ def week_page(qapp: QApplication, tmp_path: Path) -> Iterator[NativeWindow]:
     wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "recoveryPage")
     window.recovery_ack.setChecked(True)
     window.recovery_continue.click()
-    wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "weekPage")
+    past_setup(qapp, window)
     yield window
     with contextlib.suppress(RuntimeError):
         window.session.client.reset()

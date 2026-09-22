@@ -143,3 +143,45 @@ def test_a_set_pack_keeps_theme_on_its_axis(alice: TestClient) -> None:
         ).status_code
         == 422
     )
+
+
+SETUP_KEYS = ("alarm_tone", "planning_style", "setup")
+
+
+def test_a_fresh_account_omits_the_setup_preferences(alice: TestClient) -> None:
+    """Default values stay off the wire, so a 0.14 client reads an account exactly as before."""
+    body = alice.get("/api/preferences").json()
+    for key in SETUP_KEYS:
+        assert key not in body
+
+
+def test_the_alarm_tone_planning_style_and_setup_progress_round_trip(alice: TestClient) -> None:
+    payload = {
+        **defaults(),
+        "alarm_tone": "glass",
+        "planning_style": "manual",
+        "setup": {"version": 1, "step": 3, "finished_at": None},
+    }
+    saved = alice.put("/api/preferences", json=payload, headers=WRITE)
+    assert saved.status_code == 200, saved.text
+    assert alice.get("/api/preferences").json() == payload
+    finished = {**payload, "setup": {"version": 1, "step": 6, "finished_at": "2026-09-22T16:30"}}
+    assert alice.put("/api/preferences", json=finished, headers=WRITE).status_code == 200
+    assert alice.get("/api/preferences").json()["setup"]["finished_at"] == "2026-09-22T16:30"
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"alarm_tone": "siren"},
+        {"planning_style": "sometimes"},
+        {"setup": {"version": 0, "step": 0}},
+        {"setup": {"version": 1, "step": 99}},
+        {"setup": {"version": 1, "step": 0, "finished_at": "yesterday"}},
+        {"setup": {"version": 1, "step": 0, "extra": True}},
+    ],
+)
+def test_a_setup_preference_outside_its_values_is_refused(alice: TestClient, change: dict) -> None:
+    refused = alice.put("/api/preferences", json={**defaults(), **change}, headers=WRITE)
+    assert refused.status_code == 422
+    assert "siren" not in refused.text and "sometimes" not in refused.text

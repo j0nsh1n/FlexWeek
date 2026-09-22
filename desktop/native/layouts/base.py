@@ -7,13 +7,26 @@ adds homework, plans, or finishes anything by itself, so there is one planner, n
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QResizeEvent
+from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtGui import QDragEnterEvent, QDragLeaveEvent, QDragMoveEvent, QDropEvent, QResizeEvent
 from PySide6.QtWidgets import QApplication, QFrame, QLabel, QLayout, QPushButton, QScrollArea, QWidget
 
 from desktop.native.calendar import CATEGORIES
+from desktop.native.layouts.drag import (
+    EDGE_SCROLL_PX,
+    EDGE_SCROLL_STEP,
+    DropShow,
+    Mark,
+    Spot,
+    Verdict,
+    carried,
+    liftable,
+    scroll_areas,
+)
+from desktop.native.layouts.drawer import DropDrawer, drawer_sheet
 from desktop.native.weekmodel import Occurrence, WeekModel
 
 
@@ -58,7 +71,21 @@ def base_sheet(name: str, tokens: dict[str, str]) -> str:
         f"#{name} QFrame {{ background: transparent; color: {tokens['text']}; border: none;"
         " padding: 0; border-radius: 0; }"
         f"#{name} QLabel {{ background: transparent; color: {tokens['bg_ink']}; border: none; padding: 0; }}"
+        + drop_sheet(name, tokens)
     )
+
+
+def drop_sheet(name: str, tokens: dict[str, str]) -> str:
+    """The answer by the pointer, in the design's own accent, and its danger colour where a block
+    cannot go. Two ids in each selector, so no design rule for its labels outranks them."""
+    accent, danger = tokens["accent"], tokens["danger"]
+    return (
+        # Ringed in the page colour, so the bubble stands clear of a card in its own colour.
+        f"#{name} QLabel#dropHint {{ background: {accent}; color: {tokens['accent_ink']};"
+        f" border: 2px solid {tokens['bg']}; border-radius: 11px; padding: 5px 10px; font-weight: 700; }}"
+        f"#{name} QLabel#dropHint[drop=\"refused\"] {{ background: {danger};"
+        f" color: {tokens['danger_ink']}; }}"
+    ) + drawer_sheet(name, tokens)
 
 
 def rules(name: str, entries: dict[str, str]) -> str:
@@ -133,8 +160,14 @@ class LayoutView(QWidget):
     my_day_requested = Signal()
     back_requested = Signal()
     day_activated = Signal(str)
+    # A block let go at a time: its id, the day it came from (-1 when it had none), the day, the start.
+    placement_requested = Signal(str, int, int, int)
+    # Why a drop could not stand, for the status line.
+    refused = Signal(str)
 
     layout_id = ""
+    # Designs with no hours of their own open a day's hours beside themselves while a block is dragged.
+    uses_drawer = True
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -143,12 +176,26 @@ class LayoutView(QWidget):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._scene: Scene | None = None
         self._was_cramped: bool | None = None
+        # Whether a block can go at a day, start and end: the window's rule; a view only asks it.
+        self.judge: Callable[[str, int, int, int, int], Verdict] | None = None
+        self.drops = DropShow(self)
+        self._drawer: DropDrawer | None = None
+        # The window's Animations level, for the drawer's slide.
+        self.motion = "normal"
+        self._dragging = False
+        self._held: Scene | None = None
+        # Taken everywhere, so a drag over a part that means nothing still clears the last answer.
+        self.setAcceptDrops(True)
 
     @property
     def scene(self) -> Scene | None:
         return self._scene
 
     def show_week(self, scene: Scene) -> None:
+        if self._dragging:
+            # A re-render now would delete what the drag started on, mid-drag. It waits for the drop.
+            self._held = scene
+            return
         if scene == self._scene:
             return
         week_changed = self._scene is None or scene.week != self._scene.week
@@ -172,6 +219,85 @@ class LayoutView(QWidget):
         again = self.findChild(QWidget, name) if name else None
         if again is not None:
             again.setFocus()
+
+    def drag_began(self, block_id: str = "", from_day: int = -1) -> None:
+        self._dragging = True
+        if self.uses_drawer:
+            if self._drawer is None:
+                self._drawer = DropDrawer(self)
+            self._drawer.open(block_id, from_day)
+
+    def drag_ended(self) -> None:
+        self._dragging = False
+        self.clear_drop()
+        if self._drawer is not None:
+            self._drawer.close_drawer()
+        held, self._held = self._held, None
+        if held is not None:
+            self.show_week(held)
+
+    @property
+    def drawer(self) -> DropDrawer | None:
+        return self._drawer
+
+    def judge_span(self, block_id: str, from_day: int, day: int, start: int, end: int) -> Verdict:
+        if self.judge is None:
+            return Verdict(False, "")
+        return self.judge(block_id, from_day, day, start, end)
+
+    def judge_drop(self, block_id: str, from_day: int, spot: Spot) -> Verdict:
+        end = spot.start + self.minutes_of(block_id)
+        return self.judge_span(block_id, from_day, spot.day, spot.start, end)
+
+    def show_drop(self, verdict: Verdict, mark: Mark, point: QPoint) -> None:
+        self.drops.show(verdict, mark, point)
+
+    def clear_drop(self) -> None:
+        self.drops.clear()
+
+    def title_of(self, block_id: str) -> str:
+        return self._known(block_id)[0]
+
+    def minutes_of(self, block_id: str) -> int:
+        return self._known(block_id)[1]
+
+    def _known(self, block_id: str) -> tuple[str, int]:
+        week = self._scene.week if self._scene is not None else None
+        for item in (*(week.occurrences if week else ()), *(week.waiting if week else ())):
+            if item.block_id == block_id:
+                return item.title, item.minutes
+        return "", 60
+
+    def edge_scroll(self, point: QPoint) -> None:
+        """A drag near the top or bottom of a scrolling part of the view scrolls it, so a day below the
+        fold can still be reached without letting go."""
+        for area in scroll_areas(self):
+            port = area.viewport()
+            inside = port.mapFrom(self, point)
+            if not port.rect().contains(inside):
+                continue
+            bar = area.verticalScrollBar()
+            if inside.y() < EDGE_SCROLL_PX:
+                bar.setValue(bar.value() - EDGE_SCROLL_STEP)
+            elif inside.y() > port.height() - EDGE_SCROLL_PX:
+                bar.setValue(bar.value() + EDGE_SCROLL_STEP)
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:  # noqa: N802
+        if carried(event) is not None:
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event: QDragMoveEvent) -> None:  # noqa: N802
+        # Over nothing that can take it: no answer shown, and a drop here does nothing.
+        self.clear_drop()
+        self.edge_scroll(event.position().toPoint())
+        event.ignore()
+
+    def dragLeaveEvent(self, event: QDragLeaveEvent) -> None:  # noqa: N802
+        self.clear_drop()
+
+    def dropEvent(self, event: QDropEvent) -> None:  # noqa: N802
+        self.clear_drop()
+        event.ignore()
 
     @property
     def cramped(self) -> bool:
@@ -270,12 +396,17 @@ def plan_buttons(view: LayoutView, prefix: str, add_words: str) -> list[QPushBut
     return [add]
 
 
-def block_button(view: LayoutView, text: str, name: str, block_id: str, kind: str = "row") -> QPushButton:
+def block_button(
+    view: LayoutView, text: str, name: str, block_id: str, kind: str = "row", day: int = -1
+) -> QPushButton:
     """A block as something a keyboard can reach. The `block_id` property is how a test, or a screen
     reader's script, can tell which block a button opens."""
     made = button(text, name, kind)
     made.setProperty("block_id", block_id)
     made.clicked.connect(lambda _=False: view.block_activated.emit(block_id))
+    # And something to pick up: every block a design shows can be dragged to another time. `day` is the
+    # day this one shows, so a block that repeats moves only that day's copy.
+    liftable(made, block_id, day)
     return made
 
 

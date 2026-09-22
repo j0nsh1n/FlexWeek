@@ -25,13 +25,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 WEB_ONLY = {
     "sidebar_collapsed": "the sidebar is a web layout; the desktop app has no sidebar",
     "sidebar_width_px": "as above",
-    "motion": "how much the web stylesheet animates; the native client has no animation",
 }
 # Set in their own dialog rather than in Settings.
 ELSEWHERE = {
     "protected": "Availability",
     "study_windows": "Availability",
     "day_cutoff": "Availability",
+    "setup": "first-run setup writes it; Settings offers Run setup again",
 }
 # Written for you, not chosen. save_preferences derives the light or dark axis from the pack.
 DERIVED = {"theme": "follows theme_pack, set in NativeSession.save_preferences"}

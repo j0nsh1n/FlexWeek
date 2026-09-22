@@ -1,6 +1,23 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-21 (UI and setup). Branch `feat/ui-setup` off `main` at the
+  0.14.2 release. The nine-PR plan in
+  `~/.claude/orchestrate/flexweek-ui-setup/docs/plan.md`, built here as one
+  commit per unit plus a motion pass: themed controls, motion, pinned
+  sessions, the three new preferences, subject study windows, the drag
+  outline and cross-day moves, drag-to-place and Choose a time, one alarm
+  sound, the planning style, and first-run setup (`desktop/native/setup.py`,
+  pictures from `desktop/native/previews.py`), which replaces the first-week
+  card. Setup writes each page as it is left; `_flush_setup` in the window
+  sends one request at a time because a second request replaces the first on
+  the session. Tests that create an account call `past_setup` from
+  `desktop/tests/logic_support.py`. Plan corrections: `prepare_solve` copies
+  the course, the plan-review drag was not built, and due dates show the year.
+  Gate: 1098 Python tests, `scripts/verify.py` VERIFIED (pytest 225 s of its
+  300 s budget, after `_apply_appearance` stopped restyling an unchanged
+  look on every week change). Nothing pushed, no PR, no executable. VERSION stays
+  0.14.2. spec.md not edited; proposed lines are in the session report.
 - Date: 2026-09-21 (0.14.1 trust). Branch `fix/0-14-1-trust` off `origin/main`
   at the 0.14.1 merge. The 0.14.1 AppImage audit and Claude's review of that
   run: leftover homework is one WeekModel rule on every layout and both day
@@ -512,6 +529,36 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-22, `feat/ui-setup`: 0.14.3 prepared on Jonathan's "Ship it":
+  version, changelog heading, `docs/release-notes-v0.14.3.md`, and the
+  first-open text in README and `docs/github-release.md` now describe the
+  paged setup. Spotify Dismiss on a real alarm and a Windows install were not
+  hand-checked before the release.
+- 2026-09-22, `feat/ui-setup`: Daily Scheduler's drag, on Jonathan's four
+  answers (15-minute snap, overlaps side by side, a repeat moves one day,
+  other designs drop onto a day's hours). `desktop/native/canvas.py` is the
+  week (a port of `views.py` TimelineWidget; `WeekCanvas` replaced
+  `WeekTable`, `laid_out` applies the live preview). `layouts/drawer.py` is the
+  day drawer for Timeline, Bento, Retro and Clay; Mission, dial and One thing
+  keep their own hours. One judge, `NativeWindow._judge_span`: `span_problem`
+  refuses only outside hours and past due, `span_clash` names the neighbour.
+  Pinned sessions are exempt from `settle_placements` clashes. A move made
+  while a save is in flight is held in `_move_waiting` and replayed, since the
+  save's reply replaces `session.blocks`.
+- 2026-09-22, `feat/ui-setup`: dragging in every design (Jonathan's ask before
+  the spec edit). `desktop/native/layouts/drag.py` holds the pick-up, the drop
+  zones and the view-owned outline, line and hint; the window's `_judge_drop`
+  is the one rule, `span_problem` as on the grid. A drop on a day plans waiting
+  homework through `solve(on_day=...)` and pins it; a placed block keeps its
+  time. Views hold re-renders while a drag is on (the minute tick would delete
+  the source). Gate: 1121 tests, pytest 252 s of the 300 s budget.
+- 2026-09-21, `feat/ui-setup`: the UI and setup plan, implemented on
+  Jonathan's go with the Appendix E defaults (guided pages starting from a
+  style, all three planning styles with Suggest as default, a drop pins, one
+  alarm sound). Backend units built by Claude, not Grok, since he said
+  implement now. Real-desktop screenshots and a setup video in
+  `~/.claude/orchestrate/flexweek-ui-setup/docs/media/final`. Next: owner
+  review of the pictures, then PRs if asked.
 - 2026-09-21, `fix/0-14-1-trust`: 0.14.2 release prep (VERSION, CHANGELOG
   heading, `docs/release-notes-v0.14.2.md`). Published as the latest full
   release, not a pre-release, so 0.14.x installs are offered it. 0.14.0 and

@@ -249,7 +249,7 @@ class ClayDeckView(LayoutView):
                 words += (
                     f" · {item.slack_words.lower() or 'due ' + due_label(item.due, scene.week.week_start)}"
                 )
-            pill = block_button(self, words, f"clayPill{index}", item.block_id, "pill")
+            pill = block_button(self, words, f"clayPill{index}", item.block_id, "pill", day=item.day)
             over = (
                 item.end <= scene.minute
                 if day == scene.today

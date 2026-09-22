@@ -11,6 +11,7 @@ from desktop.native.reuse import (
     apply_plan,
     available_homework_minutes,
     capacity_problem,
+    clear_stale_pins,
     clipboard_fingerprint,
     copied_fixed_block,
     copied_homework_block,
@@ -261,9 +262,7 @@ def test_running_late_occupies_from_a_snapped_start_until_the_day_end() -> None:
             or ""
         ).lower()
     )
-    dirty = running_late_refusal(
-        week_start="2026-09-14", now=now, dirty=True, conflict=False, block_count=0
-    )
+    dirty = running_late_refusal(week_start="2026-09-14", now=now, dirty=True, conflict=False, block_count=0)
     assert dirty == "Your last change is still saving. Try again in a moment."
     conflict = running_late_refusal(
         week_start="2026-09-14", now=now, dirty=False, conflict=True, block_count=0
@@ -484,3 +483,71 @@ def test_a_plan_never_rewrites_a_fixed_block() -> None:
     school = {**planned_week()[0], "missed_days": [0]}
     trace = {"placed": [{**school, "days": [1, 2, 3, 4], "missed_days": []}], "unplaced": []}
     assert apply_plan([school], trace) == [school]
+
+
+def _pinned_week() -> tuple[list[dict], dict]:
+    mine = {
+        "id": "mine",
+        "title": "Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [3],
+        "start": "16:00",
+        "assignment_id": "essay",
+        "pinned": True,
+    }
+    planned = {
+        **mine,
+        "id": "other",
+        "title": "Math",
+        "start": "18:00",
+        "assignment_id": "math",
+        "pinned": False,
+    }
+    assignments = {
+        "essay": {"id": "essay", "due": "2026-09-20T23:59"},
+        "math": {"id": "math", "due": "2026-09-20T23:59"},
+    }
+    return [mine, planned], assignments
+
+
+def test_replan_all_leaves_homework_placed_by_hand_where_it_is() -> None:
+    blocks, assignments = _pinned_week()
+    payload, targets = solve_request(blocks, assignments, "2026-09-14", everything=True)
+    assert targets == {"other"}
+    held = next(block for block in payload if block["id"] == "mine")
+    assert (held["kind"], held["start"], held["days"]) == ("locked", "16:00", [3])
+
+
+def test_homework_placed_by_hand_stays_beside_a_fixed_block_and_planned_homework_gives_way() -> None:
+    """Two at one time is allowed, as in Daily Scheduler, when the student chose it: the essay was put
+    at 16:00 by hand. Math was only put at 18:00 by the planner, so it makes way for Band."""
+    blocks, assignments = _pinned_week()
+    school = {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 120,
+        "days": [3],
+        "start": "15:30",
+    }
+    band = {**school, "id": "band", "title": "Band", "duration_min": 60, "start": "18:00"}
+    settled, lost = settle_placements([*blocks, school, band], assignments, "2026-09-14")
+    mine = next(block for block in settled if block["id"] == "mine")
+    assert (mine["start"], mine["pinned"]) == ("16:00", True)
+    assert [note["block_id"] for note in lost] == ["other"]
+    assert "Band is there now" in lost[0]["message"]
+
+
+def test_a_pin_goes_when_its_time_does() -> None:
+    """The server refuses a pin with no time, so a left-over pin would stop every save. Past its due
+    date a hand-placed session still loses its time, and its pin with it."""
+    blocks, assignments = _pinned_week()
+    late = {**assignments, "essay": {"id": "essay", "due": "2026-09-16T23:59"}}
+    settled, lost = settle_placements(blocks, late, "2026-09-14")
+    mine = next(block for block in settled if block["id"] == "mine")
+    assert [note["block_id"] for note in lost] == ["mine"]
+    assert "start" not in mine and "pinned" not in mine
+    unplaced = {**blocks[0], "start": None, "days": [0, 1, 2, 3]}
+    assert "pinned" not in clear_stale_pins([unplaced])[0]
+    assert clear_stale_pins([blocks[0]])[0]["pinned"] is True

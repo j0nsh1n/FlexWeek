@@ -8,7 +8,7 @@ and the newest CHANGELOG heading in step, so the two cannot drift.
 
 from __future__ import annotations
 
-VERSION = "0.14.2"
+VERSION = "0.14.3"
 
 
 def parse(value: str) -> tuple[int, ...] | None:

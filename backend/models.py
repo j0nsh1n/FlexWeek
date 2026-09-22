@@ -114,6 +114,8 @@ class TimeBlock(BaseModel):
     )
     pomodoro_role: PomodoroRole | None = Field(default=None, exclude_if=lambda value: value is None)
     pomodoro_index: int | None = Field(default=None, ge=1, le=999, exclude_if=lambda value: value is None)
+    # Homework the student placed by hand. No plan moves it; a fixed block over it still takes its time.
+    pinned: bool = Field(default=False, exclude_if=lambda value: value is False)
     assignment_id: str | None = Field(
         default=None, min_length=1, max_length=80, exclude_if=lambda value: value is None
     )
@@ -143,6 +145,8 @@ class TimeBlock(BaseModel):
 
     @model_validator(mode="after")
     def block_state_is_consistent(self) -> TimeBlock:
+        if self.pinned and (self.kind != "flexible" or self.start is None or len(self.days) != 1):
+            raise ValueError("pinned requires a flexible block with a start on one day")
         if self.missed_days and self.kind != "locked":
             raise ValueError("only locked blocks can have missed days")
         if not set(self.missed_days).issubset(self.days):
@@ -448,6 +452,24 @@ class GridWindow(BaseModel):
         if start + self.duration_min > 1380:
             raise ValueError("window must fit the 06:00–23:00 grid")
         return self
+
+
+class StudyWindow(GridWindow):
+    """A preferred study time. With a subject, it is preferred for that subject's homework only."""
+
+    subject: str | None = Field(
+        default=None, min_length=1, max_length=40, exclude_if=lambda value: value is None
+    )
+
+    @field_validator("subject")
+    @classmethod
+    def subject_is_trimmed(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("subject must not be blank")
+        return trimmed
 
 
 class ProtectedWindow(GridWindow):
