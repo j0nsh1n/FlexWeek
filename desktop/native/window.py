@@ -95,6 +95,7 @@ from desktop.native.settings import (
 )
 from desktop.native.setup import REMINDERS, SETUP_VERSION, STYLE, SetupPage, SetupState
 from desktop.native.sound import Bell
+from desktop.native.spotify import LISTENING, STARTING, SpotifyPlayer, open_in_app
 from desktop.native.tones import FALLBACK
 from desktop.native.update import RELEASE_PAGE, due_for_check, sanitize_updates
 from desktop.native.updater import Updater, apply_update
@@ -228,6 +229,11 @@ class NativeWindow(QMainWindow):
         self._icon = icon or QIcon()
         self._alarm_dialog: AlarmRingDialog | None = None
         self._bell = Bell(self)
+        # A Spotify alarm plays in the student's Spotify app. Until it is heard the tone rings, so an
+        # alarm is never silent, and once it is the tone stops.
+        self._spotify = SpotifyPlayer(self)
+        self._spotify.late.connect(self._spotify_late)
+        self._spotify.heard.connect(self._spotify_heard)
         self._look = sanitize_look(None)
         self._allow_week_page = True
         self._load_look()
@@ -1093,7 +1099,8 @@ class NativeWindow(QMainWindow):
     def _test_reminder(self, tone: str, link: str) -> None:
         """A reminder now, in the sound on screen, so the student hears and sees what they chose."""
         volume = (self.session.preferences or {}).get("alert_volume", 80)
-        opened = tone == "spotify" and bool(link) and QDesktopServices.openUrl(QUrl(link))
+        # A reminder never starts music, so it chimes; the Spotify song is what an alarm will play.
+        opened = tone == "spotify" and bool(link) and bool(self._spotify.play(link))
         self._bell.once(FALLBACK if tone == "spotify" else tone, volume)
         title, body = "Test reminder", "This is how a reminder from FlexWeek looks."
         if self._tray_icon is not None and self._tray_icon.supportsMessages():
@@ -1102,7 +1109,7 @@ class NativeWindow(QMainWindow):
         else:
             said = "Sent. This computer shows no notifications, so reminders appear in FlexWeek instead."
         if opened:
-            said += " Alarms open your Spotify link, which just opened."
+            said += " Alarms play your Spotify link in the Spotify app, which it has just been given."
         self.setup_page.show_test_result(said)
 
     def _show_recovery(self, codes: list) -> None:
@@ -1980,23 +1987,35 @@ class NativeWindow(QMainWindow):
         try:
             dialog.exec()
         finally:
-            # Whatever closed the dialog, including the window shutting, the noise stops with it.
+            # Whatever closed the dialog, including the window shutting, the noise stops with it,
+            # Spotify included.
             self._bell.stop()
+            self._spotify.stop()
         snoozed = dialog.snoozed
         self._alarm_dialog = None
         self.session.finish_alarm(snoozed)
 
     def _ring(self, alarm: dict, url: str) -> None:
-        """Play the alarm's own sound. "spotify" means the linked track, and the web falls back to a
-        tone when that does not open, so this does too: a silent alarm is not an alarm."""
+        """Play the alarm's own sound. "spotify" means the linked song or playlist in the student's
+        Spotify app. Whatever it cannot be sure will play gets the tone too: a silent alarm is not an
+        alarm."""
         prefs = self.session.preferences or {}
-        volume = prefs.get("alert_volume", 80)
         tone = str(alarm.get("sound") or prefs.get("alarm_tone") or FALLBACK)
         if tone == "spotify" and not url:
             url = self.session.spotify_url(prefs.get("default_spotify_url") or "")
-        if tone == "spotify" and url and QDesktopServices.openUrl(QUrl(url)):
+        if tone == "spotify" and url and self._spotify.play(url) in (LISTENING, STARTING):
+            # Listening: the tone waits for `late`, and stops when Spotify is heard.
             return
-        self._bell.start(FALLBACK if tone == "spotify" else tone, volume)
+        self._bell.start(FALLBACK if tone == "spotify" else tone, prefs.get("alert_volume", 80))
+
+    def _spotify_late(self) -> None:
+        if self._alarm_dialog is not None:
+            self._bell.start(FALLBACK, (self.session.preferences or {}).get("alert_volume", 80))
+
+    def _spotify_heard(self, words: str) -> None:
+        if self._alarm_dialog is not None:
+            self._bell.stop()
+            self._alarm_dialog.show_playing(words)
 
     def _check_updates(self, *, asked: bool) -> None:
         """Look for a newer release. Asked for by the student, or once a day on its own.
@@ -2070,7 +2089,7 @@ class NativeWindow(QMainWindow):
         if not url:
             self.session._say("This item has no Spotify share link.")
             return
-        QDesktopServices.openUrl(QUrl(url))
+        open_in_app(url)
 
     def _open_settings(self) -> None:
         """Every change shows the moment it is made; there is no OK. The look and layout live on this

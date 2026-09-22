@@ -5,8 +5,8 @@ from __future__ import annotations
 from copy import deepcopy
 from uuid import uuid4
 
-from PySide6.QtCore import Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import QDesktopServices, QShowEvent
+from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -59,6 +59,7 @@ from desktop.native.motion import slide_page
 from desktop.native.remind import ALARM_SNOOZE_MIN
 from desktop.native.reuse import format_duration
 from desktop.native.sound import Bell
+from desktop.native.spotify import SpotifyPlayer, open_in_app
 from desktop.native.tones import FALLBACK, RECIPES, SOUNDS
 from desktop.native.version import VERSION
 from desktop.native.widgets import DIALOG_USABLE_HEIGHT, FlowLayout, fit_scroll_dialog
@@ -86,7 +87,9 @@ PLANNING_STYLES = (
     ("manual", "I'll drag it onto the calendar myself", "The planning button becomes Suggest times."),
 )
 SPOTIFY_TONE_NOTE = (
-    "Alarms open this link. Reminders and the end of a focus session play Chime, so they never start music."
+    "Alarms play this in your Spotify app, and stopping the alarm stops it. Reminders and the end of a"
+    " focus session play Chime, so they never start music. Without the Spotify app, alarms open the link"
+    " and ring Chime too."
 )
 # What only Today's app reads. Every other design has its own colours and shapes, so these changed
 # nothing there (measured 2026-09-21: not the view, not the top bar, apart from Corners on the bar).
@@ -405,6 +408,7 @@ class PrefsDialog(QDialog):
         self.tone_note.setObjectName("prefToneNote")
         self.tone_note.setWordWrap(True)
         self._tone_bell = Bell(self)
+        self._spotify_player = SpotifyPlayer(self)
         appearance = QWidget()
         column = QVBoxLayout(appearance)
         appear = QFormLayout()
@@ -653,7 +657,7 @@ class PrefsDialog(QDialog):
         tone = self.alarm_tone.currentData()
         if tone == "spotify":
             link = self._spotify_link()
-            if link and QDesktopServices.openUrl(QUrl(link)):
+            if link and self._spotify_player.play(link):
                 return
             tone = FALLBACK
         self._tone_bell.once(str(tone), self.volume.value())
@@ -1100,8 +1104,13 @@ class AlarmRingDialog(QDialog):
         detail.setObjectName("alarmDetail")
         layout.addWidget(detail)
         layout.addSpacing(ALARM_GAP)
+        self.playing = QLabel()
+        self.playing.setObjectName("alarmPlaying")
+        self.playing.setWordWrap(True)
+        self.playing.hide()
+        layout.addWidget(self.playing)
         if spotify:
-            link = QPushButton("Open Spotify")
+            link = QPushButton("Open in Spotify")
             link.setObjectName("alarmOpenSpotify")
             link.setMinimumHeight(ALARM_BUTTON_HEIGHT)
             link.clicked.connect(self._spotify)
@@ -1127,7 +1136,12 @@ class AlarmRingDialog(QDialog):
     def _spotify(self) -> None:
         self.open_spotify = True
         if self._url:
-            QDesktopServices.openUrl(QUrl(self._url))
+            open_in_app(self._url)
+
+    def show_playing(self, words: str) -> None:
+        """What Spotify is playing for this alarm, once it is heard."""
+        self.playing.setText(words)
+        self.playing.show()
 
 
 class TransferPreviewDialog(QDialog):

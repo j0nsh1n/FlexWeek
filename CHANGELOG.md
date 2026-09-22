@@ -40,7 +40,15 @@ All notable changes to FlexWeek are documented here. Format follows
   subject's window first, then in a window for any subject, then anywhere.
 - One alarm sound, in Settings > Alerts: Chime, Soft, Bright, Low, Glass, or a
   Spotify song or playlist, each with Play. Reminders ring it; a Spotify sound
-  opens the link for alarms only, so a reminder never starts music.
+  is for alarms only, so a reminder never starts music.
+- A Spotify alarm plays in the student's own Spotify app instead of opening a
+  browser tab, so whole songs play, free or Premium. On Linux FlexWeek tells
+  Spotify to play, names the song in the alarm, rings its own tone until the
+  music is heard, and pauses Spotify when the alarm is stopped or snoozed. On
+  Windows a track opens and starts in the Spotify app, and the media Stop key
+  stops it; a playlist, which Spotify will not start by itself there, rings the
+  tone too. Without the Spotify app, the link opens in the browser and the tone
+  rings.
 - Settings > Appearance & layout > Animations: Normal, More movement or Off.
 
 ### Changed

@@ -149,9 +149,10 @@ Contract for the finished app:
 - Comfort preferences persist per account: `alert_volume` (0-100), `end_chime`,
   `tray_notifications`, `start_at_login`, `preferred_view` (`week` or `day`),
   `sidebar_collapsed` and `sidebar_width_px` (200-640). One `alarm_tone`
-  (`chime`, `soft`, `bright`, `low`, `glass`, or `spotify`, which opens
-  `default_spotify_url` for alarms only) rings reminders, the end of a focus
-  session and new alarms. `setup` records where first-run setup stands: its
+  (`chime`, `soft`, `bright`, `low`, `glass`, or `spotify`, which plays
+  `default_spotify_url` in the student's own Spotify app, for alarms only)
+  rings reminders, the end of a focus session and new alarms. An alarm is never
+  silent: until Spotify is heard playing, the tone rings. `setup` records where first-run setup stands: its
   `step`, and `finished_at` once it is finished or skipped. Defaults stay omitted
   from stored JSON so older clients keep working, and timer rounding to the
   15-minute grid is previewed and explained rather than silent. Details live in

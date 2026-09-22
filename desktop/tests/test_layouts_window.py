@@ -1467,7 +1467,8 @@ def test_an_alarm_set_to_spotify_plays_the_track_instead_of_a_tone(
     no_spotify(monkeypatch, opened)
     window._bell = RingRecorder()
     window._ring({"name": "Wake up", "sound": "spotify"}, SPOTIFY_TRACK)
-    assert opened == [SPOTIFY_TRACK]
+    # In the Spotify app, by its own address. A track starts there by itself, so no tone over it.
+    assert opened == ["spotify:track:4cOdK2wGLETKBW3PvgPWqT"]
     assert window._bell.started == []
 
 

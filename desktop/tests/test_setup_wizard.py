@@ -435,7 +435,7 @@ def test_back_then_next_does_not_add_the_first_homework_twice(
     close(qapp, window)
 
 
-def test_a_test_reminder_rings_the_chosen_sound_and_opens_a_spotify_link(
+def test_a_test_reminder_rings_the_chosen_sound_and_gives_the_spotify_app_the_link(
     qapp: QApplication, server: LocalServer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     window = new_account(qapp, server, "setup_tester")
@@ -447,13 +447,7 @@ def test_a_test_reminder_rings_the_chosen_sound_and_opens_a_spotify_link(
     opened: list[str] = []
     monkeypatch.setattr(window._bell, "once", lambda tone, _volume: rung.append(tone) or True)
 
-    class Opener:
-        @staticmethod
-        def openUrl(url: object) -> bool:  # noqa: N802
-            opened.append(url.toString())  # type: ignore[attr-defined]
-            return True
-
-    monkeypatch.setattr("desktop.native.window.QDesktopServices", Opener)
+    monkeypatch.setattr("desktop.native.spotify.open_address", lambda address: opened.append(address) or True)
     setup.tone_buttons["bright"].setChecked(True)
     setup.test.click()
     assert rung == ["bright"]
@@ -464,7 +458,7 @@ def test_a_test_reminder_rings_the_chosen_sound_and_opens_a_spotify_link(
     assert "Spotify link" in setup.test_result.text()
     setup.spotify.setText(SPOTIFY)
     setup.test.click()
-    assert opened == [SPOTIFY]
+    assert opened == ["spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"], "the playlist, in the Spotify app"
     assert rung[-1] == "chime", "a reminder never starts music; it chimes"
     close(qapp, window)
 
