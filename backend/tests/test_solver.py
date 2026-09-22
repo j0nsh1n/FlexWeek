@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from backend.models import TimeBlock
 from backend.slots import hhmm_to_minutes, overlaps
 from backend.solver import SOLVE_BUDGET_MS, reschedule_after_miss, solve
@@ -356,3 +358,32 @@ def test_missing_one_day_of_a_repeating_lock_keeps_its_other_occurrences() -> No
     school.missed_days = [1]
     trace = solve([school])
     assert _by_id(trace.placed)["school"].days == [0, 2]
+
+
+def test_a_pinned_session_keeps_its_time_and_nothing_is_booked_over_it() -> None:
+    """Homework the student dragged onto the calendar is theirs. A plan works around it."""
+    school = _locked("school", "School", "08:00", 390, [0])
+    pinned = _flex("mine", "Essay", 120, [0]).model_copy(update={"start": "15:00", "pinned": True})
+    others = [_flex(f"hw{index}", f"Homework {index}", 60, [0]) for index in range(3)]
+    trace = solve([school, pinned, *others])
+    placed = _by_id(trace.placed)
+    assert (placed["mine"].days, placed["mine"].start, placed["mine"].pinned) == ([0], "15:00", True)
+    assert trace.unplaced == []
+    assert _no_overlaps(trace.placed)
+    mine = _placed_interval(placed["mine"])
+    for index in range(3):
+        start, end = _placed_interval(placed[f"hw{index}"])[1:]
+        assert end <= mine[1] or start >= mine[2], "nothing is placed over the pinned session"
+
+
+@pytest.mark.parametrize(
+    "block",
+    [
+        {"kind": "locked", "start": "08:00", "days": [0]},
+        {"kind": "flexible", "start": None, "days": [0]},
+        {"kind": "flexible", "start": "15:00", "days": [0, 1]},
+    ],
+)
+def test_pinned_is_refused_where_it_means_nothing(block: dict) -> None:
+    with pytest.raises(ValueError, match="pinned"):
+        TimeBlock(id="x", title="X", duration_min=60, pinned=True, **block)
