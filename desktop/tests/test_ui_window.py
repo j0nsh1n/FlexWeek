@@ -25,7 +25,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QStandardPaths, Qt
     from PySide6.QtGui import QGuiApplication
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QDialog, QPushButton
+    from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton
 
     from desktop.native.widgets import BlockDialog
     from desktop.native.window import NativeWindow
@@ -189,3 +189,31 @@ def test_ctrl_c_in_the_week_grid_copies_the_block_and_leaves_the_os_clipboard_al
     assert QGuiApplication.clipboard().text() == "the student's own text"
     assert (window.session.clipboard or {}).get("kind") == "block"
     assert "Soccer" in window.session.clipboard["label"]
+
+
+def test_creating_an_account_shows_password_length_before_submit(
+    qapp: QApplication, tmp_path: Path
+) -> None:
+    server = LocalServer(tmp_path / "flexweek.db")
+    server.start()
+    window = NativeWindow(server.origin)
+    window.show()
+    try:
+        window.findChild(QPushButton, "authSwitch").click()
+        qapp.processEvents()
+        hint = window.findChild(QLabel, "passwordHint")
+        assert hint is not None and hint.isVisible()
+        assert "12" in hint.text()
+        window.username.setText("newbie")
+        window.password.setText("short")
+        window.findChild(QPushButton, "createAccount").click()
+        qapp.processEvents()
+        assert window.session.account is None
+        assert "12" in window.auth_status.text()
+        assert "Password" in window.auth_status.text()
+    finally:
+        with contextlib.suppress(RuntimeError):
+            window.session.client.reset()
+        window.hide()
+        qapp.processEvents()
+        server.stop()

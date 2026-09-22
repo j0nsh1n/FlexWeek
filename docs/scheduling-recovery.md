@@ -43,7 +43,7 @@ reason code or deadline slack:
 ```json
 {
   "block_id": "homework",
-  "message": "Limited room: scheduled to finish 2h before the deadline.",
+  "message": "Finishes 2 h before it is due.",
   "reason": null,
   "slack_min": 120,
   "slack_status": "tight"

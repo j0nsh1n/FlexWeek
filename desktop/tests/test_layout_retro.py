@@ -167,7 +167,7 @@ def test_closing_the_notepad_cannot_hide_what_has_no_time(qapp: QApplication) ->
     waiting = view.findChild(QPushButton, "retroWaiting0")
     assert (waiting.text(), waiting.toolTip()) == (
         "Poster-1 (2 h)",
-        "There is no slot left before this deadline.",
+        "There is not enough time left before it is due, even with nothing else planned.",
     )
 
 

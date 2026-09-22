@@ -182,7 +182,10 @@ Rules:
   `{ "kind": "plan", "assignment_id": "..." }`, or `{ "kind": "add" }`, using
   the Day view rule above.
 - `scheduled_min` is the total `duration_min` of sessions and locked blocks
-  on that day, including completed sessions that hold a slot.
+  that have a `start` on that day, including completed sessions that hold a
+  slot. An open session with no `start` is listed in `sessions` on each of
+  its candidate days but is not planned there (changed 2026-09-21, 0.14.1
+  trust audit).
 - `focus_min` is the total `duration_min` of completed sessions on that day
   (decision 5).
 - `available_min` is unoccupied 15-minute slots from 06:00 up to 23:00 on

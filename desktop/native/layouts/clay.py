@@ -259,7 +259,16 @@ class ClayDeckView(LayoutView):
             pill.setStyleSheet(f"border-left-color: {mark_of(item.category)}; min-height: {scene.px(46)}px;")
             inner.addWidget(pill)
         if not scene.week.on_day(day):
-            inner.addWidget(label("A free day.", "clayCentreEmpty"))
+            if day == scene.today:
+                heading, title, line = scene.week.leftover_parts(day)
+                words = (
+                    f"{title} · {heading}"
+                    if scene.week.leftover_kind(day) == "needs_time"
+                    else (line or heading)
+                )
+                inner.addWidget(label(words, "clayCentreEmpty"))
+            else:
+                inner.addWidget(label("A free day.", "clayCentreEmpty"))
         inner.addStretch(1)
         return card
 

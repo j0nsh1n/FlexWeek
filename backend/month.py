@@ -27,24 +27,32 @@ def _placed_on_day(block: dict, day_index: int) -> bool:
     return bool(block.get("start")) and _on_day(block, day_index)
 
 
+def _is_planned_session(block: dict) -> bool:
+    """Open work with a saved plan: a start on one day. Plans have been stored since 0.14.1."""
+    return bool(block.get("start")) and len(list(block.get("days") or [])) == 1
+
+
 def _session_pinned_on_day(block: dict, day_index: int) -> bool:
     # A completed session keeps its candidate list; completed_day names the slot it
-    # held (solver.py spent-time rule). An open session carries no start at all, so
-    # only a lone candidate is a date the server can name. Contract decision 7.
+    # held (solver.py spent-time rule). Open work pins only where its plan put it.
+    # Homework still waiting for a time has no date yet, even with one possible day,
+    # so it is not scheduled work on that day (the same rule as Day). Decision 7.
     days = list(block.get("days") or [])
-    pinned = block.get("completed_day") if block.get("completed") else None
+    if not block.get("completed"):
+        return _is_planned_session(block) and days[0] == day_index
+    pinned = block.get("completed_day")
     if pinned is None:
         return len(days) == 1 and days[0] == day_index
     return int(pinned) == day_index
 
 
 def _is_undated_session(block: dict) -> bool:
-    """Open work the solver has not committed to a date: two or more candidates."""
+    """Open work with no time yet, however many days it could go on."""
     return (
         block.get("kind") == "flexible"
         and is_work_session(block)
         and not block.get("completed")
-        and len(list(block.get("days") or [])) >= 2
+        and not _is_planned_session(block)
     )
 
 

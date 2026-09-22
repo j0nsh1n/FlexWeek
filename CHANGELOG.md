@@ -5,6 +5,90 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-09-21
+
+### Fixed
+- The first-week setup card grows with each step so Skip and Next no longer
+  cover the sport and homework fields. A new account opens on school hours,
+  not the previous account's last step. Homework due is this week's Sunday
+  with a calendar, not a typed ISO date.
+- Plan my homework writes the chosen times onto the week and saves them, so an
+  accepted plan is still on the calendar after Save, a normal exit, and signing
+  in again. Finishing one assignment, undoing that, or adding an unrelated
+  Saturday event leaves other homework where it was.
+- Every week layout and both day screens name homework that is due today and
+  still needs a time, instead of saying the day is free. Today's app lists that
+  work above the week.
+- A commitment that covers planned homework takes only that homework's time,
+  names it, and offers Find a new time. The rest of the plan stays put. Plan my
+  homework keeps times that already work. Replan all my homework is a separate
+  action under More and in the plan review.
+- Running late stores the delayed start and the new times in one save, so Undo
+  once takes both away.
+- Month hides the whole week surface in every layout, not only Bento's board.
+- Creating an account shows the username rule and names a username that does
+  not match. The password can be shown or hidden.
+- An estimate that is not a multiple of 15 minutes is an error, not a repeat of
+  the hint under the field.
+- Optional homework fields sit behind More details, which opens when those
+  fields already have values.
+- Today sits beside the week arrows. Fixed activities have a Start and an End,
+  with the length underneath. The gear stays on a 1024 px wide window in the
+  offscreen tests.
+- Marking one day of a repeating commitment missed (Monday's school) no longer
+  stops the week from saving. It showed "FlexWeek could not display this
+  response", and every save after it failed, so later changes were lost on
+  restart. Running late on a week with a missed day failed the same way. The
+  replan after a missed day is now kept after a reload.
+- The week title shows in full beside its arrows instead of being cut to
+  "21 – 27 S" underneath them. When the window is too narrow it shortens the
+  month names ("28 Sep – 4 Oct") rather than cutting off the end date.
+- Fixed activities are only a Start and an End. The Duration box that could
+  disagree with them is gone; the length is worked out and shown as "6 h 30 min",
+  or as the problem ("End must be after Start.") in red beside the times.
+- A Find a new time or Finished notice is said once, on the notice, not again in
+  a pop-up, and names every homework that lost its time.
+- If Find a new time cannot place homework either, the reason shown is the new
+  one, not the sentence from when its old time was taken.
+- Settings and the homework editor keep a readable height when the desktop
+  gives them less. On 0.14.1 they could be squeezed to 154 px, their minimum,
+  which is what the audit saw.
+- Day's summary counts only work with a time, or already done, as planned.
+  Homework still waiting for a time was billed to every day it could go ("9 h
+  15 min planned"). Month's counts follow the same rule: homework with one
+  possible day but no time is in the unscheduled total, not on that day.
+- The reason homework has no time says what stopped it, such as "Your fixed
+  plans and finished work leave no gap long enough for it before it is due.",
+  instead of "That time is already taken" or "Kept out of the sleep window".
+  A tight deadline reads "Finishes only 29 min before it is due.", and a move
+  after Running late no longer says a day was missed.
+- Settings shows Look, Accent, Surface, Corners and Blocks only where they do
+  something: Today's app, or a design set to Match my look for Look and Accent.
+  Elsewhere a line says where that design's colours are.
+- Bento's Up next no longer says "No homework added" twice.
+- Check for updates no longer sits on "Checking for updates…" for good. GitHub
+  refuses unsigned checks past 60 an hour per address, which a school or phone
+  network shares, and the app said nothing when it did. The check now falls back
+  to the release page, gives up after 15 seconds of silence, and when it cannot
+  check, says so with a button to open the release page. A download that stops
+  says so in the update dialog.
+
+### Added
+- Keep me signed in on this computer, on the sign-in card and on by default.
+  The next launch opens the week without signing in until the session ends
+  (seven days after sign-in) or you log out. Log out forgets it.
+- School hours under More > Adding, for a student who skipped school at setup.
+  It opens their School if they have one, and otherwise School filled in as
+  Monday to Friday, 08:00 to 14:30.
+
+### Changed
+- After a plan, the status line says how many homework blocks were planned.
+- The Main view and Day screen menus say what each view is for first:
+  Calendar · Today's app, Agenda · Timeline, Dashboard · Bento, Focus · One
+  thing, and so on.
+- Deadline tags read Plenty of time, Tight and Cutting it close, not Room,
+  Limited room and Very little room.
+
 ## [0.14.1] - 2026-09-21
 
 ### Changed

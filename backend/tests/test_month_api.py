@@ -239,17 +239,27 @@ def test_several_candidate_days_pin_nothing_and_count_as_unscheduled(alice: Test
     assert body["deadlines"][0]["unplanned_min"] == 60
 
 
-def test_a_single_candidate_open_session_is_planned_work_on_that_day(alice: TestClient) -> None:
-    """One possible day is a real date, so planned work shows without claiming it is done."""
+def test_a_single_candidate_session_with_no_time_is_unscheduled(alice: TestClient) -> None:
+    """One possible day is not a plan. Before plans were stored it was the only date the server could
+    name; now that Day counts only work with a time, Month does too."""
     assert put_assignment(alice, assignment()).status_code == 200
     open_session = session("s-tue", 1, "16:00")
     del open_session["start"]
     assert save_week(alice, [open_session]).status_code == 200
     body = get_month(alice).json()
     tuesday = day_on(body, "2026-09-15")
-    assert tuesday["session_count"] == 1
-    assert tuesday["scheduled_min"] == 60
-    assert tuesday["focus_min"] == 0
+    assert tuesday["session_count"] == 0
+    assert tuesday["scheduled_min"] == 0
+    assert body["unscheduled"] == {"session_count": 1, "minutes": 60}
+
+
+def test_a_planned_session_is_scheduled_work_on_its_day(alice: TestClient) -> None:
+    """A saved plan is a start on one day, and that is the day it counts on."""
+    assert put_assignment(alice, assignment()).status_code == 200
+    assert save_week(alice, [session("s-tue", 1, "16:00")]).status_code == 200
+    body = get_month(alice).json()
+    tuesday = day_on(body, "2026-09-15")
+    assert (tuesday["session_count"], tuesday["scheduled_min"], tuesday["focus_min"]) == (1, 60, 0)
     assert body["unscheduled"] == {"session_count": 0, "minutes": 0}
 
 

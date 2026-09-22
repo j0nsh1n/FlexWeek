@@ -63,8 +63,8 @@ def test_today_is_in_the_middle_with_its_blocks_as_buttons(qapp: QApplication) -
     assert pills(view) == [
         "School\n08:00 · 6 h 30 min",
         "Dinner\n18:00 · 30 min",
-        "Essay-1\n18:45 · 1 h · limited room",
-        "Chem-1\n20:00 · 1 h 30 min · very little room",
+        "Essay-1\n18:45 · 1 h · tight",
+        "Chem-1\n20:00 · 1 h 30 min · cutting it close",
     ]
 
 
@@ -100,7 +100,7 @@ def test_the_tray_names_what_has_no_time_yet(qapp: QApplication) -> None:
     waiting = shown(qapp).findChild(QPushButton, "clayWaiting0")
     assert (waiting.text(), waiting.toolTip()) == (
         "Poster-1 · 2 h",
-        "There is no slot left before this deadline.",
+        "There is not enough time left before it is due, even with nothing else planned.",
     )
 
 

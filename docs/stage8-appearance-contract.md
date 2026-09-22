@@ -511,8 +511,9 @@ still reaches everyone.
 
 ### C4. Rules every design keeps
 
-- Risk is the solver's verdict (`slack_status`) in the solver's words: Very
-  little room, Limited room, Room. Work with no time yet carries the solver's
+- Risk is the solver's verdict (`slack_status`) in the solver's words: Cutting
+  it close, Tight, Plenty of time (Very little room, Limited room and Room until
+  2026-09-21). Work with no time yet carries the solver's
   reason. No design invents a threshold.
 - Every colourway passes WCAG AA for the text it carries, and so does Match my
   look in all 700 combinations of pack, light or dark, preset, accent and

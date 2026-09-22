@@ -8,7 +8,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from desktop.tests.test_weekmodel import BLOCKS, HOMEWORK, TRACE, WEEK
+from desktop.tests.test_weekmodel import BLOCKS, HOMEWORK, TRACE, WEEK, block
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
@@ -17,7 +17,7 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtWidgets import QApplication, QFrame, QLabel, QPushButton
+    from PySide6.QtWidgets import QApplication, QFrame, QLabel, QPushButton, QWidget
 
     from desktop.native.layouts.base import Scene
     from desktop.native.layouts.bento import BentoView
@@ -37,15 +37,32 @@ def shown(
     clock: str = "13:40",
     today: int | None = 3,
     blocks: list[dict] | None = None,
+    homework: dict | None = None,
+    trace: dict | None = None,
+    surface: str = "week",
     **chosen: str,
 ) -> BentoView:
     options = {**options_for(None, "bento"), **chosen}
     palette = resolved_palette("light-frost", False, None, "default")
-    week = build_week(WEEK, BLOCKS if blocks is None else blocks, HOMEWORK, TRACE)
+    week = build_week(
+        WEEK,
+        BLOCKS if blocks is None else blocks,
+        HOMEWORK if homework is None else homework,
+        TRACE if trace is None else trace,
+    )
     view = BentoView()
     view.resize(1366, 700)
     view.show_week(
-        Scene(week, today, minute_of(clock), options, tokens_for("bento", options["colour"], palette))
+        Scene(
+            week,
+            today,
+            minute_of(clock),
+            options,
+            tokens_for("bento", options["colour"], palette),
+            surface=surface,
+            month={"month": "2026-09", "days": []} if surface == "month" else None,
+            iso_day="2026-09-17",
+        )
     )
     view.show()
     qapp.processEvents()
@@ -68,14 +85,14 @@ def test_the_big_tile_is_what_comes_next_and_how_soon(qapp: QApplication) -> Non
 
 
 def test_late_at_night_the_big_tile_says_the_day_is_done(qapp: QApplication) -> None:
-    assert text(shown(qapp, "22:30"), "bentoHeroTitle") == "Nothing else today"
+    assert text(shown(qapp, "22:30"), "bentoHeroTitle") == "Nothing else scheduled today"
 
 
 def test_deadlines_come_most_squeezed_first_in_the_solvers_words(qapp: QApplication) -> None:
     view = shown(qapp)
     assert [view.findChild(QPushButton, f"bentoDeadline{index}").text() for index in range(2)] == [
-        "Chem-1\nThu 23:59 · Very little room",
-        "Essay-1\nFri 21:00 · Limited room",
+        "Chem-1\nThu 23:59 · Cutting it close",
+        "Essay-1\nFri 21:00 · Tight",
     ]
 
 
@@ -83,7 +100,7 @@ def test_what_has_no_time_is_listed_with_the_solvers_reason(qapp: QApplication) 
     view = shown(qapp)
     assert text(view, "bentoWaitingKicker") == "NOT PLACED YET (1)"
     assert view.findChild(QPushButton, "bentoWaiting0").text() == (
-        "Poster-1 · 2 h\nThere is no slot left before this deadline."
+        "Poster-1 · 2 h\nThere is not enough time left before it is due, even with nothing else planned."
     )
     assert view.findChild(QPushButton, "bentoPlan").text() == "Plan it"
 
@@ -223,3 +240,83 @@ def test_no_two_tiles_land_on_top_of_each_other_when_narrow(qapp: QApplication) 
     for index, (name, box) in enumerate(boxes):
         for other_name, other in boxes[index + 1 :]:
             assert not box.intersects(other), f"{name} overlaps {other_name}"
+
+
+def test_unplanned_homework_due_tonight_is_listed_as_a_deadline(qapp: QApplication) -> None:
+    view = shown(
+        qapp,
+        blocks=[
+            block(
+                "math-u",
+                "flexible",
+                [3],
+                None,
+                45,
+                assignment_id="math",
+                title="Math worksheet",
+            )
+        ],
+        homework={
+            "math": {
+                "id": "math",
+                "title": "Math worksheet",
+                "due": "2026-09-17T21:00",
+                "completed": False,
+            }
+        },
+        trace={"placed": [], "unplaced": [{"id": "math-u"}], "explanations": []},
+    )
+    assert view.findChild(QLabel, "bentoDeadlinesEmpty") is None
+    assert "Math worksheet" in view.findChild(QPushButton, "bentoDeadline0").text()
+    tonight = view.findChild(QPushButton, "bentoTonightTitle") or view.findChild(QLabel, "bentoTonightTitle")
+    assert tonight is not None
+    assert tonight.text() != "No homework tonight"
+    assert "Math worksheet" in tonight.text()
+    assert text(view, "bentoHeroLine") != "The rest of the day is yours."
+    assert "Nothing else today" not in text(view, "bentoHeroTitle")
+
+
+def test_month_puts_the_week_tiles_away(qapp: QApplication) -> None:
+    view = shown(qapp)
+    assert view.findChild(QWidget, "bentoScroll").isVisible()
+    assert view.findChild(QLabel, "bentoHeroTitle").isVisible()
+    options = options_for(None, "bento")
+    palette = resolved_palette("light-frost", False, None, "default")
+    view.show_week(
+        Scene(
+            build_week(WEEK, BLOCKS, HOMEWORK, TRACE),
+            3,
+            minute_of("13:40"),
+            options,
+            tokens_for("bento", options["colour"], palette),
+            surface="month",
+            month={"month": "2026-09", "days": []},
+            iso_day="2026-09-17",
+        )
+    )
+    qapp.processEvents()
+    assert view.findChild(QWidget, "bentoScroll").isVisible() is False
+    board = view.findChild(QWidget, "layoutMonthBoard")
+    assert board is not None and board.isVisible()
+    assert view.findChild(QLabel, "bentoHeroTitle").isVisible() is False
+
+
+@pytest.mark.parametrize(
+    ("blocks", "homework", "title", "line"),
+    [
+        ([], {}, "No homework added", "Add homework and FlexWeek will find it a time."),
+        (
+            [{"id": "school", "title": "School", "kind": "locked", "start": "08:00", "duration_min": 390,
+              "days": [0, 1, 2, 3, 4], "category": "class"}],
+            {},
+            "Nothing else scheduled today",
+            "The rest of the day is yours.",
+        ),
+    ],
+)
+def test_an_empty_up_next_does_not_say_its_title_twice(
+    qapp: QApplication, blocks: list[dict], homework: dict, title: str, line: str
+) -> None:
+    """A new account read "No homework added" as the card's title and again as its line."""
+    view = shown(qapp, "22:30", blocks=blocks, homework=homework, trace={"placed": [], "explanations": []})
+    assert (text(view, "bentoHeroTitle"), text(view, "bentoHeroLine")) == (title, line)

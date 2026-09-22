@@ -323,7 +323,16 @@ class MissionView(LayoutView):
             chip.setProperty("state", "past" if over or not item.live else "")
             chips.addWidget(chip)
         if not scene.week.on_day(day):
-            chips.addWidget(label("NOTHING ON THIS DAY", "missionDayEmpty"))
+            if day == scene.today:
+                heading, title, _line = scene.week.leftover_parts(day)
+                words = (
+                    f"{title} · {heading}"
+                    if scene.week.leftover_kind(day) == "needs_time"
+                    else heading
+                )
+                chips.addWidget(label(words.upper(), "missionDayEmpty"))
+            else:
+                chips.addWidget(label("NOTHING ON THIS DAY", "missionDayEmpty"))
         chips.addStretch(1)
         holder.addLayout(chips)
         return holder
@@ -335,7 +344,9 @@ class MissionView(LayoutView):
         inner = QVBoxLayout(side)
         inner.setContentsMargins(scene.px(10), scene.px(10), scene.px(10), scene.px(10))
         inner.addWidget(label("DEADLINE RADAR", "missionRadarTitle"))
-        work = scene.week.open_work()
+        work = list(scene.week.open_work())
+        seen = {item.block_id for item in work}
+        waiting = [item for item in scene.week.waiting if item.block_id not in seen]
         for index, item in enumerate(work):
             due = due_label(item.due, scene.week.week_start)
             extra = f" · {item.slack_words.upper()}" if item.slack_words else ""
@@ -347,8 +358,17 @@ class MissionView(LayoutView):
             row.setText(f"{title}\n{due}{extra}")
             row.setToolTip(item.title)
             inner.addWidget(row)
-        if not work:
-            inner.addWidget(label("ALL CLEAR", "missionRadarEmpty"))
+        offset = len(work)
+        for index, item in enumerate(waiting):
+            due = due_label(item.due, scene.week.week_start)
+            row = block_button(
+                self, f"{item.title}\n{due} · {item.reason}", f"missionRadar{offset + index}", item.block_id
+            )
+            row.setProperty("risk", "danger")
+            inner.addWidget(row)
+        if not work and not waiting:
+            heading, title, line = scene.week.leftover_parts(scene.today)
+            inner.addWidget(label((line or heading or title).upper(), "missionRadarEmpty"))
         inner.addSpacing(scene.px(10))
         inner.addWidget(label("HOMEWORK LOAD / DAY", "missionLoadTitle"))
         bars = QHBoxLayout()

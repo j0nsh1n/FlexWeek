@@ -142,10 +142,25 @@ class TimelineView(LayoutView):
                 self._column.addWidget(label(f"NOW {clock_label(scene.minute)}", "timelineNow"))
             self._column.addWidget(self._card(scene, item, index, past, item == upcoming, is_today))
         if not blocks:
-            self._column.addWidget(label("A free day.", "timelineSub"))
+            if is_today:
+                heading, title, line = scene.week.leftover_parts(day)
+                words = (
+                    f"{title} · {heading}"
+                    if scene.week.leftover_kind(day) == "needs_time"
+                    else (line or heading)
+                )
+                self._column.addWidget(label(words, "timelineSub"))
+            else:
+                self._column.addWidget(label("A free day.", "timelineSub"))
         elif is_today and upcoming is None:
+            heading, title, line = scene.week.leftover_parts(day)
+            extra = (
+                f"{title} · {heading}"
+                if scene.week.leftover_kind(day) == "needs_time"
+                else (line or heading)
+            )
             self._column.addWidget(
-                label(f"NOW {clock_label(scene.minute)} · NOTHING ELSE TODAY", "timelineNow")
+                label(f"NOW {clock_label(scene.minute)} · {extra.upper()}", "timelineNow")
             )
         self._column.addStretch(1)
 

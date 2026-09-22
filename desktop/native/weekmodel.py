@@ -14,12 +14,18 @@ from datetime import date, timedelta
 
 from desktop.native.calendar import DAYS, _is_work_session
 
-SLACK_WORDS = {"danger": "Very little room", "tight": "Limited room", "ok": "Room"}
+SLACK_WORDS = {"danger": "Cutting it close", "tight": "Tight", "ok": "Plenty of time"}
 _SLACK_ORDER = {"danger": 0, "tight": 1, None: 2, "ok": 3}
 NOT_PLANNED = "Not planned yet."
 # A homework session is saved with no category unless the student picked one. It is still homework.
 HOMEWORK = "assignments"
 END_OF_DAY = 24 * 60
+LEFTOVER = {
+    "needs_time": "Needs a time",
+    "no_homework": "No homework added",
+    "all_finished": "All homework finished",
+    "calendar_only": "Nothing else scheduled today",
+}
 
 
 def minute_of(hhmm: str) -> int:
@@ -124,6 +130,48 @@ class WeekModel:
         """Homework still to do, the most squeezed first."""
         items = [item for item in self.occurrences if item.work and item.live]
         return tuple(sorted(items, key=lambda item: (_SLACK_ORDER[item.slack], item.day, item.start)))
+
+    def due_today_unplaced(self, today: int | None) -> tuple[Waiting, ...]:
+        """Homework due today that still needs a time. Every screen reads this, not its own filter."""
+        if today is None:
+            return ()
+        iso = self.date_of(today).isoformat()
+        return tuple(item for item in self.waiting if (item.due or "").startswith(iso))
+
+    def leftover_kind(self, today: int | None) -> str:
+        """Which of the four empty-day states this week is in, once nothing placed is still ahead."""
+        if today is not None and self.due_today_unplaced(today):
+            return "needs_time"
+        homework = [item for item in self.occurrences if item.work]
+        if not homework and not self.waiting:
+            return "calendar_only" if self.occurrences else "no_homework"
+        if not any(item.live for item in homework) and not self.waiting:
+            return "all_finished"
+        return "calendar_only"
+
+    def leftover_words(self, today: int | None) -> str:
+        return LEFTOVER[self.leftover_kind(today)]
+
+    def leftover_parts(self, today: int | None) -> tuple[str, str, str]:
+        """Kicker, title, line. When homework needs a time, the title is its name."""
+        kind = self.leftover_kind(today)
+        heading = LEFTOVER[kind]
+        if kind == "needs_time":
+            first = self.due_today_unplaced(today)[0]
+            due = due_label(first.due, self.week_start)
+            return heading, first.title, f"Due {due}" if due else "Due today"
+        return heading, heading, ""
+
+    def minutes_left_today(self, today: int | None, minute: int) -> int:
+        """Placed remaining homework today, plus unplaced homework due today."""
+        if today is None:
+            return 0
+        total = 0
+        for item in self.on_day(today):
+            if item.work and item.live and item.end > minute:
+                total += item.end - max(item.start, minute)
+        total += sum(item.minutes for item in self.due_today_unplaced(today))
+        return total
 
     def day_queue(self, day: int, minute: int) -> DayQueue:
         """What a day screen is about: the thing on now, then the rest of the day in order.

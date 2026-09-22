@@ -43,17 +43,17 @@ TRACE = {
         {
             "block_id": "poster",
             "reason": "DEADLINE_MISS",
-            "message": "There is no slot left before this deadline.",
+            "message": "There is not enough time left before it is due, even with nothing else planned.",
         },
         {
             "block_id": "chem",
-            "message": "Very little room: scheduled to finish 29m before the deadline.",
+            "message": "Finishes only 29 min before it is due.",
             "slack_min": 29,
             "slack_status": "danger",
         },
         {
             "block_id": "essay",
-            "message": "Room: scheduled to finish 5h before the deadline.",
+            "message": "Finishes 5 h before it is due.",
             "slack_min": 300,
             "slack_status": "ok",
         },
@@ -69,7 +69,10 @@ def qapp() -> Iterator[QApplication]:
 
 def test_it_says_what_could_not_be_placed_and_why(qapp: QApplication) -> None:
     said = PlanReview().rows_for(TRACE, TITLES, WEEK)
-    assert "Science fair poster has no time yet. There is no slot left before this deadline." in said
+    assert (
+        "Science fair poster has no time yet."
+        " There is not enough time left before it is due, even with nothing else planned."
+    ) in said
 
 
 def test_it_says_what_moved_and_why(qapp: QApplication) -> None:
@@ -77,14 +80,29 @@ def test_it_says_what_moved_and_why(qapp: QApplication) -> None:
     moved = [line for line in said if "moved" in line]
     assert moved == [
         "History essay moved from Thu 18:45 to Fri 10:00."
-        " Moved after a missed block so the rest of the week still fits."
+        " Moved because you missed a day, so the rest of the week still fits."
     ]
+
+
+def test_a_move_after_running_late_says_so_not_that_a_day_was_missed(qapp: QApplication) -> None:
+    """Running late files its moves under the missed-day code, with a sentence of its own."""
+    from backend.availability import LATE_COPY
+
+    late = {
+        **TRACE,
+        "explanations": [
+            *TRACE["explanations"],
+            {"block_id": "essay", "reason": "RESHUFFLE_AFTER_MISS", "message": LATE_COPY},
+        ],
+    }
+    moved = [line for line in PlanReview().rows_for(late, TITLES, WEEK) if "moved" in line]
+    assert moved == ["History essay moved from Thu 18:45 to Fri 10:00. " + LATE_COPY]
 
 
 def test_it_warns_about_a_tight_deadline_but_not_a_comfortable_one(qapp: QApplication) -> None:
     said = PlanReview().rows_for(TRACE, TITLES, WEEK)
-    assert "Chem lab report: Very little room: scheduled to finish 29m before the deadline." in said
-    assert not any("History essay: Room" in line for line in said)
+    assert "Chem lab report: Finishes only 29 min before it is due." in said
+    assert not any(line.startswith("History essay: ") for line in said)
 
 
 def test_every_explanation_survives_not_just_the_first(qapp: QApplication) -> None:
@@ -149,12 +167,15 @@ def test_a_block_that_never_moved_is_not_announced_as_moving(qapp: QApplication)
             {
                 "block_id": "poster",
                 "reason": "DEADLINE_MISS",
-                "message": "There is no slot left before this deadline.",
+                "message": "There is not enough time left before it is due, even with nothing else planned.",
             }
         ],
     }
     said = PlanReview().rows_for(trace, TITLES, WEEK)
-    assert said == ["Science fair poster has no time yet. There is no slot left before this deadline."]
+    assert said == [
+        "Science fair poster has no time yet."
+        " There is not enough time left before it is due, even with nothing else planned."
+    ]
     assert not any("no time to no time" in line for line in said)
 
 

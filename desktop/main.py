@@ -25,6 +25,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton
 
 import backend
 from desktop.native.calendar import sunday_due
+from desktop.native.kept import KeptSession
 from desktop.native.window import NativeWindow
 from desktop.origin import configured_origin
 from desktop.server import LocalServer
@@ -251,7 +252,9 @@ def main(argv: list[str] | None = None) -> int:
         app.aboutToQuit.connect(server.stop)
     assert origin is not None
 
-    window = NativeWindow(origin, icon=QIcon(str(app_icon_path())))
+    # Keep me signed in is per database, like the running-instance check.
+    kept = KeptSession(Path(root) / "signed-in" / f"{instance}.json")
+    window = NativeWindow(origin, icon=QIcon(str(app_icon_path())), kept=kept)
     if report is None:
         window.listen_for_instances(instance)
     smoke = NativeSmoke(window, report, walk_setup=not hosted) if report is not None else None

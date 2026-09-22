@@ -18,7 +18,6 @@ from desktop.native.layouts.base import (
     empty,
     label,
     rules,
-    work_left,
 )
 from desktop.native.weekmodel import Occurrence, clock_label, length_label
 
@@ -166,10 +165,14 @@ class OneThingView(LayoutView):
         self._fit_title()
 
     def _left_text(self, scene: Scene) -> str:
-        return "" if scene.today is None else f"{length_label(work_left(scene))} left today"
+        if scene.today is None:
+            return ""
+        return f"{length_label(scene.week.minutes_left_today(scene.today, scene.minute))} left today"
 
     def _empty_title(self, scene: Scene) -> str:
-        return "Day screens show today" if scene.today is None else "Nothing else today"
+        if scene.today is None:
+            return "Day screens show today"
+        return scene.week.leftover_parts(scene.today)[1]
 
     def _words(
         self, scene: Scene, item: Occurrence | None, is_now: bool, has_current: bool
@@ -177,13 +180,15 @@ class OneThingView(LayoutView):
         if scene.today is None:
             return "Not this week", "Go back to planning and open this week to see today."
         if item is None:
+            heading, _title, line = scene.week.leftover_parts(scene.today)
             tomorrow = scene.week.on_day(scene.today + 1)
-            if scene.today < 6 and tomorrow:
-                return (
-                    "Done for today",
-                    f"Tomorrow starts with {tomorrow[0].title} at {clock_label(tomorrow[0].start)}",
-                )
-            return "Done for today", "The rest of the day is yours"
+            if (
+                scene.week.leftover_kind(scene.today) == "calendar_only"
+                and scene.today < 6
+                and tomorrow
+            ):
+                line = f"Tomorrow starts with {tomorrow[0].title} at {clock_label(tomorrow[0].start)}"
+            return heading, line or heading
         if is_now:
             return "Now", f"until {clock_label(item.end)} · {length_label(item.end - scene.minute)} left"
         first_upcoming = 1 if has_current else 0

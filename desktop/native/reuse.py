@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from backend.slots import DAY_END_MIN, DAY_START_MIN, SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm
 from desktop.native.calendar import DAY_FULL
@@ -52,6 +52,205 @@ def floor_slot(minutes: int) -> int:
 
 def is_homework_session(block: dict) -> bool:
     return bool(block.get("assignment_id"))
+
+
+def session_days(week_start: str, due: str) -> list[int]:
+    monday = date.fromisoformat(week_start)
+    due_day = date.fromisoformat(due[:10])
+    last = monday + timedelta(days=6)
+    if due_day < monday:
+        return [0]
+    if due_day > last:
+        return [0, 1, 2, 3, 4]
+    return list(range(due_day.weekday() + 1))
+
+
+def is_planned(block: dict) -> bool:
+    """Unfinished homework with its own time: one day and a start. Such a block is the student's plan,
+    not a request to be planned, so nothing moves it unless its time stops working or they ask."""
+    return (
+        block.get("kind") == "flexible"
+        and bool(block.get("start"))
+        and not block.get("completed")
+        and len(block.get("days") or []) == 1
+    )
+
+
+def planning_days(block: dict, assignments: dict, week_start: str) -> list[int]:
+    """The days homework may go on when it needs a new time. A plan narrows a session to the day it
+    chose, so the days up to the deadline come back from the assignment rather than from the block."""
+    assignment = assignments.get(block.get("assignment_id") or "")
+    if assignment and assignment.get("due"):
+        return session_days(week_start, assignment["due"])
+    return list(block.get("days") or [0])
+
+
+def apply_plan(
+    blocks: list[dict],
+    trace: dict | None,
+    *,
+    targets: set[str] | None = None,
+    assignments: dict | None = None,
+    week_start: str | None = None,
+) -> list[dict]:
+    """Copy the solver's start times onto the week's blocks so a save keeps the plan.
+
+    Plan my homework used to keep placements only in the in-memory trace. Save wrote the
+    blocks without starts, and any later edit dropped the trace, so homework vanished
+    until the student planned again. With `targets`, only those sessions change: a plan for part of
+    the week never touches the rest of it.
+
+    Only unfinished homework is written. The solver lists a fixed block without its missed days, and
+    copying that back left Monday missed on a block that no longer ran on Monday, which no save
+    accepts; a finished session keeps the time it was done in.
+    """
+    placed = {item["id"]: item for item in (trace or {}).get("placed") or []}
+    unplaced_ids = {item["id"] for item in (trace or {}).get("unplaced") or []}
+    out = []
+    for block in blocks:
+        copy = dict(block)
+        unplanned_work = copy.get("kind") == "flexible" and not copy.get("completed")
+        if not unplanned_work or (targets is not None and copy["id"] not in targets):
+            out.append(copy)
+            continue
+        winner = placed.get(copy["id"])
+        if winner and winner.get("start"):
+            copy["start"] = winner["start"]
+            if winner.get("days"):
+                copy["days"] = list(winner["days"])
+        elif copy["id"] in unplaced_ids:
+            if copy.pop("start", None) and assignments is not None and week_start is not None:
+                copy["days"] = planning_days(copy, assignments, week_start)
+        out.append(copy)
+    return out
+
+
+def held_in_place(block: dict) -> dict:
+    """Planned homework as the solver should see it while other work is placed: time already taken.
+    A work session cannot be sent as a fixed block with its assignment, so only its time goes."""
+    return {
+        "id": block["id"],
+        "title": block.get("title") or "Homework",
+        "kind": "locked",
+        "duration_min": block["duration_min"],
+        "days": list(block["days"]),
+        "start": block["start"],
+    }
+
+
+def solve_request(
+    blocks: list[dict],
+    assignments: dict,
+    week_start: str,
+    *,
+    everything: bool = False,
+    only: set[str] | None = None,
+) -> tuple[list[dict], set[str]]:
+    """What to send the solver, and which sessions its answer may place.
+
+    By default planned homework keeps its time and only homework without one is placed around it.
+    `everything` places every unfinished session again, with every day up to its deadline open.
+    `only` places just those sessions around everything else, for work whose time stopped working.
+    """
+    payload: list[dict] = []
+    targets: set[str] = set()
+    for block in blocks:
+        if block.get("kind") != "flexible" or block.get("completed"):
+            payload.append(block)
+            continue
+        planned = is_planned(block)
+        wanted = block["id"] in only if only is not None else everything or not planned
+        if wanted:
+            session = dict(block)
+            if planned:
+                session.pop("start")
+                session["days"] = planning_days(block, assignments, week_start)
+            payload.append(session)
+            targets.add(block["id"])
+        elif planned:
+            payload.append(held_in_place(block))
+    return payload, targets
+
+
+def _due_point(due: str | None, week_start: str) -> tuple[int, int] | None:
+    """A deadline as (day index, minute) in this week: negative before it, None when it is later."""
+    if not due:
+        return None
+    offset = (date.fromisoformat(due[:10]) - date.fromisoformat(week_start)).days
+    if offset > 6:
+        return None
+    return offset, hhmm_to_minutes(due[11:16]) if len(due) >= 16 else DAY_END_MIN
+
+
+def settle_placements(
+    blocks: list[dict],
+    assignments: dict,
+    week_start: str,
+    keep: set[str] | frozenset[str] = frozenset(),
+) -> tuple[list[dict], list[dict]]:
+    """Take the time away from planned homework whose slot no longer works, and from nothing else.
+
+    A fixed commitment added or moved over it, a missed day undone, a deadline moved earlier: each can
+    leave one session sitting where it can no longer be done. Every other session keeps its time. The
+    one that lost it gets back every day up to its deadline and a sentence saying why. `keep` names
+    homework the student just placed themselves; when two sessions collide, the other one gives way.
+    """
+    taken: dict[int, list[tuple[int, int, str]]] = {day: [] for day in range(7)}
+    for block in blocks:
+        if not block.get("start"):
+            continue
+        start = hhmm_to_minutes(block["start"])
+        end = start + int(block.get("duration_min") or 0)
+        if block.get("kind") == "locked":
+            for day in block.get("days") or []:
+                if day not in (block.get("missed_days") or []):
+                    taken[day].append((start, end, block.get("title") or "a fixed block"))
+        elif block.get("completed"):
+            days = block.get("days") or []
+            day = block.get("completed_day", days[0] if len(days) == 1 else None)
+            if day is not None:
+                taken[day].append((start, end, block.get("title") or "finished work"))
+    sessions = sorted(
+        (block for block in blocks if is_planned(block)),
+        key=lambda block: (block["id"] not in keep, block["days"][0], block["start"], block["id"]),
+    )
+    lost: dict[str, dict] = {}
+    for block in sessions:
+        day = block["days"][0]
+        start = hhmm_to_minutes(block["start"])
+        end = start + int(block.get("duration_min") or 0)
+        assignment = assignments.get(block.get("assignment_id") or "") or {}
+        due = _due_point(assignment.get("due"), week_start)
+        clash = next((title for low, high, title in taken[day] if start < high and low < end), None)
+        why = None
+        if start < DAY_START_MIN or end > DAY_END_MIN:
+            why = "that is outside the hours FlexWeek plans in"
+        elif due is not None and (day, end) > due:
+            why = "that is after it is due"
+        elif clash is not None:
+            why = f"{clash} is there now"
+        if why is None:
+            taken[day].append((start, end, block.get("title") or "homework"))
+            continue
+        title = block.get("title") or "Homework"
+        lost[block["id"]] = {
+            "block_id": block["id"],
+            "assignment_id": block.get("assignment_id"),
+            "title": title,
+            "day": day,
+            "start": block["start"],
+            "message": f"{title} no longer fits {DAY_FULL[day]} at {block['start']}: {why}.",
+        }
+    if not lost:
+        return blocks, []
+    out = []
+    for block in blocks:
+        if block["id"] in lost:
+            block = dict(block)
+            block.pop("start")
+            block["days"] = planning_days(block, assignments, week_start)
+        out.append(block)
+    return out, [lost[block["id"]] for block in sessions if block["id"] in lost]
 
 
 def occurrence_days(block: dict) -> list[int]:
@@ -461,13 +660,19 @@ MONTHS = (
 )
 
 
-def planner_title(session: object, view: str) -> str:
+def planner_title(session: object, view: str, *, short: bool = False) -> str:
     """Where you are, in words: "15 – 21 September", "Thursday 18 September", "September 2026".
+
+    `short` abbreviates the names ("28 Sep – 4 Oct") for a bar with no room for them, so the whole
+    range still reads rather than being cut after the first month.
 
     The top bar used to say none of this. It had two buttons reading "Previous week" and "Next week"
     and no statement of which week you were on at all.
     """
     from datetime import date, timedelta
+
+    def name(names: tuple[str, ...], index: int) -> str:
+        return names[index][:3] if short else names[index]
 
     start = date.fromisoformat(session.week_start)
     # selected_day is an ISO date, not an index into the week. Reading it as one raised on a real
@@ -486,10 +691,10 @@ def planner_title(session: object, view: str) -> str:
             )
         except ValueError:
             anchor = chosen
-        return f"{MONTHS[anchor.month - 1]} {anchor.year}"
+        return f"{name(MONTHS, anchor.month - 1)} {anchor.year}"
     if view == "day":
-        return f"{DAYS_LONG[chosen.weekday()]} {chosen.day} {MONTHS[chosen.month - 1]}"
+        return f"{name(DAYS_LONG, chosen.weekday())} {chosen.day} {name(MONTHS, chosen.month - 1)}"
     end = start + timedelta(days=6)
     if start.month == end.month:
-        return f"{start.day} – {end.day} {MONTHS[start.month - 1]}"
-    return f"{start.day} {MONTHS[start.month - 1]} – {end.day} {MONTHS[end.month - 1]}"
+        return f"{start.day} – {end.day} {name(MONTHS, start.month - 1)}"
+    return f"{start.day} {name(MONTHS, start.month - 1)} – {end.day} {name(MONTHS, end.month - 1)}"

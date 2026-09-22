@@ -1,22 +1,56 @@
 # context.md — FlexWeek
 
 ## Current State
-- Date: 2026-09-21 (IA harden). Branch `grok/0-14-1-ia` off `origin/main` at
-  c6b487c, local only in `~/.worktrees/flexweek-ui-grok`. Native chrome: Plan
-  my homework and More stay in every layout; Settings is a gear; Appearance &
-  layout is one Settings section; summaries speak minutes; Running late toasts
-  the reason or the locked start; first-week sport name is a placeholder.
-  VERSION stays 0.14.0. Nothing pushed. Next: Claude reviews, then Jonathan.
-- Date: 2026-09-21 (IA harden review fixes). Branch `claude/0-14-1-ia-fixes`
-  on top of `grok/0-14-1-ia` (7cd7288), local only in
-  `~/.worktrees/flexweek-ui-claude`. Fixes Claude's review of Grok's branch:
-  every Settings page fits (measured page by page at normal and large text;
-  the dialog stays within 700 px at normal), a setup time is selected only on
-  the entering click, the notice is one line under the bar, and Running late
-  confirms only after its save. A TypeSafe (Jev) sweep of student-facing strings
-  found one more session count (the spread preview), now in time. spec.md
-  drift: none new; spec.md never described the top bar, More, Settings or
-  layouts (noted in the stage 8 contract). Nothing pushed.
+- Date: 2026-09-21 (0.14.1 trust). Branch `fix/0-14-1-trust` off `origin/main`
+  at the 0.14.1 merge. The 0.14.1 AppImage audit and Claude's review of that
+  run: leftover homework is one WeekModel rule on every layout and both day
+  screens; Running late undoes in one step; a covering commitment takes only
+  the blocked homework and offers Find a new time; Plan my homework keeps
+  working times; Month hides the whole week surface; username, estimate error,
+  More details, Today, and Start/End are in. Dialog height from the audit
+  (~150 px) was not reproduced, so it is not claimed as fixed. Gate: 977
+  Python tests, `scripts/verify.py` VERIFIED. Development window driven
+  offscreen at 1024×768 and 1280×800. Packaged AppImage not rebuilt. Nothing
+  pushed. VERSION stays 0.14.1. spec.md was not edited. Drift to flag: Month's
+  decision 7 still says the solver's choice is never stored, and Running late
+  still says it re-solves after the locked block is saved. The native app now
+  stores placements and applies the Running late preview in the same save.
+  spec.md does not still describe a web app or a WebEngine shell (PR #22).
+  Second review round (Claude): a missed day no longer stops the week saving
+  (apply_plan writes only unfinished homework), the week title fits beside
+  its arrows with a short form, fixed activities are Start and End only, views
+  say what they are for, notices speak once and name every lost session, and
+  a failed replan keeps the newest reason. Gate after that: 987 Python tests,
+  `scripts/verify.py` exit 0.
+  Third round (Claude, same day): the audit's ~150 px dialogs are explained
+  and fixed. 154 px was the 0.14.1 minimum height of Settings and the homework
+  editor; the audit's desktop gave them that minimum. Reproduced on the real
+  KDE desktop with the shipped AppImage, and the fixed source holds 480 px
+  there. The dialog test now squeezes each dialog and fails on 0.14.1. Also:
+  Day counts only work with a time as planned (stage 2 contract line updated),
+  solver reasons and deadline tags reworded with Jev, Running late moves no
+  longer say a day was missed, School hours under More > Adding, Settings
+  hides Look/Accent/Surface/Corners/Blocks where they change nothing, and
+  Bento's empty Up next says its title once. Close-out (Jonathan: "finish up
+  the work"): Month pins open work only where its plan put it (decision 7
+  updated), spec.md now describes stored plans, Plan vs Replan all, Running
+  late's single save, Day/Month counting and School hours under More. The
+  older GLM findings on overdue homework, "only" mode and finished sessions do
+  not hold against the current code. A Jev copy sweep of the branch's 55 new
+  strings found nothing to change. Keep me signed in on this computer is on
+  the sign-in card (on by default): the session token is kept per database in
+  `<data>/signed-in/<instance>.json` (0600), resumed through /api/auth/me at
+  launch, and forgotten on Log out, account deletion or a 401. Checked on the
+  real KDE desktop through `desktop.main`. Check for updates hung on the
+  installed 0.14.0 AppImage because GitHub's API answered 403 (rate limit for a
+  shared carrier address) and the updater stopped silently; it now falls back
+  to the releases/latest redirect, times out, and reports failure when asked.
+  The packaged app is not rebuilt. Next: owner review, then a 0.14.2 bump and package when asked.
+- Date: 2026-09-21 (IA harden). 0.14.1 shipped: Plan my homework and More stay
+  in every design; Settings is a gear; Appearance & layout is one Settings
+  section; summaries speak minutes; Running late toasts the reason or the
+  locked start; first-week sport name is a placeholder; Settings saves as you
+  go. PRs #23 and #24.
 - Date: 2026-09-20 (layout surfaces). Branch `feat/layout-surfaces` off
   `origin/main` at 993c003, local only in `~/.worktrees/flexweek-layout-surfaces`.
   Day and Month rebuild for the chosen week layout (classic stays the clock
@@ -478,11 +512,28 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
-- 2026-09-21, `feat/0-14-1-release`: 0.14.1 release prep (VERSION, CHANGELOG
-  heading, `docs/release-notes-v0.14.1.md`) after PR #23 merged. The release is
-  published as a pre-release first so 0.14.0 installs are not offered it until
-  it is marked latest (the updater reads /releases/latest and skips
-  pre-releases); Windows installers still want a hand-check on a real PC.
+- 2026-09-21, `fix/0-14-1-trust`: 0.14.2 release prep (VERSION, CHANGELOG
+  heading, `docs/release-notes-v0.14.2.md`). Published as the latest full
+  release, not a pre-release, so 0.14.x installs are offered it. 0.14.0 and
+  0.14.1 carry the old updater, which hangs when GitHub's API rate-limits the
+  address; the notes tell those students to download by hand if it seems stuck.
+- 2026-09-21, `fix/0-14-1-trust`: Claude's fixes from the second review of
+  Grok's run, one commit each: missed-day and Running late saves (apply_plan
+  writes only unfinished homework), the week title (FittedLabel with a short
+  form), Start/End-only fixed activities, view names with a purpose, notices
+  said once and naming everyone, and the latest reason after a failed plan.
+  No push, no executable, VERSION 0.14.1, spec.md not edited. GLM skipped on
+  Jonathan's instruction; Jev used. Next: owner review, then 0.14.2 when asked.
+- 2026-09-21, `fix/0-14-1-trust`: Claude's trust-review items on the 0.14.1
+  audit branch. Leftover copy, one-step Running late undo, settle/keep-plan,
+  Month host, username/estimate/More details/Today/Start+End, offscreen 1024
+  gear. Dialog 150 px still unverified. spec.md not edited; flagged Month
+  decision 7 and Running late re-solve drift. Gate: 977 Python tests,
+  `scripts/verify.py` VERIFIED. No push, no executable, VERSION
+  0.14.1. Next: owner review.
+- 2026-09-21, `feat/0-14-1-release`: 0.14.1 shipped (PRs #23 and #24). It was
+  published as a pre-release first, then marked latest so 0.14.0 installs can
+  be offered it. Windows installers still want a hand-check on a real PC.
 - 2026-09-21, `claude/0-14-1-ia-fixes` on `grok/0-14-1-ia`: review fixes for
   0.14.1, the spread-preview wording, and Settings that apply as they change
   (Jonathan's addition to 0.14.1: no OK/Cancel, account prefs saved 600 ms

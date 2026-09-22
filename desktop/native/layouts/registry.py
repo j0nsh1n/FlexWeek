@@ -53,6 +53,9 @@ class LayoutSpec:
     summary: str
     options: tuple[Option, ...] = ()
     colourways: Colourways = ()
+    # What the view is for, in a student's words. The style name alone ("Bento", "Today's app") did
+    # not say that one is a dashboard and the other the plain calendar.
+    purpose: str = ""
 
 
 def _colour(spec_colourways: Colourways) -> Option:
@@ -72,7 +75,11 @@ LAYOUTS: dict[str, LayoutSpec] = {
     spec.id: spec
     for spec in (
         LayoutSpec(
-            "classic", "plan", "Today's app", "The week grid with the sidebar. Its colours are the Look menu."
+            "classic",
+            "plan",
+            "Today's app",
+            "The week grid with the sidebar. Its colours are the Look menu.",
+            purpose="Calendar",
         ),
         LayoutSpec(
             "timeline",
@@ -97,6 +104,7 @@ LAYOUTS: dict[str, LayoutSpec] = {
                 _show("finished", "Finished and past items"),
             ),
             TIMELINE,
+            purpose="Agenda",
         ),
         LayoutSpec(
             "mission",
@@ -105,6 +113,7 @@ LAYOUTS: dict[str, LayoutSpec] = {
             "Days as lanes across the screen, with a deadline radar.",
             (_colour(MISSION), _HOURS, _show("side", "Deadline radar and load")),
             MISSION,
+            purpose="Dashboard",
         ),
         LayoutSpec(
             "bento",
@@ -124,6 +133,7 @@ LAYOUTS: dict[str, LayoutSpec] = {
                 ),
             ),
             BENTO,
+            purpose="Dashboard",
         ),
         LayoutSpec(
             "retro",
@@ -140,6 +150,7 @@ LAYOUTS: dict[str, LayoutSpec] = {
                 ),
             ),
             RETRO,
+            purpose="Dashboard",
         ),
         LayoutSpec(
             "clay",
@@ -154,6 +165,7 @@ LAYOUTS: dict[str, LayoutSpec] = {
                 Option("tilt", "Tilted cards", "detail", (Choice("on", "Tilted"), Choice("off", "Straight"))),
             ),
             CLAY,
+            purpose="Agenda",
         ),
         LayoutSpec(
             "one",
@@ -172,6 +184,7 @@ LAYOUTS: dict[str, LayoutSpec] = {
                 _show("daybar", "Day bar"),
             ),
             ONE,
+            purpose="Focus",
         ),
         LayoutSpec(
             "dial",
@@ -185,6 +198,7 @@ LAYOUTS: dict[str, LayoutSpec] = {
                 _show("week", "Small dials for the week"),
             ),
             DIAL,
+            purpose="Clock",
         ),
     )
 }

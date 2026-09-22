@@ -49,12 +49,14 @@ API.
    - completed: its `completed_day` when set, otherwise its single candidate
      day. A completed session keeps its full candidate list, so `days` alone is
      not the pin (`backend/solver.py` spent-time rule).
-   - open: only when it has exactly one candidate day. The solver's choice is
-     never stored, so an open session with two or more candidates has no date
-     the server can name. It pins nowhere and is reported in `unscheduled`
-     instead, so planned work is never silently dropped.
-   Unplaced candidate days do not paint the whole week. A `start` is not
-   required to pin, because open sessions never carry one. Locked blocks with a start (school, sport, sleep, pomodoro
+   - open: only when its saved plan gives it a `start` on exactly one day.
+     Open work with no `start` has no date yet, however many candidate days it
+     has. It pins nowhere and is reported in `unscheduled` instead, so work is
+     never silently dropped. (Until 2026-09-21 the solver's choice was never
+     stored, so a lone candidate day pinned without a `start`. Plans are
+     stored since the 0.14.1 trust fixes, and Day counts only work with a
+     time, so Month does too.)
+   Unplaced candidate days do not paint the whole week. Locked blocks with a start (school, sport, sleep, pomodoro
    work chunks) recur on every listed day and add `locked_count` or
    `session_count` and `scheduled_min` the same way Day counts them.
 8. `preferred_view` stays `week` or `day`. Month is session navigation until
@@ -122,8 +124,8 @@ Rules:
   sessions, so a client can show what is done against what is still planned
   without a second request. It is never larger than `scheduled_min`.
 - `unscheduled` counts open flexible sessions with `assignment_id` on the
-  grid's saved weeks that pin to no date, because they still have two or more
-  candidate days. `session_count` is how many, `minutes` their total
+  grid's saved weeks that pin to no date, because they have no planned time
+  yet. `session_count` is how many, `minutes` their total
   `duration_min`. They appear in no day cell.
 - `unplanned_min` uses the existing formula against planned minutes from the
   Monday of `start` (the month's first day), so September 2026 uses

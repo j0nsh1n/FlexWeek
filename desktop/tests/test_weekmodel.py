@@ -47,11 +47,21 @@ TRACE = {
     "placed": [block("chem-1", "flexible", [3], "20:00", 90, assignment_id="chem")],
     "unplaced": [block("poster-1", "flexible", [], None, 120, assignment_id="poster")],
     "explanations": [
-        {"block_id": "chem-1", "message": "Very little room.", "slack_min": 149, "slack_status": "danger"},
-        {"block_id": "essay-1", "message": "Limited room.", "slack_min": 1515, "slack_status": "tight"},
+        {
+            "block_id": "chem-1",
+            "message": "Finishes only 2 h 29 min before it is due.",
+            "slack_min": 149,
+            "slack_status": "danger",
+        },
+        {
+            "block_id": "essay-1",
+            "message": "Finishes 25 h 15 min before it is due.",
+            "slack_min": 1515,
+            "slack_status": "tight",
+        },
         {
             "block_id": "poster-1",
-            "message": "There is no slot left before this deadline.",
+            "message": "There is not enough time left before it is due, even with nothing else planned.",
             "reason": "DEADLINE_MISS",
         },
     ],
@@ -89,7 +99,7 @@ def test_a_solver_placement_never_moves_finished_work() -> None:
 def test_work_with_no_time_waits_with_the_solvers_reason() -> None:
     week = build_week(WEEK, BLOCKS, HOMEWORK, TRACE)
     assert [(item.title, item.minutes, item.reason) for item in week.waiting] == [
-        ("Poster-1", 120, "There is no slot left before this deadline.")
+        ("Poster-1", 120, "There is not enough time left before it is due, even with nothing else planned.")
     ]
 
 
@@ -104,8 +114,8 @@ def test_work_nobody_has_planned_yet_says_so() -> None:
 def test_risk_is_the_solvers_verdict_and_the_most_squeezed_comes_first() -> None:
     week = build_week(WEEK, BLOCKS, HOMEWORK, TRACE)
     assert [(item.block_id, item.slack, item.slack_words) for item in week.open_work()] == [
-        ("chem-1", "danger", "Very little room"),
-        ("essay-1", "tight", "Limited room"),
+        ("chem-1", "danger", "Cutting it close"),
+        ("essay-1", "tight", "Tight"),
     ]
 
 
@@ -194,6 +204,56 @@ def test_labels_read_the_way_a_student_says_them() -> None:
     assert due_label("2026-09-28T08:00", WEEK) == "Sep 28 08:00"
     assert due_label("2026-09-20", WEEK) == "Sun"
     assert due_label(None, WEEK) == ""
+
+
+def test_due_today_unplaced_is_homework_that_still_needs_a_time() -> None:
+    blocks = [
+        block("math-u", "flexible", [3], None, 45, assignment_id="math", title="Math worksheet"),
+    ]
+    homework = {
+        "math": {
+            "id": "math",
+            "title": "Math worksheet",
+            "due": "2026-09-17T21:00",
+            "completed": False,
+        }
+    }
+    week = build_week(WEEK, blocks, homework, None)
+    assert [item.title for item in week.due_today_unplaced(3)] == ["Math worksheet"]
+    assert week.due_today_unplaced(2) == ()
+    assert week.leftover_kind(3) == "needs_time"
+    assert week.leftover_words(3) == "Needs a time"
+    assert week.leftover_parts(3) == ("Needs a time", "Math worksheet", "Due Thu 21:00")
+    assert week.minutes_left_today(3, 16 * 60) == 45
+
+
+def test_leftover_kind_splits_the_four_empty_days() -> None:
+    empty = build_week(WEEK, [], {}, None)
+    assert empty.leftover_kind(3) == "no_homework"
+    assert empty.leftover_words(3) == "No homework added"
+    done = build_week(
+        WEEK,
+        [
+            block(
+                "math-1",
+                "flexible",
+                [3],
+                "15:00",
+                45,
+                assignment_id="math",
+                title="Math worksheet",
+                completed=True,
+                completed_day=3,
+            )
+        ],
+        {"math": {**HOMEWORK["math"], "completed": True}},
+        None,
+    )
+    assert done.leftover_kind(3) == "all_finished"
+    assert done.leftover_words(3) == "All homework finished"
+    school = build_week(WEEK, [block("school", "locked", [3], "08:00", 390)], {}, None)
+    assert school.leftover_kind(3) == "calendar_only"
+    assert school.leftover_words(3) == "Nothing else scheduled today"
 
 
 @pytest.mark.skipif(importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent")

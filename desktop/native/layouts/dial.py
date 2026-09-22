@@ -306,7 +306,16 @@ class DayDialView(LayoutView):
                 row.clicked.connect(lambda _=False, key=item.block_id: self.block_activated.emit(key))
                 side.addWidget(row)
             if not blocks:
-                side.addWidget(label("A free day.", "dialHeading"))
+                if is_today:
+                    heading, title, line = scene.week.leftover_parts(day)
+                    words = (
+                        f"{title} · {heading}"
+                        if scene.week.leftover_kind(day) == "needs_time"
+                        else (line or heading)
+                    )
+                    side.addWidget(label(words, "dialHeading"))
+                else:
+                    side.addWidget(label("A free day.", "dialHeading"))
         if scene.week.waiting:
             them = "it" if len(scene.week.waiting) == 1 else "them"
             side.addWidget(
@@ -336,7 +345,8 @@ class DayDialView(LayoutView):
             found = scene.week.day_queue(day, scene.minute)
             item = found.queue[0] if found.queue else None
             if item is None:
-                kicker, title = "DONE FOR TODAY", "Nothing else today"
+                heading, title, _line = scene.week.leftover_parts(day)
+                kicker, title = heading.upper(), title
             elif item == found.current:
                 kicker, title = (
                     f"NOW · UNTIL {clock_label(item.end)} · "

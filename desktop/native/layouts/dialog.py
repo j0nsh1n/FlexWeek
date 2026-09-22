@@ -47,7 +47,7 @@ class LayoutSection(QGroupBox):
         self.pick.setObjectName(f"layout{slot.title()}")
         self.pick.setAccessibleName(title)
         for spec in layouts_for(role):
-            self.pick.addItem(spec.label, spec.id)
+            self.pick.addItem(f"{spec.purpose} · {spec.label}" if spec.purpose else spec.label, spec.id)
         self.pick.setCurrentIndex(max(self.pick.findData(choice[slot]), 0))
         body.addWidget(self.pick)
         self.summary = QLabel()
@@ -74,6 +74,10 @@ class LayoutSection(QGroupBox):
 
     def chosen(self) -> str:
         return str(self.pick.currentData())
+
+    def values(self) -> dict[str, str]:
+        """Every option of the design picked now, defaults included."""
+        return dict(self._options[self.chosen()])
 
     def options(self) -> dict[str, dict[str, str]]:
         """Only what the student changed. Writing a design's defaults down would freeze them, and a

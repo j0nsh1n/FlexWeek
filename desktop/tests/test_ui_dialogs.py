@@ -172,4 +172,136 @@ def test_the_homework_editor_is_wide_enough_to_read_after_it_was_made_to_scroll(
     dialog.adjustSize()
     qapp.processEvents()
     assert dialog.width() >= 500
+    assert dialog.height() >= 400
     dialog.close()
+
+
+def test_an_off_grid_estimate_says_to_use_a_multiple_of_fifteen(qapp: QApplication) -> None:
+    from desktop.native.widgets import ESTIMATE_ERROR, SLOT_HINT, HomeworkDialog
+
+    dialog = HomeworkDialog(None, None, "2026-09-14")
+    dialog.title.setText("Essay")
+    dialog.estimate.setValue(20)
+    dialog.show()
+    qapp.processEvents()
+    dialog.accept()
+    assert dialog.result() != dialog.DialogCode.Accepted
+    assert dialog.error.text() == ESTIMATE_ERROR
+    assert dialog.error.isVisible()
+    assert dialog.findChild(type(dialog.estimate_hint), "homeworkEstimateHint").text() == SLOT_HINT
+    dialog.close()
+
+
+def test_homework_optional_fields_sit_behind_more_details(qapp: QApplication) -> None:
+    from desktop.native.widgets import HomeworkDialog
+
+    blank = HomeworkDialog(None, None, "2026-09-14")
+    blank.show()
+    qapp.processEvents()
+    assert blank.findChild(type(blank.more_details), "homeworkMoreDetails") is not None
+    assert blank._details.isVisible() is False
+    blank.more_details.setChecked(True)
+    assert blank._details.isVisible() is True
+    blank.close()
+
+    filled = HomeworkDialog(
+        None,
+        {
+            "id": "math",
+            "title": "Math worksheet",
+            "due": "2026-09-14T21:00",
+            "estimate_min": 45,
+            "revision": 0,
+            "course": "Math",
+            "notes": "",
+            "links": [],
+            "checklist": [],
+        },
+        "2026-09-14",
+    )
+    filled.show()
+    qapp.processEvents()
+    assert filled.more_details.isChecked() is True
+    assert filled._details.isVisible() is True
+    filled.close()
+
+
+def test_a_fixed_activity_is_a_start_and_an_end_with_the_length_worked_out(qapp: QApplication) -> None:
+    """School is 08:00 to 14:30, not 390 minutes. An editable Duration beside End was a second way to
+    say the same thing, and the two could disagree."""
+    from PySide6.QtCore import QTime
+    from PySide6.QtWidgets import QAbstractSpinBox
+
+    dialog = BlockDialog(None, school())
+    dialog.show()
+    qapp.processEvents()
+    assert (dialog.start.time().toString("HH:mm"), dialog.end.time().toString("HH:mm")) == ("08:00", "14:30")
+    assert dialog.duration_line.text() == "6 h 30 min"
+    assert dialog.findChild(QAbstractSpinBox, "blockDuration") is None
+    dialog.end.setTime(QTime(15, 0))
+    qapp.processEvents()
+    assert dialog.duration_line.text() == "7 h"
+    dialog.accept()
+    assert dialog.block()["duration_min"] == 420
+    dialog.close()
+
+
+def test_a_fixed_activity_that_ends_before_it_starts_is_refused_beside_the_times(qapp: QApplication) -> None:
+    from PySide6.QtCore import QTime
+
+    dialog = BlockDialog(None, school())
+    dialog.show()
+    qapp.processEvents()
+    dialog.end.setTime(QTime(7, 30))
+    qapp.processEvents()
+    assert dialog.duration_line.text() == "End must be after Start."
+    dialog.accept()
+    assert dialog.result() != dialog.DialogCode.Accepted
+    # Said once, beside the times, as an error; not repeated at the bottom of the form.
+    assert dialog.duration_line.property("problem") is True
+    assert dialog.error.text() == ""
+    dialog.end.setTime(QTime(15, 10))
+    qapp.processEvents()
+    assert dialog.duration_line.text() == "Use quarter hours, such as 15:00 or 15:15."
+    dialog.accept()
+    assert dialog.result() != dialog.DialogCode.Accepted
+    dialog.close()
+
+
+def test_a_bad_username_is_named(qapp: QApplication) -> None:
+    from desktop.native.client import USERNAME_ERROR, _error
+
+    err = _error(
+        422,
+        [
+            {
+                "type": "string_too_short",
+                "loc": ["body", "username"],
+                "msg": "String should have at least 3 characters",
+                "input": "x",
+            }
+        ],
+    )
+    assert err.message == USERNAME_ERROR
+    generic = _error(422, [{"type": "value_error", "loc": ["body", "title"], "msg": "title required"}])
+    assert "required fields" in generic.message
+
+
+def test_a_short_password_names_the_field_instead_of_a_generic_check(qapp: QApplication) -> None:
+    from desktop.native.client import PASSWORD_LENGTH_HINT, _error
+
+    err = _error(
+        422,
+        [
+            {
+                "type": "string_too_short",
+                "loc": ["body", "password"],
+                "msg": "String should have at least 12 characters",
+                "input": "x",
+            }
+        ],
+    )
+    assert err.message == PASSWORD_LENGTH_HINT
+    generic = _error(422, [{"type": "value_error", "loc": ["body", "title"], "msg": "title required"}])
+    assert "required fields" in generic.message
+    assert "x" not in err.message
