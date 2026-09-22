@@ -51,6 +51,7 @@ from desktop.native.look import (
     look_menu_token,
     look_menu_value,
     look_overrides,
+    pack_motion,
     parse_look_menu_token,
     sanitize_look,
 )
@@ -296,6 +297,13 @@ class PrefsDialog(QDialog):
         self.accent_chips = QCheckBox("Use the accent on category chips")
         self.accent_chips.setObjectName("prefAccentChips")
         self.accent_chips.setChecked(bool(preferences.get("accent_chips")))
+        # How much the app moves: pages cross-fade, a new week slides in, notices rise into place.
+        self.motion = QComboBox()
+        self.motion.setObjectName("prefMotion")
+        for text, value in (("Normal", "normal"), ("More movement", "extra"), ("Off", "off")):
+            self.motion.addItem(text, value)
+        chosen_motion = preferences.get("motion") or pack_motion(self._pack)
+        self.motion.setCurrentIndex(max(0, self.motion.findData(chosen_motion)))
         self.knobs = {}
         shown = effective_look(self._look)
         self.fine_host = QWidget()
@@ -409,6 +417,7 @@ class PrefsDialog(QDialog):
         appear.addRow("Accent", self.accent)
         self._appear_form = appear
         appear.addRow(self.accent_chips)
+        appear.addRow("Animations", self.motion)
         appear.addRow(self.fine_tune)
         appear.addRow(self.fine_host)
         column.addLayout(appear)
@@ -571,7 +580,7 @@ class PrefsDialog(QDialog):
         self.spotify.editingFinished.connect(self._check_spotify)
         # Every choice says it changed. Connected last, so building the dialog says nothing, and after
         # the handlers above, so a look or a timer preset has filled in its knobs by then.
-        for box in (self.look, self.accent, self.preferred_view, *self.knobs.values()):
+        for box in (self.look, self.accent, self.preferred_view, self.motion, *self.knobs.values()):
             box.currentIndexChanged.connect(self._announce)
         for spin in (self.work, self.break_min, self.long_break, self.long_every, self.lead, self.volume):
             spin.valueChanged.connect(self._announce)
@@ -787,6 +796,7 @@ class PrefsDialog(QDialog):
             "accent_chips": self.accent_chips.isChecked(),
             "start_at_login": self.start_at_login.isChecked(),
             "preferred_view": self.preferred_view.currentData(),
+            "motion": self.motion.currentData(),
         }
 
     def _apply_look_menu(self) -> None:

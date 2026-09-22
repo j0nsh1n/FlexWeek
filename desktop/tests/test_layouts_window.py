@@ -2011,3 +2011,48 @@ def test_unplaced_homework_due_today_is_named_on_every_screen(
     assert "math worksheet" in said, said
     for phrase in FREE_TODAY:
         assert phrase not in said, f"{layout_id} still says {phrase!r} in:\n{said}"
+
+
+def _fades(host: QWidget) -> list[QLabel]:
+    from desktop.native.motion import FADE_NAME
+
+    return [label for label in host.findChildren(QLabel, FADE_NAME) if label.isVisible()]
+
+
+def test_a_new_view_is_live_at_once_while_the_old_one_fades(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    from desktop.native.motion import DURATION_MS
+
+    window._motion = "normal"
+    window.planner.resize(window.planner.size())
+    click(window, "viewMonth")
+    assert window.planner.currentWidget() is window._planner_widget("month")
+    assert len(_fades(window.planner)) == 1
+    QTest.qWait(DURATION_MS["normal"] + 200)
+    assert _fades(window.planner) == []
+
+
+def test_the_next_week_slides_in_as_the_last_one_drifts_away(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    from desktop.native.motion import DURATION_MS
+
+    window._motion = "normal"
+    start = window.session.week_start
+    click(window, "nextWeek")
+    assert window._travel_direction == -1
+    wait_until(qapp, lambda: window.session.week_start != start and not window.session.busy)
+    QTest.qWait(DURATION_MS["normal"] + 200)
+    assert _fades(window.planner) == []
+
+
+def test_animations_off_turns_every_fade_off(qapp: QApplication, window: NativeWindow) -> None:
+    window.session.preferences = {**(window.session.preferences or {}), "motion": "off"}
+    window._apply_appearance()
+    assert window._motion == "off"
+    click(window, "viewMonth")
+    assert _fades(window.planner) == []
+    dialog = PrefsDialog(window, window.session.preferences, window._look, {}, window._layout)
+    assert combo(dialog, "prefMotion").currentData() == "off"
+    assert dialog.updates()["motion"] == "off"

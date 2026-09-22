@@ -64,11 +64,13 @@ from desktop.native.layouts.views import VIEW_CLASSES
 from desktop.native.look import (
     TEXT_PT,
     effective_look,
+    pack_motion,
     pack_stylesheet,
     palette_from_tokens,
     resolved_palette,
     sanitize_look,
 )
+from desktop.native.motion import appear, apply_ui_effects, fade_away, hold_picture, motion_level, switch_page
 from desktop.native.remind import REMINDER_POLL_MS, clock_parts
 from desktop.native.reuse import (
     late_from_start,
@@ -119,6 +121,8 @@ from desktop.native.widgets import (
 )
 
 WINDOW_SIZE = (1280, 800)
+# The longest the old week's picture waits for the next one before it fades anyway.
+TRAVEL_WAIT_MS = 900
 NAV_ARROW_PX = 34
 AUTH_CARD_WIDTH = 380
 # Long enough for the student to read that the update installed before the window goes.
@@ -155,6 +159,11 @@ class NativeWindow(QMainWindow):
             self.setWindowIcon(icon)
         self.resize(*WINDOW_SIZE)
         self._stack = QStackedWidget(self)
+        # The Animations level, set from the look in _apply_appearance, and the picture of the planner
+        # held while the student moves to another week.
+        self._motion = "normal"
+        self._travel_picture: QLabel | None = None
+        self._travel_direction = 0
         self._stack.setObjectName("nativeStack")
         self.setCentralWidget(self._stack)
         self._more_pairs = []
@@ -304,7 +313,7 @@ class NativeWindow(QMainWindow):
         for index in range(self._stack.count()):
             page = self._stack.widget(index)
             if page.objectName() == name:
-                self._stack.setCurrentIndex(index)
+                switch_page(self._stack, page, self._motion)
                 return
 
     def _build_auth(self) -> None:
@@ -1049,7 +1058,8 @@ class NativeWindow(QMainWindow):
         self._sync_add_button()
         self._sync_classic_waiting()
         view = self.session.planner_view
-        self.planner.setCurrentWidget(self._planner_widget(view))
+        switch_page(self.planner, self._planner_widget(view), self._motion)
+        self._release_travel()
         for name in ("viewDay", "viewWeek", "viewMonth", "viewMyDay"):
             button = self.findChild(QPushButton, name)
             if button is not None:
@@ -1110,7 +1120,10 @@ class NativeWindow(QMainWindow):
         fresh = self.session.consume_plan_review()
         if fresh is not None:
             titles = {block["id"]: block["title"] for block in self.session.blocks}
+            was_open = self.plan_review.isVisible()
             self.plan_review.set_trace(fresh, titles, self.session.week_start)
+            if self.plan_review.isVisible() and not was_open:
+                appear(self.plan_review, self._motion)
         self._sync_chrome()
         self._apply_appearance()
         if self._pending_spread_ui and self.session.spread_preview:
@@ -1221,7 +1234,21 @@ class NativeWindow(QMainWindow):
         self.session.keep_signed_in = self.keep_signed_in.isChecked()
         self.session.login(self.username.text().strip(), self.password.text())
 
+    def _travel(self, direction: int) -> None:
+        """Hold a picture of the planner while the next week, day or month loads, then let it drift
+        away in the direction the student went. Without it the old week blinked to the new one."""
+        self._release_travel()
+        self._travel_picture = hold_picture(self.planner, self._motion)
+        self._travel_direction = direction
+        if self._travel_picture is not None:
+            QTimer.singleShot(TRAVEL_WAIT_MS, self._release_travel)
+
+    def _release_travel(self) -> None:
+        picture, self._travel_picture = self._travel_picture, None
+        fade_away(picture, self._motion, self._travel_direction)
+
     def _go_previous(self) -> None:
+        self._travel(1)
         if self.session.planner_view == "month":
             self.session.shift_month(-1)
             return
@@ -1232,6 +1259,7 @@ class NativeWindow(QMainWindow):
         self._shift_week(-7)
 
     def _go_next(self) -> None:
+        self._travel(-1)
         if self.session.planner_view == "month":
             self.session.shift_month(1)
             return
@@ -1242,6 +1270,7 @@ class NativeWindow(QMainWindow):
         self._shift_week(7)
 
     def _go_today(self) -> None:
+        self._travel(0)
         today = date.today()
         self.session.load_week(monday_of(today.isoformat()))
         if self.session.planner_view == "day" or self._day_mode:
@@ -1364,6 +1393,7 @@ class NativeWindow(QMainWindow):
         # said everything twice.
         self.toast.hide()
         self.action_notice.show()
+        appear(self.action_notice, self._motion)
 
     def _undo_from_notice(self) -> None:
         self.action_notice.hide()
@@ -1868,7 +1898,7 @@ class NativeWindow(QMainWindow):
             if self.session.preferences is not None:
                 # Pack and accent belong to the account but are seen like the look: at once. The save
                 # that follows stores them.
-                shown = {key: wanted[key] for key in ("theme_pack", "accent", "accent_chips")}
+                shown = {key: wanted[key] for key in ("theme_pack", "accent", "accent_chips", "motion")}
                 self.session.preferences = {**self.session.preferences, **shown}
             if bool(wanted["start_at_login"]) != login:
                 login = bool(wanted["start_at_login"])
@@ -2038,6 +2068,9 @@ class NativeWindow(QMainWindow):
         design = self._chrome_palette(palette)
         art = control_art(design)
         self.setStyleSheet(pack_stylesheet(pack, system_dark, self._look, accent, design, art))
+        self._motion = motion_level((self.session.preferences or {}).get("motion"), pack_motion(pack))
+        apply_ui_effects(self._motion)
+        self.toast.motion = self._motion
         # Day, Month and the week grid are dressed by the same design as the main view, so moving
         # between them is moving around one app rather than between two.
         self.week_table.set_look(self._look, design)

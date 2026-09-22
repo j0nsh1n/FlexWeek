@@ -97,6 +97,7 @@ from desktop.native.calendar import (
     resize_top_range,
 )
 from desktop.native.look import block_paint, resolved_palette
+from desktop.native.motion import appear, vanish
 from desktop.native.reuse import (
     AVAILABILITY_LIMIT,
     LATE_MINUTES,
@@ -240,15 +241,23 @@ class Toast(QLabel):
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.setInterval(TOAST_MS)
-        self._timer.timeout.connect(self.hide)
+        self._timer.timeout.connect(lambda: vanish(self, self.motion))
+        # The window's Animations level. A notice rises into place and fades when it goes.
+        self.motion = "normal"
 
     def show_message(self, text: str) -> None:
         self.setText(text)
         self.setAccessibleName(text)
         self.setAccessibleDescription(text)
         self.reposition()
+        # A notice that arrives while the last one fades out takes its place instead of vanishing too.
+        if self.graphicsEffect() is not None:
+            self.setGraphicsEffect(None)
+        was_shown = self.isVisible()
         self.show()
         self.raise_()
+        if not was_shown:
+            appear(self, self.motion, rise=True)
         self._timer.start()
 
     def reposition(self) -> None:
