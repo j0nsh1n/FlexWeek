@@ -84,13 +84,13 @@ def test_the_next_card_says_how_soon_and_is_tall_enough_for_its_three_lines(qapp
 def test_homework_cards_carry_the_deadline_and_the_solvers_verdict(qapp: QApplication) -> None:
     view = shown(qapp)
     chem = next(item for item in view.findChildren(QPushButton) if item.property("block_id") == "chem-1")
-    assert chem.text().splitlines()[-1] == "1 h 30 min · Homework · due Thu 23:59 · Cutting it close"
+    assert chem.text().splitlines()[-1] == "1 h 30 min · Homework · due Thu 17 Sep · Cutting it close"
 
 
 def test_the_inbox_lists_what_has_no_time_and_offers_to_plan_it(qapp: QApplication) -> None:
     view = shown(qapp)
     assert view.findChild(QPushButton, "timelineWaiting0").text() == (
-        "Poster-1\n2 h · due Sun 20:00 · There is not enough time left before it is due,"
+        "Poster-1\n2 h · due Sun 20 Sep, 20:00 · There is not enough time left before it is due,"
         " even with nothing else planned."
     )
     asked: list[str] = []

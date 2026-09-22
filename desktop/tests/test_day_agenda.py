@@ -91,8 +91,8 @@ def test_a_deadline_reads_as_a_student_says_it_not_as_a_timestamp(qapp: QApplica
     view.set_agenda(THURSDAY, agenda(), None)
     text = "\n".join(rows(view))
     assert "2026-09-17T23:59" not in text
-    assert "Chem lab report · due Thu 23:59" in text
-    assert "Spanish vocab · due Sep 21 08:00" in text
+    assert "Chem lab report · due Thu 17 Sep" in text
+    assert "Spanish vocab · due Mon 21 Sep, 08:00" in text
 
 
 def test_every_row_carries_its_category_colour(qapp: QApplication) -> None:

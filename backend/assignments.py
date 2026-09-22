@@ -6,7 +6,7 @@ import copy
 import hashlib
 from datetime import date, timedelta
 
-from backend.models import TimeBlock, parse_naive_stamp
+from backend.models import TimeBlock, parse_due
 from backend.slots import hhmm_to_minutes, minutes_to_hhmm, parse_deadline
 
 
@@ -74,7 +74,7 @@ def _as_session(block: dict, assignment_id: str) -> None:
 
 def due_placement_bound(week_start: str, due: str) -> tuple[int, int] | None:
     monday = date.fromisoformat(week_start)
-    due_day, minutes = parse_naive_stamp(due)
+    due_day, minutes = parse_due(due)
     if due_day > monday + timedelta(days=6):
         return None
     if due_day < monday:
@@ -84,7 +84,7 @@ def due_placement_bound(week_start: str, due: str) -> tuple[int, int] | None:
 
 def due_slack_point(week_start: str, due: str) -> tuple[int, int]:
     monday = date.fromisoformat(week_start)
-    due_day, minutes = parse_naive_stamp(due)
+    due_day, minutes = parse_due(due)
     return ((due_day - monday).days, minutes)
 
 

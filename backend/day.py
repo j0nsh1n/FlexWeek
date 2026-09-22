@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from backend.assignments import planned_minutes_by_id, unplanned_minutes
-from backend.models import TimeBlock, parse_naive_stamp
+from backend.models import TimeBlock, parse_due
 from backend.slots import (
     DAY_END_MIN,
     DAY_START_MIN,
@@ -53,7 +53,7 @@ def _due_soon(
     for body, revision in assignment_rows:
         if body.get("completed"):
             continue
-        due_day, _minutes = parse_naive_stamp(body["due"])
+        due_day, _minutes = parse_due(body["due"])
         if due_day > tomorrow:
             continue
         items.append(

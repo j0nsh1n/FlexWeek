@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from backend.assignments import unplanned_minutes
-from backend.models import GridWindow, ProtectedWindow, StudyWindow, WorkWindow, parse_naive_stamp
+from backend.models import GridWindow, ProtectedWindow, StudyWindow, WorkWindow, parse_due
 from backend.slots import (
     DAY_END_MIN,
     DAY_START_MIN,
@@ -156,7 +156,7 @@ def spread_sessions(
     # not zero, and comes back in remaining_min instead of being dropped.
     remainder = remaining % SLOT_MIN
     grid_total = remaining - remainder
-    due_day, _ = parse_naive_stamp(due)
+    due_day, _ = parse_due(due)
     start = date.fromisoformat(from_date)
     if remaining == 0 or start > due_day:
         return [], remaining

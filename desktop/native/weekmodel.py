@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+from backend.models import due_is_timed
 from desktop.native.calendar import DAYS, _is_work_session
 
 SLACK_WORDS = {"danger": "Cutting it close", "tight": "Tight", "ok": "Plenty of time"}
@@ -20,6 +21,7 @@ NOT_PLANNED = "Not planned yet."
 # A homework session is saved with no category unless the student picked one. It is still homework.
 HOMEWORK = "assignments"
 END_OF_DAY = 24 * 60
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 LEFTOVER = {
     "needs_time": "Needs a time",
     "no_homework": "No homework added",
@@ -52,13 +54,14 @@ def planned_line(planned_min: int, done_min: int) -> str:
 
 
 def due_label(due: str | None, week_start: str) -> str:
-    """A deadline as a student says it: the weekday inside this week, the date outside it."""
+    """A deadline as a student says it: Sun 27 Sep, or Sun 27 Sep, 09:00 when a time is set."""
     if not due:
         return ""
     day = date.fromisoformat(due[:10])
-    offset = (day - date.fromisoformat(week_start)).days
-    name = DAYS[offset] if 0 <= offset <= 6 else f"{day.strftime('%b')} {day.day}"
-    return f"{name} {due[11:16]}" if len(due) >= 16 else name
+    words = f"{DAYS[day.weekday()]} {day.day} {_MONTHS[day.month - 1]}"
+    if due_is_timed(due):
+        words += f", {due[11:16]}"
+    return words
 
 
 @dataclass(frozen=True)

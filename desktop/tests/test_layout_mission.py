@@ -112,8 +112,8 @@ def test_the_radar_lists_open_homework_most_squeezed_first_with_the_verdict(qapp
     view = shown(qapp)
     rows = [view.findChild(QPushButton, f"missionRadar{index}") for index in range(2)]
     assert [(row.text(), row.property("risk")) for row in rows] == [
-        ("Chem-1\nThu 23:59 · CUTTING IT CLOSE", "danger"),
-        ("Essay-1\nFri 21:00 · TIGHT", "tight"),
+        ("Chem-1\nThu 17 Sep · CUTTING IT CLOSE", "danger"),
+        ("Essay-1\nFri 18 Sep, 21:00 · TIGHT", "tight"),
     ]
 
 
