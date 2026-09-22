@@ -229,6 +229,19 @@ def test_due_today_unplaced_is_homework_that_still_needs_a_time() -> None:
     assert week.minutes_left_today(3, 16 * 60) == 45
 
 
+def test_waiting_homework_is_ordered_by_when_it_must_end() -> None:
+    blocks = [
+        block("all", "flexible", [], None, 30, assignment_id="all", title="All day"),
+        block("am", "flexible", [], None, 30, assignment_id="am", title="Morning"),
+    ]
+    homework = {
+        "all": {"id": "all", "title": "All day", "due": "2026-09-17", "completed": False},
+        "am": {"id": "am", "title": "Morning", "due": "2026-09-17T09:00", "completed": False},
+    }
+    week = build_week(WEEK, blocks, homework, None)
+    assert [item.title for item in week.waiting] == ["Morning", "All day"]
+
+
 def test_leftover_kind_splits_the_four_empty_days() -> None:
     empty = build_week(WEEK, [], {}, None)
     assert empty.leftover_kind(3) == "no_homework"

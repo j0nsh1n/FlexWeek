@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from backend.assignments import planned_minutes_by_id, unplanned_minutes
-from backend.models import TimeBlock, parse_due
+from backend.models import TimeBlock, due_sort_key, parse_due
 from backend.slots import (
     DAY_END_MIN,
     DAY_START_MIN,
@@ -66,7 +66,7 @@ def _due_soon(
                 ),
             }
         )
-    items.sort(key=lambda item: (item["due"], item["id"]))
+    items.sort(key=lambda item: due_sort_key(item["due"], item["id"]))
     return items
 
 

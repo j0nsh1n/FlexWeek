@@ -409,6 +409,17 @@ def test_december_2099_clips_the_trailing_week(alice: TestClient) -> None:
     assert body["days"][-1]["in_month"] is True
 
 
+def test_an_untimed_deadline_sorts_after_a_morning_one_on_the_same_date(alice: TestClient) -> None:
+    assert put_assignment(alice, assignment("allday", title="All day", due="2026-09-15")).status_code == 200
+    assert (
+        put_assignment(alice, assignment("morning", title="Morning", due="2026-09-15T09:00")).status_code
+        == 200
+    )
+    body = get_month(alice).json()
+    assert [item["id"] for item in body["deadlines"]] == ["morning", "allday"]
+    assert day_on(body, "2026-09-15")["due_ids"] == ["morning", "allday"]
+
+
 def test_blank_notes_do_not_turn_a_deadline_into_a_project(alice: TestClient) -> None:
     """Spaces and newlines are not notes, so they must not promote a plain deadline."""
     assert put_assignment(alice, assignment(notes="   \n\t  ")).status_code == 200

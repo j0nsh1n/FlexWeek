@@ -6,6 +6,7 @@ from copy import deepcopy
 from datetime import date, datetime, timedelta
 from uuid import uuid4
 
+from backend.models import due_sort_key
 from backend.slots import (
     DAY_END_MIN,
     DAY_START_MIN,
@@ -343,7 +344,7 @@ def due_soon_for(iso_day: str, assignments: dict[str, dict]) -> list[dict]:
         for item in assignments.values()
         if not item.get("completed") and item.get("due", "9999")[:10] <= tomorrow
     ]
-    return sorted(items, key=lambda item: (item["due"], item["id"]))
+    return sorted(items, key=lambda item: due_sort_key(item.get("due"), str(item.get("id") or "")))
 
 
 def _is_work_session(block: dict) -> bool:

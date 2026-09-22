@@ -38,6 +38,7 @@ from backend.models import (
     TimeBlock,
     WeekRequest,
     WorkWindow,
+    due_sort_key,
     valid_naive_stamp,
     valid_spotify_url,
 )
@@ -1330,7 +1331,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             if body["completed"] and not include_completed:
                 continue
             items.append(assignment_view(body, row["revision"], planned_by_id.get(row["id"], 0)))
-        items.sort(key=lambda item: (item["due"], item["id"]))
+        items.sort(key=lambda item: due_sort_key(item["due"], item["id"]))
         return {"assignments": items}
 
     @app.put("/api/assignments/{assignment_id}")

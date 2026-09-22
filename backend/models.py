@@ -75,6 +75,14 @@ def due_is_timed(value: str) -> bool:
     return match is not None and match.group(2) != END_OF_DAY_CLOCK
 
 
+def due_sort_key(due: str | None, item_id: str = "") -> tuple[date, int, str]:
+    """When the work must end, then its id. A date with no time, and 23:59, are the end of that day."""
+    if not due:
+        return date.max, END_OF_DAY_MIN, item_id
+    day, minute = parse_due(due)
+    return day, minute, item_id
+
+
 def valid_naive_stamp(value: str) -> str:
     parse_naive_stamp(value)
     return value

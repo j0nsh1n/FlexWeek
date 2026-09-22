@@ -274,6 +274,16 @@ def test_only_homework_with_a_time_counts_as_planned(alice: TestClient) -> None:
     assert monday["workload"]["scheduled_min"] == 390
 
 
+def test_an_untimed_due_sorts_after_a_morning_due_the_same_day(alice: TestClient) -> None:
+    assert put_assignment(alice, assignment("allday", title="All day", due="2026-09-15")).status_code == 200
+    assert (
+        put_assignment(alice, assignment("morning", title="Morning", due="2026-09-15T09:00")).status_code
+        == 200
+    )
+    body = get_day(alice).json()
+    assert [item["id"] for item in body["due_soon"]] == ["morning", "allday"]
+
+
 
 def test_work_finished_without_a_time_still_counts_as_planned_that_day(alice: TestClient) -> None:
     """Otherwise the day showed an hour done and nothing planned."""

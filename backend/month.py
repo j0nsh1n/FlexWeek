@@ -6,7 +6,7 @@ from datetime import date, timedelta
 
 from backend.assignments import planned_minutes_by_id, unplanned_minutes
 from backend.day import is_work_session
-from backend.models import parse_due
+from backend.models import due_sort_key, parse_due
 from backend.weeks import monday_of, month_grid, parse_month
 
 
@@ -108,8 +108,8 @@ def build_month(
         elif due_day < grid_start and not body.get("completed"):
             overdue.append(item)
     for items in due_by_date.values():
-        items.sort(key=lambda item: (item["due"], item["id"]))
-    overdue.sort(key=lambda item: (item["due"], item["id"]))
+        items.sort(key=lambda item: due_sort_key(item["due"], item["id"]))
+    overdue.sort(key=lambda item: due_sort_key(item["due"], item["id"]))
 
     session_dates: dict[str, list[str]] = {}
     days_out: list[dict] = []
@@ -188,7 +188,7 @@ def build_month(
         item["checklist_total"] = checklist_total
         item["checklist_done"] = checklist_done
         projects.append(item)
-    projects.sort(key=lambda item: (item["due"], item["id"]))
+    projects.sort(key=lambda item: due_sort_key(item["due"], item["id"]))
 
     return {
         "month": month,

@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from backend.models import due_is_timed
+from backend.models import due_is_timed, due_sort_key
 from desktop.native.calendar import DAYS, _is_work_session
 
 SLACK_WORDS = {"danger": "Cutting it close", "tight": "Tight", "ok": "Plenty of time"}
@@ -249,5 +249,5 @@ def build_week(
                 )
             )
     occurrences.sort(key=lambda item: (item.day, item.start, item.block_id))
-    waiting.sort(key=lambda item: (item.due or "9999", item.block_id))
+    waiting.sort(key=lambda item: due_sort_key(item.due, item.block_id))
     return WeekModel(week_start, tuple(occurrences), tuple(waiting))

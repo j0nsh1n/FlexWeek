@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from backend.slots import DAY_END_MIN
 from desktop.native.calendar import (
     apply_block_edit,
     apply_block_times,
@@ -10,6 +9,7 @@ from desktop.native.calendar import (
     create_drag_range,
     days_through,
     due_day_in_week,
+    due_soon_for,
     is_series,
     move_range,
     resize_bottom_range,
@@ -186,15 +186,16 @@ def test_due_point_and_span_problem_cover_date_only_and_timed_dues() -> None:
     assert legacy == (1, 24 * 60)
     assert timed == (1, 9 * 60)
     assert due_day_in_week("2026-09-15", week) == 1
-    end_of_day = 23 * 60 + 45
     after_due = "That ends after it is due, so it stayed where it was."
-    assert not ((1, end_of_day) > date_only)
-    assert not ((1, end_of_day) > legacy)
-    late = span_problem([], "essay", 1, 23 * 60, end_of_day, date_only)
-    assert late != after_due
-    if end_of_day <= DAY_END_MIN:
-        assert late is None
-    assert span_problem([], "essay", 1, DAY_END_MIN - 60, DAY_END_MIN, date_only) is None
-    assert span_problem([], "essay", 1, DAY_END_MIN - 60, DAY_END_MIN, legacy) is None
+    assert span_problem([], "essay", 1, 23 * 60, 23 * 60 + 45, date_only) is None
+    assert span_problem([], "essay", 1, 23 * 60, 23 * 60 + 45, legacy) is None
     assert span_problem([], "essay", 1, 9 * 60, 9 * 60 + 15, timed) == after_due
     assert span_problem([], "essay", 1, 8 * 60, 9 * 60, timed) is None
+    ordered = due_soon_for(
+        "2026-09-15",
+        {
+            "allday": {"id": "allday", "title": "All day", "due": "2026-09-15", "completed": False},
+            "morning": {"id": "morning", "title": "Morning", "due": "2026-09-15T09:00", "completed": False},
+        },
+    )
+    assert [item["id"] for item in ordered] == ["morning", "allday"]
