@@ -602,9 +602,16 @@ def more_actions(window: NativeWindow) -> dict[str, bool]:
 
 
 def more_sections(window: NativeWindow) -> list[str]:
+    """The heading rows. Fusion never drew `addSection` titles, so the menu uses a label row instead."""
+    from PySide6.QtWidgets import QWidgetAction
+
     menu = window.more_button.menu()
     menu.aboutToShow.emit()
-    return [action.text() for action in menu.actions() if action.isSeparator() and action.text()]
+    return [
+        action.defaultWidget().text()
+        for action in menu.actions()
+        if isinstance(action, QWidgetAction) and isinstance(action.defaultWidget(), QLabel)
+    ]
 
 
 def test_plan_and_more_stay_on_the_bar_in_every_layout(
@@ -1235,7 +1242,7 @@ def test_the_week_toolbar_keeps_only_what_is_reached_for(qapp: QApplication, win
 
     menu = window.findChild(QPushButton, "moreButton").menu()
     menu.aboutToShow.emit()
-    sections = [action.text() for action in menu.actions() if action.isSeparator() and action.text()]
+    sections = more_sections(window)
     items = more_actions(window)
     assert sections == ["Adding", "Planning"]
     assert {"Undo", "Redo", "Duplicate", "Running late", "Routines", "Advanced", "Log out"} <= set(items)

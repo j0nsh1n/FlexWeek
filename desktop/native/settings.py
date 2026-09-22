@@ -59,7 +59,7 @@ from desktop.native.reuse import format_duration
 from desktop.native.sound import Bell
 from desktop.native.tones import FALLBACK, RECIPES, SOUNDS
 from desktop.native.version import VERSION
-from desktop.native.widgets import DIALOG_USABLE_HEIGHT, FlowLayout, fit_scroll_dialog
+from desktop.native.widgets import DIALOG_USABLE_HEIGHT, DUE_FORMAT, FlowLayout, fit_scroll_dialog
 
 UPDATE_MIN_WIDTH = 420
 ALARM_MIN_WIDTH = 380
@@ -429,6 +429,9 @@ class PrefsDialog(QDialog):
         focus_form.addRow(self.auto_split)
         alerts = QWidget()
         alerts_form = QFormLayout(alerts)
+        # A long row puts its label above it, as Appearance does, so the page never needs more room
+        # than Settings has once dropdowns and spin boxes carry their chevrons.
+        alerts_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         alerts_form.addRow(_heading("Reminders"))
         alerts_form.addRow(self.reminders)
         alerts_form.addRow("Lead minutes", self.lead)
@@ -462,8 +465,12 @@ class PrefsDialog(QDialog):
         self.alarm_sound.setMinimumContentsLength(8)
         for name in SOUNDS:
             self.alarm_sound.addItem("Spotify link" if name == "spotify" else name.title(), name)
-        for widget in (self.alarm_name, self.alarm_time, self.alarm_sound):
+        # The name on a line of its own: with the dropdown's chevron room, name, time and sound side by
+        # side made Alerts wider than Settings at large text.
+        alerts_form.addRow(self.alarm_name)
+        for widget in (self.alarm_time, self.alarm_sound):
             alarm_row.addWidget(widget)
+        alarm_row.addStretch(1)
         alerts_form.addRow(alarm_row)
         self.alarm_spotify = QLineEdit()
         self.alarm_spotify.setObjectName("alarmSpotify")
@@ -889,7 +896,7 @@ class SetupCard(QWidget):
         self.homework_minutes.setValue(60)
         self.homework_due = QDateTimeEdit()
         self.homework_due.setObjectName("setupHomeworkDue")
-        self.homework_due.setDisplayFormat("yyyy-MM-dd HH:mm")
+        self.homework_due.setDisplayFormat(DUE_FORMAT)
         self.homework_due.setCalendarPopup(True)
         self.homework_due.setMinimumDate(QDate(2000, 1, 1))
         self.homework_due.setMaximumDate(QDate(2099, 12, 31))

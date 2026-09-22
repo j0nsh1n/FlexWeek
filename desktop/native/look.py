@@ -598,16 +598,89 @@ def palette_from_tokens(tokens: dict[str, str], base: dict) -> dict:
     }
 
 
-def card_check_sheet(palette: dict, tick: str) -> str:
-    """Keep me signed in, drawn in full. Fusion's own box is a faint line that vanished on the white
-    sign-in card on the KDE desktop, so a student could not see there was anything to tick. `tick` is
-    an image file of the tick in the accent's ink."""
+def control_rules(palette: dict, radius: int, size: int, art: dict[str, str]) -> str:
+    """Scrollbars, dropdowns, steppers, check marks, lists, menus and tooltips in the design's colours.
+
+    Left to Fusion they kept its grey chrome in every design, and on a dark palette an unticked box, an
+    unselected radio button and the spin arrows could not be seen at all. `art` holds the tick and
+    chevron images, which `control_art` in widgets.py draws for the palette.
+    """
+    handle = mix(palette["muted"], palette["panel"], 0.55)
+    corner = max(4, min(radius, 10))
+    item = max(4, corner - 2)
+    tick, down, up = art["tick"], art["down"], art["up"]
     return (
-        f"QCheckBox {{ background: {palette['panel']}; color: {palette['text']}; spacing: 8px; }}"
-        f"QCheckBox::indicator {{ width: 16px; height: 16px; border-radius: 4px; "
+        "QScrollBar:vertical { background: transparent; width: 12px; margin: 2px; }"
+        "QScrollBar:horizontal { background: transparent; height: 12px; margin: 2px; }"
+        f"QScrollBar::handle:vertical {{ background: {handle}; border-radius: 4px; min-height: 36px; "
+        "margin: 0 2px; }"
+        f"QScrollBar::handle:horizontal {{ background: {handle}; border-radius: 4px; min-width: 36px; "
+        "margin: 2px 0; }"
+        f"QScrollBar::handle:hover {{ background: {palette['muted']}; }}"
+        f"QScrollBar::handle:pressed {{ background: {palette['accent']}; }}"
+        "QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; border: none; "
+        "background: none; }"
+        "QScrollBar::add-page, QScrollBar::sub-page { background: none; }"
+        "QAbstractScrollArea::corner { background: transparent; border: none; }"
+        "QComboBox { padding-right: 30px; combobox-popup: 0; }"
+        "QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: center right; "
+        "width: 28px; border: none; background: transparent; }"
+        f"QComboBox::down-arrow {{ image: url({down}); width: 14px; height: 14px; }}"
+        f"QComboBox::down-arrow:on {{ image: url({up}); }}"
+        f"QComboBox QAbstractItemView {{ background: {palette['panel']}; color: {palette['text']}; "
+        f"border: 1px solid {palette['hairline_strong']}; padding: 4px; outline: 0; }}"
+        f"QComboBox QAbstractItemView::item {{ min-height: {size * 2 + 8}px; padding: 2px 10px; "
+        f"border-radius: {item}px; }}"
+        f"QComboBox QAbstractItemView::item:hover {{ background: {palette['hairline']}; }}"
+        "QAbstractSpinBox { padding-right: 26px; }"
+        "QAbstractSpinBox::up-button { subcontrol-origin: border; subcontrol-position: top right; "
+        "width: 24px; border: none; background: transparent; }"
+        "QAbstractSpinBox::down-button { subcontrol-origin: border; subcontrol-position: bottom right; "
+        "width: 24px; border: none; background: transparent; }"
+        f"QAbstractSpinBox::up-arrow {{ image: url({up}); width: 12px; height: 12px; }}"
+        f"QAbstractSpinBox::down-arrow {{ image: url({down}); width: 12px; height: 12px; }}"
+        "QDateTimeEdit::drop-down { subcontrol-origin: padding; subcontrol-position: center right; "
+        "width: 26px; border: none; background: transparent; }"
+        f"QDateTimeEdit::down-arrow {{ image: url({down}); width: 14px; height: 14px; }}"
+        f"QCalendarWidget QWidget {{ background: {palette['panel']}; color: {palette['text']}; "
+        f"alternate-background-color: {palette['panel']}; }}"
+        f"QCalendarWidget QToolButton {{ background: transparent; color: {palette['text']}; "
+        "border: none; padding: 4px 8px; font-weight: 600; }"
+        f"QCalendarWidget QAbstractItemView {{ selection-background-color: {palette['accent']}; "
+        f"selection-color: {palette['accent_ink']}; outline: 0; }}"
+        f"QCalendarWidget QAbstractItemView:disabled {{ color: {palette['muted']}; }}"
+        "QCheckBox, QRadioButton { background: transparent; spacing: 8px; }"
+        f"QCheckBox::indicator, QRadioButton::indicator {{ width: 16px; height: 16px; "
         f"border: 1px solid {palette['muted']}; background: {palette['field']}; }}"
+        "QCheckBox::indicator { border-radius: 4px; }"
+        "QRadioButton::indicator { border-radius: 9px; }"
+        f"QCheckBox::indicator:hover, QRadioButton::indicator:hover {{ "
+        f"border-color: {palette['accent']}; }}"
         f"QCheckBox::indicator:checked {{ background: {palette['accent']}; "
         f"border-color: {palette['accent']}; image: url({tick}); }}"
+        f"QRadioButton::indicator:checked {{ background: {palette['field']}; "
+        f"border: 5px solid {palette['accent']}; width: 8px; height: 8px; }}"
+        f"QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {{ "
+        f"background: {palette['hairline']}; border-color: {palette['hairline_strong']}; }}"
+        "QListWidget, QListView { outline: 0; }"
+        f"QListWidget::item:hover, QListView::item:hover {{ background: {palette['hairline']}; }}"
+        f"QListWidget::item:selected, QListView::item:selected {{ background: {palette['accent']}; "
+        f"color: {palette['accent_ink']}; }}"
+        f"QMenu {{ background: {palette['panel']}; color: {palette['text']}; "
+        f"border: 1px solid {palette['hairline_strong']}; border-radius: {corner}px; padding: 6px; }}"
+        f"QMenu::item {{ border-radius: {item}px; }}"
+        f"QMenu::item:selected {{ background: {palette['accent']}; color: {palette['accent_ink']}; }}"
+        f"QMenu::item:disabled {{ color: {palette['muted']}; }}"
+        f"QMenu::separator {{ height: 1px; background: {palette['hairline']}; margin: 6px 8px; }}"
+        f"QLabel#menuHeading {{ color: {palette['muted']}; font-weight: 600; "
+        f"font-size: {max(size - 1, 8)}pt; padding: 6px 12px 2px 12px; }}"
+        f"QToolTip {{ background: {palette['text']}; color: {palette['window']}; border: none; "
+        f"padding: 5px 9px; border-radius: {item}px; }}"
+        f"QProgressBar {{ background: {palette['hairline']}; border: none; border-radius: 4px; "
+        f"max-height: 8px; text-align: center; color: transparent; }}"
+        f"QProgressBar::chunk {{ background: {palette['accent']}; border-radius: 4px; }}"
+        f"QLineEdit:focus, QComboBox:focus, QAbstractSpinBox:focus, QPlainTextEdit:focus {{ "
+        f"border: 1px solid {palette['accent']}; }}"
     )
 
 
@@ -617,6 +690,7 @@ def pack_stylesheet(
     look: dict | None,
     accent: object = "default",
     palette: dict | None = None,
+    art: dict[str, str] | None = None,
 ) -> str:
     palette = palette if palette is not None else resolved_palette(pack, system_dark, look, accent)
     knobs = effective_look(look)
@@ -710,7 +784,7 @@ def pack_stylesheet(
         f"QLabel#alarmDetail {{ font-size: {size + 2}pt; color: {palette['muted']}; }}"
         f"QLabel#toast {{ background: {palette['panel']}; color: {palette['text']}; "
         f"{edges} padding: {pad * 2}px {pad * 3}px; border-radius: {radius}px; }}"
-    )
+    ) + (control_rules(palette, radius, size, art) if art is not None else "")
 
 
 def copy_look(choice: dict | None) -> dict:

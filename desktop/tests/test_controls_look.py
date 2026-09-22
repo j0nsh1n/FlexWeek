@@ -1,0 +1,178 @@
+"""Every control takes the design's colours, and none of them disappears on a dark palette.
+
+Left to Fusion, an unticked box, an unselected radio button and a spin box's arrows could not be seen
+on dark-frost, the dropdown list kept Fusion's grey, and menu section headings were never drawn.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import os
+from collections.abc import Iterator
+
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
+)
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+if importlib.util.find_spec("PySide6") is not None:
+    from PySide6.QtCore import QStandardPaths
+    from PySide6.QtGui import QColor, QImage
+    from PySide6.QtWidgets import (
+        QApplication,
+        QCheckBox,
+        QComboBox,
+        QLabel,
+        QMenu,
+        QRadioButton,
+        QSpinBox,
+        QVBoxLayout,
+        QWidget,
+    )
+
+    from desktop.native.layouts.registry import tokens_for
+    from desktop.native.look import pack_stylesheet, palette_from_tokens, resolved_palette
+    from desktop.native.widgets import add_heading, control_art
+
+
+@pytest.fixture(scope="module")
+def qapp() -> Iterator[QApplication]:
+    QStandardPaths.setTestModeEnabled(True)
+    yield QApplication.instance() or QApplication(["flexweek-controls-test"])
+
+
+def palettes() -> dict[str, tuple[str, bool, dict]]:
+    light = resolved_palette("light-frost", False, None)
+    return {
+        "light-frost": ("light-frost", False, light),
+        "dark-frost": ("dark-frost", True, resolved_palette("dark-frost", True, None)),
+        "bento-midnight": (
+            "light-frost",
+            False,
+            palette_from_tokens(tokens_for("bento", "midnight", light), light),
+        ),
+    }
+
+
+def styled(qapp: QApplication, name: str) -> tuple[QWidget, dict]:
+    pack, dark, palette = palettes()[name]
+    page = QWidget()
+    page.setStyleSheet(pack_stylesheet(pack, dark, None, "default", palette, control_art(palette)))
+    QVBoxLayout(page)
+    return page, palette
+
+
+def marks(image: QImage, background: str, columns: range) -> int:
+    """Pixels in `columns` that stand out from `background`: what a student can actually see."""
+    base = QColor(background).lightness()
+    return sum(
+        1
+        for x in columns
+        for y in range(image.height())
+        if x < image.width() and abs(image.pixelColor(x, y).lightness() - base) > 40
+    )
+
+
+@pytest.mark.parametrize("name", ["light-frost", "dark-frost", "bento-midnight"])
+def test_an_unticked_box_and_an_unselected_radio_button_can_be_seen(qapp: QApplication, name: str) -> None:
+    page, palette = styled(qapp, name)
+    box, radio = QCheckBox("Play a sound"), QRadioButton("I'll place it")
+    page.layout().addWidget(box)
+    page.layout().addWidget(radio)
+    page.show()
+    qapp.processEvents()
+    for control in (box, radio):
+        assert marks(control.grab().toImage(), palette["window"], range(0, 22)) >= 20, (name, control.text())
+    box.setChecked(True)
+    qapp.processEvents()
+    ticked = box.grab().toImage()
+    accent = QColor(palette["accent"]).name()
+    filled = sum(
+        1 for x in range(0, 20) for y in range(ticked.height()) if ticked.pixelColor(x, y).name() == accent
+    )
+    assert filled >= 80, (name, filled)
+    page.close()
+
+
+@pytest.mark.parametrize("name", ["light-frost", "dark-frost", "bento-midnight"])
+def test_a_spin_box_shows_its_arrows(qapp: QApplication, name: str) -> None:
+    page, palette = styled(qapp, name)
+    spin = QSpinBox()
+    spin.setValue(25)
+    page.layout().addWidget(spin)
+    page.resize(240, 60)
+    page.show()
+    qapp.processEvents()
+    image = spin.grab().toImage()
+    # In the design's muted ink, not only visible: Fusion's own arrows showed offscreen but took the
+    # desktop palette on KDE and vanished on dark-frost there.
+    ink = QColor(palette["muted"])
+
+    def near(colour: QColor) -> bool:
+        return (
+            max(
+                abs(colour.red() - ink.red()),
+                abs(colour.green() - ink.green()),
+                abs(colour.blue() - ink.blue()),
+            )
+            < 40
+        )
+
+    arrows = sum(
+        1
+        for x in range(image.width() - 22, image.width() - 4)
+        for y in range(image.height())
+        if near(image.pixelColor(x, y))
+    )
+    assert arrows >= 6, (name, arrows)
+    page.close()
+
+
+@pytest.mark.parametrize("name", ["light-frost", "dark-frost", "bento-midnight"])
+def test_a_dropdown_list_uses_the_design_and_marks_the_choice(qapp: QApplication, name: str) -> None:
+    page, palette = styled(qapp, name)
+    combo = QComboBox()
+    combo.addItems(["Calendar · Today's app", "Agenda · Timeline", "Dashboard · Bento"])
+    combo.setCurrentIndex(2)
+    page.layout().addWidget(combo)
+    page.resize(320, 80)
+    page.show()
+    qapp.processEvents()
+    combo.showPopup()
+    for _ in range(5):
+        qapp.processEvents()
+    view = combo.view()
+    image = view.grab().toImage()
+
+    def accent_share(row: int) -> float:
+        rect = view.visualRect(view.model().index(row, 0))
+        accent = QColor(palette["accent"]).name()
+        hits = sum(
+            1
+            for x in range(rect.left(), rect.right())
+            if image.pixelColor(x, rect.center().y()).name() == accent
+        )
+        return hits / max(rect.width(), 1)
+
+    assert accent_share(2) > 0.6, name
+    assert accent_share(0) < 0.05, name
+    combo.hidePopup()
+    page.close()
+
+
+def test_a_menu_heading_is_drawn_as_text(qapp: QApplication) -> None:
+    """Fusion drew `addSection` as a plain line, so More never showed Adding or Planning."""
+    page, _palette = styled(qapp, "light-frost")
+    menu = QMenu(page)
+    add_heading(menu, "Adding")
+    menu.addAction("Add homework")
+    menu.popup(page.mapToGlobal(page.rect().center()))
+    for _ in range(5):
+        qapp.processEvents()
+    heading = menu.findChild(QLabel, "menuHeading")
+    assert heading is not None and heading.text() == "Adding"
+    assert heading.isVisible() and heading.height() >= heading.fontMetrics().height()
+    menu.hide()

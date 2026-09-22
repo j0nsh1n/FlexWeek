@@ -63,7 +63,6 @@ from desktop.native.layouts.registry import options_for, sanitize_layout, tokens
 from desktop.native.layouts.views import VIEW_CLASSES
 from desktop.native.look import (
     TEXT_PT,
-    card_check_sheet,
     effective_look,
     pack_stylesheet,
     palette_from_tokens,
@@ -114,8 +113,9 @@ from desktop.native.widgets import (
     Toast,
     UnfinishedPanel,
     WeekTable,
+    add_heading,
+    control_art,
     swatch,
-    tick_file,
 )
 
 WINDOW_SIZE = (1280, 800)
@@ -637,8 +637,10 @@ class NativeWindow(QMainWindow):
         for leftover in (availability, settings, account, updates):
             leftover.setParent(overflow)
             leftover.hide()
-        for heading, buttons in self._groups:
-            more_menu.addSection(heading)
+        for index, (heading, buttons) in enumerate(self._groups):
+            if index:
+                more_menu.addSeparator()
+            add_heading(more_menu, heading)
             for button in buttons:
                 if button.parent() is not overflow:
                     button.setParent(overflow)
@@ -2034,8 +2036,8 @@ class NativeWindow(QMainWindow):
         # Blocks and month cells are painted per item, which a stylesheet cannot reach.
         palette = resolved_palette(pack, system_dark, self._look, accent)
         design = self._chrome_palette(palette)
-        self.setStyleSheet(pack_stylesheet(pack, system_dark, self._look, accent, design))
-        self.keep_signed_in.setStyleSheet(card_check_sheet(design, tick_file(design["accent_ink"])))
+        art = control_art(design)
+        self.setStyleSheet(pack_stylesheet(pack, system_dark, self._look, accent, design, art))
         # Day, Month and the week grid are dressed by the same design as the main view, so moving
         # between them is moving around one app rather than between two.
         self.week_table.set_look(self._look, design)

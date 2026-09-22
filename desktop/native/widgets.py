@@ -66,6 +66,7 @@ from PySide6.QtWidgets import (
     QTimeEdit,
     QVBoxLayout,
     QWidget,
+    QWidgetAction,
 )
 
 from backend.explain import REASON_COPY
@@ -115,6 +116,9 @@ DETAIL_BOX_HEIGHT = 84
 # homework editor on a laptop screen. It does not claim the content's width either, so that is set.
 HOMEWORK_MIN_WIDTH = 520
 DIALOG_USABLE_HEIGHT = 480
+# Dates as a student reads them. "2026-09-27 23:59" made them work out which day that was.
+DUE_FORMAT = "ddd d MMM yyyy, HH:mm"
+DATE_FORMAT = "ddd d MMM yyyy"
 DIALOG_MAX_HEIGHT = 700
 SLOT_HINT = "Use a multiple of 15 minutes, such as 15, 30, or 45."
 ESTIMATE_ERROR = "That time is not a multiple of 15 minutes."
@@ -654,7 +658,8 @@ class AddMenu(QMenu):
         fixed = self.addAction("Fixed time…")
         fixed.setObjectName("addMenuFixed")
         fixed.triggered.connect(self.fixed_requested.emit)
-        self.addSection("Then drag on the calendar")
+        self.addSeparator()
+        add_heading(self, "Then drag on the calendar")
         self._actions: dict[str, QAction] = {}
         for key, info in CATEGORIES.items():
             action = self.addAction(info["label"])
@@ -688,25 +693,55 @@ def swatch(colour: str, size: int = SWATCH_PX) -> QPixmap:
     return pixmap
 
 
-def tick_file(colour: str) -> str:
-    """A tick in one colour as an image file, for a style sheet's `image:`. Drawn here rather than
-    shipped, so the packaged app needs no extra file; twice the box's size so it stays sharp."""
+_ART_STROKES = {
+    "tick": ((QPoint(7, 17), QPoint(13, 23), QPoint(25, 9)), 4.0),
+    "down": ((QPoint(9, 13), QPoint(16, 20), QPoint(23, 13)), 3.2),
+    "up": ((QPoint(9, 19), QPoint(16, 12), QPoint(23, 19)), 3.2),
+}
+
+
+def _art_file(shape: str, colour: str) -> str:
+    """One stroke in one colour as an image file, for a style sheet's `image:`. Drawn here rather than
+    shipped, so the packaged app needs no extra file; twice its drawn size so it stays sharp."""
     folder = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.CacheLocation))
-    path = folder / f"flexweek-tick-{QColor(colour).name()[1:]}.png"
+    path = folder / f"flexweek-{shape}-{QColor(colour).name()[1:]}.png"
     if not path.is_file():
         folder.mkdir(parents=True, exist_ok=True)
+        points, width = _ART_STROKES[shape]
         image = QPixmap(32, 32)
         image.fill(Qt.GlobalColor.transparent)
         painter = QPainter(image)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        pen = QPen(QColor(colour), 4)
+        pen = QPen(QColor(colour), width)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         painter.setPen(pen)
-        painter.drawPolyline([QPoint(7, 17), QPoint(13, 23), QPoint(25, 9)])
+        painter.drawPolyline(list(points))
         painter.end()
         image.save(str(path))
     return path.as_posix()
+
+
+def control_art(palette: dict) -> dict[str, str]:
+    """The images the control rules in `pack_stylesheet` draw with: a tick in the accent's ink, and
+    chevrons for dropdowns and steppers in the muted ink."""
+    return {
+        "tick": _art_file("tick", palette["accent_ink"]),
+        "down": _art_file("down", palette["muted"]),
+        "up": _art_file("up", palette["muted"]),
+    }
+
+
+def add_heading(menu: QMenu, text: str) -> QWidgetAction:
+    """A heading row. Fusion draws `QMenu.addSection` as a bare separator, so the More menu's Adding
+    and Planning were never shown in any design."""
+    label = QLabel(text)
+    label.setObjectName("menuHeading")
+    action = QWidgetAction(menu)
+    action.setDefaultWidget(label)
+    action.setEnabled(False)
+    menu.addAction(action)
+    return action
 
 
 class DayAgenda(QWidget):
@@ -1342,7 +1377,7 @@ class HomeworkDialog(QDialog):
         form.addRow("Title", self.title)
         self.due = QDateTimeEdit(QDateTime.fromString(self._original["due"], "yyyy-MM-dd'T'HH:mm"))
         self.due.setObjectName("homeworkDue")
-        self.due.setDisplayFormat("yyyy-MM-dd HH:mm")
+        self.due.setDisplayFormat(DUE_FORMAT)
         self.due.setCalendarPopup(True)
         self.due.setMinimumDate(QDate(2000, 1, 1))
         self.due.setMaximumDate(QDate(2099, 12, 31))
@@ -1965,7 +2000,7 @@ class RoutineDialog(QDialog):
             self.list.addItem(item)
         dest = QDateEdit(QDate.fromString(week_start, "yyyy-MM-dd"))
         dest.setObjectName("routineDestination")
-        dest.setDisplayFormat("yyyy-MM-dd")
+        dest.setDisplayFormat(DATE_FORMAT)
         dest.setCalendarPopup(True)
         dest.setMinimumDate(QDate(2000, 1, 1))
         dest.setMaximumDate(QDate(2099, 12, 31))
@@ -2126,7 +2161,7 @@ class SpreadDialog(QDialog):
         layout.addWidget(self.session)
         self.from_date = QDateEdit(QDate.fromString(from_date, "yyyy-MM-dd"))
         self.from_date.setObjectName("spreadFrom")
-        self.from_date.setDisplayFormat("yyyy-MM-dd")
+        self.from_date.setDisplayFormat(DATE_FORMAT)
         self.from_date.setCalendarPopup(True)
         self.from_date.setMaximumDate(QDate.fromString(assignment["due"][:10], "yyyy-MM-dd"))
         layout.addWidget(self.from_date)
