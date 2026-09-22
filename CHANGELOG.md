@@ -5,6 +5,8 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.14.3] - 2026-09-22
+
 ### Added
 - First-run setup replaces the first-week card. A new account goes from its
   recovery codes to a page at a time, with a step rail, Back, Skip this step
@@ -52,8 +54,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ### Changed
 - Scrollbars, dropdowns and their lists, spin and time boxes, check boxes,
   radio buttons, menus, tooltips, the date picker and progress bars take the
-  colours of the chosen design. On a dark palette on KDE an unticked box, an
-  unselected radio button and the spin arrows could not be seen at all.
+  colours of the chosen design.
 - The Calendar's week works like Daily Scheduler's timeline. Each block is
   one shape instead of a run of table cells, and dragging moves the block
   itself: it follows the pointer a quarter hour at a time, into another day,
@@ -78,6 +79,8 @@ All notable changes to FlexWeek are documented here. Format follows
 ### Fixed
 - A block dragged or dropped while a save was still under way was put back
   when the save finished. It now moves once the save is done.
+- On a dark palette on KDE an unticked box, an unselected radio button and the
+  spin arrows could not be seen at all.
 
 ## [0.14.2] - 2026-09-21
 

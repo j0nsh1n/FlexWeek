@@ -23,7 +23,7 @@ Checksum files (`.sha256`) sit next to those downloads if you want to confirm th
 
 **Chromebooks.** Not supported. FlexWeek is a Windows and Linux desktop app; there is no web version.
 
-Open FlexWeek. The first screen is Sign in; choose "New here? Create an account" under it, then follow the short first-week setup (school hours, a sport, then homework). You can skip any step.
+Open FlexWeek. The first screen is Sign in; choose "New here? Create an account" under it, then follow setup a page at a time: a style, your week, how homework gets a time, reminders and the alarm sound, and your first homework. You can skip any page.
 
 ## Screenshots
 
@@ -46,9 +46,10 @@ python -m desktop.main
 The backend starts inside the app on a loopback port; there is no separate
 server to run and no page to open in a browser. The first screen is Sign in,
 with "New here? Create an account" under it. Usernames use 3–32 letters,
-numbers or underscores; passwords use 12–128 characters. A new account opens a
-short setup for school hours, one sport and the first homework, then runs
-Solve. You can skip it.
+numbers or underscores; passwords use 12–128 characters. A new account opens
+setup a page at a time: a style, the week (school, activities and a cutoff),
+how homework gets a time, reminders and the alarm sound, and up to three first
+homework. You can skip any page, and Settings can run it again.
 
 To add more, open **More** and choose **Add homework** or **Add fixed time**, or
 drag on the calendar. A **Fixed time** (school, practice) never moves when you

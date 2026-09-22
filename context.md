@@ -529,6 +529,11 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-22, `feat/ui-setup`: 0.14.3 prepared on Jonathan's "Ship it":
+  version, changelog heading, `docs/release-notes-v0.14.3.md`, and the
+  first-open text in README and `docs/github-release.md` now describe the
+  paged setup. Spotify Dismiss on a real alarm and a Windows install were not
+  hand-checked before the release.
 - 2026-09-22, `feat/ui-setup`: Daily Scheduler's drag, on Jonathan's four
   answers (15-minute snap, overlaps side by side, a repeat moves one day,
   other designs drop onto a day's hours). `desktop/native/canvas.py` is the
