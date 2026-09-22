@@ -6,7 +6,7 @@ worktree.
 
 ## Read first
 
-- `docs/0.15/plan-report.md` for what 0.15 is, and `docs/0.15/plan-refined.md` if it exists.
+- `docs/0.15/plan.md`, the working plan. `plan-report.md` and `plan-refined.md` are its history.
 - `docs/0.15/architecture.md` for the engine's shape and the rules it keeps.
 - `desktop/native/hours/`: `geometry.py` (tracks), `hand.py` (the one gesture engine), `canvas.py`
   (`HoursCanvas`, `BlockPainter`), `chips.py` (`TrayChip`), `classic.py` (Today's app, the worked

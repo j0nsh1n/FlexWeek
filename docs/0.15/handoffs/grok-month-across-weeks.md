@@ -6,7 +6,7 @@ controller has no operation for it. That operation is yours.
 
 ## Read first
 
-- `docs/0.15/plan-report.md` for the release, and `docs/0.15/architecture.md` for where this call
+- `docs/0.15/plan.md` for the release, and `docs/0.15/architecture.md` for where this call
   is made from. The drag engine reports a change called `MoveDate(block_id, from_iso, to_iso)`;
   `NativeWindow._apply_change` in `desktop/native/window.py` will call your controller method.
 - `desktop/native/controller.py`: `load_week`, `save`, `_post_pending` (a save writes a list of
