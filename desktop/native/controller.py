@@ -8,7 +8,7 @@ from datetime import date, datetime
 from urllib.parse import quote
 from uuid import uuid4
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, QTimer, Signal
 
 from backend.models import Assignment, GridWindow, ProtectedWindow, TimeBlock
 from backend.slots import minutes_to_hhmm
@@ -54,7 +54,7 @@ from desktop.native.focus import (
     restore_state,
     set_phase,
 )
-from desktop.native.history import capture_step, mark_stale, push_step
+from desktop.native.history import capture_step, join_step, mark_stale, push_step
 from desktop.native.kept import KeptSession
 from desktop.native.look import pack_axis, sanitize_look
 from desktop.native.pomodoro import inflate_for_solve, split_solved
@@ -165,6 +165,9 @@ class NativeSession(QObject):
         self._day_ticket = 0
         self._month_ticket = 0
         self._undo: list[dict] = []
+        self._join_step = False
+        # New homework to give a time once its save lands, when the student plans as they add.
+        self._plan_after_save: set[str] = set()
         self._redo: list[dict] = []
         self._committed_blocks: list[dict] = []
         self._committed_assignments: dict[str, dict] = {}
@@ -839,6 +842,17 @@ class NativeSession(QObject):
         self.add_block(updated)
         return True
 
+    def plan_after_save(self, assignment_id: str) -> None:
+        """Give this homework's sessions that need a time one once the save now under way lands."""
+        waiting = {
+            block["id"]
+            for block in self.blocks
+            if block.get("assignment_id") == assignment_id
+            and not block.get("start")
+            and not block.get("completed")
+        }
+        self._plan_after_save |= waiting
+
     def place_session(self, block_id: str, day: int, start_min: int) -> bool:
         """Give homework that needs a time the one the student chose, dragged or picked. It is pinned,
         so no plan moves it, and it is one Undo step."""
@@ -985,11 +999,14 @@ class NativeSession(QObject):
         operation_id: str | None = None,
         record_history: bool = True,
         status: str | None = None,
+        join: bool = False,
     ) -> None:
         if self.account is None or self.conflict:
             return
         if self.busy:
             return
+        # This save's change joins the Undo step before it, as automatic planning does after an add.
+        self._join_step = join
         if status is not None:
             self._save_status = status
         if self.pending_save is None:
@@ -1064,14 +1081,22 @@ class NativeSession(QObject):
                     for entry in self._pending_step["assignments"]:
                         stored = self.assignments.get(entry["id"])
                         entry["after"] = None if stored is None else deepcopy(stored)
-                    push_step(self._undo, self._pending_step)
+                    if self._join_step:
+                        join_step(self._undo, self._pending_step)
+                    else:
+                        push_step(self._undo, self._pending_step)
                     self._redo.clear()
                 self._say(held if held is not None else "Saved.")
             self._traveling = None
             self._travel_step = None
             self._pending_step = None
+            self._join_step = False
             self.pending_save = None
             self._save_status = None
+            planned_next, self._plan_after_save = self._plan_after_save, set()
+            if planned_next:
+                # Plan it for me as I add it: the new homework's time, joined to the add in one step.
+                QTimer.singleShot(0, lambda: self.solve(only=planned_next, join=True))
             if current is not None:
                 self._committed_blocks = deepcopy(self.blocks)
                 self._committed_assignments = deepcopy(self.assignments)
@@ -1090,6 +1115,9 @@ class NativeSession(QObject):
         def err(error: ApiError) -> None:
             if not self._idle(ticket):
                 return
+            # A plan waiting on this save must not fire after some later, unrelated one.
+            self._plan_after_save = set()
+            self._join_step = False
             if self._traveling and self._travel_step is not None:
                 if error.status != 409:
                     self.blocks = deepcopy(self._committed_blocks)
@@ -1119,7 +1147,7 @@ class NativeSession(QObject):
         if self.pending_save is not None and not self.conflict:
             self.save()
 
-    def solve(self, *, everything: bool = False, only: set[str] | None = None) -> None:
+    def solve(self, *, everything: bool = False, only: set[str] | None = None, join: bool = False) -> None:
         """Plan my homework. Homework that already has a time keeps it.
 
         `everything` is Replan all my homework. `only` finds new times for named work.
@@ -1172,7 +1200,7 @@ class NativeSession(QObject):
             placed_note = plan_sentence(placed, waiting) + split_note
             self._say(placed_note)
             self.week_changed.emit()
-            self.save(status=placed_note)
+            self.save(status=placed_note, join=join)
 
         self.client.request(
             "POST",

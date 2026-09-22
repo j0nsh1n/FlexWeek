@@ -9,6 +9,7 @@ from uuid import uuid4
 from PySide6.QtCore import QDate, QDateTime, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QFocusEvent, QMouseEvent, QShowEvent
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QCheckBox,
     QComboBox,
     QDateTimeEdit,
@@ -26,6 +27,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
+    QRadioButton,
     QScrollArea,
     QSpinBox,
     QStackedWidget,
@@ -75,6 +77,15 @@ ACCOUNT_MAX_WIDTH = 520
 ACCOUNT_MIN_WIDTH = 560
 SPORT_FALLBACK = "Sport or club"
 ALARM_TONE_LABELS = {"spotify": "A Spotify song or playlist"}
+PLANNING_STYLES = (
+    ("auto", "Plan it for me as I add it", "New homework gets a time straight away."),
+    (
+        "suggest",
+        "Plan when I press Plan my homework",
+        "Homework waits in a list until you ask. This is how FlexWeek has always worked.",
+    ),
+    ("manual", "I'll drag it onto the calendar myself", "The planning button becomes Suggest times."),
+)
 SPOTIFY_TONE_NOTE = (
     "Alarms open this link. Reminders and the end of a focus session play Chime, so they never start music."
 )
@@ -446,6 +457,26 @@ class PrefsDialog(QDialog):
         ]
         for section in self.layout_sections:
             column.addWidget(section)
+        planning = QWidget()
+        planning_form = QFormLayout(planning)
+        planning_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        planning_form.addRow(_heading("How homework gets a time"))
+        self.planning_style = QButtonGroup(planning)
+        chosen_style = preferences.get("planning_style") or "suggest"
+        for value, text, note in PLANNING_STYLES:
+            button = QRadioButton(text)
+            button.setObjectName(f"prefPlanning-{value}")
+            button.setChecked(value == chosen_style)
+            self.planning_style.addButton(button)
+            button.setProperty("style", value)
+            planning_form.addRow(button)
+            hint = QLabel(note)
+            hint.setObjectName("prefPlanningNote")
+            hint.setWordWrap(True)
+            planning_form.addRow(hint)
+        where = QLabel("Preferred study times, including ones kept for one subject, are in Availability.")
+        where.setWordWrap(True)
+        planning_form.addRow(where)
         focus = QWidget()
         focus_form = QFormLayout(focus)
         focus_form.addRow(_heading("Focus timer"))
@@ -563,11 +594,11 @@ class PrefsDialog(QDialog):
         self.nav = QListWidget()
         self.nav.setObjectName("prefsNav")
         self.nav.setFixedWidth(190)
-        for name in ("Appearance & layout", "Focus", "Alerts", "This computer"):
+        for name in ("Appearance & layout", "Planning", "Focus", "Alerts", "This computer"):
             self.nav.addItem(name)
         self.stack = QStackedWidget()
         self.stack.setObjectName("prefsStack")
-        for page in (appearance, focus, alerts, computer):
+        for page in (appearance, planning, focus, alerts, computer):
             area = QScrollArea()
             area.setWidgetResizable(True)
             area.setFrameShape(QFrame.Shape.NoFrame)
@@ -622,6 +653,7 @@ class PrefsDialog(QDialog):
             self.start_at_login,
         ):
             check.toggled.connect(self._announce)
+        self.planning_style.buttonToggled.connect(lambda _button, on: on and self._announce())
         self.spotify.editingFinished.connect(self.changed.emit)
         for section in self.layout_sections:
             section.changed.connect(self.changed.emit)
@@ -844,7 +876,12 @@ class PrefsDialog(QDialog):
             "preferred_view": self.preferred_view.currentData(),
             "motion": self.motion.currentData(),
             "alarm_tone": self.alarm_tone.currentData(),
+            "planning_style": self._planning_style(),
         }
+
+    def _planning_style(self) -> str:
+        checked = self.planning_style.checkedButton()
+        return str(checked.property("style")) if checked is not None else "suggest"
 
     def _apply_look_menu(self) -> None:
         """Keep knobs moved by hand; the chosen look fills in only the rest."""

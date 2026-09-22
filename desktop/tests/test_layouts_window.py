@@ -34,6 +34,7 @@ if importlib.util.find_spec("PySide6") is not None:
         QDialogButtonBox,
         QLabel,
         QPushButton,
+        QRadioButton,
         QWidget,
     )
 
@@ -2257,3 +2258,71 @@ def test_let_flexweek_move_it_takes_the_pin_away(
     settled(qapp, window)
     released = next(block for block in window.session.blocks if block["id"] == waiting["id"])
     assert released.get("pinned") is None and released["start"] == "17:00"
+
+
+def _add_through_the_editor(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> dict:
+    from desktop.native.widgets import HomeworkDialog
+
+    def fill(dialog: HomeworkDialog) -> int:
+        dialog.title.setText("Chemistry lab")
+        dialog.accept()
+        return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(HomeworkDialog, "exec", fill)
+    window._add_homework()
+    for _ in range(3):
+        settled(qapp, window)
+        QTest.qWait(50)
+    return next(item for item in window.session.assignments.values() if item["title"] == "Chemistry lab")
+
+
+def test_plan_it_as_i_add_it_gives_new_homework_a_time_in_one_undo_step(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    window.session.preferences = {**(window.session.preferences or {}), "planning_style": "auto"}
+    added = _add_through_the_editor(qapp, window, monkeypatch)
+    sessions = [block for block in window.session.blocks if block.get("assignment_id") == added["id"]]
+    assert sessions and all(block.get("start") for block in sessions), "placed without pressing Plan"
+    window.session.undo()
+    settled(qapp, window)
+    assert added["id"] not in window.session.assignments, "one Undo takes back the homework and its time"
+    assert not any(block.get("assignment_id") == added["id"] for block in window.session.blocks)
+
+
+def test_by_default_new_homework_waits_for_plan_my_homework(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    added = _add_through_the_editor(qapp, window, monkeypatch)
+    sessions = [block for block in window.session.blocks if block.get("assignment_id") == added["id"]]
+    assert sessions and not any(block.get("start") for block in sessions)
+    assert window.solve_button.text() == "Plan my homework"
+
+
+def test_placing_by_hand_turns_plan_into_suggest_times(qapp: QApplication, window: NativeWindow) -> None:
+    dialog = PrefsDialog(window, window.session.preferences, window._look, {}, window._layout)
+    dialog.findChild(QRadioButton, "prefPlanning-manual").setChecked(True)
+    assert dialog.updates()["planning_style"] == "manual"
+    window.session.preferences = {**(window.session.preferences or {}), "planning_style": "manual"}
+    window._sync_chrome()
+    assert window.solve_button.text() == "Suggest times"
+
+
+def test_a_study_window_can_be_kept_for_one_subject(qapp: QApplication) -> None:
+    from PySide6.QtCore import QTime
+
+    from desktop.native.widgets import AvailabilityDialog
+
+    dialog = AvailabilityDialog(None, {}, ["Math", "Reading"])
+    dialog.study_start.setTime(QTime(15, 30))
+    dialog.study_end.setTime(QTime(17, 0))
+    dialog.study_subject.setCurrentIndex(dialog.study_subject.findData("Math"))
+    dialog.findChild(QPushButton, "studyAdd").click()
+    kept = {"days": [0, 1, 2, 3, 4], "start": "15:30", "duration_min": 90, "subject": "Math"}
+    assert dialog.study_windows() == [kept]
+    assert dialog.study_list.item(0).text().endswith("Math only")
+    dialog.study_end.setTime(QTime(15, 0))
+    dialog.findChild(QPushButton, "studyAdd").click()
+    assert len(dialog.study_windows()) == 1
+    assert "ends after it starts" in dialog.error.text()

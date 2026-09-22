@@ -2444,7 +2444,7 @@ class SpreadDialog(QDialog):
 
 
 class AvailabilityDialog(QDialog):
-    def __init__(self, parent: QWidget | None, preferences: dict) -> None:
+    def __init__(self, parent: QWidget | None, preferences: dict, subjects: list[str] | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("availabilityDialog")
         self.setWindowTitle("Availability")
@@ -2463,6 +2463,25 @@ class AvailabilityDialog(QDialog):
         self.study_list = QListWidget()
         self.study_list.setObjectName("studyWindows")
         layout.addWidget(self.study_list)
+        # A new window's hours, and optionally the one subject it is kept for.
+        study_row = QHBoxLayout()
+        self.study_start = QTimeEdit(QTime(19, 0))
+        self.study_start.setObjectName("studyStart")
+        self.study_start.setDisplayFormat("HH:mm")
+        self.study_end = QTimeEdit(QTime(21, 0))
+        self.study_end.setObjectName("studyEnd")
+        self.study_end.setDisplayFormat("HH:mm")
+        self.study_subject = QComboBox()
+        self.study_subject.setObjectName("studySubject")
+        self.study_subject.setEditable(True)
+        self.study_subject.addItem("Any subject", "")
+        for subject in subjects or []:
+            self.study_subject.addItem(subject, subject)
+        for label, widget in (("From", self.study_start), ("to", self.study_end)):
+            study_row.addWidget(QLabel(label))
+            study_row.addWidget(widget)
+        study_row.addWidget(self.study_subject, 1)
+        layout.addLayout(study_row)
         add_study = QPushButton("Add study window")
         add_study.setObjectName("studyAdd")
         add_study.clicked.connect(self._add_study)
@@ -2495,11 +2514,12 @@ class AvailabilityDialog(QDialog):
             self.protected_list.addItem(item)
         self.study_list.clear()
         for window in self._study:
-            item = QListWidgetItem(
-                f"{window['start']} · {window['duration_min']}m · "
-                + ",".join(DAYS[day] for day in window["days"])
+            text = f"{window['start']} · {length_label(window['duration_min'])} · " + ",".join(
+                DAYS[day] for day in window["days"]
             )
-            self.study_list.addItem(item)
+            if window.get("subject"):
+                text += f" · {window['subject']} only"
+            self.study_list.addItem(QListWidgetItem(text))
 
     def _add_protected(self) -> None:
         if len(self._protected) >= AVAILABILITY_LIMIT:
@@ -2514,7 +2534,18 @@ class AvailabilityDialog(QDialog):
         if len(self._study) >= AVAILABILITY_LIMIT:
             self.error.setText("Up to 21 study windows.")
             return
-        self._study.append({"days": [0, 1, 2, 3, 4], "start": "19:00", "duration_min": 120})
+        start = self.study_start.time().hour() * 60 + self.study_start.time().minute()
+        end = self.study_end.time().hour() * 60 + self.study_end.time().minute()
+        start, end = start - start % SLOT_MIN, end - end % SLOT_MIN
+        if end - start < SLOT_MIN or start < DAY_START_MIN or end > DAY_END_MIN:
+            self.error.setText("A study window runs between 06:00 and 23:00 and ends after it starts.")
+            return
+        window: dict = {"days": [0, 1, 2, 3, 4], "start": minutes_to_hhmm(start), "duration_min": end - start}
+        typed = self.study_subject.currentText().strip()
+        if typed and typed != "Any subject":
+            window["subject"] = typed[:40]
+        self.error.setText("")
+        self._study.append(window)
         self._render()
 
     def protected(self) -> list[dict]:

@@ -126,6 +126,8 @@ from desktop.native.widgets import (
 WINDOW_SIZE = (1280, 800)
 # The longest the old week's picture waits for the next one before it fades anyway.
 TRAVEL_WAIT_MS = 900
+PLAN_LABEL = "Plan my homework"
+SUGGEST_LABEL = "Suggest times"
 NAV_ARROW_PX = 34
 AUTH_CARD_WIDTH = 380
 # Long enough for the student to read that the update installed before the window goes.
@@ -878,6 +880,9 @@ class NativeWindow(QMainWindow):
     def _sync_chrome(self) -> None:
         """Planning chips and the clipboard line step aside for a design of its own. Plan my
         homework and More stay in the top bar in every layout, every view, and My day."""
+        manual = (self.session.preferences or {}).get("planning_style") == "manual"
+        # A student who places homework by hand asks for ideas; the plan is theirs.
+        self.solve_button.setText(SUGGEST_LABEL if manual else PLAN_LABEL)
         own = isinstance(self.planner.currentWidget(), LayoutView)
         self.plan_chrome.setVisible(not own)
         self.focus_panel.setVisible(not own or self.session.focus is not None)
@@ -1325,6 +1330,10 @@ class NativeWindow(QMainWindow):
         body = dialog.assignment()
         known = self.session.assignments.get(body.get("id") or "")
         self.session.add_homework(body, days=days)
+        style = (self.session.preferences or {}).get("planning_style")
+        if style == "auto" and known is None and not body.get("completed") and days is None:
+            # Plan it for me as I add it: new homework gets its time once it is saved, in the same step.
+            self.session.plan_after_save(body["id"])
         self.session.save()
         if body.get("completed") and not (known or {}).get("completed"):
             self._set_notice(f"Finished {body.get('title') or 'Homework'}.", "Undo", self._undo_from_notice)
@@ -1754,7 +1763,10 @@ class NativeWindow(QMainWindow):
         if self.session.preferences is None:
             self.session._say("Still loading your settings…")
             return
-        dialog = AvailabilityDialog(self, self.session.preferences)
+        subjects = sorted(
+            {str(item["course"]).strip() for item in self.session.assignments.values() if item.get("course")}
+        )
+        dialog = AvailabilityDialog(self, self.session.preferences, subjects)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         self.session.save_availability(dialog.protected(), dialog.study_windows(), dialog.day_cutoff())
@@ -1954,12 +1966,14 @@ class NativeWindow(QMainWindow):
             if self.session.preferences is not None:
                 # Pack and accent belong to the account but are seen like the look: at once. The save
                 # that follows stores them.
-                shown = {key: wanted[key] for key in ("theme_pack", "accent", "accent_chips", "motion")}
+                live = ("theme_pack", "accent", "accent_chips", "motion", "alarm_tone", "planning_style")
+                shown = {key: wanted[key] for key in live}
                 self.session.preferences = {**self.session.preferences, **shown}
             if bool(wanted["start_at_login"]) != login:
                 login = bool(wanted["start_at_login"])
                 self._apply_start_at_login(login)
             self._apply_appearance()
+            self._sync_chrome()
             saver.start()
 
         saver = QTimer(dialog)
