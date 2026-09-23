@@ -38,7 +38,7 @@ from PySide6.QtWidgets import (
 )
 
 from backend.models import valid_spotify_url
-from backend.slots import DAY_END_MIN, DAY_START_MIN, SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm
+from backend.slots import SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm
 from desktop.native.calendar import (
     DAY_FULL,
     SETUP_ACTIVITY_PREFIX,
@@ -93,15 +93,8 @@ SKIP_STEP_LABEL, SKIP_ALL_LABEL = "Skip this step", "Skip setup"
 OWN_LOOK_LABEL = "Choose my own look instead"
 MAX_ACTIVITIES = 8
 MAX_FIRST_HOMEWORK = 3
-MAX_STUDY_WINDOWS = 21
 CUTOFFS = ("20:00", "20:30", "21:00", "21:30", "22:00", "22:30", "23:00")
-STUDY_DAYS = (("Weekdays", [0, 1, 2, 3, 4]), ("Every day", [0, 1, 2, 3, 4, 5, 6]), ("Weekends", [5, 6]))
 # A tap adds one of these rather than making the student type hours for the usual answers.
-STUDY_SUGGESTIONS = (
-    ("After school", [0, 1, 2, 3, 4], "15:30", "18:00"),
-    ("Evenings", [0, 1, 2, 3, 4], "19:00", "21:00"),
-    ("Weekend mornings", [5, 6], "10:00", "12:00"),
-)
 TEXT_SIZES = (("small", "Small"), ("normal", "Normal"), ("large", "Large"))
 SPACINGS = (("comfortable", "Comfortable"), ("compact", "Compact"))
 FONTS = (("sans", "Sans"), ("serif", "Serif"), ("mono", "Mono"))
@@ -216,13 +209,6 @@ def days_label(days: list[int]) -> str:
 
 def span_label(start: str, minutes: int) -> str:
     return f"{start}–{minutes_to_hhmm(hhmm_to_minutes(start) + minutes)}"
-
-
-def window_label(window: dict) -> str:
-    days = window.get("days") or []
-    named = next((name for name, wanted in STUDY_DAYS if sorted(days) == wanted), days_label(days))
-    text = f"{named} {span_label(window['start'], window['duration_min'])}"
-    return text + (f" · {window['subject']}" if window.get("subject") else "")
 
 
 def _label(text: str, name: str = "", wrap: bool = True) -> QLabel:
@@ -836,55 +822,6 @@ class SetupPage(QWidget):
         self._section(box, "When may FlexWeek plan homework?")
         self.work_editor = WorkWindowsEditor([])
         box.addWidget(self.work_editor)
-        self._section(box, "When do you like to do homework?")
-        box.addWidget(
-            _label(
-                "Plans put homework in these times first. Leave it empty to use any free time.", "setupHint"
-            )
-        )
-        self.study_chips = QWidget()
-        self.study_chips.setObjectName("setupRow")
-        self._study_line = FlowLayout(self.study_chips, gap=6)
-        self._study_line.setContentsMargins(0, 0, 0, 0)
-        box.addWidget(self.study_chips)
-        self.study_windows: list[dict] = []
-        suggestions = QWidget()
-        suggestions.setObjectName("setupRow")
-        suggest_line = FlowLayout(suggestions, gap=6)
-        suggest_line.setContentsMargins(0, 0, 0, 0)
-        for name, days, start, end in STUDY_SUGGESTIONS:
-            quick = _quiet(f"+ {name} {start}–{end}", "setupSuggest")
-            quick.clicked.connect(
-                lambda _checked=False, days=days, start=start, end=end: self._add_study(
-                    days, start, end, None
-                )
-            )
-            suggest_line.addWidget(quick)
-        box.addWidget(suggestions)
-        own = QFrame()
-        own.setObjectName("setupGroup")
-        own_line = FlowLayout(own, gap=8)
-        own_line.setContentsMargins(12, 10, 12, 10)
-        self.study_days = QComboBox()
-        self.study_days.setObjectName("setupStudyDays")
-        self.study_days.setAccessibleName("Study days")
-        for name, days in STUDY_DAYS:
-            self.study_days.addItem(name, days)
-        self.study_times = TimeRange("16:00", "18:00", "Study time")
-        self.study_subject = QComboBox()
-        self.study_subject.setObjectName("setupStudySubject")
-        self.study_subject.setEditable(True)
-        self.study_subject.setAccessibleName("Only for this subject")
-        self.study_subject.setMinimumWidth(150)
-        add = QPushButton("Add this time")
-        add.setObjectName("setupStudyAdd")
-        add.clicked.connect(self._add_own_study)
-        own_line.addWidget(self.study_days)
-        own_line.addWidget(self.study_times)
-        own_line.addWidget(self.study_subject)
-        own_line.addWidget(add)
-        self._section(box, "A time of your own, or one kept for a subject")
-        box.addWidget(own)
         return content
 
     def _build_reminders(self) -> QWidget:
@@ -1069,12 +1006,6 @@ class SetupPage(QWidget):
         self.planning_buttons.get(style, self.planning_buttons["suggest"]).setChecked(True)
         self.work_editor.set_subjects(self._state.subjects)
         self.work_editor.set_windows(self._state.preferences.get("work_windows") or [])
-        self.study_windows = deepcopy(self._state.preferences.get("study_windows") or [])
-        self._render_study()
-        self.study_subject.clear()
-        self.study_subject.addItem("Any subject", "")
-        for subject in self._state.subjects:
-            self.study_subject.addItem(subject, subject)
 
     def _fill_reminders(self) -> None:
         prefs = self._state.preferences
@@ -1368,52 +1299,6 @@ class SetupPage(QWidget):
 
     # Homework time
 
-    def _render_study(self) -> None:
-        while self._study_line.count():
-            item = self._study_line.takeAt(0)
-            widget = item.widget() if item is not None else None
-            if widget is not None:
-                widget.setParent(None)
-                widget.deleteLater()
-        for index, window in enumerate(self.study_windows):
-            chip = QPushButton(f"{window_label(window)}  ×")
-            chip.setObjectName("setupStudyChip")
-            chip.setAccessibleName(f"Remove {window_label(window)}")
-            chip.setCursor(Qt.CursorShape.PointingHandCursor)
-            chip.clicked.connect(lambda _checked=False, index=index: self._remove_study(index))
-            self._study_line.addWidget(chip)
-        self.study_chips.setVisible(bool(self.study_windows))
-
-    def _add_study(self, days: list[int], start: str, end: str, subject: str | None) -> bool:
-        if len(self.study_windows) >= MAX_STUDY_WINDOWS:
-            self.error.setText("Up to 21 study times.")
-            return False
-        begin, finish = hhmm_to_minutes(start), hhmm_to_minutes(end)
-        if finish - begin < SLOT_MIN or begin < DAY_START_MIN or finish > DAY_END_MIN:
-            self.error.setText("A study time runs between 06:00 and 23:00 and ends after it starts.")
-            return False
-        window: dict = {"days": list(days), "start": start, "duration_min": finish - begin}
-        if subject:
-            window["subject"] = subject[:40]
-        if window in self.study_windows:
-            return False
-        self.error.clear()
-        self.study_windows.append(window)
-        self._render_study()
-        return True
-
-    def _add_own_study(self) -> None:
-        start, minutes = self.study_times.span()
-        typed = self.study_subject.currentText().strip()
-        subject = typed if typed and typed != "Any subject" else None
-        days = self.study_days.currentData() or [0, 1, 2, 3, 4]
-        self._add_study(list(days), start, minutes_to_hhmm(hhmm_to_minutes(start) + minutes), subject)
-
-    def _remove_study(self, index: int) -> None:
-        if 0 <= index < len(self.study_windows):
-            self.study_windows.pop(index)
-            self._render_study()
-
     # Reminders and alarm
 
     def _tone(self) -> str:
@@ -1520,7 +1405,6 @@ class SetupPage(QWidget):
             )
             return {
                 "planning_style": checked,
-                "study_windows": deepcopy(self.study_windows),
                 "work_windows": self.work_editor.windows(),
             }
         if step == REMINDERS:
@@ -1603,11 +1487,6 @@ class SetupPage(QWidget):
                 planning += f" and {len(work_windows) - 2} more"
         else:
             planning += " · homework can be planned at any time of day"
-        windows = prefs.get("study_windows") or []
-        if windows:
-            planning += " · " + ", ".join(window_label(window) for window in windows[:3])
-            if len(windows) > 3:
-                planning += f" and {len(windows) - 3} more"
         tone = str(prefs.get("alarm_tone") or FALLBACK)
         sound = "Spotify" if tone == "spotify" else TONE_NAMES.get(tone, tone.title())
         if prefs.get("reminders_enabled"):

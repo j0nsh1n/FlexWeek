@@ -89,7 +89,8 @@ storage, CI). Each unit ends green on the rig, on the source gate, and with its 
    more than a fifth of the block, so a 15-minute block moves when pressed at 25%, 50% and 75% of
    its length at every level. The rig proves both with the real pointer.*
 3b. **Work windows in setup and Settings.** The screens that let a student say when they work.
-   Owner: ChatGPT. Brief: `handoffs/chatgpt-work-windows-ui.md`. *Done at `66ef7c6`.*
+   Owner: ChatGPT. Brief: `handoffs/chatgpt-work-windows-ui.md`. *Done at `66ef7c6`. Jonathan's
+   call, 22 September: setup asks only for work windows; study windows stay in Settings.*
 4. **Optional due times.** Due date required, due time optional, through the model, the API, the
    planner, the judge, the dialogs and the words shown. Owner: Grok for model and API, Claude for
    the dialogs. *Model, API and labels landed at `e7e5206`. Open: the dialogs.*

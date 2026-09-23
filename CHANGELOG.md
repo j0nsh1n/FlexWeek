@@ -6,6 +6,8 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Changed
+- Setup asks when FlexWeek may plan homework, and the planner keeps to those
+  hours. Preferred study times are set in Settings, no longer in setup.
 - Today's app's week scrolls through the whole day instead of squeezing
   24 hours onto the screen. Day names stay at the top.
 - Day and Week zoom: Ctrl and the mouse wheel, Ctrl with =, - or 0, or the

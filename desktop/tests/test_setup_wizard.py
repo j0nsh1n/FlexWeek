@@ -192,13 +192,14 @@ def test_every_page_is_kept_when_the_student_leaves_it(qapp: QApplication, serve
     assert window.session.preferences["day_cutoff"] == "22:00"
 
     setup.planning_buttons["auto"].setChecked(True)
-    setup._add_study([0, 1, 2, 3, 4], "19:00", "21:00", "Math")
+    setup.work_editor.set_windows([{"days": [0, 1, 2, 3, 4], "start": "19:00", "end": "21:00"}])
     setup.next.click()
     written(qapp, window)
     assert window.session.preferences["planning_style"] == "auto"
-    assert window.session.preferences["study_windows"] == [
-        {"days": [0, 1, 2, 3, 4], "start": "19:00", "duration_min": 120, "subject": "Math"}
+    assert window.session.preferences["work_windows"] == [
+        {"days": [0, 1, 2, 3, 4], "start": "19:00", "end": "21:00"}
     ]
+    assert not window.session.preferences.get("study_windows"), "setup no longer asks for study times"
 
     assert setup.reminders.isChecked(), "setup turns reminders on unless the student says no"
     setup.lead.setValue(15)
