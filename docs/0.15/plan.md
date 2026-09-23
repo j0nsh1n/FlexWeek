@@ -78,15 +78,20 @@ storage, CI). Each unit ends green on the rig, on the source gate, and with its 
 2. **The full 24-hour day.** `DAY_START_MIN` 0 and `DAY_END_MIN` 1440 through the solver, the
    controller and every surface; the planner confined to the student's work windows; existing weeks
    keep working. Owner: Grok for backend and solver, Claude for the surfaces.
+   *Backend landed at `e7e5206`; audited in `audit-01.md`. Open: the night is ranked last
+   (`handoffs/grok-night-last.md`).*
 3. **Zoom and scrolling on hours.** Pixels per hour per surface, a zoom control, a remembered level,
    and the reach checks at each level. Owner: Claude.
+   *Week scrolls at 48 pixels an hour since `ff5df31`, and the rig checks 00:00 and 24:00 can be
+   reached. Open: zoom, the remembered level, the reach matrix, block words drawn from the
+   viewport rather than the repaint rect, and Week re-scrolling to now after a re-show.*
 3b. **Work windows in setup and Settings.** The screens that let a student say when they work.
-   Owner: ChatGPT. Brief: `handoffs/chatgpt-work-windows-ui.md`.
+   Owner: ChatGPT. Brief: `handoffs/chatgpt-work-windows-ui.md`. *Not started.*
 4. **Optional due times.** Due date required, due time optional, through the model, the API, the
    planner, the judge, the dialogs and the words shown. Owner: Grok for model and API, Claude for
-   the dialogs.
+   the dialogs. *Model, API and labels landed at `e7e5206`. Open: the dialogs.*
 5. **Finish Today's app.** Move the 15 stale tests to the new surfaces; complete the matrix.
-   Owner: Claude.
+   Owner: Claude. *The 15 stale tests read the hours canvas since `ffe08aa`. Open: the matrix.*
 6. **The rig in CI.** Xvfb, a small window manager, per-design jobs, artifacts, timeouts.
    Owner: Grok. Brief: `handoffs/grok-rig-in-ci.md`.
 7. **Hosting and targets.** Every design reaches the window's hand; the hand finds any visible
