@@ -4,8 +4,15 @@
 - Date: 2026-09-23, branch `chatgpt/0-15-rig-ci` from `feat/0.15-tabs`
   at `12456d2`. The pointer rig supports Xvfb with Openbox when KWin is absent;
   a ten-minute CI job runs Classic Day and Week and uploads its artifacts.
-  KWin, local Xvfb, and a clean Python 3.14 container each passed Day 14/14 and
-  Week 17/17; the container rig took 176 seconds. Full source gate: 1262 passed.
+  State, logs, KWin socket, and default run output now belong to the checkout
+  directory; KWin finds the X display through its own Xwayland child. The old
+  main-checkout state file remains separate. Both checkouts passed a concurrent
+  real-pointer Day scenario on distinct displays, and two updated launchers
+  started simultaneously on distinct KWin displays.
+  Before this isolation fix, KWin, local Xvfb, and a clean Python 3.14 container
+  each passed Day 14/14 and Week 17/17; the container rig took 176 seconds.
+  After the fix, a local Xvfb zoom scenario passed, and the full source gate
+  passed 1269 tests, including seven rig ownership tests.
   No scenarios, native app code, executable, or remote changed. `spec.md` still
   describes CI as backend-only; the new job extends that behavior.
 - Date: 2026-09-22 (0.15 reach check). Branch `fix/015-rig-reach` from
@@ -542,11 +549,15 @@ Recorded `operation_id` values make a retried write return the first result.
 
 ## Session Handoff
 - 2026-09-23, `chatgpt/0-15-rig-ci`: Xvfb/Openbox and KWin share one hidden
-  session interface. The CI job saves Day/Week screenshots, results and video;
-  a clean Python 3.14 container exposed two missing Qt xcb libraries, now in
-  the job. Local and container pointer rigs passed 31/31; source gate passed
-  1262 tests. The next external check is the GitHub Actions run after owner
-  review. `spec.md` has the CI description drift noted above. Nothing pushed.
+  session interface scoped to each checkout. A concurrent old/new checkout
+  pointer run passed 1/1 on each display; simultaneous updated KWin launches
+  chose distinct displays and survived independent stop. The CI job saves
+  Day/Week screenshots, results and video; its ownership tests now run in CI
+  and normal pytest collection. The previous full pointer matrix passed 31/31
+  locally and in a container; the isolation checks above and the 1269-test
+  source gate passed afterward. The next external check is the GitHub Actions
+  run after owner review. `spec.md` has the CI description drift noted above.
+  Nothing pushed.
 
 - 2026-09-23, `grok/0-15-month-weeks`: Unit 8. `NativeSession.move_to_date(block_id, from_iso, to_iso) -> bool` moves a block to another date. Same week keeps the time; another week writes both documents through `POST /api/changes` in one Undo step. A repeating block moves only that day. Homework keeps its pin. The open week does not change until the reply. `date_problem` is the same `span_problem` words for a held chip. No backend change. Gate: 1261 passed, `scripts/verify.py` green. spec.md was not edited. Nothing pushed. Window still holds the Month placeholder; Unit 9 can call `move_to_date`.
 

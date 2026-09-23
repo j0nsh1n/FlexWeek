@@ -2,7 +2,8 @@
 
 KWin provides Xwayland on a virtual screen locally. Xvfb and Openbox provide the same X11
 interface on Linux CI. The state file records the exact processes this module started, so stop
-never searches for processes by command line.
+never searches for processes by command line. Each checkout has its own state, logs and KWin
+socket; the X display is allocated by the server.
 
     python scripts/rig/hidden_session.py --server xvfb start
     python scripts/rig/hidden_session.py stop
@@ -23,10 +24,17 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-STATE = Path("/tmp/flexweek-rig/session.json")
-SOCKET = "flexweek-rig"
+
+def _namespace(checkout: Path) -> tuple[Path, str]:
+    identity = checkout.resolve().stat()
+    key = f"{identity.st_dev:x}-{identity.st_ino:x}"
+    return Path("/tmp/flexweek-rig") / key / "session.json", f"flexweek-rig-{key}"
+
+
+STATE, SOCKET = _namespace(Path(__file__).resolve().parents[2])
 WIDTH, HEIGHT = 1400, 900
 X11_SOCKETS = Path("/tmp/.X11-unix")
+PROC = Path("/proc")
 SERVERS = ("kwin", "xvfb")
 
 
@@ -47,7 +55,7 @@ class Session:
 def _process_state(pid: int) -> tuple[str, int] | None:
     """Linux process state and start tick distinguish our PID from a later process using it."""
     try:
-        fields = Path(f"/proc/{pid}/stat").read_text().rsplit(") ", 1)[1].split()
+        fields = (PROC / str(pid) / "stat").read_text().rsplit(") ", 1)[1].split()
         return fields[0], int(fields[19])
     except (OSError, IndexError, ValueError):
         return None
@@ -65,7 +73,7 @@ def _alive(process: OwnedProcess) -> bool:
     if state is None or state[0] == "Z" or state[1] != process.started:
         return False
     try:
-        return Path(f"/proc/{process.pid}/comm").read_text().strip() == process.name
+        return (PROC / str(process.pid) / "comm").read_text().strip() == process.name
     except OSError:
         return False
 
@@ -78,13 +86,6 @@ def _read_state() -> Session | None:
         display = raw.get("display")
         if not isinstance(display, str) or re.fullmatch(r":[0-9]+", display) is None:
             return None
-        if raw.get("server") is None and isinstance(raw.get("pid"), int):
-            # The pre-Xvfb state records a KWin PID but not its start tick.
-            pid = raw["pid"]
-            arguments = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
-            if b"--virtual" not in arguments or SOCKET.encode() not in arguments:
-                return None
-            return Session("kwin", display, (_owned(pid, "kwin_wayland"),))
         if raw.get("server") not in SERVERS:
             return None
         processes = tuple(OwnedProcess(**item) for item in raw["processes"])
@@ -106,6 +107,8 @@ def running() -> str | None:
     """The display if the saved server and its window manager are still ours and alive."""
     session = _read_state()
     if session is None or not all(_alive(process) for process in session.processes):
+        return None
+    if session.server == "kwin" and _kwin_display(session.processes[0].pid) != session.display:
         return None
     socket = X11_SOCKETS / f"X{session.display[1:]}"
     return session.display if socket.exists() else None
@@ -170,8 +173,27 @@ def _launch(
         )
 
 
+def _kwin_display(pid: int) -> str | None:
+    """Find the Xwayland display spawned by this KWin, not another checkout's."""
+    for task in (PROC / str(pid) / "task").glob("*"):
+        try:
+            children = (task / "children").read_text().split()
+        except OSError:
+            continue
+        for child in children:
+            try:
+                arguments = (PROC / child / "cmdline").read_bytes().split(b"\0")
+            except OSError:
+                continue
+            if len(arguments) < 2 or Path(os.fsdecode(arguments[0])).name != "Xwayland":
+                continue
+            display = os.fsdecode(arguments[1])
+            if re.fullmatch(r":[0-9]+", display):
+                return display
+    return None
+
+
 def _start_kwin(env: dict[str, str]) -> str:
-    before = {path.name for path in X11_SOCKETS.glob("X*")}
     process = _launch(
         [
             "kwin_wayland", "--virtual", "--xwayland", "--no-lockscreen",
@@ -186,12 +208,10 @@ def _start_kwin(env: dict[str, str]) -> str:
         while time.monotonic() < deadline:
             if process.poll() is not None:
                 raise RuntimeError(f"KWin exited; see {STATE.parent / 'kwin.log'}")
-            fresh = {path.name for path in X11_SOCKETS.glob("X*")} - before
-            for name in sorted(fresh, key=lambda value: int(value[1:])):
-                display = f":{name[1:]}"
-                if _connects(display, env):
-                    _save(Session("kwin", display, (_owned(process.pid, "kwin_wayland"),)))
-                    return display
+            display = _kwin_display(process.pid)
+            if display and _connects(display, env):
+                _save(Session("kwin", display, (_owned(process.pid, "kwin_wayland"),)))
+                return display
             time.sleep(0.2)
         raise RuntimeError("The hidden session's Xwayland never came up")
     except BaseException:
