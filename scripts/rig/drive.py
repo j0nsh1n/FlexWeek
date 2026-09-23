@@ -17,6 +17,7 @@ that has no hours fails the scenarios that need them, which is what the 0.14.3 b
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import subprocess
@@ -66,6 +67,7 @@ def child_main(args: argparse.Namespace) -> int:
     app = QApplication(["flexweek-rig"])
 
     from desktop.native.calendar import sunday_due
+    from desktop.native.hours.hand import surface_at
     from desktop.native.hours.zoom import HoursScroll
     from desktop.native.layouts.registry import sanitize_layout
     from desktop.native.look import sanitize_look
@@ -276,26 +278,40 @@ def child_main(args: argparse.Namespace) -> int:
             yield ("wait", 500)
 
         def day_name(self, day: int) -> QPoint:
-            """A day's name on the week, sticky above the hours when Today's app draws it that way."""
+            """A day's name as it is drawn: Today's app's week keeps them in a row of their own;
+            other surfaces paint them over a column or left of a lane."""
             label = window.findChild(QWidget, f"weekDayName{day}")
             if label is not None and label.isVisible():
                 return label.mapToGlobal(label.rect().center())
-            return self.surface("hours").day_name(day)
+            for surface in self.surfaces("hours"):
+                with contextlib.suppress(LookupError, AttributeError):
+                    return surface.day_name(day)
+            raise NoSurface(f"no name drawn for day {day} in {self.design}")
 
-        def surface(self, kind: str) -> object:
-            """The hours (or month) surface on screen. Designs provide `hours_surfaces()`; Today's
-            app's week canvas predates that interface and is read through its own methods."""
+        def surfaces(self, kind: str) -> list:
+            """Every hours (or month) surface on screen. A design may show several: tiles of one day,
+            a card per day, lanes and a dial."""
             shown = window.planner.currentWidget()
             finder = getattr(shown, "hours_surfaces" if kind == "hours" else "month_surfaces", None)
             found = [item for item in finder() if item.isVisible()] if finder is not None else []
-            if found:
+            if not found:
+                raise NoSurface(f"no {kind} on the {session.planner_view} tab of {self.design}")
+            return found
+
+        def surface(self, kind: str, day: int | None = None, minute: int | None = None) -> object:
+            """The surface that shows this day and minute, or the first one when neither is asked."""
+            found = self.surfaces(kind)
+            if day is None:
                 return found[0]
-            raise NoSurface(f"no {kind} on the {session.planner_view} tab of {self.design}")
+            for item in found:
+                finder = getattr(item, "track_for", None)
+                if finder is not None and finder(day, minute) is not None:
+                    return item
+            raise NoSurface(f"no {kind} shows day {day} at {minute} in {self.design}")
 
         def reveal(self, day: int, first: int, last: int) -> Step:
             """Scroll so this stretch of the day is on screen before anything is measured."""
-            surface = self.surface("hours")
-            reveal = getattr(surface, "reveal", None)
+            reveal = getattr(self.surface("hours", day, first), "reveal", None)
             if reveal is not None:
                 reveal(day, first, last)
             yield ("wait", 150)
@@ -308,21 +324,30 @@ def child_main(args: argparse.Namespace) -> int:
             return area
 
         def minute_under(self, point: QPoint) -> float:
-            hours = self.surface("hours")
-            local = QPointF(hours.mapFromGlobal(point))
-            track = hours.track_at(local)
+            hours = surface_at(point)
+            local = QPointF(hours.mapFromGlobal(point)) if hours is not None else QPointF()
+            track = hours.track_at(local) if hours is not None else None
             if track is None:
                 raise NoSurface(f"no hours under {point.x()},{point.y()}")
             return track.minute_at(local)
 
         def at(self, day: int, minute: int, nudge: int = 3) -> QPoint:
-            return self.surface("hours").point_for(day, minute) + QPoint(0, nudge)
+            """A point on the day at a minute, `nudge` pixels on in the direction time runs, so it is
+            inside that quarter hour whichever way the design lays time out."""
+            surface = self.surface("hours", day, minute)
+            here = surface.point_for(day, minute)
+            ahead = minute + 1 if surface.track_for(day, minute + 1) is not None else minute - 1
+            there = surface.point_for(day, ahead)
+            step = there - here if ahead > minute else here - there
+            length = max(abs(step.x()) + abs(step.y()), 1)
+            return here + QPoint(round(step.x() / length * nudge), round(step.y() / length * nudge))
 
         def block_rect(self, block_id: str, day: int) -> QRect:
-            rect = self.surface("hours").block_rect(block_id, day)
-            if rect is None:
-                raise NoSurface(f"{block_id} is not drawn on day {day}")
-            return rect
+            for surface in self.surfaces("hours"):
+                rect = surface.block_rect(block_id, day)
+                if rect is not None:
+                    return rect
+            raise NoSurface(f"{block_id} is not drawn on day {day}")
 
         def chip(self, block_id: str) -> QPoint:
             """Something on screen that stands for this block and can be picked up."""
@@ -760,7 +785,10 @@ def child_main(args: argparse.Namespace) -> int:
         yield from r.drag(middle(box), middle(box) + (r.at(4, 18 * 60) - r.at(3, 19 * 60)))
         yield from r.settled()
         yield from r.tab("week")
-        expect(r.surface("hours").block_rect(ids["essay"], 3) is None, "still drawn on Thursday")
+        expect(
+            all(item.block_rect(ids["essay"], 3) is None for item in r.surfaces("hours")),
+            "still drawn on Thursday",
+        )
         yield from r.click(r.day_name(4))
         yield ("wait", 400)
         show_day((thursday + timedelta(days=1)).date().isoformat())
@@ -812,14 +840,16 @@ def child_main(args: argparse.Namespace) -> int:
     def reach(r: Rig) -> Step:
         """At every level the hours offer, 00:00 and 24:00 can be brought on screen."""
         scroll = r.zoom()
-        hours = r.surface("hours")
         for px in scroll.scale.levels:
             scroll.restore({scroll.scale.key: px})
             yield ("wait", 150)
             yield from r.reveal(3, 0, 60)
-            expect(hours.in_view(3, 0), f"00:00 is not in the hours viewport at {px} px an hour")
+            expect(r.surface("hours", 3, 0).in_view(3, 0), f"00:00 is not on screen at {px} px an hour")
             yield from r.reveal(3, 24 * 60 - 60, 24 * 60)
-            expect(hours.in_view(3, 24 * 60), f"24:00 is not in the hours viewport at {px} px an hour")
+            expect(
+                r.surface("hours", 3, 24 * 60).in_view(3, 24 * 60),
+                f"24:00 is not on screen at {px} px an hour",
+            )
 
     def week_reach(r: Rig) -> Step:
         yield from r.tab("week")

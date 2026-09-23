@@ -22,6 +22,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QHBoxLayout, QProgressBar, QVBoxLayout, QWidget
 
 from desktop.native.calendar import DAY_FULL
+from desktop.native.hours.hand import Hand
 from desktop.native.layouts.base import (
     LayoutView,
     Scene,
@@ -124,8 +125,8 @@ class OneThingView(LayoutView):
     uses_drawer = False
     layout_id = "one"
 
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
+    def __init__(self, parent: QWidget | None = None, *, hand: Hand | None = None) -> None:
+        super().__init__(parent, hand=hand)
         self._skip = 0
         self._title = label("", "oneTitle", wrap=True)
         self._root = QVBoxLayout(self)

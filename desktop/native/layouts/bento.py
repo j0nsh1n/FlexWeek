@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 
 from desktop.native.calendar import DAY_FULL, DAYS, category_title
+from desktop.native.hours.hand import Hand
 from desktop.native.layouts.base import (
     LayoutView,
     Scene,
@@ -33,8 +34,8 @@ HERO_EMPTY_LINES = {
 class BentoView(LayoutView):
     layout_id = "bento"
 
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
+    def __init__(self, parent: QWidget | None = None, *, hand: Hand | None = None) -> None:
+        super().__init__(parent, hand=hand)
         self._day: int | None = None
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)

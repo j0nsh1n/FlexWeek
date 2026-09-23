@@ -15,6 +15,8 @@ from PySide6.QtGui import QDragEnterEvent, QDragLeaveEvent, QDragMoveEvent, QDro
 from PySide6.QtWidgets import QApplication, QFrame, QLabel, QLayout, QPushButton, QScrollArea, QWidget
 
 from desktop.native.calendar import CATEGORIES
+from desktop.native.hours.hand import Hand, is_surface
+from desktop.native.hours.hand import Verdict as HandVerdict
 from desktop.native.layouts.drag import (
     EDGE_SCROLL_PX,
     EDGE_SCROLL_STEP,
@@ -149,6 +151,10 @@ def work_left(scene: Scene) -> int:
 NARROW_WIDTH = 1150
 
 
+def _refuse_all(block_id: str, from_day: int, span: object) -> HandVerdict:
+    return HandVerdict(False, "")
+
+
 class LayoutView(QWidget):
     add_requested = Signal(str)
     plan_requested = Signal()
@@ -169,9 +175,13 @@ class LayoutView(QWidget):
     # Designs with no hours of their own open a day's hours beside themselves while a block is dragged.
     uses_drawer = True
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None, *, hand: Hand | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("layout" + self.layout_id.title())
+        # The window's one pointer. Hours a design draws take it, and bring tracks and paint only: no
+        # thresholds, snapping, judging or saving of their own. A picture of a design, drawn with no
+        # window, gets one that refuses everything and belongs to the view, so nothing outlives it.
+        self.hand = hand if hand is not None else Hand(_refuse_all, self)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._scene: Scene | None = None
@@ -219,6 +229,11 @@ class LayoutView(QWidget):
         again = self.findChild(QWidget, name) if name else None
         if again is not None:
             again.setFocus()
+
+    def hours_surfaces(self) -> list[QWidget]:
+        """Every surface of hours this design shows now, in reading order. The rig and the tests find
+        days and times through these; a design with a different order says so here."""
+        return [widget for widget in self.findChildren(QWidget) if is_surface(widget) and widget.isVisible()]
 
     def hold(self, holding: bool) -> None:
         """While the pointer holds something, a new scene waits: a re-render would delete what the

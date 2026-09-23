@@ -525,3 +525,18 @@ def test_how_close_the_hours_are_is_kept_for_this_device(qapp: QApplication, win
         again.close()
         again.deleteLater()
         QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+def test_a_design_holds_its_renders_from_the_press_and_has_the_windows_hand(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """A design is given the window's one hand, and a new scene waits from the moment anything is
+    pressed, not from the moment it starts to move."""
+    from desktop.native.hours.hand import Gesture, Held
+
+    view = use(qapp, window, "timeline")
+    assert view.hand is window.hand
+    window.hand.press(window, Held(Gesture.PLACE, "Essay", 60, "essay"), QPoint(20, 20))
+    assert view._dragging, "a press, before any movement, holds the design's renders"
+    window.hand.cancel()
+    assert not view._dragging

@@ -750,7 +750,7 @@ class NativeWindow(QMainWindow):
         self.hand.refused.connect(self.session._say)
         self.hand.opened.connect(self._edit_block)
         self.hand.selected.connect(self.session.select_block)
-        self.hand.active_changed.connect(self._hold_renders)
+        self.hand.holding.connect(self._hold_renders)
         # Today's app, as Daily Scheduler draws it: a Week that scrolls and a full-width Day.
         self.week_table = ClassicWeek(self.hand)
         self.week_table.day_opened.connect(self._open_week_day)
@@ -823,7 +823,7 @@ class NativeWindow(QMainWindow):
     def _layout_view(self, layout_id: str) -> LayoutView:
         view = self._views.get(layout_id)
         if view is None:
-            view = VIEW_CLASSES[layout_id]()
+            view = VIEW_CLASSES[layout_id](hand=self.hand)
             # A layout only says what the student wants. What happens is what the window already does.
             view.add_requested.connect(
                 lambda category: self._add_from_chip(category) if category else self._add_homework()
@@ -1587,7 +1587,7 @@ class NativeWindow(QMainWindow):
             self.session._say("Moving between dates comes with the new Month.")
 
     def _hold_renders(self, holding: bool) -> None:
-        """Nothing a drag started on is rebuilt while the pointer holds it."""
+        """Nothing a press started on is rebuilt until it is let go, whether it becomes a drag or a tap."""
         for view in self._views.values():
             view.hold(holding)
         if not holding:

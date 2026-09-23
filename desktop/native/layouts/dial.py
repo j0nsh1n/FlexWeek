@@ -13,6 +13,7 @@ from PySide6.QtGui import QColor, QFont, QMouseEvent, QPainter, QPaintEvent, QPe
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QWidget
 
 from desktop.native.calendar import DAY_FULL, DAYS
+from desktop.native.hours.hand import Hand
 from desktop.native.layouts.base import (
     LayoutView,
     Scene,
@@ -242,8 +243,8 @@ class DayDialView(LayoutView):
     uses_drawer = False
     layout_id = "dial"
 
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
+    def __init__(self, parent: QWidget | None = None, *, hand: Hand | None = None) -> None:
+        super().__init__(parent, hand=hand)
         self._day: int | None = None
         # A view's minimum height must not become the window's: three designs pushed it past a 768 pixel
         # laptop screen. Inside a scroll area, what does not fit scrolls and the window keeps its size.

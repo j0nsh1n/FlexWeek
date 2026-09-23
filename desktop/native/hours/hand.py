@@ -8,6 +8,11 @@ keeps receiving the mouse until release), so no system drag-and-drop is involved
 Wayland behave alike.
 
 A press that never becomes a drag is a tap, handed back to whoever pressed. Escape lets go.
+
+What a block can land on is a surface: any widget that sets `takes_blocks` and answers `track_at`
+with a `Track` under a point of its own. `HoursCanvas` is one; My day's dial and anything a design
+draws itself can be others. The hand asks nothing else of them, so a design brings tracks and paint,
+never its own rules for dragging.
 """
 
 from __future__ import annotations
@@ -16,7 +21,6 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from enum import Enum
-from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, Qt, QTimer, Signal
 from PySide6.QtGui import QKeyEvent, QMouseEvent
@@ -24,11 +28,8 @@ from PySide6.QtWidgets import QApplication, QLabel, QScrollArea, QWidget
 from shiboken6 import isValid
 
 from desktop.native.calendar import DAYS
-from desktop.native.hours.geometry import FIRST, LAST, SLOT_MIN, LinearTrack, Span, snap
+from desktop.native.hours.geometry import SLOT_MIN, Span, Track, snap
 from desktop.native.weekmodel import length_label
-
-if TYPE_CHECKING:
-    from desktop.native.hours.canvas import HoursCanvas
 
 # A drag near a scroll area's edge scrolls it only after resting there this long, so passing
 # through the edge on the way in never shifts the hours under the pointer.
@@ -107,6 +108,19 @@ Change = Move | Place | Create | MoveDate
 Judge = Callable[[str, int, Span], Verdict]
 
 
+def is_surface(widget: object) -> bool:
+    """Whether a widget takes blocks: it has tracks, and says which one lies under a point."""
+    return isinstance(widget, QWidget) and bool(getattr(widget, "takes_blocks", False))
+
+
+def surface_at(at: QPoint) -> QWidget | None:
+    """The surface a global point is over, if any: the widget there or the nearest one holding it."""
+    widget = QApplication.widgetAt(at)
+    while widget is not None and not is_surface(widget):
+        widget = widget.parentWidget()
+    return widget
+
+
 def span_words(span: Span) -> str:
     return f"{DAYS[span.day]} {_clock(span.start)}–{_clock(span.end)} · {length_label(span.minutes)}"
 
@@ -123,6 +137,8 @@ class Hand(QObject):
     opened = Signal(str)
     selected = Signal(str, int)
     active_changed = Signal(bool)
+    # From the press to the release: nothing the press started on may be rebuilt meanwhile.
+    holding = Signal(bool)
     preview_changed = Signal()
 
     def __init__(self, judge: Judge, host: QWidget) -> None:
@@ -137,8 +153,8 @@ class Hand(QObject):
         self._pressed_at = QPoint()
         self._last = QPoint()
         self._active = False
-        self._home: tuple[HoursCanvas, LinearTrack] | None = None
-        self._track: tuple[HoursCanvas, LinearTrack] | None = None
+        self._home: tuple[QWidget, Track] | None = None
+        self._track: tuple[QWidget, Track] | None = None
         self._edge: tuple[QScrollArea, int, int, float] | None = None
         self._scroller = QTimer(self)
         self._scroller.setInterval(16)
@@ -164,13 +180,14 @@ class Hand(QObject):
         held: Held,
         at: QPoint,
         tap: Callable[[], None] | None = None,
-        home: tuple[HoursCanvas, LinearTrack] | None = None,
+        home: tuple[QWidget, Track] | None = None,
     ) -> None:
-        """Pick something up at a global point. `home` is the canvas and track it came from."""
+        """Pick something up at a global point. `home` is the surface and track it came from."""
         self._end(silent=True)
         self._held, self._source, self._tap, self._home = held, source, tap, home
         self._pressed_at = self._last = at
         QApplication.instance().installEventFilter(self)
+        self.holding.emit(True)
 
     def select(self, block_id: str, day: int) -> None:
         self.selection = (block_id, day)
@@ -262,24 +279,28 @@ class Hand(QObject):
             self._float(held.title, at)
             return
         self._chip.hide()
-        canvas, track = found
-        minute = track.minute_at(QPointF(canvas.mapFromGlobal(at)))
+        surface, track = found
+        minute = track.minute_at(QPointF(surface.mapFromGlobal(at)))
         self._show(self._span_for(held, track, minute))
 
-    def _span_for(self, held: Held, track: LinearTrack, minute: float) -> Span:
-        origin = held.origin
+    def _span_for(self, held: Held, track: Track, minute: float) -> Span:
+        """Where the held thing would go. Every bound is the track's own: a block stops at the ends
+        of the tile or column it is over, not at midnight, and a resize or a new block stays inside
+        the track it began on."""
+        origin, first, last = held.origin, track.first, track.last
         if held.kind is Gesture.RESIZE_START and origin is not None:
-            return replace(origin, start=min(max(snap(minute - held.grab), FIRST), origin.end - SLOT_MIN))
+            return replace(origin, start=min(max(snap(minute - held.grab), first), origin.end - SLOT_MIN))
         if held.kind is Gesture.RESIZE_END and origin is not None:
-            return replace(origin, end=max(min(snap(minute - held.grab), LAST), origin.start + SLOT_MIN))
+            return replace(origin, end=max(min(snap(minute - held.grab), last), origin.start + SLOT_MIN))
         if held.kind is Gesture.CREATE and origin is not None:
-            here = min(max(snap(minute), FIRST), LAST)
+            here = min(max(snap(minute), first), last)
             anchor = origin.start
             start, end = (
                 (anchor, max(here, anchor + SLOT_MIN)) if here >= anchor else (here, anchor + SLOT_MIN)
             )
             return Span(origin.day, start, end)
-        start = min(max(snap(minute - held.grab), FIRST), LAST - held.minutes)
+        # Longer than the track: it starts where the track starts and runs past its end.
+        start = max(min(snap(minute - held.grab), last - held.minutes), first)
         return Span(track.day, start, start + held.minutes)
 
     def _show(self, span: Span | None) -> None:
@@ -298,14 +319,10 @@ class Hand(QObject):
         if changed:
             self.preview_changed.emit()
 
-    def _hours_at(self, at: QPoint) -> tuple[HoursCanvas, LinearTrack] | None:
-        """The canvas and track under a global point. Cards laid at an angle overlap, so a canvas
+    def _hours_at(self, at: QPoint) -> tuple[QWidget, Track] | None:
+        """The surface and track under a global point. Cards laid at an angle overlap, so a surface
         whose rectangle is under the pointer but whose track is not passes to its siblings."""
-        from desktop.native.hours.canvas import HoursCanvas
-
-        widget = QApplication.widgetAt(at)
-        while widget is not None and not isinstance(widget, HoursCanvas):
-            widget = widget.parentWidget()
+        widget = surface_at(at)
         if widget is None:
             return None
         tried = [widget]
@@ -314,14 +331,14 @@ class Hand(QObject):
             tried += [
                 sibling
                 for sibling in reversed(
-                    parent.findChildren(HoursCanvas, options=Qt.FindChildOption.FindDirectChildrenOnly)
+                    parent.findChildren(QWidget, options=Qt.FindChildOption.FindDirectChildrenOnly)
                 )
-                if sibling is not widget and sibling.isVisible()
+                if sibling is not widget and is_surface(sibling) and sibling.isVisible()
             ]
-        for canvas in tried:
-            track = canvas.track_at(QPointF(canvas.mapFromGlobal(at)))
+        for surface in tried:
+            track = surface.track_at(QPointF(surface.mapFromGlobal(at)))
             if track is not None:
-                return canvas, track
+                return surface, track
         return None
 
     def _follow_month(self, at: QPoint) -> None:
@@ -392,8 +409,8 @@ class Hand(QObject):
     # Letting go
 
     def _end(self, silent: bool) -> None:
-        was_active = self._active
-        if self._held is not None:
+        was_active, was_holding = self._active, self._held is not None
+        if was_holding:
             QApplication.instance().removeEventFilter(self)
         self._held = self._source = self._tap = None
         self._home = self._track = None
@@ -408,6 +425,8 @@ class Hand(QObject):
             self.preview_changed.emit()
         if was_active:
             self.active_changed.emit(False)
+        if was_holding:
+            self.holding.emit(False)
 
 
 def _scroll_area_at(at: QPoint) -> QScrollArea | None:

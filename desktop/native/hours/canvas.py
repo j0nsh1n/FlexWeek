@@ -32,8 +32,6 @@ from PySide6.QtWidgets import QScrollArea, QWidget
 
 from desktop.native.calendar import CATEGORIES, DAYS, create_click_range
 from desktop.native.hours.geometry import (
-    FIRST,
-    LAST,
     SLOT_MIN,
     Axis,
     LinearTrack,
@@ -309,7 +307,13 @@ def _small(font: QFont) -> QFont:
 
 
 class HoursCanvas(QWidget):
-    """One painted widget of hours. `lay_out` says where each day's track lies in it."""
+    """One painted widget of hours. `lay_out` says where each day's track lies in it.
+
+    Days whose time runs down are named in the `header` above them; days whose time runs across are
+    named in the `gutter` to their left. Either name, clicked, opens that day."""
+
+    # A surface the hand can drop blocks on (see hand.py).
+    takes_blocks = True
 
     # A day's name was clicked: open it on Day.
     day_opened = Signal(int)
@@ -506,11 +510,10 @@ class HoursCanvas(QWidget):
             ):
                 self.painter.now(painter, track, self.now_min)
             painter.restore()
-        if self.header and any(track.axis is Axis.DOWN for track in self.tracks):
-            for track in self.tracks:
-                self.painter.day_name(
-                    painter, self._name_box(track), self._names(track.day), track.day == self.today
-                )
+        for track in self.tracks:
+            box = self._name_box(track)
+            if box is not None:
+                self.painter.day_name(painter, box, self._names(track.day), track.day == self.today)
         self._paint_label(painter)
         painter.end()
 
@@ -523,8 +526,17 @@ class HoursCanvas(QWidget):
         port = area.viewport()
         return QRectF(QRect(self.mapFrom(port, QPoint(0, 0)), port.size())).intersected(QRectF(self.rect()))
 
-    def _name_box(self, track: LinearTrack) -> QRectF:
-        return QRectF(track.area.left(), 0, track.area.width(), self.header)
+    def _name_box(self, track: LinearTrack) -> QRectF | None:
+        """Where a day's name is drawn: over a column, or left of a lane. None when there is no room
+        for one, or the day already has a name box from another of its tracks."""
+        first = next(item for item in self.tracks if item.day == track.day)
+        if first is not track or track.turn:
+            return None
+        if track.axis is Axis.DOWN and self.header:
+            return QRectF(track.area.left(), 0, track.area.width(), self.header)
+        if track.axis is Axis.ACROSS and self.gutter:
+            return QRectF(0, track.area.top(), self.gutter, track.area.height())
+        return None
 
     def _paint_label(self, painter: QPainter) -> None:
         preview = self.hand.preview
@@ -598,10 +610,10 @@ class HoursCanvas(QWidget):
         track = self.track_at(point)
         if track is None:
             return
-        anchor = min(max(snap(track.minute_at(point) - SLOT_MIN / 2), FIRST), LAST - SLOT_MIN)
+        anchor = min(max(snap(track.minute_at(point) - SLOT_MIN / 2), track.first), track.last - SLOT_MIN)
         held = Held(Gesture.CREATE, "", SLOT_MIN, None, track.day, Span(track.day, anchor, anchor + SLOT_MIN))
         self.hand.selection = None
-        self.hand.press(self, held, at, tap=lambda: self._quick_create(track.day, anchor), home=(self, track))
+        self.hand.press(self, held, at, tap=lambda: self._quick_create(track, anchor), home=(self, track))
 
     def _edge_kind(self, rect: QRectF, upright: QPointF, track: LinearTrack) -> Gesture:
         """Resize from within a few pixels of the start or end edge of a block long enough to have
@@ -620,14 +632,15 @@ class HoursCanvas(QWidget):
             return Gesture.RESIZE_END
         return Gesture.MOVE
 
-    def _quick_create(self, day: int, anchor: int) -> None:
-        """A click on free time makes up to an hour there, stopping at the next block."""
-        taken = sorted((item.start, item.end) for item in self.occurrences if item.day == day)
+    def _quick_create(self, track: LinearTrack, anchor: int) -> None:
+        """A click on free time makes up to an hour there, stopping at the next block or at the end
+        of the track."""
+        taken = sorted((item.start, item.end) for item in self.occurrences if item.day == track.day)
         if any(start <= anchor < end for start, end in taken):
             return
         made = create_click_range(anchor, taken)
-        if made is not None:
-            self.hand.commit(Create(Span(day, *made)))
+        if made is not None and min(made[1], track.last) - made[0] >= SLOT_MIN:
+            self.hand.commit(Create(Span(track.day, made[0], min(made[1], track.last))))
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         hit = self._block_at(event.position())
@@ -700,10 +713,9 @@ class HoursCanvas(QWidget):
         event.ignore()
 
     def _name_at(self, point: QPointF) -> int | None:
-        if not self.header or point.y() > self.header:
-            return None
         for track in self.tracks:
-            if track.axis is Axis.DOWN and self._name_box(track).contains(point):
+            box = self._name_box(track)
+            if box is not None and box.contains(point):
                 return track.day
         return None
 
@@ -727,9 +739,10 @@ class HoursCanvas(QWidget):
 
     def day_name(self, day: int) -> QPoint:
         track = self.track_for(day)
-        if track is None or not self.header:
+        box = self._name_box(track) if track is not None else None
+        if box is None:
             raise LookupError(f"no name drawn for day {day}")
-        return self.mapToGlobal(self._name_box(track).center().toPoint())
+        return self.mapToGlobal(box.center().toPoint())
 
     def _scroll_area(self) -> QScrollArea | None:
         area = self.parentWidget()

@@ -1,16 +1,20 @@
 """Where minutes are: the geometry every design's hours share.
 
-A track is one day's stretch of time inside a painted widget: a rectangle, the minutes at its two
-ends, which way time runs, and a turn for a card laid at an angle. A widget can hold several (a week
-of columns, a day cut into tiles). Everything here is plain arithmetic on Qt's point and rectangle
-types, so it is tested with numbers and knows nothing about gestures or painting.
+A track is one day's stretch of time inside a painted widget, between the minutes at its two ends.
+Most are straight (`LinearTrack`): a rectangle, which way time runs, and a turn for a card laid at an
+angle. My day's dial is round (`DialTrack`). A widget can hold several tracks (a week of columns, a
+day cut into tiles). The hand needs only what `Track` names, so it treats every shape alike.
+Everything here is plain arithmetic on Qt's point and rectangle types, so it is tested with numbers
+and knows nothing about gestures or painting.
 """
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Protocol
 
 from PySide6.QtCore import QPointF, QRectF
 from PySide6.QtGui import QTransform
@@ -40,6 +44,30 @@ class Span:
 
 def snap(minute: float) -> int:
     return round(minute / SLOT_MIN) * SLOT_MIN
+
+
+class Track(Protocol):
+    """One day's minutes on a surface, whatever its shape. Minutes run from `first` to `last`, and a
+    block on the track lies wholly between them."""
+
+    @property
+    def day(self) -> int: ...
+
+    @property
+    def first(self) -> int: ...
+
+    @property
+    def last(self) -> int: ...
+
+    def minute_at(self, point: QPointF) -> float:
+        """The minute under a point, past either end too."""
+        ...
+
+    def contains(self, point: QPointF) -> bool: ...
+
+    def point_for(self, minute: int) -> QPointF:
+        """A point on the track at a minute, in the owning widget's coordinates."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -124,7 +152,38 @@ class LinearTrack:
         return self._into.map(upright)
 
 
-Track = LinearTrack
+@dataclass(frozen=True)
+class DialTrack:
+    """A day's minutes round a ring, as My day's dial draws them: `sweep` degrees centred on the top
+    of the face, clockwise from `first` to `last`, between `inner` and `outer` radius about `centre`.
+    The gap at the bottom belongs to no time."""
+
+    day: int
+    centre: QPointF
+    inner: float
+    outer: float
+    first: int = FIRST
+    last: int = LAST
+    sweep: float = 300.0
+
+    def turn_at(self, point: QPointF) -> float:
+        """Degrees clockwise from the top of the face."""
+        return math.degrees(math.atan2(point.x() - self.centre.x(), -(point.y() - self.centre.y())))
+
+    def minute_at(self, point: QPointF) -> float:
+        half = self.sweep / 2
+        turn = min(max(self.turn_at(point), -half), half)
+        return self.first + (turn + half) / self.sweep * (self.last - self.first)
+
+    def contains(self, point: QPointF) -> bool:
+        reach = math.hypot(point.x() - self.centre.x(), point.y() - self.centre.y())
+        return self.inner <= reach <= self.outer and abs(self.turn_at(point)) <= self.sweep / 2
+
+    def point_for(self, minute: int) -> QPointF:
+        share = (min(max(minute, self.first), self.last) - self.first) / (self.last - self.first)
+        turn = math.radians(-self.sweep / 2 + share * self.sweep)
+        radius = (self.inner + self.outer) / 2
+        return QPointF(self.centre.x() + radius * math.sin(turn), self.centre.y() - radius * math.cos(turn))
 
 
 def overlap_columns(spans: Sequence[tuple[int, int]]) -> list[tuple[int, int]]:

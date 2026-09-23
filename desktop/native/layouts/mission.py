@@ -13,6 +13,7 @@ from PySide6.QtGui import QColor, QFont, QFontMetrics, QMouseEvent, QPainter, QP
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QToolTip, QVBoxLayout, QWidget
 
 from desktop.native.calendar import DAY_FULL, DAYS
+from desktop.native.hours.hand import Hand
 from desktop.native.layouts.base import (
     LayoutView,
     Scene,
@@ -234,8 +235,8 @@ class MissionView(LayoutView):
     # The lanes are hours already, so a block is dropped on them rather than in a drawer.
     uses_drawer = False
 
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
+    def __init__(self, parent: QWidget | None = None, *, hand: Hand | None = None) -> None:
+        super().__init__(parent, hand=hand)
         self._day: int | None = None
         # A view's minimum height must not become the window's: three designs pushed it past a 768 pixel
         # laptop screen. Inside a scroll area, what does not fit scrolls and the window keeps its size.

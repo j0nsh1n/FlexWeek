@@ -11,6 +11,7 @@ from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from desktop.native.calendar import DAYS
+from desktop.native.hours.hand import Hand
 from desktop.native.layouts.base import (
     LayoutView,
     Scene,
@@ -61,8 +62,8 @@ class TitleBar(QLabel):
 class RetroView(LayoutView):
     layout_id = "retro"
 
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
+    def __init__(self, parent: QWidget | None = None, *, hand: Hand | None = None) -> None:
+        super().__init__(parent, hand=hand)
         self._open: dict[str, bool] = {}
         self._spots: dict[str, QPoint] = {}
         self._opened_for = ""
