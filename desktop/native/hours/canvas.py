@@ -317,7 +317,7 @@ class HoursCanvas(QWidget):
 
     # A day's name was clicked: open it on Day.
     day_opened = Signal(int)
-    # Zoom by this many steps (0 goes back to the surface's own level), about this height in the
+    # Zoom by this many steps (0 goes back to the surface's own level), about this point in the
     # canvas, or about the middle of what is on screen when there is none.
     zoom_asked = Signal(int, object)
 
@@ -693,7 +693,7 @@ class HoursCanvas(QWidget):
         steps = int(self._wheel / 120)
         if steps:
             self._wheel -= steps * 120
-            self.zoom_asked.emit(steps, event.position().y())
+            self.zoom_asked.emit(steps, event.position())
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
         """Enter opens the chosen block, and Ctrl with =, - or 0 zooms. Everything else goes to the

@@ -107,7 +107,9 @@ storage, CI). Each unit ends green on the rig, on the source gate, and with its 
    `takes_blocks` and `track_at`; blocks, resizes and new blocks stop at their track's own ends;
    renders are held from the press; every design is built with the window's hand and lists its
    surfaces. Proven by `desktop/tests/test_hours_targets.py` and `scripts/mutations/targets.json`.
-   Month's date-aware judge moves to unit 9 with Month.*
+   Month's date-aware judge moves to unit 9 with Month. `HoursScroll(axis=Axis.ACROSS)` scrolls
+   and zooms lanes sideways, the plain wheel included, with day names pinned on the left: the
+   horizontal zoom Mission needs, which the review asked to settle before its unit.*
 8. **Cross-week MoveDate.** One atomic controller operation over two week documents, idempotent on
    retry, one Undo step. `/api/changes` already writes several weeks in one transaction.
    Owner: Grok. Brief: `handoffs/grok-month-across-weeks.md`.

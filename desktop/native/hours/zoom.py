@@ -2,9 +2,11 @@
 the same minute in place while that changes.
 
 A surface's hours sit in an `HoursScroll`. Ctrl and the wheel zoom about the pointer; Ctrl with =, -
-or 0 zoom about the middle of what is on screen, as do the two buttons in the corner above the hour
-labels. A header, such as the week's day names, stays above the scrolling hours and always spans
-exactly the width the hours have, so a name sits over its column whether or not a scroll bar shows.
+or 0 zoom about the middle of what is on screen, as do the two buttons in the corner. Hours that run
+down scroll up and down, with a header, such as the week's day names, kept above them and exactly as
+wide as the hours, so a name sits over its column whether or not a scroll bar shows. Hours that run
+across scroll sideways, the plain wheel included, with the day names kept in a strip to their left,
+below the corner, so they stay beside their lanes.
 
 Each surface remembers its level on this device, in the look file, as pixels an hour. A level that
 is no longer offered is read as the nearest one that is.
@@ -16,10 +18,21 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from PySide6.QtCore import QEvent, QObject, QRect, QSize, Qt, Signal
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QPushButton, QScrollArea, QWidget
+from PySide6.QtCore import QEvent, QObject, QPointF, QRect, QSize, Qt, Signal
+from PySide6.QtGui import QWheelEvent
+from PySide6.QtWidgets import (
+    QBoxLayout,
+    QFrame,
+    QHBoxLayout,
+    QPushButton,
+    QScrollArea,
+    QScrollBar,
+    QVBoxLayout,
+    QWidget,
+)
 
 from desktop.native.hours.canvas import HoursCanvas
+from desktop.native.hours.geometry import Axis
 
 KEY = re.compile(r"[a-z]+\.[a-z]+")
 
@@ -107,7 +120,7 @@ class ZoomButtons(QWidget):
 
 
 class HoursScroll(QScrollArea):
-    """Hours that scroll and zoom, with a header kept above them."""
+    """Hours that scroll and zoom along the way their time runs, with a header kept beside them."""
 
     # A level the student chose, to remember: the scale's key and its pixels an hour.
     zoomed = Signal(str, int)
@@ -120,11 +133,12 @@ class HoursScroll(QScrollArea):
         *,
         name: str,
         gutter: float,
+        axis: Axis = Axis.DOWN,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName(f"{name}Scroll")
-        self.canvas, self.scale = canvas, scale
+        self.canvas, self.scale, self.axis = canvas, scale, axis
         self.px = scale.default
         self._length_for = length_for
         self._gutter = gutter
@@ -135,21 +149,40 @@ class HoursScroll(QScrollArea):
         self.buttons.into.clicked.connect(lambda: self.zoom_by(1))
         self.header = QWidget(self)
         self.header.setObjectName(f"{name}Header")
-        self._row = QHBoxLayout(self.header)
+        self._row: QBoxLayout = QHBoxLayout(self.header) if self._down else QVBoxLayout(self.header)
         self._row.setContentsMargins(0, 0, 0, 0)
         self._row.setSpacing(0)
         self._row.addWidget(self.buttons, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.header.installEventFilter(self)
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setWidgetResizable(True)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        across = Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        (self.setHorizontalScrollBarPolicy if self._down else self.setVerticalScrollBarPolicy)(across)
         self.setWidget(canvas)
-        canvas.setFixedHeight(length_for(self.px))
+        self._fix_length(length_for(self.px))
         canvas.zoom_asked.connect(self._asked)
         self._show_limits()
 
+    @property
+    def _down(self) -> bool:
+        return self.axis is Axis.DOWN
+
+    def _bar(self) -> QScrollBar:
+        return self.verticalScrollBar() if self._down else self.horizontalScrollBar()
+
+    def _port_length(self) -> int:
+        return self.viewport().height() if self._down else self.viewport().width()
+
+    def _fix_length(self, length: int) -> None:
+        if self._down:
+            self.canvas.setFixedHeight(length)
+        else:
+            self.canvas.setFixedWidth(length)
+
     def set_header(self, content: QWidget) -> None:
-        """What sits over the hours, right of the corner. It is exactly as wide as the hours."""
+        """What is kept beside the hours: over them, right of the corner, and exactly as wide as
+        they are, when time runs down; left of them, under the corner, and exactly as tall as they
+        are below the canvas's own header, when time runs across."""
         self._row.addWidget(content, 1)
         self._place_header()
 
@@ -172,16 +205,19 @@ class HoursScroll(QScrollArea):
             self.zoomed.emit(self.scale.key, px)
 
     def _asked(self, steps: int, at: object) -> None:
-        anchor = None if at is None else float(at) - self.verticalScrollBar().value()
-        self.zoom_by(steps, anchor)
+        if isinstance(at, QPointF):
+            along = at.y() if self._down else at.x()
+            self.zoom_by(steps, along - self._bar().value())
+        else:
+            self.zoom_by(steps)
 
     def _apply(self, px: int, anchor: float | None) -> None:
-        bar = self.verticalScrollBar()
-        height = self.viewport().height()
-        at = height / 2 if anchor is None else min(max(anchor, 0.0), float(height))
+        bar = self._bar()
+        length = self._port_length()
+        at = length / 2 if anchor is None else min(max(anchor, 0.0), float(length))
         minute = self._minute_at(bar.value() + at)
         self.px = px
-        self.canvas.setFixedHeight(self._length_for(px))
+        self._fix_length(self._length_for(px))
         self._show_limits()
         if not self.isVisible():
             return
@@ -193,9 +229,10 @@ class HoursScroll(QScrollArea):
         """Give the hours their size and the scroll bar its range now rather than on the next pass,
         so a time can be put on screen straight away."""
         length = self._length_for(self.px)
-        self.canvas.resize(self.viewport().width(), length)
+        port = self.viewport()
+        self.canvas.resize(port.width(), length) if self._down else self.canvas.resize(length, port.height())
         self.canvas.relayout()
-        self.verticalScrollBar().setRange(0, max(0, length - self.viewport().height()))
+        self._bar().setRange(0, max(0, length - self._port_length()))
 
     def _show_limits(self) -> None:
         self.buttons.out.setEnabled(self.px > self.scale.levels[0])
@@ -204,15 +241,15 @@ class HoursScroll(QScrollArea):
     # Scrolling to a time
 
     def scroll_to(self, minute: int, above: int = 90) -> None:
-        """Put `minute` near the top, with `above` minutes of the day showing over it. Hours that are
-        not on screen yet do it when they are shown, and only then."""
+        """Put `minute` near the start of what shows, with `above` minutes of the day before it.
+        Hours that are not on screen yet do it when they are shown, and only then."""
         self._pending = (minute, above)
         if not self.isVisible():
             return
         self._lay_out_now()
         if self.canvas.tracks:
             self._pending = None
-            self.verticalScrollBar().setValue(round(self._y_for(minute - above)))
+            self._bar().setValue(round(self._y_for(minute - above)))
 
     def showEvent(self, event: object) -> None:  # noqa: N802
         super().showEvent(event)
@@ -220,31 +257,60 @@ class HoursScroll(QScrollArea):
         if self._pending is not None:
             self.scroll_to(*self._pending)
 
-    def _minute_at(self, y: float) -> float | None:
+    def _minute_at(self, along: float) -> float | None:
+        """The minute at a distance along the hours, down or across."""
         track = self.canvas.tracks[0] if self.canvas.tracks else None
         if track is None:
             return None
-        return track.first + (y - track.area.top()) / track.per_minute()
+        start = track.area.top() if self._down else track.area.left()
+        return track.first + (along - start) / track.per_minute()
 
     def _y_for(self, minute: float) -> float:
+        """How far along the hours, down or across, a minute lies."""
         track = self.canvas.tracks[0]
-        return track.area.top() + track.offset(min(max(minute, track.first), track.last))
+        start = track.area.top() if self._down else track.area.left()
+        return start + track.offset(min(max(minute, track.first), track.last))
+
+    def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802
+        # Lanes have nothing to scroll up and down, so the wheel moves them through the day.
+        if self._down or event.angleDelta().x():
+            super().wheelEvent(event)
+            return
+        bar = self._bar()
+        bar.setValue(bar.value() - round(event.angleDelta().y() / 120 * 3 * bar.singleStep()))
+        event.accept()
 
     # The header and the corner
 
     def _place_header(self) -> None:
         row = self.buttons.layout()
         corner = max(self._gutter, float(2 * self.buttons.out.side + row.spacing() + 10))
+        self.buttons.setFixedWidth(round(corner))
+        row.setContentsMargins(4, 0, 0, 0)
+        if not self._down:
+            self._place_side(round(corner))
+            return
         if corner != self.canvas.gutter:
             self.canvas.gutter = corner
             self.canvas.relayout()
-        self.buttons.setFixedWidth(round(corner))
-        self.buttons.layout().setContentsMargins(4, 0, 0, 0)
         tall = max(30, self.header.sizeHint().height())
         if self.viewportMargins().top() != tall:
             self.setViewportMargins(0, tall, 0, 0)
         port = self.viewport().geometry()
         self.header.setGeometry(QRect(port.left(), port.top() - tall, port.width(), tall))
+
+    def _place_side(self, wide: int) -> None:
+        """Across: the corner sits over the strip, as tall as the canvas's own header of hours, and
+        the strip is as tall as the lanes, so each name sits beside its lane."""
+        tall = max(30, self.buttons.sizeHint().height() + 6)
+        if tall > self.canvas.header:
+            self.canvas.header = tall
+            self.canvas.relayout()
+        self.buttons.setFixedHeight(round(self.canvas.header))
+        if self.viewportMargins().left() != wide:
+            self.setViewportMargins(wide, 0, 0, 0)
+        port = self.viewport().geometry()
+        self.header.setGeometry(QRect(port.left() - wide, port.top(), wide, port.height()))
 
     def resizeEvent(self, event: object) -> None:  # noqa: N802
         super().resizeEvent(event)

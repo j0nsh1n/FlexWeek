@@ -295,3 +295,97 @@ def test_a_small_repaint_does_not_write_a_long_blocks_name_again(qapp: QApplicat
     image.fill(0)
     hours.render(image, strip.topLeft(), QRegion(strip))
     assert dark_in(image, strip, round(track.area.left()) + 8) == 0
+
+
+def a_lane_week(qapp: QApplication):
+    """Seven lanes whose time runs across, as Mission control's week lays them out, with their names
+    kept in a strip on the left."""
+    from PySide6.QtCore import QRectF
+    from PySide6.QtWidgets import QLabel, QVBoxLayout
+
+    from desktop.native.hours.canvas import BlockPainter, HoursCanvas
+    from desktop.native.hours.geometry import Axis, LinearTrack
+    from desktop.native.hours.zoom import HoursScroll
+
+    def lanes(area: QRectF) -> list[LinearTrack]:
+        tall = area.height() / 7
+        return [
+            LinearTrack(
+                day, QRectF(area.left() + 8, area.top() + day * tall, area.width() - 16, tall), Axis.ACROSS
+            )
+            for day in range(7)
+        ]
+
+    hand = Hand(lambda block_id, from_day, span: Verdict(True, ""), QWidget())
+    canvas = HoursCanvas(hand, BlockPainter(resolved_palette("system", False, None)), lanes, header=24)
+    scroll = HoursScroll(
+        canvas,
+        Scale("lanes.week", (32, 48, 64, 96), 48),
+        lambda px: 24 * px + 16,
+        name="lanes",
+        gutter=70,
+        axis=Axis.ACROSS,
+    )
+    names = QWidget()
+    column = QVBoxLayout(names)
+    column.setContentsMargins(0, 0, 0, 0)
+    column.setSpacing(0)
+    for day in range(7):
+        label = QLabel(f"Day {day}")
+        label.setObjectName(f"laneName{day}")
+        column.addWidget(label, 1)
+    scroll.set_header(names)
+    scroll.move(0, 0)
+    scroll.resize(760, 420)
+    scroll.show()
+    settle(qapp)
+    return scroll
+
+
+def minute_across(scroll, x: float) -> float:
+    track = scroll.canvas.tracks[0]
+    return track.first + (scroll.horizontalScrollBar().value() + x - track.area.left()) / track.per_minute()
+
+
+def test_lanes_zoom_about_the_pointer_and_the_plain_wheel_moves_them_through_the_day(
+    qapp: QApplication,
+) -> None:
+    scroll = a_lane_week(qapp)
+    assert scroll.verticalScrollBar().maximum() == 0, "the lanes fit the height; only time scrolls"
+    x = scroll.viewport().width() * 0.6
+    before = minute_across(scroll, x)
+    wheel(scroll.canvas, QPointF(scroll.horizontalScrollBar().value() + x, 100), 1)
+    assert scroll.px == 64
+    assert abs(minute_across(scroll, x) - before) <= 1, "the minute under the pointer stayed under it"
+    at = scroll.horizontalScrollBar().value()
+    # A real wheel passes from the canvas, which leaves it, to the viewport; a sent one stops where
+    # it is sent, so it goes where a real one arrives.
+    wheel(scroll.viewport(), QPointF(x, 100), -1, ctrl=False)
+    assert scroll.px == 64
+    assert scroll.horizontalScrollBar().value() > at, "the wheel moved the lanes on through the day"
+
+
+def test_lane_names_stay_beside_their_lanes_while_the_hours_scroll(qapp: QApplication) -> None:
+    scroll = a_lane_week(qapp)
+    scroll.scroll_to(6 * 60, above=0)
+    settle(qapp)
+    for day in range(7):
+        name = scroll.findChild(QWidget, f"laneName{day}")
+        lane = scroll.canvas.track_for(day)
+        beside = name.mapToGlobal(name.rect().center()).y()
+        middle = scroll.canvas.mapToGlobal(lane.area.center().toPoint()).y()
+        assert abs(beside - middle) <= 2, f"day {day}'s name is {beside - middle} px off its lane"
+        assert name.mapToGlobal(name.rect().topLeft()).x() == scroll.mapToGlobal(scroll.rect().topLeft()).x()
+    assert 5 * 60 + 45 <= minute_across(scroll, 0) <= 6 * 60 + 15, "06:00 is at the left"
+
+
+def test_both_ends_of_a_lanes_day_can_be_reached(qapp: QApplication) -> None:
+    scroll = a_lane_week(qapp)
+    for level in scroll.scale.levels:
+        scroll.restore({"lanes.week": level})
+        scroll.canvas.reveal(3, 0, 60)
+        settle(qapp)
+        assert scroll.canvas.in_view(3, 0), f"00:00 at {level} px an hour"
+        scroll.canvas.reveal(3, 23 * 60, 24 * 60)
+        settle(qapp)
+        assert scroll.canvas.in_view(3, 24 * 60), f"24:00 at {level} px an hour"
