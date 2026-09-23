@@ -1,6 +1,17 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-23 (0.15 Mission control). Local branch
+  `chatgpt/0-15-mission` from `feat/0.15-tabs` at `ab0ef57`. Day uses Scope
+  lane and Week uses Lane ops, both on the window's Hand. Pending homework is
+  in a draggable "Not placed yet" tray. Week keeps its radar and load bars.
+  The 15-minute horizontal grab check passed at 25%, 50%, and 75% on both
+  tabs, so Column watch was not needed. Along-the-lane resize and scroll dwell
+  also passed with horizontal real-pointer targets. The stock rig passed 10/14 Day
+  and 14/17 Week scenarios. Its remaining failures aim at vertical resize or
+  dwell coordinates on horizontal hours, or look for Today's app's fixed day
+  name ids. Full source gate and mutation runner remain for owner review.
+  Nothing pushed; `spec.md` unchanged.
 - Date: 2026-09-22 (0.15 reach check). Branch `fix/015-rig-reach` from
   `grok/0-15-audit-01` at `841586f`. A partial hours track no longer reports
   00:00 or 24:00 as visible by substituting its own edge. Full source gate:

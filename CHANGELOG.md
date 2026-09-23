@@ -6,6 +6,9 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Changed
+- Mission control has a horizontal Scope lane on Day and seven Lane ops tracks
+  on Week. Blocks can move, resize, and be placed from the "Not placed yet"
+  tray on either tab. The deadline radar and daily load remain on Week.
 - Homework is due on a date. Tick "At a set time" only when it is due at a
   time that day, such as a 09:00 lesson; otherwise it is due by the end of the
   day. Homework saved before keeps its deadline.

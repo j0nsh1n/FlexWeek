@@ -838,6 +838,9 @@ class NativeWindow(QMainWindow):
             view.day_activated.connect(self.session.open_day)
             view.placement_requested.connect(self._drop_block)
             view.refused.connect(self.session._say)
+            if layout_id == "mission":
+                view.remembered_zoom = self._zoom
+                view.zoomed.connect(self._remember_zoom)
             view.judge = self._judge_span
             view.motion = self._motion
             self.planner.addWidget(view)
