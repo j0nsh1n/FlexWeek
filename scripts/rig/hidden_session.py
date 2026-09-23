@@ -64,6 +64,9 @@ def start() -> str:
             "--virtual",
             "--xwayland",
             "--no-lockscreen",
+            # Never register KDE's global shortcuts: a hidden KWin that does takes Super+Tab and the
+            # rest away from the desktop it runs under, and leaves them dead when it exits.
+            "--no-global-shortcuts",
             "--socket",
             SOCKET,
             "--width",
