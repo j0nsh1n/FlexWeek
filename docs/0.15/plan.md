@@ -78,8 +78,7 @@ storage, CI). Each unit ends green on the rig, on the source gate, and with its 
 2. **The full 24-hour day.** `DAY_START_MIN` 0 and `DAY_END_MIN` 1440 through the solver, the
    controller and every surface; the planner confined to the student's work windows; existing weeks
    keep working. Owner: Grok for backend and solver, Claude for the surfaces.
-   *Backend landed at `e7e5206`; audited in `audit-01.md`. Open: the night is ranked last
-   (`handoffs/grok-night-last.md`).*
+   *Backend landed at `e7e5206`; audited in `audit-01.md`. Night ranked last since `36dc3ff`.*
 3. **Zoom and scrolling on hours.** Pixels per hour per surface, a zoom control, a remembered level,
    and the reach checks at each level. Owner: Claude.
    *Built in `desktop/native/hours/zoom.py`. Today's app offers Day at 96, 128, 160 and 192 pixels
@@ -90,7 +89,7 @@ storage, CI). Each unit ends green on the rig, on the source gate, and with its 
    more than a fifth of the block, so a 15-minute block moves when pressed at 25%, 50% and 75% of
    its length at every level. The rig proves both with the real pointer.*
 3b. **Work windows in setup and Settings.** The screens that let a student say when they work.
-   Owner: ChatGPT. Brief: `handoffs/chatgpt-work-windows-ui.md`. *Not started.*
+   Owner: ChatGPT. Brief: `handoffs/chatgpt-work-windows-ui.md`. *Done at `66ef7c6`.*
 4. **Optional due times.** Due date required, due time optional, through the model, the API, the
    planner, the judge, the dialogs and the words shown. Owner: Grok for model and API, Claude for
    the dialogs. *Model, API and labels landed at `e7e5206`. Open: the dialogs.*

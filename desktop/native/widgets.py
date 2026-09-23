@@ -16,6 +16,7 @@ from PySide6.QtCore import (
     QEvent,
     QMimeData,
     QModelIndex,
+    QObject,
     QPersistentModelIndex,
     QPoint,
     QRect,
@@ -2037,6 +2038,8 @@ class AvailabilityDialog(QDialog):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         body = QWidget()
+        self._body = body
+        body.installEventFilter(self)
         form = QVBoxLayout(body)
         scroll.setWidget(body)
         layout.addWidget(scroll)
@@ -2100,7 +2103,21 @@ class AvailabilityDialog(QDialog):
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
+        self._fit_width()
         fit_scroll_dialog(self, min_height=600)
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        # A work window's row added later can be wider than the dialog opened. The scrolled body
+        # hears that as a layout request; the dialog itself never does.
+        if watched is self._body and event.type() == QEvent.Type.LayoutRequest:
+            self._fit_width()
+        return super().eventFilter(watched, event)
+
+    def _fit_width(self) -> None:
+        """Wide enough for every row, so the dialog only ever scrolls up and down."""
+        wanted = self._body.minimumSizeHint().width() + 2 * self.layout().contentsMargins().left() + 32
+        if wanted > self.minimumWidth():
+            self.setMinimumWidth(wanted)
 
     def accept(self) -> None:
         if self.work_editor.problem():
