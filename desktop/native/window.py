@@ -744,7 +744,7 @@ class NativeWindow(QMainWindow):
         self.hand.opened.connect(self._edit_block)
         self.hand.selected.connect(self.session.select_block)
         self.hand.active_changed.connect(self._hold_renders)
-        # Today's app, as Daily Scheduler draws it: a Week that fits and a full-width Day.
+        # Today's app, as Daily Scheduler draws it: a Week that scrolls and a full-width Day.
         self.week_table = ClassicWeek(self.hand)
         self.week_table.day_opened.connect(self._open_week_day)
         self.planner.addWidget(self.week_table)

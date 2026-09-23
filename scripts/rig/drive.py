@@ -245,6 +245,13 @@ def child_main(args: argparse.Namespace) -> int:
             yield from self.click(button.mapToGlobal(button.rect().center()))
             yield ("wait", 500)
 
+        def day_name(self, day: int) -> QPoint:
+            """A day's name on the week, sticky above the hours when Today's app draws it that way."""
+            label = window.findChild(QWidget, f"weekDayName{day}")
+            if label is not None and label.isVisible():
+                return label.mapToGlobal(label.rect().center())
+            return self.surface("hours").day_name(day)
+
         def surface(self, kind: str) -> object:
             """The hours (or month) surface on screen. Designs provide `hours_surfaces()`; Today's
             app's week canvas predates that interface and is read through its own methods."""
@@ -356,7 +363,7 @@ def child_main(args: argparse.Namespace) -> int:
         show_day(session.selected_day)
         if session.selected_day != thursday_name:
             yield from r.tab("week")
-            yield from r.click(r.surface("hours").day_name(3))
+            yield from r.click(r.day_name(3))
             yield ("wait", 400)
         show_day(thursday_name)
 
@@ -472,11 +479,21 @@ def child_main(args: argparse.Namespace) -> int:
 
     def week_open_day(r: Rig) -> Step:
         yield from r.tab("week")
-        surface = r.surface("hours")
-        yield from r.click(surface.day_name(4))
+        yield from r.click(r.day_name(4))
         yield ("wait", 400)
         friday = (thursday + timedelta(days=1)).date().isoformat()
         show_day(friday)
+
+    def week_reach(r: Rig) -> Step:
+        """00:00 and 24:00 can be brought on screen. Not the Unit 3 zoom matrix."""
+        yield from r.tab("week")
+        hours = r.surface("hours")
+        yield from r.reveal(3, 0, 60)
+        top = window.mapFromGlobal(hours.point_for(3, 0))
+        expect(window.rect().contains(top), f"00:00 is off the window at {top}")
+        yield from r.reveal(3, 24 * 60 - 60, 24 * 60)
+        bottom = window.mapFromGlobal(hours.point_for(3, 24 * 60))
+        expect(window.rect().contains(bottom), f"24:00 is off the window at {bottom}")
 
     def month_times(r: Rig) -> Step:
         yield from r.tab("month")
@@ -516,8 +533,7 @@ def child_main(args: argparse.Namespace) -> int:
         Scenario("week-beside", "week", week_beside),
         Scenario("week-past-due", "week", week_past_due),
         Scenario("week-open-day", "week", week_open_day),
-        # week-fits used to pass when 06:00 and 23:00 both sat inside the planner. The day is now
-        # 00:00–24:00 and Unit 3 owns scroll, zoom and the reach checks. It is not counted here.
+        Scenario("week-reach", "week", week_reach),
         Scenario("month-times", "month", month_times),
         Scenario("month-open-day", "month", month_open_day),
         Scenario("month-move-date", "month", month_move_date),

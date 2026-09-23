@@ -529,14 +529,19 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-22, `grok/0-15-audit-01`: Today's app week scrolls at 48 pixels an
+  hour, with day names kept at the top. Classic pointer rig: Day 4/4, Week
+  8/8 (the three missed grabs, plus 00:00 and 24:00 can be scrolled on
+  screen). Month 0/3: the old chip grid has no `month_surfaces` yet (Unit 9).
+  Source gate: 1177 passed, `scripts/verify.py` green. spec.md was not
+  edited. Next: owner review. Unit 3 still owns zoom and the full reach
+  matrix; 3b, the due dialogs, and 5–17 are still planned.
 - 2026-09-22, `grok/0-15-audit-01`: merged `grok/0-15-full-day` (`d4bfd92`) and
   `grok/0-15-optional-due` (`dc9b7fa`) onto `feat/0.15-tabs` at `248a318`.
   Midnight completions save as the next date at 00:00. Due lists use the
   parsed deadline. The 15 stale Classic widget tests read the hours canvas.
   The pointer rig opens Day from the Day tab and no longer counts the
-  06:00–23:00 fit check. Source gate and Classic Day/Week rig results are in
-  the session report. spec.md was not edited. Next: owner review. Frontend
-  units 3, 3b, 4 dialogs, and 5–17 are still planned.
+  06:00–23:00 fit check. spec.md was not edited.
 - 2026-09-22, `feat/ui-setup`: 0.14.3 prepared on Jonathan's "Ship it":
   version, changelog heading, `docs/release-notes-v0.14.3.md`, and the
   first-open text in README and `docs/github-release.md` now describe the

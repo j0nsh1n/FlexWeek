@@ -5,6 +5,10 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+- Today's app's week scrolls through the whole day instead of squeezing
+  24 hours onto the screen. Day names stay at the top.
+
 ### Fixed
 - Saving a week no longer fails when finished work ends at midnight. That
   moment is stored as the next date at 00:00.

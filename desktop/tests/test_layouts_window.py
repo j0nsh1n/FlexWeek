@@ -2166,13 +2166,16 @@ def _drop(qapp: QApplication, window: NativeWindow, block_id: str, hhmm: str, da
     for _ in range(5):
         qapp.processEvents()
     hours = _hours(window)
+    minute = int(hhmm[:2]) * 60 + int(hhmm[3:])
+    hours.reveal(day, max(minute - 60, 0), minute + 90)
+    qapp.processEvents()
     chip = next(
         widget
         for widget in window.findChildren(QPushButton)
         if widget.property("block_id") == block_id and widget.property("tray") and widget.isVisible()
     )
     start = chip.mapToGlobal(chip.rect().center())
-    end = hours.point_for(day, int(hhmm[:2]) * 60 + int(hhmm[3:]))
+    end = hours.point_for(day, minute)
 
     def send(widget, kind: QEvent.Type, at, held: bool) -> None:
         buttons = Qt.MouseButton.LeftButton if held else Qt.MouseButton.NoButton
@@ -2210,6 +2213,10 @@ def _drag_on_the_week(
     for _ in range(5):
         qapp.processEvents()
     hours = _hours(window)
+    start_min = int(hhmm[:2]) * 60 + int(hhmm[3:])
+    end_min = int(to[:2]) * 60 + int(to[3:])
+    hours.reveal(day, max(min(start_min, end_min) - 60, 0), max(start_min, end_min) + 90)
+    qapp.processEvents()
 
     def point(on: int, when: str):
         return hours.point_for(on, int(when[:2]) * 60 + int(when[3:]))

@@ -114,8 +114,8 @@ def render(main: str, colour: str | None, pack: str, look: dict | None, width: i
         )
         widget: QWidget = view
     else:
-        # Today's app's week fits the whole day, as it does in use. A picture takes no gestures, so
-        # its hand never judges anything.
+        # Today's app's week, as it does in use. A picture takes no gestures, so its hand never
+        # judges anything.
         widget = ClassicWeek(Hand(lambda block_id, from_day, span: Verdict(False, ""), QWidget()))
         widget.set_look(look, palette)
         widget.set_week(build_week(monday, blocks, homework, None), SAMPLE_DAY, SAMPLE_MINUTE)
