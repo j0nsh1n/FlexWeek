@@ -701,10 +701,10 @@ class HoursCanvas(QWidget):
 
     def in_view(self, day: int, minute: int) -> bool:
         """Whether this minute sits in the nearest scroll viewport."""
-        track = self.track_for(day, minute) or self.track_for(day)
+        track = self.track_for(day, minute)
         if track is None:
             return False
-        local = track.point_for(min(max(minute, track.first), track.last)).toPoint()
+        local = track.point_for(minute).toPoint()
         area = self._scroll_area()
         if area is None:
             return self.rect().adjusted(-2, -2, 2, 2).contains(local)

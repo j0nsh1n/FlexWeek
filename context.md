@@ -1,6 +1,11 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-22 (0.15 reach check). Branch `fix/015-rig-reach` from
+  `grok/0-15-audit-01` at `841586f`. A partial hours track no longer reports
+  00:00 or 24:00 as visible by substituting its own edge. Full source gate:
+  1181 tests passed; Classic Week reach pointer rig: 1/1. No build or push.
+  `spec.md` is unchanged.
 - Date: 2026-09-21 (UI and setup). Branch `feat/ui-setup` off `main` at the
   0.14.2 release. The nine-PR plan in
   `~/.claude/orchestrate/flexweek-ui-setup/docs/plan.md`, built here as one
@@ -529,6 +534,11 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-22, `fix/015-rig-reach`: `HoursCanvas.in_view` requires a track that
+  contains the requested minute. A scrolled 06:00–22:00 track test failed
+  before the fix and passes after it. Full source gate: 1181 passed; Classic
+  Week reach pointer rig: 1/1. The branch is local and ready to integrate with
+  the 0.15 work.
 - 2026-09-22, `grok/0-15-audit-01` at `3d1fab2`: Chat's three follow-up
   findings (`df34b9d`, `6a1e672`, `3d1fab2`). Midnight on 31 December 2099
   stores `2099-12-31T23:59` so `PUT /api/week` does not 500. The leftover
