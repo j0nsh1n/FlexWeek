@@ -289,6 +289,46 @@ def apply_block_edit(
     return result
 
 
+def relocate_block(
+    source: list[dict],
+    block_id: str,
+    from_day: int,
+    to_day: int,
+    dest: list[dict] | None = None,
+) -> tuple[list[dict], list[dict] | None, str] | None:
+    """One day's copy of a block, moved onto `to_day`. `dest` is None when that day is in the same week."""
+    block = next((item for item in source if item["id"] == block_id), None)
+    if block is None or from_day not in (block.get("days") or []) or not block.get("start"):
+        return None
+
+    def for_date(item: dict) -> dict:
+        out = deepcopy(item)
+        out["days"] = [to_day]
+        if out.get("assignment_id") and out.get("kind") == "flexible" and not out.get("completed"):
+            out["pinned"] = True
+        if out.get("completed_day") == from_day:
+            out["completed_day"] = to_day
+        out["missed_days"] = [day for day in out.get("missed_days") or [] if day in out["days"]]
+        return out
+
+    if dest is None:
+        if is_series(block):
+            before = {item["id"] for item in source}
+            edited = apply_block_edit(source, deepcopy(block), scope="occurrence", day=from_day)
+            made = next((item["id"] for item in edited if item["id"] not in before), block_id)
+            return [for_date(item) if item["id"] == made else deepcopy(item) for item in edited], None, made
+        return apply_block_edit(source, for_date(block)), None, block_id
+
+    if is_series(block):
+        split, new_id = split_occurrence(source, block_id, from_day)
+        made = new_id or block_id
+        occurrence = next(item for item in split if item["id"] == made)
+        source_out = [deepcopy(item) for item in split if item["id"] != made]
+        return source_out, [deepcopy(item) for item in dest] + [for_date(occurrence)], made
+    source_out = [deepcopy(item) for item in source if item["id"] != block_id]
+    return source_out, [deepcopy(item) for item in dest] + [for_date(block)], block_id
+
+
 def first_plannable_day(week_start: str, today: date | None = None) -> int:
     today = today or date.today()
     monday = date.fromisoformat(week_start)

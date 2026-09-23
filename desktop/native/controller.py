@@ -11,7 +11,7 @@ from uuid import uuid4
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from backend.models import Assignment, ProtectedWindow, StudyWindow, TimeBlock, WorkWindow
-from backend.slots import DAY_END_MIN, DAY_START_MIN, SLOT_MIN, minutes_to_hhmm
+from backend.slots import DAY_END_MIN, DAY_START_MIN, SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm
 from backend.weeks import current_week_start
 from desktop.native.calendar import (
     DAY_FULL,
@@ -29,7 +29,9 @@ from desktop.native.calendar import (
     monday_of,
     month_anchor_date,
     month_for_view,
+    relocate_block,
     shifted_month,
+    span_problem,
 )
 from desktop.native.client import ApiError, NativeClient
 from desktop.native.files import (
@@ -71,6 +73,7 @@ from desktop.native.reuse import (
     clipboard_item,
     copied_homework_block,
     copy_label,
+    due_point,
     is_planned,
     late_from_start,
     late_id,
@@ -189,6 +192,7 @@ class NativeSession(QObject):
         self._prefs_ticket = 0
         self._assign_ticket = 0
         self._preview_attempt: str | None = None
+        self._move_attempt: str | None = None
         self.focus: dict | None = None
         self._fresh_plan = False
         self.needs_time: dict[str, str] = {}
@@ -896,6 +900,190 @@ class NativeSession(QObject):
         self._touch("moving " + block["title"] + " on one day", keep={made})
         return True
 
+    def date_problem(self, block_id: str, from_iso: str, to_iso: str) -> str | None:
+        """Why this block cannot go on `to_iso`, in the same words as a hours drag, or None."""
+        try:
+            to_week = monday_of(to_iso)
+            from_week = monday_of(from_iso)
+            from_day = date.fromisoformat(from_iso).weekday()
+            to_day = date.fromisoformat(to_iso).weekday()
+        except ValueError:
+            return None
+        if from_iso == to_iso:
+            return None
+        block = self._block_on_week(block_id, from_week)
+        if block is None or from_day not in (block.get("days") or []) or not block.get("start"):
+            return None
+        start = hhmm_to_minutes(block["start"])
+        assignment = self.assignments.get(block.get("assignment_id") or "")
+        due = due_point((assignment or {}).get("due"), to_week)
+        return span_problem([], block_id, to_day, start, start + int(block["duration_min"]), due)
+
+    def move_to_date(self, block_id: str, from_iso: str, to_iso: str) -> bool:
+        """Move a block to another calendar date. Same week keeps its time; another week is one save
+        of both documents. A repeating block moves only the day it was dragged from. The open week
+        does not change until the server accepts the write."""
+        if self.account is None or self.conflict or self.busy or self.pending_save is not None:
+            return False
+        try:
+            from_week = monday_of(from_iso)
+            to_week = monday_of(to_iso)
+        except ValueError:
+            return False
+        if from_iso == to_iso:
+            return True
+        problem = self.date_problem(block_id, from_iso, to_iso)
+        if problem:
+            self._say(problem)
+            return False
+        key = f"move-to-date|{self.account['id']}|{block_id}|{from_iso}|{to_iso}"
+        operation_id = self._operation(key)
+        source = self._week_local(from_week)
+        dest = source if to_week == from_week else self._week_local(to_week)
+        if source is not None and dest is not None:
+            return self._commit_move_to_date(
+                block_id, from_iso, to_iso, from_week, to_week, source, dest, operation_id, key
+            )
+        ticket = self._begin()
+        needed = [week for week in dict.fromkeys((from_week, to_week)) if self._week_local(week) is None]
+        fetched: dict[str, dict] = {}
+
+        def fail(error: ApiError) -> None:
+            if self._idle(ticket):
+                self._say(error.message)
+                self.save_finished.emit(False, self.message)
+
+        def proceed() -> None:
+            if not self._alive(ticket):
+                return
+            source_state = self._week_local(from_week) or fetched[from_week]
+            dest_state = (
+                source_state if to_week == from_week else (self._week_local(to_week) or fetched[to_week])
+            )
+            launched = self._commit_move_to_date(
+                block_id,
+                from_iso,
+                to_iso,
+                from_week,
+                to_week,
+                source_state,
+                dest_state,
+                operation_id,
+                key,
+                ticket=ticket,
+            )
+            if not launched and self._alive(ticket) and self.busy:
+                self._idle(ticket)
+                self.save_finished.emit(False, self.message)
+
+        def fetch_next() -> None:
+            if not needed:
+                proceed()
+                return
+            week = needed.pop(0)
+
+            def ok(data: dict) -> None:
+                if not self._alive(ticket):
+                    return
+                fetched[week] = data
+                fetch_next()
+
+            self.client.request("GET", f"/api/week?week_start={week}", None, ok, fail)
+
+        fetch_next()
+        return True
+
+    def _week_local(self, week_start: str) -> dict | None:
+        if week_start == self.week_start:
+            return {"blocks": self.blocks, "revision": self.revision}
+        parked = self._drafts.get(week_start)
+        if parked is not None and parked["dirty"]:
+            return {"blocks": parked["blocks"], "revision": parked["revision"]}
+        return None
+
+    def _block_on_week(self, block_id: str, week_start: str) -> dict | None:
+        state = self._week_local(week_start)
+        if state is None:
+            return None
+        return next((item for item in state["blocks"] if item["id"] == block_id), None)
+
+    def _commit_move_to_date(
+        self,
+        block_id: str,
+        from_iso: str,
+        to_iso: str,
+        from_week: str,
+        to_week: str,
+        source: dict,
+        dest: dict,
+        operation_id: str,
+        attempt_key: str,
+        ticket: int | None = None,
+    ) -> bool:
+        from_day = date.fromisoformat(from_iso).weekday()
+        to_day = date.fromisoformat(to_iso).weekday()
+        block = next((item for item in source["blocks"] if item["id"] == block_id), None)
+        if block is None or from_day not in (block.get("days") or []) or not block.get("start"):
+            self._say("That block is not on that date.")
+            return False
+        start = hhmm_to_minutes(block["start"])
+        assignment = self.assignments.get(block.get("assignment_id") or "")
+        due = due_point((assignment or {}).get("due"), to_week)
+        problem = span_problem(
+            [], block_id, to_day, start, start + int(block["duration_min"]), due
+        )
+        if problem:
+            self._say(problem)
+            return False
+        moved = relocate_block(
+            source["blocks"],
+            block_id,
+            from_day,
+            to_day,
+            None if to_week == from_week else dest["blocks"],
+        )
+        if moved is None:
+            self._say("That block is not on that date.")
+            return False
+        source_after, dest_after, _made = moved
+        if dest_after is not None and len(dest_after) > MAX_WEEK_BLOCKS:
+            self._say(capacity_problem(len(dest["blocks"]), 1, week_label(to_week)))
+            return False
+        writes = [_week_write(from_week, source_after, source["revision"])]
+        step_weeks = [
+            {
+                "week_start": from_week,
+                "before": deepcopy(source["blocks"]),
+                "after": deepcopy(source_after),
+            }
+        ]
+        if dest_after is not None:
+            writes.append(_week_write(to_week, dest_after, dest["revision"]))
+            step_weeks.append(
+                {
+                    "week_start": to_week,
+                    "before": deepcopy(dest["blocks"]),
+                    "after": deepcopy(dest_after),
+                }
+            )
+        title = str(block.get("title") or "the block")
+        self._pending_step = {
+            "label": "moving " + title + " to another date",
+            "weeks": step_weeks,
+            "assignments": [],
+            "stale": False,
+        }
+        self._history_label = self._pending_step["label"]
+        self._move_attempt = attempt_key
+        self.pending_save = {
+            "weeks": writes,
+            "assignments": [],
+            "operation_id": operation_id,
+            "stay": True,
+        }
+        self._post_pending(ticket)
+        return True
+
     def unpin_assignment(self, assignment_id: str) -> bool:
         """Let FlexWeek move this homework's sessions again."""
         changed = False
@@ -994,7 +1182,7 @@ class NativeSession(QObject):
                 self._say("That change cannot be undone. Reload and try again.")
             return
         step = self._undo.pop()
-        if step.get("weeks") and step["weeks"][0]["week_start"] != self.week_start:
+        if step.get("weeks") and not any(week["week_start"] == self.week_start for week in step["weeks"]):
             self._undo.append(step)
             self._say("Undo applies to the week where that change was saved.")
             return
@@ -1009,7 +1197,7 @@ class NativeSession(QObject):
                 self._say("That change cannot be redone. Reload and try again.")
             return
         step = self._redo.pop()
-        if step.get("weeks") and step["weeks"][0]["week_start"] != self.week_start:
+        if step.get("weeks") and not any(week["week_start"] == self.week_start for week in step["weeks"]):
             self._redo.append(step)
             self._say("Redo applies to the week where that change was saved.")
             return
@@ -1017,6 +1205,70 @@ class NativeSession(QObject):
         self._travel_step = step
         self._apply_side(step, "after")
         self.save()
+
+    def _post_travel_weeks(
+        self,
+        extra: list[dict],
+        assignments: list[dict],
+        operation_id: str | None,
+        snapshot_label: str | None,
+    ) -> None:
+        ticket = self._begin()
+        side = "before" if self._traveling == "undo" else "after"
+        needed = [entry["week_start"] for entry in extra]
+        fetched: dict[str, dict] = {}
+
+        def fail(error: ApiError) -> None:
+            if not self._idle(ticket):
+                return
+            self.blocks = deepcopy(self._committed_blocks)
+            self.assignments = deepcopy(self._committed_assignments)
+            self.dirty_assignments.clear()
+            self.dirty = False
+            self.pending_save = None
+            self.conflict = False
+            if self._traveling == "undo" and self._travel_step is not None:
+                self._undo.append(self._travel_step)
+            elif self._traveling == "redo" and self._travel_step is not None:
+                self._redo.append(self._travel_step)
+            self._traveling = None
+            self._travel_step = None
+            self._say("Not saved. " + error.message)
+            self.save_finished.emit(False, self.message)
+            self.week_changed.emit()
+
+        def proceed() -> None:
+            if not self._alive(ticket):
+                return
+            writes = [_week_write(self.week_start, self.blocks, self.revision)]
+            for entry in extra:
+                data = fetched[entry["week_start"]]
+                writes.append(_week_write(entry["week_start"], deepcopy(entry[side]), data["revision"]))
+            self.pending_save = {
+                "weeks": writes,
+                "assignments": assignments,
+                "operation_id": operation_id or str(uuid4()),
+                "stay": True,
+            }
+            if snapshot_label:
+                self.pending_save["snapshot_label"] = snapshot_label
+            self._post_pending(ticket)
+
+        def fetch_next() -> None:
+            if not needed:
+                proceed()
+                return
+            week = needed.pop(0)
+
+            def ok(data: dict) -> None:
+                if not self._alive(ticket):
+                    return
+                fetched[week] = data
+                fetch_next()
+
+            self.client.request("GET", f"/api/week?week_start={week}", None, ok, fail)
+
+        fetch_next()
 
     def save(
         self,
@@ -1041,6 +1293,14 @@ class NativeSession(QObject):
                 source = item if item is not None else self._committed_assignments.get(item_id)
                 revision = int((source or {}).get("revision") or 0)
                 writes.append(_assignment_write(item_id, item, revision))
+            extra = [
+                week
+                for week in (self._travel_step or {}).get("weeks") or []
+                if week["week_start"] != self.week_start
+            ]
+            if extra:
+                self._post_travel_weeks(extra, writes, operation_id, snapshot_label)
+                return
             self.pending_save = {
                 "weeks": [_week_write(self.week_start, self.blocks, self.revision)],
                 "assignments": writes,
@@ -1070,8 +1330,10 @@ class NativeSession(QObject):
             self._say("Saving…")
         destination = None
         written = {week["week_start"] for week in self.pending_save.get("weeks") or []}
-        if self.week_start not in written and written:
+        stay = bool(self.pending_save.get("stay"))
+        if self.week_start not in written and written and not stay:
             destination = next(iter(written))
+        payload = {key: value for key, value in self.pending_save.items() if key != "stay"}
 
         def ok(data: dict) -> None:
             if not self._idle(ticket):
@@ -1101,8 +1363,13 @@ class NativeSession(QObject):
                 self._say("Redid " + self._travel_step["label"] + ".")
             else:
                 if self._pending_step is not None:
-                    if current is not None and self._pending_step["weeks"]:
-                        self._pending_step["weeks"][0]["after"] = deepcopy(self.blocks)
+                    stored_weeks = {
+                        week["week_start"]: week for week in data.get("weeks") or []
+                    }
+                    for entry in self._pending_step["weeks"]:
+                        stored = stored_weeks.get(entry["week_start"])
+                        if stored is not None:
+                            entry["after"] = deepcopy(stored["blocks"])
                     for entry in self._pending_step["assignments"]:
                         stored = self.assignments.get(entry["id"])
                         entry["after"] = None if stored is None else deepcopy(stored)
@@ -1128,6 +1395,12 @@ class NativeSession(QObject):
             if self._preview_attempt:
                 self._attempts.pop(self._preview_attempt, None)
                 self._preview_attempt = None
+            if self._move_attempt:
+                self._attempts.pop(self._move_attempt, None)
+                self._move_attempt = None
+            for week_start in written:
+                if week_start != self.week_start:
+                    self._drafts.pop(week_start, None)
             self.save_finished.emit(True, self.message)
             if destination is not None:
                 self.load_week(destination)
@@ -1161,12 +1434,15 @@ class NativeSession(QObject):
             if error.status == 409 and self._preview_attempt:
                 self._attempts.pop(self._preview_attempt, None)
                 self._preview_attempt = None
+            if error.status == 409 and self._move_attempt:
+                self._attempts.pop(self._move_attempt, None)
+                self._move_attempt = None
             self._save_status = None
             self._say("Not saved. " + error.message)
             self.save_finished.emit(False, self.message)
             self.week_changed.emit()
 
-        self.client.request("POST", "/api/changes", deepcopy(self.pending_save), ok, err)
+        self.client.request("POST", "/api/changes", deepcopy(payload), ok, err)
 
     def retry_save(self) -> None:
         if self.pending_save is not None and not self.conflict:
