@@ -693,11 +693,27 @@ class HoursCanvas(QWidget):
             raise LookupError(f"no name drawn for day {day}")
         return self.mapToGlobal(self._name_box(track).center().toPoint())
 
-    def reveal(self, day: int, first: int, last: int) -> None:
-        """Scroll the nearest scroll area so this stretch of the day is on screen."""
+    def _scroll_area(self) -> QScrollArea | None:
         area = self.parentWidget()
         while area is not None and not isinstance(area, QScrollArea):
             area = area.parentWidget()
+        return area
+
+    def in_view(self, day: int, minute: int) -> bool:
+        """Whether this minute sits in the nearest scroll viewport."""
+        track = self.track_for(day, minute) or self.track_for(day)
+        if track is None:
+            return False
+        local = track.point_for(min(max(minute, track.first), track.last)).toPoint()
+        area = self._scroll_area()
+        if area is None:
+            return self.rect().adjusted(-2, -2, 2, 2).contains(local)
+        viewport = area.viewport()
+        return viewport.rect().adjusted(-2, -2, 2, 2).contains(self.mapTo(viewport, local))
+
+    def reveal(self, day: int, first: int, last: int) -> None:
+        """Scroll the nearest scroll area so this stretch of the day is on screen."""
+        area = self._scroll_area()
         track = self.track_for(day, first) or self.track_for(day)
         if area is None or track is None:
             return

@@ -489,11 +489,9 @@ def child_main(args: argparse.Namespace) -> int:
         yield from r.tab("week")
         hours = r.surface("hours")
         yield from r.reveal(3, 0, 60)
-        top = window.mapFromGlobal(hours.point_for(3, 0))
-        expect(window.rect().contains(top), f"00:00 is off the window at {top}")
+        expect(hours.in_view(3, 0), "00:00 is not in the hours viewport")
         yield from r.reveal(3, 24 * 60 - 60, 24 * 60)
-        bottom = window.mapFromGlobal(hours.point_for(3, 24 * 60))
-        expect(window.rect().contains(bottom), f"24:00 is off the window at {bottom}")
+        expect(hours.in_view(3, 24 * 60), "24:00 is not in the hours viewport")
 
     def month_times(r: Rig) -> Step:
         yield from r.tab("month")

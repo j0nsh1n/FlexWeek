@@ -56,19 +56,17 @@ def test_an_hour_on_the_week_is_tall_enough_to_resize(qapp: QApplication) -> Non
 def test_midnight_and_the_end_of_the_day_can_be_scrolled_onto_the_week(qapp: QApplication) -> None:
     view = week_view(qapp)
     hours = view.hours
-    viewport = view.scroll.viewport()
-    assert hours.height() > viewport.height()
-
-    def on_viewport(minute: int):
-        return hours.mapTo(viewport, hours.track_for(3).point_for(minute).toPoint())
+    assert hours.height() > view.scroll.viewport().height()
 
     hours.reveal(3, FIRST, FIRST + 60)
     qapp.processEvents()
-    assert viewport.rect().adjusted(-2, -2, 2, 2).contains(on_viewport(FIRST)), "00:00 is not on screen"
+    assert hours.in_view(3, FIRST), "00:00 is not in the hours viewport"
+    assert not hours.in_view(3, LAST), "24:00 still counted as reached while it is clipped"
 
     hours.reveal(3, LAST - 60, LAST)
     qapp.processEvents()
-    assert viewport.rect().adjusted(-2, -2, 2, 2).contains(on_viewport(LAST)), "24:00 is not on screen"
+    assert hours.in_view(3, LAST), "24:00 is not in the hours viewport"
+    assert not hours.in_view(3, FIRST), "00:00 still counted as reached while it is clipped"
 
 
 def test_a_day_name_on_the_week_stays_visible_and_opens_that_day(qapp: QApplication) -> None:
