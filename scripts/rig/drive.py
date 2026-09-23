@@ -58,7 +58,7 @@ class Waited(AssertionError):
 
 
 def child_main(args: argparse.Namespace) -> int:
-    from PySide6.QtCore import QPoint, QPointF, QRect, QStandardPaths, QTimer
+    from PySide6.QtCore import QObject, QPoint, QPointF, QRect, QSize, QStandardPaths, QTimer
     from PySide6.QtGui import QColor, QCursor, QPainter, QPen
     from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QPushButton, QWidget
 
@@ -68,6 +68,7 @@ def child_main(args: argparse.Namespace) -> int:
     from desktop.native.calendar import sunday_due
     from desktop.native.hours.zoom import HoursScroll
     from desktop.native.layouts.registry import sanitize_layout
+    from desktop.native.look import sanitize_look
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
     from desktop.tests.logic_support import past_setup, wait_until
@@ -128,6 +129,8 @@ def child_main(args: argparse.Namespace) -> int:
     session.save()
     wait_until(app, lambda: not session.busy and not session.dirty, 20)
     seed = [dict(block) for block in session.blocks]
+    # What a scenario may change on the window itself, put back before the next one.
+    base_now, base_request, base_look = session.now_ms, session.client.request, dict(window._look)
     ids = {
         key: next(b["id"] for b in session.blocks if b.get("assignment_id") == key)
         for key in ("essay", "math", "poster")
@@ -211,8 +214,16 @@ def child_main(args: argparse.Namespace) -> int:
             xdo("click", 1)
             yield ("wait", 250)
 
-        def drag(self, start: QPoint, end: QPoint, held: Callable[[], None] | None = None) -> Step:
-            """Press, travel in steps as a hand does, let go. `held` runs while still pressed."""
+        def drag(
+            self,
+            start: QPoint,
+            end: QPoint,
+            held: Callable[[], object] | None = None,
+            rest: int = 200,
+            after: int = 400,
+        ) -> Step:
+            """Press, travel in steps as a hand does, rest, let go. `held` runs while still pressed,
+            and may itself be steps. `after` is how long to wait once it is let go."""
             yield from self.move(start)
             xdo("mousedown", 1)
             yield ("wait", 120)
@@ -221,12 +232,19 @@ def child_main(args: argparse.Namespace) -> int:
                 point = start + (end - start) * index / steps
                 xdo("mousemove", point.x(), point.y())
                 yield ("wait", 25)
-            yield ("wait", 200)
+            yield ("wait", rest)
             self.shot("held")
             if held is not None:
-                held()
+                more = held()
+                if isinstance(more, Generator):
+                    yield from more
             xdo("mouseup", 1)
-            yield ("wait", 400)
+            yield ("wait", after)
+
+        def double_click(self, point: QPoint) -> Step:
+            yield from self.move(point)
+            xdo("click", "--repeat", 2, "--delay", 80, 1)
+            yield ("wait", 300)
 
         def wheel(self, point: QPoint, notches: int, ctrl: bool = True) -> Step:
             """Turn the wheel over a point, away from the student (positive) or toward, with Ctrl
@@ -511,6 +529,286 @@ def child_main(args: argparse.Namespace) -> int:
         friday = (thursday + timedelta(days=1)).date().isoformat()
         show_day(friday)
 
+    def minutes(hhmm: str) -> int:
+        return int(hhmm[:2]) * 60 + int(hhmm[3:])
+
+    def hhmm(minute: int) -> str:
+        return f"{minute // 60:02d}:{minute % 60:02d}"
+
+    def unchanged(revision: int) -> None:
+        got = block(ids["essay"])
+        expect((got["days"], got["start"]) == ([3], "19:00"), f"essay is {got['days']} {got['start']}")
+        expect(session.revision == revision, f"a save was made: revision {revision} -> {session.revision}")
+
+    def day_resize_top(r: Rig) -> Step:
+        yield from day_tab(r)
+        yield from r.reveal(3, 18 * 60, 20 * 60 + 30)
+        box = r.block_rect(ids["essay"], 3)
+        edge = QPoint(box.center().x(), box.top() + 2)
+        yield from r.drag(edge, edge + (r.at(3, 18 * 60 + 30) - r.at(3, 19 * 60)))
+        yield from r.settled()
+        got = block(ids["essay"])
+        expect(
+            (got["start"], got["duration_min"]) == ("18:30", 90),
+            f"essay is {got['start']} {got['duration_min']}",
+        )
+
+    def week_resize_bottom(r: Rig) -> Step:
+        yield from r.tab("week")
+        yield from r.reveal(3, 18 * 60 + 30, 21 * 60)
+        box = r.block_rect(ids["essay"], 3)
+        edge = QPoint(box.center().x(), box.bottom() - 2)
+        yield from r.drag(edge, edge + (r.at(3, 20 * 60 + 30) - r.at(3, 20 * 60)))
+        yield from r.settled()
+        got = block(ids["essay"])
+        expect(
+            (got["start"], got["duration_min"]) == ("19:00", 90),
+            f"essay is {got['start']} {got['duration_min']}",
+        )
+
+    def click_create(r: Rig, day: int, at: int) -> Step:
+        """A click on free time makes up to an hour there."""
+        yield from r.reveal(day, at - 60, at + 120)
+        yield from r.click(r.at(day, at))
+        yield from r.accept_dialog("Club")
+        yield from r.settled()
+        made = [b for b in session.blocks if b["title"] == "Club"]
+        expect(
+            [(b["days"], b["start"], b["duration_min"]) for b in made] == [([day], hhmm(at), 60)],
+            f"made {[(b['days'], b['start'], b['duration_min']) for b in made]}",
+        )
+
+    def day_click_create(r: Rig) -> Step:
+        yield from day_tab(r)
+        yield from click_create(r, 3, 21 * 60)
+
+    def week_click_create(r: Rig) -> Step:
+        yield from r.tab("week")
+        yield from click_create(r, 5, 10 * 60)
+
+    def day_past_due(r: Rig) -> Step:
+        """The poster is due Friday. Given Saturday on Day, it stays in the tray and says why."""
+        yield from r.tab("week")
+        yield from r.click(r.day_name(5))
+        yield ("wait", 400)
+        show_day((thursday + timedelta(days=2)).date().isoformat())
+        yield from r.reveal(5, 16 * 60 + 30, 18 * 60 + 30)
+        yield from r.drag(r.chip(ids["poster"]), r.at(5, 17 * 60))
+        said = session.message
+        yield from r.settled()
+        got = block(ids["poster"])
+        expect(not got.get("start"), f"poster was placed at {got['days']} {got.get('start')}")
+        expect("after it is due" in said, f"said {said!r}")
+
+    def day_escape(r: Rig) -> Step:
+        yield from day_tab(r)
+        yield from r.reveal(3, 18 * 60 + 30, 21 * 60 + 30)
+        revision = session.revision
+        box = r.block_rect(ids["essay"], 3)
+        yield from r.drag(
+            middle(box),
+            middle(box) + (r.at(3, 20 * 60) - r.at(3, 19 * 60)),
+            held=lambda: xdo("key", "Escape"),
+        )
+        yield ("wait", 400)
+        unchanged(revision)
+
+    def week_switch_away(r: Rig) -> Step:
+        """Held on Week, the student presses D for Day and lets go there: nothing moves."""
+        yield from r.tab("week")
+        yield from r.reveal(3, 17 * 60 + 30, 20 * 60 + 30)
+        revision = session.revision
+        box = r.block_rect(ids["essay"], 3)
+
+        def to_day() -> Step:
+            xdo("key", "d")
+            yield ("wait", 500)
+
+        yield from r.drag(middle(box), middle(box) + (r.at(4, 18 * 60) - r.at(3, 19 * 60)), held=to_day)
+        yield ("wait", 400)
+        unchanged(revision)
+
+    def day_dwell(r: Rig) -> Step:
+        """Resting a held block at the top of the hours scrolls them back, and it lands earlier."""
+        yield from day_tab(r)
+        r.zoom().scroll_to(17 * 60, above=90)
+        yield ("wait", 200)
+        port = r.zoom().viewport()
+        box = r.block_rect(ids["essay"], 3)
+        grab = middle(box)
+        edge = QPoint(grab.x(), port.mapToGlobal(QPoint(0, 12)).y())
+        held_at = r.minute_under(grab) - 19 * 60
+        reachable = r.minute_under(edge) - held_at
+        under: list[float] = []
+        yield from r.drag(grab, edge, held=lambda: under.append(r.minute_under(edge)), rest=900)
+        yield from r.settled()
+        start = minutes(block(ids["essay"])["start"])
+        expect(
+            start <= reachable - 60,
+            f"essay starts {hhmm(start)}; without scrolling it could reach {hhmm(round(reachable))}",
+        )
+        expect(
+            abs(start - (under[0] - held_at)) <= 20,
+            f"essay starts {hhmm(start)} but was let go at {hhmm(round(under[0] - held_at))}",
+        )
+
+    def week_save_mid_drag(r: Rig) -> Step:
+        """The clock ticks and another change is saved while the essay is held. Both land, once."""
+        yield from r.tab("week")
+        yield from r.reveal(3, 17 * 60 + 30, 20 * 60 + 30)
+        box = r.block_rect(ids["essay"], 3)
+
+        def meanwhile() -> Step:
+            later = base_now() + 5 * 60_000
+            session.now_ms = lambda: later
+            session.add_block(
+                {
+                    "id": "rig-dinner",
+                    "title": "Dinner",
+                    "kind": "locked",
+                    "category": "meals",
+                    "start": "18:00",
+                    "duration_min": 30,
+                    "days": [5],
+                }
+            )
+            session.save()
+            yield ("until", lambda: not session.busy and not session.dirty, 8000, "the other save")
+            window._on_week()
+            yield ("wait", 200)
+
+        yield from r.drag(
+            middle(box), middle(box) + (r.at(4, 18 * 60) - r.at(3, 19 * 60)), held=meanwhile, rest=100
+        )
+        yield from r.settled()
+        essays = [b for b in session.blocks if b.get("assignment_id") == "essay"]
+        expect(
+            [(b["days"], b["start"]) for b in essays] == [([4], "18:00")],
+            f"essay sessions {[(b['days'], b['start']) for b in essays]}",
+        )
+        expect(block("rig-dinner") is not None, "the save made while it was held was lost")
+
+    def week_second_move_in_flight(r: Rig) -> Step:
+        """A second block let go while the first one's save is still on its way. Both land."""
+        yield from r.tab("week")
+        session.add_block(
+            {
+                "id": "rig-club",
+                "title": "Club",
+                "kind": "locked",
+                "category": "extra",
+                "start": "10:00",
+                "duration_min": 60,
+                "days": [5],
+            }
+        )
+        session.save()
+        yield from r.settled()
+
+        def slow(method, path, payload, on_success, on_error, *rest, **named):
+            late = (
+                on_success
+                if method == "GET"
+                else (lambda data: QTimer.singleShot(1500, lambda: on_success(data)))
+            )
+            return base_request(method, path, payload, late, on_error, *rest, **named)
+
+        session.client.request = slow
+        yield from r.reveal(3, 17 * 60 + 30, 20 * 60 + 30)
+        box = r.block_rect(ids["essay"], 3)
+        yield from r.drag(middle(box), middle(box) + (r.at(3, 20 * 60) - r.at(3, 19 * 60)), after=50)
+        in_flight: list[bool] = []
+        yield from r.reveal(5, 9 * 60 + 30, 12 * 60 + 30)
+        club = r.block_rect("rig-club", 5)
+        yield from r.drag(
+            middle(club),
+            middle(club) + (r.at(5, 12 * 60) - r.at(5, 10 * 60)),
+            held=lambda: in_flight.append(session.busy),
+            rest=50,
+        )
+        expect(in_flight == [True], "the first save had already landed, so nothing was in flight")
+        session.client.request = base_request
+        yield ("wait", 1800)
+        yield from r.settled()
+        got = block(ids["essay"])
+        expect((got["days"], got["start"]) == ([3], "20:00"), f"essay is {got['days']} {got['start']}")
+        club_now = block("rig-club")
+        expect(club_now["start"] == "12:00", f"club is {club_now['start']}")
+
+    def day_open(r: Rig) -> Step:
+        yield from day_tab(r)
+        yield from r.reveal(3, 18 * 60 + 30, 20 * 60 + 30)
+        yield from r.double_click(middle(r.block_rect(ids["essay"], 3)))
+        yield (
+            "until",
+            lambda: isinstance(QApplication.activeModalWidget(), QDialog),
+            3000,
+            "the essay to open",
+        )
+        dialog = QApplication.activeModalWidget()
+        title = dialog.findChild(QLineEdit, "homeworkTitle")
+        opened = title.text() if title is not None else dialog.windowTitle()
+        dialog.reject()
+        yield ("wait", 300)
+        expect(opened == "History essay", f"opened {opened!r}")
+
+    def week_agrees_with_day(r: Rig) -> Step:
+        """Moved on Week, the essay is on Friday's Day at that time, and no longer on Thursday."""
+        yield from r.tab("week")
+        yield from r.reveal(3, 17 * 60 + 30, 20 * 60 + 30)
+        box = r.block_rect(ids["essay"], 3)
+        yield from r.drag(middle(box), middle(box) + (r.at(4, 18 * 60) - r.at(3, 19 * 60)))
+        yield from r.settled()
+        yield from r.tab("week")
+        expect(r.surface("hours").block_rect(ids["essay"], 3) is None, "still drawn on Thursday")
+        yield from r.click(r.day_name(4))
+        yield ("wait", 400)
+        show_day((thursday + timedelta(days=1)).date().isoformat())
+        yield from r.reveal(4, 17 * 60, 20 * 60)
+        drawn = r.block_rect(ids["essay"], 4)
+        expect(drawn.contains(r.at(4, 18 * 60 + 30)), "Day draws it somewhere other than 18:00")
+
+    def small_and_large() -> Step:
+        window.resize(1150, 768)
+        window._look = sanitize_look(
+            {**window._look, "knobs": {**window._look.get("knobs", {}), "text": "large"}}
+        )
+        window._apply_appearance()
+        yield ("wait", 500)
+
+    def on_screen(widget: QWidget) -> bool:
+        frame = QRect(window.mapToGlobal(QPoint(0, 0)), window.size())
+        return widget.isVisible() and frame.contains(QRect(widget.mapToGlobal(QPoint(0, 0)), widget.size()))
+
+    def trays_whole() -> None:
+        for key in ("math", "poster"):
+            chip = next(
+                (
+                    w
+                    for w in window.findChildren(QPushButton)
+                    if w.property("block_id") == ids[key] and w.isVisible()
+                ),
+                None,
+            )
+            expect(chip is not None and on_screen(chip), f"the {key} chip is not wholly on screen")
+            expect(chip.accessibleName().startswith(chip.held.title), f"the {key} chip lost its title")
+
+    def week_small_large(r: Rig) -> Step:
+        """At 1150 by 768 with large text: every day, the tray, and a quarter hour that moves."""
+        yield from small_and_large()
+        yield from r.tab("week")
+        for day in range(7):
+            name = window.findChild(QWidget, f"weekDayName{day}")
+            expect(name is not None and on_screen(name), f"day {day}'s name is not on screen")
+        trays_whole()
+        yield from quarter_grab(r)
+
+    def day_small_large(r: Rig) -> Step:
+        yield from small_and_large()
+        yield from day_tab(r)
+        trays_whole()
+        yield from quarter_grab(r)
+
     def reach(r: Rig) -> Step:
         """At every level the hours offer, 00:00 and 24:00 can be brought on screen."""
         scroll = r.zoom()
@@ -647,6 +945,13 @@ def child_main(args: argparse.Namespace) -> int:
         Scenario("day-zoom-resize", "day", day_zoom_resize),
         Scenario("day-quarter-grab", "day", day_quarter_grab),
         Scenario("day-reach", "day", day_reach),
+        Scenario("day-resize-top", "day", day_resize_top),
+        Scenario("day-click-create", "day", day_click_create),
+        Scenario("day-past-due", "day", day_past_due),
+        Scenario("day-escape", "day", day_escape),
+        Scenario("day-dwell", "day", day_dwell),
+        Scenario("day-open", "day", day_open),
+        Scenario("day-small-large", "day", day_small_large),
         Scenario("week-move-day", "week", week_move_day),
         Scenario("week-resize-top", "week", week_resize_top),
         Scenario("week-create", "week", week_create),
@@ -657,6 +962,13 @@ def child_main(args: argparse.Namespace) -> int:
         Scenario("week-reach", "week", week_reach),
         Scenario("week-zoom-move", "week", week_zoom_move),
         Scenario("week-quarter-grab", "week", week_quarter_grab),
+        Scenario("week-resize-bottom", "week", week_resize_bottom),
+        Scenario("week-click-create", "week", week_click_create),
+        Scenario("week-switch-away", "week", week_switch_away),
+        Scenario("week-save-mid-drag", "week", week_save_mid_drag),
+        Scenario("week-second-move-in-flight", "week", week_second_move_in_flight),
+        Scenario("week-agrees-with-day", "week", week_agrees_with_day),
+        Scenario("week-small-large", "week", week_small_large),
         Scenario("month-times", "month", month_times),
         Scenario("month-open-day", "month", month_open_day),
         Scenario("month-move-date", "month", month_move_date),
@@ -684,6 +996,12 @@ def child_main(args: argparse.Namespace) -> int:
         wait_until(app, lambda: not session.busy and not session.dirty, 20)
         session.selected_day = thursday_iso
         session._say("")
+        session.now_ms, session.client.request = base_now, base_request
+        if window.size() != QSize(1280, 820) or window._look != base_look:
+            window.resize(1280, 820)
+            window._look = dict(base_look)
+            window._apply_appearance()
+            wait_until(app, lambda: True, 0.3)
         # Every scenario starts at each surface's own zoom.
         for scroll in window.findChildren(HoursScroll):
             scroll.restore({scroll.scale.key: scroll.scale.default})
@@ -702,6 +1020,29 @@ def child_main(args: argparse.Namespace) -> int:
         if not scenario.only or design in scenario.only
     ]
 
+    import gc as _gc
+
+    if os.environ.get("RIG_GC_REPORT"):
+        # Diagnosis only: keep what the collector finds instead of freeing it, and name the Qt
+        # objects among it after each scenario.
+        _gc.set_debug(_gc.DEBUG_SAVEALL)
+
+    def gc_report(label: str) -> None:
+        if not os.environ.get("RIG_GC_REPORT"):
+            return
+        _gc.collect()
+        found: dict[str, int] = {}
+        for item in _gc.garbage:
+            if isinstance(item, QObject):
+                from shiboken6 import isValid
+
+                alive = isValid(item)
+                named = repr(item.objectName()) if alive else "(C++ side already gone)"
+                name = f"{type(item).__module__}.{type(item).__qualname__} {named}"
+                found[name] = found.get(name, 0) + 1
+        print(f"GC after {label}: {found}", flush=True)
+        _gc.garbage.clear()
+
     def run_all() -> Step:
         current = None
         for design, scenario in plan:
@@ -711,6 +1052,7 @@ def child_main(args: argparse.Namespace) -> int:
                 current = design
                 use_design(design)
                 recorder.begin(out / "frames" / design)
+            gc_report(f"{design} before {scenario.name}")
             reset()
             rig.design, rig.scenario = design, scenario.name
             started = time.monotonic()
@@ -783,6 +1125,14 @@ def child_main(args: argparse.Namespace) -> int:
 
         advance()
 
+    def ended_early() -> None:
+        # A run that stops before its last scenario says what stopped it, rather than just stopping.
+        if not finished:
+            print("The app was told to quit before the run finished:", flush=True)
+            traceback.print_stack()
+
+    app.aboutToQuit.connect(ended_early)
+    app.lastWindowClosed.connect(lambda: print("The last window closed.", flush=True))
     QTimer.singleShot(300, lambda: drive(run_all()))
     app.exec()
     (out / "results.json").write_text(json.dumps(results, indent=1))

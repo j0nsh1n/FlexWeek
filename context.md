@@ -534,6 +534,13 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-23, `feat/0.15-tabs`: Unit 5 done. Rig matrix for Today's app: Day 14/14, Week 17/17,
+  including Escape, switching away, dwell, a save landing mid-drag, a second move while a save
+  is in flight, double-click to open, Day and Week agreeing, and 1150x768 with large text.
+  Found and fixed on the way: a held block dropped after switching views; tray chips cut off at
+  large text; a hang when the garbage collector freed the look pictures' leftovers mid-paint.
+  `RIG_GC_REPORT=1` makes the rig name any Qt object left in cyclic garbage. Mutation runner:
+  `.venv/bin/python scripts/mutate.py`. Gate 1240 passed. Nothing pushed.
 - 2026-09-22, `grok/0-15-night-last`: Night slots sort last. A 60-minute low
   session with 17:00–23:00 locked went to Monday 00:00 on `e7e5206` and goes
   to Monday 06:00 here. Night is still used when 06:00–23:00 is full.

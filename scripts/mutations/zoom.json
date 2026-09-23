@@ -1,0 +1,93 @@
+[
+ {
+  "file": "desktop/native/hours/canvas.py",
+  "name": "titles placed from the repaint rect again",
+  "old": "        visible = self._visible()\n",
+  "new": "        visible = QRectF(event.rect())\n",
+  "test": "desktop/tests/test_hours_zoom.py::test_a_small_repaint_does_not_write_a_long_blocks_name_again"
+ },
+ {
+  "file": "desktop/native/hours/canvas.py",
+  "name": "Daily Scheduler's full 7 px edges on short blocks",
+  "old": "        edge = min(EDGE_PX, length / 5)\n",
+  "new": "        edge = EDGE_PX\n",
+  "test": "desktop/tests/test_hours_zoom.py::test_a_quarter_hour_on_the_day_moves_from_a_quarter_half_and_three_quarters_in"
+ },
+ {
+  "file": "desktop/native/hours/canvas.py",
+  "name": "edges shrink to nothing",
+  "old": "        edge = min(EDGE_PX, length / 5)\n",
+  "new": "        edge = 0\n",
+  "test": "desktop/tests/test_hours_zoom.py::test_an_hour_still_resizes_from_its_edges_at_every_level"
+ },
+ {
+  "file": "desktop/native/hours/canvas.py",
+  "name": "Ctrl ignored on the wheel",
+  "old": "        if not event.modifiers() & Qt.KeyboardModifier.ControlModifier:\n            self._wheel = 0",
+  "new": "        if True:\n            self._wheel = 0",
+  "test": "desktop/tests/test_hours_zoom.py::test_ctrl_and_the_wheel_zoom_about_the_pointer"
+ },
+ {
+  "file": "desktop/native/hours/canvas.py",
+  "name": "touchpad half notches not added up",
+  "old": "        self._wheel += event.angleDelta().y()\n",
+  "new": "        self._wheel = event.angleDelta().y()\n",
+  "test": "desktop/tests/test_hours_zoom.py::test_ctrl_and_the_wheel_zoom_about_the_pointer"
+ },
+ {
+  "file": "desktop/native/hours/canvas.py",
+  "name": "zoom keys ignored",
+  "old": "            steps = ZOOM_KEYS.get(event.key())\n",
+  "new": "            steps = None\n",
+  "test": "desktop/tests/test_hours_zoom.py::test_keys_and_buttons_zoom_about_the_middle_and_stop_at_each_end"
+ },
+ {
+  "file": "desktop/native/hours/zoom.py",
+  "name": "zoom forgets the anchor minute",
+  "old": "            bar.setValue(round(self._y_for(minute) - at))\n",
+  "new": "            pass\n",
+  "test": "desktop/tests/test_hours_zoom.py::test_ctrl_and_the_wheel_zoom_about_the_pointer"
+ },
+ {
+  "file": "desktop/native/hours/zoom.py",
+  "name": "zoom while a block is held",
+  "old": "        if self.canvas.hand.busy:\n            return\n        px = ",
+  "new": "        px = ",
+  "test": "desktop/tests/test_hours_zoom.py::test_nothing_zooms_while_a_block_is_held"
+ },
+ {
+  "file": "desktop/native/hours/zoom.py",
+  "name": "the header as wide as the scroll area, not the hours",
+  "old": "        self.header.setGeometry(QRect(port.left(), port.top() - tall, port.width(), tall))\n",
+  "new": "        self.header.setGeometry(QRect(port.left(), port.top() - tall, self.width(), tall))\n",
+  "test": "desktop/tests/test_hours_zoom.py::test_the_day_names_sit_over_their_columns_beside_a_scroll_bar"
+ },
+ {
+  "file": "desktop/native/hours/zoom.py",
+  "name": "hidden hours never scroll on show",
+  "old": "        if self._pending is not None:\n            self.scroll_to(*self._pending)\n",
+  "new": "",
+  "test": "desktop/tests/test_hours_zoom.py::test_a_week_opened_while_hidden_scrolls_to_now_when_it_is_shown"
+ },
+ {
+  "file": "desktop/native/hours/zoom.py",
+  "name": "zoom buttons stop at no end",
+  "old": "        self.buttons.into.setEnabled(self.px < self.scale.levels[-1])\n",
+  "new": "        self.buttons.into.setEnabled(True)\n",
+  "test": "desktop/tests/test_hours_zoom.py::test_keys_and_buttons_zoom_about_the_middle_and_stop_at_each_end"
+ },
+ {
+  "file": "desktop/native/hours/classic.py",
+  "name": "the Day allowed below 96 px an hour",
+  "old": "DAY_SCALE = Scale(\"classic.day\", (96, 128, 160, 192), 96)",
+  "new": "DAY_SCALE = Scale(\"classic.day\", (72, 96, 128, 160, 192), 96)",
+  "test": "desktop/tests/test_hours_zoom.py::test_a_day_never_draws_fifteen_minutes_under_24_pixels"
+ },
+ {
+  "file": "desktop/native/hours/classic.py",
+  "name": "the same week scrolled back every render",
+  "old": "        if week.week_start != self._revealed:\n",
+  "new": "        if True:\n",
+  "test": "desktop/tests/test_hours_zoom.py::test_a_week_keeps_where_it_was_scrolled_when_it_is_shown_again"
+ }
+]

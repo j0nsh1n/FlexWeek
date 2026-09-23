@@ -18,6 +18,11 @@ All notable changes to FlexWeek are documented here. Format follows
   computer. A short block can be picked up from its middle at any zoom.
 
 ### Fixed
+- Switching to another view, week or design while holding a block puts it
+  back, instead of dropping it on whatever the new view shows there.
+- Homework waiting for a time shortens its name to fit the tray at large text.
+- A rare hang when Python freed a look picture's leftovers while the window
+  was painting.
 - The planner no longer puts homework at midnight when an hour between
   06:00 and 23:00 is free. Night is still used when the rest of the day is
   full.

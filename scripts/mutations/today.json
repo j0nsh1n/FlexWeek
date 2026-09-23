@@ -1,0 +1,30 @@
+[
+ {
+  "file": "desktop/native/window.py",
+  "name": "a held block kept when the view switches",
+  "old": "            self.hand.cancel()\n        if not self.hand.busy:\n            self._shown = self._where()\n",
+  "new": "            pass\n        if not self.hand.busy:\n            self._shown = self._where()\n",
+  "test": "desktop/tests/test_layouts_window.py::test_a_block_held_on_the_week_goes_back_when_the_student_switches_to_day"
+ },
+ {
+  "file": "desktop/native/hours/chips.py",
+  "name": "a tray chip keeps its whole words",
+  "old": "        if fitted != self.text():\n            self.setText(fitted)\n",
+  "new": "",
+  "test": "desktop/tests/test_classic_hours.py::test_a_tray_chip_shortens_its_words_to_the_room_it_has_and_keeps_its_title"
+ },
+ {
+  "file": "desktop/native/hours/chips.py",
+  "name": "a shortened chip asks only for its short words",
+  "old": "    def sizeHint(self) -> QSize:  # noqa: N802\n",
+  "new": "    def _unused_size_hint(self) -> QSize:\n",
+  "test": "desktop/tests/test_classic_hours.py::test_a_tray_chip_in_a_row_says_it_all_again_once_the_row_has_room"
+ },
+ {
+  "file": "desktop/native/previews.py",
+  "name": "a picture's stand-in host left to the collector",
+  "old": "        host.deleteLater()\n",
+  "new": "        pass\n",
+  "test": "desktop/tests/test_previews.py::test_a_picture_leaves_nothing_alive_for_the_garbage_collector"
+ }
+]

@@ -96,8 +96,9 @@ storage, CI). Each unit ends green on the rig, on the source gate, and with its 
    the dialogs. *Model, API and labels landed at `e7e5206`; the homework dialog and setup's first
    homework ask for a date and, only when ticked, a time.*
 5. **Finish Today's app.** Move the 15 stale tests to the new surfaces; complete the matrix.
-   Owner: Claude. *The 15 stale tests read the hours canvas since `ffe08aa`. Open: the matrix,
-   and a tray chip on Day whose title is cut off at large text rather than shortened.*
+   Owner: Claude. *Done. The rig runs Today's app's whole Day (14) and Week (17) matrix with the
+   real pointer, including 1150x768 with large text. Month's part waits for unit 9. The mutation
+   runner and its specs are in `scripts/mutate.py` and `scripts/mutations/`.*
 6. **The rig in CI.** Xvfb, a small window manager, per-design jobs, artifacts, timeouts.
    Owner: Grok. Brief: `handoffs/grok-rig-in-ci.md`.
 7. **Hosting and targets.** Every design reaches the window's hand; the hand finds any visible

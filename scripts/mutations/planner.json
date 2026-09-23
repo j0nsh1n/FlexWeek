@@ -1,0 +1,9 @@
+[
+ {
+  "file": "backend/solver.py",
+  "name": "night not ranked last",
+  "old": "        return (night, study, match, day, slot)\n",
+  "new": "        return (study, match, day, slot)\n",
+  "test": "backend/tests/test_solver.py::test_a_low_session_skips_midnight_when_the_morning_is_free"
+ }
+]
