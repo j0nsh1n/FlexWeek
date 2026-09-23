@@ -10,6 +10,9 @@ All notable changes to FlexWeek are documented here. Format follows
   24 hours onto the screen. Day names stay at the top.
 
 ### Fixed
+- The planner no longer puts homework at midnight when an hour between
+  06:00 and 23:00 is free. Night is still used when the rest of the day is
+  full.
 - Saving a week no longer fails when finished work ends at midnight. That
   moment is stored as the next date at 00:00, or 23:59 on 31 December 2099
   when there is no next date.
