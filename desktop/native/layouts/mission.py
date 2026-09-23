@@ -179,6 +179,7 @@ class MissionView(LayoutView):
                         font_size=f"{scene.px(12)}px",
                         font_weight=700,
                     ),
+                    'QPushButton[zoom="true"]': css(min_height="0", padding="0"),
                     'QPushButton[kind="main"]': css(background=tokens["accent"], color=tokens["accent_ink"]),
                     'QPushButton[kind="row"], QPushButton[kind="chip"], QPushButton[kind="day"]': css(
                         color=tokens["text"],
@@ -254,6 +255,7 @@ class MissionView(LayoutView):
                 for target, word in enumerate(DAYS):
                     pick = button(f"{word.upper()} {week.date_of(target).day}", f"missionDay{target}", "day")
                     pick.setAccessibleName(f"Show {DAY_FULL[target]}")
+                    pick.setProperty("day_target", target)
                     pick.clicked.connect(
                         lambda _=False, chosen=target:
                         self.day_activated.emit(self.scene.week.date_of(chosen).isoformat())
@@ -278,7 +280,6 @@ class MissionView(LayoutView):
             scene.today, scene.minute,
         )
         left.addWidget(scroll, 1)
-        scroll.show()
         if is_day:
             cargo = QFrame()
             cargo.setObjectName("missionCargo")
@@ -292,6 +293,7 @@ class MissionView(LayoutView):
         if not is_day and scene.options.get("side") != "hide" and not self.cramped:
             body.addWidget(self._side(scene))
         self._root.addLayout(body, 1)
+        scroll.show()
         if not is_day and (scene.options.get("side") == "hide" or self.cramped):
             cargo = QFrame()
             cargo.setObjectName("missionCargo")

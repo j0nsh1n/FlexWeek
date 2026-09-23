@@ -10,8 +10,9 @@
   also passed with horizontal real-pointer targets. The stock rig passed 10/14 Day
   and 14/17 Week scenarios. Its remaining failures aim at vertical resize or
   dwell coordinates on horizontal hours, or look for Today's app's fixed day
-  name ids. Full source gate and mutation runner remain for owner review.
-  Nothing pushed; `spec.md` unchanged.
+  name ids. Full source gate: 1,246 tests passed, ruff and mypy clean; all 11
+  target mutations were caught. Cartographer skipped (not installed in the
+  project venv). Nothing pushed or built; `spec.md` unchanged.
 - Date: 2026-09-22 (0.15 reach check). Branch `fix/015-rig-reach` from
   `grok/0-15-audit-01` at `841586f`. A partial hours track no longer reports
   00:00 or 24:00 as visible by substituting its own edge. Full source gate:
