@@ -98,6 +98,7 @@ def render(main: str, colour: str | None, pack: str, look: dict | None, width: i
     dark = system_dark()
     palette = resolved_palette(pack, dark, look)
     monday, blocks, homework = sample_week()
+    host: QWidget | None = None
     if main in VIEW_CLASSES:
         view = VIEW_CLASSES[main]()
         options = {**options_for(None, main), **({"colour": colour} if colour else {})}
@@ -116,13 +117,18 @@ def render(main: str, colour: str | None, pack: str, look: dict | None, width: i
     else:
         # Today's app's week, as it does in use. A picture takes no gestures, so its hand never
         # judges anything.
-        widget = ClassicWeek(Hand(lambda block_id, from_day, span: Verdict(False, ""), QWidget()))
+        host = QWidget()
+        widget = ClassicWeek(Hand(lambda block_id, from_day, span: Verdict(False, ""), host))
         widget.set_look(look, palette)
         widget.set_week(build_week(monday, blocks, homework, None), SAMPLE_DAY, SAMPLE_MINUTE)
     _settle(widget)
     picture = widget.grab()
     widget.close()
     widget.deleteLater()
+    if host is not None:
+        # Owned by nothing and held in a cycle by its hand, the host waited for the garbage
+        # collector, which could free it in the middle of painting the window and hang the app.
+        host.deleteLater()
     return picture.scaledToWidth(width, Qt.TransformationMode.SmoothTransformation)
 
 
