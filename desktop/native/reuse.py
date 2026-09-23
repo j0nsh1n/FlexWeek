@@ -6,7 +6,7 @@ import json
 from copy import deepcopy
 from datetime import date, datetime, timedelta
 
-from backend.models import parse_due
+from backend.models import due_sort_key, parse_due
 from backend.slots import DAY_END_MIN, DAY_START_MIN, SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm
 from desktop.native.calendar import DAY_FULL
 
@@ -586,7 +586,7 @@ def unfinished_items(
         if item.get("completed") or minutes < SLOT_MIN:
             continue
         items.append({**item, "remaining_min": minutes})
-    return sorted(items, key=lambda item: (item.get("due") or "", item["id"]))
+    return sorted(items, key=lambda item: due_sort_key(item.get("due"), item["id"]))
 
 
 def late_from_start(minute: int) -> str:

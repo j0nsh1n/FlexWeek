@@ -219,6 +219,19 @@ def test_unfinished_needs_an_earlier_saved_week_and_a_slot_of_remaining_time() -
     assert unfinished_items({"essay": assignment}, ["2026-08-31"], "2026-09-07", [], []) == []
 
 
+def test_unfinished_lists_a_morning_deadline_before_one_with_no_time() -> None:
+    morning = {**essay(), "id": "quiz", "due": "2026-09-11T09:00"}
+    untimed = {**essay(), "id": "paper", "due": "2026-09-11"}
+    items = unfinished_items(
+        {"quiz": morning, "paper": untimed},
+        ["2026-08-31"],
+        "2026-09-07",
+        [],
+        [],
+    )
+    assert [item["id"] for item in items] == ["quiz", "paper"]
+
+
 def test_days_through_due_matches_the_web_planner() -> None:
     assert due_day_in_week("2026-09-11T08:10", "2026-09-07") == 4
     assert days_through(4, 2) == [2, 3, 4]
