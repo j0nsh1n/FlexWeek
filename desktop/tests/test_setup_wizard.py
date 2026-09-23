@@ -23,7 +23,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QPoint, QStandardPaths, Qt, QTimer
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QDateTimeEdit, QPushButton, QWidget
+    from PySide6.QtWidgets import QApplication, QComboBox, QDateTimeEdit, QLabel, QPushButton, QWidget
 
     from desktop.native.calendar import monday_of, sunday_due
     from desktop.native.layouts.registry import sanitize_layout
@@ -42,6 +42,7 @@ if importlib.util.find_spec("PySide6") is not None:
         SetupPage,
         SetupState,
     )
+    from desktop.native.widgets import AvailabilityDialog
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
 
@@ -92,6 +93,7 @@ def written(qapp: QApplication, window: NativeWindow) -> None:
         lambda: (
             not window.session.busy
             and not window._setup_prefs
+            and window._setup_work_windows is None
             and not window._setup_week
             and not window.session.dirty
         ),
@@ -249,6 +251,14 @@ def test_skipping_every_page_keeps_nothing_and_setup_never_returns(
     visited = []
     while setup.step != DONE:
         visited.append(setup.step)
+        if setup.step == HOMEWORK:
+            assert any(
+                "Homework can be planned at any time of day." in label.text()
+                for label in setup.pages[HOMEWORK].findChildren(QLabel)
+            )
+            setup.work_editor.set_windows(
+                [{"days": [0, 1, 2, 3, 4], "start": "15:30", "end": "18:00"}]
+            )
         setup.skip.click()
     assert visited == [STYLE, WEEK, HOMEWORK, REMINDERS, FIRST]
     setup.next.click()
@@ -258,6 +268,7 @@ def test_skipping_every_page_keeps_nothing_and_setup_never_returns(
     prefs = window.session.preferences
     assert prefs["reminders_enabled"] is False, "a skipped page changes nothing"
     assert prefs.get("planning_style", "suggest") == "suggest"
+    assert not prefs.get("work_windows"), "skipping does not keep hours entered on that page"
     assert prefs["setup"]["finished_at"]
     assert not look_file().exists() or json.loads(look_file().read_text())["layout"]["main"] == "classic"
     close(qapp, window)
@@ -265,6 +276,81 @@ def test_skipping_every_page_keeps_nothing_and_setup_never_returns(
     again = sign_in(qapp, server, "setup_skipper")
     assert page(again) == "weekPage", "an empty week does not bring setup back"
     close(qapp, again)
+
+
+def test_a_work_window_chosen_in_setup_reaches_the_account(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    window = new_account(qapp, server, "setup_work_hours")
+    setup = window.setup_page
+    setup.skip.click()
+    setup.skip.click()
+    assert setup.step == HOMEWORK
+    chosen = {"days": [0, 1, 2, 3, 4], "start": "15:30", "end": "18:00", "subject": "Math"}
+    setup.work_editor.set_windows([chosen])
+    setup.next.click()
+    written(qapp, window)
+    assert window.session.preferences["work_windows"] == [chosen]
+    close(qapp, window)
+
+    again = sign_in(qapp, server, "setup_work_hours")
+    assert again.session.preferences["work_windows"] == [chosen]
+    close(qapp, again)
+
+
+def test_settings_saves_work_windows_with_existing_availability(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    window = new_account(qapp, server, "settings_work_hours")
+    window.setup_page.skip_all.click()
+    written(qapp, window)
+    protected = [{"days": [0], "start": "19:00", "duration_min": 60, "kind": "meal"}]
+    study = [{"days": [1], "start": "17:00", "duration_min": 60, "subject": "Math"}]
+    assert window.session.save_availability(protected, study, "22:00", [])
+    wait_until(qapp, lambda: not window.session.busy and window.session.preferences["study_windows"] == study)
+
+    chosen = {"days": [5, 6], "start": "10:00", "end": "16:00"}
+    sent: list[tuple[list[dict], list[dict], str | None, list[dict]]] = []
+    save = window.session.save_availability
+
+    def record(
+        kept_protected: list[dict], kept_study: list[dict], cutoff: str | None, hours: list[dict]
+    ) -> bool:
+        sent.append((kept_protected, kept_study, cutoff, hours))
+        return save(kept_protected, kept_study, cutoff, hours)
+
+    window.session.save_availability = record
+
+    def choose() -> None:
+        dialog = QApplication.activeModalWidget()
+        assert isinstance(dialog, AvailabilityDialog)
+        dialog.work_editor.set_windows([chosen])
+        dialog.accept()
+
+    QTimer.singleShot(0, choose)
+    window._open_availability()
+    wait_until(
+        qapp,
+        lambda: not window.session.busy and window.session.preferences["work_windows"] == [chosen],
+    )
+    prefs = window.session.preferences
+    assert sent == [(protected, study, "22:00", [chosen])]
+    assert prefs["protected"] == protected
+    assert prefs["study_windows"] == study
+    assert prefs["day_cutoff"] == "22:00"
+    close(qapp, window)
+
+
+def test_setup_refuses_a_work_window_that_ends_before_it_starts(qapp: QApplication) -> None:
+    setup = opened(qapp)
+    setup._show(HOMEWORK)
+    setup.work_editor.set_windows([{"days": [0], "start": "15:00", "end": "16:00"}])
+    row = setup.work_editor.findChild(QWidget, "workWindowRow")
+    row.findChild(QComboBox, "workWindowEnd").setCurrentText("14:45")
+    setup.next.click()
+    assert setup.step == HOMEWORK
+    assert row.findChild(QLabel, "validationError").text() == "End must be after Start."
+    setup.close()
 
 
 def test_skip_setup_is_remembered(qapp: QApplication, server: LocalServer) -> None:

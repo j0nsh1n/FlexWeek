@@ -54,6 +54,7 @@ from desktop.native.settings import PLANNING_STYLES, SPORT_FALLBACK, SPOTIFY_TON
 from desktop.native.sound import Bell
 from desktop.native.tones import FALLBACK, RECIPES
 from desktop.native.widgets import DAYS, DUE_FORMAT, FlowLayout
+from desktop.native.work_windows import WorkWindowsEditor
 
 SETUP_VERSION = 1
 STYLE, LOOK, COLOURS, WEEK, HOMEWORK, REMINDERS, FIRST, DONE = range(8)
@@ -832,6 +833,9 @@ class SetupPage(QWidget):
             hint = _label(note, "setupHint")
             hint.setContentsMargins(28, 0, 0, 6)
             box.addWidget(hint)
+        self._section(box, "When may FlexWeek plan homework?")
+        self.work_editor = WorkWindowsEditor([])
+        box.addWidget(self.work_editor)
         self._section(box, "When do you like to do homework?")
         box.addWidget(
             _label(
@@ -1063,6 +1067,8 @@ class SetupPage(QWidget):
     def _fill_homework(self) -> None:
         style = self._state.preferences.get("planning_style") or "suggest"
         self.planning_buttons.get(style, self.planning_buttons["suggest"]).setChecked(True)
+        self.work_editor.set_subjects(self._state.subjects)
+        self.work_editor.set_windows(self._state.preferences.get("work_windows") or [])
         self.study_windows = deepcopy(self._state.preferences.get("study_windows") or [])
         self._render_study()
         self.study_subject.clear()
@@ -1497,6 +1503,8 @@ class SetupPage(QWidget):
                     return f"{name} has to end after it starts."
         if step == REMINDERS and self._tone() == "spotify" and self._spotify_link() is None:
             return "Paste a link that starts with https://open.spotify.com, or pick another sound."
+        if step == HOMEWORK:
+            return self.work_editor.problem()
         return None
 
     def _answer(self, step: int) -> dict | None:
@@ -1510,7 +1518,11 @@ class SetupPage(QWidget):
             checked = next(
                 (value for value, button in self.planning_buttons.items() if button.isChecked()), "suggest"
             )
-            return {"planning_style": checked, "study_windows": deepcopy(self.study_windows)}
+            return {
+                "planning_style": checked,
+                "study_windows": deepcopy(self.study_windows),
+                "work_windows": self.work_editor.windows(),
+            }
         if step == REMINDERS:
             return {
                 "reminders_enabled": self.reminders.isChecked(),
@@ -1580,6 +1592,17 @@ class SetupPage(QWidget):
             ),
             PLANNING_STYLES[1][1],
         )
+        work_windows = prefs.get("work_windows") or []
+        if work_windows:
+            shown = [
+                f"{days_label(window['days'])} {window['start']}–{window['end']}"
+                for window in work_windows[:2]
+            ]
+            planning += " · homework only " + ", ".join(shown)
+            if len(work_windows) > 2:
+                planning += f" and {len(work_windows) - 2} more"
+        else:
+            planning += " · homework can be planned at any time of day"
         windows = prefs.get("study_windows") or []
         if windows:
             planning += " · " + ", ".join(window_label(window) for window in windows[:3])

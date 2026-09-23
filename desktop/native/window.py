@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import json
 import re
+from copy import deepcopy
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -199,6 +200,7 @@ class NativeWindow(QMainWindow):
         self._setup_active = False
         self._setup_checked = False
         self._setup_prefs: dict = {}
+        self._setup_work_windows: list[dict] | None = None
         self._setup_week = False
         # A block let go while a save is under way, moved once it is done: the save's reply replaces
         # the week, so a move made before it arrived would be lost.
@@ -948,6 +950,7 @@ class NativeWindow(QMainWindow):
             self._setup_active = False
             self._setup_checked = False
             self._setup_prefs = {}
+            self._setup_work_windows = None
             self._setup_week = False
             self._sync_auth_mode()
             self.username.clear()
@@ -1068,6 +1071,8 @@ class NativeWindow(QMainWindow):
             ):
                 if key in answer:
                     updates[key] = answer[key]
+            if "work_windows" in answer:
+                self._setup_work_windows = deepcopy(answer["work_windows"])
         self._setup_prefs.update(updates)
         if self.session.preferences is not None:
             # Seen at once, as Settings does: the save that follows stores them.
@@ -1084,6 +1089,16 @@ class NativeWindow(QMainWindow):
         if self._setup_prefs and session.preferences is not None:
             updates, self._setup_prefs = self._setup_prefs, {}
             session.save_preferences(updates)
+            return
+        if self._setup_work_windows is not None and session.preferences is not None:
+            windows, self._setup_work_windows = self._setup_work_windows, None
+            prefs = session.preferences
+            session.save_availability(
+                prefs.get("protected") or [],
+                prefs.get("study_windows") or [],
+                prefs.get("day_cutoff"),
+                windows,
+            )
             return
         if self._setup_week:
             self._setup_week = False
@@ -1166,7 +1181,7 @@ class NativeWindow(QMainWindow):
             planner_title(self.session, view), planner_title(self.session, view, short=True)
         )
         self._maybe_open_setup()
-        if self._setup_prefs or self._setup_week:
+        if self._setup_prefs or self._setup_work_windows is not None or self._setup_week:
             # The account's preferences may only now have arrived, and what setup kept before they did,
             # a skip included, is written with them.
             QTimer.singleShot(0, self._flush_setup)
@@ -1311,7 +1326,7 @@ class NativeWindow(QMainWindow):
         if not busy and self._move_waiting is not None:
             waiting, self._move_waiting = self._move_waiting, None
             QTimer.singleShot(0, lambda: self._move_block(*waiting))
-        if not busy and (self._setup_prefs or self._setup_week):
+        if not busy and (self._setup_prefs or self._setup_work_windows is not None or self._setup_week):
             # A moment later, so a plan that finished just now saves its week before setup writes.
             QTimer.singleShot(0, self._flush_setup)
 
@@ -1942,7 +1957,9 @@ class NativeWindow(QMainWindow):
         dialog = AvailabilityDialog(self, self.session.preferences, subjects)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
-        self.session.save_availability(dialog.protected(), dialog.study_windows(), dialog.day_cutoff())
+        self.session.save_availability(
+            dialog.protected(), dialog.study_windows(), dialog.day_cutoff(), dialog.work_windows()
+        )
 
     def _toggle_recover(self) -> None:
         visible = not self.recovery_code.isVisible()
