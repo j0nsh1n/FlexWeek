@@ -6,6 +6,9 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Changed
+- Homework is due on a date. Tick "At a set time" only when it is due at a
+  time that day, such as a 09:00 lesson; otherwise it is due by the end of the
+  day. Homework saved before keeps its deadline.
 - Setup asks when FlexWeek may plan homework, and the planner keeps to those
   hours. Preferred study times are set in Settings, no longer in setup.
 - Today's app's week scrolls through the whole day instead of squeezing

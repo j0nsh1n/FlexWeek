@@ -12,7 +12,6 @@ from pydantic import ValidationError
 from PySide6.QtCore import (
     QByteArray,
     QDate,
-    QDateTime,
     QEvent,
     QMimeData,
     QModelIndex,
@@ -45,7 +44,6 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDateEdit,
-    QDateTimeEdit,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -75,7 +73,7 @@ from PySide6.QtWidgets import (
 )
 
 from backend.explain import REASON_COPY
-from backend.models import Assignment, TimeBlock, WeekRequest
+from backend.models import Assignment, TimeBlock, WeekRequest, due_is_timed, parse_due
 from backend.slots import (
     DAY_END_MIN,
     DAY_START_MIN,
@@ -118,7 +116,7 @@ DIALOG_USABLE_HEIGHT = 480
 # What a dragged waiting homework carries: its session id.
 SESSION_MIME = "application/x-flexweek-session"
 # Dates as a student reads them. "2026-09-27 23:59" made them work out which day that was.
-DUE_FORMAT = "ddd d MMM yyyy, HH:mm"
+DUE_DATE_FORMAT = "ddd d MMM yyyy"
 DATE_FORMAT = "ddd d MMM yyyy"
 DIALOG_MAX_HEIGHT = 700
 SLOT_HINT = "Use a multiple of 15 minutes, such as 15, 30, or 45."
@@ -1069,6 +1067,66 @@ class BlockDialog(QDialog):
         return deepcopy(self._result if self._result is not None else self._original)
 
 
+class DueField(QWidget):
+    """When homework is due: always a date, and a time only for work due at one, such as a lesson
+    at 09:00. Without a time it is due by the end of that day."""
+
+    changed = Signal()
+
+    def __init__(self, due: str, name: str, *, stacked: bool = False, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        # Stacked puts the time under the date, for a form too narrow to hold them side by side.
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        outer.addLayout(row)
+        self.date = QDateEdit()
+        self.date.setObjectName(name)
+        self.date.setDisplayFormat(DUE_DATE_FORMAT)
+        self.date.setCalendarPopup(True)
+        self.date.setMinimumDate(QDate(2000, 1, 1))
+        self.date.setMaximumDate(QDate(2099, 12, 31))
+        self.date.setAccessibleName("Due date")
+        self.timed = QCheckBox("At a set time")
+        self.timed.setObjectName(f"{name}Timed")
+        self.timed.setAccessibleName("Due at a set time")
+        self.time = QTimeEdit()
+        self.time.setObjectName(f"{name}Time")
+        self.time.setDisplayFormat("HH:mm")
+        self.time.setAccessibleName("Due time")
+        row.addWidget(self.date)
+        if stacked:
+            row.addStretch(1)
+            row = QHBoxLayout()
+            row.setContentsMargins(0, 0, 0, 0)
+            outer.addLayout(row)
+        row.addWidget(self.timed)
+        row.addWidget(self.time)
+        row.addStretch(1)
+        self.set_value(due)
+        self.date.dateChanged.connect(self.changed.emit)
+        self.timed.toggled.connect(self._show_time)
+        self.timed.toggled.connect(self.changed.emit)
+        self.time.timeChanged.connect(self.changed.emit)
+
+    def set_value(self, due: str) -> None:
+        day, minute = parse_due(due)
+        self.date.setDate(QDate(day.year, day.month, day.day))
+        timed = due_is_timed(due)
+        # A time box opened later starts at a usual start of lessons, not at midnight.
+        self.time.setTime(QTime(minute // 60, minute % 60) if timed else QTime(9, 0))
+        self.timed.setChecked(timed)
+        self._show_time(timed)
+
+    def value(self) -> str:
+        day = self.date.date().toString("yyyy-MM-dd")
+        return f"{day}T{self.time.time().toString('HH:mm')}" if self.timed.isChecked() else day
+
+    def _show_time(self, timed: bool) -> None:
+        self.time.setVisible(timed)
+
+
 class HomeworkDialog(QDialog):
     def __init__(
         self,
@@ -1090,7 +1148,7 @@ class HomeworkDialog(QDialog):
             else {
                 "id": str(uuid4()),
                 "title": info["label"] if info else "",
-                "due": due or week_start + "T21:00",
+                "due": due or week_start,
                 "estimate_min": estimate_min or (info or {}).get("preset", {}).get("duration_min") or 60,
                 "category": category,
                 "revision": 0,
@@ -1117,12 +1175,7 @@ class HomeworkDialog(QDialog):
         body_layout.addLayout(form)
         self.title = _line("homeworkTitle", self._original["title"])
         form.addRow("Title", self.title)
-        self.due = QDateTimeEdit(QDateTime.fromString(self._original["due"], "yyyy-MM-dd'T'HH:mm"))
-        self.due.setObjectName("homeworkDue")
-        self.due.setDisplayFormat(DUE_FORMAT)
-        self.due.setCalendarPopup(True)
-        self.due.setMinimumDate(QDate(2000, 1, 1))
-        self.due.setMaximumDate(QDate(2099, 12, 31))
+        self.due = DueField(self._original["due"], "homeworkDue", stacked=True)
         form.addRow("Due", self.due)
         self.estimate = _minutes("homeworkEstimate", self._original["estimate_min"], 7140)
         form.addRow("Estimated time", self.estimate)
@@ -1230,7 +1283,7 @@ class HomeworkDialog(QDialog):
             self.title.textChanged.connect(self._disable_spread)
             self.notes.textChanged.connect(self._disable_spread)
             self.estimate.valueChanged.connect(self._disable_spread)
-            self.due.dateTimeChanged.connect(self._disable_spread)
+            self.due.changed.connect(self._disable_spread)
             self.course.textChanged.connect(self._disable_spread)
         else:
             self._spread_button = None
@@ -1333,6 +1386,12 @@ class HomeworkDialog(QDialog):
         self.check_text.clear()
         self._show_error("")
 
+    def _chosen_due(self) -> str:
+        """The due as the student left it. An old 23:59 that still means the same end of the day is
+        kept as it was stored, so opening and saving changes nothing."""
+        chosen, before = self.due.value(), self._original["due"]
+        return before if parse_due(chosen) == parse_due(before) else chosen
+
     def accept(self) -> None:
         candidate = deepcopy(self._original)
         links = [self.links.item(index).data(Qt.ItemDataRole.UserRole) for index in range(self.links.count())]
@@ -1352,7 +1411,7 @@ class HomeworkDialog(QDialog):
             completed_at = local_stamp()
         candidate.update(
             title=self.title.text().strip(),
-            due=self.due.dateTime().toString("yyyy-MM-dd'T'HH:mm"),
+            due=self._chosen_due(),
             estimate_min=self.estimate.value(),
             course=self.course.text() or None,
             priority=self.priority.currentData(),

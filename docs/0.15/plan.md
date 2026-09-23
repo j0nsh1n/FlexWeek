@@ -93,7 +93,8 @@ storage, CI). Each unit ends green on the rig, on the source gate, and with its 
    call, 22 September: setup asks only for work windows; study windows stay in Settings.*
 4. **Optional due times.** Due date required, due time optional, through the model, the API, the
    planner, the judge, the dialogs and the words shown. Owner: Grok for model and API, Claude for
-   the dialogs. *Model, API and labels landed at `e7e5206`. Open: the dialogs.*
+   the dialogs. *Model, API and labels landed at `e7e5206`; the homework dialog and setup's first
+   homework ask for a date and, only when ticked, a time.*
 5. **Finish Today's app.** Move the 15 stale tests to the new surfaces; complete the matrix.
    Owner: Claude. *The 15 stale tests read the hours canvas since `ffe08aa`. Open: the matrix,
    and a tray chip on Day whose title is cut off at large text rather than shortened.*

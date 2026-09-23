@@ -13,7 +13,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from uuid import uuid4
 
-from PySide6.QtCore import QDate, QDateTime, QRect, QRectF, Qt, QTime, QTimer, Signal
+from PySide6.QtCore import QRect, QRectF, Qt, QTime, QTimer, Signal
 from PySide6.QtGui import QKeyEvent, QMouseEvent, QPainter, QPainterPath, QPixmap, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
@@ -53,7 +53,7 @@ from desktop.native.previews import Previews
 from desktop.native.settings import PLANNING_STYLES, SPORT_FALLBACK, SPOTIFY_TONE_NOTE
 from desktop.native.sound import Bell
 from desktop.native.tones import FALLBACK, RECIPES
-from desktop.native.widgets import DAYS, DUE_FORMAT, FlowLayout
+from desktop.native.widgets import DAYS, DueField, FlowLayout
 from desktop.native.work_windows import WorkWindowsEditor
 
 SETUP_VERSION = 1
@@ -503,13 +503,7 @@ class HomeworkRow(QFrame):
         self.minutes.setValue(60)
         self.minutes.setSuffix(" min")
         self.minutes.setAccessibleName("How long it takes")
-        self.due = QDateTimeEdit(QDateTime.fromString(due, "yyyy-MM-dd'T'HH:mm"))
-        self.due.setObjectName("setupHomeworkDue")
-        self.due.setDisplayFormat(DUE_FORMAT)
-        self.due.setCalendarPopup(True)
-        self.due.setMinimumDate(QDate(2000, 1, 1))
-        self.due.setMaximumDate(QDate(2099, 12, 31))
-        self.due.setAccessibleName("Due")
+        self.due = DueField(due, "setupHomeworkDue")
         remove = _quiet("Remove")
         remove.setAccessibleName("Remove this homework")
         remove.clicked.connect(lambda: self.removed.emit(self))
@@ -1370,7 +1364,7 @@ class SetupPage(QWidget):
                     "id": self._made.get(title) or str(uuid4()),
                     "title": title,
                     "estimate_min": row.minutes.value(),
-                    "due": row.due.dateTime().toString("yyyy-MM-dd'T'HH:mm"),
+                    "due": row.due.value(),
                     "revision": 0,
                 }
             )

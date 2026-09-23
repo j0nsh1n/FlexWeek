@@ -392,3 +392,64 @@ def test_work_window_end_before_start_is_refused_beside_end(qapp: QApplication) 
     assert dialog.work_editor.problem() is None
     dialog.accept()
     assert dialog.result() == dialog.DialogCode.Accepted
+
+
+def _homework(due: str) -> dict:
+    return {
+        "id": "oral",
+        "title": "French oral",
+        "due": due,
+        "estimate_min": 30,
+        "revision": 0,
+        "notes": "",
+        "links": [],
+        "checklist": [],
+    }
+
+
+def test_new_homework_is_due_on_a_day_and_a_time_only_when_asked(qapp: QApplication) -> None:
+    from desktop.native.widgets import HomeworkDialog
+
+    dialog = HomeworkDialog(None, None, "2026-09-14")
+    dialog.show()
+    qapp.processEvents()
+    assert dialog.due.value() == "2026-09-14"
+    assert not dialog.due.time.isVisible(), "no time box until the student says it is due at one"
+    dialog.due.timed.setChecked(True)
+    assert dialog.due.time.isVisible()
+    assert dialog.due.value() == "2026-09-14T09:00"
+    dialog.close()
+
+
+def test_an_old_end_of_day_due_is_kept_as_stored_until_the_deadline_changes(qapp: QApplication) -> None:
+    from PySide6.QtCore import QDate
+
+    from desktop.native.widgets import HomeworkDialog
+
+    kept = HomeworkDialog(None, _homework("2026-09-20T23:59"), "2026-09-14")
+    assert not kept.due.timed.isChecked(), "23:59 was the old way of saying no time"
+    kept.title.setText("French oral, part 2")
+    kept.accept()
+    assert kept.assignment()["due"] == "2026-09-20T23:59"
+
+    moved = HomeworkDialog(None, _homework("2026-09-20T23:59"), "2026-09-14")
+    moved.due.date.setDate(QDate(2026, 9, 18))
+    moved.accept()
+    assert moved.assignment()["due"] == "2026-09-18"
+
+
+def test_a_due_time_is_shown_and_can_be_taken_away(qapp: QApplication) -> None:
+    from PySide6.QtCore import QTime
+
+    from desktop.native.widgets import HomeworkDialog
+
+    dialog = HomeworkDialog(None, _homework("2026-09-17T10:15"), "2026-09-14")
+    assert dialog.due.timed.isChecked() and dialog.due.time.time() == QTime(10, 15)
+    dialog.due.time.setTime(QTime(8, 30))
+    dialog.accept()
+    assert dialog.assignment()["due"] == "2026-09-17T08:30"
+
+    untimed = HomeworkDialog(None, _homework("2026-09-17T10:15"), "2026-09-14")
+    untimed.due.timed.setChecked(False)
+    untimed.accept()
+    assert untimed.assignment()["due"] == "2026-09-17"

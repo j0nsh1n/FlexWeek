@@ -21,7 +21,7 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QPoint, QStandardPaths, Qt, QTimer
+    from PySide6.QtCore import QPoint, QStandardPaths, Qt, QTime, QTimer
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication, QComboBox, QDateTimeEdit, QLabel, QPushButton, QWidget
 
@@ -222,7 +222,7 @@ def test_every_page_is_kept_when_the_student_leaves_it(qapp: QApplication, serve
     written(qapp, window)
     essay = next(item for item in window.session.assignments.values() if item["title"] == "History essay")
     assert essay["estimate_min"] == 90
-    assert essay["due"] == sunday_due(monday_of(window.session.week_start))
+    assert essay["due"] == sunday_due(monday_of(window.session.week_start))[:10], "that Sunday, no time"
     sessions = [block for block in window.session.blocks if block.get("assignment_id") == essay["id"]]
     assert sessions and all(block.get("start") for block in sessions), "Plan it for me gave it a time"
 
@@ -522,6 +522,28 @@ def test_back_then_next_does_not_add_the_first_homework_twice(
     close(qapp, window)
 
 
+def test_a_first_homework_due_at_a_set_time_keeps_it_and_one_without_has_none(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    window = new_account(qapp, server, "setup_due_time")
+    setup = window.setup_page
+    for _ in range(4):
+        setup.skip.click()
+    assert setup.step == FIRST
+    oral = setup.homework_rows[0]
+    oral.name.setText("French oral")
+    oral.due.timed.setChecked(True)
+    oral.due.time.setTime(QTime(9, 0))
+    setup.add_homework.click()
+    setup.homework_rows[1].name.setText("Reading log")
+    setup.next.click()
+    written(qapp, window)
+    sunday = sunday_due(window.session.week_start)[:10]
+    dues = {item["title"]: item["due"] for item in window.session.assignments.values()}
+    assert dues == {"French oral": f"{sunday}T09:00", "Reading log": sunday}
+    close(qapp, window)
+
+
 def test_a_test_reminder_rings_the_chosen_sound_and_gives_the_spotify_app_the_link(
     qapp: QApplication, server: LocalServer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -668,8 +690,8 @@ def test_first_homework_takes_up_to_three(qapp: QApplication) -> None:
     setup._add_homework_row()
     assert len(setup.homework_rows) == 3, "a fourth is refused however it is asked for"
     due = setup.homework_rows[0].due
-    assert due.calendarPopup()
-    assert due.dateTime().toString("yyyy-MM-dd'T'HH:mm") == sunday_due(monday_of("2026-09-23"))
+    assert due.date.calendarPopup()
+    assert due.value() == sunday_due(monday_of("2026-09-23"))[:10], "due that Sunday, with no time"
     setup.close()
 
 
