@@ -31,6 +31,9 @@ All notable changes to FlexWeek are documented here. Format follows
   when there is no next date.
 - Homework due on a date with no time is listed after homework due at a set
   time that same day.
+- Undo of a block moved to another week no longer throws away later changes
+  to that week. If that week changed in another window, Undo is refused and
+  both weeks stay as they are.
 
 ## [0.14.3] - 2026-09-22
 

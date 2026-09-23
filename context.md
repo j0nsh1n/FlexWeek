@@ -1,6 +1,13 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-23 (move-date follow-up). Branch `grok/0-15-move-date-2` from
+  `feat/0.15-tabs` at `062f292`. Undo of a cross-week move sends the revision
+  each week last saw; a later save to the other week is a 409 and both weeks
+  stay. `date_problem` judges a chip whose week is not open from optional
+  `start`, `duration_min`, and `assignment_id`. Source gate: 1274 passed,
+  `scripts/verify.py` green. `scripts/mutate.py scripts/mutations/planner.json`
+  caught every break. spec.md was not edited. Nothing pushed.
 - Date: 2026-09-22 (0.15 reach check). Branch `fix/015-rig-reach` from
   `grok/0-15-audit-01` at `841586f`. A partial hours track no longer reports
   00:00 or 24:00 as visible by substituting its own edge. Full source gate:
@@ -534,6 +541,18 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-23, `grok/0-15-move-date-2`: Cross-week move follow-up on `062f292`.
+  History steps keep each week's last-seen revision from the save reply and
+  send it on undo and redo. A later save to the other week is a 409, same
+  words as other saves, both weeks untouched.
+  `date_problem(block_id, from_iso, to_iso, start=None, duration_min=None,
+  assignment_id=None) -> str | None` judges from start and length when the
+  week is not local. Tests:
+  `test_undo_of_a_move_refuses_when_the_other_week_changed_elsewhere`,
+  `test_date_problem_judges_a_chip_when_its_week_is_not_loaded`. Gate: 1274
+  passed, `scripts/verify.py` green. spec.md was not edited. Nothing pushed.
+  Claude reviews before it lands.
+
 - 2026-09-23, `grok/0-15-month-weeks`: Unit 8. `NativeSession.move_to_date(block_id, from_iso, to_iso) -> bool` moves a block to another date. Same week keeps the time; another week writes both documents through `POST /api/changes` in one Undo step. A repeating block moves only that day. Homework keeps its pin. The open week does not change until the reply. `date_problem` is the same `span_problem` words for a held chip. No backend change. Gate: 1261 passed, `scripts/verify.py` green. spec.md was not edited. Nothing pushed. Window still holds the Month placeholder; Unit 9 can call `move_to_date`.
 
 - 2026-09-23, `feat/0.15-tabs`: Unit 5 done. Rig matrix for Today's app: Day 14/14, Week 17/17,
