@@ -122,6 +122,14 @@ def _week_write(week_start: str, blocks: list[dict], revision: int) -> dict:
     }
 
 
+def _keep_step_revisions(step: dict, data: dict) -> None:
+    stored = {week["week_start"]: week for week in data.get("weeks") or []}
+    for entry in step.get("weeks") or []:
+        week = stored.get(entry["week_start"])
+        if week is not None:
+            entry["revision"] = week["revision"]
+
+
 class NativeSession(QObject):
     account_changed = Signal(object)
     recovery_codes = Signal(list)
@@ -900,7 +908,15 @@ class NativeSession(QObject):
         self._touch("moving " + block["title"] + " on one day", keep={made})
         return True
 
-    def date_problem(self, block_id: str, from_iso: str, to_iso: str) -> str | None:
+    def date_problem(
+        self,
+        block_id: str,
+        from_iso: str,
+        to_iso: str,
+        start: str | None = None,
+        duration_min: int | None = None,
+        assignment_id: str | None = None,
+    ) -> str | None:
         """Why this block cannot go on `to_iso`, in the same words as a hours drag, or None."""
         try:
             to_week = monday_of(to_iso)
@@ -912,12 +928,24 @@ class NativeSession(QObject):
         if from_iso == to_iso:
             return None
         block = self._block_on_week(block_id, from_week)
-        if block is None or from_day not in (block.get("days") or []) or not block.get("start"):
+        clock = start
+        length = duration_min
+        homework_id = assignment_id or ""
+        if block is not None:
+            if from_day not in (block.get("days") or []) or not block.get("start"):
+                return None
+            clock = block["start"]
+            length = int(block["duration_min"])
+            homework_id = block.get("assignment_id") or homework_id
+        if not clock or length is None:
             return None
-        start = hhmm_to_minutes(block["start"])
-        assignment = self.assignments.get(block.get("assignment_id") or "")
+        try:
+            start_min = hhmm_to_minutes(clock)
+        except ValueError:
+            return "That is outside the hours FlexWeek plans in, so it stayed where it was."
+        assignment = self.assignments.get(homework_id) or self.assignments.get(block_id)
         due = due_point((assignment or {}).get("due"), to_week)
-        return span_problem([], block_id, to_day, start, start + int(block["duration_min"]), due)
+        return span_problem([], block_id, to_day, start_min, start_min + int(length), due)
 
     def move_to_date(self, block_id: str, from_iso: str, to_iso: str) -> bool:
         """Move a block to another calendar date. Same week keeps its time; another week is one save
@@ -1213,62 +1241,19 @@ class NativeSession(QObject):
         operation_id: str | None,
         snapshot_label: str | None,
     ) -> None:
-        ticket = self._begin()
         side = "before" if self._traveling == "undo" else "after"
-        needed = [entry["week_start"] for entry in extra]
-        fetched: dict[str, dict] = {}
-
-        def fail(error: ApiError) -> None:
-            if not self._idle(ticket):
-                return
-            self.blocks = deepcopy(self._committed_blocks)
-            self.assignments = deepcopy(self._committed_assignments)
-            self.dirty_assignments.clear()
-            self.dirty = False
-            self.pending_save = None
-            self.conflict = False
-            if self._traveling == "undo" and self._travel_step is not None:
-                self._undo.append(self._travel_step)
-            elif self._traveling == "redo" and self._travel_step is not None:
-                self._redo.append(self._travel_step)
-            self._traveling = None
-            self._travel_step = None
-            self._say("Not saved. " + error.message)
-            self.save_finished.emit(False, self.message)
-            self.week_changed.emit()
-
-        def proceed() -> None:
-            if not self._alive(ticket):
-                return
-            writes = [_week_write(self.week_start, self.blocks, self.revision)]
-            for entry in extra:
-                data = fetched[entry["week_start"]]
-                writes.append(_week_write(entry["week_start"], deepcopy(entry[side]), data["revision"]))
-            self.pending_save = {
-                "weeks": writes,
-                "assignments": assignments,
-                "operation_id": operation_id or str(uuid4()),
-                "stay": True,
-            }
-            if snapshot_label:
-                self.pending_save["snapshot_label"] = snapshot_label
-            self._post_pending(ticket)
-
-        def fetch_next() -> None:
-            if not needed:
-                proceed()
-                return
-            week = needed.pop(0)
-
-            def ok(data: dict) -> None:
-                if not self._alive(ticket):
-                    return
-                fetched[week] = data
-                fetch_next()
-
-            self.client.request("GET", f"/api/week?week_start={week}", None, ok, fail)
-
-        fetch_next()
+        writes = [_week_write(self.week_start, self.blocks, self.revision)]
+        for entry in extra:
+            writes.append(_week_write(entry["week_start"], deepcopy(entry[side]), entry["revision"]))
+        self.pending_save = {
+            "weeks": writes,
+            "assignments": assignments,
+            "operation_id": operation_id or str(uuid4()),
+            "stay": True,
+        }
+        if snapshot_label:
+            self.pending_save["snapshot_label"] = snapshot_label
+        self._post_pending()
 
     def save(
         self,
@@ -1356,20 +1341,21 @@ class NativeSession(QObject):
                 else:
                     self.assignments.pop(result["id"], None)
             if self._traveling == "undo" and self._travel_step is not None:
+                _keep_step_revisions(self._travel_step, data)
                 push_step(self._redo, self._travel_step)
                 self._say("Undid " + self._travel_step["label"] + ".")
             elif self._traveling == "redo" and self._travel_step is not None:
+                _keep_step_revisions(self._travel_step, data)
                 push_step(self._undo, self._travel_step)
                 self._say("Redid " + self._travel_step["label"] + ".")
             else:
                 if self._pending_step is not None:
-                    stored_weeks = {
-                        week["week_start"]: week for week in data.get("weeks") or []
-                    }
+                    stored_weeks = {week["week_start"]: week for week in data.get("weeks") or []}
                     for entry in self._pending_step["weeks"]:
                         stored = stored_weeks.get(entry["week_start"])
                         if stored is not None:
                             entry["after"] = deepcopy(stored["blocks"])
+                    _keep_step_revisions(self._pending_step, data)
                     for entry in self._pending_step["assignments"]:
                         stored = self.assignments.get(entry["id"])
                         entry["after"] = None if stored is None else deepcopy(stored)
