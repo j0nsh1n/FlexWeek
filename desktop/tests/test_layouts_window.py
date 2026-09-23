@@ -2203,9 +2203,15 @@ def _drop(qapp: QApplication, window: NativeWindow, block_id: str, hhmm: str, da
 
 
 def _drag_on_the_week(
-    qapp: QApplication, window: NativeWindow, day: int, hhmm: str, to_day: int, to: str
+    qapp: QApplication,
+    window: NativeWindow,
+    day: int,
+    hhmm: str,
+    to_day: int,
+    to: str,
+    between: Callable[[], None] | None = None,
 ) -> None:
-    """Press on the week's hours, move and let go, as a mouse does."""
+    """Press on the week's hours, move and let go, as a mouse does. `between` runs while it is held."""
     from PySide6.QtCore import QEvent, QPoint, QPointF
     from PySide6.QtGui import QMouseEvent
 
@@ -2240,6 +2246,9 @@ def _drag_on_the_week(
     middle = QPoint((start.x() + end.x()) // 2, (start.y() + end.y()) // 2)
     send(QEvent.Type.MouseMove, middle, True)
     send(QEvent.Type.MouseMove, end, True)
+    if between is not None:
+        between()
+        qapp.processEvents()
     send(QEvent.Type.MouseButtonRelease, end, False)
     qapp.processEvents()
 
@@ -2284,6 +2293,22 @@ def test_a_drop_over_school_sits_beside_it_and_no_plan_moves_it_off(
     settled(qapp, window)
     replanned = next(block for block in window.session.blocks if block["id"] == waiting["id"])
     assert (replanned["days"], replanned["start"]) == ([1], "10:00")
+
+
+def test_a_block_held_on_the_week_goes_back_when_the_student_switches_to_day(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Switching away while holding a block is letting go of it, as Escape is: nothing moves and
+    nothing is saved, whatever lies under the pointer on the view that comes up."""
+    settled(qapp, window)
+    revision = window.session.revision
+    _drag_on_the_week(qapp, window, 2, "10:00", 2, "11:00", between=lambda: window._choose_view("day"))
+    settled(qapp, window)
+    assert window.session.planner_view == "day"
+    assert not window.hand.busy
+    assert window.session.revision == revision, "a save was made"
+    school = [block for block in window.session.blocks if block["title"] == "School"]
+    assert [(tuple(block["days"]), block["start"]) for block in school] == [((0, 1, 2, 3, 4), "08:00")]
 
 
 def test_dragging_one_day_of_school_moves_that_day_only(qapp: QApplication, window: NativeWindow) -> None:

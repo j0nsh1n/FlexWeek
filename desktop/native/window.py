@@ -186,6 +186,7 @@ class NativeWindow(QMainWindow):
         self._making_account = False
         self._updates = sanitize_updates(None)
         self._zoom: dict[str, int] = {}
+        self._shown: tuple | None = None
         self._update_asked = False
         self._update_dialog: UpdateDialog | None = None
         self._updater = Updater(self)
@@ -1147,6 +1148,12 @@ class NativeWindow(QMainWindow):
     def _on_week(self) -> None:
         if self.session.account is None:
             return
+        if self.hand.busy and self._where() != self._shown:
+            # Somewhere else was asked for while a block was held: another view, week, day or design.
+            # The block goes back and nothing moves, as Escape does.
+            self.hand.cancel()
+        if not self.hand.busy:
+            self._shown = self._where()
         if self.session.dirty:
             # Every change reaches here, so this is where the clock on "stopped changing" restarts.
             self._changed_ms = self.session.now_ms()
@@ -1540,6 +1547,17 @@ class NativeWindow(QMainWindow):
         today, minute = self._clock_in_week()
         self.week_table.set_week(week, today, minute)
         self.day_view.set_day(week, date.fromisoformat(self.session.selected_day).weekday(), today, minute)
+
+    def _where(self) -> tuple:
+        """What the planner is showing: a held block belongs to this, and to nothing else."""
+        session = self.session
+        return (
+            session.planner_view,
+            session.week_start,
+            session.selected_day,
+            self._day_mode,
+            repr(self._layout),
+        )
 
     def _remember_zoom(self, key: str, px: int) -> None:
         """How close a surface's hours are is kept for this device, as the look is."""
