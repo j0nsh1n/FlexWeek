@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app import create_app
+from backend.assignments import completed_at_for_block
 
 PASSWORD = "a-long-test-password"
 WRITE = {"X-FlexWeek-Request": "1", "Origin": "http://testserver"}
@@ -202,3 +203,39 @@ def test_a_completed_block_ending_at_midnight_saves_and_reloads(tmp_path: Path) 
         assert week["blocks"][0]["start"] == "23:45"
         assert week["blocks"][0]["completed"] is True
         assert week["blocks"][0]["assignment_id"] == chunk["id"]
+
+
+def test_completed_at_on_the_last_midnight_stays_on_the_last_day() -> None:
+    assert (
+        completed_at_for_block(
+            "2099-12-28",
+            {"start": "23:45", "duration_min": 15, "completed_day": 3},
+        )
+        == "2099-12-31T23:59"
+    )
+
+
+def test_a_completed_block_on_the_last_day_ending_at_midnight_saves(client: TestClient) -> None:
+    """23:45–24:00 on 31 December 2099 has no next date. That instant is 23:59 on the last day."""
+    last_week = "2099-12-28"
+    night = {
+        "id": "night",
+        "title": "Night reading",
+        "kind": "flexible",
+        "duration_min": 15,
+        "days": [3],
+        "start": "23:45",
+        "priority": 3,
+        "energy": "low",
+        "latest": "Thursday 23:59",
+        "completed": True,
+        "completed_day": 3,
+    }
+    saved = client.put(
+        "/api/week", json={"week_start": last_week, "blocks": [night], "revision": 0}, headers=WRITE
+    )
+    assert saved.status_code == 200, saved.text
+    listed = client.get(f"/api/assignments?week_start={last_week}&include_completed=true")
+    assert listed.status_code == 200, listed.text
+    night_item = next(item for item in listed.json()["assignments"] if item["title"] == "Night reading")
+    assert night_item["completed_at"] == "2099-12-31T23:59"

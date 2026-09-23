@@ -8,6 +8,7 @@ from datetime import date, timedelta
 
 from backend.models import TimeBlock, parse_due
 from backend.slots import hhmm_to_minutes, minutes_to_hhmm, parse_deadline
+from backend.weeks import LAST_DAY
 
 
 def migrated_assignment_id(week_start: str, source_id: str) -> str:
@@ -38,6 +39,8 @@ def completed_at_for_block(week_start: str, block: dict) -> str:
             if end >= 24 * 60:
                 day_date += timedelta(days=end // (24 * 60))
                 end %= 24 * 60
+            if day_date > LAST_DAY:
+                return f"{LAST_DAY.isoformat()}T23:59"
             return f"{day_date.isoformat()}T{minutes_to_hhmm(end)}"
     return f"{(monday + timedelta(days=6)).isoformat()}T23:59"
 

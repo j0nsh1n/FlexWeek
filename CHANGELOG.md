@@ -11,7 +11,8 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ### Fixed
 - Saving a week no longer fails when finished work ends at midnight. That
-  moment is stored as the next date at 00:00.
+  moment is stored as the next date at 00:00, or 23:59 on 31 December 2099
+  when there is no next date.
 - Homework due on a date with no time is listed after homework due at a set
   time that same day.
 
