@@ -104,3 +104,66 @@ def test_a_day_name_on_the_week_stays_visible_and_opens_that_day(qapp: QApplicat
     assert name is not None and name.isVisible()
     QTest.mouseClick(name, Qt.MouseButton.LeftButton)
     assert opened == [4]
+
+
+def test_a_tray_chip_shortens_its_words_to_the_room_it_has_and_keeps_its_title(qapp: QApplication) -> None:
+    """The Day's tray is narrower than a long title. The chip shortens its words rather than running
+    off the edge of the tray, and says the whole title to a screen reader and in its tooltip."""
+    from desktop.native.hours.chips import TrayChip
+    from desktop.native.hours.classic import ClassicDay
+
+    title = "Science poster on the water cycle for Ms Alvarez"
+    poster = {
+        "id": "poster-1",
+        "title": title,
+        "kind": "flexible",
+        "category": "homework",
+        "assignment_id": "poster",
+        "duration_min": 90,
+        "days": [0, 1, 2, 3, 4],
+    }
+    view = ClassicDay(Hand(lambda block_id, from_day, span: Verdict(True, ""), QWidget()))
+    view.set_look(None, resolved_palette("system", False, None))
+    view.resize(760, 520)
+    view.set_day(
+        build_week("2026-09-21", [poster], {"poster": {"id": "poster", "due": "2026-09-25"}}), 3, 3, 900
+    )
+    view.show()
+    qapp.processEvents()
+    chip = view.findChild(TrayChip)
+    whole = f"{title} · 1 h 30 min"
+    inside = view.side.contentsRect()
+    assert chip.mapTo(view.side, chip.rect().topRight()).x() <= inside.right(), "the chip ran past its tray"
+    assert chip.text() != whole and chip.text().endswith("…")
+    assert chip.accessibleName() == whole
+    assert title in chip.toolTip()
+    view.side.setFixedWidth(620)
+    qapp.processEvents()
+    assert chip.text() == whole, "given room again, it says it all"
+
+
+def test_a_tray_chip_in_a_row_says_it_all_again_once_the_row_has_room(qapp: QApplication) -> None:
+    """The Week's tray is a row. A chip shortened while the window was narrow asks for its whole words
+    again, so a wider window shows them."""
+    from PySide6.QtWidgets import QHBoxLayout
+
+    from desktop.native.hours.chips import TrayChip
+    from desktop.native.weekmodel import Waiting
+
+    title = "Science poster on the water cycle"
+    whole = f"{title} · 1 h 30 min"
+    row = QWidget()
+    line = QHBoxLayout(row)
+    chip = TrayChip(
+        Hand(lambda block_id, from_day, span: Verdict(True, ""), QWidget()),
+        Waiting("poster", title, "homework", 90, "poster", "2026-09-25", ""),
+    )
+    line.addWidget(chip)
+    line.addStretch(1)
+    row.setFixedWidth(160)
+    row.show()
+    qapp.processEvents()
+    assert chip.text().endswith("…")
+    row.setFixedWidth(700)
+    qapp.processEvents()
+    assert chip.text() == whole
