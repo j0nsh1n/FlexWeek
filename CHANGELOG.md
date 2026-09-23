@@ -8,6 +8,9 @@ All notable changes to FlexWeek are documented here. Format follows
 ### Changed
 - Today's app's week scrolls through the whole day instead of squeezing
   24 hours onto the screen. Day names stay at the top.
+- Day and Week zoom: Ctrl and the mouse wheel, Ctrl with =, - or 0, or the
+  two buttons above the hours. Each remembers how close it was on this
+  computer. A short block can be picked up from its middle at any zoom.
 
 ### Fixed
 - Saving a week no longer fails when finished work ends at midnight. That

@@ -534,6 +534,12 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-22, `feat/0.15-tabs`: Unit 3, zoom and scrolling on hours. `hours/zoom.py` holds the
+  levels, the header kept above the hours and the scroll that keeps a minute in place; Today's
+  app's Day and Week use it, and the level is kept in the look file. Resize zones never take
+  more than a fifth of a block. Source gate 1202 passed; Classic rig Day 7/7, Week 10/10 with
+  the real pointer zooming. The rig's app runs with `QT_XCB_NO_XI2=1`, because Qt on the hidden
+  display never hears xdotool's wheel otherwise. Nothing pushed.
 - 2026-09-22, `fix/015-rig-reach`: `HoursCanvas.in_view` requires a track that
   contains the requested minute. A scrolled 06:00–22:00 track test failed
   before the fix and passes after it. Full source gate: 1181 passed; Classic

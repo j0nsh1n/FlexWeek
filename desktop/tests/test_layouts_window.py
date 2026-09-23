@@ -1224,8 +1224,10 @@ def test_the_week_toolbar_keeps_only_what_is_reached_for(qapp: QApplication, win
     shown = [
         button.objectName()
         for button in page.findChildren(QPushButton)
-        if button.isVisible() and button.objectName()
+        # The calendar's own controls, such as zooming its hours, belong to it, not to the toolbar.
+        if button.isVisible() and button.objectName() and not window.planner.isAncestorOf(button)
     ]
+    assert window.findChild(QPushButton, "weekZoomIn").isVisible()
     assert shown == [
         "prevWeek",
         "nextWeek",

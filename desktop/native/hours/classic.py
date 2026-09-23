@@ -1,9 +1,10 @@
 """Today's app's Day and Week, as Daily Scheduler draws them.
 
-Day is one full-width day at 96 pixels an hour that scrolls, with the homework still waiting for a
-time and a summary of the day beside it. Week is seven columns at 48 pixels an hour that scroll,
-with the day's name kept at the top so it still opens that day. Both are painted hours on the one
-`Hand`, so every gesture works the same on each.
+Day is one full-width day that opens at 96 pixels an hour and scrolls, with the homework still
+waiting for a time and a summary of the day beside it. Week is seven columns that open at 48 pixels
+an hour and scroll, with the days' names kept at the top so each still opens its day. Both zoom, and
+remember how close they were. Both are painted hours on the one `Hand`, so every gesture works the
+same on each.
 """
 
 from __future__ import annotations
@@ -12,19 +13,23 @@ from datetime import date, timedelta
 
 from PySide6.QtCore import QRectF, Qt, Signal
 from PySide6.QtGui import QMouseEvent
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from desktop.native.calendar import CATEGORIES, DAYS
 from desktop.native.hours.canvas import BlockPainter, HoursCanvas
 from desktop.native.hours.chips import TrayChip
 from desktop.native.hours.geometry import FIRST, LAST, LinearTrack
 from desktop.native.hours.hand import Hand
+from desktop.native.hours.zoom import HoursScroll, Scale
 from desktop.native.weekmodel import WeekModel, length_label
 
-DAY_HOUR_PX = 96
-WEEK_HOUR_PX = 48
+# A Day never goes below 96 pixels an hour, where 15 minutes is 24 pixels. The Week opens at 48, where
+# an hour still has edges to resize, and can go further out to see more of the day at once.
+DAY_SCALE = Scale("classic.day", (96, 128, 160, 192), 96)
+WEEK_SCALE = Scale("classic.week", (32, 48, 64, 96, 128), 48)
+DAY_HOUR_PX = DAY_SCALE.default
+WEEK_HOUR_PX = WEEK_SCALE.default
 PAD = 8
-NAME_H = 30
 GUTTER = 52
 
 
@@ -69,69 +74,46 @@ class ClassicWeek(QWidget):
         self.setObjectName("weekTable")
         self.week_start = ""
         self._revealed: str | None = None
-        self._now_min: int | None = None
-        self._needs_scroll = False
-        self.hours = HoursCanvas(
-            hand, BlockPainter({}), _seven_columns, gutter=GUTTER, header=0, names=self._name
-        )
+        self.hours = HoursCanvas(hand, BlockPainter({}), _seven_columns, gutter=GUTTER, names=self._name)
         self.hours.setObjectName("weekHours")
-        self.hours.setFixedHeight(_hours_height(WEEK_HOUR_PX))
         self.hours.day_opened.connect(self.day_opened.emit)
-        self.scroll = QScrollArea()
-        self.scroll.setObjectName("weekScroll")
-        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.scroll.setWidget(self.hours)
-        self.names = QWidget()
-        self.names.setObjectName("weekDayNames")
-        self.names.setFixedHeight(NAME_H)
-        row = QHBoxLayout(self.names)
-        row.setContentsMargins(GUTTER, 0, 0, 0)
+        self.scroll = HoursScroll(self.hours, WEEK_SCALE, _hours_height, name="week", gutter=GUTTER)
+        names = QWidget()
+        names.setObjectName("weekDayNames")
+        row = QHBoxLayout(names)
+        row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(0)
-        self._name_btns: list[DayName] = []
+        self._name_labels: list[DayName] = []
         for day in range(7):
             name = DayName(day)
             name.setObjectName(f"weekDayName{day}")
             name.setText(DAYS[day])
             name.clicked.connect(self.day_opened.emit)
-            row.addWidget(name)
-            self._name_btns.append(name)
+            row.addWidget(name, 1)
+            self._name_labels.append(name)
+        self.scroll.set_header(names)
         box = QVBoxLayout(self)
         box.setContentsMargins(0, 0, 0, 0)
-        box.setSpacing(0)
-        box.addWidget(self.names)
-        box.addWidget(self.scroll, 1)
-
-    def showEvent(self, event: object) -> None:  # noqa: N802
-        super().showEvent(event)
-        if self._needs_scroll:
-            self._needs_scroll = False
-            self._scroll_toward_now()
+        box.addWidget(self.scroll)
 
     def _name(self, day: int) -> str:
         if not self.week_start:
             return DAYS[day]
         return f"{DAYS[day]} {(date.fromisoformat(self.week_start) + timedelta(days=day)).day}"
 
-    def _scroll_toward_now(self) -> None:
-        minute = self._now_min if self._now_min is not None else 8 * 60
-        top = max(minute - 90, FIRST)
-        self.scroll.verticalScrollBar().setValue(round((top - FIRST) / 60 * WEEK_HOUR_PX))
-
     def set_look(self, look: dict | None, palette: dict) -> None:
         self.hours.set_painter(BlockPainter(palette, look))
 
     def set_week(self, week: WeekModel, today: int | None, now_min: int | None) -> None:
         self.week_start = week.week_start
-        self._now_min = now_min
         self.hours.set_week(week.occurrences, today, now_min)
-        for day, btn in enumerate(self._name_btns):
-            btn.setText(self._name(day))
+        for day, label in enumerate(self._name_labels):
+            label.setText(self._name(day))
         if week.week_start != self._revealed:
+            # A new week opens near now, or at the start of a school day. The same week keeps its
+            # place, wherever the student scrolled it.
             self._revealed = week.week_start
-            self._needs_scroll = True
-            self._scroll_toward_now()
+            self.scroll.scroll_to(now_min if now_min is not None else 8 * 60)
 
     def hours_surfaces(self) -> list[HoursCanvas]:
         return [self.hours]
@@ -148,13 +130,8 @@ class ClassicDay(QWidget):
         self._revealed: tuple[str, int] | None = None
         self.hours = HoursCanvas(hand, BlockPainter({}), self._one_column, gutter=56)
         self.hours.setObjectName("dayHours")
-        self.hours.setFixedHeight(_hours_height(DAY_HOUR_PX))
-        self.scroll = QScrollArea()
-        self.scroll.setObjectName("dayScroll")
-        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.scroll.setWidget(self.hours)
+        # The window's heading already names the day, so its header holds only the zoom.
+        self.scroll = HoursScroll(self.hours, DAY_SCALE, _hours_height, name="day", gutter=56)
         self.side = QFrame()
         self.side.setObjectName("daySide")
         self.side.setFixedWidth(250)
@@ -211,8 +188,7 @@ class ClassicDay(QWidget):
                 if today == day and now_min is not None
                 else min((item.start for item in items), default=8 * 60)
             )
-            top = max(minute - 90, FIRST)
-            self.scroll.verticalScrollBar().setValue(round((top - FIRST) / 60 * DAY_HOUR_PX))
+            self.scroll.scroll_to(minute)
 
     def _fill_tray(self, week: WeekModel) -> None:
         if self.hand.busy:

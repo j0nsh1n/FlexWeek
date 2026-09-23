@@ -82,16 +82,21 @@ storage, CI). Each unit ends green on the rig, on the source gate, and with its 
    (`handoffs/grok-night-last.md`).*
 3. **Zoom and scrolling on hours.** Pixels per hour per surface, a zoom control, a remembered level,
    and the reach checks at each level. Owner: Claude.
-   *Week scrolls at 48 pixels an hour since `ff5df31`, and the rig checks 00:00 and 24:00 can be
-   reached. Open: zoom, the remembered level, the reach matrix, block words drawn from the
-   viewport rather than the repaint rect, and Week re-scrolling to now after a re-show.*
+   *Built in `desktop/native/hours/zoom.py`. Today's app offers Day at 96, 128, 160 and 192 pixels
+   an hour (15 minutes never under 24 pixels) and Week at 32, 48, 64, 96 and 128, opening at 96
+   and 48. Ctrl and the wheel zoom about the pointer; Ctrl with =, - or 0 and the two corner
+   buttons zoom about the middle. The level is kept per surface in the look file on this device.
+   Resize zones: Daily Scheduler's 7 pixels at each end of a block 20 pixels or longer, but never
+   more than a fifth of the block, so a 15-minute block moves when pressed at 25%, 50% and 75% of
+   its length at every level. The rig proves both with the real pointer.*
 3b. **Work windows in setup and Settings.** The screens that let a student say when they work.
    Owner: ChatGPT. Brief: `handoffs/chatgpt-work-windows-ui.md`. *Not started.*
 4. **Optional due times.** Due date required, due time optional, through the model, the API, the
    planner, the judge, the dialogs and the words shown. Owner: Grok for model and API, Claude for
    the dialogs. *Model, API and labels landed at `e7e5206`. Open: the dialogs.*
 5. **Finish Today's app.** Move the 15 stale tests to the new surfaces; complete the matrix.
-   Owner: Claude. *The 15 stale tests read the hours canvas since `ffe08aa`. Open: the matrix.*
+   Owner: Claude. *The 15 stale tests read the hours canvas since `ffe08aa`. Open: the matrix,
+   and a tray chip on Day whose title is cut off at large text rather than shortened.*
 6. **The rig in CI.** Xvfb, a small window manager, per-design jobs, artifacts, timeouts.
    Owner: Grok. Brief: `handoffs/grok-rig-in-ci.md`.
 7. **Hosting and targets.** Every design reaches the window's hand; the hand finds any visible

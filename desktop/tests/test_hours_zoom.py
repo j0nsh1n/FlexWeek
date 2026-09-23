@@ -1,0 +1,297 @@
+"""Hours that zoom and scroll: the level a surface shows, the minute that stays put while it changes,
+and the short block that must still move when it is pressed.
+
+These send Qt events, so they prove the rules; the rig (scripts/rig/drive.py) zooms and drags with a
+real pointer on the real window.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import os
+from collections.abc import Iterator
+
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
+)
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+if importlib.util.find_spec("PySide6") is not None:
+    from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, Qt
+    from PySide6.QtGui import QColor, QImage, QMouseEvent, QRegion, QWheelEvent
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QApplication, QWidget
+
+    from desktop.native.hours.classic import DAY_SCALE, WEEK_SCALE, ClassicDay, ClassicWeek
+    from desktop.native.hours.hand import Gesture, Hand, Verdict
+    from desktop.native.hours.zoom import Scale, sanitize_zoom
+    from desktop.native.look import resolved_palette
+    from desktop.native.weekmodel import build_week
+
+MONDAY = "2026-09-21"
+SCHOOL = {
+    "id": "school",
+    "title": "School",
+    "kind": "locked",
+    "days": [0],
+    "start": "08:00",
+    "duration_min": 390,
+}
+QUARTER = {"id": "quiz", "title": "Quiz", "kind": "locked", "days": [3], "start": "16:00", "duration_min": 15}
+
+
+@pytest.fixture(scope="module")
+def qapp() -> Iterator[QApplication]:
+    yield QApplication.instance() or QApplication(["flexweek-zoom-test"])
+
+
+def settle(qapp: QApplication) -> None:
+    for _ in range(5):
+        qapp.processEvents()
+
+
+def a_week(qapp: QApplication, blocks: list[dict] | None = None) -> ClassicWeek:
+    # Inside the offscreen screen (800 by 800), where QApplication.widgetAt can find it.
+    view = ClassicWeek(Hand(lambda block_id, from_day, span: Verdict(True, ""), QWidget()))
+    view.set_look(None, resolved_palette("system", False, None))
+    view.set_week(build_week(MONDAY, blocks or [], {}, None), 3, 15 * 60 + 40)
+    view.move(0, 0)
+    view.resize(760, 520)
+    view.show()
+    settle(qapp)
+    return view
+
+
+def a_day(qapp: QApplication, blocks: list[dict], day: int) -> ClassicDay:
+    view = ClassicDay(Hand(lambda block_id, from_day, span: Verdict(True, ""), QWidget()))
+    view.set_look(None, resolved_palette("system", False, None))
+    view.move(0, 0)
+    view.resize(760, 560)
+    view.set_day(build_week(MONDAY, blocks, {}, None), day, 3, 15 * 60 + 40)
+    view.show()
+    settle(qapp)
+    return view
+
+
+def minute_at(view: ClassicWeek | ClassicDay, y: float) -> float:
+    """The minute at a height in the hours' viewport."""
+    track = view.hours.tracks[0]
+    inside = view.scroll.verticalScrollBar().value() + y
+    return track.first + (inside - track.area.top()) / track.per_minute()
+
+
+def wheel(widget: QWidget, at: QPointF, notches: float, ctrl: bool = True) -> None:
+    modifiers = Qt.KeyboardModifier.ControlModifier if ctrl else Qt.KeyboardModifier.NoModifier
+    event = QWheelEvent(
+        at,
+        QPointF(widget.mapToGlobal(at.toPoint())),
+        QPoint(),
+        QPoint(0, round(120 * notches)),
+        Qt.MouseButton.NoButton,
+        modifiers,
+        Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+    QApplication.sendEvent(widget, event)
+
+
+def test_a_remembered_level_is_read_back_as_one_the_surface_offers() -> None:
+    scale = Scale("classic.week", (32, 48, 64), 48)
+    assert scale.nearest(64) == 64
+    assert scale.nearest(70) == 64, "a level no longer offered is the nearest that is"
+    assert scale.nearest(40) == 32, "halfway between two levels is the smaller"
+    assert scale.nearest("64") == 48 and scale.nearest(True) == 48 and scale.nearest(None) == 48
+    assert scale.step(48, 5) == 64 and scale.step(48, -5) == 32
+    assert sanitize_zoom(
+        {"classic.week": 64, "classic.day": True, "Bad Key": 64, "bento.week": 9000, "x.y": 7}
+    ) == {"classic.week": 64}
+    assert sanitize_zoom(["classic.week", 64]) == {}
+
+
+def test_ctrl_and_the_wheel_zoom_about_the_pointer(qapp: QApplication) -> None:
+    view = a_week(qapp)
+    port = view.scroll.viewport()
+    y = port.height() * 0.7
+    before = minute_at(view, y)
+    wheel(view.hours, QPointF(300, view.scroll.verticalScrollBar().value() + y), 1)
+    assert view.scroll.px == 64
+    assert abs(minute_at(view, y) - before) <= 1, "the minute under the pointer stayed under it"
+    wheel(view.hours, QPointF(300, view.scroll.verticalScrollBar().value() + y), 0.5)
+    assert view.scroll.px == 64, "half a notch from a touchpad is not a step yet"
+    wheel(view.hours, QPointF(300, view.scroll.verticalScrollBar().value() + y), 0.5)
+    assert view.scroll.px == 96, "two half notches are one step"
+    wheel(view.hours, QPointF(300, view.scroll.verticalScrollBar().value() + y), -2)
+    assert view.scroll.px == 48
+    top = view.scroll.verticalScrollBar().value()
+    wheel(view.hours, QPointF(300, top + y), -1, ctrl=False)
+    assert view.scroll.px == 48, "without Ctrl the wheel only scrolls"
+
+
+def test_keys_and_buttons_zoom_about_the_middle_and_stop_at_each_end(qapp: QApplication) -> None:
+    view = a_week(qapp)
+    middle = view.scroll.viewport().height() / 2
+    before = minute_at(view, middle)
+    view.hours.setFocus()
+    QTest.keyClick(view.hours, Qt.Key.Key_Equal, Qt.KeyboardModifier.ControlModifier)
+    assert view.scroll.px == 64
+    assert abs(minute_at(view, middle) - before) <= 1
+    for _ in range(6):
+        QTest.mouseClick(view.scroll.buttons.into, Qt.MouseButton.LeftButton)
+    assert view.scroll.px == WEEK_SCALE.levels[-1]
+    assert not view.scroll.buttons.into.isEnabled() and view.scroll.buttons.out.isEnabled()
+    QTest.keyClick(view.hours, Qt.Key.Key_0, Qt.KeyboardModifier.ControlModifier)
+    assert view.scroll.px == WEEK_SCALE.default
+    for _ in range(6):
+        QTest.keyClick(view.hours, Qt.Key.Key_Minus, Qt.KeyboardModifier.ControlModifier)
+    assert view.scroll.px == WEEK_SCALE.levels[0]
+    assert not view.scroll.buttons.out.isEnabled()
+
+
+def test_each_zoom_is_reported_once_so_the_window_can_remember_it(qapp: QApplication) -> None:
+    view = a_week(qapp)
+    said: list[tuple[str, int]] = []
+    view.scroll.zoomed.connect(lambda key, px: said.append((key, px)))
+    QTest.mouseClick(view.scroll.buttons.into, Qt.MouseButton.LeftButton)
+    QTest.mouseClick(view.scroll.buttons.out, Qt.MouseButton.LeftButton)
+    view.scroll.restore({"classic.week": 96})
+    assert said == [("classic.week", 64), ("classic.week", 48)], "a restored level is not saved again"
+    assert view.scroll.px == 96
+
+
+def test_nothing_zooms_while_a_block_is_held(qapp: QApplication) -> None:
+    view = a_week(qapp, [SCHOOL])
+    view.scroll.scroll_to(9 * 60)
+    press = view.hours.mapFromGlobal(view.hours.point_for(0, 10 * 60))
+    QTest.mousePress(view.hours, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, press)
+    assert view.hours.hand.busy
+    view.scroll.zoom_by(1)
+    assert view.scroll.px == WEEK_SCALE.default
+    view.hours.hand.cancel()
+
+
+def test_a_day_never_draws_fifteen_minutes_under_24_pixels(qapp: QApplication) -> None:
+    view = a_day(qapp, [SCHOOL], 0)
+    for px in DAY_SCALE.levels:
+        view.scroll.restore({"classic.day": px})
+        track = view.hours.tracks[0]
+        assert track.per_minute() * 15 >= 24, f"15 minutes is {track.per_minute() * 15:.1f} px at {px}"
+
+
+def press_kind(view: ClassicWeek | ClassicDay, block_id: str, day: int, share: float) -> Gesture:
+    """What pressing a drawn block this far along it and moving a little picks up."""
+    rect = view.hours.block_rect(block_id, day)
+    assert rect is not None, f"{block_id} is not drawn"
+    at = QPoint(rect.center().x(), rect.top() + round(rect.height() * share))
+    local = QPointF(view.hours.mapFromGlobal(at))
+    held = Qt.MouseButton.LeftButton
+    for kind, buttons, point in (
+        (QEvent.Type.MouseButtonPress, held, local),
+        (QEvent.Type.MouseMove, held, local + QPointF(0, 12)),
+        (QEvent.Type.MouseMove, held, local + QPointF(0, 24)),
+    ):
+        global_at = QPointF(view.hours.mapToGlobal(point.toPoint()))
+        event = QMouseEvent(kind, point, global_at, held, buttons, Qt.KeyboardModifier.NoModifier)
+        QApplication.sendEvent(view.hours, event)
+    preview = view.hours.hand.preview
+    view.hours.hand.cancel()
+    assert preview is not None, f"pressing {share:.0%} into {block_id} picked nothing up"
+    return preview.held.kind
+
+
+@pytest.mark.parametrize("px", WEEK_SCALE.levels)
+def test_a_quarter_hour_on_the_week_moves_from_a_quarter_half_and_three_quarters_in(
+    qapp: QApplication, px: int
+) -> None:
+    view = a_week(qapp, [QUARTER])
+    view.scroll.restore({"classic.week": px})
+    view.scroll.scroll_to(16 * 60)
+    settle(qapp)
+    for share in (0.25, 0.5, 0.75):
+        assert press_kind(view, "quiz", 3, share) is Gesture.MOVE, f"{share:.0%} at {px} px an hour"
+
+
+@pytest.mark.parametrize("px", DAY_SCALE.levels)
+def test_a_quarter_hour_on_the_day_moves_from_a_quarter_half_and_three_quarters_in(
+    qapp: QApplication, px: int
+) -> None:
+    view = a_day(qapp, [QUARTER], 3)
+    view.scroll.restore({"classic.day": px})
+    view.scroll.scroll_to(16 * 60)
+    settle(qapp)
+    for share in (0.25, 0.5, 0.75):
+        assert press_kind(view, "quiz", 3, share) is Gesture.MOVE, f"{share:.0%} at {px} px an hour"
+
+
+def test_an_hour_still_resizes_from_its_edges_at_every_level(qapp: QApplication) -> None:
+    hour = {**QUARTER, "duration_min": 60}
+    view = a_day(qapp, [hour], 3)
+    for px in DAY_SCALE.levels:
+        view.scroll.restore({"classic.day": px})
+        view.scroll.scroll_to(16 * 60)
+        settle(qapp)
+        assert press_kind(view, "quiz", 3, 0.02) is Gesture.RESIZE_START, f"top edge at {px}"
+        assert press_kind(view, "quiz", 3, 0.97) is Gesture.RESIZE_END, f"bottom edge at {px}"
+
+
+def test_the_day_names_sit_over_their_columns_beside_a_scroll_bar(qapp: QApplication) -> None:
+    view = a_week(qapp)
+    assert view.scroll.verticalScrollBar().isVisible()
+    for day in range(7):
+        name = view.findChild(QWidget, f"weekDayName{day}")
+        track = view.hours.track_for(day)
+        assert name is not None and track is not None
+        over = name.mapToGlobal(name.rect().center()).x()
+        column = view.hours.mapToGlobal(track.area.center().toPoint()).x()
+        assert abs(over - column) <= 1, f"{name.text()} is {over - column} px off its column"
+
+
+def test_a_week_keeps_where_it_was_scrolled_when_it_is_shown_again(qapp: QApplication) -> None:
+    view = a_week(qapp)
+    bar = view.scroll.verticalScrollBar()
+    view.set_week(build_week("2026-09-28", [], {}, None), None, None)
+    opened_at = bar.value()
+    bar.setValue(bar.maximum())
+    view.hide()
+    view.set_week(build_week("2026-09-28", [SCHOOL], {}, None), None, None)
+    view.show()
+    settle(qapp)
+    assert opened_at != bar.maximum()
+    assert bar.value() == bar.maximum(), "the same week jumped back to the morning"
+
+
+def test_a_week_opened_while_hidden_scrolls_to_now_when_it_is_shown(qapp: QApplication) -> None:
+    view = a_week(qapp)
+    view.hide()
+    view.scroll.verticalScrollBar().setValue(0)
+    view.set_week(build_week("2026-10-05", [], {}, None), 2, 12 * 60)
+    view.show()
+    settle(qapp)
+    assert 10 * 60 <= minute_at(view, 0) <= 11 * 60, "a new week opens a little above now"
+
+
+def dark_in(image: QImage, strip: QRect, left: int) -> int:
+    return sum(
+        1
+        for y in range(strip.top(), strip.bottom())
+        for x in range(left, left + 60)
+        if QColor(image.pixel(x, y)).lightness() < 90
+    )
+
+
+def test_a_small_repaint_does_not_write_a_long_blocks_name_again(qapp: QApplication) -> None:
+    """The name of a block taller than the screen is kept in sight at the top of what shows. A repaint
+    of a strip in its middle, as when a message over it goes away, must not write it there too."""
+    view = a_day(qapp, [SCHOOL], 0)
+    hours = view.hours
+    track = hours.track_for(0)
+    assert track is not None
+    top, bottom = round(track.point_for(8 * 60).y()), round(track.point_for(14 * 60 + 30).y())
+    view.scroll.verticalScrollBar().setValue(top - 20)
+    strip = QRect(0, (top + bottom) // 2, hours.width(), 40)
+    image = QImage(hours.size(), QImage.Format.Format_ARGB32)
+    image.fill(0)
+    hours.render(image, strip.topLeft(), QRegion(strip))
+    assert dark_in(image, strip, round(track.area.left()) + 8) == 0

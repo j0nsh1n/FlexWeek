@@ -843,6 +843,11 @@ def pack_stylesheet(
         f"color: {palette['text']}; font-size: {size + 3}pt; font-weight: 700; "
         f"padding: 0; {edges} }}"
         f"QPushButton#prevWeek:hover, QPushButton#nextWeek:hover {{ color: {palette['text']}; }}"
+        # Zoom is a view control like the arrows: no fill. The corner sizes it to the text.
+        f"QPushButton[zoom=\"true\"] {{ background: transparent; color: {palette['text']}; "
+        f"font-weight: 700; padding: 0; min-height: 0; {edges} }}"
+        f"QPushButton[zoom=\"true\"]:disabled {{ background: transparent; "
+        f"color: {palette['hairline_strong']}; }}"
         # One filled button on the page: the thing the app is for.
         f"QLabel#blockDurationLine {{ color: {palette['muted']}; }}"
         f"QLabel#blockDurationLine[problem=\"true\"] {{ color: {palette['error']}; font-weight: 600; }}"

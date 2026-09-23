@@ -66,6 +66,7 @@ def child_main(args: argparse.Namespace) -> int:
     app = QApplication(["flexweek-rig"])
 
     from desktop.native.calendar import sunday_due
+    from desktop.native.hours.zoom import HoursScroll
     from desktop.native.layouts.registry import sanitize_layout
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
@@ -227,6 +228,17 @@ def child_main(args: argparse.Namespace) -> int:
             xdo("mouseup", 1)
             yield ("wait", 400)
 
+        def wheel(self, point: QPoint, notches: int, ctrl: bool = True) -> Step:
+            """Turn the wheel over a point, away from the student (positive) or toward, with Ctrl
+            held down, as a hand zooms."""
+            yield from self.move(point)
+            if ctrl:
+                xdo("keydown", "ctrl")
+            xdo("click", "--repeat", abs(notches), "--delay", 80, 4 if notches > 0 else 5)
+            if ctrl:
+                xdo("keyup", "ctrl")
+            yield ("wait", 300)
+
         def key(self, *keys: str) -> Step:
             xdo("key", *keys)
             yield ("wait", 150)
@@ -269,6 +281,21 @@ def child_main(args: argparse.Namespace) -> int:
             if reveal is not None:
                 reveal(day, first, last)
             yield ("wait", 150)
+
+        def zoom(self) -> HoursScroll:
+            """The zoom of the hours on screen. Hours that cannot zoom fail the zoom scenarios."""
+            area = self.surface("hours")._scroll_area()
+            if not isinstance(area, HoursScroll):
+                raise NoSurface(f"the {session.planner_view} hours of {self.design} do not zoom")
+            return area
+
+        def minute_under(self, point: QPoint) -> float:
+            hours = self.surface("hours")
+            local = QPointF(hours.mapFromGlobal(point))
+            track = hours.track_at(local)
+            if track is None:
+                raise NoSurface(f"no hours under {point.x()},{point.y()}")
+            return track.minute_at(local)
 
         def at(self, day: int, minute: int, nudge: int = 3) -> QPoint:
             return self.surface("hours").point_for(day, minute) + QPoint(0, nudge)
@@ -484,14 +511,107 @@ def child_main(args: argparse.Namespace) -> int:
         friday = (thursday + timedelta(days=1)).date().isoformat()
         show_day(friday)
 
-    def week_reach(r: Rig) -> Step:
-        """00:00 and 24:00 can be brought on screen. Not the Unit 3 zoom matrix."""
-        yield from r.tab("week")
+    def reach(r: Rig) -> Step:
+        """At every level the hours offer, 00:00 and 24:00 can be brought on screen."""
+        scroll = r.zoom()
         hours = r.surface("hours")
-        yield from r.reveal(3, 0, 60)
-        expect(hours.in_view(3, 0), "00:00 is not in the hours viewport")
-        yield from r.reveal(3, 24 * 60 - 60, 24 * 60)
-        expect(hours.in_view(3, 24 * 60), "24:00 is not in the hours viewport")
+        for px in scroll.scale.levels:
+            scroll.restore({scroll.scale.key: px})
+            yield ("wait", 150)
+            yield from r.reveal(3, 0, 60)
+            expect(hours.in_view(3, 0), f"00:00 is not in the hours viewport at {px} px an hour")
+            yield from r.reveal(3, 24 * 60 - 60, 24 * 60)
+            expect(hours.in_view(3, 24 * 60), f"24:00 is not in the hours viewport at {px} px an hour")
+
+    def week_reach(r: Rig) -> Step:
+        yield from r.tab("week")
+        yield from reach(r)
+
+    def day_reach(r: Rig) -> Step:
+        yield from day_tab(r)
+        yield from reach(r)
+
+    def week_zoom_move(r: Rig) -> Step:
+        """Zoom in twice with the corner button and out once with Ctrl and the wheel, then move."""
+        yield from r.tab("week")
+        scroll = r.zoom()
+        into = scroll.buttons.into
+        for _ in range(2):
+            yield from r.click(into.mapToGlobal(into.rect().center()))
+        twice = scroll.scale.step(scroll.scale.default, 2)
+        expect(scroll.px == twice, f"two clicks on zoom in show {scroll.px} px an hour, not {twice}")
+        yield from r.reveal(3, 18 * 60, 20 * 60 + 30)
+        under = middle(r.block_rect(ids["essay"], 3))
+        before = r.minute_under(under)
+        yield from r.wheel(under, -1)
+        expect(scroll.px == scroll.scale.step(twice, -1), f"the wheel left it at {scroll.px} px an hour")
+        after = r.minute_under(under)
+        expect(abs(after - before) <= 15, f"the pointer was over {before:.0f} and is now over {after:.0f}")
+        yield from r.reveal(3, 17 * 60 + 30, 20 * 60 + 30)
+        box = r.block_rect(ids["essay"], 3)
+        yield from r.drag(middle(box), middle(box) + (r.at(4, 18 * 60) - r.at(3, 19 * 60)))
+        yield from r.settled()
+        got = block(ids["essay"])
+        expect((got["days"], got["start"]) == ([4], "18:00"), f"essay is {got['days']} {got['start']}")
+
+    def day_zoom_resize(r: Rig) -> Step:
+        """Zoom in twice with Ctrl and the wheel, then stretch the essay by half an hour."""
+        yield from day_tab(r)
+        scroll = r.zoom()
+        yield from r.reveal(3, 18 * 60 + 30, 21 * 60)
+        yield from r.wheel(middle(r.block_rect(ids["essay"], 3)), 2)
+        twice = scroll.scale.step(scroll.scale.default, 2)
+        expect(scroll.px == twice, f"two notches show {scroll.px} px an hour, not {twice}")
+        yield from r.reveal(3, 18 * 60 + 30, 21 * 60)
+        box = r.block_rect(ids["essay"], 3)
+        edge = QPoint(box.center().x(), box.bottom() - 2)
+        yield from r.drag(edge, edge + (r.at(3, 20 * 60 + 30) - r.at(3, 20 * 60)))
+        yield from r.settled()
+        got = block(ids["essay"])
+        expect(
+            (got["start"], got["duration_min"]) == ("19:00", 90),
+            f"essay is {got['start']} {got['duration_min']}",
+        )
+
+    def quarter_grab(r: Rig) -> Step:
+        """A 15-minute block moves when pressed a quarter, half and three quarters of the way in."""
+        session.add_block(
+            {
+                "id": "rig-quiz",
+                "title": "Quiz",
+                "kind": "locked",
+                "category": "class",
+                "start": "20:30",
+                "duration_min": 15,
+                "days": [3],
+            }
+        )
+        session.save()
+        yield from r.settled()
+        start = 20 * 60 + 30
+        for share in (0.25, 0.5, 0.75):
+            # Two hours and more below it on screen, so the drop never rests where the hours scroll.
+            yield from r.reveal(3, start - 60, start + 150)
+            box = r.block_rect("rig-quiz", 3)
+            grab = QPoint(box.center().x(), box.top() + round(box.height() * share))
+            yield from r.drag(grab, grab + (r.at(3, start + 30) - r.at(3, start)))
+            yield from r.settled()
+            start += 30
+            got = block("rig-quiz")
+            want = f"{start // 60:02d}:{start % 60:02d}"
+            expect(
+                (got["days"], got["start"], got["duration_min"]) == ([3], want, 15),
+                f"pressed {share:.0%} in, the quiz is {got['days']} {got['start']} for "
+                f"{got['duration_min']} min, not {want} for 15",
+            )
+
+    def week_quarter_grab(r: Rig) -> Step:
+        yield from r.tab("week")
+        yield from quarter_grab(r)
+
+    def day_quarter_grab(r: Rig) -> Step:
+        yield from day_tab(r)
+        yield from quarter_grab(r)
 
     def month_times(r: Rig) -> Step:
         yield from r.tab("month")
@@ -524,6 +644,9 @@ def child_main(args: argparse.Namespace) -> int:
         Scenario("day-resize", "day", day_resize),
         Scenario("day-create", "day", day_create),
         Scenario("day-homework-in", "day", day_homework_in),
+        Scenario("day-zoom-resize", "day", day_zoom_resize),
+        Scenario("day-quarter-grab", "day", day_quarter_grab),
+        Scenario("day-reach", "day", day_reach),
         Scenario("week-move-day", "week", week_move_day),
         Scenario("week-resize-top", "week", week_resize_top),
         Scenario("week-create", "week", week_create),
@@ -532,6 +655,8 @@ def child_main(args: argparse.Namespace) -> int:
         Scenario("week-past-due", "week", week_past_due),
         Scenario("week-open-day", "week", week_open_day),
         Scenario("week-reach", "week", week_reach),
+        Scenario("week-zoom-move", "week", week_zoom_move),
+        Scenario("week-quarter-grab", "week", week_quarter_grab),
         Scenario("month-times", "month", month_times),
         Scenario("month-open-day", "month", month_open_day),
         Scenario("month-move-date", "month", month_move_date),
@@ -559,6 +684,9 @@ def child_main(args: argparse.Namespace) -> int:
         wait_until(app, lambda: not session.busy and not session.dirty, 20)
         session.selected_day = thursday_iso
         session._say("")
+        # Every scenario starts at each surface's own zoom.
+        for scroll in window.findChildren(HoursScroll):
+            scroll.restore({scroll.scale.key: scroll.scale.default})
 
     def use_design(design: str) -> None:
         window._layout = sanitize_layout({"main": design, "day": "one"})
@@ -690,7 +818,15 @@ def main() -> int:
         for key, value in os.environ.items()
         if key not in {"WAYLAND_DISPLAY", "QT_IM_MODULE", "XMODIFIERS"}
     }
-    env.update(DISPLAY=display, QT_QPA_PLATFORM="xcb", XDG_DATA_HOME=str(out / "data"))
+    # XInput 2 off: on the hidden display Qt never hears xdotool's wheel through it, only through
+    # the core protocol, and the zoom scenarios turn the wheel. Presses and drags arrive either way.
+    env.update(
+        DISPLAY=display,
+        QT_QPA_PLATFORM="xcb",
+        QT_XCB_NO_XI2="1",
+        XDG_DATA_HOME=str(out / "data"),
+        PYTHONFAULTHANDLER="1",
+    )
     command = [sys.executable, __file__, "--child", "--out", str(out)]
     for flag in ("design", "tab", "scenario"):
         if getattr(args, flag):

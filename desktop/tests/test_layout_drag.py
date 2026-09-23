@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import importlib.util
+import json
 import math
 import os
 import time
@@ -25,7 +26,7 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QByteArray, QMimeData, QPoint, QPointF, QStandardPaths, Qt
+    from PySide6.QtCore import QByteArray, QEvent, QMimeData, QPoint, QPointF, QStandardPaths, Qt
     from PySide6.QtGui import QDragEnterEvent, QDragLeaveEvent, QDragMoveEvent, QDropEvent
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication, QDialog, QPushButton, QWidget
@@ -504,3 +505,23 @@ def test_leaving_the_hours_takes_the_ghost_away(qapp: QApplication, window: Nati
     QApplication.sendEvent(hours, QDragLeaveEvent())
     assert hours.incoming_words() == ""
     view.drag_ended()
+
+
+def test_how_close_the_hours_are_is_kept_for_this_device(qapp: QApplication, window: NativeWindow) -> None:
+    """A zoom chosen on Week is in the look file, and the next window opens the Week at it."""
+    window.findChild(QPushButton, "viewWeek").click()
+    qapp.processEvents()
+    QTest.mouseClick(window.findChild(QPushButton, "weekZoomIn"), Qt.MouseButton.LeftButton)
+    assert window.week_table.scroll.px == 64
+    assert json.loads(look_file().read_text())["zoom"] == {"classic.week": 64}
+    again = NativeWindow(window.session.client.origin)
+    try:
+        assert again.week_table.scroll.px == 64
+        assert again.day_view.scroll.px == 96, "the Day was not zoomed, so it opens at its own level"
+    finally:
+        # Closed and deleted here, so nothing of this second window runs during a later test.
+        with contextlib.suppress(RuntimeError):
+            again.session.client.reset()
+        again.close()
+        again.deleteLater()
+        QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)

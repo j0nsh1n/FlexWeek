@@ -26,6 +26,7 @@ from PySide6.QtGui import (
     QPaintEvent,
     QPen,
     QResizeEvent,
+    QWheelEvent,
 )
 from PySide6.QtWidgets import QScrollArea, QWidget
 
@@ -46,6 +47,7 @@ from desktop.native.weekmodel import Occurrence, clock_label, length_label
 
 # A press this close to a block's start or end edge resizes it, on a block long enough to have edges.
 EDGE_PX = 7
+ZOOM_KEYS = {Qt.Key.Key_Equal: 1, Qt.Key.Key_Plus: 1, Qt.Key.Key_Minus: -1, Qt.Key.Key_0: 0}
 FREE_HINT = "+ drag to create, or click"
 
 
@@ -311,6 +313,9 @@ class HoursCanvas(QWidget):
 
     # A day's name was clicked: open it on Day.
     day_opened = Signal(int)
+    # Zoom by this many steps (0 goes back to the surface's own level), about this height in the
+    # canvas, or about the middle of what is on screen when there is none.
+    zoom_asked = Signal(int, object)
 
     def __init__(
         self,
@@ -341,6 +346,7 @@ class HoursCanvas(QWidget):
         self.today: int | None = None
         self.now_min: int | None = None
         self._hover: tuple[LinearTrack, int] | None = None
+        self._wheel = 0
         hand.preview_changed.connect(self.update)
 
     # What it shows
@@ -469,7 +475,7 @@ class HoursCanvas(QWidget):
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        visible = QRectF(event.rect())
+        visible = self._visible()
         self.painter.background(painter, QRectF(self.rect()))
         preview = self.hand.preview
         held = preview.held if preview is not None else None
@@ -507,6 +513,15 @@ class HoursCanvas(QWidget):
                 )
         self._paint_label(painter)
         painter.end()
+
+    def _visible(self) -> QRectF:
+        """The part of the hours on screen. Not the part being repainted: a long block's name is kept
+        in sight at the top of what shows, and a small repaint must not draw it a second time."""
+        area = self._scroll_area()
+        if area is None:
+            return QRectF(self.rect())
+        port = area.viewport()
+        return QRectF(QRect(self.mapFrom(port, QPoint(0, 0)), port.size())).intersected(QRectF(self.rect()))
 
     def _name_box(self, track: LinearTrack) -> QRectF:
         return QRectF(track.area.left(), 0, track.area.width(), self.header)
@@ -590,16 +605,18 @@ class HoursCanvas(QWidget):
 
     def _edge_kind(self, rect: QRectF, upright: QPointF, track: LinearTrack) -> Gesture:
         """Resize from within a few pixels of the start or end edge of a block long enough to have
-        edges; move from anywhere else. As in Daily Scheduler."""
+        edges; move from anywhere else. As in Daily Scheduler, except that an edge is never more than
+        a fifth of the block, so a short block still moves when pressed a quarter of the way in."""
         down = track.axis is Axis.DOWN
         length = rect.height() if down else rect.width()
         if length < 2 * EDGE_PX + 6:
             return Gesture.MOVE
+        edge = min(EDGE_PX, length / 5)
         from_start = upright.y() - rect.top() if down else upright.x() - rect.left()
         from_end = rect.bottom() - upright.y() if down else rect.right() - upright.x()
-        if from_start <= EDGE_PX:
+        if from_start <= edge:
             return Gesture.RESIZE_START
-        if from_end <= EDGE_PX:
+        if from_end <= edge:
             return Gesture.RESIZE_END
         return Gesture.MOVE
 
@@ -651,8 +668,29 @@ class HoursCanvas(QWidget):
             self._hover = None
             self.update()
 
+    def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802
+        """Ctrl and the wheel zoom about the pointer. Without Ctrl the hours scroll as usual."""
+        if not event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            self._wheel = 0
+            event.ignore()
+            return
+        event.accept()
+        # A touchpad sends small turns; a step is a whole notch of a wheel.
+        self._wheel += event.angleDelta().y()
+        steps = int(self._wheel / 120)
+        if steps:
+            self._wheel -= steps * 120
+            self.zoom_asked.emit(steps, event.position().y())
+
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
-        """Enter opens the chosen block. Everything else goes to the window's shortcuts."""
+        """Enter opens the chosen block, and Ctrl with =, - or 0 zooms. Everything else goes to the
+        window's shortcuts."""
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            steps = ZOOM_KEYS.get(event.key())
+            if steps is not None:
+                self.zoom_asked.emit(steps, None)
+                event.accept()
+                return
         chosen = self.hand.selection
         mine = chosen is not None and any(item.block_id == chosen[0] for item in self.occurrences)
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and chosen is not None and mine:

@@ -62,6 +62,7 @@ from desktop.native.hours.classic import ClassicDay, ClassicWeek
 from desktop.native.hours.geometry import Span
 from desktop.native.hours.hand import Create, Hand, Move, MoveDate, Place, span_words
 from desktop.native.hours.hand import Verdict as HandVerdict
+from desktop.native.hours.zoom import sanitize_zoom
 from desktop.native.kept import KeptSession
 from desktop.native.layouts.base import LayoutView, Scene
 from desktop.native.layouts.drag import Verdict
@@ -183,6 +184,7 @@ class NativeWindow(QMainWindow):
         self._views: dict[str, LayoutView] = {}
         self._making_account = False
         self._updates = sanitize_updates(None)
+        self._zoom: dict[str, int] = {}
         self._update_asked = False
         self._update_dialog: UpdateDialog | None = None
         self._updater = Updater(self)
@@ -238,6 +240,8 @@ class NativeWindow(QMainWindow):
         self._look = sanitize_look(None)
         self._allow_week_page = True
         self._load_look()
+        for hours in (self.week_table.scroll, self.day_view.scroll):
+            hours.restore(self._zoom)
         self.session.look = self._look
         self.session.focus_changed.connect(self._on_focus)
         self.session.focus_replace_needed.connect(self._confirm_replace_focus)
@@ -750,6 +754,8 @@ class NativeWindow(QMainWindow):
         self.planner.addWidget(self.week_table)
         self.day_view = ClassicDay(self.hand)
         self.planner.addWidget(self.day_view)
+        for hours in (self.week_table.scroll, self.day_view.scroll):
+            hours.zoomed.connect(self._remember_zoom)
         self.month_grid = MonthGrid()
         self.month_grid.day_activated.connect(self.session.open_day)
         self.planner.addWidget(self.month_grid)
@@ -1519,6 +1525,11 @@ class NativeWindow(QMainWindow):
         today, minute = self._clock_in_week()
         self.week_table.set_week(week, today, minute)
         self.day_view.set_day(week, date.fromisoformat(self.session.selected_day).weekday(), today, minute)
+
+    def _remember_zoom(self, key: str, px: int) -> None:
+        """How close a surface's hours are is kept for this device, as the look is."""
+        self._zoom = {**self._zoom, key: px}
+        self._save_look()
 
     def _open_week_day(self, day: int) -> None:
         self.session.open_day(date_for_day(self.session.week_start, day))
@@ -2309,6 +2320,7 @@ class NativeWindow(QMainWindow):
         self._look = sanitize_look(stored)
         self._layout = sanitize_layout(stored.get("layout") if isinstance(stored, dict) else None)
         self._updates = sanitize_updates(stored.get("updates") if isinstance(stored, dict) else None)
+        self._zoom = sanitize_zoom(stored.get("zoom") if isinstance(stored, dict) else None)
 
     def _save_look(self) -> None:
         import json
@@ -2316,7 +2328,7 @@ class NativeWindow(QMainWindow):
         path = self._look_path()
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            body = {**self._look, "layout": self._layout, "updates": self._updates}
+            body = {**self._look, "layout": self._layout, "updates": self._updates, "zoom": self._zoom}
             path.write_text(json.dumps(body) + "\n")
         except OSError:
             self.session._say("Could not save the look for this device.")
