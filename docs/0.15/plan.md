@@ -113,6 +113,9 @@ storage, CI). Each unit ends green on the rig, on the source gate, and with its 
 8. **Cross-week MoveDate.** One atomic controller operation over two week documents, idempotent on
    retry, one Undo step. `/api/changes` already writes several weeks in one transaction.
    Owner: Grok. Brief: `handoffs/grok-month-across-weeks.md`.
+   *Landed at `2d8bae3`. Open, in `handoffs/grok-move-date-followup.md`: Undo across weeks must
+   send the revision it last saw, and `date_problem` must answer for a chip whose week is not
+   loaded.*
 9. **Month.** One `MonthCanvas` dressed per design, the full Month matrix. Owner: Claude.
 10. **Mission control**, then 11. **Clay deck**, 12. **Retro desktop**, 13. **Bento**,
     14. **Timeline**. One design per unit, Day and Week together, riskiest interaction first.

@@ -67,9 +67,7 @@ def test_move_to_date_keeps_the_time_on_another_day_of_the_same_week(
     assert soccer["duration_min"] == 60
 
 
-def test_move_to_date_writes_both_weeks_going_forward(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_move_to_date_writes_both_weeks_going_forward(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     first = session.week_start
     second = week_after(first)
@@ -92,9 +90,7 @@ def test_move_to_date_writes_both_weeks_going_forward(
     assert titles(session.blocks) == []
 
 
-def test_move_to_date_writes_both_weeks_going_back(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_move_to_date_writes_both_weeks_going_back(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     first = session.week_start
     second = week_after(first)
@@ -115,9 +111,7 @@ def test_move_to_date_writes_both_weeks_going_back(
     assert soccer["start"] == "16:00"
 
 
-def test_move_to_date_splits_one_day_off_a_repeating_block(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_move_to_date_splits_one_day_off_a_repeating_block(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     first = session.week_start
     second = week_after(first)
@@ -154,9 +148,7 @@ def test_date_problem_and_move_to_date_refuse_homework_past_due(
 ) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     due = date_for_day(session.week_start, 3) + "T15:00"
-    session.add_homework(
-        {"id": "essay", "title": "Essay", "due": due, "estimate_min": 60, "revision": 0}
-    )
+    session.add_homework({"id": "essay", "title": "Essay", "due": due, "estimate_min": 60, "revision": 0})
     session.save()
     settled(qapp, session)
     waiting = session.blocks[0]
@@ -176,9 +168,7 @@ def test_date_problem_and_move_to_date_refuse_homework_past_due(
     assert session.message == "That ends after it is due, so it stayed where it was."
 
 
-def test_move_to_date_keeps_homework_pinned_on_the_new_week(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_move_to_date_keeps_homework_pinned_on_the_new_week(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     first = session.week_start
     second = week_after(first)
@@ -208,9 +198,7 @@ def test_move_to_date_keeps_homework_pinned_on_the_new_week(
     assert essay["start"] == "16:00"
 
 
-def test_a_409_on_the_other_week_leaves_both_weeks_untouched(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_a_409_on_the_other_week_leaves_both_weeks_untouched(qapp: QApplication, server: LocalServer) -> None:
     alice = signed_in(qapp, server.origin, "alice", create=True)
     first = alice.week_start
     second = week_after(first)
@@ -252,9 +240,7 @@ def test_a_409_on_the_other_week_leaves_both_weeks_untouched(
     assert titles(alice.blocks) == ["Soccer"]
 
 
-def test_retrying_the_same_operation_id_moves_the_block_once(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_retrying_the_same_operation_id_moves_the_block_once(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     first = session.week_start
     second = week_after(first)
@@ -343,3 +329,43 @@ def test_undo_puts_both_weeks_back(qapp: QApplication, server: LocalServer) -> N
     soccer = next(block for block in source["blocks"] if block["id"] == "soccer")
     assert soccer["days"] == [0]
     assert soccer["start"] == "16:00"
+
+
+def test_a_move_into_a_week_that_already_has_blocks_keeps_them(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    """The other week is rewritten whole, so what it already held must come along: a plain block
+    and one day of a repeating block both arrive beside what was there."""
+    session = signed_in(qapp, server.origin, "alice", create=True)
+    first = session.week_start
+    second = week_after(first)
+    session.load_week(second)
+    settled(qapp, session)
+    session.add_block(fixed("piano", "Piano", 2, "18:00"))
+    session.save()
+    settled(qapp, session)
+    session.load_week(first)
+    settled(qapp, session)
+    session.add_block(fixed("soccer", "Soccer", 3, "16:00"))
+    session.add_block(
+        {
+            "id": "band",
+            "title": "Band",
+            "kind": "locked",
+            "duration_min": 60,
+            "days": [0, 2, 4],
+            "start": "17:00",
+        }
+    )
+    session.save()
+    settled(qapp, session)
+    assert session.move_to_date("soccer", date_for_day(first, 3), date_for_day(second, 1)) is True
+    settled(qapp, session)
+    assert session.move_to_date("band", date_for_day(first, 0), date_for_day(second, 0)) is True
+    settled(qapp, session)
+    dest = read_week(qapp, session, second)
+    assert sorted(titles(dest["blocks"])) == ["Band", "Piano", "Soccer"]
+    assert next(block for block in dest["blocks"] if block["title"] == "Piano")["days"] == [2]
+    source = read_week(qapp, session, first)
+    assert sorted(titles(source["blocks"])) == ["Band"]
+    assert next(block for block in source["blocks"] if block["title"] == "Band")["days"] == [2, 4]

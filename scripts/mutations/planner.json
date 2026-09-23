@@ -5,5 +5,19 @@
   "old": "        return (night, study, match, day, slot)\n",
   "new": "        return (study, match, day, slot)\n",
   "test": "backend/tests/test_solver.py::test_a_low_session_skips_midnight_when_the_morning_is_free"
+ },
+ {
+  "file": "desktop/native/calendar.py",
+  "name": "a repeating block's day wipes the other week",
+  "old": "        return source_out, [deepcopy(item) for item in dest] + [for_date(occurrence)], made\n",
+  "new": "        return source_out, [for_date(occurrence)], made\n",
+  "test": "desktop/tests/test_logic_move_date.py::test_a_move_into_a_week_that_already_has_blocks_keeps_them"
+ },
+ {
+  "file": "desktop/native/calendar.py",
+  "name": "a plain block wipes the other week",
+  "old": "    return source_out, [deepcopy(item) for item in dest] + [for_date(block)], block_id\n",
+  "new": "    return source_out, [for_date(block)], block_id\n",
+  "test": "desktop/tests/test_logic_move_date.py::test_a_move_into_a_week_that_already_has_blocks_keeps_them"
  }
 ]
