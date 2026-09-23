@@ -623,11 +623,8 @@ def running_late_refusal(
 ) -> str | None:
     today = now.date()
     this_week = (today - timedelta(days=today.weekday())).isoformat()
-    minute = now.hour * 60 + now.minute
     if week_start != this_week:
         return "Open this week before using Running late."
-    if minute < DAY_START_MIN or minute >= DAY_END_MIN:
-        return "Running late is available between 00:00 and 24:00."
     if conflict:
         return "This week was changed somewhere else. Reload it first."
     if dirty:
