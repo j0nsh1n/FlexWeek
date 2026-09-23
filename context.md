@@ -534,6 +534,8 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-23, `grok/0-15-month-weeks`: Unit 8. `NativeSession.move_to_date(block_id, from_iso, to_iso) -> bool` moves a block to another date. Same week keeps the time; another week writes both documents through `POST /api/changes` in one Undo step. A repeating block moves only that day. Homework keeps its pin. The open week does not change until the reply. `date_problem` is the same `span_problem` words for a held chip. No backend change. Gate: 1261 passed, `scripts/verify.py` green. spec.md was not edited. Nothing pushed. Window still holds the Month placeholder; Unit 9 can call `move_to_date`.
+
 - 2026-09-23, `feat/0.15-tabs`: Unit 5 done. Rig matrix for Today's app: Day 14/14, Week 17/17,
   including Escape, switching away, dwell, a save landing mid-drag, a second move while a save
   is in flight, double-click to open, Day and Week agreeing, and 1150x768 with large text.

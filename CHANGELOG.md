@@ -35,6 +35,8 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [0.14.3] - 2026-09-22
 
 ### Added
+- A block can be moved to a date in another week in one save. Undo puts both
+  weeks back.
 - First-run setup replaces the first-week card. A new account goes from its
   recovery codes to a page at a time, with a step rail, Back, Skip this step
   and Next: a starting style (Plain calendar, Dashboard, Night owl, Retro,
