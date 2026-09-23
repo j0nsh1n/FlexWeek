@@ -21,6 +21,8 @@ On a branch from `feat/0.15-tabs`:
 
     git worktree add ~/.worktrees/flexweek-015-month -b grok/0-15-month-weeks feat/0.15-tabs
 
+`feat/0.15-tabs` is at `099e12e` or later.
+
 Add to the controller, with a name that says what a student did:
 
     def move_to_date(self, block_id: str, from_iso: str, to_iso: str) -> bool
@@ -31,13 +33,19 @@ Rules:
    only the day it was dragged from, as `move_occurrence` already does.
 2. Another week: the block leaves the first week and appears in the second at the same time, in one
    save that writes both weeks, and as one Undo step. A repeating block still moves only that one
-   day. Homework keeps its pin.
-3. The second week may not be loaded. Fetch it, apply, and save both, without losing a change the
+   day. Homework keeps its pin. The save goes through `/api/changes`, which already writes several
+   weeks in one transaction and replays a retried `operation_id`; a retry after a lost reply must
+   not move the block twice.
+3. Nothing is shown as moved until the server has accepted it: no optimistic change to the open
+   week. On any failure the block is where it was, and the student is told why in plain words.
+4. The second week may not be loaded. Fetch it, apply, and save both, without losing a change the
    student made meanwhile, and without a save that is half applied if the second write fails.
-4. Refuse in words what the week rules already refuse: a time outside the day's hours, and homework
-   that would end after it is due. Reuse `span_problem` in `desktop/native/calendar.py`; do not
-   write a second rule.
-5. A conflict (409) on either week leaves both untouched and says so, as saves do today.
+5. Refuse in words what the week rules already refuse, such as homework that would end after it is
+   due (a due with no time means the end of that day). Reuse `span_problem` in
+   `desktop/native/calendar.py`; do not write a second rule. Expose the check on its own as
+   `date_problem(block_id, from_iso, to_iso) -> str | None`, so the Month tab can show the refusal
+   while a chip is still held, before anything is sent.
+6. A conflict (409) on either week leaves both untouched and says so, as saves do today.
 
 ## Do not
 
@@ -48,10 +56,12 @@ Rules:
 ## Prove it
 
 1. Controller tests in `desktop/tests/` covering: same week, across weeks forward and back, a
-   repeating block moving one day only, a refusal for past due, a 409 on the second week, and Undo
-   putting both weeks back. Assert on the saved weeks read back from the server, not on the
-   in-memory list alone.
-2. `.venv/bin/python scripts/verify.py` green.
+   repeating block moving one day only, a refusal for past due (from `date_problem` and from
+   `move_to_date`), a 409 on the second week, a retry with the same `operation_id` moving it once,
+   the open week unchanged until the reply, and Undo putting both weeks back. Assert on the saved
+   weeks read back from the server, not on the in-memory list alone.
+2. `.venv/bin/python scripts/verify.py` green. Not while another suite or an OpenCode session runs
+   in the same checkout: they share Qt's test-mode files.
 3. A note of any backend change you needed, with the endpoint and why.
 
 GLM is available as a helper for first-pass review. Call it through the direct OpenRouter API with
