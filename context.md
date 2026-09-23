@@ -529,6 +529,15 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-22, `grok/0-15-audit-01` at `3d1fab2`: Chat's three follow-up
+  findings (`df34b9d`, `6a1e672`, `3d1fab2`). Midnight on 31 December 2099
+  stores `2099-12-31T23:59` so `PUT /api/week` does not 500. The leftover
+  homework list uses `due_sort_key`. Week-reach checks the hours viewport,
+  not the window. Source gate: 1180 passed, `scripts/verify.py` green.
+  Classic Week pointer rig 8/8. spec.md was not edited. Nothing pushed.
+  Still planned: Unit 3 zoom and the full reach matrix, 3b work windows in
+  setup/Settings, due dialogs, and 5–17.
+
 - 2026-09-22, `grok/0-15-audit-01` at `ff5df31`: Chat's six audit findings are
   on this branch, merged from `grok/0-15-full-day` (`d4bfd92`) and
   `grok/0-15-optional-due` (`dc9b7fa`) onto `feat/0.15-tabs` at `248a318`.
