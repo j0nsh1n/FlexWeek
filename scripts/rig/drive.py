@@ -1179,6 +1179,7 @@ def main() -> int:
     parser.add_argument("--design", choices=DESIGNS)
     parser.add_argument("--tab", choices=TABS)
     parser.add_argument("--scenario")
+    parser.add_argument("--server", choices=["auto", "kwin", "xvfb"], default="auto")
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--out")
     parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
@@ -1190,7 +1191,7 @@ def main() -> int:
         return child_main(args)
     import hidden_session
 
-    display = hidden_session.start()
+    display = hidden_session.start(args.server)
     out = Path(args.out or f"/tmp/flexweek-rig/{datetime.now():%Y%m%d-%H%M%S}")
     out.mkdir(parents=True, exist_ok=True)
     env = {

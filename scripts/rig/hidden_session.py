@@ -1,119 +1,300 @@
-"""A desktop session nobody sees, for driving FlexWeek with a real pointer.
+"""An unseen desktop for the real-pointer rig.
 
-KWin draws to a virtual screen and runs its own Xwayland. FlexWeek runs on that X display as an
-ordinary X11 client, and xdotool moves that display's pointer, so a press, a move and a release take
-the path a mouse's do: the X server, Qt's platform plugin, then the widget. Nothing reaches the
-desktop the student is using.
+KWin provides Xwayland on a virtual screen locally. Xvfb and Openbox provide the same X11
+interface on Linux CI. The state file records the exact processes this module started, so stop
+never searches for processes by command line.
 
-    python scripts/rig/hidden_session.py start     # prints the X display, e.g. :1
+    python scripts/rig/hidden_session.py --server xvfb start
     python scripts/rig/hidden_session.py stop
-
-The session is found again by the PID it was started with, never by matching command lines.
 """
 
 from __future__ import annotations
 
+import argparse
+import contextlib
 import json
 import os
+import re
+import select
+import shutil
 import signal
 import subprocess
-import sys
 import time
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 STATE = Path("/tmp/flexweek-rig/session.json")
 SOCKET = "flexweek-rig"
 WIDTH, HEIGHT = 1400, 900
 X11_SOCKETS = Path("/tmp/.X11-unix")
+SERVERS = ("kwin", "xvfb")
 
 
-def _alive(pid: int) -> bool:
+@dataclass(frozen=True)
+class OwnedProcess:
+    pid: int
+    name: str
+    started: int
+
+
+@dataclass(frozen=True)
+class Session:
+    server: str
+    display: str
+    processes: tuple[OwnedProcess, ...]
+
+
+def _process_state(pid: int) -> tuple[str, int] | None:
+    """Linux process state and start tick distinguish our PID from a later process using it."""
     try:
-        os.kill(pid, 0)
+        fields = Path(f"/proc/{pid}/stat").read_text().rsplit(") ", 1)[1].split()
+        return fields[0], int(fields[19])
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+def _owned(pid: int, name: str) -> OwnedProcess:
+    state = _process_state(pid)
+    if state is None:
+        raise RuntimeError(f"{name} exited before the hidden display was ready")
+    return OwnedProcess(pid, name, state[1])
+
+
+def _alive(process: OwnedProcess) -> bool:
+    state = _process_state(process.pid)
+    if state is None or state[0] == "Z" or state[1] != process.started:
+        return False
+    try:
+        return Path(f"/proc/{process.pid}/comm").read_text().strip() == process.name
     except OSError:
         return False
-    return Path(f"/proc/{pid}/comm").read_text().strip().startswith("kwin_wayland")
+
+
+def _read_state() -> Session | None:
+    try:
+        raw = json.loads(STATE.read_text())
+        if not isinstance(raw, dict):
+            return None
+        display = raw.get("display")
+        if not isinstance(display, str) or re.fullmatch(r":[0-9]+", display) is None:
+            return None
+        if raw.get("server") is None and isinstance(raw.get("pid"), int):
+            # The pre-Xvfb state records a KWin PID but not its start tick.
+            pid = raw["pid"]
+            arguments = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
+            if b"--virtual" not in arguments or SOCKET.encode() not in arguments:
+                return None
+            return Session("kwin", display, (_owned(pid, "kwin_wayland"),))
+        if raw.get("server") not in SERVERS:
+            return None
+        processes = tuple(OwnedProcess(**item) for item in raw["processes"])
+        if len(processes) != (1 if raw["server"] == "kwin" else 2):
+            return None
+        return Session(raw["server"], display, processes)
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def _save(session: Session) -> None:
+    STATE.parent.mkdir(parents=True, exist_ok=True)
+    pending = STATE.with_suffix(".new")
+    pending.write_text(json.dumps(asdict(session)))
+    pending.replace(STATE)
 
 
 def running() -> str | None:
-    """The X display of the session already running, if there is one."""
-    if not STATE.exists():
+    """The display if the saved server and its window manager are still ours and alive."""
+    session = _read_state()
+    if session is None or not all(_alive(process) for process in session.processes):
         return None
-    state = json.loads(STATE.read_text())
-    if _alive(state["pid"]) and (X11_SOCKETS / f"X{state['display'].lstrip(':')}").exists():
-        return state["display"]
-    return None
+    socket = X11_SOCKETS / f"X{session.display[1:]}"
+    return session.display if socket.exists() else None
 
 
-def _displays() -> set[str]:
-    return {name[1:] for name in os.listdir(X11_SOCKETS) if name.startswith("X")}
+def _env() -> dict[str, str]:
+    return {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"QT_IM_MODULE", "XMODIFIERS"}
+    }
 
 
-def start() -> str:
-    display = running()
-    if display is not None:
-        return display
+def _connects(display: str, env: dict[str, str]) -> bool:
+    try:
+        result = subprocess.run(
+            ["xdotool", "getmouselocation"],
+            env={**env, "DISPLAY": display},
+            capture_output=True,
+            timeout=2,
+            check=False,
+        )
+        return result.returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
+
+
+def _wait_for_display(
+    display: str, env: dict[str, str], process: subprocess.Popen, seconds: int = 20
+) -> None:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise RuntimeError(f"The hidden X server exited; see {STATE.parent} logs")
+        if _connects(display, env):
+            return
+        time.sleep(0.2)
+    raise RuntimeError(f"The hidden X display {display} never accepted connections")
+
+
+def _terminate(process: subprocess.Popen) -> None:
+    if process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=3)
+
+
+def _launch(
+    command: list[str], log_name: str, env: dict[str, str], *, pipe: bool = False
+) -> subprocess.Popen:
     STATE.parent.mkdir(parents=True, exist_ok=True)
-    before = _displays()
-    env = {key: value for key, value in os.environ.items() if key not in {"QT_IM_MODULE", "XMODIFIERS"}}
-    # Left open on purpose: KWin writes to it for as long as the session runs.
-    log = open(STATE.parent / "kwin.log", "w")  # noqa: SIM115
-    kwin = subprocess.Popen(
+    with (STATE.parent / log_name).open("w") as log:
+        return subprocess.Popen(
+            command,
+            env=env,
+            stdout=subprocess.PIPE if pipe else log,
+            stderr=log,
+            start_new_session=True,
+        )
+
+
+def _start_kwin(env: dict[str, str]) -> str:
+    before = {path.name for path in X11_SOCKETS.glob("X*")}
+    process = _launch(
         [
-            "kwin_wayland",
-            "--virtual",
-            "--xwayland",
-            "--no-lockscreen",
-            # Never register KDE's global shortcuts: a hidden KWin that does takes Super+Tab and the
-            # rest away from the desktop it runs under, and leaves them dead when it exits.
-            "--no-global-shortcuts",
-            "--socket",
-            SOCKET,
-            "--width",
-            str(WIDTH),
-            "--height",
-            str(HEIGHT),
+            "kwin_wayland", "--virtual", "--xwayland", "--no-lockscreen",
+            "--no-global-shortcuts", "--socket", SOCKET,
+            "--width", str(WIDTH), "--height", str(HEIGHT),
         ],
-        env=env,
-        stdout=log,
-        stderr=subprocess.STDOUT,
-        start_new_session=True,
+        "kwin.log",
+        env,
     )
+    try:
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                raise RuntimeError(f"KWin exited; see {STATE.parent / 'kwin.log'}")
+            fresh = {path.name for path in X11_SOCKETS.glob("X*")} - before
+            for name in sorted(fresh, key=lambda value: int(value[1:])):
+                display = f":{name[1:]}"
+                if _connects(display, env):
+                    _save(Session("kwin", display, (_owned(process.pid, "kwin_wayland"),)))
+                    return display
+            time.sleep(0.2)
+        raise RuntimeError("The hidden session's Xwayland never came up")
+    except BaseException:
+        _terminate(process)
+        raise
+
+
+def _display_from_pipe(process: subprocess.Popen) -> str:
+    """Xvfb chooses an unused display atomically and writes its number to this pipe."""
+    assert process.stdout is not None
     deadline = time.monotonic() + 20
     while time.monotonic() < deadline:
-        fresh = _displays() - before
-        if fresh:
-            display = ":" + sorted(fresh, key=int)[0]
-            # Xwayland opens its socket before it takes connections.
-            if (
-                subprocess.run(
-                    ["xdotool", "getmouselocation"], env={**env, "DISPLAY": display}, capture_output=True
-                ).returncode
-                == 0
-            ):
-                STATE.write_text(json.dumps({"pid": kwin.pid, "display": display}))
-                return display
-        if kwin.poll() is not None:
-            raise RuntimeError(f"KWin exited; see {STATE.parent / 'kwin.log'}")
+        if process.poll() is not None:
+            raise RuntimeError(f"Xvfb exited; see {STATE.parent / 'xvfb.log'}")
+        if select.select([process.stdout], [], [], 0.2)[0]:
+            number = process.stdout.readline().decode().strip()
+            if number.isdecimal():
+                process.stdout.close()
+                return f":{number}"
+            raise RuntimeError(f"Xvfb reported an invalid display: {number!r}")
+    raise RuntimeError("Xvfb did not choose a display")
+
+
+def _wait_for_openbox(env: dict[str, str], process: subprocess.Popen) -> None:
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise RuntimeError(f"Openbox exited; see {STATE.parent / 'openbox.log'}")
+        result = subprocess.run(
+            ["xprop", "-root", "_NET_SUPPORTING_WM_CHECK"],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+        if result.returncode == 0 and "window id #" in result.stdout:
+            return
         time.sleep(0.2)
-    kwin.terminate()
-    raise RuntimeError("The hidden session's Xwayland never came up.")
+    raise RuntimeError("Openbox did not take control of the hidden display")
+
+
+def _start_xvfb(env: dict[str, str]) -> str:
+    xvfb = _launch(
+        ["Xvfb", "-displayfd", "1", "-screen", "0", f"{WIDTH}x{HEIGHT}x24", "-nolisten", "tcp", "-ac"],
+        "xvfb.log",
+        env,
+        pipe=True,
+    )
+    openbox = None
+    try:
+        display = _display_from_pipe(xvfb)
+        _wait_for_display(display, env, xvfb)
+        display_env = {**env, "DISPLAY": display}
+        openbox = _launch(["openbox"], "openbox.log", display_env)
+        _wait_for_openbox(display_env, openbox)
+        _save(Session("xvfb", display, (_owned(xvfb.pid, "Xvfb"), _owned(openbox.pid, "openbox"))))
+        return display
+    except BaseException:
+        if openbox is not None:
+            _terminate(openbox)
+        _terminate(xvfb)
+        raise
+
+
+def start(server: str = "auto") -> str:
+    """Start one hidden desktop, or reuse it when it has the requested server."""
+    if server == "auto":
+        server = "kwin" if shutil.which("kwin_wayland") else "xvfb"
+    if server not in SERVERS:
+        raise ValueError(f"Unknown server {server!r}")
+    current = _read_state()
+    if current is not None:
+        if running() is not None and current.server == server:
+            return current.display
+        stop()
+    return _start_kwin(_env()) if server == "kwin" else _start_xvfb(_env())
 
 
 def stop() -> None:
-    if not STATE.exists():
-        return
-    state = json.loads(STATE.read_text())
-    if _alive(state["pid"]):
-        os.kill(state["pid"], signal.SIGTERM)
-    STATE.unlink()
+    """Stop only PIDs that still match the processes this module started."""
+    session = _read_state()
+    if session is not None:
+        for process in reversed(session.processes):
+            if _alive(process):
+                with contextlib.suppress(ProcessLookupError):
+                    os.kill(process.pid, signal.SIGTERM)
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline and any(_alive(p) for p in session.processes):
+            time.sleep(0.1)
+        for process in reversed(session.processes):
+            if _alive(process):
+                with contextlib.suppress(ProcessLookupError):
+                    os.kill(process.pid, signal.SIGKILL)
+    STATE.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
-    command = sys.argv[1] if len(sys.argv) > 1 else "start"
-    if command == "start":
-        print(start())
-    elif command == "stop":
-        stop()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--server", choices=("auto", *SERVERS), default="auto")
+    parser.add_argument("command", nargs="?", choices=("start", "stop"), default="start")
+    args = parser.parse_args()
+    if args.command == "start":
+        print(start(args.server))
     else:
-        raise SystemExit(f"unknown command {command!r}: use start or stop")
+        stop()
