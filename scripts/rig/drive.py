@@ -67,6 +67,7 @@ def child_main(args: argparse.Namespace) -> int:
     app = QApplication(["flexweek-rig"])
 
     from desktop.native.calendar import sunday_due
+    from desktop.native.client import _error
     from desktop.native.hours.hand import surface_at
     from desktop.native.hours.zoom import HoursScroll
     from desktop.native.layouts.registry import sanitize_layout
@@ -138,6 +139,8 @@ def child_main(args: argparse.Namespace) -> int:
         for key in ("essay", "math", "poster")
     }
     thursday_iso = thursday.date().isoformat()
+    seed_week = session.week_start
+    seed_dues = {key: session.assignments[key]["due"] for key in ("essay", "math", "poster")}
 
     def block(block_id: str) -> dict | None:
         return next((b for b in session.blocks if b["id"] == block_id), None)
@@ -967,6 +970,259 @@ def child_main(args: argparse.Namespace) -> int:
         got = block(ids["essay"])
         expect((got["days"], got["start"]) == ([5], "19:00"), f"essay is {got['days']} {got['start']}")
 
+    def the_day(offset: int) -> str:
+        """A date counted from Monday of the open week."""
+        return (datetime.fromisoformat(seed_week) + timedelta(days=offset)).date().isoformat()
+
+    def month_tab(r: Rig) -> Step:
+        """Month on screen, once it has drawn the open week's dates. Returns the month."""
+        yield from r.tab("month")
+
+        def drawn() -> bool:
+            with contextlib.suppress(NoSurface):
+                return r.surface("month").index_of(thursday_iso) is not None
+            return False
+
+        yield ("until", drawn, 5000, "Month to draw this week")
+        return r.surface("month")
+
+    def month_in_view(month: object, *isos: str) -> Step:
+        """Scroll the month so each of these dates is wholly on screen and clear of the edges, where
+        a held chip scrolls it."""
+        for iso in isos:
+            if month.index_of(iso) is None:
+                raise NoSurface(f"{iso} is not in the month on screen")
+            month.reveal(iso)
+        yield ("wait", 150)
+
+    def drawn_chip(month: object, block_id: str, iso: str) -> QPoint:
+        """The middle of a block's chip on a date, failing in words when the date hides it behind
+        "+N more" although the month promises room for more than it shows."""
+        at = month.index_of(iso)
+        shown, more = month.chip_boxes(at)
+        if not any(chip.block_id == block_id for chip, _box in shown):
+            raise AssertionError(
+                f"{iso} hides {block_id} behind +{more} more and shows only "
+                f"{[chip.words for chip, _box in shown]}: its row is {month.cell_rect(at).height():.0f} px "
+                f"with chips {month.pitch():.0f} px apart, the month keeps rows of at least "
+                f"{month.least_row()} px, and is {month.height()} px tall with a minimum of "
+                f"{month.minimumHeight()}"
+            )
+        return month.chip_point(block_id, iso)
+
+    def essays() -> list[tuple[list[int], str | None]]:
+        return [(b["days"], b.get("start")) for b in session.blocks if b.get("assignment_id") == "essay"]
+
+    def month_many(r: Rig) -> Step:
+        """Thursday holds more than its date has room for. The date says "+N more", and a click on it
+        opens a Day that draws every one of them."""
+        added = {
+            "rig-lunch": ("Lunch club", "14:45", 45),
+            "rig-piano": ("Piano", "17:45", 45),
+            "rig-reading": ("Reading", "20:15", 45),
+            "rig-chores": ("Chores", "21:15", 45),
+        }
+        for key, (title, start, length) in added.items():
+            session.add_block(
+                {
+                    "id": key,
+                    "title": title,
+                    "kind": "locked",
+                    "category": "extra",
+                    "start": start,
+                    "duration_min": length,
+                    "days": [3],
+                }
+            )
+        session.save()
+        yield from r.settled()
+        month = yield from month_tab(r)
+        yield from month_in_view(month, thursday_iso)
+        shown, more = month.chip_boxes(month.index_of(thursday_iso))
+        expect(
+            more > 0,
+            f"Thursday shows all {len(shown)} of its chips, so nothing is behind +N more to test",
+        )
+        yield from r.click(month.cell_point(thursday_iso))
+        yield ("wait", 400)
+        show_day(thursday_iso)
+        missing = []
+        for key, (title, start, length) in added.items():
+            yield from r.reveal(3, minutes(start) - 30, minutes(start) + length + 30)
+            if all(surface.block_rect(key, 3) is None for surface in r.surfaces("hours")):
+                missing.append(title)
+        expect(not missing, f"Thursday's Day does not draw {missing}")
+
+    def month_across_sunday(r: Rig) -> Step:
+        """The essay, due next week, is carried from Sunday onto the Monday after. It leaves this
+        week, and the next week has it once, on Monday at 19:00.
+
+        The seeded essay is due this Sunday, which Monday is after; the date would rightly refuse
+        it. So it is first given next Sunday as its deadline."""
+        sunday, next_monday = the_day(6), the_day(7)
+        homework = session.assignments["essay"]
+        session.add_homework({**homework, "due": sunday_due(next_monday)})
+        session.add_block({**block(ids["essay"]), "days": [6], "start": "19:00", "pinned": True})
+        session.save()
+        yield from r.settled()
+        expect(essays() == [([6], "19:00")], f"before the drag the essay is {essays()}, not Sunday 19:00")
+        try:
+            month = yield from month_tab(r)
+            yield from month_in_view(month, sunday, next_monday)
+            seen: list[tuple] = []
+            yield from r.drag(
+                drawn_chip(month, ids["essay"], sunday),
+                month.cell_point(next_monday),
+                held=lambda: seen.append((window.hand.month_target, window.hand.month_verdict)),
+            )
+            said = session.message
+            yield from r.settled()
+            left = essays()
+            session.load_week(next_monday)
+            yield (
+                "until",
+                lambda: not session.busy and session.week_start == next_monday,
+                8000,
+                "the next week to load",
+            )
+            there = essays()
+        finally:
+            yield from clear_next_week(next_monday)
+        expect(
+            seen and seen[0][0] == next_monday,
+            f"held over {seen[0][0] if seen else None}, not {next_monday}",
+        )
+        expect(left == [], f"the essay is still in this week at {left}; said {said!r}; held {seen}")
+        expect(there == [([0], "19:00")], f"the next week has the essay at {there}, not once on Monday 19:00")
+
+    def clear_next_week(next_monday: str) -> Step:
+        """Take the essay out of the next week and open this week again, so no later scenario finds
+        it there. Runs whether the scenario passed or not."""
+        yield ("until", lambda: not session.busy, 8000, "the session to be free")
+        if session.week_start != next_monday:
+            session.load_week(next_monday, discard=True)
+            yield (
+                "until",
+                lambda: not session.busy and session.week_start == next_monday,
+                8000,
+                "the next week to load for clearing",
+            )
+        kept = [b for b in session.blocks if b.get("assignment_id") != "essay"]
+        if len(kept) != len(session.blocks):
+            session.blocks = kept
+            session.dirty = True
+            session.save()
+            yield ("until", lambda: not session.busy and not session.dirty, 8000, "the next week to clear")
+        session.load_week(seed_week, discard=True)
+        yield (
+            "until",
+            lambda: not session.busy and session.week_start == seed_week,
+            8000,
+            "this week to load again",
+        )
+
+    def month_same_date(r: Rig) -> Step:
+        """The essay is picked up and let go on its own date. Nothing is saved, and Month stays open."""
+        month = yield from month_tab(r)
+        yield from month_in_view(month, thursday_iso)
+        revision = session.revision
+        yield from r.drag(drawn_chip(month, ids["essay"], thursday_iso), month.cell_point(thursday_iso))
+        expect(session.planner_view == "month", f"letting go on its own date opened {session.planner_view}")
+        yield from r.settled()
+        unchanged(revision)
+
+    def month_series_one_date(r: Rig) -> Step:
+        """School on Wednesday carried to Saturday. Only that day moves; the others keep the series."""
+        month = yield from month_tab(r)
+        wednesday, saturday = the_day(2), the_day(5)
+        yield from month_in_view(month, wednesday, saturday)
+        yield from r.drag(drawn_chip(month, "school", wednesday), month.cell_point(saturday))
+        yield from r.settled()
+        school = sorted((tuple(b["days"]), b["start"]) for b in session.blocks if b["title"] == "School")
+        expect(school == [((0, 1, 3, 4), "08:00"), ((5,), "08:00")], f"school is {school}")
+
+    def month_past_due(r: Rig) -> Step:
+        """The poster is due Friday and sits on Friday at 17:00. Held over Saturday, the date says it
+        would be after it is due; let go there, it stays on Friday and the message says why.
+
+        Friday rather than Thursday: Thursday already holds School, Soccer and the essay, so a fourth
+        chip there sits behind "+N more", where no pointer can pick it up."""
+        session.add_block({**block(ids["poster"]), "start": "17:00", "days": [4], "pinned": True})
+        session.save()
+        yield from r.settled()
+        placed = block(ids["poster"])
+        expect(
+            (placed["days"], placed.get("start")) == ([4], "17:00"),
+            f"before the drag the poster is {placed['days']} {placed.get('start')}, not Friday 17:00",
+        )
+        month = yield from month_tab(r)
+        friday, saturday = the_day(4), the_day(5)
+        yield from month_in_view(month, friday, saturday)
+        seen: list[tuple] = []
+        yield from r.drag(
+            drawn_chip(month, ids["poster"], friday),
+            month.cell_point(saturday),
+            held=lambda: seen.append((window.hand.month_target, window.hand.month_verdict)),
+        )
+        said = session.message
+        yield from r.settled()
+        expect(seen and seen[0][0] == saturday, f"held over {seen[0][0] if seen else None}, not {saturday}")
+        verdict = seen[0][1]
+        expect(verdict is not None and not verdict.ok, f"Saturday took the poster: verdict {verdict}")
+        expect("after it is due" in verdict.words, f"Saturday said {verdict.words!r}")
+        got = block(ids["poster"])
+        expect(
+            (got["days"], got.get("start")) == ([4], "17:00"),
+            f"poster is {got['days']} {got.get('start')}, not Friday 17:00",
+        )
+        expect("after it is due" in said, f"said {said!r}")
+
+    def month_save_refused(r: Rig) -> Step:
+        """The server turns the essay's move away as a conflict. The message says it was not saved,
+        and after a reload the essay is where it was, once, and Thursday draws it once."""
+        month = yield from month_tab(r)
+        saturday = the_day(5)
+        yield from month_in_view(month, thursday_iso, saturday)
+        refused: list[str] = []
+
+        def refuse(method, path, payload, on_success, on_error, *rest, **named):
+            if method == "POST" and path == "/api/changes":
+                session.client.request = base_request
+                refused.append(path)
+                QTimer.singleShot(50, lambda: on_error(_error(409)))
+                return None
+            return base_request(method, path, payload, on_success, on_error, *rest, **named)
+
+        def chips_of_essay() -> dict[str, int]:
+            return {
+                cell.iso: sum(chip.block_id == ids["essay"] for chip in cell.chips)
+                for cell in month.cells
+                if any(chip.block_id == ids["essay"] for chip in cell.chips)
+            }
+
+        session.client.request = refuse
+        try:
+            yield from r.drag(drawn_chip(month, ids["essay"], thursday_iso), month.cell_point(saturday))
+            yield ("until", lambda: bool(refused) and not session.busy, 8000, "the save to be turned away")
+            yield ("wait", 200)
+            said = session.message
+            before_reload = chips_of_essay()
+        finally:
+            session.client.request = base_request
+            yield from r.settled()
+        yield ("wait", 200)
+        after_reload = chips_of_essay()
+        expect("not saved" in said.lower(), f"said {said!r}")
+        expect(
+            before_reload == {thursday_iso: 1},
+            f"before the reload Month drew the essay on {before_reload}, not once on Thursday",
+        )
+        expect(essays() == [([3], "19:00")], f"after the reload the essay is {essays()}")
+        expect(
+            after_reload == {thursday_iso: 1},
+            f"after the reload Month draws the essay on {after_reload}, not once on Thursday",
+        )
+
     scenarios = [
         Scenario("day-move", "day", day_move),
         Scenario("day-resize", "day", day_resize),
@@ -1002,6 +1258,12 @@ def child_main(args: argparse.Namespace) -> int:
         Scenario("month-times", "month", month_times),
         Scenario("month-open-day", "month", month_open_day),
         Scenario("month-move-date", "month", month_move_date),
+        Scenario("month-many", "month", month_many),
+        Scenario("month-across-sunday", "month", month_across_sunday),
+        Scenario("month-same-date", "month", month_same_date),
+        Scenario("month-series-one-date", "month", month_series_one_date),
+        Scenario("month-past-due", "month", month_past_due),
+        Scenario("month-save-refused", "month", month_save_refused),
     ]
     if args.list:
         for scenario in scenarios:
@@ -1020,6 +1282,15 @@ def child_main(args: argparse.Namespace) -> int:
         while QApplication.activeModalWidget() is not None:
             QApplication.activeModalWidget().reject()
             app.processEvents()
+        if session.week_start != seed_week or session.conflict:
+            # A scenario that stopped on another week, or with a save refused: the seed belongs to
+            # this week, and a session in conflict saves nothing until it reloads.
+            session.load_week(seed_week, discard=True)
+            wait_until(app, lambda: not session.busy and session.week_start == seed_week, 20)
+        for key, due in seed_dues.items():
+            if session.assignments[key]["due"] != due:
+                session.assignments[key] = {**session.assignments[key], "due": due}
+                session.dirty_assignments.add(key)
         session.blocks = [dict(item) for item in seed]
         session.dirty = True
         session.save()
