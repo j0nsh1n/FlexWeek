@@ -103,6 +103,11 @@ storage, CI). Each unit ends green on the rig, on the source gate, and with its 
    Owner: Grok. Brief: `handoffs/grok-rig-in-ci.md`.
 7. **Hosting and targets.** Every design reaches the window's hand; the hand finds any visible
    surface; track-local bounds; render hold from press; the dial adapter. Owner: Claude.
+   *Done. `Track` is a contract with `LinearTrack` and `DialTrack`; a surface is any widget with
+   `takes_blocks` and `track_at`; blocks, resizes and new blocks stop at their track's own ends;
+   renders are held from the press; every design is built with the window's hand and lists its
+   surfaces. Proven by `desktop/tests/test_hours_targets.py` and `scripts/mutations/targets.json`.
+   Month's date-aware judge moves to unit 9 with Month.*
 8. **Cross-week MoveDate.** One atomic controller operation over two week documents, idempotent on
    retry, one Undo step. `/api/changes` already writes several weeks in one transaction.
    Owner: Grok. Brief: `handoffs/grok-month-across-weeks.md`.

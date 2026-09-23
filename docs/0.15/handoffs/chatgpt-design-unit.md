@@ -8,9 +8,12 @@ worktree.
 
 - `docs/0.15/plan.md`, the working plan. `plan-report.md` and `plan-refined.md` are its history.
 - `docs/0.15/architecture.md` for the engine's shape and the rules it keeps.
-- `desktop/native/hours/`: `geometry.py` (tracks), `hand.py` (the one gesture engine), `canvas.py`
-  (`HoursCanvas`, `BlockPainter`), `chips.py` (`TrayChip`), `classic.py` (Today's app, the worked
-  example to copy from).
+- `desktop/native/hours/`: `geometry.py` (the `Track` contract, `LinearTrack` and `DialTrack`),
+  `hand.py` (the one gesture engine, and what a surface is), `canvas.py` (`HoursCanvas`,
+  `BlockPainter`), `zoom.py` (`HoursScroll`: scrolling, zoom and a pinned header), `chips.py`
+  (`TrayChip`), `classic.py` (Today's app, the worked example to copy from).
+- `desktop/tests/test_hours_targets.py`: one test design that puts columns, lanes, a tilted card,
+  two partial-day tiles and a dial on the same hand. It is the shortest statement of the contract.
 - `desktop/native/layouts/<design>.py`, the design as it is now, and `layouts/base.py` for how a
   design renders a scene.
 - `docs/0.15/mockup/index.html`, the agreed look and interaction. Open it and use
@@ -26,11 +29,20 @@ Start from `feat/0.15-tabs`:
    with a `BlockPainter` subclass in the design's tokens. It shows one day, a tray of homework with
    no time (`TrayChip`), and whatever else that concept's description names.
 2. Week tab: the same, for the week, as the picked concept.
-3. Both must offer, for the rig: `hours_surfaces()` on the view returning the visible canvases, and
-   day names that open a day where the concept has them (`HoursCanvas(header=...)` does this).
-4. Delete that design's old drag code as you go: its `Lift`, `Pickup`, `Zone` and drawer use, and
+3. The view is given the window's hand: accept `hand` in `__init__` and pass it on
+   (`super().__init__(parent, hand=hand)`), and build every canvas and chip with `self.hand`. Never
+   make a `Hand` of your own.
+4. Lay time out any way the concept needs: `LinearTrack(day, area, axis, first, last, turn)` runs
+   down or across, starts and ends where a tile does, and tilts for a card; `DialTrack` is round.
+   Blocks stop at their own track's ends, so a part-of-day tile needs no rules of its own. Hours that
+   scroll or zoom go in an `HoursScroll`. Anything else a block can land on is a widget with
+   `takes_blocks = True` and `track_at(point)`.
+5. For the rig: `hours_surfaces()` already lists every visible surface; override it only if its
+   order is not reading order. Day names open a day when drawn by the canvas: `header=` names days
+   whose time runs down, `gutter=` names days whose time runs across.
+6. Delete that design's old drag code as you go: its `Lift`, `Pickup`, `Zone` and drawer use, and
    set `uses_drawer = False`. No `QDrag` anywhere in the design.
-5. A tray's heading leads with plain words, "No time yet" or "Not placed yet", with the themed name
+7. A tray's heading leads with plain words, "No time yet" or "Not placed yet", with the themed name
    second. A student must know what the tray holds. This came from a check of the mock-up's labels.
 
 ## Do not
@@ -54,7 +66,10 @@ Every claim needs one of these as evidence, in your report:
 3. `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q desktop/tests/test_layout_<design>.py`
    green, with the design's existing tests updated where the surface changed.
 4. `.venv/bin/python scripts/verify.py` green (about four minutes; the pytest step has a 300 second
-   budget).
+   budget). Do not run it while another suite runs in the same checkout: they share Qt's test-mode
+   files and fail each other.
+5. `.venv/bin/python scripts/mutate.py scripts/mutations/targets.json` still catches every break,
+   which shows the shared rules were not copied into the design.
 
 ## Report back
 
