@@ -534,6 +534,16 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-22, `grok/0-15-night-last`: Night slots sort last. A 60-minute low
+  session with 17:00–23:00 locked went to Monday 00:00 on `e7e5206` and goes
+  to Monday 06:00 here. Night is still used when 06:00–23:00 is full.
+  `test_generated_weeks_preserve_grid_bounds_occupancy_and_input` now also
+  runs under `DEFAULT_WORK_WINDOWS`. Busy-week, 20 solves of the same
+  fixture: median 7.971 ms / max 12.819 ms, all complete, all under 150 ms
+  (was median 7.215 / max 10.773 on the audit branch). Source gate: 1203
+  passed, `scripts/verify.py` green. spec.md was not edited. The full-day
+  worktree's uncommitted spec.md was left alone. Nothing pushed.
+
 - 2026-09-22, `feat/0.15-tabs`: Unit 3, zoom and scrolling on hours. `hours/zoom.py` holds the
   levels, the header kept above the hours and the scroll that keeps a minute in place; Today's
   app's Day and Week use it, and the level is kept in the look file. Resize zones never take

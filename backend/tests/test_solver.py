@@ -408,3 +408,24 @@ def test_a_pinned_session_keeps_its_time_and_nothing_is_booked_over_it() -> None
 def test_pinned_is_refused_where_it_means_nothing(block: dict) -> None:
     with pytest.raises(ValueError, match="pinned"):
         TimeBlock(id="x", title="X", duration_min=60, pinned=True, **block)
+
+
+def test_a_low_session_skips_midnight_when_the_morning_is_free() -> None:
+    """Lock 17:00–23:00 every day. Monday 06:00 to 17:00 is empty, so midnight must not win."""
+    evening = _locked("evening", "Evening", "17:00", 6 * 60, [0, 1, 2, 3, 4, 5, 6])
+    reading = _flex("read", "History reading", 60, [0, 1, 2], energy="low")
+    trace = run_solve([evening, reading])
+    placed = _by_id(trace.placed)["read"]
+    assert placed.days == [0]
+    assert placed.start == "06:00"
+
+
+def test_a_session_uses_the_night_when_the_day_is_full() -> None:
+    occupied = _locked("day", "Day", "06:00", 17 * 60, [0, 1, 2])
+    reading = _flex("read", "History reading", 60, [0, 1, 2])
+    trace = run_solve([occupied, reading])
+    placed = _by_id(trace.placed)["read"]
+    assert placed.start is not None
+    start = hhmm_to_minutes(placed.start)
+    assert placed.days == [0]
+    assert start < 6 * 60 or start >= 23 * 60

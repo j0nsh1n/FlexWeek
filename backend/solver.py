@@ -434,12 +434,15 @@ def _order_values(
 ) -> list[tuple[int, int]]:
     low, high = ENERGY_WINDOW[block.energy]
 
-    def key(item: tuple[int, int]) -> tuple[int, int, int, int]:
+    def key(item: tuple[int, int]) -> tuple[int, int, int, int, int]:
         day, slot = item
         start_min = DAY_START_MIN + slot * SLOT_MIN
+        end_min = start_min + block.duration_min
+        # Night is last among legal slots, on any day. 06:00–23:00 keeps the old order.
+        night = 1 if start_min < 6 * 60 or end_min > 23 * 60 else 0
         study = study_rank(windows, block.course, day, start_min, block.duration_min)
         match = 0 if low <= start_min < high else 1
-        return (study, match, day, slot)
+        return (night, study, match, day, slot)
 
     return sorted(values, key=key)
 
