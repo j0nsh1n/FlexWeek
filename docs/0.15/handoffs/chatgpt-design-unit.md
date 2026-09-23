@@ -40,9 +40,12 @@ Start from `feat/0.15-tabs`:
 5. For the rig: `hours_surfaces()` already lists every visible surface; override it only if its
    order is not reading order. Day names open a day when drawn by the canvas: `header=` names days
    whose time runs down, `gutter=` names days whose time runs across.
-6. Delete that design's old drag code as you go: its `Lift`, `Pickup`, `Zone` and drawer use, and
+6. Month is shared: `LayoutView.render_month` shows `MonthGrid` (`desktop/native/hours/month.py`) in
+   the design's colour tokens, with chips carried by the window's hand. Keep calling it; do not draw
+   a month of your own. If a concept's Month needs something the grid cannot do, say so in the report.
+7. Delete that design's old drag code as you go: its `Lift`, `Pickup`, `Zone` and drawer use, and
    set `uses_drawer = False`. No `QDrag` anywhere in the design.
-7. A tray's heading leads with plain words, "No time yet" or "Not placed yet", with the themed name
+8. A tray's heading leads with plain words, "No time yet" or "Not placed yet", with the themed name
    second. A student must know what the tray holds. This came from a check of the mock-up's labels.
 
 ## Do not

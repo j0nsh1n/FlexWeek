@@ -540,3 +540,82 @@ def test_a_design_holds_its_renders_from_the_press_and_has_the_windows_hand(
     assert view._dragging, "a press, before any movement, holds the design's renders"
     window.hand.cancel()
     assert not view._dragging
+
+
+def test_month_stays_where_the_student_scrolled_it_through_a_refresh(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Month opens on the week the student is in, once. It used to scroll back there every time
+    anything refreshed, such as a save, undoing the student's own scrolling."""
+    window.resize(900, 560)
+    window.findChild(QPushButton, "viewMonth").click()
+    wait_until(qapp, lambda: window.session.month_data is not None and not window.session.busy)
+    for _ in range(10):
+        qapp.processEvents()
+    bar = window.month_grid.scroll.verticalScrollBar()
+    assert bar.maximum() > 0, "the month is taller than the window, so it scrolls"
+    bar.setValue(0 if bar.value() else bar.maximum())
+    chosen = bar.value()
+    window._on_week()
+    for _ in range(10):
+        qapp.processEvents()
+    assert bar.value() == chosen
+
+
+def test_a_chip_let_go_after_a_save_failed_is_refused_not_kept_for_later(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """A drop after a save that did not go through used to be parked in silence, overwritten by the
+    next drop, and made much later when some other save finished."""
+    from desktop.native.hours.hand import MoveDate
+
+    session = window.session
+    settled(qapp, window)
+    essay = session_of(window, "essay")
+    thursday = date.fromisoformat(session.week_start) + timedelta(days=3)
+    saturday = thursday + timedelta(days=2)
+    session.pending_save = {"weeks": [], "assignments": [], "operation_id": "failed-before"}
+    try:
+        window._apply_change(MoveDate(essay["id"], thursday.isoformat(), saturday.isoformat()))
+        assert window._date_waiting is None, "kept to be made later"
+        assert "not saved yet" in session.message
+    finally:
+        session.pending_save = None
+    settled(qapp, window)
+    assert placed(window, "essay")[:2] == ([3], "19:00")
+
+
+def test_a_designs_month_stays_where_the_student_scrolled_it_through_a_refresh(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    window.resize(900, 560)
+    view = use(qapp, window, "timeline")
+    window.findChild(QPushButton, "viewMonth").click()
+    wait_until(qapp, lambda: window.session.month_data is not None and not window.session.busy)
+    for _ in range(10):
+        qapp.processEvents()
+    board = view.findChild(QWidget, "layoutMonthBoard")
+    assert board is not None and board.isVisible()
+    bar = board.scroll.verticalScrollBar()
+    assert bar.maximum() > 0, "the month is taller than the window, so it scrolls"
+    bar.setValue(0 if bar.value() else bar.maximum())
+    chosen = bar.value()
+    # A real change, saved: the design draws a new scene, as it does after any edit.
+    window.session.add_block(
+        {
+            "id": "club",
+            "title": "Club",
+            "kind": "locked",
+            "category": "extra",
+            "start": "18:00",
+            "duration_min": 60,
+            "days": [5],
+        }
+    )
+    window.session.save()
+    settled(qapp, window)
+    wait_until(qapp, lambda: window.session.month_data is not None and not window.session.busy)
+    for _ in range(10):
+        qapp.processEvents()
+    assert board.canvas.index_of(window.session.selected_day) is not None
+    assert bar.value() == chosen

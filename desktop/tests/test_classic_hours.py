@@ -27,13 +27,24 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.weekmodel import build_week
 
 
+# The hosts of the hands these tests make. A hand is its host's Qt child and holds no reference of
+# its own to it, so the host has to be kept for as long as the hand is used.
+HOSTS: list = []
+
+
+def a_hand() -> Hand:
+    host = QWidget()
+    HOSTS.append(host)
+    return Hand(lambda block_id, from_day, span: Verdict(True, ""), host)
+
+
 @pytest.fixture(scope="module")
 def qapp() -> Iterator[QApplication]:
     yield QApplication.instance() or QApplication(["flexweek-classic-hours-test"])
 
 
 def week_view(qapp: QApplication) -> ClassicWeek:
-    view = ClassicWeek(Hand(lambda block_id, from_day, span: Verdict(True, ""), QWidget()))
+    view = ClassicWeek(a_hand())
     view.set_look(None, resolved_palette("system", False, None))
     view.set_week(build_week("2026-09-21", [], {}, None), 3, 15 * 60 + 40)
     view.resize(980, 500)
@@ -73,7 +84,7 @@ def test_reach_does_not_substitute_the_edge_of_a_partial_track(qapp: QApplicatio
     scroll = QScrollArea()
     scroll.resize(230, 400)
     hours = HoursCanvas(
-        Hand(lambda block_id, from_day, span: Verdict(True, ""), QWidget()),
+        a_hand(),
         BlockPainter(resolved_palette("system", False, None)),
         lambda area: [LinearTrack(3, QRectF(10, 10, 180, 1160), first=6 * 60, last=22 * 60)],
     )
@@ -122,7 +133,7 @@ def test_a_tray_chip_shortens_its_words_to_the_room_it_has_and_keeps_its_title(q
         "duration_min": 90,
         "days": [0, 1, 2, 3, 4],
     }
-    view = ClassicDay(Hand(lambda block_id, from_day, span: Verdict(True, ""), QWidget()))
+    view = ClassicDay(a_hand())
     view.set_look(None, resolved_palette("system", False, None))
     view.resize(760, 520)
     view.set_day(
@@ -155,7 +166,7 @@ def test_a_tray_chip_in_a_row_says_it_all_again_once_the_row_has_room(qapp: QApp
     row = QWidget()
     line = QHBoxLayout(row)
     chip = TrayChip(
-        Hand(lambda block_id, from_day, span: Verdict(True, ""), QWidget()),
+        a_hand(),
         Waiting("poster", title, "homework", 90, "poster", "2026-09-25", ""),
     )
     line.addWidget(chip)

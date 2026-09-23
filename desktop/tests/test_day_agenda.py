@@ -139,30 +139,21 @@ def test_an_empty_day_still_says_so(qapp: QApplication) -> None:
 def test_the_month_opens_on_the_week_the_student_is_in(qapp: QApplication) -> None:
     """It opened on the first row, so on the 19th the current week sat below the fold."""
 
-    from desktop.native.widgets import MonthGrid
+    from desktop.native.hours.month import MonthGrid
 
     grid = MonthGrid()
-    days = [
-        {"date": f"2026-09-{day:02d}", "scheduled_min": 0, "due": [], "overdue": []} for day in range(1, 31)
-    ]
+    days = [{"date": f"2026-09-{day:02d}", "in_month": True, "due_ids": []} for day in range(1, 31)]
     grid.set_month({"month": "2026-09", "days": days, "overdue": []}, False)
     grid.resize(700, 200)
     grid.show()
     qapp.processEvents()
-    before = grid.table.verticalScrollBar().value()
+    bar = grid.scroll.verticalScrollBar()
+    before = bar.value()
     grid.reveal("2026-09-19")
     qapp.processEvents()
-    after = grid.table.verticalScrollBar().value()
-    assert grid.table.verticalScrollBar().maximum() > 0, "the month should be taller than the view"
-    assert after > before
-
-    found = [
-        grid.table.item(row, column).data(Qt.ItemDataRole.UserRole)
-        for row in range(grid.table.rowCount())
-        for column in range(7)
-        if grid.table.item(row, column) is not None
-    ]
-    assert "2026-09-19" in found
+    assert bar.maximum() > 0, "the month should be taller than the view"
+    assert bar.value() > before
+    assert "2026-09-19" in [cell.iso for cell in grid.canvas.cells]
 
 
 def test_a_block_that_is_not_on_this_day_is_left_out_rather_than_breaking_the_day() -> None:

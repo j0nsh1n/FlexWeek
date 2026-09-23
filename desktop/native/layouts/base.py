@@ -10,12 +10,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtCore import QPoint, Qt, QTimer, Signal
 from PySide6.QtGui import QDragEnterEvent, QDragLeaveEvent, QDragMoveEvent, QDropEvent, QResizeEvent
 from PySide6.QtWidgets import QApplication, QFrame, QLabel, QLayout, QPushButton, QScrollArea, QWidget
 
 from desktop.native.calendar import CATEGORIES
-from desktop.native.hours.hand import Hand, is_surface
+from desktop.native.hours.hand import Hand, is_date_surface, is_surface
 from desktop.native.hours.hand import Verdict as HandVerdict
 from desktop.native.layouts.drag import (
     EDGE_SCROLL_PX,
@@ -235,6 +235,11 @@ class LayoutView(QWidget):
         days and times through these; a design with a different order says so here."""
         return [widget for widget in self.findChildren(QWidget) if is_surface(widget) and widget.isVisible()]
 
+    def month_surfaces(self) -> list[QWidget]:
+        """Every month this design shows now: what the rig carries chips across."""
+        found = self.findChildren(QWidget)
+        return [widget for widget in found if is_date_surface(widget) and widget.isVisible()]
+
     def hold(self, holding: bool) -> None:
         """While the pointer holds something, a new scene waits: a re-render would delete what the
         press started on. Letting go shows the last scene that arrived."""
@@ -361,23 +366,23 @@ class LayoutView(QWidget):
 
     def render_month(self, scene: Scene, week_changed: bool) -> None:
         """A chip calendar in this design's colours. Retro and Mission keep this; they only paint."""
-        from desktop.native.widgets import MonthGrid
+        from desktop.native.hours.month import MonthGrid
 
         board = getattr(self, "_month_board", None)
         if board is None:
-            board = MonthGrid(self)
+            board = MonthGrid(self, hand=self.hand)
             board.setObjectName("layoutMonthBoard")
             board.day_activated.connect(self.day_activated.emit)
             self._month_board = board
-        placed = [
-            (scene.week.date_of(item.day).isoformat(), item.title, item.category)
-            for item in scene.week.occurrences
-        ]
         board.set_tokens(scene.tokens)
-        board.set_placed(placed)
+        board.set_week(scene.week)
         board.set_month(scene.month, scene.dirty)
-        if scene.iso_day:
-            board.reveal(scene.iso_day)
+        opened = ((scene.month or {}).get("month"), scene.iso_day)
+        if scene.month and scene.iso_day and opened != getattr(self, "_month_revealed", None):
+            # Once per month opened, and after the board has its size: after that it stays wherever
+            # the student scrolled it, through saves and refreshes.
+            self._month_revealed = opened
+            QTimer.singleShot(0, lambda: board.reveal(scene.iso_day))
         board.setGeometry(self.rect())
         board.show()
         board.raise_()

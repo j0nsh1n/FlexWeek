@@ -800,6 +800,11 @@ def pack_stylesheet(
         f"font-size: {max(size - 1, 7)}pt; }}"
         f"QLabel#daySummaryLabel {{ margin-top: 10px; }}"
         f"QLabel#dayWaitingHint {{ color: {palette['muted']}; font-size: {max(size - 1, 7)}pt; }}"
+        # What follows the pointer while something is carried: a pill, readable over any calendar.
+        f"QLabel#heldChip {{ background: {palette['accent']}; color: {palette['accent_ink']}; "
+        f"padding: 3px 10px; border-radius: 10px; }}"
+        f'QLabel#heldChip[refused="true"] {{ background: {palette["panel"]}; color: {palette["error"]}; '
+        f"{edges} }}"
         f"QHeaderView::section, QTableCornerButton::section {{ background: {palette['panel']}; "
         f"color: {palette['muted']}; padding: 2px 6px; border: none; }}"
         # QLabel is a QFrame in Qt, so without this every label, even an empty one, is drawn as a panel.

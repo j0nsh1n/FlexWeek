@@ -171,7 +171,7 @@ def test_w_d_and_m_switch_views_while_the_calendar_has_the_keyboard(
     wait_until(qapp, lambda: session.planner_view == "day" and not session.busy)
     QTest.keyClick(window.day_view.hours, Qt.Key.Key_M)
     wait_until(qapp, lambda: session.planner_view == "month" and not session.busy)
-    QTest.keyClick(window.month_grid.table, Qt.Key.Key_W)
+    QTest.keyClick(window.month_grid.canvas, Qt.Key.Key_W)
     wait_until(qapp, lambda: session.planner_view == "week" and not session.busy)
     QTest.keyClick(window.focus_panel.tasks, Qt.Key.Key_M)
     wait_until(qapp, lambda: session.planner_view == "month" and not session.busy)

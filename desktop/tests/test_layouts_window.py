@@ -292,7 +292,7 @@ def test_the_keyboard_reaches_my_day_and_back(qapp: QApplication, window: Native
     QTest.keyClick(window.planner.currentWidget(), Qt.Key.Key_M)
     wait_until(qapp, lambda: window.planner.currentWidget() is window.month_grid)
     assert window.solve_button.isVisible() is True
-    QTest.keyClick(window.month_grid.table, Qt.Key.Key_T)
+    QTest.keyClick(window.month_grid.canvas, Qt.Key.Key_T)
     assert isinstance(window.planner.currentWidget(), OneThingView)
 
 
