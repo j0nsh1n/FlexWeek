@@ -103,6 +103,7 @@ from desktop.native.reuse import (
     row_conflict,
 )
 from desktop.native.weekmodel import due_label, length_label
+from desktop.native.work_windows import WorkWindowsEditor
 
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 CHIP_ROLE = int(Qt.ItemDataRole.UserRole) + 1
@@ -2028,21 +2029,31 @@ class AvailabilityDialog(QDialog):
         super().__init__(parent)
         self.setObjectName("availabilityDialog")
         self.setWindowTitle("Availability")
+        self.setMinimumWidth(640)
         self._protected = deepcopy(preferences.get("protected") or [])
         self._study = deepcopy(preferences.get("study_windows") or [])
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Protected time"))
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        body = QWidget()
+        form = QVBoxLayout(body)
+        scroll.setWidget(body)
+        layout.addWidget(scroll)
+        form.addWidget(QLabel("Protected time"))
         self.protected_list = QListWidget()
         self.protected_list.setObjectName("protectedWindows")
-        layout.addWidget(self.protected_list)
+        self.protected_list.setMaximumHeight(100)
+        form.addWidget(self.protected_list)
         add_protected = QPushButton("Add protected time")
         add_protected.setObjectName("protectedAdd")
         add_protected.clicked.connect(self._add_protected)
-        layout.addWidget(add_protected)
-        layout.addWidget(QLabel("Preferred study hours"))
+        form.addWidget(add_protected)
+        form.addWidget(QLabel("Preferred study hours"))
         self.study_list = QListWidget()
         self.study_list.setObjectName("studyWindows")
-        layout.addWidget(self.study_list)
+        self.study_list.setMaximumHeight(100)
+        form.addWidget(self.study_list)
         # A new window's hours, and optionally the one subject it is kept for.
         study_row = QHBoxLayout()
         self.study_start = QTimeEdit(QTime(19, 0))
@@ -2061,11 +2072,11 @@ class AvailabilityDialog(QDialog):
             study_row.addWidget(QLabel(label))
             study_row.addWidget(widget)
         study_row.addWidget(self.study_subject, 1)
-        layout.addLayout(study_row)
+        form.addLayout(study_row)
         add_study = QPushButton("Add study window")
         add_study.setObjectName("studyAdd")
         add_study.clicked.connect(self._add_study)
-        layout.addWidget(add_study)
+        form.addWidget(add_study)
         self.cutoff = QComboBox()
         self.cutoff.setObjectName("availabilityCutoff")
         self.cutoff.addItem("No cutoff", None)
@@ -2075,14 +2086,26 @@ class AvailabilityDialog(QDialog):
             self.cutoff.addItem(start, start)
         current = preferences.get("day_cutoff")
         self.cutoff.setCurrentIndex(max(0, self.cutoff.findData(current)))
-        layout.addWidget(self.cutoff)
+        form.addWidget(self.cutoff)
+        form.addWidget(QLabel("When may FlexWeek plan homework?"))
+        self.work_editor = WorkWindowsEditor(preferences.get("work_windows") or [], subjects, body)
+        form.addWidget(self.work_editor)
         self.error = _error_label()
-        layout.addWidget(self.error)
+        form.addWidget(self.error)
         buttons = _buttons()
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self._render()
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
+        super().showEvent(event)
+        fit_scroll_dialog(self, min_height=600)
+
+    def accept(self) -> None:
+        if self.work_editor.problem():
+            return
+        super().accept()
 
     def _render(self) -> None:
         self.protected_list.clear()
@@ -2133,6 +2156,9 @@ class AvailabilityDialog(QDialog):
 
     def study_windows(self) -> list[dict]:
         return deepcopy(self._study)
+
+    def work_windows(self) -> list[dict]:
+        return self.work_editor.windows()
 
     def day_cutoff(self) -> str | None:
         return self.cutoff.currentData()
