@@ -437,21 +437,37 @@ def test_a_long_blocks_name_stays_in_sight_on_lanes_scrolled_past_its_start(qapp
     assert min(inked) <= 8, f"School's name starts {min(inked)} px into what shows"
 
 
-def test_lanes_keep_their_time_when_a_design_parks_them_between_renders(qapp: QApplication) -> None:
+def a_side(host: QWidget) -> QWidget:
+    """A panel beside the hours, with something to take the focus, as Mission's radar."""
+    from PySide6.QtWidgets import QFrame, QPushButton, QVBoxLayout
+
+    side = QFrame(host)
+    side.setFixedWidth(300)
+    QVBoxLayout(side).addWidget(QPushButton("Science poster", side))
+    return side
+
+
+@pytest.mark.parametrize("new_side", [False, True])
+def test_lanes_keep_their_time_when_a_design_parks_them_between_renders(
+    qapp: QApplication, new_side: bool
+) -> None:
     """Mission keeps its hours between renders and parks them on each one: hidden, out of its layout,
     back in, shown. The canvas still has the focus from the drag just finished, and hiding a scroll
-    area that holds the focus moves it on and scrolls the hours to their middle. They must come back
-    where they were, so the block just moved is still on screen."""
-    from PySide6.QtWidgets import QPushButton, QVBoxLayout
+    area that holds the focus moves it on and scrolls the hours to their middle. Mission also builds
+    a new panel beside them on each render, which Qt shows only after the hours, so they are shown
+    wider than they end up, too wide for 19:00 to be at the left. They must come back where they
+    were, so the block just moved is still on screen."""
+    from PySide6.QtWidgets import QHBoxLayout
 
     scroll = a_lane_week(qapp)
     host = QWidget()
     HOSTS.append(host)
-    column = QVBoxLayout(host)
-    column.addWidget(scroll)
-    column.addWidget(QPushButton("+ ADD"))
+    row = QHBoxLayout(host)
+    row.addWidget(scroll, 1)
+    side = a_side(host)
+    row.addWidget(side)
     host.move(0, 0)
-    host.resize(500, 480)
+    host.resize(800, 480)
     host.show()
     settle(qapp)
     scroll.restore({"lanes.week": 96})
@@ -462,11 +478,19 @@ def test_lanes_keep_their_time_when_a_design_parks_them_between_renders(qapp: QA
     settle(qapp)
     assert QApplication.focusWidget() is scroll.canvas
     assert 18 * 60 + 45 <= minute_across(scroll, 0) <= 19 * 60 + 15, "19:00 is at the left"
+    width = scroll.viewport().width()
     scroll.hide()
-    column.removeWidget(scroll)
-    column.insertWidget(0, scroll)
+    row.removeWidget(scroll)
+    if new_side:
+        row.removeWidget(side)
+        side.deleteLater()
+        side = a_side(host)
+    row.insertWidget(0, scroll, 1)
+    if new_side:
+        row.addWidget(side)
     scroll.show()
     settle(qapp)
+    assert scroll.viewport().width() == width
     at = minute_across(scroll, 0)
     assert 18 * 60 + 45 <= at <= 19 * 60 + 15, (
         f"the lanes came back at {int(at) // 60:02d}:{int(at) % 60:02d}"
