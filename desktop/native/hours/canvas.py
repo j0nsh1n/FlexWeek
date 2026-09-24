@@ -67,6 +67,7 @@ class Drawn:
     done: bool = False
     missed: bool = False
     pinned: bool = False
+    axis: Axis = Axis.DOWN
 
     @property
     def detail(self) -> str:
@@ -193,13 +194,13 @@ class BlockPainter:
         bold.setBold(True)
         plain = _small(painter.font())
         line = QFontMetrics(bold).height()
-        # The name stays in sight while the top of a long block is scrolled away.
-        top = (
-            max(rect.top() + 3, visible.top() + 3)
-            if rect.bottom() - visible.top() > 2 * line
-            else rect.top() + 3
-        )
-        room = QRectF(rect.left() + 8, top, rect.width() - 14, rect.bottom() - top - 2)
+        # The name stays in sight while the start of a long block is scrolled away, either way.
+        start = QPointF(rect.left() + 8, rect.top() + 3)
+        if drawn.axis is Axis.DOWN and rect.bottom() - visible.top() > 2 * line:
+            start.setY(max(start.y(), visible.top() + 3))
+        elif drawn.axis is Axis.ACROSS and rect.right() - visible.left() > 2 * line:
+            start.setX(max(start.x(), visible.left() + 3))
+        room = QRectF(start, QPointF(rect.right() - 6, rect.bottom() - 2))
         if room.height() < 6 or room.width() < 8:
             return
         detail = drawn.detail
@@ -453,6 +454,7 @@ class HoursCanvas(QWidget):
                     done=item.done,
                     missed=item.missed,
                     pinned=item.pinned,
+                    axis=track.axis,
                 )
             )
         if (
@@ -478,6 +480,7 @@ class HoursCanvas(QWidget):
                         1,
                         held=True,
                         verdict=preview.verdict,
+                        axis=track.axis,
                     )
                 )
         columns = overlap_columns([(d.span.start, d.span.end) for d in items])
@@ -543,7 +546,7 @@ class HoursCanvas(QWidget):
 
     def _visible(self) -> QRectF:
         """The part of the hours on screen. Not the part being repainted: a long block's name is kept
-        in sight at the top of what shows, and a small repaint must not draw it a second time."""
+        in sight at the start of what shows, and a small repaint must not draw it a second time."""
         area = self._scroll_area()
         if area is None:
             return QRectF(self.rect())

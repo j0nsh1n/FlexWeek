@@ -400,3 +400,26 @@ def test_both_ends_of_a_lanes_day_can_be_reached(qapp: QApplication) -> None:
         scroll.canvas.reveal(3, 23 * 60, 24 * 60)
         settle(qapp)
         assert scroll.canvas.in_view(3, 24 * 60), f"24:00 at {level} px an hour"
+
+
+def test_a_long_blocks_name_stays_in_sight_on_lanes_scrolled_past_its_start(qapp: QApplication) -> None:
+    """As on a column scrolled past a long block's top: School runs 08:00 to 14:30 and the lanes are
+    scrolled to 12:00, so its name is written at the left of what shows, not at its start off screen."""
+    scroll = a_lane_week(qapp)
+    scroll.canvas.set_week(build_week(MONDAY, [SCHOOL], {}, None).occurrences)
+    scroll.scroll_to(12 * 60, above=0)
+    settle(qapp)
+    port = scroll.viewport()
+    box = scroll.canvas.block_rect("school", 0)
+    assert box is not None
+    block = QRect(port.mapFromGlobal(box.topLeft()), box.size())
+    assert block.left() < 0 < block.right(), "School's start is scrolled away and its end shows"
+    image = port.grab().toImage()
+    inked = [
+        x
+        for x in range(0, 60)
+        for y in range(block.top() + 4, block.bottom() - 4)
+        if QColor(image.pixel(x, y)).lightness() < 90
+    ]
+    assert inked, "School's bar shows no name in what shows"
+    assert min(inked) <= 8, f"School's name starts {min(inked)} px into what shows"

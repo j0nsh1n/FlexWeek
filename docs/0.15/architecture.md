@@ -88,8 +88,9 @@ self.hand.holding.connect(self._hold_renders)       # from the press to the rele
 - Overlaps are allowed and drawn side by side.
 - The pointer resting 300 ms within 36 pixels of a scroll area's edge scrolls it; passing through
   does not.
-- A long block's name stays in sight at the top of what shows, placed from the viewport, not from
-  the part being repainted.
+- A long block's name stays in sight at the start of what shows, whichever way time runs: at the
+  top of a column, at the left of a lane. It is placed from the viewport, not from the part being
+  repainted.
 - Month: a chip with a time can be carried; a deadline cannot. While it is held, the date under the
   pointer is outlined, and outlined in red with the reason when the date says no. A chip let go on
   its own date, or clicked, moves nothing; a click opens the date's Day.
