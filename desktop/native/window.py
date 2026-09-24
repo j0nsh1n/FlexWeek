@@ -67,7 +67,6 @@ from desktop.native.hours.month import MonthGrid
 from desktop.native.hours.zoom import sanitize_zoom
 from desktop.native.kept import KeptSession
 from desktop.native.layouts.base import LayoutView, Scene
-from desktop.native.layouts.drag import Verdict
 from desktop.native.layouts.registry import options_for, sanitize_layout, tokens_for
 from desktop.native.layouts.views import VIEW_CLASSES
 from desktop.native.look import (
@@ -839,12 +838,8 @@ class NativeWindow(QMainWindow):
             view.my_day_requested.connect(self._enter_day)
             view.back_requested.connect(self._leave_day)
             view.day_activated.connect(self.session.open_day)
-            view.placement_requested.connect(self._drop_block)
-            view.refused.connect(self.session._say)
             view.remembered_zoom = self._zoom
             view.zoomed.connect(self._remember_zoom)
-            view.judge = self._judge_span
-            view.motion = self._motion
             self.planner.addWidget(view)
             self._views[layout_id] = view
         view.show_week(self._scene_for(layout_id))
@@ -1575,8 +1570,7 @@ class NativeWindow(QMainWindow):
         self.session.open_day(date_for_day(self.session.week_start, day))
 
     def _hand_judge(self, block_id: str, from_day: int, span) -> HandVerdict:
-        verdict = self._judge_span(block_id, from_day, span.day, span.start, span.end)
-        return HandVerdict(verdict.ok, verdict.words)
+        return self._judge_span(block_id, from_day, span.day, span.start, span.end)
 
     def _apply_change(self, change: object) -> None:
         """What the pointer did, turned into the change the week keeps."""
@@ -1740,28 +1734,18 @@ class NativeWindow(QMainWindow):
         if self.session.place_session(block["id"], day, start):
             self.session.save()
 
-    def _judge_span(self, block_id: str, from_day: int, day: int, start: int, end: int) -> Verdict:
+    def _judge_span(self, block_id: str, from_day: int, day: int, start: int, end: int) -> HandVerdict:
         """Whether a block can go where it is being dragged, and the words for it. One rule for the
         calendar and every design: another block there is allowed, and said, as in Daily Scheduler;
         time FlexWeek does not plan in, and homework ending after it is due, are not."""
         block = next((item for item in self.session.blocks if item["id"] == block_id), None)
         if block is None:
-            return Verdict(False, "")
+            return HandVerdict(False, "")
         problem = span_problem(self.session.blocks, block_id, day, start, end, self._due_point(block_id))
         if problem is not None:
-            return Verdict(False, problem, start, end)
+            return HandVerdict(False, problem)
         clash = span_clash(self.session.blocks, block_id, day, start, end)
-        return Verdict(
-            True, span_words(Span(day, start, end)) + (f" · beside {clash}" if clash else ""), start, end
-        )
-
-    def _minutes_of(self, block_id: str) -> int:
-        block = next((item for item in self.session.blocks if item["id"] == block_id), None)
-        return int((block or {}).get("duration_min") or 60)
-
-    def _title_of(self, block_id: str) -> str:
-        block = next((item for item in self.session.blocks if item["id"] == block_id), None)
-        return str((block or {}).get("title") or "")
+        return HandVerdict(True, span_words(Span(day, start, end)) + (f" · beside {clash}" if clash else ""))
 
     def _move_block(self, block_id: str, from_day: int, day: int, start: int, end: int) -> None:
         """A block let go at a time, on the calendar or in a design. Homework that needed a time gets
@@ -1787,9 +1771,6 @@ class NativeWindow(QMainWindow):
             changed = self.session.apply_times(block_id, start, end, day)
         if changed:
             self.session.save()
-
-    def _drop_block(self, block_id: str, from_day: int, day: int, start: int) -> None:
-        self._move_block(block_id, from_day, day, start, start + self._minutes_of(block_id))
 
     def _edit_block(self, block_id: str) -> None:
         if self.session.planner_view == "day":
@@ -2420,8 +2401,6 @@ class NativeWindow(QMainWindow):
             self.setStyleSheet(sheet)
             apply_ui_effects(self._motion)
             self.toast.motion = self._motion
-            for view in self._views.values():
-                view.motion = self._motion
             # Day, Month and the week grid are dressed by the same design as the main view, so moving
             # between them is moving around one app rather than between two.
             self.week_table.set_look(self._look, design)

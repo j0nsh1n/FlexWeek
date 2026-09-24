@@ -61,7 +61,6 @@ def test_week_has_seven_live_horizontal_tracks_and_one_hand(qapp: QApplication) 
     assert all(track.axis is Axis.ACROSS and track.first == 0 and track.last == 1440
                for track in hours.tracks)
     assert hours.hand is view.hand
-    assert view.uses_drawer is False
     assert view.findChild(TrayChip, "missionWaiting0") is not None
     assert view.findChild(QLabel, "missionUnplaced").text().startswith("NOT PLACED YET")
 

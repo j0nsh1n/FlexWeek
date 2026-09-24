@@ -190,6 +190,21 @@ def test_homework_from_a_tray_is_placed_where_it_is_let_go(qapp: QApplication) -
     assert rig.said == [Place("math", Span(4, 17 * 60, 17 * 60 + 45))]
 
 
+def test_homework_carried_off_the_hours_shows_nowhere_and_places_nothing(qapp: QApplication) -> None:
+    rig = Rig(qapp)
+    chip = rig.chip
+    start = chip.mapToGlobal(chip.rect().center())
+    rig.send(chip, QEvent.Type.MouseButtonPress, start, True)
+    rig.hand.press(chip, Held(Gesture.PLACE, "Math worksheet", 45, "math"), start)
+    for step in range(1, 9):
+        rig.send(chip, QEvent.Type.MouseMove, start + (rig.at(4, 17 * 60) - start) * step / 8, True)
+    assert rig.canvas.held_words() == "Fri 17:00–17:45 · 45 min"
+    rig.send(chip, QEvent.Type.MouseMove, start, True)
+    assert rig.hand.preview is None and rig.canvas.held_words() == ""
+    rig.send(chip, QEvent.Type.MouseButtonRelease, start, False)
+    assert rig.said == []
+
+
 def test_a_card_laid_at_an_angle_takes_the_time_along_the_card(qapp: QApplication) -> None:
     turned = lambda area: [  # noqa: E731
         LinearTrack(

@@ -274,15 +274,24 @@ def test_leftover_kind_splits_the_four_empty_days() -> None:
 @pytest.mark.skipif(importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent")
 def test_the_model_places_every_block_where_the_week_calendar_draws_it() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QWidget
 
-    from desktop.native.canvas import WeekCanvas
+    from desktop.native.hours.classic import ClassicWeek
+    from desktop.native.hours.hand import Hand, Verdict
 
     app = QApplication.instance() or QApplication(["flexweek-weekmodel-test"])
-    canvas = WeekCanvas()
-    canvas.set_week(WEEK, BLOCKS, TRACE)
-    drawn = {(shape.block_id, shape.day, shape.start) for shape in canvas.body.shapes}
+    host = QWidget()
+    calendar = ClassicWeek(Hand(lambda block_id, from_day, span: Verdict(False, ""), host), host)
     week = build_week(WEEK, BLOCKS, HOMEWORK, TRACE)
+    calendar.set_week(week, None, None)
+    calendar.resize(980, 640)
+    calendar.hours.relayout()
+    hours = calendar.hours
+    drawn = {
+        (item.block_id, item.span.day, item.span.start)
+        for track in hours.tracks
+        for item, _rect in hours.drawn(track)
+    }
     modelled = {(item.block_id, item.day, item.start) for item in week.occurrences}
     assert modelled == drawn
     assert len(drawn) == 15

@@ -78,11 +78,9 @@ def test_day_hero_is_one_live_full_day_track_with_window_hand(qapp: QApplication
     qapp.processEvents()
     hours = view.findChild(HoursCanvas, "bentoDayHours")
     assert view.hand is hand
-    assert view.uses_drawer is False
     assert [(track.day, track.first, track.last) for track in hours.tracks] == [(3, 0, 1440)]
     assert hours.hand is hand
     assert text(view, "bentoHeroKicker") == "THURSDAY 17 · YOUR DAY"
-    assert view.drawer is None
 
 
 def test_week_hero_has_seven_live_columns_and_openable_day_names(qapp: QApplication) -> None:
