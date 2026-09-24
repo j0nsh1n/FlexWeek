@@ -1,5 +1,4 @@
-"""Clay deck: the middle card is real buttons, the neighbours are painted and lean, and the pager is
-their keyboard twin."""
+"""Clay's Day card and Week fan use the shared, live hours canvas."""
 
 from __future__ import annotations
 
@@ -14,16 +13,18 @@ from desktop.tests.test_weekmodel import BLOCKS, HOMEWORK, TRACE, WEEK
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
 )
-
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import Qt
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QFrame, QLabel, QPushButton
+    from PySide6.QtWidgets import QApplication, QPushButton
 
+    from desktop.native.hours.canvas import HoursCanvas
+    from desktop.native.hours.chips import TrayChip
+    from desktop.native.hours.zoom import HoursScroll
     from desktop.native.layouts.base import Scene
-    from desktop.native.layouts.clay import ClayDeckView, SideCard
+    from desktop.native.layouts.clay import ClayDeckView
     from desktop.native.layouts.registry import options_for, tokens_for
     from desktop.native.look import resolved_palette
     from desktop.native.weekmodel import build_week, minute_of
@@ -35,121 +36,101 @@ def qapp() -> Iterator[QApplication]:
     yield application
 
 
-def shown(qapp: QApplication, today: int | None = 3, **chosen: str) -> ClayDeckView:
+def shown(qapp: QApplication, *, tab: str = "week", **chosen: str) -> ClayDeckView:
     options = {**options_for(None, "clay"), **chosen}
     palette = resolved_palette("light-frost", False, None, "default")
-    view = ClayDeckView()
-    view.resize(1366, 760)
     week = build_week(WEEK, BLOCKS, HOMEWORK, TRACE)
-    view.show_week(
-        Scene(week, today, minute_of("13:40"), options, tokens_for("clay", options["colour"], palette))
-    )
+    view = ClayDeckView()
+    view.resize(1150, 768)
+    view.show_week(Scene(
+        week, 3, minute_of("13:40"), options,
+        tokens_for("clay", options["colour"], palette),
+        surface=tab, iso_day=week.date_of(3).isoformat(),
+    ))
     view.show()
     qapp.processEvents()
     return view
 
 
-def pills(view: ClayDeckView) -> list[str]:
-    return [item.text() for item in view.findChildren(QPushButton) if item.property("kind") == "pill"]
+def canvas(view: ClayDeckView) -> HoursCanvas:
+    found = view.hours_surfaces()
+    assert len(found) == 1
+    assert isinstance(found[0], HoursCanvas)
+    return found[0]
 
 
-def sides(view: ClayDeckView) -> list[tuple[int, float]]:
-    return [(card.day, card.tilt) for card in view.findChildren(SideCard)]
-
-
-def test_today_is_in_the_middle_with_its_blocks_as_buttons(qapp: QApplication) -> None:
-    view = shown(qapp)
-    assert view.findChild(QLabel, "clayCentreTitle").text() == "Thursday 17 · today"
-    assert pills(view) == [
-        "School\n08:00 · 6 h 30 min",
-        "Dinner\n18:00 · 30 min",
-        "Essay-1\n18:45 · 1 h · tight",
-        "Chem-1\n20:00 · 1 h 30 min · cutting it close",
+def test_day_is_one_full_day_card_with_a_live_dish(qapp: QApplication) -> None:
+    view = shown(qapp, tab="day")
+    hours = canvas(view)
+    assert [(track.day, track.first, track.last, track.turn) for track in hours.tracks] == [
+        (3, 0, 1440, 0.0)
     ]
+    assert hours.block_rect("school", 3) is not None
+    waiting = view.findChildren(TrayChip)
+    assert {chip.held.title for chip in waiting} == {"Poster-1"}
+    assert all(chip.hand is view.hand for chip in waiting)
+    assert view.uses_drawer is False
 
 
-def test_the_neighbours_lean_away_from_the_middle(qapp: QApplication) -> None:
-    assert sides(shown(qapp)) == [(1, -7.0), (2, -3.5), (4, 3.5), (5, 7.0)]
-
-
-def test_a_click_on_a_neighbour_brings_it_to_the_middle(qapp: QApplication) -> None:
+def test_week_is_seven_tilted_live_cards(qapp: QApplication) -> None:
     view = shown(qapp)
-    QTest.mouseClick(view.findChild(SideCard, "claySide4"), Qt.MouseButton.LeftButton)
-    assert view.findChild(QLabel, "clayCentreTitle").text() == "Friday 18"
-    assert view.findChild(QLabel, "claySub").text() == "Friday is in the middle."
+    hours = canvas(view)
+    assert [track.day for track in hours.tracks] == list(range(7))
+    assert [track.turn for track in hours.tracks] == [-8, -5, -2, 0, 2, 5, 8]
+    assert all(track.first == 0 and track.last == 1440 for track in hours.tracks)
+    assert hours.block_rect("school", 3) is not None
+    assert [hours.track_at(track.point_for(19 * 60)).day for track in hours.tracks] == list(range(7))
+    assert len(view.findChildren(TrayChip)) == 1
 
 
-def test_the_pager_and_the_flip_buttons_reach_every_day(qapp: QApplication) -> None:
+def test_day_names_open_their_day_and_remain_visible(qapp: QApplication) -> None:
     view = shown(qapp)
-    view.findChild(QPushButton, "clayDay0").click()
-    assert view.findChild(QLabel, "clayCentreTitle").text() == "Monday 14"
-    assert view.findChild(QPushButton, "clayEarlier").isEnabled() is False
-    assert sides(view) == [(1, 3.5), (2, 7.0)]
-    view.findChild(QPushButton, "clayLater").click()
-    assert view.findChild(QLabel, "clayCentreTitle").text() == "Tuesday 15"
-    view.findChild(QPushButton, "clayToday").click()
-    assert view.findChild(QLabel, "clayCentreTitle").text() == "Thursday 17 · today"
+    opened: list[str] = []
+    view.day_activated.connect(opened.append)
+    hours = canvas(view)
+    for day in range(7):
+        name = view.findChild(QPushButton, f"clayDay{day}")
+        assert name is not None and name.isVisible()
+        assert name.rect().contains(name.mapFromGlobal(hours.day_name(day)))
+    QTest.mouseClick(view.findChild(QPushButton, "clayDay4"), Qt.MouseButton.LeftButton)
+    assert opened == [view.scene.week.date_of(4).isoformat()]
 
 
-def test_a_neighbour_is_described_for_a_screen_reader(qapp: QApplication) -> None:
-    card = shown(qapp).findChild(SideCard, "claySide4")
-    assert card.accessibleName() == "Friday 18: 08:00  School, 18:00  Dinner. Click to open."
+def test_straight_option_is_table_hand(qapp: QApplication) -> None:
+    hours = canvas(shown(qapp, tilt="off"))
+    assert len(hours.tracks) == 7
+    assert all(track.turn == 0 for track in hours.tracks)
 
 
-def test_the_tray_names_what_has_no_time_yet(qapp: QApplication) -> None:
-    waiting = shown(qapp).findChild(QPushButton, "clayWaiting0")
-    assert (waiting.text(), waiting.toolTip()) == (
-        "Poster-1 · 2 h",
-        "There is not enough time left before it is due, even with nothing else planned.",
-    )
-
-
-def test_option_three_cards_and_straight_cards(qapp: QApplication) -> None:
-    assert sides(shown(qapp, cards="three")) == [(2, -3.5), (4, 3.5)]
-    assert sides(shown(qapp, tilt="off")) == [(1, 0.0), (2, 0.0), (4, 0.0), (5, 0.0)]
-
-
-def test_option_colours_repaint_the_deck_and_the_middle_card(qapp: QApplication) -> None:
-    def seen(view: ClayDeckView) -> tuple[str, str]:
-        card = view.findChild(QFrame, "clayCentre")
-        return view.grab().toImage().pixelColor(4, 4).name(), card.grab().toImage().pixelColor(30, 12).name()
-
-    assert seen(shown(qapp)) == ("#f3ecff", "#e6e6fa")
-    assert seen(shown(qapp, colour="mint")) == ("#ecfbf3", "#f4f3b3")
-
-
-def test_a_side_card_says_when_it_has_cut_a_title(qapp: QApplication) -> None:
-    """Qt clips drawText to its rect, so a long title was cut mid-word with nothing to show for it."""
-    long_title = [
-        {**block, "title": "Saturday shift at the cafe until late in the evening"}
-        if block["id"] == "school"
-        else block
-        for block in BLOCKS
-    ]
-    options = {**options_for(None, "clay"), "tilt": "off"}
-    palette = resolved_palette("light-frost", False, None, "default")
-    view = ClayDeckView()
-    view.resize(1366, 760)
-    view.show_week(
-        Scene(
-            build_week(WEEK, long_title, HOMEWORK, TRACE),
-            3,
-            minute_of("13:40"),
-            options,
-            tokens_for("clay", options["colour"], palette),
-        )
-    )
-    view.show()
+def test_scroll_and_zoom_survive_a_scene_refresh(qapp: QApplication) -> None:
+    view = shown(qapp)
+    scroll = view.findChild(HoursScroll, "clayWeekScroll")
+    scroll.zoom_by(1)
+    scroll.verticalScrollBar().setValue(240)
+    before = (scroll.px, scroll.verticalScrollBar().value())
+    previous = view.scene
+    view.show_week(Scene(
+        previous.week, previous.today, previous.minute + 15, previous.options,
+        previous.tokens, surface="week", iso_day=previous.iso_day,
+    ))
     qapp.processEvents()
-    card = view.findChild(SideCard, "claySide1")
-    assert card is not None
-    painted = card.painted_lines()
-    assert painted, "the card should have lines to paint"
-    cut = [line for line in painted if line != card._lines[painted.index(line)]]
-    assert cut, "the long title should not have fitted"
-    assert all(line.endswith("\u2026") for line in cut), painted
+    assert view.findChild(HoursScroll, "clayWeekScroll") is scroll
+    assert (scroll.px, scroll.verticalScrollBar().value()) == before
+    assert canvas(view).now_min == previous.minute + 15
 
 
-def test_a_short_title_is_left_alone(qapp: QApplication) -> None:
-    card = shown(qapp).findChild(SideCard, "claySide4")
-    assert card.painted_lines() == card._lines
+def test_day_and_week_keep_separate_scrolls(qapp: QApplication) -> None:
+    view = shown(qapp)
+    week_scroll = view.findChild(HoursScroll, "clayWeekScroll")
+    previous = view.scene
+    view.show_week(Scene(
+        previous.week, previous.today, previous.minute, previous.options,
+        previous.tokens, surface="day", iso_day=previous.iso_day,
+    ))
+    qapp.processEvents()
+    day_scroll = view.findChild(HoursScroll, "clayDayScroll")
+    assert day_scroll is not week_scroll
+    assert canvas(view).tracks[0].day == 3
+    view.show_week(previous)
+    qapp.processEvents()
+    assert view.findChild(HoursScroll, "clayWeekScroll") is week_scroll
