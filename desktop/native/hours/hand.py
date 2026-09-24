@@ -405,26 +405,12 @@ class Hand(QObject):
     # Scrolling while held
 
     def _watch_edge(self, at: QPoint) -> None:
-        area = _scroll_area_at(at)
-        direction = (0, 0)
-        if area is not None:
-            inside = area.viewport().mapFromGlobal(at)
-            port = area.viewport().rect()
-            vertical = area.verticalScrollBar().maximum() > 0
-            if vertical:
-                direction = (
-                    0,
-                    -1 if inside.y() < EDGE_PX else 1 if inside.y() > port.height() - EDGE_PX else 0,
-                )
-            elif area.horizontalScrollBar().maximum() > 0:
-                direction = (
-                    -1 if inside.x() < EDGE_PX else 1 if inside.x() > port.width() - EDGE_PX else 0,
-                    0,
-                )
-        if area is None or direction == (0, 0):
+        found = _edge_at(at)
+        if found is None:
             self._edge = None
             self._scroller.stop()
             return
+        area, direction = found
         if self._edge is None or self._edge[0] is not area or self._edge[1:3] != direction:
             self._edge = (area, *direction, time.monotonic())
             self._scroller.start()
@@ -469,8 +455,25 @@ class Hand(QObject):
             self.holding.emit(False)
 
 
-def _scroll_area_at(at: QPoint) -> QScrollArea | None:
+def _edge_at(at: QPoint) -> tuple[QScrollArea, tuple[int, int]] | None:
+    """The scroll area to scroll with the pointer at a global point, and which way: the nearest one
+    holding the point that is within `EDGE_PX` of an edge it has room to scroll towards. Hours that
+    scroll sideways on a page that scrolls down leave the page's bottom edge to the page."""
     widget = QApplication.widgetAt(at)
-    while widget is not None and not isinstance(widget, QScrollArea):
+    while widget is not None:
+        if isinstance(widget, QScrollArea):
+            direction = _edge_direction(widget, at)
+            if direction != (0, 0):
+                return widget, direction
         widget = widget.parentWidget()
-    return widget
+    return None
+
+
+def _edge_direction(area: QScrollArea, at: QPoint) -> tuple[int, int]:
+    inside = area.viewport().mapFromGlobal(at)
+    port = area.viewport().rect()
+    if area.verticalScrollBar().maximum() > 0:
+        return 0, -1 if inside.y() < EDGE_PX else 1 if inside.y() > port.height() - EDGE_PX else 0
+    if area.horizontalScrollBar().maximum() > 0:
+        return -1 if inside.x() < EDGE_PX else 1 if inside.x() > port.width() - EDGE_PX else 0, 0
+    return 0, 0

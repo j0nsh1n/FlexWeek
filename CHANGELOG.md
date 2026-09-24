@@ -50,6 +50,8 @@ All notable changes to FlexWeek are documented here. Format follows
   across, as it does in columns. Text no longer gets smaller from one block to
   the next down a day.
 - The words beside a held block stay on screen when hours run across.
+- Holding a block at the bottom of Timeline's Week scrolls the page down to the
+  days below, as it scrolls the hours along at their right-hand edge.
 - Mission control no longer draws an extra initial over the shortened words
   on half-hour blocks in Week. Quarter-hour blocks still show an initial when
   their words do not fit.
