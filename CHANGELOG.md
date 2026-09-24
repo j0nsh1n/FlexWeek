@@ -10,6 +10,10 @@ All notable changes to FlexWeek are documented here. Format follows
   can show their chips.
 
 ### Changed
+- Retro desktop now shows live, draggable hours in Schedule.exe on Day and a
+  seven-day Week.exe grid on Week. The deadlines notepad and main window both
+  keep unplaced homework within reach, and the status bar shows the time or a
+  refusal while dragging. Each tab remembers its scroll and zoom.
 - Clay deck has one large, draggable Day card and seven live Week cards fanned
   up to 8 degrees. Homework without a time waits in a draggable dish. Week
   cards can also be laid straight in Appearance & layout.

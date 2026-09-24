@@ -48,7 +48,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.tests.logic_support import past_setup
 
 PASSWORD = "a-long-test-password"
-DRAWER_VIEWS = ("timeline", "bento", "retro")
+DRAWER_VIEWS = ("timeline", "bento")
 
 
 @pytest.fixture(scope="module")
@@ -281,13 +281,14 @@ def test_clay_week_day_name_opens_the_day_without_placing_homework(
     QTest.mouseClick(pick, Qt.MouseButton.LeftButton)
     settled(qapp, window)
     assert window.session.planner_view == "day"
-    assert window.session.selected_day == (
-        date.fromisoformat(window.session.week_start) + timedelta(days=5)
-    ).isoformat()
+    assert (
+        window.session.selected_day
+        == (date.fromisoformat(window.session.week_start) + timedelta(days=5)).isoformat()
+    )
     assert placed(window, "math")[1] is None
 
 
-@pytest.mark.parametrize("main", ("mission",))
+@pytest.mark.parametrize("main", ("mission", "retro"))
 def test_a_design_with_its_own_hours_opens_no_drawer(
     qapp: QApplication, window: NativeWindow, main: str
 ) -> None:
@@ -420,8 +421,8 @@ def test_a_drop_while_a_save_is_under_way_lands_once_it_is_done(
     assert any(block["id"] == "band" for block in window.session.blocks)
 
 
-def test_leaving_the_hours_takes_the_ghost_away(qapp: QApplication, window: NativeWindow) -> None:
-    view = use(qapp, window, "retro")
+def test_leaving_drawer_hours_takes_the_ghost_away(qapp: QApplication, window: NativeWindow) -> None:
+    view = use(qapp, window, "bento")
     math_id = session_of(window, "math")["id"]
     view.drag_began(math_id, -1)
     hours = view.drawer.hours

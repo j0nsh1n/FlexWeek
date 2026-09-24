@@ -1,6 +1,19 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-24 (Retro desktop unit 12), branch `chatgpt/0-15-retro` from
+  `feat/0.15-tabs` at `8e3634a`. Day uses Schedule.exe for one live hours
+  column; Week.exe shows seven live columns with pinned day names. Both use
+  the window's Hand and retain separate scroll and zoom. The deadlines.txt
+  notepad and the main window have draggable "No time yet" chips; Up next,
+  movable windows, the taskbar and the shared Month remain. Day passed all
+  14 real-pointer scenarios and Week passed all 17. Held and end screenshots
+  for tray placement and cross-day movement were inspected at 1280x820 and
+  1150x768 with large text. Full source gate: 1311 tests passed, ruff and
+  mypy clean; all 11 target mutations were caught. Cartographer skipped
+  because `traceworks` is absent from the project venv. No executable build,
+  push, PR, or `spec.md` edit. Next: Claude reviews this branch before
+  integration.
 - Date: 2026-09-24 (Clay deck unit 11), branch `chatgpt/0-15-clay` from
   `feat/0.15-tabs` at `082e9fa`. Clay Day is one large live hours card with a
   "No time yet" tray; Week is seven live cards fanned from -8 to +8 degrees.
@@ -617,6 +630,11 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-24, `chatgpt/0-15-retro`: Retro Day and Week run on the shared
+  hours engine as Schedule.exe and Week.exe. The pointer rig passed 14/14 Day
+  and 17/17 Week; source verification passed 1311 tests; target mutations
+  caught 11/11. The status bar no longer repeats an accepted drag time.
+  Claude review remains before integration. No build or remote change.
 - 2026-09-23, `chatgpt/0-15-rig-ci`: The rig's per-checkout state now owns a
   private D-Bus as well as KWin or Xvfb/Openbox. The exact no-activation
   config from `6525429` is used; KWin and the app inherit its address, and

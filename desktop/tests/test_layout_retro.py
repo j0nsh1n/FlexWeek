@@ -228,6 +228,7 @@ def test_closing_the_notepad_cannot_hide_what_has_no_time(qapp: QApplication) ->
     waiting = view.findChild(TrayChip, "retroWaiting0")
     assert waiting.text() == "Poster-1 · 2 h"
     assert waiting.hand is view.hand
+    assert "There is not enough time left before it is due" in waiting.toolTip()
 
 
 def test_redraw_keeps_each_tabs_scroll_zoom_and_position(qapp: QApplication) -> None:
@@ -248,9 +249,18 @@ def test_redraw_keeps_each_tabs_scroll_zoom_and_position(qapp: QApplication) -> 
     assert (week.px, week.verticalScrollBar().value()) == (80, 180)
 
 
-def test_status_bar_tracks_the_hands_time_and_verdict(qapp: QApplication) -> None:
+@pytest.mark.parametrize(
+    ("verdict", "expected", "state"),
+    [
+        (Verdict(True, "Thu 10:00–12:00 · 2 h"), "Thu 10:00–12:00 · 2 h", "ok"),
+        (Verdict(False, "After the due date"), "10:00–12:00 · After the due date", "refused"),
+    ],
+)
+def test_status_bar_tracks_the_hands_time_and_verdict(
+    qapp: QApplication, verdict: Verdict, expected: str, state: str
+) -> None:
     host = QWidget()
-    hand = Hand(lambda block_id, from_day, span: Verdict(False, "After the due date"), host)
+    hand = Hand(lambda block_id, from_day, span: verdict, host)
     view = RetroView(hand=hand)
     view.resize(1150, 768)
     view.show_week(scene(windows="week"))
@@ -263,8 +273,8 @@ def test_status_bar_tracks_the_hands_time_and_verdict(qapp: QApplication) -> Non
     target = scroll.canvas.point_for(3, 10 * 60)
     QTest.mousePress(chip, Qt.MouseButton.LeftButton, pos=chip.rect().center())
     QTest.mouseMove(chip, chip.mapFromGlobal(target))
-    assert view.findChild(QLabel, "retroStatus").text() == "10:00–12:00 · After the due date"
-    assert view.findChild(QLabel, "retroStatus").property("verdict") == "refused"
+    assert view.findChild(QLabel, "retroStatus").text() == expected
+    assert view.findChild(QLabel, "retroStatus").property("verdict") == state
     assert (hand.preview.span.start, hand.preview.span.end) == (600, 720)
     QTest.mouseRelease(chip, Qt.MouseButton.LeftButton, pos=chip.mapFromGlobal(target))
     assert view.findChild(QLabel, "retroStatus").property("verdict") == "ready"

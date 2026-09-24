@@ -433,6 +433,7 @@ class RetroView(LayoutView):
         for index, waiting in enumerate(scene.week.waiting):
             chip = TrayChip(self.hand, waiting)
             chip.setObjectName(f"{prefix}{index}")
+            chip.setToolTip(f"{chip.toolTip()} {waiting.reason}")
             chip.clicked.connect(
                 lambda _=False, block_id=waiting.block_id: self.block_activated.emit(block_id)
             )
@@ -449,7 +450,11 @@ class RetroView(LayoutView):
             status.setProperty("verdict", "ready")
         else:
             times = f"{clock_label(preview.span.start)}–{clock_label(preview.span.end)}"
-            status.setText(f"{times} · {preview.verdict.words}" if preview.verdict.words else times)
+            words = preview.verdict.words
+            if preview.verdict.ok:
+                status.setText(words or times)
+            else:
+                status.setText(f"{times} · {words}" if words else times)
             status.setProperty("verdict", "ok" if preview.verdict.ok else "refused")
         status.style().unpolish(status)
         status.style().polish(status)
@@ -464,6 +469,7 @@ class RetroView(LayoutView):
         for index, waiting in enumerate(scene.week.waiting):
             chip = TrayChip(self.hand, waiting)
             chip.setObjectName(f"retroNoteWaiting{index}")
+            chip.setToolTip(f"{chip.toolTip()} {waiting.reason}")
             chip.clicked.connect(
                 lambda _=False, block_id=waiting.block_id: self.block_activated.emit(block_id)
             )
