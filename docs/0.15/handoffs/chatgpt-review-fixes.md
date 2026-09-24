@@ -3,8 +3,8 @@
 Claude reviewed `chatgpt/0-15-mission` and `chatgpt/0-15-rig-ci` merged with Grok's two branches
 on a throwaway branch: the gate passed (1282 tests), every mutation spec was caught, and Month ran
 9/9 on the rig. Mission is on the engine as the brief asked, and the rig branch's process ownership
-is right. Each needs one change before it lands. Make them on the branches you already have, commit
-locally only, and Claude reviews both again.
+is right. Each needs changes before it lands: parts 1 and 3 on Mission, part 2 on the rig branch.
+Make them on the branches you already have, commit locally only, and Claude reviews both again.
 
 The two are independent and can run at the same time in their own worktrees, with two rules for the
 whole computer, not just one checkout:
@@ -83,6 +83,32 @@ password service on demand, gives them the desktop's own display, and they outli
    prints nothing.
 4. Your CI check that a run selected at least one scenario can stay. `drive.py` exiting 0 on an
    empty selection is Claude's to fix with the rig's other scenario work.
+
+## 3. Mission: the first letter is drawn over the painter's words
+
+Branch `chatgpt/0-15-mission`, the same as part 1. Added after part 1 and 2 were handed over, from
+Claude's own work on the shared painter.
+
+`MissionPainter.block` writes a block's first letter in DejaVu Sans Mono 8 on every block under
+40 px long, after the shared painter has drawn its words. The shared painter now writes whole,
+shortened lines on short blocks too (`feat/0.15-tabs` at `74f15c4`), so on Mission's week the two
+overlap: each 30-minute Dinner shows a "D" over "8:…"
+(`~/.flexweek-ui-harness/scratch/painter-after-mission-week-noon.png`).
+
+- Draw the letter only where the shared painter draws nothing. It gives up when its text room is
+  under 8 px, which is a block under 22 px long. Or drop the letter if you judge the shortened
+  words enough.
+- Leave the painter's font as you found it (`painter.save()` and `painter.restore()` around your
+  drawing). Claude is fixing the shared painter so that one block's font can no longer shrink the
+  next, but an override should not rely on that.
+- A test: a 15-minute block at the default week zoom shows your mark, and a 30-minute one does not.
+
+Two things Claude found in Mission are Claude's to fix and need nothing from you. After every save
+the hours jumped back to the morning: hiding a scroll whose canvas has focus moved its bar, and
+`HoursScroll` will keep its place across a hide. The words beside a held block could run off the
+right of what shows: the shared canvas placed them within the whole day. Also leave Mission's zoom
+wiring as it is: `LayoutView.keep_zoom` now does it for every design, and Claude moves Mission onto
+it when Mission lands.
 
 ## Do not
 
