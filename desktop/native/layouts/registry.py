@@ -139,14 +139,14 @@ LAYOUTS: dict[str, LayoutSpec] = {
             "retro",
             "plan",
             "Retro desktop",
-            "Windows and a taskbar: the week, a deadlines notepad, what is next.",
+            "Schedule.exe and Week.exe, a deadlines notepad, and a taskbar.",
             (
                 _colour(RETRO),
                 Option(
                     "windows",
                     "Windows open at start",
                     "detail",
-                    (Choice("all", "All three"), Choice("week", "Only the week")),
+                    (Choice("all", "All three"), Choice("week", "Main window only")),
                 ),
             ),
             RETRO,
