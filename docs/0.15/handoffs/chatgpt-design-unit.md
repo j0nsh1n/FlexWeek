@@ -40,9 +40,12 @@ Start from `feat/0.15-tabs`:
 5. For the rig: `hours_surfaces()` already lists every visible surface; override it only if its
    order is not reading order. Day names open a day when drawn by the canvas: `header=` names days
    whose time runs down, `gutter=` names days whose time runs across.
-6. Delete that design's old drag code as you go: its `Lift`, `Pickup`, `Zone` and drawer use, and
+6. Month is shared: `LayoutView.render_month` shows `MonthGrid` (`desktop/native/hours/month.py`) in
+   the design's colour tokens, with chips carried by the window's hand. Keep calling it; do not draw
+   a month of your own. If a concept's Month needs something the grid cannot do, say so in the report.
+7. Delete that design's old drag code as you go: its `Lift`, `Pickup`, `Zone` and drawer use, and
    set `uses_drawer = False`. No `QDrag` anywhere in the design.
-7. A tray's heading leads with plain words, "No time yet" or "Not placed yet", with the themed name
+8. A tray's heading leads with plain words, "No time yet" or "Not placed yet", with the themed name
    second. A student must know what the tray holds. This came from a check of the mock-up's labels.
 
 ## Do not
@@ -66,8 +69,8 @@ Every claim needs one of these as evidence, in your report:
 3. `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q desktop/tests/test_layout_<design>.py`
    green, with the design's existing tests updated where the surface changed.
 4. `.venv/bin/python scripts/verify.py` green (about four minutes; the pytest step has a 300 second
-   budget). Do not run it while another suite runs in the same checkout: they share Qt's test-mode
-   files and fail each other.
+   budget). Do not run it while another suite runs anywhere on this computer, in any
+   checkout: they share Qt's test-mode files under `~/.qttest` and fail each other.
 5. `.venv/bin/python scripts/mutate.py scripts/mutations/targets.json` still catches every break,
    which shows the shared rules were not copied into the design.
 

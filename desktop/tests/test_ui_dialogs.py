@@ -363,7 +363,9 @@ def test_work_window_limit_and_reset_in_settings(qapp: QApplication) -> None:
     editor.set_windows([{"days": [0], "start": "16:00", "end": "17:00"} for _ in range(21)])
     assert len(dialog.work_windows()) == 21
     assert not editor.findChild(QPushButton, "workWindowAdd").isEnabled()
+    assert editor.findChild(QLabel, "workWindowsLimit").text() == "21 is the most you can add."
     editor.set_windows([])
+    assert editor.findChild(QLabel, "workWindowsLimit").text() == "", "nothing to say below the limit"
     assert dialog.work_windows() == []
     assert editor.findChild(QPushButton, "workWindowAdd").isEnabled()
 

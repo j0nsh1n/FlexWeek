@@ -117,6 +117,12 @@ storage, CI). Each unit ends green on the rig, on the source gate, and with its 
    send the revision it last saw, and `date_problem` must answer for a chip whose week is not
    loaded.*
 9. **Month.** One `MonthCanvas` dressed per design, the full Month matrix. Owner: Claude.
+   *Built in `desktop/native/hours/month.py`: Daily Scheduler's grid ("09:00 Title" chips, "+N
+   more", a date opens Day) plus carrying a chip to another date through the one hand, with the
+   date's answer shown while held. Today's app and every design use the same `MonthGrid`. Rig 9/9
+   on classic. Chips for weeks other than the open one wait for `handoffs/grok-month-blocks.md`;
+   when they land, weeks left with unsaved changes must be drawn from those changes too, as the
+   open week is, or a chip there looks movable and is then refused.*
 10. **Mission control**, then 11. **Clay deck**, 12. **Retro desktop**, 13. **Bento**,
     14. **Timeline**. One design per unit, Day and Week together, riskiest interaction first.
     Owner: ChatGPT. Brief: `handoffs/chatgpt-design-unit.md`.

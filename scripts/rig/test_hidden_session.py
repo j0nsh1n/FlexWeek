@@ -9,7 +9,17 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
 from scripts.rig import hidden_session as hidden
+
+
+class FakeProcess:
+    pid = 42
+    stdout = None
+
+    def poll(self):
+        return None
 
 
 def _copy_into_checkout(root: Path):
@@ -48,7 +58,10 @@ def test_kwin_display_comes_from_its_xwayland_child(monkeypatch, tmp_path) -> No
 
 
 def test_running_rejects_a_display_no_longer_owned_by_kwin(monkeypatch, tmp_path) -> None:
-    session = hidden.Session("kwin", ":71", (hidden.OwnedProcess(42, "kwin_wayland", 1),))
+    session = hidden.Session("kwin", ":71", (
+        hidden.OwnedProcess(41, "dbus-daemon", 1),
+        hidden.OwnedProcess(42, "kwin_wayland", 1),
+    ), "unix:path=/tmp/dbus-private")
     (tmp_path / "X71").touch()
     monkeypatch.setattr(hidden, "X11_SOCKETS", tmp_path)
     monkeypatch.setattr(hidden, "_read_state", lambda: session)
@@ -60,8 +73,9 @@ def test_running_rejects_a_display_no_longer_owned_by_kwin(monkeypatch, tmp_path
 def test_auto_uses_xvfb_when_kwin_is_unavailable(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(hidden, "STATE", tmp_path / "session.json")
     monkeypatch.setattr(hidden.shutil, "which", lambda _name: None)
-    monkeypatch.setattr(hidden, "_start_xvfb", lambda _env: ":73")
-    monkeypatch.setattr(hidden, "_start_kwin", lambda _env: ":71")
+    monkeypatch.setattr(hidden, "_start_bus", lambda _env: (FakeProcess(), "unix:path=/tmp/dbus-private"))
+    monkeypatch.setattr(hidden, "_owned", lambda pid, _name: hidden.OwnedProcess(pid, "dbus-daemon", 1))
+    monkeypatch.setattr(hidden, "_start_xvfb", lambda _env, _daemon, _address: ":73")
     assert hidden.start() == ":73"
 
 
@@ -71,29 +85,93 @@ def test_switching_servers_stops_the_owned_session(monkeypatch) -> None:
     monkeypatch.setattr(hidden, "_read_state", lambda: current)
     monkeypatch.setattr(hidden, "running", lambda: current.display)
     monkeypatch.setattr(hidden, "stop", lambda: stopped.append(True))
-    monkeypatch.setattr(hidden, "_start_xvfb", lambda _env: ":72")
+    monkeypatch.setattr(hidden, "_start_bus", lambda _env: (FakeProcess(), "unix:path=/tmp/dbus-private"))
+    monkeypatch.setattr(hidden, "_owned", lambda pid, _name: hidden.OwnedProcess(pid, "dbus-daemon", 1))
+    monkeypatch.setattr(hidden, "_start_xvfb", lambda _env, _daemon, _address: ":72")
     assert hidden.start("xvfb") == ":72"
     assert stopped == [True]
 
 
-def test_stop_terminates_both_recorded_processes(monkeypatch, tmp_path) -> None:
+def test_stop_terminates_all_recorded_processes(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(hidden, "STATE", tmp_path / "session.json")
     first = subprocess.Popen(["sleep", "30"])
     second = subprocess.Popen(["sleep", "30"])
+    third = subprocess.Popen(["sleep", "30"])
     try:
         hidden._save(hidden.Session("xvfb", ":73", (
-            hidden._owned(first.pid, "sleep"), hidden._owned(second.pid, "sleep")
-        )))
+            hidden._owned(first.pid, "sleep"), hidden._owned(second.pid, "sleep"),
+            hidden._owned(third.pid, "sleep"),
+        ), "unix:path=/tmp/dbus-private"))
         hidden.stop()
         first.wait(timeout=3)
         second.wait(timeout=3)
-        assert first.returncode == second.returncode == -15
+        third.wait(timeout=3)
+        assert first.returncode == second.returncode == third.returncode == -15
         assert not hidden.STATE.exists()
     finally:
-        for process in (first, second):
+        for process in (first, second, third):
             if process.poll() is None:
                 process.terminate()
             process.wait(timeout=3)
+
+
+def test_kwin_uses_private_bus_instead_of_callers(monkeypatch, tmp_path) -> None:
+    launched = []
+    saved = []
+    monkeypatch.setattr(hidden, "STATE", tmp_path / "session.json")
+    monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/tmp/caller")
+    monkeypatch.setattr(hidden, "_start_bus", lambda _env: (FakeProcess(), "unix:path=/tmp/private"))
+    monkeypatch.setattr(hidden, "_owned", lambda pid, name: hidden.OwnedProcess(pid, name, 1))
+    monkeypatch.setattr(hidden, "_launch", lambda command, name, env: launched.append((command, name, env)) or FakeProcess())
+    monkeypatch.setattr(hidden, "_kwin_display", lambda _pid: ":71")
+    monkeypatch.setattr(hidden, "_connects", lambda _display, _env: True)
+    monkeypatch.setattr(hidden, "_save", saved.append)
+
+    assert hidden.start("kwin") == ":71"
+    assert launched[0][1] == "kwin.log"
+    assert launched[0][2]["DBUS_SESSION_BUS_ADDRESS"] == "unix:path=/tmp/private"
+    assert saved[0].bus == "unix:path=/tmp/private"
+    assert [process.name for process in saved[0].processes] == ["dbus-daemon", "kwin_wayland"]
+
+
+def test_stop_signals_bus_after_both_servers(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(hidden, "STATE", tmp_path / "session.json")
+    processes = (
+        hidden.OwnedProcess(41, "dbus-daemon", 1),
+        hidden.OwnedProcess(42, "Xvfb", 1),
+        hidden.OwnedProcess(43, "openbox", 1),
+    )
+    hidden._save(hidden.Session("xvfb", ":73", processes, "unix:path=/tmp/private"))
+    alive = {process.pid for process in processes}
+    signals = []
+    monkeypatch.setattr(hidden, "_alive", lambda process: process.pid in alive)
+
+    def signal_process(pid, sig):
+        signals.append((pid, sig))
+        alive.remove(pid)
+
+    monkeypatch.setattr(hidden.os, "kill", signal_process)
+    hidden.stop()
+    assert [pid for pid, _signal in signals] == [43, 42, 41]
+    assert not hidden.STATE.exists()
+
+
+def test_private_bus_has_no_activatable_services(monkeypatch, tmp_path) -> None:
+    if shutil.which("dbus-daemon") is None:
+        pytest.skip("dbus-daemon is not installed")
+    monkeypatch.setattr(hidden, "STATE", tmp_path / "session.json")
+    daemon, address = hidden._start_bus(hidden._env())
+    try:
+        result = subprocess.run(
+            ["busctl", f"--address={address}", "call", "org.freedesktop.DBus",
+             "/org/freedesktop/DBus", "org.freedesktop.DBus", "ListActivatableNames"],
+            capture_output=True, text=True, check=True, timeout=10,
+        )
+        assert result.stdout.strip() == 'as 1 "org.freedesktop.DBus"'
+    finally:
+        hidden._terminate(daemon)
+        if daemon.stdout is not None:
+            daemon.stdout.close()
 
 
 def test_stop_does_not_signal_a_reused_pid(monkeypatch, tmp_path) -> None:

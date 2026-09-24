@@ -33,8 +33,8 @@ On a branch from `feat/0.15-tabs` (at the commit that has this file, or later):
 
 - Do not edit `desktop/native/hours/*`, the designs, the rig, or `spec.md`.
 - Do not push, open a pull request, or touch the remote. Commit locally only.
-- Do not run `scripts/verify.py` while another suite or an OpenCode session runs in the same
-  checkout; they share Qt's test-mode files.
+- Do not run `scripts/verify.py` while another suite or an OpenCode session runs anywhere on this
+  computer, in any checkout: they share Qt's test-mode files under `~/.qttest`.
 
 ## Prove it
 

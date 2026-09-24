@@ -43,6 +43,17 @@ SCHOOL = {
 QUARTER = {"id": "quiz", "title": "Quiz", "kind": "locked", "days": [3], "start": "16:00", "duration_min": 15}
 
 
+# The hosts of the hands these tests make. A hand is its host's Qt child and holds no reference of
+# its own to it, so the host has to be kept for as long as the hand is used.
+HOSTS: list = []
+
+
+def a_hand() -> Hand:
+    host = QWidget()
+    HOSTS.append(host)
+    return Hand(lambda block_id, from_day, span: Verdict(True, ""), host)
+
+
 @pytest.fixture(scope="module")
 def qapp() -> Iterator[QApplication]:
     yield QApplication.instance() or QApplication(["flexweek-zoom-test"])
@@ -55,7 +66,7 @@ def settle(qapp: QApplication) -> None:
 
 def a_week(qapp: QApplication, blocks: list[dict] | None = None) -> ClassicWeek:
     # Inside the offscreen screen (800 by 800), where QApplication.widgetAt can find it.
-    view = ClassicWeek(Hand(lambda block_id, from_day, span: Verdict(True, ""), QWidget()))
+    view = ClassicWeek(a_hand())
     view.set_look(None, resolved_palette("system", False, None))
     view.set_week(build_week(MONDAY, blocks or [], {}, None), 3, 15 * 60 + 40)
     view.move(0, 0)
@@ -66,7 +77,7 @@ def a_week(qapp: QApplication, blocks: list[dict] | None = None) -> ClassicWeek:
 
 
 def a_day(qapp: QApplication, blocks: list[dict], day: int) -> ClassicDay:
-    view = ClassicDay(Hand(lambda block_id, from_day, span: Verdict(True, ""), QWidget()))
+    view = ClassicDay(a_hand())
     view.set_look(None, resolved_palette("system", False, None))
     view.move(0, 0)
     view.resize(760, 560)
@@ -316,7 +327,7 @@ def a_lane_week(qapp: QApplication):
             for day in range(7)
         ]
 
-    hand = Hand(lambda block_id, from_day, span: Verdict(True, ""), QWidget())
+    hand = a_hand()
     canvas = HoursCanvas(hand, BlockPainter(resolved_palette("system", False, None)), lanes, header=24)
     scroll = HoursScroll(
         canvas,

@@ -63,6 +63,7 @@ from desktop.native.hours.classic import ClassicDay, ClassicWeek
 from desktop.native.hours.geometry import Span
 from desktop.native.hours.hand import Create, Hand, Move, MoveDate, Place, span_words
 from desktop.native.hours.hand import Verdict as HandVerdict
+from desktop.native.hours.month import MonthGrid
 from desktop.native.hours.zoom import sanitize_zoom
 from desktop.native.kept import KeptSession
 from desktop.native.layouts.base import LayoutView, Scene
@@ -116,7 +117,6 @@ from desktop.native.widgets import (
     FlowLayout,
     HomeworkDialog,
     LateDialog,
-    MonthGrid,
     PlanReview,
     PreviewDialog,
     RoutineDialog,
@@ -208,6 +208,8 @@ class NativeWindow(QMainWindow):
         # A block let go while a save is under way, moved once it is done: the save's reply replaces
         # the week, so a move made before it arrived would be lost.
         self._move_waiting: tuple[str, int, int, int, int] | None = None
+        self._date_waiting: MoveDate | None = None
+        self._month_revealed: tuple | None = None
         self._changed_ms = 0
         self._last_try_ms = 0
         self._autosave = QTimer(self)
@@ -751,6 +753,7 @@ class NativeWindow(QMainWindow):
         self.hand.opened.connect(self._edit_block)
         self.hand.selected.connect(self.session.select_block)
         self.hand.holding.connect(self._hold_renders)
+        self.hand.date_judge = self._date_judge
         # Today's app, as Daily Scheduler draws it: a Week that scrolls and a full-width Day.
         self.week_table = ClassicWeek(self.hand)
         self.week_table.day_opened.connect(self._open_week_day)
@@ -759,13 +762,13 @@ class NativeWindow(QMainWindow):
         self.planner.addWidget(self.day_view)
         for hours in (self.week_table.scroll, self.day_view.scroll):
             hours.zoomed.connect(self._remember_zoom)
-        self.month_grid = MonthGrid()
+        self.month_grid = MonthGrid(hand=self.hand)
         self.month_grid.day_activated.connect(self.session.open_day)
         self.planner.addWidget(self.month_grid)
         for widget in (
             self.week_table.hours,
             self.day_view.hours,
-            self.month_grid.table,
+            self.month_grid.canvas,
             self.focus_panel.tasks,
         ):
             widget.installEventFilter(self)
@@ -1162,20 +1165,15 @@ class NativeWindow(QMainWindow):
         self._honour_preferred_view()
         self._check_updates(asked=False)
         self._fill_classic()
-        placed = [
-            (
-                date_for_day(self.session.week_start, int(day)),
-                str(block.get("title") or ""),
-                str(block.get("category") or ""),
-            )
-            for block in self.session.blocks
-            for day in block.get("days") or []
-        ]
-        self.month_grid.set_placed(placed)
         self.month_grid.set_month(self.session.month_data, self.session.dirty)
-        # After the table has been laid out, or scrollToItem has nothing to measure against and the
-        # month stays on its first row.
-        QTimer.singleShot(0, lambda day=self.session.selected_day: self.month_grid.reveal(day))
+        opened = (self.session.planner_view, self.session.selected_month, self.session.month_data is not None)
+        if opened[0] == "month" and opened[2] and opened != self._month_revealed:
+            # Once, when a month opens: after that it stays wherever the student scrolled it, through
+            # saves and refreshes. After the month has been laid out, or there is nothing to measure.
+            self._month_revealed = opened
+            QTimer.singleShot(0, lambda day=self.session.selected_day: self.month_grid.reveal(day))
+        elif opened[0] != "month":
+            self._month_revealed = None
         self._sync_add_button()
         self._sync_classic_waiting()
         view = self.session.planner_view
@@ -1339,6 +1337,9 @@ class NativeWindow(QMainWindow):
         if not busy and self._move_waiting is not None:
             waiting, self._move_waiting = self._move_waiting, None
             QTimer.singleShot(0, lambda: self._move_block(*waiting))
+        if not busy and self._date_waiting is not None:
+            dated, self._date_waiting = self._date_waiting, None
+            QTimer.singleShot(0, lambda: self._move_to_date(dated))
         if not busy and (self._setup_prefs or self._setup_work_windows is not None or self._setup_week):
             # A moment later, so a plan that finished just now saves its week before setup writes.
             QTimer.singleShot(0, self._flush_setup)
@@ -1547,6 +1548,7 @@ class NativeWindow(QMainWindow):
         today, minute = self._clock_in_week()
         self.week_table.set_week(week, today, minute)
         self.day_view.set_day(week, date.fromisoformat(self.session.selected_day).weekday(), today, minute)
+        self.month_grid.set_week(week)
 
     def _where(self) -> tuple:
         """What the planner is showing: a held block belongs to this, and to nothing else."""
@@ -1584,7 +1586,24 @@ class NativeWindow(QMainWindow):
             # After the release has been handled: Add is a dialog with its own event loop.
             QTimer.singleShot(0, lambda: self._create_range(span.day, span.start, span.end))
         elif isinstance(change, MoveDate):
-            self.session._say("Moving between dates comes with the new Month.")
+            self._move_to_date(change)
+
+    def _date_judge(self, block_id: str, from_iso: str, to_iso: str) -> HandVerdict:
+        """Whether a block carried on Month can go on a date: the same rule a save applies."""
+        problem = self.session.date_problem(block_id, from_iso, to_iso)
+        return HandVerdict(problem is None, problem or "")
+
+    def _move_to_date(self, change: MoveDate) -> None:
+        """A chip let go on another date. While a save is on its way it waits for it, as a block let
+        go on the hours does; nothing is shown moved until the server has it. A change that did not
+        save is not waited on: the drop is refused in words, not kept to happen later."""
+        if self.session.busy:
+            self._date_waiting = change
+            return
+        if self.session.pending_save is not None or self.session.conflict:
+            self.session._say("Not moved: your last change has not saved yet. Try again once it has.")
+            return
+        self.session.move_to_date(change.block_id, change.from_iso, change.to_iso)
 
     def _hold_renders(self, holding: bool) -> None:
         """Nothing a press started on is rebuilt until it is let go, whether it becomes a drag or a tap."""

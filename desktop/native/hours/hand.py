@@ -20,6 +20,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from datetime import date
 from enum import Enum
 
 from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, Qt, QTimer, Signal
@@ -106,11 +107,18 @@ class MoveDate:
 
 Change = Move | Place | Create | MoveDate
 Judge = Callable[[str, int, Span], Verdict]
+# Whether a block can go from one date to another: its id, the date it is on, the date asked for.
+DateJudge = Callable[[str, str, str], Verdict]
 
 
 def is_surface(widget: object) -> bool:
     """Whether a widget takes blocks: it has tracks, and says which one lies under a point."""
     return isinstance(widget, QWidget) and bool(getattr(widget, "takes_blocks", False))
+
+
+def is_date_surface(widget: object) -> bool:
+    """Whether a widget takes dates: a month says which date lies under a point."""
+    return isinstance(widget, QWidget) and bool(getattr(widget, "takes_dates", False))
 
 
 def surface_at(at: QPoint) -> QWidget | None:
@@ -143,10 +151,15 @@ class Hand(QObject):
 
     def __init__(self, judge: Judge, host: QWidget) -> None:
         super().__init__(host)
-        self._judge, self._host = judge, host
+        # The host is the hand's Qt parent, not a reference of its own: a reference back to it made a
+        # cycle that only the garbage collector could free, at a moment of its choosing.
+        self._judge = judge
         self.preview: Preview | None = None
         self.selection: tuple[str, int] | None = None
         self.month_target: str | None = None
+        self.month_verdict: Verdict | None = None
+        # The window's rule for dates; with none, every date is taken.
+        self.date_judge: DateJudge | None = None
         self._held: Held | None = None
         self._source: QWidget | None = None
         self._tap: Callable[[], None] | None = None
@@ -173,6 +186,10 @@ class Hand(QObject):
     @property
     def active(self) -> bool:
         return self._active
+
+    def preview_held(self) -> Held | None:
+        """What is held once it is being carried, for a surface to draw it lifted."""
+        return self._held if self._active else None
 
     def press(
         self,
@@ -236,6 +253,7 @@ class Hand(QObject):
 
     def _released(self) -> None:
         held, active, preview, target = self._held, self._active, self.preview, self.month_target
+        verdict = self.month_verdict
         tap = self._tap
         self._end(silent=True)
         if held is None:
@@ -246,6 +264,10 @@ class Hand(QObject):
             return
         if held.kind is Gesture.MOVE_DATE:
             if target and held.block_id and target != held.from_iso:
+                if verdict is not None and not verdict.ok:
+                    if verdict.words:
+                        self.refused.emit(verdict.words)
+                    return
                 self.committed.emit(MoveDate(held.block_id, held.from_iso, target))
             return
         if preview is None:
@@ -342,24 +364,41 @@ class Hand(QObject):
         return None
 
     def _follow_month(self, at: QPoint) -> None:
-        from desktop.native.hours.month import MonthCanvas
-
+        """Over a date, the hand asks the window whether the block can go there, and says so."""
         widget = QApplication.widgetAt(at)
-        while widget is not None and not isinstance(widget, MonthCanvas):
+        while widget is not None and not is_date_surface(widget):
             widget = widget.parentWidget()
         target = widget.date_at(QPointF(widget.mapFromGlobal(at))) if widget is not None else None
         held = self._held
         assert held is not None
+        verdict = None
+        if target and held.block_id and target != held.from_iso and self.date_judge is not None:
+            verdict = self.date_judge(held.block_id, held.from_iso, target)
         words = f"{_clock(held.origin.start) if held.origin else ''} {held.title}".strip()
-        self._float(words + (f" → {target[8:].lstrip('0')}" if target else ""), at)
-        if target != self.month_target:
-            self.month_target = target
+        if verdict is not None and not verdict.ok and verdict.words:
+            words = verdict.words
+        elif target and target != held.from_iso:
+            words += f" → {DAYS[date.fromisoformat(target).weekday()]} {int(target[8:])}"
+        self._float(words, at, refused=verdict is not None and not verdict.ok)
+        if (target, verdict) != (self.month_target, self.month_verdict):
+            self.month_target, self.month_verdict = target, verdict
             self.preview_changed.emit()
 
-    def _float(self, words: str, at: QPoint) -> None:
+    def _float(self, words: str, at: QPoint, refused: bool = False) -> None:
+        if bool(self._chip.property("refused")) != refused:
+            # Red while the place under the pointer says no, as the hours draw a refused block.
+            self._chip.setProperty("refused", refused)
+            self._chip.style().unpolish(self._chip)
+            self._chip.style().polish(self._chip)
         self._chip.setText(words)
         self._chip.adjustSize()
-        self._chip.move(self._host.mapFromGlobal(at) + QPoint(14, 10))
+        # Beside the pointer, and never past the window's edge, where its words would be cut off.
+        host = self.parent()
+        spot = host.mapFromGlobal(at) + QPoint(14, 10)
+        room = host.rect()
+        spot.setX(max(room.left(), min(spot.x(), room.right() - self._chip.width() - 4)))
+        spot.setY(max(room.top(), min(spot.y(), room.bottom() - self._chip.height() - 4)))
+        self._chip.move(spot)
         self._chip.show()
         self._chip.raise_()
 
@@ -421,6 +460,7 @@ class Hand(QObject):
         had = self.preview is not None or self.month_target is not None
         self.preview = None
         self.month_target = None
+        self.month_verdict = None
         if had:
             self.preview_changed.emit()
         if was_active:

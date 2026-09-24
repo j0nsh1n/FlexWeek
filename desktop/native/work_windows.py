@@ -77,7 +77,7 @@ class _WorkWindowRow(QFrame):
         self.end_error = QLabel()
         self.end_error.setObjectName("validationError")
         self.end_error.setTextFormat(Qt.TextFormat.PlainText)
-        self.end_error.setAccessibleName("Work window end error")
+        self.end_error.setAccessibleName("Problem with the end time")
         end_field.addWidget(self.end_error)
         fields.addLayout(end_field)
 
@@ -224,7 +224,10 @@ class WorkWindowsEditor(QWidget):
             if count
             else "Homework can be planned at any time of day."
         )
-        self.limit.setText(f"{count} of {MAX_WORK_WINDOWS} work windows.")
+        # Said only when it matters: a count under every list was the model's word, not the student's.
+        full = count >= MAX_WORK_WINDOWS
+        self.limit.setText(f"{MAX_WORK_WINDOWS} is the most you can add." if full else "")
+        self.limit.setVisible(full)
         self.add_button.setEnabled(count < MAX_WORK_WINDOWS)
         for button in self._add_buttons:
             button.setEnabled(count < MAX_WORK_WINDOWS)

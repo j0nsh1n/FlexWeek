@@ -23,7 +23,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, Qt
     from PySide6.QtGui import QMouseEvent
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QPushButton, QScrollArea, QVBoxLayout, QWidget
+    from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
     from desktop.native.hours.canvas import EDGE_PX, BlockPainter, HoursCanvas
     from desktop.native.hours.geometry import Axis, LinearTrack, Span
@@ -257,3 +257,18 @@ def test_an_edge_held_a_few_pixels_in_does_not_jump_on_the_first_move(qapp: QApp
     press = rig.at(2, 19 * 60, -6)
     rig.drag(press, press + QPoint(0, round(30 * per_minute)))
     assert rig.said == [Move("essay", 2, Span(2, 18 * 60, 19 * 60 + 30))]
+
+
+def test_the_words_that_follow_the_pointer_stay_inside_the_window(qapp: QApplication) -> None:
+    """Carried to the window's right-hand edge, long words were cut off past its side."""
+    rig = Rig(qapp)
+    title = "Science poster on the water cycle, with the diagrams Ms Alvarez asked for"
+    start = rig.chip.mapToGlobal(rig.chip.rect().center())
+    corner = rig.chip.mapToGlobal(QPoint(rig.chip.width() - 3, rig.chip.height() // 2))
+    rig.hand.press(rig.chip, Held(Gesture.PLACE, title, 45, "poster"), start)
+    for step in range(1, 9):
+        rig.send(rig.chip, QEvent.Type.MouseMove, start + (corner - start) * step / 8, True)
+    label = rig.window.findChild(QLabel, "heldChip")
+    assert label is not None and label.isVisible() and label.text() == title
+    assert rig.window.rect().contains(label.geometry()), f"{label.geometry()} runs past {rig.window.rect()}"
+    rig.hand.cancel()

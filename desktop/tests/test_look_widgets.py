@@ -28,6 +28,7 @@ if importlib.util.find_spec("PySide6") is not None:
 
     from desktop.native.calendar import CATEGORIES
     from desktop.native.canvas import Shape, WeekCanvas
+    from desktop.native.hours.month import MonthGrid
     from desktop.native.look import (
         LOOK_DEFAULTS,
         effective_look,
@@ -36,7 +37,6 @@ if importlib.util.find_spec("PySide6") is not None:
         resolved_palette,
     )
     from desktop.native.settings import PrefsDialog
-    from desktop.native.widgets import MonthGrid
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
     from desktop.tests.logic_support import past_setup
@@ -161,7 +161,8 @@ def test_days_outside_the_month_use_the_palettes_muted_ink(qapp: QApplication) -
     terminal = resolved_palette("slate", False, {"preset": "terminal", "knobs": {}})
     grid.set_month(snapshot, False)
     grid.set_palette(terminal)
-    assert grid.table.item(0, 0).foreground().color().name() == terminal["muted"] == "#7fbf7f"
+    assert grid.canvas.cells[0].in_month is False
+    assert grid.canvas.painter.c("muted").name() == terminal["muted"] == "#7fbf7f"
 
 
 def settings(look: dict) -> PrefsDialog:

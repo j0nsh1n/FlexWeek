@@ -36,6 +36,21 @@ WIDTH, HEIGHT = 1400, 900
 X11_SOCKETS = Path("/tmp/.X11-unix")
 PROC = Path("/proc")
 SERVERS = ("kwin", "xvfb")
+# A session bus as the stock one is, less <standard_session_servicedirs/>, so nothing is activated.
+BUS_CONFIG = """<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <type>session</type>
+  <keep_umask/>
+  <listen>unix:tmpdir=/tmp</listen>
+  <auth>EXTERNAL</auth>
+  <policy context="default">
+    <allow send_destination="*" eavesdrop="true"/>
+    <allow eavesdrop="true"/>
+    <allow own="*"/>
+  </policy>
+</busconfig>
+"""
 
 
 @dataclass(frozen=True)
@@ -50,6 +65,7 @@ class Session:
     server: str
     display: str
     processes: tuple[OwnedProcess, ...]
+    bus: str = ""
 
 
 def _process_state(pid: int) -> tuple[str, int] | None:
@@ -89,9 +105,13 @@ def _read_state() -> Session | None:
         if raw.get("server") not in SERVERS:
             return None
         processes = tuple(OwnedProcess(**item) for item in raw["processes"])
-        if len(processes) != (1 if raw["server"] == "kwin" else 2):
+        old_count = 1 if raw["server"] == "kwin" else 2
+        if len(processes) not in (old_count, old_count + 1):
             return None
-        return Session(raw["server"], display, processes)
+        address = raw.get("bus", "")
+        if not isinstance(address, str):
+            return None
+        return Session(raw["server"], display, processes, address)
     except (OSError, ValueError, KeyError, TypeError):
         return None
 
@@ -106,12 +126,26 @@ def _save(session: Session) -> None:
 def running() -> str | None:
     """The display if the saved server and its window manager are still ours and alive."""
     session = _read_state()
-    if session is None or not all(_alive(process) for process in session.processes):
+    if (
+        session is None
+        or not session.bus
+        or len(session.processes) != (2 if session.server == "kwin" else 3)
+        or session.processes[0].name != "dbus-daemon"
+        or not all(_alive(process) for process in session.processes)
+    ):
         return None
-    if session.server == "kwin" and _kwin_display(session.processes[0].pid) != session.display:
+    if session.server == "kwin" and _kwin_display(session.processes[-1].pid) != session.display:
         return None
     socket = X11_SOCKETS / f"X{session.display[1:]}"
     return session.display if socket.exists() else None
+
+
+def bus() -> str:
+    """The private bus address inherited by the hidden app, never the caller's bus."""
+    session = _read_state()
+    if session is None or not session.bus or running() is None:
+        raise RuntimeError("No running hidden session with a private D-Bus")
+    return session.bus
 
 
 def _env() -> dict[str, str]:
@@ -173,6 +207,31 @@ def _launch(
         )
 
 
+def _start_bus(env: dict[str, str]) -> tuple[subprocess.Popen, str]:
+    STATE.parent.mkdir(parents=True, exist_ok=True)
+    config = STATE.parent / "bus.conf"
+    config.write_text(BUS_CONFIG)
+    daemon = _launch(
+        ["dbus-daemon", f"--config-file={config}", "--nofork", "--nopidfile", "--print-address=1"],
+        "bus.log",
+        env,
+        pipe=True,
+    )
+    try:
+        assert daemon.stdout is not None
+        if select.select([daemon.stdout], [], [], 10)[0]:
+            address = daemon.stdout.readline().decode().strip()
+            if address and daemon.poll() is None:
+                return daemon, address
+        raise RuntimeError("The hidden session's D-Bus never gave its address")
+    except BaseException:
+        _terminate(daemon)
+        raise
+    finally:
+        if daemon.poll() is not None and daemon.stdout is not None:
+            daemon.stdout.close()
+
+
 def _kwin_display(pid: int) -> str | None:
     """Find the Xwayland display spawned by this KWin, not another checkout's."""
     for task in (PROC / str(pid) / "task").glob("*"):
@@ -193,7 +252,7 @@ def _kwin_display(pid: int) -> str | None:
     return None
 
 
-def _start_kwin(env: dict[str, str]) -> str:
+def _start_kwin(env: dict[str, str], daemon: OwnedProcess, address: str) -> str:
     process = _launch(
         [
             "kwin_wayland", "--virtual", "--xwayland", "--no-lockscreen",
@@ -210,7 +269,7 @@ def _start_kwin(env: dict[str, str]) -> str:
                 raise RuntimeError(f"KWin exited; see {STATE.parent / 'kwin.log'}")
             display = _kwin_display(process.pid)
             if display and _connects(display, env):
-                _save(Session("kwin", display, (_owned(process.pid, "kwin_wayland"),)))
+                _save(Session("kwin", display, (daemon, _owned(process.pid, "kwin_wayland")), address))
                 return display
             time.sleep(0.2)
         raise RuntimeError("The hidden session's Xwayland never came up")
@@ -254,7 +313,7 @@ def _wait_for_openbox(env: dict[str, str], process: subprocess.Popen) -> None:
     raise RuntimeError("Openbox did not take control of the hidden display")
 
 
-def _start_xvfb(env: dict[str, str]) -> str:
+def _start_xvfb(env: dict[str, str], daemon: OwnedProcess, address: str) -> str:
     xvfb = _launch(
         ["Xvfb", "-displayfd", "1", "-screen", "0", f"{WIDTH}x{HEIGHT}x24", "-nolisten", "tcp", "-ac"],
         "xvfb.log",
@@ -268,7 +327,7 @@ def _start_xvfb(env: dict[str, str]) -> str:
         display_env = {**env, "DISPLAY": display}
         openbox = _launch(["openbox"], "openbox.log", display_env)
         _wait_for_openbox(display_env, openbox)
-        _save(Session("xvfb", display, (_owned(xvfb.pid, "Xvfb"), _owned(openbox.pid, "openbox"))))
+        _save(Session("xvfb", display, (daemon, _owned(xvfb.pid, "Xvfb"), _owned(openbox.pid, "openbox")), address))
         return display
     except BaseException:
         if openbox is not None:
@@ -288,7 +347,22 @@ def start(server: str = "auto") -> str:
         if running() is not None and current.server == server:
             return current.display
         stop()
-    return _start_kwin(_env()) if server == "kwin" else _start_xvfb(_env())
+    base_env = _env()
+    daemon, address = _start_bus(base_env)
+    try:
+        env = {**base_env, "DBUS_SESSION_BUS_ADDRESS": address}
+        owned = _owned(daemon.pid, "dbus-daemon")
+        return (
+            _start_kwin(env, owned, address)
+            if server == "kwin"
+            else _start_xvfb(env, owned, address)
+        )
+    except BaseException:
+        _terminate(daemon)
+        raise
+    finally:
+        if daemon.stdout is not None:
+            daemon.stdout.close()
 
 
 def stop() -> None:
@@ -299,13 +373,15 @@ def stop() -> None:
             if _alive(process):
                 with contextlib.suppress(ProcessLookupError):
                     os.kill(process.pid, signal.SIGTERM)
-        deadline = time.monotonic() + 3
-        while time.monotonic() < deadline and any(_alive(p) for p in session.processes):
-            time.sleep(0.1)
-        for process in reversed(session.processes):
-            if _alive(process):
-                with contextlib.suppress(ProcessLookupError):
-                    os.kill(process.pid, signal.SIGKILL)
+                deadline = time.monotonic() + 3
+                while _alive(process) and time.monotonic() < deadline:
+                    time.sleep(0.1)
+                if _alive(process):
+                    with contextlib.suppress(ProcessLookupError):
+                        os.kill(process.pid, signal.SIGKILL)
+                    deadline = time.monotonic() + 3
+                    while _alive(process) and time.monotonic() < deadline:
+                        time.sleep(0.1)
     STATE.unlink(missing_ok=True)
 
 

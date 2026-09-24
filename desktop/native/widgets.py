@@ -14,9 +14,7 @@ from PySide6.QtCore import (
     QDate,
     QEvent,
     QMimeData,
-    QModelIndex,
     QObject,
-    QPersistentModelIndex,
     QPoint,
     QRect,
     QSize,
@@ -39,7 +37,6 @@ from PySide6.QtGui import (
     QShowEvent,
 )
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QApplication,
     QCheckBox,
     QComboBox,
@@ -49,7 +46,6 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QFrame,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QLayout,
     QLayoutItem,
@@ -62,10 +58,6 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QScrollArea,
     QSpinBox,
-    QStyledItemDelegate,
-    QStyleOptionViewItem,
-    QTableWidget,
-    QTableWidgetItem,
     QTimeEdit,
     QVBoxLayout,
     QWidget,
@@ -83,15 +75,12 @@ from backend.slots import (
 )
 from desktop.native.calendar import (
     CATEGORIES,
-    MONTH_SAVED_ONLY,
     is_series,
     local_stamp,
     monday_of,
-    month_chips,
     span_clash,
     span_problem,
 )
-from desktop.native.look import resolved_palette
 from desktop.native.motion import appear, settle, vanish
 from desktop.native.reuse import (
     AVAILABILITY_LIMIT,
@@ -105,8 +94,6 @@ from desktop.native.weekmodel import due_label, length_label
 from desktop.native.work_windows import WorkWindowsEditor
 
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-CHIP_ROLE = int(Qt.ItemDataRole.UserRole) + 1
-TODAY_ROLE = int(Qt.ItemDataRole.UserRole) + 2
 SWATCH_PX = 12
 DETAIL_BOX_HEIGHT = 84
 # A scroll area reports its own modest size hint rather than its content's, which is what keeps the
@@ -123,20 +110,6 @@ SLOT_HINT = "Use a multiple of 15 minutes, such as 15, 30, or 45."
 ESTIMATE_ERROR = "That time is not a multiple of 15 minutes."
 PLAN_REVIEW_MAX = 132
 DAY_FULL = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
-MONTH_FULL = (
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-)
 
 
 def _validation_text(error: Exception) -> str:
@@ -603,179 +576,6 @@ class DayAgenda(QWidget):
             self.homework_activated.emit(data["id"])
         elif data.get("kind") == "block":
             self.item_activated.emit(data["id"])
-
-
-class MonthChipDelegate(QStyledItemDelegate):
-    """Date number plus named chips. Counts like '2 sessions' hid what the day actually held."""
-
-    def paint(
-        self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex | QPersistentModelIndex
-    ) -> None:
-        painter.save()
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        box = option.rect.adjusted(4, 4, -4, -4)
-        today = bool(index.data(TODAY_ROLE))
-        if today:
-            painter.setPen(QColor(option.palette.highlight().color()))
-            painter.setBrush(option.palette.base().color())
-            painter.drawRoundedRect(box, 8, 8)
-        painter.setPen(option.palette.text().color())
-        painter.drawText(
-            box.adjusted(4, 2, -4, 0),
-            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft,
-            index.data() or "",
-        )
-        chips = index.data(CHIP_ROLE) or []
-        y = box.top() + option.fontMetrics.height() + 6
-        for title, colour in chips:
-            if y + 16 > box.bottom():
-                break
-            chip = QRect(box.left() + 4, y, max(24, box.width() - 8), 16)
-            fill = QColor(colour)
-            fill.setAlpha(90)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(fill)
-            painter.drawRoundedRect(chip, 8, 8)
-            painter.setPen(option.palette.text().color())
-            painter.drawText(
-                chip.adjusted(6, 0, -6, 0),
-                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
-                option.fontMetrics.elidedText(title, Qt.TextElideMode.ElideRight, chip.width() - 12),
-            )
-            y += 18
-        painter.restore()
-
-
-class MonthGrid(QWidget):
-    day_activated = Signal(str)
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setObjectName("monthPageInner")
-        layout = QVBoxLayout(self)
-        self.heading = QLabel()
-        self.heading.setObjectName("monthTitle")
-        layout.addWidget(self.heading)
-        self.warning = QLabel()
-        self.warning.setObjectName("monthSavedWarning")
-        self.warning.setWordWrap(True)
-        layout.addWidget(self.warning)
-        self.table = QTableWidget(5, 7)
-        self.table.setObjectName("monthGrid")
-        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.table.verticalHeader().setVisible(False)
-        self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.table.setHorizontalHeaderLabels(DAYS)
-        self.table.setItemDelegate(MonthChipDelegate(self.table))
-        self.table.cellClicked.connect(self._activate)
-        layout.addWidget(self.table)
-        self.overdue = QLabel()
-        self.overdue.setObjectName("monthOverdue")
-        self.overdue.setWordWrap(True)
-        layout.addWidget(self.overdue)
-        self._palette = resolved_palette("system", False, None)
-        self._tokens: dict[str, str] | None = None
-        self._placed: list[tuple[str, str, str]] = []
-        self._shown: tuple[dict | None, bool] | None = None
-
-    def set_palette(self, palette: dict) -> None:
-        self._palette = palette
-        if self._shown is not None:
-            self.set_month(*self._shown)
-
-    def set_tokens(self, tokens: dict[str, str]) -> None:
-        """A layout's own colours, so Month is not the pack's calendar sitting inside Bento."""
-        self._tokens = tokens
-        radius = 8
-        if tokens.get("cta"):
-            radius = 16
-        self.setStyleSheet(
-            f"#monthPageInner, #monthGrid {{ background: {tokens['bg']}; color: {tokens['bg_ink']}; }}"
-            f"#monthTitle {{ color: {tokens['bg_ink']}; font-weight: 800; }}"
-            f"#monthOverdue, #monthSavedWarning {{ color: {tokens['bg_muted']}; }}"
-            f"QHeaderView::section {{ background: {tokens['bg']}; color: {tokens['bg_muted']};"
-            f" border: none; padding: 4px; }}"
-            f"QTableWidget {{ gridline-color: {tokens['line']}; border: none; }}"
-            f"QTableWidget::item {{ background: {tokens['surface']}; border-radius: {radius}px; }}"
-        )
-        self._palette = {
-            "muted": tokens["bg_muted"],
-            "text": tokens["bg_ink"],
-            "panel": tokens["surface"],
-            "accent": tokens["accent"],
-        }
-        if self._shown is not None:
-            self.set_month(*self._shown)
-
-    def set_placed(self, placed: list[tuple[str, str, str]]) -> None:
-        self._placed = placed
-        if self._shown is not None:
-            self.set_month(*self._shown)
-
-    def set_month(self, snapshot: dict | None, dirty: bool) -> None:
-        self._shown = (snapshot, dirty)
-        if snapshot is None:
-            self.heading.setText("Month")
-            self.table.clearContents()
-            self.warning.setText("Loading month…" if not dirty else MONTH_SAVED_ONLY)
-            self.overdue.setText("")
-            return
-        year, month = (int(part) for part in snapshot["month"].split("-"))
-        self.heading.setText(f"{MONTH_FULL[month - 1]} {year}")
-        self.warning.setText(MONTH_SAVED_ONLY if dirty else "")
-        days = snapshot.get("days") or []
-        # The API sends whole weeks, four to six of them. Five fixed rows lost the last week of August.
-        self.table.setRowCount((len(days) + 6) // 7)
-        tallest = 1
-        today = date.today().isoformat()
-        for index in range(self.table.rowCount() * 7):
-            row, column = divmod(index, 7)
-            if index >= len(days):
-                self.table.setItem(row, column, QTableWidgetItem(""))
-                continue
-            cell = days[index]
-            stamp = date.fromisoformat(cell["date"])
-            chips = month_chips(cell, snapshot, self._placed)
-            tallest = max(tallest, 1 + len(chips))
-            item = QTableWidgetItem(str(stamp.day))
-            item.setData(Qt.ItemDataRole.UserRole, cell["date"])
-            marks = [
-                (title, (CATEGORIES.get(category) or {}).get("mark") or "#94a3b8")
-                for title, category in chips
-            ]
-            item.setData(CHIP_ROLE, marks)
-            item.setData(TODAY_ROLE, cell["date"] == today)
-            if not cell.get("in_month"):
-                item.setForeground(QColor(self._palette["muted"]))
-            self.table.setItem(row, column, item)
-        # Rows share the height on offer but never shrink below the busiest day, or Qt draws "14…"
-        # where the counts should be. Past that the table scrolls.
-        line = self.table.fontMetrics().lineSpacing()
-        self.table.verticalHeader().setMinimumSectionSize(tallest * line + 16)
-        overdue = snapshot.get("overdue") or []
-        if overdue:
-            titles = ", ".join(item.get("title") or item.get("id", "") for item in overdue[:8])
-            self.overdue.setText("Overdue: " + titles)
-        else:
-            self.overdue.setText("")
-
-    def reveal(self, iso_day: str) -> None:
-        """Open the month on the week the student is in. It opened on the first row, so on the 19th
-        the current week sat below the fold behind a fortnight of empty cells."""
-        for row in range(self.table.rowCount()):
-            for column in range(7):
-                cell = self.table.item(row, column)
-                if cell is not None and cell.data(Qt.ItemDataRole.UserRole) == iso_day:
-                    self.table.scrollToItem(cell, QAbstractItemView.ScrollHint.PositionAtCenter)
-                    return
-
-    def _activate(self, row: int, column: int) -> None:
-        item = self.table.item(row, column)
-        iso_day = item.data(Qt.ItemDataRole.UserRole) if item else None
-        if iso_day:
-            self.day_activated.emit(iso_day)
 
 
 def _line(name: str, text: str = "", limit: int = 80) -> QLineEdit:
