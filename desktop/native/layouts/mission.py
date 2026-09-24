@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QHelpEvent, QPainter, QPen
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLayout, QPushButton, QToolTip, QVBoxLayout, QWidget
 
@@ -125,7 +125,6 @@ def _detach(layout: QLayout, widget: QWidget) -> bool:
 
 class MissionView(LayoutView):
     layout_id = "mission"
-    zoomed = Signal(str, int)
     # The lanes are hours already, so a block is dropped on them rather than in a drawer.
     uses_drawer = False
 
@@ -141,7 +140,6 @@ class MissionView(LayoutView):
         self._root.setContentsMargins(14, 10, 14, 10)
         outer.addWidget(scrolling(self._page, "missionScroll"))
         self._scrolls: dict[str, HoursScroll] = {}
-        self.remembered_zoom: dict[str, int] = {}
 
     def shown_day(self, scene: Scene) -> int:
         if scene.surface == "day" and scene.iso_day:
@@ -246,8 +244,7 @@ class MissionView(LayoutView):
             scroll = HoursScroll(canvas, scale, lambda px: round((LAST - FIRST) / 60 * px) + 34,
                                  name="missionDay" if is_day else "missionWeek",
                                  gutter=scene.px(96), axis=Axis.ACROSS)
-            scroll.restore(self.remembered_zoom)
-            scroll.zoomed.connect(self.zoomed.emit)
+            self.keep_zoom(scroll)
             if not is_day:
                 names = QWidget()
                 name_column = QVBoxLayout(names)
