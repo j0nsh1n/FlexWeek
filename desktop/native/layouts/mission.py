@@ -114,7 +114,6 @@ def _detach(layout: QLayout, widget: QWidget) -> bool:
         if item.widget() is widget:
             layout.takeAt(index)
             widget.hide()
-            widget.setParent(None)
             return True
         inner = item.layout()
         if inner is not None and _detach(inner, widget):

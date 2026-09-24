@@ -17,10 +17,11 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
+    import shiboken6
     from PySide6.QtCore import QEvent, Qt
     from PySide6.QtGui import QHelpEvent
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QFrame, QLabel, QPushButton, QToolTip
+    from PySide6.QtWidgets import QApplication, QFrame, QLabel, QPushButton, QToolTip, QVBoxLayout, QWidget
 
     from desktop.native.hours.chips import TrayChip
     from desktop.native.hours.geometry import Axis
@@ -144,6 +145,28 @@ def test_narrow_week_keeps_the_tray_and_its_zoom(qapp: QApplication) -> None:
     view.show_week(replace(view.scene, surface="day"))
     view.show_week(replace(view.scene, surface="week"))
     assert view._scrolls["week"] is original and original.px == 96
+
+
+def test_parked_day_scroll_dies_with_its_host(qapp: QApplication) -> None:
+    options = options_for(None, "mission")
+    palette = resolved_palette("light-frost", False, None, "default")
+    week = build_week(WEEK, BLOCKS, HOMEWORK, TRACE)
+    scene = Scene(week, 3, minute_of("13:40"), options,
+                  tokens_for("mission", options["colour"], palette))
+    host = QWidget()
+    view = MissionView(host)
+    QVBoxLayout(host).addWidget(view)
+    view.show_week(scene)
+    host.show()
+    qapp.processEvents()
+    view.show_week(replace(scene, surface="day", iso_day="2026-09-18"))
+    parked = view._scrolls["day"]
+    view.show_week(scene)
+    assert shiboken6.isValid(parked)
+
+    host.deleteLater()
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert not shiboken6.isValid(parked)
 
 
 def test_colour_option_repaints_the_console(qapp: QApplication) -> None:

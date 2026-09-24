@@ -1,6 +1,12 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-23 (Mission review fix), branch `chatgpt/0-15-mission`.
+  Parked Day and Week scrolls stay children of the Mission page after leaving
+  the layout, so closing the host destroys them. The new host-deletion test
+  failed before the fix and passed afterward; all 13 Mission tests passed.
+  Full source gate: 1247 tests passed, ruff and mypy clean. No rig, executable,
+  push, PR, or `spec.md` change. Next: Claude reviews this branch again.
 - Date: 2026-09-23 (0.15 Mission control). Local branch
   `chatgpt/0-15-mission` from `feat/0.15-tabs` at `ab0ef57`. Day uses Scope
   lane and Week uses Lane ops, both on the window's Hand. Pending homework is
@@ -546,6 +552,11 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-23, `chatgpt/0-15-mission`: `MissionView` retains parked scrolls
+  under its page rather than orphaning them. A Week → Day → Week host-deletion
+  test failed on the old behavior and passes on the fix. Mission 13/13; full
+  source gate 1247/1247 with ruff and mypy clean. Awaiting Claude review;
+  no rig, build, push, PR, or `spec.md` edit.
 - 2026-09-23, `feat/0.15-tabs`: Unit 5 done. Rig matrix for Today's app: Day 14/14, Week 17/17,
   including Escape, switching away, dwell, a save landing mid-drag, a second move while a save
   is in flight, double-click to open, Day and Week agreeing, and 1150x768 with large text.
