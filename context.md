@@ -1,6 +1,20 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-24 (Clay deck unit 11), branch `chatgpt/0-15-clay` from
+  `feat/0.15-tabs` at `082e9fa`. Clay Day is one large live hours card with a
+  "No time yet" tray; Week is seven live cards fanned from -8 to +8 degrees.
+  Both use the window's shared Hand, retain separate scroll and zoom positions,
+  and use the shared Month. The flat Week option remains available; the old
+  three/five card setting was removed because Week now always shows seven days.
+  The angled fan passed its grab check and the real-pointer rig: Day 14/14 and
+  Week 17/17. Reviewed held and end screenshots for Day move, Week cross-day
+  move, Week quarter-grab, and small/large windows; long Week titles shorten
+  in the narrow cards, while grab points remain usable. Full source gate:
+  1305 tests passed, ruff and mypy clean; all 11 target mutations were caught.
+  Cartographer skipped because `traceworks` is absent from the project venv.
+  No executable build, push, PR, or `spec.md` edit. Next: Claude reviews the
+  branch before integration.
 - Date: 2026-09-23 (rig private D-Bus), branch `chatgpt/0-15-rig-ci`.
   Merged `feat/0.15-tabs` at `048814b` (including the private-bus fix at
   `6525429`) into the checkout-isolated KWin/Xvfb rig. Each hidden session now

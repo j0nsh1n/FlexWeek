@@ -34,7 +34,8 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.calendar import sunday_due
     from desktop.native.canvas import Timeline
     from desktop.native.hours.canvas import BlockPainter, HoursCanvas
-    from desktop.native.hours.hand import Hand
+    from desktop.native.hours.geometry import Span
+    from desktop.native.hours.hand import Hand, Place
     from desktop.native.hours.zoom import HoursScroll, Scale
     from desktop.native.layouts import drag
     from desktop.native.layouts.base import LayoutView, Scene, empty
@@ -47,7 +48,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.tests.logic_support import past_setup
 
 PASSWORD = "a-long-test-password"
-DRAWER_VIEWS = ("timeline", "bento", "retro", "clay")
+DRAWER_VIEWS = ("timeline", "bento", "retro")
 
 
 @pytest.fixture(scope="module")
@@ -272,17 +273,17 @@ def test_the_drawer_opens_on_the_day_and_near_the_time_the_block_was_lifted_from
     view.drag_ended()
 
 
-def test_a_days_name_in_the_drawer_is_for_looking_not_for_dropping(
+def test_clay_week_day_name_opens_the_day_without_placing_homework(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     view = use(qapp, window, "clay")
-    math_id = session_of(window, "math")["id"]
-    view.drag_began(math_id, -1)
-    pick = named(view.drawer, "dropDay5")
-    let_go(qapp, pick, middle(pick), math_id)
-    view.drag_ended()
+    pick = named(view, "clayDay5")
+    QTest.mouseClick(pick, Qt.MouseButton.LeftButton)
     settled(qapp, window)
-    assert view.drawer.day == 5
+    assert window.session.planner_view == "day"
+    assert window.session.selected_day == (
+        date.fromisoformat(window.session.week_start) + timedelta(days=5)
+    ).isoformat()
     assert placed(window, "math")[1] is None
 
 
@@ -395,7 +396,7 @@ def test_a_redraw_during_a_drag_waits_for_the_drop(qapp: QApplication, window: N
 def test_a_drop_while_a_save_is_under_way_lands_once_it_is_done(
     qapp: QApplication, window: NativeWindow
 ) -> None:
-    view = use(qapp, window, "clay")
+    use(qapp, window, "clay")
     window.session.add_block(
         {
             "id": "band",
@@ -409,12 +410,8 @@ def test_a_drop_while_a_save_is_under_way_lands_once_it_is_done(
     )
     window.session.save()
     assert window.session.busy
-    view = shown_view(window)
     math_id = session_of(window, "math")["id"]
-    view.drag_began(math_id, -1)
-    turn_to(qapp, view, 4, math_id)
-    let_go(qapp, view.drawer.hours, hour_point(view.drawer.hours, 17 * 60), math_id)
-    view.drag_ended()
+    window.hand.commit(Place(math_id, Span(4, 17 * 60, 18 * 60)))
     settled(qapp, window)
     wait_until(qapp, lambda: placed(window, "math")[1] is not None)
     settled(qapp, window)

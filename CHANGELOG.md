@@ -10,6 +10,9 @@ All notable changes to FlexWeek are documented here. Format follows
   can show their chips.
 
 ### Changed
+- Clay deck has one large, draggable Day card and seven live Week cards fanned
+  up to 8 degrees. Homework without a time waits in a draggable dish. Week
+  cards can also be laid straight in Appearance & layout.
 - Mission control has a horizontal Scope lane on Day and seven Lane ops tracks
   on Week. Blocks can move, resize, and be placed from the "Not placed yet"
   tray on either tab. The deadline radar and daily load remain on Week.
