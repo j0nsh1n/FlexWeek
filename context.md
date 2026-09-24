@@ -1,6 +1,34 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-23 (rig private D-Bus), branch `chatgpt/0-15-rig-ci`.
+  Merged `feat/0.15-tabs` at `048814b` (including the private-bus fix at
+  `6525429`) into the checkout-isolated KWin/Xvfb rig. Each hidden session now
+  starts its own no-activation D-Bus before the display server; the bus is an
+  owned process stopped after the servers, and FlexWeek inherits its address.
+  Rig ownership tests 10/10; full source gate 1282 tests, ruff and mypy clean.
+  Live Classic Day on KWin passed 14/14; no desktop-bus name was owned by its
+  PID and the user journal had zero global-shortcut registration failures
+  since launch. Stop removed the private bus socket and owned KWin. A scan of
+  readable same-user process environments found no holder of its address;
+  some older desktop processes deny environment reads. Local Xvfb could not
+  run because the executable is absent; its failed start cleaned up the bus.
+  No executable build, push, PR, or `spec.md` edit. Next: Claude reviews this
+  branch again.
+- Date: 2026-09-23, branch `chatgpt/0-15-rig-ci` from `feat/0.15-tabs`
+  at `12456d2`. The pointer rig supports Xvfb with Openbox when KWin is absent;
+  a ten-minute CI job runs Classic Day and Week and uploads its artifacts.
+  State, logs, KWin socket, and default run output now belong to the checkout
+  directory; KWin finds the X display through its own Xwayland child. The old
+  main-checkout state file remains separate. Both checkouts passed a concurrent
+  real-pointer Day scenario on distinct displays, and two updated launchers
+  started simultaneously on distinct KWin displays.
+  Before this isolation fix, KWin, local Xvfb, and a clean Python 3.14 container
+  each passed Day 14/14 and Week 17/17; the container rig took 176 seconds.
+  After the fix, a local Xvfb zoom scenario passed, and the full source gate
+  passed 1269 tests, including seven rig ownership tests.
+  No scenarios, native app code, executable, or remote changed. `spec.md` still
+  describes CI as backend-only; the new job extends that behavior.
 - Date: 2026-09-22 (0.15 reach check). Branch `fix/015-rig-reach` from
   `grok/0-15-audit-01` at `841586f`. A partial hours track no longer reports
   00:00 or 24:00 as visible by substituting its own edge. Full source gate:
@@ -534,6 +562,24 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-23, `chatgpt/0-15-rig-ci`: The rig's per-checkout state now owns a
+  private D-Bus as well as KWin or Xvfb/Openbox. The exact no-activation
+  config from `6525429` is used; KWin and the app inherit its address, and
+  `stop()` waits for each server before the bus. Source gate 1282/1282; live
+  KWin Classic Day 14/14; shortcut-registration failures 0. The private
+  socket and owned KWin were gone after stop. Local Xvfb is unavailable on
+  this host. No build or remote change.
+- 2026-09-23, `chatgpt/0-15-rig-ci`: Xvfb/Openbox and KWin share one hidden
+  session interface scoped to each checkout. A concurrent old/new checkout
+  pointer run passed 1/1 on each display; simultaneous updated KWin launches
+  chose distinct displays and survived independent stop. The CI job saves
+  Day/Week screenshots, results and video; its ownership tests now run in CI
+  and normal pytest collection. The previous full pointer matrix passed 31/31
+  locally and in a container; the isolation checks above and the 1269-test
+  source gate passed afterward. The next external check is the GitHub Actions
+  run after owner review. `spec.md` has the CI description drift noted above.
+  Nothing pushed.
+
 - 2026-09-23, `grok/0-15-month-weeks`: Unit 8. `NativeSession.move_to_date(block_id, from_iso, to_iso) -> bool` moves a block to another date. Same week keeps the time; another week writes both documents through `POST /api/changes` in one Undo step. A repeating block moves only that day. Homework keeps its pin. The open week does not change until the reply. `date_problem` is the same `span_problem` words for a held chip. No backend change. Gate: 1261 passed, `scripts/verify.py` green. spec.md was not edited. Nothing pushed. Window still holds the Month placeholder; Unit 9 can call `move_to_date`.
 
 - 2026-09-23, `feat/0.15-tabs`: Unit 5 done. Rig matrix for Today's app: Day 14/14, Week 17/17,

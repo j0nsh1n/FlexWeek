@@ -8,7 +8,7 @@ Every scenario starts from the same seeded week with the clock held at Thursday 
 tab with the pointer, performs one gesture with xdotool on the hidden session's X display, waits for
 the save, reloads the week from the server and asserts on what came back. A screenshot is taken
 while the pointer is still held and another after the drop, and each design's run is recorded as a
-video with the pointer drawn in. Results land in /tmp/flexweek-rig/<run>/.
+video with the pointer drawn in. Results land below this checkout's hidden-session directory.
 
 Surfaces are found through the hours interface below, which every hours surface provides. A surface
 that has no hours fails the scenarios that need them, which is what the 0.14.3 baseline records.
@@ -1512,6 +1512,7 @@ def main() -> int:
     parser.add_argument("--design", choices=DESIGNS)
     parser.add_argument("--tab", choices=TABS)
     parser.add_argument("--scenario")
+    parser.add_argument("--server", choices=["auto", "kwin", "xvfb"], default="auto")
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--out")
     parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
@@ -1523,8 +1524,12 @@ def main() -> int:
         return child_main(args)
     import hidden_session
 
-    display = hidden_session.start()
-    out = Path(args.out or f"/tmp/flexweek-rig/{datetime.now():%Y%m%d-%H%M%S}")
+    display = hidden_session.start(args.server)
+    out = (
+        Path(args.out)
+        if args.out
+        else hidden_session.STATE.parent / "runs" / f"{datetime.now():%Y%m%d-%H%M%S}-{os.getpid()}"
+    )
     out.mkdir(parents=True, exist_ok=True)
     env = {
         key: value
