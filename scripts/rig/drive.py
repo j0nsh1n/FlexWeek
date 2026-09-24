@@ -1375,6 +1375,14 @@ def child_main(args: argparse.Namespace) -> int:
         for scenario in chosen
         if not scenario.only or design in scenario.only
     ]
+    if not plan:
+        asked = " ".join(
+            f"--{flag} {getattr(args, flag)}" for flag in ("design", "tab", "scenario") if getattr(args, flag)
+        )
+        print(f"No scenario matches {asked}; --list names them.", file=sys.stderr, flush=True)
+        server.stop()
+        return 2
+
     import gc as _gc
 
     if os.environ.get("RIG_GC_REPORT"):
@@ -1494,7 +1502,7 @@ def child_main(args: argparse.Namespace) -> int:
     server.stop()
     passed = sum(1 for item in results if item["result"] == "PASS")
     print(f"\n{passed}/{len(results)} passed. Screenshots, videos and results.json in {out}")
-    return 0 if finished and passed == len(results) else 1
+    return 0 if finished and results and passed == len(results) else 1
 
 
 def main() -> int:
