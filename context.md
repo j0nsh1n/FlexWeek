@@ -43,6 +43,33 @@
   `start`, `duration_min`, and `assignment_id`. Source gate: 1274 passed,
   `scripts/verify.py` green. `scripts/mutate.py scripts/mutations/planner.json`
   caught every break. spec.md was not edited. Nothing pushed.
+- Date: 2026-09-24 (Mission short-block text), branch `chatgpt/0-15-mission`.
+  The initial appears only when the shared painter has no room for words;
+  drawing it leaves the painter's font as the shared painter set it. A new
+  default-zoom render test failed on the 30-minute overlap before the fix and
+  passes with a visible 15-minute initial. An offscreen Week render showed
+  shortened Dinner words without the extra initial and Quiz with its initial.
+  All 14 Mission tests and the full 1248-test source gate passed; ruff and
+  mypy were clean. No rig, executable build, push, PR, or `spec.md` edit.
+  Next: Claude reviews the Mission branch again.
+- Date: 2026-09-23 (Mission review fix), branch `chatgpt/0-15-mission`.
+  Parked Day and Week scrolls stay children of the Mission page after leaving
+  the layout, so closing the host destroys them. The new host-deletion test
+  failed before the fix and passed afterward; all 13 Mission tests passed.
+  Full source gate: 1247 tests passed, ruff and mypy clean. No rig, executable,
+  push, PR, or `spec.md` change. Next: Claude reviews this branch again.
+- Date: 2026-09-23 (0.15 Mission control). Local branch
+  `chatgpt/0-15-mission` from `feat/0.15-tabs` at `ab0ef57`. Day uses Scope
+  lane and Week uses Lane ops, both on the window's Hand. Pending homework is
+  in a draggable "Not placed yet" tray. Week keeps its radar and load bars.
+  The 15-minute horizontal grab check passed at 25%, 50%, and 75% on both
+  tabs, so Column watch was not needed. Along-the-lane resize and scroll dwell
+  also passed with horizontal real-pointer targets. The stock rig passed 10/14 Day
+  and 14/17 Week scenarios. Its remaining failures aim at vertical resize or
+  dwell coordinates on horizontal hours, or look for Today's app's fixed day
+  name ids. Full source gate: 1,246 tests passed, ruff and mypy clean; all 11
+  target mutations were caught. Cartographer skipped (not installed in the
+  project venv). Nothing pushed or built; `spec.md` unchanged.
 - Date: 2026-09-22 (0.15 reach check). Branch `fix/015-rig-reach` from
   `grok/0-15-audit-01` at `841586f`. A partial hours track no longer reports
   00:00 or 24:00 as visible by substituting its own edge. Full source gate:
@@ -618,6 +645,16 @@ Recorded `operation_id` values make a retried write return the first result.
 
 - 2026-09-23, `grok/0-15-month-weeks`: Unit 8. `NativeSession.move_to_date(block_id, from_iso, to_iso) -> bool` moves a block to another date. Same week keeps the time; another week writes both documents through `POST /api/changes` in one Undo step. A repeating block moves only that day. Homework keeps its pin. The open week does not change until the reply. `date_problem` is the same `span_problem` words for a held chip. No backend change. Gate: 1261 passed, `scripts/verify.py` green. spec.md was not edited. Nothing pushed. Window still holds the Month placeholder; Unit 9 can call `move_to_date`.
 
+- 2026-09-24, `chatgpt/0-15-mission`: The extra Week initial no longer
+  overlaps shortened shared words on a 30-minute block. A 15-minute block
+  still gets its initial, and Mission restores the painter's font after it.
+  Render regression red before, green after; Mission 14/14, source gate
+  1248/1248. Awaiting Claude review. No rig, build, push, or PR.
+- 2026-09-23, `chatgpt/0-15-mission`: `MissionView` retains parked scrolls
+  under its page rather than orphaning them. A Week → Day → Week host-deletion
+  test failed on the old behavior and passes on the fix. Mission 13/13; full
+  source gate 1247/1247 with ruff and mypy clean. Awaiting Claude review;
+  no rig, build, push, PR, or `spec.md` edit.
 - 2026-09-23, `feat/0.15-tabs`: Unit 5 done. Rig matrix for Today's app: Day 14/14, Week 17/17,
   including Escape, switching away, dwell, a save landing mid-drag, a second move while a save
   is in flight, double-click to open, Day and Week agreeing, and 1150x768 with large text.

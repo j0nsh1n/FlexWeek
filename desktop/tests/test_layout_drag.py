@@ -296,66 +296,6 @@ def test_a_design_with_its_own_hours_opens_no_drawer(
     view.drag_ended()
 
 
-def test_mission_lanes_take_the_day_and_time_under_the_pointer(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    view = use(qapp, window, "mission")
-    lanes = named(view, "missionLanes")
-    friday = lanes._lane(4).center().y()
-    point = QPoint(round(lanes._x(16 * 60)), round(friday))
-    assert let_go(qapp, lanes, point, session_of(window, "math")["id"]) == "Fri 16:00–17:00 · 1 h"
-    settled(qapp, window)
-    assert placed(window, "math") == ([4], "16:00", True)
-    # A bar held by its middle lands where its middle is let go, not with its start under the pointer.
-    lanes = named(shown_view(window), "missionLanes")
-    point = QPoint(round(lanes._x(17 * 60 + 30)), round(friday))
-    said = let_go(qapp, lanes, point, session_of(window, "essay")["id"], grab=30, from_day=3)
-    assert said == "Fri 17:00–18:00 · 1 h"
-    settled(qapp, window)
-    assert placed(window, "essay") == ([4], "17:00", True)
-
-
-def test_a_drop_on_school_sits_beside_it_and_stays_there(qapp: QApplication, window: NativeWindow) -> None:
-    """Allowed and said, as in Daily Scheduler. Put there by hand, so no plan moves it off again."""
-    view = use(qapp, window, "mission")
-    lanes = named(view, "missionLanes")
-    point = QPoint(round(lanes._x(10 * 60)), round(lanes._lane(4).center().y()))
-    said = let_go(qapp, lanes, point, session_of(window, "math")["id"])
-    assert said == "Fri 10:00–11:00 · 1 h · beside School"
-    settled(qapp, window)
-    assert placed(window, "math") == ([4], "10:00", True)
-    window.session.save()
-    settled(qapp, window)
-    assert placed(window, "math") == ([4], "10:00", True)
-    friday = window.week_table.hours
-    if not friday.tracks:
-        friday.resize(980, 640)
-        friday.relayout()
-    track = friday.track_for(4)
-    assert track is not None
-    drawn = {item.block_id for item, _rect in friday.drawn(track)}
-    assert drawn >= {"school", session_of(window, "math")["id"]}
-
-
-def test_a_repeating_block_dragged_in_a_design_moves_only_that_day(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    view = use(qapp, window, "mission")
-    lanes = named(view, "missionLanes")
-    point = QPoint(round(lanes._x(12 * 60)), round(lanes._lane(4).center().y()))
-    said = let_go(qapp, lanes, point, "school", grab=180, from_day=4)
-    assert said.startswith("Fri 09:00–15:30"), said
-    settled(qapp, window)
-    school = next(block for block in window.session.blocks if block["id"] == "school")
-    assert school["days"] == [0, 1, 2, 3] and school["start"] == "08:00"
-    friday = [
-        block for block in window.session.blocks if block["title"] == "School" and block["id"] != "school"
-    ]
-    assert [(block["days"], block["start"], block["duration_min"]) for block in friday] == [
-        ([4], "09:00", 390)
-    ]
-
-
 def test_a_drop_after_the_due_date_is_refused_and_changes_nothing(
     qapp: QApplication, window: NativeWindow
 ) -> None:
@@ -435,24 +375,6 @@ def test_pressing_and_moving_picks_a_block_up_and_a_click_still_opens_it(
     view.block_activated.connect(opened.append)
     QTest.mouseClick(card, Qt.MouseButton.LeftButton, pos=middle(card))
     assert opened == [essay_id] and len(lifted) == 1
-
-
-def test_a_painted_bar_opens_on_release_and_is_picked_up_where_it_was_held(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    lifted = recording_lifts(monkeypatch)
-    view = use(qapp, window, "mission")
-    lanes = named(view, "missionLanes")
-    essay_id = session_of(window, "essay")["id"]
-    held = QPoint(round(lanes._x(19 * 60 + 15)), round(lanes._lane(3).center().y()))
-    opened: list[str] = []
-    view.block_activated.connect(opened.append)
-    QTest.mouseClick(lanes, Qt.MouseButton.LeftButton, pos=held)
-    assert opened == [essay_id] and lifted == []
-    QTest.mousePress(lanes, Qt.MouseButton.LeftButton, pos=held)
-    QTest.mouseMove(lanes, held + QPoint(40, 0))
-    assert len(lifted) == 1 and lifted[0][0] == essay_id and lifted[0][2] == 3
-    assert 10 <= lifted[0][1] <= 20, "held a quarter of an hour in"
 
 
 def test_a_redraw_during_a_drag_waits_for_the_drop(qapp: QApplication, window: NativeWindow) -> None:

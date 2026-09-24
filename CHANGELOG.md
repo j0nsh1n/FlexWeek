@@ -10,6 +10,9 @@ All notable changes to FlexWeek are documented here. Format follows
   can show their chips.
 
 ### Changed
+- Mission control has a horizontal Scope lane on Day and seven Lane ops tracks
+  on Week. Blocks can move, resize, and be placed from the "Not placed yet"
+  tray on either tab. The deadline radar and daily load remain on Week.
 - Homework is due on a date. Tick "At a set time" only when it is due at a
   time that day, such as a 09:00 lesson; otherwise it is due by the end of the
   day. Homework saved before keeps its deadline.
@@ -22,6 +25,9 @@ All notable changes to FlexWeek are documented here. Format follows
   computer. A short block can be picked up from its middle at any zoom.
 
 ### Fixed
+- Mission control no longer draws an extra initial over the shortened words
+  on half-hour blocks in Week. Quarter-hour blocks still show an initial when
+  their words do not fit.
 - Switching to another view, week or design while holding a block puts it
   back, instead of dropping it on whatever the new view shows there.
 - Homework waiting for a time shortens its name to fit the tray at large text.
