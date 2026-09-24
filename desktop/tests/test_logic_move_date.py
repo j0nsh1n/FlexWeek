@@ -369,3 +369,88 @@ def test_a_move_into_a_week_that_already_has_blocks_keeps_them(
     source = read_week(qapp, session, first)
     assert sorted(titles(source["blocks"])) == ["Band"]
     assert next(block for block in source["blocks"] if block["title"] == "Band")["days"] == [2, 4]
+
+
+def test_undo_of_a_move_refuses_when_the_other_week_changed_elsewhere(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    """A later save to the other week, not on this undo stack, is kept. Undo is a 409 and both
+    weeks stay as they are."""
+    alice = signed_in(qapp, server.origin, "alice", create=True)
+    first = alice.week_start
+    second = week_after(first)
+    alice.add_block(fixed("soccer", "Soccer", 0, "16:00"))
+    alice.save()
+    settled(qapp, alice)
+    monday = date_for_day(first, 0)
+    next_monday = date_for_day(second, 0)
+    assert alice.move_to_date("soccer", monday, next_monday) is True
+    settled(qapp, alice)
+    bob = NativeSession(server.origin, qapp)
+    logic_support.HELD.append(bob)
+    bob.login("alice", PASSWORD)
+    logic_support.wait_until(qapp, lambda: bob.account is not None and not bob.busy)
+    settled(qapp, bob)
+    bob.load_week(second)
+    settled(qapp, bob)
+    bob.add_block(fixed("piano", "Piano", 0, "17:00"))
+    bob.save()
+    settled(qapp, bob)
+    alice.undo()
+    settled(qapp, alice)
+    assert alice.conflict is True
+    assert alice.message == (
+        "Not saved. The saved data changed or that name is already in use. Reload and try again."
+    )
+    source = read_week(qapp, alice, first)
+    dest = read_week(qapp, alice, second)
+    assert titles(source["blocks"]) == []
+    assert sorted(titles(dest["blocks"])) == ["Piano", "Soccer"]
+
+
+def test_date_problem_judges_a_chip_when_its_week_is_not_loaded(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    """Month has the chip's start and length from the month reply, not from the open week."""
+    session = signed_in(qapp, server.origin, "alice", create=True)
+    first = session.week_start
+    second = week_after(first)
+    due = date_for_day(first, 3) + "T15:00"
+    session.add_homework({"id": "essay", "title": "Essay", "due": due, "estimate_min": 60, "revision": 0})
+    session.save()
+    settled(qapp, session)
+    waiting = session.blocks[0]
+    assert session.place_session(waiting["id"], 2, 16 * 60) is True
+    session.save()
+    settled(qapp, session)
+    chip = next(block for block in session.blocks if block.get("assignment_id") == "essay")
+    wednesday = date_for_day(first, 2)
+    friday = date_for_day(first, 4)
+    tuesday = date_for_day(first, 1)
+    session.load_week(second)
+    settled(qapp, session)
+    assert session.week_start == second
+    assert all(block.get("id") != chip["id"] for block in session.blocks)
+    past_due = "That ends after it is due, so it stayed where it was."
+    assert (
+        session.date_problem(
+            chip["id"],
+            wednesday,
+            friday,
+            start=chip["start"],
+            duration_min=chip["duration_min"],
+            assignment_id=chip["assignment_id"],
+        )
+        == past_due
+    )
+    assert (
+        session.date_problem(
+            chip["id"],
+            wednesday,
+            tuesday,
+            start=chip["start"],
+            duration_min=chip["duration_min"],
+            assignment_id=chip["assignment_id"],
+        )
+        is None
+    )
