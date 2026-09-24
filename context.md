@@ -1,6 +1,19 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-24 (Bento unit 13), branch `chatgpt/0-15-bento` from
+  `feat/0.15-tabs` at `8e3634a`. Day is Hero clock and Week is Hero board,
+  each with painted full-day tracks, a retained zoomable scroll, and a
+  draggable "Not placed yet" tray on the window's Hand. Week's pinned day
+  names open Day. The supporting tiles option keeps its purpose: "Hero and
+  tray only" hides the optional deadline/tonight rail tile. Month remains the
+  shared grid. The 1150x768 large-text rig exposed a nested-scroll clipping
+  issue; reducing the hero's minimum height kept the target and tray in view.
+  Real-pointer rig: Day 14/14 and Week 17/17, with held/end screenshots read.
+  Full source gate: 1296 tests passed, lint and backend types clean; all 11
+  target mutations caught. Cartographer skipped because `traceworks` is absent
+  from the project venv. No executable build, push, PR, or `spec.md` edit.
+  Next: Claude reviews this branch before integration.
 - Date: 2026-09-24 (Clay deck unit 11), branch `chatgpt/0-15-clay` from
   `feat/0.15-tabs` at `082e9fa`. Clay Day is one large live hours card with a
   "No time yet" tray; Week is seven live cards fanned from -8 to +8 degrees.
@@ -617,6 +630,15 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-24, `chatgpt/0-15-bento`: Unit 13 implements Hero clock on Day and
+  Hero board on Week from base `8e3634a`; it does not use the Retro branch.
+  Bento owns only layout and paint. `HoursCanvas`, `TrayChip`, `HoursScroll`,
+  and the window Hand supply the gestures. Part-of-day tiles were not built:
+  the selected concepts use full-day tracks; any later tile must set its own
+  `LinearTrack(first, last)` without new boundary logic. Day 14/14, Week 17/17;
+  source gate 1296 passed; targets mutation set 11/11 caught. See the rig's
+  checkout-scoped `runs/` for held/end images and videos. No binary, remote,
+  or product contract change. Claude reviews before landing.
 - 2026-09-23, `chatgpt/0-15-rig-ci`: The rig's per-checkout state now owns a
   private D-Bus as well as KWin or Xvfb/Openbox. The exact no-activation
   config from `6525429` is used; KWin and the app inherit its address, and

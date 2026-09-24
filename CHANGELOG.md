@@ -10,6 +10,9 @@ All notable changes to FlexWeek are documented here. Format follows
   can show their chips.
 
 ### Changed
+- Bento's Day is a full-day Hero clock, and Week is a seven-column Hero board.
+  Both have draggable hours and a "Not placed yet" tray. The supporting tiles
+  setting can show deadlines and tonight's work or keep only the hero and tray.
 - Clay deck has one large, draggable Day card and seven live Week cards fanned
   up to 8 degrees. Homework without a time waits in a draggable dish. Week
   cards can also be laid straight in Appearance & layout.

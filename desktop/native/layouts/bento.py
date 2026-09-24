@@ -73,6 +73,7 @@ class BentoPainter(BlockPainter):
             "grid": tokens["accent_ink"],
             "hairline": tokens["accent_ink"],
             "accent": tokens["accent_ink"],
+            "accent_ink": tokens["accent"],
             "error": tokens["danger"],
             "text": tokens["accent_ink"],
             "muted": tokens["accent_ink"],
@@ -85,18 +86,21 @@ class BentoPainter(BlockPainter):
         painter.fillRect(track.area, wash)
         rule = QColor(self.tokens["accent_ink"])
         rule.setAlphaF(0.22)
-        for minute in range(FIRST, LAST + 1, 60):
+        first_hour = ((track.first + 59) // 60) * 60
+        for minute in range(first_hour, track.last + 1, 60):
             at = track.area.top() + track.offset(minute)
             painter.setPen(QPen(rule, 1))
             painter.drawLine(QPointF(track.area.left(), at), QPointF(track.area.right(), at))
 
     def fills(self, drawn: Drawn) -> tuple[QColor, QColor, QColor | None, QColor | None]:
         category = CATEGORIES.get(drawn.category, {})
-        fill = QColor(category.get("color") or self.tokens["surface"])
+        colour = category.get("color")
+        fill = QColor(colour or self.tokens["surface"])
         mark = QColor(category.get("mark") or self.tokens["line"])
         if drawn.done or drawn.missed:
             fill = fill.lighter(115)
-        return fill, QColor("#20243a"), None, mark
+        ink = QColor("#20243a" if colour else self.tokens["text"])
+        return fill, ink, None, mark
 
 
 class BentoCanvas(HoursCanvas):
@@ -243,7 +247,7 @@ class BentoView(LayoutView):
                 if is_day else "This week · Drag across days")
         hero, inside = self._tile(scene, "bentoHero", name)
         scroll = self._hours(scene, day)
-        scroll.setMinimumHeight(scene.px(560))
+        scroll.setMinimumHeight(scene.px(440))
         inside.addWidget(scroll, 1)
         rail = QWidget()
         rail.setObjectName("bentoRail")
@@ -251,10 +255,11 @@ class BentoView(LayoutView):
         side.setContentsMargins(0, 0, 0, 0)
         side.setSpacing(scene.px(12))
         side.addWidget(self._waiting(scene), 1)
-        if is_day:
-            side.addWidget(self._tonight_and_deadlines(scene), 1)
-        else:
-            side.addWidget(self._deadlines(scene))
+        if scene.options.get("tiles") != "essentials":
+            if is_day:
+                side.addWidget(self._tonight_and_deadlines(scene), 1)
+            else:
+                side.addWidget(self._deadlines(scene))
         self._grid.addWidget(hero, 0, 0)
         self._grid.addWidget(rail, 0, 1)
         self._grid.setColumnStretch(0, 3 if not is_day else 2)

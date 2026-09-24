@@ -48,7 +48,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.tests.logic_support import past_setup
 
 PASSWORD = "a-long-test-password"
-DRAWER_VIEWS = ("timeline", "bento", "retro")
+DRAWER_VIEWS = ("timeline", "retro")
 
 
 @pytest.fixture(scope="module")
@@ -256,7 +256,7 @@ def test_a_design_without_hours_opens_a_days_hours_while_dragging_and_the_drop_l
 def test_the_drawer_opens_on_the_day_and_near_the_time_the_block_was_lifted_from(
     qapp: QApplication, window: NativeWindow
 ) -> None:
-    view = use(qapp, window, "bento")
+    view = use(qapp, window, "retro")
     essay_id = session_of(window, "essay")["id"]
     view.drag_began(essay_id, 3)
     drawer = view.drawer
@@ -287,7 +287,7 @@ def test_clay_week_day_name_opens_the_day_without_placing_homework(
     assert placed(window, "math")[1] is None
 
 
-@pytest.mark.parametrize("main", ("mission",))
+@pytest.mark.parametrize("main", ("mission", "bento"))
 def test_a_design_with_its_own_hours_opens_no_drawer(
     qapp: QApplication, window: NativeWindow, main: str
 ) -> None:
@@ -311,7 +311,7 @@ def test_a_drop_after_the_due_date_is_refused_and_changes_nothing(
     )
     window.session.save()
     settled(qapp, window)
-    view = use(qapp, window, "bento")
+    view = use(qapp, window, "retro")
     poster_id = session_of(window, "poster")["id"]
     view.drag_began(poster_id, -1)
     turn_to(qapp, view, 5, poster_id)

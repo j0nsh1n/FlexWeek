@@ -20,11 +20,12 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QCoreApplication, QEvent
     from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
 
-    from desktop.native.hours.canvas import HoursCanvas
+    from desktop.native.hours.canvas import Drawn, HoursCanvas
     from desktop.native.hours.chips import TrayChip
+    from desktop.native.hours.geometry import Span
     from desktop.native.hours.hand import Hand, Verdict
     from desktop.native.layouts.base import Scene
-    from desktop.native.layouts.bento import BentoView
+    from desktop.native.layouts.bento import BentoPainter, BentoView
     from desktop.native.layouts.registry import options_for, tokens_for
     from desktop.native.look import resolved_palette
     from desktop.native.weekmodel import build_week, minute_of
@@ -162,6 +163,27 @@ def test_rail_stays_beside_the_hero_in_a_small_window(qapp: QApplication) -> Non
     waiting = view.findChild(TrayChip, "bentoWaiting0")
     assert waiting.isVisible()
     assert waiting.mapToGlobal(waiting.rect().center()).x() > hero.mapToGlobal(hero.rect().center()).x()
+
+
+def test_essentials_keeps_live_hours_and_the_tray(qapp: QApplication) -> None:
+    view = shown(qapp, "week", tiles="essentials")
+    assert view.findChild(HoursCanvas, "bentoWeekHours").isVisible()
+    assert any(chip.isVisible() for chip in view.findChildren(TrayChip, "bentoWaiting0"))
+    assert view.findChild(QWidget, "bentoDeadlines") is None
+    view.show_week(scene("day", tiles="essentials"))
+    qapp.processEvents()
+    assert view.findChild(HoursCanvas, "bentoDayHours").isVisible()
+    assert any(chip.isVisible() for chip in view.findChildren(TrayChip, "bentoWaiting0"))
+    assert view.findChild(QWidget, "bentoTonight") is None
+
+
+def test_an_uncategorized_block_remains_readable_in_midnight(qapp: QApplication) -> None:
+    palette = resolved_palette("light-frost", False, None, "default")
+    tokens = tokens_for("bento", "midnight", palette)
+    block = Drawn("plain", "Untyped event", "", False, Span(3, 21 * 60, 22 * 60), 0, 1)
+    fill, ink, _outline, _edge = BentoPainter(tokens).fills(block)
+    assert fill.name() == tokens["surface"]
+    assert ink.name() == tokens["text"]
 
 
 def test_month_uses_the_shared_grid(qapp: QApplication) -> None:
