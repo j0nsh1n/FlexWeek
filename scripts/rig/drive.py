@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import math
 import os
 import subprocess
 import sys
@@ -61,13 +62,14 @@ class Waited(AssertionError):
 def child_main(args: argparse.Namespace) -> int:
     from PySide6.QtCore import QObject, QPoint, QPointF, QRect, QSize, QStandardPaths, QTimer
     from PySide6.QtGui import QColor, QCursor, QPainter, QPen
-    from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QPushButton, QWidget
+    from PySide6.QtWidgets import QApplication, QDialog, QLabel, QLineEdit, QPushButton, QWidget
 
     QStandardPaths.setTestModeEnabled(True)
     app = QApplication(["flexweek-rig"])
 
     from desktop.native.calendar import sunday_due
     from desktop.native.client import _error
+    from desktop.native.hours.geometry import Axis
     from desktop.native.hours.hand import surface_at
     from desktop.native.hours.zoom import HoursScroll
     from desktop.native.layouts.registry import sanitize_layout
@@ -144,6 +146,12 @@ def child_main(args: argparse.Namespace) -> int:
 
     def block(block_id: str) -> dict | None:
         return next((b for b in session.blocks if b["id"] == block_id), None)
+
+    def minutes(hhmm: str) -> int:
+        return int(hhmm[:2]) * 60 + int(hhmm[3:])
+
+    def hhmm(minute: int) -> str:
+        return f"{minute // 60:02d}:{minute % 60:02d}"
 
     class Recorder:
         """Frames of the window with the pointer drawn in, for the design's video."""
@@ -352,6 +360,44 @@ def child_main(args: argparse.Namespace) -> int:
                     return rect
             raise NoSurface(f"{block_id} is not drawn on day {day}")
 
+        def _span(self, block_id: str, day: int) -> tuple[QPointF, QPointF, QPointF]:
+            """Where a drawn block lies, from its surface's own track: the point at its start in
+            time, the run from there to its end, and how far the middle of its paint sits across
+            the track, where an overlap drawn beside another or a tilted card has put it."""
+            got = block(block_id)
+            if got is None or not got.get("start"):
+                raise NoSurface(f"{block_id} has no time")
+            start = minutes(got["start"])
+            end = start + got["duration_min"]
+            surface = self.surface("hours", day, start)
+            box = surface.block_rect(block_id, day)
+            track = surface.track_for(day, start)
+            if box is None or track is None:
+                raise NoSurface(f"{block_id} is not drawn on day {day}")
+            head = QPointF(surface.point_for(day, start))
+            run = QPointF(surface.point_for(day, min(end, track.last))) - head
+            length = math.hypot(run.x(), run.y())
+            if not length:
+                raise NoSurface(f"{block_id} has no length on day {day}")
+            off = QPointF(box.center()) - head
+            along = (off.x() * run.x() + off.y() * run.y()) / length
+            across = off - run * (along / length)
+            return head, run, across
+
+        def along(self, block_id: str, day: int, share: float) -> QPoint:
+            """A point on a drawn block `share` of the way through it in time, 0.0 at its start and
+            1.0 at its end, in the middle of the block across the track, whichever way the design
+            lays time out."""
+            head, run, across = self._span(block_id, day)
+            return (head + run * share + across).toPoint()
+
+        def edge(self, block_id: str, day: int, end: bool) -> QPoint:
+            """Two pixels inside a block's start or end as drawn, where a press resizes it."""
+            head, run, across = self._span(block_id, day)
+            # The paint starts a pixel after the minute and stops a pixel before the next.
+            inside = run * (3 / math.hypot(run.x(), run.y()))
+            return (head + run - inside + across if end else head + inside + across).toPoint()
+
         def chip(self, block_id: str) -> QPoint:
             """Something on screen that stands for this block and can be picked up."""
             for widget in window.findChildren(QWidget):
@@ -452,8 +498,7 @@ def child_main(args: argparse.Namespace) -> int:
     def day_resize(r: Rig) -> Step:
         yield from day_tab(r)
         yield from r.reveal(3, 18 * 60 + 30, 21 * 60)
-        box = r.block_rect(ids["essay"], 3)
-        edge = QPoint(box.center().x(), box.bottom() - 2)
+        edge = r.edge(ids["essay"], 3, end=True)
         yield from r.drag(edge, edge + (r.at(3, 20 * 60 + 30) - r.at(3, 20 * 60)))
         yield from r.settled()
         got = block(ids["essay"])
@@ -497,8 +542,7 @@ def child_main(args: argparse.Namespace) -> int:
     def week_resize_top(r: Rig) -> Step:
         yield from r.tab("week")
         yield from r.reveal(3, 18 * 60, 20 * 60 + 30)
-        box = r.block_rect(ids["essay"], 3)
-        edge = QPoint(box.center().x(), box.top() + 2)
+        edge = r.edge(ids["essay"], 3, end=False)
         yield from r.drag(edge, edge + (r.at(3, 18 * 60 + 30) - r.at(3, 19 * 60)))
         yield from r.settled()
         got = block(ids["essay"])
@@ -522,8 +566,8 @@ def child_main(args: argparse.Namespace) -> int:
     def week_series(r: Rig) -> Step:
         yield from r.tab("week")
         yield from r.reveal(2, 8 * 60, 11 * 60)
-        box = r.block_rect("school", 2)
-        grab = QPoint(box.center().x(), r.at(2, 9 * 60).y())
+        # An hour into School's six and a half, so the grab is on the part that is on screen.
+        grab = r.along("school", 2, 60 / 390)
         yield from r.drag(grab, grab + (r.at(2, 10 * 60) - r.at(2, 9 * 60)))
         yield from r.settled()
         school = sorted((tuple(b["days"]), b["start"]) for b in session.blocks if b["title"] == "School")
@@ -557,12 +601,6 @@ def child_main(args: argparse.Namespace) -> int:
         friday = (thursday + timedelta(days=1)).date().isoformat()
         show_day(friday)
 
-    def minutes(hhmm: str) -> int:
-        return int(hhmm[:2]) * 60 + int(hhmm[3:])
-
-    def hhmm(minute: int) -> str:
-        return f"{minute // 60:02d}:{minute % 60:02d}"
-
     def unchanged(revision: int) -> None:
         got = block(ids["essay"])
         expect((got["days"], got["start"]) == ([3], "19:00"), f"essay is {got['days']} {got['start']}")
@@ -571,8 +609,7 @@ def child_main(args: argparse.Namespace) -> int:
     def day_resize_top(r: Rig) -> Step:
         yield from day_tab(r)
         yield from r.reveal(3, 18 * 60, 20 * 60 + 30)
-        box = r.block_rect(ids["essay"], 3)
-        edge = QPoint(box.center().x(), box.top() + 2)
+        edge = r.edge(ids["essay"], 3, end=False)
         yield from r.drag(edge, edge + (r.at(3, 18 * 60 + 30) - r.at(3, 19 * 60)))
         yield from r.settled()
         got = block(ids["essay"])
@@ -584,8 +621,7 @@ def child_main(args: argparse.Namespace) -> int:
     def week_resize_bottom(r: Rig) -> Step:
         yield from r.tab("week")
         yield from r.reveal(3, 18 * 60 + 30, 21 * 60)
-        box = r.block_rect(ids["essay"], 3)
-        edge = QPoint(box.center().x(), box.bottom() - 2)
+        edge = r.edge(ids["essay"], 3, end=True)
         yield from r.drag(edge, edge + (r.at(3, 20 * 60 + 30) - r.at(3, 20 * 60)))
         yield from r.settled()
         got = block(ids["essay"])
@@ -657,14 +693,20 @@ def child_main(args: argparse.Namespace) -> int:
         unchanged(revision)
 
     def day_dwell(r: Rig) -> Step:
-        """Resting a held block at the top of the hours scrolls them back, and it lands earlier."""
+        """Resting a held block at the start of the hours scrolls them back, and it lands earlier."""
         yield from day_tab(r)
-        r.zoom().scroll_to(17 * 60, above=90)
+        scroll = r.zoom()
+        scroll.scroll_to(17 * 60, above=90)
         yield ("wait", 200)
-        port = r.zoom().viewport()
+        port = scroll.viewport()
         box = r.block_rect(ids["essay"], 3)
         grab = middle(box)
-        edge = QPoint(grab.x(), port.mapToGlobal(QPoint(0, 12)).y())
+        # Twelve pixels inside the edge of the viewport where time starts: its top when the hours
+        # run down, its left when they run across.
+        if scroll.axis is Axis.DOWN:
+            edge = QPoint(grab.x(), port.mapToGlobal(QPoint(0, 12)).y())
+        else:
+            edge = QPoint(port.mapToGlobal(QPoint(12, 0)).x(), grab.y())
         held_at = r.minute_under(grab) - 19 * 60
         reachable = r.minute_under(edge) - held_at
         under: list[float] = []
@@ -811,6 +853,16 @@ def child_main(args: argparse.Namespace) -> int:
         frame = QRect(window.mapToGlobal(QPoint(0, 0)), window.size())
         return widget.isVisible() and frame.contains(QRect(widget.mapToGlobal(QPoint(0, 0)), widget.size()))
 
+    def name_shown(point: QPoint) -> bool:
+        """Whether a day's name is on screen at this point: the hours that paint it are there, or a
+        label or button of the window's is, wholly inside it."""
+        widget = QApplication.widgetAt(point)
+        if widget is None or widget.window() is not window:
+            return False
+        if getattr(widget, "takes_blocks", False):
+            return True
+        return isinstance(widget, (QLabel, QPushButton)) and on_screen(widget)
+
     def trays_whole() -> None:
         for key in ("math", "poster"):
             chip = next(
@@ -829,8 +881,7 @@ def child_main(args: argparse.Namespace) -> int:
         yield from small_and_large()
         yield from r.tab("week")
         for day in range(7):
-            name = window.findChild(QWidget, f"weekDayName{day}")
-            expect(name is not None and on_screen(name), f"day {day}'s name is not on screen")
+            expect(name_shown(r.day_name(day)), f"day {day}'s name is not on screen")
         trays_whole()
         yield from quarter_grab(r)
 
@@ -894,8 +945,7 @@ def child_main(args: argparse.Namespace) -> int:
         twice = scroll.scale.step(scroll.scale.default, 2)
         expect(scroll.px == twice, f"two notches show {scroll.px} px an hour, not {twice}")
         yield from r.reveal(3, 18 * 60 + 30, 21 * 60)
-        box = r.block_rect(ids["essay"], 3)
-        edge = QPoint(box.center().x(), box.bottom() - 2)
+        edge = r.edge(ids["essay"], 3, end=True)
         yield from r.drag(edge, edge + (r.at(3, 20 * 60 + 30) - r.at(3, 20 * 60)))
         yield from r.settled()
         got = block(ids["essay"])
@@ -923,8 +973,13 @@ def child_main(args: argparse.Namespace) -> int:
         for share in (0.25, 0.5, 0.75):
             # Two hours and more below it on screen, so the drop never rests where the hours scroll.
             yield from r.reveal(3, start - 60, start + 150)
-            box = r.block_rect("rig-quiz", 3)
-            grab = QPoint(box.center().x(), box.top() + round(box.height() * share))
+            grab = r.along("rig-quiz", 3, share)
+            # A rig aiming across the lane would press the middle of the quiz three times over.
+            under = r.minute_under(grab) - start
+            expect(
+                abs(under - 15 * share) <= 2,
+                f"aimed {share:.0%} into the quiz, the pointer is {under:.1f} min in, not {15 * share:.2f}",
+            )
             yield from r.drag(grab, grab + (r.at(3, start + 30) - r.at(3, start)))
             yield from r.settled()
             start += 30
@@ -1320,7 +1375,6 @@ def child_main(args: argparse.Namespace) -> int:
         for scenario in chosen
         if not scenario.only or design in scenario.only
     ]
-
     import gc as _gc
 
     if os.environ.get("RIG_GC_REPORT"):
