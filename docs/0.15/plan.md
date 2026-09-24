@@ -138,6 +138,11 @@ storage, CI). Each unit ends green on the rig, on the source gate, and with its 
     *Clay landed 24 September: One big card on Day, Fan hand on Week with cards turned -8 to 8
     degrees on `LinearTrack(turn=...)`; the grab check passed, so Table hand stays the "Straight"
     option. Rig Day 14/14, Week 17/17. Nothing new for the engine.*
+    *Timeline built 24 September, for review: Column rule on Day, Continuous scroll on Week as seven
+    `Axis.ACROSS` lines on one canvas in an `HoursScroll(axis=ACROSS)`, the day headings in its side
+    strip. Rig Day 14/14, Week 17/17, Month 9/9. The seven lines share the window's height and fit at
+    1150x768 with large text; below that the page scrolls, and there a held block resting at the
+    page's edge does not scroll it, because the hand scrolls only the nearest scroll area.*
 15. **My day.** One thing and Day dial onto the engine. Owner: Claude.
 16. **Delete the old path.** Drawer, `QDrag` helpers, the old canvas, any fallback. Owner: Claude.
 17. **Docs and release evidence.** Architecture, spec (with Jonathan's approval), changelog, release
