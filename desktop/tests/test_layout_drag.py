@@ -1,8 +1,5 @@
 """Dragging in every design, not only Today's app: homework and blocks put down at a time, by one rule
-and in the same words everywhere.
-
-Designs with hours of their own take the drop where it is let go. The others open a day's hours beside
-themselves while a block is dragged, as Daily Scheduler's timeline draws them, and the drop goes there.
+and in the same words everywhere, through the window's one hand.
 """
 
 from __future__ import annotations
@@ -25,29 +22,24 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QByteArray, QEvent, QMimeData, QPoint, QPointF, QStandardPaths, Qt
-    from PySide6.QtGui import QDragEnterEvent, QDragLeaveEvent, QDragMoveEvent, QDropEvent
+    from PySide6.QtCore import QEvent, QPoint, QStandardPaths, Qt
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication, QPushButton, QVBoxLayout, QWidget
 
     from desktop.native.calendar import sunday_due
-    from desktop.native.canvas import Timeline
     from desktop.native.hours.canvas import BlockPainter, HoursCanvas
     from desktop.native.hours.geometry import Span
     from desktop.native.hours.hand import Hand, Place
     from desktop.native.hours.zoom import HoursScroll, Scale
-    from desktop.native.layouts import drag
     from desktop.native.layouts.base import LayoutView, Scene, empty
     from desktop.native.layouts.registry import sanitize_layout
     from desktop.native.layouts.views import VIEW_CLASSES
     from desktop.native.look import resolved_palette
-    from desktop.native.widgets import SESSION_MIME
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
     from desktop.tests.logic_support import past_setup
 
 PASSWORD = "a-long-test-password"
-DRAWER_VIEWS: tuple[str, ...] = ()
 
 
 @pytest.fixture(scope="module")
@@ -155,121 +147,10 @@ def shown_view(window: NativeWindow) -> LayoutView:
     return view
 
 
-def taker(widget: QWidget) -> QWidget:
-    """The widget a real drag over `widget` is given to: the nearest one that takes drops."""
-    target: QWidget | None = widget
-    while target is not None and not target.acceptDrops():
-        target = target.parentWidget()
-    assert target is not None, widget.objectName()
-    return target
-
-
-def carrying(block_id: str, grab: int = 0, from_day: int = -1) -> QMimeData:
-    data = QMimeData()
-    data.setData(SESSION_MIME, QByteArray(block_id.encode()))
-    data.setData(drag.GRAB_MIME, QByteArray(str(grab).encode()))
-    data.setData(drag.DAY_MIME, QByteArray(str(from_day).encode()))
-    return data
-
-
-HELD, KEYS, MOVE = Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, Qt.DropAction.MoveAction
-
-
-def answer(target: QWidget) -> str:
-    """What the student is told while a block is over `target`: written on the hours themselves, or in
-    the bubble a design with painted hours shows by the pointer."""
-    if isinstance(target, Timeline):
-        return target.incoming_words()
-    view = drag.host_view(target)
-    assert view is not None
-    return view.drops.showing()
-
-
-def hover(
-    qapp: QApplication, widget: QWidget, point: QPoint, block_id: str, grab: int = 0, from_day: int = -1
-) -> str:
-    """Bring a block over `point` on `widget`, as a drag does, and read the answer it shows."""
-    target = taker(widget)
-    spot = widget.mapTo(target, point) if widget is not target else point
-    data = carrying(block_id, grab, from_day)
-    QApplication.sendEvent(target, QDragEnterEvent(spot, MOVE, data, HELD, KEYS))
-    QApplication.sendEvent(target, QDragMoveEvent(spot, MOVE, data, HELD, KEYS))
-    qapp.processEvents()
-    return answer(target)
-
-
-def let_go(
-    qapp: QApplication, widget: QWidget, point: QPoint, block_id: str, grab: int = 0, from_day: int = -1
-) -> str:
-    said = hover(qapp, widget, point, block_id, grab, from_day)
-    target = taker(widget)
-    spot = widget.mapTo(target, point) if widget is not target else point
-    data = carrying(block_id, grab, from_day)
-    QApplication.sendEvent(target, QDropEvent(QPointF(spot), MOVE, data, HELD, KEYS))
-    qapp.processEvents()
-    return said
-
-
-def middle(widget: QWidget) -> QPoint:
-    return widget.rect().center()
-
-
 def named(view: QWidget, name: str) -> QWidget:
     found = view.findChild(QWidget, name)
     assert found is not None, name
     return found
-
-
-def turn_to(qapp: QApplication, view: LayoutView, day: int, block_id: str) -> None:
-    """Hold the dragged block over a day's name in the drawer."""
-    pick = named(view.drawer, f"dropDay{day}")
-    data = carrying(block_id)  # held here: the event keeps only a pointer to it
-    QApplication.sendEvent(pick, QDragEnterEvent(middle(pick), MOVE, data, HELD, KEYS))
-    qapp.processEvents()
-
-
-def hour_point(hours: Timeline, minute: int) -> QPoint:
-    return QPoint(round(hours.column_rect(0).center().x()), round(hours.y_of(minute)) + 2)
-
-
-@pytest.mark.parametrize("main", DRAWER_VIEWS)
-def test_a_design_without_hours_opens_a_days_hours_while_dragging_and_the_drop_lands_there(
-    qapp: QApplication, window: NativeWindow, main: str
-) -> None:
-    view = use(qapp, window, main)
-    math_id = session_of(window, "math")["id"]
-    view.drag_began(math_id, -1)
-    drawer = view.drawer
-    assert drawer.isVisible() and drawer.day == 3, "homework with no day opens on today"
-    turn_to(qapp, view, 4, math_id)
-    assert drawer.day == 4 and drawer.hours.days == [4]
-    assert drawer.title.text() == "Drop it at a time on Friday"
-    said = let_go(qapp, drawer.hours, hour_point(drawer.hours, 17 * 60), math_id)
-    view.drag_ended()
-    assert said == "Fri 17:00–18:00 · 1 h", main
-    assert not drawer.isVisible(), "it goes with the drag"
-    settled(qapp, window)
-    assert placed(window, "math") == ([4], "17:00", True), main
-
-
-def test_the_drawer_opens_on_the_day_and_near_the_time_the_block_was_lifted_from(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    view = use(qapp, window, "retro")
-    essay_id = session_of(window, "essay")["id"]
-    view.drag_began(essay_id, 3)
-    drawer = view.drawer
-    assert drawer.day == 3
-    top = drawer.scroll.verticalScrollBar().value()
-    assert top <= drawer.hours.y_of(19 * 60) <= top + drawer.scroll.viewport().height()
-    ghost = drawer.hours.laid_out()
-    assert any(shape.block_id == essay_id and shape.day == 3 for shape, _r, _c, _h in ghost), (
-        "the day's blocks are drawn, the essay among them"
-    )
-    view.drag_ended()
-    view.drag_began("school", 1)
-    assert drawer.day == 1, "Tuesday's School opens on Tuesday, not on today"
-    view.drag_ended()
 
 
 def test_clay_week_day_name_opens_the_day_without_placing_homework(
@@ -287,19 +168,11 @@ def test_clay_week_day_name_opens_the_day_without_placing_homework(
     assert placed(window, "math")[1] is None
 
 
-@pytest.mark.parametrize("main", ("mission", "retro", "bento", "timeline", "clay"))
-def test_a_design_with_its_own_hours_opens_no_drawer(
-    qapp: QApplication, window: NativeWindow, main: str
-) -> None:
-    view = use(qapp, window, main)
-    view.drag_began(session_of(window, "math")["id"], -1)
-    assert view._drawer is None or not view._drawer.isVisible()
-    view.drag_ended()
-
-
 def test_a_drop_after_the_due_date_is_refused_and_changes_nothing(
     qapp: QApplication, window: NativeWindow
 ) -> None:
+    """Homework due on Friday, carried to Saturday: the hand is told why while it is held, and a
+    placement that reaches the window anyway is refused in the same words and saves nothing."""
     window.session.add_homework(
         {
             "id": "poster",
@@ -311,18 +184,16 @@ def test_a_drop_after_the_due_date_is_refused_and_changes_nothing(
     )
     window.session.save()
     settled(qapp, window)
-    view = use(qapp, window, "retro")
     poster_id = session_of(window, "poster")["id"]
-    view.drag_began(poster_id, -1)
-    turn_to(qapp, view, 5, poster_id)
-    said = let_go(qapp, view.drawer.hours, hour_point(view.drawer.hours, 17 * 60), poster_id)
-    view.drag_ended()
-    assert said == "That ends after it is due, so it stayed where it was."
+    saturday = Span(5, 17 * 60, 18 * 60)
+    said = window._hand_judge(poster_id, -1, saturday)
+    assert (said.ok, said.words) == (False, "That ends after it is due, so it stayed where it was.")
+    revision = window.session.revision
+    window.hand.commit(Place(poster_id, saturday))
     settled(qapp, window)
     assert placed(window, "poster")[1] is None
-    assert window.session.message == said
-
-
+    assert window.session.message == said.words
+    assert window.session.revision == revision
 
 
 def test_a_drop_while_a_save_is_under_way_lands_once_it_is_done(
@@ -352,17 +223,6 @@ def test_a_drop_while_a_save_is_under_way_lands_once_it_is_done(
     assert any(block["id"] == "band" for block in window.session.blocks)
 
 
-def test_leaving_drawer_hours_takes_the_ghost_away(qapp: QApplication, window: NativeWindow) -> None:
-    view = use(qapp, window, "bento")
-    math_id = session_of(window, "math")["id"]
-    view.drag_began(math_id, -1)
-    hours = view.drawer.hours
-    assert hover(qapp, hours, hour_point(hours, 18 * 60), math_id) == "Thu 18:00–19:00 · 1 h"
-    QApplication.sendEvent(hours, QDragLeaveEvent())
-    assert hours.incoming_words() == ""
-    view.drag_ended()
-
-
 def test_how_close_the_hours_are_is_kept_for_this_device(qapp: QApplication, window: NativeWindow) -> None:
     """A zoom chosen on Week is in the look file, and the next window opens the Week at it."""
     window.findChild(QPushButton, "viewWeek").click()
@@ -388,7 +248,6 @@ class ZoomingDesign(LayoutView):
     render, as a design that rebuilds its page does."""
 
     layout_id = "mission"
-    uses_drawer = False
 
     def __init__(self, parent: QWidget | None = None, *, hand: Hand | None = None) -> None:
         super().__init__(parent, hand=hand)

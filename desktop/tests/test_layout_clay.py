@@ -69,7 +69,6 @@ def test_day_is_one_full_day_card_with_a_live_dish(qapp: QApplication) -> None:
     waiting = view.findChildren(TrayChip)
     assert {chip.held.title for chip in waiting} == {"Poster-1"}
     assert all(chip.hand is view.hand for chip in waiting)
-    assert view.uses_drawer is False
 
 
 def test_week_is_seven_tilted_live_cards(qapp: QApplication) -> None:

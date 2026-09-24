@@ -117,7 +117,6 @@ def test_day_is_one_column_of_the_whole_day_on_the_windows_hand(qapp: QApplicati
         key for key in ("school", "dinner", "essay-1", "chem-1") if hours.block_rect(key, 3) is None
     ] == []
     assert hours.hand is view.hand
-    assert view.uses_drawer is False
 
 
 def test_two_cards_at_one_time_go_half_width(qapp: QApplication) -> None:
