@@ -792,7 +792,7 @@ def pack_stylesheet(
         f"QHeaderView, QStackedWidget {{ background: transparent; border: none; "
         f"padding: 0; border-radius: 0; }}"
         # The week's hours paint their own background; as a frame the scroll area boxed them twice.
-        f"QScrollArea#weekScroll, QScrollArea#dropScroll, QScrollArea#dayScroll {{ background: transparent; "
+        f"QScrollArea#weekScroll, QScrollArea#dayScroll {{ background: transparent; "
         f"border: none; padding: 0; border-radius: 0; }}"
         # Today's app's Day: the day's hours, then what still needs a time and a summary beside them.
         f"QFrame#daySide {{ background: {palette['panel']}; border-radius: 0; {edges} }}"

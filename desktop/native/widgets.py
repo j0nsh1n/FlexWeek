@@ -10,10 +10,8 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 from PySide6.QtCore import (
-    QByteArray,
     QDate,
     QEvent,
-    QMimeData,
     QObject,
     QPoint,
     QRect,
@@ -27,9 +25,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import (
     QAction,
     QColor,
-    QDrag,
     QIcon,
-    QMouseEvent,
     QPainter,
     QPen,
     QPixmap,
@@ -37,7 +33,6 @@ from PySide6.QtGui import (
     QShowEvent,
 )
 from PySide6.QtWidgets import (
-    QApplication,
     QCheckBox,
     QComboBox,
     QDateEdit,
@@ -100,8 +95,6 @@ DETAIL_BOX_HEIGHT = 84
 # homework editor on a laptop screen. It does not claim the content's width either, so that is set.
 HOMEWORK_MIN_WIDTH = 520
 DIALOG_USABLE_HEIGHT = 480
-# What a dragged waiting homework carries: its session id.
-SESSION_MIME = "application/x-flexweek-session"
 # Dates as a student reads them. "2026-09-27 23:59" made them work out which day that was.
 DUE_DATE_FORMAT = "ddd d MMM yyyy"
 DATE_FORMAT = "ddd d MMM yyyy"
@@ -311,37 +304,6 @@ class FlowLayout(QLayout):
             x += hint.width() + self._gap
             row_height = max(row_height, hint.height())
         return y + row_height - rect.y() + margins.bottom()
-
-
-class WaitingChip(QPushButton):
-    """Homework that needs a time. Click to open it, or drag it onto the Calendar to give it one."""
-
-    def __init__(self, text: str, block_id: str, parent: QWidget | None = None) -> None:
-        super().__init__(text, parent)
-        self.block_id = block_id
-        self._pressed_at: QPoint | None = None
-        self.setToolTip("Drag onto the calendar to give it a time")
-
-    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._pressed_at = event.position().toPoint()
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
-        start = self._pressed_at
-        moved = start is not None and (event.position().toPoint() - start).manhattanLength()
-        if not moved or moved < QApplication.startDragDistance():
-            super().mouseMoveEvent(event)
-            return
-        self._pressed_at = None
-        self.setDown(False)
-        data = QMimeData()
-        data.setData(SESSION_MIME, QByteArray(self.block_id.encode()))
-        drag = QDrag(self)
-        drag.setMimeData(data)
-        drag.setPixmap(self.grab())
-        drag.setHotSpot(event.position().toPoint())
-        drag.exec(Qt.DropAction.MoveAction)
 
 
 class AddMenu(QMenu):

@@ -143,7 +143,6 @@ class TitleBar(QLabel):
 
 class RetroView(LayoutView):
     layout_id = "retro"
-    uses_drawer = False
 
     def __init__(self, parent: QWidget | None = None, *, hand: Hand | None = None) -> None:
         super().__init__(parent, hand=hand)

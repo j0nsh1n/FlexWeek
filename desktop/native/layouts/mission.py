@@ -125,8 +125,6 @@ def _detach(layout: QLayout, widget: QWidget) -> bool:
 
 class MissionView(LayoutView):
     layout_id = "mission"
-    # The lanes are hours already, so a block is dropped on them rather than in a drawer.
-    uses_drawer = False
 
     def __init__(self, parent: QWidget | None = None, *, hand: Hand | None = None) -> None:
         super().__init__(parent, hand=hand)

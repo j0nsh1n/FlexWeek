@@ -318,10 +318,10 @@ def test_the_dial_picks_nothing_up_in_its_gap_outside_its_ring_or_in_its_middle(
 
 
 def test_my_day_has_no_drag_rules_of_its_own() -> None:
-    """Both screens move blocks only through the hand: no old drag helpers, no system drag and
-    drop, no threshold or snap of their own."""
+    """Both screens move blocks only through the hand: no system drag and drop, no threshold or
+    snap of their own."""
     for name in ("one_thing.py", "dial.py"):
         text = (LAYOUTS / name).read_text()
-        assert not re.search(r"layouts\.drag\b|\bQDrag\b|\bQMimeData\b|startDragDistance|\bsnap\(", text), (
+        assert not re.search(r"\bQDrag\b|\bQMimeData\b|startDragDistance|\bsnap\(", text), (
             name
         )

@@ -274,3 +274,16 @@ def test_the_shared_hours_have_one_set_of_drag_rules() -> None:
     assert [name for name, text in sources.items() if re.search(r"^def snap\b", text, re.M)] == [
         "geometry.py"
     ]
+
+
+def test_nothing_in_the_app_uses_system_drag_and_drop() -> None:
+    """Every block moves through the one hand. Qt's system drag and drop is where Wayland and X11
+    differ and where the rig cannot see what the student sees, so nothing may take it up again."""
+    app = HOURS.parent
+    system_drag = r"\bQDrag\b|\bQMimeData\b|\bsetAcceptDrops\b|\bdropEvent\b"
+    found = [
+        f"{path.relative_to(app)}: {match.group()}"
+        for path in sorted(app.rglob("*.py"))
+        for match in re.finditer(system_drag, path.read_text())
+    ]
+    assert found == []

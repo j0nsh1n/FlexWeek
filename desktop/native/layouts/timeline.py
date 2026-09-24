@@ -248,7 +248,6 @@ def _detach(layout: QLayout, widget: QWidget) -> bool:
 
 class TimelineView(LayoutView):
     layout_id = "timeline"
-    uses_drawer = False
 
     def __init__(self, parent: QWidget | None = None, *, hand: Hand | None = None) -> None:
         super().__init__(parent, hand=hand)
