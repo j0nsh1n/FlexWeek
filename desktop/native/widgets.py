@@ -1002,7 +1002,8 @@ class HomeworkDialog(QDialog):
             button = QPushButton(text)
             button.setObjectName(name)
             button.setToolTip("Save these edits first.")
-            button.clicked.connect(lambda _=False, kind=kind: self._request_session(kind))
+            button.setProperty("request", kind)
+            button.clicked.connect(self._request_session)
             session_row.addWidget(button)
             self._session_buttons.append(button)
         if self._session_buttons:
@@ -1140,8 +1141,8 @@ class HomeworkDialog(QDialog):
     def spread_requested(self) -> bool:
         return self._spread
 
-    def _request_session(self, kind: str) -> None:
-        self._request = kind
+    def _request_session(self) -> None:
+        self._request = self.sender().property("request")
         self._result = deepcopy(self._original)
         super().accept()
 
@@ -1320,7 +1321,8 @@ class PreviewDialog(QDialog):
         include.setChecked(bool(row.get("checked")))
         include.blockSignals(False)
         include.setEnabled(not row.get("invalid"))
-        include.toggled.connect(lambda checked, pos=index: self._set_checked(pos, checked))
+        include.setProperty("row", index)
+        include.toggled.connect(self._set_checked)
         row_layout.addWidget(include)
         if row.get("fixed"):
             day = QComboBox()
@@ -1328,7 +1330,8 @@ class PreviewDialog(QDialog):
             for name in DAYS:
                 day.addItem(name)
             day.setCurrentIndex(row["day"])
-            day.currentIndexChanged.connect(lambda value, pos=index: self._set_day(pos, value))
+            day.setProperty("row", index)
+            day.currentIndexChanged.connect(self._set_day)
             row_layout.addWidget(day)
             start = QComboBox()
             start.setObjectName(f"previewStart{index}")
@@ -1340,7 +1343,8 @@ class PreviewDialog(QDialog):
             current = row["block"].get("start") or minutes_to_hhmm(DAY_START_MIN)
             start.setCurrentText(current)
             row["block"]["start"] = start.currentText()
-            start.currentTextChanged.connect(lambda value, pos=index: self._set_start(pos, value))
+            start.setProperty("row", index)
+            start.currentTextChanged.connect(self._set_start)
             row_layout.addWidget(start)
             length = QComboBox()
             length.setObjectName(f"previewDuration{index}")
@@ -1349,9 +1353,8 @@ class PreviewDialog(QDialog):
             for minutes in range(SLOT_MIN, maximum + 1, SLOT_MIN):
                 length.addItem(str(minutes), minutes)
             length.setCurrentIndex(max(0, length.findData(min(duration, maximum))))
-            length.currentIndexChanged.connect(
-                lambda _i, box=length, pos=index: self._set_duration(pos, int(box.currentData()))
-            )
+            length.setProperty("row", index)
+            length.currentIndexChanged.connect(self._set_duration)
             row_layout.addWidget(length)
         detail = QLabel(preview_conflict_message(row, self._rows, self._existing))
         detail.setObjectName(f"previewDetail{index}")
@@ -1359,34 +1362,38 @@ class PreviewDialog(QDialog):
         row_layout.addWidget(detail, 1)
         return widget
 
-    def _set_checked(self, index: int, checked: bool) -> None:
+    def _set_checked(self, checked: bool) -> None:
         if self._rebuilding:
             return
-        self._rows[index]["checked"] = checked
+        self._rows[self.sender().property("row")]["checked"] = checked
         self._refresh()
 
-    def _set_day(self, index: int, day: int) -> None:
+    def _set_day(self, day: int) -> None:
         if self._rebuilding:
             return
+        index = self.sender().property("row")
         self._rows[index]["day"] = day
         self._rows[index]["block"]["days"] = [day]
         if not row_conflict(self._rows[index], self._rows, self._existing):
             self._rows[index]["checked"] = True
         self._refresh()
 
-    def _set_start(self, index: int, start: str) -> None:
+    def _set_start(self, start: str) -> None:
         if self._rebuilding:
             return
+        index = self.sender().property("row")
         self._rows[index]["block"]["start"] = start
         self._rows[index]["invalid"] = ""
         if not row_conflict(self._rows[index], self._rows, self._existing):
             self._rows[index]["checked"] = True
         self._refresh()
 
-    def _set_duration(self, index: int, duration: int) -> None:
+    def _set_duration(self) -> None:
         if self._rebuilding:
             return
-        self._rows[index]["block"]["duration_min"] = duration
+        length = self.sender()
+        index = length.property("row")
+        self._rows[index]["block"]["duration_min"] = int(length.currentData())
         if not row_conflict(self._rows[index], self._rows, self._existing):
             self._rows[index]["checked"] = True
         self._refresh()
