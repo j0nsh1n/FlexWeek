@@ -1,217 +1,294 @@
-"""Bento: a main view. A home screen of tiles: what is next, deadlines, what has no time yet."""
+"""Bento's hero clock and hero board, with live hours in the large purple tile."""
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
+from collections.abc import Callable
 
-from desktop.native.calendar import DAY_FULL, DAYS, category_title
+from PySide6.QtCore import QPoint, QPointF, QRectF
+from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLayout, QPushButton, QVBoxLayout, QWidget
+
+from desktop.native.calendar import CATEGORIES, DAY_FULL, DAYS
+from desktop.native.hours.canvas import BlockPainter, Drawn, HoursCanvas
+from desktop.native.hours.chips import TrayChip
+from desktop.native.hours.geometry import FIRST, LAST, LinearTrack
 from desktop.native.hours.hand import Hand
+from desktop.native.hours.zoom import HoursScroll, Scale
 from desktop.native.layouts.base import (
     LayoutView,
     Scene,
     base_sheet,
-    block_button,
     button,
     css,
     empty,
     label,
-    mark_of,
+    plan_buttons,
     rules,
     scrolling,
 )
-from desktop.native.weekmodel import clock_label, due_label, length_label, planned_line
+from desktop.native.weekmodel import clock_label, due_label, length_label
 
-# The line under an empty Up next. With none, the card repeated its title: "No homework added" twice.
-HERO_EMPTY_LINES = {
-    "no_homework": "Add homework and FlexWeek will find it a time.",
-    "all_finished": "Nothing else is due this week.",
-    "calendar_only": "The rest of the day is yours.",
-    "needs_time": "",
-}
+DAY_SCALE = Scale("bento.day", (96, 128, 160, 192), 96)
+WEEK_SCALE = Scale("bento.week", (32, 48, 64, 96, 128), 48)
+GUTTER = 52
+PAD = 6
+
+
+def _hours_height(px: int) -> int:
+    return round((LAST - FIRST) / 60 * px) + 2 * PAD
+
+
+def _week_tracks(area: QRectF) -> list[LinearTrack]:
+    width = area.width() / 7
+    return [
+        LinearTrack(day, QRectF(area.left() + day * width + 2, area.top() + PAD,
+                                width - 4, area.height() - 2 * PAD))
+        for day in range(7)
+    ]
+
+
+def _detach(layout: QLayout, widget: QWidget, host: QWidget) -> bool:
+    for index in range(layout.count()):
+        item = layout.itemAt(index)
+        if item.widget() is widget:
+            layout.takeAt(index)
+            widget.hide()
+            widget.setParent(host)
+            return True
+        child = item.widget()
+        if child is not None and child.layout() is not None and _detach(child.layout(), widget, host):
+            return True
+        inner = item.layout()
+        if inner is not None and _detach(inner, widget, host):
+            return True
+    return False
+
+
+class BentoPainter(BlockPainter):
+    """Purple hours with pale category blocks and the shared painter's readable labels."""
+
+    def __init__(self, tokens: dict[str, str]) -> None:
+        super().__init__({
+            "window": tokens["accent"],
+            "grid": tokens["accent_ink"],
+            "hairline": tokens["accent_ink"],
+            "accent": tokens["accent_ink"],
+            "error": tokens["danger"],
+            "text": tokens["accent_ink"],
+            "muted": tokens["accent_ink"],
+        })
+        self.tokens = tokens
+
+    def track(self, painter: QPainter, track: LinearTrack, today: bool) -> None:
+        wash = QColor(self.tokens["accent_ink"])
+        wash.setAlphaF(0.055 if not today else 0.10)
+        painter.fillRect(track.area, wash)
+        rule = QColor(self.tokens["accent_ink"])
+        rule.setAlphaF(0.22)
+        for minute in range(FIRST, LAST + 1, 60):
+            at = track.area.top() + track.offset(minute)
+            painter.setPen(QPen(rule, 1))
+            painter.drawLine(QPointF(track.area.left(), at), QPointF(track.area.right(), at))
+
+    def fills(self, drawn: Drawn) -> tuple[QColor, QColor, QColor | None, QColor | None]:
+        category = CATEGORIES.get(drawn.category, {})
+        fill = QColor(category.get("color") or self.tokens["surface"])
+        mark = QColor(category.get("mark") or self.tokens["line"])
+        if drawn.done or drawn.missed:
+            fill = fill.lighter(115)
+        return fill, QColor("#20243a"), None, mark
+
+
+class BentoCanvas(HoursCanvas):
+    def __init__(self, hand: Hand, painter: BentoPainter,
+                 tracks: Callable[[QRectF], list[LinearTrack]], *, gutter: int) -> None:
+        super().__init__(hand, painter, tracks, gutter=gutter)
+        self.day_buttons: dict[int, QPushButton] = {}
+
+    def day_name(self, day: int) -> QPoint:
+        pick = self.day_buttons.get(day)
+        return pick.mapToGlobal(pick.rect().center()) if pick is not None else super().day_name(day)
 
 
 class BentoView(LayoutView):
     layout_id = "bento"
+    uses_drawer = False
 
     def __init__(self, parent: QWidget | None = None, *, hand: Hand | None = None) -> None:
         super().__init__(parent, hand=hand)
-        self._day: int | None = None
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         self._board = QWidget()
         self._board.setObjectName("bentoBoard")
         self._grid = QGridLayout(self._board)
-        self._scroll = scrolling(self._board, "bentoScroll")
-        outer.addWidget(self._scroll)
+        outer.addWidget(scrolling(self._board, "bentoScroll"))
+        self._scrolls: dict[str, HoursScroll] = {}
+        self._day = 0
+        self._revealed: dict[str, object] = {}
 
     def shown_day(self, scene: Scene) -> int:
-        return self._day if self._day is not None else (scene.today if scene.today is not None else 0)
-
-    def _show_day(self, day: int) -> None:
-        if self._scene is not None:
-            self._day = None if day == self._scene.today else day
-            self.render(self._scene, False)
+        if scene.surface == "day" and scene.iso_day:
+            for day in range(7):
+                if scene.week.date_of(day).isoformat() == scene.iso_day:
+                    return day
+        return scene.today if scene.today is not None else 0
 
     def _tile(self, scene: Scene, name: str, kicker: str) -> tuple[QFrame, QVBoxLayout]:
         tile = QFrame()
         tile.setObjectName(name)
         tile.setProperty("tile", "hero" if name == "bentoHero" else "plain")
         inner = QVBoxLayout(tile)
-        inner.setContentsMargins(scene.px(18), scene.px(14), scene.px(18), scene.px(14))
-        inner.setSpacing(scene.px(4))
-        inner.addWidget(label(kicker.upper(), f"{name}Kicker"))
+        inner.setContentsMargins(scene.px(16), scene.px(14), scene.px(16), scene.px(14))
+        inner.setSpacing(scene.px(8))
+        heading = label(kicker.upper(), f"{name}Kicker")
+        heading.setProperty("role", "kicker")
+        inner.addWidget(heading)
         return tile, inner
 
-    def render(self, scene: Scene, week_changed: bool) -> None:
-        if week_changed:
-            self._day = None
+    def _style(self, scene: Scene) -> None:
         tokens, name = scene.tokens, self.objectName()
         radius = scene.px(24 if scene.options.get("corners") != "square" else 6)
-        kicker = css(
-            color=tokens["accent"], font_size=f"{scene.px(12)}px", font_weight=700, letter_spacing="1px"
-        )
         self.setStyleSheet(
             base_sheet(name, tokens)
-            + rules(
-                name,
-                {
-                    "#bentoScroll, #bentoBoard": css(background=tokens["bg"]),
-                    'QFrame[tile="plain"]': css(background=tokens["surface"], border_radius=f"{radius}px"),
-                    'QFrame[tile="hero"]': css(background=tokens["accent"], border_radius=f"{radius}px"),
-                    'QFrame[tile="plain"] QLabel': css(color=tokens["text"], font_size=f"{scene.px(14)}px"),
-                    'QFrame[tile="hero"] QLabel': css(
-                        color=tokens["accent_ink"], font_size=f"{scene.px(15)}px"
-                    ),
-                    'QFrame[tile="plain"] QLabel[role="kicker"]': kicker,
-                    'QFrame[tile="plain"] QLabel[role="muted"]': css(color=tokens["muted"]),
-                    'QFrame QLabel[role="big"]': css(font_size=f"{scene.px(34)}px", font_weight=800),
-                    "#bentoHeroTitle": css(font_size=f"{scene.px(38)}px", font_weight=800),
-                    "QPushButton": css(
-                        background=tokens["cta"],
-                        color=tokens["cta_ink"],
-                        border="none",
-                        border_radius=f"{scene.px(20)}px",
-                        padding=f"0 {scene.px(18)}px",
-                        min_height=f"{scene.px(40)}px",
-                        font_size=f"{scene.px(14)}px",
-                        font_weight=700,
-                    ),
-                    'QFrame[tile="hero"] QPushButton': css(
-                        background=tokens["accent_ink"], color=tokens["accent"]
-                    ),
-                    'QPushButton[kind="row"], QPushButton[kind="bar"]': css(
-                        background="transparent",
-                        color=tokens["text"],
-                        border="none",
-                        border_bottom=f"1px solid {tokens['line']}",
-                        border_radius="0",
-                        text_align="left",
-                        padding=f"{scene.px(6)}px 0",
-                        font_weight=500,
-                    ),
-                    'QPushButton[kind="bar"]': css(
-                        text_align="center", border_bottom="none", font_size=f"{scene.px(12)}px"
-                    ),
-                    'QPushButton[kind="bar"][chosen="true"]': css(font_weight=800, color=tokens["accent"]),
-                    'QPushButton[kind="chip"]': css(
-                        background=tokens["bg"],
-                        color=tokens["text"],
-                        border_radius=f"{scene.px(12)}px",
-                        border_left=f"5px solid {tokens['line']}",
-                        text_align="left",
-                        padding=f"{scene.px(6)}px {scene.px(10)}px",
-                        font_weight=500,
-                    ),
-                    'QPushButton[kind="chip"][state="past"]': css(
-                        color=tokens["muted"], text_decoration="line-through"
-                    ),
-                    "QPushButton:focus": css(border=f"2px solid {tokens['text']}"),
-                    'QFrame[role="bar"]': css(background=tokens["fill"], border_radius=f"{scene.px(6)}px"),
-                    'QFrame[role="bar"][today="true"]': css(background=tokens["accent"]),
-                },
-            )
+            + rules(name, {
+                "#bentoScroll, #bentoBoard": css(background=tokens["bg"]),
+                'QFrame[tile="plain"]': css(background=tokens["surface"], border_radius=f"{radius}px"),
+                'QFrame[tile="hero"]': css(background=tokens["accent"], border_radius=f"{radius}px"),
+                'QFrame[tile="plain"] QLabel': css(color=tokens["text"], font_size=f"{scene.px(13)}px"),
+                'QFrame[tile="hero"] QLabel': css(color=tokens["accent_ink"]),
+                'QFrame[tile="plain"] QLabel[role="kicker"]': css(
+                    color=tokens["accent"], font_size=f"{scene.px(12)}px", font_weight=700,
+                    letter_spacing="1px"),
+                'QFrame[tile="hero"] QLabel[role="kicker"]': css(
+                    color=tokens["accent_ink"], font_size=f"{scene.px(12)}px", font_weight=700,
+                    letter_spacing="1px"),
+                "#bentoTonightTitle": css(font_size=f"{scene.px(22)}px", font_weight=700),
+                "QPushButton": css(background=tokens["cta"], color=tokens["cta_ink"],
+                                   border="none", border_radius=f"{scene.px(12)}px",
+                                   min_height=f"{scene.px(32)}px", padding=f"0 {scene.px(8)}px"),
+                'QPushButton[zoom="true"]': css(min_height="0", padding="0"),
+                'QPushButton[kind="row"]': css(background="transparent", color=tokens["text"],
+                                               text_align="left", border="none",
+                                               border_bottom=f"1px solid {tokens['line']}",
+                                               border_radius="0"),
+                'QPushButton[kind="chip"]': css(background=tokens["bg"], color=tokens["text"],
+                                                text_align="left",
+                                                border_left=f"4px solid {tokens['danger']}"),
+                'QPushButton[kind="day"]': css(background=tokens["accent"],
+                                               color=tokens["accent_ink"], border_radius="0",
+                                               font_weight=700),
+                "QPushButton:focus": css(border=f"2px solid {tokens['text']}"),
+            })
         )
+
+    def _hours(self, scene: Scene, day: int) -> HoursScroll:
+        is_day = scene.surface == "day"
+        key = "day" if is_day else "week"
+        if key not in self._scrolls:
+            painter = BentoPainter(scene.tokens)
+            tracks = (lambda area: [LinearTrack(self._day, area.adjusted(0, PAD, -PAD, -PAD))]) \
+                if is_day else _week_tracks
+            canvas = BentoCanvas(self.hand, painter, tracks, gutter=GUTTER)
+            canvas.setObjectName("bentoDayHours" if is_day else "bentoWeekHours")
+            canvas.setAccessibleName("Hero clock" if is_day else "Hero board")
+            canvas.day_opened.connect(
+                lambda target: self.day_activated.emit(self.scene.week.date_of(target).isoformat())
+            )
+            scale = DAY_SCALE if is_day else WEEK_SCALE
+            scroll = HoursScroll(canvas, scale, _hours_height,
+                                 name="bentoDay" if is_day else "bentoWeek", gutter=GUTTER)
+            self.keep_zoom(scroll)
+            if not is_day:
+                header = QWidget()
+                row = QHBoxLayout(header)
+                row.setContentsMargins(0, 0, 0, 0)
+                row.setSpacing(0)
+                for target, word in enumerate(DAYS):
+                    head = button(word, f"bentoDayName{target}", "day")
+                    head.setProperty("day_target", target)
+                    head.setAccessibleName(f"Show {DAY_FULL[target]}")
+                    head.clicked.connect(lambda _=False, chosen=target:
+                        self.day_activated.emit(self.scene.week.date_of(chosen).isoformat()))
+                    row.addWidget(head, 1)
+                    canvas.day_buttons[target] = head
+                scroll.set_header(header)
+            self._scrolls[key] = scroll
+        scroll = self._scrolls[key]
+        canvas = scroll.canvas
+        canvas.set_painter(BentoPainter(scene.tokens))
+        if is_day:
+            changed = day != self._day
+            self._day = day
+            if changed:
+                canvas.relayout()
+            canvas.set_week([item for item in scene.week.occurrences if item.day == day],
+                            scene.today, scene.minute)
+        else:
+            canvas.set_week(scene.week.occurrences, scene.today, scene.minute)
+            for target, word in enumerate(DAYS):
+                head = canvas.day_buttons[target]
+                head.setText(f"{word} {scene.week.date_of(target).day}")
+        return scroll
+
+    def render(self, scene: Scene, week_changed: bool) -> None:
+        self._style(scene)
+        for kept in self._scrolls.values():
+            _detach(self._grid, kept, self._board)
         empty(self._grid)
-        self._grid.setContentsMargins(scene.px(20), scene.px(16), scene.px(20), scene.px(16))
-        self._grid.setSpacing(scene.px(14))
-        everything = scene.options.get("tiles") != "essentials"
-        if self.cramped:
-            # Two columns rather than a sideways scroll to reach Add and Plan.
-            self._narrow_board(scene, everything)
-            return
-        self._grid.addWidget(self._hero(scene), 0, 0, 2, 2)
-        self._grid.addWidget(self._deadlines(scene), 0, 2, 2, 1)
-        self._grid.addWidget(
-            self._waiting(scene), 0 if not everything else 2, 3 if not everything else 0, 2, 1
-        )
-        if everything:
-            self._grid.addWidget(self._tonight(scene), 0, 3)
-            self._grid.addWidget(self._total(scene), 1, 3)
-            self._grid.addWidget(self._load(scene), 2, 1, 1, 2)
-            self._grid.addWidget(self._add(scene), 2, 3)
-            self._grid.addWidget(self._strip(scene), 3, 1, 1, 3)
+        self._grid.setContentsMargins(scene.px(18), scene.px(16), scene.px(18), scene.px(16))
+        self._grid.setSpacing(scene.px(12))
+        day = self.shown_day(scene)
+        is_day = scene.surface == "day"
+        name = (f"{DAY_FULL[day]} {scene.week.date_of(day).day} · Your day"
+                if is_day else "This week · Drag across days")
+        hero, inside = self._tile(scene, "bentoHero", name)
+        scroll = self._hours(scene, day)
+        scroll.setMinimumHeight(scene.px(560))
+        inside.addWidget(scroll, 1)
+        rail = QWidget()
+        rail.setObjectName("bentoRail")
+        side = QVBoxLayout(rail)
+        side.setContentsMargins(0, 0, 0, 0)
+        side.setSpacing(scene.px(12))
+        side.addWidget(self._waiting(scene), 1)
+        if is_day:
+            side.addWidget(self._tonight_and_deadlines(scene), 1)
         else:
-            self._grid.addWidget(self._strip(scene), 2, 0, 1, 4)
-        for column in range(4):
-            self._grid.setColumnStretch(column, 1)
-        for index in range(self._grid.rowCount()):
-            self._grid.setRowMinimumHeight(index, scene.px(128))
-        for found in self._board.findChildren(type(label("", ""))):
-            role = found.objectName()
-            found.setProperty("role", "kicker" if role.endswith("Kicker") else found.property("role"))
-
-    def _narrow_board(self, scene: Scene, everything: bool) -> None:
-        """The same tiles in two columns, for a window too narrow for four."""
-        tiles = [self._hero(scene), self._deadlines(scene), self._waiting(scene)]
-        if everything:
-            tiles += [self._tonight(scene), self._total(scene), self._load(scene), self._add(scene)]
-        tiles.append(self._strip(scene))
-        wide_names = {"bentoHero", "bentoStrip", "bentoLoad"}
-        row, column = 0, 0
-        for tile in tiles:
-            if tile.objectName() in wide_names:
-                if column:
-                    row, column = row + 1, 0
-                self._grid.addWidget(tile, row, 0, 1, 2)
-                row += 1
-                continue
-            self._grid.addWidget(tile, row, column, 1, 1)
-            column += 1
-            if column == 2:
-                row, column = row + 1, 0
-        for index in range(2):
-            self._grid.setColumnStretch(index, 1)
-        for index in range(self._grid.rowCount()):
-            self._grid.setRowMinimumHeight(index, scene.px(128))
-
-    def _hero(self, scene: Scene) -> QFrame:
-        tile, inner = self._tile(scene, "bentoHero", "Up next")
-        inner.insertStretch(0, 1)
-        queue = scene.week.day_queue(scene.today, scene.minute).queue if scene.today is not None else ()
-        coming = [item for item in queue if item.start > scene.minute]
-        kicker = tile.findChild(type(label("", "")), "bentoHeroKicker")
-        if scene.today is None:
-            kicker.setText("ANOTHER WEEK")
-            inner.addWidget(label("Not this week", "bentoHeroTitle", wrap=True))
-            inner.addWidget(
-                label("Up next is about today, and today is in another week.", "bentoHeroLine", wrap=True)
+            side.addWidget(self._deadlines(scene))
+        self._grid.addWidget(hero, 0, 0)
+        self._grid.addWidget(rail, 0, 1)
+        self._grid.setColumnStretch(0, 3 if not is_day else 2)
+        self._grid.setColumnStretch(1, 1)
+        scroll.show()
+        key = "day" if is_day else "week"
+        reveal = (scene.week.week_start, day) if is_day else scene.week.week_start
+        if self._revealed.get(key) != reveal:
+            self._revealed[key] = reveal
+            minute = scene.minute if scene.today == day else min(
+                (item.start for item in scene.week.on_day(day)), default=8 * 60
             )
-        elif coming:
-            first = coming[0]
-            kicker.setText(f"UP NEXT · IN {length_label(first.start - scene.minute).upper()}")
-            inner.addWidget(label(first.title, "bentoHeroTitle", wrap=True))
-            kind = category_title(first.category) if first.category else "Fixed time"
-            inner.addWidget(
-                label(f"{clock_label(first.start)}–{clock_label(first.end)} · {kind}", "bentoHeroLine")
-            )
-        else:
-            _heading, title, line = scene.week.leftover_parts(scene.today)
-            kind = scene.week.leftover_kind(scene.today)
-            if kind == "needs_time":
-                kicker.setText("DUE TODAY")
-            inner.addWidget(label(title, "bentoHeroTitle", wrap=True))
-            inner.addWidget(label(line or HERO_EMPTY_LINES[kind], "bentoHeroLine", wrap=True))
+            scroll.scroll_to(minute if is_day else (scene.minute if scene.today is not None else 8 * 60))
+
+    def _waiting(self, scene: Scene) -> QFrame:
+        waiting = scene.week.waiting
+        tile, inner = self._tile(scene, "bentoWaiting", "Not placed yet")
+        inner.addWidget(label("Drag one onto your day." if scene.surface == "day" else
+                              "Drag one onto the week.", "bentoWaitingHint"))
+        for index, item in enumerate(waiting):
+            chip = TrayChip(self.hand, item)
+            chip.setObjectName(f"bentoWaiting{index}")
+            chip.setProperty("kind", "chip")
+            chip.setToolTip(item.reason)
+            chip.clicked.connect(lambda _=False, block_id=item.block_id: self.block_activated.emit(block_id))
+            inner.addWidget(chip)
+        if not waiting:
+            inner.addWidget(label("Everything you added has a time.", "bentoWaitingEmpty"))
+        inner.addStretch(1)
+        actions = QHBoxLayout()
+        for made in plan_buttons(self, "bento", "+ Add"):
+            actions.addWidget(made)
+        actions.addStretch(1)
+        inner.addLayout(actions)
         return tile
 
     def _deadlines(self, scene: Scene) -> QFrame:
@@ -223,171 +300,46 @@ class BentoView(LayoutView):
             words = f"{item.title}\n{due_label(item.due, scene.week.week_start)}"
             if item.slack_words:
                 words += f" · {item.slack_words}"
-            inner.addWidget(block_button(self, words, f"bentoDeadline{index}", item.block_id, day=item.day))
-        offset = len(work)
-        for index, item in enumerate(waiting):
+            inner.addWidget(self._open_button(words, f"bentoDeadline{index}", item.block_id))
+        for index, item in enumerate(waiting, start=len(work)):
             words = f"{item.title}\n{due_label(item.due, scene.week.week_start)} · Not placed yet"
-            inner.addWidget(block_button(self, words, f"bentoDeadline{offset + index}", item.block_id))
+            inner.addWidget(self._open_button(words, f"bentoDeadline{index}", item.block_id))
         if not work and not waiting:
-            inner.addWidget(
-                label("Nothing is due. Add homework when you get some.", "bentoDeadlinesEmpty", wrap=True)
-            )
+            inner.addWidget(label("Nothing is due. Add homework when you get some.",
+                                  "bentoDeadlinesEmpty", wrap=True))
         inner.addStretch(1)
         return tile
 
-    def _waiting(self, scene: Scene) -> QFrame:
-        waiting = scene.week.waiting
-        tile, inner = self._tile(
-            scene, "bentoWaiting", f"Not placed yet ({len(waiting)})" if waiting else "Not placed yet"
-        )
-        for index, item in enumerate(waiting):
-            words = f"{item.title} · {length_label(item.minutes)}\n{item.reason}"
-            inner.addWidget(block_button(self, words, f"bentoWaiting{index}", item.block_id))
-        if not waiting:
-            inner.addWidget(label("Nothing waiting", "bentoWaitingEmpty"))
-            note = label("Everything you added has a time.", "bentoWaitingNote", wrap=True)
-            note.setProperty("role", "muted")
-            inner.addWidget(note)
-        actions = QHBoxLayout()
-        if waiting:
-            plan = button("Plan it" if len(waiting) == 1 else "Plan them", "bentoPlan")
-            plan.clicked.connect(self.plan_requested.emit)
-            actions.addWidget(plan)
-        add = button("+ Add", "bentoAddSmall")
-        add.clicked.connect(lambda _=False: self.add_requested.emit(""))
-        actions.addWidget(add)
-        actions.addStretch()
-        inner.addLayout(actions)
-        # The stretch belongs under the buttons, not between them and the text. Above them it left
-        # a 165 pixel hole in a 297 pixel tile, worst on an empty week.
-        inner.addStretch(1)
-        return tile
-
-    def _tonight(self, scene: Scene) -> QFrame:
-        tile, inner = self._tile(scene, "bentoTonight", "Tonight")
-        today = scene.week.on_day(scene.today) if scene.today is not None else ()
-        session = next((item for item in today if item.work and item.live and item.end > scene.minute), None)
-        if session is not None:
-            inner.addWidget(
-                block_button(self, session.title, "bentoTonightTitle", session.block_id, day=session.day)
-            )
-            note = label(
-                f"{clock_label(session.start)} · {length_label(session.minutes)}", "bentoTonightLine"
-            )
-            note.setProperty("role", "muted")
-            inner.addWidget(note)
-            focus = button("Start focus", "bentoFocus")
-            focus.clicked.connect(
-                lambda _=False, entry=session: self.focus_requested.emit(entry.block_id, entry.day)
-            )
-            inner.addWidget(focus, 0, Qt.AlignmentFlag.AlignLeft)
-        else:
-            due_today = scene.week.due_today_unplaced(scene.today)
-            if due_today:
-                item = due_today[0]
-                inner.addWidget(block_button(self, item.title, "bentoTonightTitle", item.block_id))
-                note = label(
-                    "Not placed yet · due " + due_label(item.due, scene.week.week_start),
-                    "bentoTonightLine",
-                    wrap=True,
-                )
-                note.setProperty("role", "muted")
-                inner.addWidget(note)
-            else:
-                inner.addWidget(label("No homework tonight", "bentoTonightTitle", wrap=True))
-        inner.addStretch(1)
-        return tile
-
-    def _total(self, scene: Scene) -> QFrame:
-        tile, inner = self._tile(scene, "bentoTotal", "Homework this week")
-        work = [item for item in scene.week.occurrences if item.work]
-        big = label(length_label(sum(item.minutes for item in work)), "bentoTotalBig")
-        big.setProperty("role", "big")
-        inner.addWidget(big)
-        note = label(
-            planned_line(
-                sum(item.minutes for item in work),
-                sum(item.minutes for item in work if item.done),
-            ),
-            "bentoTotalLine",
-        )
-        note.setProperty("role", "muted")
-        inner.addWidget(note)
-        inner.addStretch(1)
-        return tile
-
-    def _load(self, scene: Scene) -> QFrame:
-        tile, inner = self._tile(scene, "bentoLoad", "Load by day, in minutes. Pick a day.")
-        bars = QHBoxLayout()
-        bars.setSpacing(scene.px(8))
-        most = max([scene.week.load_min(day) for day in range(7)] + [1])
-        shown = self.shown_day(scene)
-        for day, name in enumerate(DAYS):
-            holder = QFrame()
-            holder.setObjectName(f"bentoLoadDay{day}")
-            column = QVBoxLayout(holder)
-            column.setContentsMargins(0, 0, 0, 0)
-            column.addStretch(1)
-            bar = QFrame()
-            bar.setProperty("role", "bar")
-            bar.setProperty("today", "true" if day == scene.today else "false")
-            bar.setFixedHeight(max(round(scene.px(46) * scene.week.load_min(day) / most), scene.px(4)))
-            column.addWidget(bar)
-            pick = button(f"{name} {scene.week.load_min(day)}", f"bentoDay{day}", "bar")
-            pick.setProperty("chosen", "true" if day == shown else "false")
-            pick.setProperty("day_target", day)
-            pick.setAccessibleName(f"Show {DAY_FULL[day]}, {scene.week.load_min(day)} minutes of homework")
-            pick.clicked.connect(lambda _=False, target=day: self._show_day(target))
-            column.addWidget(pick)
-            bars.addWidget(holder)
-        inner.addLayout(bars)
-        return tile
-
-    def _add(self, scene: Scene) -> QFrame:
-        tile, inner = self._tile(scene, "bentoNew", "Something new?")
-        inner.addWidget(label("Add homework", "bentoNewTitle"))
-        add = button("+ Add", "bentoAdd")
-        add.clicked.connect(lambda _=False: self.add_requested.emit(""))
-        inner.addWidget(add, 0, Qt.AlignmentFlag.AlignLeft)
-        inner.addStretch(1)
-        return tile
-
-    def _strip(self, scene: Scene) -> QFrame:
+    def _tonight_and_deadlines(self, scene: Scene) -> QFrame:
         day = self.shown_day(scene)
-        date = scene.week.date_of(day)
-        lead = "Today, " if day == scene.today else ""
-        tile, inner = self._tile(scene, "bentoStrip", f"{lead}{DAY_FULL[day]} {date.day}")
-        if scene.options.get("tiles") == "essentials":
-            # The load chart is where a day is picked. Without it the rest of the week was out of reach.
-            picker = QHBoxLayout()
-            for target, name in enumerate(DAYS):
-                pick = button(name, f"bentoDay{target}", "bar")
-                pick.setProperty("chosen", "true" if target == day else "false")
-                pick.setProperty("day_target", target)
-                pick.setAccessibleName(f"Show {DAY_FULL[target]}")
-                pick.clicked.connect(lambda _=False, chosen=target: self._show_day(chosen))
-                picker.addWidget(pick)
-            picker.addStretch(1)
-            inner.addLayout(picker)
-        strip = QFrame()
-        strip.setObjectName("bentoStripRow")
-        row = QHBoxLayout(strip)
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(scene.px(8))
-        blocks = scene.week.on_day(day)
-        for index, item in enumerate(blocks):
-            words = f"{clock_label(item.start)}\n{item.title}"
-            chip = block_button(self, words, f"bentoChip{index}", item.block_id, "chip", day=item.day)
-            over = (
-                item.end <= scene.minute
-                if day == scene.today
-                else (scene.today is not None and day < scene.today)
-            )
-            chip.setProperty("state", "past" if over or not item.live else "")
-            chip.setStyleSheet(f"border-left-color: {mark_of(item.category)};")
-            row.addWidget(chip)
-        if not blocks:
-            row.addWidget(label("A free day.", "bentoStripEmpty"))
-        row.addStretch(1)
-        inner.addWidget(strip)
+        tile, inner = self._tile(
+            scene, "bentoTonight", "Tonight" if day == scene.today else f"On {DAY_FULL[day]}"
+        )
+        sessions = scene.week.on_day(day)
+        session = next((item for item in sessions if item.work and item.live and
+                        (day != scene.today or item.end > scene.minute)), None)
+        if session is not None:
+            inner.addWidget(self._open_button(session.title, "bentoTonightTitle", session.block_id))
+            inner.addWidget(label(f"{clock_label(session.start)} · {length_label(session.minutes)}",
+                                  "bentoTonightLine"))
+        else:
+            words = "No homework tonight" if day == scene.today else "No homework this day"
+            inner.addWidget(label(words, "bentoTonightTitle"))
+        inner.addWidget(label("DEADLINES", "bentoTonightDeadlineTitle"))
+        work = list(scene.week.open_work())
+        seen = {item.block_id for item in work}
+        due = [*work, *(item for item in scene.week.waiting if item.block_id not in seen)]
+        for index, item in enumerate(due[:4]):
+            inner.addWidget(self._open_button(
+                f"{item.title} · {due_label(item.due, scene.week.week_start)}",
+                f"bentoTonightDeadline{index}", item.block_id))
+        if not due:
+            inner.addWidget(label("Nothing due soon.", "bentoTonightDeadlineEmpty"))
+        inner.addStretch(1)
         return tile
+
+    def _open_button(self, words: str, name: str, block_id: str) -> QWidget:
+        made = button(words, name, "row")
+        made.setProperty("block_id", block_id)
+        made.clicked.connect(lambda _=False: self.block_activated.emit(block_id))
+        return made
