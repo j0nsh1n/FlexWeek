@@ -18,15 +18,16 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
     import shiboken6
-    from PySide6.QtCore import QEvent, Qt
-    from PySide6.QtGui import QHelpEvent
+    from PySide6.QtCore import QEvent, QRectF, Qt
+    from PySide6.QtGui import QFont, QHelpEvent, QImage, QPainter
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication, QFrame, QLabel, QPushButton, QToolTip, QVBoxLayout, QWidget
 
+    from desktop.native.hours.canvas import BlockPainter, Drawn
     from desktop.native.hours.chips import TrayChip
     from desktop.native.hours.geometry import Axis
     from desktop.native.layouts.base import Scene
-    from desktop.native.layouts.mission import MissionCanvas, MissionView
+    from desktop.native.layouts.mission import WEEK_SCALE, MissionCanvas, MissionView
     from desktop.native.layouts.registry import options_for, tokens_for
     from desktop.native.look import resolved_palette
     from desktop.native.weekmodel import build_week, minute_of
@@ -123,6 +124,41 @@ def test_full_day_reaches_early_block_and_quarter_hour(qapp: QApplication) -> No
     assert hours.block_rect("paper-round", 3) is not None
     assert hours.block_rect("quiz", 4).width() >= 14
     assert hours.block_rect("quiz", 4).height() >= 14
+
+
+def test_week_initial_only_fills_a_block_without_shared_words(qapp: QApplication) -> None:
+    view = shown(qapp, blocks=[*BLOCKS, block("quiz", "locked", [5], "19:00", 15)])
+    assert view._scrolls["week"].px == WEEK_SCALE.default
+    hours = view.findChild(MissionCanvas, "missionHours")
+    track = hours.track_for(5)
+    assert track is not None
+    drawn = {item.block_id: (item, rect) for item, rect in hours.drawn(track)}
+
+    def render(item: Drawn, rect: QRectF, mission: bool) -> tuple[bytes, QFont]:
+        image = QImage(int(rect.width()) + 8, int(rect.height()) + 8,
+                       QImage.Format.Format_ARGB32_Premultiplied)
+        image.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(image)
+        painter.setFont(qapp.font())
+        box = QRectF(3, 3, rect.width(), rect.height())
+        if mission:
+            hours.painter.block(painter, box, item, QRectF(image.rect()))
+        else:
+            BlockPainter.block(hours.painter, painter, box, item, QRectF(image.rect()))
+        font = painter.font()
+        painter.end()
+        return bytes(image.bits()), font
+
+    quarter, quarter_box = drawn["quiz"]
+    half, half_box = drawn["dinner"]
+    plain_quarter, plain_quarter_font = render(quarter, quarter_box, False)
+    marked_quarter, marked_quarter_font = render(quarter, quarter_box, True)
+    plain_half, plain_half_font = render(half, half_box, False)
+    marked_half, marked_half_font = render(half, half_box, True)
+    assert marked_quarter != plain_quarter
+    assert marked_half == plain_half
+    assert marked_quarter_font == plain_quarter_font
+    assert marked_half_font == plain_half_font
 
 
 def test_side_can_hide_without_hiding_the_tray(qapp: QApplication) -> None:
