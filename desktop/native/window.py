@@ -841,6 +841,8 @@ class NativeWindow(QMainWindow):
             view.day_activated.connect(self.session.open_day)
             view.placement_requested.connect(self._drop_block)
             view.refused.connect(self.session._say)
+            view.remembered_zoom = self._zoom
+            view.zoomed.connect(self._remember_zoom)
             view.judge = self._judge_span
             view.motion = self._motion
             self.planner.addWidget(view)
@@ -1563,7 +1565,8 @@ class NativeWindow(QMainWindow):
 
     def _remember_zoom(self, key: str, px: int) -> None:
         """How close a surface's hours are is kept for this device, as the look is."""
-        self._zoom = {**self._zoom, key: px}
+        # In place: every design holds this dict and reads it for the hours it makes later.
+        self._zoom[key] = px
         self._save_look()
 
     def _open_week_day(self, day: int) -> None:

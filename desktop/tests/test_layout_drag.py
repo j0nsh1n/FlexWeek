@@ -29,13 +29,18 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QByteArray, QEvent, QMimeData, QPoint, QPointF, QStandardPaths, Qt
     from PySide6.QtGui import QDragEnterEvent, QDragLeaveEvent, QDragMoveEvent, QDropEvent
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QDialog, QPushButton, QWidget
+    from PySide6.QtWidgets import QApplication, QDialog, QPushButton, QVBoxLayout, QWidget
 
     from desktop.native.calendar import sunday_due
     from desktop.native.canvas import Timeline
+    from desktop.native.hours.canvas import BlockPainter, HoursCanvas
+    from desktop.native.hours.hand import Hand
+    from desktop.native.hours.zoom import HoursScroll, Scale
     from desktop.native.layouts import drag
-    from desktop.native.layouts.base import LayoutView
+    from desktop.native.layouts.base import LayoutView, Scene, empty
     from desktop.native.layouts.registry import sanitize_layout
+    from desktop.native.layouts.views import VIEW_CLASSES
+    from desktop.native.look import resolved_palette
     from desktop.native.widgets import SESSION_MIME, HomeworkDialog
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
@@ -525,6 +530,115 @@ def test_how_close_the_hours_are_is_kept_for_this_device(qapp: QApplication, win
         again.close()
         again.deleteLater()
         QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+class ZoomingDesign(LayoutView):
+    """The least a design with hours of its own does: hours that scroll and zoom, made anew on every
+    render, as a design that rebuilds its page does."""
+
+    layout_id = "mission"
+    uses_drawer = False
+
+    def __init__(self, parent: QWidget | None = None, *, hand: Hand | None = None) -> None:
+        super().__init__(parent, hand=hand)
+        self._box = QVBoxLayout(self)
+        self.scroll: HoursScroll | None = None
+
+    def render(self, scene: Scene, week_changed: bool) -> None:
+        empty(self._box)
+        hours = HoursCanvas(self.hand, BlockPainter(resolved_palette("system", False, None)))
+        hours.set_week(scene.week.occurrences, scene.today, scene.minute)
+        scale = Scale("test.hours", (32, 48, 64, 96), 48)
+        self.scroll = self.keep_zoom(HoursScroll(hours, scale, lambda px: 24 * px, name="test", gutter=48))
+        self._box.addWidget(self.scroll)
+
+
+def zooming_design(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> ZoomingDesign:
+    """The test design, where a real design goes: chosen as the main view, in Mission's place."""
+    monkeypatch.setitem(VIEW_CLASSES, "mission", ZoomingDesign)
+    view = use(qapp, window, "mission")
+    assert isinstance(view, ZoomingDesign)
+    return view
+
+
+def zoom_in(view: ZoomingDesign) -> None:
+    assert view.scroll is not None
+    QTest.mouseClick(view.scroll.buttons.into, Qt.MouseButton.LeftButton)
+
+
+def redrawn(qapp: QApplication, window: NativeWindow) -> None:
+    """A real change, saved: the design draws a new scene, as it does after any edit."""
+    window.session.add_block(
+        {
+            "id": "club",
+            "title": "Club",
+            "kind": "locked",
+            "category": "extra",
+            "start": "18:00",
+            "duration_min": 60,
+            "days": [5],
+        }
+    )
+    window.session.save()
+    settled(qapp, window)
+
+
+def test_a_designs_zoom_is_kept_under_its_own_key(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    view = zooming_design(qapp, window, monkeypatch)
+    zoom_in(view)
+    assert view.scroll is not None and view.scroll.px == 64
+    assert json.loads(look_file().read_text())["zoom"] == {"test.hours": 64}
+
+
+def test_hours_a_design_makes_again_open_at_the_level_just_chosen(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The hours made on the next render open where the student left the last ones, not where the
+    design first opened."""
+    view = zooming_design(qapp, window, monkeypatch)
+    zoom_in(view)
+    zoomed = view.scroll
+    redrawn(qapp, window)
+    assert view.scroll is not zoomed, "the save drew new hours"
+    assert view.scroll is not None and view.scroll.px == 64
+
+
+def test_a_new_window_opens_a_designs_hours_at_the_remembered_level(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    view = zooming_design(qapp, window, monkeypatch)
+    zoom_in(view)
+    again = NativeWindow(window.session.client.origin)
+    try:
+        again.username.setText("drag_student")
+        again.password.setText(PASSWORD)
+        again.findChild(QPushButton, "signIn").click()
+        wait_until(qapp, lambda: again._stack.currentWidget().objectName() == "weekPage")
+        shown = use(qapp, again, "mission")
+        assert isinstance(shown, ZoomingDesign) and shown.scroll is not None
+        assert shown.scroll.px == 64
+    finally:
+        with contextlib.suppress(RuntimeError):
+            again.session.client.reset()
+        again.close()
+        again.deleteLater()
+        QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+def test_a_design_that_never_zooms_leaves_the_kept_levels_alone(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    window.findChild(QPushButton, "viewWeek").click()
+    qapp.processEvents()
+    QTest.mouseClick(window.findChild(QPushButton, "weekZoomIn"), Qt.MouseButton.LeftButton)
+    view = zooming_design(qapp, window, monkeypatch)
+    redrawn(qapp, window)
+    assert view.scroll is not None and view.scroll.px == 48
+    assert json.loads(look_file().read_text())["zoom"] == {"classic.week": 64}
 
 
 def test_a_design_holds_its_renders_from_the_press_and_has_the_windows_hand(
