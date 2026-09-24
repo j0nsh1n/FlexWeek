@@ -128,9 +128,8 @@ because it is where Wayland and X11 differ and where the rig cannot see what the
 
 ## Open
 
-- Chips for weeks other than the open one need the month reply's per-date blocks
-  (`handoffs/grok-month-blocks.md`); weeks left with unsaved changes must then be drawn from those
-  changes, as the open week is.
+- Chips for weeks other than the open one come from the month reply's per-date `blocks`; a week
+  left with unsaved changes is drawn from those changes, as the open week is.
 - My day's One thing and Day dial move onto the hand in unit 15; `DialTrack` is ready for them.
 - The old path (`layouts/drag.py`, the drawer, `canvas.Timeline`) goes in unit 16, once every design
   has moved.

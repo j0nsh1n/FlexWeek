@@ -25,6 +25,13 @@ All notable changes to FlexWeek are documented here. Format follows
   computer. A short block can be picked up from its middle at any zoom.
 
 ### Fixed
+- Hours no longer jump back to the morning after a save in a design that keeps
+  them between redraws, and pressing Tab no longer scrolls them to their middle.
+- A block's second line of text is never cut in half; what does not fit is
+  shortened with "…". A long block keeps its name in sight on lanes that run
+  across, as it does in columns. Text no longer gets smaller from one block to
+  the next down a day.
+- The words beside a held block stay on screen when hours run across.
 - Mission control no longer draws an extra initial over the shortened words
   on half-hour blocks in Week. Quarter-hour blocks still show an initial when
   their words do not fit.

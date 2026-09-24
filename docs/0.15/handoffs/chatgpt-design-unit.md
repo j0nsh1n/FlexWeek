@@ -49,6 +49,17 @@ Start from `feat/0.15-tabs`:
    set `uses_drawer = False`. No `QDrag` anywhere in the design.
 8. A tray's heading leads with plain words, "No time yet" or "Not placed yet", with the themed name
    second. A student must know what the tray holds. This came from a check of the mock-up's labels.
+9. What Mission's review found, so it is not found again. `desktop/native/layouts/mission.py` is the
+   second worked example after Today's app.
+   - Make each tab's `HoursScroll` once, on its first render, and keep it; a new one every render
+     loses the student's place and zoom. To keep it across `empty()`, take it out of the layout
+     and hide it, but never `setParent(None)`: a widget with no parent outlives the window and
+     keeps the whole view alive with it.
+   - A `BlockPainter` override that draws after `super().block(...)` draws only where the painter
+     drew nothing, inside `painter.save()` and `painter.restore()`. The painter writes whole,
+     shortened lines on any block with room for one; it gives up under 8 px of text room.
+   - The rig aims along a block's own track, so every Day and Week scenario passes on hours that
+     run down, across or tilted. A failing scenario is the design's until shown otherwise.
 
 ## Do not
 
