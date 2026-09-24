@@ -260,9 +260,12 @@ class HoursScroll(QScrollArea):
             self._pending = None
             self._bar().setValue(round(self._y_for(minute - above)))
 
+    def focusNextPrevChild(self, next: bool) -> bool:  # noqa: N802
+        # QScrollArea's own then scrolls to show the child that had the focus: for hours longer than
+        # what shows, a jump to their middle on Tab and whenever the hours are hidden.
+        return QWidget.focusNextPrevChild(self, next)
+
     def hideEvent(self, event: object) -> None:  # noqa: N802
-        # Hiding a scroll area that holds the focus moves the focus on, and Qt then centres the
-        # hours on the child that had it. This runs first, so the minute kept is the student's.
         super().hideEvent(event)
         self._kept, self._short_at = self._minute_at(self._bar().value()), None
 

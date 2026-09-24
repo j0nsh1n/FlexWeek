@@ -586,3 +586,34 @@ def test_a_held_blocks_words_stay_in_what_shows_on_a_column_scrolled_past_its_st
     assert seen.contains(pill), (
         f"the pill spans y {pill.top()}–{pill.bottom()}; what shows is y {seen.top()}–{seen.bottom()}"
     )
+
+
+def test_tab_moves_the_focus_on_and_leaves_the_hours_where_they_are(qapp: QApplication) -> None:
+    """A scroll area shows the child that had the focus when the focus moves on, which for hours
+    longer than what shows means jumping to their middle. Tab must only move the focus."""
+    from PySide6.QtWidgets import QHBoxLayout
+
+    scroll = a_lane_week(qapp)
+    host = QWidget()
+    HOSTS.append(host)
+    row = QHBoxLayout(host)
+    row.addWidget(scroll, 1)
+    side = a_side(host)
+    row.addWidget(side)
+    host.move(0, 0)
+    host.resize(800, 480)
+    host.show()
+    settle(qapp)
+    scroll.restore({"lanes.week": 96})
+    scroll.scroll_to(19 * 60, above=0)
+    host.activateWindow()
+    assert QTest.qWaitForWindowActive(host)
+    scroll.canvas.setFocus(Qt.FocusReason.MouseFocusReason)
+    settle(qapp)
+    QTest.keyClick(scroll.canvas, Qt.Key.Key_Tab)
+    settle(qapp)
+    at = minute_across(scroll, 0)
+    assert 18 * 60 + 45 <= at <= 19 * 60 + 15, (
+        f"after Tab the lanes start at {int(at) // 60:02d}:{int(at) % 60:02d}"
+    )
+    assert QApplication.focusWidget() is not scroll.canvas, "Tab left the focus on the hours"
