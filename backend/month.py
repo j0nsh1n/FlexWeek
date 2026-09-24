@@ -27,6 +27,22 @@ def _placed_on_day(block: dict, day_index: int) -> bool:
     return bool(block.get("start")) and _on_day(block, day_index)
 
 
+def _date_block(block: dict) -> dict:
+    days = list(block.get("days") or [])
+    return {
+        "id": block["id"],
+        "title": block["title"],
+        "start": block["start"],
+        "duration_min": int(block["duration_min"]),
+        "category": block.get("category"),
+        "kind": block["kind"],
+        "assignment_id": block.get("assignment_id"),
+        "repeats": len(days) > 1,
+        "pinned": bool(block.get("pinned")),
+        "completed": bool(block.get("completed")),
+    }
+
+
 def _is_planned_session(block: dict) -> bool:
     """Open work with a saved plan: a start on one day. Plans have been stored since 0.14.1."""
     return bool(block.get("start")) and len(list(block.get("days") or [])) == 1
@@ -141,6 +157,9 @@ def build_month(
             if label not in seen:
                 seen.append(label)
         due_items = due_by_date[label]
+        on_date = sessions + locked
+        chips = [_date_block(block) for block in on_date]
+        chips.sort(key=lambda item: (item["start"], item["title"]))
         days_out.append(
             {
                 "date": label,
@@ -149,8 +168,9 @@ def build_month(
                 "due_ids": [item["id"] for item in due_items],
                 "session_count": len(sessions),
                 "locked_count": len(locked),
-                "scheduled_min": sum(int(block["duration_min"]) for block in sessions + locked),
+                "scheduled_min": sum(int(block["duration_min"]) for block in on_date),
                 "focus_min": sum(int(block["duration_min"]) for block in sessions if block.get("completed")),
+                "blocks": chips,
             }
         )
 

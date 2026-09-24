@@ -29,6 +29,13 @@
   passed 1269 tests, including seven rig ownership tests.
   No scenarios, native app code, executable, or remote changed. `spec.md` still
   describes CI as backend-only; the new job extends that behavior.
+- Date: 2026-09-23 (month blocks). Branch `grok/0-15-month-blocks` from
+  `feat/0.15-tabs` at `062f292`. Each date in `GET /api/month` now lists its
+  timed blocks as chips (`id`, `title`, `start`, `duration_min`, `category`,
+  `kind`, `assignment_id`, `repeats`, `pinned`, `completed`). A packed
+  September (5 blocks a day, 175 chips) is 37,206 bytes compact JSON; one
+  week of the same density is 6,911. Source gate: 1278 passed,
+  `scripts/verify.py` green. spec.md was not edited. Nothing pushed.
 - Date: 2026-09-22 (0.15 reach check). Branch `fix/015-rig-reach` from
   `grok/0-15-audit-01` at `841586f`. A partial hours track no longer reports
   00:00 or 24:00 as visible by substituting its own edge. Full source gate:
@@ -579,6 +586,17 @@ Recorded `operation_id` values make a retried write return the first result.
   source gate passed afterward. The next external check is the GitHub Actions
   run after owner review. `spec.md` has the CI description drift noted above.
   Nothing pushed.
+- 2026-09-23, `grok/0-15-month-blocks`: Each `days` entry of `GET /api/month`
+  has `blocks`, the timed work on that date in start then title order. A
+  repeating block keeps one id on each of its dates with `repeats` true.
+  Homework with a time carries `assignment_id`; homework without a time is
+  absent. A chip looks like
+  `{"id": "school", "title": "School", "start": "08:00", "duration_min": 390,
+  "category": "School", "kind": "locked", "assignment_id": null, "repeats": true,
+  "pinned": false, "completed": false}`. Busy September 37,206 bytes / 175
+  chips. Desktop was not edited; `month_cells` already reads `day["blocks"]`.
+  Gate: 1278 passed. spec.md was not edited. Nothing pushed. Claude reviews
+  before it lands.
 
 - 2026-09-23, `grok/0-15-month-weeks`: Unit 8. `NativeSession.move_to_date(block_id, from_iso, to_iso) -> bool` moves a block to another date. Same week keeps the time; another week writes both documents through `POST /api/changes` in one Undo step. A repeating block moves only that day. Homework keeps its pin. The open week does not change until the reply. `date_problem` is the same `span_problem` words for a held chip. No backend change. Gate: 1261 passed, `scripts/verify.py` green. spec.md was not edited. Nothing pushed. Window still holds the Month placeholder; Unit 9 can call `move_to_date`.
 

@@ -5,6 +5,10 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- Month names every timed block on a date, so weeks other than the open one
+  can show their chips.
+
 ### Changed
 - Homework is due on a date. Tick "At a set time" only when it is due at a
   time that day, such as a 09:00 lesson; otherwise it is due by the end of the
