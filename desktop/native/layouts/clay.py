@@ -251,10 +251,10 @@ class ClayDeckView(LayoutView):
         self._root.setSpacing(scene.px(10))
         week = scene.surface != "day"
         day = self.shown_day(scene)
-        title = (
-            "Your week, fanned"
-            if week else f"{DAY_FULL[day]} {scene.week.date_of(day).day} · one day, up close"
-        )
+        if week:
+            title = "Your week, fanned" if scene.options.get("tilt") != "off" else "Your week, laid out"
+        else:
+            title = f"{DAY_FULL[day]} {scene.week.date_of(day).day} · one day, up close"
         heading = QHBoxLayout()
         heading.addWidget(label(title, "clayTitle"))
         heading.addStretch(1)

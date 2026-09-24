@@ -79,7 +79,10 @@ def test_week_is_seven_tilted_live_cards(qapp: QApplication) -> None:
     assert [track.turn for track in hours.tracks] == [-8, -5, -2, 0, 2, 5, 8]
     assert all(track.first == 0 and track.last == 1440 for track in hours.tracks)
     assert hours.block_rect("school", 3) is not None
-    assert [hours.track_at(track.point_for(19 * 60)).day for track in hours.tracks] == list(range(7))
+    for track in hours.tracks:
+        for minute in range(0, 1440, 15):
+            target = hours.track_at(track.point_for(minute + 7))
+            assert target is not None and target.day == track.day, (track.day, minute)
     assert len(view.findChildren(TrayChip)) == 1
 
 
