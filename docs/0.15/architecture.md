@@ -38,24 +38,28 @@ iso)`, `chip_point(block_id, iso)`, `cell_point(iso)` and `reveal(iso)`. All poi
 class MissionView(LayoutView):
     def __init__(self, parent=None, *, hand=None):
         super().__init__(parent, hand=hand)          # the window's hand; never make one
+        self.tray = TrayChip(self.hand, waiting)       # anywhere in the design
 
+    def render(self, scene, week_changed):
         def lanes(area: QRectF) -> list[LinearTrack]:
             tall = area.height() / 7
             return [LinearTrack(day, QRectF(area.left(), area.top() + day * tall, area.width(), tall),
                                 Axis.ACROSS) for day in range(7)]
 
-        self.week = HoursCanvas(self.hand, MissionPainter(tokens), lanes, header=24)
-        self.scroll = HoursScroll(self.week, Scale("mission.week", (32, 48, 64, 96), 48),
-                                  lambda px: 24 * px + 16, name="missionWeek", gutter=72,
-                                  axis=Axis.ACROSS)
+        self.week = HoursCanvas(self.hand, MissionPainter(scene.tokens), lanes, header=24)
+        self.week.set_week(scene.week.occurrences, scene.today, scene.minute)
+        # Made here, not in __init__: the window hands a design the remembered levels after making it.
+        self.scroll = self.keep_zoom(HoursScroll(self.week, Scale("mission.week", (32, 48, 64, 96), 48),
+                                                 lambda px: 24 * px + 16, name="missionWeek",
+                                                 gutter=72, axis=Axis.ACROSS))
         self.scroll.set_header(lane_names)             # stays beside the lanes while hours scroll
-        self.tray = TrayChip(self.hand, waiting)       # anywhere in the design
 
-    # render(scene): self.week.set_week(scene.week.occurrences, scene.today, scene.minute)
     # Month: keep calling render_month; it shows MonthGrid in this design's tokens.
 ```
 
-`LayoutView.hours_surfaces()` and `month_surfaces()` already list every visible surface for the rig.
+`LayoutView.hours_surfaces()` and `month_surfaces()` already list every visible surface for the rig,
+and `keep_zoom` opens a design's hours at the level this device last chose and hands a new one to the
+window to keep.
 A design never writes a threshold, a snap, a judge, a save or a `QDrag`;
 `scripts/mutations/targets.json` proves the shared rules were not copied.
 
