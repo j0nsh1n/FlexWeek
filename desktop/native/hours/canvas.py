@@ -219,18 +219,12 @@ class BlockPainter:
         painter.drawText(
             QRectF(room.left(), room.top(), room.width(), line), Qt.AlignmentFlag.AlignLeft, name
         )
-        painter.setFont(plain)
         faint = QColor(ink)
         faint.setAlphaF(0.8)
         refused = drawn.verdict is not None and not drawn.verdict.ok
         painter.setPen(self.c("error") if refused else faint)
         below = QRectF(room.left(), room.top() + line + 1, room.width(), room.height() - line - 1)
-        metrics = QFontMetricsF(plain)
-        for index, text in enumerate(fit_lines(detail, plain, below.width(), below.height())):
-            box = QRectF(
-                below.left(), below.top() + index * metrics.lineSpacing(), below.width(), metrics.height()
-            )
-            painter.drawText(box, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, text)
+        _write_lines(painter, detail, plain, below)
 
     def ghost(self, painter: QPainter, rect: QRectF, words: str, ok: bool) -> None:
         """Something about to be made: a tinted block where it would go, with its times."""
@@ -242,13 +236,8 @@ class BlockPainter:
         painter.drawRoundedRect(rect, 5, 5)
         bold = QFont(painter.font())
         bold.setBold(True)
-        painter.setFont(bold)
         painter.setPen(self.c("text"))
-        painter.drawText(
-            rect.adjusted(8, 3, -6, -3),
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap,
-            words,
-        )
+        _write_lines(painter, words, bold, rect.adjusted(8, 3, -6, -3))
 
     def hint(self, painter: QPainter, rect: QRectF, big: bool) -> None:
         """The free time under the pointer, lit, with how to use it."""
@@ -317,6 +306,15 @@ def _fresh(painter: QPainter) -> Iterator[None]:
         yield
     finally:
         painter.restore()
+
+
+def _write_lines(painter: QPainter, text: str, font: QFont, room: QRectF) -> None:
+    """`text` in the whole lines that fit `room`, from its top left."""
+    painter.setFont(font)
+    metrics = QFontMetricsF(font)
+    for index, line in enumerate(fit_lines(text, font, room.width(), room.height())):
+        box = QRectF(room.left(), room.top() + index * metrics.lineSpacing(), room.width(), metrics.height())
+        painter.drawText(box, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, line)
 
 
 def _small(font: QFont) -> QFont:

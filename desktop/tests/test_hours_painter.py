@@ -17,7 +17,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QRect, QRectF
-    from PySide6.QtGui import QFont, QFontMetricsF, QPainter
+    from PySide6.QtGui import QColor, QFont, QFontMetricsF, QImage, QPainter
     from PySide6.QtWidgets import QApplication, QWidget
 
     from desktop.native.hours.canvas import BlockPainter, Drawn, HoursCanvas, fit_lines
@@ -83,6 +83,39 @@ def test_a_word_wider_than_the_room_is_shortened_and_the_rest_still_follows(qapp
 def test_no_room_for_a_whole_line_gives_nothing(qapp: QApplication) -> None:
     font = QFont()
     assert fit_lines(DETAIL, font, 400, QFontMetricsF(font).height() - 1) == []
+
+
+def test_a_short_ghost_shows_only_whole_lines(qapp: QApplication) -> None:
+    """A new block too short for its times on two lines says one line, shortened, rather than two
+    with the second cut in half by its bottom edge."""
+    font = QFont()
+    bold = QFont(font)
+    bold.setBold(True)
+    metrics = QFontMetricsF(bold)
+    words = "Thu 16:00–17:30 · 1 h 30 min"
+    # The ghost writes 8 px in from its left, 6 from its right and 3 from its top and bottom.
+    rect = QRectF(10, 10, metrics.horizontalAdvance("Thu 16:00–17:30") + 16, 1.5 * metrics.lineSpacing() + 6)
+    room = rect.adjusted(8, 3, -6, -3)
+
+    def ghost(text: str) -> QImage:
+        image = QImage(240, 120, QImage.Format.Format_ARGB32)
+        image.fill(QColor("white"))
+        painter = QPainter(image)
+        painter.setFont(font)
+        BlockPainter(resolved_palette("system", False, None)).ghost(painter, rect, text, True)
+        painter.end()
+        return image
+
+    written, blank = ghost(words), ghost("")
+    inked = [
+        y
+        for y in range(int(room.top()), int(room.bottom()) + 1)
+        for x in range(int(room.left()), int(room.right()) + 1)
+        if written.pixel(x, y) != blank.pixel(x, y)
+    ]
+    assert inked, "the ghost says nothing"
+    second = room.top() + metrics.lineSpacing()
+    assert max(inked) < second, f"a line starting at y {second:.0f} is cut at the ghost's bottom edge"
 
 
 HOSTS: list = []
