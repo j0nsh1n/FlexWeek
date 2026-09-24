@@ -119,14 +119,48 @@ def test_a_date_lists_what_is_due_then_its_blocks_at_their_times() -> None:
         {"id": "run", "title": "Run", "start": "07:00", "duration_min": 30, "category": "exercise"},
     ]
     unsaved = {**ESSAY, "start": "20:15"}
-    cells = {
-        cell.iso: cell for cell in month_cells(snapshot, build_week(MONDAY, [unsaved, SCHOOL], {}, None), "")
-    }
+    week = build_week(MONDAY, [unsaved, SCHOOL], {}, None)
+    cells = {cell.iso: cell for cell in month_cells(snapshot, {MONDAY: week}, "")}
     assert [chip.words for chip in cells["2026-09-24"].chips] == ["08:00 School", "20:15 History essay"]
     assert [chip.words for chip in cells["2026-09-27"].chips] == ["Due History essay"]
     assert [chip.words for chip in cells["2026-09-28"].chips] == ["07:00 Run", "18:00 Piano"]
     assert [chip.words for chip in cells["2026-09-29"].chips] == ["Due 09:00 French oral"]
     assert [chip.carried for chip in cells["2026-09-29"].chips] == [False], "a deadline is not carried"
+
+
+def test_a_week_left_unsaved_is_drawn_as_the_student_has_it() -> None:
+    """A week the student changed and left without saving is drawn from those changes, as the open
+    week is; a week with none still comes from the month reply."""
+    snapshot = september()
+    replied = {
+        "2026-10-01": [{"id": "essay-1", "title": "History essay", "start": "19:00", "duration_min": 60}],
+        "2026-09-24": [{"id": "essay-1", "title": "History essay", "start": "19:00", "duration_min": 60}],
+        "2026-09-17": [{"id": "piano", "title": "Piano", "start": "18:00", "duration_min": 45}],
+    }
+    for day in snapshot["days"]:
+        day["blocks"] = replied.get(day["date"], [])
+    open_week = build_week(MONDAY, [ESSAY], {}, None)
+    left = build_week("2026-09-28", [{**ESSAY, "start": "20:15"}], {}, None)
+    cells = {cell.iso: cell for cell in month_cells(snapshot, {MONDAY: open_week, "2026-09-28": left}, "")}
+    assert [chip.words for chip in cells["2026-10-01"].chips] == ["20:15 History essay"]
+    assert [chip.words for chip in cells["2026-09-24"].chips] == ["19:00 History essay"]
+    assert [chip.words for chip in cells["2026-09-17"].chips] == ["18:00 Piano"]
+
+
+def test_the_grid_draws_the_open_week_and_the_weeks_left_unsaved(qapp: QApplication) -> None:
+    snapshot = september()
+    for day in snapshot["days"]:
+        if day["date"] == "2026-10-01":
+            day["blocks"] = [
+                {"id": "essay-1", "title": "History essay", "start": "19:00", "duration_min": 60}
+            ]
+    grid = MonthGrid()
+    grid.set_week(build_week(MONDAY, [ESSAY], {}, None))
+    grid.set_month(snapshot, True)
+    assert grid.canvas.chip_words("essay-1", "2026-10-01") == "19:00 History essay"
+    grid.set_unsaved({"2026-09-28": build_week("2026-09-28", [{**ESSAY, "start": "20:15"}], {}, None)})
+    assert grid.canvas.chip_words("essay-1", "2026-10-01") == "20:15 History essay"
+    assert grid.canvas.chip_words("essay-1", "2026-09-24") == "19:00 History essay"
 
 
 def test_a_chip_carried_to_another_date_is_one_date_move(qapp: QApplication) -> None:
@@ -173,7 +207,6 @@ def test_a_deadline_is_not_carried(qapp: QApplication) -> None:
     stage.carry(start, stage.canvas.cell_point("2026-09-30"), lambda: held.append(stage.hand.busy))
     assert held == [False], "nothing is picked up: moving a deadline is editing the homework"
     assert stage.said == []
-
 
 
 def test_a_dates_own_point_is_on_the_date_and_on_none_of_its_chips(qapp: QApplication) -> None:

@@ -92,7 +92,7 @@ from desktop.native.reuse import (
     unfinished_items,
     week_label,
 )
-from desktop.native.weekmodel import due_label, length_label
+from desktop.native.weekmodel import WeekModel, build_week, due_label, length_label
 
 
 def plan_sentence(placed: int, waiting: int) -> str:
@@ -1029,6 +1029,15 @@ class NativeSession(QObject):
             return {"blocks": parked["blocks"], "revision": parked["revision"]}
         return None
 
+    def unsaved_weeks(self) -> dict[str, WeekModel]:
+        """Weeks other than the open one that the student changed and left without saving, as they
+        have them now, by their Monday."""
+        return {
+            week_start: build_week(week_start, parked["blocks"], parked["assignments"], parked["trace"])
+            for week_start, parked in self._drafts.items()
+            if parked["dirty"]
+        }
+
     def _block_on_week(self, block_id: str, week_start: str) -> dict | None:
         state = self._week_local(week_start)
         if state is None:
@@ -1057,9 +1066,7 @@ class NativeSession(QObject):
         start = hhmm_to_minutes(block["start"])
         assignment = self.assignments.get(block.get("assignment_id") or "")
         due = due_point((assignment or {}).get("due"), to_week)
-        problem = span_problem(
-            [], block_id, to_day, start, start + int(block["duration_min"]), due
-        )
+        problem = span_problem([], block_id, to_day, start, start + int(block["duration_min"]), due)
         if problem:
             self._say(problem)
             return False

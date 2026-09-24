@@ -82,5 +82,47 @@
   "old": "        if scene.month and scene.iso_day and opened != getattr(self, \"_month_revealed\", None):\n",
   "new": "        if scene.month and scene.iso_day:\n",
   "test": "desktop/tests/test_layout_drag.py::test_a_designs_month_stays_where_the_student_scrolled_it_through_a_refresh"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "classic Month ignores weeks left unsaved",
+  "old": "        self.month_grid.set_unsaved(self.session.unsaved_weeks())\n",
+  "new": "",
+  "test": "desktop/tests/test_layout_drag.py::test_month_draws_a_week_left_unsaved_as_the_student_has_it[classic]"
+ },
+ {
+  "file": "desktop/native/layouts/base.py",
+  "name": "a design's Month ignores weeks left unsaved",
+  "old": "        board.set_unsaved(scene.unsaved_weeks)\n",
+  "new": "",
+  "test": "desktop/tests/test_layout_drag.py::test_month_draws_a_week_left_unsaved_as_the_student_has_it[timeline]"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the scene carries no weeks left unsaved",
+  "old": "            unsaved_weeks=session.unsaved_weeks(),\n",
+  "new": "",
+  "test": "desktop/tests/test_layout_drag.py::test_month_draws_a_week_left_unsaved_as_the_student_has_it[timeline]"
+ },
+ {
+  "file": "desktop/native/hours/month.py",
+  "name": "the grid drops the weeks left unsaved",
+  "old": "        weeks = dict(self._unsaved)\n",
+  "new": "        weeks = {}\n",
+  "test": "desktop/tests/test_hours_month.py::test_the_grid_draws_the_open_week_and_the_weeks_left_unsaved"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the judge gets no start from the month reply",
+  "old": "            start=chip.get(\"start\"),\n",
+  "new": "",
+  "test": "desktop/tests/test_layout_drag.py::test_a_chip_from_a_week_that_is_not_open_is_judged_by_its_own_time_and_homework"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the judge gets no homework from the month reply",
+  "old": "            assignment_id=chip.get(\"assignment_id\"),\n",
+  "new": "",
+  "test": "desktop/tests/test_layout_drag.py::test_a_chip_from_a_week_that_is_not_open_is_judged_by_its_own_time_and_homework"
  }
 ]

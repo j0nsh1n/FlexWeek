@@ -655,3 +655,54 @@ def test_a_designs_month_stays_where_the_student_scrolled_it_through_a_refresh(
         qapp.processEvents()
     assert board.canvas.index_of(window.session.selected_day) is not None
     assert bar.value() == chosen
+
+
+def open_month_of(qapp: QApplication, window: NativeWindow, iso: str) -> None:
+    window.session.open_month(iso[:7])
+    wait_until(qapp, lambda: window.session.month_data is not None and not window.session.busy)
+    for _ in range(10):
+        qapp.processEvents()
+
+
+@pytest.mark.parametrize("design", ["classic", "timeline"])
+def test_month_draws_a_week_left_unsaved_as_the_student_has_it(
+    qapp: QApplication, window: NativeWindow, design: str
+) -> None:
+    """The essay moved to 20:15 and its week left without saving. Month showed it at 19:00, where the
+    server has it, and a chip there could be picked up and then refused."""
+    session = window.session
+    essay = session_of(window, "essay")
+    first = date.fromisoformat(session.week_start)
+    thursday = (first + timedelta(days=3)).isoformat()
+    assert session.apply_times(essay["id"], 20 * 60 + 15, 21 * 60 + 15, 3) is True
+    session.load_week((first + timedelta(days=7)).isoformat())
+    wait_until(qapp, lambda: not session.busy and session.week_start != first.isoformat())
+    assert not session.dirty, "the week now open has no changes; the one left behind has"
+    if design == "classic":
+        canvas = window.month_grid.canvas
+    else:
+        view = use(qapp, window, design)
+    open_month_of(qapp, window, thursday)
+    if design != "classic":
+        board = view.findChild(QWidget, "layoutMonthBoard")
+        assert board is not None and board.isVisible()
+        canvas = board.canvas
+    assert canvas.chip_words(essay["id"], thursday) == "20:15 History essay"
+
+
+def test_a_chip_from_a_week_that_is_not_open_is_judged_by_its_own_time_and_homework(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """The essay is due on Sunday. With another week open, Month let its chip onto the Monday after,
+    because the rule had no time or homework to judge it by."""
+    session = window.session
+    essay = session_of(window, "essay")
+    first = date.fromisoformat(session.week_start)
+    thursday = (first + timedelta(days=3)).isoformat()
+    session.load_week((first + timedelta(days=7)).isoformat())
+    wait_until(qapp, lambda: not session.busy and session.week_start != first.isoformat())
+    open_month_of(qapp, window, thursday)
+    late = window._date_judge(essay["id"], thursday, (first + timedelta(days=7)).isoformat())
+    fine = window._date_judge(essay["id"], thursday, (first + timedelta(days=5)).isoformat())
+    assert (late.ok, late.words) == (False, "That ends after it is due, so it stayed where it was.")
+    assert (fine.ok, fine.words) == (True, "")
