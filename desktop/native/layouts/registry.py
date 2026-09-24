@@ -85,7 +85,7 @@ LAYOUTS: dict[str, LayoutSpec] = {
             "timeline",
             "plan",
             "Timeline",
-            "One day as a column, the week as a strip of load bars.",
+            "One day as a ruled page, and the week as seven lines of hours down the page.",
             (
                 _colour(TIMELINE),
                 Option(
