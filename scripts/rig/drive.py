@@ -1473,6 +1473,7 @@ def main() -> int:
     # the core protocol, and the zoom scenarios turn the wheel. Presses and drags arrive either way.
     env.update(
         DISPLAY=display,
+        DBUS_SESSION_BUS_ADDRESS=hidden_session.bus(),
         QT_QPA_PLATFORM="xcb",
         QT_XCB_NO_XI2="1",
         XDG_DATA_HOME=str(out / "data"),
