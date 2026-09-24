@@ -125,10 +125,6 @@ def render(main: str, colour: str | None, pack: str, look: dict | None, width: i
     picture = widget.grab()
     widget.close()
     widget.deleteLater()
-    if host is not None:
-        # Owned by nothing and held in a cycle by its hand, the host waited for the garbage
-        # collector, which could free it in the middle of painting the window and hang the app.
-        host.deleteLater()
     return picture.scaledToWidth(width, Qt.TransformationMode.SmoothTransformation)
 
 

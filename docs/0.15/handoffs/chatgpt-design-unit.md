@@ -45,8 +45,8 @@ Start from `feat/0.15-tabs`:
 6. Month is shared: `LayoutView.render_month` shows `MonthGrid` (`desktop/native/hours/month.py`) in
    the design's colour tokens, with chips carried by the window's hand. Keep calling it; do not draw
    a month of your own. If a concept's Month needs something the grid cannot do, say so in the report.
-7. Delete that design's old drag code as you go: its `Lift`, `Pickup`, `Zone` and drawer use, and
-   set `uses_drawer = False`. No `QDrag` anywhere in the design.
+7. No gesture code and no system drag and drop: `test_hours_targets.py` fails if `QDrag`,
+   `QMimeData`, `setAcceptDrops` or `dropEvent` appears anywhere in `desktop/native`.
 8. A tray's heading leads with plain words, "No time yet" or "Not placed yet", with the themed name
    second. A student must know what the tray holds. This came from a check of the mock-up's labels.
 9. What Mission's review found, so it is not found again. `desktop/native/layouts/mission.py` is the

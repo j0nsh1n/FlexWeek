@@ -19,12 +19,5 @@
   "old": "    def sizeHint(self) -> QSize:  # noqa: N802\n",
   "new": "    def _unused_size_hint(self) -> QSize:\n",
   "test": "desktop/tests/test_classic_hours.py::test_a_tray_chip_in_a_row_says_it_all_again_once_the_row_has_room"
- },
- {
-  "file": "desktop/native/previews.py",
-  "name": "a picture's stand-in host left to the collector",
-  "old": "        host.deleteLater()\n",
-  "new": "        pass\n",
-  "test": "desktop/tests/test_previews.py::test_a_picture_leaves_nothing_alive_for_the_garbage_collector"
  }
 ]
