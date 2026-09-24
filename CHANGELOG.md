@@ -42,6 +42,10 @@ All notable changes to FlexWeek are documented here. Format follows
   two buttons above the hours. Each remembers how close it was on this
   computer. A short block can be picked up from its middle at any zoom.
 
+### Removed
+- No side drawer of a day's hours opens while a block is dragged in Timeline,
+  Bento, Retro desktop or Clay deck. Each design has its own hours to drop on.
+
 ### Fixed
 - Hours no longer jump back to the morning after a save in a design that keeps
   them between redraws, and pressing Tab no longer scrolls them to their middle.

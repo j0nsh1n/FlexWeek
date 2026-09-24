@@ -153,6 +153,17 @@ storage, CI). Each unit ends green on the rig, on the source gate, and with its 
     mouse events and by the rig's `--tab myday` (move, refusal after due, open) on both screens.
     No engine change.*
 16. **Delete the old path.** Drawer, `QDrag` helpers, the old canvas, any fallback. Owner: Claude.
+    *Done 24 September on `claude/0-15-delete-old`. Gone: `layouts/drag.py`, `layouts/drawer.py`,
+    `canvas.py` (the old `Timeline` and `WeekCanvas`; nothing else used the module), the drawer, drop
+    bubble, judge, edge scroll and drag events on `LayoutView`, every `uses_drawer`, the unused
+    `block_button` and `WaitingChip`, and the window's `placement_requested` wiring and
+    `_drop_block`. About 1,580 lines of app code and 490 of tests. Tests of behaviour a student
+    still has moved onto the engine: the Blocks look knob and the week-model agreement read Today's
+    app's week on `HoursCanvas`, a drop after the due date goes through the window's hand and judge,
+    and homework carried off the hours places nothing. `test_nothing_in_the_app_uses_system_drag_and_drop`
+    keeps `QDrag`, `QMimeData`, `setAcceptDrops` and `dropEvent` out of `desktop/native/`. The
+    pytest step took 273 s of its 300. Rig: classic Day 14/14, Week 17/17, Month 9/9; Timeline,
+    Retro, Bento, Mission and Clay Day 14/14 and Week 17/17 each; One thing and Day dial My day 3/3.*
 17. **Docs and release evidence.** Architecture, spec (with Jonathan's approval), changelog, release
     notes, videos, supervised checks. Owner: Claude, drafts from GLM.
 
