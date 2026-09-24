@@ -29,7 +29,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QByteArray, QEvent, QMimeData, QPoint, QPointF, QStandardPaths, Qt
     from PySide6.QtGui import QDragEnterEvent, QDragLeaveEvent, QDragMoveEvent, QDropEvent
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QDialog, QPushButton, QVBoxLayout, QWidget
+    from PySide6.QtWidgets import QApplication, QPushButton, QVBoxLayout, QWidget
 
     from desktop.native.calendar import sunday_due
     from desktop.native.canvas import Timeline
@@ -42,13 +42,13 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.layouts.registry import sanitize_layout
     from desktop.native.layouts.views import VIEW_CLASSES
     from desktop.native.look import resolved_palette
-    from desktop.native.widgets import SESSION_MIME, HomeworkDialog
+    from desktop.native.widgets import SESSION_MIME
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
     from desktop.tests.logic_support import past_setup
 
 PASSWORD = "a-long-test-password"
-DRAWER_VIEWS = ("timeline", "bento", "retro")
+DRAWER_VIEWS = ("bento", "retro")
 
 
 @pytest.fixture(scope="module")
@@ -287,7 +287,7 @@ def test_clay_week_day_name_opens_the_day_without_placing_homework(
     assert placed(window, "math")[1] is None
 
 
-@pytest.mark.parametrize("main", ("mission",))
+@pytest.mark.parametrize("main", ("mission", "timeline"))
 def test_a_design_with_its_own_hours_opens_no_drawer(
     qapp: QApplication, window: NativeWindow, main: str
 ) -> None:
@@ -347,50 +347,6 @@ def test_one_thing_puts_the_thing_later_along_the_day_bar(qapp: QApplication, wi
     assert let_go(qapp, bar, point, session_of(window, "essay")["id"], from_day=3) == "Thu 20:30–21:30 · 1 h"
     settled(qapp, window)
     assert placed(window, "essay") == ([3], "20:30", True)
-
-
-def recording_lifts(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, int, int]]:
-    lifted: list[tuple[str, int, int]] = []
-    monkeypatch.setattr(
-        drag,
-        "start_drag",
-        lambda view, block_id, grab=0, from_day=-1: lifted.append((block_id, grab, from_day)),
-    )
-    # A click opens the homework editor, which would wait for a student to close it.
-    monkeypatch.setattr(HomeworkDialog, "exec", lambda _dialog: QDialog.DialogCode.Rejected)
-    return lifted
-
-
-def test_pressing_and_moving_picks_a_block_up_and_a_click_still_opens_it(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    lifted = recording_lifts(monkeypatch)
-    view = use(qapp, window, "timeline")
-    essay_id = session_of(window, "essay")["id"]
-    card = named(view, "timelineRow1")
-    QTest.mousePress(card, Qt.MouseButton.LeftButton, pos=middle(card))
-    QTest.mouseMove(card, middle(card) + QPoint(30, 0))
-    QTest.mouseRelease(card, Qt.MouseButton.LeftButton, pos=middle(card) + QPoint(30, 0))
-    assert lifted == [(essay_id, 0, 3)], "lifted off Thursday, so only Thursday's copy would move"
-    opened: list[str] = []
-    view.block_activated.connect(opened.append)
-    QTest.mouseClick(card, Qt.MouseButton.LeftButton, pos=middle(card))
-    assert opened == [essay_id] and len(lifted) == 1
-
-
-def test_a_redraw_during_a_drag_waits_for_the_drop(qapp: QApplication, window: NativeWindow) -> None:
-    """A redraw mid-drag would delete what the drag started on. The minute ticking over redraws."""
-    view = use(qapp, window, "timeline")
-    card = named(view, "timelineRow1")
-    view.drag_began()
-    later = window.session.now_ms() + 60_000
-    window.session.now_ms = lambda: later
-    window._refresh_layout()
-    qapp.processEvents()
-    assert named(view, "timelineRow1") is card
-    view.drag_ended()
-    qapp.processEvents()
-    assert view.findChild(QWidget, "timelineRow1") is not card
 
 
 def test_a_drop_while_a_save_is_under_way_lands_once_it_is_done(
