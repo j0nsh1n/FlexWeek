@@ -617,3 +617,68 @@ def test_tab_moves_the_focus_on_and_leaves_the_hours_where_they_are(qapp: QAppli
         f"after Tab the lanes start at {int(at) // 60:02d}:{int(at) % 60:02d}"
     )
     assert QApplication.focusWidget() is not scroll.canvas, "Tab left the focus on the hours"
+
+
+def test_resting_at_the_edge_of_the_page_around_the_lanes_scrolls_the_page(qapp: QApplication) -> None:
+    """Timeline's week: lanes that scroll sideways on a page that scrolls down when the window is
+    short. Resting at the page's bottom edge over the lanes scrolls the page, which the lanes cannot,
+    so a block can be carried to a day below the fold; resting at the lanes' right edge still scrolls
+    the lanes."""
+    import time
+
+    from PySide6.QtWidgets import QScrollArea, QVBoxLayout
+
+    scroll = a_lane_week(qapp)
+    scroll.canvas.set_week(
+        build_week(MONDAY, [{**ESSAY, "days": [1], "start": "10:00"}], {}, None).occurrences
+    )
+    content = QWidget()
+    column = QVBoxLayout(content)
+    column.setContentsMargins(0, 0, 0, 0)
+    column.addWidget(scroll)
+    scroll.setFixedHeight(420)
+    page = QScrollArea()
+    HOSTS.append(page)
+    page.setWidgetResizable(True)
+    page.setWidget(content)
+    page.move(0, 0)
+    page.resize(760, 250)
+    page.show()
+    settle(qapp)
+    scroll.scroll_to(10 * 60)
+    settle(qapp)
+    down, across = page.verticalScrollBar(), scroll.horizontalScrollBar()
+    assert down.maximum() > 0 and down.value() == 0, "the page is too short for the lanes"
+    assert 0 < across.value() < across.maximum(), "the lanes can scroll on through the day"
+
+    canvas = scroll.canvas
+    held = Qt.MouseButton.LeftButton
+
+    def send(kind: QEvent.Type, at: QPoint) -> None:
+        event = QMouseEvent(
+            kind, QPointF(canvas.mapFromGlobal(at)), QPointF(at), held, held, Qt.KeyboardModifier.NoModifier
+        )
+        QApplication.sendEvent(canvas, event)
+
+    def rest(at: QPoint, moved) -> None:
+        send(QEvent.Type.MouseMove, at)
+        deadline = time.monotonic() + 1.5
+        while time.monotonic() < deadline and not moved():
+            qapp.processEvents()
+
+    start = canvas.point_for(1, 10 * 60 + 30)
+    send(QEvent.Type.MouseButtonPress, start)
+    send(QEvent.Type.MouseMove, start + QPoint(20, 0))
+    assert canvas.hand.preview is not None, "the essay was not picked up"
+    middle = scroll.viewport().width() // 2
+    bottom = page.viewport().mapToGlobal(QPoint(0, page.viewport().height() - 10)).y()
+    rest(QPoint(scroll.viewport().mapToGlobal(QPoint(middle, 0)).x(), bottom), lambda: down.value() > 0)
+    assert down.value() > 0, "rested at the page's bottom edge over the lanes: the page scrolls down"
+
+    port = page.viewport()
+    right = scroll.viewport().mapToGlobal(QPoint(scroll.viewport().width() - 10, 0)).x()
+    was = across.value()
+    rest(QPoint(right, port.mapToGlobal(QPoint(0, port.height() // 2)).y()), lambda: across.value() > was)
+    assert across.value() > was, "rested at the lanes' right edge: the lanes scroll on"
+    send(QEvent.Type.MouseButtonRelease, start)
+    canvas.hand.cancel()

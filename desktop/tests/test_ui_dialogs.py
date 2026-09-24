@@ -455,3 +455,86 @@ def test_a_due_time_is_shown_and_can_be_taken_away(qapp: QApplication) -> None:
     untimed.due.timed.setChecked(False)
     untimed.accept()
     assert untimed.assignment()["due"] == "2026-09-17"
+
+
+def _dialog_classes() -> set[type]:
+    from PySide6.QtWidgets import QDialog
+
+    import desktop.native.window  # noqa: F401 - brings in every module that defines a dialog
+
+    found, waiting = set(), [QDialog]
+    while waiting:
+        for kind in waiting.pop().__subclasses__():
+            waiting.append(kind)
+            if kind.__module__.startswith("desktop.native."):
+                found.add(kind)
+    return found
+
+
+def test_every_dialog_is_freed_once_it_has_closed_and_is_let_go(qapp: QApplication) -> None:
+    """PySide gives an exec()'d dialog to Python, to be freed with its last reference. A button
+    wired to a lambda that named the dialog kept that reference inside Qt, where the garbage
+    collector cannot reach it, so the dialog outlived its use. At quit PySide then deleted it and the
+    window it belongs to one after the other, and FlexWeek crashed on the way out: "shared QObject
+    was deleted directly", then a bus error."""
+    import gc
+    import weakref
+
+    from PySide6.QtCore import QTimer
+
+    from desktop.native import settings, widgets
+
+    homework = {"id": "essay", "title": "Essay", "due": "2026-09-27T23:59", "estimate_min": 60, "revision": 0}
+    pasted = {
+        "block": school(id="copy", days=[2], start="16:00", duration_min=60),
+        "day": 2,
+        "fixed": True,
+        "checked": True,
+    }
+    made = {
+        widgets.BlockDialog: [lambda host: widgets.BlockDialog(host, school(), occurrence_day=1)],
+        widgets.HomeworkDialog: [
+            lambda host: widgets.HomeworkDialog(host, homework, "2026-09-21", waiting=True, pinned=True),
+            lambda host: widgets.HomeworkDialog(host, None, "2026-09-21"),
+        ],
+        widgets.PreviewDialog: [lambda host: widgets.PreviewDialog(host, "Paste", "", [pasted], [school()])],
+        widgets.ChooseTimeDialog: [
+            lambda host: widgets.ChooseTimeDialog(
+                host, {**homework, "duration_min": 60, "days": [1]}, "2026-09-21", [1, 2], [school()], None, 1
+            )
+        ],
+        widgets.RoutineDialog: [lambda host: widgets.RoutineDialog(host, {}, [school()], "2026-09-21")],
+        widgets.LateDialog: [lambda host: widgets.LateDialog(host, "School")],
+        widgets.SpreadDialog: [
+            lambda host: widgets.SpreadDialog(host, {**homework, "unplanned_min": 120}, "2026-09-21")
+        ],
+        widgets.AvailabilityDialog: [lambda host: widgets.AvailabilityDialog(host, {}, ["Math"])],
+        settings.PrefsDialog: [lambda host: settings.PrefsDialog(host, {}, {}, {})],
+        settings.RestoreDialog: [lambda host: settings.RestoreDialog(host, [], None, None)],
+        settings.AccountDialog: [lambda host: settings.AccountDialog(host, 3, {"username": "student"})],
+        settings.AlarmRingDialog: [
+            lambda host: settings.AlarmRingDialog(host, {"name": "Wake up", "time": "06:45"}, "")
+        ],
+        settings.TransferPreviewDialog: [lambda host: settings.TransferPreviewDialog(host, {})],
+        settings.UpdateDialog: [
+            lambda host: settings.UpdateDialog(host, {"version": "9.9.9", "notes": "", "url": ""}, "0.13.0")
+        ],
+    }
+    assert set(made) == _dialog_classes(), "a dialog is missing here: add a way to make it"
+    host = QWidget()
+    host.show()
+    kept = []
+    for kind, makers in made.items():
+        for make in makers:
+            dialog = make(host)
+            QTimer.singleShot(0, dialog.reject)
+            dialog.exec()
+            gone = weakref.ref(dialog)
+            del dialog
+            gc.collect()
+            if gone() is not None:
+                kept.append(kind.__name__)
+                gone().deleteLater()
+                qapp.processEvents()
+    host.deleteLater()
+    assert kept == [], f"still alive after closing and being let go: {kept}"

@@ -110,5 +110,12 @@
   "old": "        if isinstance(at, QPointF):\n            along = at.y() if self._down else at.x()\n",
   "new": "        if isinstance(at, QPointF):\n            along = at.y()\n",
   "test": "desktop/tests/test_hours_zoom.py::test_lanes_zoom_about_the_pointer_and_the_plain_wheel_moves_them_through_the_day"
+ },
+ {
+  "file": "desktop/native/hours/hand.py",
+  "name": "only the nearest scroll area scrolls at its edge",
+  "old": "            if direction != (0, 0):\n                return widget, direction\n",
+  "new": "            return (widget, direction) if direction != (0, 0) else None\n",
+  "test": "desktop/tests/test_hours_zoom.py::test_resting_at_the_edge_of_the_page_around_the_lanes_scrolls_the_page"
  }
 ]

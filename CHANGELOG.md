@@ -54,6 +54,13 @@ All notable changes to FlexWeek are documented here. Format follows
   across, as it does in columns. Text no longer gets smaller from one block to
   the next down a day.
 - The words beside a held block stay on screen when hours run across.
+- Holding a block at the bottom of Timeline's Week scrolls the page down to the
+  days below, as it scrolls the hours along at their right-hand edge.
+- FlexWeek no longer crashes as it quits after homework waiting for a time or
+  pinned, Settings, Account, or a paste preview was opened.
+- A block that cannot go where it is held is drawn in red, never in the accent:
+  One thing's two colourways, the High contrast and Poster looks, and Bento's
+  Sunset had a danger colour equal or close to their accent.
 - Mission control no longer draws an extra initial over the shortened words
   on half-hour blocks in Week. Quarter-hour blocks still show an initial when
   their words do not fit.

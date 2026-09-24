@@ -636,7 +636,7 @@ class PrefsDialog(QDialog):
             self.start_at_login,
         ):
             check.toggled.connect(self._announce)
-        self.planning_style.buttonToggled.connect(lambda _button, on: on and self._announce())
+        self.planning_style.buttonToggled.connect(self._style_toggled)
         self.spotify.editingFinished.connect(self.changed.emit)
         for section in self.layout_sections:
             section.changed.connect(self.changed.emit)
@@ -718,6 +718,10 @@ class PrefsDialog(QDialog):
         """Takes and drops the value a box sends. Wired straight to `changed.emit`, that value made
         every emit raise inside Qt, which swallows it, so nothing showed until Settings closed."""
         self.changed.emit()
+
+    def _style_toggled(self, _button: object, on: bool) -> None:
+        if on:
+            self._announce()
 
     def reject(self) -> None:
         """Closing is the end of any typing, so a length typed while splitting is on is rounded now,
@@ -1046,39 +1050,28 @@ class AccountDialog(QDialog):
         layout.addLayout(form)
         self.setMinimumWidth(ACCOUNT_MIN_WIDTH)
         row = FlowLayout()
-        change = QPushButton("Replace password")
-        change.setObjectName("changePassword")
-        change.clicked.connect(lambda: self._set("password"))
-        codes = QPushButton("Replace recovery codes")
-        codes.setObjectName("replaceCodes")
-        codes.clicked.connect(lambda: self._set("codes"))
-        delete = QPushButton("Delete account")
-        delete.setObjectName("deleteAccount")
-        delete.clicked.connect(lambda: self._set("delete"))
-        export_btn = QPushButton("Export account")
-        export_btn.setObjectName("exportAccount")
-        export_btn.clicked.connect(lambda: self._set("export"))
-        import_btn = QPushButton("Import account")
-        import_btn.setObjectName("importAccount")
-        import_btn.clicked.connect(lambda: self._set("import"))
-        week_btn = QPushButton("Export week")
-        week_btn.setObjectName("exportWeek")
-        week_btn.clicked.connect(lambda: self._set("week"))
-        day_btn = QPushButton("Export day")
-        day_btn.setObjectName("exportDay")
-        day_btn.clicked.connect(lambda: self._set("day"))
-        import_week = QPushButton("Import week or day file")
-        import_week.setObjectName("importFile")
-        import_week.clicked.connect(lambda: self._set("import-week"))
-        for button in (change, codes, delete, export_btn, import_btn, week_btn, day_btn, import_week):
+        for words, name, action in (
+            ("Replace password", "changePassword", "password"),
+            ("Replace recovery codes", "replaceCodes", "codes"),
+            ("Delete account", "deleteAccount", "delete"),
+            ("Export account", "exportAccount", "export"),
+            ("Import account", "importAccount", "import"),
+            ("Export week", "exportWeek", "week"),
+            ("Export day", "exportDay", "day"),
+            ("Import week or day file", "importFile", "import-week"),
+        ):
+            button = QPushButton(words)
+            button.setObjectName(name)
+            button.setProperty("action", action)
+            button.clicked.connect(self._set)
             row.addWidget(button)
         layout.addLayout(row)
         close = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         close.rejected.connect(self.reject)
         layout.addWidget(close)
 
-    def _set(self, action: str) -> None:
-        self.action = action
+    def _set(self) -> None:
+        self.action = self.sender().property("action")
         self.accept()
 
 

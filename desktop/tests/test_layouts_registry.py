@@ -19,7 +19,8 @@ from desktop.native.layouts.registry import (
     sanitize_layout,
     tokens_for,
 )
-from desktop.native.look import ACCENT_COLORS, LOOK_PRESETS, PACKS, contrast, resolved_palette
+from desktop.native.look import ACCENT_COLORS, ACCENTS, LOOK_PRESETS, PACKS, contrast, resolved_palette
+from desktop.tests.test_look import _lab
 
 DESIGNS = [spec.id for spec in LAYOUTS.values() if spec.options]
 
@@ -212,3 +213,29 @@ def test_a_dark_colourway_is_readable_like_any_other() -> None:
         for value, _label, tokens in spec.colourways:
             if relative_luminance(tokens["bg"]) < 0.35:
                 assert contrast_failures(complete(tokens)) == [], (layout_id, value)
+
+
+def test_a_refusal_never_wears_the_accent() -> None:
+    """A held block is outlined and labelled in the accent where it can go and in the danger colour
+    where it cannot. One thing's black scheme had both at #fb923c, so a refusal looked allowed and
+    only its words differed. The gap is in CIE Lab, as the accent and category audit in test_look
+    measures it; two dark reds on Poster sat 15 apart and read as one."""
+    import math
+
+    reached = {
+        f"{layout_id}/{value}": tokens_for(layout_id, value, resolved_palette("light-frost", False, None))
+        for layout_id, spec in LAYOUTS.items()
+        for value, _, _ in spec.colourways
+    }
+    for pack, dark, preset, accent, surface in itertools.product(
+        PACKS, (False, True), LOOK_PRESETS, ACCENTS, ("frost", "flat")
+    ):
+        look = {"preset": preset, "knobs": {"surface": surface}}
+        where = f"match {pack}/{'dark' if dark else 'light'}/{preset}/{accent}"
+        reached[where] = tokens_for("bento", MATCH, resolved_palette(pack, dark, look, accent))
+    close = {
+        where: round(gap, 1)
+        for where, tokens in reached.items()
+        if (gap := math.dist(_lab(tokens["accent"]), _lab(tokens["danger"]))) < 25
+    }
+    assert close == {}
