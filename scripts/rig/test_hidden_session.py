@@ -122,7 +122,10 @@ def test_kwin_uses_private_bus_instead_of_callers(monkeypatch, tmp_path) -> None
     monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/tmp/caller")
     monkeypatch.setattr(hidden, "_start_bus", lambda _env: (FakeProcess(), "unix:path=/tmp/private"))
     monkeypatch.setattr(hidden, "_owned", lambda pid, name: hidden.OwnedProcess(pid, name, 1))
-    monkeypatch.setattr(hidden, "_launch", lambda command, name, env: launched.append((command, name, env)) or FakeProcess())
+    monkeypatch.setattr(
+        hidden, "_launch",
+        lambda command, name, env: launched.append((command, name, env)) or FakeProcess(),
+    )
     monkeypatch.setattr(hidden, "_kwin_display", lambda _pid: ":71")
     monkeypatch.setattr(hidden, "_connects", lambda _display, _env: True)
     monkeypatch.setattr(hidden, "_save", saved.append)

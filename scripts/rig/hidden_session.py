@@ -327,7 +327,11 @@ def _start_xvfb(env: dict[str, str], daemon: OwnedProcess, address: str) -> str:
         display_env = {**env, "DISPLAY": display}
         openbox = _launch(["openbox"], "openbox.log", display_env)
         _wait_for_openbox(display_env, openbox)
-        _save(Session("xvfb", display, (daemon, _owned(xvfb.pid, "Xvfb"), _owned(openbox.pid, "openbox")), address))
+        _save(Session(
+            "xvfb", display,
+            (daemon, _owned(xvfb.pid, "Xvfb"), _owned(openbox.pid, "openbox")),
+            address,
+        ))
         return display
     except BaseException:
         if openbox is not None:

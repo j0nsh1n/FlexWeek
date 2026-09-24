@@ -1,6 +1,20 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-23 (rig private D-Bus), branch `chatgpt/0-15-rig-ci`.
+  Merged `feat/0.15-tabs` at `048814b` (including the private-bus fix at
+  `6525429`) into the checkout-isolated KWin/Xvfb rig. Each hidden session now
+  starts its own no-activation D-Bus before the display server; the bus is an
+  owned process stopped after the servers, and FlexWeek inherits its address.
+  Rig ownership tests 10/10; full source gate 1282 tests, ruff and mypy clean.
+  Live Classic Day on KWin passed 14/14; no desktop-bus name was owned by its
+  PID and the user journal had zero global-shortcut registration failures
+  since launch. Stop removed the private bus socket and owned KWin. A scan of
+  readable same-user process environments found no holder of its address;
+  some older desktop processes deny environment reads. Local Xvfb could not
+  run because the executable is absent; its failed start cleaned up the bus.
+  No executable build, push, PR, or `spec.md` edit. Next: Claude reviews this
+  branch again.
 - Date: 2026-09-23, branch `chatgpt/0-15-rig-ci` from `feat/0.15-tabs`
   at `12456d2`. The pointer rig supports Xvfb with Openbox when KWin is absent;
   a ten-minute CI job runs Classic Day and Week and uploads its artifacts.
@@ -548,6 +562,13 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-23, `chatgpt/0-15-rig-ci`: The rig's per-checkout state now owns a
+  private D-Bus as well as KWin or Xvfb/Openbox. The exact no-activation
+  config from `6525429` is used; KWin and the app inherit its address, and
+  `stop()` waits for each server before the bus. Source gate 1282/1282; live
+  KWin Classic Day 14/14; shortcut-registration failures 0. The private
+  socket and owned KWin were gone after stop. Local Xvfb is unavailable on
+  this host. No build or remote change.
 - 2026-09-23, `chatgpt/0-15-rig-ci`: Xvfb/Openbox and KWin share one hidden
   session interface scoped to each checkout. A concurrent old/new checkout
   pointer run passed 1/1 on each display; simultaneous updated KWin launches
