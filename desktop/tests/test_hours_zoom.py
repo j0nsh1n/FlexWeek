@@ -433,3 +433,39 @@ def test_a_long_blocks_name_stays_in_sight_on_lanes_scrolled_past_its_start(qapp
     ]
     assert inked, "School's bar shows no name in what shows"
     assert min(inked) <= 8, f"School's name starts {min(inked)} px into what shows"
+
+
+def test_lanes_keep_their_time_when_a_design_parks_them_between_renders(qapp: QApplication) -> None:
+    """Mission keeps its hours between renders and parks them on each one: hidden, out of its layout,
+    back in, shown. The canvas still has the focus from the drag just finished, and hiding a scroll
+    area that holds the focus moves it on and scrolls the hours to their middle. They must come back
+    where they were, so the block just moved is still on screen."""
+    from PySide6.QtWidgets import QPushButton, QVBoxLayout
+
+    scroll = a_lane_week(qapp)
+    host = QWidget()
+    HOSTS.append(host)
+    column = QVBoxLayout(host)
+    column.addWidget(scroll)
+    column.addWidget(QPushButton("+ ADD"))
+    host.move(0, 0)
+    host.resize(500, 480)
+    host.show()
+    settle(qapp)
+    scroll.restore({"lanes.week": 96})
+    scroll.scroll_to(19 * 60, above=0)
+    host.activateWindow()
+    assert QTest.qWaitForWindowActive(host)
+    scroll.canvas.setFocus(Qt.FocusReason.MouseFocusReason)
+    settle(qapp)
+    assert QApplication.focusWidget() is scroll.canvas
+    assert 18 * 60 + 45 <= minute_across(scroll, 0) <= 19 * 60 + 15, "19:00 is at the left"
+    scroll.hide()
+    column.removeWidget(scroll)
+    column.insertWidget(0, scroll)
+    scroll.show()
+    settle(qapp)
+    at = minute_across(scroll, 0)
+    assert 18 * 60 + 45 <= at <= 19 * 60 + 15, (
+        f"the lanes came back at {int(at) // 60:02d}:{int(at) % 60:02d}"
+    )

@@ -147,6 +147,7 @@ class HoursScroll(QScrollArea):
         self._length_for = length_for
         self._gutter = gutter
         self._pending: tuple[int, int] | None = None
+        self._kept: float | None = None
         # The header first: the scroll area starts filtering events as soon as it holds the hours.
         self.buttons = ZoomButtons(name)
         self.buttons.out.clicked.connect(lambda: self.zoom_by(-1))
@@ -255,11 +256,24 @@ class HoursScroll(QScrollArea):
             self._pending = None
             self._bar().setValue(round(self._y_for(minute - above)))
 
+    def hideEvent(self, event: object) -> None:  # noqa: N802
+        # Hiding a scroll area that holds the focus moves the focus on, and Qt then centres the
+        # hours on the child that had it. This runs first, so the minute kept is the student's.
+        super().hideEvent(event)
+        self._kept = self._minute_at(self._bar().value())
+
     def showEvent(self, event: object) -> None:  # noqa: N802
+        """Hours shown again start at the minute they started at when hidden, however the design
+        parked them, unless a time was asked for meanwhile."""
         super().showEvent(event)
         self._place_header()
+        kept, self._kept = self._kept, None
         if self._pending is not None:
             self.scroll_to(*self._pending)
+        elif kept is not None:
+            self._lay_out_now()
+            if self.canvas.tracks:
+                self._bar().setValue(round(self._y_for(kept)))
 
     def _minute_at(self, along: float) -> float | None:
         """The minute at a distance along the hours, down or across."""
