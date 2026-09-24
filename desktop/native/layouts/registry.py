@@ -119,17 +119,15 @@ LAYOUTS: dict[str, LayoutSpec] = {
             "bento",
             "plan",
             "Bento",
-            "A home screen of tiles: what is next, deadlines, what has no time yet.",
+            "A live day or week in one big tile, with homework and deadlines beside it.",
             (
                 _colour(BENTO),
                 Option(
                     "corners", "Tile corners", "style", (Choice("soft", "Soft"), Choice("square", "Square"))
                 ),
                 Option(
-                    "tiles",
-                    "Tiles",
-                    "detail",
-                    (Choice("all", "All tiles"), Choice("essentials", "Essentials only")),
+                    "tiles", "Supporting tiles", "detail",
+                    (Choice("all", "All"), Choice("essentials", "Hero and tray only")),
                 ),
             ),
             BENTO,

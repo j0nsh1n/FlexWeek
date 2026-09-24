@@ -555,7 +555,7 @@ def test_summaries_speak_minutes_not_session_counts(qapp: QApplication, window: 
     window._on_week()
     qapp.processEvents()
     shown = labels()
-    assert "1 h planned · 0 done" in shown
+    assert "THIS WEEK · DRAG ACROSS DAYS" in shown
     assert not any(sessions.search(text) for text in shown)
 
     window._layout = {"main": "timeline", "day": "one", "options": {}}
@@ -569,7 +569,7 @@ def test_summaries_speak_minutes_not_session_counts(qapp: QApplication, window: 
     click(window, "oneFinished")
     settled(qapp, window)
     click(window, "viewWeek")
-    window._layout = {"main": "bento", "day": "one", "options": {}}
+    window._layout = {"main": "timeline", "day": "one", "options": {}}
     window._on_week()
     qapp.processEvents()
     shown = labels()
