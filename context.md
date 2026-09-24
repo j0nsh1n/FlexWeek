@@ -1,6 +1,15 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-24 (Mission short-block text), branch `chatgpt/0-15-mission`.
+  The initial appears only when the shared painter has no room for words;
+  drawing it leaves the painter's font as the shared painter set it. A new
+  default-zoom render test failed on the 30-minute overlap before the fix and
+  passes with a visible 15-minute initial. An offscreen Week render showed
+  shortened Dinner words without the extra initial and Quiz with its initial.
+  All 14 Mission tests and the full 1248-test source gate passed; ruff and
+  mypy were clean. No rig, executable build, push, PR, or `spec.md` edit.
+  Next: Claude reviews the Mission branch again.
 - Date: 2026-09-23 (Mission review fix), branch `chatgpt/0-15-mission`.
   Parked Day and Week scrolls stay children of the Mission page after leaving
   the layout, so closing the host destroys them. The new host-deletion test
@@ -552,6 +561,11 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-24, `chatgpt/0-15-mission`: The extra Week initial no longer
+  overlaps shortened shared words on a 30-minute block. A 15-minute block
+  still gets its initial, and Mission restores the painter's font after it.
+  Render regression red before, green after; Mission 14/14, source gate
+  1248/1248. Awaiting Claude review. No rig, build, push, or PR.
 - 2026-09-23, `chatgpt/0-15-mission`: `MissionView` retains parked scrolls
   under its page rather than orphaning them. A Week → Day → Week host-deletion
   test failed on the old behavior and passes on the fix. Mission 13/13; full

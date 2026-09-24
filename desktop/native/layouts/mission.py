@@ -60,11 +60,13 @@ class MissionPainter(BlockPainter):
 
     def block(self, painter: QPainter, rect: QRectF, drawn: Drawn, visible: QRectF) -> None:
         super().block(painter, rect, drawn, visible)
-        if not drawn.held and rect.width() < 40:
+        if not drawn.held and rect.width() < 22:
             # A quarter-hour still has a visible mark when its name cannot fit.
+            painter.save()
             painter.setPen(QColor(self.tokens["text"]))
             painter.setFont(QFont("DejaVu Sans Mono", 8))
             painter.drawText(rect.adjusted(5, 0, -2, 0), Qt.AlignmentFlag.AlignVCenter, drawn.title[:1])
+            painter.restore()
 
 
 def _lanes(area: QRectF) -> list[LinearTrack]:

@@ -21,6 +21,9 @@ All notable changes to FlexWeek are documented here. Format follows
   computer. A short block can be picked up from its middle at any zoom.
 
 ### Fixed
+- Mission control no longer draws an extra initial over the shortened words
+  on half-hour blocks in Week. Quarter-hour blocks still show an initial when
+  their words do not fit.
 - Switching to another view, week or design while holding a block puts it
   back, instead of dropping it on whatever the new view shows there.
 - Homework waiting for a time shortens its name to fit the tray at large text.
