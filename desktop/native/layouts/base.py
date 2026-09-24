@@ -7,7 +7,7 @@ adds homework, plans, or finishes anything by itself, so there is one planner, n
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
 from PySide6.QtCore import QPoint, Qt, QTimer, Signal
@@ -17,6 +17,7 @@ from PySide6.QtWidgets import QApplication, QFrame, QLabel, QLayout, QPushButton
 from desktop.native.calendar import CATEGORIES
 from desktop.native.hours.hand import Hand, is_date_surface, is_surface
 from desktop.native.hours.hand import Verdict as HandVerdict
+from desktop.native.hours.zoom import HoursScroll
 from desktop.native.layouts.drag import (
     EDGE_SCROLL_PX,
     EDGE_SCROLL_STEP,
@@ -85,7 +86,7 @@ def drop_sheet(name: str, tokens: dict[str, str]) -> str:
         # Ringed in the page colour, so the bubble stands clear of a card in its own colour.
         f"#{name} QLabel#dropHint {{ background: {accent}; color: {tokens['accent_ink']};"
         f" border: 2px solid {tokens['bg']}; border-radius: 11px; padding: 5px 10px; font-weight: 700; }}"
-        f"#{name} QLabel#dropHint[drop=\"refused\"] {{ background: {danger};"
+        f'#{name} QLabel#dropHint[drop="refused"] {{ background: {danger};'
         f" color: {tokens['danger_ink']}; }}"
     ) + drawer_sheet(name, tokens)
 
@@ -170,6 +171,8 @@ class LayoutView(QWidget):
     placement_requested = Signal(str, int, int, int)
     # Why a drop could not stand, for the status line.
     refused = Signal(str)
+    # A level the student chose on hours this design made, to remember: the scale's key and pixels an hour.
+    zoomed = Signal(str, int)
 
     layout_id = ""
     # Designs with no hours of their own open a day's hours beside themselves while a block is dragged.
@@ -194,6 +197,9 @@ class LayoutView(QWidget):
         self.motion = "normal"
         self._dragging = False
         self._held: Scene | None = None
+        # The levels this device chose, by scale. The window hands over its own and keeps it current, so
+        # hours made on a later render open where the student left them. A picture has none.
+        self.remembered_zoom: Mapping[str, int] = {}
         # Taken everywhere, so a drag over a part that means nothing still clears the last answer.
         self.setAcceptDrops(True)
 
@@ -229,6 +235,13 @@ class LayoutView(QWidget):
         again = self.findChild(QWidget, name) if name else None
         if again is not None:
             again.setFocus()
+
+    def keep_zoom(self, scroll: HoursScroll) -> HoursScroll:
+        """Hours that open at the level this device last chose for them, and report a new one. A
+        design passes every `HoursScroll` it makes through this, where it makes it."""
+        scroll.restore(self.remembered_zoom)
+        scroll.zoomed.connect(self.zoomed)
+        return scroll
 
     def hours_surfaces(self) -> list[QWidget]:
         """Every surface of hours this design shows now, in reading order. The rig and the tests find

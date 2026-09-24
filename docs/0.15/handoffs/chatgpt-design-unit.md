@@ -35,8 +35,10 @@ Start from `feat/0.15-tabs`:
 4. Lay time out any way the concept needs: `LinearTrack(day, area, axis, first, last, turn)` runs
    down or across, starts and ends where a tile does, and tilts for a card; `DialTrack` is round.
    Blocks stop at their own track's ends, so a part-of-day tile needs no rules of its own. Hours that
-   scroll or zoom go in an `HoursScroll`. Anything else a block can land on is a widget with
-   `takes_blocks = True` and `track_at(point)`.
+   scroll or zoom go in an `HoursScroll`, made in `render` and passed through `self.keep_zoom(...)`,
+   which opens them at the level this device last chose and hands a new one to the window to keep.
+   Not in `__init__`: the window gives a design the remembered levels after making it. Anything else
+   a block can land on is a widget with `takes_blocks = True` and `track_at(point)`.
 5. For the rig: `hours_surfaces()` already lists every visible surface; override it only if its
    order is not reading order. Day names open a day when drawn by the canvas: `header=` names days
    whose time runs down, `gutter=` names days whose time runs across.
