@@ -20,6 +20,7 @@ from PySide6.QtGui import (
     QColor,
     QFont,
     QFontMetrics,
+    QFontMetricsF,
     QKeyEvent,
     QMouseEvent,
     QPainter,
@@ -66,6 +67,7 @@ class Drawn:
     done: bool = False
     missed: bool = False
     pinned: bool = False
+    axis: Axis = Axis.DOWN
 
     @property
     def detail(self) -> str:
@@ -192,13 +194,13 @@ class BlockPainter:
         bold.setBold(True)
         plain = _small(painter.font())
         line = QFontMetrics(bold).height()
-        # The name stays in sight while the top of a long block is scrolled away.
-        top = (
-            max(rect.top() + 3, visible.top() + 3)
-            if rect.bottom() - visible.top() > 2 * line
-            else rect.top() + 3
-        )
-        room = QRectF(rect.left() + 8, top, rect.width() - 14, rect.bottom() - top - 2)
+        # The name stays in sight while the start of a long block is scrolled away, either way.
+        start = QPointF(rect.left() + 8, rect.top() + 3)
+        if drawn.axis is Axis.DOWN and rect.bottom() - visible.top() > 2 * line:
+            start.setY(max(start.y(), visible.top() + 3))
+        elif drawn.axis is Axis.ACROSS and rect.right() - visible.left() > 2 * line:
+            start.setX(max(start.x(), visible.left() + 3))
+        room = QRectF(start, QPointF(rect.right() - 6, rect.bottom() - 2))
         if room.height() < 6 or room.width() < 8:
             return
         detail = drawn.detail
@@ -222,9 +224,12 @@ class BlockPainter:
         refused = drawn.verdict is not None and not drawn.verdict.ok
         painter.setPen(self.c("error") if refused else faint)
         below = QRectF(room.left(), room.top() + line + 1, room.width(), room.height() - line - 1)
-        painter.drawText(
-            below, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap, detail
-        )
+        metrics = QFontMetricsF(plain)
+        for index, text in enumerate(fit_lines(detail, plain, below.width(), below.height())):
+            box = QRectF(
+                below.left(), below.top() + index * metrics.lineSpacing(), below.width(), metrics.height()
+            )
+            painter.drawText(box, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, text)
 
     def ghost(self, painter: QPainter, rect: QRectF, words: str, ok: bool) -> None:
         """Something about to be made: a tinted block where it would go, with its times."""
@@ -304,6 +309,26 @@ def _small(font: QFont) -> QFont:
     made = QFont(font)
     made.setPointSizeF(max(made.pointSizeF() * 0.86, 7))
     return made
+
+
+def fit_lines(text: str, font: QFont, width: float, height: float) -> list[str]:
+    """`text` broken at its spaces into the whole lines that fit a box, so none is cut in half by its
+    edge. When some is left over, the last line ends in "…"; so does a word wider than the box."""
+    metrics = QFontMetricsF(font)
+    room = int((height + metrics.leading()) // metrics.lineSpacing())
+    if room < 1:
+        return []
+    wrapped: list[list[str]] = []
+    for word in text.split():
+        if wrapped and metrics.horizontalAdvance(" ".join([*wrapped[-1], word])) <= width:
+            wrapped[-1].append(word)
+        else:
+            wrapped.append([word])
+    shown = wrapped[:room]
+    if len(wrapped) > room:
+        shown[-1] = [word for line in wrapped[room - 1 :] for word in line]
+    lines = (metrics.elidedText(" ".join(line), Qt.TextElideMode.ElideRight, width) for line in shown)
+    return [line for line in lines if line]
 
 
 class HoursCanvas(QWidget):
@@ -429,6 +454,7 @@ class HoursCanvas(QWidget):
                     done=item.done,
                     missed=item.missed,
                     pinned=item.pinned,
+                    axis=track.axis,
                 )
             )
         if (
@@ -454,6 +480,7 @@ class HoursCanvas(QWidget):
                         1,
                         held=True,
                         verdict=preview.verdict,
+                        axis=track.axis,
                     )
                 )
         columns = overlap_columns([(d.span.start, d.span.end) for d in items])
@@ -519,7 +546,7 @@ class HoursCanvas(QWidget):
 
     def _visible(self) -> QRectF:
         """The part of the hours on screen. Not the part being repainted: a long block's name is kept
-        in sight at the top of what shows, and a small repaint must not draw it a second time."""
+        in sight at the start of what shows, and a small repaint must not draw it a second time."""
         area = self._scroll_area()
         if area is None:
             return QRectF(self.rect())
