@@ -12,7 +12,8 @@ where a block is drawn, and how to bring a stretch of hours into view.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, Signal
@@ -307,6 +308,17 @@ class BlockPainter:
         painter.drawText(box, Qt.AlignmentFlag.AlignCenter, words)
 
 
+@contextmanager
+def _fresh(painter: QPainter) -> Iterator[None]:
+    """Whatever a painter method sets on the painter, its font above all, is undone after it, so
+    what is drawn next starts from the canvas's own font and not from the small one before it."""
+    painter.save()
+    try:
+        yield
+    finally:
+        painter.restore()
+
+
 def _small(font: QFont) -> QFont:
     made = QFont(font)
     made.setPointSizeF(max(made.pointSizeF() * 0.86, 7))
@@ -509,21 +521,26 @@ class HoursCanvas(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         visible = self._visible()
-        self.painter.background(painter, QRectF(self.rect()))
+        with _fresh(painter):
+            self.painter.background(painter, QRectF(self.rect()))
         preview = self.hand.preview
         held = preview.held if preview is not None else None
         for index, track in enumerate(self.tracks):
             painter.save()
             painter.setTransform(track.transform, True)
-            self.painter.track(painter, track, track.day == self.today)
+            with _fresh(painter):
+                self.painter.track(painter, track, track.day == self.today)
             if index == 0 and self.gutter and track.axis is Axis.DOWN:
-                self.painter.hour_labels(painter, track, self.gutter)
+                with _fresh(painter):
+                    self.painter.hour_labels(painter, track, self.gutter)
             if index == 0 and self.header and track.axis is Axis.ACROSS:
-                self.painter.hour_labels(painter, track, self.header, every=120)
+                with _fresh(painter):
+                    self.painter.hour_labels(painter, track, self.header, every=120)
             self._paint_hint(painter, track)
             upright_visible = track.transform.inverted()[0].mapRect(visible)
             for drawn, rect in self.drawn(track):
-                self.painter.block(painter, rect, drawn, upright_visible)
+                with _fresh(painter):
+                    self.painter.block(painter, rect, drawn, upright_visible)
             if (
                 preview is not None
                 and held is not None
@@ -531,18 +548,21 @@ class HoursCanvas(QWidget):
                 and preview.span.day == track.day
             ):
                 rect = track.rect_for(preview.span.start, preview.span.end)
-                self.painter.ghost(painter, rect, span_words(preview.span), True)
+                with _fresh(painter):
+                    self.painter.ghost(painter, rect, span_words(preview.span), True)
             if (
                 self.today == track.day
                 and self.now_min is not None
                 and track.first <= self.now_min <= track.last
             ):
-                self.painter.now(painter, track, self.now_min)
+                with _fresh(painter):
+                    self.painter.now(painter, track, self.now_min)
             painter.restore()
         for track in self.tracks:
             box = self._name_box(track)
             if box is not None:
-                self.painter.day_name(painter, box, self._names(track.day), track.day == self.today)
+                with _fresh(painter):
+                    self.painter.day_name(painter, box, self._names(track.day), track.day == self.today)
         self._paint_label(painter)
         painter.end()
 
@@ -601,7 +621,8 @@ class HoursCanvas(QWidget):
             return
         rect = track.rect_for(low, high)
         big = (rect.height() if track.axis is Axis.DOWN else rect.width()) >= 26
-        self.painter.hint(painter, rect, big)
+        with _fresh(painter):
+            self.painter.hint(painter, rect, big)
 
     # Pointer
 

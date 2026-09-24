@@ -1,4 +1,5 @@
-"""A block's words are laid in whole lines: none is cut in half by the edge of the room it has."""
+"""A block's words are laid in whole lines: none is cut in half by the edge of the room it has. And
+every block is written in the canvas's own font, whatever was drawn before it."""
 
 from __future__ import annotations
 
@@ -15,10 +16,15 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtGui import QFont, QFontMetricsF
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtCore import QRect, QRectF
+    from PySide6.QtGui import QFont, QFontMetricsF, QPainter
+    from PySide6.QtWidgets import QApplication, QWidget
 
-    from desktop.native.hours.canvas import fit_lines
+    from desktop.native.hours.canvas import BlockPainter, Drawn, HoursCanvas, fit_lines
+    from desktop.native.hours.geometry import LinearTrack
+    from desktop.native.hours.hand import Hand, Verdict
+    from desktop.native.look import resolved_palette
+    from desktop.native.weekmodel import build_week
 
 DETAIL = "16:00–17:30 · 1 h 30 min · Missed · Pinned"
 
@@ -77,3 +83,52 @@ def test_a_word_wider_than_the_room_is_shortened_and_the_rest_still_follows(qapp
 def test_no_room_for_a_whole_line_gives_nothing(qapp: QApplication) -> None:
     font = QFont()
     assert fit_lines(DETAIL, font, 400, QFontMetricsF(font).height() - 1) == []
+
+
+HOSTS: list = []
+ESSAY = {
+    "id": "essay",
+    "title": "Essay",
+    "kind": "locked",
+    "days": [0, 1, 2],
+    "start": "16:00",
+    "duration_min": 90,
+}
+MATHS = {"id": "maths", "title": "Maths", "kind": "locked", "days": [1], "start": "09:00", "duration_min": 60}
+
+
+def test_every_block_is_written_in_the_canvas_font_whatever_was_drawn_before_it(qapp: QApplication) -> None:
+    """The same Essay on three days, drawn in one paint. On the first day it follows the hour labels,
+    on the second it follows Maths, drawn by a painter that, like Mission's, sets a font of its own
+    after the default block; on the third it follows nothing. All three are drawn alike."""
+
+    class Marked(BlockPainter):
+        def block(self, painter: QPainter, rect: QRectF, drawn: Drawn, visible: QRectF) -> None:
+            super().block(painter, rect, drawn, visible)
+            painter.setFont(QFont("DejaVu Sans Mono", 8))
+
+    def columns(area: QRectF) -> list[LinearTrack]:
+        # Whole pixels apart, so the same block on each day covers the same pixels.
+        return [
+            LinearTrack(day, QRectF(60 + 150 * day, 10, 140, 600), first=8 * 60, last=20 * 60)
+            for day in range(3)
+        ]
+
+    host = QWidget()
+    HOSTS.append(host)
+    canvas = HoursCanvas(
+        Hand(lambda block_id, from_day, span: Verdict(True, ""), host),
+        Marked(resolved_palette("system", False, None)),
+        columns,
+        gutter=56,
+    )
+    canvas.resize(520, 620)
+    occurrences = build_week("2026-09-21", [ESSAY, MATHS], {}, None).occurrences
+    # Maths first, so on its day the Essay is drawn after it.
+    canvas.set_week(sorted(occurrences, key=lambda item: item.block_id != "maths"))
+    canvas.relayout()
+    image = canvas.grab().toImage()
+    boxes = [canvas.block_rect("essay", day) for day in range(3)]
+    essays = [image.copy(QRect(canvas.mapFromGlobal(box.topLeft()), box.size())) for box in boxes]
+    assert essays[2] == essays[0], "the Essay after the hour labels is drawn unlike the one after nothing"
+    assert essays[2] == essays[1], "the Essay after Maths is drawn unlike the one after nothing"
