@@ -10,6 +10,10 @@ All notable changes to FlexWeek are documented here. Format follows
   can show their chips.
 
 ### Changed
+- My day moves blocks as every other screen does: drag one along One thing's
+  day bar or round Day dial's face, or One thing's big title onto its bar, and
+  the new time, or why it cannot go there, shows before you let go. Escape
+  puts it back, and a click still opens it.
 - Clay deck has one large, draggable Day card and seven live Week cards fanned
   up to 8 degrees. Homework without a time waits in a draggable dish. Week
   cards can also be laid straight in Appearance & layout.
