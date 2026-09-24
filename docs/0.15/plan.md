@@ -144,6 +144,14 @@ storage, CI). Each unit ends green on the rig, on the source gate, and with its 
     1150x768 with large text; below that the page scrolls, and there a held block resting at the
     page's edge does not scroll it, because the hand scrolls only the nearest scroll area.*
 15. **My day.** One thing and Day dial onto the engine. Owner: Claude.
+    *Built 24 September. Day dial's face is a surface: its ring is a `DialTrack`, arcs are drawn,
+    pressed and carried on it, and the held arc's words stay inside the face. One thing's day bar is
+    an `HoursCanvas` with one `LinearTrack` across 06:00 to 22:00 and a painter of its own; it moves
+    and opens blocks but makes none, since this screen does not plan. The big title is picked up
+    like a tray chip: a block moves, homework due today with no time is placed. Both screens move
+    only, as they did. Neither uses `layouts/drag.py`. Proven by `test_my_day_hours.py` with Qt's
+    mouse events and by the rig's `--tab myday` (move, refusal after due, open) on both screens.
+    No engine change.*
 16. **Delete the old path.** Drawer, `QDrag` helpers, the old canvas, any fallback. Owner: Claude.
 17. **Docs and release evidence.** Architecture, spec (with Jonathan's approval), changelog, release
     notes, videos, supervised checks. Owner: Claude, drafts from GLM.

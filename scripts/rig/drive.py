@@ -2,6 +2,7 @@
 
     .venv/bin/python scripts/rig/drive.py                       # every design, every tab
     .venv/bin/python scripts/rig/drive.py --design bento --tab day
+    .venv/bin/python scripts/rig/drive.py --design dial --tab myday   # My day's screens: one, dial
     .venv/bin/python scripts/rig/drive.py --list
 
 Every scenario starts from the same seeded week with the clock held at Thursday 15:40. It opens its
@@ -37,7 +38,9 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 DESIGNS = ("classic", "timeline", "mission", "bento", "retro", "clay")
-TABS = ("day", "week", "month")
+# My day's screens run only the My day scenarios, and the designs only the others.
+MY_DAY = ("one", "dial")
+TABS = ("day", "week", "month", "myday")
 PASSWORD = "a-long-test-password"
 
 Step = Generator[tuple, object]
@@ -1278,6 +1281,57 @@ def child_main(args: argparse.Namespace) -> int:
             f"after the reload Month draws the essay on {after_reload}, not once on Thursday",
         )
 
+    def myday_tab(r: Rig) -> Step:
+        # Measured once the top bar has settled: measured straight after a save, it was still laid
+        # out a button to the left, and the click landed on Month.
+        yield ("wait", 300)
+        button = window.findChild(QPushButton, "viewMyDay")
+        yield from r.click(button.mapToGlobal(button.rect().center()))
+        yield ("wait", 500)
+        shown = window.planner.currentWidget()
+        expect(getattr(shown, "layout_id", "") == r.design, f"My day shows {type(shown).__name__}")
+
+    def myday_carry(r: Rig) -> Step:
+        """The essay held by its middle at 19:30 and let go at 21:00, along the bar or round the dial."""
+        yield from myday_tab(r)
+        yield from r.drag(r.at(3, 19 * 60 + 30), r.at(3, 21 * 60))
+
+    def myday_move(r: Rig) -> Step:
+        yield from myday_carry(r)
+        yield from r.settled()
+        got = block(ids["essay"])
+        expect((got["days"], got["start"]) == ([3], "20:30"), f"essay is {got['days']} {got['start']}")
+
+    def myday_past_due(r: Rig) -> Step:
+        """Due Thursday at 20:00, the essay cannot end at 21:30: it stays, and the screen says why."""
+        session.assignments["essay"] = {**session.assignments["essay"], "due": f"{thursday_iso}T20:00"}
+        session.dirty_assignments.add("essay")
+        session.dirty = True
+        session.save()
+        yield ("until", lambda: not session.busy and not session.dirty, 8000, "the due time to save")
+        revision = session.revision
+        yield from myday_carry(r)
+        said = session.message
+        yield from r.settled()
+        unchanged(revision)
+        expect("after it is due" in said, f"said {said!r}")
+
+    def myday_open(r: Rig) -> Step:
+        yield from myday_tab(r)
+        yield from r.click(r.at(3, 19 * 60 + 30))
+        yield (
+            "until",
+            lambda: isinstance(QApplication.activeModalWidget(), QDialog),
+            3000,
+            "the essay to open",
+        )
+        dialog = QApplication.activeModalWidget()
+        title = dialog.findChild(QLineEdit, "homeworkTitle")
+        opened = title.text() if title is not None else dialog.windowTitle()
+        dialog.reject()
+        yield ("wait", 300)
+        expect(opened == "History essay", f"opened {opened!r}")
+
     scenarios = [
         Scenario("day-move", "day", day_move),
         Scenario("day-resize", "day", day_resize),
@@ -1319,13 +1373,17 @@ def child_main(args: argparse.Namespace) -> int:
         Scenario("month-series-one-date", "month", month_series_one_date),
         Scenario("month-past-due", "month", month_past_due),
         Scenario("month-save-refused", "month", month_save_refused),
+        Scenario("myday-move", "myday", myday_move),
+        Scenario("myday-past-due", "myday", myday_past_due),
+        Scenario("myday-open", "myday", myday_open),
     ]
     if args.list:
         for scenario in scenarios:
-            print(scenario.tab, scenario.name, ",".join(scenario.only) or "every design")
+            every = ",".join(MY_DAY) if scenario.tab == "myday" else "every design"
+            print(scenario.tab, scenario.name, ",".join(scenario.only) or every)
         return 0
 
-    chosen_designs = [args.design] if args.design else list(DESIGNS)
+    chosen_designs = [args.design] if args.design else [*DESIGNS, *MY_DAY]
     chosen = [
         s
         for s in scenarios
@@ -1363,7 +1421,10 @@ def child_main(args: argparse.Namespace) -> int:
             scroll.restore({scroll.scale.key: scroll.scale.default})
 
     def use_design(design: str) -> None:
-        window._layout = sanitize_layout({"main": design, "day": "one"})
+        if design in MY_DAY:
+            window._layout = sanitize_layout({"main": "classic", "day": design})
+        else:
+            window._layout = sanitize_layout({"main": design, "day": "one"})
         window._apply_appearance()
         session.set_view("week")
         window._on_week()
@@ -1373,7 +1434,7 @@ def child_main(args: argparse.Namespace) -> int:
         (design, scenario)
         for design in chosen_designs
         for scenario in chosen
-        if not scenario.only or design in scenario.only
+        if (not scenario.only or design in scenario.only) and (scenario.tab == "myday") == (design in MY_DAY)
     ]
     if not plan:
         asked = " ".join(
@@ -1509,7 +1570,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--design", choices=DESIGNS)
+    parser.add_argument("--design", choices=[*DESIGNS, *MY_DAY])
     parser.add_argument("--tab", choices=TABS)
     parser.add_argument("--scenario")
     parser.add_argument("--server", choices=["auto", "kwin", "xvfb"], default="auto")
