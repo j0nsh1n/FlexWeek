@@ -39,8 +39,8 @@ On a branch from `feat/0.15-tabs`:
 
 - Do not edit `desktop/native/*`, `scripts/rig/*` or `spec.md`. Claude builds the Month tab on this.
 - Do not push, open a pull request, or touch the remote. Commit locally only.
-- Do not run `scripts/verify.py` while another suite or an OpenCode session runs in the same
-  checkout; they share Qt's test-mode files.
+- Do not run `scripts/verify.py` while another suite or an OpenCode session runs anywhere on this
+  computer, in any checkout: they share Qt's test-mode files under `~/.qttest`.
 
 ## Prove it
 

@@ -69,8 +69,8 @@ Every claim needs one of these as evidence, in your report:
 3. `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q desktop/tests/test_layout_<design>.py`
    green, with the design's existing tests updated where the surface changed.
 4. `.venv/bin/python scripts/verify.py` green (about four minutes; the pytest step has a 300 second
-   budget). Do not run it while another suite runs in the same checkout: they share Qt's test-mode
-   files and fail each other.
+   budget). Do not run it while another suite runs anywhere on this computer, in any
+   checkout: they share Qt's test-mode files under `~/.qttest` and fail each other.
 5. `.venv/bin/python scripts/mutate.py scripts/mutations/targets.json` still catches every break,
    which shows the shared rules were not copied into the design.
 

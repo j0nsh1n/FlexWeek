@@ -61,7 +61,7 @@ Rules:
    the open week unchanged until the reply, and Undo putting both weeks back. Assert on the saved
    weeks read back from the server, not on the in-memory list alone.
 2. `.venv/bin/python scripts/verify.py` green. Not while another suite or an OpenCode session runs
-   in the same checkout: they share Qt's test-mode files.
+   anywhere on this computer, in any checkout: they share Qt's test-mode files under `~/.qttest`.
 3. A note of any backend change you needed, with the endpoint and why.
 
 GLM is available as a helper for first-pass review. Call it through the direct OpenRouter API with
