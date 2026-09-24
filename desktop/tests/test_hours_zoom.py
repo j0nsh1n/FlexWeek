@@ -26,7 +26,8 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtWidgets import QApplication, QWidget
 
     from desktop.native.hours.classic import DAY_SCALE, WEEK_SCALE, ClassicDay, ClassicWeek
-    from desktop.native.hours.hand import Gesture, Hand, Verdict
+    from desktop.native.hours.geometry import Axis
+    from desktop.native.hours.hand import Gesture, Hand, Verdict, span_words
     from desktop.native.hours.zoom import Scale, sanitize_zoom
     from desktop.native.look import resolved_palette
     from desktop.native.weekmodel import build_week
@@ -48,10 +49,11 @@ QUARTER = {"id": "quiz", "title": "Quiz", "kind": "locked", "days": [3], "start"
 HOSTS: list = []
 
 
-def a_hand() -> Hand:
+def a_hand(words: bool = False) -> Hand:
+    """A hand that allows everything, saying a held block's times when `words` is set."""
     host = QWidget()
     HOSTS.append(host)
-    return Hand(lambda block_id, from_day, span: Verdict(True, ""), host)
+    return Hand(lambda block_id, from_day, span: Verdict(True, span_words(span) if words else ""), host)
 
 
 @pytest.fixture(scope="module")
@@ -64,9 +66,9 @@ def settle(qapp: QApplication) -> None:
         qapp.processEvents()
 
 
-def a_week(qapp: QApplication, blocks: list[dict] | None = None) -> ClassicWeek:
+def a_week(qapp: QApplication, blocks: list[dict] | None = None, hand: Hand | None = None) -> ClassicWeek:
     # Inside the offscreen screen (800 by 800), where QApplication.widgetAt can find it.
-    view = ClassicWeek(a_hand())
+    view = ClassicWeek(hand if hand is not None else a_hand())
     view.set_look(None, resolved_palette("system", False, None))
     view.set_week(build_week(MONDAY, blocks or [], {}, None), 3, 15 * 60 + 40)
     view.move(0, 0)
@@ -318,7 +320,7 @@ def test_a_small_repaint_does_not_write_a_long_blocks_name_again(qapp: QApplicat
     assert dark_in(image, strip, round(track.area.left()) + 8) == 0
 
 
-def a_lane_week(qapp: QApplication):
+def a_lane_week(qapp: QApplication, hand: Hand | None = None):
     """Seven lanes whose time runs across, as Mission control's week lays them out, with their names
     kept in a strip on the left."""
     from PySide6.QtCore import QRectF
@@ -337,7 +339,7 @@ def a_lane_week(qapp: QApplication):
             for day in range(7)
         ]
 
-    hand = a_hand()
+    hand = hand if hand is not None else a_hand()
     canvas = HoursCanvas(hand, BlockPainter(resolved_palette("system", False, None)), lanes, header=24)
     scroll = HoursScroll(
         canvas,
@@ -468,4 +470,95 @@ def test_lanes_keep_their_time_when_a_design_parks_them_between_renders(qapp: QA
     at = minute_across(scroll, 0)
     assert 18 * 60 + 45 <= at <= 19 * 60 + 15, (
         f"the lanes came back at {int(at) // 60:02d}:{int(at) % 60:02d}"
+    )
+
+
+ESSAY = {"id": "essay", "title": "Essay", "kind": "locked", "days": [3], "start": "19:00", "duration_min": 90}
+
+
+def hold_still(canvas, day: int, minute: int) -> None:
+    """Press the block at this day and minute and carry it a little across its time, so it is held
+    where it is drawn."""
+    press = QPointF(canvas.mapFromGlobal(canvas.point_for(day, minute)))
+    across = QPointF(0, 1) if canvas.track_for(day).axis is Axis.ACROSS else QPointF(1, 0)
+    held = Qt.MouseButton.LeftButton
+    for kind, point in (
+        (QEvent.Type.MouseButtonPress, press),
+        (QEvent.Type.MouseMove, press + across * 6),
+        (QEvent.Type.MouseMove, press + across * 12),
+    ):
+        global_at = QPointF(canvas.mapToGlobal(point.toPoint()))
+        event = QMouseEvent(kind, point, global_at, held, held, Qt.KeyboardModifier.NoModifier)
+        QApplication.sendEvent(canvas, event)
+    assert canvas.hand.preview is not None, f"nothing was picked up on day {day} at minute {minute}"
+
+
+def pill_box(canvas) -> QRect:
+    """Where the held block's words are drawn on a pill beside it, in the canvas: everything in the
+    accent colour outside the held block, whose own outline is that colour."""
+    accent = QColor(resolved_palette("system", False, None)["accent"])
+    held = next(
+        track.transform.mapRect(rect).toAlignedRect().adjusted(-2, -2, 2, 2)
+        for track in canvas.tracks
+        for drawn, rect in canvas.drawn(track)
+        if drawn.held
+    )
+    image = canvas.grab().toImage()
+    box = QRect()
+    for y in range(image.height()):
+        for x in range(image.width()):
+            colour = QColor(image.pixel(x, y))
+            near = max(
+                abs(colour.red() - accent.red()),
+                abs(colour.green() - accent.green()),
+                abs(colour.blue() - accent.blue()),
+            )
+            if near <= 6 and not held.contains(x, y):
+                box = box.united(QRect(x, y, 1, 1))
+    return box
+
+
+def shown(canvas, scroll) -> QRect:
+    """What shows of the canvas: the viewport, in the canvas's coordinates."""
+    port = scroll.viewport()
+    return QRect(canvas.mapFrom(port, QPoint(0, 0)), port.size())
+
+
+def test_a_held_blocks_words_stay_in_what_shows_on_lanes(qapp: QApplication) -> None:
+    """Lanes are a whole day wide. The essay, held near the right edge of what shows, has its times on
+    a pill that fits there, not one running off past the edge of the viewport."""
+    scroll = a_lane_week(qapp, a_hand(words=True))
+    canvas = scroll.canvas
+    canvas.set_week(build_week(MONDAY, [ESSAY], {}, None).occurrences)
+    end = canvas.track_for(3).point_for(20 * 60 + 30).x()
+    scroll.horizontalScrollBar().setValue(round(end + 30 - scroll.viewport().width()))
+    settle(qapp)
+    view = shown(canvas, scroll)
+    assert 0 < view.right() - end <= 40, "the essay ends just inside the right edge of what shows"
+    hold_still(canvas, 3, 19 * 60 + 45)
+    pill = pill_box(canvas)
+    canvas.hand.cancel()
+    assert not pill.isEmpty(), "no words were drawn beside the held essay"
+    assert view.contains(pill), (
+        f"the pill spans x {pill.left()}–{pill.right()}; what shows is x {view.left()}–{view.right()}"
+    )
+
+
+def test_a_held_blocks_words_stay_in_what_shows_on_a_column_scrolled_past_its_start(
+    qapp: QApplication,
+) -> None:
+    """School, held by its end with its start scrolled away above, has its times on a pill in what
+    shows, not beside its start off the top of the viewport."""
+    view = a_week(qapp, [SCHOOL], a_hand(words=True))
+    view.scroll.scroll_to(12 * 60, above=0)
+    settle(qapp)
+    canvas = view.hours
+    seen = shown(canvas, view.scroll)
+    assert canvas.track_for(0).point_for(8 * 60).y() < seen.top(), "School's start is scrolled away"
+    hold_still(canvas, 0, 14 * 60)
+    pill = pill_box(canvas)
+    canvas.hand.cancel()
+    assert not pill.isEmpty(), "no words were drawn beside the held School"
+    assert seen.contains(pill), (
+        f"the pill spans y {pill.top()}–{pill.bottom()}; what shows is y {seen.top()}–{seen.bottom()}"
     )

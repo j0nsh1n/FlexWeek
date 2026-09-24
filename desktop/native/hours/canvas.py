@@ -284,12 +284,14 @@ class BlockPainter:
             painter.drawLine(QPointF(area.left() + at, area.top()), QPointF(area.left() + at, area.bottom()))
 
     def label(self, painter: QPainter, beside: QRectF, words: str, ok: bool, room: QRectF) -> None:
-        """The held block's words on a pill beside it, when the block is too small to say them."""
+        """The held block's words on a pill beside it, when the block is too small to say them, kept
+        in `room`, the part of the hours on screen."""
         plain = _small(painter.font())
         metrics = QFontMetrics(plain)
         width, height = metrics.horizontalAdvance(words) + 20, metrics.height() + 10
         left = beside.right() + 6 if beside.right() + 6 + width <= room.right() else beside.left() - 6 - width
-        pill = QRectF(max(left, room.left()), beside.top(), width, height)
+        top = max(min(beside.top(), room.bottom() - height), room.top())
+        pill = QRectF(max(left, room.left()), top, width, height)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(self.c("accent" if ok else "error"))
         painter.drawRoundedRect(pill, height / 2, height / 2)
@@ -577,7 +579,7 @@ class HoursCanvas(QWidget):
                 small = QFontMetrics(_small(painter.font())).horizontalAdvance(words) > rect.width() - 14
                 if small or rect.height() < 30:
                     self.painter.label(
-                        painter, track.transform.mapRect(rect), words, preview.verdict.ok, QRectF(self.rect())
+                        painter, track.transform.mapRect(rect), words, preview.verdict.ok, self._visible()
                     )
                 return
 
