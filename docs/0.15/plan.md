@@ -89,7 +89,7 @@ storage, CI). Each unit ends green on the rig, on the source gate, and with its 
    more than a fifth of the block, so a 15-minute block moves when pressed at 25%, 50% and 75% of
    its length at every level. The rig proves both with the real pointer.*
 3b. **Work windows in setup and Settings.** The screens that let a student say when they work.
-   Owner: ChatGPT. Brief: `handoffs/chatgpt-work-windows-ui.md`. *Done at `66ef7c6`. Jonathan's
+   Owner: ChatGPT. *Done at `66ef7c6`; its brief was retired at landing. Jonathan's
    call, 22 September: setup asks only for work windows; study windows stay in Settings.*
 4. **Optional due times.** Due date required, due time optional, through the model, the API, the
    planner, the judge, the dialogs and the words shown. Owner: Grok for model and API, Claude for
@@ -100,7 +100,12 @@ storage, CI). Each unit ends green on the rig, on the source gate, and with its 
    real pointer, including 1150x768 with large text. Month's part waits for unit 9. The mutation
    runner and its specs are in `scripts/mutate.py` and `scripts/mutations/`.*
 6. **The rig in CI.** Xvfb, a small window manager, per-design jobs, artifacts, timeouts.
-   Owner: Grok. Brief: `handoffs/grok-rig-in-ci.md`.
+   Owner: Grok, finished by ChatGPT. *Landed 24 September: `scripts/rig/hidden_session.py` owns
+   its processes by PID and start time, keeps state, logs and KWin's socket per checkout, and runs
+   KWin or Xvfb with Openbox on a private D-Bus that starts nothing on demand (a hidden KWin on the
+   desktop's bus took the desktop's shortcuts, even with `--no-global-shortcuts`). The `rig` job in
+   `.github/workflows/verify.yml` runs Today's app's Day and Week under Xvfb and uploads the
+   screenshots, videos and results. Not yet seen running on GitHub: nothing has been pushed.*
 7. **Hosting and targets.** Every design reaches the window's hand; the hand finds any visible
    surface; track-local bounds; render hold from press; the dial adapter. Owner: Claude.
    *Done. `Track` is a contract with `LinearTrack` and `DialTrack`; a surface is any widget with
@@ -112,7 +117,7 @@ storage, CI). Each unit ends green on the rig, on the source gate, and with its 
    horizontal zoom Mission needs, which the review asked to settle before its unit.*
 8. **Cross-week MoveDate.** One atomic controller operation over two week documents, idempotent on
    retry, one Undo step. `/api/changes` already writes several weeks in one transaction.
-   Owner: Grok. Brief: `handoffs/grok-month-across-weeks.md`.
+   Owner: Grok.
    *Landed at `2d8bae3`. Undo across weeks sends the revision it last saw (`7109e3e`). Month's
    judge gives `date_problem` the chip's start, length and homework from the month reply, so a
    chip whose week is not loaded is judged by the same rule as one whose week is.*
@@ -125,6 +130,14 @@ storage, CI). Each unit ends green on the rig, on the source gate, and with its 
 10. **Mission control**, then 11. **Clay deck**, 12. **Retro desktop**, 13. **Bento**,
     14. **Timeline**. One design per unit, Day and Week together, riskiest interaction first.
     Owner: ChatGPT. Brief: `handoffs/chatgpt-design-unit.md`.
+    *Mission landed 24 September: Scope lane on Day, Lane ops on Week, both on the window's hand
+    with `HoursScroll(axis=ACROSS)`; the grab check passed at 25%, 50% and 75%, so Column watch was
+    not needed. Rig Day 14/14, Week 17/17. Its review moved four fixes into the engine (hours kept
+    across a hide, the held words kept on screen, whole lines of text, one font per block) and the
+    rig learned to aim along any track; the brief's step 9 records the rest.*
+    *Clay landed 24 September: One big card on Day, Fan hand on Week with cards turned -8 to 8
+    degrees on `LinearTrack(turn=...)`; the grab check passed, so Table hand stays the "Straight"
+    option. Rig Day 14/14, Week 17/17. Nothing new for the engine.*
 15. **My day.** One thing and Day dial onto the engine. Owner: Claude.
 16. **Delete the old path.** Drawer, `QDrag` helpers, the old canvas, any fallback. Owner: Claude.
 17. **Docs and release evidence.** Architecture, spec (with Jonathan's approval), changelog, release
