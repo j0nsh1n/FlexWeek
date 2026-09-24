@@ -47,6 +47,8 @@ class Scene:
     month: dict | None = None
     iso_day: str = ""
     dirty: bool = False
+    # Weeks other than this one that the student changed and left unsaved, by their Monday.
+    unsaved_weeks: Mapping[str, WeekModel] = field(default_factory=dict)
 
     def px(self, size: float) -> int:
         """A size in pixels that follows the student's Text size knob."""
@@ -388,6 +390,7 @@ class LayoutView(QWidget):
             board.day_activated.connect(self.day_activated.emit)
             self._month_board = board
         board.set_tokens(scene.tokens)
+        board.set_unsaved(scene.unsaved_weeks)
         board.set_week(scene.week)
         board.set_month(scene.month, scene.dirty)
         opened = ((scene.month or {}).get("month"), scene.iso_day)

@@ -16,6 +16,7 @@ colour tokens.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -75,9 +76,10 @@ class MonthCell:
         return int(self.iso[8:])
 
 
-def month_cells(snapshot: dict | None, week: WeekModel | None, today_iso: str) -> list[MonthCell]:
-    """The dates of a month reply, each with its chips. The open week is read from what the student
-    has now, saved or not; any other week from what the reply says is on each date."""
+def month_cells(snapshot: dict | None, weeks: Mapping[str, WeekModel], today_iso: str) -> list[MonthCell]:
+    """The dates of a month reply, each with its chips. `weeks` are the weeks the student has now,
+    saved or not, by their Monday: a date in one of them is read from it; any other date from what
+    the reply says is on it."""
     if not snapshot:
         return []
     deadlines: dict[str, dict] = {}
@@ -85,8 +87,8 @@ def month_cells(snapshot: dict | None, week: WeekModel | None, today_iso: str) -
         if item.get("id"):
             deadlines[str(item["id"])] = item
     open_days: dict[str, tuple] = {}
-    if week is not None and week.week_start:
-        monday = date.fromisoformat(week.week_start)
+    for week_start, week in weeks.items():
+        monday = date.fromisoformat(week_start)
         for offset in range(7):
             day_iso = (monday + timedelta(days=offset)).isoformat()
             open_days[day_iso] = tuple(item for item in week.occurrences if item.day == offset)
@@ -506,6 +508,7 @@ class MonthGrid(QWidget):
         self.overdue.setWordWrap(True)
         layout.addWidget(self.overdue)
         self._week: WeekModel | None = None
+        self._unsaved: Mapping[str, WeekModel] = {}
         self._shown: tuple[dict | None, bool] | None = None
 
     def set_palette(self, palette: dict) -> None:
@@ -540,6 +543,12 @@ class MonthGrid(QWidget):
         if self._shown is not None:
             self.set_month(*self._shown)
 
+    def set_unsaved(self, weeks: Mapping[str, WeekModel]) -> None:
+        """Weeks the student changed and left without saving, by their Monday, as they have them."""
+        self._unsaved = weeks
+        if self._shown is not None:
+            self.set_month(*self._shown)
+
     def set_month(self, snapshot: dict | None, dirty: bool) -> None:
         self._shown = (snapshot, dirty)
         if snapshot is None:
@@ -547,9 +556,12 @@ class MonthGrid(QWidget):
             self._say(self.warning, "Loading month…")
             self._say(self.overdue, "")
             return
-        # The open week is drawn as the student has it, saved or not, so there is no "saved only" to say.
+        # Every week is drawn as the student has it, saved or not, so there is no "saved only" to say.
         self._say(self.warning, "")
-        self.canvas.set_cells(month_cells(snapshot, self._week, date.today().isoformat()))
+        weeks = dict(self._unsaved)
+        if self._week is not None and self._week.week_start:
+            weeks[self._week.week_start] = self._week
+        self.canvas.set_cells(month_cells(snapshot, weeks, date.today().isoformat()))
         overdue = snapshot.get("overdue") or []
         titles = ", ".join(str(item.get("title") or item.get("id", "")) for item in overdue[:8])
         self._say(self.overdue, "Overdue: " + titles if overdue else "")

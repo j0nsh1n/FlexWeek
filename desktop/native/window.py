@@ -883,6 +883,7 @@ class NativeWindow(QMainWindow):
             month=session.month_data,
             iso_day=session.selected_day,
             dirty=session.dirty,
+            unsaved_weeks=session.unsaved_weeks(),
         )
 
     def _chrome_palette(self, palette: dict) -> dict:
@@ -1550,6 +1551,7 @@ class NativeWindow(QMainWindow):
         today, minute = self._clock_in_week()
         self.week_table.set_week(week, today, minute)
         self.day_view.set_day(week, date.fromisoformat(self.session.selected_day).weekday(), today, minute)
+        self.month_grid.set_unsaved(self.session.unsaved_weeks())
         self.month_grid.set_week(week)
 
     def _where(self) -> tuple:
@@ -1592,8 +1594,19 @@ class NativeWindow(QMainWindow):
             self._move_to_date(change)
 
     def _date_judge(self, block_id: str, from_iso: str, to_iso: str) -> HandVerdict:
-        """Whether a block carried on Month can go on a date: the same rule a save applies."""
-        problem = self.session.date_problem(block_id, from_iso, to_iso)
+        """Whether a block carried on Month can go on a date: the same rule a save applies. A chip
+        from a week that is not loaded is judged by the time and homework the month reply gives it."""
+        days = (self.session.month_data or {}).get("days") or []
+        day = next((item for item in days if item.get("date") == from_iso), {})
+        chip = next((item for item in day.get("blocks") or [] if item.get("id") == block_id), {})
+        problem = self.session.date_problem(
+            block_id,
+            from_iso,
+            to_iso,
+            start=chip.get("start"),
+            duration_min=chip.get("duration_min"),
+            assignment_id=chip.get("assignment_id"),
+        )
         return HandVerdict(problem is None, problem or "")
 
     def _move_to_date(self, change: MoveDate) -> None:
