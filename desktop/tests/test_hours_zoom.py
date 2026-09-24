@@ -26,7 +26,8 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtWidgets import QApplication, QWidget
 
     from desktop.native.hours.classic import DAY_SCALE, WEEK_SCALE, ClassicDay, ClassicWeek
-    from desktop.native.hours.hand import Gesture, Hand, Verdict
+    from desktop.native.hours.geometry import Axis
+    from desktop.native.hours.hand import Gesture, Hand, Verdict, span_words
     from desktop.native.hours.zoom import Scale, sanitize_zoom
     from desktop.native.look import resolved_palette
     from desktop.native.weekmodel import build_week
@@ -48,10 +49,11 @@ QUARTER = {"id": "quiz", "title": "Quiz", "kind": "locked", "days": [3], "start"
 HOSTS: list = []
 
 
-def a_hand() -> Hand:
+def a_hand(words: bool = False) -> Hand:
+    """A hand that allows everything, saying a held block's times when `words` is set."""
     host = QWidget()
     HOSTS.append(host)
-    return Hand(lambda block_id, from_day, span: Verdict(True, ""), host)
+    return Hand(lambda block_id, from_day, span: Verdict(True, span_words(span) if words else ""), host)
 
 
 @pytest.fixture(scope="module")
@@ -64,9 +66,9 @@ def settle(qapp: QApplication) -> None:
         qapp.processEvents()
 
 
-def a_week(qapp: QApplication, blocks: list[dict] | None = None) -> ClassicWeek:
+def a_week(qapp: QApplication, blocks: list[dict] | None = None, hand: Hand | None = None) -> ClassicWeek:
     # Inside the offscreen screen (800 by 800), where QApplication.widgetAt can find it.
-    view = ClassicWeek(a_hand())
+    view = ClassicWeek(hand if hand is not None else a_hand())
     view.set_look(None, resolved_palette("system", False, None))
     view.set_week(build_week(MONDAY, blocks or [], {}, None), 3, 15 * 60 + 40)
     view.move(0, 0)
@@ -318,7 +320,7 @@ def test_a_small_repaint_does_not_write_a_long_blocks_name_again(qapp: QApplicat
     assert dark_in(image, strip, round(track.area.left()) + 8) == 0
 
 
-def a_lane_week(qapp: QApplication):
+def a_lane_week(qapp: QApplication, hand: Hand | None = None):
     """Seven lanes whose time runs across, as Mission control's week lays them out, with their names
     kept in a strip on the left."""
     from PySide6.QtCore import QRectF
@@ -337,7 +339,7 @@ def a_lane_week(qapp: QApplication):
             for day in range(7)
         ]
 
-    hand = a_hand()
+    hand = hand if hand is not None else a_hand()
     canvas = HoursCanvas(hand, BlockPainter(resolved_palette("system", False, None)), lanes, header=24)
     scroll = HoursScroll(
         canvas,
@@ -433,3 +435,185 @@ def test_a_long_blocks_name_stays_in_sight_on_lanes_scrolled_past_its_start(qapp
     ]
     assert inked, "School's bar shows no name in what shows"
     assert min(inked) <= 8, f"School's name starts {min(inked)} px into what shows"
+
+
+def a_side(host: QWidget) -> QWidget:
+    """A panel beside the hours, with something to take the focus, as Mission's radar."""
+    from PySide6.QtWidgets import QFrame, QPushButton, QVBoxLayout
+
+    side = QFrame(host)
+    side.setFixedWidth(300)
+    QVBoxLayout(side).addWidget(QPushButton("Science poster", side))
+    return side
+
+
+@pytest.mark.parametrize("new_side", [False, True])
+def test_lanes_keep_their_time_when_a_design_parks_them_between_renders(
+    qapp: QApplication, new_side: bool
+) -> None:
+    """Mission keeps its hours between renders and parks them on each one: hidden, out of its layout,
+    back in, shown. The canvas still has the focus from the drag just finished, and hiding a scroll
+    area that holds the focus moves it on and scrolls the hours to their middle. Mission also builds
+    a new panel beside them on each render, which Qt shows only after the hours, so they are shown
+    wider than they end up, too wide for 19:00 to be at the left. They must come back where they
+    were, so the block just moved is still on screen."""
+    from PySide6.QtWidgets import QHBoxLayout
+
+    scroll = a_lane_week(qapp)
+    host = QWidget()
+    HOSTS.append(host)
+    row = QHBoxLayout(host)
+    row.addWidget(scroll, 1)
+    side = a_side(host)
+    row.addWidget(side)
+    host.move(0, 0)
+    host.resize(800, 480)
+    host.show()
+    settle(qapp)
+    scroll.restore({"lanes.week": 96})
+    scroll.scroll_to(19 * 60, above=0)
+    host.activateWindow()
+    assert QTest.qWaitForWindowActive(host)
+    scroll.canvas.setFocus(Qt.FocusReason.MouseFocusReason)
+    settle(qapp)
+    assert QApplication.focusWidget() is scroll.canvas
+    assert 18 * 60 + 45 <= minute_across(scroll, 0) <= 19 * 60 + 15, "19:00 is at the left"
+    width = scroll.viewport().width()
+    scroll.hide()
+    row.removeWidget(scroll)
+    if new_side:
+        row.removeWidget(side)
+        side.deleteLater()
+        side = a_side(host)
+    row.insertWidget(0, scroll, 1)
+    if new_side:
+        row.addWidget(side)
+    scroll.show()
+    settle(qapp)
+    assert scroll.viewport().width() == width
+    at = minute_across(scroll, 0)
+    assert 18 * 60 + 45 <= at <= 19 * 60 + 15, (
+        f"the lanes came back at {int(at) // 60:02d}:{int(at) % 60:02d}"
+    )
+
+
+ESSAY = {"id": "essay", "title": "Essay", "kind": "locked", "days": [3], "start": "19:00", "duration_min": 90}
+
+
+def hold_still(canvas, day: int, minute: int) -> None:
+    """Press the block at this day and minute and carry it a little across its time, so it is held
+    where it is drawn."""
+    press = QPointF(canvas.mapFromGlobal(canvas.point_for(day, minute)))
+    across = QPointF(0, 1) if canvas.track_for(day).axis is Axis.ACROSS else QPointF(1, 0)
+    held = Qt.MouseButton.LeftButton
+    for kind, point in (
+        (QEvent.Type.MouseButtonPress, press),
+        (QEvent.Type.MouseMove, press + across * 6),
+        (QEvent.Type.MouseMove, press + across * 12),
+    ):
+        global_at = QPointF(canvas.mapToGlobal(point.toPoint()))
+        event = QMouseEvent(kind, point, global_at, held, held, Qt.KeyboardModifier.NoModifier)
+        QApplication.sendEvent(canvas, event)
+    assert canvas.hand.preview is not None, f"nothing was picked up on day {day} at minute {minute}"
+
+
+def pill_box(canvas) -> QRect:
+    """Where the held block's words are drawn on a pill beside it, in the canvas: everything in the
+    accent colour outside the held block, whose own outline is that colour."""
+    accent = QColor(resolved_palette("system", False, None)["accent"])
+    held = next(
+        track.transform.mapRect(rect).toAlignedRect().adjusted(-2, -2, 2, 2)
+        for track in canvas.tracks
+        for drawn, rect in canvas.drawn(track)
+        if drawn.held
+    )
+    image = canvas.grab().toImage()
+    box = QRect()
+    for y in range(image.height()):
+        for x in range(image.width()):
+            colour = QColor(image.pixel(x, y))
+            near = max(
+                abs(colour.red() - accent.red()),
+                abs(colour.green() - accent.green()),
+                abs(colour.blue() - accent.blue()),
+            )
+            if near <= 6 and not held.contains(x, y):
+                box = box.united(QRect(x, y, 1, 1))
+    return box
+
+
+def shown(canvas, scroll) -> QRect:
+    """What shows of the canvas: the viewport, in the canvas's coordinates."""
+    port = scroll.viewport()
+    return QRect(canvas.mapFrom(port, QPoint(0, 0)), port.size())
+
+
+def test_a_held_blocks_words_stay_in_what_shows_on_lanes(qapp: QApplication) -> None:
+    """Lanes are a whole day wide. The essay, held near the right edge of what shows, has its times on
+    a pill that fits there, not one running off past the edge of the viewport."""
+    scroll = a_lane_week(qapp, a_hand(words=True))
+    canvas = scroll.canvas
+    canvas.set_week(build_week(MONDAY, [ESSAY], {}, None).occurrences)
+    end = canvas.track_for(3).point_for(20 * 60 + 30).x()
+    scroll.horizontalScrollBar().setValue(round(end + 30 - scroll.viewport().width()))
+    settle(qapp)
+    view = shown(canvas, scroll)
+    assert 0 < view.right() - end <= 40, "the essay ends just inside the right edge of what shows"
+    hold_still(canvas, 3, 19 * 60 + 45)
+    pill = pill_box(canvas)
+    canvas.hand.cancel()
+    assert not pill.isEmpty(), "no words were drawn beside the held essay"
+    assert view.contains(pill), (
+        f"the pill spans x {pill.left()}–{pill.right()}; what shows is x {view.left()}–{view.right()}"
+    )
+
+
+def test_a_held_blocks_words_stay_in_what_shows_on_a_column_scrolled_past_its_start(
+    qapp: QApplication,
+) -> None:
+    """School, held by its end with its start scrolled away above, has its times on a pill in what
+    shows, not beside its start off the top of the viewport."""
+    view = a_week(qapp, [SCHOOL], a_hand(words=True))
+    view.scroll.scroll_to(12 * 60, above=0)
+    settle(qapp)
+    canvas = view.hours
+    seen = shown(canvas, view.scroll)
+    assert canvas.track_for(0).point_for(8 * 60).y() < seen.top(), "School's start is scrolled away"
+    hold_still(canvas, 0, 14 * 60)
+    pill = pill_box(canvas)
+    canvas.hand.cancel()
+    assert not pill.isEmpty(), "no words were drawn beside the held School"
+    assert seen.contains(pill), (
+        f"the pill spans y {pill.top()}–{pill.bottom()}; what shows is y {seen.top()}–{seen.bottom()}"
+    )
+
+
+def test_tab_moves_the_focus_on_and_leaves_the_hours_where_they_are(qapp: QApplication) -> None:
+    """A scroll area shows the child that had the focus when the focus moves on, which for hours
+    longer than what shows means jumping to their middle. Tab must only move the focus."""
+    from PySide6.QtWidgets import QHBoxLayout
+
+    scroll = a_lane_week(qapp)
+    host = QWidget()
+    HOSTS.append(host)
+    row = QHBoxLayout(host)
+    row.addWidget(scroll, 1)
+    side = a_side(host)
+    row.addWidget(side)
+    host.move(0, 0)
+    host.resize(800, 480)
+    host.show()
+    settle(qapp)
+    scroll.restore({"lanes.week": 96})
+    scroll.scroll_to(19 * 60, above=0)
+    host.activateWindow()
+    assert QTest.qWaitForWindowActive(host)
+    scroll.canvas.setFocus(Qt.FocusReason.MouseFocusReason)
+    settle(qapp)
+    QTest.keyClick(scroll.canvas, Qt.Key.Key_Tab)
+    settle(qapp)
+    at = minute_across(scroll, 0)
+    assert 18 * 60 + 45 <= at <= 19 * 60 + 15, (
+        f"after Tab the lanes start at {int(at) // 60:02d}:{int(at) % 60:02d}"
+    )
+    assert QApplication.focusWidget() is not scroll.canvas, "Tab left the focus on the hours"

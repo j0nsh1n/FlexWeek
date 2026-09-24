@@ -12,7 +12,8 @@ where a block is drawn, and how to bring a stretch of hours into view.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, Signal
@@ -218,18 +219,12 @@ class BlockPainter:
         painter.drawText(
             QRectF(room.left(), room.top(), room.width(), line), Qt.AlignmentFlag.AlignLeft, name
         )
-        painter.setFont(plain)
         faint = QColor(ink)
         faint.setAlphaF(0.8)
         refused = drawn.verdict is not None and not drawn.verdict.ok
         painter.setPen(self.c("error") if refused else faint)
         below = QRectF(room.left(), room.top() + line + 1, room.width(), room.height() - line - 1)
-        metrics = QFontMetricsF(plain)
-        for index, text in enumerate(fit_lines(detail, plain, below.width(), below.height())):
-            box = QRectF(
-                below.left(), below.top() + index * metrics.lineSpacing(), below.width(), metrics.height()
-            )
-            painter.drawText(box, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, text)
+        _write_lines(painter, detail, plain, below)
 
     def ghost(self, painter: QPainter, rect: QRectF, words: str, ok: bool) -> None:
         """Something about to be made: a tinted block where it would go, with its times."""
@@ -241,13 +236,8 @@ class BlockPainter:
         painter.drawRoundedRect(rect, 5, 5)
         bold = QFont(painter.font())
         bold.setBold(True)
-        painter.setFont(bold)
         painter.setPen(self.c("text"))
-        painter.drawText(
-            rect.adjusted(8, 3, -6, -3),
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap,
-            words,
-        )
+        _write_lines(painter, words, bold, rect.adjusted(8, 3, -6, -3))
 
     def hint(self, painter: QPainter, rect: QRectF, big: bool) -> None:
         """The free time under the pointer, lit, with how to use it."""
@@ -284,12 +274,14 @@ class BlockPainter:
             painter.drawLine(QPointF(area.left() + at, area.top()), QPointF(area.left() + at, area.bottom()))
 
     def label(self, painter: QPainter, beside: QRectF, words: str, ok: bool, room: QRectF) -> None:
-        """The held block's words on a pill beside it, when the block is too small to say them."""
+        """The held block's words on a pill beside it, when the block is too small to say them, kept
+        in `room`, the part of the hours on screen."""
         plain = _small(painter.font())
         metrics = QFontMetrics(plain)
         width, height = metrics.horizontalAdvance(words) + 20, metrics.height() + 10
         left = beside.right() + 6 if beside.right() + 6 + width <= room.right() else beside.left() - 6 - width
-        pill = QRectF(max(left, room.left()), beside.top(), width, height)
+        top = max(min(beside.top(), room.bottom() - height), room.top())
+        pill = QRectF(max(left, room.left()), top, width, height)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(self.c("accent" if ok else "error"))
         painter.drawRoundedRect(pill, height / 2, height / 2)
@@ -303,6 +295,26 @@ class BlockPainter:
         painter.setFont(font)
         painter.setPen(self.c("accent" if today else "muted"))
         painter.drawText(box, Qt.AlignmentFlag.AlignCenter, words)
+
+
+@contextmanager
+def _fresh(painter: QPainter) -> Iterator[None]:
+    """Whatever a painter method sets on the painter, its font above all, is undone after it, so
+    what is drawn next starts from the canvas's own font and not from the small one before it."""
+    painter.save()
+    try:
+        yield
+    finally:
+        painter.restore()
+
+
+def _write_lines(painter: QPainter, text: str, font: QFont, room: QRectF) -> None:
+    """`text` in the whole lines that fit `room`, from its top left."""
+    painter.setFont(font)
+    metrics = QFontMetricsF(font)
+    for index, line in enumerate(fit_lines(text, font, room.width(), room.height())):
+        box = QRectF(room.left(), room.top() + index * metrics.lineSpacing(), room.width(), metrics.height())
+        painter.drawText(box, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, line)
 
 
 def _small(font: QFont) -> QFont:
@@ -507,21 +519,26 @@ class HoursCanvas(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         visible = self._visible()
-        self.painter.background(painter, QRectF(self.rect()))
+        with _fresh(painter):
+            self.painter.background(painter, QRectF(self.rect()))
         preview = self.hand.preview
         held = preview.held if preview is not None else None
         for index, track in enumerate(self.tracks):
             painter.save()
             painter.setTransform(track.transform, True)
-            self.painter.track(painter, track, track.day == self.today)
+            with _fresh(painter):
+                self.painter.track(painter, track, track.day == self.today)
             if index == 0 and self.gutter and track.axis is Axis.DOWN:
-                self.painter.hour_labels(painter, track, self.gutter)
+                with _fresh(painter):
+                    self.painter.hour_labels(painter, track, self.gutter)
             if index == 0 and self.header and track.axis is Axis.ACROSS:
-                self.painter.hour_labels(painter, track, self.header, every=120)
+                with _fresh(painter):
+                    self.painter.hour_labels(painter, track, self.header, every=120)
             self._paint_hint(painter, track)
             upright_visible = track.transform.inverted()[0].mapRect(visible)
             for drawn, rect in self.drawn(track):
-                self.painter.block(painter, rect, drawn, upright_visible)
+                with _fresh(painter):
+                    self.painter.block(painter, rect, drawn, upright_visible)
             if (
                 preview is not None
                 and held is not None
@@ -529,18 +546,21 @@ class HoursCanvas(QWidget):
                 and preview.span.day == track.day
             ):
                 rect = track.rect_for(preview.span.start, preview.span.end)
-                self.painter.ghost(painter, rect, span_words(preview.span), True)
+                with _fresh(painter):
+                    self.painter.ghost(painter, rect, span_words(preview.span), True)
             if (
                 self.today == track.day
                 and self.now_min is not None
                 and track.first <= self.now_min <= track.last
             ):
-                self.painter.now(painter, track, self.now_min)
+                with _fresh(painter):
+                    self.painter.now(painter, track, self.now_min)
             painter.restore()
         for track in self.tracks:
             box = self._name_box(track)
             if box is not None:
-                self.painter.day_name(painter, box, self._names(track.day), track.day == self.today)
+                with _fresh(painter):
+                    self.painter.day_name(painter, box, self._names(track.day), track.day == self.today)
         self._paint_label(painter)
         painter.end()
 
@@ -577,7 +597,7 @@ class HoursCanvas(QWidget):
                 small = QFontMetrics(_small(painter.font())).horizontalAdvance(words) > rect.width() - 14
                 if small or rect.height() < 30:
                     self.painter.label(
-                        painter, track.transform.mapRect(rect), words, preview.verdict.ok, QRectF(self.rect())
+                        painter, track.transform.mapRect(rect), words, preview.verdict.ok, self._visible()
                     )
                 return
 
@@ -599,7 +619,8 @@ class HoursCanvas(QWidget):
             return
         rect = track.rect_for(low, high)
         big = (rect.height() if track.axis is Axis.DOWN else rect.width()) >= 26
-        self.painter.hint(painter, rect, big)
+        with _fresh(painter):
+            self.painter.hint(painter, rect, big)
 
     # Pointer
 

@@ -147,6 +147,10 @@ class HoursScroll(QScrollArea):
         self._length_for = length_for
         self._gutter = gutter
         self._pending: tuple[int, int] | None = None
+        # The minute at the start of what showed when the hours were hidden, until it is put back,
+        # and where the bar stopped while there was no room yet to put it back.
+        self._kept: float | None = None
+        self._short_at: int | None = None
         # The header first: the scroll area starts filtering events as soon as it holds the hours.
         self.buttons = ZoomButtons(name)
         self.buttons.out.clicked.connect(lambda: self.zoom_by(-1))
@@ -248,6 +252,7 @@ class HoursScroll(QScrollArea):
         """Put `minute` near the start of what shows, with `above` minutes of the day before it.
         Hours that are not on screen yet do it when they are shown, and only then."""
         self._pending = (minute, above)
+        self._kept = self._short_at = None
         if not self.isVisible():
             return
         self._lay_out_now()
@@ -255,11 +260,39 @@ class HoursScroll(QScrollArea):
             self._pending = None
             self._bar().setValue(round(self._y_for(minute - above)))
 
+    def focusNextPrevChild(self, next: bool) -> bool:  # noqa: N802
+        # QScrollArea's own then scrolls to show the child that had the focus: for hours longer than
+        # what shows, a jump to their middle on Tab and whenever the hours are hidden.
+        return QWidget.focusNextPrevChild(self, next)
+
+    def hideEvent(self, event: object) -> None:  # noqa: N802
+        super().hideEvent(event)
+        self._kept, self._short_at = self._minute_at(self._bar().value()), None
+
     def showEvent(self, event: object) -> None:  # noqa: N802
+        """Hours shown again start at the minute they started at when hidden, however the design
+        parked them, unless a time was asked for meanwhile."""
         super().showEvent(event)
         self._place_header()
         if self._pending is not None:
             self.scroll_to(*self._pending)
+        elif self._kept is not None:
+            self._put_back()
+
+    def _put_back(self) -> None:
+        """Put the kept minute at the start of what shows. A design still laying out its page can
+        show the hours wider than they end up, with no room to start there: the bar stops at its
+        end, and the minute is put back when they narrow, unless the student has scrolled."""
+        self._lay_out_now()
+        kept, bar = self._kept, self._bar()
+        if kept is None or not self.canvas.tracks:
+            return
+        wanted = round(self._y_for(kept))
+        bar.setValue(wanted)
+        if bar.value() == wanted:
+            self._kept = self._short_at = None
+        else:
+            self._short_at = bar.value()
 
     def _minute_at(self, along: float) -> float | None:
         """The minute at a distance along the hours, down or across."""
@@ -319,6 +352,11 @@ class HoursScroll(QScrollArea):
     def resizeEvent(self, event: object) -> None:  # noqa: N802
         super().resizeEvent(event)
         self._place_header()
+        if self._short_at is not None and self.isVisible():
+            if self._bar().value() == self._short_at:
+                self._put_back()
+            else:
+                self._kept = self._short_at = None
 
     def viewportEvent(self, event: QEvent) -> bool:  # noqa: N802
         if event.type() == QEvent.Type.Resize:
