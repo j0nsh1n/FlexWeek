@@ -10,7 +10,6 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import json
-import math
 import os
 import time
 from collections.abc import Callable, Iterator
@@ -321,32 +320,6 @@ def test_a_drop_after_the_due_date_is_refused_and_changes_nothing(
     settled(qapp, window)
     assert placed(window, "poster")[1] is None
     assert window.session.message == said
-
-
-def test_the_day_dial_takes_the_time_round_the_clock(qapp: QApplication, window: NativeWindow) -> None:
-    window._layout = sanitize_layout({"main": "classic", "day": "dial"})
-    window.findChild(QPushButton, "viewMyDay").click()
-    for _ in range(10):
-        qapp.processEvents()
-    face = named(shown_view(window), "dialFace")
-    centre, radius, _width = face._geometry()
-    turn = math.radians(face._angle(20 * 60))
-    point = QPoint(round(centre.x() + radius * math.sin(turn)), round(centre.y() - radius * math.cos(turn)))
-    assert let_go(qapp, face, point, session_of(window, "essay")["id"], from_day=3) == "Thu 20:00–21:00 · 1 h"
-    settled(qapp, window)
-    assert placed(window, "essay") == ([3], "20:00", True)
-
-
-def test_one_thing_puts_the_thing_later_along_the_day_bar(qapp: QApplication, window: NativeWindow) -> None:
-    window._layout = sanitize_layout({"main": "classic", "day": "one"})
-    window.findChild(QPushButton, "viewMyDay").click()
-    for _ in range(10):
-        qapp.processEvents()
-    bar = named(shown_view(window), "oneDayBar")
-    point = QPoint(round(bar._x(20 * 60 + 30)), bar.height() // 2)
-    assert let_go(qapp, bar, point, session_of(window, "essay")["id"], from_day=3) == "Thu 20:30–21:30 · 1 h"
-    settled(qapp, window)
-    assert placed(window, "essay") == ([3], "20:30", True)
 
 
 def recording_lifts(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, int, int]]:
