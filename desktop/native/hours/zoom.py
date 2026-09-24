@@ -15,7 +15,7 @@ is no longer offered is read as the nearest one that is.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from PySide6.QtCore import QEvent, QObject, QPointF, QRect, QSize, Qt, Signal
@@ -44,6 +44,10 @@ class Scale:
     key: str
     levels: tuple[int, ...]
     default: int
+
+    def __post_init__(self) -> None:
+        if KEY.fullmatch(self.key) is None or len(self.key) > 40:
+            raise ValueError(f"{self.key!r} cannot be kept in the look file: use design.surface, a to z")
 
     def nearest(self, px: object) -> int:
         if not isinstance(px, int) or isinstance(px, bool):
@@ -188,7 +192,7 @@ class HoursScroll(QScrollArea):
 
     # Zoom
 
-    def restore(self, remembered: dict[str, int]) -> None:
+    def restore(self, remembered: Mapping[str, int]) -> None:
         """The level this device last chose for this surface, if any. Nothing is remembered again."""
         if self.scale.key in remembered:
             self._apply(self.scale.nearest(remembered[self.scale.key]), None)

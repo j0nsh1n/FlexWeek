@@ -122,6 +122,16 @@ def test_a_remembered_level_is_read_back_as_one_the_surface_offers() -> None:
     assert sanitize_zoom(["classic.week", 64]) == {}
 
 
+def test_a_scale_the_look_file_could_not_keep_is_refused_where_it_is_made() -> None:
+    """The look file drops a key it does not recognise when it is read, so a scale named that way
+    would zoom and then forget, with nothing said."""
+    with pytest.raises(ValueError):
+        Scale("mission.week2", (32, 48), 48)
+    with pytest.raises(ValueError):
+        Scale("one_thing.day", (32, 48), 48)
+    assert Scale("mission.week", (32, 48), 48).key == "mission.week"
+
+
 def test_ctrl_and_the_wheel_zoom_about_the_pointer(qapp: QApplication) -> None:
     view = a_week(qapp)
     port = view.scroll.viewport()
