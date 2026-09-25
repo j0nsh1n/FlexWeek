@@ -23,11 +23,11 @@ from PySide6.QtWidgets import (
 
 from desktop.native.settings import PrefsDialog
 from desktop.native.window import NativeWindow
-from desktop.tests.window_support import qapp, server, signed_out, window  # noqa: F401
+from desktop.tests.window_support import host, qapp, server, signed_out, window  # noqa: F401
 
 
-def page() -> tuple[QScrollArea, QLineEdit, QSpinBox, QTimeEdit, QComboBox]:
-    area = QScrollArea()
+def page(parent: QWidget) -> tuple[QScrollArea, QLineEdit, QSpinBox, QTimeEdit, QComboBox]:
+    area = QScrollArea(parent)
     body = QWidget()
     column = QVBoxLayout(body)
     typing = QLineEdit()
@@ -44,22 +44,24 @@ def page() -> tuple[QScrollArea, QLineEdit, QSpinBox, QTimeEdit, QComboBox]:
     area.setWidget(body)
     area.setWidgetResizable(True)
     area.resize(320, 300)
+    parent.resize(340, 320)
     return area, typing, spin, clock, menu
 
 
 def roll(area: QScrollArea, over: QWidget) -> None:
     """One notch down, from the system, as a real mouse sends it: through the window."""
     at = QPointF(over.mapTo(area.window(), QPoint(12, over.height() // 2)))
-    QTest.wheelEvent(area.windowHandle(), at, QPoint(0, -120))
+    QTest.wheelEvent(area.window().windowHandle(), at, QPoint(0, -120))
     QApplication.processEvents()
 
 
 def test_the_wheel_over_a_box_the_student_is_not_in_scrolls_the_page(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
+    host: QWidget,  # noqa: F811
 ) -> None:
-    area, typing, spin, clock, menu = page()
-    area.show()
+    area, typing, spin, clock, menu = page(host)
+    host.show()
     assert QTest.qWaitForWindowExposed(area)
     bar = area.verticalScrollBar()
     for box, value in ((spin, spin.value), (clock, clock.time), (menu, menu.currentIndex)):
@@ -70,20 +72,19 @@ def test_the_wheel_over_a_box_the_student_is_not_in_scrolls_the_page(
         assert value() == before, f"{type(box).__name__} changed under a passing wheel"
         assert bar.value() > 0, f"the page did not scroll over the {type(box).__name__}"
         assert not box.hasFocus(), "the wheel is not a click; it must not take the keyboard"
-    area.close()
 
 
 def test_the_wheel_still_changes_a_box_the_student_clicked_into(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
+    host: QWidget,  # noqa: F811
 ) -> None:
-    area, _typing, spin, _clock, _menu = page()
-    area.show()
+    area, _typing, spin, _clock, _menu = page(host)
+    host.show()
     assert QTest.qWaitForWindowExposed(area)
     spin.setFocus()
     roll(area, spin)
     assert spin.value() == 49
-    area.close()
 
 
 def test_scrolling_down_settings_leaves_the_focus_minutes_alone(

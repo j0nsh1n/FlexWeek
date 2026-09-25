@@ -12,8 +12,8 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QStandardPaths
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtCore import QEvent, QStandardPaths
+from PySide6.QtWidgets import QApplication, QPushButton, QWidget
 
 from desktop.native.window import NativeWindow
 from desktop.server import LocalServer
@@ -44,6 +44,22 @@ def settled(qapp: QApplication, window: NativeWindow) -> None:
     wait_until(qapp, lambda: not window.session.busy and not window.session.dirty)
 
 
+def free(widget: QWidget) -> None:
+    """Delete a widget now. Left to the garbage collector, a widget a failed test still held went in
+    the middle of a later test's event loop, and Qt crashed."""
+    widget.deleteLater()
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    QApplication.processEvents()
+
+
+@pytest.fixture()
+def host(qapp: QApplication) -> Iterator[QWidget]:
+    """A parent for dialogs a test makes on their own, freed when the test ends, pass or fail."""
+    made = QWidget()
+    yield made
+    free(made)
+
+
 @pytest.fixture()
 def server(qapp: QApplication, tmp_path: Path) -> Iterator[LocalServer]:
     running = LocalServer(tmp_path / "flexweek.db")
@@ -62,7 +78,7 @@ def signed_out(qapp: QApplication, server: LocalServer) -> Iterator[NativeWindow
         with contextlib.suppress(RuntimeError):
             window.session.client.reset()
         window.hide()
-        qapp.processEvents()
+        free(window)
 
 
 @pytest.fixture()

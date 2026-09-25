@@ -23,12 +23,14 @@ from PySide6.QtWidgets import (
     QProxyStyle,
     QPushButton,
     QStyle,
+    QWidget,
 )
 
 from desktop.native import widgets
 from desktop.native.widgets import BlockDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.window_support import (  # noqa: F401
+    host,
     qapp,
     server,
     settled,
@@ -68,31 +70,35 @@ def icon_style(qapp: QApplication) -> Iterator[None]:  # noqa: F811
     qapp.setStyle(name)
 
 
-def test_the_editor_is_titled_as_a_student_says_it(qapp: QApplication) -> None:  # noqa: F811
-    assert BlockDialog(None, day=3, start="17:15").windowTitle() == "New event"
-    assert BlockDialog(None, soccer()).windowTitle() == "Edit event"
+def test_the_editor_is_titled_as_a_student_says_it(qapp: QApplication, host: QWidget) -> None:  # noqa: F811
+    assert BlockDialog(host, day=3, start="17:15").windowTitle() == "New event"
+    assert BlockDialog(host, soccer()).windowTitle() == "Edit event"
 
 
-def test_it_says_that_ticking_another_day_repeats_it(qapp: QApplication) -> None:  # noqa: F811
-    dialog = BlockDialog(None, day=3, start="17:15", duration_min=30, from_range=True)
+def test_it_says_that_ticking_another_day_repeats_it(qapp: QApplication, host: QWidget) -> None:  # noqa: F811
+    dialog = BlockDialog(host, day=3, start="17:15", duration_min=30, from_range=True)
     dialog.show()
     note = dialog.findChild(QLabel, "blockRepeatNote")
     assert note.text() == "Tick more days to repeat it on those days this week."
     assert note.isVisibleTo(dialog)
-    series = BlockDialog(None, soccer(), occurrence_day=3)
+    series = BlockDialog(host, soccer(), occurrence_day=3)
     series.show()
     series.scope_occurrence.setChecked(True)
     note = series.findChild(QLabel, "blockRepeatNote")
     assert not note.isVisibleTo(series), "the days cannot be changed for this day only"
 
 
-def test_the_missed_box_names_the_day(qapp: QApplication) -> None:  # noqa: F811
-    dialog = BlockDialog(None, soccer(), occurrence_day=3)
+def test_the_missed_box_names_the_day(qapp: QApplication, host: QWidget) -> None:  # noqa: F811
+    dialog = BlockDialog(host, soccer(), occurrence_day=3)
     assert dialog.missed.text() == "I missed it on Thursday"
 
 
-def test_no_button_in_the_editor_has_an_icon(qapp: QApplication, icon_style: None) -> None:  # noqa: F811
-    dialog = BlockDialog(None, soccer(), occurrence_day=3)
+def test_no_button_in_the_editor_has_an_icon(
+    qapp: QApplication,  # noqa: F811
+    icon_style: None,
+    host: QWidget,  # noqa: F811
+) -> None:
+    dialog = BlockDialog(host, soccer(), occurrence_day=3)
     buttons = dialog.findChildren(QPushButton)
     assert {button.text() for button in buttons} >= {"Save", "Cancel", "Delete"}
     assert [button.text() for button in buttons if not button.icon().isNull()] == []
@@ -136,6 +142,7 @@ def test_save_is_the_one_filled_button_and_delete_is_quiet_at_the_bottom_left(
 def test_delete_asks_first_and_does_nothing_when_refused(
     qapp: QApplication,  # noqa: F811
     monkeypatch: pytest.MonkeyPatch,
+    host: QWidget,  # noqa: F811
 ) -> None:
     asked: list[tuple[str, str, str]] = []
     answer = [False]
@@ -145,7 +152,7 @@ def test_delete_asks_first_and_does_nothing_when_refused(
         return answer[0]
 
     monkeypatch.setattr(widgets, "confirm", confirm)
-    dialog = BlockDialog(None, soccer())
+    dialog = BlockDialog(host, soccer())
     dialog.show()
     dialog.delete_button.click()
     assert asked == [("Delete event", "Delete Soccer practice? You can undo this.", "Delete")]
@@ -154,7 +161,7 @@ def test_delete_asks_first_and_does_nothing_when_refused(
     answer[0] = True
     dialog.delete_button.click()
     assert dialog.deleted() is True and dialog.result() == QDialog.DialogCode.Accepted
-    one_day = BlockDialog(None, soccer(), occurrence_day=3)
+    one_day = BlockDialog(host, soccer(), occurrence_day=3)
     one_day.scope_occurrence.setChecked(True)
     one_day.delete_button.click()
     assert asked[-1][1] == "Delete Soccer practice on Thursday? You can undo this."

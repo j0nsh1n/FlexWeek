@@ -14,12 +14,13 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QStandardPaths
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QApplication, QLabel, QMenu, QPushButton
+from PySide6.QtWidgets import QApplication, QLabel, QMenu, QPushButton, QWidget
 
 from desktop.native import settings
 from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.window import NativeWindow
 from desktop.tests.window_support import (  # noqa: F401
+    host,
     qapp,
     server,
     settled,
@@ -191,8 +192,9 @@ def test_about_gives_the_version_what_flexweek_is_and_where_its_data_lives(
 
 def test_help_says_guides_are_coming_and_explains_each_screen_and_the_keys(
     qapp: QApplication,  # noqa: F811
+    host: QWidget,  # noqa: F811
 ) -> None:
-    dialog = settings.HelpDialog(None)
+    dialog = settings.HelpDialog(host)
     said = "\n".join(label.text() for label in dialog.findChildren(QLabel))
     for line in (
         "A tutorial and short guides are coming in a later version. Until then, this is the short version.",
