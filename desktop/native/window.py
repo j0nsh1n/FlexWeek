@@ -300,6 +300,7 @@ class NativeWindow(QMainWindow):
         self.session.busy_changed.connect(self._on_busy)
         self.session.save_finished.connect(self._on_save_finished)
         self.session.plan_conflicts.connect(self._on_plan_conflicts)
+        self.session.planned.connect(self._on_planned)
         self._late_dialog: LateDialog | None = None
         # The late start accepted but not stored yet, and the sentence its save will confirm.
         self._late_waiting: tuple[str, str] | None = None
@@ -1626,7 +1627,10 @@ class NativeWindow(QMainWindow):
         category = self.session.armed_category
         if category not in FLEX_CATEGORIES:
             category = "assignments"
-        self._commit_homework(HomeworkDialog(self, week_start=self.session.week_start, category=category))
+        self._commit_homework(HomeworkDialog(self, today=self._today(), category=category))
+
+    def _today(self) -> str:
+        return clock_parts(self.session.now_ms())["iso"]
 
     def _sync_add_button(self) -> None:
         """The Add button carries the type a drag on the calendar will make, so the armed type is
@@ -1836,6 +1840,10 @@ class NativeWindow(QMainWindow):
             self._telling = False
             self.toast.show_message(message)
 
+    def _on_planned(self, said: str) -> None:
+        self._set_notice(said, "Undo", self._undo_from_notice)
+        self._notice_step = self.session.last_step()
+
     def _on_plan_conflicts(self, lost: list) -> None:
         if not lost:
             return
@@ -1857,7 +1865,7 @@ class NativeWindow(QMainWindow):
         self.session.arm_category(category)
         self._sync_add_button()
         if category in FLEX_CATEGORIES:
-            self._commit_homework(HomeworkDialog(self, week_start=self.session.week_start, category=category))
+            self._commit_homework(HomeworkDialog(self, today=self._today(), category=category))
             return
         self._commit_block(BlockDialog(self, category=category))
 
@@ -1876,7 +1884,6 @@ class NativeWindow(QMainWindow):
             self._commit_homework(
                 HomeworkDialog(
                     self,
-                    week_start=self.session.week_start,
                     category=category,
                     estimate_min=duration,
                     due=sunday_due(self.session.week_start),
@@ -1910,7 +1917,7 @@ class NativeWindow(QMainWindow):
         sessions = [block for block in self.session.blocks if block.get("assignment_id") == assignment_id]
         waiting = any(not block.get("start") and not block.get("completed") for block in sessions)
         pinned = any(block.get("pinned") for block in sessions)
-        dialog = HomeworkDialog(self, assignment, self.session.week_start, waiting=waiting, pinned=pinned)
+        dialog = HomeworkDialog(self, assignment, waiting=waiting, pinned=pinned)
         self._commit_homework(dialog)
 
     def _choose_time(self, assignment_id: str) -> None:

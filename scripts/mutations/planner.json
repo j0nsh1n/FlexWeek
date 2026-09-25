@@ -30,8 +30,50 @@
  {
   "file": "backend/models.py",
   "name": "a work window starts at any minute",
-  "old": "        if not (start_fits_day(start) and on_slot(start)):\n            raise ValueError(\"start must be on the 00:00–24:00 grid\")\n        return value\n\n    @field_validator(\"end\")\n",
-  "new": "        if not start_fits_day(start):\n            raise ValueError(\"start must be on the 00:00–24:00 grid\")\n        return value\n\n    @field_validator(\"end\")\n",
+  "old": "        if not (start_fits_day(start) and on_slot(start)):\n            raise ValueError(\"start must be on the 00:00\u201324:00 grid\")\n        return value\n\n    @field_validator(\"end\")\n",
+  "new": "        if not start_fits_day(start):\n            raise ValueError(\"start must be on the 00:00\u201324:00 grid\")\n        return value\n\n    @field_validator(\"end\")\n",
   "test": "backend/tests/test_stage4_api.py::test_estimates_and_the_planners_windows_stay_on_the_quarter_hour"
+ },
+ {
+  "file": "desktop/native/reuse.py",
+  "name": "a plan is not told when now is",
+  "old": "    return {**session, \"days\": days, \"earliest\": f\"{DAY_FULL[day]} {minutes_to_hhmm(minute)}\"}\n",
+  "new": "    return {**session, \"days\": days}\n",
+  "test": "desktop/tests/test_homework_plan.py::test_plan_on_a_thursday_leaves_monday_to_wednesday_and_the_hours_before_now_alone"
+ },
+ {
+  "file": "desktop/native/reuse.py",
+  "name": "days already gone stay open, so the reason is wrong",
+  "old": "    days = [item for item in session[\"days\"] if item >= day] or [day]\n",
+  "new": "    days = session[\"days\"]\n",
+  "test": "desktop/tests/test_homework_plan.py::test_plan_on_a_thursday_leaves_monday_to_wednesday_and_the_hours_before_now_alone"
+ },
+ {
+  "file": "desktop/native/reuse.py",
+  "name": "Replan all moves homework whose time has come",
+  "old": "        kept = planned and (bool(block.get(\"pinned\")) or _begun(block, not_before))\n",
+  "new": "        kept = planned and bool(block.get(\"pinned\"))\n",
+  "test": "desktop/tests/test_homework_plan.py::test_replan_all_leaves_homework_whose_time_has_passed"
+ },
+ {
+  "file": "desktop/native/reuse.py",
+  "name": "now rounded down to the quarter hour",
+  "old": "    minute = -(-minute // SLOT_MIN) * SLOT_MIN\n",
+  "new": "    minute = minute // SLOT_MIN * SLOT_MIN\n",
+  "test": "desktop/tests/test_homework_plan.py::test_a_plan_starts_at_now_rounded_up_to_the_next_quarter_hour"
+ },
+ {
+  "file": "desktop/native/controller.py",
+  "name": "a week that is over is planned",
+  "old": "        if start is not None and start[0] > 6:\n",
+  "new": "        if False:\n",
+  "test": "desktop/tests/test_homework_plan.py::test_plan_on_a_week_that_is_over_places_nothing_and_says_so"
+ },
+ {
+  "file": "desktop/native/controller.py",
+  "name": "a plan's Undo is not offered",
+  "old": "            if planned:\n                self.planned.emit(self.message)\n",
+  "new": "",
+  "test": "desktop/tests/test_homework_plan.py::test_plan_says_what_it_did_with_an_undo_that_takes_it_all_back"
  }
 ]

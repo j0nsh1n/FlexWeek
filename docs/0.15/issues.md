@@ -20,10 +20,10 @@ decision first.
 | # | What | Where / evidence | State |
 | --- | --- | --- | --- |
 | 5 | The block editor accepts any minute and the server refuses anything off the 15-minute grid after Save, in its own words ("block must fit the 00:00–24:00 grid"). Setup rounds times silently. Elsewhere steps of 5. | `widgets.py` `_span_problem` checks the length only; API: 18:30 and 18:45 save, 18:35/18:37/18:40 are 422 (`scratch/grid_probe.py`). T6, owner 1, C8. Decision 7 said 15 minutes; Jonathan's decision 3 replaced it. | Done: d60146b (server keeps any minute, planner fits around it), 198995b (editor, setup, paste, Choose a time), e16ebd7 and 74b29a4 (drags in steps of 5 or 15). |
-| 6 | New homework is due on the week's Monday, not today. | `widgets.py:913` `"due": due or week_start`. T4, owner 6, C1. | P1 |
-| 7 | Changing the due date raises inside Qt and the follow-up step (`_disable_spread`) never runs. | `DueField`: `self.date.dateChanged.connect(self.changed.emit)` hands a `QDate` to a `Signal()`; seen as `TypeError: changed() only accepts 0 argument(s)` in Claude's probe. T5. | P1 |
-| 8 | Plan places homework on days already gone (a Monday-due report planned on the past Tuesday). | T3. The solver plans the whole visible week; nothing tells it today. | P1 |
-| 9 | Homework length: 0 quietly becomes 60, 99 hours is accepted. | T11. | P1 |
+| 6 | New homework is due on the week's Monday, not today. | `widgets.py:913` `"due": due or week_start`. T4, owner 6, C1. | P1 — fixed `225908e`: new homework defaults to today. |
+| 7 | Changing the due date raises inside Qt and the follow-up step (`_disable_spread`) never runs. | `DueField`: `self.date.dateChanged.connect(self.changed.emit)` hands a `QDate` to a `Signal()`; seen as `TypeError: changed() only accepts 0 argument(s)` in Claude's probe. T5. | P1 — fixed `7b9d19b`: the signal emits without a `QDate`, and the follow-up runs. |
+| 8 | Plan places homework on days already gone (a Monday-due report planned on the past Tuesday). | T3. The solver plans the whole visible week; nothing tells it today. | P1 — fixed `e123f55`: Plan excludes time before now, including in Replan all. |
+| 9 | Homework length: 0 quietly becomes 60, 99 hours is accepted. | T11. | P1 — fixed `8709df9`: lengths outside 15 minutes to 24 hours are refused in words. |
 | 10 | Mission's Day and Week open at midnight; Timmy also saw Day and Week open at the wrong hours elsewhere. | `mission.py` has no `scroll_to`; the others scroll to now or the first block. C2, T27. | P1. Done, `9ff5bdc`: every design's Day and Week open at now, else the first block of the day or week, else 08:00, on each new day or week; the same one keeps where it was scrolled. |
 
 ## Words on screen
@@ -48,7 +48,7 @@ decision first.
 | 21 | Chips cut their text at the wrong end ("Science poster · 1 h …"); the top bar clips below about 900 px ("21 – 2…", "n my homew"); Retro's notepad clips its deadline lines at 1150x768 with large text. | C5, C7, C9, T28. | P1. Done: a chip shortens its title and keeps its length (`09d01ec`); the top bar keeps whole words, with a short title and "Plan" where there is no room (`05102b9`); a notepad line puts its date under its title (`3d04657`). |
 | 22 | A short block on sideways hours draws as three lines of "…". | Shared painter `words`. C3. | P1. Done, `7830bfa`: a block with no room for its name shows its first letter, and a line with room only for "…" is left out. |
 | 23 | The first and last hour labels are cut at the scroll edges on sideways hours. | Shared `hour_labels`. C4. | P2. Done, `7830bfa`: an hour label on the edge of what shows is moved inside it. |
-| 24 | The date picker is cut off on the left in setup and on the right in Add homework. | T29. | P2 |
+| 24 | The date picker is cut off on the left in setup and on the right in Add homework. | T29. | P2 — fixed `85c5312`: the whole month fits and the popup stays on screen. |
 | 25 | The "Next: … (in 23m)" countdown only redraws during a focus session. | T22. | P2. Done, `e05d53d`: the window's 20-second clock tick redraws the line too. |
 | 26 | A one-off dragged block's editor shows seven day boxes with nothing saying that ticking one makes it repeat. | T20. | P2. Done, lane D (`8d6865b`, `06ec931`): one line under the day boxes, "Tick more days to repeat it this week." |
 | 27 | Save and Cancel look the same; floppy-disk and red-X icons look dated. Delete is the most prominent button in the block editor. | T21, T13. | P2. Done, lane D (`8d6865b`, `790a8d1`; decision 4): Save is the one filled button and the default, no button has an icon, Delete is quiet red words at the bottom left and asks first. The question's Delete is red and Cancel plain. |
@@ -64,7 +64,7 @@ decision first.
 | # | What | Where / evidence | State |
 | --- | --- | --- | --- |
 | 34 | Dragging or resizing saves at once with no sign; add an Undo toast as after finishing homework. Advanced actions give no feedback. | T17, T18. | P2. Done, `f66679a`: a move, resize, placing, create by drag or Month carry says what it did with Undo once saved; each Advanced item says what it did in the toast. Plan's own Undo is lane C's. |
-| 35 | Plan cannot be undone. | T12. Check: a plan is a save, and saves are undo steps; if Undo is there and hidden, that is row 34. | P2 |
+| 35 | Plan cannot be undone. | T12. Check: a plan is a save, and saves are undo steps; if Undo is there and hidden, that is row 34. | P2 — fixed `1c6d3e6`: Plan and Replan all each save as one Undo step and show an Undo notice after the save lands; automatic planning joins Add homework's step. |
 | 36 | Log out and Delete account have no confirmation. | T13. | P1. Done, lane D (`fd663d2`, `06ec931`): Log out asks first, in the usual colour since nothing is lost; Delete account asks a last time and names the account. |
 
 ## Help, setup and docs
@@ -96,8 +96,9 @@ Four lanes that touch different files, so they can run at the same time; each en
 tests and the rig.
 
 - **A. Minute times** (decision 3; rows 5, 9): backend validators and `span_fits_day` accept any
-  minute and any length; the solver's occupancy covers partly-filled quarter hours; `snap()` takes
-  the step from a new `drag_step_min` preference (5 or 15); setup and Settings offer it; the rig's
+  minute while keeping each field's length limits; the solver's occupancy covers partly-filled
+  quarter hours; `snap()` takes the step from a new `drag_step_min` preference (5 or 15); setup
+  and Settings offer it; the rig's
   quarter-grab and snap expectations follow the step. Backend and engine.
 - **B. Reminders and alarms** (decisions 1 and 2; rows 1 to 4): reminders on by default and for
   existing accounts, a reminder at once when saved inside the lead, the block's Spotify link played

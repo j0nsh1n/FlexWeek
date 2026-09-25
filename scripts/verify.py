@@ -78,7 +78,7 @@ def main() -> int:
                     command,
                     cwd=ROOT,
                     check=False,
-                    timeout=300,
+                    timeout=480,
                     capture_output=capture,
                     text=capture,
                 )

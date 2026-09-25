@@ -85,6 +85,7 @@ from desktop.native.reuse import (
     late_from_start,
     late_id,
     merge_preview_rows,
+    plan_start,
     proposals_from_clipboard,
     restore_point_label,
     routine_rows,
@@ -100,6 +101,8 @@ from desktop.native.reuse import (
     week_label,
 )
 from desktop.native.weekmodel import WeekModel, build_week, due_label, length_label
+
+WEEK_OVER = "This week is over, so nothing was planned. Plan this week or a later one."
 
 
 def plan_sentence(placed: int, waiting: int) -> str:
@@ -153,6 +156,7 @@ class NativeSession(QObject):
     # Each save's outcome, for words that must wait for it: (stored, what the status line says).
     save_finished = Signal(bool, str)
     plan_conflicts = Signal(list)
+    planned = Signal(str)
     focus_changed = Signal()
     focus_replace_needed = Signal(str, str)
     alerts = Signal(list)
@@ -201,6 +205,7 @@ class NativeSession(QObject):
         self._committed_assignments: dict[str, dict] = {}
         self._history_label = "editing the week"
         self._pending_step: dict | None = None
+        self._plan_step: dict | None = None
         self._traveling: str | None = None
         self._travel_step: dict | None = None
         self.clipboard: dict | None = None
@@ -304,6 +309,7 @@ class NativeSession(QObject):
         self._committed_blocks = []
         self._committed_assignments = {}
         self._pending_step = None
+        self._plan_step = None
         self._traveling = None
         self._travel_step = None
         self.clipboard = None
@@ -1374,6 +1380,7 @@ class NativeSession(QObject):
                     self.assignments[result["id"]] = stored
                 else:
                     self.assignments.pop(result["id"], None)
+            planned = False
             if self._traveling == "undo" and self._travel_step is not None:
                 _keep_step_revisions(self._travel_step, data)
                 push_step(self._redo, self._travel_step)
@@ -1383,6 +1390,7 @@ class NativeSession(QObject):
                 push_step(self._undo, self._travel_step)
                 self._say("Redid " + self._travel_step["label"] + ".")
             else:
+                planned = self._pending_step is not None and self._pending_step is self._plan_step
                 if self._pending_step is not None:
                     stored_weeks = {week["week_start"]: week for week in data.get("weeks") or []}
                     for entry in self._pending_step["weeks"]:
@@ -1402,6 +1410,7 @@ class NativeSession(QObject):
             self._traveling = None
             self._travel_step = None
             self._pending_step = None
+            self._plan_step = None
             self._join_step = False
             self.pending_save = None
             self._save_status = None
@@ -1422,6 +1431,8 @@ class NativeSession(QObject):
                 if week_start != self.week_start:
                     self._drafts.pop(week_start, None)
             self.save_finished.emit(True, self.message)
+            if planned:
+                self.planned.emit(self.message)
             if destination is not None:
                 self.load_week(destination)
                 return
@@ -1471,10 +1482,18 @@ class NativeSession(QObject):
     def solve(self, *, everything: bool = False, only: set[str] | None = None, join: bool = False) -> None:
         """Plan my homework. Homework that already has a time keeps it.
 
-        `everything` is Replan all my homework. `only` finds new times for named work.
+        `everything` is Replan all my homework. `only` finds new times for named work. Nothing is
+        placed before now.
         """
+        if self.pending_save is not None or self.conflict:
+            self._say("Wait a moment: your last change is still saving. Then plan again.")
+            return
+        start = plan_start(self.week_start, datetime.fromtimestamp(self.now_ms() / 1000))
+        if start is not None and start[0] > 6:
+            self._say(WEEK_OVER)
+            return
         payload, targets = solve_request(
-            self.blocks, self.assignments, self.week_start, everything=everything, only=only
+            self.blocks, self.assignments, self.week_start, everything=everything, only=only, not_before=start
         )
         if not targets:
             self._say("All your homework already has a time.")
@@ -1485,6 +1504,8 @@ class NativeSession(QObject):
         def ok(data: dict) -> None:
             if not self._idle(ticket):
                 return
+            original_blocks = self.blocks
+            before = self._dump_blocks()
             self.blocks = apply_plan(
                 self.blocks, data, targets=targets, assignments=self.assignments, week_start=self.week_start
             )
@@ -1515,13 +1536,19 @@ class NativeSession(QObject):
                     self.needs_time[block_id] = reasons[block_id]
             self._fresh_plan = True
             split_note = self._apply_auto_split(data)
-            self.dirty = True
-            if not split_note:
+            changed = self._dump_blocks() != before
+            if not changed:
+                self.blocks = original_blocks
+            if changed and not split_note:
                 self._history_label = "planning the week"
             placed_note = plan_sentence(placed, waiting) + split_note
             self._say(placed_note)
             self.week_changed.emit()
+            if not changed and not self.dirty and not self.dirty_assignments:
+                return
+            self.dirty = self.dirty or changed
             self.save(status=placed_note, join=join)
+            self._plan_step = None if join or not changed else self._pending_step
 
         self.client.request(
             "POST",

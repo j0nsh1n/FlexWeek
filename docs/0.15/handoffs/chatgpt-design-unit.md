@@ -81,7 +81,7 @@ Every claim needs one of these as evidence, in your report:
    saw. A scenario that passes with an unreadable screen is not done.
 3. `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q desktop/tests/test_layout_<design>.py`
    green, with the design's existing tests updated where the surface changed.
-4. `.venv/bin/python scripts/verify.py` green (about four minutes; the pytest step has a 300 second
+4. `.venv/bin/python scripts/verify.py` green (about six minutes; the pytest step has a 480 second
    budget). Do not run it while another suite runs anywhere on this computer, in any
    checkout: they share Qt's test-mode files under `~/.qttest` and fail each other.
 5. `.venv/bin/python scripts/mutate.py scripts/mutations/targets.json` still catches every break,

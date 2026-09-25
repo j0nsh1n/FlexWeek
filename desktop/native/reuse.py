@@ -143,6 +143,32 @@ def held_in_place(block: dict) -> dict:
     }
 
 
+def plan_start(week_start: str, now: datetime) -> tuple[int, int] | None:
+    """The first time a plan may use in this week, as (day, minute): now, rounded up to the next
+    quarter hour. None while the whole week is still ahead; a day past Sunday once it is over."""
+    day = (now.date() - date.fromisoformat(week_start)).days
+    if day < 0:
+        return None
+    minute = now.hour * 60 + now.minute + (1 if now.second or now.microsecond else 0)
+    minute = -(-minute // SLOT_MIN) * SLOT_MIN
+    if minute >= DAY_END_MIN:
+        return day + 1, DAY_START_MIN
+    return day, minute
+
+
+def _begun(block: dict, not_before: tuple[int, int] | None) -> bool:
+    return not_before is not None and (block["days"][0], hhmm_to_minutes(block["start"])) < not_before
+
+
+def _from(session: dict, not_before: tuple[int, int]) -> dict:
+    """A session the solver may place no earlier than `not_before`, said as the earliest start the
+    model already has, so the reasons it gives stay true. The days already gone come off; with none
+    left it keeps today, so the solver says it is too late for it rather than that it does not fit."""
+    day, minute = not_before
+    days = [item for item in session["days"] if item >= day] or [day]
+    return {**session, "days": days, "earliest": f"{DAY_FULL[day]} {minutes_to_hhmm(minute)}"}
+
+
 def solve_request(
     blocks: list[dict],
     assignments: dict,
@@ -150,12 +176,14 @@ def solve_request(
     *,
     everything: bool = False,
     only: set[str] | None = None,
+    not_before: tuple[int, int] | None = None,
 ) -> tuple[list[dict], set[str]]:
     """What to send the solver, and which sessions its answer may place.
 
     By default planned homework keeps its time and only homework without one is placed around it.
     `everything` places every unfinished session again, with every day up to its deadline open.
     `only` places just those sessions around everything else, for work whose time stopped working.
+    `not_before` (from `plan_start`) keeps every placement at or after now.
     """
     payload: list[dict] = []
     targets: set[str] = set()
@@ -164,15 +192,16 @@ def solve_request(
             payload.append(block)
             continue
         planned = is_planned(block)
-        # Homework the student placed by hand stays put in Replan all, like a fixed block.
-        pinned = planned and bool(block.get("pinned"))
-        wanted = block["id"] in only if only is not None else (everything and not pinned) or not planned
+        # Homework the student placed by hand stays put in Replan all, like a fixed block, and so does
+        # homework whose time has already come: a plan does not reach back into the past.
+        kept = planned and (bool(block.get("pinned")) or _begun(block, not_before))
+        wanted = block["id"] in only if only is not None else (everything and not kept) or not planned
         if wanted:
             session = dict(block)
             if planned:
                 session.pop("start")
                 session["days"] = planning_days(block, assignments, week_start)
-            payload.append(session)
+            payload.append(session if not_before is None else _from(session, not_before))
             targets.add(block["id"])
         elif planned:
             payload.append(held_in_place(block))

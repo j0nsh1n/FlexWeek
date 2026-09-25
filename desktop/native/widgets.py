@@ -64,7 +64,7 @@ from PySide6.QtWidgets import (
 )
 
 from backend.explain import REASON_COPY
-from backend.models import Assignment, TimeBlock, WeekRequest, due_is_timed, parse_due
+from backend.models import ESTIMATE_MAX_MIN, Assignment, TimeBlock, WeekRequest, due_is_timed, parse_due
 from backend.slots import (
     DAY_END_MIN,
     DAY_START_MIN,
@@ -105,6 +105,18 @@ DATE_FORMAT = "ddd d MMM yyyy"
 DIALOG_MAX_HEIGHT = 700
 SLOT_HINT = "Use a multiple of 15 minutes, such as 15, 30, or 45."
 ESTIMATE_ERROR = "That time is not a multiple of 15 minutes."
+ESTIMATE_SHORT = "Give it at least 15 minutes."
+ESTIMATE_LONG = "That is more than 24 hours. Split it into parts and add each part as its own homework."
+HOMEWORK_PROBLEMS = {
+    "due": "Choose a valid due date.",
+    "course": "Keep the course name under 40 characters.",
+    "spotify_url": "Paste a Spotify share link from open.spotify.com.",
+    "notes": "Keep notes under 4,000 characters.",
+    "priority": "Choose a priority from the list.",
+    "energy": "Choose a time of day from the list.",
+    "completed_at": "Set a valid time for finished homework.",
+}
+HOMEWORK_REFUSED = "Check the homework details and try again."
 PLAN_REVIEW_MAX = 132
 UNFINISHED_MAX = 132
 REPEAT_NOTE = "Tick more days to repeat it this week."
@@ -167,6 +179,33 @@ def _validation_text(error: Exception) -> str:
     if names & {"estimate_min", "duration_min"} or "multiple of 15" in message:
         return ESTIMATE_ERROR
     return message
+
+
+def _homework_problem(error: ValueError) -> str:
+    if not isinstance(error, ValidationError):
+        return HOMEWORK_REFUSED
+    first = error.errors()[0]
+    path = tuple(str(part) for part in first.get("loc") or ())
+    field = path[0] if path else ""
+    if field == "title":
+        return (
+            "Keep the homework title under 80 characters."
+            if first["type"] == "string_too_long"
+            else "Give the homework a title."
+        )
+    if field == "estimate_min":
+        return ESTIMATE_ERROR
+    if field == "links":
+        if "url" in path:
+            return "A link needs an http:// or https:// address."
+        if "label" in path:
+            return "Give each link a name under 80 characters."
+        return "Keep no more than 20 links."
+    if field == "checklist":
+        if "text" in path:
+            return "Keep each checklist step under 80 characters."
+        return "Keep no more than 40 checklist steps."
+    return HOMEWORK_PROBLEMS.get(field, HOMEWORK_REFUSED)
 
 
 def fit_scroll_dialog(dialog: QDialog, *, min_height: int = DIALOG_USABLE_HEIGHT) -> None:
@@ -766,14 +805,29 @@ def _line(name: str, text: str = "", limit: int = 80) -> QLineEdit:
     return field
 
 
-def _minutes(name: str, value: int, maximum: int) -> QSpinBox:
-    field = QSpinBox()
-    field.setObjectName(name)
-    field.setRange(15, maximum)
-    field.setSingleStep(15)
-    field.setSuffix(" min")
-    field.setValue(value)
-    return field
+class LengthBox(QSpinBox):
+    """A homework's length in minutes. The arrows stop at 15 minutes and at a day. A length typed past
+    either end is kept as typed, so the editor says what is wrong with it: a box that stopped at 15
+    turned a typed 0 back into the last length without a word."""
+
+    def __init__(self, name: str, value: int) -> None:
+        super().__init__()
+        self.setObjectName(name)
+        self.setRange(0, 9999)
+        self.setSingleStep(SLOT_MIN)
+        self.setSuffix(" min")
+        self.setValue(value)
+
+    def stepBy(self, steps: int) -> None:  # noqa: N802 - Qt virtual
+        self.setValue(min(max(self.value() + steps * self.singleStep(), SLOT_MIN), ESTIMATE_MAX_MIN))
+
+    def stepEnabled(self) -> QAbstractSpinBox.StepEnabledFlag:  # noqa: N802 - Qt virtual
+        flags = QAbstractSpinBox.StepEnabledFlag.StepNone
+        if self.value() < ESTIMATE_MAX_MIN:
+            flags |= QAbstractSpinBox.StepEnabledFlag.StepUpEnabled
+        if self.value() > SLOT_MIN:
+            flags |= QAbstractSpinBox.StepEnabledFlag.StepDownEnabled
+        return flags
 
 
 def _error_label() -> QLabel:
@@ -1076,6 +1130,17 @@ class BlockDialog(QDialog):
         return deepcopy(self._result if self._result is not None else self._original)
 
 
+def keep_on_screen(popup: QWidget, area: QRect) -> None:
+    """Qt keeps a date's calendar on the screen under the field's corner, or on the main screen when
+    that corner is on none, and leaves out any window frame, so it could open past the edge of the
+    screen the window is on."""
+    frame = popup.frameGeometry()
+    x = max(area.left(), min(frame.left(), area.left() + area.width() - frame.width()))
+    y = max(area.top(), min(frame.top(), area.top() + area.height() - frame.height()))
+    if (x, y) != (frame.left(), frame.top()):
+        popup.move(x, y)
+
+
 class DueField(QWidget):
     """When homework is due: always a date, and a time only for work due at one, such as a lesson
     at 09:00. Without a time it is due by the end of that day."""
@@ -1097,6 +1162,7 @@ class DueField(QWidget):
         self.date.setMinimumDate(QDate(2000, 1, 1))
         self.date.setMaximumDate(QDate(2099, 12, 31))
         self.date.setAccessibleName("Due date")
+        self.date.calendarWidget().parentWidget().installEventFilter(self)
         self.timed = QCheckBox("At a set time")
         self.timed.setObjectName(f"{name}Timed")
         self.timed.setAccessibleName("Due at a set time")
@@ -1114,10 +1180,10 @@ class DueField(QWidget):
         row.addWidget(self.time)
         row.addStretch(1)
         self.set_value(due)
-        self.date.dateChanged.connect(self.changed.emit)
+        self.date.dateChanged.connect(self._say_changed)
         self.timed.toggled.connect(self._show_time)
-        self.timed.toggled.connect(self.changed.emit)
-        self.time.timeChanged.connect(self.changed.emit)
+        self.timed.toggled.connect(self._say_changed)
+        self.time.timeChanged.connect(self._say_changed)
 
     def set_value(self, due: str) -> None:
         day, minute = parse_due(due)
@@ -1135,13 +1201,23 @@ class DueField(QWidget):
     def _show_time(self, timed: bool) -> None:
         self.time.setVisible(timed)
 
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802 - Qt virtual
+        if event.type() == QEvent.Type.Show and watched.objectName() == "qt_datetimedit_calendar":
+            keep_on_screen(watched, self.window().screen().availableGeometry())
+        return super().eventFilter(watched, event)
+
+    def _say_changed(self, *_value: object) -> None:
+        # Connected straight to `changed.emit`, each signal handed its value to a signal that takes
+        # none: a TypeError inside Qt, and nothing connected to `changed` ran.
+        self.changed.emit()
+
 
 class HomeworkDialog(QDialog):
     def __init__(
         self,
         parent: QWidget | None = None,
         assignment: dict | None = None,
-        week_start: str = "2000-01-03",
+        today: str | None = None,
         category: str | None = None,
         estimate_min: int | None = None,
         due: str | None = None,
@@ -1157,7 +1233,8 @@ class HomeworkDialog(QDialog):
             else {
                 "id": str(uuid4()),
                 "title": info["label"] if info else "",
-                "due": due or week_start,
+                # Today, whatever week is on screen: the Monday of that week was often already past.
+                "due": due or today or date.today().isoformat(),
                 "estimate_min": estimate_min or (info or {}).get("preset", {}).get("duration_min") or 60,
                 "category": category,
                 "revision": 0,
@@ -1186,12 +1263,16 @@ class HomeworkDialog(QDialog):
         form.addRow("Title", self.title)
         self.due = DueField(self._original["due"], "homeworkDue", stacked=True)
         form.addRow("Due", self.due)
-        self.estimate = _minutes("homeworkEstimate", self._original["estimate_min"], 7140)
+        self.estimate = LengthBox("homeworkEstimate", self._original["estimate_min"])
         form.addRow("Estimated time", self.estimate)
         self.estimate_hint = QLabel(SLOT_HINT)
         self.estimate_hint.setObjectName("homeworkEstimateHint")
         self.estimate_hint.setWordWrap(True)
         form.addRow("", self.estimate_hint)
+        self.estimate.valueChanged.connect(self._recheck_length)
+        if self._length_problem():
+            # Stored before the limit, so the student is told before they try to save it.
+            self._say_length()
         self.error = _error_label()
         self.error.hide()
         form.addRow("", self.error)
@@ -1334,6 +1415,28 @@ class HomeworkDialog(QDialog):
         if text:
             self._scroll.ensureWidgetVisible(self.error)
 
+    def _length_problem(self) -> str:
+        minutes = self.estimate.value()
+        if minutes < SLOT_MIN:
+            return ESTIMATE_SHORT
+        if minutes > ESTIMATE_MAX_MIN:
+            return ESTIMATE_LONG
+        return ""
+
+    def _say_length(self) -> bool:
+        """Say under the box what is wrong with the length, in the error colour, or the usual hint."""
+        problem = self._length_problem()
+        self.estimate_hint.setText(problem or SLOT_HINT)
+        self.estimate_hint.setProperty("problem", bool(problem))
+        self.estimate_hint.style().unpolish(self.estimate_hint)
+        self.estimate_hint.style().polish(self.estimate_hint)
+        return bool(problem)
+
+    def _recheck_length(self, *_args: object) -> None:
+        # Only once Save has refused: while a length is being typed, "1" is not yet a mistake.
+        if self.estimate_hint.property("problem"):
+            self._say_length()
+
     def _disable_spread(self, *_args: object) -> None:
         # Like Spread, placing acts on the saved homework, so an unsaved edit turns them off.
         for button in self._session_buttons:
@@ -1403,6 +1506,9 @@ class HomeworkDialog(QDialog):
         return before if parse_due(chosen) == parse_due(before) else chosen
 
     def accept(self) -> None:
+        if self._say_length():
+            self.estimate.setFocus()
+            return
         candidate = deepcopy(self._original)
         links = [self.links.item(index).data(Qt.ItemDataRole.UserRole) for index in range(self.links.count())]
         checklist = []
@@ -1438,7 +1544,7 @@ class HomeworkDialog(QDialog):
                 {key: value for key, value in candidate.items() if key in Assignment.model_fields}
             )
         except ValueError as error:
-            self._show_error(_validation_text(error))
+            self._show_error(_homework_problem(error))
             return
         self._result = candidate
         super().accept()

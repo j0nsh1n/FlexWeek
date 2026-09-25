@@ -26,6 +26,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QPushButton
 
     from backend.slots import hhmm_to_minutes
+    from backend.weeks import current_week_start
     from desktop.native.calendar import sunday_due
     from desktop.native.client import NativeClient
     from desktop.native.controller import NativeSession, session_days
@@ -86,7 +87,15 @@ def signed_in(qapp: QApplication, origin: str, username: str, *, create: bool) -
     else:
         session.login(username, PASSWORD)
     wait_until(qapp, lambda: session.account is not None and not session.busy)
+    hold_before_the_plans(session)
     return session
+
+
+def hold_before_the_plans(session: NativeSession) -> None:
+    """Plan puts nothing before now. These tests plan this week and PLANNED_WEEK, so the clock is
+    held at the start of the earlier of the two, whatever day the suite runs."""
+    start = datetime.fromisoformat(min(current_week_start(), PLANNED_WEEK))
+    session.now_ms = lambda: int(start.timestamp() * 1000)
 
 
 def soccer() -> dict:
@@ -1559,6 +1568,7 @@ def test_accepted_plan_is_on_the_grid_after_close_and_sign_in(
     first.recovery_ack.setChecked(True)
     first.recovery_continue.click()
     past_setup(qapp, first)
+    hold_before_the_plans(first.session)
     _two_assignments(first.session)
     first.session.save()
     wait_until(qapp, lambda: not first.session.busy and not first.session.dirty)

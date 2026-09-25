@@ -186,5 +186,6 @@ storage, CI). Each unit ends green on the rig, on the source gate, and with its 
   defects fixed in the engine with their own failing test.
 - The 24-hour day widens the planner's search and allows 3am placements. Work windows bound it, and
   the solver's timing is measured in Unit 2.
-- The source gate is near its 300-second budget and stalled once in a combined run. The rig runs in
-  its own jobs, and the stall gets diagnosed rather than hidden.
+- The source gate outgrew its 300-second budget (the full suite took about 350 seconds by 25
+  September); Jonathan raised it to 480. The rig runs in its own jobs, and a stall gets diagnosed
+  rather than hidden.

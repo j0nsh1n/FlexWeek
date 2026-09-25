@@ -1238,6 +1238,11 @@ def test_every_homework_that_lost_its_time_is_named_on_the_notice(
 
 def test_the_status_line_counts_homework_blocks(qapp: QApplication, window: NativeWindow) -> None:
     """Mutation that turns this red: plan_sentence says 'Placed 4 of 4'."""
+    # The essay began at 18:45, before the clock's 19:00, so Replan all leaves it; this needs a time.
+    due = sunday_due(window.session.week_start)
+    window.session.add_homework({"id": "math", "title": "Math", "due": due, "estimate_min": 60})
+    window.session.save()
+    settled(qapp, window)
     window.session.solve(everything=True)
     wait_until(qapp, lambda: not window.session.busy)
     qapp.processEvents()
@@ -1894,7 +1899,7 @@ def test_settings_and_homework_open_tall_enough_to_read(
     assert close is not None and _dialog_shows(prefs, close)
     prefs.close()
 
-    homework = HomeworkDialog(window, week_start=window.session.week_start)
+    homework = HomeworkDialog(window)
     homework.setStyleSheet(window.styleSheet())
     homework.show()
     qapp.processEvents()
@@ -1906,7 +1911,7 @@ def test_settings_and_homework_open_tall_enough_to_read(
     assert buttons is not None and _dialog_shows(homework, buttons)
     homework.close()
 
-    edited = HomeworkDialog(window, window.session.assignments["essay"], window.session.week_start)
+    edited = HomeworkDialog(window, window.session.assignments["essay"])
     edited.setStyleSheet(window.styleSheet())
     edited.show()
     qapp.processEvents()
