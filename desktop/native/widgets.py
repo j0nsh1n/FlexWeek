@@ -50,6 +50,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMenu,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QRadioButton,
@@ -104,6 +105,7 @@ DIALOG_MAX_HEIGHT = 700
 SLOT_HINT = "Use a multiple of 15 minutes, such as 15, 30, or 45."
 ESTIMATE_ERROR = "That time is not a multiple of 15 minutes."
 PLAN_REVIEW_MAX = 132
+REPEAT_NOTE = "Tick more days to repeat it on those days this week."
 DAY_FULL = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
 
@@ -429,6 +431,32 @@ def control_art(palette: dict) -> dict[str, str]:
     }
 
 
+def confirm_box(parent: QWidget | None, title: str, question: str, yes: str) -> QMessageBox:
+    """A question before something that cannot be taken back lightly. The answer buttons say what
+    they do, and Cancel is the default, so Enter pressed out of habit changes nothing."""
+    box = QMessageBox(parent)
+    box.setObjectName("confirmBox")
+    box.setIcon(QMessageBox.Icon.NoIcon)
+    box.setWindowTitle(title)
+    box.setText(question)
+    go = box.addButton(yes, QMessageBox.ButtonRole.DestructiveRole)
+    go.setObjectName("confirmYes")
+    go.setProperty("danger", True)
+    stay = box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+    stay.setObjectName("confirmCancel")
+    stay.setProperty("quiet", True)
+    box.setDefaultButton(stay)
+    box.setEscapeButton(stay)
+    return box
+
+
+def confirm(parent: QWidget | None, title: str, question: str, yes: str) -> bool:
+    box = confirm_box(parent, title, question, yes)
+    box.exec()
+    chosen = box.clickedButton()
+    return chosen is not None and chosen.objectName() == "confirmYes"
+
+
 def add_heading(menu: QMenu, text: str) -> QWidgetAction:
     """A heading row. Fusion draws `QMenu.addSection` as a bare separator, so the More menu's Adding
     and Planning were never shown in any design."""
@@ -596,6 +624,11 @@ def _error_label() -> QLabel:
 def _buttons() -> QDialogButtonBox:
     buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
     buttons.setObjectName("dialogButtons")
+    for button in buttons.buttons():
+        # KDE's style puts a floppy disk on Save and a red X on Cancel.
+        button.setIcon(QIcon())
+    buttons.button(QDialogButtonBox.StandardButton.Save).setDefault(True)
+    buttons.button(QDialogButtonBox.StandardButton.Cancel).setProperty("quiet", True)
     return buttons
 
 
@@ -659,7 +692,7 @@ class BlockDialog(QDialog):
         self._series_days: list[bool] | None = None
         existing = block is not None
         series = existing and is_series(self._original)
-        self.setWindowTitle("Edit fixed commitment" if existing else "Add fixed commitment")
+        self.setWindowTitle("Edit event" if existing else "New event")
         self.setObjectName("blockDialog")
         layout = QVBoxLayout(self)
         self.scope_occurrence = QRadioButton("This day only")
@@ -692,6 +725,11 @@ class BlockDialog(QDialog):
             choices.addWidget(check)
             self.days.append(check)
         form.addRow("Days", choices)
+        # A week's blocks are its own, so ticking more days repeats a block within this week only.
+        self.repeat_note = QLabel(REPEAT_NOTE)
+        self.repeat_note.setObjectName("blockRepeatNote")
+        self.repeat_note.setWordWrap(True)
+        form.addRow("", self.repeat_note)
         self.scope_occurrence.toggled.connect(self._sync_scope)
         self.start = QTimeEdit(QTime.fromString(self._original.get("start") or start, "HH:mm"))
         self.start.setDisplayFormat("HH:mm")
@@ -725,7 +763,9 @@ class BlockDialog(QDialog):
         self.spotify = _line("blockSpotify", self._original.get("spotify_url") or "", 500)
         self.spotify.setPlaceholderText("https://open.spotify.com/…")
         form.addRow("Spotify link", self.spotify)
-        self.missed = QCheckBox("This day was missed")
+        self.missed = QCheckBox(
+            "I missed it" if occurrence_day is None else f"I missed it on {DAY_FULL[occurrence_day]}"
+        )
         self.missed.setObjectName("blockMissed")
         already = occurrence_day in (self._original.get("missed_days") or [])
         self.missed.setChecked(already)
@@ -733,15 +773,21 @@ class BlockDialog(QDialog):
         form.addRow("", self.missed)
         self.error = _error_label()
         layout.addWidget(self.error)
+        # Delete is not one of the dialog's answers: quiet words at the left, away from Save.
+        row = QHBoxLayout()
+        self.delete_button = QPushButton("Delete")
+        self.delete_button.setObjectName("deleteBlock")
+        self.delete_button.setAutoDefault(False)
+        self.delete_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.delete_button.setVisible(existing)
+        self.delete_button.clicked.connect(self._delete)
+        row.addWidget(self.delete_button)
+        row.addStretch(1)
         buttons = _buttons()
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        self.delete_button = QPushButton("Delete")
-        self.delete_button.setObjectName("deleteBlock")
-        self.delete_button.setVisible(existing)
-        self.delete_button.clicked.connect(self._delete)
-        layout.addWidget(self.delete_button)
+        row.addWidget(buttons)
+        layout.addLayout(row)
         self._sync_scope()
 
     def _sync_scope(self) -> None:
@@ -760,6 +806,7 @@ class BlockDialog(QDialog):
                 check.setEnabled(True)
         if not occurrence:
             self._series_days = None
+        self.repeat_note.setVisible(not occurrence)
 
     def _clock_minutes(self, clock: QTime) -> int:
         return clock.hour() * 60 + clock.minute()
@@ -816,6 +863,11 @@ class BlockDialog(QDialog):
         )
 
     def _delete(self) -> None:
+        name = self.title.text().strip() or self._original.get("title") or "this event"
+        if self.scope() == "occurrence" and self._occurrence_day is not None:
+            name += " on " + DAY_FULL[self._occurrence_day]
+        if not confirm(self, "Delete event", f"Delete {name}? You can undo this.", "Delete"):
+            return
         self._deleted = True
         super().accept()
 

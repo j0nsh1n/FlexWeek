@@ -1420,23 +1420,27 @@ class NativeWindow(QMainWindow):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         if dialog.deleted():
-            self.session.delete_block(dialog.block()["id"], scope=dialog.scope(), day=dialog.occurrence_day())
-        else:
-            before = {item["id"] for item in self.session.blocks}
-            self.session.add_block(dialog.block(), scope=dialog.scope(), day=dialog.occurrence_day())
-            day = dialog.occurrence_day()
-            if dialog.recover_missed() and day is not None:
-                # "This day only" splits the series and gives that day a new id. recover_missed returns
-                # without saving when its block does not hold the day, so it only gets one that does;
-                # otherwise the edit is saved the ordinary way instead of staying an unsaved draft.
-                ids = {dialog.block()["id"]} | ({item["id"] for item in self.session.blocks} - before)
-                holder = next(
-                    (item for item in self.session.blocks if item["id"] in ids and day in item["days"]),
-                    None,
-                )
-                if holder is not None:
-                    self.session.recover_missed(holder["id"], day)
-                    return
+            gone = dialog.block()
+            self.session.delete_block(gone["id"], scope=dialog.scope(), day=dialog.occurrence_day())
+            self.session.save()
+            # The question before deleting promised an undo; this is where it is.
+            self._set_notice(f"Deleted {gone.get('title') or 'the event'}.", "Undo", self._undo_from_notice)
+            return
+        before = {item["id"] for item in self.session.blocks}
+        self.session.add_block(dialog.block(), scope=dialog.scope(), day=dialog.occurrence_day())
+        day = dialog.occurrence_day()
+        if dialog.recover_missed() and day is not None:
+            # "This day only" splits the series and gives that day a new id. recover_missed returns
+            # without saving when its block does not hold the day, so it only gets one that does;
+            # otherwise the edit is saved the ordinary way instead of staying an unsaved draft.
+            ids = {dialog.block()["id"]} | ({item["id"] for item in self.session.blocks} - before)
+            holder = next(
+                (item for item in self.session.blocks if item["id"] in ids and day in item["days"]),
+                None,
+            )
+            if holder is not None:
+                self.session.recover_missed(holder["id"], day)
+                return
         self.session.save()
 
     def _commit_homework(self, dialog: HomeworkDialog, days: list[int] | None = None) -> None:

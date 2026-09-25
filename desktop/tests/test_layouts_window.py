@@ -691,7 +691,7 @@ def test_school_hours_adds_school_when_setup_skipped_it(
     settled(qapp, window)
     assert seen == [
         {
-            "window": "Add fixed commitment",
+            "window": "New event",
             "title": "School",
             "start": "08:00",
             "end": "14:30",
@@ -712,7 +712,7 @@ def test_school_hours_changes_the_school_already_there(
     seen = _school_dialogs(monkeypatch, end="15:15")
     _trigger_more(window, "School hours")
     settled(qapp, window)
-    assert seen[0]["window"] == "Edit fixed commitment"
+    assert seen[0]["window"] == "Edit event"
     assert (seen[0]["start"], seen[0]["end"], seen[0]["days"]) == ("08:00", "14:30", [0, 1, 2, 3, 4])
     school = [block for block in window.session.blocks if block.get("category") == "class"]
     assert [(block["id"], block["duration_min"], block["days"]) for block in school] == [

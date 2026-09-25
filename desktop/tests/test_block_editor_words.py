@@ -1,0 +1,187 @@
+"""The block editor as a student reads it (0.15 rows 17, 26, 27 and decision 4).
+
+"Edit fixed commitment" was nobody's word for practice. Seven day boxes said nothing about what
+ticking another one does. Save and Cancel looked the same, with a floppy disk and a red X, and
+Delete was the biggest button in the dialog and deleted without asking.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+
+import pytest
+
+pytest.importorskip("PySide6")
+
+from PySide6.QtCore import QPoint
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QDialogButtonBox,
+    QLabel,
+    QProxyStyle,
+    QPushButton,
+    QStyle,
+)
+
+from desktop.native import widgets
+from desktop.native.widgets import BlockDialog
+from desktop.native.window import NativeWindow
+from desktop.tests.window_support import (  # noqa: F401
+    qapp,
+    server,
+    settled,
+    signed_out,
+    wait_until,
+    window,
+)
+
+
+def soccer(**fields: object) -> dict:
+    return {
+        "id": "soccer",
+        "title": "Soccer practice",
+        "kind": "locked",
+        "category": "sport",
+        "start": "16:00",
+        "duration_min": 90,
+        "days": [1, 3],
+        **fields,
+    }
+
+
+class WantsIcons(QProxyStyle):
+    """KDE's style, as far as dialog buttons go: it asks for a floppy disk on Save."""
+
+    def styleHint(self, hint, option=None, widget=None, data=None):  # noqa: N802
+        if hint == QStyle.StyleHint.SH_DialogButtonBox_ButtonsHaveIcons:
+            return 1
+        return super().styleHint(hint, option, widget, data)
+
+
+@pytest.fixture()
+def icon_style(qapp: QApplication) -> Iterator[None]:  # noqa: F811
+    name = qapp.style().name()
+    qapp.setStyle(WantsIcons(name))
+    yield
+    qapp.setStyle(name)
+
+
+def test_the_editor_is_titled_as_a_student_says_it(qapp: QApplication) -> None:  # noqa: F811
+    assert BlockDialog(None, day=3, start="17:15").windowTitle() == "New event"
+    assert BlockDialog(None, soccer()).windowTitle() == "Edit event"
+
+
+def test_it_says_that_ticking_another_day_repeats_it(qapp: QApplication) -> None:  # noqa: F811
+    dialog = BlockDialog(None, day=3, start="17:15", duration_min=30, from_range=True)
+    dialog.show()
+    note = dialog.findChild(QLabel, "blockRepeatNote")
+    assert note.text() == "Tick more days to repeat it on those days this week."
+    assert note.isVisibleTo(dialog)
+    series = BlockDialog(None, soccer(), occurrence_day=3)
+    series.show()
+    series.scope_occurrence.setChecked(True)
+    note = series.findChild(QLabel, "blockRepeatNote")
+    assert not note.isVisibleTo(series), "the days cannot be changed for this day only"
+
+
+def test_the_missed_box_names_the_day(qapp: QApplication) -> None:  # noqa: F811
+    dialog = BlockDialog(None, soccer(), occurrence_day=3)
+    assert dialog.missed.text() == "I missed it on Thursday"
+
+
+def test_no_button_in_the_editor_has_an_icon(qapp: QApplication, icon_style: None) -> None:  # noqa: F811
+    dialog = BlockDialog(None, soccer(), occurrence_day=3)
+    buttons = dialog.findChildren(QPushButton)
+    assert {button.text() for button in buttons} >= {"Save", "Cancel", "Delete"}
+    assert [button.text() for button in buttons if not button.icon().isNull()] == []
+
+
+def test_save_is_the_one_filled_button_and_delete_is_quiet_at_the_bottom_left(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    dialog = BlockDialog(window, soccer(), occurrence_day=3)
+    dialog.show()
+    qapp.processEvents()
+    box = dialog.findChild(QDialogButtonBox)
+    save = box.button(QDialogButtonBox.StandardButton.Save) or next(
+        button for button in box.buttons() if button.text() == "Save"
+    )
+    cancel = next(button for button in box.buttons() if button.text() == "Cancel")
+    delete = dialog.findChild(QPushButton, "deleteBlock")
+    assert delete not in box.buttons(), "Delete is not one of the dialog's answers"
+    assert save.isDefault()
+
+    picture = dialog.grab().toImage()
+    background = picture.pixelColor(2, 2)
+
+    def fill(button: QPushButton) -> QColor:
+        # Above the words, inside the edge: the button's own paint and nothing else.
+        at = button.mapTo(dialog, QPoint(button.width() // 2, 4))
+        return picture.pixelColor(at.x(), at.y())
+
+    def centre(button: QPushButton) -> QPoint:
+        return button.mapTo(dialog, button.rect().center())
+
+    assert fill(save) != background, "Save is filled"
+    assert fill(cancel) == background, "Cancel is plain"
+    assert fill(delete) == background, "Delete is words, not a button"
+    assert abs(centre(delete).y() - centre(save).y()) <= 4, "Delete sits on the button row"
+    assert centre(delete).x() < min(centre(save).x(), centre(cancel).x()), "Delete is at the left"
+    dialog.close()
+
+
+def test_delete_asks_first_and_does_nothing_when_refused(
+    qapp: QApplication,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asked: list[tuple[str, str, str]] = []
+    answer = [False]
+
+    def confirm(_parent, title: str, question: str, yes: str) -> bool:
+        asked.append((title, question, yes))
+        return answer[0]
+
+    monkeypatch.setattr(widgets, "confirm", confirm)
+    dialog = BlockDialog(None, soccer())
+    dialog.show()
+    dialog.delete_button.click()
+    assert asked == [("Delete event", "Delete Soccer practice? You can undo this.", "Delete")]
+    assert dialog.result() != QDialog.DialogCode.Accepted and dialog.deleted() is False
+    assert dialog.isVisible(), "refusing leaves the editor open"
+    answer[0] = True
+    dialog.delete_button.click()
+    assert dialog.deleted() is True and dialog.result() == QDialog.DialogCode.Accepted
+    one_day = BlockDialog(None, soccer(), occurrence_day=3)
+    one_day.scope_occurrence.setChecked(True)
+    one_day.delete_button.click()
+    assert asked[-1][1] == "Delete Soccer practice on Thursday? You can undo this."
+
+
+def test_a_deleted_block_can_be_undone_from_the_notice(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = window.session
+    session.add_block(soccer())
+    session.save()
+    settled(qapp, window)
+    monkeypatch.setattr(widgets, "confirm", lambda *_args: True)
+    dialog = BlockDialog(window, session.blocks[0])
+
+    def run() -> int:
+        dialog.show()
+        dialog.delete_button.click()
+        return dialog.result()
+
+    monkeypatch.setattr(dialog, "exec", run, raising=False)
+    window._commit_block(dialog)
+    settled(qapp, window)
+    assert session.blocks == []
+    assert window.action_notice_text.text() == "Deleted Soccer practice."
+    assert window.action_notice_button.text() == "Undo"
+    window.action_notice_button.click()
+    wait_until(qapp, lambda: [block["id"] for block in session.blocks] == ["soccer"])

@@ -812,6 +812,16 @@ def pack_stylesheet(
         f"QPushButton {{ background: {palette['accent']}; color: {palette['accent_ink']}; "
         f"padding: {pad}px {pad * 2}px; border-radius: {radius}px; {edges}{button_min} }}"
         f"QPushButton:disabled {{ background: {palette['hairline_strong']}; color: {palette['muted']}; }}"
+        # One filled button per dialog: the answer. Cancel and its kind are drawn plain beside it, and
+        # a button that destroys something takes the error colour.
+        f'QPushButton[quiet="true"] {{ background: transparent; color: {palette["text"]}; '
+        f'border: 1px solid {palette["hairline_strong"]}; }}'
+        f'QPushButton[quiet="true"]:hover {{ background: {palette["hairline"]}; }}'
+        f'QPushButton[danger="true"] {{ background: {palette["error"]}; '
+        f'color: {readable_ink(palette["error"])}; }}'
+        f"QPushButton#deleteBlock {{ background: transparent; color: {palette['error']}; border: none; "
+        f"padding: {pad}px 2px; font-weight: 600; min-height: 0; }}"
+        f"QPushButton#deleteBlock:hover {{ text-decoration: underline; }}"
         # Homework that still needs a time, to be dragged onto the hours: it looks like homework, not
         # like a button that does something when pressed.
         f"QPushButton[tray=\"true\"] {{ background: {palette['panel']}; color: {palette['text']}; "
