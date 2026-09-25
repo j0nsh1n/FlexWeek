@@ -1,4 +1,4 @@
-"""Bento, the tile home screen: what each tile says, and that its options change the board."""
+"""Bento's two live hero surfaces and their retained scroll state."""
 
 from __future__ import annotations
 
@@ -8,19 +8,24 @@ from collections.abc import Iterator
 
 import pytest
 
-from desktop.tests.test_weekmodel import BLOCKS, HOMEWORK, TRACE, WEEK, block
+from desktop.tests.test_weekmodel import BLOCKS, HOMEWORK, TRACE, WEEK
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
 )
-
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtWidgets import QApplication, QFrame, QLabel, QPushButton, QWidget
+    import shiboken6
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
 
+    from desktop.native.hours.canvas import Drawn, HoursCanvas
+    from desktop.native.hours.chips import TrayChip
+    from desktop.native.hours.geometry import Span
+    from desktop.native.hours.hand import Hand, Verdict
     from desktop.native.layouts.base import Scene
-    from desktop.native.layouts.bento import BentoView
+    from desktop.native.layouts.bento import BentoPainter, BentoView
     from desktop.native.layouts.registry import options_for, tokens_for
     from desktop.native.look import resolved_palette
     from desktop.native.weekmodel import build_week, minute_of
@@ -32,291 +37,154 @@ def qapp() -> Iterator[QApplication]:
     yield application
 
 
-def shown(
-    qapp: QApplication,
-    clock: str = "13:40",
-    today: int | None = 3,
-    blocks: list[dict] | None = None,
-    homework: dict | None = None,
-    trace: dict | None = None,
-    surface: str = "week",
-    **chosen: str,
-) -> BentoView:
+def scene(surface: str = "week", *, clock: str = "13:40", blocks: list[dict] | None = None,
+          homework: dict | None = None, iso_day: str = "2026-09-17", **chosen: str) -> Scene:
     options = {**options_for(None, "bento"), **chosen}
     palette = resolved_palette("light-frost", False, None, "default")
     week = build_week(
-        WEEK,
-        BLOCKS if blocks is None else blocks,
-        HOMEWORK if homework is None else homework,
-        TRACE if trace is None else trace,
+        WEEK, BLOCKS if blocks is None else blocks,
+        HOMEWORK if homework is None else homework, TRACE,
     )
+    return Scene(
+        week, 3, minute_of(clock), options,
+        tokens_for("bento", options["colour"], palette), surface=surface,
+        month={"month": "2026-09", "days": []} if surface == "month" else None,
+        iso_day=iso_day,
+    )
+
+
+def shown(qapp: QApplication, surface: str = "week", **chosen: str) -> BentoView:
     view = BentoView()
-    view.resize(1366, 700)
-    view.show_week(
-        Scene(
-            week,
-            today,
-            minute_of(clock),
-            options,
-            tokens_for("bento", options["colour"], palette),
-            surface=surface,
-            month={"month": "2026-09", "days": []} if surface == "month" else None,
-            iso_day="2026-09-17",
-        )
-    )
+    view.resize(1150, 768)
+    view.show_week(scene(surface, **chosen))
     view.show()
     qapp.processEvents()
     return view
 
 
 def text(view: BentoView, name: str) -> str:
-    return view.findChild(QLabel, name).text()
+    found = view.findChild(QLabel, name)
+    assert found is not None
+    return found.text()
 
 
-def tiles(view: BentoView) -> list[str]:
-    return sorted(item.objectName() for item in view.findChildren(QFrame) if item.property("tile"))
-
-
-def test_the_big_tile_is_what_comes_next_and_how_soon(qapp: QApplication) -> None:
-    view = shown(qapp)
-    assert text(view, "bentoHeroKicker") == "UP NEXT · IN 4 H 20 MIN"
-    assert text(view, "bentoHeroTitle") == "Dinner"
-    assert text(view, "bentoHeroLine") == "18:00–18:30 · Meals"
-
-
-def test_late_at_night_the_big_tile_says_the_day_is_done(qapp: QApplication) -> None:
-    assert text(shown(qapp, "22:30"), "bentoHeroTitle") == "Nothing else scheduled today"
-
-
-def test_deadlines_come_most_squeezed_first_in_the_solvers_words(qapp: QApplication) -> None:
-    view = shown(qapp)
-    assert [view.findChild(QPushButton, f"bentoDeadline{index}").text() for index in range(2)] == [
-        "Chem-1\nThu 23:59 · Cutting it close",
-        "Essay-1\nFri 21:00 · Tight",
-    ]
-
-
-def test_what_has_no_time_is_listed_with_the_solvers_reason(qapp: QApplication) -> None:
-    view = shown(qapp)
-    assert text(view, "bentoWaitingKicker") == "NOT PLACED YET (1)"
-    assert view.findChild(QPushButton, "bentoWaiting0").text() == (
-        "Poster-1 · 2 h\nThere is not enough time left before it is due, even with nothing else planned."
-    )
-    assert view.findChild(QPushButton, "bentoPlan").text() == "Plan it"
-
-
-def test_an_empty_tile_says_what_to_do_next(qapp: QApplication) -> None:
-    view = shown(qapp, blocks=[])
-    assert text(view, "bentoWaitingEmpty") == "Nothing waiting"
-    assert text(view, "bentoDeadlinesEmpty") == "Nothing is due. Add homework when you get some."
-    assert view.findChild(QPushButton, "bentoAddSmall") is not None
-
-
-def test_tonight_offers_focus_on_the_next_homework(qapp: QApplication) -> None:
-    view = shown(qapp)
-    asked: list[tuple] = []
-    view.focus_requested.connect(lambda block, day: asked.append((block, day)))
-    view.findChild(QPushButton, "bentoFocus").click()
-    assert asked == [("essay-1", 3)]
-    assert view.findChild(QPushButton, "bentoTonightTitle").text() == "Essay-1"
-
-
-def test_the_week_total_counts_planned_homework(qapp: QApplication) -> None:
-    view = shown(qapp)
-    assert (text(view, "bentoTotalBig"), text(view, "bentoTotalLine")) == (
-        "3 h 15 min",
-        "3 h 15 min planned · 45 min done",
-    )
-
-
-def test_picking_a_day_in_the_load_chart_moves_the_strip(qapp: QApplication) -> None:
-    view = shown(qapp)
-    assert text(view, "bentoStripKicker") == "TODAY, THURSDAY 17"
-    view.findChild(QPushButton, "bentoDay0").click()
-    assert text(view, "bentoStripKicker") == "MONDAY 14"
-    chips = [item.text() for item in view.findChildren(QPushButton) if item.property("kind") == "chip"]
-    assert chips == ["08:00\nSchool", "15:45\nMath-1", "18:00\nDinner"]
-    assert view.findChild(QPushButton, "bentoDay0").property("chosen") == "true"
-
-
-def test_the_load_chart_says_each_days_minutes(qapp: QApplication) -> None:
-    view = shown(qapp)
-    assert [view.findChild(QPushButton, f"bentoDay{day}").text() for day in range(7)] == [
-        "Mon 45",
-        "Tue 0",
-        "Wed 0",
-        "Thu 150",
-        "Fri 0",
-        "Sat 0",
-        "Sun 0",
-    ]
-
-
-def test_option_essentials_keeps_four_tiles_and_everything_a_main_view_needs(qapp: QApplication) -> None:
-    assert tiles(shown(qapp)) == [
-        "bentoDeadlines",
-        "bentoHero",
-        "bentoLoad",
-        "bentoNew",
-        "bentoStrip",
-        "bentoTonight",
-        "bentoTotal",
-        "bentoWaiting",
-    ]
-    assert tiles(shown(qapp, tiles="essentials")) == [
-        "bentoDeadlines",
-        "bentoHero",
-        "bentoStrip",
-        "bentoWaiting",
-    ]
-
-
-def test_option_corners_and_colours_repaint_the_board(qapp: QApplication) -> None:
-    assert "border-radius: 24px" in shown(qapp).styleSheet()
-    assert "border-radius: 6px" in shown(qapp, corners="square").styleSheet()
-    assert "border-radius: 24px" not in shown(qapp, corners="square").styleSheet()
-
-    def hero(view: BentoView) -> str:
-        tile = view.findChild(QFrame, "bentoHero")
-        return tile.grab().toImage().pixelColor(tile.width() // 2, 30).name()
-
-    assert hero(shown(qapp)) == "#4f46e5"
-    assert hero(shown(qapp, colour="sunset")) == "#c2410c"
-    assert (
-        hero(shown(qapp, colour="match")) == resolved_palette("light-frost", False, None, "default")["accent"]
-    )
-
-
-def test_a_tile_does_not_hold_its_buttons_a_screen_away_from_its_text(qapp: QApplication) -> None:
-    """The stretch belongs under the buttons. Above them it left a 165px hole in a 297px tile."""
-    for blocks in (None, []):
-        view = shown(qapp, blocks=blocks)
-        tile = view.findChild(QFrame, "bentoWaiting")
-        labels = tile.findChildren(QLabel)
-        buttons = tile.findChildren(QPushButton)
-        assert labels and buttons
-        lowest_text = max(x.mapTo(tile, x.rect().bottomLeft()).y() for x in labels)
-        highest_button = min(x.mapTo(tile, x.rect().topLeft()).y() for x in buttons)
-        assert highest_button - lowest_text < 40, f"gap is {highest_button - lowest_text}px"
-
-
-def narrow(qapp: QApplication, width: int) -> BentoView:
-    options = options_for(None, "bento")
-    palette = resolved_palette("light-frost", False, None, "default")
-    view = BentoView()
-    view.resize(width, 640)
+def test_day_hero_is_one_live_full_day_track_with_window_hand(qapp: QApplication) -> None:
+    host = QWidget()
+    hand = Hand(lambda *_: Verdict(True, ""), host)
+    view = BentoView(hand=hand)
+    view.resize(1150, 768)
+    view.show_week(scene("day"))
     view.show()
     qapp.processEvents()
-    view.show_week(
-        Scene(
-            build_week(WEEK, BLOCKS, HOMEWORK, TRACE),
-            3,
-            minute_of("13:40"),
-            options,
-            tokens_for("bento", options["colour"], palette),
-        )
-    )
-    qapp.processEvents()
-    return view
+    hours = view.findChild(HoursCanvas, "bentoDayHours")
+    assert view.hand is hand
+    assert [(track.day, track.first, track.last) for track in hours.tracks] == [(3, 0, 1440)]
+    assert hours.hand is hand
+    assert text(view, "bentoHeroKicker") == "THURSDAY 17 · YOUR DAY"
 
 
-def test_a_narrow_window_gets_two_columns_not_four(qapp: QApplication) -> None:
-    """Bento wanted 1130px. On a 1024 window that pushed Add and Plan off the side."""
-    wide = narrow(qapp, 1366)
-    assert wide.cramped is False
-    assert wide._grid.columnCount() == 4
-
-    tight = narrow(qapp, 1024)
-    assert tight.cramped is True
-    assert tight._grid.columnCount() == 2
-
-
-def test_no_two_tiles_land_on_top_of_each_other_when_narrow(qapp: QApplication) -> None:
-    """The first two-column arrangement overlapped the hero and the deadlines tile."""
-    view = narrow(qapp, 1024)
-    boxes = [
-        (tile.objectName(), tile.geometry()) for tile in view.findChildren(QFrame) if tile.property("tile")
-    ]
-    for index, (name, box) in enumerate(boxes):
-        for other_name, other in boxes[index + 1 :]:
-            assert not box.intersects(other), f"{name} overlaps {other_name}"
-
-
-def test_unplanned_homework_due_tonight_is_listed_as_a_deadline(qapp: QApplication) -> None:
-    view = shown(
-        qapp,
-        blocks=[
-            block(
-                "math-u",
-                "flexible",
-                [3],
-                None,
-                45,
-                assignment_id="math",
-                title="Math worksheet",
-            )
-        ],
-        homework={
-            "math": {
-                "id": "math",
-                "title": "Math worksheet",
-                "due": "2026-09-17T21:00",
-                "completed": False,
-            }
-        },
-        trace={"placed": [], "unplaced": [{"id": "math-u"}], "explanations": []},
-    )
-    assert view.findChild(QLabel, "bentoDeadlinesEmpty") is None
-    assert "Math worksheet" in view.findChild(QPushButton, "bentoDeadline0").text()
-    tonight = view.findChild(QPushButton, "bentoTonightTitle") or view.findChild(QLabel, "bentoTonightTitle")
-    assert tonight is not None
-    assert tonight.text() != "No homework tonight"
-    assert "Math worksheet" in tonight.text()
-    assert text(view, "bentoHeroLine") != "The rest of the day is yours."
-    assert "Nothing else today" not in text(view, "bentoHeroTitle")
-
-
-def test_month_puts_the_week_tiles_away(qapp: QApplication) -> None:
+def test_week_hero_has_seven_live_columns_and_openable_day_names(qapp: QApplication) -> None:
     view = shown(qapp)
-    assert view.findChild(QWidget, "bentoScroll").isVisible()
-    assert view.findChild(QLabel, "bentoHeroTitle").isVisible()
-    options = options_for(None, "bento")
-    palette = resolved_palette("light-frost", False, None, "default")
-    view.show_week(
-        Scene(
-            build_week(WEEK, BLOCKS, HOMEWORK, TRACE),
-            3,
-            minute_of("13:40"),
-            options,
-            tokens_for("bento", options["colour"], palette),
-            surface="month",
-            month={"month": "2026-09", "days": []},
-            iso_day="2026-09-17",
-        )
-    )
+    hours = view.findChild(HoursCanvas, "bentoWeekHours")
+    assert [(track.day, track.first, track.last) for track in hours.tracks] == [
+        (day, 0, 1440) for day in range(7)
+    ]
+    opened: list[str] = []
+    view.day_activated.connect(opened.append)
+    pick = view.findChild(QPushButton, "bentoDayName0")
+    assert pick is not None
+    assert hours.day_name(0) == pick.mapToGlobal(pick.rect().center())
+    pick.click()
+    assert opened == ["2026-09-14"]
+
+
+def test_waiting_homework_is_a_hand_chip_and_appears_in_deadlines(qapp: QApplication) -> None:
+    view = shown(qapp)
+    chip = view.findChild(TrayChip, "bentoWaiting0")
+    assert chip is not None
+    assert chip.hand is view.hand
+    assert text(view, "bentoWaitingKicker") == "NOT PLACED YET"
+    deadlines = [item.text() for item in view.findChildren(QPushButton)
+                 if item.objectName().startswith("bentoDeadline")]
+    assert any("Poster-1" in words and "Not placed yet" in words for words in deadlines)
+    day = shown(qapp, "day")
+    assert day.findChild(QPushButton, "bentoTonightDeadline0") is not None
+
+
+def test_day_rail_uses_the_opened_day(qapp: QApplication) -> None:
+    view = shown(qapp, "day", iso_day="2026-09-18")
+    assert text(view, "bentoHeroKicker") == "FRIDAY 18 · YOUR DAY"
+    assert text(view, "bentoTonightKicker") == "ON FRIDAY"
+    assert text(view, "bentoTonightTitle") == "No homework this day"
+
+
+def test_day_and_week_keep_their_scroll_and_zoom_through_redraw(qapp: QApplication) -> None:
+    view = shown(qapp)
+    week = view._scrolls["week"]
+    week.zoom_by(1)
+    week_px = week.px
+    week.verticalScrollBar().setValue(260)
+    view.show_week(scene("week", clock="13:41"))
     qapp.processEvents()
-    assert view.findChild(QWidget, "bentoScroll").isVisible() is False
-    board = view.findChild(QWidget, "layoutMonthBoard")
-    assert board is not None and board.isVisible()
-    assert view.findChild(QLabel, "bentoHeroTitle").isVisible() is False
+    assert view._scrolls["week"] is week
+    assert week.px == week_px
+    assert week.verticalScrollBar().value() > 0
+    view.show_week(scene("day"))
+    qapp.processEvents()
+    day = view._scrolls["day"]
+    day.zoom_by(1)
+    view.show_week(scene("week", clock="13:42"))
+    qapp.processEvents()
+    assert view._scrolls["week"] is week
+    assert view._scrolls["day"] is day
+    assert week.px == week_px
+    view.show_week(scene("day", clock="13:43"))
+    qapp.processEvents()
+    assert view._scrolls["day"] is day
+    assert day.px == 128
+    view.show_week(scene("month"))
+    qapp.processEvents()
+    assert view.hours_surfaces() == []
+    assert view.month_surfaces()
+    assert shiboken6.isValid(week)
+    assert shiboken6.isValid(day)
+    view.close()
+    view.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert not shiboken6.isValid(week)
+    assert not shiboken6.isValid(day)
 
 
-@pytest.mark.parametrize(
-    ("blocks", "homework", "title", "line"),
-    [
-        ([], {}, "No homework added", "Add homework and FlexWeek will find it a time."),
-        (
-            [{"id": "school", "title": "School", "kind": "locked", "start": "08:00", "duration_min": 390,
-              "days": [0, 1, 2, 3, 4], "category": "class"}],
-            {},
-            "Nothing else scheduled today",
-            "The rest of the day is yours.",
-        ),
-    ],
-)
-def test_an_empty_up_next_does_not_say_its_title_twice(
-    qapp: QApplication, blocks: list[dict], homework: dict, title: str, line: str
-) -> None:
-    """A new account read "No homework added" as the card's title and again as its line."""
-    view = shown(qapp, "22:30", blocks=blocks, homework=homework, trace={"placed": [], "explanations": []})
-    assert (text(view, "bentoHeroTitle"), text(view, "bentoHeroLine")) == (title, line)
+def test_rail_stays_beside_the_hero_in_a_small_window(qapp: QApplication) -> None:
+    view = shown(qapp, "day")
+    hero = view.findChild(QLabel, "bentoHeroKicker")
+    waiting = view.findChild(TrayChip, "bentoWaiting0")
+    assert waiting.isVisible()
+    assert waiting.mapToGlobal(waiting.rect().center()).x() > hero.mapToGlobal(hero.rect().center()).x()
+
+
+def test_essentials_keeps_live_hours_and_the_tray(qapp: QApplication) -> None:
+    view = shown(qapp, "week", tiles="essentials")
+    assert view.findChild(HoursCanvas, "bentoWeekHours").isVisible()
+    assert any(chip.isVisible() for chip in view.findChildren(TrayChip, "bentoWaiting0"))
+    assert view.findChild(QWidget, "bentoDeadlines") is None
+    view.show_week(scene("day", tiles="essentials"))
+    qapp.processEvents()
+    assert view.findChild(HoursCanvas, "bentoDayHours").isVisible()
+    assert any(chip.isVisible() for chip in view.findChildren(TrayChip, "bentoWaiting0"))
+    assert view.findChild(QWidget, "bentoTonight") is None
+
+
+def test_an_uncategorized_block_remains_readable_in_midnight(qapp: QApplication) -> None:
+    palette = resolved_palette("light-frost", False, None, "default")
+    tokens = tokens_for("bento", "midnight", palette)
+    block = Drawn("plain", "Untyped event", "", False, Span(3, 21 * 60, 22 * 60), 0, 1)
+    fill, ink, _outline, _edge = BentoPainter(tokens).fills(block)
+    assert fill.name() == tokens["surface"]
+    assert ink.name() == tokens["text"]
+
+
+def test_month_uses_the_shared_grid(qapp: QApplication) -> None:
+    view = shown(qapp, "month")
+    assert view.hours_surfaces() == []
+    assert view.month_surfaces()

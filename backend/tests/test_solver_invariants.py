@@ -8,12 +8,28 @@ from types import SimpleNamespace
 import pytest
 
 from backend import solver
+from backend.availability import DEFAULT_WORK_WINDOWS, LEGACY_WORK_WINDOWS
 from backend.models import TimeBlock, WeekRequest
-from backend.solver import solve
+from backend.solver import solve as run_solve
+
+
+def solve(blocks, **kwargs):
+    kwargs.setdefault("work_windows", LEGACY_WORK_WINDOWS)
+    return run_solve(blocks, **kwargs)
 
 
 @pytest.mark.parametrize("seed", range(20))
-def test_generated_weeks_preserve_grid_bounds_occupancy_and_input(seed: int) -> None:
+@pytest.mark.parametrize(
+    "windows, day_first, day_last",
+    [
+        (LEGACY_WORK_WINDOWS, 6 * 60, 23 * 60),
+        (DEFAULT_WORK_WINDOWS, 0, 24 * 60),
+    ],
+    ids=["legacy-hours", "open-day"],
+)
+def test_generated_weeks_preserve_grid_bounds_occupancy_and_input(
+    seed: int, windows: list, day_first: int, day_last: int
+) -> None:
     rng = random.Random(seed)
     blocks = [
         TimeBlock(
@@ -61,7 +77,7 @@ def test_generated_weeks_preserve_grid_bounds_occupancy_and_input(seed: int) -> 
         )
     WeekRequest(blocks=blocks)
     before = [block.model_dump() for block in blocks]
-    trace = solve(blocks)
+    trace = solve(blocks, work_windows=windows)
     assert [block.model_dump() for block in blocks] == before
     placed = {block.id: block for block in trace.placed}
     assert placed["school"].days == [1]
@@ -78,7 +94,7 @@ def test_generated_weeks_preserve_grid_bounds_occupancy_and_input(seed: int) -> 
         hour, minute = map(int, block.start.split(":"))
         start = hour * 60 + minute
         assert start % 15 == 0
-        assert 360 <= start < start + block.duration_min <= 1380
+        assert day_first <= start < start + block.duration_min <= day_last
         for day in block.days:
             slots = {(day, t) for t in range(start, start + block.duration_min, 15)}
             assert occupied.isdisjoint(slots), (seed, block.id, occupied & slots)

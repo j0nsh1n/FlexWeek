@@ -6,13 +6,8 @@ from copy import deepcopy
 from datetime import date, datetime, timedelta
 from uuid import uuid4
 
-from backend.slots import (
-    DAY_END_MIN,
-    DAY_START_MIN,
-    SLOT_MIN,
-    hhmm_to_minutes,
-    minutes_to_hhmm,
-)
+from backend.models import due_sort_key
+from backend.slots import DAY_END_MIN, DAY_START_MIN, hhmm_to_minutes, minutes_to_hhmm
 
 LOCKED_CATEGORIES = ("class", "exercise", "extra", "meals", "sleep", "free")
 FLEX_CATEGORIES = ("assignments", "study")
@@ -21,7 +16,6 @@ DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 DAY_FULL = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 FIRST_MONTH = "2000-01"
 LAST_MONTH = "2099-12"
-MONTH_SAVED_ONLY = "This month shows saved changes only. Save your week to include recent edits."
 SERIES_DRAG_MESSAGE = (
     "{title} repeats on {count} days, so dragging it is ambiguous. Edit the occurrence or the series."
 )
@@ -108,61 +102,9 @@ def sunday_due(week_start: str) -> str:
     return date_for_day(week_start, 6) + "T23:59"
 
 
-def month_chips(
-    cell: dict,
-    snapshot: dict | None,
-    placed: list[tuple[str, str, str]] | None = None,
-) -> list[tuple[str, str]]:
-    """Names on a month cell: homework that is due, then what is already on that date in the open week."""
-    found: list[tuple[str, str]] = []
-    seen: set[str] = set()
-    iso = cell.get("date") or ""
-    titles: dict[str, tuple[str, str]] = {}
-    if snapshot:
-        for item in list(snapshot.get("deadlines") or []) + list(snapshot.get("overdue") or []):
-            ident = str(item.get("id") or "")
-            title = str(item.get("title") or ident)
-            category = str(item.get("category") or "assignments")
-            if ident:
-                titles[ident] = (title, category)
-        for aid in cell.get("due_ids") or []:
-            title, category = titles.get(str(aid), (str(aid), "assignments"))
-            if title not in seen:
-                seen.add(title)
-                found.append((title, category))
-        for item in snapshot.get("overdue") or []:
-            due = str(item.get("due") or "")[:10]
-            if due != iso:
-                continue
-            title = str(item.get("title") or item.get("id") or "")
-            if title and title not in seen:
-                seen.add(title)
-                found.append((title, str(item.get("category") or "assignments")))
-    for stamp, title, category in placed or ():
-        if stamp == iso and title not in seen:
-            seen.add(title)
-            found.append((title, category))
-    return found[:4]
-
-
 def local_stamp(now: datetime | None = None) -> str:
     moment = now or datetime.now()
     return moment.strftime("%Y-%m-%dT%H:%M")
-
-
-def snap_minute(minute: int) -> int:
-    snapped = int(round(minute / SLOT_MIN) * SLOT_MIN)
-    return max(DAY_START_MIN, min(DAY_END_MIN, snapped))
-
-
-def create_drag_range(start_min: int, end_min: int) -> tuple[int, int] | None:
-    begin = snap_minute(min(start_min, end_min))
-    stop = snap_minute(max(start_min, end_min))
-    if stop - begin < SLOT_MIN:
-        stop = min(DAY_END_MIN, begin + SLOT_MIN)
-    if stop - begin < SLOT_MIN:
-        return None
-    return begin, stop
 
 
 def occupied_intervals(blocks: list[dict], day: int) -> list[tuple[int, int]]:
@@ -178,35 +120,17 @@ def occupied_intervals(blocks: list[dict], day: int) -> list[tuple[int, int]]:
     return intervals
 
 
-def create_click_range(start_min: int, occupied: list[tuple[int, int]]) -> tuple[int, int] | None:
-    begin = snap_minute(start_min)
+def create_click_range(begin: int, occupied: list[tuple[int, int]]) -> tuple[int, int] | None:
+    """Up to an hour from `begin`, which the hand has already put on its step, stopping where the next
+    block starts."""
     stop = min(begin + 60, DAY_END_MIN)
     for slot_start, _slot_end in occupied:
         if begin <= slot_start < stop:
             stop = slot_start
             break
-    if stop - begin < SLOT_MIN:
+    if stop <= begin:
         return None
     return begin, stop
-
-
-def move_range(start_min: int, end_min: int, delta_min: int) -> tuple[int, int]:
-    duration = end_min - start_min
-    nxt = snap_minute(start_min + delta_min)
-    nxt = max(DAY_START_MIN, min(nxt, DAY_END_MIN - duration))
-    return nxt, nxt + duration
-
-
-def resize_top_range(start_min: int, end_min: int, delta_min: int) -> tuple[int, int]:
-    nxt = snap_minute(start_min + delta_min)
-    nxt = max(DAY_START_MIN, min(nxt, end_min - SLOT_MIN))
-    return nxt, end_min
-
-
-def resize_bottom_range(start_min: int, end_min: int, delta_min: int) -> tuple[int, int]:
-    nxt = snap_minute(end_min + delta_min)
-    nxt = min(DAY_END_MIN, max(nxt, start_min + SLOT_MIN))
-    return start_min, nxt
 
 
 def apply_block_times(block: dict, start_min: int, end_min: int, day: int | None = None) -> dict | None:
@@ -216,7 +140,7 @@ def apply_block_times(block: dict, start_min: int, end_min: int, day: int | None
     if is_series(block):
         return None
     duration = end_min - start_min
-    if duration < SLOT_MIN or start_min < DAY_START_MIN or end_min > DAY_END_MIN:
+    if duration <= 0 or start_min < DAY_START_MIN or end_min > DAY_END_MIN:
         return None
     updated = deepcopy(block)
     updated["start"] = minutes_to_hhmm(start_min)
@@ -288,6 +212,46 @@ def apply_block_edit(
     return result
 
 
+def relocate_block(
+    source: list[dict],
+    block_id: str,
+    from_day: int,
+    to_day: int,
+    dest: list[dict] | None = None,
+) -> tuple[list[dict], list[dict] | None, str] | None:
+    """One day's copy of a block, moved onto `to_day`. `dest` is None when that day is in the same week."""
+    block = next((item for item in source if item["id"] == block_id), None)
+    if block is None or from_day not in (block.get("days") or []) or not block.get("start"):
+        return None
+
+    def for_date(item: dict) -> dict:
+        out = deepcopy(item)
+        out["days"] = [to_day]
+        if out.get("assignment_id") and out.get("kind") == "flexible" and not out.get("completed"):
+            out["pinned"] = True
+        if out.get("completed_day") == from_day:
+            out["completed_day"] = to_day
+        out["missed_days"] = [day for day in out.get("missed_days") or [] if day in out["days"]]
+        return out
+
+    if dest is None:
+        if is_series(block):
+            before = {item["id"] for item in source}
+            edited = apply_block_edit(source, deepcopy(block), scope="occurrence", day=from_day)
+            made = next((item["id"] for item in edited if item["id"] not in before), block_id)
+            return [for_date(item) if item["id"] == made else deepcopy(item) for item in edited], None, made
+        return apply_block_edit(source, for_date(block)), None, block_id
+
+    if is_series(block):
+        split, new_id = split_occurrence(source, block_id, from_day)
+        made = new_id or block_id
+        occurrence = next(item for item in split if item["id"] == made)
+        source_out = [deepcopy(item) for item in split if item["id"] != made]
+        return source_out, [deepcopy(item) for item in dest] + [for_date(occurrence)], made
+    source_out = [deepcopy(item) for item in source if item["id"] != block_id]
+    return source_out, [deepcopy(item) for item in dest] + [for_date(block)], block_id
+
+
 def first_plannable_day(week_start: str, today: date | None = None) -> int:
     today = today or date.today()
     monday = date.fromisoformat(week_start)
@@ -343,7 +307,7 @@ def due_soon_for(iso_day: str, assignments: dict[str, dict]) -> list[dict]:
         for item in assignments.values()
         if not item.get("completed") and item.get("due", "9999")[:10] <= tomorrow
     ]
-    return sorted(items, key=lambda item: (item["due"], item["id"]))
+    return sorted(items, key=lambda item: due_sort_key(item.get("due"), str(item.get("id") or "")))
 
 
 def _is_work_session(block: dict) -> bool:

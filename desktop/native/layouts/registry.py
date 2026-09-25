@@ -85,7 +85,7 @@ LAYOUTS: dict[str, LayoutSpec] = {
             "timeline",
             "plan",
             "Timeline",
-            "One day as a column, the week as a strip of load bars.",
+            "One day as a ruled page, and the week as seven lines of hours down the page.",
             (
                 _colour(TIMELINE),
                 Option(
@@ -119,17 +119,15 @@ LAYOUTS: dict[str, LayoutSpec] = {
             "bento",
             "plan",
             "Bento",
-            "A home screen of tiles: what is next, deadlines, what has no time yet.",
+            "A live day or week in one big tile, with homework and deadlines beside it.",
             (
                 _colour(BENTO),
                 Option(
                     "corners", "Tile corners", "style", (Choice("soft", "Soft"), Choice("square", "Square"))
                 ),
                 Option(
-                    "tiles",
-                    "Tiles",
-                    "detail",
-                    (Choice("all", "All tiles"), Choice("essentials", "Essentials only")),
+                    "tiles", "Supporting tiles", "detail",
+                    (Choice("all", "All"), Choice("essentials", "Hero and tray only")),
                 ),
             ),
             BENTO,
@@ -139,14 +137,14 @@ LAYOUTS: dict[str, LayoutSpec] = {
             "retro",
             "plan",
             "Retro desktop",
-            "Windows and a taskbar: the week, a deadlines notepad, what is next.",
+            "Schedule.exe and Week.exe, a deadlines notepad, and a taskbar.",
             (
                 _colour(RETRO),
                 Option(
                     "windows",
                     "Windows open at start",
                     "detail",
-                    (Choice("all", "All three"), Choice("week", "Only the week")),
+                    (Choice("all", "All three"), Choice("week", "Main window only")),
                 ),
             ),
             RETRO,
@@ -156,13 +154,10 @@ LAYOUTS: dict[str, LayoutSpec] = {
             "clay",
             "plan",
             "Clay deck",
-            "Soft day cards in a deck, one day in the middle.",
+            "One large Day card and seven live cards on Week.",
             (
                 _colour(CLAY),
-                Option(
-                    "cards", "Cards in the deck", "detail", (Choice("five", "Five"), Choice("three", "Three"))
-                ),
-                Option("tilt", "Tilted cards", "detail", (Choice("on", "Tilted"), Choice("off", "Straight"))),
+                Option("tilt", "Week cards", "detail", (Choice("on", "Fanned"), Choice("off", "Straight"))),
             ),
             CLAY,
             purpose="Agenda",

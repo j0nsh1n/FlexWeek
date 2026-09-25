@@ -6,8 +6,10 @@ import json
 from copy import deepcopy
 from datetime import date, datetime, timedelta
 
+from backend.models import due_sort_key, parse_due
 from backend.slots import DAY_END_MIN, DAY_START_MIN, SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm
 from desktop.native.calendar import DAY_FULL
+from desktop.native.weekmodel import length_label
 
 MAX_WEEK_BLOCKS = 100
 AVAILABILITY_LIMIT = 21
@@ -31,15 +33,6 @@ def restore_point_label(text: str) -> str:
     if len(characters) <= 80:
         return text
     return "".join(characters[:79]) + "…"
-
-
-def format_duration(minutes: int) -> str:
-    hours, mins = divmod(minutes, 60)
-    if hours and mins:
-        return f"{hours}h {mins}m"
-    if hours:
-        return f"{hours}h"
-    return f"{mins}m"
 
 
 def week_label(week_start: str) -> str:
@@ -150,6 +143,32 @@ def held_in_place(block: dict) -> dict:
     }
 
 
+def plan_start(week_start: str, now: datetime) -> tuple[int, int] | None:
+    """The first time a plan may use in this week, as (day, minute): now, rounded up to the next
+    quarter hour. None while the whole week is still ahead; a day past Sunday once it is over."""
+    day = (now.date() - date.fromisoformat(week_start)).days
+    if day < 0:
+        return None
+    minute = now.hour * 60 + now.minute + (1 if now.second or now.microsecond else 0)
+    minute = -(-minute // SLOT_MIN) * SLOT_MIN
+    if minute >= DAY_END_MIN:
+        return day + 1, DAY_START_MIN
+    return day, minute
+
+
+def _begun(block: dict, not_before: tuple[int, int] | None) -> bool:
+    return not_before is not None and (block["days"][0], hhmm_to_minutes(block["start"])) < not_before
+
+
+def _from(session: dict, not_before: tuple[int, int]) -> dict:
+    """A session the solver may place no earlier than `not_before`, said as the earliest start the
+    model already has, so the reasons it gives stay true. The days already gone come off; with none
+    left it keeps today, so the solver says it is too late for it rather than that it does not fit."""
+    day, minute = not_before
+    days = [item for item in session["days"] if item >= day] or [day]
+    return {**session, "days": days, "earliest": f"{DAY_FULL[day]} {minutes_to_hhmm(minute)}"}
+
+
 def solve_request(
     blocks: list[dict],
     assignments: dict,
@@ -157,12 +176,14 @@ def solve_request(
     *,
     everything: bool = False,
     only: set[str] | None = None,
+    not_before: tuple[int, int] | None = None,
 ) -> tuple[list[dict], set[str]]:
     """What to send the solver, and which sessions its answer may place.
 
     By default planned homework keeps its time and only homework without one is placed around it.
     `everything` places every unfinished session again, with every day up to its deadline open.
     `only` places just those sessions around everything else, for work whose time stopped working.
+    `not_before` (from `plan_start`) keeps every placement at or after now.
     """
     payload: list[dict] = []
     targets: set[str] = set()
@@ -171,15 +192,16 @@ def solve_request(
             payload.append(block)
             continue
         planned = is_planned(block)
-        # Homework the student placed by hand stays put in Replan all, like a fixed block.
-        pinned = planned and bool(block.get("pinned"))
-        wanted = block["id"] in only if only is not None else (everything and not pinned) or not planned
+        # Homework the student placed by hand stays put in Replan all, like a fixed block, and so does
+        # homework whose time has already come: a plan does not reach back into the past.
+        kept = planned and (bool(block.get("pinned")) or _begun(block, not_before))
+        wanted = block["id"] in only if only is not None else (everything and not kept) or not planned
         if wanted:
             session = dict(block)
             if planned:
                 session.pop("start")
                 session["days"] = planning_days(block, assignments, week_start)
-            payload.append(session)
+            payload.append(session if not_before is None else _from(session, not_before))
             targets.add(block["id"])
         elif planned:
             payload.append(held_in_place(block))
@@ -190,10 +212,11 @@ def due_point(due: str | None, week_start: str) -> tuple[int, int] | None:
     """A deadline as (day index, minute) in this week: negative before it, None when it is later."""
     if not due:
         return None
-    offset = (date.fromisoformat(due[:10]) - date.fromisoformat(week_start)).days
+    due_day, minutes = parse_due(due)
+    offset = (due_day - date.fromisoformat(week_start)).days
     if offset > 6:
         return None
-    return offset, hhmm_to_minutes(due[11:16]) if len(due) >= 16 else DAY_END_MIN
+    return offset, minutes
 
 
 def settle_placements(
@@ -519,8 +542,8 @@ def preview_conflict_message(row: dict, rows: list[dict], existing: list[dict]) 
     if conflict:
         return f"Conflicts with {conflict}. Choose another time."
     if row.get("fixed"):
-        return format_duration(int(row["block"]["duration_min"])) + " · Only this week"
-    return format_duration(int(row["block"]["duration_min"])) + " · Time chosen when you plan"
+        return length_label(int(row["block"]["duration_min"])) + " · Only this week"
+    return length_label(int(row["block"]["duration_min"])) + " · Time chosen when you plan"
 
 
 def routine_source_blocks(blocks: list[dict]) -> list[dict]:
@@ -584,7 +607,7 @@ def unfinished_items(
         if item.get("completed") or minutes < SLOT_MIN:
             continue
         items.append({**item, "remaining_min": minutes})
-    return sorted(items, key=lambda item: (item.get("due") or "", item["id"]))
+    return sorted(items, key=lambda item: due_sort_key(item.get("due"), item["id"]))
 
 
 def late_from_start(minute: int) -> str:
@@ -621,11 +644,8 @@ def running_late_refusal(
 ) -> str | None:
     today = now.date()
     this_week = (today - timedelta(days=today.weekday())).isoformat()
-    minute = now.hour * 60 + now.minute
     if week_start != this_week:
         return "Open this week before using Running late."
-    if minute < DAY_START_MIN or minute >= DAY_END_MIN:
-        return "Running late is available between 06:00 and 23:00."
     if conflict:
         return "This week was changed somewhere else. Reload it first."
     if dirty:

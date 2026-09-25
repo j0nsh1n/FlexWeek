@@ -12,7 +12,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from desktop.native.calendar import DAYS, _is_work_session
+from backend.models import due_is_timed, due_sort_key
+from desktop.native.calendar import DAY_FULL, DAYS, _is_work_session, is_series
 
 SLACK_WORDS = {"danger": "Cutting it close", "tight": "Tight", "ok": "Plenty of time"}
 _SLACK_ORDER = {"danger": 0, "tight": 1, None: 2, "ok": 3}
@@ -20,8 +21,9 @@ NOT_PLANNED = "Not planned yet."
 # A homework session is saved with no category unless the student picked one. It is still homework.
 HOMEWORK = "assignments"
 END_OF_DAY = 24 * 60
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 LEFTOVER = {
-    "needs_time": "Needs a time",
+    "needs_time": "Not placed yet",
     "no_homework": "No homework added",
     "all_finished": "All homework finished",
     "calendar_only": "Nothing else scheduled today",
@@ -52,13 +54,48 @@ def planned_line(planned_min: int, done_min: int) -> str:
 
 
 def due_label(due: str | None, week_start: str) -> str:
-    """A deadline as a student says it: the weekday inside this week, the date outside it."""
+    """A deadline as a student says it: Sun 27 Sep, or Sun 27 Sep, 09:00 when a time is set."""
     if not due:
         return ""
     day = date.fromisoformat(due[:10])
-    offset = (day - date.fromisoformat(week_start)).days
-    name = DAYS[offset] if 0 <= offset <= 6 else f"{day.strftime('%b')} {day.day}"
-    return f"{name} {due[11:16]}" if len(due) >= 16 else name
+    words = f"{DAYS[day.weekday()]} {day.day} {_MONTHS[day.month - 1]}"
+    if due_is_timed(due):
+        words += f", {due[11:16]}"
+    return words
+
+
+def moved_words(block: dict, from_day: int, day: int, start: int, end: int) -> str:
+    """What a drag did to `block`, as it was before, now that it is on `day` from `start` to `end`:
+    "Moved History essay to Fri 18:00.", "History essay now ends at 20:30.", "Placed Math worksheet
+    on Thu 17:45." A block that repeats moved only the day it was picked up from, so that day is
+    named."""
+    title = block.get("title") or "the block"
+    if not block.get("start"):
+        return f"Placed {title} on {DAYS[day]} {clock_label(start)}."
+    if is_series(block):
+        title = f"{DAY_FULL[from_day]}'s {title}"
+    was = minute_of(block["start"])
+    was_end = was + int(block["duration_min"])
+    if day == from_day and start == was and end != was_end:
+        return f"{title} now ends at {clock_label(end)}."
+    if day == from_day and end == was_end and start != was:
+        return f"{title} now starts at {clock_label(start)}."
+    return f"Moved {title} to {DAYS[day]} {clock_label(start)}."
+
+
+def added_words(block: dict) -> str:
+    """A block just made: "Added Club on Thu 16:00.", or without a day and time when it has several
+    days or no time yet."""
+    title = block.get("title") or "a block"
+    days = block.get("days") or []
+    if block.get("start") and len(days) == 1:
+        return f"Added {title} on {DAYS[days[0]]} {block['start']}."
+    return f"Added {title}."
+
+
+def dated_words(title: str, iso: str) -> str:
+    """What carrying a block to another date on Month did, such as "Moved History essay to Fri 25 Sep"."""
+    return f"Moved {title} to {due_label(iso, '')}."
 
 
 @dataclass(frozen=True)
@@ -77,6 +114,8 @@ class Occurrence:
     assignment_id: str | None
     due: str | None
     slack: str | None
+    # Put there by hand: no plan moves it.
+    pinned: bool = False
 
     @property
     def minutes(self) -> int:
@@ -240,8 +279,9 @@ def build_week(
                     assignment_id=original.get("assignment_id"),
                     due=assignment.get("due"),
                     slack=note.get("slack_status"),
+                    pinned=bool(block.get("pinned")),
                 )
             )
     occurrences.sort(key=lambda item: (item.day, item.start, item.block_id))
-    waiting.sort(key=lambda item: (item.due or "9999", item.block_id))
+    waiting.sort(key=lambda item: due_sort_key(item.due, item.block_id))
     return WeekModel(week_start, tuple(occurrences), tuple(waiting))

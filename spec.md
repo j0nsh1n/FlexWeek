@@ -55,7 +55,10 @@ Contract for the finished app:
 - A week has unique block ids. A pomodoro parent cannot be stored in the same
   week as the chunks split from it.
 - The solver places every flexible block on the 15-minute grid (Mon–Sun,
-  06:00–23:00) without overlapping any locked block or any other placed block.
+  00:00–24:00), inside the account's work windows, without overlapping any
+  locked block or any other placed block. A block at any minute takes every
+  quarter hour it touches: one from 17:37 to 18:22 leaves no homework between
+  17:30 and 18:30.
 - Search order respects priority (1 = test, 2 = quiz, 3 = homework,
   4 = reading); a higher-priority block wins a contested slot.
 - Energy windows (`high` / `medium` / `low`) are a soft preference on value
@@ -64,7 +67,10 @@ Contract for the finished app:
   a plain-English sentence: `LOCKED_OVERLAP`, `DEADLINE_MISS`, `NO_SLOT_LEFT`,
   `PRIORITY_PREEMPT`, `ENERGY_MISMATCH` (soft), `SLEEP_GUARD`,
   `RESHUFFLE_AFTER_MISS`.
-- Sleep (23:00–06:00) is a guard the solver never places into and never steals.
+- Work windows bound where the planner places homework. Until the student sets
+  any, the whole day is open, and the planner ranks the night (23:00–06:00)
+  last, so it is used only when the rest of the day is full. Placing a block by
+  hand at any hour is always allowed.
 - Solving is capped at 150 ms. On timeout the app returns the best partial
   placement plus reasons for what is unplaced. It never hangs and never
   returns nothing.
@@ -78,8 +84,9 @@ Contract for the finished app:
   just that work. Every other session keeps its time.
 - Deadline slack is shown as ok / tight / danger.
 - Edge cases: an unsolvable week returns `complete: false` with reasons rather
-  than an error; a duration that is not a positive multiple of 15 is rejected in
-  both the app's editor and the API. Files exported by earlier builds, including
+  than an error; a homework estimate that is not a positive multiple of 15 is
+  rejected in both the app's editor and the API, while a block's start and
+  length may be any minute. Files exported by earlier builds, including
   the retired browser client, import into a signed-in account; invalid data
   stays untouched and never loads a demo.
 - Copy, paste, duplicate and copy-day use an in-memory clipboard that clears on
@@ -109,10 +116,21 @@ Contract for the finished app:
   restore point of the destination weeks and assignments first. Automatic
   bidirectional or offline sync is out of scope. Export returns 413 when the
   compact import apply envelope would exceed the 256 KiB write cap.
+- Day and Week show the whole day, 00:00 to 24:00. Hours scroll, and the
+  student can zoom: Ctrl and the wheel, Ctrl with =, - and 0, or two buttons
+  beside the hours. Each surface's level is remembered per device in the look
+  file. Every design draws its own Day and Week on one shared gesture engine
+  (`docs/0.15/architecture.md`): a block moves with the pointer in the
+  student's step, 5 minutes or 15 (the `drag_step_min` preference, 5 unless
+  chosen otherwise in setup or Settings > Planning), with its times beside it
+  while held; a typed time keeps any minute; an end drags to resize;
+  empty time drags to create; overlaps are allowed, drawn side by side and
+  named; a block moved by hand is pinned; a refusal leaves the block where it
+  was and says why before it is let go.
 - Day view lists one date: homework due soon, that day's work sessions and fixed
   commitments, one next action, and a workload summary that separates scheduled
   time (work that has a time), recorded focus time and time still free before
-  23:00, with a breakdown by category. Due soon is open homework due that day or the next, plus anything
+  midnight, with a breakdown by category. Due soon is open homework due that day or the next, plus anything
   already overdue. Below 800px Day is the default view and Week stays one control
   away. Quick Add homework asks only for title, due date and estimated time, with
   "Choose a time myself" for anything more. "Plan my homework" places only
@@ -141,8 +159,11 @@ Contract for the finished app:
   checklist items never completes the assignment, and focus minutes still
   complete nothing.
 - Preferences carry availability: up to 21 `protected` windows (downtime,
-  commute or meal), up to 21 soft `study_windows`, and an optional `day_cutoff`
-  that flexible work must finish by. A study window may name one `subject`:
+  commute or meal), up to 21 `work_windows` (the hours the planner may use,
+  set in setup and in Settings; `work_windows_defaulted` marks an account that
+  has not chosen any, whose whole day is open), up to 21 soft `study_windows`
+  (Settings only), and an optional `day_cutoff` that flexible work must finish
+  by. A study window may name one `subject`:
   the solver tries a session in its own subject's window first, then in a
   window for any subject, then anywhere else. `POST /api/solve` loads them for
   the signed-in account, so the client never re-sends occupancy.
@@ -171,8 +192,14 @@ Contract for the finished app:
   and study time, planned and completed, and any date opens Day view. A session
   pins to a date only when that date is certain: the day it was completed, or
   the day its saved plan gives it. Open work with no time yet is reported as an
-  unscheduled total instead of being painted across its candidate days. Details
-  live in `docs/stage7-contract.md`.
+  unscheduled total instead of being painted across its candidate days. Each
+  date lists its timed blocks as chips that start with their time ("09:00
+  History essay"), from the month reply's per-date `blocks`; the open week, and
+  any week left with unsaved changes, are drawn from what the student has now.
+  A chip can be dragged to another visible date and keeps its time; one
+  occurrence of a repeating block moves alone; a drop the deadline refuses
+  leaves the chip where it was and says why. Homework due that day is listed
+  first. Details live in `docs/stage7-contract.md`.
 
 ## User Experience
 Native desktop app, one window, designed at 1280px and usable down to 1150px,
@@ -196,9 +223,10 @@ stored in `setup`, and setup never returns unless the student picks Run setup
 again in Settings. School hours stays under More for later.
 
 The week calendar is a painted timeline, as in Daily Scheduler: dragging a
-block moves it with the pointer in 15-minute steps and across days, its top or
-bottom edge resizes it, and dragging or clicking empty time opens an Add dialog
-for that range. Blocks may overlap; they sit side by side, each marked. A drop
+block moves it with the pointer in the student's 5- or 15-minute step and
+across days, its top or bottom edge resizes it, and dragging or clicking empty
+time opens an Add dialog for that range. Blocks may overlap; they sit side by
+side, each marked. A drop
 is refused only outside the day's hours or when homework would end after it is
 due. Dragging one day of a repeating block moves that day only. Dragging works
 in every design: a block can be picked up wherever a design shows it. Mission
@@ -294,9 +322,13 @@ to the nearest Monday, so a client and the server cannot disagree about which
 week is open while both believe they succeeded. Blocks keep their `days` index
 and derive their calendar date, so the solver stays day-index pure.
 A week has at most 100 uniquely identified blocks; titles 1–80,
-course names at most 40, durations positive multiples of 15 up to 7140 minutes,
-and unique day indices. Explicit starts are on the visible grid and end by
-23:00. An assignment's `due` is a naive local `YYYY-MM-DDTHH:MM` between
+course names at most 40, block durations any positive number of minutes up to
+7140, and unique day indices. Explicit starts are any minute from 00:00 and end
+by 24:00 (a block ending at midnight is stored as the next date at 00:00).
+Homework estimates, spread sessions, running-late starts, split lengths,
+`day_cutoff` and work, study and protected windows stay on the 15-minute grid.
+An assignment's `due` is a naive local `YYYY-MM-DD`, due by the end of that day,
+or `YYYY-MM-DDTHH:MM` for work due at a set time that day, between
 2000-01-01 and 2099-12-31; `earliest` bounds and legacy `latest` values use a
 full English weekday plus HH:MM, or HH:MM. An account holds at most 1000
 assignments. API write bodies are capped at 256 KiB.
@@ -310,7 +342,12 @@ Slate, Nocturne or a frost pack keeps that look until the student chooses
 again. Signed-out screens follow the device setting; signing out does not
 change an account's saved choice. Preferences
 also store reminder enable/lead/sound, `reminder_dnd_override`, pomodoro
-lengths, `auto_split_pomodoro`, `default_spotify_url`, and a list of alarms. On desktop, `reminder_dnd_override`
+lengths, `auto_split_pomodoro`, `default_spotify_url`, and a list of alarms.
+Reminders are on unless the student turns them off; an account from before 0.15
+had them turned on once (`prefs_version` 1), and a later choice stands. A block
+reminds from the moment its lead begins until it starts, once, so a block saved
+inside its lead reminds at once. A block with its own Spotify link plays it at
+its start, as an alarm plays its song, with the same Dismiss and Snooze. On desktop, `reminder_dnd_override`
 tags the Notification `flexweek-stay` so the tray presenter skips the 10-second
 auto-close. Unchecked alerts still close at 10 seconds. Qt has no
 `requireInteraction`.
@@ -359,7 +396,9 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
 - Time model: local `HH:MM` strings and Mon–Sun day indices, plus naive local
   `YYYY-MM-DDTHH:MM` assignment deadlines, assumed America/Los_Angeles. No
   timezone conversion math anywhere in v1.
-- Slot grid: Mon–Sun 06:00–23:00, 15-minute slots, 68/day × 7 = 476/week.
+- Slot grid: Mon–Sun 00:00–24:00, 15-minute slots, 96/day × 7 = 672/week.
+  The planner works in these slots; a block may start and end at any minute
+  and takes every slot it touches.
   Overlap uses half-open ranges `[start, end)`. One `overlaps()` helper. There
   is no duplicate date math.
 - External APIs/services: none. No OAuth, no calendar sync, no LLM at runtime.
@@ -373,7 +412,10 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
   uninstalls each one; running them on a real PC is unverified here. Production requires HTTPS via FLEXWEEK_ORIGIN and
   persistent SQLite storage.
 - GitHub Actions: `.github/workflows/verify.yml` is the source gate (mypy, not
-  pyright). `.github/workflows/codeql.yml` runs CodeQL on Python.
+  pyright); its second job, `rig`, installs Xvfb, Openbox and xdotool, runs
+  Today's app's Day and Week with a real pointer on a hidden display, and
+  uploads the screenshots, videos and results. `.github/workflows/codeql.yml`
+  runs CodeQL on Python.
   The generic kit `ci.yml` is not installed: it ran pyright and looked for
   `tests/` at the repo root. Dependabot stays off.
 
@@ -439,8 +481,8 @@ The full source gate from the repo root, inside `.venv`, is:
 
 `--backend-only` omits desktop tests and reports desktop as unverified.
 `.github/workflows/verify.yml` runs that variant on every push and pull
-request (Python 3.14, `contents: read`). It installs nothing and does
-not build a binary.
+request (Python 3.14, `contents: read`), and its `rig` job runs the
+real-pointer rig on Today's app under Xvfb. Neither builds a binary.
 
 The commands it runs, each of which must exit 0:
 
@@ -504,6 +546,8 @@ The commands it runs, each of which must exit 0:
       the solver places work without the client re-sending occupancy.
 - [ ] A student opens Month, sees deadlines with planned and completed study
       time, and clicks a date to open Day view.
+- [ ] A student drags a Month chip to another date and the block moves there
+      with its time; dragging it past its due date is refused in words.
 - [ ] A new account skips or finishes setup, and setup does not come back;
       quitting mid-way resumes on the same page.
 - [ ] In every design, a student drags homework and blocks to a time on any

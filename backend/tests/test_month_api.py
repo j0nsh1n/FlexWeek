@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -130,6 +131,7 @@ def test_empty_september_is_a_five_week_grid(alice: TestClient) -> None:
         "locked_count": 0,
         "scheduled_min": 0,
         "focus_min": 0,
+        "blocks": [],
     }
     assert body["unscheduled"] == {"session_count": 0, "minutes": 0}
     first = day_on(body, "2026-09-01")
@@ -409,9 +411,168 @@ def test_december_2099_clips_the_trailing_week(alice: TestClient) -> None:
     assert body["days"][-1]["in_month"] is True
 
 
+def test_an_untimed_deadline_sorts_after_a_morning_one_on_the_same_date(alice: TestClient) -> None:
+    assert put_assignment(alice, assignment("allday", title="All day", due="2026-09-15")).status_code == 200
+    assert (
+        put_assignment(alice, assignment("morning", title="Morning", due="2026-09-15T09:00")).status_code
+        == 200
+    )
+    body = get_month(alice).json()
+    assert [item["id"] for item in body["deadlines"]] == ["morning", "allday"]
+    assert day_on(body, "2026-09-15")["due_ids"] == ["morning", "allday"]
+
+
 def test_blank_notes_do_not_turn_a_deadline_into_a_project(alice: TestClient) -> None:
     """Spaces and newlines are not notes, so they must not promote a plain deadline."""
     assert put_assignment(alice, assignment(notes="   \n\t  ")).status_code == 200
     body = get_month(alice).json()
     assert body["projects"] == []
     assert [item["id"] for item in body["deadlines"]] == ["hw-essay"]
+
+
+def test_a_repeating_block_appears_on_each_of_its_dates_with_the_same_id(alice: TestClient) -> None:
+    assert save_week(alice, [school()]).status_code == 200
+    body = get_month(alice).json()
+    chip = {
+        "id": "school",
+        "title": "School",
+        "start": "08:00",
+        "duration_min": 390,
+        "category": "School",
+        "kind": "locked",
+        "assignment_id": None,
+        "repeats": True,
+        "pinned": False,
+        "completed": False,
+    }
+    for label in ("2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18"):
+        assert day_on(body, label)["blocks"] == [chip]
+    assert day_on(body, "2026-09-19")["blocks"] == []
+
+
+def test_pinned_homework_appears_with_its_assignment_id(alice: TestClient) -> None:
+    assert put_assignment(alice, assignment()).status_code == 200
+    placed = session("s-tue", 1, "16:00", pinned=True)
+    assert save_week(alice, [placed]).status_code == 200
+    tuesday = day_on(get_month(alice).json(), "2026-09-15")
+    assert tuesday["blocks"] == [
+        {
+            "id": "s-tue",
+            "title": "Essay",
+            "start": "16:00",
+            "duration_min": 60,
+            "category": "Homework",
+            "kind": "flexible",
+            "assignment_id": "hw-essay",
+            "repeats": False,
+            "pinned": True,
+            "completed": False,
+        }
+    ]
+
+
+def test_homework_without_a_time_is_not_in_blocks(alice: TestClient) -> None:
+    assert put_assignment(alice, assignment()).status_code == 200
+    waiting = session("s-tue", 1, "16:00")
+    del waiting["start"]
+    assert save_week(alice, [waiting]).status_code == 200
+    body = get_month(alice).json()
+    assert day_on(body, "2026-09-15")["blocks"] == []
+    assert body["unscheduled"] == {"session_count": 1, "minutes": 60}
+
+
+def test_blocks_on_a_date_are_in_start_then_title_order(alice: TestClient) -> None:
+    assert (
+        save_week(
+            alice,
+            [
+                {
+                    "id": "late-z",
+                    "title": "Yoga",
+                    "kind": "locked",
+                    "duration_min": 45,
+                    "days": [0],
+                    "start": "18:00",
+                    "category": "exercise",
+                },
+                {
+                    "id": "early-b",
+                    "title": "Band",
+                    "kind": "locked",
+                    "duration_min": 30,
+                    "days": [0],
+                    "start": "07:00",
+                    "category": "extra",
+                },
+                {
+                    "id": "early-a",
+                    "title": "Art",
+                    "kind": "locked",
+                    "duration_min": 30,
+                    "days": [0],
+                    "start": "07:00",
+                    "category": "extra",
+                },
+            ],
+        ).status_code
+        == 200
+    )
+    titles = [item["title"] for item in day_on(get_month(alice).json(), "2026-09-14")["blocks"]]
+    assert titles == ["Art", "Band", "Yoga"]
+
+
+def test_a_block_on_the_last_sunday_and_the_next_month_week_start_stay_on_those_dates(
+    alice: TestClient,
+) -> None:
+    """September's grid ends Sunday 2026-10-04. October's weeks begin Monday 2026-09-28."""
+    sunday = {
+        "id": "sunday-club",
+        "title": "Sunday club",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [6],
+        "start": "10:00",
+        "category": "extra",
+    }
+    monday = {
+        "id": "week-open",
+        "title": "Week open",
+        "kind": "locked",
+        "duration_min": 30,
+        "days": [0],
+        "start": "07:00",
+        "category": "extra",
+    }
+    assert save_week(alice, [sunday, monday], week_start="2026-09-28").status_code == 200
+    september = get_month(alice, "2026-09").json()
+    october = get_month(alice, "2026-10").json()
+    last_sunday = day_on(september, "2026-10-04")["blocks"]
+    assert [item["id"] for item in last_sunday] == ["sunday-club"]
+    assert last_sunday[0]["start"] == "10:00"
+    first_monday = day_on(october, "2026-09-28")["blocks"]
+    assert [item["id"] for item in first_monday] == ["week-open"]
+    assert first_monday[0]["start"] == "07:00"
+
+
+def test_a_busy_month_stays_a_compact_read(alice: TestClient) -> None:
+    """Five timed blocks a day across the grid, as a packed student week looks."""
+    weeks = ("2026-08-31", "2026-09-07", "2026-09-14", "2026-09-21", "2026-09-28")
+    for week_start in weeks:
+        blocks = [
+            {
+                "id": f"{week_start}-{day}-{slot}",
+                "title": f"Club {slot}",
+                "kind": "locked",
+                "duration_min": 45,
+                "days": [day],
+                "start": f"{8 + slot:02d}:00",
+                "category": "extra",
+            }
+            for day in range(7)
+            for slot in range(5)
+        ]
+        assert save_week(alice, blocks, week_start=week_start).status_code == 200
+    encoded = json.dumps(get_month(alice).json(), separators=(",", ":"))
+    # A September week document of the same density is already tens of kilobytes; the month
+    # read names chips, not whole week rows.
+    assert 20_000 < len(encoded) < 80_000, len(encoded)

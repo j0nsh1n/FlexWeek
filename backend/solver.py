@@ -2,16 +2,34 @@ from __future__ import annotations
 
 import time
 
-from backend.availability import CLUSTER_COPY, LATE_COPY, lateness_occupancy, merge_occupancy, study_rank
+from backend.availability import (
+    CLUSTER_COPY,
+    DEFAULT_WORK_WINDOWS,
+    LATE_COPY,
+    lateness_occupancy,
+    merge_occupancy,
+    resolve_work_windows,
+    session_inside_work_windows,
+    study_rank,
+)
 from backend.explain import sentence, slack_sentence
-from backend.models import Explanation, Move, ReasonCode, SlackStatus, SolveTrace, StudyWindow, TimeBlock
+from backend.models import (
+    Explanation,
+    Move,
+    ReasonCode,
+    SlackStatus,
+    SolveTrace,
+    StudyWindow,
+    TimeBlock,
+    WorkWindow,
+)
 from backend.slots import (
-    DAY_END_MIN,
     DAY_START_MIN,
     SLOT_MIN,
     SLOTS_PER_DAY,
     duration_to_slots,
     hhmm_to_minutes,
+    occupancy_between,
     occupancy_mask,
     parse_deadline,
     slot_to_hhmm,
@@ -35,6 +53,7 @@ def solve(
     slack_deadlines: dict[str, tuple[int, int]] | None = None,
     extra_occ: list[int] | None = None,
     study_windows: list[StudyWindow] | None = None,
+    work_windows: list[WorkWindow] | None = None,
 ) -> SolveTrace:
     """Place flexible blocks around locked ones. Pure and synchronous."""
     started = time.perf_counter()
@@ -65,6 +84,7 @@ def solve(
     if extra_occ is not None:
         occ_locked = merge_occupancy(occ_locked, extra_occ)
     windows = study_windows or []
+    planning_windows, work_windows_defaulted = resolve_work_windows(work_windows)
     flex_by_id = {block.id: block for block in flexible}
     ids = [block.id for block in flexible]
     parsed_deadlines = {block.id: parse_deadline(block.latest, block.days) for block in flexible}
@@ -76,7 +96,9 @@ def solve(
     earliest = {block.id: parse_deadline(block.earliest, block.days) for block in flexible}
     lengths = {block.id: duration_to_slots(block.duration_min) for block in flexible}
     domains0 = {
-        block.id: _domain(block, occ_locked, parsed_deadlines[block.id], earliest[block.id])
+        block.id: _domain(
+            block, occ_locked, parsed_deadlines[block.id], earliest[block.id], planning_windows
+        )
         for block in flexible
     }
 
@@ -172,7 +194,9 @@ def solve(
     for block in flexible:
         if block.id in best:
             continue
-        reason = _reason_for(block, occ_locked, best, flex_by_id, parsed_deadlines, earliest)
+        reason = _reason_for(
+            block, occ_locked, best, flex_by_id, parsed_deadlines, earliest, planning_windows
+        )
         unplaced.append(block.model_copy())
         moves.append(Move(block_id=block.id, reason=reason))
         explanations.append(Explanation(block_id=block.id, reason=reason, message=sentence(reason)))
@@ -216,6 +240,8 @@ def solve(
         failed_constraints=failed,
         solve_ms=(time.perf_counter() - started) * 1000,
         complete=len(unplaced) == 0,
+        work_windows=planning_windows,
+        work_windows_defaulted=work_windows_defaulted,
     )
 
 
@@ -229,6 +255,7 @@ def reschedule_after_miss(
     slack_deadlines: dict[str, tuple[int, int]] | None = None,
     extra_occ: list[int] | None = None,
     study_windows: list[StudyWindow] | None = None,
+    work_windows: list[WorkWindow] | None = None,
 ) -> SolveTrace:
     """Mark one locked occurrence missed, solve again, and describe changed flexible placements."""
     updated: list[TimeBlock] = []
@@ -249,6 +276,7 @@ def reschedule_after_miss(
         slack_deadlines=slack_deadlines,
         extra_occ=extra_occ,
         study_windows=study_windows,
+        work_windows=work_windows,
     )
     return _reshape_moves(
         trace, blocks, previous_placed, "RESHUFFLE_AFTER_MISS", sentence("RESHUFFLE_AFTER_MISS")
@@ -266,6 +294,7 @@ def reschedule_running_late(
     slack_deadlines: dict[str, tuple[int, int]] | None = None,
     extra_occ: list[int] | None = None,
     study_windows: list[StudyWindow] | None = None,
+    work_windows: list[WorkWindow] | None = None,
 ) -> SolveTrace:
     """Occupy a late window on one day, solve again, and describe changed flexible placements."""
     late = lateness_occupancy(day, from_start, minutes)
@@ -276,6 +305,7 @@ def reschedule_running_late(
         slack_deadlines=slack_deadlines,
         extra_occ=combined,
         study_windows=study_windows,
+        work_windows=work_windows,
     )
     return _reshape_moves(trace, blocks, previous_placed, "RESHUFFLE_AFTER_MISS", LATE_COPY)
 
@@ -357,18 +387,9 @@ def _locked_occupancy(locked: list[TimeBlock]) -> list[int]:
         if block.start is None:
             continue
         start_min = hhmm_to_minutes(block.start)
-        end_min = start_min + block.duration_min
-        if start_min < DAY_START_MIN:
-            start_min = DAY_START_MIN
-        if start_min >= DAY_END_MIN:
-            continue
-        offset = start_min - DAY_START_MIN
-        slot = offset // SLOT_MIN
-        end_offset = min(DAY_END_MIN, end_min) - DAY_START_MIN
-        n = min(max(0, end_offset // SLOT_MIN - slot), SLOTS_PER_DAY - slot)
-        if n:
-            for day in block.days:
-                occ[day] |= occupancy_mask(slot, n)
+        taken = occupancy_between(start_min, start_min + block.duration_min)
+        for day in block.days:
+            occ[day] |= taken
     return occ
 
 
@@ -377,6 +398,7 @@ def _domain(
     occ: list[int],
     deadline: tuple[int, int] | None,
     earliest: tuple[int, int] | None,
+    work_windows: list[WorkWindow],
 ) -> list[tuple[int, int]]:
     n = duration_to_slots(block.duration_min)
     out: list[tuple[int, int]] = []
@@ -390,6 +412,10 @@ def _domain(
                 continue
             if occ[day] & occupancy_mask(slot, n):
                 continue
+            if not session_inside_work_windows(
+                work_windows, block.course, day, start_min, block.duration_min
+            ):
+                continue
             out.append((day, slot))
     return out
 
@@ -399,18 +425,17 @@ def _order_values(
 ) -> list[tuple[int, int]]:
     low, high = ENERGY_WINDOW[block.energy]
 
-    def key(item: tuple[int, int]) -> tuple[int, int, int, int]:
+    def key(item: tuple[int, int]) -> tuple[int, int, int, int, int]:
         day, slot = item
         start_min = DAY_START_MIN + slot * SLOT_MIN
+        end_min = start_min + block.duration_min
+        # Night is last among legal slots, on any day. 06:00–23:00 keeps the old order.
+        night = 1 if start_min < 6 * 60 or end_min > 23 * 60 else 0
         study = study_rank(windows, block.course, day, start_min, block.duration_min)
         match = 0 if low <= start_min < high else 1
-        return (study, match, day, slot)
+        return (night, study, match, day, slot)
 
     return sorted(values, key=key)
-
-
-def _has_gap(occ_day: int, n: int) -> bool:
-    return any(occ_day & occupancy_mask(slot, n) == 0 for slot in range(SLOTS_PER_DAY - n + 1))
 
 
 def _reason_for(
@@ -420,23 +445,42 @@ def _reason_for(
     flex_by_id: dict[str, TimeBlock],
     deadlines: dict[str, tuple[int, int] | None],
     earliest: dict[str, tuple[int, int] | None],
+    work_windows: list[WorkWindow],
 ) -> ReasonCode:
     deadline = deadlines[block.id]
     earliest_pt = earliest[block.id]
     empty = [0] * 7
-    vs_locked = _domain(block, occ_locked, deadline, earliest_pt)
+    vs_locked = _domain(block, occ_locked, deadline, earliest_pt, work_windows)
     if vs_locked:
         if any(flex_by_id[item].priority < block.priority for item in assigned):
             return "PRIORITY_PREEMPT"
         return "NO_SLOT_LEFT"
 
-    unconstrained = _domain(block, empty, deadline, earliest_pt)
+    unconstrained = _domain(block, empty, deadline, earliest_pt, work_windows)
     if not unconstrained:
-        if deadline is not None and _domain(block, empty, None, earliest_pt):
+        if deadline is not None and _domain(block, empty, None, earliest_pt, work_windows):
             return "DEADLINE_MISS"
+        if _domain(block, empty, deadline, earliest_pt, DEFAULT_WORK_WINDOWS):
+            return "WORK_WINDOW_MISS"
         return "SLEEP_GUARD"
 
     n = duration_to_slots(block.duration_min)
-    if not any(_has_gap(occ_locked[day], n) for day in block.days):
+    if not any(
+        _has_gap_inside_windows(occ_locked[day], n, block, day, work_windows) for day in block.days
+    ):
         return "NO_SLOT_LEFT"
     return "LOCKED_OVERLAP"
+
+
+def _has_gap_inside_windows(
+    occ_day: int, n: int, block: TimeBlock, day: int, work_windows: list[WorkWindow]
+) -> bool:
+    for slot in range(SLOTS_PER_DAY - n + 1):
+        start_min = DAY_START_MIN + slot * SLOT_MIN
+        if not session_inside_work_windows(
+            work_windows, block.course, day, start_min, block.duration_min
+        ):
+            continue
+        if occ_day & occupancy_mask(slot, n) == 0:
+            return True
+    return False

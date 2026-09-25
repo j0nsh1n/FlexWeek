@@ -26,9 +26,11 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QPushButton
 
     from backend.slots import hhmm_to_minutes
+    from backend.weeks import current_week_start
     from desktop.native.calendar import sunday_due
     from desktop.native.client import NativeClient
     from desktop.native.controller import NativeSession, session_days
+    from desktop.native.weekmodel import due_label
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
     from desktop.tests.logic_support import past_setup
@@ -85,7 +87,15 @@ def signed_in(qapp: QApplication, origin: str, username: str, *, create: bool) -
     else:
         session.login(username, PASSWORD)
     wait_until(qapp, lambda: session.account is not None and not session.busy)
+    hold_before_the_plans(session)
     return session
+
+
+def hold_before_the_plans(session: NativeSession) -> None:
+    """Plan puts nothing before now. These tests plan this week and PLANNED_WEEK, so the clock is
+    held at the start of the earlier of the two, whatever day the suite runs."""
+    start = datetime.fromisoformat(min(current_week_start(), PLANNED_WEEK))
+    session.now_ms = lambda: int(start.timestamp() * 1000)
 
 
 def soccer() -> dict:
@@ -101,7 +111,15 @@ def soccer() -> dict:
 
 def table_text(window: NativeWindow) -> str:
     """What the week says: each block's name and the line under it."""
-    return "\n".join(f"{shape.title}\n{shape.detail}" for shape in window.week_table.body.shapes)
+    hours = window.week_table.hours
+    if not hours.tracks:
+        hours.resize(980, 640)
+        hours.relayout()
+    lines = []
+    for track in hours.tracks:
+        for drawn, _rect in hours.drawn(track):
+            lines.append(f"{drawn.title}\n{drawn.detail}")
+    return "\n".join(lines)
 
 
 def test_native_modules_do_not_import_webengine(qapp: QApplication) -> None:
@@ -795,6 +813,18 @@ def test_the_reason_homework_has_no_time_is_the_latest_one(qapp: QApplication, s
     If Find a new time then finds nothing either, that sentence was kept and came back after the next
     edit, although the real reason by then was that Monday had no room before the deadline."""
     session = signed_in(qapp, server.origin, "alice", create=True)
+    wait_until(qapp, lambda: session.preferences is not None)
+    # Monday is full from 06:00 to 23:00. Without this, the open night would give the homework a time.
+    assert session.save_availability(
+        [],
+        [],
+        None,
+        [{"days": [0, 1, 2, 3, 4, 5, 6], "start": "06:00", "end": "23:00"}],
+    )
+    wait_until(
+        qapp,
+        lambda: not session.busy and (session.preferences or {}).get("work_windows"),
+    )
     _planned_school_week(qapp, session)
     for block_id, title, start, minutes in (("club", "Club", "15:00", 360), ("swim", "Swim", "06:00", 120)):
         session.add_block(
@@ -891,7 +921,9 @@ def test_spread_keeps_assignment_identity_across_sessions(qapp: QApplication, se
     assert session.spread_preview["rows"]
     assert all(row["block"]["assignment_id"] == "project" for row in session.spread_preview["rows"])
     # Time, not a count of sessions, and the deadline as a student says it.
-    assert session.spread_preview["summary"] == "3 h ready to add before Sun 23:59."
+    assert session.spread_preview["summary"] == (
+        f"3 h ready to add before {due_label(due, session.week_start)}."
+    )
     assert session.confirm_spread()
     wait_until(qapp, lambda: not session.busy)
     sessions = [block for block in session.blocks if block.get("assignment_id") == "project"]
@@ -902,11 +934,13 @@ def test_availability_round_trips_protected_time(qapp: QApplication, server: Loc
     session = signed_in(qapp, server.origin, "alice", create=True)
     wait_until(qapp, lambda: session.preferences is not None)
     window = {"kind": "meal", "days": [0, 1, 2, 3, 4], "start": "18:00", "duration_min": 30}
-    assert session.save_availability([window], [], "21:00")
+    hours = [{"days": [0, 1, 2, 3, 4, 5, 6], "start": "08:00", "end": "21:00"}]
+    assert session.save_availability([window], [], "21:00", hours)
     wait_until(qapp, lambda: not session.busy)
     assert session.preferences is not None
     assert session.preferences["protected"][0]["kind"] == "meal"
     assert session.preferences["day_cutoff"] == "21:00"
+    assert session.preferences["work_windows"][0]["start"] == "08:00"
 
 
 def test_preview_dialog_leaves_a_collision_unchecked(qapp: QApplication, server: LocalServer) -> None:
@@ -1534,6 +1568,7 @@ def test_accepted_plan_is_on_the_grid_after_close_and_sign_in(
     first.recovery_ack.setChecked(True)
     first.recovery_continue.click()
     past_setup(qapp, first)
+    hold_before_the_plans(first.session)
     _two_assignments(first.session)
     first.session.save()
     wait_until(qapp, lambda: not first.session.busy and not first.session.dirty)

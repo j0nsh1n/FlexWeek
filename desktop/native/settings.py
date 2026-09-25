@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QStackedWidget,
     QTimeEdit,
@@ -40,8 +41,9 @@ from backend.slots import SLOT_MIN
 from desktop.native import autostart
 from desktop.native.calendar import DAY_FULL
 from desktop.native.focus import FOCUS_PHASE_LABEL, format_countdown, more_time_choices, remaining_ms
+from desktop.native.hours.geometry import drag_step
 from desktop.native.layouts.dialog import SLOTS, LayoutSection
-from desktop.native.layouts.registry import LAYOUTS, MATCH, sanitize_layout
+from desktop.native.layouts.registry import MATCH, sanitize_layout
 from desktop.native.look import (
     ACCENTS,
     LOOK_KNOBS,
@@ -57,11 +59,11 @@ from desktop.native.look import (
 )
 from desktop.native.motion import slide_page
 from desktop.native.remind import ALARM_SNOOZE_MIN
-from desktop.native.reuse import format_duration
 from desktop.native.sound import Bell
 from desktop.native.spotify import SpotifyPlayer, open_in_app
-from desktop.native.tones import FALLBACK, RECIPES, SOUNDS
+from desktop.native.tones import FALLBACK, SOUNDS
 from desktop.native.version import VERSION
+from desktop.native.weekmodel import length_label
 from desktop.native.widgets import DIALOG_USABLE_HEIGHT, FlowLayout, fit_scroll_dialog
 
 UPDATE_MIN_WIDTH = 420
@@ -73,10 +75,13 @@ PREFS_MAX_BODY = 560
 PREFS_MIN_WIDTH = 640
 # Room beside the longest name in the Settings list, for its padding and selection edge.
 PREFS_NAV_PAD = 32
+ALARM_LIST_MAX_HEIGHT = 200
 ACCOUNT_MAX_WIDTH = 520
 ACCOUNT_MIN_WIDTH = 560
 SPORT_FALLBACK = "Sport or club"
 ALARM_TONE_LABELS = {"spotify": "A Spotify song or playlist"}
+DRAG_STEP_QUESTION = "When you drag a block, it moves in steps of:"
+DRAG_STEP_CHOICES = ((5, "5 minutes (more control)"), (15, "15 minutes (quarter hours)"))
 PLANNING_STYLES = (
     ("auto", "Plan it for me as I add it", "New homework gets a time straight away."),
     (
@@ -87,15 +92,72 @@ PLANNING_STYLES = (
     ("manual", "I'll drag it onto the calendar myself", "The planning button becomes Suggest times."),
 )
 SPOTIFY_TONE_NOTE = (
-    "Alarms play this in your Spotify app, and stopping the alarm stops it. Reminders and the end of a"
-    " focus session play Chime, so they never start music. Without the Spotify app, alarms open the link"
-    " and ring Chime too."
+    "Alarms play this in your Spotify app, and stopping the alarm stops it. A block with its own"
+    " Spotify link plays that link when it starts instead. Reminders and the end of a focus session"
+    " play Chime. Without the Spotify app, alarms open the link and ring Chime too."
 )
 # What only Today's app reads. Every other design has its own colours and shapes, so these changed
 # nothing there (measured 2026-09-21: not the view, not the top bar, apart from Corners on the bar).
 TODAYS_APP_KNOBS = ("surface", "corners", "blocks")
 FINE_TUNE_LOOK = "Fine-tune this look"
 FINE_TUNE_OTHER = "Fine-tune fonts, spacing and shadows"
+ABOUT_MIN_WIDTH = 420
+HELP_MIN_WIDTH = 600
+SECTION_GAP = 14
+ABOUT_LINE = "FlexWeek plans your homework around school, sports and everything else in your week."
+HELP_INTRO = (
+    "A tutorial and short guides are coming in a later version. Until then, this is the short version."
+)
+HELP_SCREENS = (
+    "Day shows one day, hour by hour. Homework that is not placed yet waits beside it, ready to drag in.",
+    "Week shows Monday to Sunday. Drag a block to move it, or drag across empty time to add one.",
+    "Month shows the whole month: each date's blocks and the homework due that day. Click a date to open "
+    "it in Day.",
+    "My day is a simple screen to follow once your plan is made: what is on now, and what comes next. "
+    "Open it with My day at the top.",
+)
+HELP_KEYS = (
+    ("D, W, M", "Day, Week, Month"),
+    ("T", "My day"),
+    ("B or Esc", "Back from My day"),
+    ("Ctrl+Z", "Undo"),
+    ("Ctrl+Y or Ctrl+Shift+Z", "Redo"),
+    ("Ctrl+C, then Ctrl+V", "Copy the selected block, then paste it into the selected day"),
+    ("Ctrl+D", "Duplicate the selected block"),
+    ("Delete", "Delete the selected block"),
+    ("Ctrl+S", "Save now"),
+    ("Ctrl and =, - or 0", "Zoom the hours in, out, or back to normal"),
+    ("Ctrl and the mouse wheel", "Zoom the hours"),
+    ("Esc while dragging", "Put the block back where it was"),
+)
+BLOCK_SONG_NOTE = (
+    "A block with a Spotify link plays it when the block starts. Dismiss or snooze it as you would an alarm."
+)
+ALARM_NOTE = "An alarm rings at its time on the days you pick, until you dismiss or snooze it."
+# A checkbox's words do not wrap, so what needs more than a few words says it underneath.
+DND_NOTE = "Each one stays in the window until you press Got it."
+TRAY_NOTE = "FlexWeek waits in the tray, so reminders and alarms still come."
+NO_SOUND = (
+    "No sound played. Check that Volume is above 0 % and that your speakers or headphones are connected"
+    " and not muted, then press Play again."
+)
+
+
+def ring_days(days: list[int]) -> str:
+    """The days an alarm rings, as a student would say them."""
+    chosen = sorted(set(days))
+    if chosen == list(range(7)):
+        return "every day"
+    if chosen == [0, 1, 2, 3, 4]:
+        return "Monday to Friday"
+    if chosen == [5, 6]:
+        return "Saturday and Sunday"
+    if not chosen:
+        return "no days"
+    if len(chosen) == 1:
+        return DAY_FULL[chosen[0]]
+    short = [DAY_FULL[day][:3] for day in chosen]
+    return ", ".join(short[:-1]) + " and " + short[-1]
 
 
 def _invalidate(layout: QLayout) -> None:
@@ -104,6 +166,23 @@ def _invalidate(layout: QLayout) -> None:
         if inner is not None:
             _invalidate(inner)
     layout.invalidate()
+
+
+def _note(words: str, name: str) -> QLabel:
+    made = QLabel(words)
+    made.setObjectName(name)
+    made.setWordWrap(True)
+    return made
+
+
+def _page_button(words: str, name: str) -> QPushButton:
+    """A button that opens something else. Plain and as wide as its words, since Close is the one
+    filled button in Settings; stretched and filled, each was the loudest thing on its page."""
+    made = QPushButton(words)
+    made.setObjectName(name)
+    made.setProperty("quiet", True)
+    made.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+    return made
 
 
 def _heading(words: str) -> QLabel:
@@ -181,12 +260,18 @@ class FocusPanel(QWidget):
         layout.addLayout(choices)
         self.tasks = QListWidget()
         self.tasks.setObjectName("focusTasks")
+        self.tasks.setToolTip("Double-click homework to start a focus timer for it.")
         self.tasks.itemActivated.connect(self._start_item)
-        layout.addWidget(self.tasks)
+        tasks_row = QHBoxLayout()
+        self.tasks_label = QLabel("Start a focus timer:")
+        self.tasks_label.setObjectName("focusTasksLabel")
+        tasks_row.addWidget(self.tasks_label, 0, Qt.AlignmentFlag.AlignTop)
+        tasks_row.addWidget(self.tasks, 1)
+        layout.addLayout(tasks_row)
         self._ended_widgets = (self.finished, self.take_break, self.more_min, self.more)
         self._run_widgets = (self.pause, self.skip, self.reset)
         # Nothing to show until a timer runs or the plan places work, and blank rows cost the calendar height.
-        for widget in (self.task, self.phase, self.time, self.tasks):
+        for widget in (self.task, self.phase, self.time, self.tasks, self.tasks_label):
             widget.setVisible(False)
 
     def _emit_more(self) -> None:
@@ -196,8 +281,12 @@ class FocusPanel(QWidget):
         payload = item.data(Qt.ItemDataRole.UserRole) or {}
         self.start_requested.emit(payload.get("id") or "", payload.get("day"))
 
+    def show_now_next(self, text: str) -> None:
+        self.now_next.setText(text)
+        self.now_next.setVisible(bool(text))
+
     def set_state(self, session) -> None:
-        self.now_next.setText(session.now_next_text())
+        self.show_now_next(session.now_next_text())
         state = session.focus
         running = state is not None and state.get("phase") != "ended"
         ended = state is not None and state.get("phase") == "ended"
@@ -214,7 +303,7 @@ class FocusPanel(QWidget):
         choices = more_time_choices(int((assignment or {}).get("estimate_min") or 0)) if ended else []
         self.more_min.clear()
         for minutes in choices:
-            self.more_min.addItem(format_duration(minutes), minutes)
+            self.more_min.addItem(length_label(minutes), minutes)
         for widget in self._ended_widgets:
             widget.setVisible(ended)
         self.more.setEnabled(bool(choices))
@@ -229,11 +318,11 @@ class FocusPanel(QWidget):
                 self.tasks.addItem(row)
         for label in (self.task, self.phase, self.time):
             label.setVisible(bool(label.text()))
-        self.now_next.setVisible(bool(self.now_next.text()))
         # An empty list still asks for about 190 pixels, and a long one would bury the calendar, so it
         # is hidden when empty and never taller than four rows; the rest scrolls.
         shown = min(self.tasks.count(), 4)
         self.tasks.setVisible(shown > 0)
+        self.tasks_label.setVisible(shown > 0)
         if shown:
             rows = shown * self.tasks.sizeHintForRow(0)
             self.tasks.setMaximumHeight(rows + 2 * self.tasks.frameWidth() + 8)
@@ -263,7 +352,6 @@ class PrefsDialog(QDialog):
         self._look = sanitize_look(look)
         chosen_layout = sanitize_layout(week_layout)
         self._alarms = [deepcopy(item) for item in preferences.get("alarms") or []]
-        self._bell = Bell(self)
         layout = QVBoxLayout(self)
         # Eighteen rows in one undivided column stood 1056 pixels tall, taller than the laptop the
         # app is built for. Everything but the buttons scrolls, and the rows sit under headings.
@@ -347,38 +435,36 @@ class PrefsDialog(QDialog):
         self.long_every = QSpinBox()
         self.long_every.setObjectName("prefLongEvery")
         self.long_every.setRange(2, 12)
+        self.long_every.setSuffix(" focus sessions")
         self.long_every.setValue(int(preferences.get("timer_long_break_every") or 4))
         self.auto_split = QCheckBox("Split long homework into focus sessions")
         self.auto_split.setObjectName("prefAutoSplit")
         self.auto_split.setChecked(bool(preferences.get("auto_split_pomodoro")))
-        self.reminders = QCheckBox("Reminders")
+        self.reminders = QCheckBox("Remind me before each block starts")
         self.reminders.setObjectName("prefReminders")
-        self.reminders.setChecked(bool(preferences.get("reminders_enabled")))
+        self.reminders.setChecked(preferences.get("reminders_enabled", True) is not False)
         self.lead = QSpinBox()
+        self.lead.setObjectName("prefLead")
         self.lead.setRange(0, 120)
+        self.lead.setSuffix(" min")
         lead = preferences.get("reminder_lead_min")
         self.lead.setValue(5 if lead is None else int(lead))
         self.reminder_sound = QCheckBox("Play a sound")
         self.reminder_sound.setObjectName("prefReminderSound")
         self.reminder_sound.setChecked(preferences.get("reminder_sound", True) is not False)
-        self.dnd_override = QCheckBox("Keep alerts visible until handled")
+        self.dnd_override = QCheckBox("Leave reminders on screen")
         self.dnd_override.setObjectName("prefDndOverride")
         self.dnd_override.setChecked(bool(preferences.get("reminder_dnd_override")))
         self.volume = QSpinBox()
         self.volume.setObjectName("prefAlertVolume")
         self.volume.setRange(0, 100)
+        self.volume.setSuffix(" %")
         self.volume.setValue(int(preferences.get("alert_volume", 80)))
-        self.preview_tone = QComboBox()
-        self.preview_tone.setObjectName("prefPreviewTone")
-        for name in RECIPES:
-            self.preview_tone.addItem(name.title(), name)
-        self.preview = QPushButton("Test")
-        self.preview.setObjectName("prefPreviewAlert")
-        self.preview.clicked.connect(self._preview_alert)
         self.end_chime = QCheckBox("Chime when a session ends")
         self.end_chime.setObjectName("prefEndChime")
         self.end_chime.setChecked(bool(preferences.get("end_chime")))
-        self.tray = QCheckBox("Stay in the tray")
+        self.tray = QCheckBox("Keep running when I close the window")
+        self.tray.setObjectName("prefTray")
         self.tray.setChecked(preferences.get("tray_notifications", True) is not False)
         self.start_at_login = QCheckBox("Start FlexWeek when I log in")
         self.start_at_login.setObjectName("prefStartAtLogin")
@@ -393,7 +479,8 @@ class PrefsDialog(QDialog):
         )
         self.spotify = QLineEdit(preferences.get("default_spotify_url") or "")
         self.spotify.setObjectName("prefSpotify")
-        self.spotify.setPlaceholderText("https://open.spotify.com/track/... or /playlist/...")
+        self.spotify.setPlaceholderText("Paste a Spotify link")
+        self.spotify.setCursorPosition(0)
         # One sound for reminders, the end of a focus session and new alarms.
         self.alarm_tone = QComboBox()
         self.alarm_tone.setObjectName("prefAlarmTone")
@@ -409,30 +496,34 @@ class PrefsDialog(QDialog):
         self.tone_note.setWordWrap(True)
         self._tone_bell = Bell(self)
         self._spotify_player = SpotifyPlayer(self)
+        # The design first, since it decides what the rest of the page offers; what applies to every
+        # screen last.
         appearance = QWidget()
         column = QVBoxLayout(appearance)
-        appear = QFormLayout()
-        appear.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        appear.addRow(_heading("Appearance & layout"))
-        # Where Look and Accent were, when the main view has colours of its own.
-        self.own_colours = QLabel()
-        self.own_colours.setObjectName("prefOwnColours")
-        self.own_colours.setWordWrap(True)
-        appear.addRow(self.own_colours)
-        appear.addRow("Look", self.look)
-        appear.addRow("Accent", self.accent)
-        self._appear_form = appear
-        appear.addRow(self.accent_chips)
-        appear.addRow("Animations", self.motion)
-        appear.addRow(self.fine_tune)
-        appear.addRow(self.fine_host)
-        column.addLayout(appear)
         self.layout_sections = [
             LayoutSection(slot, role, title, blurb, chosen_layout)
             for slot, role, title, blurb in SLOTS
         ]
-        for section in self.layout_sections:
-            column.addWidget(section)
+        main_section, day_section = self.layout_sections
+        column.addWidget(main_section)
+        appear = QFormLayout()
+        appear.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        appear.addRow("Look", self.look)
+        appear.addRow("Accent", self.accent)
+        appear.addRow(self.accent_chips)
+        self._appear_form = appear
+        column.addLayout(appear)
+        column.addSpacing(SECTION_GAP)
+        column.addWidget(day_section)
+        column.addSpacing(SECTION_GAP)
+        everywhere = QFormLayout()
+        everywhere.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        everywhere.addRow(_heading("Every screen"))
+        everywhere.addRow("Animations", self.motion)
+        everywhere.addRow(self.fine_tune)
+        everywhere.addRow(self.fine_host)
+        column.addLayout(everywhere)
+        column.addStretch(1)
         planning = QWidget()
         planning_form = QFormLayout(planning)
         planning_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
@@ -453,12 +544,25 @@ class PrefsDialog(QDialog):
         where = QLabel("Preferred study times, including ones kept for one subject, are in Availability.")
         where.setWordWrap(True)
         planning_form.addRow(where)
+        open_availability = _page_button("Availability…", "prefsAvailability")
+        open_availability.clicked.connect(self.availability_requested.emit)
+        planning_form.addRow(open_availability)
+        planning_form.addRow(_heading("Dragging"))
+        planning_form.addRow(QLabel(DRAG_STEP_QUESTION))
+        self.drag_step = QButtonGroup(planning)
+        chosen_step = drag_step(preferences.get("drag_step_min"))
+        for minutes, text in DRAG_STEP_CHOICES:
+            button = QRadioButton(text)
+            button.setObjectName(f"prefDragStep-{minutes}")
+            button.setChecked(minutes == chosen_step)
+            self.drag_step.addButton(button, minutes)
+            planning_form.addRow(button)
         focus = QWidget()
         focus_form = QFormLayout(focus)
         focus_form.addRow(_heading("Focus timer"))
         focus_form.addRow("Focus minutes", self.work)
         focus_form.addRow("Break minutes", self.break_min)
-        focus_form.addRow("Long break", self.long_break)
+        focus_form.addRow("Long break minutes", self.long_break)
         focus_form.addRow("Timer preset", self.preset_timer)
         focus_form.addRow("Long break after", self.long_every)
         focus_form.addRow(self.auto_split)
@@ -467,38 +571,50 @@ class PrefsDialog(QDialog):
         # A long row puts its label above it, as Appearance does, so the page never needs more room
         # than Settings has once dropdowns and spin boxes carry their chevrons.
         alerts_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        alerts_form.addRow(_heading("Alarm sound"))
+        alerts_form.addRow(_heading("Reminders"))
+        alerts_form.addRow(self.reminders)
+        # Everything a reminder does, in one box that greys as one while reminders are off. The switch
+        # was one unticked box among controls that looked live.
+        self.reminder_controls = QWidget()
+        self.reminder_controls.setObjectName("prefReminderControls")
+        reminder_form = QFormLayout(self.reminder_controls)
+        reminder_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        reminder_form.setContentsMargins(0, 0, 0, 0)
+        reminder_form.addRow("How long before", self.lead)
+        reminder_form.addRow(self.reminder_sound)
         tone_row = QHBoxLayout()
         tone_row.addWidget(self.alarm_tone, 1)
         tone_row.addWidget(self.play_tone)
-        alerts_form.addRow("Sound", tone_row)
-        alerts_form.addRow("Spotify link", self.spotify)
-        alerts_form.addRow(self.tone_note)
-        self._alerts_form = alerts_form
-        alerts_form.addRow(_heading("Reminders"))
-        alerts_form.addRow(self.reminders)
-        alerts_form.addRow("Lead minutes", self.lead)
-        alerts_form.addRow(self.reminder_sound)
-        alerts_form.addRow(self.dnd_override)
-        volume_row = QHBoxLayout()
-        volume_row.addWidget(self.volume)
-        volume_row.addWidget(self.preview_tone)
-        volume_row.addWidget(self.preview)
-        alerts_form.addRow("Alert volume", volume_row)
-        alerts_form.addRow(self.end_chime)
-        alerts_form.addRow(self.tray)
-        keys = ("desktop_background", "spotify", "duplicate")
-        limits = QLabel(" ".join(reminder_limits.get(key, "") for key in keys))
-        limits.setWordWrap(True)
-        limits.setObjectName("reminderLimits")
-        alerts_form.addRow(limits)
+        reminder_form.addRow("Sound", tone_row)
+        reminder_form.addRow("Spotify link", self.spotify)
+        reminder_form.addRow(self.tone_note)
+        reminder_form.addRow(self.dnd_override)
+        reminder_form.addRow(_note(DND_NOTE, "prefDndNote"))
+        self.block_song_note = _note(BLOCK_SONG_NOTE, "prefBlockSongNote")
+        reminder_form.addRow(self.block_song_note)
+        self._alerts_form = reminder_form
+        alerts_form.addRow(self.reminder_controls)
+        self.reminder_controls.setEnabled(self.reminders.isChecked())
+        self.reminders.toggled.connect(self.reminder_controls.setEnabled)
         alerts_form.addRow(_heading("Alarms"))
+        alerts_form.addRow(_note(ALARM_NOTE, "prefAlarmNote"))
+        self.alarm_empty = QLabel("No alarms yet.")
+        self.alarm_empty.setObjectName("alarmEmpty")
+        alerts_form.addRow(self.alarm_empty)
         self.alarm_list = QListWidget()
         self.alarm_list.setObjectName("alarmList")
-        self.alarm_list.setMaximumHeight(110)
+        # As tall as its alarms, up to about three, and never wider than the page: a line that does not
+        # fit wraps rather than hiding the days behind a sideways scroll.
+        self.alarm_list.setSizeAdjustPolicy(QListWidget.SizeAdjustPolicy.AdjustToContents)
+        self.alarm_list.setMaximumHeight(ALARM_LIST_MAX_HEIGHT)
+        self.alarm_list.setWordWrap(True)
+        self.alarm_list.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self.alarm_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         alerts_form.addRow(self.alarm_list)
+        self._alarms_form = alerts_form
         alarm_row = QHBoxLayout()
         self.alarm_name = QLineEdit()
+        self.alarm_name.setObjectName("alarmName")
         self.alarm_name.setPlaceholderText("Alarm name")
         self.alarm_time = QTimeEdit()
         self.alarm_time.setDisplayFormat("HH:mm")
@@ -510,14 +626,14 @@ class PrefsDialog(QDialog):
             self.alarm_sound.addItem("Spotify link" if name == "spotify" else name.title(), name)
         # The name on a line of its own: with the dropdown's chevron room, name, time and sound side by
         # side made Alerts wider than Settings at large text.
-        alerts_form.addRow(self.alarm_name)
+        alerts_form.addRow("New alarm", self.alarm_name)
         for widget in (self.alarm_time, self.alarm_sound):
             alarm_row.addWidget(widget)
         alarm_row.addStretch(1)
-        alerts_form.addRow(alarm_row)
+        alerts_form.addRow("Rings at", alarm_row)
         self.alarm_spotify = QLineEdit()
         self.alarm_spotify.setObjectName("alarmSpotify")
-        self.alarm_spotify.setPlaceholderText("Spotify link for this alarm (optional)")
+        self.alarm_spotify.setPlaceholderText("Spotify link (optional)")
         alerts_form.addRow(self.alarm_spotify)
         # Two rows, Monday to Thursday and Friday to Sunday. Seven in a line were the widest thing in
         # Settings and pushed the dialog past the 700 pixels a settings panel is allowed.
@@ -542,32 +658,33 @@ class PrefsDialog(QDialog):
         button_row.addWidget(add_alarm)
         button_row.addWidget(remove_alarm)
         alerts_form.addRow(button_row)
+        alerts_form.addRow(_heading("All alerts"))
+        alerts_form.addRow("Volume", self.volume)
+        alerts_form.addRow(self.end_chime)
+        alerts_form.addRow(self.tray)
+        alerts_form.addRow(_note(TRAY_NOTE, "prefTrayNote"))
+        keys = ("spotify", "duplicate")
+        limits = QLabel(" ".join(reminder_limits.get(key, "") for key in keys))
+        limits.setWordWrap(True)
+        limits.setObjectName("reminderLimits")
+        alerts_form.addRow(limits)
         computer = QWidget()
         computer_form = QFormLayout(computer)
         computer_form.addRow(_heading("This computer"))
+        open_account = _page_button("Manage account…", "prefsAccount")
+        open_account.setToolTip("Change your password, export or import, or delete the account.")
+        open_account.clicked.connect(self.account_requested.emit)
+        computer_form.addRow("Account", open_account)
         computer_form.addRow(self.start_at_login)
         computer_form.addRow("Open on", self.preferred_view)
-        account_row = QHBoxLayout()
-        open_account = QPushButton("Account…")
-        open_account.setObjectName("prefsAccount")
-        open_account.clicked.connect(self.account_requested.emit)
-        open_availability = QPushButton("Availability…")
-        open_availability.setObjectName("prefsAvailability")
-        open_availability.clicked.connect(self.availability_requested.emit)
-        account_row.addWidget(open_account)
-        account_row.addWidget(open_availability)
-        account_row.addStretch(1)
-        computer_form.addRow(account_row)
-        run_setup = QPushButton("Run setup again")
-        run_setup.setObjectName("prefsRunSetup")
+        run_setup = _page_button("Run setup again", "prefsRunSetup")
         run_setup.setToolTip("Style, your week, homework time and reminders, filled in as they are now.")
         run_setup.clicked.connect(self.setup_requested.emit)
         computer_form.addRow("Setup", run_setup)
         update_col = QVBoxLayout()
         version = QLabel(f"FlexWeek {VERSION}")
         version.setObjectName("prefsVersion")
-        check_updates = QPushButton("Check for updates")
-        check_updates.setObjectName("prefsCheckUpdates")
+        check_updates = _page_button("Check for updates", "prefsCheckUpdates")
         check_updates.clicked.connect(self.updates_requested.emit)
         update_col.addWidget(version)
         update_col.addWidget(check_updates)
@@ -636,7 +753,8 @@ class PrefsDialog(QDialog):
             self.start_at_login,
         ):
             check.toggled.connect(self._announce)
-        self.planning_style.buttonToggled.connect(lambda _button, on: on and self._announce())
+        self.planning_style.buttonToggled.connect(self._style_toggled)
+        self.drag_step.buttonToggled.connect(self._style_toggled)
         self.spotify.editingFinished.connect(self.changed.emit)
         for section in self.layout_sections:
             section.changed.connect(self.changed.emit)
@@ -648,7 +766,8 @@ class PrefsDialog(QDialog):
     def _follow_tone(self, *_index: object) -> None:
         """New alarms start with the chosen sound, and the note says what Spotify means for the rest."""
         tone = self.alarm_tone.currentData()
-        self._alerts_form.setRowVisible(self.tone_note, tone == "spotify")
+        for row in (self.spotify, self.tone_note):
+            self._alerts_form.setRowVisible(row, tone == "spotify")
         index = self.alarm_sound.findData(tone)
         if index >= 0:
             self.alarm_sound.setCurrentIndex(index)
@@ -660,7 +779,8 @@ class PrefsDialog(QDialog):
             if link and self._spotify_player.play(link):
                 return
             tone = FALLBACK
-        self._tone_bell.once(str(tone), self.volume.value())
+        if not self._tone_bell.once(str(tone), self.volume.value()):
+            self.save_state.setText(NO_SOUND)
 
     def _show_what_applies(self) -> None:
         """Only the settings that change the chosen views. Look, Accent, Surface, Corners and Blocks
@@ -670,11 +790,6 @@ class PrefsDialog(QDialog):
         todays_app = main.chosen() == "classic"
         matched = any(section.values().get("colour") == MATCH for section in self.layout_sections)
         coloured = todays_app or matched
-        self._appear_form.setRowVisible(self.own_colours, not coloured)
-        self.own_colours.setText(
-            f"{LAYOUTS[main.chosen()].label} has its own colours, under Main view."
-            " Set them to Match my look to use Look and Accent."
-        )
         for field in (self.look, self.accent, self.accent_chips):
             self._appear_form.setRowVisible(field, coloured)
         for knob in TODAYS_APP_KNOBS:
@@ -718,6 +833,10 @@ class PrefsDialog(QDialog):
         """Takes and drops the value a box sends. Wired straight to `changed.emit`, that value made
         every emit raise inside Qt, which swallows it, so nothing showed until Settings closed."""
         self.changed.emit()
+
+    def _style_toggled(self, _button: object, on: bool) -> None:
+        if on:
+            self._announce()
 
     def reject(self) -> None:
         """Closing is the end of any typing, so a length typed while splitting is on is rounded now,
@@ -782,22 +901,16 @@ class PrefsDialog(QDialog):
         self.break_min.setValue(preset["timer_break_min"])
         self.long_break.setValue(preset["timer_long_break_min"])
 
-    def _preview_alert(self) -> None:
-        """Sound the alert at the volume currently in the box, not the saved one, so the slider can be
-        set by ear."""
-        if not self.reminder_sound.isChecked():
-            self.preview.setText("Sound is off")
-            return
-        tone = str(self.preview_tone.currentData() or FALLBACK)
-        self.preview.setText("Test" if self._bell.once(tone, self.volume.value()) else "No sound card")
-
     def _render_alarms(self) -> None:
         self.alarm_list.clear()
         for alarm in self._alarms:
-            days = ",".join(DAY_FULL[day][:3] for day in alarm.get("days") or [])
             sound = str(alarm.get("sound") or FALLBACK)
             label = "Spotify" if sound == "spotify" else sound.title()
-            self.alarm_list.addItem(f"{alarm.get('name')} {alarm.get('time')} {days} · {label}")
+            off = "" if alarm.get("enabled", True) else " · off"
+            when = f"Rings at {alarm.get('time')}, {ring_days(alarm.get('days') or [])}"
+            self.alarm_list.addItem(f"{alarm.get('name')} · {label}{off}\n{when}")
+        self._alarms_form.setRowVisible(self.alarm_list, bool(self._alarms))
+        self._alarms_form.setRowVisible(self.alarm_empty, not self._alarms)
 
     def _add_alarm(self) -> None:
         if len(self._alarms) >= 20:
@@ -867,6 +980,7 @@ class PrefsDialog(QDialog):
             "motion": self.motion.currentData(),
             "alarm_tone": self.alarm_tone.currentData(),
             "planning_style": self._planning_style(),
+            "drag_step_min": drag_step(self.drag_step.checkedId()),
         }
 
     def _planning_style(self) -> str:
@@ -1011,11 +1125,9 @@ class AccountDialog(QDialog):
         self.setWindowTitle("Account")
         self.action: str | None = None
         layout = QVBoxLayout(self)
+        where = "your FlexWeek server" if (storage or {}).get("mode") == "hosted" else "this computer"
         info = QLabel(
-            "Signed in as "
-            + ((storage or {}).get("username") or "")
-            + ". "
-            + ((storage or {}).get("label") or "")
+            f"Signed in as {(storage or {}).get('username') or ''}. Your plans are saved on {where}."
         )
         info.setWordWrap(True)
         # Word wrap alone does not bound a label: it still claims the width of its longest
@@ -1046,39 +1158,28 @@ class AccountDialog(QDialog):
         layout.addLayout(form)
         self.setMinimumWidth(ACCOUNT_MIN_WIDTH)
         row = FlowLayout()
-        change = QPushButton("Replace password")
-        change.setObjectName("changePassword")
-        change.clicked.connect(lambda: self._set("password"))
-        codes = QPushButton("Replace recovery codes")
-        codes.setObjectName("replaceCodes")
-        codes.clicked.connect(lambda: self._set("codes"))
-        delete = QPushButton("Delete account")
-        delete.setObjectName("deleteAccount")
-        delete.clicked.connect(lambda: self._set("delete"))
-        export_btn = QPushButton("Export account")
-        export_btn.setObjectName("exportAccount")
-        export_btn.clicked.connect(lambda: self._set("export"))
-        import_btn = QPushButton("Import account")
-        import_btn.setObjectName("importAccount")
-        import_btn.clicked.connect(lambda: self._set("import"))
-        week_btn = QPushButton("Export week")
-        week_btn.setObjectName("exportWeek")
-        week_btn.clicked.connect(lambda: self._set("week"))
-        day_btn = QPushButton("Export day")
-        day_btn.setObjectName("exportDay")
-        day_btn.clicked.connect(lambda: self._set("day"))
-        import_week = QPushButton("Import week or day file")
-        import_week.setObjectName("importFile")
-        import_week.clicked.connect(lambda: self._set("import-week"))
-        for button in (change, codes, delete, export_btn, import_btn, week_btn, day_btn, import_week):
+        for words, name, action in (
+            ("Replace password", "changePassword", "password"),
+            ("Replace recovery codes", "replaceCodes", "codes"),
+            ("Delete account", "deleteAccount", "delete"),
+            ("Export account", "exportAccount", "export"),
+            ("Import account", "importAccount", "import"),
+            ("Export week", "exportWeek", "week"),
+            ("Export day", "exportDay", "day"),
+            ("Import week or day file", "importFile", "import-week"),
+        ):
+            button = QPushButton(words)
+            button.setObjectName(name)
+            button.setProperty("action", action)
+            button.clicked.connect(self._set)
             row.addWidget(button)
         layout.addLayout(row)
         close = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         close.rejected.connect(self.reject)
         layout.addWidget(close)
 
-    def _set(self, action: str) -> None:
-        self.action = action
+    def _set(self) -> None:
+        self.action = self.sender().property("action")
         self.accept()
 
 
@@ -1100,7 +1201,8 @@ class AlarmRingDialog(QDialog):
         title.setObjectName("alarmTitle")
         title.setWordWrap(True)
         layout.addWidget(title)
-        detail = QLabel((alarm.get("time") or "") + " · Alarm is ringing")
+        ringing = "Starting now" if alarm.get("block") else "Alarm is ringing"
+        detail = QLabel(f"{alarm.get('time') or ''} · {ringing}")
         detail.setObjectName("alarmDetail")
         layout.addWidget(detail)
         layout.addSpacing(ALARM_GAP)
@@ -1161,6 +1263,87 @@ class TransferPreviewDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+
+def _close_row(dialog: QDialog) -> QDialogButtonBox:
+    # A Close of its own words, not the standard button, which carries an icon on KDE.
+    buttons = QDialogButtonBox()
+    buttons.addButton("Close", QDialogButtonBox.ButtonRole.RejectRole)
+    buttons.rejected.connect(dialog.reject)
+    return buttons
+
+
+def _line(words: str, name: str) -> QLabel:
+    made = QLabel(words)
+    made.setObjectName(name)
+    made.setWordWrap(True)
+    return made
+
+
+class AboutDialog(QDialog):
+    def __init__(self, parent: QWidget | None, storage: dict | None, folder: str) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("About FlexWeek")
+        self.setMinimumWidth(ABOUT_MIN_WIDTH)
+        layout = QVBoxLayout(self)
+        layout.addWidget(_line(f"FlexWeek {VERSION}", "aboutVersion"))
+        layout.addWidget(_line(ABOUT_LINE, "aboutWhat"))
+        if (storage or {}).get("mode") == "hosted":
+            where = f"Your plans are saved on your FlexWeek server, {(storage or {}).get('origin') or ''}."
+        else:
+            where = f"Your plans are saved on this computer, in {folder}."
+        saved = _line(where, "aboutWhere")
+        saved.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        layout.addWidget(saved)
+        layout.addWidget(_close_row(self))
+
+
+class HelpDialog(QDialog):
+    """Enough to find your way until the tutorial and guides exist."""
+
+    def __init__(self, parent: QWidget | None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Help")
+        self.setMinimumWidth(HELP_MIN_WIDTH)
+        body = QWidget()
+        column = QVBoxLayout(body)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.addWidget(_line(HELP_INTRO, "helpIntro"))
+        column.addSpacing(SECTION_GAP)
+        column.addWidget(_heading("The screens"))
+        for index, words in enumerate(HELP_SCREENS):
+            column.addWidget(_line(words, f"helpScreen{index}"))
+        column.addSpacing(SECTION_GAP)
+        column.addWidget(_heading("Keyboard shortcuts"))
+        # A form, not a grid: a grid gave a two-line description one line and a bit, and cut it.
+        key_list = QWidget()
+        keys = QFormLayout(key_list)
+        keys.setContentsMargins(0, 0, 0, 0)
+        keys.setHorizontalSpacing(SECTION_GAP)
+        keys.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        for key, what in HELP_KEYS:
+            name = QLabel(key)
+            name.setObjectName("helpKey")
+            name.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+            keys.addRow(name, _line(what, "helpKeyDoes"))
+        column.addWidget(key_list)
+        column.addStretch(1)
+        # A dialog's minimum counts a wrapped line as one line, so at large text on a laptop, Help at
+        # its minimum squeezed the shortcuts to half their height. A scroll area gives the words the
+        # height they need at the width they get, and the dialog fits the screen.
+        area = QScrollArea()
+        area.setObjectName("helpScroll")
+        area.setWidgetResizable(True)
+        area.setFrameShape(QFrame.Shape.NoFrame)
+        area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        area.setWidget(body)
+        layout = QVBoxLayout(self)
+        layout.addWidget(area)
+        layout.addWidget(_close_row(self))
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
+        super().showEvent(event)
+        fit_scroll_dialog(self)
 
 
 class UpdateDialog(QDialog):

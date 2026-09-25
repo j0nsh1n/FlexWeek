@@ -1,6 +1,134 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-25 (0.15 Lane C), branch `claude/0-15-homework-planning`.
+  Five inherited fixes cover the DueField signal, due-today default, homework
+  length bounds, full-month date picker and planning after now (`7b9d19b`,
+  `225908e`, `8709df9`, `85c5312`, `e123f55`). `1c6d3e6` completes Plan and
+  Replan all Undo with a notice only after a successful save, keeps automatic
+  planning in Add homework's Undo step, and gives plain homework validation
+  messages. Plan waits when an earlier save is pending, and a no-op plan makes
+  no misleading Undo step. All 24 focused tests and 1329 full tests passed;
+  ruff and backend mypy passed; all 15 planner and due mutations were caught.
+  `scripts/verify.py` timed out at its known 300-second pytest budget near 92%,
+  so the full suite was run separately.
+  Offscreen screenshots at both requested sizes are in the UI harness scratch
+  directory. No executable build, merge, push, PR or `spec.md` change. Claude
+  reviews this branch before it lands.
+- Date: 2026-09-24 (Retro desktop unit 12), branch `chatgpt/0-15-retro` from
+  `feat/0.15-tabs` at `8e3634a`. Day uses Schedule.exe for one live hours
+  column; Week.exe shows seven live columns with pinned day names. Both use
+  the window's Hand and retain separate scroll and zoom. The deadlines.txt
+  notepad and the main window have draggable "No time yet" chips; Up next,
+  movable windows, the taskbar and the shared Month remain. Day passed all
+  14 real-pointer scenarios and Week passed all 17. Held and end screenshots
+  for tray placement and cross-day movement were inspected at 1280x820 and
+  1150x768 with large text. Full source gate: 1311 tests passed, ruff and
+  mypy clean; all 11 target mutations were caught. Cartographer skipped
+  because `traceworks` is absent from the project venv. No executable build,
+  push, PR, or `spec.md` edit. Next: Claude reviews this branch before
+  integration.
+- Date: 2026-09-24 (Bento unit 13), branch `chatgpt/0-15-bento` from
+  `feat/0.15-tabs` at `8e3634a`. Day is Hero clock and Week is Hero board,
+  each with painted full-day tracks, a retained zoomable scroll, and a
+  draggable "Not placed yet" tray on the window's Hand. Week's pinned day
+  names open Day. The supporting tiles option keeps its purpose: "Hero and
+  tray only" hides the optional deadline/tonight rail tile. Month remains the
+  shared grid. The 1150x768 large-text rig exposed a nested-scroll clipping
+  issue; reducing the hero's minimum height kept the target and tray in view.
+  Real-pointer rig: Day 14/14 and Week 17/17, with held/end screenshots read.
+  Full source gate: 1296 tests passed, lint and backend types clean; all 11
+  target mutations caught. Cartographer skipped because `traceworks` is absent
+  from the project venv. No executable build, push, PR, or `spec.md` edit.
+  Next: Claude reviews this branch before integration.
+- Date: 2026-09-24 (Clay deck unit 11), branch `chatgpt/0-15-clay` from
+  `feat/0.15-tabs` at `082e9fa`. Clay Day is one large live hours card with a
+  "No time yet" tray; Week is seven live cards fanned from -8 to +8 degrees.
+  Both use the window's shared Hand, retain separate scroll and zoom positions,
+  and use the shared Month. The flat Week option remains available; the old
+  three/five card setting was removed because Week now always shows seven days.
+  The angled fan passed its grab check and the real-pointer rig: Day 14/14 and
+  Week 17/17. Reviewed held and end screenshots for Day move, Week cross-day
+  move, Week quarter-grab, and small/large windows; long Week titles shorten
+  in the narrow cards, while grab points remain usable. Full source gate:
+  1305 tests passed, ruff and mypy clean; all 11 target mutations were caught.
+  Cartographer skipped because `traceworks` is absent from the project venv.
+  No executable build, push, PR, or `spec.md` edit. Next: Claude reviews the
+  branch before integration.
+- Date: 2026-09-23 (rig private D-Bus), branch `chatgpt/0-15-rig-ci`.
+  Merged `feat/0.15-tabs` at `048814b` (including the private-bus fix at
+  `6525429`) into the checkout-isolated KWin/Xvfb rig. Each hidden session now
+  starts its own no-activation D-Bus before the display server; the bus is an
+  owned process stopped after the servers, and FlexWeek inherits its address.
+  Rig ownership tests 10/10; full source gate 1282 tests, ruff and mypy clean.
+  Live Classic Day on KWin passed 14/14; no desktop-bus name was owned by its
+  PID and the user journal had zero global-shortcut registration failures
+  since launch. Stop removed the private bus socket and owned KWin. A scan of
+  readable same-user process environments found no holder of its address;
+  some older desktop processes deny environment reads. Local Xvfb could not
+  run because the executable is absent; its failed start cleaned up the bus.
+  No executable build, push, PR, or `spec.md` edit. Next: Claude reviews this
+  branch again.
+- Date: 2026-09-23, branch `chatgpt/0-15-rig-ci` from `feat/0.15-tabs`
+  at `12456d2`. The pointer rig supports Xvfb with Openbox when KWin is absent;
+  a ten-minute CI job runs Classic Day and Week and uploads its artifacts.
+  State, logs, KWin socket, and default run output now belong to the checkout
+  directory; KWin finds the X display through its own Xwayland child. The old
+  main-checkout state file remains separate. Both checkouts passed a concurrent
+  real-pointer Day scenario on distinct displays, and two updated launchers
+  started simultaneously on distinct KWin displays.
+  Before this isolation fix, KWin, local Xvfb, and a clean Python 3.14 container
+  each passed Day 14/14 and Week 17/17; the container rig took 176 seconds.
+  After the fix, a local Xvfb zoom scenario passed, and the full source gate
+  passed 1269 tests, including seven rig ownership tests.
+  No scenarios, native app code, executable, or remote changed. `spec.md` still
+  describes CI as backend-only; the new job extends that behavior.
+- Date: 2026-09-23 (month blocks). Branch `grok/0-15-month-blocks` from
+  `feat/0.15-tabs` at `062f292`. Each date in `GET /api/month` now lists its
+  timed blocks as chips (`id`, `title`, `start`, `duration_min`, `category`,
+  `kind`, `assignment_id`, `repeats`, `pinned`, `completed`). A packed
+  September (5 blocks a day, 175 chips) is 37,206 bytes compact JSON; one
+  week of the same density is 6,911. Source gate: 1278 passed,
+  `scripts/verify.py` green. spec.md was not edited. Nothing pushed.
+- Date: 2026-09-23 (move-date follow-up). Branch `grok/0-15-move-date-2` from
+  `feat/0.15-tabs` at `062f292`. Undo of a cross-week move sends the revision
+  each week last saw; a later save to the other week is a 409 and both weeks
+  stay. `date_problem` judges a chip whose week is not open from optional
+  `start`, `duration_min`, and `assignment_id`. Source gate: 1274 passed,
+  `scripts/verify.py` green. `scripts/mutate.py scripts/mutations/planner.json`
+  caught every break. spec.md was not edited. Nothing pushed.
+- Date: 2026-09-24 (Mission short-block text), branch `chatgpt/0-15-mission`.
+  The initial appears only when the shared painter has no room for words;
+  drawing it leaves the painter's font as the shared painter set it. A new
+  default-zoom render test failed on the 30-minute overlap before the fix and
+  passes with a visible 15-minute initial. An offscreen Week render showed
+  shortened Dinner words without the extra initial and Quiz with its initial.
+  All 14 Mission tests and the full 1248-test source gate passed; ruff and
+  mypy were clean. No rig, executable build, push, PR, or `spec.md` edit.
+  Next: Claude reviews the Mission branch again.
+- Date: 2026-09-23 (Mission review fix), branch `chatgpt/0-15-mission`.
+  Parked Day and Week scrolls stay children of the Mission page after leaving
+  the layout, so closing the host destroys them. The new host-deletion test
+  failed before the fix and passed afterward; all 13 Mission tests passed.
+  Full source gate: 1247 tests passed, ruff and mypy clean. No rig, executable,
+  push, PR, or `spec.md` change. Next: Claude reviews this branch again.
+- Date: 2026-09-23 (0.15 Mission control). Local branch
+  `chatgpt/0-15-mission` from `feat/0.15-tabs` at `ab0ef57`. Day uses Scope
+  lane and Week uses Lane ops, both on the window's Hand. Pending homework is
+  in a draggable "Not placed yet" tray. Week keeps its radar and load bars.
+  The 15-minute horizontal grab check passed at 25%, 50%, and 75% on both
+  tabs, so Column watch was not needed. Along-the-lane resize and scroll dwell
+  also passed with horizontal real-pointer targets. The stock rig passed 10/14 Day
+  and 14/17 Week scenarios. Its remaining failures aim at vertical resize or
+  dwell coordinates on horizontal hours, or look for Today's app's fixed day
+  name ids. Full source gate: 1,246 tests passed, ruff and mypy clean; all 11
+  target mutations were caught. Cartographer skipped (not installed in the
+  project venv). Nothing pushed or built; `spec.md` unchanged.
+- Date: 2026-09-22 (0.15 reach check). Branch `fix/015-rig-reach` from
+  `grok/0-15-audit-01` at `841586f`. A partial hours track no longer reports
+  00:00 or 24:00 as visible by substituting its own edge. Full source gate:
+  1181 tests passed; Classic Week reach pointer rig: 1/1. No build or push.
+  `spec.md` is unchanged.
 - Date: 2026-09-21 (UI and setup). Branch `feat/ui-setup` off `main` at the
   0.14.2 release. The nine-PR plan in
   `~/.claude/orchestrate/flexweek-ui-setup/docs/plan.md`, built here as one
@@ -529,6 +657,142 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-25, `feat/0.15-tabs`: 0.15.0 prepared on Jonathan's "make a PR,
+  after the code checks are verified merge, and then make the releases": the
+  changelog is dated, `docs/release-notes-v0.15.0.md` covers lanes C and D1,
+  and the changelog, notes and architecture say the Undo notice sits under the
+  hours. The gate passed 1447 tests, every mutation spec was caught, every
+  design's rig passed locally, and CI's rig passed 14/14 and 17/17. A Windows
+  install was not hand-checked before the release.
+- 2026-09-25, `claude/0-15-homework-planning`: Lane C code is committed at
+  `1c6d3e6` after the five row-specific commits listed in Current State. The
+  final focused suite passed 24/24 and full pytest passed 1329/1329. The
+  verifier's fixed 300-second budget expired, while its ruff and mypy stages
+  passed; running full pytest outside that budget passed. Planner and due
+  mutations were caught 15/15. The two date-picker popups and the homework
+  editor, including a length refusal, were visually
+  checked at 1280x860 and 1150x768 with large text. Claude reviews before
+  integration; do not merge this branch yet. No binary or remote action.
+- 2026-09-24, `chatgpt/0-15-retro`: Retro Day and Week run on the shared
+  hours engine as Schedule.exe and Week.exe. The pointer rig passed 14/14 Day
+  and 17/17 Week; source verification passed 1311 tests; target mutations
+  caught 11/11. The status bar no longer repeats an accepted drag time.
+  Claude review remains before integration. No build or remote change.
+- 2026-09-24, `chatgpt/0-15-bento`: Unit 13 implements Hero clock on Day and
+  Hero board on Week from base `8e3634a`; it does not use the Retro branch.
+  Bento owns only layout and paint. `HoursCanvas`, `TrayChip`, `HoursScroll`,
+  and the window Hand supply the gestures. Part-of-day tiles were not built:
+  the selected concepts use full-day tracks; any later tile must set its own
+  `LinearTrack(first, last)` without new boundary logic. Day 14/14, Week 17/17;
+  source gate 1296 passed; targets mutation set 11/11 caught. See the rig's
+  checkout-scoped `runs/` for held/end images and videos. No binary, remote,
+  or product contract change. Claude reviews before landing.
+- 2026-09-23, `chatgpt/0-15-rig-ci`: The rig's per-checkout state now owns a
+  private D-Bus as well as KWin or Xvfb/Openbox. The exact no-activation
+  config from `6525429` is used; KWin and the app inherit its address, and
+  `stop()` waits for each server before the bus. Source gate 1282/1282; live
+  KWin Classic Day 14/14; shortcut-registration failures 0. The private
+  socket and owned KWin were gone after stop. Local Xvfb is unavailable on
+  this host. No build or remote change.
+- 2026-09-23, `chatgpt/0-15-rig-ci`: Xvfb/Openbox and KWin share one hidden
+  session interface scoped to each checkout. A concurrent old/new checkout
+  pointer run passed 1/1 on each display; simultaneous updated KWin launches
+  chose distinct displays and survived independent stop. The CI job saves
+  Day/Week screenshots, results and video; its ownership tests now run in CI
+  and normal pytest collection. The previous full pointer matrix passed 31/31
+  locally and in a container; the isolation checks above and the 1269-test
+  source gate passed afterward. The next external check is the GitHub Actions
+  run after owner review. `spec.md` has the CI description drift noted above.
+  Nothing pushed.
+- 2026-09-23, `grok/0-15-month-blocks`: Each `days` entry of `GET /api/month`
+  has `blocks`, the timed work on that date in start then title order. A
+  repeating block keeps one id on each of its dates with `repeats` true.
+  Homework with a time carries `assignment_id`; homework without a time is
+  absent. A chip looks like
+  `{"id": "school", "title": "School", "start": "08:00", "duration_min": 390,
+  "category": "School", "kind": "locked", "assignment_id": null, "repeats": true,
+  "pinned": false, "completed": false}`. Busy September 37,206 bytes / 175
+  chips. Desktop was not edited; `month_cells` already reads `day["blocks"]`.
+  Gate: 1278 passed. spec.md was not edited. Nothing pushed. Claude reviews
+  before it lands.
+- 2026-09-23, `grok/0-15-move-date-2`: Cross-week move follow-up on `062f292`.
+  History steps keep each week's last-seen revision from the save reply and
+  send it on undo and redo. A later save to the other week is a 409, same
+  words as other saves, both weeks untouched.
+  `date_problem(block_id, from_iso, to_iso, start=None, duration_min=None,
+  assignment_id=None) -> str | None` judges from start and length when the
+  week is not local. Tests:
+  `test_undo_of_a_move_refuses_when_the_other_week_changed_elsewhere`,
+  `test_date_problem_judges_a_chip_when_its_week_is_not_loaded`. Gate: 1274
+  passed, `scripts/verify.py` green. spec.md was not edited. Nothing pushed.
+  Claude reviews before it lands.
+
+- 2026-09-23, `grok/0-15-month-weeks`: Unit 8. `NativeSession.move_to_date(block_id, from_iso, to_iso) -> bool` moves a block to another date. Same week keeps the time; another week writes both documents through `POST /api/changes` in one Undo step. A repeating block moves only that day. Homework keeps its pin. The open week does not change until the reply. `date_problem` is the same `span_problem` words for a held chip. No backend change. Gate: 1261 passed, `scripts/verify.py` green. spec.md was not edited. Nothing pushed. Window still holds the Month placeholder; Unit 9 can call `move_to_date`.
+
+- 2026-09-24, `chatgpt/0-15-mission`: The extra Week initial no longer
+  overlaps shortened shared words on a 30-minute block. A 15-minute block
+  still gets its initial, and Mission restores the painter's font after it.
+  Render regression red before, green after; Mission 14/14, source gate
+  1248/1248. Awaiting Claude review. No rig, build, push, or PR.
+- 2026-09-23, `chatgpt/0-15-mission`: `MissionView` retains parked scrolls
+  under its page rather than orphaning them. A Week → Day → Week host-deletion
+  test failed on the old behavior and passes on the fix. Mission 13/13; full
+  source gate 1247/1247 with ruff and mypy clean. Awaiting Claude review;
+  no rig, build, push, PR, or `spec.md` edit.
+- 2026-09-23, `feat/0.15-tabs`: Unit 5 done. Rig matrix for Today's app: Day 14/14, Week 17/17,
+  including Escape, switching away, dwell, a save landing mid-drag, a second move while a save
+  is in flight, double-click to open, Day and Week agreeing, and 1150x768 with large text.
+  Found and fixed on the way: a held block dropped after switching views; tray chips cut off at
+  large text; a hang when the garbage collector freed the look pictures' leftovers mid-paint.
+  `RIG_GC_REPORT=1` makes the rig name any Qt object left in cyclic garbage. Mutation runner:
+  `.venv/bin/python scripts/mutate.py`. Gate 1240 passed. Nothing pushed.
+- 2026-09-22, `grok/0-15-night-last`: Night slots sort last. A 60-minute low
+  session with 17:00–23:00 locked went to Monday 00:00 on `e7e5206` and goes
+  to Monday 06:00 here. Night is still used when 06:00–23:00 is full.
+  `test_generated_weeks_preserve_grid_bounds_occupancy_and_input` now also
+  runs under `DEFAULT_WORK_WINDOWS`. Busy-week, 20 solves of the same
+  fixture: median 7.971 ms / max 12.819 ms, all complete, all under 150 ms
+  (was median 7.215 / max 10.773 on the audit branch). Source gate: 1203
+  passed, `scripts/verify.py` green. spec.md was not edited. The full-day
+  worktree's uncommitted spec.md was left alone. Nothing pushed.
+
+- 2026-09-22, `feat/0.15-tabs`: Unit 3, zoom and scrolling on hours. `hours/zoom.py` holds the
+  levels, the header kept above the hours and the scroll that keeps a minute in place; Today's
+  app's Day and Week use it, and the level is kept in the look file. Resize zones never take
+  more than a fifth of a block. Source gate 1202 passed; Classic rig Day 7/7, Week 10/10 with
+  the real pointer zooming. The rig's app runs with `QT_XCB_NO_XI2=1`, because Qt on the hidden
+  display never hears xdotool's wheel otherwise. Nothing pushed.
+- 2026-09-22, `fix/015-rig-reach`: `HoursCanvas.in_view` requires a track that
+  contains the requested minute. A scrolled 06:00–22:00 track test failed
+  before the fix and passes after it. Full source gate: 1181 passed; Classic
+  Week reach pointer rig: 1/1. The branch is local and ready to integrate with
+  the 0.15 work.
+- 2026-09-22, `grok/0-15-audit-01` at `3d1fab2`: Chat's three follow-up
+  findings (`df34b9d`, `6a1e672`, `3d1fab2`). Midnight on 31 December 2099
+  stores `2099-12-31T23:59` so `PUT /api/week` does not 500. The leftover
+  homework list uses `due_sort_key`. Week-reach checks the hours viewport,
+  not the window. Source gate: 1180 passed, `scripts/verify.py` green.
+  Classic Week pointer rig 8/8. spec.md was not edited. Nothing pushed.
+  Still planned: Unit 3 zoom and the full reach matrix, 3b work windows in
+  setup/Settings, due dialogs, and 5–17.
+
+- 2026-09-22, `grok/0-15-audit-01` at `ff5df31`: Chat's six audit findings are
+  on this branch, merged from `grok/0-15-full-day` (`d4bfd92`) and
+  `grok/0-15-optional-due` (`dc9b7fa`) onto `feat/0.15-tabs` at `248a318`.
+  Midnight completions save as the next date at 00:00. Due lists use the
+  parsed deadline. Date-only 23:45 is allowed. The 15 stale Classic widget
+  tests read the hours canvas. The pointer opens Day from the Day tab. The
+  week scrolls at 48 pixels an hour with day names at the top, so a block
+  can be grabbed; 00:00 and 24:00 can be scrolled on screen. Source gate:
+  1177 passed, `scripts/verify.py` green. Classic pointer rig: Day 4/4, Week
+  8/8. Month 0/3 (no `month_surfaces` yet, Unit 9). Busy-week solver, 20
+  solves of school 08:00–14:30 Mon–Fri, a 22:00–23:00 lock daily, twelve
+  45-minute tasks due Sunday 21:00: median 2.229 ms / max 5.695 ms at
+  `248a318`, median 7.215 ms / max 10.773 ms here; all under 150 ms, all
+  complete. spec.md was not edited. Nothing pushed. Next: Chat's independent
+  review. Still planned: Unit 3 zoom and the full reach matrix, 3b work
+  windows in setup/Settings, due dialogs, and 5–17.
+
 - 2026-09-22, `feat/ui-setup`: 0.14.3 prepared on Jonathan's "Ship it":
   version, changelog heading, `docs/release-notes-v0.14.3.md`, and the
   first-open text in README and `docs/github-release.md` now describe the

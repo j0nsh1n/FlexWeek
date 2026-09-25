@@ -1,0 +1,814 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FlexWeek 0.15 mock-up: Day, Week and Month in every design</title>
+<style>
+:root { --font: "Noto Sans", "Segoe UI", system-ui, sans-serif; --mono: "DejaVu Sans Mono", ui-monospace, monospace; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #1f2230; font-family: var(--font); color: #111; }
+#switcher { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 8px 12px; background: #11131c; color: #cfd6e6; font-size: 13px; }
+#switcher .group { display: flex; gap: 4px; align-items: center; }
+#switcher button { background: #262a3a; color: #e8ecf6; border: 1px solid #3a4058; border-radius: 6px; padding: 5px 10px; font: inherit; cursor: pointer; }
+#switcher button.on { background: #e8ecf6; color: #11131c; border-color: #e8ecf6; font-weight: 700; }
+#switcher .label { color: #8a93ad; margin-right: 2px; }
+#about { padding: 6px 12px 8px; background: #11131c; color: #cfd6e6; font-size: 13px; border-top: 1px solid #262a3a; min-height: 40px; }
+#about b { color: #fff; }
+#about .risk { color: #f5b3b3; }
+#frame { width: 1280px; height: 760px; margin: 10px auto; position: relative; overflow: hidden; border-radius: 8px; box-shadow: 0 10px 40px #0008; background: var(--bg); color: var(--text); display: flex; flex-direction: column; }
+#top { display: flex; align-items: center; gap: 10px; padding: 8px 12px; flex: none; }
+#top .title { font-weight: 800; font-size: 22px; min-width: 300px; }
+#top .nav button, #top .tabs button, #top .plan { font: inherit; font-size: 14px; border-radius: 8px; padding: 6px 14px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+#top .tabs { margin-left: auto; display: flex; gap: 6px; }
+#top .tabs button.on { font-weight: 800; outline: 2px solid var(--accent); }
+#top .plan { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+#stage { flex: 1; min-height: 0; position: relative; }
+#status { flex: none; padding: 4px 12px 8px; font-size: 13px; min-height: 26px; color: var(--muted); }
+#status.refused { color: var(--danger); font-weight: 700; }
+
+/* Shared pieces */
+.track { position: relative; touch-action: none; }
+.blk { position: absolute; overflow: hidden; font-size: 12px; line-height: 1.25; padding: 3px 6px; cursor: grab; user-select: none; z-index: 2; }
+.blk b { display: block; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.blk .t { opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.blk.one b, .blk.one .t { display: inline; }
+.blk.one .t { margin-left: 6px; }
+.blk.held { pointer-events: none; z-index: 6; }
+.blk.ghost { opacity: .85; pointer-events: none; z-index: 6; }
+.blk .dot { position: absolute; right: 4px; top: 4px; width: 7px; height: 7px; border-radius: 50%; background: var(--danger); }
+.blk.fixed { cursor: grab; }
+.rule { position: absolute; left: 0; right: 0; height: 0; border-top: 1px solid var(--line); pointer-events: none; }
+.rule.half { border-top-style: dashed; opacity: .6; }
+.vrule { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px solid var(--line); pointer-events: none; }
+.vrule.half { border-left-style: dashed; opacity: .6; }
+.hourlabel { position: absolute; font-size: 11px; color: var(--muted); pointer-events: none; }
+.now { position: absolute; pointer-events: none; z-index: 4; background: var(--danger); }
+.hint { position: absolute; border: 1px dashed var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); border-radius: 6px; color: var(--accent); font-size: 12px; padding: 3px 8px; pointer-events: none; z-index: 1; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px; cursor: grab; user-select: none; font-size: 13px; touch-action: none; }
+.floating { position: fixed; z-index: 100; pointer-events: none; padding: 6px 12px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 700; box-shadow: 0 6px 18px #0005; }
+.label-held { position: absolute; z-index: 7; pointer-events: none; background: var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.label-held.refused { background: var(--danger); color: #fff; }
+.scroller { overflow: auto; position: relative; }
+.kicker { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+
+/* Month (shared shape, dressed per design) */
+.month { display: grid; grid-template-columns: repeat(7, 1fr); grid-template-rows: 28px repeat(6, 1fr); height: 100%; gap: 1px; padding: 0 12px 4px; }
+.month .dn { font-size: 12px; font-weight: 700; color: var(--muted); text-align: center; align-self: center; text-transform: uppercase; }
+.month .cell { background: var(--surface); padding: 4px 5px; overflow: hidden; cursor: pointer; position: relative; }
+.month .cell.out { opacity: .45; }
+.month .cell .n { font-size: 12px; font-weight: 700; margin-bottom: 2px; display: inline-block; min-width: 22px; height: 22px; line-height: 22px; text-align: center; border-radius: 50%; }
+.month .cell.today .n { background: var(--accent); color: var(--accent-ink); }
+.month .cell.over { outline: 2px solid var(--accent); outline-offset: -2px; }
+.mchip { display: block; font-size: 11.5px; padding: 1px 6px; margin: 2px 0; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: grab; touch-action: none; }
+.mchip.lifted { opacity: .35; }
+.more { font-size: 11px; color: var(--muted); }
+
+/* ---------- Today's app (Daily Scheduler) ---------- */
+[data-design="classic"] { --bg: #edf2fa; --surface: #ffffff; --accent: #3d6fc4; --accent-ink: #fff; --text: #172033; --muted: #536079; --line: #e3e6eb; --danger: #c0262d; }
+[data-design="classic"] .blk { border-radius: 5px; color: #0f172a; border-left: 4px solid var(--mark); background: var(--fill); }
+[data-design="classic"] .blk.held { outline: 2px solid var(--accent); }
+[data-design="classic"] .blk.refused { outline: 2px solid var(--danger); }
+.cl-day { display: grid; grid-template-columns: 1fr 250px; height: 100%; gap: 0; }
+.cl-day .main { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
+.cl-day .scroller { flex: 1; background: var(--surface); }
+.cl-side { background: var(--surface); padding: 12px; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+.cl-side .chip { background: #fee2e2; border-left: 4px solid #ef4444; }
+.cl-side .sumrow { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; border-bottom: 1px solid var(--line); }
+.cl-side .hintsmall { font-size: 11.5px; color: var(--muted); }
+.cl-week { display: grid; grid-template-rows: 30px 1fr; height: 100%; padding: 0 12px 0 0; }
+.cl-week .head { display: grid; grid-template-columns: 52px repeat(7, 1fr); }
+.cl-week .head button { background: none; border: 0; font: inherit; font-size: 14px; color: var(--muted); cursor: pointer; border-radius: 6px; }
+.cl-week .head button:hover { background: var(--surface); color: var(--text); }
+.cl-week .head button.today { color: var(--accent); font-weight: 800; }
+.cl-week .body { display: grid; grid-template-columns: 52px repeat(7, 1fr); min-height: 0; background: var(--surface); border-top: 1px solid var(--line); }
+.cl-week .body .track { border-left: 1px solid var(--line); }
+.gutter { position: relative; }
+
+/* ---------- Timeline (editorial) ---------- */
+[data-design="timeline"] { --bg: #f6f4ef; --surface: #ffffff; --accent: #1d1b16; --accent-ink: #f6f4ef; --text: #1d1b16; --muted: #5f594c; --line: #d9d3c4; --danger: #b3202a; }
+[data-design="timeline"] .blk { background: #fff; border: 1px solid #1d1b16; border-left: 5px solid var(--mark); border-radius: 3px; color: #1d1b16; }
+[data-design="timeline"] .blk.work { background: #1d1b16; color: #f6f4ef; border-color: #1d1b16; border-left-color: var(--mark); }
+[data-design="timeline"] .blk.held { box-shadow: 4px 4px 0 #1d1b16; }
+[data-design="timeline"] .blk.refused { border-color: var(--danger); }
+.tl-day { display: grid; grid-template-columns: 1fr 210px; height: 100%; padding: 0 16px; gap: 18px; }
+.tl-day h1, .tl-week h1 { font-size: 44px; margin: 0; letter-spacing: -.03em; font-weight: 900; }
+.tl-pills { display: flex; gap: 6px; margin: 6px 0 8px; }
+.tl-pills button { font: inherit; font-size: 13px; background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.tl-pills button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.tl-margin { border-left: 2px solid var(--text); padding: 60px 0 0 14px; display: flex; flex-direction: column; gap: 8px; }
+.tl-margin .chip { background: #fff; border: 1px dashed var(--text); border-left: 4px solid #ef4444; }
+.tl-ledger { display: grid; grid-template-columns: 1fr 1fr; gap: 0; height: 100%; padding: 0 16px 8px; }
+.tl-ledger .page { background: #fff; border: 1px solid var(--line); padding: 14px 16px; overflow: auto; }
+.tl-ledger .page.left { border-right: 3px double var(--text); }
+.tl-card { border: 1px solid var(--text); border-left: 5px solid var(--mark); padding: 6px 10px; margin: 6px 0; background: #fff; font-size: 13px; }
+.tl-card .tm { font-weight: 800; margin-right: 8px; }
+.tl-now { color: var(--danger); font-weight: 800; font-size: 12px; margin: 8px 0; border-top: 2px solid var(--danger); padding-top: 2px; }
+.tl-week { height: 100%; display: flex; flex-direction: column; padding: 0 16px 6px; }
+.tl-section { display: grid; grid-template-columns: 170px 1fr; align-items: center; border-bottom: 1px solid var(--line); padding: 4px 0; }
+.tl-section .dname { font-size: 24px; font-weight: 900; letter-spacing: -.02em; cursor: pointer; }
+.tl-section .dname small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
+.tl-section .track { height: 56px; }
+.tl-section.today .dname { text-decoration: underline 4px var(--danger); }
+
+/* ---------- Mission control (HUD) ---------- */
+[data-design="mission"] { --bg: #070b12; --surface: #0d1524; --accent: #4ee6c4; --accent-ink: #04101c; --text: #e6eefb; --muted: #9fb0c8; --line: #22304a; --danger: #ff4d6d; font-family: var(--mono); }
+[data-design="mission"] #top .title { font-family: var(--font); }
+[data-design="mission"] .blk { background: var(--fill-dark); border: 1px solid var(--mark); color: #e6eefb; border-radius: 2px; font-family: var(--mono); }
+[data-design="mission"] .blk.held { box-shadow: 0 0 0 2px var(--accent), 0 0 18px var(--accent); }
+[data-design="mission"] .blk.refused { box-shadow: 0 0 0 2px var(--danger), 0 0 18px var(--danger); }
+.mc { display: grid; grid-template-columns: 1fr 270px; gap: 12px; padding: 0 12px 8px; height: 100%; }
+.mc .panel { background: var(--surface); border: 1px solid var(--line); padding: 10px; overflow: auto; }
+.mc .panel h4 { margin: 0 0 8px; font-size: 11px; letter-spacing: .12em; color: var(--accent); }
+.mc .chip { background: #0a1b24; border: 1px solid var(--accent); color: var(--text); font-family: var(--mono); font-size: 12px; margin: 3px 0; }
+.mc .ruler { position: relative; height: 22px; border-bottom: 1px solid var(--line); }
+.mc .ruler span { position: absolute; font-size: 10px; color: var(--muted); transform: translateX(-50%); top: 4px; }
+.mc .lanes { display: grid; grid-template-columns: 72px 1fr; }
+.mc .lane-name { font-size: 11px; color: var(--muted); display: flex; align-items: center; cursor: pointer; }
+.mc .lane-name.today { color: var(--accent); }
+.mc .lanes .track { height: 62px; border-bottom: 1px solid var(--line); background: repeating-linear-gradient(90deg, transparent 0 calc(100%/17 - 1px), var(--line) calc(100%/17 - 1px) calc(100%/17)); }
+.mc .scope .track { height: 300px; border: 1px solid var(--line); background: repeating-linear-gradient(90deg, transparent 0 calc(100%/68 - 1px), #16233a calc(100%/68 - 1px) calc(100%/68)); }
+.mc .hudline { font-size: 11px; color: var(--muted); display: flex; gap: 18px; margin: 4px 0 8px; }
+.mc .hudline b { color: var(--accent); }
+.mc .tape { display: grid; grid-template-columns: 70px 1fr; }
+.mc .cols { display: grid; grid-template-columns: 60px repeat(7, 1fr); }
+.mc .cols .track { border-left: 1px solid var(--line); }
+
+/* ---------- Bento (tiles) ---------- */
+[data-design="bento"] { --bg: #eef2ff; --surface: #ffffff; --accent: #4f46e5; --accent-ink: #fff; --text: #1e1b4b; --muted: #4b4a75; --line: #e0e7ff; --danger: #991b1b; }
+[data-design="bento"] .blk { background: var(--fill); border-radius: 10px; color: #1e1b4b; border-left: 4px solid var(--mark); }
+[data-design="bento"] .blk.held { box-shadow: 0 8px 24px #4f46e555; outline: 2px solid var(--accent); }
+[data-design="bento"] .blk.refused { outline: 2px solid var(--danger); }
+.bn { display: grid; gap: 14px; padding: 4px 18px 10px; height: 100%; }
+.bn .tile { background: #fff; border-radius: 20px; padding: 14px 16px; min-height: 0; display: flex; flex-direction: column; box-shadow: 0 2px 8px #1e1b4b0d; }
+.bn .tile.hero { background: var(--accent); color: #fff; }
+.bn .tile.hero .kicker { color: #e0e7ff; }
+.bn .tile.hero .track { background: #ffffff14; border-radius: 12px; }
+.bn .tile.hero .rule { border-color: #ffffff26; }
+.bn .tile.hero .hourlabel { color: #e0e7ffcc; }
+.bn .chip { background: #fee2e2; border-left: 4px solid #ef4444; border-radius: 10px; margin: 4px 0; }
+.bn h2 { margin: 4px 0 8px; font-size: 22px; }
+.bn .cols7 { display: grid; grid-template-columns: 44px repeat(7, 1fr); gap: 4px; flex: 1; min-height: 0; }
+.bn .cols7 .dhead { font-size: 12px; text-align: center; color: #e0e7ff; font-weight: 700; cursor: pointer; }
+
+/* ---------- Retro desktop ---------- */
+[data-design="retro"] { --bg: #008080; --surface: #c0c0c0; --accent: #000080; --accent-ink: #fff; --text: #000; --muted: #333; --line: #808080; --danger: #a00000; font-family: "DejaVu Sans", Tahoma, sans-serif; }
+[data-design="retro"] #top .nav button, [data-design="retro"] #top .tabs button, [data-design="retro"] #top .plan { border-radius: 0; border: 2px outset #dfdfdf; background: #c0c0c0; color: #000; }
+[data-design="retro"] #top .plan { background: #000080; color: #fff; }
+[data-design="retro"] #top .title { color: #fff; }
+[data-design="retro"] #status { color: #fff; }
+[data-design="retro"] .blk { background: #c0c0c0; border: 2px outset #efefef; border-left: 5px solid var(--mark); border-radius: 0; color: #000; font-size: 11.5px; }
+[data-design="retro"] .blk.held { border: 2px inset #efefef; border-left: 5px solid var(--mark); background: #d4d0c8; }
+[data-design="retro"] .blk.refused { background: #ffd0d0; }
+.win { position: absolute; background: #c0c0c0; border: 2px outset #efefef; display: flex; flex-direction: column; box-shadow: 1px 1px 0 #000; }
+.win .bar { background: linear-gradient(90deg, #000080, #1084d0); color: #fff; font-weight: 700; font-size: 12px; padding: 3px 6px; display: flex; justify-content: space-between; }
+.win .bar i { font-style: normal; background: #c0c0c0; color: #000; border: 1px outset #fff; padding: 0 5px; font-size: 10px; }
+.win .menu { font-size: 12px; padding: 2px 6px; }
+.win .sunken { background: #fff; border: 2px inset #efefef; margin: 3px; flex: 1; min-height: 0; }
+.win .statusbar { font-size: 11.5px; border: 1px inset #efefef; margin: 0 3px 3px; padding: 1px 6px; min-height: 18px; }
+.win .chip { background: #fff; border-radius: 0; font-family: var(--mono); font-size: 12px; padding: 2px 6px; display: flex; }
+.taskbar { position: absolute; left: 0; right: 0; bottom: 0; height: 34px; background: #c0c0c0; border-top: 2px outset #efefef; display: flex; align-items: center; gap: 6px; padding: 0 6px; font-size: 12px; }
+.taskbar .start { font-weight: 800; border: 2px outset #efefef; padding: 2px 8px; }
+.taskbar .tray { margin-left: auto; border: 1px inset #efefef; padding: 2px 6px; display: flex; gap: 6px; align-items: center; }
+.taskbar .tray .chip { padding: 1px 6px; background: #fff; border: 1px solid #808080; border-radius: 0; font-size: 11px; }
+.desk-icons .blk { text-align: center; background: #c0c0c0cc; }
+
+/* ---------- Clay deck ---------- */
+[data-design="clay"] { --bg: #f3ecff; --surface: #ffffff; --accent: #3a2f4d; --accent-ink: #fff; --text: #3a2f4d; --muted: #4a3f5e; --line: #e3d9f5; --danger: #9b1c4a; }
+[data-design="clay"] .blk { background: var(--fill); border-radius: 14px; border: 3px solid #fff; color: #3a2f4d; box-shadow: inset -3px -3px 6px #0000001a, 3px 4px 10px #3a2f4d26; }
+[data-design="clay"] .blk.held { transform: scale(1.04); box-shadow: inset -3px -3px 6px #0000001a, 6px 10px 22px #3a2f4d44; }
+[data-design="clay"] .blk.refused { border-color: var(--danger); }
+.cy { height: 100%; padding: 4px 18px 10px; display: flex; flex-direction: column; }
+.cy h2 { margin: 2px 0 6px; font-size: 22px; }
+.cy .card { background: #fff; border-radius: 26px; border: 4px solid #fff; box-shadow: inset -6px -6px 14px #3a2f4d14, 8px 12px 28px #3a2f4d22; padding: 14px; position: relative; }
+.cy .dish { background: #fff; border-radius: 22px; padding: 12px; box-shadow: inset 4px 4px 10px #3a2f4d1a; display: flex; flex-direction: column; gap: 8px; }
+.cy .chip { background: #fdbcb4; border-radius: 999px; border: 3px solid #fff; box-shadow: 2px 3px 8px #3a2f4d26; }
+.cy .felt { background: radial-gradient(circle at 30% 20%, #cdeccf, #a9d8b3); border-radius: 26px; box-shadow: inset 0 0 40px #0000001f; }
+.cy .felt .rule { border-color: #ffffff80; }
+.cy .felt .hourlabel { color: #2d5a3a; }
+.cy .fan { position: relative; flex: 1; }
+.cy .fan .card { position: absolute; top: 20px; width: 170px; height: 480px; padding: 26px 8px 8px; transform-origin: center; }
+.cy .fan .card .dn { position: absolute; top: 6px; left: 12px; font-weight: 800; font-size: 14px; cursor: pointer; }
+.cy .fan .card.today { top: 0; width: 200px; height: 540px; z-index: 3; }
+.cy .row7 { display: grid; grid-template-columns: 46px repeat(7, 1fr); gap: 10px; flex: 1; min-height: 0; }
+.cy .row7 .card { padding: 26px 6px 6px; }
+.cy .row7 .card .dn { position: absolute; top: 5px; left: 12px; font-weight: 800; font-size: 13px; cursor: pointer; }
+.cy .deckcorner { position: absolute; right: 10px; top: 40px; width: 230px; height: 160px; }
+.cy .deckcorner .chip { position: absolute; }
+</style>
+</head>
+<body>
+<div id="switcher"></div>
+<div id="about"></div>
+<div id="frame" data-design="classic">
+  <div id="top">
+    <div class="title" id="title"></div>
+    <div class="nav"><button>‹</button> <button>›</button> <button>Today</button></div>
+    <div class="tabs" id="tabs"></div>
+    <button class="plan">Plan my homework</button>
+  </div>
+  <div id="stage"></div>
+  <div id="status"></div>
+</div>
+<script>
+"use strict";
+const DAYN = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const FULL = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const WEEK0 = 21;                       // Monday 21 September 2026
+const NOW = { dom: 24, min: 15 * 60 + 40 };
+const FROM = 6 * 60, TO = 23 * 60, SNAP = 15;
+const CATS = {
+  class: ["#bfdbfe", "#3b82f6", "#10233f"], assignments: ["#fecaca", "#ef4444", "#3f1414"],
+  exercise: ["#a7f3d0", "#10b981", "#0f3326"], extra: ["#fbcfe8", "#ec4899", "#3f1230"],
+  meals: ["#fed7aa", "#f97316", "#3f2410"], study: ["#ddd6fe", "#8b5cf6", "#241545"], free: ["#e2e8f0", "#94a3b8", "#1e293b"],
+};
+let uid = 1;
+function B(title, cat, dom, start, end, extra = {}) { return { id: "b" + uid++, title, cat, dom, start, end, ...extra }; }
+function seed() {
+  const blocks = [];
+  for (let d = 21; d <= 25; d++) blocks.push(B("School", "class", d, 8 * 60, 14 * 60 + 30, { fixed: true, series: "school" }));
+  for (const d of [22, 24]) blocks.push(B("Soccer", "exercise", d, 16 * 60, 17 * 60 + 30, { fixed: true, series: "soccer" }));
+  for (let d = 21; d <= 27; d++) blocks.push(B("Dinner", "meals", d, 18 * 60, 18 * 60 + 45, { fixed: true, series: "dinner" }));
+  blocks.push(B("Piano", "extra", 21, 17 * 60, 17 * 60 + 45, { fixed: true }));
+  blocks.push(B("History essay", "assignments", 24, 19 * 60, 20 * 60, { work: true, pinned: true }));
+  blocks.push(B("Reading log", "assignments", 22, 19 * 60 + 30, 20 * 60 + 15, { work: true }));
+  blocks.push(B("Chem lab report", "assignments", 26, 10 * 60, 11 * 60 + 30, { work: true }));
+  return blocks;
+}
+const S = {
+  design: "classic", tab: "day", day: 3, concept: {}, blocks: seed(),
+  tray: [ { id: "t1", title: "Math worksheet", minutes: 60, due: 27 * 1440 + 23 * 60 + 59 },
+          { id: "t2", title: "Science poster", minutes: 60, due: 25 * 1440 + 23 * 60 + 59 },
+          { id: "t3", title: "Spanish vocab", minutes: 30, due: 26 * 1440 + 23 * 60 + 59 } ],
+  preview: null, drag: null, msg: "", msgBad: false,
+};
+
+// ---------- Concepts: what each design's Day and Week are ----------
+const CONCEPTS = {
+  classic: {
+    day: { A: ["Daily Scheduler's day", "One full-width day at 96 px an hour that scrolls, with Not placed yet and a summary in the sidebar, as in Daily Scheduler. Drag, resize from an edge, drag empty time to add, or drag homework in from the sidebar.", ""] },
+    week: { A: ["Overview that fits", "06:00 to 23:00 fits without scrolling, like Daily Scheduler's week. Blocks still move, resize and cross days here. Click a day's name to open it on Day.", "Short blocks are small at this scale; the times are written on the block while it is held."] },
+  },
+  timeline: {
+    day: { A: ["Column rule", "The big day heading stays. Under it the day is one ruled column like a notebook page, ink cards on it, NOW in red. Homework without a time waits in the margin on the right.", "Two cards at one time go half width."],
+           B: ["Ledger spread", "Two facing pages. The left keeps the clock-ordered list the design is known for; the right is a narrow hour rail where the same cards are pinned by time. Drag on the rail; the list follows.", "The list and the rail both ask for attention."] },
+    week: { A: ["Continuous scroll", "The week reads down the page like an article: each day a big heading with its hours running across beside it. Drag along a day's line to change the time, or onto another day's line.", "Seven lines of hours make a tall page; it scrolls."],
+            B: ["Timetable", "Days become columns and hours rows, like a school timetable, in ink. Homework without a time waits in the margin.", "The clock-ordered list, the design's signature, is gone on Week."] },
+  },
+  mission: {
+    day: { A: ["Scope lane", "One wide horizontal lane under a magnified ruler fills the screen, the day read left to right. Homework without a time docks in the cargo bay below.", "Crowded evenings stack into sub-rows and take height."],
+           B: ["Altitude tape", "The scope turns upright: hours run down a tape, blocks horizontal bars on it. The radar panel on the right is the tray.", "It gives up the left-to-right ruler the design is known for."] },
+    week: { A: ["Lane ops", "The seven day lanes and the hour ruler stay, now fully live: drag along a lane to retime, across lanes to change day, pull an end to resize. Pending homework sits by the radar.", "Seventeen hours across seven lanes make small targets."],
+            B: ["Column watch", "The HUD transposes: one shared hour ruler down the left, days as columns. The radar panel is the tray.", "Loses the horizontal lanes."] },
+  },
+  bento: {
+    day: { A: ["Hero clock", "The purple hero tile becomes the day itself: a tall timeline inside it. Not placed yet, Tonight and Deadlines move to tiles on the right, and Not placed yet is the tray.", "The calm up-next glance becomes the whole day."],
+           B: ["Part-of-day tiles", "The day is three tiles, Morning, Afternoon and Evening, each its own short timeline. Drag a block from one tile into another. Not placed yet is a fourth tile.", "A block that runs across noon or 17:00 is cut between tiles."] },
+    week: { A: ["Hero board", "The hero tile grows into the week: seven columns of hours in one big tile. Deadlines and Not placed yet shrink to a rail on the right.", "The hero becomes a dense grid."],
+            B: ["Day tiles", "A wall of eight tiles: one per day, each a small timeline, and Not placed yet as the eighth. Drag a block from one day's tile to another.", "Each day's tile is small, so short blocks are thin."] },
+  },
+  retro: {
+    day: { A: ["Schedule.exe", "One big bevelled window holds the day's hours; its status bar prints the time while you drag. deadlines.txt stays open as the tray: drag a line out of it.", "The window chrome takes some space."],
+           B: ["Wallpaper day", "No window: the teal desktop is the day, hours drawn as wallpaper lines, blocks sit like desktop icons. Homework without a time waits in the system tray by the clock.", "Leaves the everything-in-a-window idea."] },
+    week: { A: ["Week.exe grid", "Week.exe becomes a real grid: days as columns, hours as rows, bevelled bars in the cells. deadlines.txt remains the tray.", "Borders and title bars take space."],
+            B: ["Seven windows", "Each day opens as its own little window, tiled across the desktop. Drag a block out of one window into another to change its day.", "A window moved off to the side can hide a day."] },
+  },
+  clay: {
+    day: { A: ["One big card", "Today's clay card grows to fill the view, pills pressed into hour grooves. Homework without a time waits in a clay dish at the side.", "The fan is gone while you look at one day."],
+           B: ["Felt board", "Blocks become little clay cards laid on a felt board ruled in hours. Homework without a time is a small fanned deck in the corner.", "Card shadows can hide a time underneath."] },
+    week: { A: ["Fan hand", "The fan stays: seven day cards, tilted, today raised and larger. Pills drag along a card to retime and across to a neighbour to change day.", "Tilted cards make small pills harder to grab."],
+            B: ["Table hand", "The hand is laid flat: seven cards in a row sharing one hour scale on the left, a small deck of unplaced homework at the foot.", "Flat loses the fanned look people like."] },
+  },
+};
+const MONTH_ABOUT = ["Daily Scheduler's month", "A grid of the month with \"08:00 School\" chips and today circled. Click a day to open it on Day. Drag a chip to another date to move it there at the same time.", ""];
+
+// ---------- Rules ----------
+function lengthWords(m) { const h = Math.floor(m / 60), r = m % 60; return h && r ? `${h} h ${r} min` : h ? `${h} h` : `${r} min`; }
+function hhmm(m) { return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); }
+function snap(m) { return Math.round(m / SNAP) * SNAP; }
+function clampSpan(start, len) { start = Math.max(FROM, Math.min(start, TO - len)); return [start, start + len]; }
+function dayName(dom) { return DAYN[(dom - WEEK0 + 700) % 7] || ""; }
+function judge(item, dom, start, end) {
+  if (start < FROM || end > TO) return { ok: false, words: "That is outside the hours FlexWeek plans in." };
+  if (item.due !== undefined && dom * 1440 + end > item.due) return { ok: false, words: "That ends after it is due, so it stays where it was." };
+  const beside = S.blocks.find(b => b.id !== item.id && b.dom === dom && b.start < end && start < b.end);
+  const words = `${dayName(dom)} ${hhmm(start)}–${hhmm(end)} · ${lengthWords(end - start)}` + (beside ? ` · beside ${beside.title}` : "");
+  return { ok: true, words };
+}
+function say(words, bad = false) { S.msg = words; S.msgBad = bad; const el = document.getElementById("status"); el.textContent = words; el.className = bad ? "refused" : ""; }
+
+// ---------- Tracks: every surface with hours registers them ----------
+let TRACKS = [];
+function track(el, dom, axis, from = FROM, to = TO, angle = 0, opts = {}) {
+  el.classList.add("track");
+  const t = { el, dom, axis, from, to, angle, opts };
+  el._track = t; TRACKS.push(t); return t;
+}
+function blocksOn(dom) {
+  let list = S.blocks.filter(b => b.dom === dom);
+  const p = S.preview;
+  if (p) {
+    list = list.filter(b => b.id !== p.id);
+    if (p.dom === dom) list.push({ ...p.item, dom: p.dom, start: p.start, end: p.end, _held: true, _verdict: p.verdict });
+  }
+  return list;
+}
+function columns(list) {
+  const order = [...list].sort((a, b) => a.start - b.start || a.end - b.end);
+  const ends = [], col = new Map();
+  for (const b of order) { let i = ends.findIndex(e => e <= b.start); if (i < 0) { i = ends.length; ends.push(0); } ends[i] = b.end; col.set(b, i); }
+  const out = new Map();
+  for (const b of order) { const share = order.filter(o => o.start < b.end && b.start < o.end).map(o => col.get(o)); out.set(b, [col.get(b), Math.max(...share) + 1]); }
+  return out;
+}
+function drawTrack(t) {
+  t.el.querySelectorAll(".blk, .label-held").forEach(n => n.remove());
+  const list = blocksOn(t.dom).filter(b => b.end > t.from && b.start < t.to);
+  const cols = columns(list);
+  const span = t.to - t.from;
+  for (const b of list) {
+    const [c, n] = cols.get(b);
+    const s = Math.max(b.start, t.from), e = Math.min(b.end, t.to);
+    const el = document.createElement("div");
+    const [fill, mark, dark] = CATS[b.cat] || CATS.free;
+    el.className = "blk" + (b.fixed ? " fixed" : " work") + (b._held ? " held" : "") + (b._held && b._verdict && !b._verdict.ok ? " refused" : "");
+    el.style.setProperty("--fill", fill); el.style.setProperty("--mark", mark); el.style.setProperty("--fill-dark", dark);
+    el.dataset.id = b.id;
+    const g = 2;
+    if (t.axis === "v") {
+      el.style.top = ((s - t.from) / span * 100) + "%"; el.style.height = `calc(${(e - s) / span * 100}% - ${g}px)`;
+      el.style.left = `calc(${c / n * 100}% + ${g}px)`; el.style.width = `calc(${100 / n}% - ${2 * g}px)`;
+    } else {
+      el.style.left = ((s - t.from) / span * 100) + "%"; el.style.width = `calc(${(e - s) / span * 100}% - ${g}px)`;
+      el.style.top = `calc(${c / n * 100}% + ${g}px)`; el.style.height = `calc(${100 / n}% - ${2 * g}px)`;
+    }
+    const held = b._held;
+    const detail = held ? b._verdict.words : `${hhmm(b.start)}–${hhmm(b.end)}` + (b.pinned ? " · Pinned" : "");
+    el.innerHTML = `<b></b><div class="t"></div>` + (n > 1 && !held ? `<span class="dot" title="Shares its time"></span>` : "");
+    el.querySelector("b").textContent = b.title; el.querySelector(".t").textContent = detail;
+    t.el.appendChild(el);
+    const small = t.axis === "v" ? el.offsetHeight < 30 : el.offsetHeight < 30;
+    if (small) el.classList.add("one");
+    if (held && (el.offsetWidth < 150 || small)) {
+      const lab = document.createElement("div");
+      lab.className = "label-held" + (b._verdict.ok ? "" : " refused"); lab.textContent = b._verdict.words;
+      t.el.appendChild(lab);
+      lab.style.left = (el.offsetLeft + el.offsetWidth + 6) + "px"; lab.style.top = el.offsetTop + "px";
+      if (el.offsetLeft + el.offsetWidth + 6 + lab.offsetWidth > t.el.clientWidth) lab.style.left = Math.max(0, el.offsetLeft - lab.offsetWidth - 6) + "px";
+    }
+  }
+}
+function drawAll() { TRACKS.forEach(drawTrack); if (S.tab === "day" && S.design === "classic") drawSummary(); }
+function rules(t, labels = true, every = 60) {
+  const span = t.to - t.from;
+  for (let m = Math.ceil(t.from / 30) * 30; m <= t.to; m += 30) {
+    const half = m % 60 !== 0;
+    if (half && every === 60 && span > 12 * 60 && t.el.clientHeight < 700 && t.axis === "v") continue;
+    const r = document.createElement("div");
+    r.className = (t.axis === "v" ? "rule" : "vrule") + (half ? " half" : "");
+    if (t.axis === "v") r.style.top = ((m - t.from) / span * 100) + "%"; else r.style.left = ((m - t.from) / span * 100) + "%";
+    t.el.appendChild(r);
+  }
+}
+function gutter(el, from, to, step = 60) {
+  el.classList.add("gutter");
+  for (let m = Math.ceil(from / step) * step; m <= to; m += step) {
+    const l = document.createElement("div"); l.className = "hourlabel"; l.textContent = hhmm(m);
+    l.style.top = `calc(${(m - from) / (to - from) * 100}% - 7px)`; l.style.right = "6px"; el.appendChild(l);
+  }
+}
+function nowMark(t) {
+  if (t.dom !== NOW.dom || NOW.min < t.from || NOW.min > t.to) return;
+  const n = document.createElement("div"); n.className = "now";
+  const p = (NOW.min - t.from) / (t.to - t.from) * 100;
+  if (t.axis === "v") { n.style.cssText = `left:0;right:0;top:${p}%;height:2px`; } else { n.style.cssText = `top:0;bottom:0;left:${p}%;width:2px`; }
+  t.el.appendChild(n);
+}
+function decorate(t, opts = {}) { rules(t); if (opts.now !== false) nowMark(t); }
+
+// ---------- Pointer: one engine for every surface ----------
+function trackAt(x, y) {
+  const hit = document.elementFromPoint(x, y);
+  const el = hit && hit.closest(".track");
+  return el ? el._track : null;
+}
+function local(t, x, y) {
+  const r = t.el.getBoundingClientRect();
+  const w = t.el.offsetWidth, h = t.el.offsetHeight;
+  if (!t.angle) return { x: x - r.left, y: y - r.top, w, h };
+  const a = -t.angle * Math.PI / 180, mx = r.left + r.width / 2, my = r.top + r.height / 2, dx = x - mx, dy = y - my;
+  return { x: dx * Math.cos(a) - dy * Math.sin(a) + w / 2, y: dx * Math.sin(a) + dy * Math.cos(a) + h / 2, w, h };
+}
+function minuteAt(t, x, y) { const p = local(t, x, y); const f = t.axis === "v" ? p.y / p.h : p.x / p.w; return t.from + f * (t.to - t.from); }
+function pxPerMin(t) { return (t.axis === "v" ? t.el.offsetHeight : t.el.offsetWidth) / (t.to - t.from); }
+
+let floater = null;
+function float(words, x, y) {
+  if (!floater) { floater = document.createElement("div"); floater.className = "floating"; document.body.appendChild(floater); }
+  floater.textContent = words; floater.style.left = (x + 14) + "px"; floater.style.top = (y + 10) + "px"; floater.style.display = "";
+}
+function unfloat() { if (floater) floater.style.display = "none"; }
+
+document.addEventListener("pointerdown", e => {
+  if (e.button !== 0) return;
+  const tray = e.target.closest("[data-tray]"), blk = e.target.closest(".blk"), mchip = e.target.closest(".mchip"), tr = e.target.closest(".track"), cell = e.target.closest(".cell"), open = e.target.closest("[data-open]");
+  if (open) return;
+  if (tray) S.drag = { kind: "tray", item: S.tray.find(i => i.id === tray.dataset.tray), x0: e.clientX, y0: e.clientY, moved: false };
+  else if (mchip) S.drag = { kind: "month", item: S.blocks.find(b => b.id === mchip.dataset.id), el: mchip, x0: e.clientX, y0: e.clientY, moved: false };
+  else if (blk && tr) {
+    const t = tr._track, b = S.blocks.find(x => x.id === blk.dataset.id), m = minuteAt(t, e.clientX, e.clientY), edge = 8 / pxPerMin(t);
+    const long = (b.end - b.start) * pxPerMin(t) >= 26;
+    const mode = long && m - b.start <= edge ? "top" : long && b.end - m <= edge ? "bottom" : "move";
+    S.drag = { kind: "block", item: b, mode, grab: m - b.start, origin: t, x0: e.clientX, y0: e.clientY, moved: false };
+  } else if (tr) { const t = tr._track; S.drag = { kind: "create", t, anchor: Math.min(snap(minuteAt(t, e.clientX, e.clientY) - 7), TO - SNAP), x0: e.clientX, y0: e.clientY, moved: false }; }
+  else if (cell) S.drag = { kind: "cell", dom: +cell.dataset.dom, x0: e.clientX, y0: e.clientY, moved: false };
+  if (S.drag) { e.preventDefault(); clearHint(); }
+});
+document.addEventListener("pointermove", e => {
+  const d = S.drag;
+  if (!d) { hover(e); return; }
+  if (!d.moved && Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < 4) return;
+  d.moved = true; d.x = e.clientX; d.y = e.clientY;
+  autoscroll(e.clientX, e.clientY);
+  if (d.kind === "block") moveBlock(d, e.clientX, e.clientY);
+  else if (d.kind === "tray") moveTray(d, e.clientX, e.clientY);
+  else if (d.kind === "create") moveCreate(d, e.clientX, e.clientY);
+  else if (d.kind === "month") moveMonth(d, e.clientX, e.clientY);
+});
+document.addEventListener("pointerup", e => {
+  const d = S.drag; S.drag = null; stopScroll();
+  if (!d) return;
+  if (!d.moved) { click(d, e); return; }
+  if (d.kind === "block" || d.kind === "tray") dropBlock(d);
+  else if (d.kind === "create") dropCreate(d);
+  else if (d.kind === "month") dropMonth(d);
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && S.drag) { S.drag = null; S.preview = null; unfloat(); document.querySelectorAll(".cell.over").forEach(c => c.classList.remove("over")); drawAll(); say("Let go without moving anything."); }
+  if (!S.drag && !e.target.closest("input")) {
+    const k = e.key.toLowerCase();
+    if (k === "d") setTab("day"); if (k === "w") setTab("week"); if (k === "m") setTab("month");
+    if (k === "a" || k === "b") { S.concept[S.design + ":" + S.tab] = k.toUpperCase(); render(); }
+    if ("123456".includes(k) && k) setDesign(Object.keys(CONCEPTS)[+k - 1]);
+  }
+});
+function moveBlock(d, x, y) {
+  const t = trackAt(x, y) || d.last;
+  if (!t) return;
+  d.last = t;
+  const b = d.item, m = minuteAt(t, x, y);
+  let dom = b.dom, start = b.start, end = b.end;
+  if (d.mode === "move") { [start, end] = clampSpan(snap(m - d.grab), b.end - b.start); dom = t.dom; }
+  else if (d.mode === "top") { start = Math.max(FROM, Math.min(snap(m), b.end - SNAP)); }
+  else { end = Math.min(TO, Math.max(snap(m), b.start + SNAP)); }
+  S.preview = { id: b.id, item: b, dom, start, end, verdict: judge(b, dom, start, end) };
+  retitle(); drawAll(); statusbar(S.preview.verdict.words);
+}
+function moveTray(d, x, y) {
+  const t = trackAt(x, y);
+  if (!t) { S.preview = null; drawAll(); float(d.item.title, x, y); return; }
+  unfloat();
+  const [start, end] = clampSpan(snap(minuteAt(t, x, y)), d.item.minutes);
+  const item = { id: "new-" + d.item.id, title: d.item.title, cat: "assignments", due: d.item.due, work: true };
+  S.preview = { id: item.id, item, dom: t.dom, start, end, verdict: judge(item, t.dom, start, end) };
+  drawAll(); statusbar(S.preview.verdict.words);
+}
+function dropBlock(d) {
+  const p = S.preview; S.preview = null; unfloat();
+  if (!p) { drawAll(); return; }
+  if (!p.verdict.ok) { drawAll(); say(p.verdict.words, true); return; }
+  if (d.kind === "tray") {
+    S.tray = S.tray.filter(i => i.id !== d.item.id);
+    S.blocks.push({ ...p.item, id: "b" + uid++, dom: p.dom, start: p.start, end: p.end, pinned: true });
+    say(`${p.item.title} is on ${FULL[(p.dom - WEEK0) % 7]} at ${hhmm(p.start)}, and stays there when you plan.`);
+    render(); return;
+  }
+  const b = d.item, was = b.dom;
+  b.dom = p.dom; b.start = p.start; b.end = p.end; if (b.work) b.pinned = true;
+  let extra = "";
+  if (b.series) { extra = ` Only ${FULL[(was - WEEK0) % 7]}'s ${b.title} moved; the other days keep their time.`; b.series = null; }
+  say(`${b.title}: ${p.verdict.words}.${extra}`);
+  render();
+}
+function moveCreate(d, x, y) {
+  const t = d.t, m = Math.max(FROM, Math.min(TO, snap(minuteAt(t, x, y))));
+  const [s, e] = m >= d.anchor ? [d.anchor, Math.max(m, d.anchor + SNAP)] : [m, d.anchor + SNAP];
+  const item = { id: "creating", title: "New activity", cat: "free" };
+  S.preview = { id: item.id, item, dom: t.dom, start: s, end: e, verdict: judge(item, t.dom, s, e) };
+  drawAll(); statusbar(S.preview.verdict.words);
+}
+function dropCreate(d) {
+  const p = S.preview; S.preview = null;
+  if (!p || !p.verdict.ok) { drawAll(); return; }
+  S.blocks.push({ id: "b" + uid++, title: "New activity", cat: "free", dom: p.dom, start: p.start, end: p.end, fixed: true });
+  say(`Added New activity, ${p.verdict.words}. In FlexWeek this opens Add with the time filled in.`);
+  drawAll();
+}
+function click(d, e) {
+  if (d.kind === "create") {
+    const t = d.t, taken = S.blocks.filter(b => b.dom === t.dom).sort((a, b) => a.start - b.start);
+    let s = d.anchor, end = Math.min(s + 60, TO);
+    for (const b of taken) if (b.start >= s && b.start < end) { end = b.start; break; }
+    if (taken.some(b => b.start <= s && s < b.end) || end - s < SNAP) return;
+    S.blocks.push({ id: "b" + uid++, title: "New activity", cat: "free", dom: t.dom, start: s, end, fixed: true });
+    say(`Added New activity, ${dayName(t.dom)} ${hhmm(s)}–${hhmm(end)}. A click makes up to an hour, as in Daily Scheduler.`); drawAll();
+  } else if (d.kind === "block") say(`${d.item.title}. Double-click opens it in FlexWeek.`);
+  else if (d.kind === "cell" || d.kind === "month") openDay(d.kind === "cell" ? d.dom : d.item.dom);
+}
+function openDay(dom) {
+  if (dom < WEEK0 || dom > WEEK0 + 6) { say("Only 21 to 27 September has blocks in this mock-up."); return; }
+  S.day = dom - WEEK0; setTab("day");
+}
+function moveMonth(d, x, y) {
+  document.querySelectorAll(".cell.over").forEach(c => c.classList.remove("over"));
+  d.el.classList.add("lifted");
+  const hit = document.elementFromPoint(x, y), cell = hit && hit.closest(".cell");
+  d.target = cell ? +cell.dataset.dom : null;
+  if (cell) cell.classList.add("over");
+  float(`${hhmm(d.item.start)} ${d.item.title}` + (d.target ? ` → ${d.target} Sep` : ""), x, y);
+}
+function dropMonth(d) {
+  unfloat(); document.querySelectorAll(".cell.over").forEach(c => c.classList.remove("over"));
+  if (!d.target || d.target === d.item.dom) { render(); return; }
+  const v = judge(d.item, d.target, d.item.start, d.item.end);
+  if (!v.ok) { say(v.words, true); render(); return; }
+  d.item.dom = d.target; if (d.item.series) d.item.series = null;
+  say(`${d.item.title} moved to ${d.target} September at ${hhmm(d.item.start)}.`); render();
+}
+// Scroll only after the pointer rests near an edge, so passing through the edge on the way in
+// never shifts the hours under it.
+let scrollState = null;
+function autoscroll(x, y) {
+  const hit = document.elementFromPoint(x, y); const sc = hit && hit.closest(".scroller");
+  if (!sc) { stopScroll(); return; }
+  const r = sc.getBoundingClientRect(), zone = 36;
+  const dy = y < r.top + zone ? -1 : y > r.bottom - zone ? 1 : 0, dx = x < r.left + zone ? -1 : x > r.right - zone ? 1 : 0;
+  const vertical = sc.scrollHeight > sc.clientHeight, dir = vertical ? dy : dx;
+  if (!dir) { stopScroll(); return; }
+  if (scrollState && scrollState.sc === sc && scrollState.dir === dir) return;
+  stopScroll();
+  scrollState = { sc, dir, vertical, since: performance.now(), raf: 0 };
+  const step = now => {
+    if (!scrollState) return;
+    if (now - scrollState.since > 300) {
+      if (scrollState.vertical) sc.scrollTop += 9 * dir; else sc.scrollLeft += 9 * dir;
+      const d = S.drag; if (d && d.x !== undefined) { if (d.kind === "block") moveBlock(d, d.x, d.y); else if (d.kind === "tray") moveTray(d, d.x, d.y); }
+    }
+    scrollState.raf = requestAnimationFrame(step);
+  };
+  scrollState.raf = requestAnimationFrame(step);
+}
+function stopScroll() { if (scrollState) cancelAnimationFrame(scrollState.raf); scrollState = null; }
+let hintEl = null;
+function clearHint() { if (hintEl) { hintEl.remove(); hintEl = null; } }
+function hover(e) {
+  const t = trackAt(e.clientX, e.clientY);
+  if (!t || e.target.closest(".blk")) { clearHint(); return; }
+  const m = minuteAt(t, e.clientX, e.clientY);
+  let lo = t.from, hi = t.to;
+  for (const b of S.blocks.filter(b => b.dom === t.dom)) { if (b.start <= m && m < b.end) { clearHint(); return; } if (b.end <= m) lo = Math.max(lo, b.end); else if (b.start > m) hi = Math.min(hi, b.start); }
+  if (hi - lo < SNAP) { clearHint(); return; }
+  if (!hintEl || hintEl.parentNode !== t.el) { clearHint(); hintEl = document.createElement("div"); hintEl.className = "hint"; t.el.appendChild(hintEl); }
+  const span = t.to - t.from;
+  const big = (hi - lo) * pxPerMin(t) > 24;
+  hintEl.textContent = big ? "+ drag to create, or click" : "";
+  if (t.axis === "v") hintEl.style.cssText = `left:2px;right:2px;top:${(lo - t.from) / span * 100}%;height:${(hi - lo) / span * 100}%`;
+  else hintEl.style.cssText = `top:2px;bottom:2px;left:${(lo - t.from) / span * 100}%;width:${(hi - lo) / span * 100}%`;
+}
+function statusbar(words) { const sb = document.querySelector(".statusbar"); if (sb) sb.textContent = words; }
+
+// ---------- Surfaces ----------
+const stage = document.getElementById("stage");
+function h(html) { stage.innerHTML = html; }
+function q(sel) { return stage.querySelector(sel); }
+function qa(sel) { return [...stage.querySelectorAll(sel)]; }
+function dom() { return WEEK0 + S.day; }
+function trayChips(cls = "chip") { return S.tray.map(i => `<div class="${cls}" data-tray="${i.id}">${i.title} · ${lengthWords(i.minutes)}</div>`).join(""); }
+function vDay(el, d, opts = {}) { const t = track(el, d, "v", opts.from ?? FROM, opts.to ?? TO); decorate(t, opts); return t; }
+function hDay(el, d, opts = {}) { const t = track(el, d, "h", opts.from ?? FROM, opts.to ?? TO); decorate(t, opts); return t; }
+
+function drawSummary() {
+  const box = q("#summary"); if (!box) return;
+  const tot = {};
+  for (const b of S.blocks.filter(b => b.dom === dom())) tot[b.cat] = (tot[b.cat] || 0) + b.end - b.start;
+  const names = { class: "School", exercise: "Sports", meals: "Meals", assignments: "Homework", extra: "Activities", free: "Other" };
+  box.innerHTML = Object.entries(tot).map(([c, m]) => `<div class="sumrow"><span>${names[c] || c}</span><b>${lengthWords(m)}</b></div>`).join("") || "<div class='hintsmall'>Nothing planned.</div>";
+}
+const SURFACES = {
+  "classic:day:A"() {
+    h(`<div class="cl-day"><div class="main"><div class="scroller" id="sc"><div style="display:grid;grid-template-columns:56px 1fr;height:${(TO - FROM) / 60 * 96}px"><div id="g"></div><div id="t"></div></div></div></div>
+       <div class="cl-side"><div class="kicker">Not placed yet</div>${trayChips()}<div class="hintsmall">Drag one onto the day to give it that time, or drag on empty time to add something.</div>
+       <div class="kicker" style="margin-top:8px">Summary</div><div id="summary"></div></div></div>`);
+    gutter(q("#g"), FROM, TO); vDay(q("#t"), dom());
+    q("#sc").scrollTop = (NOW.min - 90 - FROM) / 60 * 96;
+  },
+  "classic:week:A"() {
+    h(`<div class="cl-week"><div class="head"><div></div>${DAYN.map((n, i) => `<button data-open="${WEEK0 + i}" class="${WEEK0 + i === NOW.dom ? "today" : ""}">${n} ${WEEK0 + i}</button>`).join("")}</div>
+       <div class="body"><div id="g"></div>${DAYN.map((n, i) => `<div id="d${i}"></div>`).join("")}</div></div>`);
+    gutter(q("#g"), FROM, TO, 120); DAYN.forEach((n, i) => vDay(q("#d" + i), WEEK0 + i));
+  },
+  "timeline:day:A"() {
+    h(`<div class="tl-day"><div style="display:flex;flex-direction:column;min-height:0"><h1>${FULL[S.day]}</h1><div style="color:var(--muted);font-size:13px">${dom()} September · 1 h planned · 0 done</div>
+       <div class="tl-pills">${DAYN.map((n, i) => `<button data-open="${WEEK0 + i}" class="${i === S.day ? "on" : ""}">${n} ${WEEK0 + i}</button>`).join("")}</div>
+       <div class="scroller" id="sc" style="flex:1"><div style="display:grid;grid-template-columns:56px 1fr;height:${(TO - FROM) / 60 * 80}px"><div id="g"></div><div id="t"></div></div></div></div>
+       <div class="tl-margin"><div class="kicker">In the margin</div><div style="font-size:12px;color:var(--muted)">No time yet. Drag onto the page.</div>${trayChips()}</div></div>`);
+    gutter(q("#g"), FROM, TO); vDay(q("#t"), dom()); q("#sc").scrollTop = (NOW.min - 120 - FROM) / 60 * 80;
+  },
+  "timeline:day:B"() {
+    const list = S.blocks.filter(b => b.dom === dom()).sort((a, b) => a.start - b.start);
+    let cards = "", nowDone = false;
+    for (const b of list) {
+      if (!nowDone && dom() === NOW.dom && b.start > NOW.min) { cards += `<div class="tl-now">NOW ${hhmm(NOW.min)}</div>`; nowDone = true; }
+      cards += `<div class="tl-card" style="--mark:${(CATS[b.cat] || CATS.free)[1]}"><span class="tm">${hhmm(b.start)}</span>${b.title} <span style="color:var(--muted)">· ${lengthWords(b.end - b.start)}</span></div>`;
+    }
+    h(`<div class="tl-ledger"><div class="page left"><h1 style="font-size:36px">${FULL[S.day]}</h1><div class="tl-pills">${DAYN.map((n, i) => `<button data-open="${WEEK0 + i}" class="${i === S.day ? "on" : ""}">${n}</button>`).join("")}</div>${cards}
+       <div class="kicker" style="margin-top:14px">Not placed yet</div>${trayChips()}</div>
+       <div class="page"><div class="kicker">The rail</div><div class="scroller" id="sc" style="height:calc(100% - 20px)"><div style="display:grid;grid-template-columns:52px 1fr;height:${(TO - FROM) / 60 * 64}px"><div id="g"></div><div id="t"></div></div></div></div></div>`);
+    qa(".tl-ledger .page.left .chip").forEach(c => { c.style.cssText = "background:#fff;border:1px dashed #1d1b16;border-left:4px solid #ef4444;margin:4px 0;display:flex"; });
+    gutter(q("#g"), FROM, TO); vDay(q("#t"), dom()); q("#sc").scrollTop = (NOW.min - 120 - FROM) / 60 * 64;
+  },
+  "timeline:week:A"() {
+    h(`<div class="tl-week"><div style="display:flex;align-items:baseline;gap:14px"><h1 style="font-size:34px">This week</h1><span style="color:var(--muted);font-size:13px">06:00 on the left, 23:00 on the right. Drag along a line, or onto another day's line.</span></div>
+       <div style="display:grid;grid-template-columns:170px 1fr;font-size:11px;color:var(--muted)"><div></div><div id="ruler" style="position:relative;height:16px"></div></div>
+       <div class="scroller" style="flex:1">${DAYN.map((n, i) => `<div class="tl-section ${WEEK0 + i === NOW.dom ? "today" : ""}"><div class="dname" data-open="${WEEK0 + i}">${FULL[i]}<small>${WEEK0 + i} September</small></div><div id="d${i}"></div></div>`).join("")}</div>
+       <div style="display:flex;gap:8px;align-items:center;padding-top:6px"><span class="kicker">In the margin</span>${trayChips()}</div></div>`);
+    qa(".tl-week > div:last-child .chip").forEach(c => { c.style.cssText = "background:#fff;border:1px dashed #1d1b16;border-left:4px solid #ef4444"; });
+    for (let m = FROM; m <= TO; m += 120) { const s = document.createElement("span"); s.textContent = hhmm(m); s.style.cssText = `position:absolute;left:${(m - FROM) / (TO - FROM) * 100}%;transform:translateX(-50%)`; q("#ruler").appendChild(s); }
+    DAYN.forEach((n, i) => hDay(q("#d" + i), WEEK0 + i));
+  },
+  "timeline:week:B"() {
+    h(`<div class="tl-day" style="grid-template-columns:1fr 190px"><div style="display:flex;flex-direction:column;min-height:0"><h1 style="font-size:34px">Timetable</h1>
+       <div style="display:grid;grid-template-columns:52px repeat(7,1fr);font-weight:800;font-size:13px;border-bottom:2px solid #1d1b16;padding-bottom:4px"><div></div>${DAYN.map((n, i) => `<div data-open="${WEEK0 + i}" style="cursor:pointer;${WEEK0 + i === NOW.dom ? "color:var(--danger)" : ""}">${n} ${WEEK0 + i}</div>`).join("")}</div>
+       <div style="flex:1;display:grid;grid-template-columns:52px repeat(7,1fr);min-height:0;background:#fff"><div id="g"></div>${DAYN.map((n, i) => `<div id="d${i}" style="border-left:1px solid var(--line)"></div>`).join("")}</div></div>
+       <div class="tl-margin"><div class="kicker">In the margin</div>${trayChips()}</div></div>`);
+    gutter(q("#g"), FROM, TO, 120); DAYN.forEach((n, i) => vDay(q("#d" + i), WEEK0 + i));
+  },
+  "mission:day:A"() {
+    h(`<div class="mc" style="grid-template-columns:1fr"><div style="display:flex;flex-direction:column;min-height:0">
+       <div class="hudline"><span>FLEXWEEK / DAY / <b>${FULL[S.day].toUpperCase()} ${dom()}</b></span><span>LOCAL <b>${hhmm(NOW.min)}</b></span><span>DRAG A BAR · PULL AN END · DRAG EMPTY TIME</span></div>
+       <div class="scope"><div class="ruler" id="ruler"></div><div id="t"></div></div>
+       <div class="panel" style="margin-top:12px"><h4>CARGO BAY · NOT PLACED</h4><div style="display:flex;gap:8px;flex-wrap:wrap">${trayChips()}</div></div></div></div>`);
+    for (let m = FROM; m <= TO; m += 60) { const s = document.createElement("span"); s.textContent = hhmm(m); s.style.left = ((m - FROM) / (TO - FROM) * 100) + "%"; q("#ruler").appendChild(s); }
+    hDay(q("#t"), dom());
+  },
+  "mission:day:B"() {
+    h(`<div class="mc"><div style="display:flex;flex-direction:column;min-height:0"><div class="hudline"><span>ALTITUDE / <b>${FULL[S.day].toUpperCase()} ${dom()}</b></span><span>LOCAL <b>${hhmm(NOW.min)}</b></span></div>
+       <div class="scroller" id="sc" style="flex:1;border:1px solid var(--line)"><div class="tape" style="height:${(TO - FROM) / 60 * 84}px"><div id="g"></div><div id="t"></div></div></div></div>
+       <div class="panel"><h4>RADAR · NOT PLACED</h4>${trayChips()}<h4 style="margin-top:14px">DEADLINES</h4><div style="font-size:12px;color:var(--muted)">SCIENCE POSTER · FRI 23:59<br>MATH WORKSHEET · SUN 23:59</div></div></div>`);
+    gutter(q("#g"), FROM, TO); vDay(q("#t"), dom()); q("#sc").scrollTop = (NOW.min - 120 - FROM) / 60 * 84;
+  },
+  "mission:week:A"() {
+    h(`<div class="mc"><div style="display:flex;flex-direction:column;min-height:0"><div class="hudline"><span>FLEXWEEK / WEEK 39</span><span>LOCAL <b>${hhmm(NOW.min)}</b></span></div>
+       <div class="lanes"><div></div><div class="ruler" id="ruler"></div>${DAYN.map((n, i) => `<div class="lane-name ${WEEK0 + i === NOW.dom ? "today" : ""}" data-open="${WEEK0 + i}">${n.toUpperCase()} ${WEEK0 + i}</div><div id="d${i}"></div>`).join("")}</div></div>
+       <div class="panel"><h4>PENDING · NOT PLACED</h4>${trayChips()}<h4 style="margin-top:14px">DEADLINE RADAR</h4><div style="font-size:12px;color:var(--muted)">SCIENCE POSTER · FRI 23:59<br>MATH WORKSHEET · SUN 23:59<br>SPANISH VOCAB · SAT 23:59</div></div></div>`);
+    for (let m = FROM; m <= TO; m += 120) { const s = document.createElement("span"); s.textContent = hhmm(m); s.style.left = ((m - FROM) / (TO - FROM) * 100) + "%"; q("#ruler").appendChild(s); }
+    DAYN.forEach((n, i) => hDay(q("#d" + i), WEEK0 + i));
+  },
+  "mission:week:B"() {
+    h(`<div class="mc"><div style="display:flex;flex-direction:column;min-height:0"><div class="hudline"><span>COLUMN WATCH / WEEK 39</span><span>LOCAL <b>${hhmm(NOW.min)}</b></span></div>
+       <div class="cols" style="font-size:11px;color:var(--muted)"><div></div>${DAYN.map((n, i) => `<div data-open="${WEEK0 + i}" style="text-align:center;cursor:pointer;${WEEK0 + i === NOW.dom ? "color:var(--accent)" : ""}">${n.toUpperCase()} ${WEEK0 + i}</div>`).join("")}</div>
+       <div class="cols" style="flex:1;min-height:0"><div id="g"></div>${DAYN.map((n, i) => `<div id="d${i}"></div>`).join("")}</div></div>
+       <div class="panel"><h4>RADAR · NOT PLACED</h4>${trayChips()}</div></div>`);
+    gutter(q("#g"), FROM, TO, 120); DAYN.forEach((n, i) => vDay(q("#d" + i), WEEK0 + i));
+  },
+  "bento:day:A"() {
+    h(`<div class="bn" style="grid-template-columns:2fr 1fr;grid-template-rows:1fr 1fr"><div class="tile hero" style="grid-row:span 2"><div class="kicker">${FULL[S.day]} ${dom()} · your day</div>
+       <div class="scroller" id="sc" style="flex:1;margin-top:8px"><div style="display:grid;grid-template-columns:48px 1fr;height:${(TO - FROM) / 60 * 80}px"><div id="g"></div><div id="t"></div></div></div></div>
+       <div class="tile"><div class="kicker">Not placed yet</div><div style="font-size:12px;color:var(--muted);margin:4px 0">Drag one onto your day.</div>${trayChips()}</div>
+       <div class="tile"><div class="kicker">Tonight</div><h2>History essay</h2><div style="color:var(--muted)">19:00 · 1 h</div><div class="kicker" style="margin-top:12px">Deadlines</div><div style="font-size:13px">Science poster · Fri 23:59<br>Math worksheet · Sun 23:59</div></div></div>`);
+    gutter(q("#g"), FROM, TO); vDay(q("#t"), dom()); q("#sc").scrollTop = (NOW.min - 120 - FROM) / 60 * 80;
+  },
+  "bento:day:B"() {
+    const parts = [["Morning", FROM, 12 * 60], ["Afternoon", 12 * 60, 17 * 60], ["Evening", 17 * 60, TO]];
+    h(`<div class="bn" style="grid-template-columns:1fr 1fr 1fr 0.8fr">${parts.map((p, i) => `<div class="tile ${i === 1 ? "hero" : ""}"><div class="kicker">${p[0]} · ${hhmm(p[1])}–${hhmm(p[2])}</div><div style="flex:1;display:grid;grid-template-columns:44px 1fr;margin-top:8px"><div id="g${i}"></div><div id="p${i}"></div></div></div>`).join("")}
+       <div class="tile"><div class="kicker">Not placed yet</div><div style="font-size:12px;color:var(--muted);margin:4px 0">Drag into any part of the day.</div>${trayChips()}</div></div>`);
+    parts.forEach((p, i) => { gutter(q("#g" + i), p[1], p[2]); vDay(q("#p" + i), dom(), { from: p[1], to: p[2] }); });
+  },
+  "bento:week:A"() {
+    h(`<div class="bn" style="grid-template-columns:3fr 1fr;grid-template-rows:1fr auto"><div class="tile hero" style="grid-row:span 2"><div class="kicker">This week · drag across days</div>
+       <div class="cols7" style="grid-template-rows:20px 1fr;margin-top:6px"><div></div>${DAYN.map((n, i) => `<div class="dhead" data-open="${WEEK0 + i}">${n} ${WEEK0 + i}</div>`).join("")}<div id="g"></div>${DAYN.map((n, i) => `<div id="d${i}"></div>`).join("")}</div></div>
+       <div class="tile"><div class="kicker">Not placed yet</div>${trayChips()}</div><div class="tile"><div class="kicker">Deadlines</div><div style="font-size:13px">Science poster · Fri 23:59<br>Spanish vocab · Sat 23:59<br>Math worksheet · Sun 23:59</div></div></div>`);
+    gutter(q("#g"), FROM, TO, 120); DAYN.forEach((n, i) => vDay(q("#d" + i), WEEK0 + i));
+  },
+  "bento:week:B"() {
+    h(`<div class="bn" style="grid-template-columns:repeat(4,1fr);grid-template-rows:1fr 1fr">${DAYN.map((n, i) => `<div class="tile ${WEEK0 + i === NOW.dom ? "hero" : ""}"><div class="kicker" data-open="${WEEK0 + i}" style="cursor:pointer">${FULL[i]} ${WEEK0 + i}</div><div style="flex:1;display:grid;grid-template-columns:38px 1fr;margin-top:6px"><div id="g${i}"></div><div id="d${i}"></div></div></div>`).join("")}
+       <div class="tile"><div class="kicker">Not placed yet</div><div style="font-size:12px;color:var(--muted);margin:4px 0">Drag onto any day's tile.</div>${trayChips()}</div></div>`);
+    DAYN.forEach((n, i) => { gutter(q("#g" + i), FROM, TO, 240); vDay(q("#d" + i), WEEK0 + i); });
+  },
+  "retro:day:A"() {
+    h(`<div class="win" style="left:14px;top:6px;width:800px;height:640px"><div class="bar">Schedule.exe — ${FULL[S.day]} ${dom()}<i>x</i></div><div class="menu">File  Edit  View  Help</div>
+       <div class="sunken scroller" id="sc"><div style="display:grid;grid-template-columns:54px 1fr;height:${(TO - FROM) / 60 * 72}px"><div id="g"></div><div id="t"></div></div></div><div class="statusbar">Drag a block, pull its top or bottom edge, or drag empty time.</div></div>
+       <div class="win" style="left:840px;top:40px;width:400px;height:220px"><div class="bar">deadlines.txt — no time yet<i>x</i></div><div class="sunken" style="padding:6px;display:flex;flex-direction:column;gap:4px">${trayChips()}<div style="font-size:11px;color:#555;margin-top:6px">Drag a line onto Schedule.exe.</div></div></div>
+       <div class="taskbar"><span class="start">Start</span><span class="start">Schedule.exe</span><span class="start">deadlines.txt</span><span class="tray">${hhmm(NOW.min)}</span></div>`);
+    gutter(q("#g"), FROM, TO); vDay(q("#t"), dom()); q("#sc").scrollTop = (NOW.min - 120 - FROM) / 60 * 72;
+  },
+  "retro:day:B"() {
+    h(`<div style="position:absolute;inset:0 0 34px 0;display:grid;grid-template-columns:60px 1fr 60px"><div id="g"></div><div id="t" class="desk-icons"></div><div></div></div>
+       <div class="win" style="right:16px;top:8px;width:220px;height:74px"><div class="bar">${FULL[S.day]} ${dom()}<i>x</i></div><div class="menu">The desktop is today. Hours are the wallpaper lines.</div></div>
+       <div class="taskbar"><span class="start">Start</span><span class="tray">No time yet: ${trayChips()} <b>${hhmm(NOW.min)}</b></span></div>`);
+    qa(".taskbar .tray .chip").forEach(c => { c.style.cssText = "background:#fff;border:1px solid #808080;padding:1px 6px;font-size:11px"; });
+    gutter(q("#g"), FROM, TO); qa("#g .hourlabel").forEach(l => l.style.color = "#e0ffff");
+    const t = track(q("#t"), dom(), "v"); rules(t); nowMark(t); qa("#t .rule").forEach(r => r.style.borderColor = "#ffffff55");
+  },
+  "retro:week:A"() {
+    h(`<div class="win" style="left:14px;top:6px;width:900px;height:640px"><div class="bar">Week.exe — 21 to 27 September<i>x</i></div><div class="menu">File  Edit  View  Help</div>
+       <div style="display:grid;grid-template-columns:54px repeat(7,1fr);font-size:12px;font-weight:700;margin:0 3px"><div></div>${DAYN.map((n, i) => `<div data-open="${WEEK0 + i}" style="border:1px outset #fff;text-align:center;cursor:pointer">${n} ${WEEK0 + i}</div>`).join("")}</div>
+       <div class="sunken scroller" id="sc"><div style="display:grid;grid-template-columns:54px repeat(7,1fr);height:${(TO - FROM) / 60 * 44}px"><div id="g"></div>${DAYN.map((n, i) => `<div id="d${i}" style="border-left:1px solid #c0c0c0"></div>`).join("")}</div></div><div class="statusbar">Ready.</div></div>
+       <div class="win" style="left:940px;top:60px;width:310px;height:200px"><div class="bar">deadlines.txt<i>x</i></div><div class="sunken" style="padding:6px;display:flex;flex-direction:column;gap:4px">${trayChips()}</div></div>
+       <div class="taskbar"><span class="start">Start</span><span class="start">Week.exe</span><span class="start">deadlines.txt</span><span class="tray">${hhmm(NOW.min)}</span></div>`);
+    gutter(q("#g"), FROM, TO); DAYN.forEach((n, i) => vDay(q("#d" + i), WEEK0 + i)); q("#sc").scrollTop = (7 * 60 - FROM) / 60 * 44;
+  },
+  "retro:week:B"() {
+    const spots = [[10, 6], [322, 6], [634, 6], [946, 6], [10, 336], [322, 336], [634, 336]];
+    h(DAYN.map((n, i) => `<div class="win" style="left:${spots[i][0]}px;top:${spots[i][1]}px;width:300px;height:318px"><div class="bar" data-open="${WEEK0 + i}" style="cursor:pointer">${FULL[i]} ${WEEK0 + i}${WEEK0 + i === NOW.dom ? " (today)" : ""}<i>x</i></div><div class="sunken" style="display:grid;grid-template-columns:40px 1fr"><div id="g${i}"></div><div id="d${i}"></div></div></div>`).join("")
+      + `<div class="win" style="left:946px;top:336px;width:300px;height:180px"><div class="bar">deadlines.txt<i>x</i></div><div class="sunken" style="padding:6px;display:flex;flex-direction:column;gap:4px">${trayChips()}</div></div>
+       <div class="taskbar"><span class="start">Start</span>${DAYN.map(n => `<span class="start">${n}</span>`).join("")}<span class="tray">${hhmm(NOW.min)}</span></div>`);
+    DAYN.forEach((n, i) => { gutter(q("#g" + i), FROM, TO, 240); vDay(q("#d" + i), WEEK0 + i); });
+  },
+  "clay:day:A"() {
+    h(`<div class="cy"><h2>${FULL[S.day]} ${dom()} · one day, up close</h2><div style="flex:1;display:grid;grid-template-columns:1fr 260px;gap:18px;min-height:0">
+       <div class="card" style="display:flex;flex-direction:column;min-height:0"><div class="scroller" id="sc" style="flex:1"><div style="display:grid;grid-template-columns:52px 1fr;height:${(TO - FROM) / 60 * 80}px"><div id="g"></div><div id="t"></div></div></div></div>
+       <div class="dish"><div class="kicker" style="color:var(--text)">In the dish · no time yet</div>${trayChips()}<div style="font-size:12px;color:var(--muted)">Press one into the day.</div></div></div></div>`);
+    gutter(q("#g"), FROM, TO); vDay(q("#t"), dom()); q("#sc").scrollTop = (NOW.min - 120 - FROM) / 60 * 80;
+  },
+  "clay:day:B"() {
+    h(`<div class="cy"><h2>${FULL[S.day]} ${dom()} · on the felt</h2><div class="felt" style="flex:1;position:relative;padding:14px 260px 14px 14px;min-height:0"><div class="kicker" style="position:absolute;right:30px;top:14px;color:#2d5a3a">The deck · no time yet</div>
+       <div style="display:grid;grid-template-columns:52px 1fr;height:100%"><div id="g"></div><div id="t"></div></div>
+       <div class="deckcorner">${S.tray.map((i, k) => `<div class="chip" data-tray="${i.id}" style="left:${k * 14}px;top:${k * 40}px;transform:rotate(${(k - 1) * 6}deg)">${i.title} · ${lengthWords(i.minutes)}</div>`).join("")}</div></div></div>`);
+    gutter(q("#g"), FROM, TO); vDay(q("#t"), dom());
+  },
+  "clay:week:A"() {
+    const angles = [-15, -10, -5, 0, 5, 10, 15], lefts = [30, 190, 350, 520, 700, 860, 1020];
+    h(`<div class="cy"><div style="display:flex;gap:10px;align-items:center"><h2 style="margin:0">Your week, fanned</h2><span class="kicker" style="color:var(--text)">No time yet:</span>${trayChips()}</div>
+       <div class="fan">${DAYN.map((n, i) => `<div class="card ${WEEK0 + i === NOW.dom ? "today" : ""}" id="c${i}" style="left:${lefts[i]}px;transform:rotate(${angles[i]}deg);background:${["#fdbcb4", "#add8e6", "#c9f7d0", "#ffffff", "#fde68a", "#e6e6fa", "#fbcfe8"][i]}"><div class="dn" data-open="${WEEK0 + i}">${n} ${WEEK0 + i}</div><div id="d${i}" style="height:100%"></div></div>`).join("")}</div></div>`);
+    DAYN.forEach((n, i) => { const t = track(q("#d" + i), WEEK0 + i, "v", FROM, TO, angles[i]); rules(t); nowMark(t); });
+  },
+  "clay:week:B"() {
+    h(`<div class="cy"><h2>Your week, laid flat</h2><div class="row7"><div id="g" style="margin-top:26px"></div>${DAYN.map((n, i) => `<div class="card" style="background:${["#fdbcb4", "#add8e6", "#c9f7d0", "#ffffff", "#fde68a", "#e6e6fa", "#fbcfe8"][i]}"><div class="dn" data-open="${WEEK0 + i}">${n} ${WEEK0 + i}</div><div id="d${i}" style="height:100%"></div></div>`).join("")}</div>
+       <div style="display:flex;gap:10px;align-items:center;margin-top:10px"><span class="kicker" style="color:var(--text)">The deck, no time yet:</span>${trayChips()}</div></div>`);
+    gutter(q("#g"), FROM, TO, 120); DAYN.forEach((n, i) => vDay(q("#d" + i), WEEK0 + i));
+  },
+};
+function monthSurface() {
+  const first = new Date(2026, 8, 1), lead = (first.getDay() + 6) % 7;
+  let cells = DAYN.map(n => `<div class="dn">${n}</div>`).join("");
+  for (let i = 0; i < 42; i++) {
+    const d = i - lead + 1, inMonth = d >= 1 && d <= 30, domv = inMonth ? d : null;
+    const list = inMonth ? S.blocks.filter(b => b.dom === d).sort((a, b) => a.start - b.start) : [];
+    const shown = list.slice(0, 4).map(b => { const [fill, mark, dark] = CATS[b.cat] || CATS.free; const dk = S.design === "mission"; return `<span class="mchip" data-id="${b.id}" style="background:${dk ? dark : fill};${dk ? "color:#e6eefb;border-left:3px solid " + mark : "border-left:3px solid " + mark}">${hhmm(b.start)} ${b.title}</span>`; }).join("");
+    const num = inMonth ? d : d < 1 ? 31 + d : d - 30;
+    cells += `<div class="cell ${inMonth ? "" : "out"} ${d === NOW.dom ? "today" : ""}" ${inMonth ? `data-dom="${d}"` : ""}><span class="n">${num}</span>${shown}${list.length > 4 ? `<div class="more">+${list.length - 4} more</div>` : ""}</div>`;
+  }
+  h(`<div class="month">${cells}</div>`);
+  const style = { retro: "border:2px outset #efefef;border-radius:0", clay: "border-radius:16px;box-shadow:inset -3px -3px 8px #3a2f4d14", bento: "border-radius:14px", mission: "border:1px solid #22304a", timeline: "border:1px solid #d9d3c4", classic: "" }[S.design];
+  qa(".cell").forEach(c => c.style.cssText += style);
+}
+
+// ---------- Frame ----------
+function concept() { const k = S.design + ":" + S.tab; const have = CONCEPTS[S.design][S.tab]; if (!have) return null; if (!S.concept[k] || !have[S.concept[k]]) S.concept[k] = "A"; return S.concept[k]; }
+function retitle() {
+  const t = document.getElementById("title");
+  t.textContent = S.tab === "day" ? `${FULL[S.day]} ${WEEK0 + S.day} September` : S.tab === "week" ? "21 – 27 September" : "September 2026";
+}
+let lastKey = "", kept = {};
+function render() {
+  const key = `${S.design}:${S.tab}:${S.day}:${S.concept[S.design + ":" + S.tab] || "A"}`;
+  kept = {}; if (key === lastKey) document.querySelectorAll("#stage .scroller").forEach((sc, i) => kept[i] = [sc.scrollTop, sc.scrollLeft]);
+  TRACKS = []; clearHint();
+  document.getElementById("frame").dataset.design = S.design;
+  retitle();
+  document.getElementById("tabs").innerHTML = ["day", "week", "month"].map(t => `<button data-tab="${t}" class="${S.tab === t ? "on" : ""}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("");
+  let about;
+  if (S.tab === "month") { monthSurface(); about = MONTH_ABOUT; }
+  else { const c = concept(); SURFACES[`${S.design}:${S.tab}:${c}`](); about = CONCEPTS[S.design][S.tab][c]; }
+  drawAll();
+  if (key === lastKey) document.querySelectorAll("#stage .scroller").forEach((sc, i) => { if (kept[i]) { sc.scrollTop = kept[i][0]; sc.scrollLeft = kept[i][1]; } });
+  lastKey = key;
+  const c = S.tab === "month" ? null : concept();
+  const variants = S.tab === "month" ? [] : Object.keys(CONCEPTS[S.design][S.tab]);
+  document.getElementById("switcher").innerHTML =
+    `<div class="group"><span class="label">Design</span>${Object.keys(CONCEPTS).map((d, i) => `<button data-design="${d}" class="${S.design === d ? "on" : ""}">${i + 1} ${{ classic: "Today's app", timeline: "Timeline", mission: "Mission control", bento: "Bento", retro: "Retro desktop", clay: "Clay deck" }[d]}</button>`).join("")}</div>
+     <div class="group"><span class="label">Tab</span>${["day", "week", "month"].map(t => `<button data-tab="${t}" class="${S.tab === t ? "on" : ""}">${t[0].toUpperCase()}${t.slice(1)}</button>`).join("")}</div>
+     ${variants.length > 1 ? `<div class="group"><span class="label">Concept</span>${variants.map(v => `<button data-concept="${v}" class="${c === v ? "on" : ""}">${v} · ${CONCEPTS[S.design][S.tab][v][0]}</button>`).join("")}</div>` : ""}
+     <div class="group"><button id="reset">Reset the week</button></div>`;
+  document.getElementById("about").innerHTML = `<b>${about[0]}.</b> ${about[1]}` + (about[2] ? ` <span class="risk">Watch: ${about[2]}</span>` : "") + `<br><span style="color:#8a93ad">Try: drag a block, pull its top or bottom edge, drag across empty time, drag homework in from the tray. Keys: 1-6 design, D W M tab, A B concept, Esc lets go.</span>`;
+}
+function setTab(t) { S.tab = t; render(); }
+function setDesign(d) { if (d) { S.design = d; render(); } }
+document.addEventListener("click", e => {
+  const d = e.target.closest("[data-design]"), t = e.target.closest("[data-tab]"), c = e.target.closest("[data-concept]"), o = e.target.closest("[data-open]");
+  if (e.target.id === "reset") { S.blocks = seed(); S.tray = [{ id: "t1", title: "Math worksheet", minutes: 60, due: 27 * 1440 + 23 * 60 + 59 }, { id: "t2", title: "Science poster", minutes: 60, due: 25 * 1440 + 23 * 60 + 59 }, { id: "t3", title: "Spanish vocab", minutes: 30, due: 26 * 1440 + 23 * 60 + 59 }]; say(""); render(); return; }
+  if (d && d.id !== "frame") setDesign(d.dataset.design);
+  else if (t) setTab(t.dataset.tab);
+  else if (c) { S.concept[S.design + ":" + S.tab] = c.dataset.concept; render(); }
+  else if (o) openDay(+o.dataset.open);
+});
+document.addEventListener("dblclick", e => { const b = e.target.closest(".blk"); if (b) say(`${S.blocks.find(x => x.id === b.dataset.id)?.title}: in FlexWeek a double-click opens its editor.`); });
+const params = new URLSearchParams(location.search);
+if (params.get("design")) S.design = params.get("design");
+if (params.get("tab")) S.tab = params.get("tab");
+if (params.get("concept")) S.concept[S.design + ":" + S.tab] = params.get("concept");
+render();
+window.__mock = { S, render, TRACKS: () => TRACKS };
+</script>
+</body>
+</html>

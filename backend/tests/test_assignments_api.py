@@ -150,6 +150,16 @@ def test_list_orders_open_by_due_and_include_completed_adds_finished_ones(alice:
     assert [item["id"] for item in with_done.json()["assignments"]] == ["done", "sooner", "later"]
 
 
+def test_an_untimed_due_sorts_after_a_timed_due_the_same_day(alice: TestClient) -> None:
+    assert put_assignment(alice, assignment("allday", title="All day", due="2026-09-15")).status_code == 200
+    assert (
+        put_assignment(alice, assignment("morning", title="Morning", due="2026-09-15T09:00")).status_code
+        == 200
+    )
+    listed = alice.get(f"/api/assignments?week_start={WEEK_ONE}")
+    assert [item["id"] for item in listed.json()["assignments"]] == ["morning", "allday"]
+
+
 def test_planned_and_unplanned_minutes_count_open_sessions_in_this_week_and_later(alice: TestClient) -> None:
     assert put_assignment(alice, assignment(estimate_min=180)).status_code == 200
     first = save_week(alice, WEEK_ONE, [session("w1", "hw-essay", duration_min=60, days=[6])], 0)

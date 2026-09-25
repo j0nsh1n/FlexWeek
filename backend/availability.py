@@ -5,9 +5,16 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from backend.assignments import unplanned_minutes
-from backend.models import GridWindow, ProtectedWindow, StudyWindow, parse_naive_stamp
-from backend.slots import DAY_END_MIN, DAY_START_MIN, SLOT_MIN, SLOTS_PER_DAY, occupancy_mask
+from backend.models import GridWindow, ProtectedWindow, StudyWindow, WorkWindow, parse_due
+from backend.slots import DAY_END_MIN, SLOT_MIN, clock_to_minutes, occupancy_between
 from backend.weeks import monday_of
+
+DEFAULT_WORK_WINDOWS = [
+    WorkWindow(days=[0, 1, 2, 3, 4, 5, 6], start="00:00", end="24:00"),
+]
+LEGACY_WORK_WINDOWS = [
+    WorkWindow(days=[0, 1, 2, 3, 4, 5, 6], start="06:00", end="23:00"),
+]
 
 LATE_COPY = "Moved after you ran late so the rest of the day still fits."
 CLUSTER_COPY = (
@@ -17,17 +24,7 @@ CLUSTER_COPY = (
 
 
 def add_occupancy(occ: list[int], day: int, start_min: int, end_min: int) -> None:
-    if start_min < DAY_START_MIN:
-        start_min = DAY_START_MIN
-    if end_min > DAY_END_MIN:
-        end_min = DAY_END_MIN
-    if start_min >= end_min or start_min >= DAY_END_MIN:
-        return
-    offset = start_min - DAY_START_MIN
-    slot = offset // SLOT_MIN
-    n = min(max(0, (end_min - DAY_START_MIN) // SLOT_MIN - slot), SLOTS_PER_DAY - slot)
-    if n:
-        occ[day] |= occupancy_mask(slot, n)
+    occ[day] |= occupancy_between(start_min, end_min)
 
 
 def occupancy_from_windows(
@@ -79,6 +76,51 @@ def study_rank(
     return best
 
 
+def resolve_work_windows(windows: list[WorkWindow] | None) -> tuple[list[WorkWindow], bool]:
+    if windows:
+        return list(windows), False
+    return [window.model_copy() for window in DEFAULT_WORK_WINDOWS], True
+
+
+def _merged_work_spans(
+    windows: list[WorkWindow], course: str | None, day: int
+) -> list[tuple[int, int]]:
+    """One day's applicable windows, merged where they touch or overlap."""
+    wanted = course.strip().casefold() if course and course.strip() else None
+    spans: list[tuple[int, int]] = []
+    for window in windows:
+        if day not in window.days:
+            continue
+        if window.subject is not None and (wanted is None or window.subject.casefold() != wanted):
+            continue
+        begin = clock_to_minutes(window.start)
+        finish = clock_to_minutes(window.end)
+        if begin < finish:
+            spans.append((begin, finish))
+    if not spans:
+        return []
+    spans.sort()
+    merged = [spans[0]]
+    for begin, finish in spans[1:]:
+        last_begin, last_finish = merged[-1]
+        if begin <= last_finish:
+            merged[-1] = (last_begin, max(last_finish, finish))
+        else:
+            merged.append((begin, finish))
+    return merged
+
+
+def session_inside_work_windows(
+    windows: list[WorkWindow], course: str | None, day: int, start_min: int, duration_min: int
+) -> bool:
+    """True when the whole session sits inside the day's merged applicable windows."""
+    end_min = start_min + duration_min
+    return any(
+        begin <= start_min and end_min <= finish
+        for begin, finish in _merged_work_spans(windows, course, day)
+    )
+
+
 def merge_occupancy(base: list[int], extra: list[int]) -> list[int]:
     return [left | right for left, right in zip(base, extra, strict=True)]
 
@@ -97,7 +139,7 @@ def spread_sessions(
     # not zero, and comes back in remaining_min instead of being dropped.
     remainder = remaining % SLOT_MIN
     grid_total = remaining - remainder
-    due_day, _ = parse_naive_stamp(due)
+    due_day, _ = parse_due(due)
     start = date.fromisoformat(from_date)
     if remaining == 0 or start > due_day:
         return [], remaining

@@ -287,7 +287,7 @@ PRESET_PALETTES = {
         muted="#5c3d2e",
         accent="#8b0000",
         accent_ink="#ffd60a",
-        error="#6b0000",
+        error="#a3004f",
         block_locked="#0b132b",
         block_locked_ink="#ffd60a",
         block_flex="#8b0000",
@@ -307,7 +307,7 @@ PRESET_PALETTES = {
         muted="#ffff00",
         accent="#ffff00",
         accent_ink="#000000",
-        error="#ffff00",
+        error="#ff6b6b",
         block_locked="#000000",
         block_locked_ink="#ffffff",
         block_flex="#000000",
@@ -580,21 +580,29 @@ def palette_from_tokens(tokens: dict[str, str], base: dict) -> dict:
     A layout used to dress only itself, so Bento's indigo sat under a top bar in the pack's blue and
     the focus timer arrived in default chrome. The chrome now follows whichever design is on screen.
     Category colours stay on `base`: a block is School-blue in every design.
+
+    The chrome writes one text colour on the window, its panels and its fields. Where the page's ink
+    cannot be read on the design's cards, as Retro's white desktop ink on its grey windows (1.82 to 1),
+    the window takes the cards' colour and ink, as Retro's own windows do.
     """
     line = tokens["line"]
+    if contrast(tokens["bg_ink"], tokens["surface"]) >= AA_TEXT:
+        window, text, muted = tokens["bg"], tokens["bg_ink"], tokens["bg_muted"]
+    else:
+        window, text, muted = tokens["surface"], tokens["text"], tokens["muted"]
     return {
         **base,
-        "window": tokens["bg"],
+        "window": window,
         "panel": tokens["surface"],
         "field": tokens["surface"],
         "grid": line,
-        "text": tokens["bg_ink"],
-        "muted": tokens["bg_muted"],
+        "text": text,
+        "muted": muted,
         "accent": tokens["accent"],
         "accent_ink": tokens["accent_ink"],
         "error": tokens["danger"],
         "hairline": line,
-        "hairline_strong": mix(tokens["bg_ink"], tokens["surface"], 0.30),
+        "hairline_strong": mix(text, tokens["surface"], 0.30),
     }
 
 
@@ -646,8 +654,11 @@ def control_rules(palette: dict, radius: int, size: int, art: dict[str, str]) ->
         f"alternate-background-color: {palette['panel']}; }}"
         f"QCalendarWidget QToolButton {{ background: transparent; color: {palette['text']}; "
         "border: none; padding: 4px 8px; font-weight: 600; }"
+        # The month's grid is a QFrame too. Padded like a panel, it lost its last column and week: the
+        # calendar sizes its columns to the whole view, not to what the padding leaves.
         f"QCalendarWidget QAbstractItemView {{ selection-background-color: {palette['accent']}; "
-        f"selection-color: {palette['accent_ink']}; outline: 0; }}"
+        f"selection-color: {palette['accent_ink']}; outline: 0; padding: 0; border: none; "
+        "border-radius: 0; }"
         f"QCalendarWidget QAbstractItemView:disabled {{ color: {palette['muted']}; }}"
         "QCheckBox, QRadioButton { background: transparent; spacing: 8px; }"
         f"QCheckBox::indicator, QRadioButton::indicator {{ width: 16px; height: 16px; "
@@ -674,8 +685,9 @@ def control_rules(palette: dict, radius: int, size: int, art: dict[str, str]) ->
         f"QMenu::separator {{ height: 1px; background: {palette['hairline']}; margin: 6px 8px; }}"
         f"QLabel#menuHeading {{ color: {palette['muted']}; font-weight: 600; "
         f"font-size: {max(size - 1, 8)}pt; padding: 6px 12px 2px 12px; }}"
+        # A tooltip does not take the window's text size by itself, so at Large it stayed small.
         f"QToolTip {{ background: {palette['text']}; color: {palette['window']}; border: none; "
-        f"padding: 5px 9px; border-radius: {item}px; }}"
+        f"padding: 5px 9px; border-radius: {item}px; font-size: {size}pt; }}"
         f"QProgressBar {{ background: {palette['hairline']}; border: none; border-radius: 4px; "
         f"max-height: 8px; text-align: center; color: transparent; }}"
         f"QProgressBar::chunk {{ background: {palette['accent']}; border-radius: 4px; }}"
@@ -771,6 +783,11 @@ def pack_stylesheet(
     item_h = 36 if knobs["text"] == "large" else 22
     button_min = f" min-height: {item_h}px;" if knobs["text"] == "large" else ""
     field_min = FIELD_MIN_PX[knobs["text"]]
+    # A flat look has no edges, so a plain button is told from its words by a faint fill instead.
+    if knobs["depth"] == "flat":
+        quiet_edge = f"background: {palette['hairline']}; border: none;"
+    else:
+        quiet_edge = f"background: transparent; border: 1px solid {palette['hairline_strong']};"
     return (
         f"QMainWindow, QDialog, QWidget {{ background: {palette['window']}; color: {palette['text']}; "
         f"font-family: {family}; font-size: {size}pt; }}"
@@ -792,8 +809,19 @@ def pack_stylesheet(
         f"QHeaderView, QStackedWidget {{ background: transparent; border: none; "
         f"padding: 0; border-radius: 0; }}"
         # The week's hours paint their own background; as a frame the scroll area boxed them twice.
-        f"QScrollArea#weekScroll, QScrollArea#dropScroll {{ background: transparent; border: none; "
-        f"padding: 0; border-radius: 0; }}"
+        f"QScrollArea#weekScroll, QScrollArea#dayScroll, QScrollArea#helpScroll {{ background: transparent; "
+        f"border: none; padding: 0; border-radius: 0; }}"
+        # Today's app's Day: the day's hours, then what still needs a time and a summary beside them.
+        f"QFrame#daySide {{ background: {palette['panel']}; border-radius: 0; {edges} }}"
+        f"QLabel#dayWaitingLabel, QLabel#daySummaryLabel {{ color: {palette['accent']}; font-weight: 800; "
+        f"font-size: {max(size - 1, 7)}pt; }}"
+        f"QLabel#daySummaryLabel {{ margin-top: 10px; }}"
+        f"QLabel#dayWaitingHint {{ color: {palette['muted']}; font-size: {max(size - 1, 7)}pt; }}"
+        # What follows the pointer while something is carried: a pill, readable over any calendar.
+        f"QLabel#heldChip {{ background: {palette['accent']}; color: {palette['accent_ink']}; "
+        f"padding: 3px 10px; border-radius: 10px; }}"
+        f'QLabel#heldChip[refused="true"] {{ background: {palette["panel"]}; color: {palette["error"]}; '
+        f"{edges} }}"
         f"QHeaderView::section, QTableCornerButton::section {{ background: {palette['panel']}; "
         f"color: {palette['muted']}; padding: 2px 6px; border: none; }}"
         # QLabel is a QFrame in Qt, so without this every label, even an empty one, is drawn as a panel.
@@ -801,6 +829,22 @@ def pack_stylesheet(
         f"QPushButton {{ background: {palette['accent']}; color: {palette['accent_ink']}; "
         f"padding: {pad}px {pad * 2}px; border-radius: {radius}px; {edges}{button_min} }}"
         f"QPushButton:disabled {{ background: {palette['hairline_strong']}; color: {palette['muted']}; }}"
+        # The rule above that gives every widget the text colour also keeps it when the widget is off,
+        # so reminder settings looked live while reminders were off.
+        f"QWidget#prefReminderControls QWidget:disabled {{ color: {palette['muted']}; }}"
+        # One filled button per dialog: the answer. Cancel and its kind are drawn plain beside it, and
+        # a button that destroys something takes the error colour.
+        f'QPushButton[quiet="true"] {{ color: {palette["text"]}; {quiet_edge} }}'
+        f'QPushButton[quiet="true"]:hover {{ background: {palette["hairline"]}; }}'
+        f'QPushButton[danger="true"] {{ background: {palette["error"]}; '
+        f'color: {readable_ink(palette["error"])}; }}'
+        f"QPushButton#deleteBlock {{ background: transparent; color: {palette['error']}; border: none; "
+        f"padding: {pad}px 2px; font-weight: 600; min-height: 0; }}"
+        f"QPushButton#deleteBlock:hover {{ text-decoration: underline; }}"
+        # Homework that still needs a time, to be dragged onto the hours: it looks like homework, not
+        # like a button that does something when pressed.
+        f"QPushButton[tray=\"true\"] {{ background: {palette['panel']}; color: {palette['text']}; "
+        f"{edges} border-left: 4px solid #ef4444; text-align: left; }}"
         f"QMenu::item {{ min-height: {item_h}px; padding: {pad}px {pad * 2}px; }}"
         f"QLabel#nowNext {{ font-weight: 600; }}"
         f"QLabel#focusTask {{ font-weight: 600; }}"
@@ -812,6 +856,7 @@ def pack_stylesheet(
         f"QLabel#authNote, QLabel#passwordHint, QLabel#usernameHint {{ color: {palette['muted']}; }}"
         f"QLabel#validationError {{ color: {palette['error']}; font-weight: 600; }}"
         f"QLabel#homeworkEstimateHint {{ color: {palette['muted']}; }}"
+        f"QLabel#homeworkEstimateHint[problem=\"true\"] {{ color: {palette['error']}; font-weight: 600; }}"
         f"QPushButton#todayWeek {{ background: transparent; color: {palette['text']}; "
         f"font-weight: 600; padding: {pad}px {pad * 2}px; {edges} }}"
         # The way in is a button; the way to a new account is small print, so it is drawn as a link.
@@ -833,9 +878,18 @@ def pack_stylesheet(
         f"color: {palette['text']}; font-size: {size + 3}pt; font-weight: 700; "
         f"padding: 0; {edges} }}"
         f"QPushButton#prevWeek:hover, QPushButton#nextWeek:hover {{ color: {palette['text']}; }}"
+        # Zoom is a view control like the arrows: no fill. The corner sizes it to the text.
+        f"QPushButton[zoom=\"true\"] {{ background: transparent; color: {palette['text']}; "
+        f"font-weight: 700; padding: 0; min-height: 0; {edges} }}"
+        f"QPushButton[zoom=\"true\"]:disabled {{ background: transparent; "
+        f"color: {palette['hairline_strong']}; }}"
         # One filled button on the page: the thing the app is for.
         f"QLabel#blockDurationLine {{ color: {palette['muted']}; }}"
         f"QLabel#blockDurationLine[problem=\"true\"] {{ color: {palette['error']}; font-weight: 600; }}"
+        f"QLabel#prefsHeading, QLabel#layoutMainHeading, QLabel#layoutDayHeading {{ font-weight: 700; "
+        f"color: {palette['muted']}; }}"
+        f"QLabel#aboutVersion {{ font-size: {size + 4}pt; font-weight: 700; }}"
+        f"QLabel#helpKey {{ font-weight: 600; }}"
         f"QPushButton#moreButton, QPushButton#settingsGear {{ background: transparent; "
         f"color: {palette['muted']}; {edges} }}"
         + setup_rules(palette, radius, size, pad, knobs["depth"])

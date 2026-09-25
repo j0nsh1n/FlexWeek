@@ -3,11 +3,192 @@
 All notable changes to FlexWeek are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.15.0] - 2026-09-25
+
+### Added
+- Month names every timed block on a date, so weeks other than the open one
+  can show their chips.
+- A block with a Spotify link plays it when the block starts, the way an alarm
+  plays its song. Dismiss stops it and Snooze plays it again five minutes later.
+- Help and About, under More. Help says what Day, Week, Month and My day are
+  for, lists the keyboard shortcuts, and says a tutorial and guides are coming.
+  About gives the version and the folder your plans are saved in.
+- Everything under More and Advanced, Plan my homework or Suggest times, and
+  the plan review's two buttons say on hover what they do. A greyed item says
+  why, such as "Nothing to undo yet."
+- Moving, resizing or making a block by dragging says what changed once it is
+  saved, under the hours, with Undo beside it: "Moved History essay to Fri
+  18:00.", "History essay now ends at 20:30.", "Placed Math worksheet on Thu
+  18:00.", "Added Club on Thu 16:00." Carrying a block to another date on Month
+  says so too. Undo takes back that one change and says what it undid.
+- Everything under More > Advanced, and its keyboard shortcut, says what it did
+  under the top bar once it is done: copied, pasted, duplicated, saved, undid
+  or redid what, saved a restore point, restored, or reloaded this week.
+
+### Changed
+- The block editor is "New event" or "Edit event". Under the day boxes it says
+  "Tick more days to repeat it this week.", and the missed box names its day:
+  "I missed it on Thursday". Save is the one filled button. Delete is quiet red
+  words at the bottom left, asks first, and a deleted block comes back with
+  Undo on the notice under the hours.
+- Log out and Delete account ask first, and Delete account names the account.
+  Log out's answer is drawn in the usual colour, since nothing is lost.
+- Settings > Appearance & layout opens on the main view's design, with a
+  sentence on what a design is. Its style rows sit on the page rather than in a
+  box, and Animations and Fine-tune come last under "Every screen".
+- Settings > Focus says "Long break minutes" and "Long break after 4 focus
+  sessions". This computer has "Manage account…" on a row of its own, and
+  Availability sits on Planning under the sentence that names it. Buttons in
+  Settings that open something else are plain and as wide as their words.
+- One word for one thing: the Next line says "in 20 min" and "1 h 30 min" as
+  every design does, a finished block or focus session says "Finished", and
+  homework without a time is "Not placed yet" in every design. The strip under
+  Today's app's Next line says "Start a focus timer:".
+- Hover descriptions take the text size chosen in Settings.
+- Times are by the minute. A block typed as 17:37 to 18:22 in the block editor,
+  in setup or in a routine saves as 17:37 to 18:22. Dragging, resizing and
+  drawing a block move in steps of 5 minutes, or of 15 if you choose that in
+  setup or in Settings > Planning. Homework is still planned on quarter hours,
+  and never over any part of one that a block takes.
+- Reminders are on unless you turn them off. New accounts start with them on,
+  and an account made before this version has them turned on once; if you turn
+  them off afterwards, they stay off.
+- A reminder shows in FlexWeek as well as in the tray: for a moment under the
+  top bar, and on the status line until something more important replaces it.
+- Settings > Alerts puts reminders first, with their switch at the top and their
+  settings greyed while it is off. Alarms have their own group, and each alarm
+  says when it rings. One sound dropdown instead of two; the volume shows a %
+  sign, and "Stay in the tray" and "Keep alerts visible until handled" say what
+  they do.
+- Retro desktop now shows live, draggable hours in Schedule.exe on Day and a
+  seven-day Week.exe grid on Week. The deadlines notepad and main window both
+  keep unplaced homework within reach, and the status bar shows the time or a
+  refusal while dragging. Each tab remembers its scroll and zoom.
+- Bento's Day is a full-day Hero clock, and Week is a seven-column Hero board.
+  Both have draggable hours and a "Not placed yet" tray. The supporting tiles
+  setting can show deadlines and tonight's work or keep only the hero and tray.
+- Timeline's Day is one ruled page of the whole day, with homework as ink cards,
+  NOW in red, and homework without a time in the margin to drag onto it. Its
+  Week reads down the page: each day's big heading beside a line of hours, and
+  blocks move along a line or onto another day's line.
+- My day moves blocks as every other screen does: drag one along One thing's
+  day bar or round Day dial's face, or One thing's big title onto its bar, and
+  the new time, or why it cannot go there, shows before you let go. Escape
+  puts it back, and a click still opens it.
+- Clay deck has one large, draggable Day card and seven live Week cards fanned
+  up to 8 degrees. Homework without a time waits in a draggable dish. Week
+  cards can also be laid straight in Appearance & layout.
+- Mission control has a horizontal Scope lane on Day and seven Lane ops tracks
+  on Week. Blocks can move, resize, and be placed from the "Not placed yet"
+  tray on either tab. The deadline radar and daily load remain on Week.
+- Homework is due on a date. Tick "At a set time" only when it is due at a
+  time that day, such as a 09:00 lesson; otherwise it is due by the end of the
+  day. Homework saved before keeps its deadline.
+- Setup asks when FlexWeek may plan homework, and the planner keeps to those
+  hours. Preferred study times are set in Settings, no longer in setup.
+- Today's app's week scrolls through the whole day instead of squeezing
+  24 hours onto the screen. Day names stay at the top.
+- Day and Week zoom: Ctrl and the mouse wheel, Ctrl with =, - or 0, or the
+  two buttons above the hours. Each remembers how close it was on this
+  computer. A short block can be picked up from its middle at any zoom.
+- Ctrl with =, - or 0 zooms the hours on screen wherever the keyboard is, in
+  Today's app and every design, not only after a click on the hours.
+- A block made by dragging has no category until you choose one, so it no
+  longer counts as School in the Day's summary. A type picked under Add, "Then
+  drag on the calendar", is still what the next drag makes.
+
+### Removed
+- No side drawer of a day's hours opens while a block is dragged in Timeline,
+  Bento, Retro desktop or Clay deck. Each design has its own hours to drop on.
+
+### Fixed
+- Scrolling down Settings no longer changes the number boxes, time boxes and
+  dropdowns the pointer passes over. A box takes the wheel once clicked into.
+- Unfinished works in every design; it did nothing in six of seven. With
+  nothing unfinished it is greyed and says why.
+- Cancelling Running late after a preview takes its "N tasks move" line off
+  the screen.
+- Sign in and Create account say what went wrong: an empty username or
+  password, a password too short to be right, a username that cannot exist or
+  is taken, or FlexWeek not reaching its server. Account says "Your plans are
+  saved on this computer." as a sentence.
+- Settings says FlexWeek 0.15.0; it said 0.14.3.
+- Editing one day of a repeating block no longer also says the change applies
+  to every selected day.
+- Help at large text no longer cuts its keyboard shortcuts in half, and fits
+  the screen.
+- Retro desktop's Teal, Plum and Slate colours no longer put white text on
+  grey in Settings, the editors and the top bar (1.8 to 1). The window takes
+  Retro's grey with black text, as Retro's own windows do.
+- A block saved inside its own reminder time, such as one at 18:45 saved at
+  18:38 with a 10-minute reminder, now reminds at once instead of never.
+- "Saved preferences." no longer replaces a reminder on the status line.
+- Play beside the alert sound says what to check when no sound comes out:
+  that Volume is above 0 % and the speakers or headphones are connected and
+  not muted. It said "No sound card", and at Volume 0 blamed the computer.
+- New homework starts with today's due date. Changing its due date runs the
+  follow-up controls without an error, and invalid details are explained in
+  ordinary words.
+- Homework lengths outside 15 minutes to 24 hours are refused with a reason.
+  The due-date calendar shows its full month in setup and Add homework.
+- Plan and Replan all leave past time alone. A saved plan offers Undo; one Undo
+  removes every block that plan placed, and Redo restores them. An automatic
+  plan stays in the Add homework Undo step. Plan waits for an earlier failed
+  save instead of claiming the next plan was stored.
+- Hours no longer jump back to the morning after a save in a design that keeps
+  them between redraws, and pressing Tab no longer scrolls them to their middle.
+- A block's second line of text is never cut in half; what does not fit is
+  shortened with "…". A long block keeps its name in sight on lanes that run
+  across, as it does in columns. Text no longer gets smaller from one block to
+  the next down a day.
+- The words beside a held block stay on screen when hours run across.
+- Holding a block at the bottom of Timeline's Week scrolls the page down to the
+  days below, as it scrolls the hours along at their right-hand edge.
+- FlexWeek no longer crashes as it quits after homework waiting for a time or
+  pinned, Settings, Account, or a paste preview was opened.
+- A block that cannot go where it is held is drawn in red, never in the accent:
+  One thing's two colourways, the High contrast and Poster looks, and Bento's
+  Sunset had a danger colour equal or close to their accent.
+- Mission control no longer draws an extra initial over the shortened words
+  on half-hour blocks in Week. Quarter-hour blocks still show an initial when
+  their words do not fit.
+- Switching to another view, week or design while holding a block puts it
+  back, instead of dropping it on whatever the new view shows there.
+- Homework waiting for a time shortens its name to fit the tray at large text.
+- A rare hang when Python freed a look picture's leftovers while the window
+  was painting.
+- The planner no longer puts homework at midnight when an hour between
+  06:00 and 23:00 is free. Night is still used when the rest of the day is
+  full.
+- Saving a week no longer fails when finished work ends at midnight. That
+  moment is stored as the next date at 00:00, or 23:59 on 31 December 2099
+  when there is no next date.
+- Homework due on a date with no time is listed after homework due at a set
+  time that same day.
+- Undo of a block moved to another week no longer throws away later changes
+  to that week. If that week changed in another window, Undo is refused and
+  both weeks stay as they are.
+- "Next: … (in 23m)" counts down with the clock when no focus timer is running.
+- Every design's Day and Week open at the time now, or at the first block of
+  the day or week shown, each time you go to another day or week. Mission
+  control opened at midnight.
+- A homework chip shortens its title and keeps its length whole: "Science
+  pos… · 1 h 30 min", not "Science poster · 1 h …".
+- The top bar keeps whole words at every window width. Where there is no room,
+  the title uses its short form and Plan my homework says Plan.
+- Retro desktop's deadlines.txt keeps each date on the page at large text, and
+  homework with no time shows once: in the notepad, or under the hours while
+  the notepad is closed.
+- A short block on hours that run across shows its first letter instead of
+  lines of "…", and the hour labels at either edge of the scroll stay whole.
+- Today's app's "Needs a time" bar no longer blinks empty each time the week
+  saves.
 
 ## [0.14.3] - 2026-09-22
 
 ### Added
+- A block can be moved to a date in another week in one save. Undo puts both
+  weeks back.
 - First-run setup replaces the first-week card. A new account goes from its
   recovery codes to a page at a time, with a step rail, Back, Skip this step
   and Next: a starting style (Plain calendar, Dashboard, Night owl, Retro,

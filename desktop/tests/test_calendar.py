@@ -6,44 +6,23 @@ from desktop.native.calendar import (
     apply_block_edit,
     apply_block_times,
     create_click_range,
-    create_drag_range,
     days_through,
     due_day_in_week,
+    due_soon_for,
     is_series,
-    move_range,
-    resize_bottom_range,
-    resize_top_range,
-    snap_minute,
     span_clash,
     span_problem,
     split_occurrence,
     sunday_due,
 )
+from desktop.native.reuse import due_point
 
 
-def test_snap_minute_rounds_to_fifteen_and_clamps_to_the_grid() -> None:
-    assert snap_minute(367) == 360
-    assert snap_minute(368) == 375
-    assert snap_minute(0) == 360
-    assert snap_minute(2000) == 1380
-
-
-def test_create_drag_and_click_ranges_follow_the_daily_scheduler() -> None:
-    assert create_drag_range(360, 400) == (360, 405)
-    assert create_drag_range(400, 360) == (360, 405)
+def test_a_click_makes_up_to_an_hour_and_stops_at_the_next_block() -> None:
     assert create_click_range(900, [(930, 960)]) == (900, 930)
     assert create_click_range(900, []) == (900, 960)
-    assert create_click_range(1365, [(1370, 1380)]) is None
-
-
-def test_move_and_resize_keep_minimum_duration_and_day_bounds() -> None:
-    assert move_range(600, 660, 20) == (615, 675)
-    assert move_range(360, 420, -60) == (360, 420)
-    assert move_range(1300, 1360, 60) == (1320, 1380)
-    assert resize_top_range(600, 660, 50) == (645, 660)
-    assert resize_top_range(600, 660, 200) == (645, 660)
-    assert resize_bottom_range(600, 660, -50) == (600, 615)
-    assert resize_bottom_range(1320, 1365, 60) == (1320, 1380)
+    assert create_click_range(1425, [(1430, 1440)]) == (1425, 1430)
+    assert create_click_range(1430, [(1430, 1440)]) is None
 
 
 def test_a_repeating_locked_block_cannot_be_retimed_from_one_day() -> None:
@@ -164,11 +143,36 @@ def test_a_time_on_another_block_is_allowed_and_named_but_not_outside_the_day_or
         "finished work sits on the day it was done"
     )
     assert span_clash(blocks, "essay", 2, 17 * 60, 18 * 60) == "Done work"
-    assert span_problem(blocks, "essay", 1, 5 * 60 + 45, 6 * 60 + 45, None) == (
+    assert span_problem(blocks, "essay", 1, 3 * 60, 4 * 60, None) is None
+    assert span_problem(blocks, "essay", 1, 22 * 60 + 30, 23 * 60 + 30, None) is None
+    assert span_problem(blocks, "essay", 1, 23 * 60 + 30, 24 * 60 + 30, None) == (
         "That is outside the hours FlexWeek plans in, so it stayed where it was."
     )
-    assert span_problem(blocks, "essay", 1, 22 * 60 + 30, 23 * 60 + 30, None) is not None
     assert span_problem(blocks, "essay", 3, 19 * 60, 20 * 60, (3, 19 * 60 + 30)) == (
         "That ends after it is due, so it stayed where it was."
     )
     assert span_problem(blocks, "essay", 3, 18 * 60, 19 * 60 + 30, (3, 19 * 60 + 30)) is None
+
+
+def test_due_point_and_span_problem_cover_date_only_and_timed_dues() -> None:
+    week = "2026-09-14"
+    date_only = due_point("2026-09-15", week)
+    legacy = due_point("2026-09-15T23:59", week)
+    timed = due_point("2026-09-15T09:00", week)
+    assert date_only == (1, 24 * 60)
+    assert legacy == (1, 24 * 60)
+    assert timed == (1, 9 * 60)
+    assert due_day_in_week("2026-09-15", week) == 1
+    after_due = "That ends after it is due, so it stayed where it was."
+    assert span_problem([], "essay", 1, 23 * 60, 23 * 60 + 45, date_only) is None
+    assert span_problem([], "essay", 1, 23 * 60, 23 * 60 + 45, legacy) is None
+    assert span_problem([], "essay", 1, 9 * 60, 9 * 60 + 15, timed) == after_due
+    assert span_problem([], "essay", 1, 8 * 60, 9 * 60, timed) is None
+    ordered = due_soon_for(
+        "2026-09-15",
+        {
+            "allday": {"id": "allday", "title": "All day", "due": "2026-09-15", "completed": False},
+            "morning": {"id": "morning", "title": "Morning", "due": "2026-09-15T09:00", "completed": False},
+        },
+    )
+    assert [item["id"] for item in ordered] == ["morning", "allday"]

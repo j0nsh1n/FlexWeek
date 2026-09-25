@@ -1,0 +1,279 @@
+"""The More menu explains itself (0.15 rows 11, 12, 31, 37).
+
+Its actions had no hover descriptions, a greyed "Unfinished" gave no reason, and "Unfinished" did
+nothing at all in every design but Today's app. There was no Help and no About.
+"""
+
+from __future__ import annotations
+
+from datetime import date, timedelta
+
+import pytest
+
+pytest.importorskip("PySide6")
+
+from PySide6.QtCore import QPoint, QStandardPaths
+from PySide6.QtGui import QAction
+from PySide6.QtWidgets import QApplication, QLabel, QMenu, QPushButton, QScrollArea, QToolTip, QWidget
+
+from desktop.native import settings
+from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.look import TEXT_PT, sanitize_look
+from desktop.native.window import NativeWindow
+from desktop.tests.window_support import (  # noqa: F401
+    host,
+    qapp,
+    server,
+    settled,
+    signed_out,
+    wait_until,
+    window,
+)
+
+NOTHING_UNFINISHED = "Nothing is unfinished: no homework from earlier weeks still needs time."
+TOOLTIPS = {
+    "Add homework": (
+        "Add an assignment with its due date and how long it will take. FlexWeek finds time for it."
+    ),
+    "School hours": "Set the days and times you are at school, so nothing is planned then.",
+    "Add fixed time": (
+        "Add something that happens at a set time, like practice or a lesson. Homework is planned around it."
+    ),
+    "Running late": (
+        "Behind today? Say how late you are, and FlexWeek moves the rest of today's homework later."
+    ),
+    "Unfinished": NOTHING_UNFINISHED,
+    "Routines": "Save this week's fixed times as a routine, or add a saved routine to a week.",
+    "Quick focus": (
+        "Start a 30-minute focus timer now, without picking homework. Change its length in Settings > Focus."
+    ),
+    "Replan all my homework": (
+        "Find new times for all of this week's homework, as if none had a time yet. Homework you placed "
+        "yourself stays put. Use it when your week has changed a lot."
+    ),
+    "Help": "What each screen is for, and the keyboard shortcuts.",
+    "About FlexWeek": "The version, and where your plans are saved.",
+    "Log out": "Sign out on this computer. Your plans stay saved in your account.",
+    "Undo": "Nothing to undo yet.",
+    "Redo": "Nothing to redo.",
+    "Copy": "Copy the selected block to paste into another day. Ctrl+C",
+    "Paste into (the selected day)": "Copy a block or a day first.",
+    "Duplicate": "Make a copy of the selected block, with a preview first. Ctrl+D",
+    "Copy (the selected day)": "Copy every block on the selected day to paste into another day.",
+    "Save": "Save now. FlexWeek already saves after every change. Ctrl+S",
+    "Restore": "Go back to an earlier copy of your plans. FlexWeek keeps one before big changes.",
+    "Reload": "Load this week again as it is saved. Use it if something looks out of date.",
+}
+PLAN = (
+    "Find a time for homework that has none, around your fixed times and before it is due. Homework "
+    "that already has a time keeps it."
+)
+SUGGEST = "Give homework without a time a suggested time. Drag any of them somewhere else if you like."
+
+
+def actions(menu: QMenu) -> list[QAction]:
+    """What a student can hover: every item with words, submenus opened, headings left out."""
+    found = []
+    for action in menu.actions():
+        if action.isSeparator() or not action.text():
+            continue
+        if action.menu() is not None:
+            found += actions(action.menu())
+            continue
+        found.append(action)
+    return found
+
+
+def opened_more(window: NativeWindow) -> QMenu:  # noqa: F811
+    menu = window.more_button.menu()
+    menu.aboutToShow.emit()
+    return menu
+
+
+def test_every_action_under_more_and_advanced_says_what_it_does(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    menu = opened_more(window)
+    advanced = next(action.menu() for action in menu.actions() if action.menu() is not None)
+    assert menu.toolTipsVisible() and advanced.toolTipsVisible()
+    said = {named(action.text()): action.toolTip() for action in actions(menu) if action.isVisible()}
+    assert said == TOOLTIPS
+
+
+def named(text: str) -> str:
+    """Copy day and Paste name the selected day, which is today."""
+    for verb in ("Copy ", "Paste into "):
+        if text.startswith(verb):
+            return verb + "(the selected day)"
+    return text
+
+
+def test_the_plan_button_and_the_plan_review_say_what_they_do(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    assert window.solve_button.toolTip() == PLAN
+    window.session.preferences = {**window.session.preferences, "planning_style": "manual"}
+    window._sync_chrome()
+    assert window.solve_button.text() == "Suggest times"
+    assert window.solve_button.toolTip() == SUGGEST
+    assert window.findChild(QPushButton, "planReviewDismiss").toolTip() == "Hide this list."
+    assert window.findChild(QPushButton, "planReviewReplan").toolTip() == TOOLTIPS["Replan all my homework"]
+
+
+def unfinished_action(window: NativeWindow) -> QAction:  # noqa: F811
+    return next(action for action in actions(opened_more(window)) if action.text() == "Unfinished")
+
+
+def test_unfinished_with_nothing_unfinished_is_greyed_and_says_why(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    window.session.save()
+    settled(qapp, window)
+    action = unfinished_action(window)
+    assert action.isEnabled() is False
+    assert action.toolTip() == NOTHING_UNFINISHED
+    window._show_unfinished()
+    assert window.week_status.text() == NOTHING_UNFINISHED
+    assert not window.unfinished_panel.isVisibleTo(window)
+
+
+def test_unfinished_opens_its_list_in_any_design(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    """Homework from last week with two hours still to plan, seen from the week after, in Timeline."""
+    session = window.session
+    week = date.fromisoformat(session.week_start)
+    session.add_block({"id": "school", "title": "School", "kind": "locked", "start": "08:00",
+                       "duration_min": 390, "days": [0, 1, 2, 3, 4]})
+    session.add_homework({"id": "essay", "title": "History essay", "estimate_min": 120, "revision": 0,
+                          "due": (week + timedelta(days=10)).isoformat() + "T23:59"})
+    session.save()
+    settled(qapp, window)
+    planned = next(block for block in session.blocks if block.get("assignment_id") == "essay")
+    session.delete_block(planned["id"])
+    session.save()
+    settled(qapp, window)
+    later = (week + timedelta(days=7)).isoformat()
+    session.load_week(later)
+    wait_until(qapp, lambda: session.week_start == later and not session.busy)
+    window.unfinished_panel.hide()
+    window._layout = sanitize_layout({"main": "timeline", "day": "one"})
+    window._on_week()
+    qapp.processEvents()
+    action = unfinished_action(window)
+    assert action.isEnabled()
+    action.trigger()
+    qapp.processEvents()
+    panel = window.unfinished_panel
+    assert panel.isVisibleTo(window), "Timeline showed nothing"
+    rows = [label.text() for label in panel.findChildren(QLabel) if label.isVisibleTo(window)]
+    assert "History essay · 2 h left" in rows
+    assert action.toolTip() == "Homework from earlier weeks that still needs time. Plan it into this week."
+
+
+def test_about_gives_the_version_what_flexweek_is_and_where_its_data_lives(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    wait_until(qapp, lambda: window.session.storage_info is not None)
+    folder = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
+    dialog = settings.AboutDialog(window, window.session.storage_info, folder)
+    said = [label.text() for label in dialog.findChildren(QLabel)]
+    assert said == [
+        "FlexWeek 0.15.0",
+        "FlexWeek plans your homework around school, sports and everything else in your week.",
+        f"Your plans are saved on this computer, in {folder}.",
+    ]
+    assert dialog.windowTitle() == "About FlexWeek"
+
+
+def test_help_says_guides_are_coming_and_explains_each_screen_and_the_keys(
+    qapp: QApplication,  # noqa: F811
+    host: QWidget,  # noqa: F811
+) -> None:
+    dialog = settings.HelpDialog(host)
+    said = "\n".join(label.text() for label in dialog.findChildren(QLabel))
+    for line in (
+        "A tutorial and short guides are coming in a later version. Until then, this is the short version.",
+        "Day shows one day, hour by hour. Homework that is not placed yet waits beside it, ready to drag in.",
+        "Week shows Monday to Sunday. Drag a block to move it, or drag across empty time to add one.",
+        "Month shows the whole month: each date's blocks and the homework due that day. Click a date to "
+        "open it in Day.",
+        "My day is a simple screen to follow once your plan is made: what is on now, and what comes next. "
+        "Open it with My day at the top.",
+        "D, W, M",
+        "Day, Week, Month",
+        "Ctrl+Z",
+        "Undo",
+        "Ctrl+Y or Ctrl+Shift+Z",
+        "Esc while dragging",
+        "Put the block back where it was",
+    ):
+        assert line in said, line
+    assert dialog.windowTitle() == "Help"
+
+
+def shows_all_of_itself(label: QLabel) -> bool:
+    if label.wordWrap():
+        return label.height() >= label.heightForWidth(label.width())
+    hint = label.sizeHint()
+    return label.width() >= hint.width() and label.height() >= hint.height()
+
+
+def test_help_shows_every_line_whole_at_large_text_and_fits_the_screen(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    knobs = {**window._look.get("knobs", {}), "text": "large"}
+    window._look = sanitize_look({**window._look, "knobs": knobs})
+    window._apply_appearance()
+    dialog = settings.HelpDialog(window)
+    dialog.show()
+    qapp.processEvents()
+    labels = dialog.findChildren(QLabel)
+    assert len(labels) == 1 + 2 + len(settings.HELP_SCREENS) + 2 * len(settings.HELP_KEYS)
+    assert [label.text() for label in labels if not shows_all_of_itself(label)] == []
+    view = dialog.findChild(QScrollArea, "helpScroll").viewport()
+    cut = [label.text() for label in labels if label.mapTo(view, label.rect().topRight()).x() > view.width()]
+    assert cut == []
+    assert dialog.height() <= dialog.screen().availableGeometry().height() - 48
+    picture = dialog.grab().toImage()
+    inside = view.parentWidget().mapTo(dialog, QPoint(2, 2))
+    assert picture.pixelColor(inside.x(), inside.y()) == picture.pixelColor(2, 2), "a box around the words"
+    dialog.close()
+
+
+def test_a_description_is_as_large_as_the_text_the_student_chose(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    """At Large the descriptions stayed at the system's small tooltip size."""
+    for text in ("normal", "large"):
+        knobs = {**window._look.get("knobs", {}), "text": text}
+        window._look = sanitize_look({**window._look, "knobs": knobs})
+        window._apply_appearance()
+        button = window.solve_button
+        QToolTip.showText(button.mapToGlobal(QPoint(0, button.height())), button.toolTip(), button)
+        qapp.processEvents()
+        tip = next(w for w in qapp.topLevelWidgets() if w.objectName() == "qtooltip_label" and w.isVisible())
+        assert tip.font().pointSize() == TEXT_PT[text], text
+        QToolTip.hideText()
+        qapp.processEvents()
+
+
+def test_help_and_about_are_under_more(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    opened: list[str] = []
+    monkeypatch.setattr(settings.HelpDialog, "exec", lambda dialog: opened.append(dialog.windowTitle()) or 0)
+    monkeypatch.setattr(settings.AboutDialog, "exec", lambda dialog: opened.append(dialog.windowTitle()) or 0)
+    for action in actions(opened_more(window)):
+        if action.text() in {"Help", "About FlexWeek"}:
+            action.trigger()
+    assert opened == ["Help", "About FlexWeek"]

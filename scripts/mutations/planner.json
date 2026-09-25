@@ -1,0 +1,79 @@
+[
+ {
+  "file": "backend/solver.py",
+  "name": "night not ranked last",
+  "old": "        return (night, study, match, day, slot)\n",
+  "new": "        return (study, match, day, slot)\n",
+  "test": "backend/tests/test_solver.py::test_a_low_session_skips_midnight_when_the_morning_is_free"
+ },
+ {
+  "file": "desktop/native/calendar.py",
+  "name": "a repeating block's day wipes the other week",
+  "old": "        return source_out, [deepcopy(item) for item in dest] + [for_date(occurrence)], made\n",
+  "new": "        return source_out, [for_date(occurrence)], made\n",
+  "test": "desktop/tests/test_logic_move_date.py::test_a_move_into_a_week_that_already_has_blocks_keeps_them"
+ },
+ {
+  "file": "desktop/native/calendar.py",
+  "name": "a plain block wipes the other week",
+  "old": "    return source_out, [deepcopy(item) for item in dest] + [for_date(block)], block_id\n",
+  "new": "    return source_out, [for_date(block)], block_id\n",
+  "test": "desktop/tests/test_logic_move_date.py::test_a_move_into_a_week_that_already_has_blocks_keeps_them"
+ },
+ {
+  "file": "backend/slots.py",
+  "name": "the planner floors a block's end",
+  "old": "    last = -(-(end_min - DAY_START_MIN) // SLOT_MIN)\n",
+  "new": "    last = (end_min - DAY_START_MIN) // SLOT_MIN\n",
+  "test": "backend/tests/test_solver.py::test_homework_is_never_planned_in_a_quarter_hour_a_block_at_any_minute_touches"
+ },
+ {
+  "file": "backend/models.py",
+  "name": "a work window starts at any minute",
+  "old": "        if not (start_fits_day(start) and on_slot(start)):\n            raise ValueError(\"start must be on the 00:00\u201324:00 grid\")\n        return value\n\n    @field_validator(\"end\")\n",
+  "new": "        if not start_fits_day(start):\n            raise ValueError(\"start must be on the 00:00\u201324:00 grid\")\n        return value\n\n    @field_validator(\"end\")\n",
+  "test": "backend/tests/test_stage4_api.py::test_estimates_and_the_planners_windows_stay_on_the_quarter_hour"
+ },
+ {
+  "file": "desktop/native/reuse.py",
+  "name": "a plan is not told when now is",
+  "old": "    return {**session, \"days\": days, \"earliest\": f\"{DAY_FULL[day]} {minutes_to_hhmm(minute)}\"}\n",
+  "new": "    return {**session, \"days\": days}\n",
+  "test": "desktop/tests/test_homework_plan.py::test_plan_on_a_thursday_leaves_monday_to_wednesday_and_the_hours_before_now_alone"
+ },
+ {
+  "file": "desktop/native/reuse.py",
+  "name": "days already gone stay open, so the reason is wrong",
+  "old": "    days = [item for item in session[\"days\"] if item >= day] or [day]\n",
+  "new": "    days = session[\"days\"]\n",
+  "test": "desktop/tests/test_homework_plan.py::test_plan_on_a_thursday_leaves_monday_to_wednesday_and_the_hours_before_now_alone"
+ },
+ {
+  "file": "desktop/native/reuse.py",
+  "name": "Replan all moves homework whose time has come",
+  "old": "        kept = planned and (bool(block.get(\"pinned\")) or _begun(block, not_before))\n",
+  "new": "        kept = planned and bool(block.get(\"pinned\"))\n",
+  "test": "desktop/tests/test_homework_plan.py::test_replan_all_leaves_homework_whose_time_has_passed"
+ },
+ {
+  "file": "desktop/native/reuse.py",
+  "name": "now rounded down to the quarter hour",
+  "old": "    minute = -(-minute // SLOT_MIN) * SLOT_MIN\n",
+  "new": "    minute = minute // SLOT_MIN * SLOT_MIN\n",
+  "test": "desktop/tests/test_homework_plan.py::test_a_plan_starts_at_now_rounded_up_to_the_next_quarter_hour"
+ },
+ {
+  "file": "desktop/native/controller.py",
+  "name": "a week that is over is planned",
+  "old": "        if start is not None and start[0] > 6:\n",
+  "new": "        if False:\n",
+  "test": "desktop/tests/test_homework_plan.py::test_plan_on_a_week_that_is_over_places_nothing_and_says_so"
+ },
+ {
+  "file": "desktop/native/controller.py",
+  "name": "a plan's Undo is not offered",
+  "old": "            if planned:\n                self.planned.emit(self.message)\n",
+  "new": "",
+  "test": "desktop/tests/test_homework_plan.py::test_plan_says_what_it_did_with_an_undo_that_takes_it_all_back"
+ }
+]

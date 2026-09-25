@@ -1,0 +1,93 @@
+[
+ {
+  "file": "desktop/native/hours/hand.py",
+  "name": "a move bounded by the day, not its tile",
+  "old": "        start = max(min(snap(minute - held.grab, step), last - held.minutes), first)\n",
+  "new": "        start = max(min(snap(minute - held.grab, step), 1440 - held.minutes), 0)\n",
+  "test": "desktop/tests/test_hours_targets.py::test_a_tile_keeps_a_block_inside_its_own_hours"
+ },
+ {
+  "file": "desktop/native/hours/hand.py",
+  "name": "a resize bounded by the day, not its tile",
+  "old": "            return replace(origin, end=min(max(snap(minute - held.grab, step), earliest), last))\n",
+  "new": "            return replace(origin, end=min(max(snap(minute - held.grab, step), earliest), 1440))\n",
+  "test": "desktop/tests/test_hours_targets.py::test_a_tile_keeps_a_block_inside_its_own_hours"
+ },
+ {
+  "file": "desktop/native/hours/hand.py",
+  "name": "a new block drawn past its tile",
+  "old": "            here = min(max(snap(minute, step), first), last)\n",
+  "new": "            here = min(max(snap(minute, step), first), 1440)\n",
+  "test": "desktop/tests/test_hours_targets.py::test_a_tile_keeps_a_block_inside_its_own_hours"
+ },
+ {
+  "file": "desktop/native/hours/canvas.py",
+  "name": "a click-made block runs past its tile",
+  "old": "            self.hand.commit(Create(Span(track.day, made[0], min(made[1], track.last))))\n",
+  "new": "            self.hand.commit(Create(Span(track.day, made[0], made[1])))\n",
+  "test": "desktop/tests/test_hours_targets.py::test_a_click_near_a_tiles_end_makes_only_what_fits_in_it"
+ },
+ {
+  "file": "desktop/native/hours/hand.py",
+  "name": "only Today's app canvases take blocks",
+  "old": "    return isinstance(widget, QWidget) and bool(getattr(widget, \"takes_blocks\", False))\n",
+  "new": "    return type(widget).__name__ == \"HoursCanvas\"\n",
+  "test": "desktop/tests/test_hours_targets.py::test_one_hand_lands_a_block_on_every_kind_of_surface"
+ },
+ {
+  "file": "desktop/native/hours/hand.py",
+  "name": "renders held only once the pointer moves",
+  "old": "        QApplication.instance().installEventFilter(self)\n        self.holding.emit(True)\n",
+  "new": "        QApplication.instance().installEventFilter(self)\n",
+  "test": "desktop/tests/test_hours_targets.py::test_renders_are_held_from_the_press_until_the_hand_lets_go"
+ },
+ {
+  "file": "desktop/native/hours/hand.py",
+  "name": "renders never let go",
+  "old": "        if was_holding:\n            self.holding.emit(False)\n",
+  "new": "",
+  "test": "desktop/tests/test_hours_targets.py::test_renders_are_held_from_the_press_until_the_hand_lets_go"
+ },
+ {
+  "file": "desktop/native/hours/canvas.py",
+  "name": "no names for lanes that run across",
+  "old": "        if track.axis is Axis.ACROSS and self.gutter:\n",
+  "new": "        if False:\n",
+  "test": "desktop/tests/test_hours_targets.py::test_a_days_name_opens_it_whichever_way_its_time_runs"
+ },
+ {
+  "file": "desktop/native/layouts/base.py",
+  "name": "a design lists no surfaces",
+  "old": "        return [widget for widget in self.findChildren(QWidget) if is_surface(widget) and widget.isVisible()]\n",
+  "new": "        return []\n",
+  "test": "desktop/tests/test_hours_targets.py::test_a_design_lists_every_surface_it_shows"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the window holds renders only once a drag starts",
+  "old": "        self.hand.holding.connect(self._hold_renders)\n",
+  "new": "        self.hand.active_changed.connect(self._hold_renders)\n",
+  "test": "desktop/tests/test_layout_drag.py::test_a_design_holds_its_renders_from_the_press_and_has_the_windows_hand"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "designs get a hand of their own",
+  "old": "            view = VIEW_CLASSES[layout_id](hand=self.hand)\n",
+  "new": "            view = VIEW_CLASSES[layout_id]()\n",
+  "test": "desktop/tests/test_layout_drag.py::test_a_design_holds_its_renders_from_the_press_and_has_the_windows_hand"
+ },
+ {
+  "file": "desktop/native/hours/hand.py",
+  "name": "the hand snaps to quarter hours whatever the step",
+  "old": "        origin, first, last, step = held.origin, track.first, track.last, self.step\n",
+  "new": "        origin, first, last, step = held.origin, track.first, track.last, 15\n",
+  "test": "desktop/tests/test_hours_hand.py::test_a_move_a_resize_and_a_new_block_land_on_the_step_and_never_finer"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the window never gives the hand the student's step",
+  "old": "        self.hand.step = drag_step((self.session.preferences or {}).get(\"drag_step_min\"))\n",
+  "new": "",
+  "test": "desktop/tests/test_layouts_window.py::test_the_drag_step_is_chosen_in_settings_kept_by_the_account_and_given_to_the_hand"
+ }
+]

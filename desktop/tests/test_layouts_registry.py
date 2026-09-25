@@ -19,7 +19,17 @@ from desktop.native.layouts.registry import (
     sanitize_layout,
     tokens_for,
 )
-from desktop.native.look import ACCENT_COLORS, LOOK_PRESETS, PACKS, contrast, resolved_palette
+from desktop.native.look import (
+    AA_TEXT,
+    ACCENT_COLORS,
+    ACCENTS,
+    LOOK_PRESETS,
+    PACKS,
+    contrast,
+    palette_from_tokens,
+    resolved_palette,
+)
+from desktop.tests.test_look import EVERY_LOOK, TEXT_PAIRS, _lab
 
 DESIGNS = [spec.id for spec in LAYOUTS.values() if spec.options]
 
@@ -108,6 +118,32 @@ def test_every_shipped_colourway_is_readable(layout_id: str) -> None:
     palette = resolved_palette("light-frost", False, None, "default")
     for value, _, _ in LAYOUTS[layout_id].colourways:
         assert contrast_failures(tokens_for(layout_id, value, palette)) == [], (layout_id, value)
+
+
+def test_every_design_dresses_the_window_in_colours_its_text_reads_on() -> None:
+    """A design's colours dress the whole window: the top bar, Day, Month and every dialog. Retro's
+    dark desktops put their white page text on its grey windows and fields, 1.82 to 1."""
+    bases = [
+        resolved_palette(pack, dark, {"preset": preset, "knobs": {"surface": surface}}, accent)
+        for pack, dark, preset, accent, surface in EVERY_LOOK
+    ]
+    # Match my look follows the look, so it is checked in every one; a design's own colours are fixed,
+    # and the look lends them only its block colours, so a light and a dark look are enough.
+    dressed = [(MATCH, palette_from_tokens(tokens_for(DESIGNS[0], MATCH, base), base)) for base in bases]
+    light, dark = resolved_palette("light-frost", False, None), resolved_palette("nocturne", True, None)
+    dressed += [
+        (f"{layout_id} {value}", palette_from_tokens(tokens_for(layout_id, value, base), base))
+        for layout_id in DESIGNS
+        for value, _, _ in LAYOUTS[layout_id].colourways
+        for base in (light, dark)
+    ]
+    failures = {
+        (name, ink, paper, round(contrast(chrome[ink], chrome[paper]), 2))
+        for name, chrome in dressed
+        for ink, paper in TEXT_PAIRS
+        if contrast(chrome[ink], chrome[paper]) < AA_TEXT
+    }
+    assert sorted(failures) == []
 
 
 def test_match_my_look_is_readable_in_every_look_the_app_has() -> None:
@@ -212,3 +248,29 @@ def test_a_dark_colourway_is_readable_like_any_other() -> None:
         for value, _label, tokens in spec.colourways:
             if relative_luminance(tokens["bg"]) < 0.35:
                 assert contrast_failures(complete(tokens)) == [], (layout_id, value)
+
+
+def test_a_refusal_never_wears_the_accent() -> None:
+    """A held block is outlined and labelled in the accent where it can go and in the danger colour
+    where it cannot. One thing's black scheme had both at #fb923c, so a refusal looked allowed and
+    only its words differed. The gap is in CIE Lab, as the accent and category audit in test_look
+    measures it; two dark reds on Poster sat 15 apart and read as one."""
+    import math
+
+    reached = {
+        f"{layout_id}/{value}": tokens_for(layout_id, value, resolved_palette("light-frost", False, None))
+        for layout_id, spec in LAYOUTS.items()
+        for value, _, _ in spec.colourways
+    }
+    for pack, dark, preset, accent, surface in itertools.product(
+        PACKS, (False, True), LOOK_PRESETS, ACCENTS, ("frost", "flat")
+    ):
+        look = {"preset": preset, "knobs": {"surface": surface}}
+        where = f"match {pack}/{'dark' if dark else 'light'}/{preset}/{accent}"
+        reached[where] = tokens_for("bento", MATCH, resolved_palette(pack, dark, look, accent))
+    close = {
+        where: round(gap, 1)
+        for where, tokens in reached.items()
+        if (gap := math.dist(_lab(tokens["accent"]), _lab(tokens["danger"]))) < 25
+    }
+    assert close == {}

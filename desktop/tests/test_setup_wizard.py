@@ -21,9 +21,9 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QPoint, QStandardPaths, Qt, QTimer
+    from PySide6.QtCore import QPoint, QStandardPaths, Qt, QTime, QTimer
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QDateTimeEdit, QPushButton, QWidget
+    from PySide6.QtWidgets import QApplication, QComboBox, QDateTimeEdit, QLabel, QPushButton, QWidget
 
     from desktop.native.calendar import monday_of, sunday_due
     from desktop.native.layouts.registry import sanitize_layout
@@ -42,6 +42,7 @@ if importlib.util.find_spec("PySide6") is not None:
         SetupPage,
         SetupState,
     )
+    from desktop.native.widgets import AvailabilityDialog
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
 
@@ -92,6 +93,7 @@ def written(qapp: QApplication, window: NativeWindow) -> None:
         lambda: (
             not window.session.busy
             and not window._setup_prefs
+            and window._setup_work_windows is None
             and not window._setup_week
             and not window.session.dirty
         ),
@@ -190,13 +192,18 @@ def test_every_page_is_kept_when_the_student_leaves_it(qapp: QApplication, serve
     assert window.session.preferences["day_cutoff"] == "22:00"
 
     setup.planning_buttons["auto"].setChecked(True)
-    setup._add_study([0, 1, 2, 3, 4], "19:00", "21:00", "Math")
+    assert setup.drag_buttons[5].isChecked(), "five minutes unless the student picks fifteen"
+    setup.drag_buttons[15].setChecked(True)
+    setup.work_editor.set_windows([{"days": [0, 1, 2, 3, 4], "start": "19:00", "end": "21:00"}])
     setup.next.click()
     written(qapp, window)
     assert window.session.preferences["planning_style"] == "auto"
-    assert window.session.preferences["study_windows"] == [
-        {"days": [0, 1, 2, 3, 4], "start": "19:00", "duration_min": 120, "subject": "Math"}
+    assert window.session.preferences["drag_step_min"] == 15
+    assert window.hand.step == 15
+    assert window.session.preferences["work_windows"] == [
+        {"days": [0, 1, 2, 3, 4], "start": "19:00", "end": "21:00"}
     ]
+    assert not window.session.preferences.get("study_windows"), "setup no longer asks for study times"
 
     assert setup.reminders.isChecked(), "setup turns reminders on unless the student says no"
     setup.lead.setValue(15)
@@ -219,7 +226,7 @@ def test_every_page_is_kept_when_the_student_leaves_it(qapp: QApplication, serve
     written(qapp, window)
     essay = next(item for item in window.session.assignments.values() if item["title"] == "History essay")
     assert essay["estimate_min"] == 90
-    assert essay["due"] == sunday_due(monday_of(window.session.week_start))
+    assert essay["due"] == sunday_due(monday_of(window.session.week_start))[:10], "that Sunday, no time"
     sessions = [block for block in window.session.blocks if block.get("assignment_id") == essay["id"]]
     assert sessions and all(block.get("start") for block in sessions), "Plan it for me gave it a time"
 
@@ -249,6 +256,14 @@ def test_skipping_every_page_keeps_nothing_and_setup_never_returns(
     visited = []
     while setup.step != DONE:
         visited.append(setup.step)
+        if setup.step == HOMEWORK:
+            assert any(
+                "Homework can be planned at any time of day." in label.text()
+                for label in setup.pages[HOMEWORK].findChildren(QLabel)
+            )
+            setup.work_editor.set_windows(
+                [{"days": [0, 1, 2, 3, 4], "start": "15:30", "end": "18:00"}]
+            )
         setup.skip.click()
     assert visited == [STYLE, WEEK, HOMEWORK, REMINDERS, FIRST]
     setup.next.click()
@@ -256,8 +271,9 @@ def test_skipping_every_page_keeps_nothing_and_setup_never_returns(
     assert page(window) == "weekPage"
     assert window.session.blocks == [] and window.session.assignments == {}
     prefs = window.session.preferences
-    assert prefs["reminders_enabled"] is False, "a skipped page changes nothing"
+    assert prefs["reminders_enabled"] is True, "a skipped page changes nothing, and reminders start on"
     assert prefs.get("planning_style", "suggest") == "suggest"
+    assert not prefs.get("work_windows"), "skipping does not keep hours entered on that page"
     assert prefs["setup"]["finished_at"]
     assert not look_file().exists() or json.loads(look_file().read_text())["layout"]["main"] == "classic"
     close(qapp, window)
@@ -265,6 +281,81 @@ def test_skipping_every_page_keeps_nothing_and_setup_never_returns(
     again = sign_in(qapp, server, "setup_skipper")
     assert page(again) == "weekPage", "an empty week does not bring setup back"
     close(qapp, again)
+
+
+def test_a_work_window_chosen_in_setup_reaches_the_account(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    window = new_account(qapp, server, "setup_work_hours")
+    setup = window.setup_page
+    setup.skip.click()
+    setup.skip.click()
+    assert setup.step == HOMEWORK
+    chosen = {"days": [0, 1, 2, 3, 4], "start": "15:30", "end": "18:00", "subject": "Math"}
+    setup.work_editor.set_windows([chosen])
+    setup.next.click()
+    written(qapp, window)
+    assert window.session.preferences["work_windows"] == [chosen]
+    close(qapp, window)
+
+    again = sign_in(qapp, server, "setup_work_hours")
+    assert again.session.preferences["work_windows"] == [chosen]
+    close(qapp, again)
+
+
+def test_settings_saves_work_windows_with_existing_availability(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    window = new_account(qapp, server, "settings_work_hours")
+    window.setup_page.skip_all.click()
+    written(qapp, window)
+    protected = [{"days": [0], "start": "19:00", "duration_min": 60, "kind": "meal"}]
+    study = [{"days": [1], "start": "17:00", "duration_min": 60, "subject": "Math"}]
+    assert window.session.save_availability(protected, study, "22:00", [])
+    wait_until(qapp, lambda: not window.session.busy and window.session.preferences["study_windows"] == study)
+
+    chosen = {"days": [5, 6], "start": "10:00", "end": "16:00"}
+    sent: list[tuple[list[dict], list[dict], str | None, list[dict]]] = []
+    save = window.session.save_availability
+
+    def record(
+        kept_protected: list[dict], kept_study: list[dict], cutoff: str | None, hours: list[dict]
+    ) -> bool:
+        sent.append((kept_protected, kept_study, cutoff, hours))
+        return save(kept_protected, kept_study, cutoff, hours)
+
+    window.session.save_availability = record
+
+    def choose() -> None:
+        dialog = QApplication.activeModalWidget()
+        assert isinstance(dialog, AvailabilityDialog)
+        dialog.work_editor.set_windows([chosen])
+        dialog.accept()
+
+    QTimer.singleShot(0, choose)
+    window._open_availability()
+    wait_until(
+        qapp,
+        lambda: not window.session.busy and window.session.preferences["work_windows"] == [chosen],
+    )
+    prefs = window.session.preferences
+    assert sent == [(protected, study, "22:00", [chosen])]
+    assert prefs["protected"] == protected
+    assert prefs["study_windows"] == study
+    assert prefs["day_cutoff"] == "22:00"
+    close(qapp, window)
+
+
+def test_setup_refuses_a_work_window_that_ends_before_it_starts(qapp: QApplication) -> None:
+    setup = opened(qapp)
+    setup._show(HOMEWORK)
+    setup.work_editor.set_windows([{"days": [0], "start": "15:00", "end": "16:00"}])
+    row = setup.work_editor.findChild(QWidget, "workWindowRow")
+    row.findChild(QComboBox, "workWindowEnd").setCurrentText("14:45")
+    setup.next.click()
+    assert setup.step == HOMEWORK
+    assert row.findChild(QLabel, "validationError").text() == "End must be after Start."
+    setup.close()
 
 
 def test_skip_setup_is_remembered(qapp: QApplication, server: LocalServer) -> None:
@@ -435,6 +526,28 @@ def test_back_then_next_does_not_add_the_first_homework_twice(
     close(qapp, window)
 
 
+def test_a_first_homework_due_at_a_set_time_keeps_it_and_one_without_has_none(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    window = new_account(qapp, server, "setup_due_time")
+    setup = window.setup_page
+    for _ in range(4):
+        setup.skip.click()
+    assert setup.step == FIRST
+    oral = setup.homework_rows[0]
+    oral.name.setText("French oral")
+    oral.due.timed.setChecked(True)
+    oral.due.time.setTime(QTime(9, 0))
+    setup.add_homework.click()
+    setup.homework_rows[1].name.setText("Reading log")
+    setup.next.click()
+    written(qapp, window)
+    sunday = sunday_due(window.session.week_start)[:10]
+    dues = {item["title"]: item["due"] for item in window.session.assignments.values()}
+    assert dues == {"French oral": f"{sunday}T09:00", "Reading log": sunday}
+    close(qapp, window)
+
+
 def test_a_test_reminder_rings_the_chosen_sound_and_gives_the_spotify_app_the_link(
     qapp: QApplication, server: LocalServer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -581,22 +694,27 @@ def test_first_homework_takes_up_to_three(qapp: QApplication) -> None:
     setup._add_homework_row()
     assert len(setup.homework_rows) == 3, "a fourth is refused however it is asked for"
     due = setup.homework_rows[0].due
-    assert due.calendarPopup()
-    assert due.dateTime().toString("yyyy-MM-dd'T'HH:mm") == sunday_due(monday_of("2026-09-23"))
+    assert due.date.calendarPopup()
+    assert due.value() == sunday_due(monday_of("2026-09-23"))[:10], "due that Sunday, with no time"
     setup.close()
 
 
-def test_a_time_steps_a_quarter_hour_and_a_typed_one_moves_to_the_nearest(qapp: QApplication) -> None:
+def test_a_time_steps_a_quarter_hour_and_a_typed_one_keeps_its_minute(qapp: QApplication) -> None:
+    """School that starts at 08:05 starts at 08:05. It was moved to 08:00 without a word."""
     field = QuarterTime("08:00")
     field.setCurrentSection(QDateTimeEdit.Section.MinuteSection)
     field.stepBy(1)
     assert field.hhmm() == "08:15"
     field.stepBy(-2)
     assert field.hhmm() == "07:45"
-    field.set_minutes(8 * 60 + 7)
+    field.setTime(QTime(8, 7))
+    field.editingFinished.emit()
+    assert field.hhmm() == "08:07"
+    field.stepBy(1)
+    assert field.hhmm() == "08:15", "the arrows go on to the quarter hour either side"
+    field.setTime(QTime(8, 7))
+    field.stepBy(-1)
     assert field.hhmm() == "08:00"
-    field.set_minutes(8 * 60 + 8)
-    assert field.hhmm() == "08:15"
 
 
 def test_a_style_card_is_picked_from_the_keyboard(qapp: QApplication) -> None:

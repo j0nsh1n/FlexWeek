@@ -17,13 +17,36 @@ Checksum files (`.sha256`) sit next to those downloads if you want to confirm th
 
 **Windows.** Run `FlexWeek-Windows-x64-Setup.exe`. It installs FlexWeek for your Windows account without an administrator, then open FlexWeek from the Start menu. If Windows shows "Windows protected your PC", choose More info, then Run anyway. FlexWeek is not code-signed yet; the warning is SmartScreen not recognizing a new publisher, not a virus finding. Schools and IT can deploy `FlexWeek-Windows-x64.msi` instead, which installs for every account on the PC. Uninstall from Settings, then Apps.
 
-**Linux.** Extract the archive and open the file named FlexWeek. You need a 64-bit Linux desktop (GNOME, KDE Plasma, Cinnamon, Xfce), glibc 2.38 or newer (Ubuntu 24.04, Linux Mint 22, Debian 13, Fedora 39 or newer), and working graphics (OpenGL or EGL). A remote or headless session without a display will not work. The X11 cursor helper (libxcb-cursor) is inside the download.
+**Linux.** Extract the archive and open the file named FlexWeek. You need a 64-bit Linux desktop (GNOME, KDE Plasma, Cinnamon, Xfce), glibc 2.38 or newer (Ubuntu 24.04, Linux Mint 22, Debian 13, Fedora 39 or newer), and working graphics (OpenGL or EGL). A remote or headless session without a display will not work. The system libraries it uses are listed under [Linux libraries](#linux-libraries).
 
 **Linux AppImage.** If `FlexWeek-x86_64.AppImage` won't start (missing FUSE), run `chmod +x FlexWeek-x86_64.AppImage && ./FlexWeek-x86_64.AppImage --appimage-extract`, which unpacks a `squashfs-root` folder, then run `./squashfs-root/AppRun`. Without FUSE, the tarball above is the reliable choice.
 
 **Chromebooks.** Not supported. FlexWeek is a Windows and Linux desktop app; there is no web version.
 
 Open FlexWeek. The first screen is Sign in; choose "New here? Create an account" under it, then follow setup a page at a time: a style, your week, how homework gets a time, reminders and the alarm sound, and your first homework. You can skip any page.
+
+### Linux libraries
+
+The Linux download carries Qt and Python inside it, including the X11 helpers many desktops leave out (`libxcb-cursor` and five others). It uses these libraries from your system, and a desktop install already has them:
+
+| For | Libraries |
+| --- | --- |
+| Graphics | `libEGL.so.1`, `libGL.so.1` |
+| Keyboard | `libxkbcommon.so.0`, and on X11 `libxkbcommon-x11.so.0` |
+| Text | `libfontconfig.so.1`, `libfreetype.so.6` |
+| X11 | `libX11.so.6`, `libX11-xcb.so.1`, and `libxcb.so.1` with its `randr`, `render`, `shape`, `shm`, `sync`, `xfixes` and `xkb` parts |
+| Wayland | `libwayland-client.so.0`, `libwayland-cursor.so.0`, `libwayland-egl.so.1` |
+| Desktop services | `libglib-2.0.so.0`, `libdbus-1.so.3` |
+| Network | `libgssapi_krb5.so.2`, `libbrotlidec.so.1` |
+| Sound, optional | `libpulse.so.0` from PulseAudio or PipeWire, and `libbz2.so.1`, `libdrm.so.2`, `libXext.so.6` and `libXrandr.so.2` for Qt's sound plugin. Without them, reminders and alarms still show, silently. |
+
+If FlexWeek does not start, this lists any that are missing:
+
+```bash
+find FlexWeek -name '*.so*' -exec ldd {} + 2>/dev/null | grep 'not found' | sort -u
+```
+
+On Debian or Ubuntu without a full desktop, such as a container or a minimal install, `sudo apt install libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3` adds the ones FlexWeek's own test machines lacked.
 
 ## Screenshots
 
@@ -42,6 +65,10 @@ pip install -r requirements.txt
 pip install -r requirements-desktop.txt
 python -m desktop.main
 ```
+
+On Linux, pip's PySide6 does not include the X11 helpers that the download carries, so a checkout also needs `libxcb-cursor.so.0`, `libxcb-icccm.so.4`, `libxcb-image.so.0`, `libxcb-keysyms.so.1`, `libxcb-render-util.so.0` and `libxcb-util.so.1`, besides the [Linux libraries](#linux-libraries) above. On Debian or Ubuntu: `sudo apt install libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-util1`.
+
+Building the Linux download (`./desktop/build_linux.sh`) also needs a C compiler (GCC), Python 3.14's development headers, `patchelf` (installed by `requirements-desktop.txt`) and `readelf` (binutils). The six X11 helpers must be installed, because the build copies them into the bundle. A release is built on Ubuntu 24.04, so nothing in it needs a glibc newer than 2.38; [DESKTOP.md](DESKTOP.md) has the details.
 
 The backend starts inside the app on a loopback port; there is no separate
 server to run and no page to open in a browser. The first screen is Sign in,

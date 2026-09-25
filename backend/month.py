@@ -6,7 +6,7 @@ from datetime import date, timedelta
 
 from backend.assignments import planned_minutes_by_id, unplanned_minutes
 from backend.day import is_work_session
-from backend.models import parse_naive_stamp
+from backend.models import due_sort_key, parse_due
 from backend.weeks import monday_of, month_grid, parse_month
 
 
@@ -25,6 +25,22 @@ def _on_day(block: dict, day_index: int) -> bool:
 
 def _placed_on_day(block: dict, day_index: int) -> bool:
     return bool(block.get("start")) and _on_day(block, day_index)
+
+
+def _date_block(block: dict) -> dict:
+    days = list(block.get("days") or [])
+    return {
+        "id": block["id"],
+        "title": block["title"],
+        "start": block["start"],
+        "duration_min": int(block["duration_min"]),
+        "category": block.get("category"),
+        "kind": block["kind"],
+        "assignment_id": block.get("assignment_id"),
+        "repeats": len(days) > 1,
+        "pinned": bool(block.get("pinned")),
+        "completed": bool(block.get("completed")),
+    }
 
 
 def _is_planned_session(block: dict) -> bool:
@@ -99,7 +115,7 @@ def build_month(
     overdue: list[dict] = []
     assignment_due: dict[str, date] = {}
     for body, revision in assignment_rows:
-        due_day, _minutes = parse_naive_stamp(body["due"])
+        due_day, _minutes = parse_due(body["due"])
         assignment_due[body["id"]] = due_day
         item = _deadline_item(body, revision, due_day, planned)
         key = due_day.isoformat()
@@ -108,8 +124,8 @@ def build_month(
         elif due_day < grid_start and not body.get("completed"):
             overdue.append(item)
     for items in due_by_date.values():
-        items.sort(key=lambda item: (item["due"], item["id"]))
-    overdue.sort(key=lambda item: (item["due"], item["id"]))
+        items.sort(key=lambda item: due_sort_key(item["due"], item["id"]))
+    overdue.sort(key=lambda item: due_sort_key(item["due"], item["id"]))
 
     session_dates: dict[str, list[str]] = {}
     days_out: list[dict] = []
@@ -141,6 +157,9 @@ def build_month(
             if label not in seen:
                 seen.append(label)
         due_items = due_by_date[label]
+        on_date = sessions + locked
+        chips = [_date_block(block) for block in on_date]
+        chips.sort(key=lambda item: (item["start"], item["title"]))
         days_out.append(
             {
                 "date": label,
@@ -149,8 +168,9 @@ def build_month(
                 "due_ids": [item["id"] for item in due_items],
                 "session_count": len(sessions),
                 "locked_count": len(locked),
-                "scheduled_min": sum(int(block["duration_min"]) for block in sessions + locked),
+                "scheduled_min": sum(int(block["duration_min"]) for block in on_date),
                 "focus_min": sum(int(block["duration_min"]) for block in sessions if block.get("completed")),
+                "blocks": chips,
             }
         )
 
@@ -188,7 +208,7 @@ def build_month(
         item["checklist_total"] = checklist_total
         item["checklist_done"] = checklist_done
         projects.append(item)
-    projects.sort(key=lambda item: (item["due"], item["id"]))
+    projects.sort(key=lambda item: due_sort_key(item["due"], item["id"]))
 
     return {
         "month": month,

@@ -1,0 +1,44 @@
+[
+ {
+  "file": "desktop/native/widgets.py",
+  "name": "a time always saved",
+  "old": "        return f\"{day}T{self.time.time().toString('HH:mm')}\" if self.timed.isChecked() else day\n",
+  "new": "        return f\"{day}T{self.time.time().toString('HH:mm')}\"\n",
+  "test": "desktop/tests/test_ui_dialogs.py::test_new_homework_is_due_on_a_day_and_a_time_only_when_asked"
+ },
+ {
+  "file": "desktop/native/widgets.py",
+  "name": "old 23:59 rewritten on save",
+  "old": "        return before if parse_due(chosen) == parse_due(before) else chosen\n",
+  "new": "        return chosen\n",
+  "test": "desktop/tests/test_ui_dialogs.py::test_an_old_end_of_day_due_is_kept_as_stored_until_the_deadline_changes"
+ },
+ {
+  "file": "desktop/native/widgets.py",
+  "name": "the kept due survives a changed deadline",
+  "old": "        return before if parse_due(chosen) == parse_due(before) else chosen\n",
+  "new": "        return before\n",
+  "test": "desktop/tests/test_ui_dialogs.py::test_an_old_end_of_day_due_is_kept_as_stored_until_the_deadline_changes"
+ },
+ {
+  "file": "desktop/native/widgets.py",
+  "name": "time box always shown",
+  "old": "        self.time.setVisible(timed)\n",
+  "new": "        self.time.setVisible(True)\n",
+  "test": "desktop/tests/test_ui_dialogs.py::test_new_homework_is_due_on_a_day_and_a_time_only_when_asked"
+ },
+ {
+  "file": "desktop/native/widgets.py",
+  "name": "a stored time not read back",
+  "old": "        self.time.setTime(QTime(minute // 60, minute % 60) if timed else QTime(9, 0))\n",
+  "new": "        self.time.setTime(QTime(9, 0))\n",
+  "test": "desktop/tests/test_ui_dialogs.py::test_a_due_time_is_shown_and_can_be_taken_away"
+ },
+ {
+  "file": "desktop/native/setup.py",
+  "name": "setup writes the old timed stamp",
+  "old": "                    \"due\": row.due.value(),",
+  "new": "                    \"due\": row.due.value() if row.due.timed.isChecked() else row.due.value() + \"T23:59\",",
+  "test": "desktop/tests/test_setup_wizard.py::test_a_first_homework_due_at_a_set_time_keeps_it_and_one_without_has_none"
+ }
+]

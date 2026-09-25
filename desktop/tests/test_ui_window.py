@@ -22,7 +22,7 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QStandardPaths, Qt
+    from PySide6.QtCore import QStandardPaths, Qt, QTime
     from PySide6.QtGui import QGuiApplication
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton
@@ -158,6 +158,30 @@ def soccer() -> dict:
     }
 
 
+def test_the_block_editor_saves_any_minute_and_shows_it_back(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """18:37 to 19:22 was taken by the editor and refused by the server after Save."""
+    saved(qapp, window, soccer())
+    dialog = BlockDialog(window, soccer())
+
+    def steps() -> None:
+        dialog.start.setTime(QTime(18, 37))
+        dialog.end.setTime(QTime(19, 22))
+        dialog.accept()
+
+    student(dialog, monkeypatch, steps)
+    window._commit_block(dialog)
+    settled(qapp, window)
+    window.session.load_week(window.session.week_start, discard=True)
+    settled(qapp, window)
+    stored = next(block for block in window.session.blocks if block["id"] == "soccer")
+    assert (stored["start"], stored["duration_min"]) == ("18:37", 45)
+    again = BlockDialog(window, stored)
+    assert (again.start.time().toString("HH:mm"), again.end.time().toString("HH:mm")) == ("18:37", "19:22")
+    assert again.duration_line.text() == "45 min"
+
+
 def test_w_d_and_m_switch_views_while_the_calendar_has_the_keyboard(
     qapp: QApplication, window: NativeWindow
 ) -> None:
@@ -167,11 +191,11 @@ def test_w_d_and_m_switch_views_while_the_calendar_has_the_keyboard(
     window. The older test sends the key straight to the window, which no student can do.
     """
     session = window.session
-    QTest.keyClick(window.week_table, Qt.Key.Key_D)
+    QTest.keyClick(window.week_table.hours, Qt.Key.Key_D)
     wait_until(qapp, lambda: session.planner_view == "day" and not session.busy)
-    QTest.keyClick(window.day_agenda.list, Qt.Key.Key_M)
+    QTest.keyClick(window.day_view.hours, Qt.Key.Key_M)
     wait_until(qapp, lambda: session.planner_view == "month" and not session.busy)
-    QTest.keyClick(window.month_grid.table, Qt.Key.Key_W)
+    QTest.keyClick(window.month_grid.canvas, Qt.Key.Key_W)
     wait_until(qapp, lambda: session.planner_view == "week" and not session.busy)
     QTest.keyClick(window.focus_panel.tasks, Qt.Key.Key_M)
     wait_until(qapp, lambda: session.planner_view == "month" and not session.busy)
@@ -185,8 +209,8 @@ def test_ctrl_c_in_the_week_grid_copies_the_block_and_leaves_the_os_clipboard_al
     window.session.select_block("soccer", 0)
     QGuiApplication.clipboard().setText("the student's own text")
     # Pressed on the week itself, where a block was just clicked: the window's copy, not the system's.
-    window.week_table.body.setFocus()
-    QTest.keyClick(window.week_table.body, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
+    window.week_table.hours.setFocus()
+    QTest.keyClick(window.week_table.hours, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
     assert QGuiApplication.clipboard().text() == "the student's own text"
     assert (window.session.clipboard or {}).get("kind") == "block"
     assert "Soccer" in window.session.clipboard["label"]
@@ -209,7 +233,7 @@ def test_creating_an_account_shows_password_length_before_submit(qapp: QApplicat
         qapp.processEvents()
         assert window.session.account is None
         assert "12" in window.auth_status.text()
-        assert "Password" in window.auth_status.text()
+        assert "password" in window.auth_status.text().lower()
     finally:
         with contextlib.suppress(RuntimeError):
             window.session.client.reset()

@@ -7,9 +7,15 @@ import copy
 import pytest
 from pydantic import ValidationError
 
+from backend.availability import LEGACY_WORK_WINDOWS
 from backend.models import TimeBlock
 from backend.slots import hhmm_to_minutes, overlaps
-from backend.solver import solve
+from backend.solver import solve as run_solve
+
+
+def solve(blocks, **kwargs):
+    kwargs.setdefault("work_windows", LEGACY_WORK_WINDOWS)
+    return run_solve(blocks, **kwargs)
 
 
 def _locked(

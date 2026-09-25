@@ -1,36 +1,147 @@
-"""Retro desktop: a main view. The week is a window, deadlines are a notepad, what is next is a dialog.
-
-The windows drag by their title bars and close, and the taskbar brings them back. Work with no time
-yet is listed in the week window as well as the notepad, so closing the notepad cannot hide it.
-"""
+"""Retro desktop: live hours in movable windows, with deadlines in a notepad."""
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QMouseEvent
-from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtCore import QPoint, QRectF, Qt, QTimer
+from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPen, QResizeEvent
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
-from desktop.native.calendar import DAYS
+from desktop.native.calendar import DAY_FULL, DAYS
+from desktop.native.hours.canvas import BlockPainter, Drawn, HoursCanvas
+from desktop.native.hours.chips import TrayChip
+from desktop.native.hours.geometry import FIRST, LAST, LinearTrack
+from desktop.native.hours.hand import Hand
+from desktop.native.hours.zoom import HoursScroll, Scale, opening_minute
 from desktop.native.layouts.base import (
     LayoutView,
     Scene,
     base_sheet,
-    block_button,
     button,
     css,
     empty,
     label,
+    mark_of,
     plan_buttons,
     rules,
     scrolling,
 )
 from desktop.native.weekmodel import clock_label, due_label, length_label
 
+DAY_SCALE = Scale("retro.day", (96, 128, 160, 192), 96)
+WEEK_SCALE = Scale("retro.week", (48, 64, 80, 96), 64)
+GUTTER = 56
+PAD = 8
 WINDOWS = (
-    ("week", "Week.exe", QPoint(24, 14)),
-    ("notes", "deadlines.txt", QPoint(470, 330)),
-    ("next", "Up next", QPoint(60, 360)),
+    ("week", "Week.exe", QPoint(14, 6)),
+    ("notes", "deadlines.txt", QPoint(850, 40)),
+    ("next", "Up next", QPoint(850, 300)),
 )
+
+
+def _height(px: int) -> int:
+    return round((LAST - FIRST) / 60 * px) + 2 * PAD
+
+
+def _columns(area: QRectF) -> list[LinearTrack]:
+    width = area.width() / 7
+    return [
+        LinearTrack(day, QRectF(area.left() + day * width, area.top() + PAD, width, area.height() - 2 * PAD))
+        for day in range(7)
+    ]
+
+
+class RetroPainter(BlockPainter):
+    """Square grid and bevelled bars, with shared block words and hour labels."""
+
+    def __init__(self, tokens: dict[str, str]) -> None:
+        super().__init__(
+            {
+                "window": tokens["surface"],
+                "grid": tokens["line"],
+                "hairline": tokens["line"],
+                "accent": tokens["accent"],
+                "accent_ink": tokens["accent_ink"],
+                "error": tokens["danger"],
+                "text": tokens["text"],
+                "muted": tokens["muted"],
+            }
+        )
+        self.tokens = tokens
+
+    def track(self, painter: QPainter, track: LinearTrack, today: bool) -> None:
+        painter.fillRect(track.area, QColor("#ffffff"))
+        super().track(painter, track, today)
+        painter.setPen(QPen(QColor(self.tokens["line"]), 1))
+        painter.drawLine(track.area.topLeft(), track.area.bottomLeft())
+
+    def block(self, painter: QPainter, rect: QRectF, drawn: Drawn, visible: QRectF) -> None:
+        refused = drawn.verdict is not None and not drawn.verdict.ok
+        face = QColor("#ffd0d0" if refused else self.tokens["surface"])
+        if drawn.held and not refused:
+            face = face.lighter(110)
+        painter.fillRect(rect, face)
+        bright = QColor(self.tokens["line"] if drawn.held else "#ffffff")
+        dark = QColor("#ffffff" if drawn.held else self.tokens["line"])
+        painter.setPen(QPen(bright, 2))
+        painter.drawLine(rect.topLeft(), rect.topRight())
+        painter.drawLine(rect.topLeft(), rect.bottomLeft())
+        painter.setPen(QPen(dark, 2))
+        painter.drawLine(rect.bottomLeft(), rect.bottomRight())
+        painter.drawLine(rect.topRight(), rect.bottomRight())
+        painter.fillRect(
+            QRectF(rect.left() + 2, rect.top() + 2, 4, max(0.0, rect.height() - 4)),
+            QColor(mark_of(drawn.category)),
+        )
+        if drawn.held or drawn.chosen:
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(QColor(self.tokens["danger"] if refused else self.tokens["accent"]), 2))
+            painter.drawRect(rect.adjusted(1, 1, -1, -1))
+        if drawn.columns > 1 and not drawn.held:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(self.tokens["danger"]))
+            painter.drawEllipse(QRectF(rect.right() - 10, rect.top() + 4, 7, 7))
+        self.words(painter, rect, drawn, QColor(self.tokens["text"]), visible)
+
+
+class RetroCanvas(HoursCanvas):
+    """The week header sits outside the scroll, while the rig can find its day names."""
+
+    def __init__(self, hand: Hand, painter: RetroPainter, *, week: bool) -> None:
+        super().__init__(hand, painter, _columns if week else None, gutter=GUTTER)
+        self.day_buttons: dict[int, QWidget] = {}
+
+    def day_name(self, day: int) -> QPoint:
+        pick = self.day_buttons.get(day)
+        return pick.mapToGlobal(pick.rect().center()) if pick is not None else super().day_name(day)
+
+
+class NoteLine(QPushButton):
+    """A line of the notepad: a flag and a title, then when it is due. Short of room the date goes
+    under the title, whole, and the title shortens only if it must, rather than the line running off
+    the page."""
+
+    def __init__(self, head: str, due: str, name: str) -> None:
+        self._head, self._due = head, due
+        super().__init__(f"{head}  {due}")
+        self.setObjectName(name)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setProperty("kind", "row")
+        self.setProperty("mono", "true")
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        fonts = self.fontMetrics()
+        widest = max(fonts.horizontalAdvance(line) for line in self.text().split("\n"))
+        room = max(self.width() - (super().sizeHint().width() - widest), 0)
+        fitted = f"{self._head}  {self._due}"
+        if fonts.horizontalAdvance(fitted) > room:
+            # Under the title, in line with it past the flag.
+            lines = (self._head, f"   {self._due}")
+            fitted = "\n".join(fonts.elidedText(line, Qt.TextElideMode.ElideRight, room) for line in lines)
+        if fitted != self.text():
+            self.setText(fitted)
+            self.updateGeometry()
 
 
 class TitleBar(QLabel):
@@ -53,6 +164,7 @@ class TitleBar(QLabel):
         limit_x = max(desk.width() - 60, 0) if desk is not None else spot.x()
         limit_y = max(desk.height() - 30, 0) if desk is not None else spot.y()
         self._window.move(min(max(spot.x(), 0), limit_x), min(max(spot.y(), 0), limit_y))
+        self._window.setProperty("moved", True)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         self._grab = None
@@ -61,11 +173,14 @@ class TitleBar(QLabel):
 class RetroView(LayoutView):
     layout_id = "retro"
 
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
+    def __init__(self, parent: QWidget | None = None, *, hand: Hand | None = None) -> None:
+        super().__init__(parent, hand=hand)
         self._open: dict[str, bool] = {}
         self._spots: dict[str, QPoint] = {}
         self._opened_for = ""
+        self._scrolls: dict[str, HoursScroll] = {}
+        self._moved: set[str] = set()
+        self.hand.preview_changed.connect(self._status)
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
@@ -84,6 +199,13 @@ class RetroView(LayoutView):
         self._bar_row.setContentsMargins(4, 3, 4, 3)
         surface.addWidget(self._bar)
         outer.addWidget(self._surface)
+
+    def _shown_day(self, scene: Scene) -> int:
+        if scene.surface == "day" and scene.iso_day:
+            for day in range(7):
+                if scene.week.date_of(day).isoformat() == scene.iso_day:
+                    return day
+        return scene.today if scene.today is not None else 0
 
     def _toggle(self, key: str) -> None:
         if self._scene is not None:
@@ -105,9 +227,6 @@ class RetroView(LayoutView):
                     "#retroScroll, #retroDesk": css(background=tokens["bg"]),
                     "#retroTaskbar": css(background=tokens["surface"], border_top=raised),
                     'QFrame[role="window"]': css(background=tokens["surface"], border=raised),
-                    # The drop drawer is a window here too: square, raised, its days square keys.
-                    "QFrame#dropDrawer": css(border=raised, border_radius="0"),
-                    ", ".join(f"QPushButton#dropDay{day}" for day in range(7)): css(border_radius="0"),
                     'QFrame[role="sunken"]': css(background="#ffffff", border=f"2px inset {tokens['line']}"),
                     "QLabel": css(color=tokens["text"], font_size=f"{scene.px(13)}px"),
                     'QLabel[role="title"]': css(
@@ -142,10 +261,14 @@ class RetroView(LayoutView):
                         text_align="left",
                         min_height=f"{scene.px(20)}px",
                     ),
-                    'QPushButton[kind="row"][state="past"]': css(
-                        color="#3a3a3a", text_decoration="line-through"
-                    ),
                     'QPushButton[kind="row"][mono="true"]': css(font_family="DejaVu Sans Mono, monospace"),
+                    'QPushButton[kind="day"]': css(padding="0", min_height=f"{scene.px(28)}px"),
+                    'QPushButton[kind="day"][chosen="true"]': css(
+                        border=f"2px inset {tokens['line']}", font_weight=800
+                    ),
+                    'QPushButton[tray="true"]': css(background="#ffffff", text_align="left"),
+                    'QPushButton[zoom="true"]': css(min_height="0", padding="0"),
+                    'QLabel#retroStatus[verdict="refused"]': css(color=tokens["danger"]),
                     'QPushButton[kind="task"][open="true"]': css(
                         border=f"2px inset {tokens['line']}", font_weight=700
                     ),
@@ -156,27 +279,85 @@ class RetroView(LayoutView):
                 },
             )
         )
+        for kept in self._scrolls.values():
+            kept.hide()
+            kept.setParent(self._desk)
         for child in self._desk.findChildren(QFrame, options=Qt.FindChildOption.FindDirectChildrenOnly):
             if child.property("role") == "window":
                 self._spots[child.objectName()] = child.pos()
+                if child.property("moved"):
+                    self._moved.add(child.objectName())
                 child.setParent(None)
                 child.deleteLater()
-        builders = {"week": self._week_window, "notes": self._notes_window, "next": self._next_window}
+        builders = {"week": self._hours_window, "notes": self._notes_window, "next": self._next_window}
         for key, title, home in WINDOWS:
             if not self._open.get(key):
                 continue
+            if key == "week":
+                title = self._main_title(scene)
             frame = self._frame(scene, key, title)
             builders[key](scene, frame.layout())
             frame.setParent(self._desk)
-            frame.setMaximumWidth(max(self.width(), self._desk.width(), 280) - 16)
+            if key == "week":
+                frame.setFixedSize(self._main_width(), max(self._desk.height(), self.height() - 40) - 12)
+            else:
+                frame.setFixedWidth(self._side_width())
             frame.adjustSize()
             self._place(frame, home)
             frame.show()
         self._taskbar(scene)
+        QTimer.singleShot(0, self._fit_windows)
+
+    def _main_width(self) -> int:
+        width = max(self.width(), self._desk.width())
+        return min(round(width * 0.70), width - 280)
+
+    def _side_width(self) -> int:
+        return max(260, max(self.width(), self._desk.width()) - self._main_width() - 32)
+
+    def _fit_windows(self) -> None:
+        main = self.findChild(QFrame, "retroWindow-week")
+        if main is not None:
+            main.setFixedSize(self._main_width(), max(self._desk.height() - 12, 430))
+            self._clamp(main)
+        for key, top in (("notes", 40), ("next", 300)):
+            frame = self.findChild(QFrame, f"retroWindow-{key}")
+            if frame is None:
+                continue
+            frame.setFixedWidth(self._side_width())
+            frame.adjustSize()
+            if not frame.property("moved"):
+                frame.move(self._main_width() + 20, top)
+            else:
+                self._clamp(frame)
+
+    def _clamp(self, frame: QFrame) -> None:
+        frame.move(
+            min(max(frame.x(), 0), max(self._desk.width() - 60, 0)),
+            min(max(frame.y(), 0), max(self._desk.height() - 30, 0)),
+        )
+
+    def resizeEvent(self, event: object) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        if hasattr(self, "_desk"):
+            QTimer.singleShot(0, self._fit_windows)
+
+    def _main_title(self, scene: Scene) -> str:
+        if scene.surface == "day":
+            day = self._shown_day(scene)
+            return f"Schedule.exe — {DAY_FULL[day]} {scene.week.date_of(day).day}"
+        return f"Week.exe — {scene.week.date_of(0).day} to {scene.week.date_of(6).day}"
 
     def _place(self, frame: QFrame, home: QPoint) -> None:
         desk = self._desk
-        spot = self._spots.get(frame.objectName(), home)
+        if frame.objectName() in self._moved:
+            spot = self._spots[frame.objectName()]
+        elif frame.objectName() == "retroWindow-notes":
+            spot = QPoint(self._main_width() + 20, 40)
+        elif frame.objectName() == "retroWindow-next":
+            spot = QPoint(self._main_width() + 20, 300)
+        else:
+            spot = home
         limit_x = max(desk.width() - 60, 0)
         limit_y = max(desk.height() - 30, 0)
         frame.move(min(max(spot.x(), 0), limit_x), min(max(spot.y(), 0), limit_y))
@@ -185,6 +366,7 @@ class RetroView(LayoutView):
         frame = QFrame()
         frame.setObjectName(f"retroWindow-{key}")
         frame.setProperty("role", "window")
+        frame.setProperty("moved", frame.objectName() in self._moved)
         body = QVBoxLayout(frame)
         body.setContentsMargins(3, 3, 3, 6)
         body.setSpacing(scene.px(5))
@@ -201,80 +383,131 @@ class RetroView(LayoutView):
         body.addLayout(head)
         return frame
 
-    def _week_window(self, scene: Scene, body: QVBoxLayout) -> None:
+    def _hours_window(self, scene: Scene, body: QVBoxLayout) -> None:
         menu = QHBoxLayout()
         for made in plan_buttons(self, "retro", "Add homework…"):
             made.setProperty("kind", "menu")
             menu.addWidget(made)
         menu.addStretch(1)
         body.addLayout(menu)
-        sunken = QFrame()
-        sunken.setProperty("role", "sunken")
-        grid = QGridLayout(sunken)
-        grid.setContentsMargins(4, 4, 4, 4)
-        grid.setHorizontalSpacing(scene.px(6))
-        for day, name in enumerate(DAYS):
-            today = day == scene.today
-            head = label(
-                f"{name} {scene.week.date_of(day).day}" + (" (today)" if today else ""), f"retroDay{day}"
+        is_day = scene.surface == "day"
+        key = "day" if is_day else "week"
+        if key not in self._scrolls:
+            canvas = RetroCanvas(self.hand, RetroPainter(scene.tokens), week=not is_day)
+            canvas.setObjectName("retroHours")
+            canvas.day_opened.connect(
+                lambda day: self.day_activated.emit(self.scene.week.date_of(day).isoformat())
             )
-            head.setProperty("role", "today" if today else "")
-            grid.addWidget(head, 0, day)
-            for row, item in enumerate(scene.week.on_day(day), start=1):
-                words = f"{clock_label(item.start)} {item.title}"
-                made = block_button(self, words, f"retroBlock{day}-{row}", item.block_id, day=day)
-                made.setProperty("state", "" if item.live else "past")
-                grid.addWidget(made, row, day)
-        grid.setRowStretch(grid.rowCount(), 1)
-        pane = scrolling(sunken, "retroWeekPane")
-        pane.setWidgetResizable(False)
-        pane.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        sunken.adjustSize()
-        pane.setMinimumSize(520, 220)
-        body.addWidget(pane, 1)
-        if scene.week.waiting:
-            waiting = QHBoxLayout()
-            waiting.addWidget(label("Not placed yet:", "retroWaitingLabel"))
-            for index, item in enumerate(scene.week.waiting):
-                made = block_button(
-                    self,
-                    f"{item.title} ({length_label(item.minutes)})",
-                    f"retroWaiting{index}",
-                    item.block_id,
+            scroll = self.keep_zoom(
+                HoursScroll(
+                    canvas,
+                    DAY_SCALE if is_day else WEEK_SCALE,
+                    _height,
+                    name="retroDay" if is_day else "retroWeek",
+                    gutter=GUTTER,
                 )
-                made.setToolTip(item.reason)
-                waiting.addWidget(made)
-            waiting.addStretch(1)
-            body.addLayout(waiting)
+            )
+            if not is_day:
+                names = QWidget()
+                row = QHBoxLayout(names)
+                row.setContentsMargins(0, 0, 0, 0)
+                row.setSpacing(0)
+                for day in range(7):
+                    pick = button("", f"retroDay{day}", "day")
+                    pick.clicked.connect(
+                        lambda _=False, chosen=day: self.day_activated.emit(
+                            self.scene.week.date_of(chosen).isoformat()
+                        )
+                    )
+                    pick.setProperty("day_target", day)
+                    canvas.day_buttons[day] = pick
+                    row.addWidget(pick, 1)
+                scroll.set_header(names)
+            self._scrolls[key] = scroll
+        scroll = self._scrolls[key]
+        canvas = scroll.canvas
+        canvas.set_painter(RetroPainter(scene.tokens))
+        if is_day:
+            day = self._shown_day(scene)
+            canvas._lay_out = lambda area: [LinearTrack(day, area.adjusted(0, PAD, -PAD, -PAD))]
+            canvas.relayout()
+            items = [item for item in scene.week.occurrences if item.day == day]
+        else:
+            day = None
+            items = scene.week.occurrences
+            for target, pick in canvas.day_buttons.items():
+                pick.setText(f"{DAYS[target]} {scene.week.date_of(target).day}")
+                pick.setProperty("chosen", "true" if target == scene.today else "false")
+                pick.style().unpolish(pick)
+                pick.style().polish(pick)
+        canvas.set_week(items, scene.today, scene.minute)
+        body.addWidget(scroll, 1)
+        scroll.show()
+        opens = opening_minute(scene.week, scene.today, scene.minute, day)
+        scroll.open_at((scene.week.week_start, day), opens)
+        if scene.week.waiting and not self._open.get("notes"):
+            # The notepad is where they live; here only while it is closed, so they are never shown twice.
+            body.addWidget(label("Not placed yet · deadlines.txt", "retroWaitingLabel"))
+            body.addLayout(self._tray(scene, "retroWaiting"))
+        status = label("Ready. Drag a block, pull an edge, or drag empty time.", "retroStatus", wrap=True)
+        status.setMinimumHeight(scene.px(32))
+        body.addWidget(status)
+        self._status()
+
+    def _tray(self, scene: Scene, prefix: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        for index, waiting in enumerate(scene.week.waiting):
+            chip = TrayChip(self.hand, waiting)
+            chip.setObjectName(f"{prefix}{index}")
+            chip.setToolTip(f"{chip.toolTip()} {waiting.reason}")
+            chip.clicked.connect(
+                lambda _=False, block_id=waiting.block_id: self.block_activated.emit(block_id)
+            )
+            row.addWidget(chip, 1)
+        return row
+
+    def _status(self) -> None:
+        status = self.findChild(QLabel, "retroStatus")
+        if status is None:
+            return
+        preview = self.hand.preview
+        if preview is None:
+            status.setText("Ready. Drag a block, pull an edge, or drag empty time.")
+            status.setProperty("verdict", "ready")
+        else:
+            times = f"{clock_label(preview.span.start)}–{clock_label(preview.span.end)}"
+            words = preview.verdict.words
+            if preview.verdict.ok:
+                status.setText(words or times)
+            else:
+                status.setText(f"{times} · {words}" if words else times)
+            status.setProperty("verdict", "ok" if preview.verdict.ok else "refused")
+        status.style().unpolish(status)
+        status.style().polish(status)
 
     def _notes_window(self, scene: Scene, body: QVBoxLayout) -> None:
         sunken = QFrame()
         sunken.setProperty("role", "sunken")
         lines = QVBoxLayout(sunken)
         lines.setContentsMargins(4, 4, 4, 4)
-        lines.setSpacing(0)
-        index = 0
-        for item in scene.week.open_work():
+        lines.setSpacing(2)
+        lines.addWidget(label("Not placed yet · deadlines.txt", "retroNotesWaiting"))
+        for index, waiting in enumerate(scene.week.waiting):
+            chip = TrayChip(self.hand, waiting)
+            chip.setObjectName(f"retroNoteWaiting{index}")
+            chip.setToolTip(f"{chip.toolTip()} {waiting.reason}")
+            chip.clicked.connect(
+                lambda _=False, block_id=waiting.block_id: self.block_activated.emit(block_id)
+            )
+            lines.addWidget(chip)
+        if not scene.week.waiting:
+            lines.addWidget(label("Everything has a time.", "retroNotesNoWaiting"))
+        for index, item in enumerate(scene.week.open_work()):
             flag = {"danger": "!!", "tight": " !"}.get(item.slack or "", "  ")
-            made = block_button(
-                self,
-                f"{flag} {item.title:<26} {due_label(item.due, scene.week.week_start)}",
-                f"retroNote{index}",
-                item.block_id,
-                day=item.day,
-            )
-            made.setProperty("mono", "true")
+            due = due_label(item.due, scene.week.week_start)
+            made = NoteLine(f"{flag} {item.title}", due, f"retroNote{index}")
+            made.clicked.connect(lambda _=False, block_id=item.block_id: self.block_activated.emit(block_id))
             lines.addWidget(made)
-            index += 1
-        for item in scene.week.waiting:
-            made = block_button(
-                self, f"?? {item.title:<26} not placed yet", f"retroNote{index}", item.block_id
-            )
-            made.setProperty("mono", "true")
-            lines.addWidget(made)
-            index += 1
-        if not index:
-            lines.addWidget(label("nothing open.", "retroNotesEmpty"))
         body.addWidget(sunken)
 
     def _next_window(self, scene: Scene, body: QVBoxLayout) -> None:
@@ -305,6 +538,8 @@ class RetroView(LayoutView):
     def _taskbar(self, scene: Scene) -> None:
         empty(self._bar_row)
         for key, title, _ in WINDOWS:
+            if key == "week":
+                title = "Schedule.exe" if scene.surface == "day" else "Week.exe"
             task = button(title, f"retroTask-{key}", "task")
             task.setProperty("open", "true" if self._open.get(key) else "false")
             task.setAccessibleName(("Hide " if self._open.get(key) else "Show ") + title)

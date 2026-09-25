@@ -22,12 +22,15 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QStandardPaths
+    from PySide6.QtCore import QRectF, QStandardPaths
     from PySide6.QtGui import QColor
-    from PySide6.QtWidgets import QApplication, QComboBox, QPushButton
+    from PySide6.QtWidgets import QApplication, QComboBox, QPushButton, QWidget
 
     from desktop.native.calendar import CATEGORIES
-    from desktop.native.canvas import Shape, WeekCanvas
+    from desktop.native.hours.canvas import Drawn
+    from desktop.native.hours.classic import ClassicWeek
+    from desktop.native.hours.hand import Hand, Verdict
+    from desktop.native.hours.month import MonthGrid
     from desktop.native.look import (
         LOOK_DEFAULTS,
         effective_look,
@@ -36,7 +39,7 @@ if importlib.util.find_spec("PySide6") is not None:
         resolved_palette,
     )
     from desktop.native.settings import PrefsDialog
-    from desktop.native.widgets import MonthGrid
+    from desktop.native.weekmodel import build_week
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
     from desktop.tests.logic_support import past_setup
@@ -53,6 +56,8 @@ SCHOOL = {
 }
 CLUB = {"id": "club", "title": "Club", "kind": "locked", "start": "10:00", "duration_min": 30, "days": [1]}
 PALE, STRONG = "#bfdbfe", "#3b82f6"
+# The hosts of the hands these tests make: a hand is its host's Qt child and keeps no reference to it.
+HOSTS: list = []
 
 
 @pytest.fixture(scope="module")
@@ -68,24 +73,53 @@ def look_of(**knobs: str) -> dict:
     return {"preset": "default", "knobs": knobs}
 
 
-def week(qapp: QApplication, look: dict | None, pack: str = "nocturne") -> tuple[WeekCanvas, dict]:
+def week(qapp: QApplication, look: dict | None, pack: str = "nocturne") -> tuple[ClassicWeek, dict]:
+    """Today's app's week, opened at 07:00 so School and Club are both on screen."""
     palette = resolved_palette(pack, pack in {"nocturne", "dark-frost"}, look)
-    canvas = WeekCanvas()
-    canvas.resize(1000, 800)
-    canvas.set_look(look, palette)
-    canvas.set_week(WEEK, [SCHOOL, CLUB], None)
-    canvas.show()
+    host = QWidget()
+    HOSTS.append(host)
+    calendar = ClassicWeek(Hand(lambda block_id, from_day, span: Verdict(False, ""), host))
+    calendar.resize(1000, 800)
+    calendar.set_look(look, palette)
+    calendar.set_week(build_week(WEEK, [SCHOOL, CLUB], {}, None), None, 7 * 60)
+    calendar.show()
     qapp.processEvents()
-    return canvas, palette
+    calendar.hours.relayout()
+    qapp.processEvents()
+    return calendar, palette
 
 
-def shape(canvas: WeekCanvas, block_id: str) -> Shape:
-    return next(item for item in canvas.body.shapes if item.block_id == block_id)
+def block_on(calendar: ClassicWeek, block_id: str) -> tuple[Drawn, QRectF]:
+    hours = calendar.hours
+    return next(
+        (drawn, rect)
+        for track in hours.tracks
+        for drawn, rect in hours.drawn(track)
+        if drawn.block_id == block_id
+    )
 
 
-def pixel(canvas: WeekCanvas, block_id: str, where: str) -> str:
-    rect = next(rect for item, rect, _count, _held in canvas.body.laid_out() if item.block_id == block_id)
-    image = canvas.body.grab().toImage()
+def shape(calendar: ClassicWeek, block_id: str) -> tuple[str, str, str | None, str | None]:
+    """Fill, ink, outline and edge, as the week paints the block."""
+    fill, ink, outline, edge = calendar.hours.painter.fills(block_on(calendar, block_id)[0])
+    return fill.name(), ink.name(), outline and outline.name(), edge and edge.name()
+
+
+def painted(window: NativeWindow, block_id: str) -> tuple[str, str | None]:
+    hours = window.week_table.hours
+    if not hours.tracks:
+        window.show()
+        hours.resize(980, 640)
+        hours.relayout()
+    track = hours.track_for(0, 8 * 60)
+    drawn = next(item for item, _rect in hours.drawn(track) if item.block_id == block_id)
+    fill, _ink, _outline, edge = hours.painter.fills(drawn)
+    return fill.name(), None if edge is None else edge.name()
+
+
+def pixel(calendar: ClassicWeek, block_id: str, where: str) -> str:
+    rect = block_on(calendar, block_id)[1]
+    image = calendar.hours.grab().toImage()
     # "left" sits on the 4px edge or the 2px outline; "inside" is past the text, clear of both.
     x = rect.left() + 1.5 if where == "left" else rect.right() - 8
     return QColor(image.pixel(int(x), int(rect.center().y()))).name()
@@ -96,43 +130,41 @@ def test_the_category_table_is_what_these_tests_assume() -> None:
 
 
 def test_a_filled_block_is_the_pale_category_colour_with_ink_that_reads(qapp: QApplication) -> None:
-    canvas, palette = week(qapp, look_of())
-    school = shape(canvas, "school")
-    assert (school.fill, school.ink, school.outline, school.edge) == (PALE, "#000000", None, None)
+    calendar, palette = week(qapp, look_of())
+    assert shape(calendar, "school") == (PALE, "#000000", None, None)
     # No category: the palette's own block colours, not a fixed light grey that glares on a dark pack.
-    club = shape(canvas, "club")
-    assert (club.fill, club.ink) == (palette["block_locked"], palette["block_locked_ink"])
-    assert pixel(canvas, "school", "inside") == PALE
+    assert shape(calendar, "club")[:2] == (palette["block_locked"], palette["block_locked_ink"])
+    assert pixel(calendar, "school", "inside") == PALE
 
 
 def test_an_outlined_block_is_drawn_as_one_outline_in_the_strong_colour(qapp: QApplication) -> None:
-    canvas, palette = week(qapp, look_of(blocks="outlined"))
-    school = shape(canvas, "school")
-    assert (school.fill, school.ink, school.outline) == (palette["grid"], palette["text"], STRONG)
-    assert pixel(canvas, "school", "left") == STRONG
-    assert pixel(canvas, "school", "inside") == palette["grid"]
+    calendar, palette = week(qapp, look_of(blocks="outlined"))
+    assert shape(calendar, "school")[:3] == (palette["grid"], palette["text"], STRONG)
+    assert pixel(calendar, "school", "left") == STRONG
+    assert pixel(calendar, "school", "inside") == palette["grid"]
 
 
 def test_an_edge_block_is_a_plain_card_with_the_strong_colour_down_its_left(qapp: QApplication) -> None:
-    canvas, palette = week(qapp, look_of(blocks="edge"))
-    school = shape(canvas, "school")
-    assert (school.fill, school.edge) == (palette["panel"], STRONG)
-    assert pixel(canvas, "school", "left") == STRONG
-    assert pixel(canvas, "school", "inside") == palette["panel"]
+    calendar, palette = week(qapp, look_of(blocks="edge"))
+    fill, _ink, _outline, edge = shape(calendar, "school")
+    assert (fill, edge) == (palette["panel"], STRONG)
+    assert pixel(calendar, "school", "left") == STRONG
+    assert pixel(calendar, "school", "inside") == palette["panel"]
 
 
 def test_the_outline_stays_visible_on_a_light_pack(qapp: QApplication) -> None:
-    canvas, palette = week(qapp, look_of(blocks="outlined"), pack="slate")
-    assert pixel(canvas, "school", "left") == STRONG
+    calendar, palette = week(qapp, look_of(blocks="outlined"), pack="slate")
+    assert pixel(calendar, "school", "left") == STRONG
     assert palette["grid"] == "#fbfcff"
 
 
 def test_changing_the_look_repaints_the_week_already_on_screen(qapp: QApplication) -> None:
-    canvas, palette = week(qapp, look_of())
-    assert shape(canvas, "school").fill == PALE
-    canvas.set_look(look_of(blocks="edge"), palette)
-    assert (shape(canvas, "school").fill, shape(canvas, "school").edge) == (palette["panel"], STRONG)
-    assert pixel(canvas, "school", "inside") == palette["panel"]
+    calendar, palette = week(qapp, look_of())
+    assert shape(calendar, "school")[0] == PALE
+    calendar.set_look(look_of(blocks="edge"), palette)
+    fill, _ink, _outline, edge = shape(calendar, "school")
+    assert (fill, edge) == (palette["panel"], STRONG)
+    assert pixel(calendar, "school", "inside") == palette["panel"]
 
 
 def test_days_outside_the_month_use_the_palettes_muted_ink(qapp: QApplication) -> None:
@@ -149,7 +181,8 @@ def test_days_outside_the_month_use_the_palettes_muted_ink(qapp: QApplication) -
     terminal = resolved_palette("slate", False, {"preset": "terminal", "knobs": {}})
     grid.set_month(snapshot, False)
     grid.set_palette(terminal)
-    assert grid.table.item(0, 0).foreground().color().name() == terminal["muted"] == "#7fbf7f"
+    assert grid.canvas.cells[0].in_month is False
+    assert grid.canvas.painter.c("muted").name() == terminal["muted"] == "#7fbf7f"
 
 
 def settings(look: dict) -> PrefsDialog:
@@ -249,14 +282,14 @@ def test_a_look_chosen_in_the_window_reaches_the_calendar_not_only_the_styleshee
         window.session.add_block(dict(SCHOOL))
         window.session.save()
         wait_until(qapp, lambda: window.session.revision == 1 and not window.session.busy)
-        assert shape(window.week_table, "school").fill == PALE
+        assert painted(window, "school")[0] == PALE
 
         # What Settings does when the student presses OK.
         window._look = look_of(blocks="edge")
         window._apply_appearance()
-        school = shape(window.week_table, "school")
-        assert school.edge == STRONG
-        assert school.fill != PALE
+        fill, edge = painted(window, "school")
+        assert edge == STRONG
+        assert fill != PALE
         assert "border: 1px solid" in window.styleSheet()
     finally:
         with contextlib.suppress(RuntimeError):

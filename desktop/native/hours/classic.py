@@ -1,0 +1,203 @@
+"""Today's app's Day and Week, as Daily Scheduler draws them.
+
+Day is one full-width day that opens at 96 pixels an hour and scrolls, with the homework still
+waiting for a time and a summary of the day beside it. Week is seven columns that open at 48 pixels
+an hour and scroll, with the days' names kept at the top so each still opens its day. Both zoom, and
+remember how close they were. Both are painted hours on the one `Hand`, so every gesture works the
+same on each.
+"""
+
+from __future__ import annotations
+
+from datetime import date, timedelta
+
+from PySide6.QtCore import QRectF, Qt, Signal
+from PySide6.QtGui import QMouseEvent
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+
+from desktop.native.calendar import CATEGORIES, DAYS
+from desktop.native.hours.canvas import BlockPainter, HoursCanvas
+from desktop.native.hours.chips import TrayChip
+from desktop.native.hours.geometry import FIRST, LAST, LinearTrack
+from desktop.native.hours.hand import Hand
+from desktop.native.hours.zoom import HoursScroll, Scale, opening_minute
+from desktop.native.weekmodel import WeekModel, length_label
+
+# A Day never goes below 96 pixels an hour, where 15 minutes is 24 pixels. The Week opens at 48, where
+# an hour still has edges to resize, and can go further out to see more of the day at once.
+DAY_SCALE = Scale("classic.day", (96, 128, 160, 192), 96)
+WEEK_SCALE = Scale("classic.week", (32, 48, 64, 96, 128), 48)
+DAY_HOUR_PX = DAY_SCALE.default
+WEEK_HOUR_PX = WEEK_SCALE.default
+PAD = 8
+GUTTER = 52
+
+
+def _hours_height(px_per_hour: int) -> int:
+    return round((LAST - FIRST) / 60 * px_per_hour) + 2 * PAD
+
+
+class DayName(QLabel):
+    """A day's name above the week. Kept out of the scroll so it stays reachable."""
+
+    clicked = Signal(int)
+
+    def __init__(self, day: int, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._day = day
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit(self._day)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+
+def _seven_columns(area: QRectF) -> list[LinearTrack]:
+    width = area.width() / 7
+    return [
+        LinearTrack(day, QRectF(area.left() + day * width, area.top() + PAD, width, area.height() - 2 * PAD))
+        for day in range(7)
+    ]
+
+
+class ClassicWeek(QWidget):
+    """The week as a scrollable overview, names fixed at the top, still drags."""
+
+    day_opened = Signal(int)
+
+    def __init__(self, hand: Hand, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("weekTable")
+        self.week_start = ""
+        self.hours = HoursCanvas(hand, BlockPainter({}), _seven_columns, gutter=GUTTER, names=self._name)
+        self.hours.setObjectName("weekHours")
+        self.hours.day_opened.connect(self.day_opened.emit)
+        self.scroll = HoursScroll(self.hours, WEEK_SCALE, _hours_height, name="week", gutter=GUTTER)
+        names = QWidget()
+        names.setObjectName("weekDayNames")
+        row = QHBoxLayout(names)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(0)
+        self._name_labels: list[DayName] = []
+        for day in range(7):
+            name = DayName(day)
+            name.setObjectName(f"weekDayName{day}")
+            name.setText(DAYS[day])
+            name.clicked.connect(self.day_opened.emit)
+            row.addWidget(name, 1)
+            self._name_labels.append(name)
+        self.scroll.set_header(names)
+        box = QVBoxLayout(self)
+        box.setContentsMargins(0, 0, 0, 0)
+        box.addWidget(self.scroll)
+
+    def _name(self, day: int) -> str:
+        if not self.week_start:
+            return DAYS[day]
+        return f"{DAYS[day]} {(date.fromisoformat(self.week_start) + timedelta(days=day)).day}"
+
+    def set_look(self, look: dict | None, palette: dict) -> None:
+        self.hours.set_painter(BlockPainter(palette, look))
+
+    def set_week(self, week: WeekModel, today: int | None, now_min: int | None) -> None:
+        self.week_start = week.week_start
+        self.hours.set_week(week.occurrences, today, now_min)
+        for day, label in enumerate(self._name_labels):
+            label.setText(self._name(day))
+        self.scroll.open_at(week.week_start, opening_minute(week, today, now_min))
+
+    def hours_surfaces(self) -> list[HoursCanvas]:
+        return [self.hours]
+
+
+class ClassicDay(QWidget):
+    """One day, full width, with what still needs a time and what the day holds beside it."""
+
+    def __init__(self, hand: Hand, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("dayView")
+        self.hand = hand
+        self.day = 0
+        self.hours = HoursCanvas(hand, BlockPainter({}), self._one_column, gutter=56)
+        self.hours.setObjectName("dayHours")
+        # The window's heading already names the day, so its header holds only the zoom.
+        self.scroll = HoursScroll(self.hours, DAY_SCALE, _hours_height, name="day", gutter=56)
+        self.side = QFrame()
+        self.side.setObjectName("daySide")
+        self.side.setFixedWidth(250)
+        side = QVBoxLayout(self.side)
+        side.setContentsMargins(12, 12, 12, 12)
+        side.setSpacing(6)
+        waiting = QLabel("Not placed yet")
+        waiting.setObjectName("dayWaitingLabel")
+        side.addWidget(waiting)
+        self.tray = QVBoxLayout()
+        self.tray.setSpacing(6)
+        side.addLayout(self.tray)
+        self.tray_hint = QLabel(
+            "Drag one onto the day to give it that time, or drag on empty time to add something."
+        )
+        self.tray_hint.setObjectName("dayWaitingHint")
+        self.tray_hint.setWordWrap(True)
+        side.addWidget(self.tray_hint)
+        summary = QLabel("Summary")
+        summary.setObjectName("daySummaryLabel")
+        side.addWidget(summary)
+        self.summary = QLabel()
+        self.summary.setObjectName("daySummary")
+        self.summary.setWordWrap(True)
+        self.summary.setTextFormat(Qt.TextFormat.PlainText)
+        side.addWidget(self.summary)
+        side.addStretch(1)
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(0)
+        row.addWidget(self.scroll, 1)
+        row.addWidget(self.side)
+
+    def _one_column(self, area: QRectF) -> list[LinearTrack]:
+        return [LinearTrack(self.day, area.adjusted(0, PAD, -PAD, -PAD))]
+
+    def set_look(self, look: dict | None, palette: dict) -> None:
+        self.hours.set_painter(BlockPainter(palette, look))
+
+    def set_day(self, week: WeekModel, day: int, today: int | None, now_min: int | None) -> None:
+        changed_day = day != self.day
+        self.day = day
+        if changed_day:
+            self.hours.relayout()
+        self.hours.set_week([item for item in week.occurrences if item.day == day], today, now_min)
+        self._fill_tray(week)
+        self._fill_summary(week, day)
+        self.scroll.open_at((week.week_start, day), opening_minute(week, today, now_min, day))
+
+    def _fill_tray(self, week: WeekModel) -> None:
+        if self.hand.busy:
+            # Rebuilding would delete the chip the pointer is holding. The release refreshes.
+            return
+        while self.tray.count():
+            widget = self.tray.takeAt(0).widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+        for index, waiting in enumerate(week.waiting):
+            chip = TrayChip(self.hand, waiting)
+            chip.setObjectName(f"dayWaiting{index}")
+            chip.clicked.connect(lambda _=False, key=waiting.block_id: self.hand.open(key))
+            self.tray.addWidget(chip)
+        self.tray_hint.setVisible(bool(week.waiting))
+
+    def _fill_summary(self, week: WeekModel, day: int) -> None:
+        totals: dict[str, int] = {}
+        for item in week.on_day(day):
+            name = CATEGORIES.get(item.category, {}).get("label") or ("Homework" if item.work else "Other")
+            totals[name] = totals.get(name, 0) + item.minutes
+        lines = [f"{name}: {length_label(minutes)}" for name, minutes in totals.items()]
+        self.summary.setText("\n".join(lines) if lines else "Nothing planned.")
+
+    def hours_surfaces(self) -> list[HoursCanvas]:
+        return [self.hours]

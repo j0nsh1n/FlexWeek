@@ -6,8 +6,9 @@ import copy
 import hashlib
 from datetime import date, timedelta
 
-from backend.models import TimeBlock, parse_naive_stamp
+from backend.models import TimeBlock, parse_due
 from backend.slots import hhmm_to_minutes, minutes_to_hhmm, parse_deadline
+from backend.weeks import LAST_DAY
 
 
 def migrated_assignment_id(week_start: str, source_id: str) -> str:
@@ -33,7 +34,14 @@ def completed_at_for_block(week_start: str, block: dict) -> str:
             day = days[0]
         if day is not None:
             end = hhmm_to_minutes(start) + int(block["duration_min"])
-            return f"{(monday + timedelta(days=int(day))).isoformat()}T{minutes_to_hhmm(end)}"
+            # 24:00 is the next date at 00:00. A stamp of T24:00 is not a time the API accepts.
+            day_date = monday + timedelta(days=int(day))
+            if end >= 24 * 60:
+                day_date += timedelta(days=end // (24 * 60))
+                end %= 24 * 60
+            if day_date > LAST_DAY:
+                return f"{LAST_DAY.isoformat()}T23:59"
+            return f"{day_date.isoformat()}T{minutes_to_hhmm(end)}"
     return f"{(monday + timedelta(days=6)).isoformat()}T23:59"
 
 
@@ -74,7 +82,7 @@ def _as_session(block: dict, assignment_id: str) -> None:
 
 def due_placement_bound(week_start: str, due: str) -> tuple[int, int] | None:
     monday = date.fromisoformat(week_start)
-    due_day, minutes = parse_naive_stamp(due)
+    due_day, minutes = parse_due(due)
     if due_day > monday + timedelta(days=6):
         return None
     if due_day < monday:
@@ -84,7 +92,7 @@ def due_placement_bound(week_start: str, due: str) -> tuple[int, int] | None:
 
 def due_slack_point(week_start: str, due: str) -> tuple[int, int]:
     monday = date.fromisoformat(week_start)
-    due_day, minutes = parse_naive_stamp(due)
+    due_day, minutes = parse_due(due)
     return ((due_day - monday).days, minutes)
 
 

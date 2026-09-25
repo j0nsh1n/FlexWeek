@@ -200,9 +200,11 @@ def test_a_block_cannot_run_past_midnight() -> None:
 
 def test_labels_read_the_way_a_student_says_them() -> None:
     assert [length_label(value) for value in (30, 60, 90, 0)] == ["30 min", "1 h", "1 h 30 min", "0 min"]
-    assert due_label("2026-09-17T23:59", WEEK) == "Thu 23:59"
-    assert due_label("2026-09-28T08:00", WEEK) == "Sep 28 08:00"
-    assert due_label("2026-09-20", WEEK) == "Sun"
+    assert due_label("2026-09-17T23:59", WEEK) == "Thu 17 Sep"
+    assert due_label("2026-09-27", WEEK) == "Sun 27 Sep"
+    assert due_label("2026-09-27T09:00", WEEK) == "Sun 27 Sep, 09:00"
+    assert due_label("2026-09-28T08:00", WEEK) == "Mon 28 Sep, 08:00"
+    assert due_label("2026-09-20", WEEK) == "Sun 20 Sep"
     assert due_label(None, WEEK) == ""
 
 
@@ -222,9 +224,22 @@ def test_due_today_unplaced_is_homework_that_still_needs_a_time() -> None:
     assert [item.title for item in week.due_today_unplaced(3)] == ["Math worksheet"]
     assert week.due_today_unplaced(2) == ()
     assert week.leftover_kind(3) == "needs_time"
-    assert week.leftover_words(3) == "Needs a time"
-    assert week.leftover_parts(3) == ("Needs a time", "Math worksheet", "Due Thu 21:00")
+    assert week.leftover_words(3) == "Not placed yet"
+    assert week.leftover_parts(3) == ("Not placed yet", "Math worksheet", "Due Thu 17 Sep, 21:00")
     assert week.minutes_left_today(3, 16 * 60) == 45
+
+
+def test_waiting_homework_is_ordered_by_when_it_must_end() -> None:
+    blocks = [
+        block("all", "flexible", [], None, 30, assignment_id="all", title="All day"),
+        block("am", "flexible", [], None, 30, assignment_id="am", title="Morning"),
+    ]
+    homework = {
+        "all": {"id": "all", "title": "All day", "due": "2026-09-17", "completed": False},
+        "am": {"id": "am", "title": "Morning", "due": "2026-09-17T09:00", "completed": False},
+    }
+    week = build_week(WEEK, blocks, homework, None)
+    assert [item.title for item in week.waiting] == ["Morning", "All day"]
 
 
 def test_leftover_kind_splits_the_four_empty_days() -> None:
@@ -259,15 +274,24 @@ def test_leftover_kind_splits_the_four_empty_days() -> None:
 @pytest.mark.skipif(importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent")
 def test_the_model_places_every_block_where_the_week_calendar_draws_it() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QWidget
 
-    from desktop.native.canvas import WeekCanvas
+    from desktop.native.hours.classic import ClassicWeek
+    from desktop.native.hours.hand import Hand, Verdict
 
     app = QApplication.instance() or QApplication(["flexweek-weekmodel-test"])
-    canvas = WeekCanvas()
-    canvas.set_week(WEEK, BLOCKS, TRACE)
-    drawn = {(shape.block_id, shape.day, shape.start) for shape in canvas.body.shapes}
+    host = QWidget()
+    calendar = ClassicWeek(Hand(lambda block_id, from_day, span: Verdict(False, ""), host), host)
     week = build_week(WEEK, BLOCKS, HOMEWORK, TRACE)
+    calendar.set_week(week, None, None)
+    calendar.resize(980, 640)
+    calendar.hours.relayout()
+    hours = calendar.hours
+    drawn = {
+        (item.block_id, item.span.day, item.span.start)
+        for track in hours.tracks
+        for item, _rect in hours.drawn(track)
+    }
     modelled = {(item.block_id, item.day, item.start) for item in week.occurrences}
     assert modelled == drawn
     assert len(drawn) == 15

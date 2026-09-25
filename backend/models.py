@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from backend.slots import clock_to_minutes, on_slot, span_fits_day, start_fits_day
 from backend.weeks import FIRST_DAY, LAST_DAY, is_week_start
 
 BlockKind = Literal["locked", "flexible"]
@@ -20,6 +21,7 @@ ReasonCode = Literal[
     "PRIORITY_PREEMPT",
     "ENERGY_MISMATCH",
     "SLEEP_GUARD",
+    "WORK_WINDOW_MISS",
     "RESHUFFLE_AFTER_MISS",
 ]
 PomodoroRole = Literal["work", "break"]
@@ -31,21 +33,65 @@ SPOTIFY_SHARE = re.compile(
 )
 # Naive local stamp: date, T, hour:minute. No seconds, no timezone, any minute.
 NAIVE_STAMP = re.compile(r"(\d{4}-\d{2}-\d{2})T((?:[01]\d|2[0-3]):[0-5]\d)\Z")
+NAIVE_DATE = re.compile(r"(\d{4}-\d{2}-\d{2})\Z")
+# Date-only due, and the old default T23:59, mean the end of that calendar day.
+END_OF_DAY_MIN = 24 * 60
+END_OF_DAY_CLOCK = "23:59"
+# One homework is at most a day's work; longer work is split into parts.
+ESTIMATE_MAX_MIN = 24 * 60
+
+
+def _iso_day(text: str) -> date:
+    day = date.fromisoformat(text)
+    if not FIRST_DAY <= day <= LAST_DAY:
+        raise ValueError("date must be between 2000-01-01 and 2099-12-31")
+    return day
 
 
 def parse_naive_stamp(value: str) -> tuple[date, int]:
     match = NAIVE_STAMP.fullmatch(value)
     if not match:
         raise ValueError("must be YYYY-MM-DDTHH:MM with no seconds or timezone")
-    day = date.fromisoformat(match.group(1))
-    if not FIRST_DAY <= day <= LAST_DAY:
-        raise ValueError("date must be between 2000-01-01 and 2099-12-31")
     hour, minute = map(int, match.group(2).split(":"))
+    return _iso_day(match.group(1)), hour * 60 + minute
+
+
+def parse_due(value: str) -> tuple[date, int]:
+    """The due day, and the minute work must end by. Date-only and 23:59 are the end of that day."""
+    if NAIVE_DATE.fullmatch(value):
+        return _iso_day(value), END_OF_DAY_MIN
+    match = NAIVE_STAMP.fullmatch(value)
+    if not match:
+        raise ValueError("must be YYYY-MM-DD or YYYY-MM-DDTHH:MM with no seconds or timezone")
+    day = _iso_day(match.group(1))
+    clock = match.group(2)
+    if clock == END_OF_DAY_CLOCK:
+        return day, END_OF_DAY_MIN
+    hour, minute = map(int, clock.split(":"))
     return day, hour * 60 + minute
+
+
+def due_is_timed(value: str) -> bool:
+    """True when the due stamp names a clock other than the old end-of-day 23:59."""
+    match = NAIVE_STAMP.fullmatch(value)
+    return match is not None and match.group(2) != END_OF_DAY_CLOCK
+
+
+def due_sort_key(due: str | None, item_id: str = "") -> tuple[date, int, str]:
+    """When the work must end, then its id. A date with no time, and 23:59, are the end of that day."""
+    if not due:
+        return date.max, END_OF_DAY_MIN, item_id
+    day, minute = parse_due(due)
+    return day, minute, item_id
 
 
 def valid_naive_stamp(value: str) -> str:
     parse_naive_stamp(value)
+    return value
+
+
+def valid_due(value: str) -> str:
+    parse_due(value)
     return value
 
 
@@ -78,7 +124,8 @@ class TimeBlock(BaseModel):
     id: str = Field(min_length=1, max_length=80)
     title: str = Field(min_length=1, max_length=80)
     kind: BlockKind
-    duration_min: int = Field(le=7140)
+    # Any minute: a student's own times are kept as typed. Only the planner works in quarter hours.
+    duration_min: int = Field(gt=0, le=7140)
     days: list[int] = Field(min_length=1, max_length=7)
     priority: Priority = 3
     energy: Energy = "medium"
@@ -121,13 +168,6 @@ class TimeBlock(BaseModel):
     )
 
     _spotify_url = field_validator("spotify_url")(valid_spotify_url)
-
-    @field_validator("duration_min")
-    @classmethod
-    def duration_is_slot_aligned(cls, value: int) -> int:
-        if value <= 0 or value % 15 != 0:
-            raise ValueError("duration_min must be a positive multiple of 15")
-        return value
 
     @field_validator("days")
     @classmethod
@@ -212,7 +252,7 @@ class AssignmentContent(BaseModel):
     energy: Energy = "medium"
     spotify_url: str | None = Field(default=None, max_length=500)
     due: str
-    estimate_min: int = Field(le=7140)
+    estimate_min: int = Field(le=ESTIMATE_MAX_MIN)
     focus_minutes: int = Field(default=0, ge=0, le=71400)
     focus_sessions: int = Field(default=0, ge=0, le=9999)
     completed: bool = False
@@ -226,7 +266,7 @@ class AssignmentContent(BaseModel):
     )
 
     _spotify_url = field_validator("spotify_url")(valid_spotify_url)
-    _due = field_validator("due")(valid_naive_stamp)
+    _due = field_validator("due")(valid_due)
 
     @field_validator("completed_at")
     @classmethod
@@ -271,7 +311,7 @@ class RoutineBlock(BaseModel):
     title: str = Field(min_length=1, max_length=80)
     days: list[int] = Field(min_length=1, max_length=7)
     start: str
-    duration_min: int = Field(le=7140)
+    duration_min: int = Field(gt=0, le=7140)
     category: str | None = Field(default=None, max_length=32)
     course: str | None = Field(default=None, max_length=40)
     priority: Priority = 3
@@ -294,13 +334,6 @@ class RoutineBlock(BaseModel):
             raise ValueError("days must be unique values in 0..6")
         return value
 
-    @field_validator("duration_min")
-    @classmethod
-    def duration_is_slot_aligned(cls, value: int) -> int:
-        if value <= 0 or value % 15 != 0:
-            raise ValueError("duration_min must be a positive multiple of 15")
-        return value
-
     @field_validator("start")
     @classmethod
     def start_is_hhmm(cls, value: str) -> str:
@@ -309,11 +342,11 @@ class RoutineBlock(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def block_fits_the_grid(self) -> RoutineBlock:
+    def block_fits_the_day(self) -> RoutineBlock:
         hour, minute = map(int, self.start.split(":"))
         start = hour * 60 + minute
-        if minute % 15 or start < 360 or start + self.duration_min > 1380:
-            raise ValueError("block must fit the 06:00–23:00 grid")
+        if not span_fits_day(start, self.duration_min):
+            raise ValueError("block must fit between 00:00 and 24:00")
         return self
 
 
@@ -354,6 +387,62 @@ class Routine(BaseModel):
         return self
 
 
+class WorkWindow(BaseModel):
+    """Hard hours the planner may use. Hand-placed blocks are not bound by this."""
+
+    model_config = ConfigDict(extra="forbid")
+    days: list[int] = Field(min_length=1, max_length=7)
+    start: str = Field(min_length=5, max_length=5)
+    end: str = Field(min_length=5, max_length=5)
+    subject: str | None = Field(
+        default=None, min_length=1, max_length=40, exclude_if=lambda value: value is None
+    )
+
+    @field_validator("days")
+    @classmethod
+    def days_in_week(cls, value: list[int]) -> list[int]:
+        if len(set(value)) != len(value) or any(day < 0 or day > 6 for day in value):
+            raise ValueError("days must be unique values in 0..6")
+        return value
+
+    @field_validator("start")
+    @classmethod
+    def start_is_on_the_grid(cls, value: str) -> str:
+        if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value):
+            raise ValueError("start must be HH:MM")
+        hour, minute = map(int, value.split(":"))
+        start = hour * 60 + minute
+        if not (start_fits_day(start) and on_slot(start)):
+            raise ValueError("start must be on the 00:00–24:00 grid")
+        return value
+
+    @field_validator("end")
+    @classmethod
+    def end_is_on_the_grid(cls, value: str) -> str:
+        if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d|24:00", value):
+            raise ValueError("end must be HH:MM, or 24:00")
+        end = clock_to_minutes(value)
+        if not on_slot(end) or end <= 0 or end > 24 * 60:
+            raise ValueError("end must be on the 00:00–24:00 grid")
+        return value
+
+    @field_validator("subject")
+    @classmethod
+    def subject_is_trimmed(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("subject must not be blank")
+        return trimmed
+
+    @model_validator(mode="after")
+    def end_is_after_start(self) -> WorkWindow:
+        if clock_to_minutes(self.end) <= clock_to_minutes(self.start):
+            raise ValueError("end must be after start")
+        return self
+
+
 class Move(BaseModel):
     block_id: str
     reason: ReasonCode
@@ -379,6 +468,8 @@ class SolveTrace(BaseModel):
     failed_constraints: list[ReasonCode]
     solve_ms: float
     complete: bool
+    work_windows: list[WorkWindow] = Field(default_factory=list)
+    work_windows_defaulted: bool = False
 
 
 class WeekRequest(BaseModel):
@@ -400,8 +491,8 @@ class WeekRequest(BaseModel):
                     raise ValueError("invalid start time")
                 hour, minute = map(int, block.start.split(":"))
                 start = hour * 60 + minute
-                if minute % 15 or start < 360 or start + block.duration_min > 1380:
-                    raise ValueError("block must fit the 06:00–23:00 grid")
+                if not span_fits_day(start, block.duration_min):
+                    raise ValueError("block must fit between 00:00 and 24:00")
             for bound in (block.earliest, block.latest):
                 if bound and not re.fullmatch(
                     r"(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday) )?"
@@ -434,14 +525,14 @@ class GridWindow(BaseModel):
             raise ValueError("start must be HH:MM")
         hour, minute = map(int, value.split(":"))
         start = hour * 60 + minute
-        if minute % 15 or start < 360 or start >= 1380:
-            raise ValueError("start must be on the 06:00–23:00 grid")
+        if not (start_fits_day(start) and on_slot(start)):
+            raise ValueError("start must be on the 00:00–24:00 grid")
         return value
 
     @field_validator("duration_min")
     @classmethod
     def duration_is_slot_aligned(cls, value: int) -> int:
-        if value <= 0 or value % 15 != 0:
+        if value <= 0 or not on_slot(value):
             raise ValueError("duration_min must be a positive multiple of 15")
         return value
 
@@ -449,8 +540,8 @@ class GridWindow(BaseModel):
     def window_fits_the_grid(self) -> GridWindow:
         hour, minute = map(int, self.start.split(":"))
         start = hour * 60 + minute
-        if start + self.duration_min > 1380:
-            raise ValueError("window must fit the 06:00–23:00 grid")
+        if not span_fits_day(start, self.duration_min):
+            raise ValueError("window must fit the 00:00–24:00 grid")
         return self
 
 
@@ -526,8 +617,8 @@ class RunningLateRequest(BaseModel):
             raise ValueError("from_start must be HH:MM")
         hour, minute = map(int, value.split(":"))
         start = hour * 60 + minute
-        if minute % 15 or start < 360 or start >= 1380:
-            raise ValueError("from_start must be on the 06:00–23:00 grid")
+        if not (start_fits_day(start) and on_slot(start)):
+            raise ValueError("from_start must be on the 00:00–24:00 grid")
         return value
 
     @field_validator("previous_placed")

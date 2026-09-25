@@ -1,0 +1,401 @@
+"""How close the hours are: the levels a surface offers, the one it shows, and a scroll that keeps
+the same minute in place while that changes.
+
+A surface's hours sit in an `HoursScroll`. Ctrl and the wheel zoom about the pointer; Ctrl with =, -
+or 0, the window's shortcuts for whichever hours it shows, zoom about the middle of what is on
+screen, as do the two buttons in the corner. Hours that run
+down scroll up and down, with a header, such as the week's day names, kept above them and exactly as
+wide as the hours, so a name sits over its column whether or not a scroll bar shows. Hours that run
+across scroll sideways, the plain wheel included, with the day names kept in a strip to their left,
+below the corner, so they stay beside their lanes.
+
+Each surface remembers its level on this device, in the look file, as pixels an hour. A level that
+is no longer offered is read as the nearest one that is.
+"""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+
+from PySide6.QtCore import QEvent, QObject, QPointF, QRect, QSize, Qt, Signal
+from PySide6.QtGui import QWheelEvent
+from PySide6.QtWidgets import (
+    QBoxLayout,
+    QFrame,
+    QHBoxLayout,
+    QPushButton,
+    QScrollArea,
+    QScrollBar,
+    QVBoxLayout,
+    QWidget,
+)
+
+from desktop.native.hours.canvas import HoursCanvas
+from desktop.native.hours.geometry import Axis
+from desktop.native.weekmodel import WeekModel
+
+KEY = re.compile(r"[a-z]+\.[a-z]+")
+# With Ctrl, anywhere in the window: zoom in, out, or back to the surface's own level.
+ZOOM_KEYS = {Qt.Key.Key_Equal: 1, Qt.Key.Key_Plus: 1, Qt.Key.Key_Minus: -1, Qt.Key.Key_0: 0}
+# Hours with neither now nor a block to show open at 08:00.
+OPENS = 8 * 60
+
+
+@dataclass(frozen=True)
+class Scale:
+    """The pixels an hour a surface offers, smallest first, and the one it opens at."""
+
+    key: str
+    levels: tuple[int, ...]
+    default: int
+
+    def __post_init__(self) -> None:
+        if KEY.fullmatch(self.key) is None or len(self.key) > 40:
+            raise ValueError(f"{self.key!r} cannot be kept in the look file: use design.surface, a to z")
+
+    def nearest(self, px: object) -> int:
+        if not isinstance(px, int) or isinstance(px, bool):
+            return self.default
+        return min(self.levels, key=lambda level: (abs(level - px), level))
+
+    def step(self, px: int, by: int) -> int:
+        at = self.levels.index(self.nearest(px))
+        return self.levels[min(max(at + by, 0), len(self.levels) - 1)]
+
+
+def sanitize_zoom(raw: object) -> dict[str, int]:
+    """The remembered levels, whatever the file on disk says."""
+    if not isinstance(raw, dict):
+        return {}
+    clean: dict[str, int] = {}
+    for key, px in raw.items():
+        if len(clean) >= 32:
+            break
+        named = isinstance(key, str) and len(key) <= 40 and KEY.fullmatch(key) is not None
+        if named and isinstance(px, int) and not isinstance(px, bool) and 8 <= px <= 480:
+            clean[key] = px
+    return clean
+
+
+def opening_minute(week: WeekModel, today: int | None, now: int | None, day: int | None = None) -> int:
+    """Where hours open: now, on today or on this week; otherwise the first block of the day shown,
+    or of the week; otherwise the start of a school day."""
+    if today is not None and now is not None and day in (None, today):
+        return now
+    items = week.occurrences if day is None else week.on_day(day)
+    return min((item.start for item in items), default=OPENS)
+
+
+class ZoomButton(QPushButton):
+    """A square button whose natural size is the square it is drawn at."""
+
+    side = 24
+
+    def sizeHint(self) -> QSize:  # noqa: N802
+        return QSize(self.side, self.side)
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802
+        return self.sizeHint()
+
+
+class ZoomButtons(QWidget):
+    """Zoom out and zoom in, side by side, for the corner above the hour labels."""
+
+    def __init__(self, name: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName(f"{name}Zoom")
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(2)
+        self.out = self._button("−", f"{name}ZoomOut", "Zoom out", "Ctrl+-")
+        self.into = self._button("+", f"{name}ZoomIn", "Zoom in", "Ctrl+=")
+        row.addWidget(self.out)
+        row.addWidget(self.into)
+        row.addStretch(1)
+        self._fit()
+
+    def _fit(self) -> None:
+        # Square, and grows with the text, never under 24 pixels a side.
+        side = max(24, self.fontMetrics().height() + 8)
+        for button in (self.out, self.into):
+            button.side = side
+            button.setFixedSize(side, side)
+
+    def changeEvent(self, event: QEvent) -> None:  # noqa: N802
+        super().changeEvent(event)
+        if event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange):
+            self._fit()
+
+    def _button(self, face: str, name: str, words: str, keys: str) -> ZoomButton:
+        button = ZoomButton(face)
+        button.setObjectName(name)
+        button.setProperty("zoom", True)
+        button.setToolTip(f"{words} on the hours ({keys}; Ctrl+0 goes back)")
+        button.setAccessibleName(f"{words} on the hours")
+        button.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        return button
+
+
+class HoursScroll(QScrollArea):
+    """Hours that scroll and zoom along the way their time runs, with a header kept beside them."""
+
+    # A level the student chose, to remember: the scale's key and its pixels an hour.
+    zoomed = Signal(str, int)
+
+    def __init__(
+        self,
+        canvas: HoursCanvas,
+        scale: Scale,
+        length_for: Callable[[int], int],
+        *,
+        name: str,
+        gutter: float,
+        axis: Axis = Axis.DOWN,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName(f"{name}Scroll")
+        self.canvas, self.scale, self.axis = canvas, scale, axis
+        self.px = scale.default
+        self._length_for = length_for
+        self._gutter = gutter
+        self._pending: tuple[int, int] | None = None
+        # The minute at the start of what showed when the hours were hidden, until it is put back,
+        # and where the bar stopped while there was no room yet to put it back.
+        self._kept: float | None = None
+        self._short_at: int | None = None
+        # The week, or day, these hours last opened on.
+        self._opened: object = None
+        # The header first: the scroll area starts filtering events as soon as it holds the hours.
+        self.buttons = ZoomButtons(name)
+        self.buttons.out.clicked.connect(lambda: self.zoom_by(-1))
+        self.buttons.into.clicked.connect(lambda: self.zoom_by(1))
+        self.header = QWidget(self)
+        self.header.setObjectName(f"{name}Header")
+        self._row: QBoxLayout = QHBoxLayout(self.header) if self._down else QVBoxLayout(self.header)
+        self._row.setContentsMargins(0, 0, 0, 0)
+        self._row.setSpacing(0)
+        self._row.addWidget(self.buttons, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self.header.installEventFilter(self)
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setWidgetResizable(True)
+        across = Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        (self.setHorizontalScrollBarPolicy if self._down else self.setVerticalScrollBarPolicy)(across)
+        self.setWidget(canvas)
+        self._fix_length(length_for(self.px))
+        canvas.zoom_asked.connect(self._asked)
+        self._show_limits()
+
+    @property
+    def _down(self) -> bool:
+        return self.axis is Axis.DOWN
+
+    def _bar(self) -> QScrollBar:
+        return self.verticalScrollBar() if self._down else self.horizontalScrollBar()
+
+    def _port_length(self) -> int:
+        return self.viewport().height() if self._down else self.viewport().width()
+
+    def _fix_length(self, length: int) -> None:
+        if self._down:
+            self.canvas.setFixedHeight(length)
+        else:
+            self.canvas.setFixedWidth(length)
+
+    def set_header(self, content: QWidget) -> None:
+        """What is kept beside the hours: over them, right of the corner, and exactly as wide as
+        they are, when time runs down; left of them, under the corner, and exactly as tall as they
+        are below the canvas's own header, when time runs across."""
+        self._row.addWidget(content, 1)
+        self._place_header()
+
+    # Zoom
+
+    def restore(self, remembered: Mapping[str, int]) -> None:
+        """The level this device last chose for this surface, if any. Nothing is remembered again."""
+        if self.scale.key in remembered:
+            self._apply(self.scale.nearest(remembered[self.scale.key]), None)
+
+    def zoom_by(self, steps: int, anchor: float | None = None) -> None:
+        """Zoom in (positive) or out, keeping the minute at `anchor`, a height in the viewport, in
+        place. Without one, the middle of what is on screen stays put. Nothing moves while a drag is
+        under way: the block under the pointer must stay under it."""
+        if self.canvas.hand.busy:
+            return
+        px = self.scale.default if steps == 0 else self.scale.step(self.px, steps)
+        if px != self.px:
+            self._apply(px, anchor)
+            self.zoomed.emit(self.scale.key, px)
+
+    def _asked(self, steps: int, at: object) -> None:
+        if isinstance(at, QPointF):
+            along = at.y() if self._down else at.x()
+            self.zoom_by(steps, along - self._bar().value())
+        else:
+            self.zoom_by(steps)
+
+    def _apply(self, px: int, anchor: float | None) -> None:
+        bar = self._bar()
+        length = self._port_length()
+        at = length / 2 if anchor is None else min(max(anchor, 0.0), float(length))
+        minute = self._minute_at(bar.value() + at)
+        self.px = px
+        self._fix_length(self._length_for(px))
+        self._show_limits()
+        if not self.isVisible():
+            return
+        self._lay_out_now()
+        if minute is not None and self.canvas.tracks:
+            bar.setValue(round(self._y_for(minute) - at))
+
+    def _lay_out_now(self) -> None:
+        """Give the hours their size and the scroll bar its range now rather than on the next pass,
+        so a time can be put on screen straight away."""
+        length = self._length_for(self.px)
+        port = self.viewport()
+        self.canvas.resize(port.width(), length) if self._down else self.canvas.resize(length, port.height())
+        self.canvas.relayout()
+        self._bar().setRange(0, max(0, length - self._port_length()))
+
+    def _show_limits(self) -> None:
+        self.buttons.out.setEnabled(self.px > self.scale.levels[0])
+        self.buttons.into.setEnabled(self.px < self.scale.levels[-1])
+
+    # Scrolling to a time
+
+    def scroll_to(self, minute: int, above: int = 90) -> None:
+        """Put `minute` near the start of what shows, with `above` minutes of the day before it.
+        Hours that are not on screen yet do it when they are shown, and only then. Shown while
+        their page is still being laid out, they may not reach it yet; they do once they can."""
+        self._pending = (minute, above)
+        self._kept = self._short_at = None
+        if not self.isVisible():
+            return
+        self._lay_out_now()
+        if self.canvas.tracks:
+            self._pending = None
+            self._kept = minute - above
+            self._put_back()
+
+    def open_at(self, key: object, minute: int, above: int = 90) -> None:
+        """Scroll to `minute` the first time these hours show `key`, a week or one of its days. The
+        same one shown again stays wherever the student scrolled it, through saves and refreshes."""
+        if key != self._opened:
+            self._opened = key
+            self.scroll_to(minute, above)
+
+    def focusNextPrevChild(self, next: bool) -> bool:  # noqa: N802
+        # QScrollArea's own then scrolls to show the child that had the focus: for hours longer than
+        # what shows, a jump to their middle on Tab and whenever the hours are hidden.
+        return QWidget.focusNextPrevChild(self, next)
+
+    def hideEvent(self, event: object) -> None:  # noqa: N802
+        super().hideEvent(event)
+        self._kept, self._short_at = self._minute_at(self._bar().value()), None
+
+    def showEvent(self, event: object) -> None:  # noqa: N802
+        """Hours shown again start at the minute they started at when hidden, however the design
+        parked them, unless a time was asked for meanwhile."""
+        super().showEvent(event)
+        self._place_header()
+        if self._pending is not None:
+            self.scroll_to(*self._pending)
+        elif self._kept is not None:
+            self._put_back()
+
+    def _put_back(self) -> None:
+        """Put the kept minute at the start of what shows. A design still laying out its page can
+        show the hours wider than they end up, with no room to start there: the bar stops at its
+        end, and the minute is put back when they narrow, unless the student has scrolled."""
+        self._lay_out_now()
+        kept, bar = self._kept, self._bar()
+        if kept is None or not self.canvas.tracks:
+            return
+        wanted = round(self._y_for(kept))
+        bar.setValue(wanted)
+        if bar.value() == wanted:
+            self._kept = self._short_at = None
+        else:
+            self._short_at = bar.value()
+
+    def _minute_at(self, along: float) -> float | None:
+        """The minute at a distance along the hours, down or across."""
+        track = self.canvas.tracks[0] if self.canvas.tracks else None
+        if track is None:
+            return None
+        start = track.area.top() if self._down else track.area.left()
+        return track.first + (along - start) / track.per_minute()
+
+    def _y_for(self, minute: float) -> float:
+        """How far along the hours, down or across, a minute lies."""
+        track = self.canvas.tracks[0]
+        start = track.area.top() if self._down else track.area.left()
+        return start + track.offset(min(max(minute, track.first), track.last))
+
+    def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802
+        # Lanes have nothing to scroll up and down, so the wheel moves them through the day.
+        if self._down or event.angleDelta().x():
+            super().wheelEvent(event)
+            return
+        bar = self._bar()
+        bar.setValue(bar.value() - round(event.angleDelta().y() / 120 * 3 * bar.singleStep()))
+        event.accept()
+
+    # The header and the corner
+
+    def _place_header(self) -> None:
+        row = self.buttons.layout()
+        corner = max(self._gutter, float(2 * self.buttons.out.side + row.spacing() + 10))
+        self.buttons.setFixedWidth(round(corner))
+        row.setContentsMargins(4, 0, 0, 0)
+        if not self._down:
+            self._place_side(round(corner))
+            return
+        if corner != self.canvas.gutter:
+            self.canvas.gutter = corner
+            self.canvas.relayout()
+        tall = max(30, self.header.sizeHint().height())
+        if self.viewportMargins().top() != tall:
+            self.setViewportMargins(0, tall, 0, 0)
+        port = self.viewport().geometry()
+        self.header.setGeometry(QRect(port.left(), port.top() - tall, port.width(), tall))
+
+    def _place_side(self, wide: int) -> None:
+        """Across: the corner sits over the strip, as tall as the canvas's own header of hours, and
+        the strip is as tall as the lanes, so each name sits beside its lane."""
+        tall = max(30, self.buttons.sizeHint().height() + 6)
+        if tall > self.canvas.header:
+            self.canvas.header = tall
+            self.canvas.relayout()
+        self.buttons.setFixedHeight(round(self.canvas.header))
+        if self.viewportMargins().left() != wide:
+            self.setViewportMargins(wide, 0, 0, 0)
+        port = self.viewport().geometry()
+        self.header.setGeometry(QRect(port.left() - wide, port.top(), wide, port.height()))
+
+    def resizeEvent(self, event: object) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._place_header()
+        if self._short_at is not None and self.isVisible():
+            # Hours that grew pull the bar back with them; that is not the student scrolling.
+            if self._bar().value() == min(self._short_at, self._bar().maximum()):
+                self._put_back()
+            else:
+                self._kept = self._short_at = None
+
+    def viewportEvent(self, event: QEvent) -> bool:  # noqa: N802
+        if event.type() == QEvent.Type.Resize:
+            # A scroll bar that comes or goes changes the width the hours have.
+            self._place_header()
+        return super().viewportEvent(event)
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if watched is self.header and event.type() in (
+            QEvent.Type.LayoutRequest,
+            QEvent.Type.StyleChange,
+            QEvent.Type.FontChange,
+        ):
+            self._place_header()
+        return super().eventFilter(watched, event)

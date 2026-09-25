@@ -46,14 +46,14 @@ def test_reminder_preferences_persist(tmp_path: Path) -> None:
         register(client)
         assert client.get("/api/preferences").json() == {
             "theme": "system",
-            "reminders_enabled": False,
+            "reminders_enabled": True,
             "reminder_lead_min": 5,
             "reminder_sound": True,
             **phase7_defaults(),
         }
         payload = {
             "theme": "slate",
-            "reminders_enabled": True,
+            "reminders_enabled": False,
             "reminder_lead_min": 15,
             "reminder_sound": False,
             **phase7_defaults(),
@@ -98,7 +98,7 @@ def test_reminder_preference_migration_on_legacy_db(tmp_path: Path) -> None:
     with TestClient(app) as client:
         register(client, "migrated")
         prefs = client.get("/api/preferences").json()
-        assert prefs["reminders_enabled"] is False
+        assert prefs["reminders_enabled"] is True
         assert prefs["reminder_lead_min"] == 5
         assert prefs["reminder_sound"] is True
 

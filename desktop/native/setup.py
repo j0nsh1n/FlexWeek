@@ -13,7 +13,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from uuid import uuid4
 
-from PySide6.QtCore import QDate, QDateTime, QRect, QRectF, Qt, QTime, QTimer, Signal
+from PySide6.QtCore import QRect, QRectF, Qt, QTime, QTimer, Signal
 from PySide6.QtGui import QKeyEvent, QMouseEvent, QPainter, QPainterPath, QPixmap, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
@@ -38,7 +38,7 @@ from PySide6.QtWidgets import (
 )
 
 from backend.models import valid_spotify_url
-from backend.slots import DAY_END_MIN, DAY_START_MIN, SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm
+from backend.slots import SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm
 from desktop.native.calendar import (
     DAY_FULL,
     SETUP_ACTIVITY_PREFIX,
@@ -46,14 +46,22 @@ from desktop.native.calendar import (
     is_setup_block,
     sunday_due,
 )
+from desktop.native.hours.geometry import drag_step
 from desktop.native.layouts.registry import LAYOUTS, layouts_for, options_for, sanitize_layout
 from desktop.native.look import PACK_LABELS, PACKS, effective_look, sanitize_look
 from desktop.native.motion import appear, fade_away, glide, hold_picture, slide_page
 from desktop.native.previews import Previews
-from desktop.native.settings import PLANNING_STYLES, SPORT_FALLBACK, SPOTIFY_TONE_NOTE
+from desktop.native.settings import (
+    DRAG_STEP_CHOICES,
+    DRAG_STEP_QUESTION,
+    PLANNING_STYLES,
+    SPORT_FALLBACK,
+    SPOTIFY_TONE_NOTE,
+)
 from desktop.native.sound import Bell
 from desktop.native.tones import FALLBACK, RECIPES
-from desktop.native.widgets import DAYS, DUE_FORMAT, FlowLayout
+from desktop.native.widgets import DAYS, DueField, FlowLayout
+from desktop.native.work_windows import WorkWindowsEditor
 
 SETUP_VERSION = 1
 STYLE, LOOK, COLOURS, WEEK, HOMEWORK, REMINDERS, FIRST, DONE = range(8)
@@ -92,15 +100,8 @@ SKIP_STEP_LABEL, SKIP_ALL_LABEL = "Skip this step", "Skip setup"
 OWN_LOOK_LABEL = "Choose my own look instead"
 MAX_ACTIVITIES = 8
 MAX_FIRST_HOMEWORK = 3
-MAX_STUDY_WINDOWS = 21
 CUTOFFS = ("20:00", "20:30", "21:00", "21:30", "22:00", "22:30", "23:00")
-STUDY_DAYS = (("Weekdays", [0, 1, 2, 3, 4]), ("Every day", [0, 1, 2, 3, 4, 5, 6]), ("Weekends", [5, 6]))
 # A tap adds one of these rather than making the student type hours for the usual answers.
-STUDY_SUGGESTIONS = (
-    ("After school", [0, 1, 2, 3, 4], "15:30", "18:00"),
-    ("Evenings", [0, 1, 2, 3, 4], "19:00", "21:00"),
-    ("Weekend mornings", [5, 6], "10:00", "12:00"),
-)
 TEXT_SIZES = (("small", "Small"), ("normal", "Normal"), ("large", "Large"))
 SPACINGS = (("comfortable", "Comfortable"), ("compact", "Compact"))
 FONTS = (("sans", "Sans"), ("serif", "Serif"), ("mono", "Mono"))
@@ -215,13 +216,6 @@ def days_label(days: list[int]) -> str:
 
 def span_label(start: str, minutes: int) -> str:
     return f"{start}–{minutes_to_hhmm(hhmm_to_minutes(start) + minutes)}"
-
-
-def window_label(window: dict) -> str:
-    days = window.get("days") or []
-    named = next((name for name, wanted in STUDY_DAYS if sorted(days) == wanted), days_label(days))
-    text = f"{named} {span_label(window['start'], window['duration_min'])}"
-    return text + (f" · {window['subject']}" if window.get("subject") else "")
 
 
 def _label(text: str, name: str = "", wrap: bool = True) -> QLabel:
@@ -405,36 +399,35 @@ class DayPicker(QWidget):
 
 
 class QuarterTime(QTimeEdit):
-    """A time on the 15-minute grid the planner works in. The arrows and the wheel move the minutes a
-    quarter hour at a time, and a time typed between quarters moves to the nearest one."""
+    """A time of day. The arrows and the wheel move the minutes a quarter hour at a time; a time typed
+    between quarters keeps its minute, as the block editor does."""
 
     def __init__(self, hhmm: str) -> None:
         super().__init__(QTime.fromString(hhmm, "HH:mm"))
         self.setObjectName("setupTime")
         self.setDisplayFormat("HH:mm")
         self.setCorrectionMode(QAbstractSpinBox.CorrectionMode.CorrectToNearestValue)
-        self.editingFinished.connect(self._snap)
 
     def minutes(self) -> int:
         time = self.time()
         return time.hour() * 60 + time.minute()
 
     def set_minutes(self, minutes: int) -> None:
-        minutes = max(0, min(minutes, 24 * 60 - SLOT_MIN))
+        minutes = max(0, min(minutes, 24 * 60 - 1))
         self.setTime(QTime(minutes // 60, minutes % 60))
 
     def stepBy(self, steps: int) -> None:  # noqa: N802
         if self.currentSection() == QDateTimeEdit.Section.MinuteSection:
             base = self.minutes() - self.minutes() % SLOT_MIN
+            # Up from 08:07 is 08:15 and down is 08:00: the quarter hour on each side.
+            if steps < 0 and self.minutes() % SLOT_MIN:
+                steps += 1
             self.set_minutes(base + steps * SLOT_MIN)
             return
         super().stepBy(steps)
 
-    def _snap(self) -> None:
-        self.set_minutes(round(self.minutes() / SLOT_MIN) * SLOT_MIN)
-
     def hhmm(self) -> str:
-        return minutes_to_hhmm(round(self.minutes() / SLOT_MIN) * SLOT_MIN)
+        return minutes_to_hhmm(self.minutes())
 
 
 class TimeRange(QWidget):
@@ -516,13 +509,7 @@ class HomeworkRow(QFrame):
         self.minutes.setValue(60)
         self.minutes.setSuffix(" min")
         self.minutes.setAccessibleName("How long it takes")
-        self.due = QDateTimeEdit(QDateTime.fromString(due, "yyyy-MM-dd'T'HH:mm"))
-        self.due.setObjectName("setupHomeworkDue")
-        self.due.setDisplayFormat(DUE_FORMAT)
-        self.due.setCalendarPopup(True)
-        self.due.setMinimumDate(QDate(2000, 1, 1))
-        self.due.setMaximumDate(QDate(2099, 12, 31))
-        self.due.setAccessibleName("Due")
+        self.due = DueField(due, "setupHomeworkDue")
         remove = _quiet("Remove")
         remove.setAccessibleName("Remove this homework")
         remove.clicked.connect(lambda: self.removed.emit(self))
@@ -832,55 +819,18 @@ class SetupPage(QWidget):
             hint = _label(note, "setupHint")
             hint.setContentsMargins(28, 0, 0, 6)
             box.addWidget(hint)
-        self._section(box, "When do you like to do homework?")
-        box.addWidget(
-            _label(
-                "Plans put homework in these times first. Leave it empty to use any free time.", "setupHint"
-            )
-        )
-        self.study_chips = QWidget()
-        self.study_chips.setObjectName("setupRow")
-        self._study_line = FlowLayout(self.study_chips, gap=6)
-        self._study_line.setContentsMargins(0, 0, 0, 0)
-        box.addWidget(self.study_chips)
-        self.study_windows: list[dict] = []
-        suggestions = QWidget()
-        suggestions.setObjectName("setupRow")
-        suggest_line = FlowLayout(suggestions, gap=6)
-        suggest_line.setContentsMargins(0, 0, 0, 0)
-        for name, days, start, end in STUDY_SUGGESTIONS:
-            quick = _quiet(f"+ {name} {start}–{end}", "setupSuggest")
-            quick.clicked.connect(
-                lambda _checked=False, days=days, start=start, end=end: self._add_study(
-                    days, start, end, None
-                )
-            )
-            suggest_line.addWidget(quick)
-        box.addWidget(suggestions)
-        own = QFrame()
-        own.setObjectName("setupGroup")
-        own_line = FlowLayout(own, gap=8)
-        own_line.setContentsMargins(12, 10, 12, 10)
-        self.study_days = QComboBox()
-        self.study_days.setObjectName("setupStudyDays")
-        self.study_days.setAccessibleName("Study days")
-        for name, days in STUDY_DAYS:
-            self.study_days.addItem(name, days)
-        self.study_times = TimeRange("16:00", "18:00", "Study time")
-        self.study_subject = QComboBox()
-        self.study_subject.setObjectName("setupStudySubject")
-        self.study_subject.setEditable(True)
-        self.study_subject.setAccessibleName("Only for this subject")
-        self.study_subject.setMinimumWidth(150)
-        add = QPushButton("Add this time")
-        add.setObjectName("setupStudyAdd")
-        add.clicked.connect(self._add_own_study)
-        own_line.addWidget(self.study_days)
-        own_line.addWidget(self.study_times)
-        own_line.addWidget(self.study_subject)
-        own_line.addWidget(add)
-        self._section(box, "A time of your own, or one kept for a subject")
-        box.addWidget(own)
+        self._section(box, DRAG_STEP_QUESTION)
+        self.drag_step = QButtonGroup(content)
+        self.drag_buttons: dict[int, QRadioButton] = {}
+        for minutes, text in DRAG_STEP_CHOICES:
+            button = QRadioButton(text)
+            button.setObjectName(f"setupDragStep-{minutes}")
+            self.drag_step.addButton(button, minutes)
+            self.drag_buttons[minutes] = button
+            box.addWidget(button)
+        self._section(box, "When may FlexWeek plan homework?")
+        self.work_editor = WorkWindowsEditor([])
+        box.addWidget(self.work_editor)
         return content
 
     def _build_reminders(self) -> QWidget:
@@ -1063,17 +1013,13 @@ class SetupPage(QWidget):
     def _fill_homework(self) -> None:
         style = self._state.preferences.get("planning_style") or "suggest"
         self.planning_buttons.get(style, self.planning_buttons["suggest"]).setChecked(True)
-        self.study_windows = deepcopy(self._state.preferences.get("study_windows") or [])
-        self._render_study()
-        self.study_subject.clear()
-        self.study_subject.addItem("Any subject", "")
-        for subject in self._state.subjects:
-            self.study_subject.addItem(subject, subject)
+        self.drag_buttons[drag_step(self._state.preferences.get("drag_step_min"))].setChecked(True)
+        self.work_editor.set_subjects(self._state.subjects)
+        self.work_editor.set_windows(self._state.preferences.get("work_windows") or [])
 
     def _fill_reminders(self) -> None:
         prefs = self._state.preferences
-        # Reminders are off for an account until it says otherwise. Setup is where it says so.
-        self.reminders.setChecked(True if self._state.first_run else bool(prefs.get("reminders_enabled")))
+        self.reminders.setChecked(prefs.get("reminders_enabled", True) is not False)
         self.lead.setValue(int(prefs.get("reminder_lead_min", 10) if not self._state.first_run else 10))
         self.lead.setEnabled(self.reminders.isChecked())
         tone = str(prefs.get("alarm_tone") or FALLBACK)
@@ -1362,52 +1308,6 @@ class SetupPage(QWidget):
 
     # Homework time
 
-    def _render_study(self) -> None:
-        while self._study_line.count():
-            item = self._study_line.takeAt(0)
-            widget = item.widget() if item is not None else None
-            if widget is not None:
-                widget.setParent(None)
-                widget.deleteLater()
-        for index, window in enumerate(self.study_windows):
-            chip = QPushButton(f"{window_label(window)}  ×")
-            chip.setObjectName("setupStudyChip")
-            chip.setAccessibleName(f"Remove {window_label(window)}")
-            chip.setCursor(Qt.CursorShape.PointingHandCursor)
-            chip.clicked.connect(lambda _checked=False, index=index: self._remove_study(index))
-            self._study_line.addWidget(chip)
-        self.study_chips.setVisible(bool(self.study_windows))
-
-    def _add_study(self, days: list[int], start: str, end: str, subject: str | None) -> bool:
-        if len(self.study_windows) >= MAX_STUDY_WINDOWS:
-            self.error.setText("Up to 21 study times.")
-            return False
-        begin, finish = hhmm_to_minutes(start), hhmm_to_minutes(end)
-        if finish - begin < SLOT_MIN or begin < DAY_START_MIN or finish > DAY_END_MIN:
-            self.error.setText("A study time runs between 06:00 and 23:00 and ends after it starts.")
-            return False
-        window: dict = {"days": list(days), "start": start, "duration_min": finish - begin}
-        if subject:
-            window["subject"] = subject[:40]
-        if window in self.study_windows:
-            return False
-        self.error.clear()
-        self.study_windows.append(window)
-        self._render_study()
-        return True
-
-    def _add_own_study(self) -> None:
-        start, minutes = self.study_times.span()
-        typed = self.study_subject.currentText().strip()
-        subject = typed if typed and typed != "Any subject" else None
-        days = self.study_days.currentData() or [0, 1, 2, 3, 4]
-        self._add_study(list(days), start, minutes_to_hhmm(hhmm_to_minutes(start) + minutes), subject)
-
-    def _remove_study(self, index: int) -> None:
-        if 0 <= index < len(self.study_windows):
-            self.study_windows.pop(index)
-            self._render_study()
-
     # Reminders and alarm
 
     def _tone(self) -> str:
@@ -1479,7 +1379,7 @@ class SetupPage(QWidget):
                     "id": self._made.get(title) or str(uuid4()),
                     "title": title,
                     "estimate_min": row.minutes.value(),
-                    "due": row.due.dateTime().toString("yyyy-MM-dd'T'HH:mm"),
+                    "due": row.due.value(),
                     "revision": 0,
                 }
             )
@@ -1497,6 +1397,8 @@ class SetupPage(QWidget):
                     return f"{name} has to end after it starts."
         if step == REMINDERS and self._tone() == "spotify" and self._spotify_link() is None:
             return "Paste a link that starts with https://open.spotify.com, or pick another sound."
+        if step == HOMEWORK:
+            return self.work_editor.problem()
         return None
 
     def _answer(self, step: int) -> dict | None:
@@ -1510,7 +1412,11 @@ class SetupPage(QWidget):
             checked = next(
                 (value for value, button in self.planning_buttons.items() if button.isChecked()), "suggest"
             )
-            return {"planning_style": checked, "study_windows": deepcopy(self.study_windows)}
+            return {
+                "planning_style": checked,
+                "drag_step_min": drag_step(self.drag_step.checkedId()),
+                "work_windows": self.work_editor.windows(),
+            }
         if step == REMINDERS:
             return {
                 "reminders_enabled": self.reminders.isChecked(),
@@ -1580,11 +1486,18 @@ class SetupPage(QWidget):
             ),
             PLANNING_STYLES[1][1],
         )
-        windows = prefs.get("study_windows") or []
-        if windows:
-            planning += " · " + ", ".join(window_label(window) for window in windows[:3])
-            if len(windows) > 3:
-                planning += f" and {len(windows) - 3} more"
+        work_windows = prefs.get("work_windows") or []
+        if work_windows:
+            shown = [
+                f"{days_label(window['days'])} {window['start']}–{window['end']}"
+                for window in work_windows[:2]
+            ]
+            planning += " · homework only " + ", ".join(shown)
+            if len(work_windows) > 2:
+                planning += f" and {len(work_windows) - 2} more"
+        else:
+            planning += " · homework can be planned at any time of day"
+        planning += f" · a drag moves {drag_step(prefs.get('drag_step_min'))} minutes at a time"
         tone = str(prefs.get("alarm_tone") or FALLBACK)
         sound = "Spotify" if tone == "spotify" else TONE_NAMES.get(tone, tone.title())
         if prefs.get("reminders_enabled"):

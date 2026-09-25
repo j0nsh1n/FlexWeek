@@ -1,0 +1,408 @@
+[
+ {
+  "file": "desktop/native/window.py",
+  "name": "a held block kept when the view switches",
+  "old": "            self.hand.cancel()\n        if not self.hand.busy:\n            self._shown = self._where()\n",
+  "new": "            pass\n        if not self.hand.busy:\n            self._shown = self._where()\n",
+  "test": "desktop/tests/test_layouts_window.py::test_a_block_held_on_the_week_goes_back_when_the_student_switches_to_day"
+ },
+ {
+  "file": "desktop/native/hours/chips.py",
+  "name": "a tray chip keeps its whole words",
+  "old": "        if fitted != self.text():\n            self.setText(fitted)\n",
+  "new": "",
+  "test": "desktop/tests/test_classic_hours.py::test_a_tray_chip_shortens_its_words_to_the_room_it_has_and_keeps_its_title"
+ },
+ {
+  "file": "desktop/native/hours/chips.py",
+  "name": "a shortened chip asks only for its short words",
+  "old": "    def sizeHint(self) -> QSize:  # noqa: N802\n",
+  "new": "    def _unused_size_hint(self) -> QSize:\n",
+  "test": "desktop/tests/test_classic_hours.py::test_a_tray_chip_in_a_row_says_it_all_again_once_the_row_has_room"
+ },
+ {
+  "file": "desktop/native/remind.py",
+  "name": "a block saved inside its lead reminds at once",
+  "old": "    return start - max(0, int(lead)) <= int(now_min) <= start\n",
+  "new": "    return int(now_min) - REMINDER_WINDOW_MIN <= start - max(0, int(lead)) <= int(now_min)\n",
+  "test": "desktop/tests/test_reminders_window.py::test_a_block_saved_inside_its_lead_reminds_at_once_and_only_once"
+ },
+ {
+  "file": "desktop/native/remind.py",
+  "name": "a block reminds once",
+  "old": "        if key in fired or not start_alert_due(start_min, now_min, lead_min):\n",
+  "new": "        if not start_alert_due(start_min, now_min, lead_min):\n",
+  "test": "desktop/tests/test_reminders_window.py::test_a_block_saved_inside_its_lead_reminds_at_once_and_only_once"
+ },
+ {
+  "file": "desktop/native/remind.py",
+  "name": "a block with a song has one notice at its start",
+  "old": "            # Its song is its notice at the start, so it gets one, not two.\n            continue\n",
+  "new": "            pass\n",
+  "test": "desktop/tests/test_remind.py::test_a_block_with_a_song_is_announced_by_the_song_at_its_start"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the status line keeps a reminder through a save",
+  "old": "        if self._held_reminder is not None and message in ROUTINE_STATUS:\n            return\n",
+  "new": "",
+  "test": "desktop/tests/test_reminders_window.py::test_the_status_line_keeps_a_reminder_until_something_more_important"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a reminder shows in the window as well as the tray",
+  "old": "            self.toast.show_message(said)\n            self._held_reminder = said\n",
+  "new": "            self._held_reminder = said\n",
+  "test": "desktop/tests/test_reminders_window.py::test_a_block_saved_inside_its_lead_reminds_at_once_and_only_once"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "dismissing a block's song stops it",
+  "old": "            self._bell.stop()\n            self._spotify.stop()\n",
+  "new": "            self._bell.stop()\n",
+  "test": "desktop/tests/test_reminders_window.py::test_a_block_with_a_spotify_link_plays_it_at_its_start_and_dismiss_stops_it"
+ },
+ {
+  "file": "desktop/native/controller.py",
+  "name": "a snoozed block song rings again",
+  "old": "                self._snoozed_songs[alarm[\"id\"]] = alarm\n",
+  "new": "                pass\n",
+  "test": "desktop/tests/test_reminders_window.py::test_a_snoozed_block_song_plays_again_five_minutes_later"
+ },
+ {
+  "file": "backend/storage.py",
+  "name": "accounts from 0.14 get reminders on",
+  "old": "        upgrade_preferences(db)\n",
+  "new": "",
+  "test": "desktop/tests/test_reminders_window.py::test_an_account_from_0_14_with_reminders_off_reminds_after_the_update"
+ },
+ {
+  "file": "backend/storage.py",
+  "name": "reminders turned off after the update stay off",
+  "old": " WHERE prefs_version < 1\")\n",
+  "new": "\")\n",
+  "test": "desktop/tests/test_reminders_window.py::test_reminders_turned_off_after_the_update_stay_off"
+ },
+ {
+  "file": "desktop/native/settings.py",
+  "name": "reminder settings grey while reminders are off",
+  "old": "        self.reminders.toggled.connect(self.reminder_controls.setEnabled)\n",
+  "new": "",
+  "test": "desktop/tests/test_alerts_page.py::test_the_reminder_controls_are_greyed_while_reminders_are_off"
+ },
+ {
+  "file": "desktop/native/widgets.py",
+  "name": "the wheel scrolls past a box nobody clicked into",
+  "old": "            event.ignore()\n            return True\n",
+  "new": "            return False\n",
+  "test": "desktop/tests/test_wheel_guard.py::test_the_wheel_over_a_box_the_student_is_not_in_scrolls_the_page"
+ },
+ {
+  "file": "desktop/native/focus.py",
+  "name": "the Next line says min",
+  "old": "f\" (in {length_label(wait)})\"",
+  "new": "f\" (in {wait}m)\"",
+  "test": "desktop/tests/test_words_on_screen.py::test_the_next_line_says_min_like_every_design"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "cancelling Running late clears its preview",
+  "old": "            if preview is not None:\n                # The preview's",
+  "new": "            if False:\n                # The preview's",
+  "test": "desktop/tests/test_words_on_screen.py::test_cancelling_running_late_takes_its_preview_off_the_screen"
+ },
+ {
+  "file": "desktop/native/widgets.py",
+  "name": "the block editor is titled as a student says it",
+  "old": "self.setWindowTitle(\"Edit event\" if existing else \"New event\")",
+  "new": "self.setWindowTitle(\"Edit fixed commitment\" if existing else \"Add fixed commitment\")",
+  "test": "desktop/tests/test_block_editor_words.py::test_the_editor_is_titled_as_a_student_says_it"
+ },
+ {
+  "file": "desktop/native/widgets.py",
+  "name": "deleting a block asks first",
+  "old": "if not confirm(self, \"Delete event\", f\"Delete {name}? You can undo this.\", \"Delete\"):",
+  "new": "if False:",
+  "test": "desktop/tests/test_block_editor_words.py::test_delete_asks_first_and_does_nothing_when_refused"
+ },
+ {
+  "file": "desktop/native/widgets.py",
+  "name": "the delete question's answer is red",
+  "old": "    go.setProperty(\"danger\", danger)\n    stay = QPushButton(\"Cancel\", box)\n    stay.setObjectName(\"confirmCancel\")\n    stay.setProperty(\"quiet\", True)\n    box.addButton(go, QMessageBox.ButtonRole.DestructiveRole)\n    box.addButton(stay, QMessageBox.ButtonRole.RejectRole)\n",
+  "new": "    stay = QPushButton(\"Cancel\", box)\n    stay.setObjectName(\"confirmCancel\")\n    box.addButton(go, QMessageBox.ButtonRole.DestructiveRole)\n    box.addButton(stay, QMessageBox.ButtonRole.RejectRole)\n    go.setProperty(\"danger\", danger)\n    stay.setProperty(\"quiet\", True)\n",
+  "test": "desktop/tests/test_block_editor_words.py::test_the_question_before_deleting_draws_its_answer_red_and_cancel_plain"
+ },
+ {
+  "file": "desktop/native/widgets.py",
+  "name": "a series opened on one day does not say every day changes",
+  "old": "and scope_box.isHidden())",
+  "new": "and not scope_box.isVisible())",
+  "test": "desktop/tests/test_block_editor_words.py::test_a_series_opened_on_one_day_does_not_also_say_every_day_changes"
+ },
+ {
+  "file": "desktop/native/widgets.py",
+  "name": "the repeat note sits in the Days field, not a row of its own",
+  "old": "        days_field = QVBoxLayout()\n        days_field.addLayout(choices)\n        days_field.addWidget(self.repeat_note)\n        # Level with the boxes rather than halfway down to the note.\n        days_label = QLabel(\"Days\")\n        days_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)\n        form.addRow(days_label, days_field)\n",
+  "new": "        self.repeat_note.setWordWrap(True)\n        form.addRow(\"Days\", choices)\n        form.addRow(\"\", self.repeat_note)\n",
+  "test": "desktop/tests/test_block_editor_words.py::test_the_repeat_note_sits_whole_under_the_day_boxes"
+ },
+ {
+  "file": "desktop/native/client.py",
+  "name": "sign-in says what went wrong before asking",
+  "old": "    if not password:\n        return SIGN_IN_NO_PASSWORD\n",
+  "new": "",
+  "test": "desktop/tests/test_account_words.py::test_sign_in_says_what_went_wrong"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "logging out asks first, and not in red",
+  "old": "if confirm(self, \"Log out\", LOG_OUT_QUESTION, \"Log out\", danger=False):",
+  "new": "if confirm(self, \"Log out\", LOG_OUT_QUESTION, \"Log out\"):",
+  "test": "desktop/tests/test_account_words.py::test_log_out_asks_first_and_stays_signed_in_when_refused"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "deleting the account asks a last time",
+  "old": "if confirm(self, \"Delete account\", question, f\"Delete {name}\"):",
+  "new": "if True:",
+  "test": "desktop/tests/test_account_words.py::test_delete_account_names_the_account_and_keeps_it_when_refused"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "More shows its descriptions",
+  "old": "        more_menu.setToolTipsVisible(True)\n",
+  "new": "",
+  "test": "desktop/tests/test_more_menu_words.py::test_every_action_under_more_and_advanced_says_what_it_does"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a greyed Unfinished says why",
+  "old": "    \"unfinishedOpen\": NOTHING_UNFINISHED,\n",
+  "new": "",
+  "test": "desktop/tests/test_more_menu_words.py::test_unfinished_with_nothing_unfinished_is_greyed_and_says_why"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "Unfinished opens its list",
+  "old": "            self.toast.show_message(NOTHING_UNFINISHED)\n        self.unfinished_panel.set_items(items)\n",
+  "new": "            self.toast.show_message(NOTHING_UNFINISHED)\n",
+  "test": "desktop/tests/test_more_menu_words.py::test_unfinished_opens_its_list_in_any_design"
+ },
+ {
+  "file": "desktop/native/look.py",
+  "name": "Help has no box around its words",
+  "old": "QScrollArea#weekScroll, QScrollArea#dayScroll, QScrollArea#helpScroll {{",
+  "new": "QScrollArea#weekScroll, QScrollArea#dayScroll {{",
+  "test": "desktop/tests/test_more_menu_words.py::test_help_shows_every_line_whole_at_large_text_and_fits_the_screen"
+ },
+ {
+  "file": "desktop/native/look.py",
+  "name": "a description takes the chosen text size",
+  "old": "border-radius: {item}px; font-size: {size}pt; }}",
+  "new": "border-radius: {item}px; }}",
+  "test": "desktop/tests/test_more_menu_words.py::test_a_description_is_as_large_as_the_text_the_student_chose"
+ },
+ {
+  "file": "desktop/native/layouts/dialog.py",
+  "name": "Settings opens on Main view with one sentence on designs",
+  "old": "lines = (DESIGN_LINE, blurb) if slot == \"main\" else (blurb,)",
+  "new": "lines = (blurb,)",
+  "test": "desktop/tests/test_settings_words.py::test_appearance_opens_on_main_view_and_ends_with_animations_and_fine_tune"
+ },
+ {
+  "file": "desktop/native/settings.py",
+  "name": "Long break after counts focus sessions",
+  "old": "        self.long_every.setSuffix(\" focus sessions\")\n",
+  "new": "",
+  "test": "desktop/tests/test_settings_words.py::test_focus_says_what_the_long_break_counts"
+ },
+ {
+  "file": "desktop/native/settings.py",
+  "name": "Play that hears nothing says what to do",
+  "old": "\" and not muted, then press Play again.\"",
+  "new": "\" and not muted.\"",
+  "test": "desktop/tests/test_settings_words.py::test_play_that_hears_nothing_says_what_to_do"
+ },
+ {
+  "file": "desktop/native/layouts/dialog.py",
+  "name": "Reset is a quiet button",
+  "old": "        self.reset.setProperty(\"quiet\", True)\n",
+  "new": "",
+  "test": "desktop/tests/test_settings_words.py::test_reset_is_a_quiet_button_at_the_left_not_a_bar_across_the_page"
+ },
+ {
+  "file": "desktop/native/look.py",
+  "name": "headings stand out",
+  "old": "f\"QLabel#prefsHeading, QLabel#layoutMainHeading, QLabel#layoutDayHeading {{ font-weight: 700; \"",
+  "new": "f\"QLabel#prefsHeading {{ font-weight: 700; \"",
+  "test": "desktop/tests/test_settings_words.py::test_every_heading_on_appearance_stands_out_from_the_rows_under_it"
+ },
+ {
+  "file": "desktop/native/settings.py",
+  "name": "a button that opens something else is plain",
+  "old": "    made.setProperty(\"quiet\", True)\n    made.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)\n",
+  "new": "",
+  "test": "desktop/tests/test_settings_words.py::test_a_button_that_opens_something_else_is_plain_and_as_wide_as_its_words"
+ },
+ {
+  "file": "desktop/native/look.py",
+  "name": "a plain button on a flat look has no edge",
+  "old": "quiet_edge = f\"background: {palette['hairline']}; border: none;\"",
+  "new": "quiet_edge = f\"background: transparent; border: 1px solid {palette['hairline_strong']};\"",
+  "test": "desktop/tests/test_look.py::test_depth_is_drawn_with_edges_because_qt_has_no_shadows"
+ },
+ {
+  "file": "desktop/native/look.py",
+  "name": "a design's window colours keep text readable",
+  "old": "if contrast(tokens[\"bg_ink\"], tokens[\"surface\"]) >= AA_TEXT:",
+  "new": "if True:",
+  "test": "desktop/tests/test_layouts_registry.py::test_every_design_dresses_the_window_in_colours_its_text_reads_on"
+ },
+ {
+  "file": "desktop/native/hours/chips.py",
+  "name": "a tray chip shortens its length before its title",
+  "old": "            if title.strip(\"\u2026\"):\n                fitted = title + self._length\n",
+  "new": "",
+  "test": "desktop/tests/test_classic_hours.py::test_a_tray_chip_shortens_its_title_and_keeps_its_length_whole"
+ },
+ {
+  "file": "desktop/native/widgets.py",
+  "name": "the week title cut short of its short form",
+  "old": "        return QSize(max(self._minimum, short if self._short else 0), super().minimumSizeHint().height())\n",
+  "new": "        return QSize(self._minimum, super().minimumSizeHint().height())\n",
+  "test": "desktop/tests/test_window_screens.py::test_the_top_bar_is_never_cut_mid_word"
+ },
+ {
+  "file": "desktop/native/widgets.py",
+  "name": "the top bar squeezed instead of wrapping",
+  "old": "        if least + self._gap + second.minimumSize().width() <= area.width():\n",
+  "new": "        if True:\n",
+  "test": "desktop/tests/test_window_screens.py::test_the_top_bar_is_never_cut_mid_word"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the window narrower than the top bar's buttons",
+  "old": "        self.setMinimumWidth(max(WINDOW_MIN_WIDTH, needed))\n",
+  "new": "        self.setMinimumWidth(WINDOW_MIN_WIDTH)\n",
+  "test": "desktop/tests/test_window_screens.py::test_the_top_bar_is_never_cut_mid_word"
+ },
+ {
+  "file": "desktop/native/layouts/retro.py",
+  "name": "a notepad line runs off the page",
+  "old": "        if fonts.horizontalAdvance(fitted) > room:\n",
+  "new": "        if False:\n",
+  "test": "desktop/tests/test_layout_retro.py::test_a_notepad_line_short_of_room_puts_its_date_under_its_title"
+ },
+ {
+  "file": "desktop/native/layouts/retro.py",
+  "name": "Retro shows what has no time twice",
+  "old": "        if scene.week.waiting and not self._open.get(\"notes\"):\n",
+  "new": "        if scene.week.waiting:\n",
+  "test": "desktop/tests/test_layout_retro.py::test_what_has_no_time_is_shown_once_in_the_notepad_or_under_the_hours_when_it_is_closed"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the countdown waits for a focus timer to redraw it",
+  "old": "        self._layout_tick.timeout.connect(self._count_down)\n",
+  "new": "",
+  "test": "desktop/tests/test_now_next.py::test_the_next_and_now_countdowns_move_with_the_minute_without_a_focus_timer"
+ },
+ {
+  "file": "desktop/native/settings.py",
+  "name": "an empty now and next line still takes its row",
+  "old": "        self.now_next.setVisible(bool(text))\n",
+  "new": "        self.now_next.setVisible(True)\n",
+  "test": "desktop/tests/test_now_next.py::test_the_next_and_now_countdowns_move_with_the_minute_without_a_focus_timer"
+ },
+ {
+  "file": "desktop/native/controller.py",
+  "name": "a block made by dragging is School until a type is picked",
+  "old": "        self.armed_category: str | None = None\n",
+  "new": "        self.armed_category: str | None = \"class\"\n",
+  "test": "desktop/tests/test_drag_results.py::test_a_block_made_by_dragging_has_no_category_until_the_student_picks_one"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a drag saves with no sign",
+  "old": "            self._say_when_saved(moved_words(block, origin, day, start, end))\n",
+  "new": "",
+  "test": "desktop/tests/test_drag_results.py::test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a block made by dragging says nothing",
+  "old": "            self._say_when_saved(added_words(made[0]))\n",
+  "new": "            pass\n",
+  "test": "desktop/tests/test_drag_results.py::test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a date carried on Month says nothing",
+  "old": "            self._say_when_saved(dated_words(self._title_of(change.block_id, change.from_iso), change.to_iso))\n",
+  "new": "            pass\n",
+  "test": "desktop/tests/test_drag_results.py::test_a_chip_carried_on_month_says_what_it_did"
+ },
+ {
+  "file": "desktop/native/weekmodel.py",
+  "name": "a resize said as a move",
+  "old": "    if day == from_day and start == was and end != was_end:\n",
+  "new": "    if False:\n",
+  "test": "desktop/tests/test_drag_results.py::test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the notice's Undo says nothing",
+  "old": "        self._notice_step = None\n        self._told(self.session.undo)\n",
+  "new": "        self._notice_step = None\n        self.session.undo()\n",
+  "test": "desktop/tests/test_drag_results.py::test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a notice pushes the hours down under a held block",
+  "old": "        if self._change_saved is None or self.hand.busy:\n",
+  "new": "        if self._change_saved is None:\n",
+  "test": "desktop/tests/test_drag_results.py::test_the_notice_waits_for_the_pointer_and_goes_once_its_change_is_no_longer_the_last"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a notice keeps an Undo that would take back a later change",
+  "old": "        elif stored and self._notice_step is not None and self.session.last_step() is not self._notice_step:\n",
+  "new": "        elif False:\n",
+  "test": "desktop/tests/test_drag_results.py::test_the_notice_waits_for_the_pointer_and_goes_once_its_change_is_no_longer_the_last"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "Advanced actions say what they did only in the status line",
+  "old": "            action.triggered.connect(lambda _=False, pressed=button: self._told(pressed.click))\n",
+  "new": "            action.triggered.connect(button.click)\n",
+  "test": "desktop/tests/test_drag_results.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the toast says an action is still going, not what it did",
+  "old": "        if self._telling and message and not message.endswith(\"\u2026\"):\n",
+  "new": "        if self._telling and message:\n",
+  "test": "desktop/tests/test_drag_results.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
+ },
+ {
+  "file": "desktop/native/controller.py",
+  "name": "Duplicate says it copied",
+  "old": "        if not self.copy_block(source_id, day, scope, say=False):\n",
+  "new": "        if not self.copy_block(source_id, day, scope):\n",
+  "test": "desktop/tests/test_drag_results.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
+ },
+ {
+  "file": "desktop/native/controller.py",
+  "name": "Reload says This week",
+  "old": "        self.load_week(self.week_start, discard=True, said=\"Reloaded this week.\")\n",
+  "new": "        self.load_week(self.week_start, discard=True)\n",
+  "test": "desktop/tests/test_drag_results.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a paste says Saved, not what it pasted",
+  "old": "            said=said,\n        )\n",
+  "new": "        )\n",
+  "test": "desktop/tests/test_drag_results.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
+ }
+]

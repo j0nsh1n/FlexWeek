@@ -1,27 +1,28 @@
 """One thing: a day screen. The whole window is the thing that is on now, or next if nothing is.
 
 It deliberately cannot plan. Its value is that it shows less, so the only way out is back to planning.
-It can move the day's own blocks, though: drag one along the day bar, or drag the thing itself onto
-it, to put it later, as Running late does.
+It can move the day's own blocks, though, through the window's hand: drag one along the day bar, or
+drag the thing itself onto it, to put it later, as Running late does.
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, Signal
+from PySide6.QtCore import QRect, QRectF, Qt, Signal
 from PySide6.QtGui import (
-    QColor,
     QFont,
     QFontMetrics,
     QKeyEvent,
     QMouseEvent,
     QPainter,
-    QPaintEvent,
     QPen,
     QResizeEvent,
 )
-from PySide6.QtWidgets import QHBoxLayout, QProgressBar, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QProgressBar, QVBoxLayout, QWidget
 
 from desktop.native.calendar import DAY_FULL
+from desktop.native.hours.canvas import BlockPainter, Drawn, HoursCanvas
+from desktop.native.hours.geometry import Axis, LinearTrack, Span
+from desktop.native.hours.hand import Gesture, Hand, Held
 from desktop.native.layouts.base import (
     LayoutView,
     Scene,
@@ -31,103 +32,186 @@ from desktop.native.layouts.base import (
     label,
     rules,
 )
-from desktop.native.layouts.drag import Carried, Mark, Pickup, Spot, Verdict, Zone, liftable, snap
-from desktop.native.weekmodel import Occurrence, clock_label, length_label
+from desktop.native.weekmodel import Occurrence, Waiting, clock_label, length_label
 
 DAY_START, DAY_END = 6 * 60, 22 * 60
+BAR_TALL = 22
 
 
-class DayBar(QWidget):
-    """The day as one thin bar: every block a segment, the chosen one in the accent, now as a tick.
-    A segment can be dragged along it to a new time, and a block dropped on it goes at that time."""
+def _small(font: QFont) -> QFont:
+    """The words on the carried block's pill, a little under the bar's own font."""
+    made = QFont(font)
+    made.setPointSizeF(max(made.pointSizeF() * 0.86, 7))
+    return made
+
+
+class BarPainter(BlockPainter):
+    """The day as one thin bar: every block a segment, the thing on screen in the accent, now as a
+    tick. A carried block is drawn where it would land, outlined, with its words on a pill above."""
+
+    def __init__(self, tokens: dict[str, str], chosen: str | None) -> None:
+        super().__init__(
+            {
+                "track": tokens["line"],
+                "other": tokens["bg_muted"],
+                "accent": tokens["accent"],
+                "accent_ink": tokens["accent_ink"],
+                "error": tokens["danger"],
+                "tick": tokens["bg_ink"],
+            }
+        )
+        self.chosen = chosen
+        self._middle = 0.0
+
+    def background(self, painter: QPainter, rect: QRectF) -> None:
+        pass
+
+    def track(self, painter: QPainter, track: LinearTrack, today: bool) -> None:
+        area = track.area
+        self._middle = area.center().y()
+        painter.fillRect(QRectF(area.left(), self._middle - 5, area.width(), 10), self.c("track"))
+
+    def hour_labels(
+        self,
+        painter: QPainter,
+        track: LinearTrack,
+        room: float,
+        every: int = 60,
+        visible: QRectF | None = None,
+    ) -> None:
+        pass
+
+    def block(self, painter: QPainter, rect: QRectF, drawn: Drawn, visible: QRectF) -> None:
+        tall = min(10.0, rect.height())
+        # On the bar, or in its share of the bar's height where blocks overlap.
+        middle = self._middle if drawn.columns == 1 else rect.center().y()
+        segment = QRectF(rect.left(), middle - tall / 2, max(rect.width(), 2), tall)
+        if drawn.held:
+            ok = drawn.verdict is None or drawn.verdict.ok
+            colour = self.c("accent" if ok else "error")
+            painter.fillRect(segment, colour)
+            painter.setPen(QPen(colour, 2, Qt.PenStyle.DashLine))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRect(QRectF(segment.left(), segment.top() - 4, max(segment.width(), 4), tall + 8))
+            return
+        painter.fillRect(segment, self.c("accent" if drawn.block_id == self.chosen else "other"))
+
+    def hint(self, painter: QPainter, rect: QRectF, big: bool) -> None:
+        pass
+
+    def now(self, painter: QPainter, track: LinearTrack, minute: int) -> None:
+        area = track.area
+        painter.fillRect(
+            QRectF(area.left() + track.offset(minute) - 1.5, area.top(), 3, area.height()), self.c("tick")
+        )
+
+    def label(self, painter: QPainter, beside: QRectF, words: str, ok: bool, room: QRectF) -> None:
+        """Above the carried segment, in the room left over the bar for it."""
+        plain = _small(painter.font())
+        metrics = QFontMetrics(plain)
+        width, height = metrics.horizontalAdvance(words) + 20, metrics.height() + 10
+        left = min(max(beside.center().x() - width / 2, room.left()), room.right() - width)
+        pill = QRectF(left, max(beside.top() - 8 - height, room.top()), width, height)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(self.c("accent" if ok else "error"))
+        painter.drawRoundedRect(pill, height / 2, height / 2)
+        painter.setPen(self.c("accent_ink"))
+        painter.setFont(plain)
+        painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, words)
+
+
+class DayBar(HoursCanvas):
+    """Today from 06:00 to 22:00 as one track across. A segment can be carried along it to a new
+    time, and a tap on one opens it. Free time makes nothing: this screen does not plan."""
 
     block_clicked = Signal(str)
 
-    def __init__(self, day: int = 0, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setObjectName("oneDayBar")
-        self.setFixedHeight(22)
-        self._day = day
-        self._blocks: tuple[Occurrence, ...] = ()
-        self._chosen: Occurrence | None = None
-        self._minute: int | None = None
-        self._colours = ("#2a2a2a", "#6b6b6b", "#fb923c", "#ffffff")
-        self._ghost_colours = ("#fb923c", "#ef4444")
-        self._drop: Verdict | None = None
-        self._pickup = Pickup(self, self.block_at, self.block_clicked.emit, self.minute_at)
-
-    def set_day(
-        self,
-        blocks: tuple[Occurrence, ...],
-        chosen: Occurrence | None,
-        minute: int | None,
-        tokens: dict[str, str],
-    ) -> None:
-        self._blocks, self._chosen, self._minute = blocks, chosen, minute
-        self._colours = (tokens["line"], tokens["bg_muted"], tokens["accent"], tokens["bg_ink"])
-        self._ghost_colours = (tokens["accent"], tokens["danger"])
-        self.setAccessibleName(f"Today from {clock_label(DAY_START)} to {clock_label(DAY_END)}")
-        self.update()
-
-    def _x(self, minute: int) -> float:
-        share = (min(max(minute, DAY_START), DAY_END) - DAY_START) / (DAY_END - DAY_START)
-        return share * self.width()
-
-    def minute_at(self, spot: QPointF) -> int:
-        share = min(max(spot.x() / max(self.width(), 1), 0.0), 1.0)
-        return round(DAY_START + share * (DAY_END - DAY_START))
-
-    def block_at(self, spot: QPointF) -> Occurrence | None:
-        return next(
-            (item for item in self._blocks if self._x(item.start) <= spot.x() <= self._x(item.end)), None
+    def __init__(self, hand: Hand, day: int, tokens: dict[str, str], chosen: str | None) -> None:
+        super().__init__(
+            hand,
+            BarPainter(tokens, chosen),
+            lambda area: [LinearTrack(day, area, Axis.ACROSS, DAY_START, DAY_END)],
         )
-
-    def set_drop(self, verdict: Verdict | None) -> None:
-        self._drop = verdict
-        self.update()
-
-    def where(self, point: QPoint, thing: Carried) -> tuple[Spot, Mark]:
-        return Spot(self._day, snap(self.minute_at(QPointF(point)) - thing.grab)), Mark(paint=self.set_drop)
+        self.setObjectName("oneDayBar")
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setAccessibleName(f"Today from {clock_label(DAY_START)} to {clock_label(DAY_END)}")
+        self.setAccessibleDescription("Drag a block along the bar to move it, or click it to open it.")
+        # Room over the bar for the carried block's words.
+        self.header = QFontMetrics(_small(self.font())).height() + 18
+        self.setFixedHeight(round(self.header) + BAR_TALL)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
-        self._pickup.press(event)
+        if event.button() != Qt.MouseButton.LeftButton:
+            return
+        hit = self._block_at(event.position())
+        if hit is None:
+            return
+        drawn, _rect, track = hit
+        span = drawn.span
+        held = Held(
+            Gesture.MOVE,
+            drawn.title,
+            span.minutes,
+            drawn.block_id,
+            span.day,
+            span,
+            round(track.minute_at(event.position()) - span.start),
+        )
+        self.hand.press(
+            self,
+            held,
+            event.globalPosition().toPoint(),
+            tap=lambda: self.block_clicked.emit(drawn.block_id),
+            home=(self, track),
+        )
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        # The first click of the two has opened it already.
+        event.accept()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
-        self._pickup.move(event)
+        if not self.hand.busy:
+            over = self._block_at(event.position()) is not None
+            self.setCursor(Qt.CursorShape.OpenHandCursor if over else Qt.CursorShape.ArrowCursor)
 
-    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
-        self._pickup.release(event)
 
-    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
-        track, other, chosen, tick = (QColor(colour) for colour in self._colours)
-        painter = QPainter(self)
-        painter.fillRect(QRectF(0, 6, self.width(), 10), track)
-        for item in self._blocks:
-            left, right = self._x(item.start), self._x(item.end)
-            painter.fillRect(
-                QRectF(left, 6, max(right - left, 2), 10), chosen if item == self._chosen else other
-            )
-        if self._minute is not None:
-            painter.fillRect(QRectF(self._x(self._minute) - 1.5, 0, 3, 22), tick)
-        drop = self._drop
-        if drop is not None and drop.start is not None and drop.end is not None:
-            colour = QColor(self._ghost_colours[0 if drop.ok else 1])
-            left, right = self._x(drop.start), self._x(drop.end)
-            painter.setPen(QPen(colour, 2, Qt.PenStyle.DashLine))
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRect(QRectF(left, 2, max(right - left, 4), 18))
-        painter.end()
+class Thing(QLabel):
+    """The thing itself, as large as the window allows. Like a tray chip, it can be picked up and
+    let go on the day bar: a block with a time moves there, homework with none is given that time."""
+
+    def __init__(self, hand: Hand) -> None:
+        super().__init__("")
+        self.hand = hand
+        self.held: Held | None = None
+        self.setObjectName("oneTitle")
+        self.setWordWrap(True)
+        self.setTextFormat(Qt.TextFormat.PlainText)
+
+    def carry(self, thing: Occurrence | Waiting | None) -> None:
+        if isinstance(thing, Occurrence):
+            span = Span(thing.day, thing.start, thing.end)
+            self.held = Held(Gesture.MOVE, thing.title, thing.minutes, thing.block_id, thing.day, span)
+        elif isinstance(thing, Waiting):
+            self.held = Held(Gesture.PLACE, thing.title, thing.minutes, thing.block_id)
+        else:
+            self.held = None
+        self.setProperty("block_id", self.held.block_id if self.held is not None else None)
+        self.setCursor(Qt.CursorShape.OpenHandCursor if self.held is not None else Qt.CursorShape.ArrowCursor)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton and self.held is not None:
+            self.hand.press(self, self.held, event.globalPosition().toPoint())
+            return
+        super().mousePressEvent(event)
 
 
 class OneThingView(LayoutView):
-    # The day bar is the day's hours, so a block is dropped on it rather than in a drawer.
-    uses_drawer = False
     layout_id = "one"
 
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
+    def __init__(self, parent: QWidget | None = None, *, hand: Hand | None = None) -> None:
+        super().__init__(parent, hand=hand)
         self._skip = 0
-        self._title = label("", "oneTitle", wrap=True)
+        self._title = Thing(self.hand)
         self._root = QVBoxLayout(self)
         self._root.setContentsMargins(30, 22, 30, 22)
 
@@ -172,7 +256,7 @@ class OneThingView(LayoutView):
             )
         )
         empty(self._root)
-        self._title = label("", "oneTitle", wrap=True)
+        self._title = Thing(self.hand)
         top = QHBoxLayout()
         when = (
             "Another week"
@@ -189,8 +273,9 @@ class OneThingView(LayoutView):
         self._title.setText((item.title if item else self._empty_title(scene)).upper())
         if item is not None:
             self._title.setAccessibleDescription("Press Enter to open it")
-            # The thing itself can be dragged onto the day bar, to a later time.
-            liftable(self._title, item.block_id)
+        # The thing itself can be carried onto the day bar, to a later time.
+        needs_time = scene.today is not None and scene.week.leftover_kind(scene.today) == "needs_time"
+        self._title.carry(item or (scene.week.due_today_unplaced(scene.today)[0] if needs_time else None))
         self._root.addWidget(self._title)
         self._root.addWidget(label(line.upper(), "oneLine", wrap=True))
         if is_now and item is not None:
@@ -209,10 +294,9 @@ class OneThingView(LayoutView):
         self._root.addLayout(self._actions(scene, item))
         self._root.addStretch(1)
         if scene.options.get("daybar") != "hide" and scene.today is not None:
-            bar = DayBar(scene.today)
-            bar.set_day(scene.week.on_day(scene.today), item, scene.minute, tokens)
+            bar = DayBar(self.hand, scene.today, tokens, item.block_id if item is not None else None)
+            bar.set_week(scene.week.on_day(scene.today), scene.today, scene.minute)
             bar.block_clicked.connect(self.block_activated.emit)
-            Zone(self, bar, bar.where)
             self._root.addWidget(bar)
         foot = QHBoxLayout()
         then = queue[self._skip + 1 : self._skip + 3]

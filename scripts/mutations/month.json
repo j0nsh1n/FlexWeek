@@ -1,0 +1,128 @@
+[
+ {
+  "file": "desktop/native/hours/month.py",
+  "name": "the open week read from the reply, not what the student has now",
+  "old": "        if iso in open_days:\n",
+  "new": "        if False:\n",
+  "test": "desktop/tests/test_hours_month.py::test_a_date_lists_what_is_due_then_its_blocks_at_their_times"
+ },
+ {
+  "file": "desktop/native/hours/month.py",
+  "name": "a deadline carried like a block",
+  "old": "        return self.block_id is not None and self.start is not None and not self.due\n",
+  "new": "        return True\n",
+  "test": "desktop/tests/test_hours_month.py::test_a_deadline_is_not_carried"
+ },
+ {
+  "file": "desktop/native/hours/hand.py",
+  "name": "a refused date moves the block anyway",
+  "old": "                if verdict is not None and not verdict.ok:\n",
+  "new": "                if False:\n",
+  "test": "desktop/tests/test_hours_month.py::test_a_refused_date_shows_while_held_and_moves_nothing"
+ },
+ {
+  "file": "desktop/native/hours/hand.py",
+  "name": "the date rule never asked while held",
+  "old": "        if target and held.block_id and target != held.from_iso and self.date_judge is not None:\n",
+  "new": "        if False:\n",
+  "test": "desktop/tests/test_hours_month.py::test_a_refused_date_shows_while_held_and_moves_nothing"
+ },
+ {
+  "file": "desktop/native/hours/hand.py",
+  "name": "a chip let go on its own date moves it",
+  "old": "            if target and held.block_id and target != held.from_iso:\n                if verdict",
+  "new": "            if target and held.block_id:\n                if verdict",
+  "test": "desktop/tests/test_hours_month.py::test_a_chip_let_go_on_its_own_date_moves_nothing_and_a_clicked_one_opens_it"
+ },
+ {
+  "file": "desktop/native/hours/month.py",
+  "name": "a clicked chip opens nothing",
+  "old": "tap=lambda: self.date_opened.emit(cell.iso)",
+  "new": "tap=lambda: None",
+  "test": "desktop/tests/test_hours_month.py::test_a_chip_let_go_on_its_own_date_moves_nothing_and_a_clicked_one_opens_it"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "Month scrolls back on every refresh",
+  "old": "        if opened[0] == \"month\" and opened[2] and opened != self._month_revealed:\n",
+  "new": "        if opened[0] == \"month\" and opened[2]:\n",
+  "test": "desktop/tests/test_layout_drag.py::test_month_stays_where_the_student_scrolled_it_through_a_refresh"
+ },
+ {
+  "file": "desktop/native/hours/hand.py",
+  "name": "the floating words run past the window",
+  "old": "        self._chip.move(spot)\n",
+  "new": "        self._chip.move(self._host.mapFromGlobal(at) + QPoint(14, 10))\n",
+  "test": "desktop/tests/test_hours_hand.py::test_the_words_that_follow_the_pointer_stay_inside_the_window"
+ },
+ {
+  "file": "desktop/native/hours/month.py",
+  "name": "a date's point lands on its first chip",
+  "old": "        free = (used + box.height()) / 2 if used < box.height() - 6 else box.height() - 3\n",
+  "new": "        free = self.number_height() + 3\n",
+  "test": "desktop/tests/test_hours_month.py::test_a_dates_own_point_is_on_the_date_and_on_none_of_its_chips"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a drop after a failed save kept for later",
+  "old": "        if self.session.busy:\n            self._date_waiting = change\n",
+  "new": "        if self.session.busy or self.session.pending_save is not None:\n            self._date_waiting = change\n",
+  "test": "desktop/tests/test_layout_drag.py::test_a_chip_let_go_after_a_save_failed_is_refused_not_kept_for_later"
+ },
+ {
+  "file": "desktop/native/hours/hand.py",
+  "name": "the hand keeps its host, a cycle",
+  "old": "        self._judge = judge\n",
+  "new": "        self._judge, self._host = judge, host\n",
+  "test": "desktop/tests/test_hours_month.py::test_a_month_with_no_window_is_freed_without_the_garbage_collector"
+ },
+ {
+  "file": "desktop/native/layouts/base.py",
+  "name": "a design's month scrolls back on every refresh",
+  "old": "        if scene.month and scene.iso_day and opened != getattr(self, \"_month_revealed\", None):\n",
+  "new": "        if scene.month and scene.iso_day:\n",
+  "test": "desktop/tests/test_layout_drag.py::test_a_designs_month_stays_where_the_student_scrolled_it_through_a_refresh"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "classic Month ignores weeks left unsaved",
+  "old": "        self.month_grid.set_unsaved(self.session.unsaved_weeks())\n",
+  "new": "",
+  "test": "desktop/tests/test_layout_drag.py::test_month_draws_a_week_left_unsaved_as_the_student_has_it[classic]"
+ },
+ {
+  "file": "desktop/native/layouts/base.py",
+  "name": "a design's Month ignores weeks left unsaved",
+  "old": "        board.set_unsaved(scene.unsaved_weeks)\n",
+  "new": "",
+  "test": "desktop/tests/test_layout_drag.py::test_month_draws_a_week_left_unsaved_as_the_student_has_it[timeline]"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the scene carries no weeks left unsaved",
+  "old": "            unsaved_weeks=session.unsaved_weeks(),\n",
+  "new": "",
+  "test": "desktop/tests/test_layout_drag.py::test_month_draws_a_week_left_unsaved_as_the_student_has_it[timeline]"
+ },
+ {
+  "file": "desktop/native/hours/month.py",
+  "name": "the grid drops the weeks left unsaved",
+  "old": "        weeks = dict(self._unsaved)\n",
+  "new": "        weeks = {}\n",
+  "test": "desktop/tests/test_hours_month.py::test_the_grid_draws_the_open_week_and_the_weeks_left_unsaved"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the judge gets no start from the month reply",
+  "old": "            start=chip.get(\"start\"),\n",
+  "new": "",
+  "test": "desktop/tests/test_layout_drag.py::test_a_chip_from_a_week_that_is_not_open_is_judged_by_its_own_time_and_homework"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the judge gets no homework from the month reply",
+  "old": "            assignment_id=chip.get(\"assignment_id\"),\n",
+  "new": "",
+  "test": "desktop/tests/test_layout_drag.py::test_a_chip_from_a_week_that_is_not_open_is_judged_by_its_own_time_and_homework"
+ }
+]

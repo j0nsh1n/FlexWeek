@@ -162,7 +162,7 @@ def test_a_block_the_solver_could_not_place_is_not_split() -> None:
 
 
 def test_chunks_that_would_run_past_the_end_of_the_day_leave_the_block_whole() -> None:
-    split, count = split_solved([essay()], {"placed": [placed_at("22:00")]}, PREFS)
+    split, count = split_solved([essay()], {"placed": [placed_at("23:00")]}, PREFS)
     assert count == 0 and len(split) == 1
 
 

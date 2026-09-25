@@ -6,6 +6,7 @@ import contextlib
 import ipaddress
 import json
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from urllib.parse import unquote, urlsplit
@@ -26,6 +27,21 @@ MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 PASSWORD_LENGTH_HINT = "Password: use 12–128 characters."
 USERNAME_HINT = "Username: 3–32 letters, numbers or underscores."
 USERNAME_ERROR = "That username is not 3–32 letters, numbers or underscores."
+# Sign-in and sign-up say which thing is wrong wherever FlexWeek can tell. The server answers a wrong
+# password and an unknown username alike on purpose, so that one sentence says so.
+SIGN_IN_WRONG = (
+    "Wrong username or password. FlexWeek doesn't say which, so no one can find out who has an account."
+)
+SIGN_IN_NO_USERNAME = "Type your username."
+SIGN_IN_NO_PASSWORD = "Type your password."
+SIGN_IN_BAD_USERNAME = (
+    "No FlexWeek username looks like that. Usernames are 3–32 letters, numbers or underscores."
+)
+SIGN_IN_SHORT_PASSWORD = "That password is too short to be right. FlexWeek passwords have 12–128 characters."
+SIGN_UP_NO_USERNAME = "Choose a username: 3–32 letters, numbers or underscores."
+SIGN_UP_NO_PASSWORD = "Choose a password. It needs 12–128 characters."
+SIGN_UP_SHORT_PASSWORD = "That password is too short. It needs at least 12 characters."
+USERNAME_TAKEN = "That username is taken. Choose another one."
 logger = logging.getLogger(__name__)
 
 
@@ -101,7 +117,9 @@ def _error(status: int, detail: object = None) -> ApiError:
     if status == 401 and detail == "Incorrect password":
         return ApiError(status, "Incorrect password. Try again.")
     if status == 401 and detail == "Incorrect username or password":
-        return ApiError(status, "Incorrect username or password. Try again.")
+        return ApiError(status, SIGN_IN_WRONG)
+    if status == 409 and detail == "Username unavailable":
+        return ApiError(status, USERNAME_TAKEN)
     if status == 401 and detail == "Incorrect username or recovery code":
         return ApiError(status, "Incorrect username or recovery code.")
     if status == 422:
@@ -120,6 +138,46 @@ def _error(status: int, detail: object = None) -> ApiError:
         503: "Storage is unavailable. Keep your changes and try again shortly.",
     }
     return ApiError(status, messages.get(status, "FlexWeek could not complete this request. Try again."))
+
+
+def _username_ok(name: str) -> bool:
+    return re.fullmatch(r"[A-Za-z0-9_]{3,32}", name) is not None
+
+
+def sign_in_problem(name: str, password: str) -> str:
+    """What is wrong before asking the server, which could only say "check the required fields"."""
+    if not name:
+        return SIGN_IN_NO_USERNAME
+    if not password:
+        return SIGN_IN_NO_PASSWORD
+    if not _username_ok(name):
+        return SIGN_IN_BAD_USERNAME
+    if len(password) < 12:
+        return SIGN_IN_SHORT_PASSWORD
+    return ""
+
+
+def sign_up_problem(name: str, password: str) -> str:
+    if not name:
+        return SIGN_UP_NO_USERNAME
+    if not _username_ok(name):
+        return USERNAME_ERROR
+    if not password:
+        return SIGN_UP_NO_PASSWORD
+    if len(password) < 12:
+        return SIGN_UP_SHORT_PASSWORD
+    return ""
+
+
+def auth_error(error: ApiError, *, creating: bool) -> ApiError:
+    """The words for a sign-in or sign-up that failed on the way. The general ones speak of changes
+    that may not have been saved, which a sign-in never has."""
+    then = "create your account" if creating else "sign in"
+    if error.status == 0:
+        return ApiError(0, f"FlexWeek can't reach its server. Close FlexWeek, open it again, then {then}.")
+    if error.status == 503:
+        return ApiError(503, f"FlexWeek can't open its saved data right now. Wait a minute, then {then}.")
+    return error
 
 
 class NativeClient(QObject):
