@@ -22,12 +22,13 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QDate, QStandardPaths, QTime
+    from PySide6.QtCore import QDate, QStandardPaths, Qt, QTime
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import (
         QApplication,
         QDialog,
         QPushButton,
+        QWidget,
     )
 
     from desktop.native.calendar import date_for_day, sunday_due
@@ -236,3 +237,48 @@ def test_a_due_field_says_it_changed_with_no_arguments(qapp: QApplication) -> No
     field.timed.setChecked(True)
     field.time.setTime(QTime(8, 15))
     assert heard == [(), (), ()]
+
+
+# Length
+
+
+def typed(box: QWidget, text: str) -> None:
+    box.setFocus()
+    box.selectAll()
+    QTest.keyClicks(box, text)
+
+
+def test_a_length_under_15_minutes_or_over_24_hours_is_refused_beside_the_box(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    said: list[tuple[str, int, bool, bool]] = []
+
+    def enter(dialog: HomeworkDialog) -> int:
+        dialog.show()
+        dialog.title.setText("Science poster")
+        hint = dialog.estimate_hint
+
+        def saved_as(text: str) -> None:
+            typed(dialog.estimate, text)
+            dialog.accept()
+            problem = bool(hint.property("problem"))
+            said.append((hint.text(), dialog.estimate.value(), problem, dialog.isVisible()))
+
+        saved_as("0")
+        saved_as("1500")
+        typed(dialog.estimate, "1440")
+        QTest.keyClick(dialog.estimate, Qt.Key.Key_Up)
+        said.append(("cap", dialog.estimate.value(), False, False))
+        saved_as("90")
+        return dialog.result()
+
+    opened_with(monkeypatch, enter)
+    window._add_homework()
+    settled(qapp, window)
+    zero, long, cap, fine = said
+    assert zero == ("Give it at least 15 minutes.", 0, True, True), "0 is kept as typed and refused in words"
+    assert long[1:] == (1500, True, True) and "Split it into parts" in long[0]
+    assert cap[1] == 1440, "the arrows stop at 24 hours"
+    assert fine[2:] == (False, False), "a length in range saves"
+    saved = next(item for item in window.session.assignments.values() if item["title"] == "Science poster")
+    assert saved["estimate_min"] == 90

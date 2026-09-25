@@ -37,6 +37,8 @@ NAIVE_DATE = re.compile(r"(\d{4}-\d{2}-\d{2})\Z")
 # Date-only due, and the old default T23:59, mean the end of that calendar day.
 END_OF_DAY_MIN = 24 * 60
 END_OF_DAY_CLOCK = "23:59"
+# One homework is at most a day's work; longer work is split into parts.
+ESTIMATE_MAX_MIN = 24 * 60
 
 
 def _iso_day(text: str) -> date:
@@ -256,7 +258,7 @@ class AssignmentContent(BaseModel):
     energy: Energy = "medium"
     spotify_url: str | None = Field(default=None, max_length=500)
     due: str
-    estimate_min: int = Field(le=7140)
+    estimate_min: int = Field(le=ESTIMATE_MAX_MIN)
     focus_minutes: int = Field(default=0, ge=0, le=71400)
     focus_sessions: int = Field(default=0, ge=0, le=9999)
     completed: bool = False

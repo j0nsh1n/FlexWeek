@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+from backend.models import ESTIMATE_MAX_MIN
 from backend.slots import hhmm_to_minutes
 from backend.weeks import is_week_start
 from desktop.native.reuse import format_duration, occurrence_days
@@ -15,7 +16,7 @@ FOCUS_PHASE_LABEL = {
     "long_break": "Long break",
     "ended": "Session done",
 }
-MAX_ESTIMATE_MIN = 7140
+MAX_ESTIMATE_MIN = ESTIMATE_MAX_MIN
 MAX_FOCUS_MINUTES = 71400
 MAX_FOCUS_SESSIONS = 9999
 MORE_TIME_CHOICES = (15, 30, 45, 60, 90, 120, 180, 240)

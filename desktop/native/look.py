@@ -827,6 +827,7 @@ def pack_stylesheet(
         f"QLabel#authNote, QLabel#passwordHint, QLabel#usernameHint {{ color: {palette['muted']}; }}"
         f"QLabel#validationError {{ color: {palette['error']}; font-weight: 600; }}"
         f"QLabel#homeworkEstimateHint {{ color: {palette['muted']}; }}"
+        f"QLabel#homeworkEstimateHint[problem=\"true\"] {{ color: {palette['error']}; font-weight: 600; }}"
         f"QPushButton#todayWeek {{ background: transparent; color: {palette['text']}; "
         f"font-weight: 600; padding: {pad}px {pad * 2}px; {edges} }}"
         # The way in is a button; the way to a new account is small print, so it is drawn as a link.

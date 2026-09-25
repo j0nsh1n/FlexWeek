@@ -33,6 +33,7 @@ from PySide6.QtGui import (
     QShowEvent,
 )
 from PySide6.QtWidgets import (
+    QAbstractSpinBox,
     QCheckBox,
     QComboBox,
     QDateEdit,
@@ -60,7 +61,7 @@ from PySide6.QtWidgets import (
 )
 
 from backend.explain import REASON_COPY
-from backend.models import Assignment, TimeBlock, WeekRequest, due_is_timed, parse_due
+from backend.models import ESTIMATE_MAX_MIN, Assignment, TimeBlock, WeekRequest, due_is_timed, parse_due
 from backend.slots import (
     DAY_END_MIN,
     DAY_START_MIN,
@@ -101,6 +102,8 @@ DATE_FORMAT = "ddd d MMM yyyy"
 DIALOG_MAX_HEIGHT = 700
 SLOT_HINT = "Use a multiple of 15 minutes, such as 15, 30, or 45."
 ESTIMATE_ERROR = "That time is not a multiple of 15 minutes."
+ESTIMATE_SHORT = "Give it at least 15 minutes."
+ESTIMATE_LONG = "That is more than 24 hours. Split it into parts and add each part as its own homework."
 PLAN_REVIEW_MAX = 132
 DAY_FULL = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
@@ -547,14 +550,29 @@ def _line(name: str, text: str = "", limit: int = 80) -> QLineEdit:
     return field
 
 
-def _minutes(name: str, value: int, maximum: int) -> QSpinBox:
-    field = QSpinBox()
-    field.setObjectName(name)
-    field.setRange(15, maximum)
-    field.setSingleStep(15)
-    field.setSuffix(" min")
-    field.setValue(value)
-    return field
+class LengthBox(QSpinBox):
+    """A homework's length in minutes. The arrows stop at 15 minutes and at a day. A length typed past
+    either end is kept as typed, so the editor says what is wrong with it: a box that stopped at 15
+    turned a typed 0 back into the last length without a word."""
+
+    def __init__(self, name: str, value: int) -> None:
+        super().__init__()
+        self.setObjectName(name)
+        self.setRange(0, 9999)
+        self.setSingleStep(SLOT_MIN)
+        self.setSuffix(" min")
+        self.setValue(value)
+
+    def stepBy(self, steps: int) -> None:  # noqa: N802 - Qt virtual
+        self.setValue(min(max(self.value() + steps * self.singleStep(), SLOT_MIN), ESTIMATE_MAX_MIN))
+
+    def stepEnabled(self) -> QAbstractSpinBox.StepEnabledFlag:  # noqa: N802 - Qt virtual
+        flags = QAbstractSpinBox.StepEnabledFlag.StepNone
+        if self.value() < ESTIMATE_MAX_MIN:
+            flags |= QAbstractSpinBox.StepEnabledFlag.StepUpEnabled
+        if self.value() > SLOT_MIN:
+            flags |= QAbstractSpinBox.StepEnabledFlag.StepDownEnabled
+        return flags
 
 
 def _error_label() -> QLabel:
@@ -945,12 +963,16 @@ class HomeworkDialog(QDialog):
         form.addRow("Title", self.title)
         self.due = DueField(self._original["due"], "homeworkDue", stacked=True)
         form.addRow("Due", self.due)
-        self.estimate = _minutes("homeworkEstimate", self._original["estimate_min"], 7140)
+        self.estimate = LengthBox("homeworkEstimate", self._original["estimate_min"])
         form.addRow("Estimated time", self.estimate)
         self.estimate_hint = QLabel(SLOT_HINT)
         self.estimate_hint.setObjectName("homeworkEstimateHint")
         self.estimate_hint.setWordWrap(True)
         form.addRow("", self.estimate_hint)
+        self.estimate.valueChanged.connect(self._recheck_length)
+        if self._length_problem():
+            # Stored before the limit, so the student is told before they try to save it.
+            self._say_length()
         self.error = _error_label()
         self.error.hide()
         form.addRow("", self.error)
@@ -1093,6 +1115,28 @@ class HomeworkDialog(QDialog):
         if text:
             self._scroll.ensureWidgetVisible(self.error)
 
+    def _length_problem(self) -> str:
+        minutes = self.estimate.value()
+        if minutes < SLOT_MIN:
+            return ESTIMATE_SHORT
+        if minutes > ESTIMATE_MAX_MIN:
+            return ESTIMATE_LONG
+        return ""
+
+    def _say_length(self) -> bool:
+        """Say under the box what is wrong with the length, in the error colour, or the usual hint."""
+        problem = self._length_problem()
+        self.estimate_hint.setText(problem or SLOT_HINT)
+        self.estimate_hint.setProperty("problem", bool(problem))
+        self.estimate_hint.style().unpolish(self.estimate_hint)
+        self.estimate_hint.style().polish(self.estimate_hint)
+        return bool(problem)
+
+    def _recheck_length(self, *_args: object) -> None:
+        # Only once Save has refused: while a length is being typed, "1" is not yet a mistake.
+        if self.estimate_hint.property("problem"):
+            self._say_length()
+
     def _disable_spread(self, *_args: object) -> None:
         # Like Spread, placing acts on the saved homework, so an unsaved edit turns them off.
         for button in self._session_buttons:
@@ -1162,6 +1206,9 @@ class HomeworkDialog(QDialog):
         return before if parse_due(chosen) == parse_due(before) else chosen
 
     def accept(self) -> None:
+        if self._say_length():
+            self.estimate.setFocus()
+            return
         candidate = deepcopy(self._original)
         links = [self.links.item(index).data(Qt.ItemDataRole.UserRole) for index in range(self.links.count())]
         checklist = []

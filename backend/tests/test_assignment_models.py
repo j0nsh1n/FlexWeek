@@ -92,6 +92,13 @@ def test_assignment_estimate_must_be_a_positive_multiple_of_15() -> None:
             Assignment.model_validate(assignment(estimate_min=estimate_min))
 
 
+def test_assignment_estimate_is_at_most_a_day() -> None:
+    assert Assignment.model_validate(assignment(estimate_min=24 * 60)).estimate_min == 24 * 60
+    for estimate_min in (24 * 60 + 15, 99 * 60):
+        with pytest.raises(ValidationError):
+            Assignment.model_validate(assignment(estimate_min=estimate_min))
+
+
 def test_completed_assignment_requires_completed_at_and_open_one_forbids_it() -> None:
     with pytest.raises(ValidationError, match="completed_at"):
         Assignment.model_validate(assignment(completed=True, completed_at=None))
