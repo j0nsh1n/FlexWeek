@@ -1,6 +1,20 @@
 # context.md — FlexWeek
 
 ## Current State
+- Date: 2026-09-25 (0.15 Lane C), branch `claude/0-15-homework-planning`.
+  Five inherited fixes cover the DueField signal, due-today default, homework
+  length bounds, full-month date picker and planning after now (`7b9d19b`,
+  `225908e`, `8709df9`, `85c5312`, `e123f55`). `1c6d3e6` completes Plan and
+  Replan all Undo with a notice only after a successful save, keeps automatic
+  planning in Add homework's Undo step, and gives plain homework validation
+  messages. Plan waits when an earlier save is pending, and a no-op plan makes
+  no misleading Undo step. All 24 focused tests and 1329 full tests passed;
+  ruff and backend mypy passed; all 15 planner and due mutations were caught.
+  `scripts/verify.py` timed out at its known 300-second pytest budget near 92%,
+  so the full suite was run separately.
+  Offscreen screenshots at both requested sizes are in the UI harness scratch
+  directory. No executable build, merge, push, PR or `spec.md` change. Claude
+  reviews this branch before it lands.
 - Date: 2026-09-24 (Retro desktop unit 12), branch `chatgpt/0-15-retro` from
   `feat/0.15-tabs` at `8e3634a`. Day uses Schedule.exe for one live hours
   column; Week.exe shows seven live columns with pinned day names. Both use
@@ -643,6 +657,15 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-25, `claude/0-15-homework-planning`: Lane C code is committed at
+  `1c6d3e6` after the five row-specific commits listed in Current State. The
+  final focused suite passed 24/24 and full pytest passed 1329/1329. The
+  verifier's fixed 300-second budget expired, while its ruff and mypy stages
+  passed; running full pytest outside that budget passed. Planner and due
+  mutations were caught 15/15. The two date-picker popups and the homework
+  editor, including a length refusal, were visually
+  checked at 1280x860 and 1150x768 with large text. Claude reviews before
+  integration; do not merge this branch yet. No binary or remote action.
 - 2026-09-24, `chatgpt/0-15-retro`: Retro Day and Week run on the shared
   hours engine as Schedule.exe and Week.exe. The pointer rig passed 14/14 Day
   and 17/17 Week; source verification passed 1311 tests; target mutations

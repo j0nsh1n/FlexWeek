@@ -47,6 +47,15 @@ All notable changes to FlexWeek are documented here. Format follows
   Bento, Retro desktop or Clay deck. Each design has its own hours to drop on.
 
 ### Fixed
+- New homework starts with today's due date. Changing its due date runs the
+  follow-up controls without an error, and invalid details are explained in
+  ordinary words.
+- Homework lengths outside 15 minutes to 24 hours are refused with a reason.
+  The due-date calendar shows its full month in setup and Add homework.
+- Plan and Replan all leave past time alone. A saved plan offers Undo; one Undo
+  removes every block that plan placed, and Redo restores them. An automatic
+  plan stays in the Add homework Undo step. Plan waits for an earlier failed
+  save instead of claiming the next plan was stored.
 - Hours no longer jump back to the morning after a save in a design that keeps
   them between redraws, and pressing Tab no longer scrolls them to their middle.
 - A block's second line of text is never cut in half; what does not fit is
