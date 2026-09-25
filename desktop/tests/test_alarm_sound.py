@@ -121,22 +121,13 @@ def test_a_good_spotify_link_is_kept_on_the_alarm(qapp: Any) -> None:
     assert dialog.updates()["alarms"][0]["spotify_url"] == link
 
 
-def test_the_test_button_uses_the_volume_in_the_box_not_the_saved_one(qapp: Any) -> None:
+def test_play_uses_the_volume_in_the_box_not_the_saved_one(qapp: Any) -> None:
     dialog = prefs_dialog(qapp, alert_volume=80)
-    dialog._bell = Recorder()
+    dialog._tone_bell = Recorder()
     dialog.volume.setValue(35)
-    dialog.preview_tone.setCurrentIndex(dialog.preview_tone.findData("low"))
-    dialog._preview_alert()
-    assert dialog._bell.started == [("low", 35)]
-
-
-def test_the_test_button_says_so_when_sound_is_switched_off(qapp: Any) -> None:
-    dialog = prefs_dialog(qapp)
-    dialog._bell = Recorder()
-    dialog.reminder_sound.setChecked(False)
-    dialog._preview_alert()
-    assert dialog._bell.started == []
-    assert dialog.preview.text() == "Sound is off"
+    dialog.alarm_tone.setCurrentIndex(dialog.alarm_tone.findData("low"))
+    dialog.play_tone.click()
+    assert dialog._tone_bell.started == [("low", 35)]
 
 
 def test_a_ringing_alarm_is_big_enough_to_notice(qapp: Any) -> None:

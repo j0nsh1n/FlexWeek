@@ -56,7 +56,7 @@ from desktop.native.calendar import (
     sunday_due,
 )
 from desktop.native.client import PASSWORD_LENGTH_HINT, USERNAME_ERROR, USERNAME_HINT
-from desktop.native.controller import NativeSession
+from desktop.native.controller import ROUTINE_STATUS, NativeSession
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
 from desktop.native.hours.chips import TrayChip
 from desktop.native.hours.classic import ClassicDay, ClassicWeek
@@ -235,6 +235,8 @@ class NativeWindow(QMainWindow):
         self._tray_hinted = False
         self._icon = icon or QIcon()
         self._alarm_dialog: AlarmRingDialog | None = None
+        # The reminder the status line is keeping, until something more important or "Got it".
+        self._held_reminder: str | None = None
         self._bell = Bell(self)
         # A Spotify alarm plays in the student's Spotify app. Until it is heard the tone rings, so an
         # alarm is never silent, and once it is the tone stops.
@@ -742,6 +744,7 @@ class NativeWindow(QMainWindow):
         self.plan_review.replan_requested.connect(lambda: self.session.solve(everything=True))
         layout.addWidget(self.plan_review)
         self.alert_strip = AlertStrip()
+        self.alert_strip.handled.connect(self._release_status)
         layout.addWidget(self.alert_strip)
         self.planner = QStackedWidget()
         self.planner.setObjectName("plannerStack")
@@ -1274,7 +1277,15 @@ class NativeWindow(QMainWindow):
 
     def _on_status(self, message: str) -> None:
         self.auth_status.setText(message)
+        if self._held_reminder is not None and message in ROUTINE_STATUS:
+            return
+        self._held_reminder = None
         self.week_status.setText(message)
+
+    def _release_status(self) -> None:
+        if self._held_reminder is not None:
+            self._held_reminder = None
+            self.week_status.setText(self.session.message)
 
     def _sync_more_menu(self) -> None:
         for action, button in self._more_pairs:
@@ -2053,13 +2064,26 @@ class NativeWindow(QMainWindow):
             elif prefs.get("end_chime"):
                 own = str(focus[0].get("tone") or FALLBACK)
                 self._bell.once(own if tone is None else short, prefs.get("alert_volume", 80))
+        tray = self._tray_icon if self._tray_icon is not None and self._tray_icon.supportsMessages() else None
+        reminders = []
         for notice in notices:
             title = notice.get("title") or "FlexWeek"
             body = notice.get("body") or ""
-            if self._tray_icon is not None and self._tray_icon.supportsMessages():
-                self._tray_icon.showMessage(title, body, QSystemTrayIcon.MessageIcon.Information, 8000)
-            else:
-                self.session._say(title + (" — " + body if body else ""))
+            words = title + (" — " + body if body else "")
+            if tray is not None:
+                tray.showMessage(title, body, QSystemTrayIcon.MessageIcon.Information, 8000)
+            if notice.get("kind") == "reminder":
+                reminders.append(words)
+            elif tray is None:
+                self.session._say(words)
+        if reminders:
+            # A desktop can hide a tray message, and FlexWeek cannot tell that it did, so the window
+            # says it as well: for a moment under the top bar, and on the status line until it matters
+            # less than what comes next.
+            said = "; ".join(reminders)
+            self.toast.show_message(said)
+            self._held_reminder = said
+            self.week_status.setText(said)
         if notices and prefs.get("reminder_dnd_override"):
             # A tray message is gone in eight seconds and a machine may suppress it outright. This
             # one sits in the window until it is dealt with, which is what the setting promises.

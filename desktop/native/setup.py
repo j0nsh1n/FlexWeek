@@ -1019,8 +1019,7 @@ class SetupPage(QWidget):
 
     def _fill_reminders(self) -> None:
         prefs = self._state.preferences
-        # Reminders are off for an account until it says otherwise. Setup is where it says so.
-        self.reminders.setChecked(True if self._state.first_run else bool(prefs.get("reminders_enabled")))
+        self.reminders.setChecked(prefs.get("reminders_enabled", True) is not False)
         self.lead.setValue(int(prefs.get("reminder_lead_min", 10) if not self._state.first_run else 10))
         self.lead.setEnabled(self.reminders.isChecked())
         tone = str(prefs.get("alarm_tone") or FALLBACK)

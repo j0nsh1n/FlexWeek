@@ -1419,9 +1419,12 @@ class AlertStrip(QWidget):
     """Alerts that stay put until the student deals with them.
 
     A tray message is gone in eight seconds, and on a machine that suppresses notifications it is
-    never seen at all. "Keep alerts visible until handled" promises the opposite, so when it is on the
-    alert is also shown here, in the window, where nothing outside the app can take it away.
+    never seen at all. "Leave reminders on screen" promises the opposite, so when it is on the alert is
+    also shown here, in the window, where nothing outside the app can take it away.
     """
+
+    # The student has dealt with every alert it held.
+    handled = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -1454,6 +1457,8 @@ class AlertStrip(QWidget):
         if self._notices:
             self._notices.pop(0)
         self._render()
+        if not self._notices:
+            self.handled.emit()
 
     def _render(self) -> None:
         self.setVisible(bool(self._notices))

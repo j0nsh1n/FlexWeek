@@ -44,7 +44,7 @@ def alice(client: TestClient) -> TestClient:
 def defaults() -> dict:
     return {
         "theme": "system",
-        "reminders_enabled": False,
+        "reminders_enabled": True,
         "reminder_lead_min": 5,
         "reminder_sound": True,
         "reminder_dnd_override": False,

@@ -24,7 +24,7 @@ WEEK = (TODAY - timedelta(days=TODAY.weekday())).isoformat()
 def preferences(theme: str = "system") -> dict:
     return {
         "theme": theme,
-        "reminders_enabled": False,
+        "reminders_enabled": True,
         "reminder_lead_min": 5,
         "reminder_sound": True,
         "reminder_dnd_override": False,
