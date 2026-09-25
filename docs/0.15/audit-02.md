@@ -10,6 +10,8 @@ settles one of them it says so.
 
 ## Bugs
 
+Eight from this pass, one from ChatGPT's screenshots, and owner finding 1 confirmed.
+
 1. **New homework is due on Monday, not today.** The editor opens with Due set to the week's
    Monday (`widgets.py:913`, `"due": due or week_start`). Confirms owner finding 6. Default to
    today, or tomorrow when today is nearly over.
@@ -30,22 +32,32 @@ settles one of them it says so.
    step must bump it, and the updater compares it.
 7. **Retro's notepad clips its deadline lines** at 1150x768 with large text: "History essay Sun 27
    Se". The line should shorten with "…" or wrap.
-8. **The More menu has no descriptions**, and "Unfinished" is greyed with nothing to say why. Its
+8. **A typed time is refused after Save, in the server's words.** The block editor's Start and
+   End take any minute, and the editor checks only that the length is a multiple of 15; the
+   server keeps the 15-minute grid for starts too, so 18:37, 18:35 and 18:40 all come back as
+   "Value error, block must fit the 00:00–24:00 grid" (ChatGPT's screenshots 21 to 24; probed
+   through the real API with `scratch/grid_probe.py`: 18:30 and 18:45 save, 18:35, 18:37 and
+   18:40 are 422). Confirms owner finding 1, and it is worse than "steps of 5": nothing between
+   quarter hours can be saved at all, and the student learns it only after Save, in a message
+   about a grid. The rule is decision 7 (time snaps to 15 minutes). Make the editor keep it:
+   Start and End step by 15, a typed time snaps to the nearest quarter as the student leaves
+   the box, and the length line says so; then the server's message is never seen.
+9. **The top bar clips at 900 px wide**: the title becomes "21 – 2…" and Plan my homework "n my
+   homew" (ChatGPT's screenshot 39). Below about 1000 px the bar needs to drop the title's
+   long form and shorten or wrap the plan button, not cut them.
+10. **The More menu has no descriptions**, and "Unfinished" is greyed with nothing to say why. Its
    actions are made with `more_menu.addAction(button.text())` (`window.py:683`) and get no
    `setToolTip`/`setStatusTip`; nor does "Plan my homework" / "Suggest times". Confirms owner
    finding 4. Give each a one-line tooltip, and a disabled one a reason.
 
 ## Could not reproduce
 
-- **Times stepping by 5 minutes** (owner finding 1). In code every time box steps by one minute:
-  the block editor's Start and End (`17:15` → `17:16` on step, hour step `18:16`, a typed `17:17`
-  kept) and the homework editor's set time (`09:00` → `09:01`). Probed offscreen with
-  `scratch/time_step_probe.py`. Need to know which box and how it was moved (arrow keys, the
-  spinner, the wheel, typing); the desktop's own style may be stepping the wheel.
+- (Owner finding 1 was reproduced; see bug 8. A first probe of the time box alone found it
+  stepping by one minute and missed that the save is what refuses the time.)
 - **No reminder for a drag-created block** (owner finding 5). The reminder check reads the open
   week's live blocks (`_today_reminder_source`), so a block saved a moment ago is seen; it fires
   when `now - 2 <= start - lead <= now`, polled every `REMINDER_POLL_MS`. Two things can stop it:
-  Settings > Alerts > "Reminders" is off by default (see 10 below), and a block whose start is
+  Settings > Alerts > "Reminders" is off by default (see 12 below), and a block whose start is
   already within the lead time when it is saved has its fire time in the past window. To check
   with the clock held: lead 5, a block saved at 17:02 for 17:15, then tick to 17:10.
 - **A block's Spotify link playing at its start.** Not a feature: a block's link opens only from
@@ -55,29 +67,29 @@ settles one of them it says so.
 
 ## Design and wording
 
-9. **Settings > Appearance & layout is dense** (owner finding 2). The page opens with an
+11. **Settings > Appearance & layout is dense** (owner finding 2). The page opens with an
    implementation note ("Timeline has its own colours, under Main view. Set them to Match my look
    to use Look and Accent."), then Animations, then a "Fine-tune" checkbox, then a "Main view"
    label that heads a box within the box holding a dropdown, its description, and a grey table of
    Style rows. Suggest: the note goes (or moves under the colours it is about); "Main view" becomes
    the page's first heading with the design picker; style rows sit flat under it; fine-tune last.
-10. **Settings > Alerts mixes two things and hides a switch.** "Alarm sound: Chime [Play], Spotify
+12. **Settings > Alerts mixes two things and hides a switch.** "Alarm sound: Chime [Play], Spotify
     link" sits above "Reminders" with the Reminders checkbox off by default while every control
     under it looks live (Lead minutes, Play a sound, Alert volume with a second "Chime" dropdown and
     [Test]). A student who wants a reminder must find one unchecked box. Suggest: Reminders first,
     on by default after setup asks, its controls greyed while off; alarms as their own group with
     their times, since the page never shows when an alarm rings.
-11. **"in 20m" vs "in 20 min".** Today's app's "Next:" line says "(in 20m)"; One thing says "IN 20
+13. **"in 20m" vs "in 20 min".** Today's app's "Next:" line says "(in 20m)"; One thing says "IN 20
     MIN"; Retro's Up next says "in 20 min". One form.
-12. **Today's app's unlabelled strip.** Under "Next: …" a white bar reads "History essay 19:00" with
+14. **Today's app's unlabelled strip.** Under "Next: …" a white bar reads "History essay 19:00" with
     nothing saying what it is (tonight's pinned homework). A word in front, or fold it into the
     Next line.
-13. **Retro shows the same "no time yet" chips twice**, in deadlines.txt and at the foot of the main
+15. **Retro shows the same "no time yet" chips twice**, in deadlines.txt and at the foot of the main
     window. Two places to drag from is fine; two copies of the same list is noise on a small
     screen. One or the other.
-14. **Clay's fanned Week leans its hour numbers** with the first card. The concept's look; noted
+16. **Clay's fanned Week leans its hour numbers** with the first card. The concept's look; noted
     so no one reports it as a bug.
-15. **Account says "Signed in as audit_student. On this device"** with no full stop on the second
+17. **Account says "Signed in as audit_student. On this device"** with no full stop on the second
     sentence. Trivial.
 
 ## Later, footnoted (owner finding 3)
