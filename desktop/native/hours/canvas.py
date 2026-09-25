@@ -352,6 +352,22 @@ def _small(font: QFont) -> QFont:
     return made
 
 
+# Words that belong to the number before them.
+UNITS = ("h", "min")
+
+
+def _words(text: str) -> list[str]:
+    """The words a line may break between. A number keeps the unit after it, so a length never
+    reads "6" at the end of one line and "h 30 min" at the start of the next."""
+    words: list[str] = []
+    for word in text.split():
+        if words and word in UNITS and words[-1].isdigit():
+            words[-1] += " " + word
+        else:
+            words.append(word)
+    return words
+
+
 def fit_lines(text: str, font: QFont, width: float, height: float) -> list[str]:
     """`text` broken at its spaces into the whole lines that fit a box, so none is cut in half by its
     edge. When some is left over, the last line ends in "…"; so does a word wider than the box. A
@@ -361,7 +377,7 @@ def fit_lines(text: str, font: QFont, width: float, height: float) -> list[str]:
     if room < 1:
         return []
     wrapped: list[list[str]] = []
-    for word in text.split():
+    for word in _words(text):
         if wrapped and metrics.horizontalAdvance(" ".join([*wrapped[-1], word])) <= width:
             wrapped[-1].append(word)
         else:

@@ -268,3 +268,12 @@ def test_an_hour_label_at_the_edge_of_what_shows_is_moved_inside_it(
             f"{label} runs from {ink[0].left():.0f} to {ink[0].right():.0f}, "
             f"outside {shown.left():.0f} to {shown.right():.0f}"
         )
+
+
+def test_a_length_is_never_broken_between_its_number_and_unit(qapp) -> None:
+    font = QFont()
+    metrics = QFontMetricsF(font)
+    # Room for "08:00–14:30 · 6" but not for "08:00–14:30 · 6 h".
+    width = metrics.horizontalAdvance("08:00–14:30 · 6") + 2
+    lines = fit_lines("08:00–14:30 · 6 h 30 min", font, width, metrics.lineSpacing() * 4)
+    assert lines == ["08:00–14:30 ·", "6 h 30 min"], lines
