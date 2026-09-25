@@ -33,6 +33,8 @@ from PySide6.QtGui import (
     QShowEvent,
 )
 from PySide6.QtWidgets import (
+    QAbstractSpinBox,
+    QApplication,
     QCheckBox,
     QComboBox,
     QDateEdit,
@@ -103,6 +105,31 @@ SLOT_HINT = "Use a multiple of 15 minutes, such as 15, 30, or 45."
 ESTIMATE_ERROR = "That time is not a multiple of 15 minutes."
 PLAN_REVIEW_MAX = 132
 DAY_FULL = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+
+class WheelGuard(QObject):
+    """A number box, time box or dropdown takes the mouse wheel only once it has been clicked into;
+    otherwise the wheel scrolls whatever it is on. Scrolling down Settings changed every box the
+    pointer passed over on the way."""
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        kind = event.type()
+        if not isinstance(watched, (QAbstractSpinBox, QComboBox)):
+            return False
+        if kind == QEvent.Type.Polish:
+            # Qt gives a wheel-focus box the keyboard before the wheel arrives, so it would always
+            # look clicked into by the time this filter sees the wheel.
+            watched.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        elif kind == QEvent.Type.Wheel and not watched.hasFocus():
+            # Ignored and stopped here, Qt offers it to the parent, which is the page's scroll area.
+            event.ignore()
+            return True
+        return False
+
+
+def steady_wheel(app: QApplication) -> None:
+    if app.findChild(WheelGuard) is None:
+        app.installEventFilter(WheelGuard(app))
 
 
 def _validation_text(error: Exception) -> str:

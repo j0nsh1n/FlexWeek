@@ -124,6 +124,7 @@ from desktop.native.widgets import (
     UnfinishedPanel,
     add_heading,
     control_art,
+    steady_wheel,
     swatch,
 )
 
@@ -161,6 +162,9 @@ class NativeWindow(QMainWindow):
         kept: KeptSession | None = None,
     ) -> None:
         super().__init__(parent)
+        application = QApplication.instance()
+        if isinstance(application, QApplication):
+            steady_wheel(application)
         self.session = NativeSession(origin, self, kept)
         self._instance_server: QLocalServer | None = None
         self.setWindowTitle("FlexWeek")
