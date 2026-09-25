@@ -267,7 +267,7 @@ def test_skipping_every_page_keeps_nothing_and_setup_never_returns(
     assert page(window) == "weekPage"
     assert window.session.blocks == [] and window.session.assignments == {}
     prefs = window.session.preferences
-    assert prefs["reminders_enabled"] is False, "a skipped page changes nothing"
+    assert prefs["reminders_enabled"] is True, "a skipped page changes nothing, and reminders start on"
     assert prefs.get("planning_style", "suggest") == "suggest"
     assert not prefs.get("work_windows"), "skipping does not keep hours entered on that page"
     assert prefs["setup"]["finished_at"]

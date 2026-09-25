@@ -59,6 +59,7 @@ from backend.storage import (
     delete_account,
     digest,
     initialize,
+    new_preferences,
     password_hash,
     password_matches,
     throttle,
@@ -606,7 +607,7 @@ class Preferences(BaseModel):
     model_config = ConfigDict(extra="forbid")
     # "system" follows the device light/dark setting; slate is Light and nocturne is Dark.
     theme: Literal["system", "slate", "nocturne"]
-    reminders_enabled: bool = False
+    reminders_enabled: bool = True
     reminder_lead_min: int = Field(default=5, ge=0, le=120)
     reminder_sound: bool = True
     reminder_dnd_override: bool = False
@@ -1081,7 +1082,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                         "INSERT INTO users(username, password_hash) VALUES (?, ?)", (data.username, encoded)
                     )
                     user_id = int(cursor.lastrowid or 0)
-                    db.execute("INSERT INTO preferences(user_id) VALUES (?)", (user_id,))
+                    new_preferences(db, user_id)
                     replace_recovery_codes(db, user_id, codes)
                     token = create_session(db, user_id)
             except sqlite3.IntegrityError as exc:

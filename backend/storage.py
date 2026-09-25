@@ -18,7 +18,7 @@ PREFERENCES_TABLE = """
     CREATE TABLE IF NOT EXISTS preferences (
         user_id INTEGER PRIMARY KEY REFERENCES users(id),
         theme TEXT NOT NULL DEFAULT 'system' CHECK(theme IN ('system', 'slate', 'nocturne')),
-        reminders_enabled INTEGER NOT NULL DEFAULT 0
+        reminders_enabled INTEGER NOT NULL DEFAULT 1
             CHECK(reminders_enabled IN (0, 1)),
         reminder_lead_min INTEGER NOT NULL DEFAULT 5
             CHECK(reminder_lead_min >= 0 AND reminder_lead_min <= 120),
@@ -35,9 +35,14 @@ PREFERENCES_TABLE = """
         default_spotify_url TEXT,
         alarms_json TEXT NOT NULL DEFAULT '[]',
         availability_json TEXT NOT NULL DEFAULT '{}',
-        comfort_json TEXT NOT NULL DEFAULT '{}'
+        comfort_json TEXT NOT NULL DEFAULT '{}',
+        prefs_version INTEGER NOT NULL DEFAULT 0
     )
 """
+# Each account's preferences row records the last of these one-time changes it has had, so a change
+# reaches every account once and a choice made after it is never undone by it.
+# 1: reminders on (0.15). Setup never asked, so they were off for everyone who had not turned them on.
+PREFS_VERSION = 1
 WEEKS_TABLE = """
     CREATE TABLE IF NOT EXISTS weeks (
         user_id INTEGER NOT NULL REFERENCES users(id), week_start TEXT NOT NULL,
@@ -171,6 +176,7 @@ def migrate_preferences(db: sqlite3.Connection) -> None:
         "alarms_json": "TEXT NOT NULL DEFAULT '[]'",
         "availability_json": "TEXT NOT NULL DEFAULT '{}'",
         "comfort_json": "TEXT NOT NULL DEFAULT '{}'",
+        "prefs_version": "INTEGER NOT NULL DEFAULT 0",
     }
     for name, declaration in phase7_columns.items():
         if name not in cols:
@@ -204,6 +210,22 @@ def allow_system_theme(db: sqlite3.Connection) -> None:
     )
     db.execute("DROP TABLE preferences_legacy")
     db.execute("COMMIT")
+
+
+def upgrade_preferences(db: sqlite3.Connection) -> None:
+    """Bring each account's preferences to PREFS_VERSION. A no-op once they are there."""
+    db.execute("BEGIN IMMEDIATE")
+    db.execute("UPDATE preferences SET reminders_enabled = 1, prefs_version = 1 WHERE prefs_version < 1")
+    db.execute("COMMIT")
+
+
+def new_preferences(db: sqlite3.Connection, user_id: int) -> None:
+    """A new account's preferences, already past every one-time change. A table 0.14 created still
+    defaults reminders to off, so they are set here rather than left to the column."""
+    db.execute(
+        "INSERT INTO preferences(user_id, reminders_enabled, prefs_version) VALUES (?, 1, ?)",
+        (user_id, PREFS_VERSION),
+    )
 
 
 def migrate_assignments(db: sqlite3.Connection) -> None:
@@ -262,6 +284,7 @@ def initialize(path: Path) -> None:
         date_legacy_weeks(db)
         migrate_preferences(db)
         allow_system_theme(db)
+        upgrade_preferences(db)
         migrate_assignments(db)
 
 

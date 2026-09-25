@@ -30,7 +30,7 @@ def test_phase7_preferences_and_alarms_round_trip(tmp_path: Path) -> None:
         defaults = client.get("/api/preferences").json()
         assert defaults | {} == {
             "theme": "system",
-            "reminders_enabled": False,
+            "reminders_enabled": True,
             "reminder_lead_min": 5,
             "reminder_sound": True,
             "reminder_dnd_override": False,
