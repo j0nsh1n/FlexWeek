@@ -10,10 +10,10 @@ decision first.
 
 | # | What | Where / evidence | State |
 | --- | --- | --- | --- |
-| 1 | A block saved inside its own lead time never gets a reminder: the fire time is already past. Nothing fires at the start itself. | `remind.py` `start_alert_due`: fires only when `now - 2 <= start - lead <= now`, polled every 30 s. Clock-held probe: a block saved at 17:02 for 17:15 with lead 5 fires at 17:10; saved at 17:12 it never would. T1, owner 5. | P1 |
-| 2 | Timmy's clean test got no alert (block for 18:45, lead 10, nothing by 18:48) and the cause is unknown. Reminders are off after a skipped setup (`reminders_enabled` False) and the switch is easy to miss (row 30). | T1, C-reminder probe. Needs a run with the real desktop notification watched, not just the signal. | P1 |
-| 3 | "Saved preferences." overwrites a reminder shown in the status bar. | `controller.py:2752`. T1. | P1 |
-| 4 | A block's Spotify link never plays by itself; only the alarms in Settings > Alerts do. Dragged blocks have no reminder switch of their own. | T2, owner 5. Not a bug today; a rule to decide: play the block's link when its reminder fires? | D |
+| 1 | A block saved inside its own lead time never gets a reminder: the fire time is already past. Nothing fires at the start itself. | `remind.py` `start_alert_due`: fires only when `now - 2 <= start - lead <= now`, polled every 30 s. Clock-held probe: a block saved at 17:02 for 17:15 with lead 5 fires at 17:10; saved at 17:12 it never would. T1, owner 5. | P1. Fixed, lane B (`42524d2`): a reminder is due from the start of the lead through the start minute, once per block and day, so a block saved inside its lead reminds at the first check. At the start, a block with a Spotify link plays it (row 4); one without gets no second notice. |
+| 2 | Timmy's clean test got no alert (block for 18:45, lead 10, nothing by 18:48) and the cause is unknown. Reminders are off after a skipped setup (`reminders_enabled` False) and the switch is easy to miss (row 30). | T1, C-reminder probe. Needs a run with the real desktop notification watched, not just the signal. | P1. Reproduced with the clock held (`scratch/lane-b-timmy_probe.py`): saved at 18:38, its 18:35 fire time was already past, so row 1's check never fired. Reminders are now on by default and turned on once for older accounts (`e85949f`), and a reminder shows in the tray, as a toast and on the status line (`42524d2`), checked in `test_reminders_window.py` with a stand-in tray. |
+| 3 | "Saved preferences." overwrites a reminder shown in the status bar. | `controller.py:2752`. T1. | P1. Fixed, lane B (`42524d2`): the status line keeps a reminder through a save's confirmation until something more important comes, or Got it on a reminder left on screen. |
+| 4 | A block's Spotify link never plays by itself; only the alarms in Settings > Alerts do. Dragged blocks have no reminder switch of their own. | T2, owner 5. Not a bug today; a rule to decide: play the block's link when its reminder fires? | Decided (decision 1). Done, lane B (`42524d2`): a block's Spotify link plays at its start as an alarm, with the same Dismiss and Snooze. No switch per block: decision 2 reminds of every block while Reminders is on. |
 
 ## Times and the grid
 
@@ -54,7 +54,7 @@ decision first.
 | 27 | Save and Cancel look the same; floppy-disk and red-X icons look dated. Delete is the most prominent button in the block editor. | T21, T13. | P2 |
 | 28 | Retro shows the same "no time yet" chips in deadlines.txt and at the foot of the main window. | C15. | P2 |
 | 29 | Settings > Appearance & layout is dense: an implementation note first, a box in a box, style rows in a grey table. Scrolling over its number boxes changes them. | T15, owner 2, C11. | P2 |
-| 30 | Settings > Alerts: alarm sound and reminders mixed, the Reminders switch off and easy to miss among live-looking controls, two "Chime" dropdowns, no sign of when an alarm rings. | C12. | P2 |
+| 30 | Settings > Alerts: alarm sound and reminders mixed, the Reminders switch off and easy to miss among live-looking controls, two "Chime" dropdowns, no sign of when an alarm rings. | C12. | P2. Fixed, lane B (`80288ef`): reminders first, switch on top, their settings greyed while off; alarms as their own group saying when each rings; one sound dropdown. Row 18's Alerts words and row 19's Play message are done there too. |
 | 31 | Dark themes have weak contrast; the layout choice is not explained; My day and Month are unclear to a first-time user. | T30, T31. | P2 |
 | 32 | Ctrl and = zooms only when the hours have keyboard focus. | `canvas.py` `keyPressEvent`; T32. Make it the window's. | P2 |
 | 33 | A dragged block counts toward School in the Day summary. | T26. Category of a drag-made block. | P2 |
