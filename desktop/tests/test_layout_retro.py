@@ -106,11 +106,10 @@ def test_day_opens_schedule_with_one_live_column(
     assert [track.day for track in scroll.canvas.tracks] == [3]
     assert scroll.canvas.hand is view.hand
     assert scroll.canvas.block_rect("school", 3) is not None
-    for name in ("retroWaiting0", "retroNoteWaiting0"):
-        chip = view.findChild(TrayChip, name)
-        assert chip.isVisible()
-        corner = chip.mapTo(view, QPoint(chip.width(), chip.height()))
-        assert corner.x() <= view.width() and corner.y() <= view.height()
+    chip = view.findChild(TrayChip, "retroNoteWaiting0")
+    assert chip.isVisible()
+    corner = chip.mapTo(view, QPoint(chip.width(), chip.height()))
+    assert corner.x() <= view.width() and corner.y() <= view.height()
 
 
 def test_week_has_seven_live_columns_and_pinned_day_names(qapp: QApplication) -> None:
@@ -205,9 +204,6 @@ def test_every_weekday_and_the_tray_are_reachable_when_the_desk_is_narrow(qapp: 
         head = view.findChild(QPushButton, f"retroDay{day}")
         assert head.mapTo(view, QPoint(0, 0)).x() >= 0
         assert head.mapTo(view, QPoint(head.width(), 0)).x() <= view.width()
-    chip = view.findChild(TrayChip, "retroWaiting0")
-    assert chip.isVisible()
-    assert chip.mapTo(view, QPoint(chip.width(), chip.height())).x() <= view.width()
     note = view.findChild(TrayChip, "retroNoteWaiting0")
     assert note.isVisible()
     assert note.mapTo(view, QPoint(note.width(), note.height())).x() <= view.width()
@@ -220,6 +216,43 @@ def test_the_notepad_flags_squeezed_work_and_shows_a_live_waiting_chip(qapp: QAp
     chip = view.findChild(TrayChip, "retroNoteWaiting0")
     assert chip.block_id == "poster-1"
     assert chip.hand is view.hand
+
+
+def test_what_has_no_time_is_shown_once_in_the_notepad_or_under_the_hours_when_it_is_closed(
+    qapp: QApplication,
+) -> None:
+    view = shown(qapp)
+    waiting = [chip.objectName() for chip in view.findChildren(TrayChip) if chip.block_id == "poster-1"]
+    assert waiting == ["retroNoteWaiting0"]
+    QTest.mouseClick(view.findChild(QPushButton, "retroClose-notes"), Qt.MouseButton.LeftButton)
+    waiting = [chip.objectName() for chip in view.findChildren(TrayChip) if chip.block_id == "poster-1"]
+    assert waiting == ["retroWaiting0"]
+    assert view.findChild(TrayChip, "retroWaiting0").isVisible()
+    QTest.mouseClick(view.findChild(QPushButton, "retroTask-notes"), Qt.MouseButton.LeftButton)
+    waiting = [chip.objectName() for chip in view.findChildren(TrayChip) if chip.block_id == "poster-1"]
+    assert waiting == ["retroNoteWaiting0"]
+
+
+def test_a_notepad_line_short_of_room_puts_its_date_under_its_title(qapp: QApplication) -> None:
+    """At 1150x768 with large text a long line read "History essay Sun 27 Se", cut by the page. A
+    line that fits stays one line; one that does not puts its date, whole, on a line of its own."""
+    long = [
+        item if item["id"] != "essay-1" else {**item, "title": "History essay on the causes of the war"}
+        for item in BLOCKS
+    ]
+    view = shown(qapp, 1150, 768, blocks=long, scale=1.4)
+    qapp.processEvents()
+    pad = view.findChild(QFrame, "retroWindow-notes")
+    short, long_line = (view.findChild(QPushButton, f"retroNote{index}") for index in range(2))
+    assert short.text() == "!! Chem-1  Thu 17 Sep"
+    lines = long_line.text().split("\n")
+    assert len(lines) == 2, f"{long_line.text()!r} is one line"
+    assert lines[0].startswith(" ! History essay") and lines[1] == "   Fri 18 Sep, 21:00", lines
+    for line in (short, long_line):
+        need = QPushButton.sizeHint(line)
+        assert need.width() <= line.width() and need.height() <= line.height(), f"{line.text()!r} is cut"
+        assert line.mapTo(pad, QPoint(line.width(), line.height())).x() <= pad.width()
+        assert line.mapTo(pad, QPoint(line.width(), line.height())).y() <= pad.height()
 
 
 def test_closing_the_notepad_cannot_hide_what_has_no_time(qapp: QApplication) -> None:

@@ -47,5 +47,19 @@
   "old": "        self.setMinimumWidth(max(WINDOW_MIN_WIDTH, needed))\n",
   "new": "        self.setMinimumWidth(WINDOW_MIN_WIDTH)\n",
   "test": "desktop/tests/test_window_screens.py::test_the_top_bar_is_never_cut_mid_word"
+ },
+ {
+  "file": "desktop/native/layouts/retro.py",
+  "name": "a notepad line runs off the page",
+  "old": "        if fonts.horizontalAdvance(fitted) > room:\n",
+  "new": "        if False:\n",
+  "test": "desktop/tests/test_layout_retro.py::test_a_notepad_line_short_of_room_puts_its_date_under_its_title"
+ },
+ {
+  "file": "desktop/native/layouts/retro.py",
+  "name": "Retro shows what has no time twice",
+  "old": "        if scene.week.waiting and not self._open.get(\"notes\"):\n",
+  "new": "        if scene.week.waiting:\n",
+  "test": "desktop/tests/test_layout_retro.py::test_what_has_no_time_is_shown_once_in_the_notepad_or_under_the_hours_when_it_is_closed"
  }
 ]
