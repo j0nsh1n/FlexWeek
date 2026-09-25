@@ -2,7 +2,8 @@
 the same minute in place while that changes.
 
 A surface's hours sit in an `HoursScroll`. Ctrl and the wheel zoom about the pointer; Ctrl with =, -
-or 0 zoom about the middle of what is on screen, as do the two buttons in the corner. Hours that run
+or 0, the window's shortcuts for whichever hours it shows, zoom about the middle of what is on
+screen, as do the two buttons in the corner. Hours that run
 down scroll up and down, with a header, such as the week's day names, kept above them and exactly as
 wide as the hours, so a name sits over its column whether or not a scroll bar shows. Hours that run
 across scroll sideways, the plain wheel included, with the day names kept in a strip to their left,
@@ -36,6 +37,8 @@ from desktop.native.hours.geometry import Axis
 from desktop.native.weekmodel import WeekModel
 
 KEY = re.compile(r"[a-z]+\.[a-z]+")
+# With Ctrl, anywhere in the window: zoom in, out, or back to the surface's own level.
+ZOOM_KEYS = {Qt.Key.Key_Equal: 1, Qt.Key.Key_Plus: 1, Qt.Key.Key_Minus: -1, Qt.Key.Key_0: 0}
 # Hours with neither now nor a block to show open at 08:00.
 OPENS = 8 * 60
 

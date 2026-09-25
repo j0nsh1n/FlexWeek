@@ -64,7 +64,7 @@ from desktop.native.hours.geometry import Span
 from desktop.native.hours.hand import Create, Hand, Move, MoveDate, Place, span_words
 from desktop.native.hours.hand import Verdict as HandVerdict
 from desktop.native.hours.month import MonthGrid
-from desktop.native.hours.zoom import sanitize_zoom
+from desktop.native.hours.zoom import ZOOM_KEYS, HoursScroll, sanitize_zoom
 from desktop.native.kept import KeptSession
 from desktop.native.layouts.base import LayoutView, Scene
 from desktop.native.layouts.registry import options_for, sanitize_layout, tokens_for
@@ -915,6 +915,11 @@ class NativeWindow(QMainWindow):
             today, minute = self._clock_in_week()
             for hours in (self.week_table.hours, self.day_view.hours):
                 hours.set_clock(today, minute)
+
+    def _hours_shown(self) -> list[HoursScroll]:
+        """The hours on screen now, in Today's app or a design, for the zoom keys."""
+        page = self.planner.currentWidget()
+        return [hours for hours in page.findChildren(HoursScroll) if hours.isVisible()] if page else []
 
     def _count_down(self) -> None:
         """The countdown in "Next: … (in 23m)" moves on with the minute, whether or not a focus timer
@@ -2520,6 +2525,11 @@ class NativeWindow(QMainWindow):
                 return
             if key == Qt.Key.Key_S:
                 self.session.save()
+                event.accept()
+                return
+            if key in ZOOM_KEYS:
+                for hours in self._hours_shown():
+                    hours.zoom_by(ZOOM_KEYS[key])
                 event.accept()
                 return
         if key == Qt.Key.Key_Delete:

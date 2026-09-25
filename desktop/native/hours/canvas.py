@@ -47,7 +47,6 @@ from desktop.native.weekmodel import Occurrence, clock_label, length_label
 
 # A press this close to a block's start or end edge resizes it, on a block long enough to have edges.
 EDGE_PX = 7
-ZOOM_KEYS = {Qt.Key.Key_Equal: 1, Qt.Key.Key_Plus: 1, Qt.Key.Key_Minus: -1, Qt.Key.Key_0: 0}
 FREE_HINT = "+ drag to create, or click"
 
 
@@ -782,14 +781,8 @@ class HoursCanvas(QWidget):
             self.zoom_asked.emit(steps, event.position())
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
-        """Enter opens the chosen block, and Ctrl with =, - or 0 zooms. Everything else goes to the
-        window's shortcuts."""
-        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            steps = ZOOM_KEYS.get(event.key())
-            if steps is not None:
-                self.zoom_asked.emit(steps, None)
-                event.accept()
-                return
+        """Enter opens the chosen block. Everything else goes to the window's shortcuts, zoom
+        included."""
         chosen = self.hand.selection
         mine = chosen is not None and any(item.block_id == chosen[0] for item in self.occurrences)
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and chosen is not None and mine:

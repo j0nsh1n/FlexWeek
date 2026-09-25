@@ -35,11 +35,11 @@
   "test": "desktop/tests/test_hours_zoom.py::test_ctrl_and_the_wheel_zoom_about_the_pointer"
  },
  {
-  "file": "desktop/native/hours/canvas.py",
+  "file": "desktop/native/window.py",
   "name": "zoom keys ignored",
-  "old": "            steps = ZOOM_KEYS.get(event.key())\n",
-  "new": "            steps = None\n",
-  "test": "desktop/tests/test_hours_zoom.py::test_keys_and_buttons_zoom_about_the_middle_and_stop_at_each_end"
+  "old": "            if key in ZOOM_KEYS:\n",
+  "new": "            if False:\n",
+  "test": "desktop/tests/test_zoom_keys.py::test_ctrl_and_equals_minus_and_zero_zoom_the_hours_showing_wherever_the_keyboard_is"
  },
  {
   "file": "desktop/native/hours/zoom.py",
@@ -74,7 +74,7 @@
   "name": "zoom buttons stop at no end",
   "old": "        self.buttons.into.setEnabled(self.px < self.scale.levels[-1])\n",
   "new": "        self.buttons.into.setEnabled(True)\n",
-  "test": "desktop/tests/test_hours_zoom.py::test_keys_and_buttons_zoom_about_the_middle_and_stop_at_each_end"
+  "test": "desktop/tests/test_hours_zoom.py::test_the_buttons_zoom_about_the_middle_and_stop_at_each_end"
  },
  {
   "file": "desktop/native/hours/classic.py",
@@ -166,5 +166,19 @@
   "old": "                    box.moveLeft(max(min(box.left(), visible.right() - wide), visible.left()))\n",
   "new": "",
   "test": "desktop/tests/test_hours_painter.py::test_an_hour_label_at_the_edge_of_what_shows_is_moved_inside_it"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the zoom keys reach only Today's app's hours",
+  "old": "        return [hours for hours in page.findChildren(HoursScroll) if hours.isVisible()] if page else []\n",
+  "new": "        return [hours for hours in (self.week_table.scroll, self.day_view.scroll) if hours.isVisible()]\n",
+  "test": "desktop/tests/test_zoom_keys.py::test_ctrl_and_equals_minus_and_zero_zoom_the_hours_showing_wherever_the_keyboard_is"
+ },
+ {
+  "file": "desktop/native/hours/canvas.py",
+  "name": "the hours zoom on Ctrl and = as well as the window",
+  "old": "        chosen = self.hand.selection\n        mine = ",
+  "new": "        if event.modifiers() & Qt.KeyboardModifier.ControlModifier and event.key() == Qt.Key.Key_Equal:\n            self.zoom_asked.emit(1, None)\n        chosen = self.hand.selection\n        mine = ",
+  "test": "desktop/tests/test_zoom_keys.py::test_with_the_hours_holding_the_keyboard_one_press_is_one_step"
  }
 ]
