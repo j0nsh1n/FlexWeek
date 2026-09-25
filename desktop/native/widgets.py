@@ -867,10 +867,10 @@ class DueField(QWidget):
         row.addWidget(self.time)
         row.addStretch(1)
         self.set_value(due)
-        self.date.dateChanged.connect(self.changed.emit)
+        self.date.dateChanged.connect(self._say_changed)
         self.timed.toggled.connect(self._show_time)
-        self.timed.toggled.connect(self.changed.emit)
-        self.time.timeChanged.connect(self.changed.emit)
+        self.timed.toggled.connect(self._say_changed)
+        self.time.timeChanged.connect(self._say_changed)
 
     def set_value(self, due: str) -> None:
         day, minute = parse_due(due)
@@ -887,6 +887,11 @@ class DueField(QWidget):
 
     def _show_time(self, timed: bool) -> None:
         self.time.setVisible(timed)
+
+    def _say_changed(self, *_value: object) -> None:
+        # Connected straight to `changed.emit`, each signal handed its value to a signal that takes
+        # none: a TypeError inside Qt, and nothing connected to `changed` ran.
+        self.changed.emit()
 
 
 class HomeworkDialog(QDialog):
