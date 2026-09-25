@@ -424,3 +424,17 @@ def test_every_advanced_action_says_what_it_did_when_it_is_done(
         ("Restore", "Saved restore point Before exams."),
         ("Reload", "Reloaded this week."),
     ]
+
+
+def test_a_save_that_leaves_the_homework_waiting_keeps_the_same_chips(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Chips made again on every save were shown a frame after the old ones went, so Today's app's
+    "Needs a time" bar blinked empty each time a block moved."""
+    before = tray_chip(window, session_of(window, "math")["id"])
+    essay = session_of(window, "essay")
+    window._move_block(essay["id"], 3, 4, minute("18:00"), minute("19:00"))
+    settled(qapp, window)
+    after = tray_chip(window, session_of(window, "math")["id"])
+    assert after is before, "the Needs a time bar made its chips again for the same homework"
+    assert after.isVisible()

@@ -794,6 +794,7 @@ class NativeWindow(QMainWindow):
         self.classic_waiting = QFrame()
         self.classic_waiting.setObjectName("classicWaiting")
         self.classic_waiting_row = QHBoxLayout(self.classic_waiting)
+        self._waiting_shown: tuple = ()
         self.classic_waiting_row.setContentsMargins(8, 4, 8, 4)
         self.classic_waiting.hide()
         layout.addWidget(self.classic_waiting)
@@ -1533,13 +1534,6 @@ class NativeWindow(QMainWindow):
         if self.hand.busy:
             # Rebuilding would delete the chip the pointer is holding. The release refreshes.
             return
-        row = self.classic_waiting_row
-        while row.count():
-            item = row.takeAt(0)
-            widget = item.widget()
-            if widget is not None:
-                widget.setParent(None)
-                widget.deleteLater()
         classic = (
             self._layout.get("main") == "classic"
             and not self._day_mode
@@ -1555,6 +1549,18 @@ class NativeWindow(QMainWindow):
         )
         waiting = week.waiting if week is not None else ()
         self.classic_waiting.setVisible(bool(waiting))
+        # Every save comes through here. Chips made again for the same homework were shown a frame
+        # after the old ones went, so the bar blinked empty on each save.
+        if waiting == self._waiting_shown:
+            return
+        self._waiting_shown = waiting
+        row = self.classic_waiting_row
+        while row.count():
+            item = row.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
         if not waiting:
             return
         kicker = QLabel("Needs a time")
