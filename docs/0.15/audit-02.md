@@ -54,12 +54,13 @@ Eight from this pass, one from ChatGPT's screenshots, and owner finding 1 confir
 
 - (Owner finding 1 was reproduced; see bug 8. A first probe of the time box alone found it
   stepping by one minute and missed that the save is what refuses the time.)
-- **No reminder for a drag-created block** (owner finding 5). The reminder check reads the open
-  week's live blocks (`_today_reminder_source`), so a block saved a moment ago is seen; it fires
-  when `now - 2 <= start - lead <= now`, polled every `REMINDER_POLL_MS`. Two things can stop it:
-  Settings > Alerts > "Reminders" is off by default (see 12 below), and a block whose start is
-  already within the lead time when it is saved has its fire time in the past window. To check
-  with the clock held: lead 5, a block saved at 17:02 for 17:15, then tick to 17:10.
+- **No reminder for a drag-created block** (owner finding 5). Tested with the clock held
+  (`scratch/reminder_probe.py`): reminders on, lead 5, a block saved at 17:02 for 17:15; ticking
+  the clock, the reminder "Homework starts soon · 17:15 · Thu" fires at 17:10 and once only. So a
+  block saved a moment before is seen. What stops it is the switch: after a skipped setup
+  `reminders_enabled` is False, and Settings > Alerts shows "Reminders" unticked among controls
+  that look live (12 below). To settle Jonathan's case: is that box ticked in his account? If it
+  is and nothing came, the next suspect is the desktop notification itself, not the reminder.
 - **A block's Spotify link playing at its start.** Not a feature: a block's link opens only from
   More > Open Spotify link; only the alarms under Settings > Alerts play a song by themselves. A
   product decision, not a bug: if a block with a link should play it when its reminder fires, say
