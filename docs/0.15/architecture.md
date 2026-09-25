@@ -9,8 +9,8 @@ The code in `desktop/native/hours/` is the authority; each module's docstring sa
 
 | Module | Owns |
 | --- | --- |
-| `geometry.py` | Where minutes are. `Span(day, start, end)`, `snap` (15 minutes), `overlap_columns`, and the `Track` contract with two shapes: `LinearTrack(day, area, axis, first, last, turn)` runs down or across, covers part of a day or all of it, and can be tilted; `DialTrack(day, centre, inner, outer, first, last, sweep)` is My day's ring. Pure arithmetic, tested with numbers. |
-| `hand.py` | What the pointer is doing. `Hand`, `Held`, `Preview`, `Verdict`, and the changes it reports: `Move`, `Place`, `Create`, `MoveDate`. The threshold between a tap and a drag, finding the surface under the pointer, snapping with the grab offset, the track's own bounds, the window's judge, the words that follow the pointer, dwell auto-scroll, Escape, losing the window, and holding renders. |
+| `geometry.py` | Where minutes are. `Span(day, start, end)`, `snap` (to a step), `DRAG_STEPS`, `overlap_columns`, and the `Track` contract with two shapes: `LinearTrack(day, area, axis, first, last, turn)` runs down or across, covers part of a day or all of it, and can be tilted; `DialTrack(day, centre, inner, outer, first, last, sweep)` is My day's ring. Pure arithmetic, tested with numbers. |
+| `hand.py` | What the pointer is doing. `Hand`, `Held`, `Preview`, `Verdict`, and the changes it reports: `Move`, `Place`, `Create`, `MoveDate`. The threshold between a tap and a drag, finding the surface under the pointer, snapping to its `step` with the grab offset, the track's own bounds, the window's judge, the words that follow the pointer, dwell auto-scroll, Escape, losing the window, and holding renders. |
 | `canvas.py` | Painted hours. `HoursCanvas` lays out tracks, draws rules, blocks, the held block where it would land, the create ghost, the free-time hint and the now line through a `BlockPainter`, and answers the rig. A design replaces the painter, not the gestures. |
 | `zoom.py` | Hours that scroll and zoom. `HoursScroll(canvas, Scale, length_for, name=, gutter=, axis=)` zooms about the pointer (Ctrl and the wheel) or the middle (Ctrl with `=`, `-`, `0`, and two corner buttons), keeps a header beside the hours (above them when time runs down, left of them when it runs across), and remembers each surface's level in the look file. |
 | `chips.py` | `TrayChip`: homework with no time, anywhere in a design, dragged onto any hours; a click opens it. |
@@ -73,6 +73,7 @@ anywhere in `desktop/native/`.
 
 ```python
 self.hand = Hand(self._hand_judge, self)            # the one rule for hours: span_problem and due
+self.hand.step = drag_step(preferences.get("drag_step_min"))   # in _sync_chrome, on every change
 self.hand.date_judge = self._date_judge             # the one rule for dates: session.date_problem
 self.hand.committed.connect(self._apply_change)     # Move, Place, Create or MoveDate
 self.hand.refused.connect(self.session._say)
@@ -89,8 +90,10 @@ self.hand.holding.connect(self._hold_renders)       # from the press to the rele
 
 ## Rules the engine keeps
 
-- Time snaps to 15 minutes. A block keeps the distance between the pointer and its edge, so nothing
-  jumps on the first move.
+- A drag moves in the student's step: 5 minutes, or 15 if their `drag_step_min` preference says so.
+  A move, a resize and a new block land on a multiple of the step, even a block that started off it;
+  a resized edge stays at least a step from the other one. A block keeps the distance between the
+  pointer and its edge, so nothing jumps on the first move. Typed times are any minute.
 - Every bound is the track's own: a move, a resize or a new block stops at the end of the tile or
   column it is on, not at midnight. A block longer than its track starts where the track starts.
 - Resize from within 7 pixels of an edge of a block at least 20 pixels long, but never more than a
