@@ -342,7 +342,12 @@ Slate, Nocturne or a frost pack keeps that look until the student chooses
 again. Signed-out screens follow the device setting; signing out does not
 change an account's saved choice. Preferences
 also store reminder enable/lead/sound, `reminder_dnd_override`, pomodoro
-lengths, `auto_split_pomodoro`, `default_spotify_url`, and a list of alarms. On desktop, `reminder_dnd_override`
+lengths, `auto_split_pomodoro`, `default_spotify_url`, and a list of alarms.
+Reminders are on unless the student turns them off; an account from before 0.15
+had them turned on once (`prefs_version` 1), and a later choice stands. A block
+reminds from the moment its lead begins until it starts, once, so a block saved
+inside its lead reminds at once. A block with its own Spotify link plays it at
+its start, as an alarm plays its song, with the same Dismiss and Snooze. On desktop, `reminder_dnd_override`
 tags the Notification `flexweek-stay` so the tray presenter skips the 10-second
 auto-close. Unchecked alerts still close at 10 seconds. Qt has no
 `requireInteraction`.

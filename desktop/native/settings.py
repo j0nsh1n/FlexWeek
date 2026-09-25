@@ -91,9 +91,9 @@ PLANNING_STYLES = (
     ("manual", "I'll drag it onto the calendar myself", "The planning button becomes Suggest times."),
 )
 SPOTIFY_TONE_NOTE = (
-    "Alarms play this in your Spotify app, and stopping the alarm stops it. Reminders and the end of a"
-    " focus session play Chime, so they never start music. Without the Spotify app, alarms open the link"
-    " and ring Chime too."
+    "Alarms play this in your Spotify app, and stopping the alarm stops it. A block with its own"
+    " Spotify link plays that link when it starts instead. Reminders and the end of a focus session"
+    " play Chime. Without the Spotify app, alarms open the link and ring Chime too."
 )
 # What only Today's app reads. Every other design has its own colours and shapes, so these changed
 # nothing there (measured 2026-09-21: not the view, not the top bar, apart from Corners on the bar).
