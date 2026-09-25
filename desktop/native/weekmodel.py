@@ -23,7 +23,7 @@ HOMEWORK = "assignments"
 END_OF_DAY = 24 * 60
 _MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 LEFTOVER = {
-    "needs_time": "Needs a time",
+    "needs_time": "Not placed yet",
     "no_homework": "No homework added",
     "all_finished": "All homework finished",
     "calendar_only": "Nothing else scheduled today",

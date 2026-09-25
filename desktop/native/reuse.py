@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta
 from backend.models import due_sort_key, parse_due
 from backend.slots import DAY_END_MIN, DAY_START_MIN, SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm
 from desktop.native.calendar import DAY_FULL
+from desktop.native.weekmodel import length_label
 
 MAX_WEEK_BLOCKS = 100
 AVAILABILITY_LIMIT = 21
@@ -32,15 +33,6 @@ def restore_point_label(text: str) -> str:
     if len(characters) <= 80:
         return text
     return "".join(characters[:79]) + "…"
-
-
-def format_duration(minutes: int) -> str:
-    hours, mins = divmod(minutes, 60)
-    if hours and mins:
-        return f"{hours}h {mins}m"
-    if hours:
-        return f"{hours}h"
-    return f"{mins}m"
 
 
 def week_label(week_start: str) -> str:
@@ -521,8 +513,8 @@ def preview_conflict_message(row: dict, rows: list[dict], existing: list[dict]) 
     if conflict:
         return f"Conflicts with {conflict}. Choose another time."
     if row.get("fixed"):
-        return format_duration(int(row["block"]["duration_min"])) + " · Only this week"
-    return format_duration(int(row["block"]["duration_min"])) + " · Time chosen when you plan"
+        return length_label(int(row["block"]["duration_min"])) + " · Only this week"
+    return length_label(int(row["block"]["duration_min"])) + " · Time chosen when you plan"
 
 
 def routine_source_blocks(blocks: list[dict]) -> list[dict]:

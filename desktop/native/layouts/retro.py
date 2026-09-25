@@ -420,7 +420,7 @@ class RetroView(LayoutView):
             minute = scene.minute if scene.today == day or not is_day and scene.today is not None else 8 * 60
             scroll.scroll_to(minute)
         if scene.week.waiting:
-            body.addWidget(label("No time yet · deadlines.txt", "retroWaitingLabel"))
+            body.addWidget(label("Not placed yet · deadlines.txt", "retroWaitingLabel"))
             body.addLayout(self._tray(scene, "retroWaiting"))
         status = label("Ready. Drag a block, pull an edge, or drag empty time.", "retroStatus", wrap=True)
         status.setMinimumHeight(scene.px(32))
@@ -464,7 +464,7 @@ class RetroView(LayoutView):
         lines = QVBoxLayout(sunken)
         lines.setContentsMargins(4, 4, 4, 4)
         lines.setSpacing(2)
-        lines.addWidget(label("No time yet · deadlines.txt", "retroNotesWaiting"))
+        lines.addWidget(label("Not placed yet · deadlines.txt", "retroNotesWaiting"))
         for index, waiting in enumerate(scene.week.waiting):
             chip = TrayChip(self.hand, waiting)
             chip.setObjectName(f"retroNoteWaiting{index}")

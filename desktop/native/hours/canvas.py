@@ -78,7 +78,7 @@ class Drawn:
             f"{clock_label(self.span.start)}–{clock_label(self.span.end)} · {length_label(self.span.minutes)}"
         )
         for flag, word in (
-            (self.done, "Done"),
+            (self.done, "Finished"),
             (self.missed, "Missed"),
             (self.pinned and not self.done, "Pinned"),
         ):

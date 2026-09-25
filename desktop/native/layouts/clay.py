@@ -188,7 +188,7 @@ class ClayDeckView(LayoutView):
     def _tray(self, scene: Scene) -> QVBoxLayout:
         dish = QVBoxLayout()
         dish.setSpacing(scene.px(8))
-        dish.addWidget(label("No time yet · in the dish", "clayTrayLabel"))
+        dish.addWidget(label("Not placed yet · in the dish", "clayTrayLabel"))
         for index, waiting in enumerate(scene.week.waiting):
             dish.addWidget(self._chip(waiting, index))
         dish.addStretch(1)
@@ -264,7 +264,7 @@ class ClayDeckView(LayoutView):
         if week:
             self._root.addWidget(scroll, 1)
             dish = QHBoxLayout()
-            dish.addWidget(label("No time yet · in the dish", "clayTrayLabel"))
+            dish.addWidget(label("Not placed yet · in the dish", "clayTrayLabel"))
             for index, waiting in enumerate(scene.week.waiting):
                 dish.addWidget(self._chip(waiting, index))
             dish.addStretch(1)

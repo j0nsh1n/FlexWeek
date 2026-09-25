@@ -161,7 +161,7 @@ def test_now_is_written_in_red_beside_the_line(qapp: QApplication) -> None:
 def test_the_margin_holds_what_has_no_time_and_a_click_opens_it(qapp: QApplication) -> None:
     view = shown(qapp, "day")
     margin = view.findChild(QFrame, "timelineMargin")
-    assert margin.findChild(QLabel, "timelineTrayLabel").text() == "No time yet · in the margin"
+    assert margin.findChild(QLabel, "timelineTrayLabel").text() == "Not placed yet · in the margin"
     chips = margin.findChildren(TrayChip)
     assert [(chip.held.title, chip.hand is view.hand) for chip in chips] == [("Poster-1", True)]
     opened: list[str] = []
@@ -220,7 +220,7 @@ def test_week_says_its_dates_and_load_and_keeps_a_margin(qapp: QApplication) -> 
     assert view.findChild(QLabel, "timelineSub").text() == (
         "14 September – 20 September · 3 h 15 min planned · 45 min done"
     )
-    assert view.findChild(QLabel, "timelineTrayLabel").text().startswith("No time yet")
+    assert view.findChild(QLabel, "timelineTrayLabel").text().startswith("Not placed yet")
     assert [chip.held.title for chip in view.findChildren(TrayChip)] == ["Poster-1"]
 
 

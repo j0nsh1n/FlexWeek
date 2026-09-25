@@ -57,11 +57,11 @@ from desktop.native.look import (
 )
 from desktop.native.motion import slide_page
 from desktop.native.remind import ALARM_SNOOZE_MIN
-from desktop.native.reuse import format_duration
 from desktop.native.sound import Bell
 from desktop.native.spotify import SpotifyPlayer, open_in_app
 from desktop.native.tones import FALLBACK, RECIPES, SOUNDS
 from desktop.native.version import VERSION
+from desktop.native.weekmodel import length_label
 from desktop.native.widgets import DIALOG_USABLE_HEIGHT, FlowLayout, fit_scroll_dialog
 
 UPDATE_MIN_WIDTH = 420
@@ -181,12 +181,18 @@ class FocusPanel(QWidget):
         layout.addLayout(choices)
         self.tasks = QListWidget()
         self.tasks.setObjectName("focusTasks")
+        self.tasks.setToolTip("Double-click homework to start a focus timer for it.")
         self.tasks.itemActivated.connect(self._start_item)
-        layout.addWidget(self.tasks)
+        tasks_row = QHBoxLayout()
+        self.tasks_label = QLabel("Start a focus timer:")
+        self.tasks_label.setObjectName("focusTasksLabel")
+        tasks_row.addWidget(self.tasks_label, 0, Qt.AlignmentFlag.AlignTop)
+        tasks_row.addWidget(self.tasks, 1)
+        layout.addLayout(tasks_row)
         self._ended_widgets = (self.finished, self.take_break, self.more_min, self.more)
         self._run_widgets = (self.pause, self.skip, self.reset)
         # Nothing to show until a timer runs or the plan places work, and blank rows cost the calendar height.
-        for widget in (self.task, self.phase, self.time, self.tasks):
+        for widget in (self.task, self.phase, self.time, self.tasks, self.tasks_label):
             widget.setVisible(False)
 
     def _emit_more(self) -> None:
@@ -214,7 +220,7 @@ class FocusPanel(QWidget):
         choices = more_time_choices(int((assignment or {}).get("estimate_min") or 0)) if ended else []
         self.more_min.clear()
         for minutes in choices:
-            self.more_min.addItem(format_duration(minutes), minutes)
+            self.more_min.addItem(length_label(minutes), minutes)
         for widget in self._ended_widgets:
             widget.setVisible(ended)
         self.more.setEnabled(bool(choices))
@@ -234,6 +240,7 @@ class FocusPanel(QWidget):
         # is hidden when empty and never taller than four rows; the rest scrolls.
         shown = min(self.tasks.count(), 4)
         self.tasks.setVisible(shown > 0)
+        self.tasks_label.setVisible(shown > 0)
         if shown:
             rows = shown * self.tasks.sizeHintForRow(0)
             self.tasks.setMaximumHeight(rows + 2 * self.tasks.frameWidth() + 8)

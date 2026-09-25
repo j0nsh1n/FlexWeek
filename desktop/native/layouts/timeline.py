@@ -432,7 +432,7 @@ class TimelineView(LayoutView):
         inner = QVBoxLayout(margin)
         inner.setContentsMargins(scene.px(14), scene.px(8), 0, 0)
         inner.setSpacing(scene.px(8))
-        inner.addWidget(label("No time yet · in the margin", "timelineTrayLabel", wrap=True))
+        inner.addWidget(label("Not placed yet · in the margin", "timelineTrayLabel", wrap=True))
         waiting = scene.week.waiting
         words = "Drag one onto the page to give it a time." if waiting else "Nothing is waiting for a time."
         inner.addWidget(label(words, "timelineTrayHint", wrap=True))
@@ -467,7 +467,7 @@ class TimelineView(LayoutView):
         self._root.addWidget(scroll, 1)
         tray = QHBoxLayout()
         tray.setSpacing(scene.px(8))
-        tray.addWidget(label("No time yet · in the margin", "timelineTrayLabel"))
+        tray.addWidget(label("Not placed yet · in the margin", "timelineTrayLabel"))
         for index, item in enumerate(week.waiting):
             tray.addWidget(self._chip(item, index))
         if not week.waiting:

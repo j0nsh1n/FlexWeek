@@ -2491,7 +2491,7 @@ class NativeSession(QObject):
                     self.alerts.emit(
                         [
                             {
-                                "title": "Focus session done",
+                                "title": "Focus session finished",
                                 "body": self.focus["title"],
                                 "kind": "focus",
                                 "tone": "soft",

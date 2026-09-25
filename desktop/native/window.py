@@ -923,6 +923,7 @@ class NativeWindow(QMainWindow):
             # Picking what to focus on is planning. Left in, the picker took the height and the day
             # screen's title was cut off after its first line.
             self.focus_panel.tasks.hide()
+            self.focus_panel.tasks_label.hide()
         # Quick focus is in the action row whenever there is one, so the panel's own copy would be
         # the same button twice; it belongs to the panel only where no action row is shown.
         self.focus_panel.quick.setVisible(own and self._day_mode)
@@ -1523,7 +1524,7 @@ class NativeWindow(QMainWindow):
         self.classic_waiting.setVisible(bool(waiting))
         if not waiting:
             return
-        kicker = QLabel("Needs a time")
+        kicker = QLabel("Not placed yet")
         kicker.setObjectName("classicWaitingLabel")
         row.addWidget(kicker)
         for index, item in enumerate(waiting):
@@ -1957,6 +1958,9 @@ class NativeWindow(QMainWindow):
             self._commit_late(preview)
         else:
             self.session.late_preview = None
+            if preview is not None:
+                # The preview's "N tasks move" stood under the week as if something had moved.
+                self.session._say("")
 
     def _commit_late(self, preview: dict | None) -> None:
         block = None if preview is None else preview.get("block")

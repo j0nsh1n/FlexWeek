@@ -224,8 +224,8 @@ def test_due_today_unplaced_is_homework_that_still_needs_a_time() -> None:
     assert [item.title for item in week.due_today_unplaced(3)] == ["Math worksheet"]
     assert week.due_today_unplaced(2) == ()
     assert week.leftover_kind(3) == "needs_time"
-    assert week.leftover_words(3) == "Needs a time"
-    assert week.leftover_parts(3) == ("Needs a time", "Math worksheet", "Due Thu 17 Sep, 21:00")
+    assert week.leftover_words(3) == "Not placed yet"
+    assert week.leftover_parts(3) == ("Not placed yet", "Math worksheet", "Due Thu 17 Sep, 21:00")
     assert week.minutes_left_today(3, 16 * 60) == 45
 
 
