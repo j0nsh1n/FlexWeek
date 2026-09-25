@@ -657,6 +657,13 @@ Recorded `operation_id` values make a retried write return the first result.
   suspect was a CSS `backdrop-filter` that Qt widgets cannot draw.
 
 ## Session Handoff
+- 2026-09-25, `feat/0.15-tabs`: 0.15.0 prepared on Jonathan's "make a PR,
+  after the code checks are verified merge, and then make the releases": the
+  changelog is dated, `docs/release-notes-v0.15.0.md` covers lanes C and D1,
+  and the changelog, notes and architecture say the Undo notice sits under the
+  hours. The gate passed 1447 tests, every mutation spec was caught, every
+  design's rig passed locally, and CI's rig passed 14/14 and 17/17. A Windows
+  install was not hand-checked before the release.
 - 2026-09-25, `claude/0-15-homework-planning`: Lane C code is committed at
   `1c6d3e6` after the five row-specific commits listed in Current State. The
   final focused suite passed 24/24 and full pytest passed 1329/1329. The

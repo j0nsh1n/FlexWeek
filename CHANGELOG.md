@@ -3,7 +3,7 @@
 All notable changes to FlexWeek are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.15.0] - Unreleased
+## [0.15.0] - 2026-09-25
 
 ### Added
 - Month names every timed block on a date, so weeks other than the open one
@@ -17,10 +17,10 @@ All notable changes to FlexWeek are documented here. Format follows
   the plan review's two buttons say on hover what they do. A greyed item says
   why, such as "Nothing to undo yet."
 - Moving, resizing or making a block by dragging says what changed once it is
-  saved, with Undo beside it: "Moved History essay to Fri 18:00.", "History
-  essay now ends at 20:30.", "Placed Math worksheet on Thu 18:00.", "Added Club
-  on Thu 16:00." Carrying a block to another date on Month says so too. Undo
-  takes back that one change and says what it undid.
+  saved, under the hours, with Undo beside it: "Moved History essay to Fri
+  18:00.", "History essay now ends at 20:30.", "Placed Math worksheet on Thu
+  18:00.", "Added Club on Thu 16:00." Carrying a block to another date on Month
+  says so too. Undo takes back that one change and says what it undid.
 - Everything under More > Advanced, and its keyboard shortcut, says what it did
   under the top bar once it is done: copied, pasted, duplicated, saved, undid
   or redid what, saved a restore point, restored, or reloaded this week.
@@ -30,7 +30,7 @@ All notable changes to FlexWeek are documented here. Format follows
   "Tick more days to repeat it this week.", and the missed box names its day:
   "I missed it on Thursday". Save is the one filled button. Delete is quiet red
   words at the bottom left, asks first, and a deleted block comes back with
-  Undo on the notice under the top bar.
+  Undo on the notice under the hours.
 - Log out and Delete account ask first, and Delete account names the account.
   Log out's answer is drawn in the usual colour, since nothing is lost.
 - Settings > Appearance & layout opens on the main view's design, with a
@@ -181,6 +181,8 @@ All notable changes to FlexWeek are documented here. Format follows
   the notepad is closed.
 - A short block on hours that run across shows its first letter instead of
   lines of "…", and the hour labels at either edge of the scroll stay whole.
+- Today's app's "Needs a time" bar no longer blinks empty each time the week
+  saves.
 
 ## [0.14.3] - 2026-09-22
 

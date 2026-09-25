@@ -1845,7 +1845,7 @@ class NativeWindow(QMainWindow):
         self._change_saving = words if self.session.busy else None
 
     def _show_change(self) -> None:
-        # Not while a block is held: the notice would push the hours down under the pointer.
+        # Not while a block is held: nothing new appears beside the hours until the release.
         if self._change_saved is None or self.hand.busy:
             return
         words, self._change_saved = self._change_saved, None

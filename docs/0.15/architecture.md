@@ -2,7 +2,7 @@
 
 Every design draws its own Day and Week, and Month is shared, but there is one way to move time
 around: one `Hand` per window runs every gesture, and surfaces only lay out, paint and say what is
-under a point. This file describes the engine as it stands on `feat/0.15-tabs` after units 1 to 9.
+under a point. This file describes the engine as it ships in 0.15.0.
 The code in `desktop/native/hours/` is the authority; each module's docstring says what it owns.
 
 ## Modules
@@ -83,10 +83,11 @@ self.hand.holding.connect(self._hold_renders)       # from the press to the rele
 - A change goes to the controller: `_move_block` (waiting while a save is running), `place_session`,
   `_create_range`, or `move_to_date` (one write of both weeks through `/api/changes`, retry-safe,
   shown only once the server accepts it; a drop after a save that failed is refused in words).
-- Once a change's save lands, the notice over the hours says what it did ("Moved History essay to
-  Fri 18:00."), with Undo for that one change. A notice that lands while something is held waits
-  for the release, since it moves the hours down, and it goes once a later save makes its step no
-  longer the last.
+- Once a change's save lands, the notice under the hours says what it did ("Moved History essay to
+  Fri 18:00."), with Undo for that one change. It shares the status line's row, which keeps the
+  notice's height whether it shows or not, so its coming and going never moves the hours. One that
+  lands while something is held waits for the release, and it goes once a later save makes its
+  step no longer the last.
 - Renders are held from the press, so nothing the press started on is deleted by a re-render; the
   last scene arrives on release.
 - Asking for anywhere else while a block is held (another view, week, day or design) cancels the
