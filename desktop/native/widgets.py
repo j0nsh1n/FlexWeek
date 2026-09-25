@@ -847,6 +847,17 @@ class BlockDialog(QDialog):
         return deepcopy(self._result if self._result is not None else self._original)
 
 
+def keep_on_screen(popup: QWidget, area: QRect) -> None:
+    """Qt keeps a date's calendar on the screen under the field's corner, or on the main screen when
+    that corner is on none, and leaves out any window frame, so it could open past the edge of the
+    screen the window is on."""
+    frame = popup.frameGeometry()
+    x = max(area.left(), min(frame.left(), area.left() + area.width() - frame.width()))
+    y = max(area.top(), min(frame.top(), area.top() + area.height() - frame.height()))
+    if (x, y) != (frame.left(), frame.top()):
+        popup.move(x, y)
+
+
 class DueField(QWidget):
     """When homework is due: always a date, and a time only for work due at one, such as a lesson
     at 09:00. Without a time it is due by the end of that day."""
@@ -868,6 +879,7 @@ class DueField(QWidget):
         self.date.setMinimumDate(QDate(2000, 1, 1))
         self.date.setMaximumDate(QDate(2099, 12, 31))
         self.date.setAccessibleName("Due date")
+        self.date.calendarWidget().parentWidget().installEventFilter(self)
         self.timed = QCheckBox("At a set time")
         self.timed.setObjectName(f"{name}Timed")
         self.timed.setAccessibleName("Due at a set time")
@@ -905,6 +917,11 @@ class DueField(QWidget):
 
     def _show_time(self, timed: bool) -> None:
         self.time.setVisible(timed)
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802 - Qt virtual
+        if event.type() == QEvent.Type.Show and watched.objectName() == "qt_datetimedit_calendar":
+            keep_on_screen(watched, self.window().screen().availableGeometry())
+        return super().eventFilter(watched, event)
 
     def _say_changed(self, *_value: object) -> None:
         # Connected straight to `changed.emit`, each signal handed its value to a signal that takes

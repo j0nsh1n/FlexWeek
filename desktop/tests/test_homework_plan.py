@@ -22,16 +22,20 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QDate, QStandardPaths, Qt, QTime
+    from PySide6.QtCore import QDate, QPoint, QStandardPaths, Qt, QTime
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import (
         QApplication,
+        QCalendarWidget,
         QDialog,
         QPushButton,
+        QTableView,
         QWidget,
     )
 
     from desktop.native.calendar import date_for_day, sunday_due
+    from desktop.native.look import sanitize_look
+    from desktop.native.setup import FIRST
     from desktop.native.widgets import DueField, HomeworkDialog
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
@@ -282,3 +286,73 @@ def test_a_length_under_15_minutes_or_over_24_hours_is_refused_beside_the_box(
     assert fine[2:] == (False, False), "a length in range saves"
     saved = next(item for item in window.session.assignments.values() if item["title"] == "Science poster")
     assert saved["estimate_min"] == 90
+
+
+# The due date's calendar
+
+
+def calendar_problems(popup: QWidget, screen) -> list[str]:
+    """What is cut off. The whole month's grid must fit its view: the look padded the grid like a
+    panel, so the calendar lost its last column, or its first once it scrolled to a Sunday."""
+    problems = []
+    # geometry, not frameGeometry: a popup has no frame, but the offscreen platform draws one.
+    if not screen.contains(popup.geometry()):
+        problems.append(f"popup {popup.geometry().getRect()} outside {screen.getRect()}")
+    view = popup.findChild(QCalendarWidget).findChild(QTableView)
+    across, down = view.horizontalHeader(), view.verticalHeader()
+    if across.length() > view.viewport().width():
+        problems.append(f"the last column is cut: {across.length()} across {view.viewport().width()}")
+    if down.length() > view.viewport().height():
+        problems.append(f"the last week is cut: {down.length()} down {view.viewport().height()}")
+    return problems
+
+
+def opened_calendar(qapp: QApplication, field: DueField) -> QWidget:
+    edit = field.date
+    QTest.mouseClick(edit, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier,
+                     QPoint(edit.width() - 6, edit.height() // 2))
+    popup = edit.findChild(QWidget, "qt_datetimedit_calendar")
+    wait_until(qapp, lambda: popup is not None and popup.isVisible())
+    for _ in range(5):
+        qapp.processEvents()
+    return popup
+
+
+@pytest.mark.parametrize("text", ["normal", "large"])
+def test_the_due_calendar_shows_its_whole_month_on_the_windows_screen(
+    qapp: QApplication, server: LocalServer, monkeypatch: pytest.MonkeyPatch, text: str
+) -> None:
+    made = signed_up(qapp, server, f"calendar_{text}")
+    try:
+        wait_until(qapp, lambda: made._stack.currentWidget().objectName() == "setupPage")
+        if text == "large":
+            made.resize(1150, 768)
+            knobs = {**made._look.get("knobs", {}), "text": "large"}
+            made._look = sanitize_look({**made._look, "knobs": knobs})
+            made._apply_appearance()
+        setup = made.setup_page
+        # Setup draws its style pictures in windows of their own, one at a time; each one shown
+        # closes any calendar that is open.
+        wait_until(qapp, lambda: not setup._pending_pictures and not setup._warm.isActive())
+        setup._show(FIRST)
+        qapp.processEvents()
+        screen = made.screen().availableGeometry()
+        popup = opened_calendar(qapp, setup.homework_rows[0].due)
+        assert calendar_problems(popup, screen) == [], "in setup"
+        popup.hide()
+
+        found: list[list[str]] = []
+
+        def look(dialog: HomeworkDialog) -> int:
+            dialog.show()
+            qapp.processEvents()
+            shown = opened_calendar(qapp, dialog.due)
+            found.append(calendar_problems(shown, dialog.screen().availableGeometry()))
+            shown.hide()
+            return QDialog.DialogCode.Rejected
+
+        opened_with(monkeypatch, look)
+        made._add_homework()
+        assert found == [[]], "in Add homework"
+    finally:
+        closed(qapp, made)

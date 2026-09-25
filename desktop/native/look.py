@@ -646,8 +646,11 @@ def control_rules(palette: dict, radius: int, size: int, art: dict[str, str]) ->
         f"alternate-background-color: {palette['panel']}; }}"
         f"QCalendarWidget QToolButton {{ background: transparent; color: {palette['text']}; "
         "border: none; padding: 4px 8px; font-weight: 600; }"
+        # The month's grid is a QFrame too. Padded like a panel, it lost its last column and week: the
+        # calendar sizes its columns to the whole view, not to what the padding leaves.
         f"QCalendarWidget QAbstractItemView {{ selection-background-color: {palette['accent']}; "
-        f"selection-color: {palette['accent_ink']}; outline: 0; }}"
+        f"selection-color: {palette['accent_ink']}; outline: 0; padding: 0; border: none; "
+        "border-radius: 0; }"
         f"QCalendarWidget QAbstractItemView:disabled {{ color: {palette['muted']}; }}"
         "QCheckBox, QRadioButton { background: transparent; spacing: 8px; }"
         f"QCheckBox::indicator, QRadioButton::indicator {{ width: 16px; height: 16px; "
