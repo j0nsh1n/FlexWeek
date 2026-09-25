@@ -1403,8 +1403,8 @@ class AlertStrip(QWidget):
     """Alerts that stay put until the student deals with them.
 
     A tray message is gone in eight seconds, and on a machine that suppresses notifications it is
-    never seen at all. "Leave reminders on screen until I close them" promises the opposite, so when it
-    is on the alert is also shown here, in the window, where nothing outside the app can take it away.
+    never seen at all. "Leave reminders on screen" promises the opposite, so when it is on the alert is
+    also shown here, in the window, where nothing outside the app can take it away.
     """
 
     # The student has dealt with every alert it held.
