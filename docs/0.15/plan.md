@@ -112,7 +112,8 @@ storage, CI). Each unit ends green on the rig, on the source gate, and with its 
    KWin or Xvfb with Openbox on a private D-Bus that starts nothing on demand (a hidden KWin on the
    desktop's bus took the desktop's shortcuts, even with `--no-global-shortcuts`). The `rig` job in
    `.github/workflows/verify.yml` runs Today's app's Day and Week under Xvfb and uploads the
-   screenshots, videos and results. Not yet seen running on GitHub: nothing has been pushed.*
+   screenshots, videos and results. First ran on GitHub on 25 September, on the push of
+   `feat/0.15-tabs`: Day 14/14 and Week 17/17 (run 36198505353).*
 7. **Hosting and targets.** Every design reaches the window's hand; the hand finds any visible
    surface; track-local bounds; render hold from press; the dial adapter. Owner: Claude.
    *Done. `Track` is a contract with `LinearTrack` and `DialTrack`; a surface is any widget with

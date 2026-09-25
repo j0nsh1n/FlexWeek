@@ -121,8 +121,10 @@ self.hand.holding.connect(self._hold_renders)       # from the press to the rele
 Unit tests (`test_hours_geometry`, `test_hours_hand`, `test_hours_zoom`, `test_hours_targets`,
 `test_hours_month`, `test_classic_hours`) send Qt events and prove the rules. The rig
 (`scripts/rig/drive.py`) drives the real pointer on a hidden desktop and reads the week back from the
-server: Today's app passes Day 14/14, Week 17/17 and Month 9/9. `scripts/mutate.py` breaks one rule
-at a time; every spec in `scripts/mutations/` is caught.
+server: Today's app passes Day 14/14, Week 17/17 and Month 9/9, and every design and both My day
+screens pass theirs. The `rig` job in `.github/workflows/verify.yml` runs Today's app's Day and Week
+on every push under Xvfb and Openbox; it first ran on GitHub on 25 September, 14/14 and 17/17.
+`scripts/mutate.py` breaks one rule at a time; every spec in `scripts/mutations/` is caught.
 
 ## Why this shape
 
@@ -138,6 +140,5 @@ because it is where Wayland and X11 differ and where the rig cannot see what the
 
 ## Open
 
-- Nothing in the engine. Every design, Today's app and both My day screens move blocks through the
-  one hand, and the old drag path is gone.
-- The CI `rig` job has not yet run on GitHub: nothing has been pushed.
+- Nothing. Every design, Today's app and both My day screens move blocks through the one hand, and
+  the old drag path is gone.
