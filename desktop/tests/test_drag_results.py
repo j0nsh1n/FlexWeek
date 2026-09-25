@@ -438,3 +438,29 @@ def test_a_save_that_leaves_the_homework_waiting_keeps_the_same_chips(
     after = tray_chip(window, session_of(window, "math")["id"])
     assert after is before, "the Needs a time bar made its chips again for the same homework"
     assert after.isVisible()
+
+
+def test_a_notice_coming_and_going_never_moves_the_hours(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Over the hours, each drag's notice pushed the page down under the pointer, and on a short
+    window put the next drop where the hours scroll by themselves."""
+    before = window.planner.geometry()
+    window._set_notice("Moved History essay to Fri 18:00.", "Undo", lambda: None)
+    for _ in range(5):
+        qapp.processEvents()
+    assert window.action_notice.isVisible()
+    assert window.planner.geometry() == before
+    window.action_notice.hide()
+    for _ in range(5):
+        qapp.processEvents()
+    assert window.planner.geometry() == before
+
+
+def test_a_short_notice_keeps_its_words_on_one_line(qapp: QApplication, window: NativeWindow) -> None:
+    window._set_notice("Moved History essay to Fri 18:00.", "Undo", lambda: None)
+    for _ in range(5):
+        qapp.processEvents()
+    text = window.action_notice_text
+    words = text.fontMetrics().horizontalAdvance("Moved History essay to Fri 18:00.")
+    assert text.width() >= words, "the notice's words wrap onto a second line"

@@ -100,18 +100,18 @@ def test_the_next_and_now_countdowns_move_with_the_minute_without_a_focus_timer(
     line = made.findChild(QLabel, "nowNext")
     assert made.session.focus is None
     assert line.isVisible()
-    assert line.text() == "Next: Dinner at 18:00 (in 2h 20m)"
+    assert line.text() == "Next: Dinner at 18:00 (in 2 h 20 min)"
     # The window looks at the clock on its own timer; here it looks every 20 ms, not every 20 s.
     made._layout_tick.setInterval(20)
     clock[0] += timedelta(minutes=1)
     pump(qapp, 0.3)
-    assert line.text() == "Next: Dinner at 18:00 (in 2h 19m)"
+    assert line.text() == "Next: Dinner at 18:00 (in 2 h 19 min)"
     clock[0] += timedelta(hours=2, minutes=29)
     pump(qapp, 0.3)
-    assert line.text() == "Now: Dinner · 20m left"
+    assert line.text() == "Now: Dinner · 20 min left"
     clock[0] += timedelta(minutes=1)
     pump(qapp, 0.3)
-    assert line.text() == "Now: Dinner · 19m left"
+    assert line.text() == "Now: Dinner · 19 min left"
     clock[0] += timedelta(minutes=19)
     pump(qapp, 0.3)
     assert line.text() == ""

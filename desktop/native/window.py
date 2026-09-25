@@ -139,6 +139,8 @@ WINDOW_MIN_WIDTH = 640
 # The longest the old week's picture waits for the next one before it fades anyway.
 TRAVEL_WAIT_MS = 900
 PLAN_LABEL = "Plan my homework"
+# The widest an Undo notice's words go before they wrap, beside the status line.
+NOTICE_MAX_WIDTH = 520
 SUGGEST_LABEL = "Suggest times"
 PLAN_TIP = (
     "Find a time for homework that has none, around your fixed times and before it is due. Homework "
@@ -885,12 +887,21 @@ class NativeWindow(QMainWindow):
         notice_row.addWidget(self.action_notice_text, 1)
         notice_row.addWidget(self.action_notice_button)
         self.action_notice.hide()
-        layout.addWidget(self.action_notice)
         layout.addWidget(self.planner, 1)
         self.week_status = QLabel()
         self.week_status.setObjectName("weekStatus")
         self.week_status.setWordWrap(True)
-        layout.addWidget(self.week_status)
+        # The notice shares the status line's row, under the hours, and the row keeps the notice's
+        # height whether or not it shows. Over the hours, each drag's notice pushed the whole page
+        # down under the pointer, and on a short window put the next drop where the hours scroll.
+        foot = QWidget()
+        foot.setObjectName("statusRow")
+        foot_row = QHBoxLayout(foot)
+        foot_row.setContentsMargins(0, 0, 0, 0)
+        foot_row.addWidget(self.week_status, 1)
+        foot_row.addWidget(self.action_notice)
+        self._status_row = foot
+        layout.addWidget(foot)
         self._stack.addWidget(page)
         self.toast = Toast(self, self._toast_top)
 
@@ -1796,9 +1807,25 @@ class NativeWindow(QMainWindow):
             self._sync_classic_waiting()
             self._show_change()
 
+    def _hold_status_row(self) -> None:
+        """As tall as the notice, shown or not, so its coming and going never moves the hours."""
+        button, label = self.action_notice_button, self.action_notice_text
+        words, said = button.text(), label.text()
+        # Measured with words in it: empty, the notice is a few pixels shorter.
+        button.setText(words or "Undo")
+        label.setText(said or "Moved History essay to Fri 18:00.")
+        self._status_row.setMinimumHeight(self.action_notice.sizeHint().height())
+        button.setText(words)
+        label.setText(said)
+
     def _set_notice(self, text: str, button: str, callback) -> None:
         self._notice_step = None
         self.action_notice_text.setText(text)
+        # A wrapping label asks for its narrowest width, and "Fri 18:00." went to a second line
+        # beside an empty status line. Its words' width, up to a limit, keeps it on one.
+        self.action_notice_text.setMinimumWidth(
+            min(self.action_notice_text.fontMetrics().horizontalAdvance(text) + 8, NOTICE_MAX_WIDTH)
+        )
         self.action_notice_button.setText(button)
         self._notice_callback = callback
         # The notice stays until the student acts on it. A toast of the same words on top of it
@@ -2677,6 +2704,7 @@ class NativeWindow(QMainWindow):
             self._dressed = dressed
             self.setStyleSheet(sheet)
             self._keep_bar_whole()
+            self._hold_status_row()
             apply_ui_effects(self._motion)
             self.toast.motion = self._motion
             # Day, Month and the week grid are dressed by the same design as the main view, so moving

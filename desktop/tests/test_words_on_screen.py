@@ -66,7 +66,7 @@ def test_the_tray_is_not_placed_yet_everywhere(
     window._on_week()
     qapp.processEvents()
     assert window.findChild(QLabel, "classicWaitingLabel").text() == "Not placed yet"
-    trays = (("timeline", "timelineTrayLabel"), ("clay", "clayTrayLabel"), ("retro", "retroWaitingLabel"))
+    trays = (("timeline", "timelineTrayLabel"), ("clay", "clayTrayLabel"), ("retro", "retroNotesWaiting"))
     for main, name in trays:
         window._layout = sanitize_layout({"main": main, "day": "one"})
         window._on_week()
