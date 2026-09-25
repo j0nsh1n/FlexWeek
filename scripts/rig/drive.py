@@ -345,16 +345,14 @@ def child_main(args: argparse.Namespace) -> int:
                 raise NoSurface(f"no hours under {point.x()},{point.y()}")
             return track.minute_at(local)
 
-        def at(self, day: int, minute: int, nudge: int = 3) -> QPoint:
-            """A point on the day at a minute, `nudge` pixels on in the direction time runs, so it is
-            inside that quarter hour whichever way the design lays time out."""
+        def at(self, day: int, minute: int) -> QPoint:
+            """A point on the day a minute and a quarter past a minute, whichever way the design lays
+            time out: inside the drag step that starts there, and nearer it than the next one, at a
+            step of 5 or 15 and at every zoom. Three pixels on, as it was, is past a 5-minute step on
+            a Week at 48 pixels an hour."""
             surface = self.surface("hours", day, minute)
-            here = surface.point_for(day, minute)
-            ahead = minute + 1 if surface.track_for(day, minute + 1) is not None else minute - 1
-            there = surface.point_for(day, ahead)
-            step = there - here if ahead > minute else here - there
-            length = max(abs(step.x()) + abs(step.y()), 1)
-            return here + QPoint(round(step.x() / length * nudge), round(step.y() / length * nudge))
+            track = surface.track_for(day, minute)
+            return surface.mapToGlobal(track.point_for(min(minute + 1.25, track.last))).toPoint()
 
         def block_rect(self, block_id: str, day: int) -> QRect:
             for surface in self.surfaces("hours"):

@@ -22,7 +22,7 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QStandardPaths, Qt
+    from PySide6.QtCore import QStandardPaths, Qt, QTime
     from PySide6.QtGui import QGuiApplication
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton
@@ -156,6 +156,30 @@ def soccer() -> dict:
         "duration_min": 60,
         "days": [0],
     }
+
+
+def test_the_block_editor_saves_any_minute_and_shows_it_back(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """18:37 to 19:22 was taken by the editor and refused by the server after Save."""
+    saved(qapp, window, soccer())
+    dialog = BlockDialog(window, soccer())
+
+    def steps() -> None:
+        dialog.start.setTime(QTime(18, 37))
+        dialog.end.setTime(QTime(19, 22))
+        dialog.accept()
+
+    student(dialog, monkeypatch, steps)
+    window._commit_block(dialog)
+    settled(qapp, window)
+    window.session.load_week(window.session.week_start, discard=True)
+    settled(qapp, window)
+    stored = next(block for block in window.session.blocks if block["id"] == "soccer")
+    assert (stored["start"], stored["duration_min"]) == ("18:37", 45)
+    again = BlockDialog(window, stored)
+    assert (again.start.time().toString("HH:mm"), again.end.time().toString("HH:mm")) == ("18:37", "19:22")
+    assert again.duration_line.text() == "45 min"
 
 
 def test_w_d_and_m_switch_views_while_the_calendar_has_the_keyboard(

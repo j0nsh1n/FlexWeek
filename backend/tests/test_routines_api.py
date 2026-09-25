@@ -116,6 +116,13 @@ def test_put_revision_zero_creates_and_identical_body_does_not_bump(alice: TestC
     assert (listed_at, listed_updated, listed_body) == (created_at, updated_at, {**routine(revision=1)})
 
 
+def test_a_routine_block_at_any_minute_saves(alice: TestClient) -> None:
+    body = routine(blocks=[school(start="07:05", duration_min=400)])
+    saved = put_routine(alice, body)
+    assert saved.status_code == 200, saved.text
+    assert [(block["start"], block["duration_min"]) for block in saved.json()["blocks"]] == [("07:05", 400)]
+
+
 def test_stale_routine_revision_conflicts(alice: TestClient) -> None:
     assert put_routine(alice, routine()).status_code == 200
     stale = put_routine(alice, routine(name="Next week", revision=0))

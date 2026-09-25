@@ -63,7 +63,9 @@ WEEK = [
 class Rig:
     """A window with a week of hours, a tray chip and a hand, and what the hand reported."""
 
-    def __init__(self, qapp: QApplication, judge=None, lay_out=None, height: int = 680) -> None:
+    def __init__(
+        self, qapp: QApplication, judge=None, lay_out=None, height: int = 680, step: int = 15
+    ) -> None:
         self.window = QWidget()
         # Inside the offscreen screen (800 by 800), where QApplication.widgetAt can find it.
         self.window.resize(760, 760)
@@ -75,6 +77,9 @@ class Rig:
         self.hand = Hand(
             judge or (lambda block_id, from_day, span: Verdict(True, span_words(span))), self.window
         )
+        # The rules below hold at any step. At this height five minutes is two pixels, finer than a
+        # point aimed at a minute can promise, so they are checked a quarter hour at a time.
+        self.hand.step = step
         self.hand.committed.connect(self.said.append)
         self.hand.refused.connect(lambda words: self.said.append(("refused", words)))
         self.hand.opened.connect(lambda block_id: self.said.append(("opened", block_id)))
@@ -143,6 +148,41 @@ def test_the_edges_resize_and_never_to_less_than_a_quarter_hour(qapp: QApplicati
         Move("essay", 2, Span(2, 17 * 60 + 30, 19 * 60)),
         Move("essay", 2, Span(2, 18 * 60 + 45, 19 * 60)),
     ]
+
+
+@pytest.mark.parametrize("step", [5, 15])
+def test_a_move_a_resize_and_a_new_block_land_on_the_step_and_never_finer(
+    qapp: QApplication, step: int
+) -> None:
+    """A lesson from 17:37 to 18:22, moved, stretched and drawn beside, a minute further each time for
+    half an hour. Whatever the hand moves lands on a multiple of the step; at 5 it reaches the steps
+    a quarter-hour snap never does, and a lesson off the step comes onto it."""
+    evening = lambda area: [  # noqa: E731
+        LinearTrack(
+            day, QRectF(area.left() + day * 100, area.top(), 100, area.height()), first=17 * 60, last=21 * 60
+        )
+        for day in range(7)
+    ]
+    rig = Rig(qapp, lay_out=evening, step=step)
+    rig.canvas.set_week([occurrence("lesson", 2, 17 * 60 + 37, 18 * 60 + 22)])
+
+    def drag(start: QPoint, end: QPoint) -> None:
+        # Out past the distance that makes a press a drag, then back to where it is let go.
+        rig.send(rig.canvas, QEvent.Type.MouseButtonPress, start, True)
+        rig.send(rig.canvas, QEvent.Type.MouseMove, start + QPoint(0, 60), True)
+        rig.send(rig.canvas, QEvent.Type.MouseMove, end, True)
+        rig.send(rig.canvas, QEvent.Type.MouseButtonRelease, end, False)
+
+    landed: list[int] = []
+    for offset in range(1, 31):
+        rig.said.clear()
+        drag(rig.at(2, 18 * 60), rig.at(2, 18 * 60 + offset))
+        drag(rig.at(2, 18 * 60 + 22, -3), rig.at(2, 18 * 60 + 22 + offset, -3))
+        drag(rig.at(4, 19 * 60, 1), rig.at(4, 19 * 60 + 15 + offset))
+        moved, stretched, drawn = rig.said
+        landed += [moved.span.start, stretched.span.end, drawn.span.start, drawn.span.end]
+    assert [minute for minute in landed if minute % step] == []
+    assert {minute % 15 for minute in landed} == ({0, 5, 10} if step == 5 else {0})
 
 
 def test_dragging_free_time_creates_that_span_and_a_click_makes_up_to_an_hour(qapp: QApplication) -> None:

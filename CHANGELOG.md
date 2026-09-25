@@ -10,6 +10,11 @@ All notable changes to FlexWeek are documented here. Format follows
   can show their chips.
 
 ### Changed
+- Times are by the minute. A block typed as 17:37 to 18:22 in the block editor,
+  in setup or in a routine saves as 17:37 to 18:22. Dragging, resizing and
+  drawing a block move in steps of 5 minutes, or of 15 if you choose that in
+  setup or in Settings > Planning. Homework is still planned on quarter hours,
+  and never over any part of one that a block takes.
 - Retro desktop now shows live, draggable hours in Schedule.exe on Day and a
   seven-day Week.exe grid on Week. The deadlines notepad and main window both
   keep unplaced homework within reach, and the status bar shows the time or a

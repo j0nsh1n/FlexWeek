@@ -145,7 +145,7 @@ def test_a_set_pack_keeps_theme_on_its_axis(alice: TestClient) -> None:
     )
 
 
-SETUP_KEYS = ("alarm_tone", "planning_style", "setup")
+SETUP_KEYS = ("alarm_tone", "planning_style", "drag_step_min", "setup")
 
 
 def test_a_fresh_account_omits_the_setup_preferences(alice: TestClient) -> None:
@@ -155,11 +155,12 @@ def test_a_fresh_account_omits_the_setup_preferences(alice: TestClient) -> None:
         assert key not in body
 
 
-def test_the_alarm_tone_planning_style_and_setup_progress_round_trip(alice: TestClient) -> None:
+def test_the_alarm_tone_planning_style_drag_step_and_setup_progress_round_trip(alice: TestClient) -> None:
     payload = {
         **defaults(),
         "alarm_tone": "glass",
         "planning_style": "manual",
+        "drag_step_min": 15,
         "setup": {"version": 1, "step": 3, "finished_at": None},
     }
     saved = alice.put("/api/preferences", json=payload, headers=WRITE)
@@ -175,6 +176,8 @@ def test_the_alarm_tone_planning_style_and_setup_progress_round_trip(alice: Test
     [
         {"alarm_tone": "siren"},
         {"planning_style": "sometimes"},
+        {"drag_step_min": 10},
+        {"drag_step_min": 1},
         {"setup": {"version": 0, "step": 0}},
         {"setup": {"version": 1, "step": 99}},
         {"setup": {"version": 1, "step": 0, "finished_at": "yesterday"}},

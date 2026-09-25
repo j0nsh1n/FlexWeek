@@ -24,12 +24,12 @@ from backend.models import (
     WorkWindow,
 )
 from backend.slots import (
-    DAY_END_MIN,
     DAY_START_MIN,
     SLOT_MIN,
     SLOTS_PER_DAY,
     duration_to_slots,
     hhmm_to_minutes,
+    occupancy_between,
     occupancy_mask,
     parse_deadline,
     slot_to_hhmm,
@@ -387,18 +387,9 @@ def _locked_occupancy(locked: list[TimeBlock]) -> list[int]:
         if block.start is None:
             continue
         start_min = hhmm_to_minutes(block.start)
-        end_min = start_min + block.duration_min
-        if start_min < DAY_START_MIN:
-            start_min = DAY_START_MIN
-        if start_min >= DAY_END_MIN:
-            continue
-        offset = start_min - DAY_START_MIN
-        slot = offset // SLOT_MIN
-        end_offset = min(DAY_END_MIN, end_min) - DAY_START_MIN
-        n = min(max(0, end_offset // SLOT_MIN - slot), SLOTS_PER_DAY - slot)
-        if n:
-            for day in block.days:
-                occ[day] |= occupancy_mask(slot, n)
+        taken = occupancy_between(start_min, start_min + block.duration_min)
+        for day in block.days:
+            occ[day] |= taken
     return occ
 
 

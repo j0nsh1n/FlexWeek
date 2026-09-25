@@ -25,7 +25,14 @@ app was broken in use.
    later. Placing a block by hand at any hour is always allowed. (22 September.)
 6. A homework's due date is required; its due time is optional, for work due at a set time that day.
    (22 September, replaces the mandatory 23:59.)
-7. Time snaps to 15 minutes.
+7. Times are by the minute; a drag moves in steps of 5 or 15. (24 September, replaces "Time snaps to
+   15 minutes".) A typed start or end keeps any minute, and the server stores it, for week and
+   routine blocks. Dragging, resizing and creating by drag snap to the student's step, 5 minutes by
+   default; setup and Settings offer 15. Homework estimates, focus lengths and the planner's windows
+   stay on quarter hours, and the planner still gives homework quarter-hour starts, fitted around
+   blocks at any minute. Jonathan: "I want it to be by the minute, but when doing things like
+   dragging it should be incremented by 5, so users have the most control possible. Or add in setup
+   how detailed they want the dragging to be, and let them pick between 15 and 5."
 8. Overlaps are allowed, drawn side by side, and named in words.
 9. Moving one day of a repeating block moves only that day.
 10. Homework placed by hand is pinned, and no plan moves it.

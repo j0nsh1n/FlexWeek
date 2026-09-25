@@ -19,9 +19,11 @@ from typing import Protocol
 from PySide6.QtCore import QPointF, QRectF
 from PySide6.QtGui import QTransform
 
-from backend.slots import DAY_END_MIN, DAY_START_MIN, SLOT_MIN
+from backend.slots import DAY_END_MIN, DAY_START_MIN
 
 FIRST, LAST = DAY_START_MIN, DAY_END_MIN
+# The minutes a student can have a drag move by; the first is what an account starts with.
+DRAG_STEPS = (5, 15)
 # Space between blocks that share a time, and between a block and its track's sides.
 GAP = 2.0
 
@@ -42,8 +44,13 @@ class Span:
         return self.end - self.start
 
 
-def snap(minute: float) -> int:
-    return round(minute / SLOT_MIN) * SLOT_MIN
+def snap(minute: float, step: int) -> int:
+    return round(minute / step) * step
+
+
+def drag_step(chosen: object) -> int:
+    """The step a preference names, or the first one for anything else."""
+    return chosen if isinstance(chosen, int) and chosen in DRAG_STEPS else DRAG_STEPS[0]
 
 
 class Track(Protocol):

@@ -19,7 +19,7 @@ decision first.
 
 | # | What | Where / evidence | State |
 | --- | --- | --- | --- |
-| 5 | The block editor accepts any minute and the server refuses anything off the 15-minute grid after Save, in its own words ("block must fit the 00:00–24:00 grid"). Setup rounds times silently. Elsewhere steps of 5. | `widgets.py` `_span_problem` checks the length only; API: 18:30 and 18:45 save, 18:35/18:37/18:40 are 422 (`scratch/grid_probe.py`). T6, owner 1, C8. Decision 7 says 15 minutes: Start and End step by 15 and a typed time snaps as the box is left. | P1 |
+| 5 | The block editor accepts any minute and the server refuses anything off the 15-minute grid after Save, in its own words ("block must fit the 00:00–24:00 grid"). Setup rounds times silently. Elsewhere steps of 5. | `widgets.py` `_span_problem` checks the length only; API: 18:30 and 18:45 save, 18:35/18:37/18:40 are 422 (`scratch/grid_probe.py`). T6, owner 1, C8. Decision 7 said 15 minutes; Jonathan's decision 3 replaced it. | Done: d60146b (server keeps any minute, planner fits around it), 198995b (editor, setup, paste, Choose a time), e16ebd7 and 74b29a4 (drags in steps of 5 or 15). |
 | 6 | New homework is due on the week's Monday, not today. | `widgets.py:913` `"due": due or week_start`. T4, owner 6, C1. | P1 |
 | 7 | Changing the due date raises inside Qt and the follow-up step (`_disable_spread`) never runs. | `DueField`: `self.date.dateChanged.connect(self.changed.emit)` hands a `QDate` to a `Signal()`; seen as `TypeError: changed() only accepts 0 argument(s)` in Claude's probe. T5. | P1 |
 | 8 | Plan places homework on days already gone (a Monday-due report planned on the past Tuesday). | T3. The solver plans the whole visible week; nothing tells it today. | P1 |

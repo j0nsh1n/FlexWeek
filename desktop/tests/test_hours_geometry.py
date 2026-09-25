@@ -53,8 +53,9 @@ def test_a_turned_card_reads_minutes_along_the_card_not_the_screen() -> None:
     assert card.contains(QPointF(300, 510)) and not card.contains(QPointF(50, 100))
 
 
-def test_snapping_is_to_the_quarter_hour() -> None:
-    assert [snap(m) for m in (1147, 1148, 1152.4, 1153)] == [1140, 1155, 1155, 1155]
+def test_snapping_is_to_the_step_the_student_chose() -> None:
+    assert [snap(m, 15) for m in (1147, 1148, 1152.4, 1153)] == [1140, 1155, 1155, 1155]
+    assert [snap(m, 5) for m in (1057, 1057.6, 1102.4, 1103)] == [1055, 1060, 1100, 1105]
 
 
 def test_overlapping_spans_get_a_column_each_and_equal_spans_still_do() -> None:

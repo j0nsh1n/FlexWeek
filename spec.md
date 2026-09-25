@@ -56,7 +56,9 @@ Contract for the finished app:
   week as the chunks split from it.
 - The solver places every flexible block on the 15-minute grid (Mon–Sun,
   00:00–24:00), inside the account's work windows, without overlapping any
-  locked block or any other placed block.
+  locked block or any other placed block. A block at any minute takes every
+  quarter hour it touches: one from 17:37 to 18:22 leaves no homework between
+  17:30 and 18:30.
 - Search order respects priority (1 = test, 2 = quiz, 3 = homework,
   4 = reading); a higher-priority block wins a contested slot.
 - Energy windows (`high` / `medium` / `low`) are a soft preference on value
@@ -82,8 +84,9 @@ Contract for the finished app:
   just that work. Every other session keeps its time.
 - Deadline slack is shown as ok / tight / danger.
 - Edge cases: an unsolvable week returns `complete: false` with reasons rather
-  than an error; a duration that is not a positive multiple of 15 is rejected in
-  both the app's editor and the API. Files exported by earlier builds, including
+  than an error; a homework estimate that is not a positive multiple of 15 is
+  rejected in both the app's editor and the API, while a block's start and
+  length may be any minute. Files exported by earlier builds, including
   the retired browser client, import into a signed-in account; invalid data
   stays untouched and never loads a demo.
 - Copy, paste, duplicate and copy-day use an in-memory clipboard that clears on
@@ -117,8 +120,10 @@ Contract for the finished app:
   student can zoom: Ctrl and the wheel, Ctrl with =, - and 0, or two buttons
   beside the hours. Each surface's level is remembered per device in the look
   file. Every design draws its own Day and Week on one shared gesture engine
-  (`docs/0.15/architecture.md`): a block moves with the pointer a quarter hour
-  at a time, with its times beside it while held; an end drags to resize;
+  (`docs/0.15/architecture.md`): a block moves with the pointer in the
+  student's step, 5 minutes or 15 (the `drag_step_min` preference, 5 unless
+  chosen otherwise in setup or Settings > Planning), with its times beside it
+  while held; a typed time keeps any minute; an end drags to resize;
   empty time drags to create; overlaps are allowed, drawn side by side and
   named; a block moved by hand is pinned; a refusal leaves the block where it
   was and says why before it is let go.
@@ -218,9 +223,10 @@ stored in `setup`, and setup never returns unless the student picks Run setup
 again in Settings. School hours stays under More for later.
 
 The week calendar is a painted timeline, as in Daily Scheduler: dragging a
-block moves it with the pointer in 15-minute steps and across days, its top or
-bottom edge resizes it, and dragging or clicking empty time opens an Add dialog
-for that range. Blocks may overlap; they sit side by side, each marked. A drop
+block moves it with the pointer in the student's 5- or 15-minute step and
+across days, its top or bottom edge resizes it, and dragging or clicking empty
+time opens an Add dialog for that range. Blocks may overlap; they sit side by
+side, each marked. A drop
 is refused only outside the day's hours or when homework would end after it is
 due. Dragging one day of a repeating block moves that day only. Dragging works
 in every design: a block can be picked up wherever a design shows it. Mission
@@ -316,10 +322,12 @@ to the nearest Monday, so a client and the server cannot disagree about which
 week is open while both believe they succeeded. Blocks keep their `days` index
 and derive their calendar date, so the solver stays day-index pure.
 A week has at most 100 uniquely identified blocks; titles 1–80,
-course names at most 40, durations positive multiples of 15 up to 7140 minutes,
-and unique day indices. Explicit starts are on the visible grid and end by
-24:00 (a block ending at midnight is stored as the next date at 00:00). An
-assignment's `due` is a naive local `YYYY-MM-DD`, due by the end of that day,
+course names at most 40, block durations any positive number of minutes up to
+7140, and unique day indices. Explicit starts are any minute from 00:00 and end
+by 24:00 (a block ending at midnight is stored as the next date at 00:00).
+Homework estimates, spread sessions, running-late starts, split lengths,
+`day_cutoff` and work, study and protected windows stay on the 15-minute grid.
+An assignment's `due` is a naive local `YYYY-MM-DD`, due by the end of that day,
 or `YYYY-MM-DDTHH:MM` for work due at a set time that day, between
 2000-01-01 and 2099-12-31; `earliest` bounds and legacy `latest` values use a
 full English weekday plus HH:MM, or HH:MM. An account holds at most 1000
@@ -384,6 +392,8 @@ auto-close. Unchecked alerts still close at 10 seconds. Qt has no
   `YYYY-MM-DDTHH:MM` assignment deadlines, assumed America/Los_Angeles. No
   timezone conversion math anywhere in v1.
 - Slot grid: Mon–Sun 00:00–24:00, 15-minute slots, 96/day × 7 = 672/week.
+  The planner works in these slots; a block may start and end at any minute
+  and takes every slot it touches.
   Overlap uses half-open ranges `[start, end)`. One `overlaps()` helper. There
   is no duplicate date math.
 - External APIs/services: none. No OAuth, no calendar sync, no LLM at runtime.

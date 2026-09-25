@@ -88,6 +88,14 @@ def test_two_weeks_of_one_account_hold_independent_blocks_and_revisions(account:
     assert saved_two.json() == {"week_start": WEEK_TWO, "blocks": [reading], "revision": 1}
 
 
+def test_a_block_at_any_minute_is_saved_as_it_was_typed(account: TestClient) -> None:
+    lesson = {"id": "lesson", "title": "Lesson", "kind": "locked", "start": "17:37", "duration_min": 45, "days": [3]}
+    saved = save(account, WEEK_ONE, [lesson], 0)
+    assert saved.status_code == 200, saved.text
+    back = account.get(f"/api/week?week_start={WEEK_ONE}").json()["blocks"]
+    assert [(block["start"], block["duration_min"]) for block in back] == [("17:37", 45)]
+
+
 def test_put_rejects_a_non_monday_week_start_and_changes_nothing(account: TestClient) -> None:
     math = flex("a-math", title="Algebra homework")
     assert save(account, WEEK_ONE, [math], 0).status_code == 200
