@@ -19,5 +19,19 @@
   "old": "    return source_out, [deepcopy(item) for item in dest] + [for_date(block)], block_id\n",
   "new": "    return source_out, [for_date(block)], block_id\n",
   "test": "desktop/tests/test_logic_move_date.py::test_a_move_into_a_week_that_already_has_blocks_keeps_them"
+ },
+ {
+  "file": "backend/slots.py",
+  "name": "the planner floors a block's end",
+  "old": "    last = -(-(end_min - DAY_START_MIN) // SLOT_MIN)\n",
+  "new": "    last = (end_min - DAY_START_MIN) // SLOT_MIN\n",
+  "test": "backend/tests/test_solver.py::test_homework_is_never_planned_in_a_quarter_hour_a_block_at_any_minute_touches"
+ },
+ {
+  "file": "backend/models.py",
+  "name": "a work window starts at any minute",
+  "old": "        if not (start_fits_day(start) and on_slot(start)):\n            raise ValueError(\"start must be on the 00:00–24:00 grid\")\n        return value\n\n    @field_validator(\"end\")\n",
+  "new": "        if not start_fits_day(start):\n            raise ValueError(\"start must be on the 00:00–24:00 grid\")\n        return value\n\n    @field_validator(\"end\")\n",
+  "test": "backend/tests/test_stage4_api.py::test_estimates_and_the_planners_windows_stay_on_the_quarter_hour"
  }
 ]
