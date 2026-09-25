@@ -82,6 +82,10 @@ self.hand.holding.connect(self._hold_renders)       # from the press to the rele
 - A change goes to the controller: `_move_block` (waiting while a save is running), `place_session`,
   `_create_range`, or `move_to_date` (one write of both weeks through `/api/changes`, retry-safe,
   shown only once the server accepts it; a drop after a save that failed is refused in words).
+- Once a change's save lands, the notice over the hours says what it did ("Moved History essay to
+  Fri 18:00."), with Undo for that one change. A notice that lands while something is held waits
+  for the release, since it moves the hours down, and it goes once a later save makes its step no
+  longer the last.
 - Renders are held from the press, so nothing the press started on is deleted by a re-render; the
   last scene arrives on release.
 - Asking for anywhere else while a block is held (another view, week, day or design) cancels the

@@ -8,6 +8,14 @@ All notable changes to FlexWeek are documented here. Format follows
 ### Added
 - Month names every timed block on a date, so weeks other than the open one
   can show their chips.
+- Moving, resizing or making a block by dragging says what changed once it is
+  saved, with Undo beside it: "Moved History essay to Fri 18:00.", "History
+  essay now ends at 20:30.", "Placed Math worksheet on Thu 18:00.", "Added Club
+  on Thu 16:00." Carrying a block to another date on Month says so too. Undo
+  takes back that one change and says what it undid.
+- Everything under More > Advanced, and its keyboard shortcut, says what it did
+  under the top bar once it is done: copied, pasted, duplicated, saved, undid
+  or redid what, saved a restore point, restored, or reloaded this week.
 
 ### Changed
 - Retro desktop now shows live, draggable hours in Schedule.exe on Day and a
@@ -41,6 +49,11 @@ All notable changes to FlexWeek are documented here. Format follows
 - Day and Week zoom: Ctrl and the mouse wheel, Ctrl with =, - or 0, or the
   two buttons above the hours. Each remembers how close it was on this
   computer. A short block can be picked up from its middle at any zoom.
+- Ctrl with =, - or 0 zooms the hours on screen wherever the keyboard is, in
+  Today's app and every design, not only after a click on the hours.
+- A block made by dragging has no category until you choose one, so it no
+  longer counts as School in the Day's summary. A type picked under Add, "Then
+  drag on the calendar", is still what the next drag makes.
 
 ### Removed
 - No side drawer of a day's hours opens while a block is dragged in Timeline,
@@ -80,6 +93,19 @@ All notable changes to FlexWeek are documented here. Format follows
 - Undo of a block moved to another week no longer throws away later changes
   to that week. If that week changed in another window, Undo is refused and
   both weeks stay as they are.
+- "Next: … (in 23m)" counts down with the clock when no focus timer is running.
+- Every design's Day and Week open at the time now, or at the first block of
+  the day or week shown, each time you go to another day or week. Mission
+  control opened at midnight.
+- A homework chip shortens its title and keeps its length whole: "Science
+  pos… · 1 h 30 min", not "Science poster · 1 h …".
+- The top bar keeps whole words at every window width. Where there is no room,
+  the title uses its short form and Plan my homework says Plan.
+- Retro desktop's deadlines.txt keeps each date on the page at large text, and
+  homework with no time shows once: in the notepad, or under the hours while
+  the notepad is closed.
+- A short block on hours that run across shows its first letter instead of
+  lines of "…", and the hour labels at either edge of the scroll stay whole.
 
 ## [0.14.3] - 2026-09-22
 
