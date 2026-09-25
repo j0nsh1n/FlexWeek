@@ -74,9 +74,37 @@ decision first.
 | 37 | No Help or About; a tutorial and guides are for later, but the app should say so somewhere. | T8, owner 3. | P2 |
 | 38 | README does not list the Qt system libraries (libEGL.so.1 first) or separate runtime from dev needs; DESKTOP.md is stale near line 170; the 0.15 release notes are a draft. | T34, T35, T36. Release step. | P2 |
 
-## Decisions for Jonathan
+## Jonathan's decisions (24 September)
 
-- Row 4: should a block's Spotify link play when its reminder fires?
-- Row 1: should a reminder also fire at the block's start, not only `lead` minutes before?
-- Row 5: keep 15 minutes as the one step everywhere (decision 7), so 17:37 snaps to 17:30 or 17:45?
-- Row 27: where should Delete go in the block editor?
+1. **A block's Spotify link plays by itself** (row 4). It plays at the block's start, the way an
+   alarm does, and stops the way an alarm is stopped.
+2. **Blocks remind by default** (rows 1 and 2). The reason no notification came is that reminders
+   are off after setup and the switch is buried in Settings > Alerts. Reminders are on for every
+   block unless the student turns them off; a block saved inside its lead time reminds at once; the
+   switch moves to the top of Alerts. Timmy's failed 18:45 test is still chased down on its own.
+3. **Times are by the minute; dragging steps by 5** (row 5, replaces decision 7's 15-minute
+   snap). A typed Start or End keeps any minute, and the server stores it. Dragging, resizing and
+   creating by drag snap to 5 minutes by default, and setup and Settings offer 5 or 15. The
+   planner still gives homework quarter-hour starts, fitted around blocks at any minute.
+4. **Delete in the block editor** (row 27), Claude's call: it leaves the button row, becomes a
+   quiet text button at the bottom left, and asks before deleting. Save is the one filled button.
+
+## Fix plan
+
+Four lanes that touch different files, so they can run at the same time; each ends in its own
+tests and the rig.
+
+- **A. Minute times** (decision 3; rows 5, 9): backend validators and `span_fits_day` accept any
+  minute and any length; the solver's occupancy covers partly-filled quarter hours; `snap()` takes
+  the step from a new `drag_step_min` preference (5 or 15); setup and Settings offer it; the rig's
+  quarter-grab and snap expectations follow the step. Backend and engine.
+- **B. Reminders and alarms** (decisions 1 and 2; rows 1 to 4): reminders on by default and for
+  existing accounts, a reminder at once when saved inside the lead, the block's Spotify link played
+  at its start, the status line kept, and Timmy's case reproduced with the desktop notification.
+  Controller, `remind.py`, alerts, Settings > Alerts.
+- **C. Homework and planning** (rows 6 to 8, 35): due date defaults to today, the `DueField`
+  signal, planning never on past days, length limits, Plan undoable.
+- **D. Screens and words** (rows 10 to 34, 36, 37): tooltips and reasons, Unfinished, Running late,
+  sign-in errors, confirmations, the block editor's buttons and title, chips and the top bar,
+  sideways painter fixes, Mission's first scroll, Ctrl and = everywhere, Settings layout and words,
+  the version, README and DESKTOP.md.
