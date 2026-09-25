@@ -104,6 +104,16 @@ SLOT_HINT = "Use a multiple of 15 minutes, such as 15, 30, or 45."
 ESTIMATE_ERROR = "That time is not a multiple of 15 minutes."
 ESTIMATE_SHORT = "Give it at least 15 minutes."
 ESTIMATE_LONG = "That is more than 24 hours. Split it into parts and add each part as its own homework."
+HOMEWORK_PROBLEMS = {
+    "due": "Choose a valid due date.",
+    "course": "Keep the course name under 40 characters.",
+    "spotify_url": "Paste a Spotify share link from open.spotify.com.",
+    "notes": "Keep notes under 4,000 characters.",
+    "priority": "Choose a priority from the list.",
+    "energy": "Choose a time of day from the list.",
+    "completed_at": "Set a valid time for finished homework.",
+}
+HOMEWORK_REFUSED = "Check the homework details and try again."
 PLAN_REVIEW_MAX = 132
 DAY_FULL = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
@@ -119,6 +129,33 @@ def _validation_text(error: Exception) -> str:
     if names & {"estimate_min", "duration_min"} or "multiple of 15" in message:
         return ESTIMATE_ERROR
     return message
+
+
+def _homework_problem(error: ValueError) -> str:
+    if not isinstance(error, ValidationError):
+        return HOMEWORK_REFUSED
+    first = error.errors()[0]
+    path = tuple(str(part) for part in first.get("loc") or ())
+    field = path[0] if path else ""
+    if field == "title":
+        return (
+            "Keep the homework title under 80 characters."
+            if first["type"] == "string_too_long"
+            else "Give the homework a title."
+        )
+    if field == "estimate_min":
+        return ESTIMATE_ERROR
+    if field == "links":
+        if "url" in path:
+            return "A link needs an http:// or https:// address."
+        if "label" in path:
+            return "Give each link a name under 80 characters."
+        return "Keep no more than 20 links."
+    if field == "checklist":
+        if "text" in path:
+            return "Keep each checklist step under 80 characters."
+        return "Keep no more than 40 checklist steps."
+    return HOMEWORK_PROBLEMS.get(field, HOMEWORK_REFUSED)
 
 
 def fit_scroll_dialog(dialog: QDialog, *, min_height: int = DIALOG_USABLE_HEIGHT) -> None:
@@ -1261,7 +1298,7 @@ class HomeworkDialog(QDialog):
                 {key: value for key, value in candidate.items() if key in Assignment.model_fields}
             )
         except ValueError as error:
-            self._show_error(_validation_text(error))
+            self._show_error(_homework_problem(error))
             return
         self._result = candidate
         super().accept()

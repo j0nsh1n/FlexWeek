@@ -54,5 +54,12 @@
   "old": "        if start is not None and start[0] > 6:\n",
   "new": "        if False:\n",
   "test": "desktop/tests/test_homework_plan.py::test_plan_on_a_week_that_is_over_places_nothing_and_says_so"
+ },
+ {
+  "file": "desktop/native/controller.py",
+  "name": "a plan's Undo is not offered",
+  "old": "            if planned:\n                self.planned.emit(self.message)\n",
+  "new": "",
+  "test": "desktop/tests/test_homework_plan.py::test_plan_says_what_it_did_with_an_undo_that_takes_it_all_back"
  }
 ]

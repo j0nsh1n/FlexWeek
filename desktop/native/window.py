@@ -226,6 +226,8 @@ class NativeWindow(QMainWindow):
         self.session.busy_changed.connect(self._on_busy)
         self.session.save_finished.connect(self._on_save_finished)
         self.session.plan_conflicts.connect(self._on_plan_conflicts)
+        self.session.planned.connect(self._on_planned)
+        self._plan_notice = False
         self._late_dialog: LateDialog | None = None
         # The late start accepted but not stored yet, and the sentence its save will confirm.
         self._late_waiting: tuple[str, str] | None = None
@@ -1631,6 +1633,7 @@ class NativeWindow(QMainWindow):
             self._sync_classic_waiting()
 
     def _set_notice(self, text: str, button: str, callback) -> None:
+        self._plan_notice = False
         self.action_notice_text.setText(text)
         self.action_notice_button.setText(button)
         self._notice_callback = callback
@@ -1643,6 +1646,10 @@ class NativeWindow(QMainWindow):
     def _undo_from_notice(self) -> None:
         self.action_notice.hide()
         self.session.undo()
+
+    def _on_planned(self, said: str) -> None:
+        self._set_notice(said, "Undo", self._undo_from_notice)
+        self._plan_notice = True
 
     def _on_plan_conflicts(self, lost: list) -> None:
         if not lost:
@@ -1967,6 +1974,9 @@ class NativeWindow(QMainWindow):
         self._late_waiting = (block["id"], late_locked_line(block, moved))
 
     def _on_save_finished(self, stored: bool, said: str) -> None:
+        if self._plan_notice:
+            self.action_notice.hide()
+            self._plan_notice = False
         if self._late_waiting is None:
             return
         block_id, message = self._late_waiting
