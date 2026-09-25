@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import contextlib
 import json
-import re
 from copy import deepcopy
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -55,7 +54,7 @@ from desktop.native.calendar import (
     span_problem,
     sunday_due,
 )
-from desktop.native.client import PASSWORD_LENGTH_HINT, USERNAME_ERROR, USERNAME_HINT
+from desktop.native.client import PASSWORD_LENGTH_HINT, USERNAME_HINT, sign_in_problem, sign_up_problem
 from desktop.native.controller import NativeSession
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
 from desktop.native.hours.chips import TrayChip
@@ -123,6 +122,7 @@ from desktop.native.widgets import (
     Toast,
     UnfinishedPanel,
     add_heading,
+    confirm,
     control_art,
     steady_wheel,
     swatch,
@@ -133,6 +133,10 @@ WINDOW_SIZE = (1280, 800)
 TRAVEL_WAIT_MS = 900
 PLAN_LABEL = "Plan my homework"
 SUGGEST_LABEL = "Suggest times"
+LOG_OUT_QUESTION = (
+    "Log out of FlexWeek on this computer? Your plans stay saved in your account. You'll need your "
+    "password to sign in again."
+)
 NAV_ARROW_PX = 34
 AUTH_CARD_WIDTH = 380
 # Long enough for the student to read that the update installed before the window goes.
@@ -554,7 +558,7 @@ class NativeWindow(QMainWindow):
         bar.addWidget(self.account_name)
         sign_out = QPushButton("Log out")
         sign_out.setObjectName("signOut")
-        sign_out.clicked.connect(self.session.logout)
+        sign_out.clicked.connect(self._log_out)
         sign_out.setVisible(False)
         bar.addWidget(sign_out)
         self._top_bar = bar
@@ -1355,20 +1359,22 @@ class NativeWindow(QMainWindow):
         self.password_reveal.setText("Hide" if shown else "Show")
 
     def _create_account(self) -> None:
-        name = self.username.text().strip()
-        if not re.fullmatch(r"[A-Za-z0-9_]{3,32}", name):
-            self.session._say(USERNAME_ERROR)
-            return
-        password = self.password.text()
-        if not 12 <= len(password) <= 128:
-            self.session._say(PASSWORD_LENGTH_HINT)
+        name, password = self.username.text().strip(), self.password.text()
+        problem = sign_up_problem(name, password)
+        if problem:
+            self.session._say(problem)
             return
         self.session.keep_signed_in = self.keep_signed_in.isChecked()
         self.session.register(name, password)
 
     def _sign_in(self) -> None:
+        name, password = self.username.text().strip(), self.password.text()
+        problem = sign_in_problem(name, password)
+        if problem:
+            self.session._say(problem)
+            return
         self.session.keep_signed_in = self.keep_signed_in.isChecked()
-        self.session.login(self.username.text().strip(), self.password.text())
+        self.session.login(name, password)
 
     def _travel(self, direction: int) -> None:
         """Hold a picture of the planner while the next week, day or month loads, then let it drift
@@ -2271,13 +2277,17 @@ class NativeWindow(QMainWindow):
         elif dialog.action == "preview" and dialog.selected_id:
             self.session.preview_restore_point(dialog.selected_id, self._open_restore)
         elif dialog.action == "restore" and dialog.selected_id:
-            confirm = QMessageBox.question(
+            answer = QMessageBox.question(
                 self,
                 "Restore",
                 "Restore this snapshot? FlexWeek saves a restore point first.",
             )
-            if confirm == QMessageBox.StandardButton.Yes:
+            if answer == QMessageBox.StandardButton.Yes:
                 self.session.apply_restore_point(dialog.selected_id)
+
+    def _log_out(self) -> None:
+        if confirm(self, "Log out", LOG_OUT_QUESTION, "Log out"):
+            self.session.logout()
 
     def _open_account(self) -> None:
         dialog = AccountDialog(self, self.session.recovery_remaining, self.session.storage_info)
@@ -2289,8 +2299,17 @@ class NativeWindow(QMainWindow):
         elif dialog.action == "codes":
             self.session.replace_recovery_codes(password)
         elif dialog.action == "delete":
-            confirm = QMessageBox.question(self, "Delete account", "Delete this account and its saved weeks?")
-            if confirm == QMessageBox.StandardButton.Yes:
+            name = (self.session.account or {}).get("username") or "this account"
+            where = (
+                "your FlexWeek server"
+                if (self.session.storage_info or {}).get("mode") == "hosted"
+                else "this computer"
+            )
+            question = (
+                f"Delete the account {name}? Every week, all your homework and your settings are removed "
+                f"from {where}. This can't be undone."
+            )
+            if confirm(self, "Delete account", question, f"Delete {name}"):
                 self.session.delete_account(password)
         elif dialog.action == "export":
             self.session.export_account(password, self._write_account_file)
@@ -2330,14 +2349,14 @@ class NativeWindow(QMainWindow):
                 self.session._say(parsed["error"])
                 return
             if parsed.get("format") == EXPORT_FORMAT and self.session.blocks:
-                confirm = QMessageBox.question(
+                answer = QMessageBox.question(
                     self,
                     "Replace week",
                     "Replace blocks in "
                     + week_label(self.session.week_start)
                     + " with the import? Other weeks stay untouched.",
                 )
-                if confirm != QMessageBox.StandardButton.Yes:
+                if answer != QMessageBox.StandardButton.Yes:
                     return
                 self.session.import_week_file(raw, replace=True)
             else:

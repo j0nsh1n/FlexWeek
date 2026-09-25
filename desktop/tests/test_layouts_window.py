@@ -304,8 +304,11 @@ def test_the_view_buttons_leave_a_day_screen(qapp: QApplication, window: NativeW
 
 
 def test_signing_out_of_a_day_screen_does_not_leave_the_next_student_in_one(
-    qapp: QApplication, window: NativeWindow
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from desktop.native import window as window_module
+
+    monkeypatch.setattr(window_module, "confirm", lambda *_args: True)
     click(window, "viewMyDay")
     click(window, "signOut")
     wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "authPage")

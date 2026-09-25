@@ -33,7 +33,7 @@ from desktop.native.calendar import (
     shifted_month,
     span_problem,
 )
-from desktop.native.client import ApiError, NativeClient
+from desktop.native.client import ApiError, NativeClient, auth_error
 from desktop.native.files import (
     export_day_payload,
     export_week_payload,
@@ -571,7 +571,7 @@ class NativeSession(QObject):
             "/api/auth/register",
             {"username": username, "password": password},
             ok,
-            lambda error: self._fail(ticket, error),
+            lambda error: self._fail(ticket, auth_error(error, creating=True)),
         )
 
     def login(self, username: str, password: str) -> None:
@@ -592,7 +592,7 @@ class NativeSession(QObject):
             "/api/auth/login",
             {"username": username, "password": password},
             ok,
-            lambda error: self._fail(ticket, error),
+            lambda error: self._fail(ticket, auth_error(error, creating=False)),
         )
 
     def finish_recovery(self) -> None:

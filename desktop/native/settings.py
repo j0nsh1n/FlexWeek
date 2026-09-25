@@ -1022,11 +1022,9 @@ class AccountDialog(QDialog):
         self.setWindowTitle("Account")
         self.action: str | None = None
         layout = QVBoxLayout(self)
+        where = "your FlexWeek server" if (storage or {}).get("mode") == "hosted" else "this computer"
         info = QLabel(
-            "Signed in as "
-            + ((storage or {}).get("username") or "")
-            + ". "
-            + ((storage or {}).get("label") or "")
+            f"Signed in as {(storage or {}).get('username') or ''}. Your plans are saved on {where}."
         )
         info.setWordWrap(True)
         # Word wrap alone does not bound a label: it still claims the width of its longest
