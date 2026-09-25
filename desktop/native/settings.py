@@ -196,8 +196,12 @@ class FocusPanel(QWidget):
         payload = item.data(Qt.ItemDataRole.UserRole) or {}
         self.start_requested.emit(payload.get("id") or "", payload.get("day"))
 
+    def show_now_next(self, text: str) -> None:
+        self.now_next.setText(text)
+        self.now_next.setVisible(bool(text))
+
     def set_state(self, session) -> None:
-        self.now_next.setText(session.now_next_text())
+        self.show_now_next(session.now_next_text())
         state = session.focus
         running = state is not None and state.get("phase") != "ended"
         ended = state is not None and state.get("phase") == "ended"
@@ -229,7 +233,6 @@ class FocusPanel(QWidget):
                 self.tasks.addItem(row)
         for label in (self.task, self.phase, self.time):
             label.setVisible(bool(label.text()))
-        self.now_next.setVisible(bool(self.now_next.text()))
         # An empty list still asks for about 190 pixels, and a long one would bury the calendar, so it
         # is hidden when empty and never taller than four rows; the rest scrolls.
         shown = min(self.tasks.count(), 4)

@@ -269,6 +269,7 @@ class NativeWindow(QMainWindow):
         self._layout_tick = QTimer(self)
         self._layout_tick.setInterval(LAYOUT_TICK_MS)
         self._layout_tick.timeout.connect(self._refresh_layout)
+        self._layout_tick.timeout.connect(self._count_down)
         self._layout_tick.start()
         self._apply_appearance()
         if QSystemTrayIcon.isSystemTrayAvailable() and not self._icon.isNull():
@@ -914,6 +915,11 @@ class NativeWindow(QMainWindow):
             today, minute = self._clock_in_week()
             for hours in (self.week_table.hours, self.day_view.hours):
                 hours.set_clock(today, minute)
+
+    def _count_down(self) -> None:
+        """The countdown in "Next: … (in 23m)" moves on with the minute, whether or not a focus timer
+        is running to redraw it."""
+        self.focus_panel.show_now_next(self.session.now_next_text())
 
     def _sync_chrome(self) -> None:
         """Planning chips and the clipboard line step aside for a design of its own. Plan my

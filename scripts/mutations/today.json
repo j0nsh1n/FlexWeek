@@ -61,5 +61,19 @@
   "old": "        if scene.week.waiting and not self._open.get(\"notes\"):\n",
   "new": "        if scene.week.waiting:\n",
   "test": "desktop/tests/test_layout_retro.py::test_what_has_no_time_is_shown_once_in_the_notepad_or_under_the_hours_when_it_is_closed"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the countdown waits for a focus timer to redraw it",
+  "old": "        self._layout_tick.timeout.connect(self._count_down)\n",
+  "new": "",
+  "test": "desktop/tests/test_now_next.py::test_the_next_and_now_countdowns_move_with_the_minute_without_a_focus_timer"
+ },
+ {
+  "file": "desktop/native/settings.py",
+  "name": "an empty now and next line still takes its row",
+  "old": "        self.now_next.setVisible(bool(text))\n",
+  "new": "        self.now_next.setVisible(True)\n",
+  "test": "desktop/tests/test_now_next.py::test_the_next_and_now_countdowns_move_with_the_minute_without_a_focus_timer"
  }
 ]
