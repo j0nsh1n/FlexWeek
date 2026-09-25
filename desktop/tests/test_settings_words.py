@@ -187,3 +187,36 @@ def test_fine_tune_is_the_last_thing_on_appearance(
     boxes = [box for box in appearance.findChildren(QCheckBox) if box.isVisibleTo(dialog)]
     assert max(boxes, key=lambda box: top(box, appearance)) is dialog.fine_tune
     dialog.close()
+
+
+def test_reset_is_a_quiet_button_at_the_left_not_a_bar_across_the_page(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    dialog = prefs(window, {"main": "timeline", "day": "one", "options": {}})
+    appearance = page(dialog, 0)
+    reset = appearance.findChild(QPushButton, "layoutMainReset")
+    assert reset.isVisibleTo(dialog)
+    picture = appearance.grab().toImage()
+    at = reset.mapTo(appearance, reset.rect().topLeft())
+    assert picture.pixelColor(at.x() + reset.width() // 2, at.y() + 4) == picture.pixelColor(2, 2), "filled"
+    assert reset.width() <= reset.sizeHint().width(), "as wide as its words, not the page"
+    dialog.close()
+
+
+def test_every_heading_on_appearance_stands_out_from_the_rows_under_it(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    dialog = prefs(window, {"main": "timeline", "day": "one", "options": {}})
+    appearance = page(dialog, 0)
+    headings = [
+        label
+        for label in appearance.findChildren(QLabel)
+        if label.isVisibleTo(dialog) and label.text() and label.text() == label.text().upper()
+    ]
+    assert sorted(label.text() for label in headings) == ["DAY SCREEN", "EVERY SCREEN", "MAIN VIEW"]
+    plain = appearance.findChild(QLabel, "layoutMainColourNote")
+    for heading in headings:
+        assert heading.font().bold() and not plain.font().bold(), heading.text()
+    dialog.close()

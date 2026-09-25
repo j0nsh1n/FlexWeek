@@ -444,12 +444,17 @@ def confirm_box(parent: QWidget | None, title: str, question: str, yes: str) -> 
     box.setIcon(QMessageBox.Icon.NoIcon)
     box.setWindowTitle(title)
     box.setText(question)
-    go = box.addButton(yes, QMessageBox.ButtonRole.DestructiveRole)
+    # Looks set before the box adds them: it styles a button as it adds it, so Delete set red afterwards
+    # was drawn in the accent colour. Given the box as parent, since PySide does not hand a button added
+    # this way to the box, and it was freed with the last Python name for it.
+    go = QPushButton(yes, box)
     go.setObjectName("confirmYes")
     go.setProperty("danger", True)
-    stay = box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+    stay = QPushButton("Cancel", box)
     stay.setObjectName("confirmCancel")
     stay.setProperty("quiet", True)
+    box.addButton(go, QMessageBox.ButtonRole.DestructiveRole)
+    box.addButton(stay, QMessageBox.ButtonRole.RejectRole)
     box.setDefaultButton(stay)
     box.setEscapeButton(stay)
     return box
@@ -715,7 +720,9 @@ class BlockDialog(QDialog):
         layout.addWidget(scope_box)
         note = QLabel("Changes apply to every selected day in this series.")
         note.setObjectName("seriesScope")
-        note.setVisible(existing and len(self._original.get("days") or []) > 1 and not scope_box.isVisible())
+        # isHidden, not isVisible: nothing is visible before the dialog is shown, so the note stood over
+        # "This day only" and "Every selected day" and contradicted the first.
+        note.setVisible(existing and len(self._original.get("days") or []) > 1 and scope_box.isHidden())
         layout.addWidget(note)
         form = QFormLayout()
         layout.addLayout(form)

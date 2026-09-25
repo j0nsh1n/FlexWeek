@@ -97,7 +97,8 @@ TODAYS_APP_KNOBS = ("surface", "corners", "blocks")
 FINE_TUNE_LOOK = "Fine-tune this look"
 FINE_TUNE_OTHER = "Fine-tune fonts, spacing and shadows"
 ABOUT_MIN_WIDTH = 420
-HELP_MIN_WIDTH = 520
+HELP_MIN_WIDTH = 600
+SECTION_GAP = 14
 ABOUT_LINE = "FlexWeek plans your homework around school, sports and everything else in your week."
 HELP_INTRO = (
     "A tutorial and short guides are coming in a later version. Until then, this is the short version."
@@ -465,7 +466,9 @@ class PrefsDialog(QDialog):
         appear.addRow(self.accent_chips)
         self._appear_form = appear
         column.addLayout(appear)
+        column.addSpacing(SECTION_GAP)
         column.addWidget(day_section)
+        column.addSpacing(SECTION_GAP)
         everywhere = QFormLayout()
         everywhere.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         everywhere.addRow(_heading("Every screen"))
@@ -1233,21 +1236,44 @@ class HelpDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Help")
         self.setMinimumWidth(HELP_MIN_WIDTH)
-        layout = QVBoxLayout(self)
-        layout.addWidget(_line(HELP_INTRO, "helpIntro"))
-        layout.addWidget(_heading("The screens"))
+        body = QWidget()
+        column = QVBoxLayout(body)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.addWidget(_line(HELP_INTRO, "helpIntro"))
+        column.addSpacing(SECTION_GAP)
+        column.addWidget(_heading("The screens"))
         for index, words in enumerate(HELP_SCREENS):
-            layout.addWidget(_line(words, f"helpScreen{index}"))
-        layout.addWidget(_heading("Keyboard shortcuts"))
-        keys = QGridLayout()
-        keys.setColumnStretch(1, 1)
-        for row, (key, what) in enumerate(HELP_KEYS):
+            column.addWidget(_line(words, f"helpScreen{index}"))
+        column.addSpacing(SECTION_GAP)
+        column.addWidget(_heading("Keyboard shortcuts"))
+        # A form, not a grid: a grid gave a two-line description one line and a bit, and cut it.
+        key_list = QWidget()
+        keys = QFormLayout(key_list)
+        keys.setContentsMargins(0, 0, 0, 0)
+        keys.setHorizontalSpacing(SECTION_GAP)
+        keys.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        for key, what in HELP_KEYS:
             name = QLabel(key)
             name.setObjectName("helpKey")
-            keys.addWidget(name, row, 0, Qt.AlignmentFlag.AlignTop)
-            keys.addWidget(_line(what, "helpKeyDoes"), row, 1)
-        layout.addLayout(keys)
+            keys.addRow(name, _line(what, "helpKeyDoes"))
+        column.addWidget(key_list)
+        column.addStretch(1)
+        # A dialog's minimum counts a wrapped line as one line, so at large text on a laptop, Help at
+        # its minimum squeezed the shortcuts to half their height. A scroll area gives the words the
+        # height they need at the width they get, and the dialog fits the screen.
+        area = QScrollArea()
+        area.setObjectName("helpScroll")
+        area.setWidgetResizable(True)
+        area.setFrameShape(QFrame.Shape.NoFrame)
+        area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        area.setWidget(body)
+        layout = QVBoxLayout(self)
+        layout.addWidget(area)
         layout.addWidget(_close_row(self))
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
+        super().showEvent(event)
+        fit_scroll_dialog(self)
 
 
 class UpdateDialog(QDialog):

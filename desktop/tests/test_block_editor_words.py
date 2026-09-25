@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from desktop.native import widgets
+from desktop.native.look import resolved_palette
 from desktop.native.widgets import BlockDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.window_support import (  # noqa: F401
@@ -192,3 +193,41 @@ def test_a_deleted_block_can_be_undone_from_the_notice(
     assert window.action_notice_button.text() == "Undo"
     window.action_notice_button.click()
     wait_until(qapp, lambda: [block["id"] for block in session.blocks] == ["soccer"])
+
+
+def test_a_series_opened_on_one_day_does_not_also_say_every_day_changes(
+    qapp: QApplication,  # noqa: F811
+    host: QWidget,  # noqa: F811
+) -> None:
+    one_day = BlockDialog(host, soccer(), occurrence_day=3)
+    one_day.show()
+    assert one_day.findChild(QWidget, "editScope").isVisibleTo(one_day)
+    note = one_day.findChild(QLabel, "seriesScope")
+    assert not note.isVisibleTo(one_day), "it stood over This day only and said the opposite"
+    whole = BlockDialog(host, soccer())
+    whole.show()
+    assert not whole.findChild(QWidget, "editScope").isVisibleTo(whole)
+    assert whole.findChild(QLabel, "seriesScope").isVisibleTo(whole)
+
+
+def test_the_question_before_deleting_draws_its_answer_red_and_cancel_plain(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    pack, dark, accent = window._look_inputs()
+    red = QColor(window._chrome_palette(resolved_palette(pack, dark, window._look, accent))["error"])
+    box = widgets.confirm_box(window, "Delete event", "Delete Soccer practice? You can undo this.", "Delete")
+    box.show()
+    qapp.processEvents()
+    yes = box.findChild(QPushButton, "confirmYes")
+    cancel = box.findChild(QPushButton, "confirmCancel")
+    assert sorted(button.text() for button in box.buttons() if button.isVisible()) == ["Cancel", "Delete"]
+    picture = box.grab().toImage()
+
+    def fill(button: QPushButton) -> QColor:
+        at = button.mapTo(box, QPoint(button.width() // 2, 4))
+        return picture.pixelColor(at.x(), at.y())
+
+    assert fill(yes) == red, fill(yes).name()
+    assert fill(cancel) == picture.pixelColor(2, 2), "Cancel is plain"
+    box.close()

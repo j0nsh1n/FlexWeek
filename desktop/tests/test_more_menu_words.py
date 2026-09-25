@@ -14,10 +14,11 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QStandardPaths
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QApplication, QLabel, QMenu, QPushButton, QWidget
+from PySide6.QtWidgets import QApplication, QLabel, QMenu, QPushButton, QScrollArea, QWidget
 
 from desktop.native import settings
 from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.look import sanitize_look
 from desktop.native.window import NativeWindow
 from desktop.tests.window_support import (  # noqa: F401
     host,
@@ -212,6 +213,33 @@ def test_help_says_guides_are_coming_and_explains_each_screen_and_the_keys(
     ):
         assert line in said, line
     assert dialog.windowTitle() == "Help"
+
+
+def shows_all_of_itself(label: QLabel) -> bool:
+    if label.wordWrap():
+        return label.height() >= label.heightForWidth(label.width())
+    hint = label.sizeHint()
+    return label.width() >= hint.width() and label.height() >= hint.height()
+
+
+def test_help_shows_every_line_whole_at_large_text_and_fits_the_screen(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    knobs = {**window._look.get("knobs", {}), "text": "large"}
+    window._look = sanitize_look({**window._look, "knobs": knobs})
+    window._apply_appearance()
+    dialog = settings.HelpDialog(window)
+    dialog.show()
+    qapp.processEvents()
+    labels = dialog.findChildren(QLabel)
+    assert len(labels) == 1 + 2 + len(settings.HELP_SCREENS) + 2 * len(settings.HELP_KEYS)
+    assert [label.text() for label in labels if not shows_all_of_itself(label)] == []
+    view = dialog.findChild(QScrollArea, "helpScroll").viewport()
+    cut = [label.text() for label in labels if label.mapTo(view, label.rect().topRight()).x() > view.width()]
+    assert cut == []
+    assert dialog.height() <= dialog.screen().availableGeometry().height() - 48
+    dialog.close()
 
 
 def test_help_and_about_are_under_more(

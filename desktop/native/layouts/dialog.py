@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QPushButton,
     QVBoxLayout,
@@ -78,7 +79,11 @@ class LayoutSection(QWidget):
         body.addWidget(self.more)
         self.reset = QPushButton("Reset this layout's options")
         self.reset.setObjectName(f"layout{slot.title()}Reset")
-        body.addWidget(self.reset)
+        self.reset.setProperty("quiet", True)
+        reset_row = QHBoxLayout()
+        reset_row.addWidget(self.reset)
+        reset_row.addStretch(1)
+        body.addLayout(reset_row)
         self.pick.currentIndexChanged.connect(lambda _index: (self._rebuild(True), self.changed.emit()))
         self.more.toggled.connect(lambda _on: self._rebuild(False))
         self.reset.clicked.connect(self._reset)
