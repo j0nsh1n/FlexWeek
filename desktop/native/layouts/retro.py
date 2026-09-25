@@ -11,7 +11,7 @@ from desktop.native.hours.canvas import BlockPainter, Drawn, HoursCanvas
 from desktop.native.hours.chips import TrayChip
 from desktop.native.hours.geometry import FIRST, LAST, LinearTrack
 from desktop.native.hours.hand import Hand
-from desktop.native.hours.zoom import HoursScroll, Scale
+from desktop.native.hours.zoom import HoursScroll, Scale, opening_minute
 from desktop.native.layouts.base import (
     LayoutView,
     Scene,
@@ -414,11 +414,8 @@ class RetroView(LayoutView):
         canvas.set_week(items, scene.today, scene.minute)
         body.addWidget(scroll, 1)
         scroll.show()
-        revealed = (scene.week.week_start, day)
-        if revealed != getattr(scroll, "_retro_revealed", None):
-            scroll._retro_revealed = revealed
-            minute = scene.minute if scene.today == day or not is_day and scene.today is not None else 8 * 60
-            scroll.scroll_to(minute)
+        opens = opening_minute(scene.week, scene.today, scene.minute, day)
+        scroll.open_at((scene.week.week_start, day), opens)
         if scene.week.waiting:
             body.addWidget(label("No time yet · deadlines.txt", "retroWaitingLabel"))
             body.addLayout(self._tray(scene, "retroWaiting"))

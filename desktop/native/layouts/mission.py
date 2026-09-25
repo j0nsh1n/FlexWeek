@@ -13,7 +13,7 @@ from desktop.native.hours.canvas import BlockPainter, Drawn, HoursCanvas
 from desktop.native.hours.chips import TrayChip
 from desktop.native.hours.geometry import FIRST, LAST, Axis, LinearTrack
 from desktop.native.hours.hand import Hand
-from desktop.native.hours.zoom import HoursScroll, Scale
+from desktop.native.hours.zoom import HoursScroll, Scale, opening_minute
 from desktop.native.layouts.base import (
     LayoutView,
     Scene,
@@ -275,6 +275,8 @@ class MissionView(LayoutView):
             [item for item in week.occurrences if not is_day or item.day == day],
             scene.today, scene.minute,
         )
+        shown = day if is_day else None
+        scroll.open_at((week.week_start, shown), opening_minute(week, scene.today, scene.minute, shown))
         left.addWidget(scroll, 1)
         if is_day:
             cargo = QFrame()

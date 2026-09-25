@@ -29,7 +29,7 @@ from desktop.native.hours.canvas import BlockPainter, Drawn, HoursCanvas
 from desktop.native.hours.chips import TrayChip
 from desktop.native.hours.geometry import FIRST, LAST, Axis, LinearTrack
 from desktop.native.hours.hand import Hand
-from desktop.native.hours.zoom import HoursScroll, Scale
+from desktop.native.hours.zoom import HoursScroll, Scale, opening_minute
 from desktop.native.layouts.base import (
     LayoutView,
     Scene,
@@ -384,13 +384,14 @@ class TimelineView(LayoutView):
             scroll = self.keep_zoom(HoursScroll(
                 canvas, DAY_SCALE, _column_length, name="timelineColumn", gutter=scene.px(56),
             ))
-            scroll.scroll_to(scene.minute, above=120)
             self._keep("day", scroll, scene)
         canvas = scroll.canvas
         canvas._lay_out = partial(_column, day)
         canvas.set_painter(TimelinePainter(scene.tokens))
         canvas.relayout()
         canvas.set_week(_shown(scene, scene.week.on_day(day)), scene.today, scene.minute)
+        opens = opening_minute(scene.week, scene.today, scene.minute, day)
+        scroll.open_at((scene.week.week_start, day), opens, above=120)
         scroll.setMinimumHeight(scene.px(260))
         return scroll
 
@@ -492,7 +493,6 @@ class TimelineView(LayoutView):
                 canvas, WEEK_SCALE, _line_length, name="timelineWeek", gutter=scene.px(170), axis=Axis.ACROSS,
             ))
             scroll.set_header(self._headings(canvas))
-            scroll.scroll_to(scene.minute, above=180)
             self._keep("week", scroll, scene)
         canvas = scroll.canvas
         canvas._lay_out = partial(_lines, pad)
@@ -506,6 +506,8 @@ class TimelineView(LayoutView):
                 f"border-bottom: {scene.px(4)}px solid {scene.tokens['danger']};" if today else ""
             )
         canvas.set_week(_shown(scene, scene.week.occurrences), scene.today, scene.minute)
+        opens = opening_minute(scene.week, scene.today, scene.minute)
+        scroll.open_at(scene.week.week_start, opens, above=180)
         # Seven lines share what the window has; below this each line is too thin to hold a block's
         # name, and the page scrolls instead.
         scroll.setMinimumHeight(scene.px(30) + 7 * scene.px(38 if compact else 46))

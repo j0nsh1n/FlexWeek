@@ -20,7 +20,7 @@ from desktop.native.hours.canvas import BlockPainter, HoursCanvas
 from desktop.native.hours.chips import TrayChip
 from desktop.native.hours.geometry import FIRST, LAST, LinearTrack
 from desktop.native.hours.hand import Hand
-from desktop.native.hours.zoom import HoursScroll, Scale
+from desktop.native.hours.zoom import HoursScroll, Scale, opening_minute
 from desktop.native.weekmodel import WeekModel, length_label
 
 # A Day never goes below 96 pixels an hour, where 15 minutes is 24 pixels. The Week opens at 48, where
@@ -73,7 +73,6 @@ class ClassicWeek(QWidget):
         super().__init__(parent)
         self.setObjectName("weekTable")
         self.week_start = ""
-        self._revealed: str | None = None
         self.hours = HoursCanvas(hand, BlockPainter({}), _seven_columns, gutter=GUTTER, names=self._name)
         self.hours.setObjectName("weekHours")
         self.hours.day_opened.connect(self.day_opened.emit)
@@ -109,11 +108,7 @@ class ClassicWeek(QWidget):
         self.hours.set_week(week.occurrences, today, now_min)
         for day, label in enumerate(self._name_labels):
             label.setText(self._name(day))
-        if week.week_start != self._revealed:
-            # A new week opens near now, or at the start of a school day. The same week keeps its
-            # place, wherever the student scrolled it.
-            self._revealed = week.week_start
-            self.scroll.scroll_to(now_min if now_min is not None else 8 * 60)
+        self.scroll.open_at(week.week_start, opening_minute(week, today, now_min))
 
     def hours_surfaces(self) -> list[HoursCanvas]:
         return [self.hours]
@@ -127,7 +122,6 @@ class ClassicDay(QWidget):
         self.setObjectName("dayView")
         self.hand = hand
         self.day = 0
-        self._revealed: tuple[str, int] | None = None
         self.hours = HoursCanvas(hand, BlockPainter({}), self._one_column, gutter=56)
         self.hours.setObjectName("dayHours")
         # The window's heading already names the day, so its header holds only the zoom.
@@ -179,16 +173,7 @@ class ClassicDay(QWidget):
         self.hours.set_week([item for item in week.occurrences if item.day == day], today, now_min)
         self._fill_tray(week)
         self._fill_summary(week, day)
-        key = (week.week_start, day)
-        if key != self._revealed:
-            self._revealed = key
-            items = week.on_day(day)
-            minute = (
-                now_min
-                if today == day and now_min is not None
-                else min((item.start for item in items), default=8 * 60)
-            )
-            self.scroll.scroll_to(minute)
+        self.scroll.open_at((week.week_start, day), opening_minute(week, today, now_min, day))
 
     def _fill_tray(self, week: WeekModel) -> None:
         if self.hand.busy:

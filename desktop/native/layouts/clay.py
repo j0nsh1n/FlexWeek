@@ -13,7 +13,7 @@ from desktop.native.hours.canvas import BlockPainter, Drawn, HoursCanvas
 from desktop.native.hours.chips import TrayChip
 from desktop.native.hours.geometry import FIRST, LAST, Axis, LinearTrack
 from desktop.native.hours.hand import Hand
-from desktop.native.hours.zoom import HoursScroll, Scale
+from desktop.native.hours.zoom import HoursScroll, Scale, opening_minute
 from desktop.native.layouts.base import (
     LayoutView,
     Scene,
@@ -166,7 +166,6 @@ class ClayDeckView(LayoutView):
             if week:
                 scroll.set_header(self._names(scene, scroll))
                 scroll.zoomed.connect(lambda _key, _px: self._align_names(scroll, self.scene.options))
-            scroll.scroll_to(scene.minute, above=120)
             self._scrolls[key] = scroll
         scroll = self._scrolls[key]
         canvas = scroll.canvas
@@ -182,6 +181,9 @@ class ClayDeckView(LayoutView):
             scene.week.occurrences if week else [item for item in scene.week.occurrences if item.day == day],
             scene.today, scene.minute,
         )
+        shown = None if week else day
+        opens = opening_minute(scene.week, scene.today, scene.minute, shown)
+        scroll.open_at((scene.week.week_start, shown), opens, above=120)
         scroll.setMinimumHeight(scene.px(390) if week else scene.px(430))
         return scroll
 
