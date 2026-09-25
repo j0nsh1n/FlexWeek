@@ -24,7 +24,7 @@ decision first.
 | 7 | Changing the due date raises inside Qt and the follow-up step (`_disable_spread`) never runs. | `DueField`: `self.date.dateChanged.connect(self.changed.emit)` hands a `QDate` to a `Signal()`; seen as `TypeError: changed() only accepts 0 argument(s)` in Claude's probe. T5. | P1 |
 | 8 | Plan places homework on days already gone (a Monday-due report planned on the past Tuesday). | T3. The solver plans the whole visible week; nothing tells it today. | P1 |
 | 9 | Homework length: 0 quietly becomes 60, 99 hours is accepted. | T11. | P1 |
-| 10 | Mission's Day and Week open at midnight; Timmy also saw Day and Week open at the wrong hours elsewhere. | `mission.py` has no `scroll_to`; the others scroll to now or the first block. C2, T27. | P1 |
+| 10 | Mission's Day and Week open at midnight; Timmy also saw Day and Week open at the wrong hours elsewhere. | `mission.py` has no `scroll_to`; the others scroll to now or the first block. C2, T27. | P1. Done, `9ff5bdc`: every design's Day and Week open at now, else the first block of the day or week, else 08:00, on each new day or week; the same one keeps where it was scrolled. |
 
 ## Words on screen
 
@@ -45,25 +45,25 @@ decision first.
 
 | # | What | Where / evidence | State |
 | --- | --- | --- | --- |
-| 21 | Chips cut their text at the wrong end ("Science poster · 1 h …"); the top bar clips below about 900 px ("21 – 2…", "n my homew"); Retro's notepad clips its deadline lines at 1150x768 with large text. | C5, C7, C9, T28. | P1 |
-| 22 | A short block on sideways hours draws as three lines of "…". | Shared painter `words`. C3. | P1 |
-| 23 | The first and last hour labels are cut at the scroll edges on sideways hours. | Shared `hour_labels`. C4. | P2 |
+| 21 | Chips cut their text at the wrong end ("Science poster · 1 h …"); the top bar clips below about 900 px ("21 – 2…", "n my homew"); Retro's notepad clips its deadline lines at 1150x768 with large text. | C5, C7, C9, T28. | P1. Done: a chip shortens its title and keeps its length (`09d01ec`); the top bar keeps whole words, with a short title and "Plan" where there is no room (`05102b9`); a notepad line puts its date under its title (`3d04657`). |
+| 22 | A short block on sideways hours draws as three lines of "…". | Shared painter `words`. C3. | P1. Done, `7830bfa`: a block with no room for its name shows its first letter, and a line with room only for "…" is left out. |
+| 23 | The first and last hour labels are cut at the scroll edges on sideways hours. | Shared `hour_labels`. C4. | P2. Done, `7830bfa`: an hour label on the edge of what shows is moved inside it. |
 | 24 | The date picker is cut off on the left in setup and on the right in Add homework. | T29. | P2 |
-| 25 | The "Next: … (in 23m)" countdown only redraws during a focus session. | T22. | P2 |
+| 25 | The "Next: … (in 23m)" countdown only redraws during a focus session. | T22. | P2. Done, `e05d53d`: the window's 20-second clock tick redraws the line too. |
 | 26 | A one-off dragged block's editor shows seven day boxes with nothing saying that ticking one makes it repeat. | T20. | P2. Done, lane D (`8d6865b`, `06ec931`): one line under the day boxes, "Tick more days to repeat it this week." |
 | 27 | Save and Cancel look the same; floppy-disk and red-X icons look dated. Delete is the most prominent button in the block editor. | T21, T13. | P2. Done, lane D (`8d6865b`, `790a8d1`; decision 4): Save is the one filled button and the default, no button has an icon, Delete is quiet red words at the bottom left and asks first. The question's Delete is red and Cancel plain. |
-| 28 | Retro shows the same "no time yet" chips in deadlines.txt and at the foot of the main window. | C15. | P2 |
+| 28 | Retro shows the same "no time yet" chips in deadlines.txt and at the foot of the main window. | C15. | P2. Done, `3d04657`: the notepad has them; the main window shows them only while the notepad is closed. |
 | 29 | Settings > Appearance & layout is dense: an implementation note first, a box in a box, style rows in a grey table. Scrolling over its number boxes changes them. | T15, owner 2, C11. | P2. Done, lane D (`2479b6c`, `db72266`, `790a8d1`): the wheel scrolls past boxes nobody clicked into; the page opens on Main view with one sentence on designs, the note moves under the colours it is about, the style rows sit on the page, headings stand out, and Reset is a plain button. |
 | 30 | Settings > Alerts: alarm sound and reminders mixed, the Reminders switch off and easy to miss among live-looking controls, two "Chime" dropdowns, no sign of when an alarm rings. | C12. | P2. Fixed, lane B (`80288ef`): reminders first, switch on top, their settings greyed while off; alarms as their own group saying when each rings; one sound dropdown. Row 18's Alerts words and row 19's Play message are done there too. |
 | 31 | Dark themes have weak contrast; the layout choice is not explained; My day and Month are unclear to a first-time user. | T30, T31. | P2. Done, lane D (`db72266`, `bf80a9d`, `70d386e`, `716b9a6`): Main view says what a design is; Help gives Month and My day a sentence each. Contrast: every look already passed the look tests' pairs, but a design's colours, read back into the window's, were never held to them. Retro's Teal, Plum and Slate put white text on grey (1.82 to 1); the window now takes Retro's grey with black text, and a test holds every design's window colours to the pairs in all 700 looks. |
-| 32 | Ctrl and = zooms only when the hours have keyboard focus. | `canvas.py` `keyPressEvent`; T32. Make it the window's. | P2 |
-| 33 | A dragged block counts toward School in the Day summary. | T26. Category of a drag-made block. | P2 |
+| 32 | Ctrl and = zooms only when the hours have keyboard focus. | `canvas.py` `keyPressEvent`; T32. Make it the window's. | P2. Done, `0e9efde`: the window's shortcuts for the hours showing, in Today's app and every design; the hours no longer handle them. |
+| 33 | A dragged block counts toward School in the Day summary. | T26. Category of a drag-made block. | P2. Done, `c37a97e`: nothing is armed until a type is picked under Add, so a dragged block has no category and counts as Other. |
 
 ## Actions and safety
 
 | # | What | Where / evidence | State |
 | --- | --- | --- | --- |
-| 34 | Dragging or resizing saves at once with no sign; add an Undo toast as after finishing homework. Advanced actions give no feedback. | T17, T18. | P2 |
+| 34 | Dragging or resizing saves at once with no sign; add an Undo toast as after finishing homework. Advanced actions give no feedback. | T17, T18. | P2. Done, `f66679a`: a move, resize, placing, create by drag or Month carry says what it did with Undo once saved; each Advanced item says what it did in the toast. Plan's own Undo is lane C's. |
 | 35 | Plan cannot be undone. | T12. Check: a plan is a save, and saves are undo steps; if Undo is there and hidden, that is row 34. | P2 |
 | 36 | Log out and Delete account have no confirmation. | T13. | P1. Done, lane D (`fd663d2`, `06ec931`): Log out asks first, in the usual colour since nothing is lost; Delete account asks a last time and names the account. |
 

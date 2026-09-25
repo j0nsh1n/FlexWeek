@@ -71,7 +71,14 @@ class BarPainter(BlockPainter):
         self._middle = area.center().y()
         painter.fillRect(QRectF(area.left(), self._middle - 5, area.width(), 10), self.c("track"))
 
-    def hour_labels(self, painter: QPainter, track: LinearTrack, room: float, every: int = 60) -> None:
+    def hour_labels(
+        self,
+        painter: QPainter,
+        track: LinearTrack,
+        room: float,
+        every: int = 60,
+        visible: QRectF | None = None,
+    ) -> None:
         pass
 
     def block(self, painter: QPainter, rect: QRectF, drawn: Drawn, visible: QRectF) -> None:

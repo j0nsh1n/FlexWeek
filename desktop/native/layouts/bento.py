@@ -13,7 +13,7 @@ from desktop.native.hours.canvas import BlockPainter, Drawn, HoursCanvas
 from desktop.native.hours.chips import TrayChip
 from desktop.native.hours.geometry import FIRST, LAST, LinearTrack
 from desktop.native.hours.hand import Hand
-from desktop.native.hours.zoom import HoursScroll, Scale
+from desktop.native.hours.zoom import HoursScroll, Scale, opening_minute
 from desktop.native.layouts.base import (
     LayoutView,
     Scene,
@@ -127,7 +127,6 @@ class BentoView(LayoutView):
         outer.addWidget(scrolling(self._board, "bentoScroll"))
         self._scrolls: dict[str, HoursScroll] = {}
         self._day = 0
-        self._revealed: dict[str, object] = {}
 
     def shown_day(self, scene: Scene) -> int:
         if scene.surface == "day" and scene.iso_day:
@@ -264,14 +263,9 @@ class BentoView(LayoutView):
         self._grid.setColumnStretch(0, 3 if not is_day else 2)
         self._grid.setColumnStretch(1, 1)
         scroll.show()
-        key = "day" if is_day else "week"
-        reveal = (scene.week.week_start, day) if is_day else scene.week.week_start
-        if self._revealed.get(key) != reveal:
-            self._revealed[key] = reveal
-            minute = scene.minute if scene.today == day else min(
-                (item.start for item in scene.week.on_day(day)), default=8 * 60
-            )
-            scroll.scroll_to(minute if is_day else (scene.minute if scene.today is not None else 8 * 60))
+        shown = day if is_day else None
+        opens = opening_minute(scene.week, scene.today, scene.minute, shown)
+        scroll.open_at((scene.week.week_start, shown), opens)
 
     def _waiting(self, scene: Scene) -> QFrame:
         waiting = scene.week.waiting

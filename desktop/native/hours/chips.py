@@ -14,10 +14,13 @@ class TrayChip(QPushButton):
     """Homework with no time yet. Drag it onto any hours to give it that time; a click opens it.
 
     Its words shorten to the room it has, with the whole title in its tooltip, rather than running
-    off the edge of a narrow tray or large text."""
+    off the edge of a narrow tray or large text. The title shortens first: the length is the number
+    the chip is for."""
 
     def __init__(self, hand: Hand, waiting: Waiting, parent: QWidget | None = None) -> None:
-        self._words = f"{waiting.title} · {length_label(waiting.minutes)}"
+        self._title = waiting.title
+        self._length = f" · {length_label(waiting.minutes)}"
+        self._words = f"{waiting.title}{self._length}"
         super().__init__(self._words, parent)
         self.hand = hand
         self.block_id = waiting.block_id
@@ -43,7 +46,14 @@ class TrayChip(QPushButton):
         super().resizeEvent(event)
         fonts = self.fontMetrics()
         chrome = super().sizeHint().width() - fonts.horizontalAdvance(self.text())
-        fitted = fonts.elidedText(self._words, Qt.TextElideMode.ElideRight, max(self.width() - chrome, 0))
+        room = max(self.width() - chrome, 0)
+        fitted = fonts.elidedText(self._words, Qt.TextElideMode.ElideRight, room)
+        if fitted != self._words:
+            title = fonts.elidedText(
+                self._title, Qt.TextElideMode.ElideRight, room - fonts.horizontalAdvance(self._length)
+            )
+            if title.strip("…"):
+                fitted = title + self._length
         if fitted != self.text():
             self.setText(fitted)
 

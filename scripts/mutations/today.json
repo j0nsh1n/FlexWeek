@@ -257,5 +257,152 @@
   "old": "if contrast(tokens[\"bg_ink\"], tokens[\"surface\"]) >= AA_TEXT:",
   "new": "if True:",
   "test": "desktop/tests/test_layouts_registry.py::test_every_design_dresses_the_window_in_colours_its_text_reads_on"
+ },
+ {
+  "file": "desktop/native/hours/chips.py",
+  "name": "a tray chip shortens its length before its title",
+  "old": "            if title.strip(\"\u2026\"):\n                fitted = title + self._length\n",
+  "new": "",
+  "test": "desktop/tests/test_classic_hours.py::test_a_tray_chip_shortens_its_title_and_keeps_its_length_whole"
+ },
+ {
+  "file": "desktop/native/widgets.py",
+  "name": "the week title cut short of its short form",
+  "old": "        return QSize(max(self._minimum, short if self._short else 0), super().minimumSizeHint().height())\n",
+  "new": "        return QSize(self._minimum, super().minimumSizeHint().height())\n",
+  "test": "desktop/tests/test_window_screens.py::test_the_top_bar_is_never_cut_mid_word"
+ },
+ {
+  "file": "desktop/native/widgets.py",
+  "name": "the top bar squeezed instead of wrapping",
+  "old": "        if least + self._gap + second.minimumSize().width() <= area.width():\n",
+  "new": "        if True:\n",
+  "test": "desktop/tests/test_window_screens.py::test_the_top_bar_is_never_cut_mid_word"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the window narrower than the top bar's buttons",
+  "old": "        self.setMinimumWidth(max(WINDOW_MIN_WIDTH, needed))\n",
+  "new": "        self.setMinimumWidth(WINDOW_MIN_WIDTH)\n",
+  "test": "desktop/tests/test_window_screens.py::test_the_top_bar_is_never_cut_mid_word"
+ },
+ {
+  "file": "desktop/native/layouts/retro.py",
+  "name": "a notepad line runs off the page",
+  "old": "        if fonts.horizontalAdvance(fitted) > room:\n",
+  "new": "        if False:\n",
+  "test": "desktop/tests/test_layout_retro.py::test_a_notepad_line_short_of_room_puts_its_date_under_its_title"
+ },
+ {
+  "file": "desktop/native/layouts/retro.py",
+  "name": "Retro shows what has no time twice",
+  "old": "        if scene.week.waiting and not self._open.get(\"notes\"):\n",
+  "new": "        if scene.week.waiting:\n",
+  "test": "desktop/tests/test_layout_retro.py::test_what_has_no_time_is_shown_once_in_the_notepad_or_under_the_hours_when_it_is_closed"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the countdown waits for a focus timer to redraw it",
+  "old": "        self._layout_tick.timeout.connect(self._count_down)\n",
+  "new": "",
+  "test": "desktop/tests/test_now_next.py::test_the_next_and_now_countdowns_move_with_the_minute_without_a_focus_timer"
+ },
+ {
+  "file": "desktop/native/settings.py",
+  "name": "an empty now and next line still takes its row",
+  "old": "        self.now_next.setVisible(bool(text))\n",
+  "new": "        self.now_next.setVisible(True)\n",
+  "test": "desktop/tests/test_now_next.py::test_the_next_and_now_countdowns_move_with_the_minute_without_a_focus_timer"
+ },
+ {
+  "file": "desktop/native/controller.py",
+  "name": "a block made by dragging is School until a type is picked",
+  "old": "        self.armed_category: str | None = None\n",
+  "new": "        self.armed_category: str | None = \"class\"\n",
+  "test": "desktop/tests/test_drag_results.py::test_a_block_made_by_dragging_has_no_category_until_the_student_picks_one"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a drag saves with no sign",
+  "old": "            self._say_when_saved(moved_words(block, origin, day, start, end))\n",
+  "new": "",
+  "test": "desktop/tests/test_drag_results.py::test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a block made by dragging says nothing",
+  "old": "            self._say_when_saved(added_words(made[0]))\n",
+  "new": "            pass\n",
+  "test": "desktop/tests/test_drag_results.py::test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a date carried on Month says nothing",
+  "old": "            self._say_when_saved(dated_words(self._title_of(change.block_id, change.from_iso), change.to_iso))\n",
+  "new": "            pass\n",
+  "test": "desktop/tests/test_drag_results.py::test_a_chip_carried_on_month_says_what_it_did"
+ },
+ {
+  "file": "desktop/native/weekmodel.py",
+  "name": "a resize said as a move",
+  "old": "    if day == from_day and start == was and end != was_end:\n",
+  "new": "    if False:\n",
+  "test": "desktop/tests/test_drag_results.py::test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the notice's Undo says nothing",
+  "old": "        self._notice_step = None\n        self._told(self.session.undo)\n",
+  "new": "        self._notice_step = None\n        self.session.undo()\n",
+  "test": "desktop/tests/test_drag_results.py::test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a notice pushes the hours down under a held block",
+  "old": "        if self._change_saved is None or self.hand.busy:\n",
+  "new": "        if self._change_saved is None:\n",
+  "test": "desktop/tests/test_drag_results.py::test_the_notice_waits_for_the_pointer_and_goes_once_its_change_is_no_longer_the_last"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a notice keeps an Undo that would take back a later change",
+  "old": "        elif stored and self._notice_step is not None and self.session.last_step() is not self._notice_step:\n",
+  "new": "        elif False:\n",
+  "test": "desktop/tests/test_drag_results.py::test_the_notice_waits_for_the_pointer_and_goes_once_its_change_is_no_longer_the_last"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "Advanced actions say what they did only in the status line",
+  "old": "            action.triggered.connect(lambda _=False, pressed=button: self._told(pressed.click))\n",
+  "new": "            action.triggered.connect(button.click)\n",
+  "test": "desktop/tests/test_drag_results.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the toast says an action is still going, not what it did",
+  "old": "        if self._telling and message and not message.endswith(\"\u2026\"):\n",
+  "new": "        if self._telling and message:\n",
+  "test": "desktop/tests/test_drag_results.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
+ },
+ {
+  "file": "desktop/native/controller.py",
+  "name": "Duplicate says it copied",
+  "old": "        if not self.copy_block(source_id, day, scope, say=False):\n",
+  "new": "        if not self.copy_block(source_id, day, scope):\n",
+  "test": "desktop/tests/test_drag_results.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
+ },
+ {
+  "file": "desktop/native/controller.py",
+  "name": "Reload says This week",
+  "old": "        self.load_week(self.week_start, discard=True, said=\"Reloaded this week.\")\n",
+  "new": "        self.load_week(self.week_start, discard=True)\n",
+  "test": "desktop/tests/test_drag_results.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a paste says Saved, not what it pasted",
+  "old": "            said=said,\n        )\n",
+  "new": "        )\n",
+  "test": "desktop/tests/test_drag_results.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
  }
 ]

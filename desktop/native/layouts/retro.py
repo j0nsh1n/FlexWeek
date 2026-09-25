@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPen
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPen, QResizeEvent
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
 from desktop.native.calendar import DAY_FULL, DAYS
 from desktop.native.hours.canvas import BlockPainter, Drawn, HoursCanvas
 from desktop.native.hours.chips import TrayChip
 from desktop.native.hours.geometry import FIRST, LAST, LinearTrack
 from desktop.native.hours.hand import Hand
-from desktop.native.hours.zoom import HoursScroll, Scale
+from desktop.native.hours.zoom import HoursScroll, Scale, opening_minute
 from desktop.native.layouts.base import (
     LayoutView,
     Scene,
@@ -113,6 +113,35 @@ class RetroCanvas(HoursCanvas):
     def day_name(self, day: int) -> QPoint:
         pick = self.day_buttons.get(day)
         return pick.mapToGlobal(pick.rect().center()) if pick is not None else super().day_name(day)
+
+
+class NoteLine(QPushButton):
+    """A line of the notepad: a flag and a title, then when it is due. Short of room the date goes
+    under the title, whole, and the title shortens only if it must, rather than the line running off
+    the page."""
+
+    def __init__(self, head: str, due: str, name: str) -> None:
+        self._head, self._due = head, due
+        super().__init__(f"{head}  {due}")
+        self.setObjectName(name)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setProperty("kind", "row")
+        self.setProperty("mono", "true")
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        fonts = self.fontMetrics()
+        widest = max(fonts.horizontalAdvance(line) for line in self.text().split("\n"))
+        room = max(self.width() - (super().sizeHint().width() - widest), 0)
+        fitted = f"{self._head}  {self._due}"
+        if fonts.horizontalAdvance(fitted) > room:
+            # Under the title, in line with it past the flag.
+            lines = (self._head, f"   {self._due}")
+            fitted = "\n".join(fonts.elidedText(line, Qt.TextElideMode.ElideRight, room) for line in lines)
+        if fitted != self.text():
+            self.setText(fitted)
+            self.updateGeometry()
 
 
 class TitleBar(QLabel):
@@ -414,12 +443,10 @@ class RetroView(LayoutView):
         canvas.set_week(items, scene.today, scene.minute)
         body.addWidget(scroll, 1)
         scroll.show()
-        revealed = (scene.week.week_start, day)
-        if revealed != getattr(scroll, "_retro_revealed", None):
-            scroll._retro_revealed = revealed
-            minute = scene.minute if scene.today == day or not is_day and scene.today is not None else 8 * 60
-            scroll.scroll_to(minute)
-        if scene.week.waiting:
+        opens = opening_minute(scene.week, scene.today, scene.minute, day)
+        scroll.open_at((scene.week.week_start, day), opens)
+        if scene.week.waiting and not self._open.get("notes"):
+            # The notepad is where they live; here only while it is closed, so they are never shown twice.
             body.addWidget(label("Not placed yet · deadlines.txt", "retroWaitingLabel"))
             body.addLayout(self._tray(scene, "retroWaiting"))
         status = label("Ready. Drag a block, pull an edge, or drag empty time.", "retroStatus", wrap=True)
@@ -477,12 +504,8 @@ class RetroView(LayoutView):
             lines.addWidget(label("Everything has a time.", "retroNotesNoWaiting"))
         for index, item in enumerate(scene.week.open_work()):
             flag = {"danger": "!!", "tight": " !"}.get(item.slack or "", "  ")
-            made = button(
-                f"{flag} {item.title}  {due_label(item.due, scene.week.week_start)}",
-                f"retroNote{index}",
-                "row",
-            )
-            made.setProperty("mono", "true")
+            due = due_label(item.due, scene.week.week_start)
+            made = NoteLine(f"{flag} {item.title}", due, f"retroNote{index}")
             made.clicked.connect(lambda _=False, block_id=item.block_id: self.block_activated.emit(block_id))
             lines.addWidget(made)
         body.addWidget(sunken)

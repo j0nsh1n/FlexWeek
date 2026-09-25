@@ -9,6 +9,8 @@ from collections.abc import Iterator
 
 import pytest
 
+from desktop.tests.test_weekmodel import BLOCKS, HOMEWORK, TRACE, WEEK
+
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
 )
@@ -16,15 +18,19 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QRect, QRectF
+    from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt
     from PySide6.QtGui import QColor, QFont, QFontMetricsF, QImage, QPainter
     from PySide6.QtWidgets import QApplication, QWidget
 
+    from desktop.native.hours import canvas as canvas_module
     from desktop.native.hours.canvas import BlockPainter, Drawn, HoursCanvas, fit_lines
     from desktop.native.hours.geometry import LinearTrack
     from desktop.native.hours.hand import Hand, Verdict
+    from desktop.native.layouts.base import Scene
+    from desktop.native.layouts.registry import options_for, tokens_for
+    from desktop.native.layouts.timeline import TimelineView
     from desktop.native.look import resolved_palette
-    from desktop.native.weekmodel import build_week
+    from desktop.native.weekmodel import build_week, minute_of
 
 DETAIL = "16:00–17:30 · 1 h 30 min · Missed · Pinned"
 
@@ -78,6 +84,12 @@ def test_a_word_wider_than_the_room_is_shortened_and_the_rest_still_follows(qapp
     assert lines[0].endswith("…") and lines[0] != "16:00–17:30"
     assert lines[1:] == ["· 1 h"]
     assert fits(lines, font, width)
+
+
+def test_a_line_with_room_for_nothing_but_dots_is_left_out(qapp: QApplication) -> None:
+    font = QFont()
+    width = QFontMetricsF(font).horizontalAdvance("…") + 1
+    assert fit_lines("18:00–18:30 · 30 min", font, width, 20 * QFontMetricsF(font).lineSpacing()) == []
 
 
 def test_no_room_for_a_whole_line_gives_nothing(qapp: QApplication) -> None:
@@ -165,3 +177,94 @@ def test_every_block_is_written_in_the_canvas_font_whatever_was_drawn_before_it(
     essays = [image.copy(QRect(canvas.mapFromGlobal(box.topLeft()), box.size())) for box in boxes]
     assert essays[2] == essays[0], "the Essay after the hour labels is drawn unlike the one after nothing"
     assert essays[2] == essays[1], "the Essay after Maths is drawn unlike the one after nothing"
+
+
+if importlib.util.find_spec("PySide6") is not None:
+
+    class Said(QPainter):
+        """A painter that keeps every word it writes, where, and the ink it covers, in the widget's
+        coordinates. Put in place of the canvas module's QPainter, it is the one a real paint event
+        draws with."""
+
+        words: list[tuple[str, QRectF]] = []
+        inks: list[tuple[str, QRectF]] = []
+
+        def drawText(self, *args: object) -> None:  # noqa: N802
+            text = next(arg for arg in reversed(args) if isinstance(arg, str))
+            where = next(arg for arg in args if isinstance(arg, (QRectF, QRect, QPointF)))
+            box = QRectF(where, where) if isinstance(where, QPointF) else QRectF(where)
+            flags = next((arg for arg in args if isinstance(arg, (int, Qt.AlignmentFlag))), 0)
+            ink = QFontMetricsF(self.font()).boundingRect(box, int(flags), text)
+            Said.words.append((text, self.worldTransform().mapRect(box)))
+            Said.inks.append((text, self.worldTransform().mapRect(ink)))
+            super().drawText(*args)
+
+
+def timeline_week(qapp: QApplication) -> TimelineView:
+    options = options_for(None, "timeline")
+    palette = resolved_palette("light-frost", False, None, "default")
+    week = build_week(WEEK, BLOCKS, HOMEWORK, TRACE)
+    tokens = tokens_for("timeline", options["colour"], palette)
+    view = TimelineView()
+    HOSTS.append(view)
+    view.resize(1150, 700)
+    view.show_week(Scene(week, 3, minute_of("17:00"), options, tokens))
+    view.show()
+    qapp.processEvents()
+    return view
+
+
+def words_on(canvas: HoursCanvas, block_id: str, day: int) -> list[str]:
+    box = canvas.block_rect(block_id, day)
+    inside = QRectF(QRect(canvas.mapFromGlobal(box.topLeft()), box.size()))
+    return [text for text, where in Said.words if inside.contains(where.center())]
+
+
+@pytest.mark.parametrize("points", [9, 13])
+def test_a_short_block_on_sideways_hours_is_its_first_letter_not_dots(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch, points: int
+) -> None:
+    """Timeline's Week at 64 pixels an hour draws the 30-minute Dinner 30 pixels wide: no room for
+    any of its name, in three lines of small text or one of large. It says "D", its first letter,
+    and nothing else; not lines of "…". A block with room still says its name."""
+    monkeypatch.setattr(canvas_module, "QPainter", Said)
+    usual = QFont(qapp.font())
+    font = QFont(usual)
+    font.setPointSize(points)
+    qapp.setFont(font)
+    try:
+        canvas = timeline_week(qapp).hours_surfaces()[0]
+        assert canvas.block_rect("dinner", 0).width() < 34
+        Said.words = []
+        canvas.repaint()
+    finally:
+        qapp.setFont(usual)
+    for day in range(7):
+        assert words_on(canvas, "dinner", day) == ["D"], f"Dinner on day {day}"
+    assert words_on(canvas, "school", 0)[0].startswith("School")
+
+
+def test_an_hour_label_at_the_edge_of_what_shows_is_moved_inside_it(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Timeline's Week scrolled so 08:00 sits on the left edge of what shows, then so 20:00 sits on
+    its right edge: each label is written whole inside what shows, not cut to ")8:00" or "20:0"."""
+    monkeypatch.setattr(canvas_module, "QPainter", Said)
+    canvas = timeline_week(qapp).hours_surfaces()[0]
+    scroll = canvas._scroll_area()
+    port, bar = scroll.viewport(), scroll.horizontalScrollBar()
+    track = canvas.tracks[0]
+    for label, x in (
+        ("08:00", track.area.left() + track.offset(8 * 60)),
+        ("20:00", track.area.left() + track.offset(20 * 60) - port.width()),
+    ):
+        bar.setValue(round(x))
+        Said.inks = []
+        canvas.repaint()
+        shown = QRectF(QRect(canvas.mapFrom(port, QPoint(0, 0)), port.size()))
+        ink = [where for text, where in Said.inks if text == label]
+        assert len(ink) == 1, f"{label} written {len(ink)} times"
+        assert shown.left() <= ink[0].left() and ink[0].right() <= shown.right(), (
+            f"{label} runs from {ink[0].left():.0f} to {ink[0].right():.0f}, "
+            f"outside {shown.left():.0f} to {shown.right():.0f}"
+        )

@@ -12,7 +12,7 @@ The code in `desktop/native/hours/` is the authority; each module's docstring sa
 | `geometry.py` | Where minutes are. `Span(day, start, end)`, `snap` (to a step), `DRAG_STEPS`, `overlap_columns`, and the `Track` contract with two shapes: `LinearTrack(day, area, axis, first, last, turn)` runs down or across, covers part of a day or all of it, and can be tilted; `DialTrack(day, centre, inner, outer, first, last, sweep)` is My day's ring. Pure arithmetic, tested with numbers. |
 | `hand.py` | What the pointer is doing. `Hand`, `Held`, `Preview`, `Verdict`, and the changes it reports: `Move`, `Place`, `Create`, `MoveDate`. The threshold between a tap and a drag, finding the surface under the pointer, snapping to its `step` with the grab offset, the track's own bounds, the window's judge, the words that follow the pointer, dwell auto-scroll, Escape, losing the window, and holding renders. |
 | `canvas.py` | Painted hours. `HoursCanvas` lays out tracks, draws rules, blocks, the held block where it would land, the create ghost, the free-time hint and the now line through a `BlockPainter`, and answers the rig. A design replaces the painter, not the gestures. |
-| `zoom.py` | Hours that scroll and zoom. `HoursScroll(canvas, Scale, length_for, name=, gutter=, axis=)` zooms about the pointer (Ctrl and the wheel) or the middle (Ctrl with `=`, `-`, `0`, and two corner buttons), keeps a header beside the hours (above them when time runs down, left of them when it runs across), and remembers each surface's level in the look file. |
+| `zoom.py` | Hours that scroll and zoom. `HoursScroll(canvas, Scale, length_for, name=, gutter=, axis=)` zooms about the pointer (Ctrl and the wheel) or the middle (two corner buttons, and Ctrl with `=`, `-`, `0`, which are the window's shortcuts for whichever hours it shows, wherever the keyboard is), keeps a header beside the hours (above them when time runs down, left of them when it runs across), and remembers each surface's level in the look file. |
 | `chips.py` | `TrayChip`: homework with no time, anywhere in a design, dragged onto any hours; a click opens it. |
 | `month.py` | Month as Daily Scheduler draws it. `month_cells` builds each date's chips; `MonthCanvas` paints them and carries a chip with a time to another date; `MonthGrid` is what Today's app and every design show. |
 | `classic.py` | Today's app's Day and Week, the worked example a design copies from. |
@@ -83,6 +83,10 @@ self.hand.holding.connect(self._hold_renders)       # from the press to the rele
 - A change goes to the controller: `_move_block` (waiting while a save is running), `place_session`,
   `_create_range`, or `move_to_date` (one write of both weeks through `/api/changes`, retry-safe,
   shown only once the server accepts it; a drop after a save that failed is refused in words).
+- Once a change's save lands, the notice over the hours says what it did ("Moved History essay to
+  Fri 18:00."), with Undo for that one change. A notice that lands while something is held waits
+  for the release, since it moves the hours down, and it goes once a later save makes its step no
+  longer the last.
 - Renders are held from the press, so nothing the press started on is deleted by a re-render; the
   last scene arrives on release.
 - Asking for anywhere else while a block is held (another view, week, day or design) cancels the

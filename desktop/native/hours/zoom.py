@@ -2,7 +2,8 @@
 the same minute in place while that changes.
 
 A surface's hours sit in an `HoursScroll`. Ctrl and the wheel zoom about the pointer; Ctrl with =, -
-or 0 zoom about the middle of what is on screen, as do the two buttons in the corner. Hours that run
+or 0, the window's shortcuts for whichever hours it shows, zoom about the middle of what is on
+screen, as do the two buttons in the corner. Hours that run
 down scroll up and down, with a header, such as the week's day names, kept above them and exactly as
 wide as the hours, so a name sits over its column whether or not a scroll bar shows. Hours that run
 across scroll sideways, the plain wheel included, with the day names kept in a strip to their left,
@@ -33,8 +34,13 @@ from PySide6.QtWidgets import (
 
 from desktop.native.hours.canvas import HoursCanvas
 from desktop.native.hours.geometry import Axis
+from desktop.native.weekmodel import WeekModel
 
 KEY = re.compile(r"[a-z]+\.[a-z]+")
+# With Ctrl, anywhere in the window: zoom in, out, or back to the surface's own level.
+ZOOM_KEYS = {Qt.Key.Key_Equal: 1, Qt.Key.Key_Plus: 1, Qt.Key.Key_Minus: -1, Qt.Key.Key_0: 0}
+# Hours with neither now nor a block to show open at 08:00.
+OPENS = 8 * 60
 
 
 @dataclass(frozen=True)
@@ -71,6 +77,15 @@ def sanitize_zoom(raw: object) -> dict[str, int]:
         if named and isinstance(px, int) and not isinstance(px, bool) and 8 <= px <= 480:
             clean[key] = px
     return clean
+
+
+def opening_minute(week: WeekModel, today: int | None, now: int | None, day: int | None = None) -> int:
+    """Where hours open: now, on today or on this week; otherwise the first block of the day shown,
+    or of the week; otherwise the start of a school day."""
+    if today is not None and now is not None and day in (None, today):
+        return now
+    items = week.occurrences if day is None else week.on_day(day)
+    return min((item.start for item in items), default=OPENS)
 
 
 class ZoomButton(QPushButton):
@@ -151,6 +166,8 @@ class HoursScroll(QScrollArea):
         # and where the bar stopped while there was no room yet to put it back.
         self._kept: float | None = None
         self._short_at: int | None = None
+        # The week, or day, these hours last opened on.
+        self._opened: object = None
         # The header first: the scroll area starts filtering events as soon as it holds the hours.
         self.buttons = ZoomButtons(name)
         self.buttons.out.clicked.connect(lambda: self.zoom_by(-1))
@@ -250,7 +267,8 @@ class HoursScroll(QScrollArea):
 
     def scroll_to(self, minute: int, above: int = 90) -> None:
         """Put `minute` near the start of what shows, with `above` minutes of the day before it.
-        Hours that are not on screen yet do it when they are shown, and only then."""
+        Hours that are not on screen yet do it when they are shown, and only then. Shown while
+        their page is still being laid out, they may not reach it yet; they do once they can."""
         self._pending = (minute, above)
         self._kept = self._short_at = None
         if not self.isVisible():
@@ -258,7 +276,15 @@ class HoursScroll(QScrollArea):
         self._lay_out_now()
         if self.canvas.tracks:
             self._pending = None
-            self._bar().setValue(round(self._y_for(minute - above)))
+            self._kept = minute - above
+            self._put_back()
+
+    def open_at(self, key: object, minute: int, above: int = 90) -> None:
+        """Scroll to `minute` the first time these hours show `key`, a week or one of its days. The
+        same one shown again stays wherever the student scrolled it, through saves and refreshes."""
+        if key != self._opened:
+            self._opened = key
+            self.scroll_to(minute, above)
 
     def focusNextPrevChild(self, next: bool) -> bool:  # noqa: N802
         # QScrollArea's own then scrolls to show the child that had the focus: for hours longer than
@@ -353,7 +379,8 @@ class HoursScroll(QScrollArea):
         super().resizeEvent(event)
         self._place_header()
         if self._short_at is not None and self.isVisible():
-            if self._bar().value() == self._short_at:
+            # Hours that grew pull the bar back with them; that is not the student scrolling.
+            if self._bar().value() == min(self._short_at, self._bar().maximum()):
                 self._put_back()
             else:
                 self._kept = self._short_at = None

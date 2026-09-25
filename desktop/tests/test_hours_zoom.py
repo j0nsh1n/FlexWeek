@@ -153,22 +153,22 @@ def test_ctrl_and_the_wheel_zoom_about_the_pointer(qapp: QApplication) -> None:
     assert view.scroll.px == 48, "without Ctrl the wheel only scrolls"
 
 
-def test_keys_and_buttons_zoom_about_the_middle_and_stop_at_each_end(qapp: QApplication) -> None:
+def test_the_buttons_zoom_about_the_middle_and_stop_at_each_end(qapp: QApplication) -> None:
+    """The keys are the window's, and test_zoom_keys presses them there; they zoom as these do."""
     view = a_week(qapp)
     middle = view.scroll.viewport().height() / 2
     before = minute_at(view, middle)
-    view.hours.setFocus()
-    QTest.keyClick(view.hours, Qt.Key.Key_Equal, Qt.KeyboardModifier.ControlModifier)
+    QTest.mouseClick(view.scroll.buttons.into, Qt.MouseButton.LeftButton)
     assert view.scroll.px == 64
     assert abs(minute_at(view, middle) - before) <= 1
     for _ in range(6):
         QTest.mouseClick(view.scroll.buttons.into, Qt.MouseButton.LeftButton)
     assert view.scroll.px == WEEK_SCALE.levels[-1]
     assert not view.scroll.buttons.into.isEnabled() and view.scroll.buttons.out.isEnabled()
-    QTest.keyClick(view.hours, Qt.Key.Key_0, Qt.KeyboardModifier.ControlModifier)
+    view.scroll.zoom_by(0)
     assert view.scroll.px == WEEK_SCALE.default
     for _ in range(6):
-        QTest.keyClick(view.hours, Qt.Key.Key_Minus, Qt.KeyboardModifier.ControlModifier)
+        QTest.mouseClick(view.scroll.buttons.out, Qt.MouseButton.LeftButton)
     assert view.scroll.px == WEEK_SCALE.levels[0]
     assert not view.scroll.buttons.out.isEnabled()
 

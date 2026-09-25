@@ -46,7 +46,6 @@ from desktop.native.weekmodel import Occurrence, clock_label, length_label
 
 # A press this close to a block's start or end edge resizes it, on a block long enough to have edges.
 EDGE_PX = 7
-ZOOM_KEYS = {Qt.Key.Key_Equal: 1, Qt.Key.Key_Plus: 1, Qt.Key.Key_Minus: -1, Qt.Key.Key_0: 0}
 FREE_HINT = "+ drag to create, or click"
 
 
@@ -133,19 +132,35 @@ class BlockPainter:
         else:
             painter.drawLine(area.topLeft(), area.topRight())
 
-    def hour_labels(self, painter: QPainter, track: LinearTrack, room: float, every: int = 60) -> None:
-        """Hours beside the first track: to its left down a column, above it across a lane."""
+    def hour_labels(
+        self,
+        painter: QPainter,
+        track: LinearTrack,
+        room: float,
+        every: int = 60,
+        visible: QRectF | None = None,
+    ) -> None:
+        """Hours beside the first track: to its left down a column, above it across a lane. A label
+        the edge of `visible`, the part on screen, would cut is moved inside it, as a long block's
+        name is."""
         painter.setPen(self.c("muted"))
         painter.setFont(_small(painter.font()))
+        metrics = QFontMetricsF(painter.font())
         for minute in range(((track.first + every - 1) // every) * every, track.last + 1, every):
             at = track.offset(minute)
+            words = clock_label(minute)
             if track.axis is Axis.DOWN:
                 box = QRectF(track.area.left() - room, track.area.top() + at - 9, room - 6, 18)
                 align = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                if visible is not None and box.bottom() > visible.top() and box.top() < visible.bottom():
+                    box.moveTop(max(min(box.top(), visible.bottom() - box.height()), visible.top()))
             else:
-                box = QRectF(track.area.left() + at - 30, track.area.top() - room, 60, room - 2)
+                wide = metrics.horizontalAdvance(words) + 2
+                box = QRectF(track.area.left() + at - wide / 2, track.area.top() - room, wide, room - 2)
                 align = Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom
-            painter.drawText(box, align, clock_label(minute))
+                if visible is not None and box.right() > visible.left() and box.left() < visible.right():
+                    box.moveLeft(max(min(box.left(), visible.right() - wide), visible.left()))
+            painter.drawText(box, align, words)
 
     def fills(self, drawn: Drawn) -> tuple[QColor, QColor, QColor | None, QColor | None]:
         """Fill, ink, outline and edge for a block: the Blocks look knob and the category."""
@@ -211,13 +226,21 @@ class BlockPainter:
             painter.setFont(plain)
             text = f"{drawn.title} · {detail}" if detail else drawn.title
             elided = QFontMetrics(plain).elidedText(text, Qt.TextElideMode.ElideRight, int(room.width()))
+            if not elided.strip("…"):
+                elided = _initial(drawn.title, QFontMetrics(plain), room.width())
             painter.drawText(room, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided)
             return
         painter.setFont(bold)
         name = QFontMetrics(bold).elidedText(drawn.title, Qt.TextElideMode.ElideRight, int(room.width()))
+        named = bool(name.strip("…"))
+        if not named:
+            name = _initial(drawn.title, QFontMetrics(bold), room.width())
         painter.drawText(
             QRectF(room.left(), room.top(), room.width(), line), Qt.AlignmentFlag.AlignLeft, name
         )
+        if not named:
+            # No room for any of the name, so none for its times either.
+            return
         faint = QColor(ink)
         faint.setAlphaF(0.8)
         refused = drawn.verdict is not None and not drawn.verdict.ok
@@ -316,6 +339,13 @@ def _write_lines(painter: QPainter, text: str, font: QFont, room: QRectF) -> Non
         painter.drawText(box, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, line)
 
 
+def _initial(title: str, metrics: QFontMetrics, width: float) -> str:
+    """A block with no room for any of its name: its first letter if that fits, else nothing. Its
+    colour already says a block is there; a lone "…" said nothing more."""
+    first = title.strip()[:1]
+    return first if first and metrics.horizontalAdvance(first) <= width else ""
+
+
 def _small(font: QFont) -> QFont:
     made = QFont(font)
     made.setPointSizeF(max(made.pointSizeF() * 0.86, 7))
@@ -324,7 +354,8 @@ def _small(font: QFont) -> QFont:
 
 def fit_lines(text: str, font: QFont, width: float, height: float) -> list[str]:
     """`text` broken at its spaces into the whole lines that fit a box, so none is cut in half by its
-    edge. When some is left over, the last line ends in "…"; so does a word wider than the box."""
+    edge. When some is left over, the last line ends in "…"; so does a word wider than the box. A
+    line with room for nothing but "…" is left out, and so is everything after it."""
     metrics = QFontMetricsF(font)
     room = int((height + metrics.leading()) // metrics.lineSpacing())
     if room < 1:
@@ -338,8 +369,14 @@ def fit_lines(text: str, font: QFont, width: float, height: float) -> list[str]:
     shown = wrapped[:room]
     if len(wrapped) > room:
         shown[-1] = [word for line in wrapped[room - 1 :] for word in line]
-    lines = (metrics.elidedText(" ".join(line), Qt.TextElideMode.ElideRight, width) for line in shown)
-    return [line for line in lines if line]
+    lines = []
+    for line in shown:
+        fitted = metrics.elidedText(" ".join(line), Qt.TextElideMode.ElideRight, width)
+        if not fitted.strip("…"):
+            # Not one letter of it fits: a line of "…" says nothing, and what follows even less.
+            break
+        lines.append(fitted)
+    return lines
 
 
 class HoursCanvas(QWidget):
@@ -525,16 +562,16 @@ class HoursCanvas(QWidget):
         for index, track in enumerate(self.tracks):
             painter.save()
             painter.setTransform(track.transform, True)
+            upright_visible = track.transform.inverted()[0].mapRect(visible)
             with _fresh(painter):
                 self.painter.track(painter, track, track.day == self.today)
             if index == 0 and self.gutter and track.axis is Axis.DOWN:
                 with _fresh(painter):
-                    self.painter.hour_labels(painter, track, self.gutter)
+                    self.painter.hour_labels(painter, track, self.gutter, visible=upright_visible)
             if index == 0 and self.header and track.axis is Axis.ACROSS:
                 with _fresh(painter):
-                    self.painter.hour_labels(painter, track, self.header, every=120)
+                    self.painter.hour_labels(painter, track, self.header, every=120, visible=upright_visible)
             self._paint_hint(painter, track)
-            upright_visible = track.transform.inverted()[0].mapRect(visible)
             for drawn, rect in self.drawn(track):
                 with _fresh(painter):
                     self.painter.block(painter, rect, drawn, upright_visible)
@@ -745,14 +782,8 @@ class HoursCanvas(QWidget):
             self.zoom_asked.emit(steps, event.position())
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
-        """Enter opens the chosen block, and Ctrl with =, - or 0 zooms. Everything else goes to the
-        window's shortcuts."""
-        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            steps = ZOOM_KEYS.get(event.key())
-            if steps is not None:
-                self.zoom_asked.emit(steps, None)
-                event.accept()
-                return
+        """Enter opens the chosen block. Everything else goes to the window's shortcuts, zoom
+        included."""
         chosen = self.hand.selection
         mine = chosen is not None and any(item.block_id == chosen[0] for item in self.occurrences)
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and chosen is not None and mine:

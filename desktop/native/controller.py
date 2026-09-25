@@ -184,7 +184,9 @@ class NativeSession(QObject):
         self.day_data: dict | None = None
         self.selected_month: str | None = None
         self.month_data: dict | None = None
-        self.armed_category = "class"
+        # The type a drag on the hours makes, once one is picked under Add. Until then a block made by
+        # dragging has none: it used to be School, and an hour of Club counted as school.
+        self.armed_category: str | None = None
         self.selected_block_id: str | None = None
         self.selected_occurrence_day: int | None = None
         self._ticket = 0
@@ -292,7 +294,7 @@ class NativeSession(QObject):
         self.day_data = None
         self.selected_month = None
         self.month_data = None
-        self.armed_category = "class"
+        self.armed_category = None
         self.selected_block_id = None
         self.selected_occurrence_day = None
         self._day_ticket += 1
@@ -647,7 +649,10 @@ class NativeSession(QObject):
             return
         self.client.request("POST", "/api/auth/logout", None, lambda _data: finish(), lambda _error: finish())
 
-    def load_week(self, week_start: str | None = None, *, discard: bool = False) -> None:
+    def load_week(
+        self, week_start: str | None = None, *, discard: bool = False, said: str = "This week."
+    ) -> None:
+        """Load a week from the server. `said` is what the status line says once it is loaded."""
         if self.account is None:
             return
         if self.busy:
@@ -680,7 +685,7 @@ class NativeSession(QObject):
         def week_ok(data: dict) -> None:
             if not self._alive(ticket) or self.client.account is None:
                 return
-            self._load_assignments(ticket, previous, data)
+            self._load_assignments(ticket, previous, data, said)
 
         def failed(error: ApiError) -> None:
             if not self._alive(ticket):
@@ -697,7 +702,7 @@ class NativeSession(QObject):
     def _assignments_url(self, week_start: str) -> str:
         return f"/api/assignments?week_start={week_start}&include_completed=true"
 
-    def _load_assignments(self, ticket: int, previous: str, week: dict) -> None:
+    def _load_assignments(self, ticket: int, previous: str, week: dict, said: str = "This week.") -> None:
         loaded = week["week_start"]
 
         def ok(data: dict) -> None:
@@ -725,7 +730,7 @@ class NativeSession(QObject):
             self._committed_blocks = deepcopy(self.blocks)
             self._committed_assignments = deepcopy(self.assignments)
             self._ensure_selected_day()
-            self._say("This week.")
+            self._say(said)
             self._refresh_view()
             self.week_changed.emit()
             self._restore_focus()
@@ -752,7 +757,7 @@ class NativeSession(QObject):
         self.dirty = False
         self.conflict = False
         self.dirty_assignments.clear()
-        self.load_week(self.week_start, discard=True)
+        self.load_week(self.week_start, discard=True, said="Reloaded this week.")
 
     def _touch(self, label: str | None = None, keep: set[str] | frozenset[str] = frozenset()) -> None:
         if label:
@@ -1183,6 +1188,10 @@ class NativeSession(QObject):
         body["completed"] = completed
         body["completed_at"] = (body.get("completed_at") or local_stamp()) if completed else None
         self.add_homework(body)
+
+    def last_step(self) -> dict | None:
+        """The change Undo would take back now."""
+        return self._undo[-1] if self._undo else None
 
     def can_undo(self) -> bool:
         self._drop_stale_history()
@@ -1658,7 +1667,7 @@ class NativeSession(QObject):
             return (today.weekday(), None)
         return None
 
-    def copy_block(self, block_id: str, day: int | None, scope: str = "auto") -> bool:
+    def copy_block(self, block_id: str, day: int | None, scope: str = "auto", *, say: bool = True) -> bool:
         if self.account is None:
             return False
         source = next((item for item in self.blocks if item["id"] == block_id), None)
@@ -1674,7 +1683,8 @@ class NativeSession(QObject):
             "items": items,
             "fingerprint": clipboard_fingerprint(items),
         }
-        self._say(label + " copied. Choose a destination and paste.")
+        if say:
+            self._say(label + " copied. Choose a destination and paste.")
         self.week_changed.emit()
         return True
 
@@ -1748,7 +1758,8 @@ class NativeSession(QObject):
             self._say("Select a block before duplicating it.")
             return None
         prior = deepcopy(self.clipboard)
-        if not self.copy_block(source_id, day, scope):
+        # Nothing is left copied, so nothing says so.
+        if not self.copy_block(source_id, day, scope, say=False):
             return None
         rows = self.paste_proposals(day if day is not None else 0, None)
         self.clipboard = prior
@@ -1765,7 +1776,9 @@ class NativeSession(QObject):
         attempt_key: str | None = None,
         existing: list[dict] | None = None,
         destination: str | None = None,
+        said: str | None = None,
     ) -> bool:
+        """Add the checked rows. `said` is what the status line says once they are saved."""
         if self.account is None or self.conflict:
             return False
         checked = [row for row in rows if row.get("checked")]
@@ -1799,13 +1812,14 @@ class NativeSession(QObject):
                 return False
             self.blocks = list(self.blocks) + added
             self._touch(label)
-            self.save(snapshot_label=snapshot_label, operation_id=op_id)
+            self.save(snapshot_label=snapshot_label, operation_id=op_id, status=said)
             return True
         self._commit_groups(
             by_week,
             label=label,
             snapshot_label=snapshot_label,
             operation_id=op_id,
+            said=said,
         )
         return True
 
@@ -1816,6 +1830,7 @@ class NativeSession(QObject):
         label: str,
         snapshot_label: str | None,
         operation_id: str,
+        said: str | None = None,
     ) -> None:
         needed = [week for week in by_week if week != self.week_start]
         ticket = self._begin()
@@ -1861,6 +1876,8 @@ class NativeSession(QObject):
             if snapshot_label:
                 payload["snapshot_label"] = snapshot_label
             self.pending_save = payload
+            if said is not None:
+                self._save_status = said
             self._post_pending(ticket)
 
         def fetch_next() -> None:
@@ -3012,7 +3029,7 @@ class NativeSession(QObject):
             self._redo.clear()
             self._focus_after_restore = True
             self._say("Restored.")
-            self.load_week(self.week_start)
+            self.load_week(self.week_start, said="Restored.")
             self._fetch_restore_points()
 
         def err(error: ApiError) -> None:
