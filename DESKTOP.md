@@ -31,19 +31,18 @@ plugins ship as a folder.
 Icons come from `desktop/assets/logo.png`. The SQLite database lives under the
 user data directory, never inside the read-only bundle.
 
-**What is still true below.** Section 7 (the bundled server), section 9 and the
-sections after it (the Windows build and installers, releasing the Linux build,
+**What is still true below.** Section 6 (the Linux build), section 7 (the
+bundled server), section 9 and the sections after it (the Windows build and installers, releasing the Linux build,
 reminders, and window/tray/quit behaviour). Read those.
 
 **What is superseded.** Sections 1 to 5 recommended a `QWebEngineView` window
 pointed at a hosted origin. That decision was reversed on 2026-09-17 in favour
 of native widgets, and the browser client it assumed was retired on 2026-09-19.
 They are kept because they record why the choice was made and what the evidence
-was at the time. Do not build from them. Sections 6 and 8 are WebEngine-era
-records as well: section 6 describes the Chromium build (the "1 GB dependency",
-the ~390 MB artifact and its checklist) and section 8 the WebEngine wrapper's
-defects and API references. The current Linux bundle is about 250 MB with no
-Chromium in it.
+was at the time. Do not build from them. The first section 8 ("Desktop completion
+checks") is a WebEngine-era record as well: the WebEngine wrapper's defects and
+API references. Section 6 describes the current Linux build, which is about
+250 MB with no Chromium in it.
 
 ---
 
@@ -149,52 +148,66 @@ reopening the app restores the session until the seven-day cookie expiry.
 
 <!-- End of the superseded WebEngine recommendation. Sections 6 onward are current. -->
 
-## 6. Linux build — implemented 2026-09-07
+## 6. Linux build (current as of 0.15)
 
-The recommendation above is now built. Verified on this machine: PySide6 6.11.2
-(`cp310-abi3` wheels, so the stable ABI covers Python 3.14.7), Nuitka 4.2.1,
-patchelf 0.19.1, GCC 16.2.1.
+First built on 2026-09-07 around Chromium; since 0.12 the window is native Qt
+widgets and no Chromium is compiled in. The WebEngine build this section used
+to describe, with its ~390 MB artifact and checklist, is in git history.
 
 ```bash
-pip install -r requirements-desktop.txt
+pip install -r requirements.txt -r requirements-desktop.txt
 ./desktop/build_linux.sh          # -> dist/FlexWeek/FlexWeek
+./desktop/package_linux.sh        # -> dist/release/FlexWeek-Linux-x86_64.tar.gz
 ```
 
-Point it at a server with `FLEXWEEK_DESKTOP_ORIGIN`, falling back to
-`FLEXWEEK_ORIGIN`, then `http://127.0.0.1:8000`.
+Pinned in `requirements-desktop.txt`: PySide6 6.11.2 (`cp310-abi3` wheels,
+so the stable ABI covers Python 3.14), Nuitka 4.2.1 and patchelf 0.19.1. The
+machine also needs a C compiler (GCC), Python 3.14's development headers,
+`readelf` (binutils), `ldconfig`, and the six X11 helpers listed below
+installed, because the build copies them in.
 
-**Layout**
+**Files**
 
-- `desktop/origin.py` — origin resolution and the same-origin test. No Qt
-  imports, so it is unit-tested without the 1 GB dependency.
-- `desktop/main.py` — `QApplication`, one persistent `QWebEngineProfile`, one
-  `QWebEngineView`, the native retry panel, and the external-link handling.
-- `desktop/build_linux.sh` — the build.
+- `desktop/main.py` — `QApplication`, the bundled backend (section 7) unless
+  `FLEXWEEK_DESKTOP_ORIGIN` is set, and the native window
+  (`desktop/native/window.py`). One copy runs per user data folder; launching
+  again brings it forward. `--smoke-test` is described under "Releasing the
+  Linux build".
+- `desktop/build_linux.sh` — Nuitka onedir. Leaves out the WebEngine modules,
+  keeps the Qt plugins listed at the top of this file, and drops
+  `egldeviceintegrations` and `printsupport`.
+- `desktop/finish_linux_bundle.sh` — trims Qt's `.qm` translations, copies
+  `libxcb-cursor.so.0`, `libxcb-icccm.so.4`, `libxcb-image.so.0`,
+  `libxcb-keysyms.so.1`, `libxcb-render-util.so.0` and `libxcb-util.so.1` into
+  the bundle with their licences (Qt's X11 plugin needs them, and Ubuntu and Mint
+  do not install them), then runs the check below.
+- `desktop/check_bundle.py` — fails the bundle when a binary needs a glibc newer
+  than 2.38, or a library that is neither inside it nor in `LINUX_SYSTEM_LIBS`,
+  the libraries a desktop Linux already has. Two plugins Qt skips when their
+  libraries are missing (the GTK file dialogs and GLib's network status) are
+  exempt.
+- `desktop/package_linux.sh` makes the tarball and `packaging/make-appimage.sh`
+  the AppImage. `desktop/smoke_linux_containers.sh` starts the tarball in stock
+  Ubuntu 24.04 and Debian 13 containers.
 
-**Deviation from section 1:** Nuitka is invoked directly rather than through
-`pyside6-deploy`. The wrapper rewrites its own `pysidedeploy.spec` with absolute
-machine paths on every run, so a committed spec does not survive. `pyside6-deploy`
-only shells out to `python -m nuitka` anyway; the script keeps the plugin list the
-wrapper computed. `pysidedeploy.spec` is gitignored so running the wrapper by hand
-does not dirty the tree.
+**What the bundle takes from the system.** The README's "Linux libraries" table,
+for students, lists it. It was read on 2026-09-25 from a 0.14 bundle with
+`readelf -d` on every file: each `NEEDED` library the bundle does not carry. That
+is `libEGL.so.1` and `libGL.so.1`; `libxkbcommon.so.0` and
+`libxkbcommon-x11.so.0`; `libfontconfig.so.1` and `libfreetype.so.6`; `libX11`,
+`libX11-xcb` and `libxcb` with its `glx`, `randr`, `render`, `shape`, `shm`,
+`sync`, `xfixes` and `xkb` parts; `libwayland-client`, `-cursor` and `-egl`;
+`libglib-2.0`, `libgthread-2.0` and `libdbus-1`; `libgssapi_krb5` and
+`libbrotlidec` for Qt's network module; `libpulse`, `libbz2`, `libdrm`, `libXext`
+and `libXrandr` for sound; and glibc, `libstdc++` and `libgcc_s`. PySide6's own
+ICU, FFmpeg, OpenSSL and zstd are inside.
 
-**Artifact:** onedir, ~390 MB (Chromium), with a ~33 MB launcher binary. Not
-`--onefile`, per section 2.
+**Where to build a release.** On Ubuntu 24.04, the release workflow's `linux`
+job. A newer host fails the glibc check on purpose: this Fedora workstation's
+Python needs glibc 2.42 (`GLIBC_ABI_GNU2_TLS`).
 
-### Checklist status (section 4)
-
-| # | Test | Status |
-|---|---|---|
-| 1 | Window opens the configured origin | Verified — page title `FlexWeek` |
-| 2 | Login survives a restart | Verified — register in-window, kill, reopen: `/api/auth/me` returns the account; an empty profile returns 401 |
-| 3 | Bad origin shows Retry | Verified — dead port switches to the native panel |
-| 4 | `target=_blank` opens the OS browser | Real Qt link test emits one OS handoff and retains no hidden page; OS browser availability remains a manual check |
-| 5 | Sign-out clears the session | Verified in real WebEngine: sign-out clears the grid, a second account starts empty, original account restores its week |
-| 6 | Onedir starts with no Python installed | Verified on Linux — runs under `env -i` |
-| 7 | Runs with no separate server (added 2026-09-07) | Verified — the binary itself holds the listening socket on 127.0.0.1, serves `/api/health` 200 and `<title>FlexWeek</title>`, and releases the port on exit |
-| 8 | Writes nothing into its own bundle | Verified — database and cookies land in the user data dir; no file under `dist/FlexWeek/` changed during a run |
-
-Windows is untouched. Only `build_linux.sh` and the Linux checks exist.
+**Size.** A 0.14 bundle is 252 MB unpacked, and its largest file is the 48 MB
+`FlexWeek` launcher. The AppImage of it is 92 MB.
 
 ---
 
@@ -260,7 +273,7 @@ not deleted.
 GLM-5.3 Flash drafted `desktop/build_windows.ps1` and made `patchelf` a Linux-only
 requirement. The main agent reviewed the draft and tightened staging, compiler
 selection, environment restoration and publication checks. The script uses Python 3.14, Nuitka and PySide6 to create a standalone
-Windows directory with the backend and frontend included. It stages builds and
+Windows directory with the backend and the native window included. It stages builds and
 refuses to overwrite `dist/FlexWeek-Windows`.
 
 From a Windows PowerShell prompt in the repository:
@@ -275,8 +288,8 @@ py -3.14 -m venv .venv
 A compatible Visual Studio C++ build toolchain is required. No Windows host or
 PowerShell interpreter was available in this session, so neither a Windows
 executable nor PowerShell execution has been verified. The remaining Windows
-check is build → open → register → save → restart → sign out, plus external-link
-and draft-download checks on a machine without the development virtualenv.
+check is build → open → register → save → restart → sign out on a machine
+without the development virtualenv.
 
 The default self-contained desktop mode stores accounts locally. Hosted mode
 (`FLEXWEEK_DESKTOP_ORIGIN`) points the desktop app at another deployment's
@@ -331,10 +344,10 @@ artifacts for seven days.
 ## 8. Releasing the Linux build
 
 The built app is **not** committed. `dist/` is gitignored, and it has to stay
-that way: `libQt6WebEngineCore.so.6` alone is 194 MB against GitHub's hard
-100 MB per-file limit, so a plain `git add dist/` produces a repository that
-cannot be pushed. It would also take `.git` from under a megabyte to over half
-a gigabyte, permanently, and every judge cloning the repo would pay for it.
+that way: the bundle is about 250 MB, so a plain `git add dist/` would grow
+`.git` by that much, permanently, and every judge cloning the repo would pay for
+it. (While it held Chromium, `libQt6WebEngineCore.so.6` alone was over GitHub's
+100 MB per-file limit.)
 
 Distribute it as a release asset instead. GitHub Releases allow 2 GB per file.
 
@@ -350,14 +363,14 @@ bundle on purpose.
 
 The archive holds one `FlexWeek/` folder with the app, `README.txt`,
 `flexweek.png`, `flexweek.desktop`, `install-menu-entry.sh` and `LICENSE.txt`.
-`finish_linux_bundle.sh` vendors `libxcb-cursor` (and the other X11 cursor
-helpers) into the bundle, drops unused Qt `.qm` files, and fails the build if
-anything needs a newer glibc than 2.38. A tar.gz keeps the executable bit that
+`finish_linux_bundle.sh` copies `libxcb-cursor` and the five other X11 helpers
+into the bundle, drops unused Qt `.qm` files, and fails the build if anything
+needs a newer glibc than 2.38 or a library a desktop does not have (section 6). A tar.gz keeps the executable bit that
 a zip would lose. Attach the tarball and its `.sha256` to a GitHub Release
 using the body in `docs/github-release.md`. The README's "Download for Linux"
 link expects this exact filename.
 
-528 MB on disk compresses to about 205 MB. Users extract it and run
+About 250 MB on disk (section 6). Users extract it and run
 `FlexWeek/FlexWeek`, with no Python and no separate server.
 
 Verify a release candidate by extracting it somewhere clean and starting it with
@@ -379,23 +392,19 @@ Create account screen instead of making accounts on that server.
 Debian 13 containers; the release workflow runs it on the Linux tarball, the raw
 Linux onedir and the Windows build.
 
-**A page process that stops (0.9.1).** Qt leaves a blank window with no message
-when the page's renderer process dies. The window now reloads the page once with
-`?recovered=1`: `theme.js` swaps the frosted glass for the solid panels for that
-session, and `auth.js` signs back in and plans the week again so the placed work
-and "Your plan" return, with a status line saying so. If the page stops again
-within a minute, the native panel says "FlexWeek stopped showing your week" with
-a Reload button instead of reloading in a loop. The stop reason and exit code go
-to stderr. The WebEngine `recovery` probe kills the renderer to cover this.
-
 **Housekeeping.** `build_linux.sh` preserves each previous build as
 `dist/FlexWeek.previous.<timestamp>` and never prunes them, so `dist/` grows by
-about 528 MB per rebuild. Delete the ones you do not need.
+about 250 MB per rebuild. Delete the ones you do not need.
 
 ## Reminders (Phase 5)
 
-Start reminders ship in the shared web UI (preferences, in-app toast, Notification
-API while the window is open). Phase 7 added the tray presenter described below.
+As of 0.15, reminders are on unless the student turns them off in
+Settings > Alerts, and accounts from before 0.15 had them turned on once. A
+reminder comes a set number of minutes before each block starts, and at once for
+a block saved inside that time. It shows in the tray, for a moment under the top
+bar, and on the status line. A block with its own Spotify link plays it when the
+block starts, stopped and snoozed as an alarm is. `desktop/native/remind.py`
+decides when; the window presents it.
 
 ## Window, tray and quitting (2026-09-10)
 
@@ -404,8 +413,10 @@ API while the window is open). Phase 7 added the tray presenter described below.
 - When the desktop has a system tray, FlexWeek puts its logo there. Closing the
   window hides it to the tray, so reminders and alarms keep firing. The first
   close shows a tray message that says so.
-- Click the tray icon, or choose **Open FlexWeek** from its menu, to bring the
+- Click the tray icon, or choose **Show FlexWeek** from its menu, to bring the
   window back. Choose **Quit** from the tray menu to stop FlexWeek.
+- Settings > Alerts > "Keep running when I close the window" turns this off;
+  closing the window then quits.
 - Without a tray, or when the tray icon cannot load, closing the window quits.
   FlexWeek never keeps running with no window and no tray icon.
 - Launching FlexWeek again while it runs brings the existing window forward
