@@ -1302,7 +1302,7 @@ def test_a_week_across_two_months_shortens_to_month_abbreviations_not_an_ellipsi
 
 
 def test_the_top_bar_keeps_the_gear_on_a_1024_window(qapp: QApplication, window: NativeWindow) -> None:
-    """Mutation that turns this red: week_title keeps its full sizeHint as a minimum width."""
+    """The gear stays inside a 1024 pixel window. test_window_screens goes on down to the narrowest."""
     window.resize(1024, 768)
     window.show()
     qapp.processEvents()

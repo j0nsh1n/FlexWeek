@@ -52,6 +52,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QTimeEdit,
     QVBoxLayout,
@@ -165,7 +166,10 @@ class FittedLabel(QLabel):
         return QSize(width, super().sizeHint().height())
 
     def minimumSizeHint(self) -> QSize:  # noqa: N802
-        return QSize(self._minimum, super().minimumSizeHint().height())
+        # A short form is kept whole: "21 – 2…" said less than either form.
+        margins = self.contentsMargins()
+        short = self.fontMetrics().horizontalAdvance(self._short) + margins.left() + margins.right() + 2
+        return QSize(max(self._minimum, short if self._short else 0), super().minimumSizeHint().height())
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)
@@ -185,6 +189,137 @@ class FittedLabel(QLabel):
         if self._short and metrics.horizontalAdvance(text) > room:
             text = self._short
         super().setText(metrics.elidedText(text, Qt.TextElideMode.ElideRight, room))
+
+
+class FittedButton(QPushButton):
+    """A button with a short form of its words, shown when its row has no room for the whole of
+    them, so it is never cut mid-word. It asks for the room the whole words need."""
+
+    def __init__(self, text: str, short: str, parent: QWidget | None = None) -> None:
+        super().__init__(text, parent)
+        self._full, self._short = text, short
+        self.setAccessibleName(text)
+        # A plain button never goes below the room for its whole words; this one may, to its short form.
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+
+    def set_texts(self, text: str, short: str) -> None:
+        self._full, self._short = text, short
+        self.setAccessibleName(text)
+        self.setText(text)
+        self.updateGeometry()
+        self._fit()
+
+    def _wide(self, words: str) -> int:
+        fonts = self.fontMetrics()
+        chrome = super().sizeHint().width() - fonts.horizontalAdvance(self.text())
+        return chrome + fonts.horizontalAdvance(words)
+
+    def sizeHint(self) -> QSize:  # noqa: N802
+        return QSize(self._wide(self._full), super().sizeHint().height())
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802
+        return QSize(self._wide(self._short), super().minimumSizeHint().height())
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._fit()
+
+    def changeEvent(self, event: QEvent) -> None:  # noqa: N802
+        super().changeEvent(event)
+        if event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange):
+            self.updateGeometry()
+            self._fit()
+
+    def _fit(self) -> None:
+        words = self._full if self.width() >= self._wide(self._full) else self._short
+        if words != self.text():
+            self.setText(words)
+
+
+class EndsLayout(QLayout):
+    """Two groups on one row, the first at its left and the second at its right, each as wide as it
+    asks while there is room. Short of room, the first gives way first, down to its smallest, then
+    the second; with no room for both at their smallest, the second goes under the first, still at
+    the right. So the top bar is never squeezed until its words are cut."""
+
+    def __init__(self, parent: QWidget | None = None, gap: int = 6) -> None:
+        super().__init__(parent)
+        self._items: list[QLayoutItem] = []
+        self._gap = gap
+
+    def add_group(self, group: QLayout) -> None:
+        # A layout, not a widget holding one: a change inside it reaches the window's layout at once.
+        self.addChildLayout(group)
+        self._items.append(group)
+
+    def addItem(self, item: QLayoutItem) -> None:  # noqa: N802 - Qt virtual
+        self._items.append(item)
+
+    def count(self) -> int:
+        return len(self._items)
+
+    def itemAt(self, index: int) -> QLayoutItem | None:  # noqa: N802 - Qt virtual
+        return self._items[index] if 0 <= index < len(self._items) else None
+
+    def takeAt(self, index: int) -> QLayoutItem | None:  # noqa: N802 - Qt virtual
+        return self._items.pop(index) if 0 <= index < len(self._items) else None
+
+    def expandingDirections(self) -> Qt.Orientation:  # noqa: N802 - Qt virtual
+        return Qt.Orientation.Horizontal
+
+    def hasHeightForWidth(self) -> bool:  # noqa: N802 - Qt virtual
+        return True
+
+    def heightForWidth(self, width: int) -> int:  # noqa: N802 - Qt virtual
+        return self._arrange(QRect(0, 0, width, 0), place=False)
+
+    def setGeometry(self, rect: QRect) -> None:  # noqa: N802 - Qt virtual
+        super().setGeometry(rect)
+        self._arrange(rect, place=True)
+
+    def sizeHint(self) -> QSize:  # noqa: N802 - Qt virtual
+        hints = [item.sizeHint() for item in self._items]
+        return self._framed(
+            sum(hint.width() for hint in hints) + self._gap * (len(hints) - 1),
+            max((hint.height() for hint in hints), default=0),
+        )
+
+    def minimumSize(self) -> QSize:  # noqa: N802 - Qt virtual
+        smallest = [item.minimumSize() for item in self._items]
+        return self._framed(
+            max((size.width() for size in smallest), default=0),
+            max((size.height() for size in smallest), default=0),
+        )
+
+    def _framed(self, width: int, height: int) -> QSize:
+        margins = self.contentsMargins()
+        return QSize(width + margins.left() + margins.right(), height + margins.top() + margins.bottom())
+
+    def _arrange(self, rect: QRect, place: bool) -> int:
+        margins = self.contentsMargins()
+        area = rect.adjusted(margins.left(), margins.top(), -margins.right(), -margins.bottom())
+        shown = [item for item in self._items if not item.isEmpty()]
+        if len(shown) != 2:
+            tall = max((item.sizeHint().height() for item in shown), default=0)
+            for item in shown if place else ():
+                item.setGeometry(QRect(area.x(), area.y(), area.width(), tall))
+            return tall + margins.top() + margins.bottom()
+        first, second = shown
+        least = first.minimumSize().width()
+        if least + self._gap + second.minimumSize().width() <= area.width():
+            right = min(second.sizeHint().width(), area.width() - self._gap - least)
+            left = min(first.sizeHint().width(), area.width() - self._gap - right)
+            tall = max(first.sizeHint().height(), second.sizeHint().height())
+            if place:
+                first.setGeometry(QRect(area.x(), area.y(), left, tall))
+                second.setGeometry(QRect(area.x() + area.width() - right, area.y(), right, tall))
+            return tall + margins.top() + margins.bottom()
+        top, below = first.sizeHint().height(), second.sizeHint().height()
+        if place:
+            first.setGeometry(QRect(area.x(), area.y(), min(first.sizeHint().width(), area.width()), top))
+            wide = min(second.sizeHint().width(), area.width())
+            second.setGeometry(QRect(area.x() + area.width() - wide, area.y() + top + self._gap, wide, below))
+        return top + self._gap + below + margins.top() + margins.bottom()
 
 
 class Toast(QLabel):

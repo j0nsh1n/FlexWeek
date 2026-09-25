@@ -112,6 +112,8 @@ from desktop.native.widgets import (
     AvailabilityDialog,
     BlockDialog,
     ChooseTimeDialog,
+    EndsLayout,
+    FittedButton,
     FittedLabel,
     FlowLayout,
     HomeworkDialog,
@@ -128,10 +130,14 @@ from desktop.native.widgets import (
 )
 
 WINDOW_SIZE = (1280, 800)
+WINDOW_MIN_WIDTH = 640
 # The longest the old week's picture waits for the next one before it fades anyway.
 TRAVEL_WAIT_MS = 900
 PLAN_LABEL = "Plan my homework"
 SUGGEST_LABEL = "Suggest times"
+# What they say on a top bar with no room for the whole words.
+PLAN_SHORT = "Plan"
+SUGGEST_SHORT = "Suggest"
 NAV_ARROW_PX = 34
 AUTH_CARD_WIDTH = 380
 # Long enough for the student to read that the update installed before the window goes.
@@ -269,7 +275,7 @@ class NativeWindow(QMainWindow):
             self._install_tray()
         self._sync_auth_mode()
         self._show_page("authPage")
-        self.setMinimumWidth(640)
+        self.setMinimumWidth(WINDOW_MIN_WIDTH)
         # After the window exists, so a kept session opens the week the ordinary way.
         QTimer.singleShot(0, self.session.resume)
 
@@ -502,12 +508,18 @@ class NativeWindow(QMainWindow):
         page = QWidget()
         page.setObjectName("weekPage")
         layout = QVBoxLayout(page)
-        bar = QHBoxLayout()
+        # Where you are at the left, what to show and do at the right; on a narrow window the second
+        # goes under the first rather than both being cut.
+        bar = EndsLayout()
+        where = QHBoxLayout()
+        self._bar_views = QHBoxLayout()
+        bar.add_group(where)
+        bar.add_group(self._bar_views)
         # Where you are, said once and said large. Thirteen buttons of equal weight and no title at
         # all was the clutter: nothing told the eye where to land.
         self.week_title = FittedLabel()
         self.week_title.setObjectName("weekTitle")
-        bar.addWidget(self.week_title)
+        where.addWidget(self.week_title)
         self.prev_nav = QPushButton("‹")
         self.prev_nav.setObjectName("prevWeek")
         self.prev_nav.setToolTip("Previous week")
@@ -522,9 +534,8 @@ class NativeWindow(QMainWindow):
         today.clicked.connect(self._go_today)
         for arrow in (self.prev_nav, self.next_nav):
             arrow.setFixedWidth(NAV_ARROW_PX)
-            bar.addWidget(arrow)
-        bar.addWidget(today)
-        bar.addStretch()
+            where.addWidget(arrow)
+        where.addWidget(today)
         # One control, not four loose buttons: switching view is one decision.
         for view, label, tip in (
             ("day", "Day", "One day as a list"),
@@ -537,22 +548,22 @@ class NativeWindow(QMainWindow):
             button.setCheckable(True)
             button.setToolTip(tip)
             button.clicked.connect(lambda checked=False, value=view: self._choose_view(value))
-            bar.addWidget(button)
+            self._bar_views.addWidget(button)
         my_day = QPushButton("My day")
         my_day.setObjectName("viewMyDay")
         my_day.setCheckable(True)
         my_day.setToolTip("Watch today")
         my_day.clicked.connect(self._enter_day)
-        bar.addWidget(my_day)
+        self._bar_views.addWidget(my_day)
         self.account_name = QLabel()
         self.account_name.setObjectName("accountName")
         self.account_name.setVisible(False)
-        bar.addWidget(self.account_name)
+        self._bar_views.addWidget(self.account_name)
         sign_out = QPushButton("Log out")
         sign_out.setObjectName("signOut")
         sign_out.clicked.connect(self.session.logout)
         sign_out.setVisible(False)
-        bar.addWidget(sign_out)
+        self._bar_views.addWidget(sign_out)
         self._top_bar = bar
         layout.addLayout(bar)
         # Everything between the bar and the calendar is for planning, so a day screen can put it away.
@@ -590,7 +601,7 @@ class NativeWindow(QMainWindow):
         redo = QPushButton("Redo")
         redo.setObjectName("redoButton")
         redo.clicked.connect(self.session.redo)
-        solve = QPushButton("Plan my homework")
+        solve = FittedButton(PLAN_LABEL, PLAN_SHORT)
         solve.setObjectName("solveButton")
         solve.clicked.connect(self.session.solve)
         replan = QPushButton("Replan all my homework")
@@ -707,10 +718,8 @@ class NativeWindow(QMainWindow):
         gear.clicked.connect(self._open_settings)
         # The week saves itself now, so Save is not a thing to press; it stays reachable under More
         # and on Ctrl+S for anyone who wants to be sure. Retry appears only when a save has failed.
-        self._top_bar.addWidget(solve)
-        self._top_bar.addWidget(retry)
-        self._top_bar.addWidget(more)
-        self._top_bar.addWidget(gear)
+        for shown in (solve, retry, more, gear):
+            self._bar_views.addWidget(shown)
         self.solve_button = solve
         self.more_button = more
         self.settings_gear = gear
@@ -911,7 +920,8 @@ class NativeWindow(QMainWindow):
         homework and More stay in the top bar in every layout, every view, and My day."""
         manual = (self.session.preferences or {}).get("planning_style") == "manual"
         # A student who places homework by hand asks for ideas; the plan is theirs.
-        self.solve_button.setText(SUGGEST_LABEL if manual else PLAN_LABEL)
+        self.solve_button.set_texts(*((SUGGEST_LABEL, SUGGEST_SHORT) if manual else (PLAN_LABEL, PLAN_SHORT)))
+        self._keep_bar_whole()
         own = isinstance(self.planner.currentWidget(), LayoutView)
         self.plan_chrome.setVisible(not own)
         self.focus_panel.setVisible(not own or self.session.focus is not None)
@@ -922,6 +932,14 @@ class NativeWindow(QMainWindow):
         # Quick focus is in the action row whenever there is one, so the panel's own copy would be
         # the same button twice; it belongs to the panel only where no action row is shown.
         self.focus_panel.quick.setVisible(own and self._day_mode)
+
+    def _keep_bar_whole(self) -> None:
+        """The window is never narrower than the top bar's buttons at their smallest, which large
+        text, Suggest times and Retry save each widen."""
+        self._bar_views.invalidate()
+        margins = self._bar_views.parentWidget().layout().contentsMargins()
+        needed = self._bar_views.minimumSize().width() + margins.left() + margins.right()
+        self.setMinimumWidth(max(WINDOW_MIN_WIDTH, needed))
 
     def _choose_view(self, view: str) -> None:
         self._day_mode = False
@@ -2399,6 +2417,7 @@ class NativeWindow(QMainWindow):
         if dressed != self._dressed:
             self._dressed = dressed
             self.setStyleSheet(sheet)
+            self._keep_bar_whole()
             apply_ui_effects(self._motion)
             self.toast.motion = self._motion
             # Day, Month and the week grid are dressed by the same design as the main view, so moving

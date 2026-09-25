@@ -26,5 +26,26 @@
   "old": "            if title.strip(\"…\"):\n                fitted = title + self._length\n",
   "new": "",
   "test": "desktop/tests/test_classic_hours.py::test_a_tray_chip_shortens_its_title_and_keeps_its_length_whole"
+ },
+ {
+  "file": "desktop/native/widgets.py",
+  "name": "the week title cut short of its short form",
+  "old": "        return QSize(max(self._minimum, short if self._short else 0), super().minimumSizeHint().height())\n",
+  "new": "        return QSize(self._minimum, super().minimumSizeHint().height())\n",
+  "test": "desktop/tests/test_window_screens.py::test_the_top_bar_is_never_cut_mid_word"
+ },
+ {
+  "file": "desktop/native/widgets.py",
+  "name": "the top bar squeezed instead of wrapping",
+  "old": "        if least + self._gap + second.minimumSize().width() <= area.width():\n",
+  "new": "        if True:\n",
+  "test": "desktop/tests/test_window_screens.py::test_the_top_bar_is_never_cut_mid_word"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the window narrower than the top bar's buttons",
+  "old": "        self.setMinimumWidth(max(WINDOW_MIN_WIDTH, needed))\n",
+  "new": "        self.setMinimumWidth(WINDOW_MIN_WIDTH)\n",
+  "test": "desktop/tests/test_window_screens.py::test_the_top_bar_is_never_cut_mid_word"
  }
 ]
