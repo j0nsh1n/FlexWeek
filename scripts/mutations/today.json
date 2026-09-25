@@ -82,5 +82,89 @@
   "old": "        self.armed_category: str | None = None\n",
   "new": "        self.armed_category: str | None = \"class\"\n",
   "test": "desktop/tests/test_drag_results.py::test_a_block_made_by_dragging_has_no_category_until_the_student_picks_one"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a drag saves with no sign",
+  "old": "            self._say_when_saved(moved_words(block, origin, day, start, end))\n",
+  "new": "",
+  "test": "desktop/tests/test_drag_results.py::test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a block made by dragging says nothing",
+  "old": "            self._say_when_saved(added_words(made[0]))\n",
+  "new": "            pass\n",
+  "test": "desktop/tests/test_drag_results.py::test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a date carried on Month says nothing",
+  "old": "            self._say_when_saved(dated_words(self._title_of(change.block_id, change.from_iso), change.to_iso))\n",
+  "new": "            pass\n",
+  "test": "desktop/tests/test_drag_results.py::test_a_chip_carried_on_month_says_what_it_did"
+ },
+ {
+  "file": "desktop/native/weekmodel.py",
+  "name": "a resize said as a move",
+  "old": "    if day == from_day and start == was and end != was_end:\n",
+  "new": "    if False:\n",
+  "test": "desktop/tests/test_drag_results.py::test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the notice's Undo says nothing",
+  "old": "        self._notice_step = None\n        self._told(self.session.undo)\n",
+  "new": "        self._notice_step = None\n        self.session.undo()\n",
+  "test": "desktop/tests/test_drag_results.py::test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a notice pushes the hours down under a held block",
+  "old": "        if self._change_saved is None or self.hand.busy:\n",
+  "new": "        if self._change_saved is None:\n",
+  "test": "desktop/tests/test_drag_results.py::test_the_notice_waits_for_the_pointer_and_goes_once_its_change_is_no_longer_the_last"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a notice keeps an Undo that would take back a later change",
+  "old": "        elif stored and self._notice_step is not None and self.session.last_step() is not self._notice_step:\n",
+  "new": "        elif False:\n",
+  "test": "desktop/tests/test_drag_results.py::test_the_notice_waits_for_the_pointer_and_goes_once_its_change_is_no_longer_the_last"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "Advanced actions say what they did only in the status line",
+  "old": "            action.triggered.connect(lambda _=False, pressed=button: self._told(pressed.click))\n",
+  "new": "            action.triggered.connect(button.click)\n",
+  "test": "desktop/tests/test_drag_results.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the toast says an action is still going, not what it did",
+  "old": "        if self._telling and message and not message.endswith(\"…\"):\n",
+  "new": "        if self._telling and message:\n",
+  "test": "desktop/tests/test_drag_results.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
+ },
+ {
+  "file": "desktop/native/controller.py",
+  "name": "Duplicate says it copied",
+  "old": "        if not self.copy_block(source_id, day, scope, say=False):\n",
+  "new": "        if not self.copy_block(source_id, day, scope):\n",
+  "test": "desktop/tests/test_drag_results.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
+ },
+ {
+  "file": "desktop/native/controller.py",
+  "name": "Reload says This week",
+  "old": "        self.load_week(self.week_start, discard=True, said=\"Reloaded this week.\")\n",
+  "new": "        self.load_week(self.week_start, discard=True)\n",
+  "test": "desktop/tests/test_drag_results.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a paste says Saved, not what it pasted",
+  "old": "            said=said,\n        )\n",
+  "new": "        )\n",
+  "test": "desktop/tests/test_drag_results.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
  }
 ]

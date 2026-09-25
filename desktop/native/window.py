@@ -105,7 +105,7 @@ from desktop.native.tones import FALLBACK
 from desktop.native.update import RELEASE_PAGE, due_for_check, sanitize_updates
 from desktop.native.updater import Updater, apply_update
 from desktop.native.version import VERSION
-from desktop.native.weekmodel import build_week
+from desktop.native.weekmodel import added_words, build_week, dated_words, moved_words
 from desktop.native.widgets import (
     AddMenu,
     AlertStrip,
@@ -214,6 +214,14 @@ class NativeWindow(QMainWindow):
         # the week, so a move made before it arrived would be lost.
         self._move_waiting: tuple[str, int, int, int, int] | None = None
         self._date_waiting: MoveDate | None = None
+        # What a drag changed, said with Undo once its save lands: the words for the save on its way,
+        # and words waiting for the pointer to let go, since the notice pushes the hours down.
+        self._change_saving: str | None = None
+        self._change_saved: str | None = None
+        # The Undo step a change notice offers to take back.
+        self._notice_step: dict | None = None
+        # Something asked for is under way; the next thing the status line says is what it did.
+        self._telling = False
         self._month_revealed: tuple | None = None
         self._changed_ms = 0
         self._last_try_ms = 0
@@ -229,6 +237,7 @@ class NativeWindow(QMainWindow):
         self.session.recovery_codes.connect(self._show_recovery)
         self.session.week_changed.connect(self._on_week)
         self.session.status.connect(self._on_status)
+        self.session.status.connect(self._tell)
         self.session.busy_changed.connect(self._on_busy)
         self.session.save_finished.connect(self._on_save_finished)
         self.session.plan_conflicts.connect(self._on_plan_conflicts)
@@ -702,7 +711,7 @@ class NativeWindow(QMainWindow):
             if button.parent() is not overflow:
                 button.setParent(overflow)
             action = advanced_menu.addAction(button.text())
-            action.triggered.connect(button.click)
+            action.triggered.connect(lambda _=False, pressed=button: self._told(pressed.click))
             self._more_pairs.append((action, button))
         if sign_out.parent() is not overflow:
             sign_out.setParent(overflow)
@@ -1612,7 +1621,7 @@ class NativeWindow(QMainWindow):
         elif isinstance(change, Create):
             span = change.span
             # After the release has been handled: Add is a dialog with its own event loop.
-            QTimer.singleShot(0, lambda: self._create_range(span.day, span.start, span.end))
+            QTimer.singleShot(0, lambda: self._create_by_drag(span))
         elif isinstance(change, MoveDate):
             self._move_to_date(change)
 
@@ -1642,7 +1651,17 @@ class NativeWindow(QMainWindow):
         if self.session.pending_save is not None or self.session.conflict:
             self.session._say("Not moved: your last change has not saved yet. Try again once it has.")
             return
-        self.session.move_to_date(change.block_id, change.from_iso, change.to_iso)
+        if self.session.move_to_date(change.block_id, change.from_iso, change.to_iso):
+            self._say_when_saved(dated_words(self._title_of(change.block_id, change.from_iso), change.to_iso))
+
+    def _title_of(self, block_id: str, iso: str) -> str:
+        """A block's title, from this week or, for a chip from another week, from what Month shows."""
+        block = next((item for item in self.session.blocks if item["id"] == block_id), None)
+        if block is None:
+            days = (self.session.month_data or {}).get("days") or []
+            day = next((item for item in days if item.get("date") == iso), {})
+            block = next((item for item in day.get("blocks") or [] if item.get("id") == block_id), None)
+        return (block or {}).get("title") or "the block"
 
     def _hold_renders(self, holding: bool) -> None:
         """Nothing a press started on is rebuilt until it is let go, whether it becomes a drag or a tap."""
@@ -1655,8 +1674,10 @@ class NativeWindow(QMainWindow):
         if self.session.account is not None and not self.hand.busy:
             self._fill_classic()
             self._sync_classic_waiting()
+            self._show_change()
 
     def _set_notice(self, text: str, button: str, callback) -> None:
+        self._notice_step = None
         self.action_notice_text.setText(text)
         self.action_notice_button.setText(button)
         self._notice_callback = callback
@@ -1668,7 +1689,36 @@ class NativeWindow(QMainWindow):
 
     def _undo_from_notice(self) -> None:
         self.action_notice.hide()
-        self.session.undo()
+        self._notice_step = None
+        self._told(self.session.undo)
+
+    def _say_when_saved(self, words: str) -> None:
+        """`words` say what the save now on its way changes, once it lands, with Undo. A change that
+        started no save says nothing."""
+        self._change_saving = words if self.session.busy else None
+
+    def _show_change(self) -> None:
+        # Not while a block is held: the notice would push the hours down under the pointer.
+        if self._change_saved is None or self.hand.busy:
+            return
+        words, self._change_saved = self._change_saved, None
+        self._set_notice(words, "Undo", self._undo_from_notice)
+        self._notice_step = self.session.last_step()
+
+    def _told(self, act) -> None:
+        """Do what the student asked, and once it is done say what it did in the toast: the first thing
+        the status line says, bar words ending in "…", which say it is still going. The status line
+        alone, at the foot of the window, went unseen."""
+        self._telling = True
+        act()
+        if not self.session.busy:
+            # Done at once, or a dialog closed without doing anything.
+            self._telling = False
+
+    def _tell(self, message: str) -> None:
+        if self._telling and message and not message.endswith("…"):
+            self._telling = False
+            self.toast.show_message(message)
 
     def _on_plan_conflicts(self, lost: list) -> None:
         if not lost:
@@ -1694,6 +1744,13 @@ class NativeWindow(QMainWindow):
             self._commit_homework(HomeworkDialog(self, week_start=self.session.week_start, category=category))
             return
         self._commit_block(BlockDialog(self, category=category))
+
+    def _create_by_drag(self, span: Span) -> None:
+        before = {item["id"] for item in self.session.blocks}
+        self._create_range(span.day, span.start, span.end)
+        made = [item for item in self.session.blocks if item["id"] not in before]
+        if made:
+            self._say_when_saved(added_words(made[0]))
 
     def _create_range(self, day: int, start_min: int, end_min: int) -> None:
         start = minutes_to_hhmm(start_min)
@@ -1791,15 +1848,16 @@ class NativeWindow(QMainWindow):
             if verdict.words:
                 self.session._say(verdict.words)
             return
+        origin = from_day if from_day in block["days"] else day
         if not block.get("start"):
             changed = self.session.place_session(block_id, day, start)
         elif is_series(block):
-            origin = from_day if from_day in block["days"] else day
             changed = self.session.move_occurrence(block_id, origin, day, start, end)
         else:
             changed = self.session.apply_times(block_id, start, end, day)
         if changed:
             self.session.save()
+            self._say_when_saved(moved_words(block, origin, day, start, end))
 
     def _edit_block(self, block_id: str) -> None:
         if self.session.planner_view == "day":
@@ -1831,7 +1889,9 @@ class NativeWindow(QMainWindow):
         attempt_key: str | None = None,
         existing: list[dict] | None = None,
         destination: str | None = None,
+        done: str | None = None,
     ) -> None:
+        """`done` is the verb that says what saving the rows did, as in "Pasted Piano"."""
         if not rows:
             return
         dialog = PreviewDialog(
@@ -1843,6 +1903,9 @@ class NativeWindow(QMainWindow):
         )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
+        chosen = [row for row in dialog.rows() if row.get("checked")]
+        what = chosen[0]["block"]["title"] if len(chosen) == 1 else f"{len(chosen)} blocks"
+        said = f"{done} {what}." if done and chosen else None
         self.session.confirm_preview(
             dialog.rows(),
             label=label,
@@ -1850,6 +1913,7 @@ class NativeWindow(QMainWindow):
             attempt_key=attempt_key,
             existing=existing,
             destination=destination,
+            said=said,
         )
 
     def _copy_selected(self) -> None:
@@ -1858,7 +1922,7 @@ class NativeWindow(QMainWindow):
     def _paste_clipboard(self) -> None:
         clip = self.session.clipboard
         rows = self.session.paste_proposals()
-        label = "the copied day" if clip and clip["kind"] == "day" else "the copied block"
+        label = "pasting " + clip["label"] if clip else "pasting"
         key = None
         if clip and self.session.account is not None:
             dest = self.session.paste_destination()
@@ -1873,15 +1937,20 @@ class NativeWindow(QMainWindow):
             rows,
             label=label,
             attempt_key=key,
+            done="Pasted",
         )
 
     def _duplicate_selected(self) -> None:
+        chosen = next(
+            (item for item in self.session.blocks if item["id"] == self.session.selected_block_id), None
+        )
         rows = self.session.duplicate_selected()
         self._show_preview(
             "Preview paste",
             "Nothing changes until you save this preview.",
             rows,
-            label="the copied block",
+            label="duplicating " + (chosen or {}).get("title", "a block"),
+            done="Duplicated",
         )
 
     def _copy_day(self) -> None:
@@ -1994,6 +2063,15 @@ class NativeWindow(QMainWindow):
         self._late_waiting = (block["id"], late_locked_line(block, moved))
 
     def _on_save_finished(self, stored: bool, said: str) -> None:
+        change, self._change_saving = self._change_saving, None
+        if stored and change is not None:
+            self._change_saved = change
+            self._show_change()
+        elif stored and self._notice_step is not None and self.session.last_step() is not self._notice_step:
+            # A later change, or an Undo, has taken the notice's step off the top: its Undo would now
+            # take back something else.
+            self.action_notice.hide()
+            self._notice_step = None
         if self._late_waiting is None:
             return
         block_id, message = self._late_waiting
@@ -2286,7 +2364,7 @@ class NativeWindow(QMainWindow):
         if dialog.action == "create":
             self.session.create_restore_point(dialog.create_label)
         elif dialog.action == "preview" and dialog.selected_id:
-            self.session.preview_restore_point(dialog.selected_id, self._open_restore)
+            self.session.preview_restore_point(dialog.selected_id, lambda: self._told(self._open_restore))
         elif dialog.action == "restore" and dialog.selected_id:
             confirm = QMessageBox.question(
                 self,
@@ -2502,29 +2580,29 @@ class NativeWindow(QMainWindow):
         if mods & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier):
             if key == Qt.Key.Key_Z:
                 if mods & Qt.KeyboardModifier.ShiftModifier:
-                    self.session.redo()
+                    self._told(self.session.redo)
                 else:
-                    self.session.undo()
+                    self._told(self.session.undo)
                 event.accept()
                 return
             if key == Qt.Key.Key_Y:
-                self.session.redo()
+                self._told(self.session.redo)
                 event.accept()
                 return
             if key == Qt.Key.Key_C:
-                self._copy_selected()
+                self._told(self._copy_selected)
                 event.accept()
                 return
             if key == Qt.Key.Key_V:
-                self._paste_clipboard()
+                self._told(self._paste_clipboard)
                 event.accept()
                 return
             if key == Qt.Key.Key_D:
-                self._duplicate_selected()
+                self._told(self._duplicate_selected)
                 event.accept()
                 return
             if key == Qt.Key.Key_S:
-                self.session.save()
+                self._told(self.session.save)
                 event.accept()
                 return
             if key in ZOOM_KEYS:

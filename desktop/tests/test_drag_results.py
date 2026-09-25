@@ -220,3 +220,207 @@ def test_a_block_made_by_dragging_has_no_category_until_the_student_picks_one(
         {"Club": ([3], "16:00", 60, None), "Practice": ([3], "17:30", 30, "exercise")},
         "School: 6 h 30 min\nOther: 1 h\nActivity: 30 min\nSports: 30 min\nHomework: 1 h",
     )
+
+
+def notice(window: NativeWindow) -> tuple[bool, str, str]:
+    """The notice over the hours: whether it shows, its words and its button."""
+    if not window.action_notice.isVisible():
+        return False, "", ""
+    return True, window.action_notice_text.text(), window.action_notice_button.text()
+
+
+def toast(window: NativeWindow) -> str:
+    return window.toast.text() if window.toast.isVisible() else ""
+
+
+def tray_chip(window: NativeWindow, block_id: str) -> QPushButton:
+    return next(
+        chip
+        for chip in window.findChildren(QPushButton)
+        if chip.property("block_id") == block_id and chip.property("tray") and chip.isVisible()
+    )
+
+
+def test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Dragging saved at once with no sign. Now each change says what it did once it is saved, with
+    Undo beside it, and Undo takes that one change back and says so."""
+    session = window.session
+    answer_editors(monkeypatch, "Club")
+    hours = window.week_table.hours
+    math = session_of(window, "math")["id"]
+    said = []
+
+    hours.reveal(3, 17 * 60, 21 * 60)
+    qapp.processEvents()
+    drag(qapp, hours, hours, hours.point_for(3, 19 * 60 + 30), hours.point_for(4, 18 * 60 + 30))
+    wait_until(qapp, lambda: session_of(window, "essay")["days"] == [4])
+    settled(qapp, window)
+    said.append(notice(window))
+
+    hours.reveal(4, 17 * 60, 21 * 60)
+    qapp.processEvents()
+    # Three pixels inside the essay's end, where a press resizes it.
+    edge = QPoint(0, -3)
+    drag(qapp, hours, hours, hours.point_for(4, 19 * 60) + edge, hours.point_for(4, 19 * 60 + 30) + edge)
+    wait_until(qapp, lambda: session_of(window, "essay")["duration_min"] == 90)
+    settled(qapp, window)
+    said.append(notice(window))
+
+    create_on(qapp, window, hours, 5, "10:00-11:00", "Club")
+    said.append(notice(window))
+
+    hours.reveal(3, 17 * 60, 20 * 60)
+    qapp.processEvents()
+    before = [dict(block) for block in session.blocks]
+    drag(qapp, tray_chip(window, math), hours, tray_chip(window, math).mapToGlobal(QPoint(8, 8)),
+         hours.point_for(3, 18 * 60))
+    wait_until(qapp, lambda: session_of(window, "math").get("start") == "18:00")
+    settled(qapp, window)
+    said.append(notice(window))
+    assert said == [
+        (True, "Moved History essay to Fri 18:00.", "Undo"),
+        (True, "History essay now ends at 19:30.", "Undo"),
+        (True, "Added Club on Sat 10:00.", "Undo"),
+        (True, "Placed Math worksheet on Thu 18:00.", "Undo"),
+    ]
+
+    QTest.mouseClick(window.findChild(QPushButton, "actionNoticeButton"), LEFT)
+    wait_until(qapp, lambda: not session_of(window, "math").get("start"))
+    settled(qapp, window)
+    assert (notice(window), toast(window)) == ((False, "", ""), "Undid placing Math worksheet.")
+    assert session.blocks == before, "Undo took back the placing and nothing else"
+
+
+def test_the_notice_waits_for_the_pointer_and_goes_once_its_change_is_no_longer_the_last(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """A notice pushes the hours down, so one that lands while a block is held waits for it to be let
+    go. Once a later change is saved, its Undo would take back that one instead, so it goes."""
+    session = window.session
+    hours = window.week_table.hours
+    hours.reveal(3, 16 * 60, 21 * 60)
+    qapp.processEvents()
+    drag(qapp, hours, hours, hours.point_for(3, 19 * 60 + 30), hours.point_for(3, 20 * 60 + 30))
+    assert session.busy, "the essay's save is still on its way"
+    # The chips the release took out of the tray are freed before a hand could press again. Freed
+    # while a block is held, each is a window of its own going, which lets the block go.
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    # Held on Piano while the essay's save lands.
+    send(hours, QEvent.Type.MouseButtonPress, hours.point_for(3, 17 * 60 + 15), True)
+    send(hours, QEvent.Type.MouseMove, hours.point_for(3, 17 * 60 + 45), True)
+    wait_until(qapp, lambda: not session.busy and session_of(window, "essay")["start"] == "20:00")
+    held = notice(window)
+    send(hours, QEvent.Type.MouseButtonRelease, hours.point_for(3, 17 * 60 + 45), False)
+    qapp.processEvents()
+    let_go = notice(window)
+    wait_until(qapp, lambda: next(b for b in session.blocks if b["id"] == "piano")["start"] == "17:30")
+    settled(qapp, window)
+    after_piano = notice(window)
+    session.select_block("piano", 3)
+    QTest.keyClick(window, Qt.Key.Key_Delete)
+    settled(qapp, window)
+    assert (held, let_go, after_piano, notice(window)) == (
+        (False, "", ""),
+        (True, "Moved History essay to Thu 20:00.", "Undo"),
+        (True, "Moved Piano to Thu 17:30.", "Undo"),
+        (False, "", ""),
+    )
+
+
+def test_a_move_in_a_design_says_what_it_did_too(qapp: QApplication, window: NativeWindow) -> None:
+    from desktop.native.layouts.registry import sanitize_layout
+
+    window._layout = sanitize_layout({"main": "mission", "day": "one"})
+    window._apply_appearance()
+    window._on_week()
+    settled(qapp, window)
+    hours = window.planner.currentWidget().hours_surfaces()[0]
+    hours.reveal(3, 17 * 60, 21 * 60)
+    qapp.processEvents()
+    drag(qapp, hours, hours, hours.point_for(3, 19 * 60 + 30), hours.point_for(4, 18 * 60 + 30))
+    wait_until(qapp, lambda: session_of(window, "essay")["days"] == [4])
+    settled(qapp, window)
+    assert notice(window) == (True, "Moved History essay to Fri 18:00.", "Undo")
+
+
+def test_a_chip_carried_on_month_says_what_it_did(qapp: QApplication, window: NativeWindow) -> None:
+    from datetime import date
+
+    # Inside the offscreen screen, 800 pixels square, where the hand can find the date under a point.
+    window.move(0, 0)
+    window.resize(760, 720)
+    QTest.mouseClick(window.findChild(QPushButton, "viewMonth"), LEFT)
+    settled(qapp, window)
+    canvas = window.month_grid.canvas
+    thursday = date.fromisoformat(window.session.week_start) + timedelta(days=3)
+    friday = thursday + timedelta(days=1)
+    canvas.reveal(thursday.isoformat())
+    qapp.processEvents()
+    essay = session_of(window, "essay")["id"]
+    start, end = canvas.chip_point(essay, thursday.isoformat()), canvas.cell_point(friday.isoformat())
+    drag(qapp, canvas, canvas, start, end)
+    wait_until(qapp, lambda: session_of(window, "essay")["days"] == [4])
+    settled(qapp, window)
+    months = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+    words = f"Moved History essay to Fri {friday.day} {months[friday.month - 1]}."
+    assert notice(window) == (True, words, "Undo")
+
+
+def advanced(window: NativeWindow, words: str) -> None:
+    """Pick the item under More > Advanced whose words start with `words`, as a click on it does."""
+    menu = window.more_button.menu()
+    menu.aboutToShow.emit()
+    inner = next(action.menu() for action in menu.actions() if action.menu() and action.text() == "Advanced")
+    next(action for action in inner.actions() if action.text().startswith(words)).trigger()
+
+
+def test_every_advanced_action_says_what_it_did_when_it_is_done(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Their words went only to the status line at the foot of the window, which nobody watched."""
+    from PySide6.QtWidgets import QComboBox, QLineEdit
+
+    from desktop.native.settings import RestoreDialog
+    from desktop.native.widgets import PreviewDialog
+
+    days = iter((4, 5))
+
+    def preview(dialog: PreviewDialog) -> int:
+        """Put the copy on a free day, which ticks it, and save the preview."""
+        dialog.show()
+        dialog.findChild(QComboBox, "previewDay0").setCurrentIndex(next(days))
+        QTest.mouseClick(dialog.confirm, LEFT)
+        return dialog.result()
+
+    def restore(dialog: RestoreDialog) -> int:
+        dialog.show()
+        QTest.keyClicks(dialog.findChild(QLineEdit, "restoreLabel"), "Before exams")
+        QTest.mouseClick(dialog.findChild(QPushButton, "restoreCreate"), LEFT)
+        return dialog.result()
+
+    monkeypatch.setattr(PreviewDialog, "exec", preview)
+    monkeypatch.setattr(RestoreDialog, "exec", restore)
+    hours = window.week_table.hours
+    hours.reveal(3, 16 * 60, 19 * 60)
+    qapp.processEvents()
+    click(qapp, hours, hours.point_for(3, 17 * 60 + 15))
+    assert window.session.selected_block_id == "piano"
+    said = []
+    for words in ("Copy", "Paste", "Duplicate", "Copy Thursday", "Save", "Undo", "Redo", "Restore", "Reload"):
+        window.toast.hide()
+        advanced(window, words)
+        settled(qapp, window)
+        said.append((words, toast(window)))
+    assert said == [
+        ("Copy", "Piano copied. Choose a destination and paste."),
+        ("Paste", "Pasted Piano."),
+        ("Duplicate", "Duplicated Piano."),
+        ("Copy Thursday", "Thursday · 3 items copied. Choose a destination and paste."),
+        ("Save", "Saved."),
+        ("Undo", "Undid duplicating Piano."),
+        ("Redo", "Redid duplicating Piano."),
+        ("Restore", "Saved restore point Before exams."),
+        ("Reload", "Reloaded this week."),
+    ]
