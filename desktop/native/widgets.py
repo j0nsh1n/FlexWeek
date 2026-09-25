@@ -899,7 +899,7 @@ class HomeworkDialog(QDialog):
         self,
         parent: QWidget | None = None,
         assignment: dict | None = None,
-        week_start: str = "2000-01-03",
+        today: str | None = None,
         category: str | None = None,
         estimate_min: int | None = None,
         due: str | None = None,
@@ -915,7 +915,8 @@ class HomeworkDialog(QDialog):
             else {
                 "id": str(uuid4()),
                 "title": info["label"] if info else "",
-                "due": due or week_start,
+                # Today, whatever week is on screen: the Monday of that week was often already past.
+                "due": due or today or date.today().isoformat(),
                 "estimate_min": estimate_min or (info or {}).get("preset", {}).get("duration_min") or 60,
                 "category": category,
                 "revision": 0,

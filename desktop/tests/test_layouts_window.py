@@ -1861,7 +1861,7 @@ def test_settings_and_homework_open_tall_enough_to_read(
     assert close is not None and _dialog_shows(prefs, close)
     prefs.close()
 
-    homework = HomeworkDialog(window, week_start=window.session.week_start)
+    homework = HomeworkDialog(window)
     homework.setStyleSheet(window.styleSheet())
     homework.show()
     qapp.processEvents()
@@ -1873,7 +1873,7 @@ def test_settings_and_homework_open_tall_enough_to_read(
     assert buttons is not None and _dialog_shows(homework, buttons)
     homework.close()
 
-    edited = HomeworkDialog(window, window.session.assignments["essay"], window.session.week_start)
+    edited = HomeworkDialog(window, window.session.assignments["essay"])
     edited.setStyleSheet(window.styleSheet())
     edited.show()
     qapp.processEvents()

@@ -1477,7 +1477,10 @@ class NativeWindow(QMainWindow):
         category = self.session.armed_category
         if category not in FLEX_CATEGORIES:
             category = "assignments"
-        self._commit_homework(HomeworkDialog(self, week_start=self.session.week_start, category=category))
+        self._commit_homework(HomeworkDialog(self, today=self._today(), category=category))
+
+    def _today(self) -> str:
+        return clock_parts(self.session.now_ms())["iso"]
 
     def _sync_add_button(self) -> None:
         """The Add button carries the type a drag on the calendar will make, so the armed type is
@@ -1662,7 +1665,7 @@ class NativeWindow(QMainWindow):
         self.session.arm_category(category)
         self._sync_add_button()
         if category in FLEX_CATEGORIES:
-            self._commit_homework(HomeworkDialog(self, week_start=self.session.week_start, category=category))
+            self._commit_homework(HomeworkDialog(self, today=self._today(), category=category))
             return
         self._commit_block(BlockDialog(self, category=category))
 
@@ -1674,7 +1677,6 @@ class NativeWindow(QMainWindow):
             self._commit_homework(
                 HomeworkDialog(
                     self,
-                    week_start=self.session.week_start,
                     category=category,
                     estimate_min=duration,
                     due=sunday_due(self.session.week_start),
@@ -1708,7 +1710,7 @@ class NativeWindow(QMainWindow):
         sessions = [block for block in self.session.blocks if block.get("assignment_id") == assignment_id]
         waiting = any(not block.get("start") and not block.get("completed") for block in sessions)
         pinned = any(block.get("pinned") for block in sessions)
-        dialog = HomeworkDialog(self, assignment, self.session.week_start, waiting=waiting, pinned=pinned)
+        dialog = HomeworkDialog(self, assignment, waiting=waiting, pinned=pinned)
         self._commit_homework(dialog)
 
     def _choose_time(self, assignment_id: str) -> None:

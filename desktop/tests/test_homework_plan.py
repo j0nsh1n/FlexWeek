@@ -10,7 +10,7 @@ import importlib.util
 import os
 import time
 from collections.abc import Callable, Iterator
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -158,6 +158,34 @@ def opened_with(
 def press(dialog: QDialog, name: str) -> int:
     dialog.findChild(QPushButton, name).click()
     return QDialog.DialogCode.Accepted
+
+
+# Due today
+
+
+def test_new_homework_opens_due_today_whatever_week_is_on_screen(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dues: list[str] = []
+
+    def look(dialog: HomeworkDialog) -> int:
+        dues.append(dialog.due.value())
+        return QDialog.DialogCode.Rejected
+
+    opened_with(monkeypatch, look)
+    window._add_homework()
+    today = thursday_iso(window)
+    assert dues == [today], "due today, not on the Monday of the week on screen"
+
+    dues.clear()
+    window._edit_homework("math")
+    assert dues == [window.session.assignments["math"]["due"][:10]], "editing keeps its own due date"
+
+    ahead = (date.fromisoformat(window.session.week_start) + timedelta(days=7)).isoformat()
+    window.session.load_week(ahead)
+    wait_until(qapp, lambda: window.session.week_start == ahead and not window.session.busy)
+    window._add_homework()
+    assert dues[-1] == today
 
 
 # The due date's follow-ups
