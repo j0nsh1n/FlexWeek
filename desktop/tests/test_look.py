@@ -166,23 +166,26 @@ def test_choosing_a_preset_means_every_one_of_its_knobs() -> None:
     assert look_overrides("default", {**LOOK_DEFAULTS, "corners": "pill"}) == {"corners": "pill"}
 
 
+# Every pair of window colours the app puts text on.
+TEXT_PAIRS = [
+    ("text", "window"),
+    ("text", "panel"),
+    ("text", "field"),
+    ("text", "grid"),
+    ("muted", "window"),
+    ("muted", "panel"),
+    ("error", "panel"),
+    ("accent_ink", "accent"),
+    ("block_locked_ink", "block_locked"),
+    ("block_flex_ink", "block_flex"),
+]
+
+
 def test_every_look_keeps_its_text_readable() -> None:
-    pairs = [
-        ("text", "window"),
-        ("text", "panel"),
-        ("text", "field"),
-        ("text", "grid"),
-        ("muted", "window"),
-        ("muted", "panel"),
-        ("error", "panel"),
-        ("accent_ink", "accent"),
-        ("block_locked_ink", "block_locked"),
-        ("block_flex_ink", "block_flex"),
-    ]
     assert len(EVERY_LOOK) == 5 * 2 * 7 * 5 * 2
     for pack, system_dark, preset, accent, surface in EVERY_LOOK:
         palette = resolved_palette(pack, system_dark, look_of(preset, surface=surface), accent)
-        for ink, fill in pairs:
+        for ink, fill in TEXT_PAIRS:
             ratio = contrast(palette[ink], palette[fill])
             where = f"{pack}/{'dark' if system_dark else 'light'}/{preset}/{accent}/{surface}"
             assert ratio >= AA_TEXT, f"{where}: {ink} on {fill} is {ratio:.2f} to 1"

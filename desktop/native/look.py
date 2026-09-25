@@ -580,21 +580,29 @@ def palette_from_tokens(tokens: dict[str, str], base: dict) -> dict:
     A layout used to dress only itself, so Bento's indigo sat under a top bar in the pack's blue and
     the focus timer arrived in default chrome. The chrome now follows whichever design is on screen.
     Category colours stay on `base`: a block is School-blue in every design.
+
+    The chrome writes one text colour on the window, its panels and its fields. Where the page's ink
+    cannot be read on the design's cards, as Retro's white desktop ink on its grey windows (1.82 to 1),
+    the window takes the cards' colour and ink, as Retro's own windows do.
     """
     line = tokens["line"]
+    if contrast(tokens["bg_ink"], tokens["surface"]) >= AA_TEXT:
+        window, text, muted = tokens["bg"], tokens["bg_ink"], tokens["bg_muted"]
+    else:
+        window, text, muted = tokens["surface"], tokens["text"], tokens["muted"]
     return {
         **base,
-        "window": tokens["bg"],
+        "window": window,
         "panel": tokens["surface"],
         "field": tokens["surface"],
         "grid": line,
-        "text": tokens["bg_ink"],
-        "muted": tokens["bg_muted"],
+        "text": text,
+        "muted": muted,
         "accent": tokens["accent"],
         "accent_ink": tokens["accent_ink"],
         "error": tokens["danger"],
         "hairline": line,
-        "hairline_strong": mix(tokens["bg_ink"], tokens["surface"], 0.30),
+        "hairline_strong": mix(text, tokens["surface"], 0.30),
     }
 
 
