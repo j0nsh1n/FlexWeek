@@ -456,6 +456,7 @@ class PrefsDialog(QDialog):
         where = QLabel("Preferred study times, including ones kept for one subject, are in Availability.")
         where.setWordWrap(True)
         planning_form.addRow(where)
+        planning_form.addRow(_heading("Dragging"))
         planning_form.addRow(QLabel(DRAG_STEP_QUESTION))
         self.drag_step = QButtonGroup(planning)
         chosen_step = drag_step(preferences.get("drag_step_min"))
