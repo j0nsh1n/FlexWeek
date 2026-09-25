@@ -6,15 +6,10 @@ from desktop.native.calendar import (
     apply_block_edit,
     apply_block_times,
     create_click_range,
-    create_drag_range,
     days_through,
     due_day_in_week,
     due_soon_for,
     is_series,
-    move_range,
-    resize_bottom_range,
-    resize_top_range,
-    snap_minute,
     span_clash,
     span_problem,
     split_occurrence,
@@ -23,29 +18,11 @@ from desktop.native.calendar import (
 from desktop.native.reuse import due_point
 
 
-def test_snap_minute_rounds_to_fifteen_and_clamps_to_the_grid() -> None:
-    assert snap_minute(367) == 360
-    assert snap_minute(368) == 375
-    assert snap_minute(0) == 0
-    assert snap_minute(2000) == 1440
-
-
-def test_create_drag_and_click_ranges_follow_the_daily_scheduler() -> None:
-    assert create_drag_range(360, 400) == (360, 405)
-    assert create_drag_range(400, 360) == (360, 405)
+def test_a_click_makes_up_to_an_hour_and_stops_at_the_next_block() -> None:
     assert create_click_range(900, [(930, 960)]) == (900, 930)
     assert create_click_range(900, []) == (900, 960)
-    assert create_click_range(1425, [(1430, 1440)]) is None
-
-
-def test_move_and_resize_keep_minimum_duration_and_day_bounds() -> None:
-    assert move_range(600, 660, 20) == (615, 675)
-    assert move_range(0, 60, -60) == (0, 60)
-    assert move_range(1380, 1440, 60) == (1380, 1440)
-    assert resize_top_range(600, 660, 50) == (645, 660)
-    assert resize_top_range(600, 660, 200) == (645, 660)
-    assert resize_bottom_range(600, 660, -50) == (600, 615)
-    assert resize_bottom_range(1380, 1425, 60) == (1380, 1440)
+    assert create_click_range(1425, [(1430, 1440)]) == (1425, 1430)
+    assert create_click_range(1430, [(1430, 1440)]) is None
 
 
 def test_a_repeating_locked_block_cannot_be_retimed_from_one_day() -> None:

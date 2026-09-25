@@ -119,6 +119,9 @@ class Stage:
         self.window.setGeometry(QRect(0, 0, 760, 720))
         self.said: list[object] = []
         self.hand = Hand(lambda block_id, from_day, span: Verdict(True, span_words(span)), self.window)
+        # A pixel of the morning tile is over two minutes, too coarse to aim within a 5-minute step.
+        # What these prove, bounds and targets, holds at any step.
+        self.hand.step = 15
         self.hand.committed.connect(self.said.append)
         self.view = Everything(self.hand)
         self.view.setParent(self.window)

@@ -60,7 +60,7 @@ from desktop.native.controller import NativeSession
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
 from desktop.native.hours.chips import TrayChip
 from desktop.native.hours.classic import ClassicDay, ClassicWeek
-from desktop.native.hours.geometry import Span
+from desktop.native.hours.geometry import Span, drag_step
 from desktop.native.hours.hand import Create, Hand, Move, MoveDate, Place, span_words
 from desktop.native.hours.hand import Verdict as HandVerdict
 from desktop.native.hours.month import MonthGrid
@@ -908,7 +908,9 @@ class NativeWindow(QMainWindow):
 
     def _sync_chrome(self) -> None:
         """Planning chips and the clipboard line step aside for a design of its own. Plan my
-        homework and More stay in the top bar in every layout, every view, and My day."""
+        homework and More stay in the top bar in every layout, every view, and My day. The hand
+        drags in the step the student chose."""
+        self.hand.step = drag_step((self.session.preferences or {}).get("drag_step_min"))
         manual = (self.session.preferences or {}).get("planning_style") == "manual"
         # A student who places homework by hand asks for ideas; the plan is theirs.
         self.solve_button.setText(SUGGEST_LABEL if manual else PLAN_LABEL)

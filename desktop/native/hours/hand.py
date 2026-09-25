@@ -29,7 +29,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QScrollArea, QWidget
 from shiboken6 import isValid
 
 from desktop.native.calendar import DAYS
-from desktop.native.hours.geometry import SLOT_MIN, Span, Track, snap
+from desktop.native.hours.geometry import DRAG_STEPS, Span, Track, snap
 from desktop.native.weekmodel import length_label
 
 # A drag near a scroll area's edge scrolls it only after resting there this long, so passing
@@ -154,6 +154,8 @@ class Hand(QObject):
         # The host is the hand's Qt parent, not a reference of its own: a reference back to it made a
         # cycle that only the garbage collector could free, at a moment of its choosing.
         self._judge = judge
+        # Minutes a move, a resize or a new block lands on. The window sets it from the account.
+        self.step = DRAG_STEPS[0]
         self.preview: Preview | None = None
         self.selection: tuple[str, int] | None = None
         self.month_target: str | None = None
@@ -306,23 +308,24 @@ class Hand(QObject):
         self._show(self._span_for(held, track, minute))
 
     def _span_for(self, held: Held, track: Track, minute: float) -> Span:
-        """Where the held thing would go. Every bound is the track's own: a block stops at the ends
-        of the tile or column it is over, not at midnight, and a resize or a new block stays inside
-        the track it began on."""
-        origin, first, last = held.origin, track.first, track.last
+        """Where the held thing would go, on the step. Every bound is the track's own: a block stops
+        at the ends of the tile or column it is over, not at midnight, and a resize or a new block
+        stays inside the track it began on. A resized edge stays a step or more from the other one,
+        on a step even when the other edge is not."""
+        origin, first, last, step = held.origin, track.first, track.last, self.step
         if held.kind is Gesture.RESIZE_START and origin is not None:
-            return replace(origin, start=min(max(snap(minute - held.grab), first), origin.end - SLOT_MIN))
+            latest = (origin.end - step) // step * step
+            return replace(origin, start=max(min(snap(minute - held.grab, step), latest), first))
         if held.kind is Gesture.RESIZE_END and origin is not None:
-            return replace(origin, end=max(min(snap(minute - held.grab), last), origin.start + SLOT_MIN))
+            earliest = -(-(origin.start + step) // step) * step
+            return replace(origin, end=min(max(snap(minute - held.grab, step), earliest), last))
         if held.kind is Gesture.CREATE and origin is not None:
-            here = min(max(snap(minute), first), last)
+            here = min(max(snap(minute, step), first), last)
             anchor = origin.start
-            start, end = (
-                (anchor, max(here, anchor + SLOT_MIN)) if here >= anchor else (here, anchor + SLOT_MIN)
-            )
+            start, end = (anchor, max(here, anchor + step)) if here >= anchor else (here, anchor + step)
             return Span(origin.day, start, end)
         # Longer than the track: it starts where the track starts and runs past its end.
-        start = max(min(snap(minute - held.grab), last - held.minutes), first)
+        start = max(min(snap(minute - held.grab, step), last - held.minutes), first)
         return Span(track.day, start, start + held.minutes)
 
     def _show(self, span: Span | None) -> None:

@@ -11,7 +11,7 @@ from uuid import uuid4
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from backend.models import Assignment, ProtectedWindow, StudyWindow, TimeBlock, WorkWindow
-from backend.slots import DAY_END_MIN, DAY_START_MIN, SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm
+from backend.slots import DAY_END_MIN, DAY_START_MIN, hhmm_to_minutes, minutes_to_hhmm
 from backend.weeks import current_week_start
 from desktop.native.calendar import (
     DAY_FULL,
@@ -898,7 +898,7 @@ class NativeSession(QObject):
         block = next((item for item in self.blocks if item["id"] == block_id), None)
         if block is None or not is_series(block) or from_day not in block["days"]:
             return False
-        if end_min - start_min < SLOT_MIN or start_min < DAY_START_MIN or end_min > DAY_END_MIN:
+        if end_min <= start_min or start_min < DAY_START_MIN or end_min > DAY_END_MIN:
             return False
         before = {item["id"] for item in self.blocks}
         moved = {**block, "start": minutes_to_hhmm(start_min), "duration_min": end_min - start_min}
