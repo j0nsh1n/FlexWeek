@@ -201,8 +201,10 @@ def test_help_says_guides_are_coming_and_explains_each_screen_and_the_keys(
         "A tutorial and short guides are coming in a later version. Until then, this is the short version.",
         "Day shows one day, hour by hour. Homework that is not placed yet waits beside it, ready to drag in.",
         "Week shows Monday to Sunday. Drag a block to move it, or drag across empty time to add one.",
-        "Month shows every date with its blocks and what is due. Click a date to open that day.",
-        "My day is a simple screen to follow once your plan is made: what is on now, and what comes next.",
+        "Month shows the whole month: each date's blocks and the homework due that day. Click a date to "
+        "open it in Day.",
+        "My day is a simple screen to follow once your plan is made: what is on now, and what comes next. "
+        "Open it with My day at the top.",
         "D, W, M",
         "Day, Week, Month",
         "Ctrl+Z",

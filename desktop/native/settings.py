@@ -111,8 +111,10 @@ HELP_INTRO = (
 HELP_SCREENS = (
     "Day shows one day, hour by hour. Homework that is not placed yet waits beside it, ready to drag in.",
     "Week shows Monday to Sunday. Drag a block to move it, or drag across empty time to add one.",
-    "Month shows every date with its blocks and what is due. Click a date to open that day.",
-    "My day is a simple screen to follow once your plan is made: what is on now, and what comes next.",
+    "Month shows the whole month: each date's blocks and the homework due that day. Click a date to open "
+    "it in Day.",
+    "My day is a simple screen to follow once your plan is made: what is on now, and what comes next. "
+    "Open it with My day at the top.",
 )
 HELP_KEYS = (
     ("D, W, M", "Day, Week, Month"),
