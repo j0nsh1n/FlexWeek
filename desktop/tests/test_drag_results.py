@@ -1,0 +1,222 @@
+"""What a drag on the hours makes, and what it says once it is saved."""
+
+from __future__ import annotations
+
+import contextlib
+import importlib.util
+import os
+import time
+from collections.abc import Callable, Iterator
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
+)
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+if importlib.util.find_spec("PySide6") is not None:
+    from PySide6.QtCore import QEvent, QPoint, QPointF, QStandardPaths, Qt
+    from PySide6.QtGui import QAction, QMouseEvent
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QApplication, QDialogButtonBox, QLabel, QPushButton, QWidget
+
+    from desktop.native.calendar import sunday_due
+    from desktop.native.hours.canvas import HoursCanvas
+    from desktop.native.widgets import BlockDialog
+    from desktop.native.window import NativeWindow
+    from desktop.server import LocalServer
+    from desktop.tests.logic_support import past_setup
+
+    LEFT = Qt.MouseButton.LeftButton
+
+PASSWORD = "a-long-test-password"
+
+
+@pytest.fixture(scope="module")
+def qapp() -> Iterator[QApplication]:
+    QStandardPaths.setTestModeEnabled(True)
+    yield QApplication.instance() or QApplication(["flexweek-drag-results-test"])
+
+
+def wait_until(qapp: QApplication, predicate: Callable[[], bool], timeout: float = 8.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        qapp.processEvents()
+        if predicate():
+            return
+        time.sleep(0.02)
+    raise AssertionError("condition was still false")
+
+
+def settled(qapp: QApplication, window: NativeWindow) -> None:
+    """The save and the refreshes it starts have all landed."""
+    session = window.session
+    wait_until(
+        qapp, lambda: not session.busy and not session.dirty and not any(session.client._replies.values())
+    )
+    for _ in range(5):
+        qapp.processEvents()
+
+
+def look_file() -> Path:
+    root = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
+    return Path(root) / "flexweek-look.json"
+
+
+@pytest.fixture()
+def window(qapp: QApplication, tmp_path: Path) -> Iterator[NativeWindow]:
+    """Today's app's Week: School on weekdays 08:00-14:30, Piano on Thursday 17:00-17:30, the History
+    essay on Thursday 19:00-20:00 and a Math worksheet with no time yet. The clock is held at Thursday
+    10:00."""
+    look_file().unlink(missing_ok=True)
+    server = LocalServer(tmp_path / "flexweek.db")
+    server.start()
+    made = NativeWindow(server.origin)
+    made.resize(1280, 860)
+    made.show()
+    try:
+        made.username.setText("drag_results_student")
+        made.password.setText(PASSWORD)
+        made.findChild(QPushButton, "createAccount").click()
+        wait_until(qapp, lambda: made._stack.currentWidget().objectName() == "recoveryPage")
+        made.recovery_ack.setChecked(True)
+        made.recovery_continue.click()
+        past_setup(qapp, made)
+        session = made.session
+        thursday = datetime.fromisoformat(session.week_start) + timedelta(days=3, hours=10)
+        session.now_ms = lambda: int(thursday.timestamp() * 1000)
+        session.add_block(
+            {"id": "school", "title": "School", "kind": "locked", "category": "class",
+             "start": "08:00", "duration_min": 390, "days": [0, 1, 2, 3, 4]}
+        )
+        session.add_block(
+            {"id": "piano", "title": "Piano", "kind": "locked", "category": "extra",
+             "start": "17:00", "duration_min": 30, "days": [3]}
+        )
+        due = sunday_due(session.week_start)
+        for key, title in (("essay", "History essay"), ("math", "Math worksheet")):
+            session.add_homework({"id": key, "title": title, "due": due, "estimate_min": 60, "revision": 0})
+        session.save()
+        settled(qapp, made)
+        essay = session_of(made, "essay")
+        session.add_block({**essay, "start": "19:00", "days": [3], "pinned": True})
+        session.save()
+        settled(qapp, made)
+        made.findChild(QPushButton, "viewWeek").click()
+        settled(qapp, made)
+        yield made
+    finally:
+        with contextlib.suppress(RuntimeError):
+            made.session.client.reset()
+        made.hide()
+        qapp.processEvents()
+        server.stop()
+        look_file().unlink(missing_ok=True)
+
+
+def session_of(window: NativeWindow, assignment_id: str) -> dict:
+    return next(block for block in window.session.blocks if block.get("assignment_id") == assignment_id)
+
+
+def minute(hhmm: str) -> int:
+    return int(hhmm[:2]) * 60 + int(hhmm[3:])
+
+
+def send(widget: QWidget, kind: QEvent.Type, at: QPoint, held: bool) -> None:
+    buttons = Qt.MouseButton.LeftButton if held else Qt.MouseButton.NoButton
+    event = QMouseEvent(
+        kind, QPointF(widget.mapFromGlobal(at)), QPointF(at), Qt.MouseButton.LeftButton, buttons,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    QApplication.sendEvent(widget, event)
+
+
+def drag(qapp: QApplication, source: QWidget, hours: HoursCanvas, start: QPoint, end: QPoint) -> None:
+    """Press on `source`, move over `hours` and let go, as a mouse does."""
+    send(source, QEvent.Type.MouseButtonPress, start, True)
+    for step in range(1, 9):
+        send(hours, QEvent.Type.MouseMove, start + (end - start) * step / 8, True)
+    send(hours, QEvent.Type.MouseButtonRelease, end, False)
+    qapp.processEvents()
+
+
+def click(qapp: QApplication, widget: QWidget, at: QPoint) -> None:
+    send(widget, QEvent.Type.MouseButtonPress, at, True)
+    send(widget, QEvent.Type.MouseButtonRelease, at, False)
+    qapp.processEvents()
+
+
+def open_thursday(qapp: QApplication, window: NativeWindow) -> HoursCanvas:
+    """A click on Thursday's name in the Week opens it on Day."""
+    QTest.mouseClick(window.findChild(QLabel, "weekDayName3"), LEFT)
+    settled(qapp, window)
+    assert window.session.planner_view == "day"
+    return window.day_view.hours
+
+
+def answer_editors(monkeypatch: pytest.MonkeyPatch, *titles: str | None) -> list[tuple[str, str]]:
+    """Each block editor that opens is shown, and what its title and category say is kept. Then the
+    title is typed and Save pressed, or with None, Cancel pressed."""
+    seen: list[tuple[str, str]] = []
+    queue = list(titles)
+
+    def run(dialog: BlockDialog) -> int:
+        dialog.show()
+        seen.append((dialog.title.text(), dialog.category.currentText()))
+        buttons = dialog.findChild(QDialogButtonBox, "dialogButtons")
+        title = queue.pop(0)
+        if title is None:
+            QTest.mouseClick(buttons.button(QDialogButtonBox.StandardButton.Cancel), LEFT)
+        else:
+            dialog.title.selectAll()
+            QTest.keyClicks(dialog.title, title)
+            QTest.mouseClick(buttons.button(QDialogButtonBox.StandardButton.Save), LEFT)
+        return dialog.result()
+
+    monkeypatch.setattr(BlockDialog, "exec", run)
+    return seen
+
+
+def create_on(
+    qapp: QApplication, window: NativeWindow, hours: HoursCanvas, day: int, span: str, title: str
+) -> None:
+    """Drag across free time from the first to the second of "HH:MM-HH:MM", and wait until the
+    block the editor names `title` is saved."""
+    start, end = minute(span[:5]), minute(span[6:])
+    hours.reveal(day, start - 60, end + 60)
+    qapp.processEvents()
+    # Two pixels into the first minute, so the press is on free time rather than a block's edge.
+    drag(qapp, hours, hours, hours.point_for(day, start) + QPoint(0, 2), hours.point_for(day, end))
+    wait_until(qapp, lambda: any(block["title"] == title for block in window.session.blocks))
+    settled(qapp, window)
+
+
+def test_a_block_made_by_dragging_has_no_category_until_the_student_picks_one(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """It used to be School, so an hour of Club counted as School in the Day's summary. A type picked
+    under Add, "Then drag on the calendar", is still what the next drag makes."""
+    seen = answer_editors(monkeypatch, "Club", None, "Practice")
+    add = window.findChild(QPushButton, "addButton")
+    day = open_thursday(qapp, window)
+    says = [add.text()]
+    create_on(qapp, window, day, 3, "16:00-17:00", "Club")
+    window.add_menu.findChild(QAction, "addMenu-exercise").trigger()
+    settled(qapp, window)
+    says.append(add.text())
+    create_on(qapp, window, day, 3, "17:30-18:00", "Practice")
+    made = {
+        block["title"]: (block["days"], block["start"], block["duration_min"], block.get("category"))
+        for block in window.session.blocks
+        if block["title"] in ("Club", "Practice")
+    }
+    assert (says, seen, made, window.day_view.summary.text()) == (
+        ["Add", "Add sports"],
+        [("", "None"), ("Sports", "Sports"), ("Sports", "Sports")],
+        {"Club": ([3], "16:00", 60, None), "Practice": ([3], "17:30", 30, "exercise")},
+        "School: 6 h 30 min\nOther: 1 h\nActivity: 30 min\nSports: 30 min\nHomework: 1 h",
+    )

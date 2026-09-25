@@ -473,7 +473,7 @@ class AddMenu(QMenu):
             action.triggered.connect(lambda _checked=False, value=key: self.category_chosen.emit(value))
             self._actions[key] = action
 
-    def set_armed(self, category: str) -> None:
+    def set_armed(self, category: str | None) -> None:
         for key, action in self._actions.items():
             action.setChecked(key == category)
 

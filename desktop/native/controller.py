@@ -170,7 +170,9 @@ class NativeSession(QObject):
         self.day_data: dict | None = None
         self.selected_month: str | None = None
         self.month_data: dict | None = None
-        self.armed_category = "class"
+        # The type a drag on the hours makes, once one is picked under Add. Until then a block made by
+        # dragging has none: it used to be School, and an hour of Club counted as school.
+        self.armed_category: str | None = None
         self.selected_block_id: str | None = None
         self.selected_occurrence_day: int | None = None
         self._ticket = 0
@@ -276,7 +278,7 @@ class NativeSession(QObject):
         self.day_data = None
         self.selected_month = None
         self.month_data = None
-        self.armed_category = "class"
+        self.armed_category = None
         self.selected_block_id = None
         self.selected_occurrence_day = None
         self._day_ticket += 1

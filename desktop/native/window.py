@@ -1490,7 +1490,7 @@ class NativeWindow(QMainWindow):
     def _add_fixed(self) -> None:
         category = self.session.armed_category
         if category in FLEX_CATEGORIES:
-            category = "class"
+            category = None
         self._commit_block(BlockDialog(self, category=category))
 
     def _school_hours(self) -> None:
@@ -1514,10 +1514,10 @@ class NativeWindow(QMainWindow):
         armed = self.session.armed_category
         self.add_menu.set_armed(armed)
         button = self.findChild(QPushButton, "addButton")
-        info = CATEGORIES.get(armed)
-        if button is not None and info is not None:
-            button.setText(f"Add {info['label'].lower()}")
-            button.setIcon(QIcon(swatch(info["mark"])))
+        info = CATEGORIES.get(armed or "")
+        if button is not None:
+            button.setText(f"Add {info['label'].lower()}" if info else "Add")
+            button.setIcon(QIcon(swatch(info["mark"])) if info else QIcon())
 
     def _sync_classic_waiting(self) -> None:
         """Today's app's Week shows homework with no start above the hours, to drag onto them."""

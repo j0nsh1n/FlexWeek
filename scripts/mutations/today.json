@@ -75,5 +75,12 @@
   "old": "        self.now_next.setVisible(bool(text))\n",
   "new": "        self.now_next.setVisible(True)\n",
   "test": "desktop/tests/test_now_next.py::test_the_next_and_now_countdowns_move_with_the_minute_without_a_focus_timer"
+ },
+ {
+  "file": "desktop/native/controller.py",
+  "name": "a block made by dragging is School until a type is picked",
+  "old": "        self.armed_category: str | None = None\n",
+  "new": "        self.armed_category: str | None = \"class\"\n",
+  "test": "desktop/tests/test_drag_results.py::test_a_block_made_by_dragging_has_no_category_until_the_student_picks_one"
  }
 ]
