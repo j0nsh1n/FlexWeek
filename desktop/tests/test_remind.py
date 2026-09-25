@@ -14,14 +14,15 @@ from desktop.native.remind import (
 )
 
 
-def test_start_alert_due_fires_inside_the_lead_window_only() -> None:
-    # 16:00 start, 5 minute lead, 2 minute catch-up window.
-    assert start_alert_due(16 * 60, 15 * 60 + 55, 5, 2) is True
-    assert start_alert_due(16 * 60, 15 * 60 + 54, 5, 2) is False
-    assert start_alert_due(16 * 60, 16 * 60, 5, 2) is False
-    assert start_alert_due(16 * 60, 15 * 60 + 57, 5, 2) is True
-    assert start_alert_due(16 * 60, 16 * 60, 0, 2) is True
-    assert start_alert_due(16 * 60, 15 * 60 + 55, 0, 2) is False
+def test_start_alert_due_from_the_lead_to_the_start() -> None:
+    # 16:00 start, 5 minute lead: due from 15:55 through the 16:00 minute, never after.
+    assert start_alert_due(16 * 60, 15 * 60 + 55, 5) is True
+    assert start_alert_due(16 * 60, 15 * 60 + 54, 5) is False
+    assert start_alert_due(16 * 60, 15 * 60 + 58, 5) is True
+    assert start_alert_due(16 * 60, 16 * 60, 5) is True
+    assert start_alert_due(16 * 60, 16 * 60 + 1, 5) is False
+    assert start_alert_due(16 * 60, 16 * 60, 0) is True
+    assert start_alert_due(16 * 60, 15 * 60 + 55, 0) is False
 
 
 def test_due_reminders_fire_once_per_block_start() -> None:
@@ -150,3 +151,57 @@ def test_alarm_fires_at_seven_on_a_daylight_saving_day() -> None:
         else:
             os.environ["TZ"] = previous
         time.tzset()
+
+
+PRACTICE = {
+    "id": "practice",
+    "title": "Guitar practice",
+    "kind": "locked",
+    "start": "18:45",
+    "days": [3],
+    "completed": False,
+    "missed_days": [],
+}
+THURSDAY = "2026-09-17"
+
+
+def reminded(minutes: range, lead: int, block: dict = PRACTICE) -> list[tuple[int, str]]:
+    """Each minute checked in turn, as the poll does, keeping what has fired."""
+    fired: set[str] = set()
+    seen = []
+    for minute in minutes:
+        for item in due_reminders(
+            blocks=[block], trace=None, today_iso=THURSDAY, now_min=minute, lead_min=lead, fired=fired
+        ):
+            fired.add(item["key"])
+            seen.append((minute, item["title"]))
+    return seen
+
+
+def test_a_block_first_seen_inside_its_lead_reminds_at_the_first_check() -> None:
+    # Saved at 18:38 for 18:45 with a 10-minute lead: the lead began at 18:35.
+    assert reminded(range(18 * 60 + 38, 19 * 60), lead=10) == [(18 * 60 + 38, "Guitar practice starts soon")]
+
+
+def test_a_block_first_seen_in_its_start_minute_says_it_starts_now() -> None:
+    assert reminded(range(18 * 60 + 45, 19 * 60), lead=10) == [(18 * 60 + 45, "Guitar practice starts now")]
+
+
+def test_a_block_that_has_started_does_not_remind() -> None:
+    assert reminded(range(18 * 60 + 46, 19 * 60), lead=10) == []
+
+
+def test_a_block_with_a_song_is_announced_by_the_song_at_its_start() -> None:
+    from desktop.native.remind import due_songs
+
+    block = {**PRACTICE, "spotify_url": "https://open.spotify.com/track/abc"}
+    assert reminded(range(18 * 60 + 45, 19 * 60), lead=0, block=block) == []
+    played: set[str] = set()
+    songs = []
+    for minute in range(18 * 60 + 40, 19 * 60):
+        for song in due_songs(blocks=[block], trace=None, today_iso=THURSDAY, now_min=minute, played=played):
+            played.add(song["id"])
+            songs.append((minute, song["name"], song["spotify_url"]))
+    assert songs == [(18 * 60 + 45, "Guitar practice", "https://open.spotify.com/track/abc")]
+    start = 18 * 60 + 45
+    assert due_songs(blocks=[PRACTICE], trace=None, today_iso=THURSDAY, now_min=start, played=set()) == []

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import datetime
 
 from backend.slots import hhmm_to_minutes
@@ -32,11 +33,16 @@ def clock_parts(now_ms: int) -> dict:
     }
 
 
-def start_alert_due(start_min: int, now_min: int, lead: int, window_min: int) -> bool:
-    fire_at = max(0, int(start_min) - max(0, int(lead)))
-    now = int(now_min)
-    window = max(0, int(window_min))
-    return now - window <= fire_at <= now
+def start_alert_due(start_min: int, now_min: int, lead: int) -> bool:
+    """From the minute the lead begins to the start minute itself. A block saved after its lead
+    began, or found when the app opens, is still reminded of before it starts, and the start minute
+    is in because the poll may first look during it."""
+    start = int(start_min)
+    return start - max(0, int(lead)) <= int(now_min) <= start
+
+
+def song_due(start_min: int, now_min: int) -> bool:
+    return int(start_min) <= int(now_min) <= int(start_min) + REMINDER_WINDOW_MIN
 
 
 def reminder_key(week_start: str, block_id: str, day: int, start: str) -> str:
@@ -71,6 +77,21 @@ def reminder_blocks(blocks: list[dict], trace: dict | None) -> list[dict]:
     return locked + placed
 
 
+def todays_starts(
+    blocks: list[dict], trace: dict | None, today_iso: str
+) -> Iterator[tuple[dict, int, int, str]]:
+    """Each block starting today: the block, its day, its start in minutes, and its reminder key."""
+    week_start = monday_of(today_iso)
+    for block in reminder_blocks(blocks, trace):
+        start = block.get("start")
+        if not start or block.get("completed"):
+            continue
+        for day in occurrence_days(block):
+            if day in (block.get("missed_days") or []) or date_for_day(week_start, day) != today_iso:
+                continue
+            yield block, day, hhmm_to_minutes(start), reminder_key(week_start, block["id"], day, start)
+
+
 def due_reminders(
     *,
     blocks: list[dict],
@@ -80,29 +101,46 @@ def due_reminders(
     lead_min: int,
     fired: set[str],
 ) -> list[dict]:
-    week_start = monday_of(today_iso)
     due = []
-    for block in reminder_blocks(blocks, trace):
-        start = block.get("start")
-        if not start or block.get("completed"):
+    for block, day, start_min, key in todays_starts(blocks, trace, today_iso):
+        if key in fired or not start_alert_due(start_min, now_min, lead_min):
             continue
-        for day in occurrence_days(block):
-            if day in (block.get("missed_days") or []):
-                continue
-            if date_for_day(week_start, day) != today_iso:
-                continue
-            if not start_alert_due(hhmm_to_minutes(start), now_min, lead_min, REMINDER_WINDOW_MIN):
-                continue
-            key = reminder_key(week_start, block["id"], day, start)
-            if key in fired:
-                continue
-            due.append(
-                {
-                    "key": key,
-                    "title": f"{block['title']} starts soon",
-                    "body": f"{start} · {DAYS[day]}",
-                }
-            )
+        started = now_min >= start_min
+        if started and block.get("spotify_url"):
+            # Its song is its notice at the start, so it gets one, not two.
+            continue
+        due.append(
+            {
+                "key": key,
+                "title": f"{block['title']} {'starts now' if started else 'starts soon'}",
+                "body": f"{block['start']} · {DAYS[day]}",
+            }
+        )
+    return due
+
+
+def due_songs(
+    *, blocks: list[dict], trace: dict | None, today_iso: str, now_min: int, played: set[str]
+) -> list[dict]:
+    """Blocks with a Spotify link that are starting, as alarms: the song plays until it is dismissed
+    or snoozed. An alarm with no days never rings on its own, only when it is snoozed."""
+    due = []
+    for block, _day, start_min, key in todays_starts(blocks, trace, today_iso):
+        link = block.get("spotify_url")
+        if not link or key in played or not song_due(start_min, now_min):
+            continue
+        due.append(
+            {
+                "id": key,
+                "name": block["title"],
+                "time": block["start"],
+                "days": [],
+                "enabled": True,
+                "sound": "spotify",
+                "spotify_url": link,
+                "block": True,
+            }
+        )
     return due
 
 

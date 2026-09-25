@@ -61,7 +61,14 @@ from desktop.native.history import capture_step, join_step, mark_stale, push_ste
 from desktop.native.kept import KeptSession
 from desktop.native.look import pack_axis, sanitize_look
 from desktop.native.pomodoro import inflate_for_solve, split_solved
-from desktop.native.remind import clock_parts, due_alarms, due_reminders, reminder_lead_min, snooze_until
+from desktop.native.remind import (
+    clock_parts,
+    due_alarms,
+    due_reminders,
+    due_songs,
+    reminder_lead_min,
+    snooze_until,
+)
 from desktop.native.reuse import (
     MAX_WEEK_BLOCKS,
     apply_plan,
@@ -128,6 +135,13 @@ def _keep_step_revisions(step: dict, data: dict) -> None:
         week = stored.get(entry["week_start"])
         if week is not None:
             entry["revision"] = week["revision"]
+
+
+# What the status line says when a save or a week load goes as expected. A reminder on the status line
+# outranks these, so they are not allowed to replace it.
+ROUTINE_STATUS = frozenset(
+    ("Saving…", "Saved.", "Saving preferences…", "Saved preferences.", "Loading…", "This week.")
+)
 
 
 class NativeSession(QObject):
@@ -218,6 +232,8 @@ class NativeSession(QObject):
         self.last_alarm_check: int | None = None
         self.active_alarm: dict | None = None
         self.alarm_queue: list[dict] = []
+        self.played_songs: set[str] = set()
+        self._snoozed_songs: dict[str, dict] = {}
         self._focus_after_restore = False
         self.restore_points: list[dict] = []
         self.restore_preview: dict | None = None
@@ -307,6 +323,8 @@ class NativeSession(QObject):
         self.last_alarm_check = None
         self.active_alarm = None
         self.alarm_queue.clear()
+        self.played_songs.clear()
+        self._snoozed_songs.clear()
         self._focus_after_restore = False
         self.restore_points = []
         self.restore_preview = None
@@ -2617,9 +2635,10 @@ class NativeSession(QObject):
             return self._reminder_blocks, self._reminder_trace
         return None
 
-    def _due_reminder_notices(
+    def _due_block_alerts(
         self, blocks: list[dict], trace: dict | None, clock: dict, prefs: dict
-    ) -> list[dict]:
+    ) -> tuple[list[dict], list[dict]]:
+        """Today's reminders, and the songs of blocks with a Spotify link that are starting."""
         notices: list[dict] = []
         due = due_reminders(
             blocks=blocks,
@@ -2632,7 +2651,15 @@ class NativeSession(QObject):
         for item in due:
             self.fired_reminders.add(item["key"])
             notices.append({"title": item["title"], "body": item["body"], "kind": "reminder"})
-        return notices
+        songs = due_songs(
+            blocks=blocks,
+            trace=trace,
+            today_iso=clock["iso"],
+            now_min=clock["minute"],
+            played=self.played_songs,
+        )
+        self.played_songs.update(song["id"] for song in songs)
+        return notices, songs
 
     def _request_today_reminders(self, today_monday: str) -> None:
         if self._reminder_fetching == today_monday:
@@ -2670,15 +2697,18 @@ class NativeSession(QObject):
         source = self._today_reminder_source(today_monday)
         if source is None:
             return
-        notices = self._due_reminder_notices(source[0], source[1], clock, prefs)
+        notices, songs = self._due_block_alerts(source[0], source[1], clock, prefs)
         if notices:
             self.alerts.emit(notices)
+        for song in songs:
+            self._enqueue_alarm(song)
 
     def check_alerts(self) -> None:
         if self.account is None:
             return
         clock = self._clock()
         notices: list[dict] = []
+        songs: list[dict] = []
         prefs = self.preferences or {}
         if prefs.get("reminders_enabled"):
             today_monday = monday_of(clock["iso"])
@@ -2686,9 +2716,9 @@ class NativeSession(QObject):
             if source is None:
                 self._request_today_reminders(today_monday)
             else:
-                notices.extend(self._due_reminder_notices(source[0], source[1], clock, prefs))
+                notices, songs = self._due_block_alerts(source[0], source[1], clock, prefs)
         queued, self.snoozed_alarms, self.last_alarm_check = due_alarms(
-            alarms=list(prefs.get("alarms") or []),
+            alarms=[*(prefs.get("alarms") or []), *self._snoozed_songs.values()],
             today_iso=clock["iso"],
             weekday=clock["day"],
             now_ms=clock["now_ms"],
@@ -2699,7 +2729,7 @@ class NativeSession(QObject):
         )
         if notices:
             self.alerts.emit(notices)
-        for alarm in queued:
+        for alarm in (*songs, *queued):
             self._enqueue_alarm(alarm)
 
     def _enqueue_alarm(self, alarm: dict) -> None:
@@ -2719,6 +2749,12 @@ class NativeSession(QObject):
         self.active_alarm = None
         if snooze and alarm is not None:
             self.snoozed_alarms[alarm["id"]] = snooze_until(self.now_ms())
+        if alarm is not None and alarm.get("block"):
+            # A block's song is in no list of alarms, so the snooze has to keep it to ring it again.
+            if snooze:
+                self._snoozed_songs[alarm["id"]] = alarm
+            else:
+                self._snoozed_songs.pop(alarm["id"], None)
         nxt = self.alarm_queue.pop(0) if self.alarm_queue else None
         self.active_alarm = nxt
         self.alarm_due.emit(nxt)

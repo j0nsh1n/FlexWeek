@@ -1093,7 +1093,8 @@ class AlarmRingDialog(QDialog):
         title.setObjectName("alarmTitle")
         title.setWordWrap(True)
         layout.addWidget(title)
-        detail = QLabel((alarm.get("time") or "") + " · Alarm is ringing")
+        ringing = "Starting now" if alarm.get("block") else "Alarm is ringing"
+        detail = QLabel(f"{alarm.get('time') or ''} · {ringing}")
         detail.setObjectName("alarmDetail")
         layout.addWidget(detail)
         layout.addSpacing(ALARM_GAP)
