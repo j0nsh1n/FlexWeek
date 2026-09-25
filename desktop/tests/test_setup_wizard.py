@@ -699,17 +699,22 @@ def test_first_homework_takes_up_to_three(qapp: QApplication) -> None:
     setup.close()
 
 
-def test_a_time_steps_a_quarter_hour_and_a_typed_one_moves_to_the_nearest(qapp: QApplication) -> None:
+def test_a_time_steps_a_quarter_hour_and_a_typed_one_keeps_its_minute(qapp: QApplication) -> None:
+    """School that starts at 08:05 starts at 08:05. It was moved to 08:00 without a word."""
     field = QuarterTime("08:00")
     field.setCurrentSection(QDateTimeEdit.Section.MinuteSection)
     field.stepBy(1)
     assert field.hhmm() == "08:15"
     field.stepBy(-2)
     assert field.hhmm() == "07:45"
-    field.set_minutes(8 * 60 + 7)
+    field.setTime(QTime(8, 7))
+    field.editingFinished.emit()
+    assert field.hhmm() == "08:07"
+    field.stepBy(1)
+    assert field.hhmm() == "08:15", "the arrows go on to the quarter hour either side"
+    field.setTime(QTime(8, 7))
+    field.stepBy(-1)
     assert field.hhmm() == "08:00"
-    field.set_minutes(8 * 60 + 8)
-    assert field.hhmm() == "08:15"
 
 
 def test_a_style_card_is_picked_from_the_keyboard(qapp: QApplication) -> None:

@@ -71,7 +71,7 @@ def test_move_to_date_writes_both_weeks_going_forward(qapp: QApplication, server
     session = signed_in(qapp, server.origin, "alice", create=True)
     first = session.week_start
     second = week_after(first)
-    session.add_block(fixed("soccer", "Soccer", 3, "16:00"))
+    session.add_block({**fixed("soccer", "Soccer", 3, "16:07"), "duration_min": 43})
     session.save()
     settled(qapp, session)
     thursday = date_for_day(first, 3)
@@ -85,7 +85,7 @@ def test_move_to_date_writes_both_weeks_going_forward(qapp: QApplication, server
     soccer = dest["blocks"][0]
     assert soccer["id"] == "soccer"
     assert soccer["days"] == [1]
-    assert soccer["start"] == "16:00"
+    assert (soccer["start"], soccer["duration_min"]) == ("16:07", 43), "carried with its time exactly"
     assert session.week_start == first
     assert titles(session.blocks) == []
 

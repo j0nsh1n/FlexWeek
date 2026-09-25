@@ -399,36 +399,35 @@ class DayPicker(QWidget):
 
 
 class QuarterTime(QTimeEdit):
-    """A time on the 15-minute grid the planner works in. The arrows and the wheel move the minutes a
-    quarter hour at a time, and a time typed between quarters moves to the nearest one."""
+    """A time of day. The arrows and the wheel move the minutes a quarter hour at a time; a time typed
+    between quarters keeps its minute, as the block editor does."""
 
     def __init__(self, hhmm: str) -> None:
         super().__init__(QTime.fromString(hhmm, "HH:mm"))
         self.setObjectName("setupTime")
         self.setDisplayFormat("HH:mm")
         self.setCorrectionMode(QAbstractSpinBox.CorrectionMode.CorrectToNearestValue)
-        self.editingFinished.connect(self._snap)
 
     def minutes(self) -> int:
         time = self.time()
         return time.hour() * 60 + time.minute()
 
     def set_minutes(self, minutes: int) -> None:
-        minutes = max(0, min(minutes, 24 * 60 - SLOT_MIN))
+        minutes = max(0, min(minutes, 24 * 60 - 1))
         self.setTime(QTime(minutes // 60, minutes % 60))
 
     def stepBy(self, steps: int) -> None:  # noqa: N802
         if self.currentSection() == QDateTimeEdit.Section.MinuteSection:
             base = self.minutes() - self.minutes() % SLOT_MIN
+            # Up from 08:07 is 08:15 and down is 08:00: the quarter hour on each side.
+            if steps < 0 and self.minutes() % SLOT_MIN:
+                steps += 1
             self.set_minutes(base + steps * SLOT_MIN)
             return
         super().stepBy(steps)
 
-    def _snap(self) -> None:
-        self.set_minutes(round(self.minutes() / SLOT_MIN) * SLOT_MIN)
-
     def hhmm(self) -> str:
-        return minutes_to_hhmm(round(self.minutes() / SLOT_MIN) * SLOT_MIN)
+        return minutes_to_hhmm(self.minutes())
 
 
 class TimeRange(QWidget):

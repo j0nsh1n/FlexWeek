@@ -260,11 +260,50 @@ def test_a_fixed_activity_that_ends_before_it_starts_is_refused_beside_the_times
     # Said once, beside the times, as an error; not repeated at the bottom of the form.
     assert dialog.duration_line.property("problem") is True
     assert dialog.error.text() == ""
-    dialog.end.setTime(QTime(15, 10))
-    qapp.processEvents()
-    assert dialog.duration_line.text() == "Use quarter hours, such as 15:00 or 15:15."
-    dialog.accept()
-    assert dialog.result() != dialog.DialogCode.Accepted
+    dialog.close()
+
+
+def test_a_fixed_activity_the_editor_cannot_save_is_explained_in_the_apps_words(qapp: QApplication) -> None:
+    """The editor checks a block with the server's own rules. Their words ("Value error, spotify_url
+    must be an open.spotify.com share link") are not a student's."""
+    said = {}
+    for field, fill in (("title", "   "), ("days", None), ("spotify", "https://example.com/song")):
+        dialog = BlockDialog(None, school())
+        if field == "title":
+            dialog.title.setText(fill)
+        elif field == "days":
+            for check in dialog.days:
+                check.setChecked(False)
+        else:
+            dialog.spotify.setText(fill)
+        dialog.accept()
+        assert dialog.result() != dialog.DialogCode.Accepted
+        said[field] = dialog.error.text()
+        dialog.close()
+    assert said == {
+        "title": "Give it a title.",
+        "days": "Tick at least one day.",
+        "spotify": "That is not a Spotify share link. Paste one that starts with https://open.spotify.com, "
+        "or leave it empty.",
+    }
+
+
+def test_a_pasted_block_off_the_quarter_hour_keeps_its_time(qapp: QApplication) -> None:
+    """The paste preview offers quarter hours to move to. A block copied from 17:37 showed, and would
+    have saved, at 00:00, the first one offered, because 17:37 was not among them."""
+    from desktop.native.widgets import PreviewDialog
+
+    pasted = {
+        "block": school(id="copy", days=[2], start="17:37", duration_min=43),
+        "day": 2,
+        "fixed": True,
+        "checked": True,
+    }
+    dialog = PreviewDialog(None, "Paste", "", [pasted], [])
+    start = dialog.findChild(QComboBox, "previewStart0")
+    length = dialog.findChild(QComboBox, "previewDuration0")
+    assert (start.currentText(), length.currentData()) == ("17:37", 43)
+    assert [(row["block"]["start"], row["block"]["duration_min"]) for row in dialog.rows()] == [("17:37", 43)]
     dialog.close()
 
 

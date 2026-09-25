@@ -2403,7 +2403,7 @@ def test_choose_a_time_places_homework_without_dragging(
         seen.append(dialog.beside.text())
         ok = dialog.buttons.button(dialog.buttons.StandardButton.Ok)
         seen.append("ok" if ok.isEnabled() else "refused")
-        dialog.start.setTime(QTime(16, 0))
+        dialog.start.setTime(QTime(16, 7))
         return QDialog.DialogCode.Accepted
 
     monkeypatch.setattr(ChooseTimeDialog, "exec", pick)
@@ -2416,7 +2416,7 @@ def test_choose_a_time_places_homework_without_dragging(
         "ok",
     ]
     placed = next(block for block in window.session.blocks if block["id"] == waiting["id"])
-    assert (placed["days"], placed["start"], placed.get("pinned")) == ([1], "16:00", True)
+    assert (placed["days"], placed["start"], placed.get("pinned")) == ([1], "16:07", True), "the time picked"
     hours = _hours(window)
     shown = next(
         item for item, _rect in hours.drawn(hours.track_for(1, 16 * 60)) if item.block_id == waiting["id"]
