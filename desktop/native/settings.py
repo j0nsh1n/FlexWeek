@@ -41,7 +41,7 @@ from desktop.native import autostart
 from desktop.native.calendar import DAY_FULL
 from desktop.native.focus import FOCUS_PHASE_LABEL, format_countdown, more_time_choices, remaining_ms
 from desktop.native.layouts.dialog import SLOTS, LayoutSection
-from desktop.native.layouts.registry import LAYOUTS, MATCH, sanitize_layout
+from desktop.native.layouts.registry import MATCH, sanitize_layout
 from desktop.native.look import (
     ACCENTS,
     LOOK_KNOBS,
@@ -122,6 +122,11 @@ HELP_KEYS = (
     ("Ctrl and the mouse wheel", "Zoom the hours"),
     ("Esc while dragging", "Put the block back where it was"),
 )
+NO_SOUND = (
+    "No sound came out. Check that speakers or headphones are plugged in and not muted, then press Test "
+    "again. Alerts still appear on screen."
+)
+SILENT_VOLUME = "Alert volume is 0, so there is nothing to hear. Turn it up, then press Test."
 
 
 def _invalidate(layout: QLayout) -> None:
@@ -380,6 +385,7 @@ class PrefsDialog(QDialog):
         self.long_every = QSpinBox()
         self.long_every.setObjectName("prefLongEvery")
         self.long_every.setRange(2, 12)
+        self.long_every.setSuffix(" focus sessions")
         self.long_every.setValue(int(preferences.get("timer_long_break_every") or 4))
         self.auto_split = QCheckBox("Split long homework into focus sessions")
         self.auto_split.setObjectName("prefAutoSplit")
@@ -442,30 +448,32 @@ class PrefsDialog(QDialog):
         self.tone_note.setWordWrap(True)
         self._tone_bell = Bell(self)
         self._spotify_player = SpotifyPlayer(self)
+        # The design first, since it decides what the rest of the page offers; what applies to every
+        # screen last.
         appearance = QWidget()
         column = QVBoxLayout(appearance)
-        appear = QFormLayout()
-        appear.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        appear.addRow(_heading("Appearance & layout"))
-        # Where Look and Accent were, when the main view has colours of its own.
-        self.own_colours = QLabel()
-        self.own_colours.setObjectName("prefOwnColours")
-        self.own_colours.setWordWrap(True)
-        appear.addRow(self.own_colours)
-        appear.addRow("Look", self.look)
-        appear.addRow("Accent", self.accent)
-        self._appear_form = appear
-        appear.addRow(self.accent_chips)
-        appear.addRow("Animations", self.motion)
-        appear.addRow(self.fine_tune)
-        appear.addRow(self.fine_host)
-        column.addLayout(appear)
         self.layout_sections = [
             LayoutSection(slot, role, title, blurb, chosen_layout)
             for slot, role, title, blurb in SLOTS
         ]
-        for section in self.layout_sections:
-            column.addWidget(section)
+        main_section, day_section = self.layout_sections
+        column.addWidget(main_section)
+        appear = QFormLayout()
+        appear.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        appear.addRow("Look", self.look)
+        appear.addRow("Accent", self.accent)
+        appear.addRow(self.accent_chips)
+        self._appear_form = appear
+        column.addLayout(appear)
+        column.addWidget(day_section)
+        everywhere = QFormLayout()
+        everywhere.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        everywhere.addRow(_heading("Every screen"))
+        everywhere.addRow("Animations", self.motion)
+        everywhere.addRow(self.fine_tune)
+        everywhere.addRow(self.fine_host)
+        column.addLayout(everywhere)
+        column.addStretch(1)
         planning = QWidget()
         planning_form = QFormLayout(planning)
         planning_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
@@ -486,12 +494,16 @@ class PrefsDialog(QDialog):
         where = QLabel("Preferred study times, including ones kept for one subject, are in Availability.")
         where.setWordWrap(True)
         planning_form.addRow(where)
+        open_availability = QPushButton("Availability…")
+        open_availability.setObjectName("prefsAvailability")
+        open_availability.clicked.connect(self.availability_requested.emit)
+        planning_form.addRow(open_availability)
         focus = QWidget()
         focus_form = QFormLayout(focus)
         focus_form.addRow(_heading("Focus timer"))
         focus_form.addRow("Focus minutes", self.work)
         focus_form.addRow("Break minutes", self.break_min)
-        focus_form.addRow("Long break", self.long_break)
+        focus_form.addRow("Long break minutes", self.long_break)
         focus_form.addRow("Timer preset", self.preset_timer)
         focus_form.addRow("Long break after", self.long_every)
         focus_form.addRow(self.auto_split)
@@ -578,19 +590,13 @@ class PrefsDialog(QDialog):
         computer = QWidget()
         computer_form = QFormLayout(computer)
         computer_form.addRow(_heading("This computer"))
+        open_account = QPushButton("Manage account…")
+        open_account.setObjectName("prefsAccount")
+        open_account.setToolTip("Change your password, export or import, or delete the account.")
+        open_account.clicked.connect(self.account_requested.emit)
+        computer_form.addRow("Account", open_account)
         computer_form.addRow(self.start_at_login)
         computer_form.addRow("Open on", self.preferred_view)
-        account_row = QHBoxLayout()
-        open_account = QPushButton("Account…")
-        open_account.setObjectName("prefsAccount")
-        open_account.clicked.connect(self.account_requested.emit)
-        open_availability = QPushButton("Availability…")
-        open_availability.setObjectName("prefsAvailability")
-        open_availability.clicked.connect(self.availability_requested.emit)
-        account_row.addWidget(open_account)
-        account_row.addWidget(open_availability)
-        account_row.addStretch(1)
-        computer_form.addRow(account_row)
         run_setup = QPushButton("Run setup again")
         run_setup.setObjectName("prefsRunSetup")
         run_setup.setToolTip("Style, your week, homework time and reminders, filled in as they are now.")
@@ -703,11 +709,6 @@ class PrefsDialog(QDialog):
         todays_app = main.chosen() == "classic"
         matched = any(section.values().get("colour") == MATCH for section in self.layout_sections)
         coloured = todays_app or matched
-        self._appear_form.setRowVisible(self.own_colours, not coloured)
-        self.own_colours.setText(
-            f"{LAYOUTS[main.chosen()].label} has its own colours, under Main view."
-            " Set them to Match my look to use Look and Accent."
-        )
         for field in (self.look, self.accent, self.accent_chips):
             self._appear_form.setRowVisible(field, coloured)
         for knob in TODAYS_APP_KNOBS:
@@ -825,8 +826,13 @@ class PrefsDialog(QDialog):
         if not self.reminder_sound.isChecked():
             self.preview.setText("Sound is off")
             return
+        self.preview.setText("Test")
+        if not self.volume.value():
+            self.save_state.setText(SILENT_VOLUME)
+            return
         tone = str(self.preview_tone.currentData() or FALLBACK)
-        self.preview.setText("Test" if self._bell.once(tone, self.volume.value()) else "No sound card")
+        if not self._bell.once(tone, self.volume.value()):
+            self.save_state.setText(NO_SOUND)
 
     def _render_alarms(self) -> None:
         self.alarm_list.clear()

@@ -409,11 +409,14 @@ def test_settings_shows_only_what_the_main_view_uses(qapp: QApplication) -> None
     dialog.show()
     qapp.processEvents()
 
+    def note() -> QLabel | None:
+        return dialog.findChild(QLabel, "layoutMainColourNote")
+
     def shown() -> dict[str, bool]:
         fields = {"look": dialog.look, "accent": dialog.accent, "chips": dialog.accent_chips}
         fields.update(dialog.knobs)
         return {name: field.isVisibleTo(dialog) for name, field in fields.items()} | {
-            "note": dialog.own_colours.isVisibleTo(dialog)
+            "note": note() is not None and note().isVisibleTo(dialog)
         }
 
     everything = shown()
@@ -425,9 +428,7 @@ def test_settings_shows_only_what_the_main_view_uses(qapp: QApplication) -> None
     qapp.processEvents()
     bento = shown()
     assert {name for name, on in bento.items() if not on} == {"look", "accent", "chips", *TODAYS_APP_KNOBS}
-    assert dialog.own_colours.text() == (
-        "Bento has its own colours, under Main view. Set them to Match my look to use Look and Accent."
-    )
+    assert note().text() == "Pick Match my look to use your own Look and Accent."
     assert dialog.fine_tune.text() == FINE_TUNE_OTHER
 
     colour = combo(dialog, "layoutMain-colour")
@@ -936,11 +937,11 @@ def test_settings_fits_its_width_in_every_layout_and_text_size(
 ) -> None:
     """Settings scrolls down, never sideways. When a page was wider than its room the extra was cut
     off: every dropdown lost its arrow and the layout blurbs stopped mid-word. At large text the
-    list beside it cut "Appearance & layout" short, and a group's title sat on its frame line over
-    its first row. Measured in the real window, because the pack's padding and font are the cause."""
+    list beside it cut "Appearance & layout" short. Measured in the real window, because the pack's
+    padding and font are the cause."""
     choices = [{"main": main, "day": "one"} for main in LAYOUTS if LAYOUTS[main].role == "plan"]
     choices += [{"main": "classic", "day": day} for day in LAYOUTS if LAYOUTS[day].role == "day"]
-    too_wide, cut_names, covered_titles = [], [], []
+    too_wide, cut_names = [], []
     for text in ("normal", "large"):
         window._look = {**window._look, "knobs": {**(window._look.get("knobs") or {}), "text": text}}
         window._apply_appearance()
@@ -967,14 +968,9 @@ def test_settings_fits_its_width_in_every_layout_and_text_size(
             settled(qapp, window)
             if dialog.nav.sizeHintForColumn(0) > dialog.nav.viewport().width():
                 cut_names.append((text, choice["main"], choice["day"]))
-            for section in dialog.layout_sections:
-                first = section.findChildren(QLabel)[0]
-                if first.y() < section.fontMetrics().height():
-                    covered_titles.append((text, section.slot, first.y()))
             dialog.close()
     assert too_wide == []
     assert cut_names == []
-    assert covered_titles == []
 
 
 def chrome_colour(window: NativeWindow) -> str:

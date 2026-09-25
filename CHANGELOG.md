@@ -3,7 +3,7 @@
 All notable changes to FlexWeek are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.15.0] - Unreleased
 
 ### Added
 - Month names every timed block on a date, so weeks other than the open one

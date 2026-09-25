@@ -1,7 +1,7 @@
 """Main view and Day screen pickers, built from the registry so a new design needs no code here.
 
-A design's Style options stay in view under the pick. Fine-tune waits behind one checkbox so the
-first look stays short.
+A design's Style options stay in view under the pick, flat on the page under the section's heading.
+Fine-tune waits behind one checkbox so the first look stays short.
 """
 
 from __future__ import annotations
@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFormLayout,
-    QGroupBox,
     QLabel,
     QPushButton,
     QVBoxLayout,
@@ -19,30 +18,43 @@ from PySide6.QtWidgets import (
 )
 
 from desktop.native.layouts.base import empty
-from desktop.native.layouts.registry import LAYOUTS, LEVELS, layouts_for, options_for
+from desktop.native.layouts.registry import LAYOUTS, LEVELS, MATCH, layouts_for, options_for
 
 SLOTS = (
     ("main", "plan", "Main view", "Where you plan your week."),
     ("day", "day", "Day screen", "What you watch once the plan is made. Open it with My day."),
 )
+DESIGN_LINE = (
+    "A design is how FlexWeek lays out your week. Your blocks and homework are the same in every one."
+)
+# Look and Accent are shown only for a design that uses them, so a design with colours of its own
+# says how to get them back, under the colours it is about.
+COLOUR_NOTE = "Pick Match my look to use your own Look and Accent."
 
 
-class LayoutSection(QGroupBox):
+class LayoutSection(QWidget):
     """One pick and the options of whatever is picked. Each design keeps its own settings while the
     dialog is open, so trying another design and coming back loses nothing."""
 
     changed = Signal()
 
     def __init__(self, slot: str, role: str, title: str, blurb: str, choice: dict) -> None:
-        super().__init__(title)
+        super().__init__()
         self.slot = slot
         self.setObjectName(f"layout{slot.title()}Section")
         self._options = {spec.id: options_for(choice, spec.id) for spec in layouts_for(role)}
+        self._colour_note: QLabel | None = None
         body = QVBoxLayout(self)
-        # Wrapped, or its one long line sets the width of the whole Settings page.
-        intro = QLabel(blurb)
-        intro.setWordWrap(True)
-        body.addWidget(intro)
+        body.setContentsMargins(0, 0, 0, 0)
+        heading = QLabel(title.upper())
+        heading.setObjectName(f"layout{slot.title()}Heading")
+        body.addWidget(heading)
+        lines = (DESIGN_LINE, blurb) if slot == "main" else (blurb,)
+        for line in lines:
+            # Wrapped, or its one long line sets the width of the whole Settings page.
+            intro = QLabel(line)
+            intro.setWordWrap(True)
+            body.addWidget(intro)
         self.pick = QComboBox()
         self.pick.setObjectName(f"layout{slot.title()}")
         self.pick.setAccessibleName(title)
@@ -108,6 +120,7 @@ class LayoutSection(QGroupBox):
         self.more.setVisible(bool(detail))
         self.reset.setVisible(bool(spec.options))
         empty(self._form)
+        self._colour_note = None
         for level, heading in LEVELS:
             rows = [option for option in spec.options if option.level == level]
             if not rows or (level == "detail" and not self.more.isChecked()):
@@ -130,3 +143,14 @@ class LayoutSection(QGroupBox):
                 )
                 box.currentIndexChanged.connect(lambda _index: self.changed.emit())
                 self._form.addRow(option.label, box)
+                if option.key == "colour":
+                    self._colour_note = QLabel(COLOUR_NOTE)
+                    self._colour_note.setObjectName(f"layout{self.slot.title()}ColourNote")
+                    self._colour_note.setWordWrap(True)
+                    self._form.addRow("", self._colour_note)
+                    box.currentIndexChanged.connect(self._sync_colour_note)
+        self._sync_colour_note()
+
+    def _sync_colour_note(self, *_index: object) -> None:
+        if self._colour_note is not None:
+            self._form.setRowVisible(self._colour_note, self._options[self.chosen()].get("colour") != MATCH)
