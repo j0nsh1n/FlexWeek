@@ -78,6 +78,7 @@ from desktop.native.reuse import (
     late_from_start,
     late_id,
     merge_preview_rows,
+    plan_start,
     proposals_from_clipboard,
     restore_point_label,
     routine_rows,
@@ -93,6 +94,8 @@ from desktop.native.reuse import (
     week_label,
 )
 from desktop.native.weekmodel import WeekModel, build_week, due_label, length_label
+
+WEEK_OVER = "This week is over, so nothing was planned. Plan this week or a later one."
 
 
 def plan_sentence(placed: int, waiting: int) -> str:
@@ -1444,10 +1447,15 @@ class NativeSession(QObject):
     def solve(self, *, everything: bool = False, only: set[str] | None = None, join: bool = False) -> None:
         """Plan my homework. Homework that already has a time keeps it.
 
-        `everything` is Replan all my homework. `only` finds new times for named work.
+        `everything` is Replan all my homework. `only` finds new times for named work. Nothing is
+        placed before now.
         """
+        start = plan_start(self.week_start, datetime.fromtimestamp(self.now_ms() / 1000))
+        if start is not None and start[0] > 6:
+            self._say(WEEK_OVER)
+            return
         payload, targets = solve_request(
-            self.blocks, self.assignments, self.week_start, everything=everything, only=only
+            self.blocks, self.assignments, self.week_start, everything=everything, only=only, not_before=start
         )
         if not targets:
             self._say("All your homework already has a time.")

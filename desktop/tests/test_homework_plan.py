@@ -35,6 +35,7 @@ if importlib.util.find_spec("PySide6") is not None:
 
     from desktop.native.calendar import date_for_day, sunday_due
     from desktop.native.look import sanitize_look
+    from desktop.native.reuse import plan_start
     from desktop.native.setup import FIRST
     from desktop.native.widgets import DueField, HomeworkDialog
     from desktop.native.window import NativeWindow
@@ -241,6 +242,104 @@ def test_a_due_field_says_it_changed_with_no_arguments(qapp: QApplication) -> No
     field.timed.setChecked(True)
     field.time.setTime(QTime(8, 15))
     assert heard == [(), (), ()]
+
+
+# Plan never before now
+
+
+def test_a_plan_starts_at_now_rounded_up_to_the_next_quarter_hour() -> None:
+    def at(day: int, hour: int, minute: int, second: int = 0) -> tuple[int, int] | None:
+        return plan_start("2026-09-21", datetime(2026, 9, day, hour, minute, second))
+
+    assert at(24, 10, 0) == (3, 600)
+    assert at(24, 10, 0, 30) == (3, 615)
+    assert at(24, 10, 7) == (3, 615)
+    assert at(24, 23, 50) == (4, 0)
+    assert at(27, 23, 55) == (7, 0), "past Sunday: the week is over"
+    assert at(20, 22, 0) is None, "the whole week is still ahead"
+
+
+
+def test_plan_on_a_thursday_leaves_monday_to_wednesday_and_the_hours_before_now_alone(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    session = window.session
+    wednesday = date_for_day(session.week_start, 2)
+    session.add_homework(
+        {"id": "reading", "title": "Reading log", "due": sunday_due(session.week_start),
+         "estimate_min": 60, "energy": "high", "revision": 0},
+        days=[3],
+    )
+    session.add_homework({"id": "chem", "title": "Chem lab report", "due": wednesday, "estimate_min": 60,
+                          "revision": 0})
+    session.save()
+    settled(qapp, window)
+    before = {block["id"]: (block["days"], block.get("start")) for block in session.blocks}
+    window.findChild(QPushButton, "solveButton").click()
+    settled(qapp, window)
+
+    after = {block["id"]: (block["days"], block.get("start")) for block in session.blocks}
+    moved = {key: value for key, value in after.items() if before.get(key) != value}
+    assert moved, "the plan placed something"
+    for key, (days, start) in moved.items():
+        assert start is not None and (days[0], start) >= (3, "10:00"), f"{key} planned at {days} {start}"
+    assert session_of(window, "reading")["days"] == [3]
+    assert session_of(window, "reading")["start"] >= "10:00", "its morning is before now"
+    assert session_of(window, "math")["days"][0] >= 3
+    chem = session_of(window, "chem")
+    assert not chem.get("start"), "due yesterday: there is no time left for it this week"
+    assert session.needs_time[chem["id"]] == TOO_LATE
+
+
+def test_replan_all_leaves_homework_whose_time_has_passed(qapp: QApplication, window: NativeWindow) -> None:
+    session = window.session
+    math = session_of(window, "math")
+    session.add_block({**math, "start": "15:00", "days": [1]})
+    session.save()
+    settled(qapp, window)
+    assert not session_of(window, "math").get("pinned")
+    window.findChild(QPushButton, "replanAll").click()
+    settled(qapp, window)
+    math = session_of(window, "math")
+    assert (math["days"], math["start"]) == ([1], "15:00"), "Tuesday is gone; Replan all leaves it be"
+
+
+def test_plan_it_as_i_add_it_starts_no_earlier_than_now(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    window.session.preferences = {**(window.session.preferences or {}), "planning_style": "auto"}
+
+    def fill(dialog: HomeworkDialog) -> int:
+        dialog.title.setText("Spanish vocab")
+        dialog.due.date.setDate(QDate.fromString(sunday_due(window.session.week_start)[:10], "yyyy-MM-dd"))
+        dialog.energy.setCurrentIndex(dialog.energy.findData("high"))
+        dialog.accept()
+        return QDialog.DialogCode.Accepted
+
+    opened_with(monkeypatch, fill)
+    window._add_homework()
+    settled(qapp, window)
+    added = next(item for item in window.session.assignments.values() if item["title"] == "Spanish vocab")
+    placed = session_of(window, added["id"])
+    assert placed.get("start"), "placed as it was added"
+    assert (placed["days"][0], placed["start"]) >= (3, "10:00")
+
+
+def test_plan_on_a_week_that_is_over_places_nothing_and_says_so(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    session = window.session
+    last = (date.fromisoformat(session.week_start) - timedelta(days=7)).isoformat()
+    session.load_week(last)
+    wait_until(qapp, lambda: session.week_start == last and not session.busy)
+    session.add_homework({"id": "late", "title": "Old worksheet", "due": sunday_due(last), "estimate_min": 60,
+                          "revision": 0})
+    session.save()
+    settled(qapp, window)
+    window.findChild(QPushButton, "solveButton").click()
+    settled(qapp, window)
+    assert not session_of(window, "late").get("start")
+    assert window.week_status.text() == PAST_WEEK
 
 
 # Length

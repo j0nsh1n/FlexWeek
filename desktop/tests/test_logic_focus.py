@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -81,6 +82,9 @@ def test_editing_the_week_stops_reminders_for_a_deleted_session(
     qapp: QApplication, server: LocalServer
 ) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
+    # Planned from Monday morning, so there is time left in the week whatever day the test runs.
+    monday = datetime.fromisoformat(session.week_start) + timedelta(hours=9)
+    session.now_ms = lambda: int(monday.timestamp() * 1000)
     session.add_homework(essay(session))
     session.save()
     settled(qapp, session)
