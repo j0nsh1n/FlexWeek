@@ -192,10 +192,14 @@ def test_every_page_is_kept_when_the_student_leaves_it(qapp: QApplication, serve
     assert window.session.preferences["day_cutoff"] == "22:00"
 
     setup.planning_buttons["auto"].setChecked(True)
+    assert setup.drag_buttons[5].isChecked(), "five minutes unless the student picks fifteen"
+    setup.drag_buttons[15].setChecked(True)
     setup.work_editor.set_windows([{"days": [0, 1, 2, 3, 4], "start": "19:00", "end": "21:00"}])
     setup.next.click()
     written(qapp, window)
     assert window.session.preferences["planning_style"] == "auto"
+    assert window.session.preferences["drag_step_min"] == 15
+    assert window.hand.step == 15
     assert window.session.preferences["work_windows"] == [
         {"days": [0, 1, 2, 3, 4], "start": "19:00", "end": "21:00"}
     ]

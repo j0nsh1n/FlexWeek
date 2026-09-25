@@ -46,11 +46,18 @@ from desktop.native.calendar import (
     is_setup_block,
     sunday_due,
 )
+from desktop.native.hours.geometry import drag_step
 from desktop.native.layouts.registry import LAYOUTS, layouts_for, options_for, sanitize_layout
 from desktop.native.look import PACK_LABELS, PACKS, effective_look, sanitize_look
 from desktop.native.motion import appear, fade_away, glide, hold_picture, slide_page
 from desktop.native.previews import Previews
-from desktop.native.settings import PLANNING_STYLES, SPORT_FALLBACK, SPOTIFY_TONE_NOTE
+from desktop.native.settings import (
+    DRAG_STEP_CHOICES,
+    DRAG_STEP_QUESTION,
+    PLANNING_STYLES,
+    SPORT_FALLBACK,
+    SPOTIFY_TONE_NOTE,
+)
 from desktop.native.sound import Bell
 from desktop.native.tones import FALLBACK, RECIPES
 from desktop.native.widgets import DAYS, DueField, FlowLayout
@@ -813,6 +820,15 @@ class SetupPage(QWidget):
             hint = _label(note, "setupHint")
             hint.setContentsMargins(28, 0, 0, 6)
             box.addWidget(hint)
+        self._section(box, DRAG_STEP_QUESTION)
+        self.drag_step = QButtonGroup(content)
+        self.drag_buttons: dict[int, QRadioButton] = {}
+        for minutes, text in DRAG_STEP_CHOICES:
+            button = QRadioButton(text)
+            button.setObjectName(f"setupDragStep-{minutes}")
+            self.drag_step.addButton(button, minutes)
+            self.drag_buttons[minutes] = button
+            box.addWidget(button)
         self._section(box, "When may FlexWeek plan homework?")
         self.work_editor = WorkWindowsEditor([])
         box.addWidget(self.work_editor)
@@ -998,6 +1014,7 @@ class SetupPage(QWidget):
     def _fill_homework(self) -> None:
         style = self._state.preferences.get("planning_style") or "suggest"
         self.planning_buttons.get(style, self.planning_buttons["suggest"]).setChecked(True)
+        self.drag_buttons[drag_step(self._state.preferences.get("drag_step_min"))].setChecked(True)
         self.work_editor.set_subjects(self._state.subjects)
         self.work_editor.set_windows(self._state.preferences.get("work_windows") or [])
 
@@ -1399,6 +1416,7 @@ class SetupPage(QWidget):
             )
             return {
                 "planning_style": checked,
+                "drag_step_min": drag_step(self.drag_step.checkedId()),
                 "work_windows": self.work_editor.windows(),
             }
         if step == REMINDERS:
@@ -1481,6 +1499,7 @@ class SetupPage(QWidget):
                 planning += f" and {len(work_windows) - 2} more"
         else:
             planning += " · homework can be planned at any time of day"
+        planning += f" · a drag moves {drag_step(prefs.get('drag_step_min'))} minutes at a time"
         tone = str(prefs.get("alarm_tone") or FALLBACK)
         sound = "Spotify" if tone == "spotify" else TONE_NAMES.get(tone, tone.title())
         if prefs.get("reminders_enabled"):

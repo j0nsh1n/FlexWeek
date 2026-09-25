@@ -909,6 +909,40 @@ def test_settings_saves_once_after_a_burst_and_closing_saves_it_at_once(
     assert (window.session.preferences or {})["timer_work_min"] == 45
 
 
+def test_the_drag_step_is_chosen_in_settings_kept_by_the_account_and_given_to_the_hand(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Five minutes until the student says otherwise. Fifteen, picked in Settings, moves the hand at
+    once, is saved with the account and read back from it; five again is the default once more."""
+    assert window.hand.step == 5
+
+    def stored() -> dict:
+        got: dict = {}
+        window.session.client.request(
+            "GET", "/api/preferences", None, got.update, lambda error: got.update(error=error)
+        )
+        wait_until(qapp, lambda: bool(got))
+        return got
+
+    for choice in (15, 5):
+        seen: dict[str, object] = {}
+
+        def pick(dialog: PrefsDialog, choice: int = choice, seen: dict = seen) -> int:
+            dialog.findChild(QRadioButton, f"prefDragStep-{choice}").setChecked(True)
+            seen["hand"] = window.hand.step
+            return QDialog.DialogCode.Rejected
+
+        PrefsDialog.exec = pick
+        try:
+            window._open_settings()
+        finally:
+            del PrefsDialog.exec
+        wait_until(qapp, lambda: not window.session.busy)
+        assert seen == {"hand": choice}, "applied while Settings is open"
+        assert stored().get("drag_step_min", 5) == choice
+        assert window.hand.step == choice
+
+
 def test_a_pause_saves_without_closing_settings(qapp: QApplication, window: NativeWindow) -> None:
     sent = preference_puts(window)
 

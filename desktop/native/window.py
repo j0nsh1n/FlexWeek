@@ -1073,6 +1073,7 @@ class NativeWindow(QMainWindow):
                 self._setup_week = True
             for key in (
                 "planning_style",
+                "drag_step_min",
                 "study_windows",
                 "reminders_enabled",
                 "reminder_lead_min",
@@ -2218,7 +2219,15 @@ class NativeWindow(QMainWindow):
             if self.session.preferences is not None:
                 # Pack and accent belong to the account but are seen like the look: at once. The save
                 # that follows stores them.
-                live = ("theme_pack", "accent", "accent_chips", "motion", "alarm_tone", "planning_style")
+                live = (
+                    "theme_pack",
+                    "accent",
+                    "accent_chips",
+                    "motion",
+                    "alarm_tone",
+                    "planning_style",
+                    "drag_step_min",
+                )
                 shown = {key: wanted[key] for key in live}
                 self.session.preferences = {**self.session.preferences, **shown}
             if bool(wanted["start_at_login"]) != login:

@@ -40,6 +40,7 @@ from backend.slots import SLOT_MIN
 from desktop.native import autostart
 from desktop.native.calendar import DAY_FULL
 from desktop.native.focus import FOCUS_PHASE_LABEL, format_countdown, more_time_choices, remaining_ms
+from desktop.native.hours.geometry import drag_step
 from desktop.native.layouts.dialog import SLOTS, LayoutSection
 from desktop.native.layouts.registry import LAYOUTS, MATCH, sanitize_layout
 from desktop.native.look import (
@@ -77,6 +78,8 @@ ACCOUNT_MAX_WIDTH = 520
 ACCOUNT_MIN_WIDTH = 560
 SPORT_FALLBACK = "Sport or club"
 ALARM_TONE_LABELS = {"spotify": "A Spotify song or playlist"}
+DRAG_STEP_QUESTION = "When you drag a block, it moves in steps of:"
+DRAG_STEP_CHOICES = ((5, "5 minutes (more control)"), (15, "15 minutes (quarter hours)"))
 PLANNING_STYLES = (
     ("auto", "Plan it for me as I add it", "New homework gets a time straight away."),
     (
@@ -453,6 +456,15 @@ class PrefsDialog(QDialog):
         where = QLabel("Preferred study times, including ones kept for one subject, are in Availability.")
         where.setWordWrap(True)
         planning_form.addRow(where)
+        planning_form.addRow(QLabel(DRAG_STEP_QUESTION))
+        self.drag_step = QButtonGroup(planning)
+        chosen_step = drag_step(preferences.get("drag_step_min"))
+        for minutes, text in DRAG_STEP_CHOICES:
+            button = QRadioButton(text)
+            button.setObjectName(f"prefDragStep-{minutes}")
+            button.setChecked(minutes == chosen_step)
+            self.drag_step.addButton(button, minutes)
+            planning_form.addRow(button)
         focus = QWidget()
         focus_form = QFormLayout(focus)
         focus_form.addRow(_heading("Focus timer"))
@@ -637,6 +649,7 @@ class PrefsDialog(QDialog):
         ):
             check.toggled.connect(self._announce)
         self.planning_style.buttonToggled.connect(self._style_toggled)
+        self.drag_step.buttonToggled.connect(self._style_toggled)
         self.spotify.editingFinished.connect(self.changed.emit)
         for section in self.layout_sections:
             section.changed.connect(self.changed.emit)
@@ -871,6 +884,7 @@ class PrefsDialog(QDialog):
             "motion": self.motion.currentData(),
             "alarm_tone": self.alarm_tone.currentData(),
             "planning_style": self._planning_style(),
+            "drag_step_min": drag_step(self.drag_step.checkedId()),
         }
 
     def _planning_style(self) -> str:
