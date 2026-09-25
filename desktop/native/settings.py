@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QStackedWidget,
     QTimeEdit,
@@ -169,6 +170,16 @@ def _note(words: str, name: str) -> QLabel:
     made = QLabel(words)
     made.setObjectName(name)
     made.setWordWrap(True)
+    return made
+
+
+def _page_button(words: str, name: str) -> QPushButton:
+    """A button that opens something else. Plain and as wide as its words, since Close is the one
+    filled button in Settings; stretched and filled, each was the loudest thing on its page."""
+    made = QPushButton(words)
+    made.setObjectName(name)
+    made.setProperty("quiet", True)
+    made.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
     return made
 
 
@@ -528,8 +539,7 @@ class PrefsDialog(QDialog):
         where = QLabel("Preferred study times, including ones kept for one subject, are in Availability.")
         where.setWordWrap(True)
         planning_form.addRow(where)
-        open_availability = QPushButton("Availability…")
-        open_availability.setObjectName("prefsAvailability")
+        open_availability = _page_button("Availability…", "prefsAvailability")
         open_availability.clicked.connect(self.availability_requested.emit)
         planning_form.addRow(open_availability)
         planning_form.addRow(_heading("Dragging"))
@@ -656,23 +666,20 @@ class PrefsDialog(QDialog):
         computer = QWidget()
         computer_form = QFormLayout(computer)
         computer_form.addRow(_heading("This computer"))
-        open_account = QPushButton("Manage account…")
-        open_account.setObjectName("prefsAccount")
+        open_account = _page_button("Manage account…", "prefsAccount")
         open_account.setToolTip("Change your password, export or import, or delete the account.")
         open_account.clicked.connect(self.account_requested.emit)
         computer_form.addRow("Account", open_account)
         computer_form.addRow(self.start_at_login)
         computer_form.addRow("Open on", self.preferred_view)
-        run_setup = QPushButton("Run setup again")
-        run_setup.setObjectName("prefsRunSetup")
+        run_setup = _page_button("Run setup again", "prefsRunSetup")
         run_setup.setToolTip("Style, your week, homework time and reminders, filled in as they are now.")
         run_setup.clicked.connect(self.setup_requested.emit)
         computer_form.addRow("Setup", run_setup)
         update_col = QVBoxLayout()
         version = QLabel(f"FlexWeek {VERSION}")
         version.setObjectName("prefsVersion")
-        check_updates = QPushButton("Check for updates")
-        check_updates.setObjectName("prefsCheckUpdates")
+        check_updates = _page_button("Check for updates", "prefsCheckUpdates")
         check_updates.clicked.connect(self.updates_requested.emit)
         update_col.addWidget(version)
         update_col.addWidget(check_updates)
@@ -1312,6 +1319,7 @@ class HelpDialog(QDialog):
         for key, what in HELP_KEYS:
             name = QLabel(key)
             name.setObjectName("helpKey")
+            name.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
             keys.addRow(name, _line(what, "helpKeyDoes"))
         column.addWidget(key_list)
         column.addStretch(1)

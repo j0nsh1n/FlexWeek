@@ -11,6 +11,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
+from PySide6.QtCore import QPoint
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -218,4 +219,27 @@ def test_every_heading_on_appearance_stands_out_from_the_rows_under_it(
     plain = appearance.findChild(QLabel, "layoutMainColourNote")
     for heading in headings:
         assert heading.font().bold() and not plain.font().bold(), heading.text()
+    dialog.close()
+
+
+@pytest.mark.parametrize(
+    ("row", "name"),
+    [(1, "prefsAvailability"), (4, "prefsAccount"), (4, "prefsRunSetup"), (4, "prefsCheckUpdates")],
+)
+def test_a_button_that_opens_something_else_is_plain_and_as_wide_as_its_words(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+    row: int,
+    name: str,
+) -> None:
+    """Stretched across the page and filled, each was louder than Close, the one answer Settings has."""
+    dialog = prefs(window)
+    dialog.nav.setCurrentRow(row)
+    qapp.processEvents()
+    on = page(dialog, row)
+    button = on.findChild(QPushButton, name)
+    picture = on.grab().toImage()
+    at = button.mapTo(on, QPoint(button.width() // 2, 4))
+    assert picture.pixelColor(at.x(), at.y()) == picture.pixelColor(2, 2), "filled"
+    assert button.width() <= button.sizeHint().width(), "as wide as the page"
     dialog.close()

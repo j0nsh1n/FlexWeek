@@ -12,13 +12,13 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QStandardPaths
+from PySide6.QtCore import QPoint, QStandardPaths
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QApplication, QLabel, QMenu, QPushButton, QScrollArea, QWidget
+from PySide6.QtWidgets import QApplication, QLabel, QMenu, QPushButton, QScrollArea, QToolTip, QWidget
 
 from desktop.native import settings
 from desktop.native.layouts.registry import sanitize_layout
-from desktop.native.look import sanitize_look
+from desktop.native.look import TEXT_PT, sanitize_look
 from desktop.native.window import NativeWindow
 from desktop.tests.window_support import (  # noqa: F401
     host,
@@ -239,7 +239,28 @@ def test_help_shows_every_line_whole_at_large_text_and_fits_the_screen(
     cut = [label.text() for label in labels if label.mapTo(view, label.rect().topRight()).x() > view.width()]
     assert cut == []
     assert dialog.height() <= dialog.screen().availableGeometry().height() - 48
+    picture = dialog.grab().toImage()
+    inside = view.parentWidget().mapTo(dialog, QPoint(2, 2))
+    assert picture.pixelColor(inside.x(), inside.y()) == picture.pixelColor(2, 2), "a box around the words"
     dialog.close()
+
+
+def test_a_description_is_as_large_as_the_text_the_student_chose(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    """At Large the descriptions stayed at the system's small tooltip size."""
+    for text in ("normal", "large"):
+        knobs = {**window._look.get("knobs", {}), "text": text}
+        window._look = sanitize_look({**window._look, "knobs": knobs})
+        window._apply_appearance()
+        button = window.solve_button
+        QToolTip.showText(button.mapToGlobal(QPoint(0, button.height())), button.toolTip(), button)
+        qapp.processEvents()
+        tip = next(w for w in qapp.topLevelWidgets() if w.objectName() == "qtooltip_label" and w.isVisible())
+        assert tip.font().pointSize() == TEXT_PT[text], text
+        QToolTip.hideText()
+        qapp.processEvents()
 
 
 def test_help_and_about_are_under_more(

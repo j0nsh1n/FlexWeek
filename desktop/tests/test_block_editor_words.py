@@ -17,6 +17,7 @@ from PySide6.QtCore import QPoint
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QLabel,
@@ -27,7 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from desktop.native import widgets
-from desktop.native.look import resolved_palette
+from desktop.native.look import resolved_palette, sanitize_look
 from desktop.native.widgets import BlockDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.window_support import (  # noqa: F401
@@ -80,13 +81,34 @@ def test_it_says_that_ticking_another_day_repeats_it(qapp: QApplication, host: Q
     dialog = BlockDialog(host, day=3, start="17:15", duration_min=30, from_range=True)
     dialog.show()
     note = dialog.findChild(QLabel, "blockRepeatNote")
-    assert note.text() == "Tick more days to repeat it on those days this week."
+    assert note.text() == "Tick more days to repeat it this week."
     assert note.isVisibleTo(dialog)
     series = BlockDialog(host, soccer(), occurrence_day=3)
     series.show()
     series.scope_occurrence.setChecked(True)
     note = series.findChild(QLabel, "blockRepeatNote")
     assert not note.isVisibleTo(series), "the days cannot be changed for this day only"
+
+
+@pytest.mark.parametrize("text", ["normal", "large"])
+def test_the_repeat_note_sits_whole_under_the_day_boxes(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+    text: str,
+) -> None:
+    window._look = sanitize_look({**window._look, "knobs": {**window._look.get("knobs", {}), "text": text}})
+    window._apply_appearance()
+    dialog = BlockDialog(window, day=3, start="17:15", duration_min=30, from_range=True)
+    dialog.show()
+    qapp.processEvents()
+    note = dialog.findChild(QLabel, "blockRepeatNote")
+    thursday = dialog.findChild(QCheckBox, "blockDay3")
+    below = note.mapTo(dialog, QPoint(0, 0)).y() - thursday.mapTo(dialog, QPoint(0, thursday.height())).y()
+    needed = note.heightForWidth(note.width()) if note.wordWrap() else note.sizeHint().height()
+    assert note.height() == needed, "taller than its words, so it floated, or shorter, so it was cut"
+    assert note.wordWrap() or note.width() >= note.sizeHint().width()
+    assert 0 <= below <= 8, below
+    dialog.close()
 
 
 def test_the_missed_box_names_the_day(qapp: QApplication, host: QWidget) -> None:  # noqa: F811
@@ -231,3 +253,11 @@ def test_the_question_before_deleting_draws_its_answer_red_and_cancel_plain(
     assert fill(yes) == red, fill(yes).name()
     assert fill(cancel) == picture.pixelColor(2, 2), "Cancel is plain"
     box.close()
+    leave = widgets.confirm_box(window, "Log out", "Log out?", "Log out", danger=False)
+    leave.show()
+    qapp.processEvents()
+    picture = leave.grab().toImage()
+    answer = leave.findChild(QPushButton, "confirmYes")
+    at = answer.mapTo(leave, QPoint(answer.width() // 2, 4))
+    assert picture.pixelColor(at.x(), at.y()) not in (red, picture.pixelColor(2, 2)), "filled, not red"
+    leave.close()

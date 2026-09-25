@@ -2406,7 +2406,7 @@ class NativeWindow(QMainWindow):
                 self.session.apply_restore_point(dialog.selected_id)
 
     def _log_out(self) -> None:
-        if confirm(self, "Log out", LOG_OUT_QUESTION, "Log out"):
+        if confirm(self, "Log out", LOG_OUT_QUESTION, "Log out", danger=False):
             self.session.logout()
 
     def _open_help(self) -> None:

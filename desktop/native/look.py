@@ -674,8 +674,9 @@ def control_rules(palette: dict, radius: int, size: int, art: dict[str, str]) ->
         f"QMenu::separator {{ height: 1px; background: {palette['hairline']}; margin: 6px 8px; }}"
         f"QLabel#menuHeading {{ color: {palette['muted']}; font-weight: 600; "
         f"font-size: {max(size - 1, 8)}pt; padding: 6px 12px 2px 12px; }}"
+        # A tooltip does not take the window's text size by itself, so at Large it stayed small.
         f"QToolTip {{ background: {palette['text']}; color: {palette['window']}; border: none; "
-        f"padding: 5px 9px; border-radius: {item}px; }}"
+        f"padding: 5px 9px; border-radius: {item}px; font-size: {size}pt; }}"
         f"QProgressBar {{ background: {palette['hairline']}; border: none; border-radius: 4px; "
         f"max-height: 8px; text-align: center; color: transparent; }}"
         f"QProgressBar::chunk {{ background: {palette['accent']}; border-radius: 4px; }}"
@@ -771,6 +772,11 @@ def pack_stylesheet(
     item_h = 36 if knobs["text"] == "large" else 22
     button_min = f" min-height: {item_h}px;" if knobs["text"] == "large" else ""
     field_min = FIELD_MIN_PX[knobs["text"]]
+    # A flat look has no edges, so a plain button is told from its words by a faint fill instead.
+    if knobs["depth"] == "flat":
+        quiet_edge = f"background: {palette['hairline']}; border: none;"
+    else:
+        quiet_edge = f"background: transparent; border: 1px solid {palette['hairline_strong']};"
     return (
         f"QMainWindow, QDialog, QWidget {{ background: {palette['window']}; color: {palette['text']}; "
         f"font-family: {family}; font-size: {size}pt; }}"
@@ -792,7 +798,7 @@ def pack_stylesheet(
         f"QHeaderView, QStackedWidget {{ background: transparent; border: none; "
         f"padding: 0; border-radius: 0; }}"
         # The week's hours paint their own background; as a frame the scroll area boxed them twice.
-        f"QScrollArea#weekScroll, QScrollArea#dayScroll {{ background: transparent; "
+        f"QScrollArea#weekScroll, QScrollArea#dayScroll, QScrollArea#helpScroll {{ background: transparent; "
         f"border: none; padding: 0; border-radius: 0; }}"
         # Today's app's Day: the day's hours, then what still needs a time and a summary beside them.
         f"QFrame#daySide {{ background: {palette['panel']}; border-radius: 0; {edges} }}"
@@ -817,8 +823,7 @@ def pack_stylesheet(
         f"QWidget#prefReminderControls QWidget:disabled {{ color: {palette['muted']}; }}"
         # One filled button per dialog: the answer. Cancel and its kind are drawn plain beside it, and
         # a button that destroys something takes the error colour.
-        f'QPushButton[quiet="true"] {{ background: transparent; color: {palette["text"]}; '
-        f'border: 1px solid {palette["hairline_strong"]}; }}'
+        f'QPushButton[quiet="true"] {{ color: {palette["text"]}; {quiet_edge} }}'
         f'QPushButton[quiet="true"]:hover {{ background: {palette["hairline"]}; }}'
         f'QPushButton[danger="true"] {{ background: {palette["error"]}; '
         f'color: {readable_ink(palette["error"])}; }}'

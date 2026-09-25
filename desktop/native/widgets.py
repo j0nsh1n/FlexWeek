@@ -106,7 +106,7 @@ SLOT_HINT = "Use a multiple of 15 minutes, such as 15, 30, or 45."
 ESTIMATE_ERROR = "That time is not a multiple of 15 minutes."
 PLAN_REVIEW_MAX = 132
 UNFINISHED_MAX = 132
-REPEAT_NOTE = "Tick more days to repeat it on those days this week."
+REPEAT_NOTE = "Tick more days to repeat it this week."
 REPLAN_TIP = (
     "Find new times for all of this week's homework, as if none had a time yet. Homework you placed "
     "yourself stays put. Use it when your week has changed a lot."
@@ -452,9 +452,12 @@ def control_art(palette: dict) -> dict[str, str]:
     }
 
 
-def confirm_box(parent: QWidget | None, title: str, question: str, yes: str) -> QMessageBox:
+def confirm_box(
+    parent: QWidget | None, title: str, question: str, yes: str, *, danger: bool = True
+) -> QMessageBox:
     """A question before something that cannot be taken back lightly. The answer buttons say what
-    they do, and Cancel is the default, so Enter pressed out of habit changes nothing."""
+    they do, and Cancel is the default, so Enter pressed out of habit changes nothing. The answer is
+    red only when it destroys something; logging out keeps everything, so it is not."""
     box = QMessageBox(parent)
     box.setObjectName("confirmBox")
     box.setIcon(QMessageBox.Icon.NoIcon)
@@ -465,7 +468,7 @@ def confirm_box(parent: QWidget | None, title: str, question: str, yes: str) -> 
     # this way to the box, and it was freed with the last Python name for it.
     go = QPushButton(yes, box)
     go.setObjectName("confirmYes")
-    go.setProperty("danger", True)
+    go.setProperty("danger", danger)
     stay = QPushButton("Cancel", box)
     stay.setObjectName("confirmCancel")
     stay.setProperty("quiet", True)
@@ -476,8 +479,8 @@ def confirm_box(parent: QWidget | None, title: str, question: str, yes: str) -> 
     return box
 
 
-def confirm(parent: QWidget | None, title: str, question: str, yes: str) -> bool:
-    box = confirm_box(parent, title, question, yes)
+def confirm(parent: QWidget | None, title: str, question: str, yes: str, *, danger: bool = True) -> bool:
+    box = confirm_box(parent, title, question, yes, danger=danger)
     box.exec()
     chosen = box.clickedButton()
     return chosen is not None and chosen.objectName() == "confirmYes"
@@ -752,12 +755,18 @@ class BlockDialog(QDialog):
             check.setChecked(index in self._original["days"])
             choices.addWidget(check)
             self.days.append(check)
-        form.addRow("Days", choices)
         # A week's blocks are its own, so ticking more days repeats a block within this week only.
+        # One line, never wrapped, under the boxes it is about. Wrapped, the form gave it two lines'
+        # height for one line of words, or one line's height for two.
         self.repeat_note = QLabel(REPEAT_NOTE)
         self.repeat_note.setObjectName("blockRepeatNote")
-        self.repeat_note.setWordWrap(True)
-        form.addRow("", self.repeat_note)
+        days_field = QVBoxLayout()
+        days_field.addLayout(choices)
+        days_field.addWidget(self.repeat_note)
+        # Level with the boxes rather than halfway down to the note.
+        days_label = QLabel("Days")
+        days_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        form.addRow(days_label, days_field)
         self.scope_occurrence.toggled.connect(self._sync_scope)
         self.start = QTimeEdit(QTime.fromString(self._original.get("start") or start, "HH:mm"))
         self.start.setDisplayFormat("HH:mm")

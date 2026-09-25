@@ -123,11 +123,11 @@ def test_account_says_where_the_plans_are_saved_in_a_sentence(
     )
 
 
-def asked_with(monkeypatch: pytest.MonkeyPatch, answer: bool) -> list[tuple[str, str, str]]:
-    asked: list[tuple[str, str, str]] = []
+def asked_with(monkeypatch: pytest.MonkeyPatch, answer: bool) -> list[tuple[str, str, str, bool]]:
+    asked: list[tuple[str, str, str, bool]] = []
 
-    def confirm(_parent, title: str, question: str, yes: str) -> bool:
-        asked.append((title, question, yes))
+    def confirm(_parent, title: str, question: str, yes: str, *, danger: bool = True) -> bool:
+        asked.append((title, question, yes, danger))
         return answer
 
     monkeypatch.setattr(window_module, "confirm", confirm)
@@ -139,6 +139,7 @@ LOG_OUT = (
     "Log out of FlexWeek on this computer? Your plans stay saved in your account. You'll need your "
     "password to sign in again.",
     "Log out",
+    False,  # Nothing is lost, so the answer is not drawn red.
 )
 
 
@@ -173,6 +174,7 @@ DELETE = (
     "Delete the account words_student? Every week, all your homework and your settings are removed "
     "from this computer. This can't be undone.",
     "Delete words_student",
+    True,
 )
 
 
