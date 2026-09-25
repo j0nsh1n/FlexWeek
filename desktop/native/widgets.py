@@ -105,7 +105,12 @@ DIALOG_MAX_HEIGHT = 700
 SLOT_HINT = "Use a multiple of 15 minutes, such as 15, 30, or 45."
 ESTIMATE_ERROR = "That time is not a multiple of 15 minutes."
 PLAN_REVIEW_MAX = 132
+UNFINISHED_MAX = 132
 REPEAT_NOTE = "Tick more days to repeat it on those days this week."
+REPLAN_TIP = (
+    "Find new times for all of this week's homework, as if none had a time yet. Homework you placed "
+    "yourself stays put. Use it when your week has changed a lot."
+)
 DAY_FULL = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
 
@@ -1447,15 +1452,20 @@ class UnfinishedPanel(QWidget):
         super().__init__(parent)
         self.setObjectName("unfinishedReview")
         layout = QVBoxLayout(self)
-        heading = QLabel("Unfinished homework")
+        heading = QLabel("Unfinished homework from earlier weeks")
+        heading.setObjectName("unfinishedHeading")
         layout.addWidget(heading)
         self.list = QListWidget()
         self.list.setObjectName("unfinishedList")
         layout.addWidget(self.list)
+        row = QHBoxLayout()
         dismiss = QPushButton("Hide")
         dismiss.setObjectName("unfinishedDismiss")
+        dismiss.setProperty("quiet", True)
         dismiss.clicked.connect(self.hide)
-        layout.addWidget(dismiss)
+        row.addWidget(dismiss)
+        row.addStretch(1)
+        layout.addLayout(row)
         self.hide()
 
     def set_items(self, items: list[dict]) -> None:
@@ -1463,7 +1473,8 @@ class UnfinishedPanel(QWidget):
         for item in items:
             row = QWidget()
             row_layout = QHBoxLayout(row)
-            text = QLabel(f"{item['title']} · {item['remaining_min']} min left")
+            text = QLabel(f"{item['title']} · {length_label(int(item['remaining_min']))} left")
+            text.setObjectName("unfinishedRow")
             row_layout.addWidget(text, 1)
             button = QPushButton("Plan here")
             button.setObjectName(f"planUnfinished-{item['id']}")
@@ -1475,6 +1486,10 @@ class UnfinishedPanel(QWidget):
             wrapper.setSizeHint(row.sizeHint())
             self.list.addItem(wrapper)
             self.list.setItemWidget(wrapper, row)
+        # As tall as its rows, as the plan review is: one row in a box eight rows deep read as empty.
+        if items:
+            height = sum(self.list.sizeHintForRow(index) for index in range(self.list.count()))
+            self.list.setFixedHeight(min(height + 2 * self.list.frameWidth() + 4, UNFINISHED_MAX))
         self.setVisible(bool(items))
 
 
@@ -1553,9 +1568,11 @@ class PlanReview(QWidget):
         row = QHBoxLayout()
         dismiss = QPushButton("Got it")
         dismiss.setObjectName("planReviewDismiss")
+        dismiss.setToolTip("Hide this list.")
         dismiss.clicked.connect(self._dismiss)
         replan = QPushButton("Replan all my homework")
         replan.setObjectName("planReviewReplan")
+        replan.setToolTip(REPLAN_TIP)
         replan.clicked.connect(self.replan_requested.emit)
         row.addWidget(dismiss)
         row.addWidget(replan)

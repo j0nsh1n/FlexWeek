@@ -57,6 +57,7 @@ from desktop.native.calendar import (
 from desktop.native.client import PASSWORD_LENGTH_HINT, USERNAME_HINT, sign_in_problem, sign_up_problem
 from desktop.native.controller import NativeSession
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
+from desktop.native.focus import phase_duration_ms
 from desktop.native.hours.chips import TrayChip
 from desktop.native.hours.classic import ClassicDay, ClassicWeek
 from desktop.native.hours.geometry import Span
@@ -89,9 +90,11 @@ from desktop.native.reuse import (
     week_label,
 )
 from desktop.native.settings import (
+    AboutDialog,
     AccountDialog,
     AlarmRingDialog,
     FocusPanel,
+    HelpDialog,
     PrefsDialog,
     RestoreDialog,
     TransferPreviewDialog,
@@ -106,6 +109,7 @@ from desktop.native.updater import Updater, apply_update
 from desktop.native.version import VERSION
 from desktop.native.weekmodel import build_week
 from desktop.native.widgets import (
+    REPLAN_TIP,
     AddMenu,
     AlertStrip,
     AvailabilityDialog,
@@ -133,6 +137,53 @@ WINDOW_SIZE = (1280, 800)
 TRAVEL_WAIT_MS = 900
 PLAN_LABEL = "Plan my homework"
 SUGGEST_LABEL = "Suggest times"
+PLAN_TIP = (
+    "Find a time for homework that has none, around your fixed times and before it is due. Homework "
+    "that already has a time keeps it."
+)
+SUGGEST_TIP = "Give homework without a time a suggested time. Drag any of them somewhere else if you like."
+NOTHING_UNFINISHED = "Nothing is unfinished: no homework from earlier weeks still needs time."
+QUICK_FOCUS_TIP = (
+    "Start a {minutes}-minute focus timer now, without picking homework. "
+    "Change its length in Settings > Focus."
+)
+# Hover words for More and Advanced, by the object name of the button each action presses.
+MORE_TIPS = {
+    "addHomework": (
+        "Add an assignment with its due date and how long it will take. FlexWeek finds time for it."
+    ),
+    "schoolHours": "Set the days and times you are at school, so nothing is planned then.",
+    "addFixed": (
+        "Add something that happens at a set time, like practice or a lesson. Homework is planned around it."
+    ),
+    "runningLate": (
+        "Behind today? Say how late you are, and FlexWeek moves the rest of today's homework later."
+    ),
+    "unfinishedOpen": "Homework from earlier weeks that still needs time. Plan it into this week.",
+    "routinesButton": "Save this week's fixed times as a routine, or add a saved routine to a week.",
+    "openSpotify": "Open the selected block's Spotify link in Spotify.",
+    "replanAll": REPLAN_TIP,
+    "undoButton": "Undo your last change. Ctrl+Z",
+    "redoButton": "Redo the change you just undid. Ctrl+Y",
+    "copyBlock": "Copy the selected block to paste into another day. Ctrl+C",
+    "pasteBlock": "Paste what you copied into the selected day, with a preview first. Ctrl+V",
+    "duplicateBlock": "Make a copy of the selected block, with a preview first. Ctrl+D",
+    "copyDay": "Copy every block on the selected day to paste into another day.",
+    "saveButton": "Save now. FlexWeek already saves after every change. Ctrl+S",
+    "restoreButton": "Go back to an earlier copy of your plans. FlexWeek keeps one before big changes.",
+    "reloadWeek": "Load this week again as it is saved. Use it if something looks out of date.",
+    "helpButton": "What each screen is for, and the keyboard shortcuts.",
+    "aboutButton": "The version, and where your plans are saved.",
+    "signOut": "Sign out on this computer. Your plans stay saved in your account.",
+}
+# Why an action is greyed, when the reason is not simply that FlexWeek is busy.
+GREYED_TIPS = {
+    "unfinishedOpen": NOTHING_UNFINISHED,
+    "undoButton": "Nothing to undo yet.",
+    "redoButton": "Nothing to redo.",
+    "pasteBlock": "Copy a block or a day first.",
+}
+WAIT_TIP = "Wait a moment: FlexWeek is still saving or planning."
 LOG_OUT_QUESTION = (
     "Log out of FlexWeek on this computer? Your plans stay saved in your account. You'll need your "
     "password to sign in again."
@@ -658,6 +709,7 @@ class NativeWindow(QMainWindow):
         overflow.setObjectName("moreOverflow")
         overflow.hide()
         more_menu = QMenu(more)
+        more_menu.setToolTipsVisible(True)
         self._more_pairs = []
         self._spotify_action = None
         self.quick_focus = QPushButton("Quick focus")
@@ -694,18 +746,27 @@ class NativeWindow(QMainWindow):
                 if button is spotify:
                     self._spotify_action = action
         advanced_menu = more_menu.addMenu("Advanced")
+        advanced_menu.setToolTipsVisible(True)
         for button in self._advanced:
             if button.parent() is not overflow:
                 button.setParent(overflow)
             action = advanced_menu.addAction(button.text())
             action.triggered.connect(button.click)
             self._more_pairs.append((action, button))
-        if sign_out.parent() is not overflow:
-            sign_out.setParent(overflow)
+        help_button = QPushButton("Help")
+        help_button.setObjectName("helpButton")
+        help_button.clicked.connect(self._open_help)
+        about = QPushButton("About FlexWeek")
+        about.setObjectName("aboutButton")
+        about.clicked.connect(self._open_about)
         more_menu.addSeparator()
-        logout = more_menu.addAction(sign_out.text())
-        logout.triggered.connect(sign_out.click)
-        self._more_pairs.append((logout, sign_out))
+        for button in (help_button, about, sign_out):
+            if button.parent() is not overflow:
+                button.setParent(overflow)
+            button.hide()
+            action = more_menu.addAction(button.text())
+            action.triggered.connect(button.click)
+            self._more_pairs.append((action, button))
         more_menu.aboutToShow.connect(self._sync_more_menu)
         more.setMenu(more_menu)
         gear = QPushButton("⚙\ufe0e")
@@ -741,11 +802,11 @@ class NativeWindow(QMainWindow):
         self.focus_panel.break_requested.connect(self.session.take_focus_break)
         self.focus_panel.more_requested.connect(self.session.add_focus_time)
         layout.addWidget(self.focus_panel)
+        # Neither is inside the planning chrome, which a design of its own hides: More > Unfinished
+        # and Plan can be pressed from any design, and what they show is the point of pressing them.
         self.unfinished_panel = UnfinishedPanel()
         self.unfinished_panel.plan_requested.connect(self._plan_unfinished)
-        chrome.addWidget(self.unfinished_panel)
-        # Not inside the planning chrome: Plan can be pressed from any design, and what the solver
-        # says about the result is the point of pressing it.
+        layout.addWidget(self.unfinished_panel)
         self.plan_review = PlanReview()
         self.plan_review.replan_requested.connect(lambda: self.session.solve(everything=True))
         layout.addWidget(self.plan_review)
@@ -920,6 +981,7 @@ class NativeWindow(QMainWindow):
         manual = (self.session.preferences or {}).get("planning_style") == "manual"
         # A student who places homework by hand asks for ideas; the plan is theirs.
         self.solve_button.setText(SUGGEST_LABEL if manual else PLAN_LABEL)
+        self.solve_button.setToolTip(SUGGEST_TIP if manual else PLAN_TIP)
         own = isinstance(self.planner.currentWidget(), LayoutView)
         self.plan_chrome.setVisible(not own)
         self.focus_panel.setVisible(not own or self.session.focus is not None)
@@ -1283,11 +1345,30 @@ class NativeWindow(QMainWindow):
         self.week_status.setText(message)
 
     def _sync_more_menu(self) -> None:
+        unfinished = self.findChild(QPushButton, "unfinishedOpen")
+        if unfinished is not None:
+            # Worked out as the menu opens: the busy flag turns every action back on when a save
+            # ends, and left to that "Unfinished" was pressable with nothing to show.
+            unfinished.setEnabled(not self.session.busy and bool(self.session.unfinished()))
         for action, button in self._more_pairs:
             action.setEnabled(button.isEnabled())
             action.setText(button.text())
+            action.setToolTip(self._more_tip(button.objectName(), button.isEnabled()))
         if self._spotify_action is not None:
             self._spotify_action.setVisible(bool(self.session.spotify_url()))
+
+    def _more_tip(self, name: str, enabled: bool) -> str:
+        if name == "quickFocusAction":
+            minutes = phase_duration_ms("work", self.session.preferences) // 60_000
+            return QUICK_FOCUS_TIP.format(minutes=minutes)
+        if enabled:
+            return MORE_TIPS.get(name, "")
+        session = self.session
+        if session.busy or session.dirty or session.pending_save is not None:
+            return WAIT_TIP
+        if name == "pasteBlock" and session.clipboard is not None:
+            return "Click a day first, then paste into it."
+        return GREYED_TIPS.get(name, "")
 
     def _on_busy(self, busy: bool) -> None:
         names = (
@@ -1921,7 +2002,11 @@ class NativeWindow(QMainWindow):
             return
 
     def _show_unfinished(self) -> None:
-        self.unfinished_panel.set_items(self.session.unfinished())
+        items = self.session.unfinished()
+        if not items:
+            self.session._say(NOTHING_UNFINISHED)
+            self.toast.show_message(NOTHING_UNFINISHED)
+        self.unfinished_panel.set_items(items)
 
     def _plan_unfinished(self, assignment_id: str) -> None:
         item = self.session.assignments.get(assignment_id)
@@ -2288,6 +2373,12 @@ class NativeWindow(QMainWindow):
     def _log_out(self) -> None:
         if confirm(self, "Log out", LOG_OUT_QUESTION, "Log out"):
             self.session.logout()
+
+    def _open_help(self) -> None:
+        HelpDialog(self).exec()
+
+    def _open_about(self) -> None:
+        AboutDialog(self, self.session.storage_info, str(self._look_path().parent)).exec()
 
     def _open_account(self) -> None:
         dialog = AccountDialog(self, self.session.recovery_remaining, self.session.storage_info)

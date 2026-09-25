@@ -516,6 +516,8 @@ def test_every_dialog_is_freed_once_it_has_closed_and_is_let_go(qapp: QApplicati
             lambda host: settings.AlarmRingDialog(host, {"name": "Wake up", "time": "06:45"}, "")
         ],
         settings.TransferPreviewDialog: [lambda host: settings.TransferPreviewDialog(host, {})],
+        settings.AboutDialog: [lambda host: settings.AboutDialog(host, {"mode": "local"}, "FlexWeek")],
+        settings.HelpDialog: [lambda host: settings.HelpDialog(host)],
         settings.UpdateDialog: [
             lambda host: settings.UpdateDialog(host, {"version": "9.9.9", "notes": "", "url": ""}, "0.13.0")
         ],

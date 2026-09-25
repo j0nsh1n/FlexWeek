@@ -96,6 +96,32 @@ SPOTIFY_TONE_NOTE = (
 TODAYS_APP_KNOBS = ("surface", "corners", "blocks")
 FINE_TUNE_LOOK = "Fine-tune this look"
 FINE_TUNE_OTHER = "Fine-tune fonts, spacing and shadows"
+ABOUT_MIN_WIDTH = 420
+HELP_MIN_WIDTH = 520
+ABOUT_LINE = "FlexWeek plans your homework around school, sports and everything else in your week."
+HELP_INTRO = (
+    "A tutorial and short guides are coming in a later version. Until then, this is the short version."
+)
+HELP_SCREENS = (
+    "Day shows one day, hour by hour. Homework that is not placed yet waits beside it, ready to drag in.",
+    "Week shows Monday to Sunday. Drag a block to move it, or drag across empty time to add one.",
+    "Month shows every date with its blocks and what is due. Click a date to open that day.",
+    "My day is a simple screen to follow once your plan is made: what is on now, and what comes next.",
+)
+HELP_KEYS = (
+    ("D, W, M", "Day, Week, Month"),
+    ("T", "My day"),
+    ("B or Esc", "Back from My day"),
+    ("Ctrl+Z", "Undo"),
+    ("Ctrl+Y or Ctrl+Shift+Z", "Redo"),
+    ("Ctrl+C, then Ctrl+V", "Copy the selected block, then paste it into the selected day"),
+    ("Ctrl+D", "Duplicate the selected block"),
+    ("Delete", "Delete the selected block"),
+    ("Ctrl+S", "Save now"),
+    ("Ctrl and =, - or 0", "Zoom the hours in, out, or back to normal"),
+    ("Ctrl and the mouse wheel", "Zoom the hours"),
+    ("Esc while dragging", "Put the block back where it was"),
+)
 
 
 def _invalidate(layout: QLayout) -> None:
@@ -1159,6 +1185,63 @@ class TransferPreviewDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+
+def _close_row(dialog: QDialog) -> QDialogButtonBox:
+    # A Close of its own words, not the standard button, which carries an icon on KDE.
+    buttons = QDialogButtonBox()
+    buttons.addButton("Close", QDialogButtonBox.ButtonRole.RejectRole)
+    buttons.rejected.connect(dialog.reject)
+    return buttons
+
+
+def _line(words: str, name: str) -> QLabel:
+    made = QLabel(words)
+    made.setObjectName(name)
+    made.setWordWrap(True)
+    return made
+
+
+class AboutDialog(QDialog):
+    def __init__(self, parent: QWidget | None, storage: dict | None, folder: str) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("About FlexWeek")
+        self.setMinimumWidth(ABOUT_MIN_WIDTH)
+        layout = QVBoxLayout(self)
+        layout.addWidget(_line(f"FlexWeek {VERSION}", "aboutVersion"))
+        layout.addWidget(_line(ABOUT_LINE, "aboutWhat"))
+        if (storage or {}).get("mode") == "hosted":
+            where = f"Your plans are saved on your FlexWeek server, {(storage or {}).get('origin') or ''}."
+        else:
+            where = f"Your plans are saved on this computer, in {folder}."
+        saved = _line(where, "aboutWhere")
+        saved.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        layout.addWidget(saved)
+        layout.addWidget(_close_row(self))
+
+
+class HelpDialog(QDialog):
+    """Enough to find your way until the tutorial and guides exist."""
+
+    def __init__(self, parent: QWidget | None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Help")
+        self.setMinimumWidth(HELP_MIN_WIDTH)
+        layout = QVBoxLayout(self)
+        layout.addWidget(_line(HELP_INTRO, "helpIntro"))
+        layout.addWidget(_heading("The screens"))
+        for index, words in enumerate(HELP_SCREENS):
+            layout.addWidget(_line(words, f"helpScreen{index}"))
+        layout.addWidget(_heading("Keyboard shortcuts"))
+        keys = QGridLayout()
+        keys.setColumnStretch(1, 1)
+        for row, (key, what) in enumerate(HELP_KEYS):
+            name = QLabel(key)
+            name.setObjectName("helpKey")
+            keys.addWidget(name, row, 0, Qt.AlignmentFlag.AlignTop)
+            keys.addWidget(_line(what, "helpKeyDoes"), row, 1)
+        layout.addLayout(keys)
+        layout.addWidget(_close_row(self))
 
 
 class UpdateDialog(QDialog):
