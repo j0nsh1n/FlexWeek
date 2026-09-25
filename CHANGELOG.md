@@ -10,8 +10,33 @@ All notable changes to FlexWeek are documented here. Format follows
   can show their chips.
 - A block with a Spotify link plays it when the block starts, the way an alarm
   plays its song. Dismiss stops it and Snooze plays it again five minutes later.
+- Help and About, under More. Help says what Day, Week, Month and My day are
+  for, lists the keyboard shortcuts, and says a tutorial and guides are coming.
+  About gives the version and the folder your plans are saved in.
+- Everything under More and Advanced, Plan my homework or Suggest times, and
+  the plan review's two buttons say on hover what they do. A greyed item says
+  why, such as "Nothing to undo yet."
 
 ### Changed
+- The block editor is "New event" or "Edit event". Under the day boxes it says
+  "Tick more days to repeat it this week.", and the missed box names its day:
+  "I missed it on Thursday". Save is the one filled button. Delete is quiet red
+  words at the bottom left, asks first, and a deleted block comes back with
+  Undo on the notice under the top bar.
+- Log out and Delete account ask first, and Delete account names the account.
+  Log out's answer is drawn in the usual colour, since nothing is lost.
+- Settings > Appearance & layout opens on the main view's design, with a
+  sentence on what a design is. Its style rows sit on the page rather than in a
+  box, and Animations and Fine-tune come last under "Every screen".
+- Settings > Focus says "Long break minutes" and "Long break after 4 focus
+  sessions". This computer has "Manage account…" on a row of its own, and
+  Availability sits on Planning under the sentence that names it. Buttons in
+  Settings that open something else are plain and as wide as their words.
+- One word for one thing: the Next line says "in 20 min" and "1 h 30 min" as
+  every design does, a finished block or focus session says "Finished", and
+  homework without a time is "Not placed yet" in every design. The strip under
+  Today's app's Next line says "Start a focus timer:".
+- Hover descriptions take the text size chosen in Settings.
 - Times are by the minute. A block typed as 17:37 to 18:22 in the block editor,
   in setup or in a routine saves as 17:37 to 18:22. Dragging, resizing and
   drawing a block move in steps of 5 minutes, or of 15 if you choose that in
@@ -64,11 +89,30 @@ All notable changes to FlexWeek are documented here. Format follows
   Bento, Retro desktop or Clay deck. Each design has its own hours to drop on.
 
 ### Fixed
+- Scrolling down Settings no longer changes the number boxes, time boxes and
+  dropdowns the pointer passes over. A box takes the wheel once clicked into.
+- Unfinished works in every design; it did nothing in six of seven. With
+  nothing unfinished it is greyed and says why.
+- Cancelling Running late after a preview takes its "N tasks move" line off
+  the screen.
+- Sign in and Create account say what went wrong: an empty username or
+  password, a password too short to be right, a username that cannot exist or
+  is taken, or FlexWeek not reaching its server. Account says "Your plans are
+  saved on this computer." as a sentence.
+- Settings says FlexWeek 0.15.0; it said 0.14.3.
+- Editing one day of a repeating block no longer also says the change applies
+  to every selected day.
+- Help at large text no longer cuts its keyboard shortcuts in half, and fits
+  the screen.
+- Retro desktop's Teal, Plum and Slate colours no longer put white text on
+  grey in Settings, the editors and the top bar (1.8 to 1). The window takes
+  Retro's grey with black text, as Retro's own windows do.
 - A block saved inside its own reminder time, such as one at 18:45 saved at
   18:38 with a 10-minute reminder, now reminds at once instead of never.
 - "Saved preferences." no longer replaces a reminder on the status line.
-- Play beside the alert sound says so when this computer has no sound output,
-  instead of "No sound card".
+- Play beside the alert sound says what to check when no sound comes out:
+  that Volume is above 0 % and the speakers or headphones are connected and
+  not muted. It said "No sound card", and at Volume 0 blamed the computer.
 - Hours no longer jump back to the morning after a save in a design that keeps
   them between redraws, and pressing Tab no longer scrolls them to their middle.
 - A block's second line of text is never cut in half; what does not fit is

@@ -30,16 +30,16 @@ decision first.
 
 | # | What | Where / evidence | State |
 | --- | --- | --- | --- |
-| 11 | The More menu and Advanced items, Plan my homework / Suggest times and the plan controls have no hover descriptions; "Unfinished" is greyed with no reason; Quick focus is unexplained. | `window.py:683` `addAction(button.text())`, no tooltips. T8, T23, owner 4, C10. | P1 |
-| 12 | Unfinished sometimes does nothing, sometimes opens an empty screen. | T7. | P1 |
-| 13 | Cancelling Running late leaves its preview message on screen. | T9. | P1 |
-| 14 | Sign-in shows one error for every problem; sign-up says nothing for an empty password. | T10. | P1 |
-| 15 | Settings says "FlexWeek 0.14.3". | `desktop/native/version.py`. T14, C6. Release step. | P1 |
-| 16 | "in 20m" / "in 20 min" / "IN 20 MIN"; "Finished" and "Done"; "Not placed yet" and "Needs a time" for the same tray. | T24, T25, C13. One word each. | P2 |
-| 17 | The block editor's title "Edit fixed commitment"; "This day was missed"; the plain "Next:" strip under the title with no label. | T19, C14. | P2 |
-| 18 | Settings words: volume with no %, "Long break after 4" with no unit, "Stay in the tray", "Keep alerts visible until handled", the Spotify placeholder cut off, Account… and Availability… under This computer. | T16. | P2 |
-| 19 | The sound test says "No sound card" and nothing else. | T33. | P2 |
-| 20 | Account: "On this device" with no full stop. | C17. | P2 |
+| 11 | The More menu and Advanced items, Plan my homework / Suggest times and the plan controls have no hover descriptions; "Unfinished" is greyed with no reason; Quick focus is unexplained. | `window.py:683` `addAction(button.text())`, no tooltips. T8, T23, owner 4, C10. | P1. Done, lane D (`bf80a9d`, `06ec931`): everything under More and Advanced, Plan my homework or Suggest times and the plan review's two buttons describe on hover what they do, and the menus show it; a greyed action says why; Quick focus names its 30 minutes. The descriptions take the chosen text size. |
+| 12 | Unfinished sometimes does nothing, sometimes opens an empty screen. | T7. | P1. Done, lane D (`bf80a9d`): the Unfinished list sits beside the plan review in every design, its enabled state is worked out as the menu opens, and with nothing unfinished it is greyed and says why. |
+| 13 | Cancelling Running late leaves its preview message on screen. | T9. | P1. Done, lane D (`a8220b2`): cancelling after a preview clears its line. |
+| 14 | Sign-in shows one error for every problem; sign-up says nothing for an empty password. | T10. | P1. Done, lane D (`fd663d2`): each problem has its own words, checked before the request where the server could only say the generic sentence, and an unreachable server says to restart. A wrong password and an unknown username stay one answer, and the sentence says why. |
+| 15 | Settings says "FlexWeek 0.14.3". | `desktop/native/version.py`. T14, C6. Release step. | P1. Done, lane D (`db72266`): 0.15.0 in `version.py` and the changelog heading. |
+| 16 | "in 20m" / "in 20 min" / "IN 20 MIN"; "Finished" and "Done"; "Not placed yet" and "Needs a time" for the same tray. | T24, T25, C13. One word each. | P2. Done, lane D (`a8220b2`): "in 20 min" and "1 h 30 min", "Finished", and "Not placed yet" in every design. |
+| 17 | The block editor's title "Edit fixed commitment"; "This day was missed"; the plain "Next:" strip under the title with no label. | T19, C14. | P2. Done, lane D (`8d6865b`, `a8220b2`): "New event" and "Edit event", "I missed it on Thursday", and the strip under Next says "Start a focus timer:". |
+| 18 | Settings words: volume with no %, "Long break after 4" with no unit, "Stay in the tray", "Keep alerts visible until handled", the Spotify placeholder cut off, Account… and Availability… under This computer. | T16. | P2. Done. Lane D (`db72266`, `06ec931`): "Long break minutes", "Long break after 4 focus sessions", Account on its own row as "Manage account…", Availability on Planning under the sentence that names it, and those buttons plain. Lane B (`80288ef`): the Alerts words, the volume's %, and the Spotify placeholder. |
+| 19 | The sound test says "No sound card" and nothing else. | T33. | P2. Done, lanes B and D: lane B moved the test to Play (`80288ef`); the merge `bee6c96` makes its message say what to check: "No sound played. Check that Volume is above 0 % and that your speakers or headphones are connected and not muted, then press Play again." At Volume 0 it had blamed the computer. |
+| 20 | Account: "On this device" with no full stop. | C17. | P2. Done, lane D (`fd663d2`): "Your plans are saved on this computer." |
 
 ## Drawing and layout
 
@@ -50,12 +50,12 @@ decision first.
 | 23 | The first and last hour labels are cut at the scroll edges on sideways hours. | Shared `hour_labels`. C4. | P2 |
 | 24 | The date picker is cut off on the left in setup and on the right in Add homework. | T29. | P2 |
 | 25 | The "Next: … (in 23m)" countdown only redraws during a focus session. | T22. | P2 |
-| 26 | A one-off dragged block's editor shows seven day boxes with nothing saying that ticking one makes it repeat. | T20. | P2 |
-| 27 | Save and Cancel look the same; floppy-disk and red-X icons look dated. Delete is the most prominent button in the block editor. | T21, T13. | P2 |
+| 26 | A one-off dragged block's editor shows seven day boxes with nothing saying that ticking one makes it repeat. | T20. | P2. Done, lane D (`8d6865b`, `06ec931`): one line under the day boxes, "Tick more days to repeat it this week." |
+| 27 | Save and Cancel look the same; floppy-disk and red-X icons look dated. Delete is the most prominent button in the block editor. | T21, T13. | P2. Done, lane D (`8d6865b`, `790a8d1`; decision 4): Save is the one filled button and the default, no button has an icon, Delete is quiet red words at the bottom left and asks first. The question's Delete is red and Cancel plain. |
 | 28 | Retro shows the same "no time yet" chips in deadlines.txt and at the foot of the main window. | C15. | P2 |
-| 29 | Settings > Appearance & layout is dense: an implementation note first, a box in a box, style rows in a grey table. Scrolling over its number boxes changes them. | T15, owner 2, C11. | P2 |
+| 29 | Settings > Appearance & layout is dense: an implementation note first, a box in a box, style rows in a grey table. Scrolling over its number boxes changes them. | T15, owner 2, C11. | P2. Done, lane D (`2479b6c`, `db72266`, `790a8d1`): the wheel scrolls past boxes nobody clicked into; the page opens on Main view with one sentence on designs, the note moves under the colours it is about, the style rows sit on the page, headings stand out, and Reset is a plain button. |
 | 30 | Settings > Alerts: alarm sound and reminders mixed, the Reminders switch off and easy to miss among live-looking controls, two "Chime" dropdowns, no sign of when an alarm rings. | C12. | P2. Fixed, lane B (`80288ef`): reminders first, switch on top, their settings greyed while off; alarms as their own group saying when each rings; one sound dropdown. Row 18's Alerts words and row 19's Play message are done there too. |
-| 31 | Dark themes have weak contrast; the layout choice is not explained; My day and Month are unclear to a first-time user. | T30, T31. | P2 |
+| 31 | Dark themes have weak contrast; the layout choice is not explained; My day and Month are unclear to a first-time user. | T30, T31. | P2. Done, lane D (`db72266`, `bf80a9d`, `70d386e`, `716b9a6`): Main view says what a design is; Help gives Month and My day a sentence each. Contrast: every look already passed the look tests' pairs, but a design's colours, read back into the window's, were never held to them. Retro's Teal, Plum and Slate put white text on grey (1.82 to 1); the window now takes Retro's grey with black text, and a test holds every design's window colours to the pairs in all 700 looks. |
 | 32 | Ctrl and = zooms only when the hours have keyboard focus. | `canvas.py` `keyPressEvent`; T32. Make it the window's. | P2 |
 | 33 | A dragged block counts toward School in the Day summary. | T26. Category of a drag-made block. | P2 |
 
@@ -65,14 +65,14 @@ decision first.
 | --- | --- | --- | --- |
 | 34 | Dragging or resizing saves at once with no sign; add an Undo toast as after finishing homework. Advanced actions give no feedback. | T17, T18. | P2 |
 | 35 | Plan cannot be undone. | T12. Check: a plan is a save, and saves are undo steps; if Undo is there and hidden, that is row 34. | P2 |
-| 36 | Log out and Delete account have no confirmation. | T13. | P1 |
+| 36 | Log out and Delete account have no confirmation. | T13. | P1. Done, lane D (`fd663d2`, `06ec931`): Log out asks first, in the usual colour since nothing is lost; Delete account asks a last time and names the account. |
 
 ## Help, setup and docs
 
 | # | What | Where / evidence | State |
 | --- | --- | --- | --- |
-| 37 | No Help or About; a tutorial and guides are for later, but the app should say so somewhere. | T8, owner 3. | P2 |
-| 38 | README does not list the Qt system libraries (libEGL.so.1 first) or separate runtime from dev needs; DESKTOP.md is stale near line 170; the 0.15 release notes are a draft. | T34, T35, T36. Release step. | P2 |
+| 37 | No Help or About; a tutorial and guides are for later, but the app should say so somewhere. | T8, owner 3. | P2. Done, lane D (`bf80a9d`, `790a8d1`, `06ec931`): Help and About under More. Help says a tutorial and guides are coming, and fits the screen at large text. |
+| 38 | README does not list the Qt system libraries (libEGL.so.1 first) or separate runtime from dev needs; DESKTOP.md is stale near line 170; the 0.15 release notes are a draft. | T34, T35, T36. Release step. | P2. Done, lane D (`64629ec`, `9c8dc58`): the README lists what the Linux download takes from the system, starting with libEGL.so.1, read with readelf from a 0.14 bundle, and separates what developers need; DESKTOP.md section 6 describes the current build; the release notes cover what has landed and name what has not. |
 
 ## Jonathan's decisions (24 September)
 
@@ -88,6 +88,7 @@ decision first.
    planner still gives homework quarter-hour starts, fitted around blocks at any minute.
 4. **Delete in the block editor** (row 27), Claude's call: it leaves the button row, becomes a
    quiet text button at the bottom left, and asks before deleting. Save is the one filled button.
+   Done, lane D (`8d6865b`).
 
 ## Fix plan
 
