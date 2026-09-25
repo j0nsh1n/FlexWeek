@@ -6,14 +6,7 @@ from datetime import date, timedelta
 
 from backend.assignments import planned_minutes_by_id, unplanned_minutes
 from backend.models import TimeBlock, due_sort_key, parse_due
-from backend.slots import (
-    DAY_END_MIN,
-    DAY_START_MIN,
-    SLOT_MIN,
-    SLOTS_PER_DAY,
-    block_interval_on_day,
-    occupancy_mask,
-)
+from backend.slots import SLOT_MIN, SLOTS_PER_DAY, block_interval_on_day, occupancy_between
 
 
 def is_work_session(block: dict) -> bool:
@@ -78,16 +71,7 @@ def _available_min(blocks: list[dict], day_index: int) -> int:
         interval = block_interval_on_day(TimeBlock.model_validate(raw), day_index)
         if interval is None:
             continue
-        start_min, end_min = interval
-        start_min = max(start_min, DAY_START_MIN)
-        end_min = min(end_min, DAY_END_MIN)
-        if end_min <= start_min:
-            continue
-        start_slot = (start_min - DAY_START_MIN) // SLOT_MIN
-        n_slots = (end_min - start_min) // SLOT_MIN
-        if n_slots <= 0:
-            continue
-        mask |= occupancy_mask(start_slot, n_slots)
+        mask |= occupancy_between(*interval)
     return (SLOTS_PER_DAY - mask.bit_count()) * SLOT_MIN
 
 

@@ -59,6 +59,7 @@ from backend.storage import (
     delete_account,
     digest,
     initialize,
+    new_preferences,
     password_hash,
     password_matches,
     throttle,
@@ -606,7 +607,7 @@ class Preferences(BaseModel):
     model_config = ConfigDict(extra="forbid")
     # "system" follows the device light/dark setting; slate is Light and nocturne is Dark.
     theme: Literal["system", "slate", "nocturne"]
-    reminders_enabled: bool = False
+    reminders_enabled: bool = True
     reminder_lead_min: int = Field(default=5, ge=0, le=120)
     reminder_sound: bool = True
     reminder_dnd_override: bool = False
@@ -655,6 +656,8 @@ class Preferences(BaseModel):
     planning_style: Literal["auto", "suggest", "manual"] = Field(
         default="suggest", exclude_if=lambda value: value == "suggest"
     )
+    # Minutes a dragged, resized or drawn block moves by. Typed times are any minute either way.
+    drag_step_min: Literal[5, 15] = Field(default=5, exclude_if=lambda value: value == 5)
     setup: SetupProgress | None = Field(default=None, exclude_if=lambda value: value is None)
 
     _spotify_url = field_validator("default_spotify_url")(valid_spotify_url)
@@ -885,6 +888,7 @@ def encode_comfort(preferences: Preferences) -> str:
             "motion": preferences.motion,
             "alarm_tone": preferences.alarm_tone,
             "planning_style": preferences.planning_style,
+            "drag_step_min": preferences.drag_step_min,
             "setup": preferences.setup.model_dump() if preferences.setup is not None else None,
         },
         separators=(",", ":"),
@@ -924,6 +928,7 @@ def preferences_from_row(row: sqlite3.Row) -> dict:
         motion=comfort.get("motion"),
         alarm_tone=comfort.get("alarm_tone", "chime"),
         planning_style=comfort.get("planning_style", "suggest"),
+        drag_step_min=comfort.get("drag_step_min", 5),
         setup=comfort.get("setup"),
     ).model_dump()
 
@@ -1081,7 +1086,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                         "INSERT INTO users(username, password_hash) VALUES (?, ?)", (data.username, encoded)
                     )
                     user_id = int(cursor.lastrowid or 0)
-                    db.execute("INSERT INTO preferences(user_id) VALUES (?)", (user_id,))
+                    new_preferences(db, user_id)
                     replace_recovery_codes(db, user_id, codes)
                     token = create_session(db, user_id)
             except sqlite3.IntegrityError as exc:

@@ -2,22 +2,22 @@
  {
   "file": "desktop/native/hours/hand.py",
   "name": "a move bounded by the day, not its tile",
-  "old": "        start = max(min(snap(minute - held.grab), last - held.minutes), first)\n",
-  "new": "        start = max(min(snap(minute - held.grab), 1440 - held.minutes), 0)\n",
+  "old": "        start = max(min(snap(minute - held.grab, step), last - held.minutes), first)\n",
+  "new": "        start = max(min(snap(minute - held.grab, step), 1440 - held.minutes), 0)\n",
   "test": "desktop/tests/test_hours_targets.py::test_a_tile_keeps_a_block_inside_its_own_hours"
  },
  {
   "file": "desktop/native/hours/hand.py",
   "name": "a resize bounded by the day, not its tile",
-  "old": "            return replace(origin, end=max(min(snap(minute - held.grab), last), origin.start + SLOT_MIN))\n",
-  "new": "            return replace(origin, end=max(min(snap(minute - held.grab), 1440), origin.start + SLOT_MIN))\n",
+  "old": "            return replace(origin, end=min(max(snap(minute - held.grab, step), earliest), last))\n",
+  "new": "            return replace(origin, end=min(max(snap(minute - held.grab, step), earliest), 1440))\n",
   "test": "desktop/tests/test_hours_targets.py::test_a_tile_keeps_a_block_inside_its_own_hours"
  },
  {
   "file": "desktop/native/hours/hand.py",
   "name": "a new block drawn past its tile",
-  "old": "            here = min(max(snap(minute), first), last)\n",
-  "new": "            here = min(max(snap(minute), first), 1440)\n",
+  "old": "            here = min(max(snap(minute, step), first), last)\n",
+  "new": "            here = min(max(snap(minute, step), first), 1440)\n",
   "test": "desktop/tests/test_hours_targets.py::test_a_tile_keeps_a_block_inside_its_own_hours"
  },
  {
@@ -75,5 +75,19 @@
   "old": "            view = VIEW_CLASSES[layout_id](hand=self.hand)\n",
   "new": "            view = VIEW_CLASSES[layout_id]()\n",
   "test": "desktop/tests/test_layout_drag.py::test_a_design_holds_its_renders_from_the_press_and_has_the_windows_hand"
+ },
+ {
+  "file": "desktop/native/hours/hand.py",
+  "name": "the hand snaps to quarter hours whatever the step",
+  "old": "        origin, first, last, step = held.origin, track.first, track.last, self.step\n",
+  "new": "        origin, first, last, step = held.origin, track.first, track.last, 15\n",
+  "test": "desktop/tests/test_hours_hand.py::test_a_move_a_resize_and_a_new_block_land_on_the_step_and_never_finer"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the window never gives the hand the student's step",
+  "old": "        self.hand.step = drag_step((self.session.preferences or {}).get(\"drag_step_min\"))\n",
+  "new": "",
+  "test": "desktop/tests/test_layouts_window.py::test_the_drag_step_is_chosen_in_settings_kept_by_the_account_and_given_to_the_hand"
  }
 ]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.app import create_app
+from backend.slots import hhmm_to_minutes
 
 PASSWORD = "a-long-test-password"
 WRITE = {"X-FlexWeek-Request": "1", "Origin": "http://testserver"}
@@ -50,10 +52,20 @@ def account(client: TestClient) -> TestClient:
     return client
 
 
-def test_solve_rejects_duration_not_multiple_of_15(account: TestClient) -> None:
-    bad = {**VALID_FLEX, "duration_min": 10}
-    response = account.post("/api/solve", json={"blocks": [bad]}, headers=WRITE)
-    assert response.status_code == 422
+def test_solve_plans_a_session_of_any_length_from_a_quarter_hour(account: TestClient) -> None:
+    """A session resized by hand and then let go again can be any length. The planner still starts it
+    on a quarter hour and keeps every quarter hour it touches for it."""
+    short = {**VALID_FLEX, "id": "short", "duration_min": 10}
+    long = {**VALID_FLEX, "id": "long", "duration_min": 50}
+    response = account.post("/api/solve", json={"blocks": [short, long]}, headers=WRITE)
+    assert response.status_code == 200, response.text
+    spans = sorted(
+        (hhmm_to_minutes(block["start"]), block["duration_min"]) for block in response.json()["placed"]
+    )
+    assert len(spans) == 2
+    assert all(start % 15 == 0 for start, _ in spans)
+    (first, length), (second, _) = spans
+    assert second >= first + math.ceil(length / 15) * 15
 
 
 def test_solve_rejects_zero_duration(account: TestClient) -> None:

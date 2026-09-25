@@ -192,10 +192,14 @@ def test_every_page_is_kept_when_the_student_leaves_it(qapp: QApplication, serve
     assert window.session.preferences["day_cutoff"] == "22:00"
 
     setup.planning_buttons["auto"].setChecked(True)
+    assert setup.drag_buttons[5].isChecked(), "five minutes unless the student picks fifteen"
+    setup.drag_buttons[15].setChecked(True)
     setup.work_editor.set_windows([{"days": [0, 1, 2, 3, 4], "start": "19:00", "end": "21:00"}])
     setup.next.click()
     written(qapp, window)
     assert window.session.preferences["planning_style"] == "auto"
+    assert window.session.preferences["drag_step_min"] == 15
+    assert window.hand.step == 15
     assert window.session.preferences["work_windows"] == [
         {"days": [0, 1, 2, 3, 4], "start": "19:00", "end": "21:00"}
     ]
@@ -267,7 +271,7 @@ def test_skipping_every_page_keeps_nothing_and_setup_never_returns(
     assert page(window) == "weekPage"
     assert window.session.blocks == [] and window.session.assignments == {}
     prefs = window.session.preferences
-    assert prefs["reminders_enabled"] is False, "a skipped page changes nothing"
+    assert prefs["reminders_enabled"] is True, "a skipped page changes nothing, and reminders start on"
     assert prefs.get("planning_style", "suggest") == "suggest"
     assert not prefs.get("work_windows"), "skipping does not keep hours entered on that page"
     assert prefs["setup"]["finished_at"]
@@ -695,17 +699,22 @@ def test_first_homework_takes_up_to_three(qapp: QApplication) -> None:
     setup.close()
 
 
-def test_a_time_steps_a_quarter_hour_and_a_typed_one_moves_to_the_nearest(qapp: QApplication) -> None:
+def test_a_time_steps_a_quarter_hour_and_a_typed_one_keeps_its_minute(qapp: QApplication) -> None:
+    """School that starts at 08:05 starts at 08:05. It was moved to 08:00 without a word."""
     field = QuarterTime("08:00")
     field.setCurrentSection(QDateTimeEdit.Section.MinuteSection)
     field.stepBy(1)
     assert field.hhmm() == "08:15"
     field.stepBy(-2)
     assert field.hhmm() == "07:45"
-    field.set_minutes(8 * 60 + 7)
+    field.setTime(QTime(8, 7))
+    field.editingFinished.emit()
+    assert field.hhmm() == "08:07"
+    field.stepBy(1)
+    assert field.hhmm() == "08:15", "the arrows go on to the quarter hour either side"
+    field.setTime(QTime(8, 7))
+    field.stepBy(-1)
     assert field.hhmm() == "08:00"
-    field.set_minutes(8 * 60 + 8)
-    assert field.hhmm() == "08:15"
 
 
 def test_a_style_card_is_picked_from_the_keyboard(qapp: QApplication) -> None:

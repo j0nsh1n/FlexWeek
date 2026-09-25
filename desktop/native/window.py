@@ -55,12 +55,12 @@ from desktop.native.calendar import (
     sunday_due,
 )
 from desktop.native.client import PASSWORD_LENGTH_HINT, USERNAME_HINT, sign_in_problem, sign_up_problem
-from desktop.native.controller import NativeSession
+from desktop.native.controller import ROUTINE_STATUS, NativeSession
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
 from desktop.native.focus import phase_duration_ms
 from desktop.native.hours.chips import TrayChip
 from desktop.native.hours.classic import ClassicDay, ClassicWeek
-from desktop.native.hours.geometry import Span
+from desktop.native.hours.geometry import Span, drag_step
 from desktop.native.hours.hand import Create, Hand, Move, MoveDate, Place, span_words
 from desktop.native.hours.hand import Verdict as HandVerdict
 from desktop.native.hours.month import MonthGrid
@@ -294,6 +294,8 @@ class NativeWindow(QMainWindow):
         self._tray_hinted = False
         self._icon = icon or QIcon()
         self._alarm_dialog: AlarmRingDialog | None = None
+        # The reminder the status line is keeping, until something more important or "Got it".
+        self._held_reminder: str | None = None
         self._bell = Bell(self)
         # A Spotify alarm plays in the student's Spotify app. Until it is heard the tone rings, so an
         # alarm is never silent, and once it is the tone stops.
@@ -811,6 +813,7 @@ class NativeWindow(QMainWindow):
         self.plan_review.replan_requested.connect(lambda: self.session.solve(everything=True))
         layout.addWidget(self.plan_review)
         self.alert_strip = AlertStrip()
+        self.alert_strip.handled.connect(self._release_status)
         layout.addWidget(self.alert_strip)
         self.planner = QStackedWidget()
         self.planner.setObjectName("plannerStack")
@@ -977,7 +980,9 @@ class NativeWindow(QMainWindow):
 
     def _sync_chrome(self) -> None:
         """Planning chips and the clipboard line step aside for a design of its own. Plan my
-        homework and More stay in the top bar in every layout, every view, and My day."""
+        homework and More stay in the top bar in every layout, every view, and My day. The hand
+        drags in the step the student chose."""
+        self.hand.step = drag_step((self.session.preferences or {}).get("drag_step_min"))
         manual = (self.session.preferences or {}).get("planning_style") == "manual"
         # A student who places homework by hand asks for ideas; the plan is theirs.
         self.solve_button.setText(SUGGEST_LABEL if manual else PLAN_LABEL)
@@ -1142,6 +1147,7 @@ class NativeWindow(QMainWindow):
                 self._setup_week = True
             for key in (
                 "planning_style",
+                "drag_step_min",
                 "study_windows",
                 "reminders_enabled",
                 "reminder_lead_min",
@@ -1342,7 +1348,15 @@ class NativeWindow(QMainWindow):
 
     def _on_status(self, message: str) -> None:
         self.auth_status.setText(message)
+        if self._held_reminder is not None and message in ROUTINE_STATUS:
+            return
+        self._held_reminder = None
         self.week_status.setText(message)
+
+    def _release_status(self) -> None:
+        if self._held_reminder is not None:
+            self._held_reminder = None
+            self.week_status.setText(self.session.message)
 
     def _sync_more_menu(self) -> None:
         unfinished = self.findChild(QPushButton, "unfinishedOpen")
@@ -2153,13 +2167,26 @@ class NativeWindow(QMainWindow):
             elif prefs.get("end_chime"):
                 own = str(focus[0].get("tone") or FALLBACK)
                 self._bell.once(own if tone is None else short, prefs.get("alert_volume", 80))
+        tray = self._tray_icon if self._tray_icon is not None and self._tray_icon.supportsMessages() else None
+        reminders = []
         for notice in notices:
             title = notice.get("title") or "FlexWeek"
             body = notice.get("body") or ""
-            if self._tray_icon is not None and self._tray_icon.supportsMessages():
-                self._tray_icon.showMessage(title, body, QSystemTrayIcon.MessageIcon.Information, 8000)
-            else:
-                self.session._say(title + (" — " + body if body else ""))
+            words = title + (" — " + body if body else "")
+            if tray is not None:
+                tray.showMessage(title, body, QSystemTrayIcon.MessageIcon.Information, 8000)
+            if notice.get("kind") == "reminder":
+                reminders.append(words)
+            elif tray is None:
+                self.session._say(words)
+        if reminders:
+            # A desktop can hide a tray message, and FlexWeek cannot tell that it did, so the window
+            # says it as well: for a moment under the top bar, and on the status line until it matters
+            # less than what comes next.
+            said = "; ".join(reminders)
+            self.toast.show_message(said)
+            self._held_reminder = said
+            self.week_status.setText(said)
         if notices and prefs.get("reminder_dnd_override"):
             # A tray message is gone in eight seconds and a machine may suppress it outright. This
             # one sits in the window until it is dealt with, which is what the setting promises.
@@ -2319,7 +2346,15 @@ class NativeWindow(QMainWindow):
             if self.session.preferences is not None:
                 # Pack and accent belong to the account but are seen like the look: at once. The save
                 # that follows stores them.
-                live = ("theme_pack", "accent", "accent_chips", "motion", "alarm_tone", "planning_style")
+                live = (
+                    "theme_pack",
+                    "accent",
+                    "accent_chips",
+                    "motion",
+                    "alarm_tone",
+                    "planning_style",
+                    "drag_step_min",
+                )
                 shown = {key: wanted[key] for key in live}
                 self.session.preferences = {**self.session.preferences, **shown}
             if bool(wanted["start_at_login"]) != login:

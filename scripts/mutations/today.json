@@ -19,5 +19,75 @@
   "old": "    def sizeHint(self) -> QSize:  # noqa: N802\n",
   "new": "    def _unused_size_hint(self) -> QSize:\n",
   "test": "desktop/tests/test_classic_hours.py::test_a_tray_chip_in_a_row_says_it_all_again_once_the_row_has_room"
+ },
+ {
+  "file": "desktop/native/remind.py",
+  "name": "a block saved inside its lead reminds at once",
+  "old": "    return start - max(0, int(lead)) <= int(now_min) <= start\n",
+  "new": "    return int(now_min) - REMINDER_WINDOW_MIN <= start - max(0, int(lead)) <= int(now_min)\n",
+  "test": "desktop/tests/test_reminders_window.py::test_a_block_saved_inside_its_lead_reminds_at_once_and_only_once"
+ },
+ {
+  "file": "desktop/native/remind.py",
+  "name": "a block reminds once",
+  "old": "        if key in fired or not start_alert_due(start_min, now_min, lead_min):\n",
+  "new": "        if not start_alert_due(start_min, now_min, lead_min):\n",
+  "test": "desktop/tests/test_reminders_window.py::test_a_block_saved_inside_its_lead_reminds_at_once_and_only_once"
+ },
+ {
+  "file": "desktop/native/remind.py",
+  "name": "a block with a song has one notice at its start",
+  "old": "            # Its song is its notice at the start, so it gets one, not two.\n            continue\n",
+  "new": "            pass\n",
+  "test": "desktop/tests/test_remind.py::test_a_block_with_a_song_is_announced_by_the_song_at_its_start"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "the status line keeps a reminder through a save",
+  "old": "        if self._held_reminder is not None and message in ROUTINE_STATUS:\n            return\n",
+  "new": "",
+  "test": "desktop/tests/test_reminders_window.py::test_the_status_line_keeps_a_reminder_until_something_more_important"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a reminder shows in the window as well as the tray",
+  "old": "            self.toast.show_message(said)\n            self._held_reminder = said\n",
+  "new": "            self._held_reminder = said\n",
+  "test": "desktop/tests/test_reminders_window.py::test_a_block_saved_inside_its_lead_reminds_at_once_and_only_once"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "dismissing a block's song stops it",
+  "old": "            self._bell.stop()\n            self._spotify.stop()\n",
+  "new": "            self._bell.stop()\n",
+  "test": "desktop/tests/test_reminders_window.py::test_a_block_with_a_spotify_link_plays_it_at_its_start_and_dismiss_stops_it"
+ },
+ {
+  "file": "desktop/native/controller.py",
+  "name": "a snoozed block song rings again",
+  "old": "                self._snoozed_songs[alarm[\"id\"]] = alarm\n",
+  "new": "                pass\n",
+  "test": "desktop/tests/test_reminders_window.py::test_a_snoozed_block_song_plays_again_five_minutes_later"
+ },
+ {
+  "file": "backend/storage.py",
+  "name": "accounts from 0.14 get reminders on",
+  "old": "        upgrade_preferences(db)\n",
+  "new": "",
+  "test": "desktop/tests/test_reminders_window.py::test_an_account_from_0_14_with_reminders_off_reminds_after_the_update"
+ },
+ {
+  "file": "backend/storage.py",
+  "name": "reminders turned off after the update stay off",
+  "old": " WHERE prefs_version < 1\")\n",
+  "new": "\")\n",
+  "test": "desktop/tests/test_reminders_window.py::test_reminders_turned_off_after_the_update_stay_off"
+ },
+ {
+  "file": "desktop/native/settings.py",
+  "name": "reminder settings grey while reminders are off",
+  "old": "        self.reminders.toggled.connect(self.reminder_controls.setEnabled)\n",
+  "new": "",
+  "test": "desktop/tests/test_alerts_page.py::test_the_reminder_controls_are_greyed_while_reminders_are_off"
  }
 ]

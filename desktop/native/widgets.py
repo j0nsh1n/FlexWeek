@@ -114,6 +114,22 @@ REPLAN_TIP = (
 DAY_FULL = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
 
+# What the block editor says when the server's rules refuse a block, by the field they name. Their own
+# words ("Value error, spotify_url must be ...") are for a developer, not a student.
+BLOCK_PROBLEMS = {
+    "title": "Give it a title.",
+    "days": "Tick at least one day.",
+    "spotify_url": "That is not a Spotify share link. Paste one that starts with https://open.spotify.com, "
+    "or leave it empty.",
+}
+BLOCK_REFUSED = "FlexWeek cannot keep this block as it is. Check its title, days and times."
+
+
+def _block_problem(error: ValidationError) -> str:
+    fields = [str(part) for item in error.errors() for part in item.get("loc") or ()]
+    return next((BLOCK_PROBLEMS[field] for field in fields if field in BLOCK_PROBLEMS), BLOCK_REFUSED)
+
+
 class WheelGuard(QObject):
     """A number box, time box or dropdown takes the mouse wheel only once it has been clicked into;
     otherwise the wheel scrolls whatever it is on. Scrolling down Settings changed every box the
@@ -831,12 +847,7 @@ class BlockDialog(QDialog):
         return self._clock_minutes(self.end.time()) - self._clock_minutes(self.start.time())
 
     def _span_problem(self) -> str:
-        span = self._span()
-        if span <= 0:
-            return "End must be after Start."
-        if span % SLOT_MIN:
-            return "Use quarter hours, such as 15:00 or 15:15."
-        return ""
+        return "End must be after Start." if self._span() <= 0 else ""
 
     def _keep_length(self, *_args: object) -> None:
         """Moving the start moves the end with it, as a calendar does, so the length stays."""
@@ -906,12 +917,13 @@ class BlockDialog(QDialog):
         candidate["missed_days"] = [
             day for day in candidate.get("missed_days", []) if day in candidate["days"] and day != restored
         ]
+        if candidate["kind"] != "locked":
+            self.error.setText("Use the homework editor for flexible work.")
+            return
         try:
-            if candidate["kind"] != "locked":
-                raise ValueError("Use the homework editor for flexible work.")
             WeekRequest(blocks=[TimeBlock.model_validate(candidate)])
-        except ValueError as error:
-            self.error.setText(_validation_text(error))
+        except ValidationError as error:
+            self.error.setText(_block_problem(error))
             return
         self._result = candidate
         super().accept()
@@ -1390,10 +1402,11 @@ class PreviewDialog(QDialog):
             start.setObjectName(f"previewStart{index}")
             duration = int(row["block"]["duration_min"])
             last = DAY_END_MIN - duration
-            for minute in range(DAY_START_MIN, last + 1, SLOT_MIN):
-                label = minutes_to_hhmm(minute)
-                start.addItem(label, label)
             current = row["block"].get("start") or minutes_to_hhmm(DAY_START_MIN)
+            # Quarter hours to move it to, and its own time among them when it is not on one.
+            offered = {minutes_to_hhmm(minute) for minute in range(DAY_START_MIN, last + 1, SLOT_MIN)}
+            for label in sorted(offered | {current}):
+                start.addItem(label, label)
             start.setCurrentText(current)
             row["block"]["start"] = start.currentText()
             start.setProperty("row", index)
@@ -1403,7 +1416,10 @@ class PreviewDialog(QDialog):
             length.setObjectName(f"previewDuration{index}")
             start_min = hhmm_to_minutes(row["block"]["start"])
             maximum = min(DAY_END_MIN - start_min, int(row.get("original_duration") or duration))
-            for minutes in range(SLOT_MIN, maximum + 1, SLOT_MIN):
+            lengths = set(range(SLOT_MIN, maximum + 1, SLOT_MIN))
+            if duration <= maximum:
+                lengths.add(duration)
+            for minutes in sorted(lengths):
                 length.addItem(str(minutes), minutes)
             length.setCurrentIndex(max(0, length.findData(min(duration, maximum))))
             length.setProperty("row", index)
@@ -1504,9 +1520,12 @@ class AlertStrip(QWidget):
     """Alerts that stay put until the student deals with them.
 
     A tray message is gone in eight seconds, and on a machine that suppresses notifications it is
-    never seen at all. "Keep alerts visible until handled" promises the opposite, so when it is on the
-    alert is also shown here, in the window, where nothing outside the app can take it away.
+    never seen at all. "Leave reminders on screen" promises the opposite, so when it is on the alert is
+    also shown here, in the window, where nothing outside the app can take it away.
     """
+
+    # The student has dealt with every alert it held.
+    handled = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -1539,6 +1558,8 @@ class AlertStrip(QWidget):
         if self._notices:
             self._notices.pop(0)
         self._render()
+        if not self._notices:
+            self.handled.emit()
 
     def _render(self) -> None:
         self.setVisible(bool(self._notices))
@@ -1714,9 +1735,8 @@ class ChooseTimeDialog(QDialog):
         self._check()
 
     def choice(self) -> tuple[int, int]:
-        """The day and the start, on the 15-minute grid."""
-        minutes = self.start.time().hour() * 60 + self.start.time().minute()
-        return int(self.day.currentData()), minutes - minutes % SLOT_MIN
+        """The day and the start, to the minute the student picked."""
+        return int(self.day.currentData()), self.start.time().hour() * 60 + self.start.time().minute()
 
     def _check(self, *_args: object) -> None:
         day, start = self.choice()

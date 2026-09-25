@@ -8,8 +8,25 @@ All notable changes to FlexWeek are documented here. Format follows
 ### Added
 - Month names every timed block on a date, so weeks other than the open one
   can show their chips.
+- A block with a Spotify link plays it when the block starts, the way an alarm
+  plays its song. Dismiss stops it and Snooze plays it again five minutes later.
 
 ### Changed
+- Times are by the minute. A block typed as 17:37 to 18:22 in the block editor,
+  in setup or in a routine saves as 17:37 to 18:22. Dragging, resizing and
+  drawing a block move in steps of 5 minutes, or of 15 if you choose that in
+  setup or in Settings > Planning. Homework is still planned on quarter hours,
+  and never over any part of one that a block takes.
+- Reminders are on unless you turn them off. New accounts start with them on,
+  and an account made before this version has them turned on once; if you turn
+  them off afterwards, they stay off.
+- A reminder shows in FlexWeek as well as in the tray: for a moment under the
+  top bar, and on the status line until something more important replaces it.
+- Settings > Alerts puts reminders first, with their switch at the top and their
+  settings greyed while it is off. Alarms have their own group, and each alarm
+  says when it rings. One sound dropdown instead of two; the volume shows a %
+  sign, and "Stay in the tray" and "Keep alerts visible until handled" say what
+  they do.
 - Retro desktop now shows live, draggable hours in Schedule.exe on Day and a
   seven-day Week.exe grid on Week. The deadlines notepad and main window both
   keep unplaced homework within reach, and the status bar shows the time or a
@@ -47,6 +64,11 @@ All notable changes to FlexWeek are documented here. Format follows
   Bento, Retro desktop or Clay deck. Each design has its own hours to drop on.
 
 ### Fixed
+- A block saved inside its own reminder time, such as one at 18:45 saved at
+  18:38 with a 10-minute reminder, now reminds at once instead of never.
+- "Saved preferences." no longer replaces a reminder on the status line.
+- Play beside the alert sound says so when this computer has no sound output,
+  instead of "No sound card".
 - Hours no longer jump back to the morning after a save in a design that keeps
   them between redraws, and pressing Tab no longer scrolls them to their middle.
 - A block's second line of text is never cut in half; what does not fit is

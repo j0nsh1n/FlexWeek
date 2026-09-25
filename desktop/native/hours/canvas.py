@@ -34,7 +34,6 @@ from PySide6.QtWidgets import QScrollArea, QWidget
 
 from desktop.native.calendar import CATEGORIES, DAYS, create_click_range
 from desktop.native.hours.geometry import (
-    SLOT_MIN,
     Axis,
     LinearTrack,
     Span,
@@ -615,7 +614,7 @@ class HoursCanvas(QWidget):
                 low = max(low, item.end)
             elif item.start > minute:
                 high = min(high, item.start)
-        if high - low < SLOT_MIN:
+        if high - low < self.hand.step:
             return
         rect = track.rect_for(low, high)
         big = (rect.height() if track.axis is Axis.DOWN else rect.width()) >= 26
@@ -658,8 +657,10 @@ class HoursCanvas(QWidget):
         track = self.track_at(point)
         if track is None:
             return
-        anchor = min(max(snap(track.minute_at(point) - SLOT_MIN / 2), track.first), track.last - SLOT_MIN)
-        held = Held(Gesture.CREATE, "", SLOT_MIN, None, track.day, Span(track.day, anchor, anchor + SLOT_MIN))
+        # Less half a step, so rounding floors: the block starts in the step the pointer went down in.
+        step = self.hand.step
+        anchor = min(max(snap(track.minute_at(point) - step / 2, step), track.first), track.last - step)
+        held = Held(Gesture.CREATE, "", step, None, track.day, Span(track.day, anchor, anchor + step))
         self.hand.selection = None
         self.hand.press(self, held, at, tap=lambda: self._quick_create(track, anchor), home=(self, track))
 
@@ -687,7 +688,7 @@ class HoursCanvas(QWidget):
         if any(start <= anchor < end for start, end in taken):
             return
         made = create_click_range(anchor, taken)
-        if made is not None and min(made[1], track.last) - made[0] >= SLOT_MIN:
+        if made is not None and min(made[1], track.last) - made[0] >= self.hand.step:
             self.hand.commit(Create(Span(track.day, made[0], min(made[1], track.last))))
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # noqa: N802
@@ -716,7 +717,7 @@ class HoursCanvas(QWidget):
             self.setCursor(
                 Qt.CursorShape.PointingHandCursor if track is not None else Qt.CursorShape.ArrowCursor
             )
-            hover = (track, snap(track.minute_at(point))) if track is not None else None
+            hover = (track, snap(track.minute_at(point), self.hand.step)) if track is not None else None
         if hover != self._hover:
             self._hover = hover
             self.update()

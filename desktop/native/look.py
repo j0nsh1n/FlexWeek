@@ -812,6 +812,9 @@ def pack_stylesheet(
         f"QPushButton {{ background: {palette['accent']}; color: {palette['accent_ink']}; "
         f"padding: {pad}px {pad * 2}px; border-radius: {radius}px; {edges}{button_min} }}"
         f"QPushButton:disabled {{ background: {palette['hairline_strong']}; color: {palette['muted']}; }}"
+        # The rule above that gives every widget the text colour also keeps it when the widget is off,
+        # so reminder settings looked live while reminders were off.
+        f"QWidget#prefReminderControls QWidget:disabled {{ color: {palette['muted']}; }}"
         # One filled button per dialog: the answer. Cancel and its kind are drawn plain beside it, and
         # a button that destroys something takes the error colour.
         f'QPushButton[quiet="true"] {{ background: transparent; color: {palette["text"]}; '

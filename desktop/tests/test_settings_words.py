@@ -155,26 +155,25 @@ def test_account_has_its_own_row_and_availability_is_under_planning(
     dialog.close()
 
 
-def test_a_sound_test_that_hears_nothing_says_what_to_do(
+def test_play_that_hears_nothing_says_what_to_do(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """It said "No sound card" and nothing else, and at volume 0 it blamed the computer."""
     dialog = prefs(window)
-    monkeypatch.setattr(dialog._bell, "once", lambda _tone, _volume: False)
-    dialog.reminder_sound.setChecked(True)
-    dialog.volume.setValue(80)
-    dialog.preview.click()
-    assert dialog.preview.text() == "Test"
-    assert dialog.save_state.text() == (
-        "No sound came out. Check that speakers or headphones are plugged in and not muted, then "
-        "press Test again. Alerts still appear on screen."
+    next_step = (
+        "No sound played. Check that Volume is above 0 % and that your speakers or headphones are "
+        "connected and not muted, then press Play again."
     )
     dialog.volume.setValue(0)
-    dialog.preview.click()
-    assert dialog.save_state.text() == (
-        "Alert volume is 0, so there is nothing to hear. Turn it up, then press Test."
-    )
+    dialog.play_tone.click()
+    assert dialog.save_state.text() == next_step
+    dialog.save_state.setText("")
+    monkeypatch.setattr(dialog._tone_bell, "once", lambda _tone, _volume: False)
+    dialog.volume.setValue(80)
+    dialog.play_tone.click()
+    assert dialog.save_state.text() == next_step
     dialog.close()
 
 

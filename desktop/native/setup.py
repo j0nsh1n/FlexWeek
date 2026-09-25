@@ -46,11 +46,18 @@ from desktop.native.calendar import (
     is_setup_block,
     sunday_due,
 )
+from desktop.native.hours.geometry import drag_step
 from desktop.native.layouts.registry import LAYOUTS, layouts_for, options_for, sanitize_layout
 from desktop.native.look import PACK_LABELS, PACKS, effective_look, sanitize_look
 from desktop.native.motion import appear, fade_away, glide, hold_picture, slide_page
 from desktop.native.previews import Previews
-from desktop.native.settings import PLANNING_STYLES, SPORT_FALLBACK, SPOTIFY_TONE_NOTE
+from desktop.native.settings import (
+    DRAG_STEP_CHOICES,
+    DRAG_STEP_QUESTION,
+    PLANNING_STYLES,
+    SPORT_FALLBACK,
+    SPOTIFY_TONE_NOTE,
+)
 from desktop.native.sound import Bell
 from desktop.native.tones import FALLBACK, RECIPES
 from desktop.native.widgets import DAYS, DueField, FlowLayout
@@ -392,36 +399,35 @@ class DayPicker(QWidget):
 
 
 class QuarterTime(QTimeEdit):
-    """A time on the 15-minute grid the planner works in. The arrows and the wheel move the minutes a
-    quarter hour at a time, and a time typed between quarters moves to the nearest one."""
+    """A time of day. The arrows and the wheel move the minutes a quarter hour at a time; a time typed
+    between quarters keeps its minute, as the block editor does."""
 
     def __init__(self, hhmm: str) -> None:
         super().__init__(QTime.fromString(hhmm, "HH:mm"))
         self.setObjectName("setupTime")
         self.setDisplayFormat("HH:mm")
         self.setCorrectionMode(QAbstractSpinBox.CorrectionMode.CorrectToNearestValue)
-        self.editingFinished.connect(self._snap)
 
     def minutes(self) -> int:
         time = self.time()
         return time.hour() * 60 + time.minute()
 
     def set_minutes(self, minutes: int) -> None:
-        minutes = max(0, min(minutes, 24 * 60 - SLOT_MIN))
+        minutes = max(0, min(minutes, 24 * 60 - 1))
         self.setTime(QTime(minutes // 60, minutes % 60))
 
     def stepBy(self, steps: int) -> None:  # noqa: N802
         if self.currentSection() == QDateTimeEdit.Section.MinuteSection:
             base = self.minutes() - self.minutes() % SLOT_MIN
+            # Up from 08:07 is 08:15 and down is 08:00: the quarter hour on each side.
+            if steps < 0 and self.minutes() % SLOT_MIN:
+                steps += 1
             self.set_minutes(base + steps * SLOT_MIN)
             return
         super().stepBy(steps)
 
-    def _snap(self) -> None:
-        self.set_minutes(round(self.minutes() / SLOT_MIN) * SLOT_MIN)
-
     def hhmm(self) -> str:
-        return minutes_to_hhmm(round(self.minutes() / SLOT_MIN) * SLOT_MIN)
+        return minutes_to_hhmm(self.minutes())
 
 
 class TimeRange(QWidget):
@@ -813,6 +819,15 @@ class SetupPage(QWidget):
             hint = _label(note, "setupHint")
             hint.setContentsMargins(28, 0, 0, 6)
             box.addWidget(hint)
+        self._section(box, DRAG_STEP_QUESTION)
+        self.drag_step = QButtonGroup(content)
+        self.drag_buttons: dict[int, QRadioButton] = {}
+        for minutes, text in DRAG_STEP_CHOICES:
+            button = QRadioButton(text)
+            button.setObjectName(f"setupDragStep-{minutes}")
+            self.drag_step.addButton(button, minutes)
+            self.drag_buttons[minutes] = button
+            box.addWidget(button)
         self._section(box, "When may FlexWeek plan homework?")
         self.work_editor = WorkWindowsEditor([])
         box.addWidget(self.work_editor)
@@ -998,13 +1013,13 @@ class SetupPage(QWidget):
     def _fill_homework(self) -> None:
         style = self._state.preferences.get("planning_style") or "suggest"
         self.planning_buttons.get(style, self.planning_buttons["suggest"]).setChecked(True)
+        self.drag_buttons[drag_step(self._state.preferences.get("drag_step_min"))].setChecked(True)
         self.work_editor.set_subjects(self._state.subjects)
         self.work_editor.set_windows(self._state.preferences.get("work_windows") or [])
 
     def _fill_reminders(self) -> None:
         prefs = self._state.preferences
-        # Reminders are off for an account until it says otherwise. Setup is where it says so.
-        self.reminders.setChecked(True if self._state.first_run else bool(prefs.get("reminders_enabled")))
+        self.reminders.setChecked(prefs.get("reminders_enabled", True) is not False)
         self.lead.setValue(int(prefs.get("reminder_lead_min", 10) if not self._state.first_run else 10))
         self.lead.setEnabled(self.reminders.isChecked())
         tone = str(prefs.get("alarm_tone") or FALLBACK)
@@ -1399,6 +1414,7 @@ class SetupPage(QWidget):
             )
             return {
                 "planning_style": checked,
+                "drag_step_min": drag_step(self.drag_step.checkedId()),
                 "work_windows": self.work_editor.windows(),
             }
         if step == REMINDERS:
@@ -1481,6 +1497,7 @@ class SetupPage(QWidget):
                 planning += f" and {len(work_windows) - 2} more"
         else:
             planning += " · homework can be planned at any time of day"
+        planning += f" · a drag moves {drag_step(prefs.get('drag_step_min'))} minutes at a time"
         tone = str(prefs.get("alarm_tone") or FALLBACK)
         sound = "Spotify" if tone == "spotify" else TONE_NAMES.get(tone, tone.title())
         if prefs.get("reminders_enabled"):
