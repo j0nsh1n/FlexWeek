@@ -17,7 +17,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QRectF, Qt
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QLabel, QScrollArea, QWidget
+    from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QScrollArea, QWidget
 
     from desktop.native.hours.canvas import EDGE_PX, BlockPainter, HoursCanvas
     from desktop.native.hours.classic import WEEK_HOUR_PX, ClassicWeek
@@ -145,12 +145,41 @@ def test_a_tray_chip_shortens_its_words_to_the_room_it_has_and_keeps_its_title(q
     whole = f"{title} · 1 h 30 min"
     inside = view.side.contentsRect()
     assert chip.mapTo(view.side, chip.rect().topRight()).x() <= inside.right(), "the chip ran past its tray"
-    assert chip.text() != whole and chip.text().endswith("…")
+    assert chip.text() != whole and chip.text().endswith("… · 1 h 30 min"), chip.text()
     assert chip.accessibleName() == whole
     assert title in chip.toolTip()
     view.side.setFixedWidth(620)
     qapp.processEvents()
     assert chip.text() == whole, "given room again, it says it all"
+
+
+def test_a_tray_chip_shortens_its_title_and_keeps_its_length_whole(qapp: QApplication) -> None:
+    """The length is the number the chip is for, so the title gives way first: "Science pos… ·
+    1 h 30 min", not "Science poster · 1 h …". With no room for a letter of the title beside the
+    length, the words shorten from their end as before."""
+    from PySide6.QtWidgets import QHBoxLayout
+
+    from desktop.native.hours.chips import TrayChip
+    from desktop.native.weekmodel import Waiting
+
+    row = QWidget()
+    line = QHBoxLayout(row)
+    line.setContentsMargins(0, 0, 0, 0)
+    chip = TrayChip(a_hand(), Waiting("poster", "Science poster", "homework", 90, "poster", "2026-09-25", ""))
+    line.addWidget(chip)
+    line.addStretch(1)
+    row.show()
+    qapp.processEvents()
+    assert chip.text() == "Science poster · 1 h 30 min"
+    fonts = chip.fontMetrics()
+    # A plain button's own width beside its words: the chip's padding and frame.
+    chrome = QPushButton.sizeHint(chip).width() - fonts.horizontalAdvance(chip.text())
+    chip.setFixedWidth(chrome + fonts.horizontalAdvance("Science pos… · 1 h 30 min") + 1)
+    qapp.processEvents()
+    assert chip.text() == "Science pos… · 1 h 30 min"
+    chip.setFixedWidth(chrome + fonts.horizontalAdvance(" · 1 h 30 min"))
+    qapp.processEvents()
+    assert chip.text().startswith("S") and chip.text().endswith("…") and "1 h 30 min" not in chip.text()
 
 
 def test_a_tray_chip_in_a_row_says_it_all_again_once_the_row_has_room(qapp: QApplication) -> None:
@@ -174,7 +203,7 @@ def test_a_tray_chip_in_a_row_says_it_all_again_once_the_row_has_room(qapp: QApp
     row.setFixedWidth(160)
     row.show()
     qapp.processEvents()
-    assert chip.text().endswith("…")
+    assert chip.text().endswith("… · 1 h 30 min"), chip.text()
     row.setFixedWidth(700)
     qapp.processEvents()
     assert chip.text() == whole

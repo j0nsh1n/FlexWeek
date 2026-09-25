@@ -19,5 +19,12 @@
   "old": "    def sizeHint(self) -> QSize:  # noqa: N802\n",
   "new": "    def _unused_size_hint(self) -> QSize:\n",
   "test": "desktop/tests/test_classic_hours.py::test_a_tray_chip_in_a_row_says_it_all_again_once_the_row_has_room"
+ },
+ {
+  "file": "desktop/native/hours/chips.py",
+  "name": "a tray chip shortens its length before its title",
+  "old": "            if title.strip(\"…\"):\n                fitted = title + self._length\n",
+  "new": "",
+  "test": "desktop/tests/test_classic_hours.py::test_a_tray_chip_shortens_its_title_and_keeps_its_length_whole"
  }
 ]
