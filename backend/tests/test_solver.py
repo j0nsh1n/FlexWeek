@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from backend.availability import LEGACY_WORK_WINDOWS
-from backend.models import TimeBlock
+from backend.models import TimeBlock, WorkWindow
 from backend.slots import hhmm_to_minutes, overlaps
 from backend.solver import SOLVE_BUDGET_MS
 from backend.solver import reschedule_after_miss as run_reschedule_after_miss
@@ -429,3 +429,14 @@ def test_a_session_uses_the_night_when_the_day_is_full() -> None:
     start = hhmm_to_minutes(placed.start)
     assert placed.days == [0]
     assert start < 6 * 60 or start >= 23 * 60
+
+
+def test_homework_is_never_planned_in_a_quarter_hour_a_block_at_any_minute_touches() -> None:
+    """A lesson from 17:37 to 18:22 takes 17:30 to 18:30 from the planner. With its end floored,
+    18:15 looked free and homework could be planned over the lesson's last seven minutes."""
+    lesson = _locked("lesson", "Lesson", "17:37", 45, [0])
+    sessions = [_flex(f"hw-{index}", "Homework", 15, [0]) for index in range(4)]
+    evening = WorkWindow(days=[0], start="17:30", end="18:45")
+    trace = run_solve([lesson, *sessions], work_windows=[evening])
+    starts = [block.start for block in trace.placed if block.kind == "flexible"]
+    assert starts == ["18:30"]

@@ -54,16 +54,17 @@ def minutes_to_hhmm(minutes: int) -> str:
 
 
 def start_fits_day(start_min: int) -> bool:
-    return start_min % SLOT_MIN == 0 and DAY_START_MIN <= start_min < DAY_END_MIN
+    return DAY_START_MIN <= start_min < DAY_END_MIN
 
 
 def span_fits_day(start_min: int, duration_min: int) -> bool:
-    return (
-        duration_min > 0
-        and duration_min % SLOT_MIN == 0
-        and start_fits_day(start_min)
-        and start_min + duration_min <= DAY_END_MIN
-    )
+    return duration_min > 0 and start_fits_day(start_min) and start_min + duration_min <= DAY_END_MIN
+
+
+def on_slot(minutes: int) -> bool:
+    """Whether a time or a length is on the planner's quarter hours. A block may be any minute;
+    homework estimates and the windows the planner works in may not."""
+    return minutes % SLOT_MIN == 0
 
 
 def minutes_to_slot(minutes: int) -> int:
@@ -87,9 +88,10 @@ def slot_to_hhmm(slot: int) -> str:
 
 
 def duration_to_slots(duration_min: int) -> int:
-    if duration_min <= 0 or duration_min % SLOT_MIN:
-        raise ValueError("duration must be a positive multiple of 15")
-    return duration_min // SLOT_MIN
+    """The quarter hours a length takes from a quarter-hour start: 50 minutes takes four."""
+    if duration_min <= 0:
+        raise ValueError("duration must be positive")
+    return -(-duration_min // SLOT_MIN)
 
 
 def overlaps(a_start: int, a_end: int, b_start: int, b_end: int) -> bool:
@@ -132,3 +134,15 @@ def occupancy_mask(start_slot: int, n_slots: int) -> int:
     if n_slots <= 0 or start_slot < 0 or start_slot + n_slots > SLOTS_PER_DAY:
         raise ValueError("occupancy range is outside the 00:00–24:00 grid")
     return ((1 << n_slots) - 1) << start_slot
+
+
+def occupancy_between(start_min: int, end_min: int) -> int:
+    """Every quarter hour a span touches, cut to the day: 17:37 to 18:22 takes 17:30 to 18:30, so the
+    planner never puts homework over the part of a quarter hour a block has."""
+    start_min = max(start_min, DAY_START_MIN)
+    end_min = min(end_min, DAY_END_MIN)
+    if end_min <= start_min:
+        return 0
+    first = (start_min - DAY_START_MIN) // SLOT_MIN
+    last = -(-(end_min - DAY_START_MIN) // SLOT_MIN)
+    return occupancy_mask(first, last - first)

@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.app import create_app
+from backend.day import build_day
 
 PASSWORD = "a-long-test-password"
 WRITE = {"X-FlexWeek-Request": "1", "Origin": "http://testserver"}
@@ -168,6 +169,14 @@ def test_a_placed_unfinished_session_is_start(alice: TestClient) -> None:
     assert body["workload"]["scheduled_min"] == 60
     assert body["workload"]["focus_min"] == 0
     assert body["workload"]["available_min"] == 1380
+
+
+def test_a_block_at_any_minute_takes_every_quarter_hour_it_touches_from_free_time() -> None:
+    """Free time is the quarter hours the planner can still use. A lesson from 17:37 to 18:22 leaves
+    none of 17:30 to 18:30; with its end floored, 18:15 was counted free."""
+    lesson = {"id": "lesson", "title": "Lesson", "kind": "locked", "start": "17:37", "duration_min": 45, "days": [1]}
+    body = build_day(DAY, WEEK, [lesson], [], [])
+    assert body["workload"]["available_min"] == 24 * 60 - 60
 
 
 def test_overdue_open_homework_is_due_soon(alice: TestClient) -> None:

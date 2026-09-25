@@ -58,15 +58,10 @@ def test_overlaps_half_open() -> None:
     assert not overlaps(10 * 60, 11 * 60, 8 * 60, 9 * 60)
 
 
-def test_duration_must_be_multiple_of_15() -> None:
+def test_a_blocks_length_is_any_positive_minute() -> None:
+    assert TimeBlock(id="short", title="Short", kind="locked", duration_min=7, days=[0], start="17:37")
     with pytest.raises(ValidationError):
-        TimeBlock(
-            id="bad",
-            title="Bad",
-            kind="flexible",
-            duration_min=10,
-            days=[0],
-        )
+        TimeBlock(id="bad", title="Bad", kind="flexible", duration_min=0, days=[0])
 
 
 def test_days_must_be_in_week() -> None:

@@ -6,14 +6,7 @@ from datetime import date, timedelta
 
 from backend.assignments import unplanned_minutes
 from backend.models import GridWindow, ProtectedWindow, StudyWindow, WorkWindow, parse_due
-from backend.slots import (
-    DAY_END_MIN,
-    DAY_START_MIN,
-    SLOT_MIN,
-    SLOTS_PER_DAY,
-    clock_to_minutes,
-    occupancy_mask,
-)
+from backend.slots import DAY_END_MIN, SLOT_MIN, clock_to_minutes, occupancy_between
 from backend.weeks import monday_of
 
 DEFAULT_WORK_WINDOWS = [
@@ -31,17 +24,7 @@ CLUSTER_COPY = (
 
 
 def add_occupancy(occ: list[int], day: int, start_min: int, end_min: int) -> None:
-    if start_min < DAY_START_MIN:
-        start_min = DAY_START_MIN
-    if end_min > DAY_END_MIN:
-        end_min = DAY_END_MIN
-    if start_min >= end_min or start_min >= DAY_END_MIN:
-        return
-    offset = start_min - DAY_START_MIN
-    slot = offset // SLOT_MIN
-    n = min(max(0, (end_min - DAY_START_MIN) // SLOT_MIN - slot), SLOTS_PER_DAY - slot)
-    if n:
-        occ[day] |= occupancy_mask(slot, n)
+    occ[day] |= occupancy_between(start_min, end_min)
 
 
 def occupancy_from_windows(
