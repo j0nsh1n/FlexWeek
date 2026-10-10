@@ -649,6 +649,8 @@ class NativeWindow(QMainWindow):
         self._apply_appearance()
         if QSystemTrayIcon.isSystemTrayAvailable() and not self._icon.isNull():
             self._install_tray()
+        # The sign-in card's height is held only while its page shows (_pin_auth_height).
+        self._stack.currentChanged.connect(self._pin_auth_height)
         self._sync_auth_mode()
         self._show_page("authPage")
         self.setMinimumWidth(WINDOW_MIN_WIDTH)
@@ -842,12 +844,17 @@ class NativeWindow(QMainWindow):
         self.create_button.setDefault(mode == CREATE)
         self.recover_button.setDefault(mode == RESET)
 
-    def _pin_auth_height(self) -> None:
+    def _pin_auth_height(self, _index: int = -1) -> None:
         """Hold the sign-in page's wordmark and card top where the tallest page, Create or Reset, puts
         them, so nothing jumps between pages (#74): the card sits at the top of a holder that is always as
         tall as that card, and the pages that are shorter simply end sooner."""
         holder, card = self._auth_holder, self._auth_card
         if holder is None or card is None:
+            return
+        if holder.parentWidget() is not self._stack.currentWidget():
+            # A stack is as tall as its tallest page, so a pinned card on a hidden sign-in page kept every
+            # window at least its height: at Large text Retro's was 782 px, past a 768 px laptop.
+            holder.setMinimumHeight(0)
             return
         shown = self._auth_mode_shown or SIGN_IN
         # Laying out another page hides the widget that has focus, and Qt does not give it back.
