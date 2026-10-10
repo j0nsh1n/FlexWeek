@@ -2186,6 +2186,20 @@ def _preset_locked(category: str | None, day: int, start: str, duration_min: int
     }
 
 
+def _range_locked(category: str | None, day: int, start: str, duration_min: int) -> dict:
+    """A new fixed time for a range drawn on the hours: the drawn start and length, not the preset's."""
+    info = CATEGORIES.get(category or "")
+    return {
+        "id": str(uuid4()),
+        "kind": "locked",
+        "title": info["label"] if info else "",
+        "days": [day],
+        "start": start,
+        "duration_min": duration_min,
+        "category": category,
+    }
+
+
 def bare(widget: QWidget) -> QWidget:
     """A box that only holds other widgets: it paints nothing, so a dialog's body is its card and not
     a pale box inside it."""
@@ -2930,16 +2944,7 @@ class BlockDialog(Dialog):
         if block is not None:
             self._original = deepcopy(block)
         elif from_range:
-            info = CATEGORIES.get(category or "")
-            self._original = {
-                "id": str(uuid4()),
-                "kind": "locked",
-                "title": info["label"] if info else "",
-                "days": [day],
-                "start": start,
-                "duration_min": duration_min,
-                "category": category,
-            }
+            self._original = _range_locked(category, day, start, duration_min)
         else:
             self._original = _preset_locked(category, day, start, duration_min)
         self._result: dict | None = None
@@ -3075,6 +3080,44 @@ class BlockDialog(Dialog):
         row.addWidget(buttons)
         layout.addLayout(row)
         self._sync_scope()
+
+    def fill_new(
+        self,
+        *,
+        day: int,
+        start: str,
+        category: str | None,
+        duration_min: int = 60,
+        from_range: bool = False,
+    ) -> None:
+        """Set the requested values on a new dialog that has never been shown."""
+        made = _range_locked if from_range else _preset_locked
+        self._original = made(category, day, start, duration_min)
+        self._result = None
+        self._deleted = False
+        self._occurrence_day = None
+        self.title.setText(self._original["title"])
+        self.day_picker.set_days(self._original["days"])
+        self._length = self._original["duration_min"]
+        self._end_by_hand = False
+        self._following = False
+        self._moved = ""
+        self.start.setTime(QTime.fromString(self._original["start"], "HH:mm"))
+        self.end.setTime(
+            self._minutes_clock(self.start.minutes() + self._original["duration_min"])
+        )
+        self._guessing = not bool(category)
+        chosen = category or guess_locked_category(self._original["start"])
+        self._applying_guess = True
+        self.category.setCurrentIndex(max(0, self.category.findData(chosen)))
+        self._applying_guess = False
+        self.spotify.clear()
+        self.more_details.setChecked(False)
+        self.missed.setChecked(False)
+        self._show_length()
+        self.error.clear()
+        self.title.setFocus(Qt.FocusReason.OtherFocusReason)
+        self.refit()
 
     def _name_block_toggle(self, open_: bool) -> None:
         self.more_details.setText("Fewer details" if open_ else "More details")
