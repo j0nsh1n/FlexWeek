@@ -5,6 +5,13 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-10-10
+
+### Fixed
+- Add fixed time opens at once: the dimmed window and the sheet appear together. Before, the window dimmed first and the sheet followed a moment later. The same goes for adding one from the add menu, Ctrl+K, a free spot's menu and a range drawn on the hours.
+- With Large text, the window fits a 1366x768 laptop screen in every design again. In Retro it could not get shorter than 782 px after signing in.
+- Month fits a 1024x640 window with "Unfinished homework from earlier weeks" open, with no scroll bar and the last week whole.
+
 ## [0.19.0] - 2026-10-10
 
 ### Added

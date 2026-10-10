@@ -614,11 +614,15 @@ def _saved_anything(name: str, box: Box) -> bool:
     return bool(box.top.findChild(SettingsPage).updates()["alarms"])
 
 
-@pytest.mark.parametrize("way", ["next", "enter"])
-@pytest.mark.parametrize("name", [*DIALOGS, "study-hours-start", "study-hours-end", "alarm-time"])
+# Enter in a picker or a Settings box presses no Add button, so only the dialogs are left by Enter.
+LEAVINGS = [
+    *((name, way) for name in DIALOGS for way in ("next", "enter")),
+    *((name, "next") for name in ("study-hours-start", "study-hours-end", "alarm-time")),
+]
+
+
+@pytest.mark.parametrize(("name", "way"), LEAVINGS)
 def test_save_with_an_unreadable_time_saves_nothing_and_goes_back_to_the_box(opened, name, way) -> None:
-    if way == "enter" and name not in DIALOGS:
-        pytest.skip("Enter in a picker or Settings box presses no Add button")
     box = opened(name)
     enter(box.field, "tab-in")
     type_text(box.field, "25:00")

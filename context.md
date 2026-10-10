@@ -1,6 +1,11 @@
 # context.md — FlexWeek
 
 ## Current State
+- 2026-10-10: v0.19.1 on `release/0.19.1` (same worktree and venv as 0.19.0): J19, the Add fixed time
+  sheet built ahead while idle (`_block_spare`, one account and one look, dropped on either change;
+  editing a block still builds on demand); the sign-in card holds its height only while its page
+  shows (`_pin_auth_height` on the stack's `currentChanged`), so a hidden sign-in page no longer sets
+  every window's least height; Month's tight row is exactly one chip line (#28 at 1024x640).
 - 2026-10-10: v0.19.0 released from `release/0.19.0` (worktree `~/.worktrees/flexweek-0190`, `.venv` is
   `venv-0190`): the QA handoff's remaining Fix first items and the Codex audit of 0.18.5. School and
   Setup's activities are a standing week in the store (`standing_blocks`, one row per Setup id and
@@ -15,17 +20,9 @@
   (Opus, Grok 4.7, GPT-6 Luna, Sonnet, Haiku) and an audit-fix lane, merged and checked by Claude.
 - Tests that pick a day of the current week on the real clock can fail on later weekdays since item
   2: hold the clock (`grid_support.hold_clock`, `session.now_ms`).
-- 2026-10-10: v0.18.5 on `release/0.18.5` (worktree `~/.worktrees/flexweek-0185`, `.venv` is
-  `venv-0185-engine`): roadmap's Consistency and polish. New accounts start on a 12-hour clock
-  (`clock_24h`, Rust migration `keep_24_hour_clock` stamps older accounts 24-hour; the desktop
-  conftest sets 24-hour per test unless a test chooses); one short and one long date format from
-  `engine/engine/src/desk/datetext.rs`; time boxes keep what was typed and show a problem card
-  (`fields.ClockField`, `ProblemLine`); buttons re-measure after a look change (`widgets.fit_buttons`);
-  a click moves the week's keyboard spot and a closed sheet leaves it on the week (Jonathan,
-  2026-10-10, over the QA handoff's "back to the button"). Tests fail on any error inside a Qt slot
-  (`no_error_is_lost_inside_a_qt_slot`; pass `QTimer.singleShot(0, receiver, fn)`, never a bare
-  bound method); `fwtest gate` checks mutation patterns first. Built by Haiku 5.5 and Sonnet 5.5
-  lanes, reviewed by Claude.
+- Since 0.18.5: new accounts start on a 12-hour clock (the desktop conftest sets 24-hour per test
+  unless a test chooses); tests fail on any error inside a Qt slot (`no_error_is_lost_inside_a_qt_slot`;
+  pass `QTimer.singleShot(0, receiver, fn)`, never a bare bound method).
 - Probing motion: `~/.flexweek-ui-harness/scratch/0.18.4/j14/claude-r3/probe_noprof.py` (copy into
   `desktop/tests/` as `test_zz_*.py`, run through fwtest with `-s`; `PROBE_DRAIN=1` waits for
   Settings' design previews, which otherwise land in the timed window; `PROBE_NOPROF=1` for real
@@ -141,18 +138,11 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
-- 2026-10-10, `release/0.19.0`: all five lanes and the audit fixes merged; version, CHANGELOG,
-  `docs/release-notes-v0.19.0.md`, roadmap and spec.md (standing week, unfinished from earlier weeks,
-  fair share, past times, the toast, Text size, the week list) written under Jonathan's overnight
-  grant. Released through a PR to main on Jonathan's word. Minor fixes below go into 0.19.1.
+- 2026-10-10, `release/0.19.1`: J19 (a GPT-6 Luna lane, reviewed and fixed by Claude), the Retro
+  Large-text window height and Month at 1024x640, on Jonathan's full go for 0.19.1 (push, PR, merge,
+  release). Kept as they are, his to revisit: "12:00 AM" for the end of the day on the 12-hour clock,
+  the shorter sign-in reset note, a whole series' typed start in the past allowed, the stacked dated
+  day chips. A Grok audit of 0.19.0 is running on his side.
 - Next: 1.0.0 with the Android companion (Rust core via UniFFI, Kotlin and Compose) and iroh device
   sync with background sync on the phone (about Oct 22); plan in
   `~/.flexweek-ui-harness/scratch/PLAN-0185-to-100.md`.
-- Open for Jonathan: at Large text Retro's window cannot get below 782 px tall (rig week-small-large
-  and day-small-large fail at 1150x768): the hidden sign-in page sets every window's least height,
-  and 0.19.0's taller Reset card pushed it past 768. A fix that lets hidden pages stop sizing the
-  window is saved in `~/.flexweek-ui-harness/scratch/0.19.0/hidden-pages-dont-size-window.patch`; it
-  lets windows shrink to 434-550 px, never laid out before, so it waits for his call (0.19.1).
-- Open for Jonathan: "12:00 AM" for the end of the day on the 12-hour clock (or "midnight"); the
-  shortened sign-in reset note; a series-wide typed start in the past is still allowed (single days
-  are refused); the dated day chips now stack the date under the day.
