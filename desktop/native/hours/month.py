@@ -393,7 +393,9 @@ class MonthCanvas(QWidget):
         return max(27.0, QFontMetrics(self.font()).height() + 11)
 
     def tight_row(self) -> int:
-        return round(self.number_height() + TIGHT_CHIPS * self.pitch() + 4)
+        # Exactly what _slots needs for TIGHT_CHIPS lines. Two pixels more of padding left a 1024x640
+        # window 4 px short of fitting Month with the Unfinished panel open (#28).
+        return math.ceil(self.number_height() + 2 + TIGHT_CHIPS * self.pitch())
 
     def least_row(self) -> int:
         return round(self.number_height() + LEAST_CHIPS * self.pitch() + self.pitch() + 4)
