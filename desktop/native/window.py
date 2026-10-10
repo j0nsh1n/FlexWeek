@@ -559,6 +559,9 @@ class NativeWindow(QMainWindow):
         self._settings_save: Callable[[], None] | None = None
         self._settings_unsaved: Callable[[], bool] | None = None
         self._settings_prepare_scheduled = False
+        self._block_spare: BlockDialog | None = None
+        self._block_spare_account: str | None = None
+        self._block_prepare_scheduled = False
         self._leaving: QTimer | None = None
         self._saved_to_leave = False
         # A block let go while a save is under way, moved once it is done: the save's reply replaces
@@ -1894,6 +1897,7 @@ class NativeWindow(QMainWindow):
 
     def _on_account(self, account: object) -> None:
         if account is None:
+            self._discard_block_spare()
             if self._settings is not None and self._stack.currentWidget() is self._settings:
                 self._show_page("weekPage")
             self._discard_settings_page()
@@ -1913,6 +1917,8 @@ class NativeWindow(QMainWindow):
             self._apply_appearance()
             self._show_page("authPage")
             return
+        if self._block_spare_account != str(account["id"]):
+            self._discard_block_spare()
         self._apply_appearance()
         if self._settings is not None and self._settings.account_id != account["id"]:
             self._discard_settings_page()
@@ -2242,6 +2248,7 @@ class NativeWindow(QMainWindow):
         if not self._setup_active and not on_focus and not on_settings:
             self._show_page("weekPage")
         self._maybe_prepare_settings()
+        self._maybe_prepare_block_spare()
         if self.plan_review.isVisible():
             self._layout_plan_review()
         can_retry = self.session.pending_save is not None and not self.session.conflict
@@ -2728,27 +2735,112 @@ class NativeWindow(QMainWindow):
         category = self.session.armed_category
         if category in FLEX_CATEGORIES:
             category = None
-        self._commit_block(self._sheet(lambda: self._new_event(category)))
+        day, start = self._new_event_values()
+        self._commit_new_block(day, start, category)
 
-    def _new_event(self, category: str | None) -> BlockDialog:
+    def _commit_new_block(
+        self,
+        day: int,
+        start: str,
+        category: str | None,
+        duration_min: int = 60,
+        *,
+        from_range: bool = False,
+    ) -> None:
+        try:
+            self._commit_block(
+                self._sheet(
+                    lambda: self._take_block_dialog(
+                        day=day,
+                        start=start,
+                        category=category,
+                        duration_min=duration_min,
+                        from_range=from_range,
+                    )
+                )
+            )
+        finally:
+            self._maybe_prepare_block_spare()
+
+    def _take_block_dialog(
+        self,
+        *,
+        day: int,
+        start: str,
+        category: str | None,
+        duration_min: int = 60,
+        from_range: bool = False,
+    ) -> BlockDialog:
+        spare = self._block_spare
+        if spare is not None and self._block_spare_account == self._account_id() and isValid(spare):
+            self._block_spare = None
+            self._block_spare_account = None
+            spare.fill_new(
+                day=day, start=start, category=category, duration_min=duration_min, from_range=from_range
+            )
+            return spare
+        self._discard_block_spare()
+        return BlockDialog(
+            self, day=day, start=start, duration_min=duration_min, category=category, from_range=from_range
+        )
+
+    def _new_event_values(self) -> tuple[int, str]:
         """A new event opens on the next quarter hour still ahead today, or with none left, the first one
         tomorrow. The usual start stays for another week, which has no "now", and for tomorrow when that is
         a day of the next week, which the open one cannot hold."""
         today, minute = self._clock_in_week()
         if today is None or minute is None:
-            return BlockDialog(self, category=category)
+            return 0, "16:00"
         ahead, slot = next_slot(minute)
         if today + ahead > 6:
-            return BlockDialog(self, category=category)
-        return BlockDialog(self, day=today + ahead, start=minutes_to_hhmm(slot), category=category)
+            return 0, "16:00"
+        return today + ahead, minutes_to_hhmm(slot)
 
     def _add_fixed_at(self, day: int, minute: int) -> None:
         category = self.session.armed_category
         if category in FLEX_CATEGORIES:
             category = None
-        self._commit_block(
-            self._sheet(lambda: BlockDialog(self, day=day, start=minutes_to_hhmm(minute), category=category))
-        )
+        self._commit_new_block(day, minutes_to_hhmm(minute), category)
+
+    def _maybe_prepare_block_spare(self) -> None:
+        if (
+            self._block_spare is not None
+            or self._block_prepare_scheduled
+            or self.session.account is None
+            or self.session.preferences is None
+            or self._setup_active
+            or QApplication.activeModalWidget() is not None
+        ):
+            return
+        self._block_prepare_scheduled = True
+        QTimer.singleShot(0, self._prepare_block_spare)
+
+    def _prepare_block_spare(self) -> None:
+        self._block_prepare_scheduled = False
+        if (
+            self._block_spare is not None
+            or self.session.account is None
+            or self.session.preferences is None
+            or self._setup_active
+            or QApplication.activeModalWidget() is not None
+        ):
+            return
+        account_id = self._account_id()
+        try:
+            spare = BlockDialog(self)
+        except Exception:
+            return
+        if account_id != self._account_id():
+            spare.deleteLater()
+            return
+        self._block_spare = spare
+        self._block_spare_account = account_id
+
+    def _discard_block_spare(self) -> None:
+        spare, self._block_spare = self._block_spare, None
+        self._block_spare_account = None
+        if spare is not None and isValid(spare):
+            spare.deleteLater()
 
     def _add_homework_due(self, due: str) -> None:
         category = self.session.armed_category
@@ -3162,7 +3254,8 @@ class NativeWindow(QMainWindow):
                 self._sheet(lambda: HomeworkDialog(self, today=self._today(), category=category))
             )
             return
-        self._commit_block(self._sheet(lambda: self._new_event(category)))
+        day, start = self._new_event_values()
+        self._commit_new_block(day, start, category)
 
     def _create_by_drag(self, span: Span) -> None:
         before = {item["id"] for item in self.session.blocks}
@@ -3188,18 +3281,7 @@ class NativeWindow(QMainWindow):
                 days=[day],
             )
             return
-        self._commit_block(
-            self._sheet(
-                lambda: BlockDialog(
-                    self,
-                    day=day,
-                    start=start,
-                    duration_min=duration,
-                    category=category,
-                    from_range=True,
-                )
-            )
-        )
+        self._commit_new_block(day, start, category, duration, from_range=True)
 
     def _due_point(self, block_id: str) -> tuple[int, int] | None:
         """The day and minute a homework session is due, for the calendar to refuse a drag past it."""
@@ -4546,6 +4628,8 @@ class NativeWindow(QMainWindow):
         dressed = (sheet, repr(look), repr(palette), chips, self._motion, ctx.feel.key)
         # Every change to the week comes through here. Restyling the whole window each time, when the
         # look had not changed, cost about 26 ms a change and repainted everything on screen.
+        if dressed != self._dressed:
+            self._discard_block_spare()
         set_current(ctx)
         if dressed != self._dressed:
             self._dressed = dressed
@@ -4563,6 +4647,7 @@ class NativeWindow(QMainWindow):
             self._dress_entry(palette, look)
             self.setup_page.set_palette(palette)
             self._dress_feel(ctx, sheet, extra)
+            self._maybe_prepare_block_spare()
             fit_buttons(self)
         if page_sheet != self._page_sheet:
             # The planner holds the design's page and nothing of the chrome.
