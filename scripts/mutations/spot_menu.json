@@ -23,8 +23,8 @@
  {
   "file": "desktop/native/window.py",
   "name": "Add fixed time ignores the spot's day",
-  "old": "BlockDialog(self, day=day, start=minutes_to_hhmm(minute), category=category)",
-  "new": "BlockDialog(self, day=0, start=minutes_to_hhmm(minute), category=category)",
+  "old": "self._commit_new_block(day, minutes_to_hhmm(minute), category)",
+  "new": "self._commit_new_block(0, minutes_to_hhmm(minute), category)",
   "test": "desktop/tests/test_context_menu.py::test_add_fixed_time_opens_the_sheet_on_that_day_at_that_time"
  },
  {

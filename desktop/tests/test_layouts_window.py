@@ -1011,6 +1011,38 @@ def test_every_layout_leaves_the_window_fitting_a_laptop(qapp: QApplication, win
     assert {name: size for name, size in sizes.items() if size[0] > 1366 or size[1] > 768} == {}
 
 
+def test_every_layout_fits_a_laptop_at_large_text_once_signed_in(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """The sign-in card is held at the height of its tallest page, Create or Reset. Held while the page
+    was hidden, it made Retro's window 782 px tall at Large text after signing in, past a 768 px laptop.
+    Back on the sign-in page the card is held again, so nothing jumps between its pages (#74)."""
+    from desktop.native.look import sanitize_look
+
+    knobs = {**window._look.get("knobs", {}), "text": "large"}
+    window._look = sanitize_look({**window._look, "knobs": knobs})
+    window._apply_appearance()
+    qapp.processEvents()
+    tall = {}
+    for layout_id, spec in LAYOUTS.items():
+        if layout_id not in VIEW_CLASSES:
+            continue
+        window._day_mode = spec.role == "day"
+        main = layout_id if spec.role == "plan" else "classic"
+        window._layout = {"main": main, "day": "dial", "options": {}}
+        if spec.role == "day":
+            window._layout["day"] = layout_id
+        window._on_week()
+        qapp.processEvents()
+        height = window.minimumSizeHint().height()
+        if height > 768:
+            tall[layout_id] = height
+    assert tall == {}
+    window._show_page("authPage")
+    qapp.processEvents()
+    assert window._auth_holder.minimumHeight() > window._auth_card.sizeHint().height()
+
+
 def test_the_dialog_fits_a_laptop_with_every_level_open(qapp: QApplication) -> None:
     busiest = {
         "main": "timeline",
