@@ -702,55 +702,6 @@ pub fn copy_label(block: &Value, source_day: &Value, scope: &Value) -> EngineRes
     Ok(title)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_plan_starts_at_the_next_quarter_hour() {
-        assert_eq!(
-            plan_start_at("2026-09-21", "2026-09-21", 10, 30, 0, 0).unwrap(),
-            Some((0, 630))
-        );
-        assert_eq!(
-            plan_start_at("2026-09-21", "2026-09-21", 10, 31, 0, 0).unwrap(),
-            Some((0, 645))
-        );
-        assert_eq!(
-            plan_start_at("2026-09-21", "2026-09-24", 9, 0, 0, 1).unwrap(),
-            Some((3, 555))
-        );
-    }
-
-    #[test]
-    fn a_half_minute_counts_as_a_whole_one() {
-        assert_eq!(
-            plan_start_at("2026-09-21", "2026-09-21", 10, 30, 30, 0).unwrap(),
-            Some((0, 645))
-        );
-    }
-
-    #[test]
-    fn a_plan_that_starts_after_midnight_starts_the_next_day() {
-        assert_eq!(
-            plan_start_at("2026-09-21", "2026-09-21", 23, 59, 30, 0).unwrap(),
-            Some((1, 0))
-        );
-        assert_eq!(
-            plan_start_at("2026-09-21", "2026-09-27", 23, 50, 0, 0).unwrap(),
-            Some((7, 0))
-        );
-    }
-
-    #[test]
-    fn a_week_still_ahead_has_no_start() {
-        assert_eq!(
-            plan_start_at("2026-09-28", "2026-09-27", 10, 0, 0, 0).unwrap(),
-            None
-        );
-    }
-}
-
 fn ceil_slot(minutes: i64) -> i64 {
     (minutes.max(0) + SLOT_MIN - 1) / SLOT_MIN * SLOT_MIN
 }
@@ -860,4 +811,53 @@ pub fn fair_share(
         }
     }
     Ok((out, notes))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_plan_starts_at_the_next_quarter_hour() {
+        assert_eq!(
+            plan_start_at("2026-09-21", "2026-09-21", 10, 30, 0, 0).unwrap(),
+            Some((0, 630))
+        );
+        assert_eq!(
+            plan_start_at("2026-09-21", "2026-09-21", 10, 31, 0, 0).unwrap(),
+            Some((0, 645))
+        );
+        assert_eq!(
+            plan_start_at("2026-09-21", "2026-09-24", 9, 0, 0, 1).unwrap(),
+            Some((3, 555))
+        );
+    }
+
+    #[test]
+    fn a_half_minute_counts_as_a_whole_one() {
+        assert_eq!(
+            plan_start_at("2026-09-21", "2026-09-21", 10, 30, 30, 0).unwrap(),
+            Some((0, 645))
+        );
+    }
+
+    #[test]
+    fn a_plan_that_starts_after_midnight_starts_the_next_day() {
+        assert_eq!(
+            plan_start_at("2026-09-21", "2026-09-21", 23, 59, 30, 0).unwrap(),
+            Some((1, 0))
+        );
+        assert_eq!(
+            plan_start_at("2026-09-21", "2026-09-27", 23, 50, 0, 0).unwrap(),
+            Some((7, 0))
+        );
+    }
+
+    #[test]
+    fn a_week_still_ahead_has_no_start() {
+        assert_eq!(
+            plan_start_at("2026-09-28", "2026-09-27", 10, 0, 0, 0).unwrap(),
+            None
+        );
+    }
 }
