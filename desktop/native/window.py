@@ -2265,7 +2265,7 @@ class NativeWindow(QMainWindow):
         if self._setup_prefs or self._setup_work_windows is not None or self._setup_week:
             # The account's preferences may only now have arrived, and what setup kept before they did,
             # a skip included, is written with them.
-            QTimer.singleShot(0, self._flush_setup)
+            QTimer.singleShot(0, self, self._flush_setup)
         on_focus = self._stack.currentWidget() is self.focus_screen
         # Settings stays built between opens, so whether it is on screen is the question, not whether
         # it exists.
@@ -2499,7 +2499,7 @@ class NativeWindow(QMainWindow):
             QTimer.singleShot(0, lambda: self._move_to_date(dated))
         if not busy and (self._setup_prefs or self._setup_work_windows is not None or self._setup_week):
             # A moment later, so a plan that finished just now saves its week before setup writes.
-            QTimer.singleShot(0, self._flush_setup)
+            QTimer.singleShot(0, self, self._flush_setup)
 
     def _leave_greyed_button(self) -> None:
         """A button greyed with the keyboard on it hands the keyboard to the next one along, such as the
@@ -2842,7 +2842,7 @@ class NativeWindow(QMainWindow):
         ):
             return
         self._block_prepare_scheduled = True
-        QTimer.singleShot(0, self._prepare_block_spare)
+        QTimer.singleShot(0, self, self._prepare_block_spare)
 
     def _prepare_block_spare(self) -> None:
         self._block_prepare_scheduled = False
@@ -4265,7 +4265,7 @@ class NativeWindow(QMainWindow):
         ):
             return
         self._settings_prepare_scheduled = True
-        QTimer.singleShot(0, self._prepare_settings_page)
+        QTimer.singleShot(0, self, self._prepare_settings_page)
 
     def _prepare_settings_page(self) -> None:
         self._settings_prepare_scheduled = False

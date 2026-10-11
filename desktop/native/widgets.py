@@ -2816,7 +2816,7 @@ class Dialog(QDialog):
             child.setUpdatesEnabled(False)
             frozen.append(child)
         self._frozen = frozen
-        QTimer.singleShot(0, self._thaw_when_settled)
+        QTimer.singleShot(0, self, self._thaw_when_settled)
 
     def _thaw_when_settled(self) -> None:
         if not isValid(self):
