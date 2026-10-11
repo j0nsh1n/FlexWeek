@@ -1,7 +1,6 @@
-//! Item 1c, part C: work due after this Sunday gets a fair share of this week, and the rest waits
-//! for next week's Plan.
+//! P1 keeps the homework estimate intact while sharing only work due beyond the coming week.
 
-use flexweek_engine::desk::planning::fair_share;
+use flexweek_engine::desk::planning::{fair_share, open_rest_sessions, time_still_needed};
 use serde_json::{Map, Value, json};
 
 const WEEK: &str = "2026-10-05"; // Monday
@@ -41,23 +40,17 @@ fn share(
 }
 
 #[test]
-fn due_next_wednesday_planned_on_saturday_gets_two_of_its_four_days() {
-    // Sat and Sun this week, Mon and Tue next week: 2 h over 4 days is 1 h this week.
+fn due_next_wednesday_planned_on_saturday_stays_whole_within_seven_days() {
     let (blocks, notes) = share(&[session("s1", 120)], "2026-10-14T23:59", 120, 5, &["s1"]);
-    assert_eq!(blocks[0]["duration_min"], json!(60));
-    assert_eq!(
-        notes,
-        vec![
-            json!({"assignment_id": "sci", "title": "Science project", "this_week_min": 60, "left_min": 60})
-        ]
-    );
+    assert_eq!(blocks[0]["duration_min"], json!(120));
+    assert!(notes.is_empty());
 }
 
 #[test]
-fn the_share_rounds_up_to_the_quarter_hour() {
-    // Monday plan, due Wednesday next week: 7 of 9 days, 105 min * 7 / 9 = 81.7, so 90.
-    let (blocks, _) = share(&[session("s1", 105)], "2026-10-14T23:59", 105, 0, &["s1"]);
+fn due_wednesday_after_next_week_gets_a_fair_share() {
+    let (blocks, notes) = share(&[session("s1", 105)], "2026-10-14T23:59", 105, 0, &["s1"]);
     assert_eq!(blocks[0]["duration_min"], json!(90));
+    assert_eq!(notes[0]["left_min"], json!(15));
 }
 
 #[test]
@@ -76,7 +69,7 @@ fn due_next_monday_keeps_all_of_it_this_week() {
 }
 
 #[test]
-fn time_already_held_this_week_counts_toward_the_share() {
+fn homework_due_within_seven_days_keeps_its_unplaced_session_with_existing_time() {
     let mut held = session("held", 45);
     held["start"] = json!("16:00");
     held["days"] = json!([5]);
@@ -87,12 +80,12 @@ fn time_already_held_this_week_counts_toward_the_share() {
         5,
         &["s1"],
     );
-    assert_eq!(blocks[1]["duration_min"], json!(15));
-    assert_eq!(notes[0]["this_week_min"], json!(60));
+    assert_eq!(blocks[1]["duration_min"], json!(75));
+    assert!(notes.is_empty());
 }
 
 #[test]
-fn a_session_with_no_share_left_leaves_the_week() {
+fn homework_due_within_seven_days_is_not_removed_when_another_session_is_held() {
     let mut held = session("held", 60);
     held["start"] = json!("16:00");
     let (blocks, notes) = share(
@@ -102,14 +95,8 @@ fn a_session_with_no_share_left_leaves_the_week() {
         5,
         &["s1"],
     );
-    assert_eq!(
-        blocks
-            .iter()
-            .map(|b| b["id"].as_str().unwrap())
-            .collect::<Vec<_>>(),
-        vec!["held"]
-    );
-    assert_eq!(notes[0]["left_min"], json!(60));
+    assert_eq!(blocks.len(), 2);
+    assert!(notes.is_empty());
 }
 
 #[test]
@@ -117,4 +104,34 @@ fn planning_again_does_not_shrink_it_further() {
     // The first plan left a 60 min session; the second plan is worked out from the 120 min left.
     let (blocks, _) = share(&[session("s1", 60)], "2026-10-14T23:59", 120, 5, &["s1"]);
     assert_eq!(blocks[0]["duration_min"], json!(60));
+}
+
+#[test]
+fn open_rest_adds_one_idempotent_session_for_homework_due_after_this_week() {
+    let mut assignments = science("2026-10-14T23:59", 120);
+    assignments["sci"]["unplanned_min"] = json!(120);
+    let first = open_rest_sessions(&[], &assignments, WEEK).unwrap();
+    assert_eq!(first.len(), 1);
+    assert_eq!(first[0]["duration_min"], json!(120));
+    assert_eq!(
+        open_rest_sessions(&first, &assignments, WEEK).unwrap(),
+        first
+    );
+}
+
+#[test]
+fn time_still_needed_reports_the_open_session_amount() {
+    let mut assignments = science("2026-10-14T23:59", 120);
+    assignments["sci"]["unplanned_min"] = json!(0);
+    let counts = time_still_needed(&assignments, &[session("s1", 120)], WEEK).unwrap();
+    assert_eq!(counts[0]["minutes"], json!(120));
+    assert_eq!(counts[0]["period"], json!("later"));
+}
+
+#[test]
+fn time_still_needed_adds_unplanned_minutes_and_open_week_remainder() {
+    let mut assignments = science("2026-10-14T23:59", 120);
+    assignments["sci"]["unplanned_min"] = json!(60);
+    let counts = time_still_needed(&assignments, &[session("s1", 30)], WEEK).unwrap();
+    assert_eq!(counts[0]["minutes"], json!(90));
 }

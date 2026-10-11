@@ -340,6 +340,111 @@ pub fn solve_request(
     Ok((payload, targets))
 }
 
+/// Add one open session for homework with time remaining and no open session in this week.
+/// The deterministic id makes applying the operation repeatedly safe.
+pub fn open_rest_sessions(
+    blocks: &[Value],
+    assignments: &serde_json::Map<String, Value>,
+    week_start: &str,
+) -> EngineResult<Vec<Value>> {
+    let monday = from_iso(week_start)?;
+    let mut out = blocks.to_vec();
+    for (id, assignment) in assignments {
+        if truthy(get(assignment, "completed")?)
+            || int_of(&or_default(get(assignment, "unplanned_min")?, json!(0)))? <= 0
+        {
+            continue;
+        }
+        let Some(due) = assignment.get("due").and_then(Value::as_str) else {
+            continue;
+        };
+        if crate::model::parse_due(due)?.0 < monday {
+            continue;
+        }
+        let has_open = out.iter().any(|block| {
+            block.get("assignment_id").and_then(Value::as_str) == Some(id)
+                && !truthy(block.get("start"))
+                && !block
+                    .get("completed")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+        });
+        if has_open {
+            continue;
+        }
+        let minutes = floor_slot(int_of(subscript(assignment, "unplanned_min")?)?);
+        if minutes < SLOT_MIN {
+            continue;
+        }
+        let due = subscript(assignment, "due")?;
+        out.push(json!({
+            "id": format!("{id}-rest-{week_start}"),
+            "kind": "flexible",
+            "assignment_id": id,
+            "title": assignment.get("title").cloned().unwrap_or(Value::Null),
+            "duration_min": minutes,
+            "days": session_days(week_start, due)?,
+            "priority": assignment.get("priority").cloned().unwrap_or(json!(2)),
+            "energy": assignment.get("energy").cloned().unwrap_or(json!("medium")),
+            "completed": false
+        }));
+    }
+    Ok(out)
+}
+
+/// Count homework time that still needs a time, grouped by deadline week relative to this week.
+pub fn time_still_needed(
+    assignments: &serde_json::Map<String, Value>,
+    open_week_blocks: &[Value],
+    week_start: &str,
+) -> EngineResult<Vec<Value>> {
+    let monday = from_iso(week_start)?;
+    let mut result = Vec::new();
+    for (id, assignment) in assignments {
+        if truthy(get(assignment, "completed")?) {
+            continue;
+        }
+        let waiting: i64 = open_week_blocks
+            .iter()
+            .filter(|block| {
+                block.get("assignment_id").and_then(Value::as_str) == Some(id)
+                    && !truthy(block.get("start"))
+                    && !block
+                        .get("completed")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false)
+            })
+            .map(|block| {
+                block
+                    .get("duration_min")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0)
+            })
+            .sum();
+        let unplanned = int_of(&or_default(get(assignment, "unplanned_min")?, json!(0)))?;
+        let minutes = floor_slot(unplanned + waiting);
+        if minutes == 0 {
+            continue;
+        }
+        let due = assignment.get("due").and_then(Value::as_str);
+        let offset = due
+            .map(|text| crate::model::parse_due(text).map(|(day, _)| (day - monday).num_days()))
+            .transpose()?;
+        let period = match offset {
+            Some(day) if day < 0 => "earlier",
+            Some(day) if day <= 6 => "this_week",
+            _ => "later",
+        };
+        result.push(json!({
+            "assignment_id": id,
+            "title": assignment.get("title").cloned().unwrap_or(Value::Null),
+            "minutes": minutes,
+            "period": period
+        }));
+    }
+    Ok(result)
+}
+
 pub fn due_point(due: &Value, week_start: &str) -> EngineResult<Option<(i64, i64)>> {
     if !truthy(Some(due)) {
         return Ok(None);
@@ -706,13 +811,7 @@ fn ceil_slot(minutes: i64) -> i64 {
     (minutes.max(0) + SLOT_MIN - 1) / SLOT_MIN * SLOT_MIN
 }
 
-/// Item 1c, part C: homework due after this Sunday gets only a fair share of this week. The share is
-/// the minutes it has left from this week on, times the days left in this week from `first_day`,
-/// over the days from `first_day` to its due day; the rest waits for next week's Plan. Worked out from
-/// what is left, not from the session, so planning again never shrinks it further. The `targets`
-/// sessions Plan is about to place are cut to fit the share after any time it already has this week;
-/// one with nothing left to hold is taken out of the week. Returns the week's blocks and, for each
-/// homework cut, `{assignment_id, title, this_week_min, left_min}`.
+/// Keep homework due within seven days whole. Farther deadlines may receive a fair share.
 pub fn fair_share(
     blocks: &[Value],
     assignments: &serde_json::Map<String, Value>,
@@ -754,7 +853,7 @@ pub fn fair_share(
             continue;
         };
         let due_offset = (crate::model::parse_due(due)?.0 - monday).num_days();
-        if due_offset <= 6 {
+        if due_offset - first_day.clamp(0, 6) <= 7 {
             continue;
         }
         let left = available_homework_minutes(assignment, &json!([]), committed)?;
@@ -802,11 +901,28 @@ pub fn fair_share(
         }
         out = kept;
         if cut {
+            let remainder = (left - placed).max(0);
+            if remainder >= SLOT_MIN {
+                let rest_id = format!("{homework}-rest-{week_start}");
+                out.retain(|block| id_of(block).as_deref() != Some(rest_id.as_str()));
+                let due = subscript(assignment, "due")?;
+                out.push(json!({
+                    "id": rest_id,
+                    "title": assignment.get("title").cloned().unwrap_or(Value::Null),
+                    "kind": "flexible",
+                    "assignment_id": homework,
+                    "duration_min": remainder,
+                    "days": session_days(week_start, due)?,
+                    "priority": assignment.get("priority").cloned().unwrap_or(json!(2)),
+                    "energy": assignment.get("energy").cloned().unwrap_or(json!("medium")),
+                    "completed": false
+                }));
+            }
             notes.push(json!({
                 "assignment_id": homework,
                 "title": assignment.get("title").cloned().unwrap_or(Value::Null),
                 "this_week_min": placed,
-                "left_min": (left - placed).max(0),
+                "left_min": remainder,
             }));
         }
     }
