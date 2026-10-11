@@ -2365,11 +2365,11 @@ class NativeWindow(QMainWindow):
             self._fill_unfinished(prompt)
             self._unfinished_introduced = True
             self.unfinished_badge.hide()
-        elif self.session.homework_time_needed() and not self._unfinished_introduced:
+        elif self.session.homework_time_needed_elsewhere() and not self._unfinished_introduced:
             self._unfinished_opened = False
             self.unfinished_panel.hide()
             self._sync_unfinished_badge(items)
-        elif (items or self.session.homework_time_needed()) and self._unfinished_introduced:
+        elif (items or self.session.homework_time_needed_elsewhere()) and self._unfinished_introduced:
             if self._unfinished_opened and not self.unfinished_panel.isHidden():
                 self._fill_unfinished(items)
             else:
@@ -3766,7 +3766,7 @@ class NativeWindow(QMainWindow):
             return
 
     def _sync_unfinished_badge(self, items: list[dict]) -> None:
-        count = len(self.session.homework_time_needed())
+        count = len(self.session.homework_time_needed_elsewhere())
         self.unfinished_badge.setText(
             f"Unfinished homework · {count} item{'s' if count != 1 else ''}"
         )

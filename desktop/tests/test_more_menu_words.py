@@ -266,6 +266,26 @@ def test_more_badge_counts_open_homework_before_an_earlier_week_prompt(
     assert window.unfinished_badge.text() == "Unfinished homework · 1 item"
 
 
+def test_more_badge_leaves_out_work_due_this_week_that_the_rail_already_lists(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    """Work due this week with a chip in Not placed yet is counted there. A bar above the hours for it
+    came and went with each chip, moving the week under the pointer."""
+    session = window.session
+    due = (date.fromisoformat(session.week_start) + timedelta(days=6)).isoformat() + "T23:59"
+    session.add_homework(
+        {"id": "math", "title": "Math", "estimate_min": 60, "revision": 0, "due": due}
+    )
+    session.save()
+    settled(qapp, window)
+    window._unfinished_introduced = False
+    window._on_week()
+    assert [item["assignment_id"] for item in session.homework_time_needed()] == ["math"]
+    assert not window.unfinished_badge.isVisibleTo(window)
+    assert window.rail.waiting_count.text() == "1"
+
+
 def test_unfinished_is_greyed_when_every_item_is_not_yet_overdue(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
