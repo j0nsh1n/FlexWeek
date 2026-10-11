@@ -135,8 +135,8 @@ from desktop.native.look import (
     FOCUS_GAP_PX,
     FOCUS_RING_PX,
     RING_BUTTONS,
+    readable_edge,
     resolved_palette,
-    switch_track_edge,
 )
 from desktop.native.menus import Menu
 from desktop.native.motion import (
@@ -170,9 +170,17 @@ from desktop.native.tokens import (
     WEIGHT_REGULAR,
     WEIGHT_STRONG,
     Shadow,
+    fit_lightness,
     type_pt,
 )
-from desktop.native.weekmodel import clock_text, due_label, end_after_start_words, hhmm_text, length_label
+from desktop.native.weekmodel import (
+    clock_text,
+    due_label,
+    end_after_start_words,
+    hhmm_text,
+    length_label,
+    range_label,
+)
 
 # Meals first: 18:00–19:30 sits inside the afternoon activity window.
 _MEAL_WINDOWS = ((7 * 60, 8 * 60), (12 * 60, 13 * 60), (18 * 60, 19 * 60 + 30))
@@ -1510,11 +1518,16 @@ def _art_file(shape: str, colour: str) -> str:
     return path.as_posix()
 
 
-def _switch_file(on: bool, track: str, knob: str) -> str:
+def _switch_file(on: bool, track: str, knob: str, outline: str | None = None) -> str:
     """A switch's pill and knob as one image, the knob at the right when on. Drawn at twice the
     34 by 20 the style sheet shows it."""
     folder = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.CacheLocation))
-    names = (QColor(track).name()[1:], QColor(knob).name()[1:], "on" if on else "off")
+    names = (
+        QColor(track).name()[1:],
+        QColor(knob).name()[1:],
+        QColor(outline).name()[1:] if outline else "plain",
+        "on" if on else "off",
+    )
     path = folder / f"flexweek-switch-{'-'.join(names)}.png"
     if not path.is_file():
         folder.mkdir(parents=True, exist_ok=True)
@@ -1525,6 +1538,12 @@ def _switch_file(on: bool, track: str, knob: str) -> str:
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(track))
         painter.drawRoundedRect(0, 0, 68, 40, 20, 20)
+        if outline:
+            pen = QPen(QColor(outline), 4)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(QRectF(2, 2, 64, 36), 18, 18)
+            painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(knob))
         painter.drawEllipse(32 if on else 4, 4, 32, 32)
         painter.end()
@@ -1546,15 +1565,16 @@ def control_art(palette: dict) -> dict[str, str]:
     """The images the control rules in `pack_stylesheet` draw with: a tick in the accent's ink,
     chevrons for dropdowns and steppers in the muted ink, a switch on, off and greyed, and the
     chevron after More in the text colour."""
+    off_outline = readable_edge(palette)
     return {
         "more": _icon_file("chevron-down", palette["text"]),
         "tick": _art_file("tick", palette["accent_ink"]),
         "down": _art_file("down", palette["muted"]),
         "up": _art_file("up", palette["muted"]),
         "switch_on": _switch_file(True, palette["accent"], palette["accent_ink"]),
-        "switch_off": _switch_file(False, switch_track_edge(palette), "#ffffff"),
-        "switch_on_off": _switch_file(True, palette["hairline_strong"], palette["hairline"]),
-        "switch_off_off": _switch_file(False, palette["hairline"], palette["hairline_strong"]),
+        "switch_off": _switch_file(False, palette["panel"], off_outline, off_outline),
+        "switch_on_off": _switch_file(True, palette["panel"], off_outline, off_outline),
+        "switch_off_off": _switch_file(False, palette["panel"], off_outline, off_outline),
     }
 
 
@@ -5145,7 +5165,8 @@ class LateDialog(Dialog):
         layout.addWidget(
             sheet_note("Say how late you are and preview what moves. Nothing changes until you accept it.")
         )
-        layout.addWidget(QLabel(context))
+        self.context = QLabel(context)
+        layout.addWidget(self.context)
         self.minutes = QComboBox()
         self.minutes.setObjectName("lateMinutes")
         for value in LATE_MINUTES:
@@ -5199,30 +5220,89 @@ class LateDialog(Dialog):
 
     def show_trace(self, trace: dict, titles: dict[str, str]) -> None:
         self.changes.clear()
+        details = {
+            block["id"]: block
+            for block in [*(trace.get("placed") or []), *(trace.get("unplaced") or [])]
+        }
         for move in trace.get("moves") or []:
-            self.changes.addItem(f"{titles.get(move['block_id'], move['block_id'])}: {_late_move(move)}")
+            block = details.get(move["block_id"], {})
+            title = titles.get(move["block_id"], move["block_id"])
+            item = QListWidgetItem()
+            item.setText(_late_move(move, block, title))
+            item.setData(Qt.ItemDataRole.AccessibleTextRole, _late_move_words(move, block, title))
+            self.changes.addItem(item)
+            label = QLabel()
+            label.setTextFormat(Qt.TextFormat.RichText)
+            background = self.palette().color(QPalette.ColorRole.Base).name()
+            muted = fit_lightness(self.palette().color(QPalette.ColorRole.Mid).name(), (background,), 4.5)
+            label.setText(_late_move_markup(move, block, muted))
+            self.changes.setItemWidget(item, label)
         for block in trace.get("unplaced") or []:
             self.changes.addItem(block["title"] + " no longer fits and will stay on the task list.")
         if self.changes.count() == 0:
             self.changes.addItem("No homework needs to move.")
         moved = len(trace.get("moves") or [])
         unplaced = len(trace.get("unplaced") or [])
-        self.summary.setText(f"{moved} tasks move · {unplaced} tasks no longer fit")
+        summary = _late_summary(moved, unplaced)
+        self.summary.setText(summary)
+        self.summary.setAccessibleName(summary)
         self.summary.setVisible(True)
+        announce(self.summary, summary)
         self.changes.setVisible(True)
         self.accept_button.setEnabled(True)
         self.minutes.setEnabled(False)
 
 
-def _late_move(move: dict) -> str:
+def _late_summary(moved: int, unplaced: int) -> str:
+    parts = []
+    if moved:
+        parts.append(f"{moved} task{'s' if moved != 1 else ''} {'moves' if moved == 1 else 'move'}")
+    if unplaced:
+        noun = "task" if unplaced == 1 else "tasks"
+        verb = "no longer fits" if unplaced == 1 else "no longer fit"
+        parts.append(f"{unplaced} {noun} {verb}")
+    return " · ".join(parts) or "Nothing needs to move."
+
+
+def _late_move(move: dict, block: dict, title: str) -> str:
     was, now = move.get("from_start"), move.get("to_start")
-    if was and now:
-        return f"from {hhmm_text(was)} to {hhmm_text(now)}"
+    duration = int(block.get("duration_min") or 0)
+    old_day, new_day = move.get("from_day"), move.get("to_day")
+    if was and now and old_day is not None and new_day is not None:
+        old = range_label(hhmm_to_minutes(was), hhmm_to_minutes(was) + duration)
+        new = range_label(hhmm_to_minutes(now), hhmm_to_minutes(now) + duration)
+        return f"{DAY_FULL[old_day][:3]} {old} → {DAY_FULL[new_day][:3]} {new}"
+    if now and was:
+        return f"{title}: from {hhmm_text(was)} to {hhmm_text(now)}"
     if now:
-        return f"placed at {hhmm_text(now)}"
+        return f"{title}: placed at {hhmm_text(now)}"
     if was:
-        return f"moves off {hhmm_text(was)} and is not placed"
-    return "not placed"
+        return f"{title}: moves off {hhmm_text(was)} and is not placed"
+    return f"{title}: not placed"
+
+
+def _late_move_words(move: dict, block: dict, title: str) -> str:
+    was, now = move.get("from_start"), move.get("to_start")
+    duration = int(block.get("duration_min") or 0)
+    old_day, new_day = move.get("from_day"), move.get("to_day")
+    if was and now and old_day is not None and new_day is not None:
+        old = range_label(hhmm_to_minutes(was), hhmm_to_minutes(was) + duration).replace("–", " to ")
+        new = range_label(hhmm_to_minutes(now), hhmm_to_minutes(now) + duration).replace("–", " to ")
+        day_change = " different day" if old_day != new_day else ""
+        return f"{title}, moves from {DAY_FULL[old_day]} {old} to {DAY_FULL[new_day]} {new}{day_change}"
+    return f"{title}, moved to {now or was or 'no time'}"
+
+
+def _late_move_markup(move: dict, block: dict, muted: str) -> str:
+    was, now = move.get("from_start"), move.get("to_start")
+    old_day, new_day = move.get("from_day"), move.get("to_day")
+    duration = int(block.get("duration_min") or 0)
+    if not was or not now or old_day is None or new_day is None:
+        return _late_move(move, block, "")
+    old = range_label(hhmm_to_minutes(was), hhmm_to_minutes(was) + duration)
+    new = range_label(hhmm_to_minutes(now), hhmm_to_minutes(now) + duration)
+    to_day = f"<b>{DAY_FULL[new_day][:3]}</b>" if old_day != new_day else DAY_FULL[new_day][:3]
+    return f'<span style="color:{muted}">{DAY_FULL[old_day][:3]} {old}</span> → {to_day} {new}'
 
 
 class SpreadDialog(Dialog):

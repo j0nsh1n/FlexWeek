@@ -13,6 +13,7 @@ from itertools import product
 from math import dist
 
 import pytest
+from PySide6.QtGui import QImage
 
 import desktop.native.look as look_module
 from desktop.native.calendar import CATEGORIES
@@ -52,9 +53,12 @@ from desktop.native.look import (
     resolved_palette,
     sanitize_look,
     settings_rules,
+    setup_rules,
     switch_track_edge,
 )
 from desktop.native.tokens import SINK, TEXT_SCALE, mix_oklab, oklab, oklch_of
+from desktop.native.widgets import control_art
+from desktop.tests.window_support import qapp  # noqa: F401
 
 # Every look a student can reach: pack, the device's light or dark setting, preset, accent, surface.
 EVERY_LOOK = list(product(PACKS, (False, True), LOOK_PRESETS, ACCENTS, LOOK_KNOBS["surface"]))
@@ -99,6 +103,62 @@ def test_control_edges_have_three_to_one_contrast(preset: str, system_dark: bool
     assert f"border: 2px solid {focus}" in control_rules(palette, 6, "normal", switch_art)
     switch_grounds = (palette["field"], palette["panel"], palette["window"])
     assert min(contrast(switch_edge, ground) for ground in switch_grounds) >= 3
+
+
+def test_control_edges_hold_for_every_pack_preset_system_mode_and_design(qapp) -> None:  # noqa: F811
+    designs = (
+        "today's app", "Retro", "Clay", "Bento", "Mission", "Timeline", "Day dial", "One thing"
+    )
+    art = {
+        "tick": "tick",
+        "down": "down",
+        "up": "up",
+        "switch_off": "off",
+        "switch_on": "on",
+        "switch_off_off": "off-disabled",
+        "switch_on_off": "on-disabled",
+    }
+    for pack, preset, system_dark, design in product(PACKS, LOOK_PRESETS, (False, True), designs):
+        look = look_of(preset)
+        palette = resolved_palette(pack, system_dark, look)
+        field, card = palette["field"], palette["panel"]
+        resting, focus = readable_edge(palette), readable_focus_edge(palette)
+        case = f"{pack}/{preset}/{'dark' if system_dark else 'light'}/{design}"
+        assert min(contrast(resting, ground) for ground in (field, card)) >= AA_GRAPHIC, case
+        assert min(contrast(focus, ground) for ground in (field, card)) >= AA_GRAPHIC, case
+        if preset != "high-contrast":
+            assert min(contrast(focus, ground) for ground in (field, card)) > min(
+                contrast(resting, ground) for ground in (field, card)
+            ), case
+
+        sheet = pack_stylesheet(pack, system_dark, look, art=art)
+        setup = setup_rules(palette, 8, "normal", 8, effective_look(look)["depth"])
+        assert f"border: 1px solid {resting}" in sheet, case
+        assert f"border: 2px solid {focus}" in sheet, case
+        assert f"border: 1px solid {resting}" in setup, case
+        assert f"border: 2px solid {focus}; padding: 3px 11px" in setup, case
+        assert f"{focus}" in setup and 'QPushButton[pill="true"]:focus' in setup, case
+        assert "QPushButton#setupChip:focus" in setup and "QPushButton#setupStudyChip:focus" in setup, case
+        assert f"border-color: {palette['accent']}" in setup, case
+
+        switch = control_art(palette)
+        off = QImage(switch["switch_off"])
+        off_disabled = QImage(switch["switch_off_off"])
+        on_disabled = QImage(switch["switch_on_off"])
+        assert off.pixelColor(60, 20).name() == card.lower(), (case, "off track")
+        for image in (off, off_disabled):
+            track = image.pixelColor(60, 20).name()
+            edge = image.pixelColor(34, 2).name()
+            knob = image.pixelColor(20, 20).name()
+            assert contrast(edge, card) >= AA_GRAPHIC, (case, "off outline", edge, card)
+            assert contrast(edge, track) >= AA_GRAPHIC, (case, "off outline on track", edge, track)
+            assert contrast(knob, track) >= AA_GRAPHIC, (case, "off knob", knob, track)
+        disabled_track = on_disabled.pixelColor(8, 20).name()
+        disabled_edge = on_disabled.pixelColor(34, 2).name()
+        disabled_knob = on_disabled.pixelColor(48, 20).name()
+        assert contrast(disabled_edge, card) >= AA_GRAPHIC, (case, "disabled on outline")
+        assert contrast(disabled_edge, disabled_track) >= AA_GRAPHIC, (case, "disabled on track outline")
+        assert contrast(disabled_knob, disabled_track) >= AA_GRAPHIC, (case, "disabled on knob")
 
 
 def test_look_measures_memoises_sanitize_look_per_look(monkeypatch: pytest.MonkeyPatch) -> None:

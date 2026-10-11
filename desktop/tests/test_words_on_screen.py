@@ -122,7 +122,7 @@ def test_cancelling_running_late_takes_its_preview_off_the_screen(
         dialog.show()
         dialog.preview_requested.emit()
         wait_until(qapp, lambda: session.late_preview is not None and not session.busy)
-        assert window.toast.text().endswith("tasks no longer fit")
+        assert window.toast.text() == "1 task moves"
         dialog.reject()
         return dialog.result()
 

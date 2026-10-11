@@ -147,7 +147,9 @@ pub fn range_label(start: i64, end: i64) -> String {
     }
     let (first, first_half) = twelve(start);
     let (last, last_half) = twelve(end);
-    if first_half == last_half {
+    // Midnight reads as AM, so "9–12 AM" would put the end of the day at the wrong end of the morning.
+    let ends_at_midnight = end >= 24 * 60 || end <= start;
+    if first_half == last_half && !ends_at_midnight {
         format!("{first}–{last} {last_half}")
     } else {
         format!("{first} {first_half}–{last} {last_half}")

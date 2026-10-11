@@ -14,7 +14,7 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, QRect, Qt
-from PySide6.QtGui import QHoverEvent
+from PySide6.QtGui import QColor, QHoverEvent, QImage, QPainter
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
     QApplication,
@@ -46,6 +46,7 @@ from desktop.native.feel import (
     set_current,
     title_bar_contrast_ok,
 )
+from desktop.native.layouts import retro
 from desktop.native.layouts.registry import MATCH, sanitize_layout, tokens_for
 from desktop.native.look import pack_stylesheet, resolved_palette, sanitize_look
 from desktop.native.motion import apply_ui_effects
@@ -59,6 +60,7 @@ from desktop.native.tokens import (
     TYPE_PT,
     WEIGHT_REGULAR,
     WEIGHT_STRONG,
+    contrast,
     type_pt,
 )
 from desktop.native.widgets import HomeworkDialog, control_art
@@ -407,6 +409,22 @@ def test_retro_settings_close_caption_closes_the_page(qapp: QApplication) -> Non
     assert closed == [True]
     free(page)
     free(host)
+
+
+def test_retro_bevel_replaces_unreadable_bottom_and_right_highlights() -> None:
+    colours = retro.Scheme(
+        face="#c0c0c0", light="#dfdfdf", hi="#ffffff", shadow="#808080", dark="#0a0a0a",
+        field="#ffffff", ink="#000000", tip="#ffffe1", folder="#f3d36b", rule="#e3e3e3",
+        desk="#008080", desk_ink="#ffffff", title="#000080", title_end="#0000ff",
+        title_ink="#ffffff", accent="#008080", danger="#ff0000",
+    )
+    image = QImage(12, 12, QImage.Format.Format_ARGB32)
+    image.fill(QColor("#ffffff"))
+    painter = QPainter(image)
+    retro.bevel(painter, QRect(1, 1, 10, 10), colours, "sunken", "#ffffff", "#333333")
+    painter.end()
+    assert contrast(image.pixelColor(10, 5).name(), "#ffffff") >= 3
+    assert contrast(image.pixelColor(5, 10).name(), "#ffffff") >= 3
 
 
 def test_retro_bevels_are_raised_and_sunken(qapp: QApplication) -> None:  # noqa: F811

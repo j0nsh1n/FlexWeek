@@ -72,121 +72,17 @@ KNOWN_RETRO = (
     "known failure (0l, reopened as 0l-R): Retro's BevelPane paints its bevel over the 2 px focus ring"
 )
 # Measured on 0.19.0 (0204dfe3) offscreen.
-KNOB_TODAY = {
-    "bento-dark",
-    "classic-dark",
-    "classic-high-contrast",
-    "classic-ink",
-    "classic-nocturne",
-    "classic-terminal",
-    "clay-dark",
-    "dial-dark",
-    "mission-dark",
-    "one-dark",
-    "retro-dark",
-    "timeline-dark",
-}
-CHIP_TODAY = {
-    "bento-dark",
-    "bento-light",
-    "classic-dark",
-    "classic-ink",
-    "classic-light",
-    "classic-nocturne",
-    "classic-pastel",
-    "classic-slate",
-    "classic-terminal",
-    "clay-dark",
-    "clay-light",
-    "dial-dark",
-    "dial-light",
-    "mission-dark",
-    "mission-light",
-    "one-dark",
-    "one-light",
-    "retro-light",
-    "timeline-dark",
-    "timeline-light",
-}
-FOCUS_TODAY = {"retro-light", "retro-dark"}
+KNOB_TODAY = set()
+CHIP_TODAY = set()
+FOCUS_TODAY = set()
 SLACK = 0.02  # 8-bit rounding of a colour that the look computed to exactly 3:1
 
 
 KNOWN_CHIP_FOCUS = "known failure (0l-R.1): a focused chip gets the 40 % button ring, not a 2 px accent ring"
 KNOWN_DISABLED = "known failure (0l-R.2): a disabled switch's outline falls under 3:1 on its card"
-CHIP_FOCUS_TODAY = {
-    "bento-dark",
-    "bento-light",
-    "classic-dark",
-    "classic-ink",
-    "classic-light",
-    "classic-nocturne",
-    "classic-paper",
-    "classic-pastel",
-    "classic-poster",
-    "classic-slate",
-    "classic-terminal",
-    "clay-dark",
-    "clay-light",
-    "dial-dark",
-    "dial-light",
-    "mission-dark",
-    "mission-light",
-    "one-dark",
-    "one-light",
-    "retro-dark",
-    "retro-light",
-    "timeline-dark",
-    "timeline-light",
-}
-DISABLED_OFF_TODAY = {
-    "bento-dark",
-    "bento-light",
-    "classic-dark",
-    "classic-ink",
-    "classic-light",
-    "classic-nocturne",
-    "classic-paper",
-    "classic-pastel",
-    "classic-slate",
-    "classic-terminal",
-    "clay-dark",
-    "clay-light",
-    "dial-dark",
-    "dial-light",
-    "mission-dark",
-    "mission-light",
-    "one-dark",
-    "one-light",
-    "retro-dark",
-    "retro-light",
-    "timeline-dark",
-    "timeline-light",
-}
-DISABLED_ON_TODAY = {
-    "bento-dark",
-    "bento-light",
-    "classic-dark",
-    "classic-ink",
-    "classic-light",
-    "classic-nocturne",
-    "classic-paper",
-    "classic-pastel",
-    "classic-slate",
-    "classic-terminal",
-    "clay-dark",
-    "clay-light",
-    "dial-dark",
-    "dial-light",
-    "mission-dark",
-    "mission-light",
-    "one-dark",
-    "one-light",
-    "retro-dark",
-    "retro-light",
-    "timeline-dark",
-    "timeline-light",
-}
+CHIP_FOCUS_TODAY = set()
+DISABLED_OFF_TODAY = set()
+DISABLED_ON_TODAY = set()
 
 
 def luminance(colour: QColor) -> float:
@@ -440,11 +336,13 @@ def off_switch(
     origin = switch.mapTo(window, QPoint(0, 0))
     image = window.grab().toImage()
     middle = origin.y() + box.center().y()
+    outline_x = box.left() + 1 if on else box.right() - 1
+    outline = pixel(image, QPoint(origin.x() + outline_x, middle))
     track = pixel(image, QPoint(origin.x() + box.left() + box.width() * 3 // 4, middle))
     card = pixel(image, QPoint(origin.x() + box.left() - 3, middle))
     knob = pixel(image, QPoint(origin.x() + box.left() + box.width() * 3 // 10, middle))
     try:
-        check(track, card, knob)
+        check(outline if check is track_on_card else track, card, knob)
     finally:
         switch.setEnabled(True)
         window._close_settings(save=False)

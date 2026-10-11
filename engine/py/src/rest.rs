@@ -187,6 +187,7 @@ fn spread_sessions(
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
+#[pyo3(signature = (blocks, deadlines, slack_deadlines, extra_occ, work_windows, clock, now_floor=None))]
 fn solve(
     py: Python<'_>,
     blocks: &str,
@@ -195,6 +196,7 @@ fn solve(
     extra_occ: Option<Vec<u128>>,
     work_windows: Option<&str>,
     clock: Py<PyAny>,
+    now_floor: Option<(i64, i64)>,
 ) -> PyResult<String> {
     guard(|| {
         let blocks = blocks_of(blocks)?;
@@ -206,6 +208,7 @@ fn solve(
                 extra_occ.as_deref(),
                 work.as_deref(),
                 Some(&overrides),
+                now_floor,
                 solver::SOLVE_BUDGET_MS,
                 elapsed,
             )
@@ -255,6 +258,7 @@ fn reschedule_after_miss(
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
+#[pyo3(signature = (blocks, day, minutes, from_start, previous_placed, deadlines, slack_deadlines, extra_occ, work_windows, clock, now_floor=None))]
 fn reschedule_running_late(
     py: Python<'_>,
     blocks: &str,
@@ -267,6 +271,7 @@ fn reschedule_running_late(
     extra_occ: Option<Vec<u128>>,
     work_windows: Option<&str>,
     clock: Py<PyAny>,
+    now_floor: Option<(i64, i64)>,
 ) -> PyResult<String> {
     guard(|| {
         let blocks = blocks_of(blocks)?;
@@ -284,6 +289,7 @@ fn reschedule_running_late(
                 extra_occ.as_deref(),
                 work.as_deref(),
                 Some(&overrides),
+                now_floor,
                 solver::SOLVE_BUDGET_MS,
                 elapsed,
             )

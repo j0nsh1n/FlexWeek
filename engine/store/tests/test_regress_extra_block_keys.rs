@@ -118,7 +118,6 @@ fn the_same_block_id_may_repeat_across_weeks_and_users() {
 }
 
 #[test]
-#[ignore = "known failure (no fix-specs item; Sammy's finding 6): store::save_week writes a block list that repeats an id; only Python's WeekRequest refuses it"]
 fn the_store_refuses_a_week_that_repeats_a_block_id() {
     let (conn, ann, _) = db("keys-dup-id");
     let doubled = format!(

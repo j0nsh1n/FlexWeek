@@ -47,7 +47,6 @@ def late(qapp, server, name: str, minutes: int, pinned: bool = False) -> tuple[d
     return block, placed, said
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN)
 @pytest.mark.parametrize("minutes", [15, 30, 60])
 def test_l12_the_running_block_shifts_by_the_delay_and_keeps_its_length(qapp, server, minutes) -> None:
     _block, placed, _said = late(qapp, server, f"l12_{minutes}", minutes)
@@ -56,7 +55,6 @@ def test_l12_the_running_block_shifts_by_the_delay_and_keeps_its_length(qapp, se
     assert (placed.get("days"), placed.get("start"), placed.get("duration_min")) == wanted, placed
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN)
 def test_l12_nothing_lands_before_now(qapp, server) -> None:
     _block, placed, _said = late(qapp, server, "l12_floor", 30)
     day = (placed.get("days") or [None])[0]
@@ -64,7 +62,6 @@ def test_l12_nothing_lands_before_now(qapp, server) -> None:
     assert day == 0 and hh * 60 + mm >= 17 * 60, placed
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_WORDS)
 def test_l12_the_preview_says_1_task_moves(qapp, server) -> None:
     _block, _placed, said = late(qapp, server, "l12_words", 30)
     assert said[-1].startswith("1 task moves"), said
@@ -76,7 +73,6 @@ KNOWN_PINNED = (
 )
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_PINNED)
 def test_l12_a_pinned_running_block_also_shifts_by_the_delay(qapp, server) -> None:
     """Rule 1 names no exception for a block the student placed by hand; left where it is, it overlaps
     the 17:00-17:30 late block."""

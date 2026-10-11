@@ -65,3 +65,30 @@ def test_running_late_starts_from_the_next_quarter_hour(
     said, asked = running_late_says(qapp, window, monkeypatch)
     assert said == f"Starting from {start_24 if twenty_four else start_12} today (Thursday)."
     assert asked == [from_start], "the preview is asked for the start the words name"
+
+
+def test_running_late_names_the_block_already_in_progress(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    window.session.preferences = {**(window.session.preferences or {}), "clock_24h": False}
+    hold_clock(window, THURSDAY, "17:00")
+    window.session.blocks = [
+        {
+            "id": "late-test",
+            "title": "Late test",
+            "kind": "flexible",
+            "duration_min": 60,
+            "days": [3],
+            "start": "16:45",
+            "pinned": False,
+        }
+    ]
+    contexts: list[str] = []
+
+    def inspect(dialog: LateDialog) -> int:
+        contexts.append(dialog.context.text())
+        return QDialog.DialogCode.Rejected
+
+    monkeypatch.setattr(LateDialog, "exec", inspect)
+    window._open_late()
+    assert contexts == ["Late test, 4:45 PM, moves 30 min later"]

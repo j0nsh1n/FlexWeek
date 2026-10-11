@@ -101,7 +101,6 @@ def test_t1_editor_opened_from_one_day_of_a_repeating_block_defaults_to_this_day
         free(dialog)
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_TW1)
 @pytest.mark.parametrize(("start", "mark"), [(9 * 60, "9 AM"), (11 * 60 + 30, "11:30 AM")])
 def test_tw1_a_range_ending_at_midnight_keeps_the_starts_mark(start, mark) -> None:
     """Only the start is asserted: "12 AM" vs "midnight" for the end is a 0.19.1 wording call."""

@@ -12,8 +12,8 @@ use flexweek_engine::desk::focus::{now_and_next, now_next_line};
 use flexweek_engine::desk::planning::late_locked_line;
 use flexweek_engine::desk::remind::due_reminders;
 use flexweek_engine::desk::weekmodel::{
-    added_words, clock_label, clock_text, due_label, hhmm_text, moved_words, set_clock_24h,
-    time_format,
+    added_words, clock_label, clock_text, due_label, hhmm_text, moved_words, range_label,
+    set_clock_24h, time_format,
 };
 use serde_json::{Value, json};
 
@@ -44,6 +44,29 @@ fn test_clock_text_on_both_clocks() {
         assert_eq!(clock_text(minute), on_12, "{minute} on the 12-hour clock");
         assert_eq!(clock_label(minute), on_12, "{minute} on the 12-hour clock");
     }
+}
+
+#[test]
+fn test_a_range_ending_at_midnight_keeps_both_marks() {
+    let _clock = clock_lock();
+    set_clock_24h(false);
+    for (start, end, words) in [
+        (9 * 60, 24 * 60, "9 AM–12 AM"),
+        (9 * 60, 0, "9 AM–12 AM"),
+        (23 * 60, 24 * 60, "11 PM–12 AM"),
+        (11 * 60 + 30, 24 * 60, "11:30 AM–12 AM"),
+        (21 * 60, 24 * 60, "9 PM–12 AM"),
+        (22 * 60, 2 * 60, "10 PM–2 AM"),
+        (22 * 60, 21 * 60, "10 PM–9 PM"),
+        (16 * 60, 17 * 60 + 30, "4–5:30 PM"),
+        (9 * 60, 11 * 60, "9–11 AM"),
+        (11 * 60, 12 * 60 + 30, "11 AM–12:30 PM"),
+    ] {
+        assert_eq!(range_label(start, end), words, "{start} to {end}");
+    }
+    set_clock_24h(true);
+    assert_eq!(range_label(9 * 60, 24 * 60), "09:00–24:00");
+    assert_eq!(range_label(9 * 60, 0), "09:00–00:00");
 }
 
 #[test]

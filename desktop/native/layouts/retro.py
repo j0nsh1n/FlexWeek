@@ -323,10 +323,19 @@ def frame_in(painter: QPainter, rect: QRect, top_left: QColor, bottom_right: QCo
     painter.fillRect(QRect(rect.right(), rect.top(), 1, rect.height()), bottom_right)
 
 
-def bevel(painter: QPainter, rect: QRect, colours: Scheme, kind: str) -> None:
+def bevel(
+    painter: QPainter,
+    rect: QRect,
+    colours: Scheme,
+    kind: str,
+    ground: str | None = None,
+    readable: str | None = None,
+) -> None:
     names = BEVELS[kind]
     for ring in range(len(names) // 2):
         light, dark = (QColor(getattr(colours, name)) for name in names[2 * ring : 2 * ring + 2])
+        if ground and readable and contrast(dark.name(), ground) < 3:
+            dark = QColor(readable)
         frame_in(painter, rect.adjusted(ring, ring, -ring, -ring), light, dark)
 
 

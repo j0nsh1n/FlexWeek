@@ -3793,7 +3793,33 @@ class NativeWindow(QMainWindow):
             minute = DAY_END_MIN - SLOT_MIN
         starting = now.replace(hour=minute // 60, minute=minute % 60, second=0, microsecond=0)
         from_start = late_from_start(minute)
-        dialog = LateDialog(self, f"Starting from {hhmm_text(from_start)} today ({DAY_FULL[now.weekday()]}).")
+        now_minute = now.hour * 60 + now.minute
+        running = next(
+            (
+                block
+                for block in self.session.blocks
+                if block.get("kind") == "flexible"
+                and not block.get("completed")
+                and block.get("start")
+                and now.weekday() in (block.get("days") or [])
+                and hhmm_to_minutes(block["start"]) <= now_minute
+                < hhmm_to_minutes(block["start"]) + int(block.get("duration_min") or 0)
+            ),
+            None,
+        )
+        context = (
+            f"{running['title']}, {hhmm_text(running['start'])}, moves 30 min later"
+            if running is not None
+            else f"Starting from {hhmm_text(from_start)} today ({DAY_FULL[now.weekday()]})."
+        )
+        dialog = LateDialog(self, context)
+        if running is not None:
+            dialog.minutes.currentIndexChanged.connect(
+                lambda _index: dialog.context.setText(
+                    f"{running['title']}, {hhmm_text(running['start'])}, moves "
+                    f"{dialog.chosen_minutes()} min later"
+                )
+            )
         dialog.preview_requested.connect(
             lambda: self.session.preview_running_late(dialog.chosen_minutes(), starting)
         )
