@@ -1,8 +1,10 @@
 //! Week rows. Python still encodes the block list and maps a conflict to HTTP.
 
+use std::collections::HashSet;
+
 use rusqlite::{Connection, OptionalExtension, params};
 
-use crate::{StoreResult, defer_write};
+use crate::{StoreError, StoreResult, defer_write};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum WeekSave {
@@ -18,7 +20,19 @@ pub fn list_account_weeks(conn: &Connection, user_id: i64) -> StoreResult<Vec<(S
     Ok(rows)
 }
 
-/// Missing row is stored text `"[]"` at revision 0, so an empty save does not insert.
+/// The first id that a block list uses twice. Text that is not a list of blocks has none to repeat.
+fn repeated_block_id(encoded: &str) -> Option<String> {
+    let blocks: Vec<serde_json::Value> = serde_json::from_str(encoded).ok()?;
+    let mut seen = HashSet::new();
+    blocks
+        .iter()
+        .filter_map(|block| block.get("id")?.as_str())
+        .find(|id| !seen.insert(*id))
+        .map(str::to_string)
+}
+
+/// Missing row is stored text `"[]"` at revision 0, so an empty save does not insert. A list that
+/// repeats a block id is refused before anything is read or written.
 pub fn save_week(
     conn: &Connection,
     user_id: i64,
@@ -26,6 +40,9 @@ pub fn save_week(
     encoded: &str,
     revision: i64,
 ) -> StoreResult<WeekSave> {
+    if let Some(id) = repeated_block_id(encoded) {
+        return Err(StoreError::RepeatedBlockId(id));
+    }
     let stored: Option<(String, i64)> = conn
         .query_row(
             "SELECT blocks, revision FROM weeks WHERE user_id = ?1 AND week_start = ?2",

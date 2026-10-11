@@ -226,7 +226,11 @@ def save_week_row(
     revision: int,
 ) -> tuple[list[dict], int]:
     encoded = json.dumps(blocks, sort_keys=True, separators=(",", ":"))
-    status, stored_revision = db.save_week(user_id, week_start, encoded, revision)
+    try:
+        status, stored_revision = db.save_week(user_id, week_start, encoded, revision)
+    except ValueError as error:
+        # The store refuses a list that repeats a block id and says which one; `encoded` is always valid JSON.
+        raise HTTPException(422, str(error)) from error
     if status == "conflict":
         raise HTTPException(409, WEEK_CONFLICT)
     return blocks, stored_revision
