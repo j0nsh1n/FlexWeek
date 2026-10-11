@@ -446,10 +446,17 @@ fn focus_credit(
 }
 
 #[pyfunction]
-fn focus_candidates(blocks: &str, assignments: &str, trace: &str) -> PyResult<String> {
+fn focus_candidates(
+    blocks: &str,
+    assignments: &str,
+    trace: &str,
+    week_start: &str,
+    now: &str,
+) -> PyResult<String> {
     let (blocks, assignments, trace) = (parse(blocks)?, parse(assignments)?, parse(trace)?);
     guard(|| {
-        let found = focus::focus_candidates(&blocks, &assignments, &trace).map_err(crate::raise)?;
+        let found = focus::focus_candidates(&blocks, &assignments, &trace, week_start, now)
+            .map_err(crate::raise)?;
         Ok(array(found))
     })
 }
@@ -964,6 +971,29 @@ fn reuse_unfinished(
     })
 }
 
+#[pyfunction]
+fn reuse_left_over(
+    assignments: &str,
+    saved_weeks: &str,
+    today_week: &str,
+    now: &str,
+    blocks: &str,
+    committed: &str,
+) -> PyResult<String> {
+    let (assignments, saved, blocks, committed) = (
+        parse(assignments)?,
+        parse(saved_weeks)?,
+        parse(blocks)?,
+        parse(committed)?,
+    );
+    guard(|| {
+        let items =
+            clipboard::left_over_items(&assignments, &saved, today_week, now, &blocks, &committed)
+                .map_err(crate::raise)?;
+        Ok(dump(&Value::Array(items)))
+    })
+}
+
 /// `session` is the caller's own, read here for its week, day and month, and asked for `now_ms()`
 /// only when My Day needs the local date; `moment_at` is `datetime.fromtimestamp`. A Python error
 /// from either is raised as it came.
@@ -1454,6 +1484,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         reuse_routine_template,
         reuse_routine_rows,
         reuse_unfinished,
+        reuse_left_over,
         reuse_planner_title,
         reuse_solve_request,
         reuse_settle_placements,

@@ -494,3 +494,87 @@ pub fn unfinished_items(
     }
     Ok(keyed.into_iter().map(|(_, item)| item).collect())
 }
+
+pub fn left_over_items(
+    assignments: &Value,
+    saved_weeks: &Value,
+    today_week: &str,
+    now: &str,
+    blocks: &Value,
+    committed_blocks: &Value,
+) -> EngineResult<Vec<Value>> {
+    let (today, minute) = crate::model::parse_due(now)?;
+    let moment = (today, minute);
+    let Value::Object(table) = assignments else {
+        return Err(attribute_error(assignments, "values"));
+    };
+    let mut items = Vec::new();
+    for assignment in table.values() {
+        let available = available_homework_minutes(assignment, blocks, committed_blocks)?;
+        if truthy(get(assignment, "completed")?) {
+            continue;
+        }
+        let due = get(assignment, "due")?.and_then(Value::as_str);
+        let overdue = due
+            .map(crate::model::parse_due)
+            .transpose()?
+            .is_some_and(|deadline| deadline <= moment);
+        let overdue_sessions: i64 = if overdue {
+            iterate(blocks)?
+                .iter()
+                .filter(|block| {
+                    block.get("assignment_id").and_then(Value::as_str)
+                        == get(assignment, "id").ok().flatten().and_then(Value::as_str)
+                        && !truthy(block.get("completed"))
+                        && block.get("duration_min").and_then(Value::as_i64).is_some()
+                })
+                .map(|block| {
+                    block
+                        .get("duration_min")
+                        .and_then(Value::as_i64)
+                        .unwrap_or(0)
+                })
+                .sum()
+        } else {
+            0
+        };
+        let remaining = available.max(overdue_sessions);
+        if remaining < SLOT_MIN {
+            continue;
+        }
+        let carried = if overdue {
+            false
+        } else {
+            let week = json!(today_week);
+            let mut earlier = false;
+            for saved in iterate(saved_weeks)? {
+                if compare(Cmp::Lt, &saved, &week)? {
+                    earlier = true;
+                    break;
+                }
+            }
+            earlier
+        };
+        if !overdue && !carried {
+            continue;
+        }
+        let Value::Object(fields) = assignment else {
+            return Err(type_error(format!(
+                "'{}' object is not a mapping",
+                type_name(assignment)
+            )));
+        };
+        let mut item = fields.clone();
+        item.insert("remaining_min".into(), json!(remaining));
+        item.insert(
+            "left_over_state".into(),
+            json!(if overdue {
+                "overdue"
+            } else {
+                "left_from_last_week"
+            }),
+        );
+        items.push(Value::Object(item));
+    }
+    Ok(items)
+}

@@ -460,6 +460,32 @@ fn test_unfinished_lists_a_morning_deadline_before_one_with_no_time() {
 }
 
 #[test]
+fn test_left_over_classifies_deadlines_against_today_not_the_open_week() {
+    let overdue = with(essay(), json!({"id": "bio", "due": "2026-10-14"}));
+    let carried = with(essay(), json!({"id": "lab", "due": "2026-10-21"}));
+    let items = clipboard::left_over_items(
+        &json!({"bio": overdue, "lab": carried}),
+        &json!(["2026-10-05"]),
+        "2026-10-12",
+        "2026-10-17T10:00",
+        &json!([{"id": "bio-session", "assignment_id": "bio", "duration_min": 60}]),
+        &json!([]),
+    )
+    .expect("left-over items");
+    let states: std::collections::BTreeMap<_, _> = items
+        .iter()
+        .map(|item| {
+            (
+                item["id"].as_str().unwrap(),
+                item["left_over_state"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(states["bio"], "overdue");
+    assert_eq!(states["lab"], "left_from_last_week");
+}
+
+#[test]
 fn test_days_through_due_matches_the_web_planner() {
     assert_eq!(
         due_day_of(&json!("2026-09-11T08:10"), "2026-09-07").expect("a day"),

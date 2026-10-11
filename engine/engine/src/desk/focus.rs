@@ -358,7 +358,11 @@ pub fn focus_candidates(
     blocks: &Value,
     assignments: &Value,
     trace: &Value,
+    week_start: &str,
+    now: &str,
 ) -> EngineResult<Vec<Value>> {
+    let (today, now_minute) = crate::model::parse_due(now)?;
+    let monday = crate::time::date_from_iso(week_start)?;
     let mut placed = crate::desk::pyops::PyDict::new();
     let source = or_default(Some(trace), json!({}));
     for item in iterate(&or_default(get(&source, "placed")?, json!([])))? {
@@ -400,8 +404,28 @@ pub fn focus_candidates(
         if placement.is_null() || !truthy(get(&placement, "start")?) {
             continue;
         }
-        let days = or_default(get(&placement, "days")?, json!([null]));
-        let first_day = crate::desk::pyops::first_of(&days)?;
+        let days = occurrence_days(&placement)?;
+        let start = hhmm_to_minutes(text(subscript(&placement, "start")?, "start")?)?;
+        let duration = to_int(subscript(&placement, "duration_min")?)?;
+        let day = days.iter().find_map(|day| {
+            let index = day.as_i64()?;
+            let date = monday.checked_add_days(chrono::Days::new(index as u64))?;
+            (date > today
+                || (date == today && i128::from(start) + duration > i128::from(now_minute)))
+            .then_some(index)
+        });
+        let is_overdue = assignment
+            .and_then(|item| item.get("due"))
+            .and_then(Value::as_str)
+            .map(crate::model::parse_due)
+            .transpose()?
+            .is_some_and(|deadline| deadline <= (today, now_minute));
+        if is_overdue {
+            continue;
+        }
+        let Some(day) = day else {
+            continue;
+        };
         let owner = match assignment {
             Some(found) if truthy(Some(found)) => found.clone(),
             _ => block.clone(),
@@ -409,11 +433,45 @@ pub fn focus_candidates(
         result.push(json!({
             "id": subscript(&block, "id")?,
             "title": subscript(&block, "title")?,
-            "day": first_day,
+            "day": day,
             "start": subscript(&placement, "start")?,
             "focus_sessions": int_json(to_int(&or_default(get(&owner, "focus_sessions")?, json!(0)))?),
             "focus_minutes": int_json(to_int(&or_default(get(&owner, "focus_minutes")?, json!(0)))?),
         }));
+    }
+    let Value::Object(table) = assignments else {
+        return Err(crate::stored::attribute_error(assignments, "values"));
+    };
+    for (id, assignment) in table {
+        if truthy(get(assignment, "completed")?) {
+            continue;
+        }
+        let due = get(assignment, "due")?.and_then(Value::as_str);
+        let overdue = due
+            .map(crate::model::parse_due)
+            .transpose()?
+            .is_some_and(|deadline| deadline <= (today, now_minute));
+        if !overdue {
+            continue;
+        }
+        let block = iterate(blocks)?.into_iter().find(|block| {
+            block.get("assignment_id").and_then(Value::as_str) == Some(id.as_str())
+                && truthy(block.get("start"))
+                && !truthy(block.get("completed"))
+        });
+        if let Some(block) = block {
+            result.push(json!({
+                "id": id,
+                "title": format!("{}, overdue", py_str(subscript(assignment, "title")?)),
+                "assignment_id": id,
+                "day": null,
+                "start": null,
+                "focus_sessions": int_json(to_int(&or_default(get(assignment, "focus_sessions")?, json!(0)))?),
+                "focus_minutes": int_json(to_int(&or_default(get(assignment, "focus_minutes")?, json!(0)))?),
+                "overdue": true,
+                "block_id": subscript(&block, "id")?,
+            }));
+        }
     }
     Ok(result)
 }
