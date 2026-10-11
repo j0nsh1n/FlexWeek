@@ -74,10 +74,9 @@ def unnamed(root: QWidget) -> list[str]:
         if isinstance(field, QComboBox):
             # Qt 6.11 answers a combo box's accessible Name with its current text whatever is set, so
             # a screen reader takes its label from the "labelled by" relation that a buddy creates.
-            # A combo with no visible label carries its own accessible name instead.
-            own = field.accessibleName().strip()
-            if field not in buddies and (not own or own == field.currentText()):
-                bad.append(f"{label} has no buddy label and no name of its own")
+            # A name of its own does not stand in for the buddy.
+            if field not in buddies:
+                bad.append(f"{label} has no buddy label")
             continue
         name = a11y_name(field).strip()
         value = field.currentText() if isinstance(field, Segmented) else ""

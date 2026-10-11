@@ -997,6 +997,11 @@ class ActivityRow(QFrame):
         self.category = QComboBox()
         self.category.setObjectName("setupActivityCategory")
         self.category.setAccessibleName("Sports or Activity")
+        # Qt reads a combo by its current text; a buddy label gives screen readers its name. Hidden,
+        # since the row shows no field name.
+        category_label = QLabel("Sports or Activity", self)
+        category_label.setBuddy(self.category)
+        category_label.hide()
         self.category.addItem("Activity", "extra")
         self.category.addItem("Sports", "exercise")
         self.category.setCurrentIndex(max(0, self.category.findData(category)))
