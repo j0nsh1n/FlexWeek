@@ -1,6 +1,8 @@
 //! P1 keeps the homework estimate intact while sharing only work due beyond the coming week.
 
-use flexweek_engine::desk::planning::{fair_share, open_rest_sessions, time_still_needed};
+use flexweek_engine::desk::planning::{
+    fair_share, move_earlier_homework, open_rest_sessions, time_still_needed,
+};
 use serde_json::{Map, Value, json};
 
 const WEEK: &str = "2026-10-05"; // Monday
@@ -246,4 +248,40 @@ fn homework_set_to_one_go_never_gets_a_fair_share() {
     .unwrap();
     assert_eq!(blocks[0]["duration_min"], json!(180));
     assert!(notes.is_empty());
+}
+
+#[test]
+fn earlier_open_homework_moves_into_this_week_with_both_week_writes() {
+    let assignments = science("2026-10-21T23:59", 60);
+    let prior = vec![json!({
+        "week_start": WEEK,
+        "revision": 3,
+        "blocks": [session("old-session", 60)]
+    })];
+    let moved = move_earlier_homework(&[], &prior, &assignments, "2026-10-12").unwrap();
+    assert_eq!(moved["blocks"][0]["id"], json!("old-session"));
+    assert_eq!(moved["blocks"][0]["duration_min"], json!(60));
+    assert_eq!(moved["blocks"][0]["days"], json!([0, 1, 2, 3, 4, 5, 6]));
+    assert_eq!(moved["weeks"][0]["before"].as_array().unwrap().len(), 1);
+    assert!(moved["weeks"][0]["after"].as_array().unwrap().is_empty());
+    let repeated = move_earlier_homework(
+        moved["blocks"].as_array().unwrap(),
+        &moved["weeks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| {
+                json!({
+                    "week_start": item["week_start"],
+                    "revision": item["revision"],
+                    "blocks": item["after"]
+                })
+            })
+            .collect::<Vec<_>>(),
+        &assignments,
+        "2026-10-12",
+    )
+    .unwrap();
+    assert_eq!(repeated["blocks"], moved["blocks"]);
+    assert!(repeated["weeks"].as_array().unwrap().is_empty());
 }

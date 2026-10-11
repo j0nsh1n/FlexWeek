@@ -392,6 +392,140 @@ pub fn open_rest_sessions(
     Ok(out)
 }
 
+/// Move open sessions from earlier weeks into this week and return both sides of each write.
+pub fn move_earlier_homework(
+    blocks: &[Value],
+    earlier_weeks: &[Value],
+    assignments: &serde_json::Map<String, Value>,
+    week_start: &str,
+) -> EngineResult<Value> {
+    let monday = from_iso(week_start)?;
+    let mut current = blocks.to_vec();
+    let mut moved = Vec::new();
+    let mut updates = Vec::new();
+    for saved in earlier_weeks {
+        let source_week = py_str(subscript(saved, "week_start")?);
+        if source_week.as_str() >= week_start {
+            continue;
+        }
+        let before = list_field(saved, "blocks")?;
+        let before_blocks = iterate(&before)?;
+        let mut after = Vec::new();
+        let mut groups: Vec<(String, Vec<Value>)> = Vec::new();
+        for block in before_blocks {
+            let Some(assignment_id) = block.get("assignment_id").and_then(Value::as_str) else {
+                after.push(block);
+                continue;
+            };
+            let Some(assignment) = assignments.get(assignment_id) else {
+                after.push(block);
+                continue;
+            };
+            let is_open = eq(get(&block, "kind")?.unwrap_or(null()), &json!("flexible"))
+                && !truthy(get(&block, "start")?)
+                && !truthy(get(&block, "completed")?)
+                && !truthy(get(assignment, "completed")?);
+            let Some(due) = assignment.get("due").and_then(Value::as_str) else {
+                after.push(block);
+                continue;
+            };
+            if !is_open || crate::model::parse_due(due)?.0 < monday {
+                after.push(block);
+                continue;
+            }
+            if let Some((_, sessions)) = groups.iter_mut().find(|(id, _)| id == assignment_id) {
+                sessions.push(block);
+            } else {
+                groups.push((assignment_id.to_string(), vec![block]));
+            }
+        }
+        let mut changed = false;
+        for (assignment_id, sessions) in &groups {
+            let minutes: i64 = sessions
+                .iter()
+                .map(|block| {
+                    block
+                        .get("duration_min")
+                        .and_then(Value::as_i64)
+                        .unwrap_or(0)
+                })
+                .sum();
+            let existing = current.iter().position(|block| {
+                block.get("assignment_id").and_then(Value::as_str) == Some(assignment_id)
+                    && eq(
+                        get(block, "kind").ok().flatten().unwrap_or(null()),
+                        &json!("flexible"),
+                    )
+                    && !truthy(block.get("start"))
+                    && !truthy(block.get("completed"))
+            });
+            let Some(assignment) = assignments.get(assignment_id) else {
+                after.extend(sessions.iter().cloned());
+                continue;
+            };
+            let mut moved_block = if let Some(at) = existing {
+                let block = &mut current[at];
+                let duration = block
+                    .get("duration_min")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0);
+                if let Some(fields) = block.as_object_mut() {
+                    fields.insert("duration_min".into(), json!(duration + minutes));
+                    fields.insert(
+                        "days".into(),
+                        Value::Array(
+                            session_days(week_start, subscript(assignment, "due")?)?
+                                .into_iter()
+                                .map(Value::from)
+                                .collect(),
+                        ),
+                    );
+                }
+                block.clone()
+            } else {
+                if current.len() as i64 >= crate::desk::reuse::MAX_WEEK_BLOCKS {
+                    after.extend(sessions.iter().cloned());
+                    continue;
+                }
+                let mut block = sessions[0].clone();
+                let Value::Object(fields) = &mut block else {
+                    after.extend(sessions.iter().cloned());
+                    continue;
+                };
+                fields.insert("duration_min".into(), json!(minutes));
+                fields.insert(
+                    "days".into(),
+                    Value::Array(
+                        session_days(week_start, subscript(assignment, "due")?)?
+                            .into_iter()
+                            .map(Value::from)
+                            .collect(),
+                    ),
+                );
+                fields.shift_remove("start");
+                fields.shift_remove("earliest");
+                fields.shift_remove("pinned");
+                current.push(block.clone());
+                block
+            };
+            if let Some(fields) = moved_block.as_object_mut() {
+                fields.insert("duration_min".into(), json!(minutes));
+            }
+            moved.push(moved_block);
+            changed = true;
+        }
+        if changed {
+            updates.push(json!({
+                "week_start": source_week,
+                "before": before,
+                "after": after,
+                "revision": get(saved, "revision")?.cloned().unwrap_or(Value::Null),
+            }));
+        }
+    }
+    Ok(json!({"blocks": current, "moved": moved, "weeks": updates}))
+}
+
 /// Count homework time that still needs a time, grouped by deadline week relative to this week.
 pub fn time_still_needed(
     assignments: &serde_json::Map<String, Value>,
