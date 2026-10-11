@@ -34,6 +34,8 @@ fn share(
         &json!([]),
         WEEK,
         first_day,
+        0,
+        &[],
         &targets,
     )
     .unwrap()
@@ -47,10 +49,10 @@ fn due_next_wednesday_planned_on_saturday_stays_whole_within_seven_days() {
 }
 
 #[test]
-fn due_wednesday_after_next_week_gets_a_fair_share() {
+fn due_wednesday_after_next_week_gets_a_fair_share_by_plannable_days() {
     let (blocks, notes) = share(&[session("s1", 105)], "2026-10-14T23:59", 105, 0, &["s1"]);
-    assert_eq!(blocks[0]["duration_min"], json!(90));
-    assert_eq!(notes[0]["left_min"], json!(15));
+    assert_eq!(blocks[0]["duration_min"], json!(75));
+    assert_eq!(notes[0]["left_min"], json!(30));
 }
 
 #[test]
@@ -134,4 +136,39 @@ fn time_still_needed_adds_unplanned_minutes_and_open_week_remainder() {
     assignments["sci"]["unplanned_min"] = json!(60);
     let counts = time_still_needed(&assignments, &[session("s1", 30)], WEEK).unwrap();
     assert_eq!(counts[0]["minutes"], json!(90));
+}
+
+#[test]
+fn days_without_study_windows_are_not_part_of_this_weeks_share() {
+    let windows = vec![json!({"days": [0, 1, 2, 3, 4], "start": "19:00", "end": "21:00"})];
+    let (blocks, notes) = fair_share(
+        &[session("s1", 120)],
+        &science("2026-10-21T23:59", 120),
+        &json!([]),
+        WEEK,
+        5,
+        825,
+        &windows,
+        &["s1".to_string()],
+    )
+    .unwrap();
+    assert_eq!(blocks[0]["duration_min"], json!(120));
+    assert!(notes.is_empty());
+}
+
+#[test]
+fn today_counts_when_a_free_slot_remains_after_the_clock() {
+    let windows = vec![json!({"days": [6], "start": "10:00", "end": "12:00"})];
+    let (blocks, _) = fair_share(
+        &[session("s1", 120)],
+        &science("2026-10-28T23:59", 120),
+        &json!([]),
+        WEEK,
+        6,
+        660,
+        &windows,
+        &["s1".to_string()],
+    )
+    .unwrap();
+    assert_eq!(blocks[0]["duration_min"], json!(45));
 }

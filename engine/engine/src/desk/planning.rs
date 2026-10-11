@@ -675,6 +675,85 @@ pub fn floor_slot(minutes: i64) -> i64 {
     (minutes.max(0) / SLOT_MIN) * SLOT_MIN
 }
 
+fn has_free_study_slot(
+    day: i64,
+    after: i64,
+    work_windows: &[Value],
+    blocks: &[Value],
+) -> EngineResult<bool> {
+    let windows: Vec<(i64, i64)> = if work_windows.is_empty() {
+        vec![(DAY_START_MIN, DAY_END_MIN)]
+    } else {
+        let mut windows = Vec::new();
+        for window in work_windows {
+            if !window
+                .get("days")
+                .and_then(Value::as_array)
+                .is_some_and(|days| days.iter().any(|value| value.as_i64() == Some(day)))
+            {
+                continue;
+            }
+            windows.push((
+                minutes_of(subscript(window, "start")?)?,
+                minutes_of(subscript(window, "end")?)?,
+            ));
+        }
+        windows
+    };
+    for (start, end) in windows {
+        let mut slot = ceil_slot(start.max(after));
+        while slot + SLOT_MIN <= end {
+            let occupied = blocks.iter().any(|block| {
+                let Some(block_start) = block
+                    .get("start")
+                    .and_then(Value::as_str)
+                    .and_then(|value| hhmm_to_minutes(value).ok())
+                else {
+                    return false;
+                };
+                let days = block.get("days").and_then(Value::as_array);
+                let duration = block
+                    .get("duration_min")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0);
+                days.is_some_and(|days| days.iter().any(|value| value.as_i64() == Some(day)))
+                    && slot < block_start + duration
+                    && block_start < slot + SLOT_MIN
+            });
+            if !occupied {
+                return Ok(true);
+            }
+            slot += SLOT_MIN;
+        }
+    }
+    Ok(false)
+}
+
+fn plannable_days(
+    first_day: i64,
+    first_minute: i64,
+    last_day: i64,
+    work_windows: &[Value],
+    blocks: &[Value],
+) -> EngineResult<(i64, i64)> {
+    let mut this_week = 0;
+    let mut all_days = 0;
+    for day in first_day.clamp(0, 6)..=last_day.min(41) {
+        let after = if day == first_day {
+            first_minute
+        } else {
+            DAY_START_MIN
+        };
+        if has_free_study_slot(day % 7, after, work_windows, blocks)? {
+            all_days += 1;
+            if day <= 6 {
+                this_week += 1;
+            }
+        }
+    }
+    Ok((this_week, all_days))
+}
+
 pub fn available_homework_minutes(
     assignment: &Value,
     blocks: &Value,
@@ -818,6 +897,8 @@ pub fn fair_share(
     committed: &Value,
     week_start: &str,
     first_day: i64,
+    first_minute: i64,
+    work_windows: &[Value],
     targets: &[String],
 ) -> EngineResult<(Vec<Value>, Vec<Value>)> {
     let monday = from_iso(week_start)?;
@@ -856,9 +937,17 @@ pub fn fair_share(
         if due_offset - first_day.clamp(0, 6) <= 7 {
             continue;
         }
+        let (this_week, all_days) = plannable_days(
+            first_day,
+            first_minute,
+            due_offset,
+            work_windows,
+            &iterate(committed)?,
+        )?;
+        if this_week == 0 || all_days == 0 {
+            continue;
+        }
         let left = available_homework_minutes(assignment, &json!([]), committed)?;
-        let this_week = 7 - first_day.clamp(0, 6);
-        let all_days = (due_offset - first_day.clamp(0, 6)).max(this_week);
         let share = ceil_slot((left * this_week + all_days - 1) / all_days).min(left);
         let held: i64 = out
             .iter()
