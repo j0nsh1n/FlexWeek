@@ -157,10 +157,29 @@ Contract for the finished app:
   the student, with the button reading Suggest times. Homework dragged onto a
   time, or given one with Choose a time, is `pinned`: every plan, Replan all
   included, keeps it where the student put it, even beside a fixed block. The
-  planner places homework at the earliest times that fit. Work due after this
-  Sunday gets only a fair share of this week (the minutes left divided by the
-  plannable days up to its due date), and the review says what waits ("Science
-  project: 1 h this week, 1 h left for next week"). After a plan, the review
+  planner places homework at the earliest times that fit and never shortens a
+  homework's length. Work due within the coming week (due at most seven days
+  after today) is never split: Plan places as much of it as fits in what is
+  left of this week. Work due later gets a fair share of this week: its minutes
+  left divided by the plannable days up to its due date, where this week counts
+  only the days still left with study hours, and today only while a study
+  window still has a free 15 minutes after now. An "In one go" homework is
+  never shared out: it gets one gap of its full length before it is due, or
+  stays in Not placed yet with "Doesn't fit in one go before Wed 21. Allow
+  splitting?". Whatever is not placed stays time that needs a place: the placed
+  part keeps its session and the rest is a second open session of the same
+  homework. Before placing anything in a week, Plan and Replan give that week
+  one session for each open homework with time still needed that is due on or
+  after that week's Monday and has no open session there; unplaced time left in
+  an earlier week moves into it in the same save. Until placed it shows in Not
+  placed yet with its amount ("History · 1 h left"). One engine count of the
+  time still needed (this week, an earlier week, a later week) feeds the plan
+  review, the message after Plan, Not placed yet and More; "All your homework
+  already has a time" and "Everything has a time" show only when it is 0. The
+  plan review hides when the week changes. The review says what was placed
+  ("History: 1 h this week (Sun), 1 h left for next week"), or with nothing
+  placed: "No homework time left this week. History, Math and Bio are due next
+  week; plan them there." After a plan, the review
   names each day with more than 3 hours of homework on it ("Thursday has
   5 h 30 min of homework.") and moves nothing itself. A time already past is
   refused wherever a time is chosen (a drag, Choose a time, Do it at): "That's
