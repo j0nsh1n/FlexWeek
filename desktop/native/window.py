@@ -257,9 +257,11 @@ BUSY_BUTTONS = (
 )
 # The views in the order the top bar's segments show them, which a change of view slides along.
 VIEW_ORDER = ("day", "week", "month")
-# The week list for screen readers: its height while the keyboard is on it, and folded away otherwise.
-WEEK_LIST_OPEN = 132
-WEEK_LIST_FOLDED = 0
+# The week list for screen readers opens over the grid, so the grid never moves: a fixed row above
+# it is the way in, and the list floats at this width (the whole planner on a narrow window).
+WEEK_LIST_ROW_HEIGHT = 28
+WEEK_LIST_ROW_NAME = "Week as a list · Ctrl+Shift+L"
+WEEK_LIST_PANEL_WIDTH = 360
 PLAN_LABEL = "Plan my homework"
 SUGGEST_LABEL = "Suggest times"
 PLAN_TIP = (
@@ -1508,13 +1510,27 @@ class NativeWindow(QMainWindow):
         column.addWidget(self.alert_strip)
         self.planner = QStackedWidget()
         self.planner.setObjectName("plannerStack")
+        # A row of fixed height is the Tab stop: the list opens over the grid from it, so Tab never
+        # moves the week.
+        self.week_list_row = QPushButton(WEEK_LIST_ROW_NAME)
+        self.week_list_row.setObjectName("weekListRow")
+        self.week_list_row.setProperty("quiet", True)
+        self.week_list_row.setAccessibleName(WEEK_LIST_ROW_NAME)
+        self.week_list_row.setFixedHeight(WEEK_LIST_ROW_HEIGHT)
+        self.week_list_row.clicked.connect(self._toggle_week_access_list)
+        self.week_list_row.installEventFilter(self)
+        self.week_list_panel = QFrame(page)
+        self.week_list_panel.setObjectName("weekListPanel")
+        self.week_list_panel.hide()
+        panel_layout = QVBoxLayout(self.week_list_panel)
+        panel_layout.setContentsMargins(0, 0, 0, 0)
+        # Where Esc puts the keyboard back: whatever had it when the list opened.
+        self._week_list_return: QWidget | None = None
         self.week_access_list = QListWidget()
         self.week_access_list.setObjectName("weekAccessList")
         self.week_access_list.setAccessibleName("This week's blocks")
         self.week_access_list.setAccessibleDescription("A list of each day and its blocks in time order.")
-        # Folded to nothing until the keyboard reaches it: screen readers and Tab still find it, and the
-        # week keeps its room for everyone who reads the grid.
-        self.week_access_list.setMaximumHeight(WEEK_LIST_FOLDED)
+        panel_layout.addWidget(self.week_access_list)
         self.week_access_list.itemActivated.connect(self._week_access_activate)
         self.week_access_list.installEventFilter(self)
         self._week_list_shortcut = QShortcut(QKeySequence("Ctrl+Shift+L"), self)
@@ -1562,8 +1578,9 @@ class NativeWindow(QMainWindow):
             widget.installEventFilter(self)
         # The calendar is the point of this page, so it takes whatever height the rest does not need,
         # down to the window's foot. Notices float over it rather than taking a row.
-        column.addWidget(self.week_access_list)
+        column.addWidget(self.week_list_row)
         column.addWidget(self.planner, 1)
+        self.planner.installEventFilter(self)
         layout.addLayout(body, 1)
         self._stack.addWidget(page)
         self._week_page = page
@@ -2300,7 +2317,7 @@ class NativeWindow(QMainWindow):
         self.next_nav.setToolTip(f"Next {period}")
         self.prev_nav.setAccessibleName(f"Previous {period}")
         self.next_nav.setAccessibleName(f"Next {period}")
-        self.week_access_list.setVisible(view == "week" and not self._day_mode)
+        self._show_week_list_row(view == "week" and not self._day_mode)
         title_view = "myday" if self._day_mode else view
         watched = shown.watched_date() if self._day_mode and isinstance(shown, LayoutView) else None
         self.week_title.set_full_text(
@@ -3098,7 +3115,7 @@ class NativeWindow(QMainWindow):
                 row = QListWidgetItem(words)
                 row.setData(Qt.ItemDataRole.UserRole, (occurrence.block_id, day))
                 self.week_access_list.addItem(row)
-        self.week_access_list.setVisible(self.session.planner_view == "week" and not self._day_mode)
+        self._show_week_list_row(self.session.planner_view == "week" and not self._day_mode)
         if selected_key is not None:
             for index in range(self.week_access_list.count()):
                 row = self.week_access_list.item(index)
@@ -3106,9 +3123,55 @@ class NativeWindow(QMainWindow):
                     self.week_access_list.setCurrentRow(index)
                     break
 
+    def _show_week_list_row(self, shown: bool) -> None:
+        self.week_list_row.setVisible(shown)
+        if not shown:
+            self._close_week_access_list(restore_focus=False)
+
     def _focus_week_access_list(self) -> None:
-        if self.week_access_list.isVisible():
-            self.week_access_list.setFocus(Qt.FocusReason.ShortcutFocusReason)
+        """Open the week list over the grid with the keyboard on its first row."""
+        if not self.week_list_row.isVisible():
+            return
+        if not self.week_list_panel.isVisible():
+            focus = QApplication.focusWidget()
+            self._week_list_return = None if focus is self.week_access_list else focus
+        self.week_list_panel.show()
+        self._layout_week_list()
+        if self.week_access_list.count():
+            self.week_access_list.setCurrentRow(0)
+        self.week_access_list.setFocus(Qt.FocusReason.ShortcutFocusReason)
+
+    def _toggle_week_access_list(self) -> None:
+        if self.week_list_panel.isVisible():
+            self._close_week_access_list()
+        else:
+            self._focus_week_access_list()
+
+    def _close_week_access_list(self, restore_focus: bool = True) -> None:
+        if not self.week_list_panel.isVisible():
+            return
+        back = self._week_list_return
+        self._week_list_return = None
+        self.week_list_panel.hide()
+        if not restore_focus:
+            return
+        if back is None or not isValid(back) or not back.isVisible():
+            back = self.week_list_row
+        if back.isVisible():
+            back.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _layout_week_list(self) -> None:
+        """The list floats over the planner: the right-hand side of it, or all of it on a narrow window."""
+        host = self._week_page
+        origin = self.planner.mapTo(host, QPoint(0, 0))
+        width = self.planner.width()
+        if self.width() >= NARROW_WIDTH:
+            width = min(width, WEEK_LIST_PANEL_WIDTH)
+        self.week_list_panel.setGeometry(
+            origin.x() + self.planner.width() - width, origin.y(), width, self.planner.height()
+        )
+        self.week_list_panel.raise_()
+        raise_pictures(host)
 
     def _week_access_activate(self, row: QListWidgetItem) -> None:
         target = row.data(Qt.ItemDataRole.UserRole)
@@ -5149,11 +5212,26 @@ class NativeWindow(QMainWindow):
         super().keyPressEvent(event)
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
-        if watched is self.week_access_list and event.type() in (QEvent.Type.FocusIn, QEvent.Type.FocusOut):
-            opened = event.type() == QEvent.Type.FocusIn
-            self.week_access_list.setMaximumHeight(WEEK_LIST_OPEN if opened else WEEK_LIST_FOLDED)
+        if (
+            watched is self.planner
+            and event.type() == QEvent.Type.Resize
+            and self.week_list_panel.isVisible()
+        ):
+            self._layout_week_list()
+        # A push button answers Space only; Enter opens the list as well.
+        if (
+            watched is self.week_list_row
+            and event.type() == QEvent.Type.KeyPress
+            and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+            and not event.modifiers()
+        ):
+            self.week_list_row.click()
+            return True
         if watched is self.week_access_list and event.type() == QEvent.Type.KeyPress:
             key = event.key()
+            if key == Qt.Key.Key_Escape and not event.modifiers():
+                self._close_week_access_list()
+                return True
             if key == Qt.Key.Key_Menu or (
                 key == Qt.Key.Key_F10 and event.modifiers() == Qt.KeyboardModifier.ShiftModifier
             ):

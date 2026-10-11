@@ -54,6 +54,8 @@ def key(window, k, mods=Qt.KeyboardModifier.NoModifier) -> None:
 def test_0k_every_main_design_has_the_week_list_before_its_hours(qapp, window, design) -> None:
     hours = in_design(qapp, window, design)
     listing = window.week_access_list
+    assert window.week_list_row.isVisibleTo(window), f"{design}: no way into the week list"
+    key(window, Qt.Key.Key_L, CTRL_SHIFT)
     assert listing.isVisibleTo(window), f"{design}: no week list"
     assert any("School" in listing.item(i).text() for i in range(listing.count()))
     cursor, seen = listing.nextInFocusChain(), []
@@ -82,7 +84,6 @@ def test_0k_ctrl_shift_l_from_the_hours_opens_the_list_and_enter_opens_a_block(
     assert opened == ["school"]
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_JUMP)
 @pytest.mark.parametrize("design", ["classic", "timeline"])
 def test_u19_tabbing_through_the_week_page_twice_never_moves_the_hours(qapp, window, design) -> None:
     hours = in_design(qapp, window, design)
@@ -102,7 +103,6 @@ def test_u19_tabbing_through_the_week_page_twice_never_moves_the_hours(qapp, win
     assert len(tops) == 1, f"the hours sat at y = {sorted(tops)}"
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_ROW)
 def test_u19_a_fixed_28_px_week_as_a_list_row_is_a_tab_stop(qapp, window) -> None:
     in_design(qapp, window, "classic")
     rows = [w for w in window.findChildren(QWidget)
@@ -112,7 +112,6 @@ def test_u19_a_fixed_28_px_week_as_a_list_row_is_a_tab_stop(qapp, window) -> Non
     assert rows[0].height() == 28 and rows[0].focusPolicy() & Qt.FocusPolicy.TabFocus
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_ESC)
 def test_u19_esc_in_the_list_returns_to_the_grid(qapp, window) -> None:
     hours = in_design(qapp, window, "classic")
     hours.setFocus(Qt.FocusReason.OtherFocusReason)
