@@ -55,7 +55,6 @@ def type_end(dialog: BlockDialog, text: str) -> None:
     press(dialog.end, Qt.Key.Key_Tab)
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_F3)
 @pytest.mark.parametrize("typed", ["3:15", "315"])
 def test_f3_block_editor_bare_end_after_830_am_reads_pm(block_editor, typed) -> None:
     dialog = block_editor("08:30", twelve=True)
@@ -63,7 +62,6 @@ def test_f3_block_editor_bare_end_after_830_am_reads_pm(block_editor, typed) -> 
     assert dialog.end.minutes() == 15 * 60 + 15, dialog.end.lineEdit().text()
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_F3)
 def test_f3_setup_school_bare_end_after_830_am_reads_pm(qapp) -> None:
     set_clock_24h(False)
     box = _setup(qapp, "school-end")
@@ -80,7 +78,6 @@ def test_f3_setup_school_bare_end_after_830_am_reads_pm(qapp) -> None:
             free(widget)
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_F3B)
 def test_f3_end_before_a_9_pm_start_shows_the_problem_under_end(block_editor) -> None:
     dialog = block_editor("21:00", twelve=True)
     type_end(dialog, "3:15")

@@ -61,7 +61,14 @@ from desktop.native.calendar import (
     SETUP_SCHOOL_ID,
     is_setup_block,
 )
-from desktop.native.fields import END_OF_DAY, QUICK_LENGTHS, ClockField, DayPicker, Stepper
+from desktop.native.fields import (
+    END_OF_DAY,
+    QUICK_LENGTHS,
+    ClockField,
+    DayPicker,
+    Stepper,
+    held_on_problem,
+)
 from desktop.native.fonts import numeral, weighted
 from desktop.native.hours.geometry import drag_step
 from desktop.native.layouts.registry import (
@@ -111,6 +118,7 @@ from desktop.native.widgets import (
     DAYS,
     CardGrid,
     ChoiceCard,
+    ConfirmSheet,
     DueField,
     FlowLayout,
     fill_cutoff,
@@ -189,7 +197,9 @@ RAIL_MIN = 210
 PAGE_MARGIN, FADE_PX = 32, 24
 # A step on the rail is marked by its number in a ring, or once it is done by a tick on the accent.
 BADGE_PX, TICK_PX = 20, 16
-PENDING, CURRENT, FINISHED = "pending", "current", "finished"
+PENDING, CURRENT, FINISHED, SKIPPED = "pending", "current", "finished", "skipped"
+# What the side list says of each step's state, as the step's accessible description.
+RAIL_STATES = {CURRENT: "Current step", FINISHED: "Done", SKIPPED: "Skipped", PENDING: ""}
 PLAY_PX = 20
 
 
@@ -315,8 +325,9 @@ def _label(text: str, name: str = "", wrap: bool = True) -> QLabel:
 
 
 def step_badge(number: int, state: str, palette: dict, family: str, ratio: float = 1.0) -> QPixmap:
-    """A step's mark on the rail: its number in a ring, the ring in the accent on the step shown, and
-    a tick on the accent once the step is done."""
+    """A step's mark on the rail: its number in a ring, the ring in the accent on the step shown, a
+    tick on the accent once the step is done, and a dash in a dashed ring once it is skipped (F3b), so a
+    skipped step does not read as done."""
     side = round(BADGE_PX * ratio)
     made = QPixmap(side, side)
     made.fill(Qt.GlobalColor.transparent)
@@ -331,6 +342,14 @@ def step_badge(number: int, state: str, palette: dict, family: str, ratio: float
         tick = icons.pixmap("check", palette["accent_ink"], TICK_PX, ratio)
         inset = (BADGE_PX - TICK_PX) / 2
         painter.drawPixmap(QRectF(inset, inset, TICK_PX, TICK_PX), tick, QRectF(tick.rect()))
+    elif state == SKIPPED:
+        pen = QPen(QColor(palette["muted"]), 1.5)
+        pen.setStyle(Qt.PenStyle.DashLine)
+        painter.setPen(pen)
+        painter.drawEllipse(ring)
+        dash = icons.pixmap("minus", palette["muted"], TICK_PX, ratio)
+        inset = (BADGE_PX - TICK_PX) / 2
+        painter.drawPixmap(QRectF(inset, inset, TICK_PX, TICK_PX), dash, QRectF(dash.rect()))
     else:
         current = state == CURRENT
         painter.setPen(QPen(QColor(palette["accent" if current else "hairline_strong"]), 1.5))
@@ -341,6 +360,11 @@ def step_badge(number: int, state: str, palette: dict, family: str, ratio: float
         painter.drawText(QRectF(0, 0, BADGE_PX, BADGE_PX), Qt.AlignmentFlag.AlignCenter, str(number))
     painter.end()
     return made
+
+
+def _rail_row(step: int) -> int:
+    """The side list's row that holds `step`."""
+    return next(index for index, (_name, steps) in enumerate(RAIL) if step in steps)
 
 
 def _repolish(widget: QWidget) -> None:
@@ -905,6 +929,7 @@ class TimeRange(QWidget):
         self.start.setAccessibleName(f"{name} starts")
         self.end = QuarterTime(end, end=True)
         self.end.setAccessibleName(f"{name} ends")
+        self.end.pair_with(self.start, name)
         line.addWidget(_label("from", "setupFieldLabel", wrap=False))
         line.addWidget(self.start)
         line.addWidget(_label("to", "setupFieldLabel", wrap=False))
@@ -1093,6 +1118,9 @@ class SetupPage(QWidget):
         self._bell = Bell(self)
         self._step = STYLE
         self._furthest = STYLE
+        # Rows of the side list left by Skip, not by Next: marked Skipped, and the summary says so.
+        self._skipped: set[int] = set()
+        self._week_as_opened: tuple = ()
         self._own_look = False
         self._state = SetupState("system", sanitize_look(None), sanitize_layout(None), {}, [], "")
         self._pack, self._look, self._layout = self._state.pack, self._state.look, self._state.layout
@@ -1560,6 +1588,7 @@ class SetupPage(QWidget):
         self._own_look = step in (LOOK, COLOURS)
         self._step = step
         self._furthest = step
+        self._skipped = set()
         self._entered = (self._pack, deepcopy(self._look), deepcopy(self._layout))
         self.error.clear()
         self.test_result.clear()
@@ -1644,6 +1673,12 @@ class SetupPage(QWidget):
             self._add_activity()
         fill_cutoff(self.cutoff, self._state.preferences.get("day_cutoff"))
         self._follow_school()
+        self._week_as_opened = self._week_typed()
+
+    def _week_typed(self) -> tuple:
+        """What the student can change on Your week, to tell what they typed from what it opened with."""
+        rows = tuple((row.name.text(), tuple(row.days.days()), row.times.span()) for row in self.activities)
+        return tuple(self.school_days.days()), self.school_times.span(), rows
 
     def _follow_school(self) -> None:
         self.school_hint.setVisible(not self.school_days.days())
@@ -1690,7 +1725,71 @@ class SetupPage(QWidget):
         self._leave(self._after(self._step), keep=True)
 
     def _skip_step(self) -> None:
-        self._leave(self._after(self._step), keep=False)
+        """Skip asks first when the step holds something typed, so School is never thrown away by a
+        click (F3b): to fix a time that does not work, or to keep what is there and go on."""
+        step = self._step
+        entered = self._kept_on(step)
+        if entered:
+            bad = self._bad_box(step)
+            what = " and ".join(entered)
+            if bad is not None:
+                question = f"{bad[1]}'s times don't work ({bad[2]}). Fix them, or skip without {what}?"
+                stay = "fix"
+                answers = (("skip", f"Skip without {what}", "outlined"), ("fix", "Fix them", "filled"))
+            else:
+                question = f"Keep {what} and go on, or skip without {what}?"
+                stay = "keep"
+                answers = (
+                    ("skip", f"Skip without {what}", "outlined"),
+                    ("keep", f"Keep {what} and go on", "filled"),
+                )
+            sheet = ConfirmSheet(self, "Skip this step?", question, answers, default=stay)
+            sheet.exec()
+            # Esc or the close button is the answer Enter gives: nothing is thrown away by leaving.
+            answer = sheet.answer or stay
+            sheet.deleteLater()
+            if answer == "fix":
+                self._hold_on(bad[0] if bad is not None else None)
+                return
+            if answer == "keep":
+                self._leave(self._after(step), keep=True)
+                return
+        self._leave(self._after(step), keep=False)
+
+    def _kept_on(self, step: int) -> list[str]:
+        """What the student changed on a step that Skip would throw away, by name: School and each
+        activity. A step as it opened asks nothing; its defaults were never typed."""
+        if step != WEEK or self._week_typed() == self._week_as_opened:
+            return []
+        names = ["School"] if self.school_days.days() else []
+        names += [row.name.text().strip() or SPORT_FALLBACK for row in self.activities if row.days.days()]
+        return names
+
+    def _bad_box(self, step: int) -> tuple[ClockField, str, str] | None:
+        """The first end box on `step` at or before its start, with what it belongs to and why."""
+        if step != WEEK:
+            return None
+        rows = [("School", self.school_times)] if self.school_days.days() else []
+        rows += [
+            (row.name.text().strip() or SPORT_FALLBACK, row.times)
+            for row in self.activities
+            if row.days.days()
+        ]
+        for name, times in rows:
+            start, end = times.start.minutes(), times.end.minutes()
+            if end <= start:
+                return times.end, name, f"ends {clock_text(end)}, before it starts"
+        return None
+
+    def _hold_on(self, box: ClockField | None) -> None:
+        """The keyboard on the box that needs fixing, its whole time selected and its problem said under
+        it; the bar at the bottom only counts what is left to fix."""
+        if box is None:
+            return
+        box.check_after_start()
+        box.setFocus(Qt.FocusReason.OtherFocusReason)
+        box.lineEdit().selectAll()
+        self.error.setText("1 thing to fix on this step")
 
     def _go_back(self) -> None:
         if self._step != STYLE:
@@ -1720,7 +1819,22 @@ class SetupPage(QWidget):
         step = self._step
         answer = None
         if keep:
+            # Hours with no days ticked are not kept, so what is wrong with them holds nothing up.
+            unused = [] if self.school_days.days() else [self.school_times]
+            unused += [row.times for row in self.activities if not row.days.days()]
+            for times in unused:
+                times.start.clear_problem()
+                times.end.clear_problem()
             problem = self._problem(step)
+            # A time box that says what is wrong under it keeps the keyboard (F3, F3b); the line here
+            # is the fallback for what no box says.
+            if held_on_problem(self):
+                self.error.setText("1 thing to fix on this step")
+                return
+            bad = self._bad_box(step)
+            if bad is not None:
+                self._hold_on(bad[0])
+                return
             if problem:
                 self.error.setText(problem)
                 return
@@ -1732,6 +1846,12 @@ class SetupPage(QWidget):
             # A clock tried and then skipped is not kept either.
             self._show_clock(self._state.preferences.get("clock_24h") is True)
         self.error.clear()
+        row, onto = _rail_row(step), _rail_row(destination)
+        if destination > step and onto != row:
+            if keep:
+                self._skipped.discard(row)
+            else:
+                self._skipped.add(row)
         if answer is not None:
             self._absorb(step, answer)
         self.left.emit(step, destination, answer)
@@ -1800,9 +1920,11 @@ class SetupPage(QWidget):
             reachable = steps[0] <= self._furthest or (steps[0] == DONE and self._furthest >= DONE)
             item.setEnabled(reachable)
             _repolish(item)
-            state = CURRENT if current else FINISHED if done else PENDING
+            skipped = not current and done and index in self._skipped
+            state = CURRENT if current else SKIPPED if skipped else FINISHED if done else PENDING
             item.setIcon(self._badge(index + 1, state, item.font().family()))
-            item.setAccessibleDescription("Done" if state == FINISHED else "")
+            item.setAccessibleDescription(RAIL_STATES[state])
+            item.setToolTip(RAIL_STATES[state])
         self._fit_rail()
 
     def _fit_rail(self) -> None:
@@ -2251,7 +2373,7 @@ class SetupPage(QWidget):
             reminders = f"Off · alarms ring {sound}"
         values = (
             look,
-            " · ".join(week_parts) or "Nothing fixed yet",
+            "skipped" if _rail_row(WEEK) in self._skipped else " · ".join(week_parts) or "Nothing fixed yet",
             planning,
             reminders,
             ", ".join(state.homework) or "None yet",

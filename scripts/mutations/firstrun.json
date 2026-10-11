@@ -93,8 +93,8 @@
   {
     "name": "no tick on a finished step",
     "file": "desktop/native/setup.py",
-    "old": "            state = CURRENT if current else FINISHED if done else PENDING\n",
-    "new": "            state = CURRENT if current else PENDING\n",
+    "old": "            state = CURRENT if current else SKIPPED if skipped else FINISHED if done else PENDING\n",
+    "new": "            state = CURRENT if current else SKIPPED if skipped else PENDING\n",
     "test": "desktop/tests/test_setup_look.py::test_a_finished_step_shows_a_tick_on_the_rail"
   },
   {

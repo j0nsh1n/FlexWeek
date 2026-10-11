@@ -7,6 +7,7 @@ it."""
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
 from PySide6.QtCore import QDate, QDateTime, QEvent, QObject, QRect, QRectF, Qt, QTime, QTimer, Signal
 from PySide6.QtGui import (
@@ -45,7 +46,7 @@ from backend.slots import SLOT_MIN
 from desktop.native import icons
 from desktop.native.calendar import DAY_FULL, DAYS
 from desktop.native.tokens import WEIGHT_STRONG
-from desktop.native.weekmodel import clock_text, time_format
+from desktop.native.weekmodel import clock_text, end_after_start_words, time_format
 
 # A day of another month, and the letters over the days, as shares of the text colour on the card.
 FAINT = 0.45
@@ -391,8 +392,28 @@ class ProblemLine(QFrame):
         self.text.setObjectName("clockErrorText")
         self.text.setWordWrap(True)
         row.addWidget(self.text, 1)
+        self.action = QPushButton()
+        self.action.setObjectName("clockErrorUse")
+        self.action.setProperty("outlined", True)
+        self.action.setAutoDefault(False)
+        self.action.hide()
+        row.addWidget(self.action, 0, Qt.AlignmentFlag.AlignVCenter)
+        self._take: Callable[[], None] | None = None
+        self.action.clicked.connect(self._act)
         self.hide()
         field.destroyed.connect(self.deleteLater)
+
+    def offer(self, words: str, take: Callable[[], None] | None) -> None:
+        """A button beside the problem that puts it right ("Use 3:15 PM"), or none."""
+        self._take = take
+        self.action.setText(words)
+        self.action.setVisible(bool(words) and take is not None)
+        if self.isVisible():
+            self.place()
+
+    def _act(self) -> None:
+        if self._take is not None:
+            self._take()
 
     def say(self, words: str) -> None:
         self.text.setText(words)
@@ -447,6 +468,9 @@ class ClockField(QTimeEdit):
     _line: ProblemLine | None = None
     _first_click = False
     _before: int | None = None
+    _start: ClockField | None = None
+    _subject = ""
+    _other = 0
 
     def __init__(
         self, time: QTime | None = None, parent: QWidget | None = None, *, end: bool = False
@@ -472,6 +496,30 @@ class ClockField(QTimeEdit):
     def problem(self) -> str:
         """The line shown under the box while its text says no time, else an empty string."""
         return self._problem
+
+    def pair_with(self, start: ClockField, subject: str = "") -> None:
+        """Make this the end box of `start`. A time typed without AM or PM is read as the one that ends
+        after the start soonest, and an end at or before the start is said under this box. `subject`
+        names what ends ("School") in the line that offers the other half of the day."""
+        self._start = start
+        self._subject = subject
+        start.settled.connect(self._start_settled)
+
+    def _read(self, text: str, *, whole: bool = True) -> int | None:
+        """`text` as read_clock reads it; on the 12-hour clock an end box's bare hour takes AM or PM by
+        its start: 8:30 AM to "3:15" is 3:15 PM, which a bare 3:15 on its own is not (F3)."""
+        minutes = read_clock(text, end=self._end, whole=whole)
+        found = WRITTEN_TIME.fullmatch(text.strip().lower())
+        if minutes is None or self._start is None or found is None or found[3] or "AP" not in time_format():
+            return minutes
+        hour = int(found[1])
+        if not 1 <= hour <= 12:
+            return minutes
+        morning = hour % 12 * 60 + int(found[2] or 0)
+        start = self._start.minutes()
+        later = [END_OF_DAY if at == 0 else at for at in (morning, morning + 12 * 60)]
+        after = [at for at in later if at > start]
+        return min(after) if after else minutes
 
     def _minutes_of(self, time: QTime) -> int:
         minutes = time.hour() * 60 + time.minute()
@@ -505,7 +553,7 @@ class ClockField(QTimeEdit):
         self._touched = True
         if self._before is None:
             self._before = self.minutes()
-        minutes = read_clock(text, end=self._end)
+        minutes = self._read(text)
         if minutes is not None:
             self._take(minutes, as_typed=True)
 
@@ -515,7 +563,7 @@ class ClockField(QTimeEdit):
         one from before they began (a half-typed "15:15" of "15:15x" was taken on the way), and is never
         23:59."""
         line = self.lineEdit()
-        minutes = read_clock(line.text(), end=self._end, whole=False)
+        minutes = self._read(line.text(), whole=False)
         low, high = self._limits()
         before, self._before = self._before, None
         if minutes is None or not low <= minutes <= high:
@@ -538,9 +586,43 @@ class ClockField(QTimeEdit):
         line.blockSignals(True)
         line.setText(clock_text(self.minutes()))
         line.blockSignals(False)
+        self.check_after_start()
         if self._touched:
             self._touched = False
             self.settled.emit(True)
+
+    def check_after_start(self) -> None:
+        """An end at or before its start is said under the end box, where the student is, and Save and
+        Next stay on it (held_on_problem); the form's own line was below the buttons."""
+        if self._start is None or self._problem:
+            return
+        start, end = self._start.minutes(), self.minutes()
+        if end > start:
+            return
+        other = end + 12 * 60 if end < 12 * 60 else end - 12 * 60
+        self._other = other if self._subject and start < other <= END_OF_DAY else 0
+        if self._other:
+            self._complain(
+                f"{self._subject} ends at {clock_text(end)}, before it starts at {clock_text(start)}. "
+                f"Did you mean {clock_text(other)}?"
+            )
+            if self._line is not None:
+                self._line.offer(f"Use {clock_text(other)}", self._use_other)
+        else:
+            self._complain(end_after_start_words(clock_text(start)))
+
+    def _use_other(self) -> None:
+        other, self._other = self._other, 0
+        if other:
+            self._take(other)
+            self.setFocus(Qt.FocusReason.OtherFocusReason)
+            self.settled.emit(True)
+
+    def _start_settled(self, _by_hand: bool) -> None:
+        # A start moved before the end takes back the problem it caused; a new one waits until the end
+        # box is left, never said while the student is still on the start.
+        if self._problem and self._start is not None and self.minutes() > self._start.minutes():
+            self._mend()
 
     def _complain(self, words: str) -> None:
         fresh = words != self._problem
@@ -553,13 +635,20 @@ class ClockField(QTimeEdit):
         if fresh:
             announce(self, words, assertive=True)
 
+    def clear_problem(self) -> None:
+        """Take the problem line away when what the box belongs to no longer counts, such as School
+        with no days ticked."""
+        self._mend()
+
     def _mend(self) -> None:
         if not self._problem:
             return
         self._problem = ""
+        self._other = 0
         self.setAccessibleDescription("")
         self._outline(False)
         if self._line is not None:
+            self._line.offer("", None)
             self._line.hide()
 
     def _outline(self, on: bool) -> None:
@@ -571,7 +660,7 @@ class ClockField(QTimeEdit):
         return self.lineEdit().text() if self._typing else clock_text(self._minutes_of(dateTime.time()))
 
     def dateTimeFromText(self, text: str) -> QDateTime:  # noqa: N802
-        minutes = read_clock(text, end=self._end, whole=False)
+        minutes = self._read(text, whole=False)
         if minutes is None:
             return self.dateTime()
         # In the box's own zone: Qt 6.11 keeps its value in UTC, and a local one moved it by the offset.

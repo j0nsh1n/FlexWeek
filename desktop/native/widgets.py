@@ -3001,6 +3001,7 @@ class BlockDialog(Dialog):
             self._minutes_clock(self._clock_to_minutes(self.start.time()) + self._length), end=True
         )
         self.end.setObjectName("blockEnd")
+        self.end.pair_with(self.start)
         form.add_pair(("Start", self.start), ("End", self.end))
         self.duration_line = QLabel()
         self.duration_line.setObjectName("blockDurationLine")
@@ -3221,10 +3222,11 @@ class BlockDialog(Dialog):
         self._show_length()
 
     def _show_length(self) -> None:
-        problem = self._span_problem()
-        # The problem is said here, beside the times, in the error colour; nowhere else, so it is
-        # not the same sentence twice.
-        length = length_label(self._span())
+        # Said under End once End is settled there (F3), else here beside the times; never both, so it
+        # is not the same sentence twice.
+        said_by_end = bool(self.end.problem())
+        problem = "" if said_by_end else self._span_problem()
+        length = "" if said_by_end else length_label(self._span())
         self.duration_line.setText(problem or (f"{self._moved} ({length})" if self._moved else length))
         self.duration_line.setProperty("problem", bool(problem))
         self.duration_line.style().unpolish(self.duration_line)
@@ -3330,6 +3332,7 @@ class SchoolHoursDialog(Dialog):
         begin.setAccessibleName("School starts")
         finish = QuarterTime(minutes_to_hhmm(hhmm_to_minutes(start) + minutes), end=True)
         finish.setAccessibleName("School ends")
+        finish.pair_with(begin, "School")
         self.times = SimpleNamespace(
             start=begin,
             end=finish,
@@ -5382,6 +5385,7 @@ class AvailabilityDialog(Dialog):
         self.picker_end = ClockField(QTime(18, 0), end=True)
         self.picker_end.setObjectName("availabilityEnd")
         self.picker_end.setAccessibleName("To")
+        self.picker_end.pair_with(self.picker_start)
         self.picker_subject = QComboBox()
         self.picker_subject.setObjectName("availabilitySubject")
         self.picker_subject.setAccessibleName("Subject")

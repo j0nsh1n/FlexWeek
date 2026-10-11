@@ -62,7 +62,6 @@ def click_skip(qapp, setup) -> list[str]:
     return asked
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_ASK)
 def test_f3b_skip_with_a_bad_school_asks_and_escape_means_fix_them(qapp, school) -> None:
     box = school(bad=True)
     asked = click_skip(qapp, box.top)
@@ -71,7 +70,6 @@ def test_f3b_skip_with_a_bad_school_asks_and_escape_means_fix_them(qapp, school)
     assert QApplication.focusWidget() in (box.field, box.field.lineEdit())
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_ASK)
 def test_f3b_skip_with_a_good_school_asks_and_escape_keeps_school(qapp, school) -> None:
     box = school(bad=False)
     asked = click_skip(qapp, box.top)
@@ -80,7 +78,6 @@ def test_f3b_skip_with_a_good_school_asks_and_escape_keeps_school(qapp, school) 
     assert box.top._step != WEEK  # kept and went on
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_MARK)
 def test_f3b_a_skipped_step_is_marked_skipped_not_done(qapp, school) -> None:
     box = school(bad=False)
     box.top._leave(box.top._after(WEEK), keep=False)  # what "Skip without School" ends in
@@ -90,7 +87,6 @@ def test_f3b_a_skipped_step_is_marked_skipped_not_done(qapp, school) -> None:
     assert said == "Skipped", repr(said)
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_FOCUS)
 def test_f3b_a_blocked_next_puts_the_keyboard_on_end_with_its_time_selected(qapp, school) -> None:
     box = school(bad=True)
     box.top.next.setFocus(Qt.FocusReason.TabFocusReason)
