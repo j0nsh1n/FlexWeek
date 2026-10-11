@@ -2040,11 +2040,14 @@ class Segmented(Choices):
             self.setCurrentIndex(index)
 
     def _show(self, index: int) -> None:
+        # With nothing chosen (a "More looks" card is worn) the first option takes the Tab stop, so the
+        # keyboard can still reach the row.
+        stop = max(index, 0)
         for at, button in enumerate(self._buttons):
             button.setChecked(at == index)
             button.setFocusPolicy(
                 Qt.FocusPolicy.ClickFocus
-                | (Qt.FocusPolicy.TabFocus if at == index else Qt.FocusPolicy.NoFocus)
+                | (Qt.FocusPolicy.TabFocus if at == stop else Qt.FocusPolicy.NoFocus)
             )
             button.setAccessibleDescription(f"{at + 1} of {len(self._buttons)}")
 
