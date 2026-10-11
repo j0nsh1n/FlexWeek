@@ -101,7 +101,11 @@ def test_the_rail_holds_next_not_placed_yet_and_the_focus_list_left_of_the_week(
     use_clock(qapp, window, False)
     assert not window.focus_panel.isVisible()
     bar_bottom = window.solve_button.mapTo(window, QPoint(0, window.solve_button.height())).y()
-    assert window.planner.mapTo(window, QPoint(0, 0)).y() - bar_bottom < 32
+    # U19's fixed week list row sits between the bar and the week; nothing else does.
+    row = window.week_list_row
+    assert row.mapTo(window, QPoint(0, 0)).y() - bar_bottom < 32
+    row_bottom = row.mapTo(window, QPoint(0, row.height())).y()
+    assert window.planner.mapTo(window, QPoint(0, 0)).y() - row_bottom < 32
     # Day keeps the rail, and says what is next there instead of in a band above its hours.
     window.findChild(QPushButton, "viewDay").click()
     wait_until(qapp, lambda: window.planner.currentWidget() is window.day_view)
