@@ -137,11 +137,12 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
-- 2026-10-10, `release/0.19.1`: J19 (a GPT-6 Luna lane, reviewed and fixed by Claude), the Retro
-  Large-text window height and Month at 1024x640, on Jonathan's full go for 0.19.1 (push, PR, merge,
-  release). Kept as they are, his to revisit: "12:00 AM" for the end of the day on the 12-hour clock,
-  the shorter sign-in reset note, a whole series' typed start in the past allowed, the stacked dated
-  day chips. A Grok audit of 0.19.0 is running on his side.
-- Next: 1.0.0 with the Android companion (Rust core via UniFFI, Kotlin and Compose) and iroh device
-  sync with background sync on the phone (about Oct 22); plan in
-  `~/.flexweek-ui-harness/scratch/PLAN-0185-to-100.md`.
+- 2026-10-11, `release/0.19.2` (local only, not pushed): the QA handoff's Fix first items from
+  `flexweek-0191-handoff`. In: F3, F3b, 3-R, L12, T-W1, R10, 0l-R, A28, 0f-R, R1, N15, S1, A27, T1, P1 (with
+  spec.md's planning text, written under Jonathan's overnight grant for his review). Gate 4668 passed; rig
+  249/249 at 8981d4fa. Regression Tester's suites live in desktop/tests/regress184, regress190 and
+  backend/tests/regress184, collected only with FLEXWEEK_REGRESS=1 (regress184 waits for its conftest).
+- Not in yet: 1b-R (in worktree ~/.worktrees/flexweek-0192-p1, one commit d7a71eb3 plus uncommitted UI work,
+  gate not green yet), U19 (finished, uncommitted in ~/.worktrees/flexweek-0192-u19, waiting for Jonathan's OK
+  on the 0k test change), R11 (not started). Next patch items N1-N14 moved to 1.0.0.
+- Then: version 0.19.2, release notes, rig, PR on Jonathan's word. After that, 1.0.0 (Android, iroh sync).
