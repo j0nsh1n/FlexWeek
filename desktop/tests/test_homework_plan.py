@@ -683,8 +683,9 @@ def test_homework_editor_refuses_each_field_in_its_own_words(
             monkeypatch.setattr(HomeworkDialog, "_chosen_due", lambda _dialog: value)
         dialog.accept()
         assert dialog.isVisible(), "invalid homework stays open"
-        assert dialog.error.text() == said
-        assert "Value error" not in dialog.error.text()
+        error = dialog.title_problem if field == "title" else dialog.error
+        assert error.text() == said
+        assert "Value error" not in error.text()
     finally:
         dialog.close()
 

@@ -216,6 +216,60 @@ def test_do_it_at_after_it_is_due_is_refused_in_words(qapp: QApplication) -> Non
     free(parent)
 
 
+def test_past_do_it_at_save_focuses_field_and_announces_one_description(
+    qapp: QApplication,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from desktop.native import widgets as widgets_module
+
+    said = []
+    monkeypatch.setattr(
+        widgets_module,
+        "announce",
+        lambda field, words, *, assertive=False: said.append((field, words, assertive)),
+    )
+    parent = host()
+    dialog = opened(parent)
+    dialog.when.setCurrentIndex(1)
+    dialog.when_day.set_days([0])
+    dialog.when_time.setTime(QTime(10, 0))
+    dialog.accept()
+    message = dialog.when_problem.text()
+    assert message == "That's in the past."
+    assert dialog.when_time.accessibleDescription() == message
+    assert dialog.when_problem.accessibleName() == message
+    assert dialog.when_time.hasFocus() or dialog.when_time.lineEdit().hasFocus()
+    assert said == [(dialog.when_time, message, True)]
+    free(dialog)
+    free(parent)
+
+
+def test_homework_title_save_error_focuses_title_and_announces_once(
+    qapp: QApplication,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from desktop.native import widgets as widgets_module
+
+    said = []
+    monkeypatch.setattr(
+        widgets_module,
+        "announce",
+        lambda field, words, *, assertive=False: said.append((field, words, assertive)),
+    )
+    parent = host()
+    dialog = opened(parent)
+    dialog.title.clear()
+    dialog.accept()
+    message = dialog.title_problem.text()
+    assert message == "Give the homework a title."
+    assert dialog.title.accessibleDescription() == message
+    assert dialog.title_problem.accessibleName() == message
+    assert dialog.title.hasFocus()
+    assert said == [(dialog.title, message, True)]
+    free(dialog)
+    free(parent)
+
+
 # Through the window and its session
 
 

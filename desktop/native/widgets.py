@@ -3703,6 +3703,10 @@ class HomeworkDialog(Dialog):
         # Homework saved with no category is still homework, so it gets the same hint.
         self.title.setPlaceholderText("e.g. History essay")
         form.addRow("Title", self.title)
+        self.title_problem = _error_label()
+        self.title_problem.setVisible(False)
+        form.addRow("", self.title_problem)
+        self.title.textChanged.connect(self._clear_title_problem)
         # Where it is placed, said under the title in Edit; a new or unplaced homework says nothing.
         self.placed_line = sheet_note(self._placed_words())
         form.addRow("", self.placed_line)
@@ -4040,6 +4044,9 @@ class HomeworkDialog(Dialog):
             self._form.setRowVisible(self._fixed_row, fixed is not None)
             self._form.setRowVisible(self.when_note, fixed is not None)
         self.when_problem.setVisible(False)
+        self.when_time.setAccessibleDescription("")
+        self.when_problem.clear()
+        self.when_problem.setAccessibleName("")
         self.when_note.setText(
             f"Pinned to {DAYS[fixed['day']]} at {hhmm_text(fixed['start'])}. Plan won't move it."
             if fixed
@@ -4101,7 +4108,7 @@ class HomeworkDialog(Dialog):
             now = self._now()
             past = past_problem(week, fixed["day"], start, now.date().isoformat(), now.hour * 60 + now.minute)
             if past:
-                return past
+                return "That's in the past."
         sessions = self._open_sessions()
         length = int(sessions[0]["duration_min"]) if sessions else self.estimate.value()
         problem = span_problem([], "", fixed["day"], start, start + length, due_point(due, week))
@@ -4112,6 +4119,21 @@ class HomeworkDialog(Dialog):
         self._form.setRowVisible(self.error, bool(text))
         if text:
             self._scroll.ensureWidgetVisible(self.error)
+
+    def _show_field_problem(self, field: QWidget, line: QLabel, text: str) -> None:
+        field.setAccessibleDescription(text)
+        line.setText(text)
+        line.setAccessibleName(text)
+        line.setVisible(True)
+        field.setFocus(Qt.FocusReason.OtherFocusReason)
+        self._scroll.ensureWidgetVisible(line)
+        announce(field, text, assertive=True)
+
+    def _clear_title_problem(self, *_args: object) -> None:
+        self.title.setAccessibleDescription("")
+        self.title_problem.clear()
+        self.title_problem.setAccessibleName("")
+        self.title_problem.setVisible(False)
 
     def _length_problem(self) -> str:
         minutes = self.estimate.value()
@@ -4299,9 +4321,7 @@ class HomeworkDialog(Dialog):
         if fixed is not None and self._when_changed():
             problem = self._fixed_problem(fixed, self._chosen_due())
             if problem:
-                self.when_problem.setText(problem)
-                self.when_problem.setVisible(True)
-                self._scroll.ensureWidgetVisible(self.when_problem)
+                self._show_field_problem(self.when_time, self.when_problem, problem)
                 return
         candidate = deepcopy(self._original)
         links = [self.links.item(index).data(Qt.ItemDataRole.UserRole) for index in range(self.links.count())]
@@ -4341,7 +4361,14 @@ class HomeworkDialog(Dialog):
                 {key: value for key, value in candidate.items() if key in Assignment.model_fields}
             )
         except ValueError as error:
-            self._show_error(_homework_problem(error))
+            message = _homework_problem(error)
+            path = ()
+            if isinstance(error, ValidationError) and error.errors():
+                path = tuple(str(part) for part in error.errors()[0].get("loc") or ())
+            if path and path[0] == "title":
+                self._show_field_problem(self.title, self.title_problem, message)
+            else:
+                self._show_error(message)
             return
         self._spread = self.spread_choice.currentData() == "spread"
         self._result = candidate
