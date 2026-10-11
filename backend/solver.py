@@ -46,6 +46,7 @@ def solve(
     slack_deadlines: dict[str, tuple[int, int]] | None = None,
     extra_occ: list[int] | None = None,
     work_windows: list[WorkWindow] | None = None,
+    now_floor: tuple[int, int] | None = None,
 ) -> SolveTrace:
     """Place flexible blocks around locked ones. Pure and synchronous."""
     raw = flexweek_engine.solve(
@@ -55,6 +56,7 @@ def solve(
         extra_occ,
         _windows(work_windows),
         _clock(),
+        now_floor,
     )
     return SolveTrace.model_validate(json.loads(raw))
 
@@ -96,6 +98,7 @@ def reschedule_running_late(
     slack_deadlines: dict[str, tuple[int, int]] | None = None,
     extra_occ: list[int] | None = None,
     work_windows: list[WorkWindow] | None = None,
+    now_floor: tuple[int, int] | None = None,
 ) -> SolveTrace:
     """Occupy a late window on one day, solve again, and describe changed flexible placements."""
     raw = flexweek_engine.reschedule_running_late(
@@ -109,5 +112,6 @@ def reschedule_running_late(
         extra_occ,
         _windows(work_windows),
         _clock(),
+        now_floor,
     )
     return SolveTrace.model_validate(json.loads(raw))

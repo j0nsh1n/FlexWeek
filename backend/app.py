@@ -1558,6 +1558,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 slack_deadlines=extra_slack,
                 extra_occ=extra_occ,
                 work_windows=work_windows,
+                now_floor=week.running_late.now_floor,
             ).model_dump()
         return solve(
             blocks,
@@ -1565,6 +1566,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             slack_deadlines=extra_slack,
             extra_occ=extra_occ,
             work_windows=work_windows,
+            now_floor=week.now_floor,
         ).model_dump()
 
     @app.get("/api/health")

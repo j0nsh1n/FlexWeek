@@ -178,6 +178,17 @@ ROUTINE_STATUS = frozenset(
 )
 
 
+def _late_summary(moved: int, unplaced: int) -> str:
+    parts = []
+    if moved:
+        parts.append(f"{moved} task{'s' if moved != 1 else ''} {'moves' if moved == 1 else 'move'}")
+    if unplaced:
+        noun = "task" if unplaced == 1 else "tasks"
+        verb = "no longer fits" if unplaced == 1 else "no longer fit"
+        parts.append(f"{unplaced} {noun} {verb}")
+    return " · ".join(parts) or "Nothing needs to move."
+
+
 class NativeSession(QObject):
     account_changed = Signal(object)
     recovery_codes = Signal(list)
@@ -1967,6 +1978,7 @@ class NativeSession(QObject):
             {
                 "blocks": inflate_for_solve(payload, self.preferences),
                 "week_start": self.week_start,
+                "now_floor": list(start) if start is not None else None,
             },
             ok,
             lambda error: self._fail(ticket, error),
@@ -2596,6 +2608,7 @@ class NativeSession(QObject):
                     "day": day,
                     "minutes": minutes,
                     "from_start": from_start,
+                    "now_floor": [day, hhmm_to_minutes(from_start)],
                     "previous_placed": previous,
                 },
             }
@@ -2613,7 +2626,7 @@ class NativeSession(QObject):
                 }
                 moved = len(trace.get("moves") or [])
                 unplaced = len(trace.get("unplaced") or [])
-                self._say(f"{moved} tasks move · {unplaced} tasks no longer fit")
+                self._say(_late_summary(moved, unplaced))
                 self.week_changed.emit()
 
             self.client.request(

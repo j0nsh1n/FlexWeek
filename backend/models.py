@@ -622,6 +622,7 @@ class RunningLateRequest(BaseModel):
     minutes: Literal[15, 30, 60]
     from_start: str = Field(min_length=5, max_length=5)
     previous_placed: list[TimeBlock] = Field(max_length=100)
+    now_floor: tuple[int, int] | None = None
 
     @field_validator("from_start")
     @classmethod
@@ -646,6 +647,7 @@ class SolveRequest(WeekRequest):
     recover: RecoveryRequest | None = None
     running_late: RunningLateRequest | None = None
     week_start: str | None = None
+    now_floor: tuple[int, int] | None = None
 
     @field_validator("week_start")
     @classmethod

@@ -5,6 +5,9 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+- Running late moves a block already in progress by the chosen delay and keeps new homework at or after the current time. The preview shows the day and full before-and-after times.
+
 ## [0.19.1] - 2026-10-10
 
 ### Fixed
