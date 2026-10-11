@@ -309,7 +309,11 @@ def replace_account(db: Connection, user_id: int, snapshot: dict) -> dict:
     assignments = [
         (item["id"], canonical(item["body"]), int(item["revision"])) for item in snapshot["assignments"]
     ]
-    db.replace_account(user_id, weeks, assignments)
+    try:
+        db.replace_account(user_id, weeks, assignments)
+    except ValueError as error:
+        # The store refuses a week that repeats a block id and says which one.
+        raise HTTPException(422, str(error)) from error
     return {
         "weeks": [{"week_start": start, "revision": revision} for start, _blocks, revision in weeks],
         "assignments": [

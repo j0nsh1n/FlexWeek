@@ -21,7 +21,7 @@ pub fn list_account_weeks(conn: &Connection, user_id: i64) -> StoreResult<Vec<(S
 }
 
 /// The first id that a block list uses twice. Text that is not a list of blocks has none to repeat.
-fn repeated_block_id(encoded: &str) -> Option<String> {
+pub(crate) fn repeated_block_id(encoded: &str) -> Option<String> {
     let blocks: Vec<serde_json::Value> = serde_json::from_str(encoded).ok()?;
     let mut seen = HashSet::new();
     blocks

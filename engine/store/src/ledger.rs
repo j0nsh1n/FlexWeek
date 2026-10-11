@@ -5,7 +5,8 @@ use std::collections::HashSet;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::json;
 
-use crate::{StoreResult, defer_write};
+use crate::weeks::repeated_block_id;
+use crate::{StoreError, StoreResult, defer_write};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Recall {
@@ -59,12 +60,20 @@ pub fn capture_account(conn: &Connection, user_id: i64) -> StoreResult<String> {
     Ok(payload.to_string())
 }
 
+/// A backup import or a restore replaces the whole account. A week that repeats a block id refuses
+/// the whole replace, before the old weeks are deleted.
 pub fn replace_account(
     conn: &Connection,
     user_id: i64,
     weeks: &[(String, String, i64)],
     assignments: &[(String, String, i64)],
 ) -> StoreResult<()> {
+    if let Some(id) = weeks
+        .iter()
+        .find_map(|(_, blocks, _)| repeated_block_id(blocks))
+    {
+        return Err(StoreError::RepeatedBlockId(id));
+    }
     defer_write(
         conn,
         "DELETE FROM weeks WHERE user_id = ?1",

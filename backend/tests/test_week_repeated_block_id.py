@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
@@ -10,6 +11,7 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
+import backend.app as backend_app
 from backend.app import create_app, save_week_row
 from backend.storage import connect
 
@@ -105,3 +107,80 @@ def test_a_backup_file_with_a_doubled_id_is_refused_and_the_account_stays_as_it_
         assert refused.json()["detail"].startswith("Invalid input.")
     assert stored_weeks(database) == before
     assert client.get(f"/api/week?week_start={WEEK}").json()["blocks"][0]["title"] == "School"
+
+
+DOUBLED = 'Two blocks in this week share the id "school". Each block needs its own id.'
+
+
+def whole_account(client: TestClient) -> dict:
+    exported = client.post("/api/account-export", json={"password": PASSWORD}, headers=WRITE).json()
+    exported.pop("exported_at")
+    return {"export": exported, "restore_points": client.get("/api/restore-points").json()}
+
+
+def test_an_import_that_reaches_the_store_with_a_doubled_id_is_refused_and_changes_nothing(
+    client: TestClient, database: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    saved = client.put(
+        "/api/week", json={"week_start": WEEK, "blocks": [school()], "revision": 0}, headers=WRITE
+    )
+    assert saved.status_code == 200, saved.text
+    snapshot = client.post("/api/account-export", json={"password": PASSWORD}, headers=WRITE).json()
+    snapshot["preferences"]["theme"] = (
+        "nocturne" if snapshot["preferences"]["theme"] != "nocturne" else "slate"
+    )
+    preview = client.post("/api/account-import/preview", json={"snapshot": snapshot}, headers=WRITE)
+    assert preview.status_code == 200, preview.text
+    before = whole_account(client)
+    weeks_before = stored_weeks(database)
+
+    # The request model is bypassed: the doubled id appears only after it has accepted the file.
+    real_dump = backend_app.dump_blocks
+    monkeypatch.setattr(backend_app, "dump_blocks", lambda blocks: [*real_dump(blocks), *real_dump(blocks)])
+    refused = client.post(
+        "/api/account-import",
+        json={
+            "snapshot": snapshot,
+            "state_token": preview.json()["state_token"],
+            "operation_id": "op-bypass",
+        },
+        headers=WRITE,
+    )
+
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["detail"] == DOUBLED
+    assert stored_weeks(database) == weeks_before
+    assert whole_account(client) == before
+
+
+def test_a_restore_point_with_a_doubled_id_is_refused_and_changes_nothing(
+    client: TestClient, database: Path
+) -> None:
+    saved = client.put(
+        "/api/week", json={"week_start": WEEK, "blocks": [school()], "revision": 0}, headers=WRITE
+    )
+    assert saved.status_code == 200, saved.text
+    body = {
+        "weeks": [{"week_start": WEEK, "blocks": [school(), school("School again")], "revision": 1}],
+        "assignments": [],
+    }
+    with connect(database) as db:
+        user_id = db.execute("SELECT id FROM users WHERE username = 'alice'").fetchone()[0]
+        db.insert_restore_point(
+            user_id, "planted", "Planted", "2026-09-14T08:00:00", 1, 0, json.dumps(body), [], 20
+        )
+    before = whole_account(client)
+    weeks_before = stored_weeks(database)
+    preview = client.get("/api/restore-points/planted/preview")
+    assert preview.status_code == 200, preview.text
+
+    refused = client.post(
+        "/api/restore-points/planted/restore",
+        json={"state_token": preview.json()["state_token"], "operation_id": "op-restore"},
+        headers=WRITE,
+    )
+
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["detail"] == DOUBLED
+    assert stored_weeks(database) == weeks_before
+    assert whole_account(client) == before
