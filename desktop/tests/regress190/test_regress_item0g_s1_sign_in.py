@@ -21,13 +21,6 @@ from desktop.native.client import SIGN_IN_NO_USERNAME, SIGN_IN_SHORT_PASSWORD, U
 from desktop.native.fields import ProblemLine
 from desktop.tests.window_support import qapp, server, signed_out  # noqa: F401
 
-KNOWN_OVERLAP = "known failure (S1.1): ProblemLine floats over the card and covers the rows below it"
-KNOWN_HINT = "known failure (S1.2): the username hint stays on screen while the username problem shows"
-KNOWN_A18 = (
-    "known failure (S1.6, A18): a re-check while typing moves focus to another field's problem"
-)
-KNOWN_WIDTH = "known failure (S1.3): the problem line is up to 360 px wide, not the field's width"
-
 
 def up(qapp, w, mode: str) -> None:
     w.resize(1280, 860)
@@ -202,7 +195,6 @@ def overlaps(w) -> list[str]:
     return found
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_OVERLAP)
 def test_s1_create_account_jo_short_then_fixed_no_two_card_rows_overlap(qapp, signed_out) -> None:
     w = signed_out
     up(qapp, w, "create")
@@ -217,7 +209,6 @@ def test_s1_create_account_jo_short_then_fixed_no_two_card_rows_overlap(qapp, si
     assert all(found == [] for _step, found in seen), seen
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_HINT)
 def test_s1_the_username_hint_hides_while_its_problem_shows_and_comes_back(qapp, signed_out) -> None:
     w = signed_out
     up(qapp, w, "create")
@@ -229,7 +220,6 @@ def test_s1_the_username_hint_hides_while_its_problem_shows_and_comes_back(qapp,
     assert w.username_hint.isVisible()
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_A18)
 @pytest.mark.parametrize("mode", ["create", "reset"])
 def test_s1_a18_typing_a_username_after_a_failed_submit_keeps_focus_and_every_key(
     qapp, signed_out, mode
@@ -249,7 +239,6 @@ def test_s1_a18_typing_a_username_after_a_failed_submit_keeps_focus_and_every_ke
     assert (got is w.username, w.username.text()) == (True, "maya"), f"focus on {got.objectName()}"
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_WIDTH)
 def test_s1_the_problem_line_is_as_wide_as_its_field(qapp, signed_out) -> None:
     w = signed_out
     up(qapp, w, "create")

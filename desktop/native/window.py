@@ -731,6 +731,9 @@ class NativeWindow(QMainWindow):
             field.style().unpolish(field)
             field.style().polish(field)
             line.hide()
+        if hasattr(self, "username_hint"):
+            self.username_hint.setVisible(self._entry_mode == CREATE)
+            self.password_hint.setVisible(self._entry_mode == CREATE)
 
     def _show_auth_problem(self, field: QLineEdit, message: str, *, focus: bool) -> None:
         line = {
@@ -744,6 +747,10 @@ class NativeWindow(QMainWindow):
         field.style().unpolish(field)
         field.style().polish(field)
         line.say(message)
+        if field is self.username:
+            self.username_hint.hide()
+        elif field is self.password:
+            self.password_hint.hide()
         if focus:
             field.setFocus(Qt.FocusReason.OtherFocusReason)
             field.selectAll()
@@ -776,16 +783,6 @@ class NativeWindow(QMainWindow):
         ):
             return
         mode = mode or self._entry_mode
-        visible_fields = {
-            field
-            for field, line in (
-                (self.username, self.username_problem),
-                (self.password, self.password_problem),
-                (self.recovery_code, self.recovery_code_problem),
-                (self.new_recovery_password, self.recovery_password_problem),
-            )
-            if line.isVisible()
-        }
         if mode == CREATE:
             problem = sign_up_problem(self.username.text().strip(), self.password.text())
         elif mode == SIGN_IN:
@@ -797,10 +794,10 @@ class NativeWindow(QMainWindow):
         self._clear_auth_problems()
         field = self._auth_problem_field(problem) if problem else None
         if field is not None:
-            move_focus = focus or (
-                self.sender() in visible_fields and field is not self.sender()
-            )
-            self._show_auth_problem(field, problem, focus=move_focus)
+            self._show_auth_problem(field, problem, focus=focus)
+            if not focus and self._last_auth_announcement != (field, problem):
+                announce(field, f"Error: {problem}")
+                self._last_auth_announcement = (field, problem)
 
     def _explain_wrong_sign_in(self) -> None:
         sheet = ConfirmSheet(
@@ -1008,6 +1005,7 @@ class NativeWindow(QMainWindow):
         username_box.addWidget(self.username)
         self.username_problem = ProblemLine(self.username)
         self.username_problem.setObjectName("usernameProblem")
+        self.username_problem.attach(username_box, username_box.indexOf(self.username) + 1)
         self.username_hint = QLabel(USERNAME_HINT)
         self.username_hint.setObjectName("usernameHint")
         self.username_hint.setWordWrap(True)
@@ -1024,6 +1022,7 @@ class NativeWindow(QMainWindow):
         password_box.addWidget(self.password)
         self.password_problem = ProblemLine(self.password)
         self.password_problem.setObjectName("passwordProblem")
+        self.password_problem.attach(password_box, password_box.indexOf(self.password) + 1)
         # A wrong sign-in is said here, right under the box it is about, so it is read with the box.
         self.auth_error = QWidget()
         self.auth_error.setObjectName("authError")
@@ -1060,6 +1059,7 @@ class NativeWindow(QMainWindow):
         self.recovery_code_problem = ProblemLine(self.recovery_code)
         self.recovery_code_problem.setObjectName("recoveryCodeProblem")
         layout.addWidget(self.recovery_code)
+        self.recovery_code_problem.attach(layout, layout.indexOf(self.recovery_code) + 1)
         self.new_recovery_password = PasswordField()
         self.new_recovery_password.setObjectName("recoverPassword")
         self.new_recovery_password.setMaxLength(128)
@@ -1068,6 +1068,7 @@ class NativeWindow(QMainWindow):
         self.recovery_password_problem = ProblemLine(self.new_recovery_password)
         self.recovery_password_problem.setObjectName("recoveryPasswordProblem")
         layout.addWidget(self.new_recovery_password)
+        self.recovery_password_problem.attach(layout, layout.indexOf(self.new_recovery_password) + 1)
         # On by default: most students plan on their own laptop, and signing in was the first thing
         # FlexWeek asked at every launch. Log out forgets it, for a shared computer.
         self.keep_signed_in = QCheckBox("Keep me signed in on this computer")

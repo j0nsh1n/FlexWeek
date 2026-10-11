@@ -27,9 +27,11 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QAbstractSpinBox,
+    QBoxLayout,
     QCalendarWidget,
     QDateEdit,
     QDateTimeEdit,
+    QFormLayout,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -371,9 +373,7 @@ def announce(widget: QWidget, words: str, *, assertive: bool = False) -> None:
 
 
 class ProblemLine(QFrame):
-    """A short problem written under a field, with a warning icon, in a frame of its own: it floats over
-    what is below, so it needs no room kept for it in forms of every shape. It is a child of the nearest
-    ancestor that can hold it, so it scrolls with the field."""
+    """A short problem written under a field, with a warning icon, in a frame of its own."""
 
     GAP = 4
     MAX_WIDTH = 360
@@ -381,6 +381,8 @@ class ProblemLine(QFrame):
     def __init__(self, field: QWidget) -> None:
         super().__init__(field.parentWidget() or field)
         self.field = field
+        self._overlay = True
+        self.setProperty("problem", False)
         self.setObjectName("clockError")
         row = QHBoxLayout(self)
         row.setContentsMargins(8, 4, 8, 4)
@@ -403,6 +405,34 @@ class ProblemLine(QFrame):
         self.hide()
         field.destroyed.connect(self.deleteLater)
 
+    def attach(self, layout, index: int) -> None:
+        """Reserve a row under fields whose forms have a layout."""
+        if isinstance(layout, QFormLayout):
+            row, _role = layout.getWidgetPosition(self.field)
+            if row < 0:
+                return
+            layout.insertRow(row + 1, self)
+        elif isinstance(layout, QBoxLayout):
+            if layout.direction() == QBoxLayout.Direction.TopToBottom:
+                layout.insertWidget(index, self)
+            else:
+                editor = getattr(self.field, "lineEdit", lambda: None)()
+                typed_text = editor.text() if editor is not None else None
+                holder = QWidget(layout.parentWidget())
+                column = QVBoxLayout(holder)
+                column.setContentsMargins(0, 0, 0, 0)
+                column.setSpacing(0)
+                layout.replaceWidget(self.field, holder)
+                self.field.setParent(holder)
+                self.setParent(holder)
+                column.addWidget(self.field)
+                column.addWidget(self)
+                if editor is not None and typed_text is not None:
+                    editor.setText(typed_text)
+        else:
+            return
+        self._overlay = False
+
     def offer(self, words: str, take: Callable[[], None] | None) -> None:
         """A button beside the problem that puts it right ("Use 3:15 PM"), or none."""
         self._take = take
@@ -417,9 +447,16 @@ class ProblemLine(QFrame):
 
     def say(self, words: str) -> None:
         self.text.setText(words)
-        self.place()
+        colour = self.text.palette().color(QPalette.ColorRole.WindowText).name()
+        self.icon.setPixmap(icons.pixmap("triangle-alert", colour, 16))
+        self.setProperty("problem", True)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        if self._overlay:
+            self.place()
         self.show()
-        self.raise_()
+        if self._overlay:
+            self.raise_()
 
     def place(self) -> None:
         field = self.field
@@ -631,6 +668,11 @@ class ClockField(QTimeEdit):
         self._outline(True)
         if self._line is None:
             self._line = ProblemLine(self)
+            layout = self.parentWidget().layout() if self.parentWidget() is not None else None
+            if layout is not None:
+                index = layout.indexOf(self)
+                if index >= 0:
+                    self._line.attach(layout, index + 1)
         self._line.say(words)
         if fresh:
             announce(self, words, assertive=True)
@@ -649,6 +691,7 @@ class ClockField(QTimeEdit):
         self._outline(False)
         if self._line is not None:
             self._line.offer("", None)
+            self._line.setProperty("problem", False)
             self._line.hide()
 
     def _outline(self, on: bool) -> None:
@@ -657,7 +700,10 @@ class ClockField(QTimeEdit):
         self.style().polish(self)
 
     def textFromDateTime(self, dateTime: QDateTime) -> str:  # noqa: N802, N803
-        return self.lineEdit().text() if self._typing else clock_text(self._minutes_of(dateTime.time()))
+        # Qt asks again whenever the box is shown, reparented or restyled; a problem line under the box
+        # means the text is what the student wrote, which no re-render may replace with the last good time.
+        keep = self._typing or bool(self._problem)
+        return self.lineEdit().text() if keep else clock_text(self._minutes_of(dateTime.time()))
 
     def dateTimeFromText(self, text: str) -> QDateTime:  # noqa: N802
         minutes = self._read(text, whole=False)

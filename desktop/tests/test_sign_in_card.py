@@ -287,3 +287,30 @@ def test_a_wrong_sign_in_is_a_short_red_line_under_the_password_box(
     assert top >= window.password.mapTo(window, QPoint(0, window.password.height())).y()
     assert window.password.accessibleDescription() == text.text()
     assert announced == [(window.password, f"Error: {text.text()}", True)]
+
+
+def test_a_field_problem_is_the_only_error_for_its_field(signed_out: NativeWindow) -> None:  # noqa: F811
+    """S1: the old box under Password and the foot line never show beside the line under the field."""
+    window = signed_out
+    window.show()
+    QApplication.processEvents()
+    window._on_status("Wrong username or password. Try again, or choose Forgot password.")
+    QApplication.processEvents()
+    assert window.password_problem.isVisibleTo(window)
+    assert not window.auth_error.isVisibleTo(window)
+    assert not window.auth_status.isVisibleTo(window)
+
+
+def test_a_field_problem_has_a_one_pixel_edge_in_the_error_colour(signed_out: NativeWindow) -> None:  # noqa: F811
+    """S1: the edge rule wins over the generic QFrame rule, so the line is drawn with the error edge."""
+    window = signed_out
+    window.show()
+    QApplication.processEvents()
+    window._on_status("Wrong username or password. Try again, or choose Forgot password.")
+    QApplication.processEvents()
+    pack, dark, accent = window._look_inputs()
+    error = QColor(resolved_palette(pack, dark, window._look, accent)["error"])
+    line = window.password_problem
+    image = line.grab().toImage()
+    edge = image.pixelColor(image.width() // 2, 0)
+    assert edge.name() == error.name(), f"top edge is {edge.name()}, not the error colour {error.name()}"

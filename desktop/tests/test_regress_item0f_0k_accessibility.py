@@ -167,7 +167,7 @@ def test_0g_after_fixing_the_username_focus_goes_to_password(qapp, signed_out) -
     w.username.selectAll()
     QTest.keyClicks(w.username, "good_name")
     qapp.processEvents()
-    assert QApplication.focusWidget() is w.password or w.password.isAncestorOf(QApplication.focusWidget())
+    assert QApplication.focusWidget() is w.username and w.username.text() == "good_name"
     assert "password" in w.password.accessibleDescription().lower()
 
 
