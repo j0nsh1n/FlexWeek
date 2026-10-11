@@ -265,11 +265,10 @@ def painted_colours(qapp: QApplication, draw, palette: dict | None = None) -> se
     return {image.pixelColor(x, y).name() for x in range(image.width()) for y in range(image.height())}
 
 
-def test_a_deadline_is_a_quiet_chip_led_by_due_and_red_only_once_its_date_has_gone(
+def test_a_deadline_says_overdue_in_words_without_using_the_error_colour(
     qapp: QApplication,
 ) -> None:
-    """A column of red boxes down a Sunday was the most alarming thing in the app for its most
-    ordinary fact. A deadline is a neutral chip led by a bold "Due", and red is kept for past due."""
+    """A deadline is a neutral chip led by "Due" or "Overdue"; red is kept for errors."""
     from PySide6.QtCore import QRectF
 
     from desktop.native.calendar import CATEGORIES
@@ -279,7 +278,8 @@ def test_a_deadline_is_a_quiet_chip_led_by_due_and_red_only_once_its_date_has_go
     cells = {cell.iso: cell for cell in month_cells(september(), {}, "2026-09-28")}
     gone, coming = cells["2026-09-27"].chips[0], cells["2026-09-29"].chips[0]
     assert (gone.late, coming.late) == (True, False)
-    assert (gone.flag, coming.flag) == ("Due", "Due 09:00")
+    assert (gone.flag, coming.flag) == ("Overdue", "Due 09:00")
+    assert "Overdue" in gone.words
 
     box = QRectF(0, 0, 240, 40)
 
@@ -288,8 +288,18 @@ def test_a_deadline_is_a_quiet_chip_led_by_due_and_red_only_once_its_date_has_go
 
     for shown in (gone, coming):
         assert CATEGORIES["assignments"]["mark"] not in chip(shown), "outlined in homework's colour"
-    assert palette["error"] in chip(gone)
+    assert palette["error"] not in chip(gone)
     assert palette["error"] not in chip(coming)
+
+
+def test_a_month_block_names_its_carried_history() -> None:
+    from desktop.native.hours.month import MonthChip
+
+    chip = MonthChip(
+        "block:bio", "Bio reading", "assignments", block_id="bio", start=14 * 60 + 30,
+        history="Left from last week",
+    )
+    assert chip.words == "Left from last week 14:30 Bio reading"
 
 
 def test_a_block_on_month_is_its_category_as_the_week_fills_it(qapp: QApplication) -> None:

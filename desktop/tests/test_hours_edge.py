@@ -1,6 +1,4 @@
-"""A homework block's edge says who chose its time (finding 32 of the 0.17.2 audit): dashed when
-FlexWeek planned it and the next plan may move it, solid when the student placed it and no plan will.
-Read off the pixels of the shared block painter, so every design that draws its hours through it has it."""
+"""Homework state tags and edges use the shared painter across designs and looks."""
 
 from __future__ import annotations
 
@@ -32,7 +30,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.layouts.registry import LAYOUTS, MATCH, tokens_for
     from desktop.native.layouts.retro import RetroPainter, scheme
     from desktop.native.layouts.timeline import TimelinePainter
-    from desktop.native.look import category_paint, resolved_palette
+    from desktop.native.look import EXPERIMENTAL_LOOKS, STANDARD_LOOKS, category_paint, resolved_palette
     from desktop.native.weekmodel import Occurrence
 
 RECT = QRectF(20, 20, 140, 100)
@@ -84,11 +82,10 @@ def mark_colour() -> str:
 
 
 @pytest.mark.parametrize("look", LOOKS.values(), ids=LOOKS.keys())
-def test_homework_flexweek_planned_has_a_dashed_edge(qapp: QApplication, look: dict | None) -> None:  # noqa: F811
+def test_homework_flexweek_planned_has_no_dashed_red_edge(qapp: QApplication, look: dict | None) -> None:  # noqa: F811
     mark = mark_colour()
     edge = top_edge(block(), look)
-    assert 0.25 < share(edge, mark) < 0.9, "dashes of the category's mark"
-    assert runs(edge, mark) >= 6, "with gaps between them"
+    assert runs(edge, mark) < 6, "the overdue state replaces the old dashed edge"
 
 
 @pytest.mark.parametrize("look", LOOKS.values(), ids=LOOKS.keys())
@@ -102,6 +99,55 @@ def test_homework_being_carried_has_no_gaps_in_its_edge(qapp: QApplication) -> N
     """The ring that marks the carried block is solid, as the edge it will have once dropped."""
     edge = top_edge(block(held=True), None)
     assert len({pixel.name() for pixel in edge}) == 1
+
+
+def test_history_tags_fit_a_30_minute_block_at_large_text(qapp: QApplication) -> None:  # noqa: F811
+    look = {"preset": "default", "knobs": {"text": "large"}}
+    painter = BlockPainter(PALETTE, look)
+    for state in ("Overdue", "Left from last week"):
+        image = QImage(100, 70, QImage.Format.Format_ARGB32)
+        image.fill(QColor("white"))
+        paint = QPainter(image)
+        paint.setFont(QFont("Inter", 14))
+        drawn = Drawn("essay", "History essay", CATEGORY, True, Span(3, 17 * 60, 17 * 60 + 30), 0, 1,
+                      history=state)
+        painter.history_tag(paint, QRectF(15, 15, 70, 38), drawn)
+        paint.end()
+        assert any(
+            image.pixelColor(x, y) != QColor("white")
+            for x in range(15, 85)
+            for y in range(15, 53)
+        ), state
+        assert all(
+            image.pixelColor(x, y) == QColor("white")
+            for x in range(100)
+            for y in range(70)
+            if x < 15 or x >= 85 or y < 15 or y >= 53
+        ), state
+
+
+def _contrast(first: QColor, second: QColor) -> float:
+    def luminance(colour: QColor) -> float:
+        values = [colour.redF(), colour.greenF(), colour.blueF()]
+        linear = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4 for value in values]
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+    high, low = sorted((luminance(first), luminance(second)), reverse=True)
+    return (high + 0.05) / (low + 0.05)
+
+
+@pytest.mark.parametrize("kind,name", STANDARD_LOOKS + EXPERIMENTAL_LOOKS)
+def test_history_tag_text_has_accessible_contrast_in_every_look(
+    qapp: QApplication, kind: str, name: str
+) -> None:
+    if kind == "pack":
+        look = None
+        palette = resolved_palette(name, name in {"dark-frost", "nocturne"}, look)
+    else:
+        look = {"preset": name, "knobs": {}}
+        palette = resolved_palette("light-frost", False, look)
+    fill, ink, _outline, _edge = BlockPainter(palette, look).fills(block(history="Overdue"))
+    assert _contrast(fill, ink) >= 4.5, name
 
 
 @pytest.mark.parametrize("drawn", [block(work=False), block(done=True), block(pinned=True, done=True)])

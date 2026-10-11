@@ -1794,9 +1794,12 @@ class RetroView(LayoutView):
         middle = Cell(ahead or "", "retroStatusNow", colours)
         waiting = len(scene.week.waiting)
         right = Cell(
-            (f"{waiting} homework {NOT_PLACED}", f"{waiting} {NOT_PLACED}")
-            if waiting
-            else "Everything has a time",
+            scene.week.homework_sentence
+            or (
+                (f"{waiting} homework {NOT_PLACED}", f"{waiting} {NOT_PLACED}")
+                if waiting
+                else "Everything has a time"
+            ),
             "retroStatusWaiting",
             colours,
         )
@@ -2043,7 +2046,13 @@ class RetroView(LayoutView):
             hint = f"{count} {NOT_PLACED}: drag {them} onto Week.exe, or use Plan my homework."
             lines.addWidget(self._note(hint, "retroNotesHint", wrap=True))
         else:
-            lines.addWidget(self._note("Everything has a time.", "retroNotesNoWaiting", wrap=True))
+            lines.addWidget(
+                self._note(
+                    scene.week.homework_sentence or "Everything has a time.",
+                    "retroNotesNoWaiting",
+                    wrap=True,
+                )
+            )
         lines.addStretch(1)
         area.setWidget(text)
         inside.addWidget(area)

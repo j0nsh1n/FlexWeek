@@ -1427,9 +1427,7 @@ def test_a_real_solve_explains_itself_once(qapp: QApplication, window: NativeWin
 
 
 def test_the_plan_bar_counts_what_the_toast_counts(qapp: QApplication, window: NativeWindow) -> None:
-    """Decision 18 of 0.17. The bar counted every block the solver's trace calls placed, School and
-    homework already placed included, and said 2 placed under a toast that said 0. Both now say the
-    homework this plan gave a time and the homework it could not."""
+    """The bar counts the unplaced homework, while the toast names time still needed."""
     session = window.session
     session.add_block({"id": "school", "title": "School", "kind": "locked", "category": "class",
                        "start": "08:00", "duration_min": 390, "days": [0, 1, 2, 3, 4]})
@@ -1446,7 +1444,7 @@ def test_the_plan_bar_counts_what_the_toast_counts(qapp: QApplication, window: N
     qapp.processEvents()
     assert len(session.trace.get("placed") or []) > 1, "the trace also lists School"
     placed, waiting = session.plan_counts
-    assert window.toast.text().startswith(plan_sentence(placed, waiting))
+    assert "still needs a time" in window.toast.text()
     assert window.plan_review.isVisible()
     assert window.plan_review.heading.text() == plan_sentence(placed, waiting)
 
@@ -1507,7 +1505,7 @@ def test_the_plan_notice_counts_homework_blocks(qapp: QApplication, window: Nati
     window.session.solve(everything=True)
     wait_until(qapp, lambda: not window.session.busy)
     qapp.processEvents()
-    assert window.toast.text().startswith("Placed ")
+    assert window.toast.text() == "Everything has a time."
     assert " of " not in window.toast.text()
 
 

@@ -18,6 +18,8 @@ qapp = logic_support.qapp
 server = logic_support.server
 
 if importlib.util.find_spec("PySide6") is not None:
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 
     from desktop.native import widgets
@@ -199,4 +201,48 @@ def test_the_unfinished_list_holds_only_overdue_homework(
         ]
     )
     rows = [label.text() for label in panel.findChildren(QLabel) if label.objectName() == "unfinishedRow"]
-    assert rows == ["History essay · 1 h left", "Quiz · 30 min left"]
+    assert rows == [
+        "History essay · 1 h left · due Fri 2 Oct · Overdue",
+        "Quiz · 30 min left · due Sat 3 Oct · Overdue",
+    ]
+
+
+def test_homework_rows_expose_state_and_tab_through_each_action(qapp: QApplication) -> None:
+    panel = UnfinishedPanel()
+    panel.set_items(
+        [
+            {
+                "id": "bio",
+                "title": "Bio reading",
+                "remaining_min": 60,
+                "due": "2026-10-14",
+                "left_over_state": "overdue",
+            },
+            {
+                "id": "chem",
+                "title": "Chem lab",
+                "remaining_min": 30,
+                "due": "2026-10-21",
+                "left_over_state": "left_from_last_week",
+            },
+        ],
+        datetime(2026, 10, 17),
+        {"bio", "chem"},
+    )
+    panel.show()
+    qapp.processEvents()
+    rows = [panel.list.itemWidget(panel.list.item(index)) for index in range(panel.list.count())]
+    assert [row.accessibleName() for row in rows] == [
+        "Bio reading · 1 h left · due Wed 14 Oct · Overdue",
+        "Chem lab · 30 min left · due Wed 21 Oct · Left from last week",
+    ]
+    actions = [
+        panel.findChild(QPushButton, "planUnfinished-bio"),
+        panel.findChild(QPushButton, "deleteUnfinished-bio"),
+        panel.findChild(QPushButton, "planUnfinished-chem"),
+        panel.findChild(QPushButton, "deleteUnfinished-chem"),
+    ]
+    for current, following in zip(actions, actions[1:], strict=False):
+        current.setFocus()
+        QTest.keyClick(current, Qt.Key.Key_Tab)
+        assert qapp.focusWidget() is following

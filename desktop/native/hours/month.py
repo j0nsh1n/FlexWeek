@@ -76,6 +76,7 @@ class MonthChip:
     done: bool = False
     # Due on a date already gone and not finished.
     late: bool = False
+    history: str = ""
 
     @property
     def carried(self) -> bool:
@@ -84,14 +85,20 @@ class MonthChip:
 
     @property
     def flag(self) -> str:
-        """What a deadline chip leads with, drawn bold: "Due" and its time if it has one."""
+        """The state word shown before a deadline or a carried block."""
+        if self.history:
+            return self.history
         if not self.due:
             return ""
+        if self.late:
+            return "Overdue"
         return f"Due {hhmm_text(self.due_time)}" if self.due_time else "Due"
 
     @property
     def words(self) -> str:
-        if self.due:
+        if self.due or self.history:
+            if self.history and not self.due:
+                return f"{self.flag} {clock_label(self.start or 0)} {self.title}"
             return f"{self.flag} {self.title}"
         return f"{clock_label(self.start or 0)} {self.title}"
 
@@ -154,6 +161,7 @@ def month_cells(snapshot: dict | None, weeks: Mapping[str, WeekModel], today_iso
                         start=item.start,
                         minutes=item.end - item.start,
                         done=item.done,
+                        history=item.history,
                     )
                 )
         else:
@@ -170,6 +178,7 @@ def month_cells(snapshot: dict | None, weeks: Mapping[str, WeekModel], today_iso
                         start=int(start[:2]) * 60 + int(start[3:]),
                         minutes=int(item.get("duration_min") or 0),
                         done=bool(item.get("completed")),
+                        history=str(item.get("history") or ""),
                     )
                 )
         blocks.sort(key=lambda chip: (chip.start or 0, chip.title))
@@ -231,7 +240,7 @@ class MonthPainter:
         else:
             fill = QColor(category_fill)
         ink = self.c("text")
-        flag = self.c("error") if chip.late else self.c("text")
+        flag = self.c("text")
         if faded or chip.done or held:
             # Only the fill says "done"; dimmed words were too faint to read (#93).
             fill.setAlpha(fill.alpha() // 2)
@@ -241,7 +250,7 @@ class MonthPainter:
         room = box.adjusted(5, 0, -3, 0)
         align = Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
         words = chip.words
-        if chip.due:
+        if chip.due or chip.history:
             plain = painter.font()
             bold = weighted(plain, WEIGHT_STRONG)
             painter.setFont(bold)
@@ -250,7 +259,7 @@ class MonthPainter:
             painter.drawText(room, align, elide(chip.flag, Qt.TextElideMode.ElideRight, int(room.width())))
             room.setLeft(room.left() + QFontMetrics(bold).horizontalAdvance(chip.flag + " "))
             painter.setFont(plain)
-            words = chip.title
+            words = chip.title if chip.due else f"{clock_label(chip.start or 0)} {chip.title}"
         painter.setPen(ink)
         if room.width() > 0:
             elide = QFontMetrics(painter.font()).elidedText

@@ -214,19 +214,19 @@ def test_availability_is_a_sheet_that_esc_closes(qapp: QApplication, window: Nat
     escape_closes(qapp, window, window._open_availability, "Availability", week_anchor(window))
 
 
-def test_plan_unfinished_homework_is_a_sheet_that_esc_closes(
+def test_plan_homework_is_a_sheet_that_esc_closes(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
 ) -> None:
     def launch() -> None:
         window._show_preview(
-            "Plan unfinished homework",
+            "Plan homework",
             "History essay keeps its original deadline and progress.",
             PREVIEW_ROWS,
-            label="unfinished homework",
+            label="homework",
         )
 
-    escape_closes(qapp, window, launch, "Plan unfinished homework", week_anchor(window))
+    escape_closes(qapp, window, launch, "Plan homework", week_anchor(window))
 
 
 def test_manage_account_is_a_sheet_that_esc_closes(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811

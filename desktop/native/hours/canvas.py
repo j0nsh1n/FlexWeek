@@ -16,6 +16,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import date
 from functools import cached_property
 
 from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, Signal
@@ -123,6 +124,8 @@ class Drawn:
     axis: Axis = Axis.DOWN
     # Its name only, on hours too narrow for the name and its times.
     short: bool = False
+    history: str = ""
+    history_due: str | None = None
 
     @property
     def times(self) -> str:
@@ -143,6 +146,15 @@ class Drawn:
         if self.held and self.verdict is not None:
             return self.verdict.words
         words = f"{self.times} · {self.length}"
+        if self.history:
+            state = self.history
+            if state == "Overdue" and self.history_due:
+                try:
+                    due = date.fromisoformat(self.history_due[:10])
+                    state += f", was due {due.strftime('%a')} {due.day} {due.strftime('%b')}"
+                except ValueError:
+                    pass
+            words += f" · {state}"
         return words + " · Pinned" if self.pinned and not self.done else words
 
 
@@ -297,6 +309,55 @@ class BlockPainter:
         painter.setFont(font)
         self.words(painter, rect, drawn, ink, visible, fill, edge)
 
+    def history_tag(self, painter: QPainter, rect: QRectF, drawn: Drawn) -> None:
+        """Keep deadline state visible across every design without using the error colour."""
+        font = at_scale(painter.font(), "caption", self.scale(painter.font()), WEIGHT_STRONG)
+        text = "Overdue" if drawn.history == "Overdue" else "Left from last week"
+        warning = drawn.history == "Overdue"
+        pad, gap = 3.0, 3.0
+        max_width, max_height = rect.width() - 6, rect.height() - 6
+        lines = [text]
+        if not warning and QFontMetricsF(font).horizontalAdvance(text) + 2 * pad > max_width:
+            lines = ["Left from", "last week"]
+        while font.pointSizeF() > 7:
+            metrics = QFontMetricsF(font)
+            icon_side = max(8.0, metrics.height() - 2.0)
+            icon_room = icon_side + gap if warning else 0.0
+            width = max(metrics.horizontalAdvance(line) for line in lines) + 2 * pad + icon_room
+            height = len(lines) * metrics.height() + 2 * pad
+            if width <= max_width and height <= max_height:
+                break
+            font.setPointSizeF(font.pointSizeF() - 0.5)
+        else:
+            return
+        tag = QRectF(rect.left() + 3, rect.top() + 3, width, height)
+        fill, ink, _outline, _edge = self.fills(drawn)
+        painter.save()
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(fill)
+        painter.drawRoundedRect(tag, 4, 4)
+        painter.setFont(font)
+        painter.setPen(ink)
+        left = tag.left() + pad
+        if warning:
+            painter.drawPixmap(
+                QPointF(left, tag.top() + pad + 1),
+                icons.pixmap("triangle-alert", ink.name(), round(icon_side)),
+            )
+            left += icon_room
+        for index, line in enumerate(lines):
+            painter.drawText(
+                QRectF(
+                    left,
+                    tag.top() + pad + index * metrics.height(),
+                    metrics.horizontalAdvance(line) + 1,
+                    metrics.height(),
+                ),
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                line,
+            )
+        painter.restore()
+
     def crossing(self, painter: QPainter, rect: QRectF, around: list[QRectF] | None = None) -> None:
         """The time now drawn again inside `rect`, over what a block has painted there, when the
         line or the dot or pill on it reaches the block. It stops NOW_CLEAR short of each of
@@ -326,15 +387,12 @@ class BlockPainter:
         shape = QPainterPath()
         shape.addRoundedRect(rect, RADIUS_BLOCK, RADIUS_BLOCK)
         painter.fillPath(shape, fill)
-        # Homework FlexWeek planned has a dashed edge, since the next plan may move it. One the student
-        # placed, or is holding to place, has a solid one, since no plan will.
         homework = drawn.work and not drawn.done
-        if outline is not None or homework:
+        if outline is not None or homework and (drawn.pinned or drawn.held):
             if outline is None:
                 mark = category_paint(drawn.category, self.colours)[1]
                 outline = QColor(mark or self.colours["block_edge"])
-            dashed = homework and not (drawn.pinned or drawn.held)
-            painter.setPen(QPen(outline, 2, Qt.PenStyle.DashLine if dashed else Qt.PenStyle.SolidLine))
+            painter.setPen(QPen(outline, 2))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), RADIUS_BLOCK - 1, RADIUS_BLOCK - 1)
         if edge is not None:
@@ -1171,6 +1229,8 @@ class HoursCanvas(QWidget):
                     pinned=item.pinned,
                     axis=track.axis,
                     short=self.short_words,
+                    history=item.history,
+                    history_due=item.due,
                 )
             )
         if (
@@ -1281,6 +1341,8 @@ class HoursCanvas(QWidget):
                     elif not drawn.held and key in self._fresh:
                         painter.setOpacity(self._progress)
                     self.painter.block(painter, rect, drawn, upright_visible)
+                    if drawn.history:
+                        self.painter.history_tag(painter, rect, drawn)
             if (
                 preview is not None
                 and held is not None

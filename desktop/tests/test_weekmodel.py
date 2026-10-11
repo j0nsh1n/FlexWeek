@@ -10,7 +10,7 @@ import os
 
 import pytest
 
-from desktop.native.weekmodel import build_week
+from desktop.native.weekmodel import build_week, homework_time_sentence
 
 WEEK = "2026-09-14"
 HOMEWORK = {
@@ -67,6 +67,17 @@ TRACE = {
         },
     ],
 }
+
+
+def test_homework_time_sentence_includes_overdue_carried_and_unplaced_work() -> None:
+    assert homework_time_sentence(
+        [
+            {"id": "bio", "left_over_state": "overdue", "remaining_min": 60},
+            {"id": "chem", "left_over_state": "left_from_last_week", "remaining_min": 30},
+        ],
+        [{"assignment_id": "chem", "minutes": 30}, {"assignment_id": "art", "minutes": 15}],
+    ) == "1 overdue · 1 left from last week · 1 h 45 min still needs a time"
+    assert homework_time_sentence([], []) == "Everything has a time."
 
 
 @pytest.mark.skipif(importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent")

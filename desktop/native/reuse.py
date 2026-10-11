@@ -340,6 +340,26 @@ def unfinished_items(
     )
 
 
+def left_over_items(
+    assignments: dict[str, dict],
+    saved_weeks: list[str],
+    today_week: str,
+    now: str,
+    blocks: list[dict],
+    committed_blocks: list[dict],
+) -> list[dict]:
+    return json.loads(
+        flexweek_engine.reuse_left_over(
+            json.dumps(assignments),
+            json.dumps(saved_weeks),
+            today_week,
+            now,
+            json.dumps(blocks),
+            json.dumps(committed_blocks),
+        )
+    )
+
+
 def late_from_start(minute: int) -> str:
     return str(flexweek_engine.reuse_late_from(minute))
 

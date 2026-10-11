@@ -92,12 +92,12 @@ def test_the_rail_holds_next_not_placed_yet_and_the_focus_list_left_of_the_week(
         "Next", "Soccer practice", "4:00 PM · in 20 min", "Then Dinner at 6:30 PM"
     )
     # In time order with the time at the right, today's said as Today.
-    assert rail.task_rows() == [("Chem lab report", "Mon 8:00 PM"), ("History essay", "Today 7:00 PM")]
+    assert rail.task_rows() == [("History essay", "Today 7:00 PM")]
     assert [chip.accessibleName() for chip in chips(window)] == ["Math worksheet · 1 h"]
     assert rail.waiting_count.text() == "1"
     use_clock(qapp, window, True)
     assert (card.when.text(), card.then.text()) == ("16:00 · in 20 min", "Then Dinner at 18:30")
-    assert rail.task_rows() == [("Chem lab report", "Mon 20:00"), ("History essay", "Today 19:00")]
+    assert rail.task_rows() == [("History essay", "Today 19:00")]
     use_clock(qapp, window, False)
     assert not window.focus_panel.isVisible()
     bar_bottom = window.solve_button.mapTo(window, QPoint(0, window.solve_button.height())).y()
@@ -300,6 +300,10 @@ def test_the_focus_list_grows_to_its_rows_with_no_scroll_bar_and_no_row_cut(
     """The list was a small scrolling box that clipped the last row ("Fri 17:0(")."""
     seeded(qapp, window)
     session = window.session
+    monday = datetime.fromisoformat(session.week_start) + timedelta(hours=19)
+    session.now_ms = lambda: int(monday.timestamp() * 1000)
+    session.week_changed.emit()
+    settled(qapp, window)
     math = next(block for block in session.blocks if block.get("assignment_id") == "math")
     session.add_block({**math, "start": "17:00", "days": [4], "pinned": True})
     session.save()

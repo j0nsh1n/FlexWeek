@@ -4810,7 +4810,7 @@ class UnfinishedPanel(QWidget):
         super().__init__(parent)
         self.setObjectName("unfinishedReview")
         layout = QVBoxLayout(self)
-        heading = QLabel("Unfinished homework")
+        heading = QLabel("Overdue and left from last week")
         heading.setObjectName("unfinishedHeading")
         layout.addWidget(heading)
         self.list = QListWidget()
@@ -4843,9 +4843,23 @@ class UnfinishedPanel(QWidget):
             row_layout = QHBoxLayout(row)
             text = QLabel(f"{item['title']} · {length_label(int(item['remaining_min']))} left")
             text.setObjectName("unfinishedRow")
+            state = item.get("left_over_state")
+            state_words = "Overdue" if state == "overdue" or item["id"] in late else "Left from last week"
+            due = item.get("due")
+            due_words = ""
+            if isinstance(due, str) and due:
+                try:
+                    due_day = date.fromisoformat(due[:10])
+                    due_words = f" · due {due_day.strftime('%a')} {due_day.day} {due_day.strftime('%b')}"
+                except ValueError:
+                    pass
+            length = length_label(int(item["remaining_min"]))
+            row_words = f"{item['title']} · {length} left{due_words} · {state_words}"
+            row.setAccessibleName(row_words)
+            text.setText(row_words)
             row_layout.addWidget(text, 1)
             if item.get("plannable", True):
-                button = QPushButton("Plan here")
+                button = QPushButton("Find a time")
                 button.setObjectName(f"planUnfinished-{item['id']}")
                 # The row's answer, drawn as a tint beside the outlined Delete, each with room round
                 # its words.

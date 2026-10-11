@@ -83,6 +83,27 @@ def length_label(minutes: int) -> str:
     return str(flexweek_engine.week_length_label(minutes))
 
 
+def homework_time_sentence(left_over: list[dict], needed: list[dict]) -> str:
+    overdue = sum(item.get("left_over_state") == "overdue" for item in left_over)
+    carried = sum(item.get("left_over_state") == "left_from_last_week" for item in left_over)
+    minutes = {item.get("assignment_id"): int(item.get("minutes", 0)) for item in needed}
+    for item in left_over:
+        if item.get("left_over_state") == "overdue":
+            key = item.get("id")
+            minutes[key] = max(minutes.get(key, 0), int(item.get("remaining_min", 0)))
+    total = sum(minutes.values())
+    if not overdue and not carried and not total:
+        return "Everything has a time."
+    words = []
+    if overdue:
+        words.append(f"{overdue} overdue")
+    if carried:
+        words.append(f"{carried} left from last week")
+    if total:
+        words.append(f"{length_label(total)} still needs a time")
+    return " · ".join(words)
+
+
 def planned_line(planned_min: int, done_min: int) -> str:
     return str(flexweek_engine.week_planned_line(planned_min, done_min))
 
@@ -125,6 +146,7 @@ class Occurrence:
     slack: str | None
     # Put there by hand: no plan moves it.
     pinned: bool = False
+    history: str = ""
 
     @property
     def minutes(self) -> int:
@@ -171,6 +193,7 @@ class WeekModel:
     waiting: tuple[Waiting, ...] = ()
     # Minutes the focus timer has credited to this week's homework, and to its blocks without any.
     focus_min: int = 0
+    homework_sentence: str = ""
 
     def _engine(self) -> Any:
         """The week as the engine holds it, read once for a model whose tuples cannot change."""

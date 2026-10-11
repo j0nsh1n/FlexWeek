@@ -67,6 +67,7 @@ from desktop.native.weekmodel import (
     clock_label,
     due_label,
     hhmm_text,
+    homework_time_sentence,
     length_label,
     minute_of,
     time_format,
@@ -852,6 +853,7 @@ class Rail(QFrame):
         assignments: dict,
         time_needed: list[dict] | None = None,
         one_go_unplaced: set[str] | None = None,
+        left_over: list[dict] | None = None,
     ) -> None:
         self._week, self._today, self._minute = week, today, minute
         due = frozenset(
@@ -897,15 +899,17 @@ class Rail(QFrame):
         self.one_go.setVisible(bool(self.one_go_box.count()))
         count = len(time_needed or [])
         self._time_needed_count = count
+        words = homework_time_sentence(left_over or [], time_needed or [])
+        self.none_waiting.setText(words)
+        self.none_waiting.setAccessibleName(words)
+        previous = getattr(self, "_history_words", None)
+        if words != previous and (previous is not None or left_over or time_needed):
+            from desktop.native.fields import announce
+
+            announce(self.none_waiting, words)
+        self._history_words = words
         if count:
-            lines = [
-                f"{item['title']} · {length_label(item['minutes'])} left"
-                for item in time_needed or []
-            ]
-            self.none_waiting.setText("\n".join(lines))
             self.waiting_count.setText(str(count))
-        else:
-            self.none_waiting.setText("Everything has a time.")
         self.waiting_count.setText(str(self._time_needed_count) if self._time_needed_count else "")
         self._show()
 

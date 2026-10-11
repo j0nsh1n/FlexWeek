@@ -89,6 +89,7 @@ from desktop.native.reuse import (
     is_planned,
     late_from_start,
     late_id,
+    left_over_items,
     merge_preview_rows,
     move_earlier_homework,
     open_rest_sessions,
@@ -104,10 +105,16 @@ from desktop.native.reuse import (
     settle_placements,
     solve_request,
     time_still_needed,
-    unfinished_items,
     week_label,
 )
-from desktop.native.weekmodel import WeekModel, build_week, due_label, length_label, minute_of
+from desktop.native.weekmodel import (
+    WeekModel,
+    build_week,
+    due_label,
+    homework_time_sentence,
+    length_label,
+    minute_of,
+)
 
 WEEK_OVER = "This week is over, so nothing was planned. Plan this week or a later one."
 
@@ -2018,11 +2025,7 @@ class NativeSession(QObject):
             self._plan_idle = True
             try:
                 needed = self.homework_time_needed()
-                self._say(
-                    "All your homework already has a time."
-                    if not needed
-                    else plan_sentence(0, len(needed))
-                )
+                self._say(homework_time_sentence(self.unfinished(), needed))
             finally:
                 self._plan_idle = False
             # Homework left in an earlier week is not this plan's to move; the window offers it.
@@ -2108,7 +2111,9 @@ class NativeSession(QObject):
                     self._pending_step["weeks"].extend(deepcopy(prior_updates))
                     self._pending_step["id"] = str(uuid4())
                     self._plan_step_id = self._pending_step["id"]
-            placed_note = plan_sentence(placed, waiting) + split_note
+            placed_note = homework_time_sentence(self.unfinished(), self.homework_time_needed())
+            if split_note:
+                placed_note += split_note
             if not changed and not self.dirty and not self.dirty_assignments:
                 self._say(placed_note)
                 self.week_changed.emit()
@@ -2592,10 +2597,14 @@ class NativeSession(QObject):
         )
 
     def unfinished(self) -> list[dict]:
-        return unfinished_items(
+        moment = datetime.fromtimestamp(self.now_ms() / 1000)
+        today = moment.date()
+        today_week = monday_of(today.isoformat())
+        return left_over_items(
             self.assignments,
             self.saved_weeks,
-            self.week_start,
+            today_week,
+            moment.isoformat(timespec="minutes"),
             self.blocks,
             self._committed_blocks,
         )
@@ -2631,13 +2640,8 @@ class NativeSession(QObject):
         ]
 
     def left_unfinished(self) -> list[dict]:
-        """Homework whose time was in an earlier week and was never ticked done, so nothing from this
-        week on covers it, whether or not it is due yet. Only asked of the week the clock is in: from a
-        later week, this week's own times would look left behind."""
-        today = datetime.fromtimestamp(self.now_ms() / 1000).date()
-        if monday_of(today.isoformat()) != self.week_start:
-            return []
-        return self.unfinished()
+        """Homework whose deadline passed or whose saved session was left in an earlier week."""
+        return [item for item in self.unfinished() if item.get("left_over_state") == "left_from_last_week"]
 
     def plan_left(self, assignment_ids: list[str]) -> None:
         """"Plan them": each one gets a session in this week for the time it has left, and Plan finds
@@ -3013,7 +3017,14 @@ class NativeSession(QObject):
         )
 
     def focus_tasks(self) -> list[dict]:
-        return focus_candidates(self.blocks, self.assignments, self.trace)
+        now = datetime.fromtimestamp(self.now_ms() / 1000)
+        return focus_candidates(
+            self.blocks,
+            self.assignments,
+            self.trace,
+            self.week_start,
+            now.isoformat(timespec="minutes"),
+        )
 
     def _drop_missing_focus(self) -> None:
         state = self.focus
@@ -3097,31 +3108,49 @@ class NativeSession(QObject):
                 "title": "Quick focus",
             }
         else:
-            block = next((item for item in self.blocks if item["id"] == block_id), None)
-            if block is None or block.get("completed") or block.get("pomodoro_role") == "break":
-                self._say("Place an unfinished work block before starting focus.")
-                return False
-            placed = block if block.get("start") else None
-            if placed is None and self.trace:
-                placed = next(
+            if day is None and block_id in self.assignments:
+                assignment = self.assignments[block_id]
+                target = {
+                    "weekStart": self.week_start,
+                    "blockId": None,
+                    "assignmentId": block_id,
+                    "day": None,
+                    "start": None,
+                    "title": f"{assignment['title']}, overdue",
+                }
+            else:
+                block = next(
                     (
                         item
-                        for item in (self.trace.get("placed") or [])
-                        if item["id"] == block_id and (day is None or day in (item.get("days") or []))
+                        for item in self.blocks
+                        if item["id"] == block_id or item.get("assignment_id") == block_id
                     ),
                     None,
                 )
-            if placed is None or not placed.get("start"):
-                self._say("Place an unfinished work block before starting focus.")
-                return False
-            target = {
-                "weekStart": self.week_start,
-                "blockId": block_id,
-                "assignmentId": block.get("assignment_id"),
-                "day": (placed.get("days") or [day])[0],
-                "start": placed["start"],
-                "title": block["title"],
-            }
+                if block is None or block.get("completed") or block.get("pomodoro_role") == "break":
+                    self._say("Place a work block that is not finished before starting focus.")
+                    return False
+                placed = block if block.get("start") else None
+                if placed is None and self.trace:
+                    placed = next(
+                        (
+                            item
+                            for item in (self.trace.get("placed") or [])
+                            if item["id"] == block_id and (day is None or day in (item.get("days") or []))
+                        ),
+                        None,
+                    )
+                if placed is None or not placed.get("start"):
+                    self._say("Place a work block that is not finished before starting focus.")
+                    return False
+                target = {
+                    "weekStart": self.week_start,
+                    "blockId": block["id"],
+                    "assignmentId": block.get("assignment_id"),
+                    "day": (placed.get("days") or [day])[0],
+                    "start": placed["start"],
+                    "title": block["title"],
+                }
         if self.focus is not None and not replace:
             self._pending_focus = {**target, "quick": quick, "block_id": block_id, "day": day}
             self.focus_replace_needed.emit(self.focus["title"], target["title"])

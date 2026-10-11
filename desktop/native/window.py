@@ -169,6 +169,7 @@ from desktop.native.weekmodel import (
     clock_text,
     dated_words,
     hhmm_text,
+    homework_time_sentence,
     moved_words,
     set_clock_24h,
 )
@@ -204,7 +205,6 @@ from desktop.native.widgets import (
     drop_waiting_dim,
     fit_buttons,
     keyboard_focus_rings,
-    overdue_unfinished,
     steady_wheel,
     swatch,
     use_app_style,
@@ -270,7 +270,7 @@ PLAN_TIP = (
     "that already has a time keeps it."
 )
 SUGGEST_TIP = "Give homework without a time a suggested time. Drag any of them somewhere else if you like."
-NOTHING_UNFINISHED = "Nothing is unfinished: no homework from earlier weeks still needs time."
+NOTHING_UNFINISHED = "None left"
 QUICK_FOCUS_TIP = (
     "Open the focus timer, ready to start {minutes} minutes without picking homework. "
     "Change its length in Settings > Focus."
@@ -315,7 +315,7 @@ MORE_TIPS = {
     "runningLate": (
         "Behind today? Say how late you are, and FlexWeek moves the rest of today's homework later."
     ),
-    "unfinishedOpen": "Homework from earlier weeks that still needs time. Plan it into this week.",
+    "unfinishedOpen": "Overdue and earlier-week homework that still needs time. Plan it into this week.",
     "routinesButton": "Save this week's fixed times as a routine, or add a saved routine to a week.",
     "openSpotify": "Open the selected block's Spotify link in Spotify.",
     "replanAll": REPLAN_TIP,
@@ -657,6 +657,12 @@ class NativeWindow(QMainWindow):
         self._layout_tick.timeout.connect(self._refresh_layout)
         self._layout_tick.timeout.connect(self._count_down)
         self._layout_tick.start()
+        self._deadline_tick = QTimer(self)
+        self._deadline_tick.setSingleShot(True)
+        self._deadline_tick.timeout.connect(self._deadline_changed)
+        app = QApplication.instance()
+        if app is not None:
+            app.applicationStateChanged.connect(self._application_state_changed)
         self._apply_appearance()
         if QSystemTrayIcon.isSystemTrayAvailable() and not self._icon.isNull():
             self._install_tray()
@@ -1304,10 +1310,10 @@ class NativeWindow(QMainWindow):
         solve.setObjectName("solveButton")
         # Second only to Add: accent words on a tint, not a third outlined button beside Today and More.
         solve.setProperty("secondary", True)
-        solve.clicked.connect(self.session.solve)
+        solve.clicked.connect(self._plan_with_left_over)
         replan = QPushButton("Replan all my homework")
         replan.setObjectName("replanAll")
-        replan.clicked.connect(lambda: self.session.solve(everything=True))
+        replan.clicked.connect(lambda: self._plan_with_left_over(everything=True))
         save = QPushButton("Save this week now")
         save.setObjectName("saveButton")
         save.clicked.connect(self.session.save)
@@ -1332,7 +1338,7 @@ class NativeWindow(QMainWindow):
         routines = QPushButton("Routines")
         routines.setObjectName("routinesButton")
         routines.clicked.connect(self._open_routines)
-        unfinished = QPushButton("Unfinished")
+        unfinished = QPushButton(NONE_UNFINISHED)
         unfinished.setObjectName("unfinishedOpen")
         unfinished.clicked.connect(self._show_unfinished)
         late = QPushButton("Running late")
@@ -1485,6 +1491,10 @@ class NativeWindow(QMainWindow):
         self.left_chip = QFrame()
         self.left_chip.setObjectName("leftChip")
         chip_row = QHBoxLayout(self.left_chip)
+        self.left_chip_icon = QLabel()
+        self.left_chip_icon.setObjectName("leftChipIcon")
+        self.left_chip_icon.setFixedSize(16, 16)
+        chip_row.addWidget(self.left_chip_icon)
         self.left_chip_text = QLabel()
         self.left_chip_text.setObjectName("leftChipText")
         chip_row.addWidget(self.left_chip_text, 1)
@@ -1501,7 +1511,7 @@ class NativeWindow(QMainWindow):
         self.left_chip.hide()
         column.addWidget(self.left_chip)
         self.plan_review = PlanReview()
-        self.plan_review.replan_requested.connect(lambda: self.session.solve(everything=True))
+        self.plan_review.replan_requested.connect(lambda: self._plan_with_left_over(everything=True))
         self.plan_review.allow_split_requested.connect(self.session.allow_splitting)
         self.alert_strip = AlertStrip()
         self.alert_strip.handled.connect(self._reminder_handled)
@@ -1664,7 +1674,7 @@ class NativeWindow(QMainWindow):
             view.add_requested.connect(
                 lambda category: self._add_from_chip(category) if category else self._add_homework()
             )
-            view.plan_requested.connect(self.session.solve)
+            view.plan_requested.connect(self._plan_with_left_over)
             view.block_activated.connect(self._edit_block)
             view.finished_requested.connect(self._finish_homework)
             view.focus_requested.connect(self._start_focus)
@@ -1743,7 +1753,9 @@ class NativeWindow(QMainWindow):
         surface = "week"
         if not self._day_mode and layout_id in VIEW_CLASSES and session.planner_view in {"day", "month"}:
             surface = session.planner_view
-        week = build_week(session.week_start, session.blocks, session.assignments, session.trace)
+        week = self._week_with_history(
+            build_week(session.week_start, session.blocks, session.assignments, session.trace)
+        )
         running = session.focus_elapsed_min()
         if running:
             # A running session counts as it goes; the homework is credited only when it ends.
@@ -1765,6 +1777,21 @@ class NativeWindow(QMainWindow):
             account=self._account_id(),
         )
 
+    def _week_with_history(self, week):
+        states = {
+            item["id"]: "Overdue" if item.get("left_over_state") == "overdue" else "Left from last week"
+            for item in self.session.unfinished()
+        }
+        return replace(
+            week,
+            occurrences=tuple(
+                replace(item, history=states.get(item.assignment_id, "")) for item in week.occurrences
+            ),
+            homework_sentence=homework_time_sentence(
+                self.session.unfinished(), self.session.homework_time_needed()
+            ),
+        )
+
     def _refresh_layout(self) -> None:
         shown = self.planner.currentWidget()
         if isinstance(shown, LayoutView) and self.session.account is not None:
@@ -1784,6 +1811,44 @@ class NativeWindow(QMainWindow):
         """The countdown in "Next: … (in 23m)" moves on with the minute, whether or not a focus timer
         is running to redraw it."""
         self._show_next()
+
+    def _schedule_deadline_tick(self) -> None:
+        self._deadline_tick.stop()
+        if self.session.account is None:
+            return
+        moment = datetime.fromtimestamp(self.session.now_ms() / 1000)
+        deadlines = []
+        for item in self.session.assignments.values():
+            raw = item.get("due")
+            if not isinstance(raw, str) or not raw:
+                continue
+            try:
+                due = datetime.fromisoformat(raw)
+                if len(raw) == 10:
+                    due = due.replace(hour=23, minute=59)
+            except ValueError:
+                continue
+            if due > moment:
+                deadlines.append(due)
+        if deadlines:
+            delay = round((min(deadlines) - moment).total_seconds() * 1000)
+            self._deadline_tick.start(min(max(delay, 1), 2_147_483_647))
+
+    def _deadline_changed(self) -> None:
+        if self.session.account is None:
+            return
+        self._fill_classic()
+        self._refresh_layout()
+        if self.unfinished_panel.isVisible():
+            self._fill_unfinished(self._unfinished_items())
+        self._sync_left_chip()
+        self._show_next()
+        self.rail.set_tasks(self.session.focus_tasks(), self._clock_in_week()[0])
+        self._schedule_deadline_tick()
+
+    def _application_state_changed(self, state: Qt.ApplicationState) -> None:
+        if state == Qt.ApplicationState.ApplicationActive:
+            self._deadline_changed()
 
     def _rail_shown(self) -> bool:
         """Whether Today's app's rail is beside the planner: on its Day and Week."""
@@ -2406,6 +2471,7 @@ class NativeWindow(QMainWindow):
         self._sync_running_late()
         self._sync_chrome()
         self._apply_appearance()
+        self._schedule_deadline_tick()
         # A month that arrives while it is still sliding in: its picture is taken again once the
         # month has scrolled to its first row, which is a turn of the event loop after this.
         if sliding_in(self.planner):
@@ -2488,19 +2554,28 @@ class NativeWindow(QMainWindow):
     def _sync_more_menu(self) -> None:
         self._sync_undo_enabled()
         needed = self.session.homework_time_needed()
-        count = len(needed)
         unfinished = self.findChild(QPushButton, "unfinishedOpen")
+        left_over = self.session.unfinished()
         if unfinished is not None:
             # Worked out as the menu opens: the busy flag turns every action back on when a save
             # ends, and left to that "Unfinished" was pressable with nothing to show.
-            unfinished.setEnabled(not self.session.busy and bool(needed))
+            unfinished.setEnabled(not self.session.busy and (bool(needed) or bool(left_over)))
         for action, button in self._more_pairs:
             action.setEnabled(button.isEnabled())
             tip = self._more_tip(button.objectName(), button.isEnabled())
+            if button is unfinished and left_over:
+                overdue = sum(item.get("left_over_state") == "overdue" for item in left_over)
+                carried = len(left_over) - overdue
+                parts = []
+                if carried:
+                    parts.append(f"Left from last week · {carried}")
+                if overdue:
+                    parts.append(f"Overdue · {overdue}")
+                action.setText(" · ".join(parts))
+                action.setToolTip(tip)
+                continue
             # Greyed with nothing to show, Unfinished says so on its row, not only in a tooltip (T23).
             said = f"\t{NONE_UNFINISHED}" if tip == NOTHING_UNFINISHED else ""
-            if button.objectName() == "unfinishedOpen" and count:
-                said = f"\t{count} left"
             action.setText(button.text() + said)
             action.setToolTip(tip)
         if self._spotify_action is not None:
@@ -3050,8 +3125,10 @@ class NativeWindow(QMainWindow):
         """Today's app's Day and Week from the open week. Held while the pointer holds something."""
         if self.hand.busy:
             return
-        week = build_week(
-            self.session.week_start, self.session.blocks, self.session.assignments, self.session.trace
+        week = self._week_with_history(
+            build_week(
+                self.session.week_start, self.session.blocks, self.session.assignments, self.session.trace
+            )
         )
         today, minute = self._clock_in_week()
         self._sync_week_access_list(week)
@@ -3074,6 +3151,7 @@ class NativeWindow(QMainWindow):
             self.session.assignments,
             self.session.homework_time_needed(),
             one_go_unplaced,
+            self.session.unfinished(),
         )
         self.month_grid.set_unsaved(self.session.unsaved_weeks())
         self.month_grid.set_week(week)
@@ -3101,12 +3179,12 @@ class NativeWindow(QMainWindow):
                     done=occurrence.done,
                     missed=occurrence.missed,
                     pinned=occurrence.pinned,
+                    history=occurrence.history,
+                    history_due=occurrence.due,
                 )
                 detail = drawn.detail
                 if not occurrence.work:
                     detail += " · Fixed time"
-                elif occurrence.due and occurrence.due < self.session.week_start and not occurrence.done:
-                    detail += " · Unfinished from last week"
                 words = f"{DAY_FULL[day]}: {occurrence.title}, {detail}"
                 row = QListWidgetItem(words)
                 row.setData(Qt.ItemDataRole.UserRole, (occurrence.block_id, day))
@@ -3500,7 +3578,9 @@ class NativeWindow(QMainWindow):
             if waiting:
                 self._choose_time(assignment["id"])
                 return
-        self.session._say("All your homework already has a time.")
+        self.session._say(
+            homework_time_sentence(self.session.unfinished(), self.session.homework_time_needed())
+        )
 
     def _choose_time(self, assignment_id: str) -> None:
         """A time for this homework's first session that needs one, picked rather than dragged."""
@@ -3841,13 +3921,8 @@ class NativeWindow(QMainWindow):
         ]
 
     def _unfinished_items(self, items: list[dict] | None = None) -> list[dict]:
-        """Unfinished homework: late, or left in an earlier week whether or not it is due yet (1b).
-        Asked with the session's own clock, so the app and its tests agree."""
-        found = self.session.unfinished() if items is None else items
-        now = datetime.fromtimestamp(self.session.now_ms() / 1000)
-        keep = {item["id"] for item in overdue_unfinished(found, now)}
-        keep |= {item["id"] for item in self.session.left_unfinished()}
-        return [item for item in found if item["id"] in keep]
+        """The engine classifies overdue and earlier-week homework against the held session clock."""
+        return self.session.unfinished() if items is None else items
 
     def _fill_unfinished(self, items: list[dict]) -> None:
         self.unfinished_panel.set_items(
@@ -3855,24 +3930,72 @@ class NativeWindow(QMainWindow):
         )
 
     def _sync_left_chip(self) -> None:
-        """Shown once Plan was asked for in this week, while homework from an earlier week waits."""
-        asked = self.session.plan_asked_week == self.session.week_start
-        left = self.session.left_unfinished() if asked else []
-        words = f"{len(left)} unfinished from last week"
+        """Offer overdue and carried homework from the same list used by Plan and More."""
+        left = self._unfinished_items()
+        overdue = sum(item.get("left_over_state") == "overdue" for item in left)
+        carried = len(left) - overdue
+        parts = []
+        if overdue:
+            parts.append(f"{overdue} overdue")
+        if carried:
+            parts.append(f"{carried} left from last week")
+        words = " · ".join(parts)
         self.left_chip_text.setText(words)
         self.left_chip.setAccessibleName(words)
+        self.left_chip_icon.setPixmap(
+            icons.pixmap("history", self.palette().color(QPalette.ColorRole.Mid).name(), 16)
+        )
         self.left_chip.setVisible(bool(left))
+        if words and words != getattr(self, "_left_chip_words", ""):
+            announce(self.left_chip_text, words)
+        self._left_chip_words = words
 
     def _plan_left(self) -> None:
-        self.session.plan_left([item["id"] for item in self.session.left_unfinished()])
+        items = self._unfinished_items()
+        self.session.plan_left([item["id"] for item in items])
+        self.session.solve()
 
     def _did_left(self) -> None:
-        left = self.session.left_unfinished()
+        left = self._unfinished_items()
         if not left:
             return
         self.session.did_these([item["id"] for item in left])
         words = left[0]["title"] if len(left) == 1 else f"{len(left)} homework"
         self._set_notice(f"Marked {words} finished.", "Undo", self._undo_from_notice)
+
+    def _plan_with_left_over(self, everything: bool = False) -> None:
+        items = self._unfinished_items()
+        if not items:
+            if everything:
+                self.session.solve(everything=True)
+            else:
+                self.session.solve()
+            return
+        overdue = sum(item.get("left_over_state") == "overdue" for item in items)
+        carried = len(items) - overdue
+        parts = []
+        if overdue:
+            parts.append(f"{overdue} overdue")
+        if carried:
+            parts.append(f"{carried} left from last week")
+        box = QMessageBox(self)
+        box.setWindowTitle("Before planning")
+        box.setText(", ".join(parts))
+        plan = box.addButton("Plan them", QMessageBox.ButtonRole.AcceptRole)
+        did = box.addButton("I did these", QMessageBox.ButtonRole.ActionRole)
+        box.addButton("Not now", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        if box.clickedButton() is plan:
+            self.session.plan_left([item["id"] for item in items])
+            if everything:
+                self.session.solve(everything=True)
+            else:
+                self.session.solve()
+        elif box.clickedButton() is did:
+            self.session.did_these([item["id"] for item in items])
+        else:
+            self.session.plan_asked_week = self.session.week_start
+            self._sync_left_chip()
 
     def _copy_last_week_fixed(self) -> None:
         def offer(rows: list[dict] | None) -> None:
@@ -3889,7 +4012,7 @@ class NativeWindow(QMainWindow):
         self.session.copy_last_week_fixed_rows(offer)
 
     def _show_unfinished(self) -> None:
-        items = self._counted_items()
+        items = self._unfinished_items() or self._counted_items()
         if not items:
             self.session._say(NOTHING_UNFINISHED)
         self._fill_unfinished(items)
@@ -3899,10 +4022,10 @@ class NativeWindow(QMainWindow):
         item = self.session.assignments.get(assignment_id)
         rows = self.session.plan_unfinished(assignment_id)
         self._show_preview(
-            "Plan unfinished homework",
+            "Plan homework",
             (item["title"] + " keeps its original deadline and progress.") if item else "",
             rows,
-            label="unfinished homework",
+            label="homework",
             attempt_key=(
                 f"unfinished|{self.session.account['id']}|{self.session.week_start}|"
                 f"{assignment_id}|{self.session.remaining_for(assignment_id)}"
