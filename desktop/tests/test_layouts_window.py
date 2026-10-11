@@ -1444,7 +1444,8 @@ def test_the_plan_bar_counts_what_the_toast_counts(qapp: QApplication, window: N
     qapp.processEvents()
     assert len(session.trace.get("placed") or []) > 1, "the trace also lists School"
     placed, waiting = session.plan_counts
-    assert "still needs a time" in window.toast.text()
+    assert waiting == 1
+    assert window.toast.text().endswith("10 h still needs a time")
     assert window.plan_review.isVisible()
     assert window.plan_review.heading.text() == plan_sentence(placed, waiting)
 

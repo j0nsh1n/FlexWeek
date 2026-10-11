@@ -85,7 +85,7 @@ def mark_colour() -> str:
 def test_homework_flexweek_planned_has_no_dashed_red_edge(qapp: QApplication, look: dict | None) -> None:  # noqa: F811
     mark = mark_colour()
     edge = top_edge(block(), look)
-    assert runs(edge, mark) < 6, "the overdue state replaces the old dashed edge"
+    assert runs(edge, mark) == 0, "the overdue state replaces the old dashed edge"
 
 
 @pytest.mark.parametrize("look", LOOKS.values(), ids=LOOKS.keys())

@@ -718,6 +718,9 @@ def test_unfinished_homework_keeps_the_same_assignment(qapp: QApplication, serve
     session.load_week(current)
     wait_until(qapp, lambda: session.week_start == current and not session.busy)
     wait_until(qapp, lambda: previous in session.saved_weeks)
+    # Left from last week is judged against today, so the clock is in the week being viewed.
+    monday = datetime.fromisoformat(current) + timedelta(hours=7)
+    session.now_ms = lambda: int(monday.timestamp() * 1000)
     items = session.unfinished()
     assert items[0]["id"] == "lab"
     rows = session.plan_unfinished("lab")

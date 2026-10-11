@@ -148,9 +148,16 @@
  },
  {
   "file": "desktop/native/hours/month.py",
-  "name": "every deadline flagged red",
+  "name": "a deadline gone by said Due, not Overdue",
+  "old": "            return \"Overdue\"\n",
+  "new": "            return f\"Due {hhmm_text(self.due_time)}\" if self.due_time else \"Due\"\n",
+  "test": "desktop/tests/test_hours_month.py::test_a_deadline_says_overdue_in_words_without_using_the_error_colour"
+ },
+ {
+  "file": "desktop/native/hours/month.py",
+  "name": "a deadline gone by flagged red again",
   "old": "        flag = self.c(\"text\")\n",
-  "new": "        flag = self.c(\"error\")\n",
+  "new": "        flag = self.c(\"error\") if chip.late else self.c(\"text\")\n",
   "test": "desktop/tests/test_hours_month.py::test_a_deadline_says_overdue_in_words_without_using_the_error_colour"
  },
  {

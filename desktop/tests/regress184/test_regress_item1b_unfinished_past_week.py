@@ -2,11 +2,13 @@
 to More.
 
 The spec's guard: homework due Wednesday of week 2 with its only session on Friday of week 1, never
-ticked; open week 2 (clock: Monday 07:00 of week 2): More shows the carried item; Plan leaves the session
-where it is and shows the "left from last week" chip; "Plan them" places it in week 2 before
+ticked; open week 2 (clock: Monday 07:00 of week 2): More shows 1 unfinished; Plan leaves the session
+where it is and shows the "1 unfinished from last week" chip; "Plan them" places it in week 2 before
 Wednesday; in a second run "I did these" marks it done, More shows 0 and Plan then places nothing new.
 
-The chip and its two buttons are found by their visible words, independent of design.
+The chip and its two buttons do not exist yet, so they are found by their words (UI Designer's: "...
+unfinished from last week", "Plan them", "I did these"), design-agnostic. Known failures are
+xfail(strict=True).
 """
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
@@ -31,6 +33,13 @@ from desktop.tests.grid_support import (  # noqa: F401
     window,
 )
 
+KNOWN_CHIP = (
+    "known failure (item 1b): there is no 'unfinished from last week' chip with Plan them / I did these"
+)
+KNOWN_CLOCK = (
+    "known failure (item 1b): window.py calls overdue_unfinished without a time, so it reads "
+    "datetime.now(), not the session's injectable clock (session.now_ms)"
+)
 FRIDAY, WEDNESDAY = 4, 2
 
 
@@ -95,12 +104,13 @@ def test_plan_never_moves_last_weeks_session_on_its_own(qapp, window) -> None:
     assert [b for b in lab_sessions(window) if b.get("start")] == []
 
 
+@pytest.mark.xfail(strict=True, reason=KNOWN_CHIP)
 def test_plan_shows_the_unfinished_from_last_week_chip(qapp, window) -> None:
     left_in_week_one(qapp, window)
     plan(qapp, window)
     chip = [
         label.text() for label in window.findChildren(QLabel)
-        if label.isVisible() and "left from last week" in label.text()
+        if label.isVisible() and "unfinished from last week" in label.text()
     ]
     assert chip and visible_button(window, "Plan them") and visible_button(window, "I did these")
 
@@ -129,16 +139,23 @@ def test_i_did_these_marks_it_done_more_shows_none_and_plan_places_nothing(qapp,
     assert [b for b in lab_sessions(window) if b.get("start")] == []
 
 
-def test_left_over_classification_uses_the_session_clock(qapp, window) -> None:
-    """Changing the held clock moves the same session from carried to overdue."""
-    _week1, week2 = left_in_week_one(qapp, window)
-    session = window.session
-    item = next(item for item in session.unfinished() if item["id"] == "lab")
-    assert item["left_over_state"] == "left_from_last_week"
-    after_due = datetime.fromisoformat(week2) + timedelta(days=WEDNESDAY + 1, minutes=1)
-    session.now_ms = lambda: int(after_due.timestamp() * 1000)
+@pytest.mark.xfail(strict=True, reason=KNOWN_CLOCK)
+def test_overdue_unfinished_is_asked_with_the_session_clock(qapp, window, monkeypatch) -> None:
+    """Every call the window makes to overdue_unfinished passes the session's own time."""
+    import desktop.native.window as window_module
+
+    left_in_week_one(qapp, window)
+    real = window_module.overdue_unfinished
+    asked: list = []
+
+    def spy(items, now=None):
+        asked.append(now)
+        return real(items, now)
+
+    monkeypatch.setattr(window_module, "overdue_unfinished", spy)
     window._sync_more_menu()
-    session.week_changed.emit()
-    settled(qapp, window)
-    item = next(item for item in session.unfinished() if item["id"] == "lab")
-    assert item["left_over_state"] == "overdue"
+    window.session.week_changed.emit()
+    qapp.processEvents()
+    session_now = datetime.fromtimestamp(window.session.now_ms() / 1000)
+    assert asked, "the window never asked"
+    assert all(now is not None and abs((now - session_now).total_seconds()) < 60 for now in asked), asked
