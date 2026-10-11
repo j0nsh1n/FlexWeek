@@ -242,6 +242,30 @@ def test_unfinished_stays_open_when_the_week_changes_after_it_is_opened(
     assert not window.unfinished_badge.isVisibleTo(window)
 
 
+def test_more_badge_counts_open_homework_before_an_earlier_week_prompt(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    session = window.session
+    due = (date.fromisoformat(session.week_start) + timedelta(days=9)).isoformat() + "T23:59"
+    session.add_homework(
+        {
+            "id": "history",
+            "title": "History",
+            "estimate_min": 120,
+            "revision": 0,
+            "due": due,
+        }
+    )
+    session.save()
+    settled(qapp, window)
+    window._unfinished_introduced = False
+    window._on_week()
+    assert len(session.homework_time_needed()) == 1
+    assert window.unfinished_badge.isVisibleTo(window)
+    assert window.unfinished_badge.text() == "Unfinished homework · 1 item"
+
+
 def test_unfinished_is_greyed_when_every_item_is_not_yet_overdue(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811

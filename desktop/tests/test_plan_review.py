@@ -119,6 +119,64 @@ def test_a_clean_plan_says_nothing(qapp: QApplication) -> None:
     assert panel.rows_for({"placed": [], "unplaced": [], "moves": [], "explanations": []}, TITLES, WEEK) == []
 
 
+def test_a_share_with_no_time_this_week_says_when_to_plan_it(qapp: QApplication) -> None:
+    trace = {
+        "placed": [],
+        "unplaced": [],
+        "moves": [],
+        "explanations": [],
+        "shares": [
+            {"title": "History", "this_week_min": 0, "left_min": 60},
+            {"title": "Math", "this_week_min": 0, "left_min": 30},
+            {"title": "Bio", "this_week_min": 0, "left_min": 30},
+        ],
+    }
+    assert PlanReview().rows_for(trace, {}, WEEK) == [
+        "No homework time left this week. History, Math and Bio are due next week; plan them there."
+    ]
+
+
+def test_a_share_note_names_the_days_that_received_time(qapp: QApplication) -> None:
+    trace = {
+        "placed": [],
+        "unplaced": [],
+        "moves": [],
+        "explanations": [],
+        "shares": [
+            {"title": "History", "this_week_min": 60, "left_min": 60, "placed_days": [6]}
+        ],
+    }
+    assert PlanReview().rows_for(trace, {}, WEEK) == [
+        "History: 1 h this week (Sun), 1 h left for next week"
+    ]
+
+
+def test_one_go_unplaced_homework_offers_accessible_allow_split_action(qapp: QApplication) -> None:
+    from PySide6.QtWidgets import QPushButton
+
+    trace = {
+        "placed": [],
+        "unplaced": [{"id": "poster-block", "assignment_id": "poster", "title": "Science fair poster"}],
+        "moves": [],
+        "explanations": [],
+    }
+    assignments = {
+        "poster": {"id": "poster", "title": "Science fair poster", "due": "2026-09-23T23:59", "spread": "one"}
+    }
+    panel = PlanReview()
+    panel.set_trace(trace, {"poster-block": "Science fair poster"}, WEEK, (0, 1), assignments)
+    assert panel.list.item(0).text() == (
+        "Science fair poster doesn't fit in one go before Wed 23 Sep. Allow splitting?"
+    )
+    action = panel.list.findChild(QPushButton, "planReviewAllowSplitting")
+    assert action is not None
+    assert action.accessibleName() == panel.list.item(0).text()
+    selected: list[str] = []
+    panel.allow_split_requested.connect(selected.append)
+    action.click()
+    assert selected == ["poster"]
+
+
 def test_the_panel_shows_the_count_and_can_be_dismissed(qapp: QApplication) -> None:
     from PySide6.QtWidgets import QPushButton
 

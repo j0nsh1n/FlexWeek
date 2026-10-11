@@ -3822,6 +3822,9 @@ class HomeworkDialog(Dialog):
         self.spread_choice = Segmented(
             (("In one go", "one"), ("Spread over days", "spread")), "homeworkSpread"
         )
+        self.spread_choice.setCurrentIndex(
+            max(0, self.spread_choice.findData(self._original.get("spread", "one")))
+        )
         form.addRow("Sessions", self.spread_choice)
         self.spread_line = sheet_note("")
         form.addRow("", self.spread_line)
@@ -4429,6 +4432,7 @@ class HomeworkDialog(Dialog):
             title=self.title.text().strip(),
             due=self._chosen_due(),
             estimate_min=self.estimate.value(),
+            spread=self.spread_choice.currentData(),
             course=self.course.text() or None,
             priority=self.priority.currentData(),
             energy=self.energy.currentData(),
@@ -4828,10 +4832,13 @@ class PlanReview(QFrame):
 
     dismissed = Signal()
     replan_requested = Signal()
+    allow_split_requested = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("planReview")
+        self._assignments: dict[str, dict] = {}
+        self._split_rows: dict[str, str] = {}
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
@@ -4879,6 +4886,15 @@ class PlanReview(QFrame):
         said: list[str] = []
         for block in trace.get("unplaced") or []:
             name = titles.get(block["id"], block.get("title") or "Homework")
+            assignment = next(
+                (item for item in self._assignments.values() if item.get("id") == block.get("assignment_id")),
+                None,
+            )
+            if assignment is not None and assignment.get("spread", "one") == "one":
+                due = due_label(assignment["due"], week_start)
+                said.append(f"{name} doesn't fit in one go before {due}. Allow splitting?")
+                self._split_rows[said[-1]] = assignment["id"]
+                continue
             why = next(
                 (
                     item.get("message")
@@ -4916,19 +4932,41 @@ class PlanReview(QFrame):
                 said.append(f"{titles.get(item['block_id'], 'Homework')}: {item['message']}")
         for day, total in overfull_days(trace):
             said.append(f"{DAY_FULL[day]} has {length_label(total)} of homework.")
-        for share in trace.get("shares") or []:
+        shares = trace.get("shares") or []
+        if shares and not any(share["this_week_min"] for share in shares):
+            names = [share["title"] for share in shares]
+            if len(names) == 1:
+                due = f"{names[0]} is due next week; plan it there."
+            elif len(names) == 2:
+                due = f"{names[0]} and {names[1]} are due next week; plan them there."
+            else:
+                due = f"{', '.join(names[:-1])} and {names[-1]} are due next week; plan them there."
+            said.append("No homework time left this week. " + due)
+        for share in shares:
+            if not share["this_week_min"]:
+                continue
+            days = ", ".join(DAY_FULL[day][:3] for day in share.get("placed_days") or [])
+            on_days = f" ({days})" if days else ""
             said.append(
-                f"{share['title']}: {length_label(share['this_week_min'])} this week, "
+                f"{share['title']}: {length_label(share['this_week_min'])} this week{on_days}, "
                 f"{length_label(share['left_min'])} left for next week"
             )
         return said
 
     def set_trace(
-        self, trace: dict | None, titles: dict[str, str], week_start: str, counts: tuple[int, int]
+        self,
+        trace: dict | None,
+        titles: dict[str, str],
+        week_start: str,
+        counts: tuple[int, int],
+        assignments: dict | None = None,
     ) -> None:
         """`counts` are the plan's own, homework it gave a time and homework it could not, the
         numbers the toast says. The trace's placed list holds every block with a time, School
         included, so counted here it said 2 placed where the toast said 0."""
+        self.week_start = week_start
+        self._assignments = assignments or {}
+        self._split_rows: dict[str, str] = {}
         self.list.clear()
         said = self.rows_for(trace or {}, titles, week_start) if trace else []
         if not said:
@@ -4939,7 +4977,25 @@ class PlanReview(QFrame):
 
         self.heading.setText(plan_sentence(placed, waiting))
         for line in said:
-            self.list.addItem(QListWidgetItem(line))
+            row = QListWidgetItem(line)
+            self.list.addItem(row)
+            assignment_id = self._split_rows.get(line)
+            if assignment_id is not None:
+                content = QWidget(self.list)
+                row_layout = QHBoxLayout(content)
+                row_layout.setContentsMargins(4, 0, 4, 0)
+                message = QLabel(line, content)
+                message.setWordWrap(True)
+                row_layout.addWidget(message, 1)
+                button = QPushButton("Allow splitting")
+                button.setObjectName("planReviewAllowSplitting")
+                button.setAccessibleName(line)
+                button.clicked.connect(
+                    lambda _=False, key=assignment_id: self.allow_split_requested.emit(key)
+                )
+                row_layout.addWidget(button)
+                self.list.setItemWidget(row, content)
+                row.setSizeHint(content.sizeHint())
         # As tall as it needs and no taller. One line in a box four lines deep reads as an error.
         row = self.list.sizeHintForRow(0) if self.list.count() else 0
         self.list.setFixedHeight(min(row * len(said) + 2 * self.list.frameWidth() + 4, PLAN_REVIEW_MAX))

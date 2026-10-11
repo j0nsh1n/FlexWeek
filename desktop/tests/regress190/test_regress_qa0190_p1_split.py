@@ -4,7 +4,6 @@ remainder exists nowhere (Fresh Eyes F1/F2/F4, Assistant Local L4, Timmy's rules
 Session level (NativeSession over a LocalServer), with a held clock (`session.now_ms`), as in Coder's
 probe. The week is the real current week; the clock is put on its Saturday or Monday. Rule: Plan never
 makes a homework's time shorter than its estimate, and what is not placed this week is still there.
-Known failures are xfail(strict=True).
 """
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
@@ -18,14 +17,6 @@ pytest.importorskip("PySide6")
 
 from desktop.tests.logic_support import qapp, server, settled, signed_in, wait_until  # noqa: F401
 
-KNOWN_CUT = (
-    "known failure (P1 cause 3): fair_share writes duration_min = the share onto the stored session "
-    "(planning.rs fair_share, controller.py solve), so 120 min becomes 45 and the rest is gone"
-)
-KNOWN_REST = (
-    "known failure (P1 cause 4): 'left for next week' is never made into a session; next week's Plan "
-    "says 'All your homework already has a time.' and places nothing"
-)
 WEEKDAYS = {"days": [0, 1, 2, 3, 4], "start": "19:00", "end": "21:00"}
 WEEKEND = {"days": [5, 6], "start": "10:00", "end": "12:00"}
 
@@ -82,7 +73,6 @@ def next_week(qapp, session) -> None:
 FRESH_EYES = [("math", 45, 9), ("history", 120, 10), ("bio", 60, 11)]  # due next Wed, Thu, Fri
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_CUT)
 def test_p1_1_saturday_1345_without_weekend_hours_plan_cuts_nothing(qapp, server) -> None:
     session = student(qapp, server, "p1_sat_cut")
     hold(session, 5, 13, 45)
@@ -92,7 +82,6 @@ def test_p1_1_saturday_1345_without_weekend_hours_plan_cuts_nothing(qapp, server
     assert kept == {ident: estimate for ident, estimate, _d in FRESH_EYES}
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_REST)
 def test_p1_1_next_weeks_plan_places_all_three_whole_before_their_due_days(qapp, server) -> None:
     session = student(qapp, server, "p1_sat_next")
     hold(session, 5, 13, 45)
@@ -105,7 +94,6 @@ def test_p1_1_next_weeks_plan_places_all_three_whole_before_their_due_days(qapp,
     assert placed == {ident: estimate for ident, estimate, _d in FRESH_EYES}, placed
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_CUT)
 def test_p1_8_monday_1630_lab_report_180_due_next_wednesday_keeps_180(qapp, server) -> None:
     """Assistant Local's weekday repro: one 2 h 30 block on Friday, the 30 min gone."""
     session = student(qapp, server, "p1_mon_lab")
@@ -117,7 +105,6 @@ def test_p1_8_monday_1630_lab_report_180_due_next_wednesday_keeps_180(qapp, serv
     assert minutes(session, "lab") == 180, seen
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_CUT)
 def test_p1_auto_split_off_saturday_45_due_wednesday_stays_one_45_session(qapp, server) -> None:
     """Timmy's addition: rule a, work due within the coming week is never split."""
     session = student(qapp, server, "p1_sat_45")
@@ -138,3 +125,33 @@ def test_p1_guard_weekday_item_due_within_the_week_is_placed_whole(qapp, server)
     homework(qapp, session, [("essay", 90, 3)])
     plan(qapp, session)
     assert minutes(session, "essay", placed=True) == 90
+
+
+def test_allow_splitting_replaces_one_unplaced_session_with_the_full_estimate(qapp, server) -> None:
+    session = student(qapp, server, "p1_allow_split")
+    hold(session, 0, 16, 30)
+    session.selected_day = session.today_iso()
+    homework(qapp, session, [("lab", 180, 9)])
+    assert session.allow_splitting("lab")
+    def split_complete() -> bool:
+        pieces = [block for block in session.blocks if block.get("assignment_id") == "lab"]
+        return (
+            not session.busy
+            and not session.dirty
+            and len(pieces) == 3
+            and all(block.get("start") for block in pieces)
+        )
+
+    wait_until(qapp, split_complete, timeout=20)
+    assert split_complete(), {
+        "message": session.message,
+        "pieces": [block for block in session.blocks if block.get("assignment_id") == "lab"],
+        "spread_preview": session.spread_preview,
+        "assignments": session.assignments,
+        "needs_time": session.needs_time,
+    }
+    settled(qapp, session)
+    pieces = [block for block in session.blocks if block.get("assignment_id") == "lab"]
+    assert len(pieces) == 3, pieces
+    assert all(block.get("start") for block in pieces), pieces
+    assert sum(block.get("duration_min") or 0 for block in pieces) == 180, pieces

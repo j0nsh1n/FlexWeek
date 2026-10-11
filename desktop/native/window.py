@@ -1502,6 +1502,7 @@ class NativeWindow(QMainWindow):
         column.addWidget(self.left_chip)
         self.plan_review = PlanReview()
         self.plan_review.replan_requested.connect(lambda: self.session.solve(everything=True))
+        self.plan_review.allow_split_requested.connect(self.session.allow_splitting)
         self.alert_strip = AlertStrip()
         self.alert_strip.handled.connect(self._reminder_handled)
         column.addWidget(self.alert_strip)
@@ -1536,6 +1537,7 @@ class NativeWindow(QMainWindow):
         self.rail = Rail(self.hand)
         self.rail.focus_requested.connect(self._start_focus)
         self.rail.date_chosen.connect(self._go_to_date)
+        self.rail.allow_split_requested.connect(self.session.allow_splitting)
         self.rail.month_shown_changed.connect(self._keep_rail)
         body.addWidget(self.rail)
         body.addLayout(column, 1)
@@ -2229,6 +2231,8 @@ class NativeWindow(QMainWindow):
     def _on_week(self) -> None:
         if self.session.account is None:
             return
+        if self.plan_review.isVisible() and self.plan_review.week_start != self.session.week_start:
+            self.plan_review.hide()
         if self.hand.busy and self._where() != self._shown:
             # Somewhere else was asked for while a block was held: another view, week, day or design.
             # The block goes back and nothing moves, as Escape does.
@@ -2361,7 +2365,11 @@ class NativeWindow(QMainWindow):
             self._fill_unfinished(prompt)
             self._unfinished_introduced = True
             self.unfinished_badge.hide()
-        elif items and self._unfinished_introduced:
+        elif self.session.homework_time_needed() and not self._unfinished_introduced:
+            self._unfinished_opened = False
+            self.unfinished_panel.hide()
+            self._sync_unfinished_badge(items)
+        elif (items or self.session.homework_time_needed()) and self._unfinished_introduced:
             if self._unfinished_opened and not self.unfinished_panel.isHidden():
                 self._fill_unfinished(items)
             else:
@@ -2379,7 +2387,13 @@ class NativeWindow(QMainWindow):
         if fresh is not None:
             titles = {block["id"]: block["title"] for block in self.session.blocks}
             was_open = self.plan_review.isVisible()
-            self.plan_review.set_trace(fresh, titles, self.session.week_start, self.session.plan_counts)
+            self.plan_review.set_trace(
+                fresh,
+                titles,
+                self.session.week_start,
+                self.session.plan_counts,
+                self.session.assignments,
+            )
             self._reveal_placed()
             if self.plan_review.isVisible():
                 self._layout_plan_review()
@@ -3030,7 +3044,24 @@ class NativeWindow(QMainWindow):
         self._sync_week_access_list(week)
         self.week_table.set_week(week, today, minute)
         self.day_view.set_day(week, date.fromisoformat(self.session.selected_day).weekday(), today, minute)
-        self.rail.set_week(week, today, minute, self.session.assignments)
+        trace = self.session.trace or {}
+        one_go_unplaced = (
+            {
+                item.get("assignment_id")
+                for item in trace.get("unplaced") or []
+                if item.get("assignment_id")
+            }
+            if trace.get("week_start") == self.session.week_start
+            else set()
+        )
+        self.rail.set_week(
+            week,
+            today,
+            minute,
+            self.session.assignments,
+            self.session.homework_time_needed(),
+            one_go_unplaced,
+        )
         self.month_grid.set_unsaved(self.session.unsaved_weeks())
         self.month_grid.set_week(week)
 
@@ -3735,11 +3766,11 @@ class NativeWindow(QMainWindow):
             return
 
     def _sync_unfinished_badge(self, items: list[dict]) -> None:
-        count = len(items)
+        count = len(self.session.homework_time_needed())
         self.unfinished_badge.setText(
-            f"Unfinished homework from earlier weeks · {count} item{'s' if count != 1 else ''}"
+            f"Unfinished homework · {count} item{'s' if count != 1 else ''}"
         )
-        self.unfinished_badge.setVisible(bool(items))
+        self.unfinished_badge.setVisible(bool(count))
 
     def _collapse_unfinished(self) -> None:
         self._unfinished_introduced = True

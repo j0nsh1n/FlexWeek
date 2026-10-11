@@ -255,6 +255,7 @@ class AssignmentContent(BaseModel):
     spotify_url: str | None = Field(default=None, max_length=500)
     due: str
     estimate_min: int = Field(le=ESTIMATE_MAX_MIN)
+    spread: Literal["one", "spread"] = Field(default="one", exclude_if=lambda value: value == "one")
     focus_minutes: int = Field(default=0, ge=0, le=71400)
     focus_sessions: int = Field(default=0, ge=0, le=9999)
     completed: bool = False

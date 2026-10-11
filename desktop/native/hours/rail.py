@@ -11,7 +11,7 @@ behind "Not placed yet" and opens on a wrapping row under that line.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 
 from PySide6.QtCore import (
@@ -64,6 +64,7 @@ from desktop.native.weekmodel import (
     Waiting,
     WeekModel,
     clock_label,
+    due_label,
     hhmm_text,
     length_label,
     minute_of,
@@ -668,6 +669,7 @@ class Rail(QFrame):
     date_chosen = Signal(str)
     # The month was folded away (False) or shown again (True), to be kept on this computer.
     month_shown_changed = Signal(bool)
+    allow_split_requested = Signal(str)
 
     def __init__(self, hand: Hand, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -683,6 +685,8 @@ class Rail(QFrame):
         self._minute: int | None = None
         self._tasks: tuple = ()
         self._waiting: tuple[Waiting, ...] = ()
+        self._waiting_amounts: dict[str, int] = {}
+        self._time_needed_count = 0
         self._chips: list[RailChip] = []
         self._waiting_open = False
         self._due: frozenset[str] = frozenset()
@@ -726,6 +730,12 @@ class Rail(QFrame):
         self.waiting_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.waiting_head.addWidget(self.waiting_count)
         waiting_box.addLayout(self.waiting_head)
+        self.one_go = QWidget(self.waiting)
+        self.one_go.setObjectName("railOneGo")
+        self.one_go_box = QVBoxLayout(self.one_go)
+        self.one_go_box.setContentsMargins(0, 0, 0, 0)
+        self.one_go_box.setSpacing(SPACING[0])
+        waiting_box.addWidget(self.one_go)
         self.tray = QVBoxLayout()
         self.tray.setSpacing(2)
         waiting_box.addLayout(self.tray)
@@ -830,7 +840,15 @@ class Rail(QFrame):
 
     # What it shows
 
-    def set_week(self, week: WeekModel, today: int | None, minute: int | None, assignments: dict) -> None:
+    def set_week(
+        self,
+        week: WeekModel,
+        today: int | None,
+        minute: int | None,
+        assignments: dict,
+        time_needed: list[dict] | None = None,
+        one_go_unplaced: set[str] | None = None,
+    ) -> None:
         self._week, self._today, self._minute = week, today, minute
         due = frozenset(
             str(item.get("due") or "")[:10]
@@ -840,7 +858,51 @@ class Rail(QFrame):
         self._due = due
         now = date.today() if today is None else week.date_of(today)
         self.month.show_week(week.week_start, now, due)
-        self.set_waiting(week.waiting)
+        amounts = {item["assignment_id"]: item["minutes"] for item in time_needed or []}
+        self.set_waiting(week.waiting, amounts)
+        while self.one_go_box.count():
+            entry = self.one_go_box.takeAt(0)
+            if entry.widget() is not None:
+                entry.widget().deleteLater()
+        for needed in time_needed or []:
+            assignment = (assignments or {}).get(needed["assignment_id"], {})
+            if (
+                assignment.get("spread", "one") != "one"
+                or needed["assignment_id"] not in (one_go_unplaced or set())
+            ):
+                continue
+            line = (
+                f"{needed['title']} doesn't fit in one go before "
+                f"{due_label(assignment.get('due'), week.week_start)}. Allow splitting?"
+            )
+            row = QWidget(self.one_go)
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            message = QLabel(line, row)
+            message.setObjectName("railOneGoMessage")
+            message.setWordWrap(True)
+            row_layout.addWidget(message, 1)
+            action = QPushButton("Allow splitting", row)
+            action.setObjectName("railAllowSplitting")
+            action.setAccessibleName(line)
+            action.clicked.connect(
+                lambda _=False, key=needed["assignment_id"]: self.allow_split_requested.emit(key)
+            )
+            row_layout.addWidget(action)
+            self.one_go_box.addWidget(row)
+        self.one_go.setVisible(bool(self.one_go_box.count()))
+        count = len(time_needed or [])
+        self._time_needed_count = count
+        if count:
+            lines = [
+                f"{item['title']} · {length_label(item['minutes'])} left"
+                for item in time_needed or []
+            ]
+            self.none_waiting.setText("\n".join(lines))
+            self.waiting_count.setText(str(count))
+        else:
+            self.none_waiting.setText("Everything has a time.")
+        self.waiting_count.setText(str(self._time_needed_count) if self._time_needed_count else "")
         self._show()
 
     def set_clock(self, today: int | None, minute: int | None) -> None:
@@ -896,20 +958,23 @@ class Rail(QFrame):
             margins = self.tasks.contentsMargins()
             self.tasks.setFixedHeight(tall + margins.top() + margins.bottom() + 2)
 
-    def set_waiting(self, waiting: tuple[Waiting, ...]) -> None:
+    def set_waiting(self, waiting: tuple[Waiting, ...], amounts: dict[str, int] | None = None) -> None:
         if self.hand.busy:
             # Rebuilding would delete the chip the pointer is holding. The release refreshes.
             return
         # Every save comes through here. Chips made again for the same homework were shown a frame
         # after the old ones went, so the tray blinked empty on each save.
-        if waiting == self._waiting:
+        if waiting == self._waiting and (amounts or {}) == self._waiting_amounts:
             return
         self._waiting = waiting
+        self._waiting_amounts = amounts or {}
         for chip in self._chips:
             chip.setParent(None)
             chip.deleteLater()
         self._chips = []
         for index, item in enumerate(waiting):
+            if amounts and item.assignment_id in amounts:
+                item = replace(item, minutes=amounts[item.assignment_id])
             chip = RailChip(self.hand, item)
             chip.setObjectName(f"classicWaiting{index}")
             chip.colours, chip.look = self.colours, self.look
@@ -984,8 +1049,7 @@ class Rail(QFrame):
         listed = self.tasks.count() > 0
         self.focus.setVisible(wide and listed)
         self.none_waiting.setVisible(not self._chips)
-        self.waiting_count.setText(str(len(self._chips)))
-        self.waiting_count.setVisible(bool(self._chips))
+        self.waiting_count.setVisible(bool(self.waiting_count.text()))
         # With the month folded, the way back sits on the first header the rail shows.
         for head in (self.next.head, self.waiting_head, self.focus_head):
             head.removeWidget(self.show_month)
