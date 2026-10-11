@@ -3060,6 +3060,7 @@ class BlockDialog(Dialog):
         self._delete_every_week = False
         self._occurrence_day = occurrence_day
         self._series_days: list[bool] | None = None
+        self._syncing_scope_days = False
         existing = block is not None
         series = existing and is_series(self._original)
         self.setObjectName("blockDialog")
@@ -3071,6 +3072,10 @@ class BlockDialog(Dialog):
         form.addRow("Title", self.title)
         self.day_picker = DayPicker(self._original["days"], "blockDay")
         self.days = self.day_picker.buttons
+        for index, check in enumerate(self.days):
+            # The day is read off the button: a lambda naming the dialog kept it from being freed.
+            check.setProperty("weekday", index)
+            check.toggled.connect(self._day_toggled)
         # A week's blocks are its own, so ticking more days repeats a block within this week only.
         # One line, never wrapped, under the boxes it is about. Wrapped, the form gave it two lines'
         # height for one line of words, or one line's height for two.
@@ -3255,14 +3260,18 @@ class BlockDialog(Dialog):
         # off every other day. The series' ticks are kept while the one-day view is showing.
         if occurrence and self._series_days is None:
             self._series_days = [check.isChecked() for check in self.days]
-        for index, check in enumerate(self.days):
-            if occurrence:
-                check.setChecked(index == self._occurrence_day)
-                check.setEnabled(False)
-            else:
-                if self._series_days is not None:
-                    check.setChecked(self._series_days[index])
-                check.setEnabled(True)
+        self._syncing_scope_days = True
+        try:
+            for index, check in enumerate(self.days):
+                if occurrence:
+                    check.setChecked(index == self._occurrence_day)
+                    check.setEnabled(False)
+                else:
+                    if self._series_days is not None:
+                        check.setChecked(self._series_days[index])
+                    check.setEnabled(True)
+        finally:
+            self._syncing_scope_days = False
         if not occurrence:
             self._series_days = None
         self.repeat_note.setVisible(not occurrence)
@@ -3278,6 +3287,16 @@ class BlockDialog(Dialog):
         else:
             days = [index for index, check in enumerate(self.days) if check.isChecked()]
         self.scope_series.setText(f"Every {day_range_and_words(days)}")
+
+    def _day_toggled(self, checked: bool) -> None:
+        day = int(self.sender().property("weekday"))
+        if (
+            self.scope_occurrence.isChecked()
+            and self._occurrence_day is not None
+            and self._series_days is not None
+            and not self._syncing_scope_days
+        ):
+            self._series_days[day] = checked
 
     def _clock_to_minutes(self, clock: QTime) -> int:
         return clock.hour() * 60 + clock.minute()
@@ -3441,7 +3460,11 @@ class BlockDialog(Dialog):
             self.start.setFocus()
             return
         candidate = deepcopy(self._original)
-        chosen_days = [index for index, check in enumerate(self.days) if check.isChecked()]
+        chosen_days = (
+            [index for index, selected in enumerate(self._series_days) if selected]
+            if self.scope() == "occurrence" and self._series_days is not None
+            else [index for index, check in enumerate(self.days) if check.isChecked()]
+        )
         candidate.update(
             title=self.title.text().strip(),
             days=chosen_days,

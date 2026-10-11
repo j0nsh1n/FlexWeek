@@ -115,6 +115,8 @@ def test_restore_preview_keeps_the_chosen_point(qapp: QApplication) -> None:
 
 def test_going_back_keeps_a_day_the_student_had_already_unticked(qapp: QApplication) -> None:
     dialog = BlockDialog(None, school(), occurrence_day=2)
+    # Opened from one day, the editor starts on that day only (T1); the student goes to the series first.
+    dialog.scope_series.setChecked(True)
     dialog.days[4].setChecked(False)
     dialog.scope_occurrence.setChecked(True)
     dialog.scope_series.setChecked(True)
