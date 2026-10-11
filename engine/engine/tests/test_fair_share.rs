@@ -145,11 +145,11 @@ fn time_still_needed_reports_the_open_session_amount() {
 }
 
 #[test]
-fn time_still_needed_adds_unplanned_minutes_and_open_week_remainder() {
+fn time_still_needed_does_not_double_count_an_open_week_remainder() {
     let mut assignments = science("2026-10-14T23:59", 120);
     assignments["sci"]["unplanned_min"] = json!(60);
     let counts = time_still_needed(&assignments, &[session("s1", 30)], WEEK).unwrap();
-    assert_eq!(counts[0]["minutes"], json!(90));
+    assert_eq!(counts[0]["minutes"], json!(60));
 }
 
 #[test]

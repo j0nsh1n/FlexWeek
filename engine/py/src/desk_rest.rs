@@ -505,18 +505,35 @@ fn reuse_fair_share(
     committed: &str,
     week_start: &str,
     first_day: i64,
+    planning_context: &str,
     targets: Vec<String>,
 ) -> PyResult<(String, String)> {
-    let (blocks, assignments, committed) = (parse(blocks)?, parse(assignments)?, parse(committed)?);
+    let (blocks, assignments, committed, planning_context) = (
+        parse(blocks)?,
+        parse(assignments)?,
+        parse(committed)?,
+        parse(planning_context)?,
+    );
     guard(|| {
         let blocks = blocks.as_array().cloned().unwrap_or_default();
         let assignments = assignments.as_object().cloned().unwrap_or_default();
+        let first_minute = planning_context
+            .get("first_minute")
+            .and_then(Value::as_i64)
+            .unwrap_or(0);
+        let work_windows = planning_context
+            .get("work_windows")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
         let (week, notes) = planning::fair_share(
             &blocks,
             &assignments,
             &committed,
             week_start,
             first_day,
+            first_minute,
+            &work_windows,
             &targets,
         )
         .map_err(crate::raise)?;
@@ -524,6 +541,55 @@ fn reuse_fair_share(
             serde_json::Value::Array(week).to_string(),
             serde_json::Value::Array(notes).to_string(),
         ))
+    })
+}
+
+#[pyfunction]
+fn reuse_open_rest(blocks: &str, assignments: &str, week_start: &str) -> PyResult<String> {
+    let (blocks, assignments) = (parse(blocks)?, parse(assignments)?);
+    guard(|| {
+        let blocks = blocks.as_array().cloned().unwrap_or_default();
+        let assignments = assignments.as_object().cloned().unwrap_or_default();
+        Ok(dump(&Value::Array(
+            planning::open_rest_sessions(&blocks, &assignments, week_start)
+                .map_err(crate::raise)?,
+        )))
+    })
+}
+
+#[pyfunction]
+fn reuse_move_earlier_homework(
+    blocks: &str,
+    earlier_weeks: &str,
+    assignments: &str,
+    week_start: &str,
+) -> PyResult<String> {
+    let (blocks, earlier_weeks, assignments) =
+        (parse(blocks)?, parse(earlier_weeks)?, parse(assignments)?);
+    guard(|| {
+        let blocks = blocks.as_array().cloned().unwrap_or_default();
+        let earlier_weeks = earlier_weeks.as_array().cloned().unwrap_or_default();
+        let assignments = assignments.as_object().cloned().unwrap_or_default();
+        let result =
+            planning::move_earlier_homework(&blocks, &earlier_weeks, &assignments, week_start)
+                .map_err(crate::raise)?;
+        Ok(dump(&result))
+    })
+}
+
+#[pyfunction]
+fn reuse_time_still_needed(
+    assignments: &str,
+    open_week_blocks: &str,
+    week_start: &str,
+) -> PyResult<String> {
+    let (assignments, blocks) = (parse(assignments)?, parse(open_week_blocks)?);
+    guard(|| {
+        let assignments = assignments.as_object().cloned().unwrap_or_default();
+        let blocks = blocks.as_array().cloned().unwrap_or_default();
+        Ok(dump(&Value::Array(
+            planning::time_still_needed(&assignments, &blocks, week_start).map_err(crate::raise)?,
+        )))
     })
 }
 
@@ -1347,6 +1413,9 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         reuse_homework,
         reuse_session_days,
         reuse_fair_share,
+        reuse_open_rest,
+        reuse_move_earlier_homework,
+        reuse_time_still_needed,
         reuse_planned,
         reuse_planning_days,
         reuse_apply_plan,

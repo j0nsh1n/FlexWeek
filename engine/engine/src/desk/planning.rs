@@ -556,7 +556,7 @@ pub fn time_still_needed(
             })
             .sum();
         let unplanned = int_of(&or_default(get(assignment, "unplanned_min")?, json!(0)))?;
-        let minutes = floor_slot(unplanned + waiting);
+        let minutes = floor_slot(unplanned.max(waiting));
         if minutes == 0 {
             continue;
         }
