@@ -17,6 +17,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Setup's Sports or Activity choice is read out by its name, not by its current value.
 - The recovery codes are cleared from FlexWeek once you press Continue to my week, instead of staying in a hidden page.
 - A problem with what you typed now appears on its own line right under the field, pushing what is below it down instead of covering it, in the error colour and as wide as the field. The field's hint steps aside while it shows. Typing never moves the cursor to another field; only Sign in, Create account or Save does. An unreadable time stays as you typed it. Add and Edit homework say "That's in the past." and Title problems under their field the same way, read out once, with the cursor on the field when you press Save.
+- Deleting a repeating block asks once, starting from the day you opened it on, and names the days ("Delete Soccer on every Tue and Thu this week?"). For School and Setup activities the choices are "This day only", "This week only" and "This week and later"; earlier weeks keep it, and "This week and later" says it can't be undone.
 - Sign in, Create account and Reset password keep the last text size and High contrast you used on this computer, so Large text and High contrast no longer drop back to the default look when you sign out. Colours, accent and theme are not carried over.
 
 ## [0.19.1] - 2026-10-10

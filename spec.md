@@ -104,10 +104,12 @@ Contract for the finished app:
   student omit or adjust one-week exceptions without changing the routine.
 - School and Setup's activities make the account's standing week: one row per
   block, keyed by its Setup id and the week it stands from, so every week shows
-  them unless that week has its own copy. Changing or removing School or an
-  activity asks "Just this week" or "Every week"; every week rewrites the saved
-  later weeks in the same save (`standing` in `/api/changes`), and only the open
-  week's part has Undo. Restore points and account exports carry the standing
+  them unless that week has its own copy. Deleting School or an
+  activity asks once, naming the days: "This day only" (when opened from one
+  day), "This week only" or "This week and later"; earlier weeks keep it, and
+  this week and later rewrites the saved later weeks in the same save
+  (`standing` in `/api/changes`) and can't be undone; only the open week's part
+  has Undo. Restore points and account exports carry the standing
   rows.
 - A later week reviews unfinished homework using the original assignment ID,
   exact deadline and progress. Repeated planning and request retries cannot
