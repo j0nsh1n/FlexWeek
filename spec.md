@@ -323,9 +323,11 @@ the bottom right of the page, with Undo when the step can be undone. It goes aft
 when it offers Undo, held while the pointer or the keyboard is on it, with a
 thin line showing the time left), on a change of week, or when its Undo is
 used; a switch of view or design keeps it, and Plan finding nothing new leaves
-an Undo toast up. There is no status line. Before the week grid, a list of the
-week's blocks for screen readers and the keyboard stays folded until the
-keyboard reaches it (Tab, or Ctrl+Shift+L). Month opens
+an Undo toast up. There is no status line. Before the week grid, a fixed row,
+"Week as a list · Ctrl+Shift+L", is a Tab stop; it, Enter or Space opens a
+list of the week's blocks for screen readers and the keyboard in a panel over
+the grid, and Esc closes it and returns the keyboard to where it was. Opening
+or closing it never moves the grid. Month opens
 with the student's week as its first row. A new account with no homework sees
 "Nothing here yet." and one "Add your first homework" button in place of empty
 hours. A focus timer has a screen of its own (Start focus, Quick focus or F):
