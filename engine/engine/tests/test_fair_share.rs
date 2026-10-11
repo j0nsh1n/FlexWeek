@@ -10,7 +10,7 @@ fn science(due: &str, estimate: i64) -> Map<String, Value> {
     table.insert(
         "sci".into(),
         json!({"id": "sci", "title": "Science project", "due": due, "estimate_min": estimate,
-               "focus_minutes": 0}),
+               "focus_minutes": 0, "spread": "spread"}),
     );
     table
 }
@@ -109,10 +109,15 @@ fn homework_due_within_seven_days_is_not_removed_when_another_session_is_held() 
 }
 
 #[test]
-fn planning_again_does_not_shrink_it_further() {
-    // The first plan left a 60 min session; the second plan is worked out from the 120 min left.
-    let (blocks, _) = share(&[session("s1", 60)], "2026-10-14T23:59", 120, 5, &["s1"]);
-    assert_eq!(blocks[0]["duration_min"], json!(60));
+fn spreading_a_partial_session_keeps_the_estimate_across_both_sessions() {
+    let (blocks, _) = share(&[session("s1", 60)], "2026-10-21T23:59", 120, 5, &["s1"]);
+    assert_eq!(
+        blocks
+            .iter()
+            .map(|block| block["duration_min"].as_i64().unwrap())
+            .sum::<i64>(),
+        120
+    );
 }
 
 #[test]
@@ -160,7 +165,8 @@ fn days_without_study_windows_are_not_part_of_this_weeks_share() {
     )
     .unwrap();
     assert_eq!(blocks[0]["duration_min"], json!(120));
-    assert!(notes.is_empty());
+    assert_eq!(notes[0]["this_week_min"], json!(0));
+    assert_eq!(notes[0]["left_min"], json!(120));
 }
 
 #[test]
@@ -181,6 +187,32 @@ fn today_counts_when_a_free_slot_remains_after_the_clock() {
 }
 
 #[test]
+fn today_does_not_count_when_a_commitment_uses_every_slot_after_the_clock() {
+    let windows = vec![json!({"days": [6], "start": "10:00", "end": "12:00"})];
+    let held = json!([{
+        "id": "appointment",
+        "kind": "locked",
+        "days": [6],
+        "start": "11:00",
+        "duration_min": 60
+    }]);
+    let (blocks, notes) = fair_share(
+        &[session("s1", 120)],
+        &science("2026-10-28T23:59", 120),
+        &held,
+        WEEK,
+        6,
+        660,
+        &windows,
+        &["s1".to_string()],
+    )
+    .unwrap();
+    assert_eq!(blocks[0]["duration_min"], json!(120));
+    assert_eq!(notes[0]["this_week_min"], json!(0));
+    assert_eq!(notes[0]["left_min"], json!(120));
+}
+
+#[test]
 fn later_due_dates_count_their_full_study_calendar() {
     let windows = vec![json!({"days": [0, 1, 2, 3, 4], "start": "19:00", "end": "21:00"})];
     let (blocks, _) = fair_share(
@@ -195,4 +227,23 @@ fn later_due_dates_count_their_full_study_calendar() {
     )
     .unwrap();
     assert_eq!(blocks[0]["duration_min"], json!(15));
+}
+
+#[test]
+fn homework_set_to_one_go_never_gets_a_fair_share() {
+    let mut assignments = science("2026-10-21T23:59", 180);
+    assignments["sci"]["spread"] = json!("one");
+    let (blocks, notes) = fair_share(
+        &[session("s1", 180)],
+        &assignments,
+        &json!([]),
+        WEEK,
+        0,
+        0,
+        &[],
+        &["s1".to_string()],
+    )
+    .unwrap();
+    assert_eq!(blocks[0]["duration_min"], json!(180));
+    assert!(notes.is_empty());
 }

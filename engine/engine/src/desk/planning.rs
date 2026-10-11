@@ -941,6 +941,14 @@ pub fn fair_share(
         let Some(assignment) = assignments.get(&homework) else {
             continue;
         };
+        if assignment
+            .get("spread")
+            .and_then(Value::as_str)
+            .unwrap_or("one")
+            == "one"
+        {
+            continue;
+        }
         let Some(due) = assignment.get("due").and_then(Value::as_str) else {
             continue;
         };
@@ -955,10 +963,16 @@ pub fn fair_share(
             work_windows,
             &iterate(committed)?,
         )?;
+        let left = available_homework_minutes(assignment, &json!([]), committed)?;
         if this_week == 0 || all_days == 0 {
+            notes.push(json!({
+                "assignment_id": homework,
+                "title": assignment.get("title").cloned().unwrap_or(Value::Null),
+                "this_week_min": 0,
+                "left_min": left,
+            }));
             continue;
         }
-        let left = available_homework_minutes(assignment, &json!([]), committed)?;
         let share = ceil_slot((left * this_week + all_days - 1) / all_days).min(left);
         let held: i64 = out
             .iter()
