@@ -346,6 +346,7 @@ pub fn open_rest_sessions(
     blocks: &[Value],
     assignments: &serde_json::Map<String, Value>,
     week_start: &str,
+    earlier_blocks: &[Value],
 ) -> EngineResult<Vec<Value>> {
     let monday = from_iso(week_start)?;
     let mut out = blocks.to_vec();
@@ -369,7 +370,12 @@ pub fn open_rest_sessions(
                     .and_then(Value::as_bool)
                     .unwrap_or(false)
         });
-        if has_open {
+        let already_placed_earlier = earlier_blocks.iter().any(|block| {
+            block.get("assignment_id").and_then(Value::as_str) == Some(id)
+                && truthy(block.get("start"))
+                && !truthy(block.get("completed"))
+        });
+        if has_open || already_placed_earlier {
             continue;
         }
         let minutes = floor_slot(int_of(subscript(assignment, "unplanned_min")?)?);

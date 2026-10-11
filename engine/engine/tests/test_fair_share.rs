@@ -126,13 +126,30 @@ fn spreading_a_partial_session_keeps_the_estimate_across_both_sessions() {
 fn open_rest_adds_one_idempotent_session_for_homework_due_after_this_week() {
     let mut assignments = science("2026-10-14T23:59", 120);
     assignments["sci"]["unplanned_min"] = json!(120);
-    let first = open_rest_sessions(&[], &assignments, WEEK).unwrap();
+    let first = open_rest_sessions(&[], &assignments, WEEK, &[]).unwrap();
     assert_eq!(first.len(), 1);
     assert_eq!(first[0]["duration_min"], json!(120));
     assert_eq!(
-        open_rest_sessions(&first, &assignments, WEEK).unwrap(),
+        open_rest_sessions(&first, &assignments, WEEK, &[]).unwrap(),
         first
     );
+}
+
+#[test]
+fn open_rest_does_not_duplicate_homework_already_placed_in_an_earlier_week() {
+    let mut assignments = science("2026-10-21T23:59", 120);
+    assignments["sci"]["unplanned_min"] = json!(120);
+    let earlier = [json!({
+        "id": "sci-session",
+        "assignment_id": "sci",
+        "start": "16:00",
+        "duration_min": 120,
+        "completed": false
+    })];
+
+    let blocks = open_rest_sessions(&[], &assignments, WEEK, &earlier).unwrap();
+
+    assert!(blocks.is_empty());
 }
 
 #[test]

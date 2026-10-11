@@ -545,13 +545,20 @@ fn reuse_fair_share(
 }
 
 #[pyfunction]
-fn reuse_open_rest(blocks: &str, assignments: &str, week_start: &str) -> PyResult<String> {
-    let (blocks, assignments) = (parse(blocks)?, parse(assignments)?);
+fn reuse_open_rest(
+    blocks: &str,
+    assignments: &str,
+    week_start: &str,
+    earlier_blocks: &str,
+) -> PyResult<String> {
+    let (blocks, assignments, earlier_blocks) =
+        (parse(blocks)?, parse(assignments)?, parse(earlier_blocks)?);
     guard(|| {
         let blocks = blocks.as_array().cloned().unwrap_or_default();
         let assignments = assignments.as_object().cloned().unwrap_or_default();
+        let earlier_blocks = earlier_blocks.as_array().cloned().unwrap_or_default();
         Ok(dump(&Value::Array(
-            planning::open_rest_sessions(&blocks, &assignments, week_start)
+            planning::open_rest_sessions(&blocks, &assignments, week_start, &earlier_blocks)
                 .map_err(crate::raise)?,
         )))
     })

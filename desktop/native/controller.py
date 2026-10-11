@@ -1982,7 +1982,15 @@ class NativeSession(QObject):
             if only is None
             else (deepcopy(self.blocks), [], [])
         )
-        open_blocks = open_rest_sessions(planning_blocks, self.assignments, self.week_start)
+        earlier_blocks = [
+            block
+            for week in prior_input
+            for block in week.get("blocks", [])
+            if block.get("start") and not block.get("completed")
+        ]
+        open_blocks = open_rest_sessions(
+            planning_blocks, self.assignments, self.week_start, earlier_blocks
+        )
         payload, targets = solve_request(
             open_blocks, self.assignments, self.week_start, everything=everything, only=only, not_before=start
         )

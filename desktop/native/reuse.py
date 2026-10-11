@@ -154,10 +154,12 @@ def fair_share(
     return json.loads(week), json.loads(notes)
 
 
-def open_rest_sessions(blocks: list[dict], assignments: dict, week_start: str) -> list[dict]:
+def open_rest_sessions(
+    blocks: list[dict], assignments: dict, week_start: str, earlier_blocks: tuple[dict, ...] | list[dict] = ()
+) -> list[dict]:
     return json.loads(
         flexweek_engine.reuse_open_rest(
-            json.dumps(blocks), json.dumps(assignments), week_start
+            json.dumps(blocks), json.dumps(assignments), week_start, json.dumps(earlier_blocks)
         )
     )
 
