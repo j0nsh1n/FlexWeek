@@ -3119,14 +3119,7 @@ class NativeSession(QObject):
                     "title": f"{assignment['title']}, overdue",
                 }
             else:
-                block = next(
-                    (
-                        item
-                        for item in self.blocks
-                        if item["id"] == block_id or item.get("assignment_id") == block_id
-                    ),
-                    None,
-                )
+                block = next((item for item in self.blocks if item["id"] == block_id), None)
                 if block is None or block.get("completed") or block.get("pomodoro_role") == "break":
                     self._say("Place a work block that is not finished before starting focus.")
                     return False

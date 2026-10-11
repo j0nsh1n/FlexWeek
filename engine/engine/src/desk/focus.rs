@@ -454,12 +454,12 @@ pub fn focus_candidates(
         if !overdue {
             continue;
         }
-        let block = iterate(blocks)?.into_iter().find(|block| {
+        let has_session = iterate(blocks)?.into_iter().any(|block| {
             block.get("assignment_id").and_then(Value::as_str) == Some(id.as_str())
                 && truthy(block.get("start"))
                 && !truthy(block.get("completed"))
         });
-        if let Some(block) = block {
+        if has_session {
             result.push(json!({
                 "id": id,
                 "title": format!("{}, overdue", py_str(subscript(assignment, "title")?)),
@@ -469,7 +469,6 @@ pub fn focus_candidates(
                 "focus_sessions": int_json(to_int(&or_default(get(assignment, "focus_sessions")?, json!(0)))?),
                 "focus_minutes": int_json(to_int(&or_default(get(assignment, "focus_minutes")?, json!(0)))?),
                 "overdue": true,
-                "block_id": subscript(&block, "id")?,
             }));
         }
     }

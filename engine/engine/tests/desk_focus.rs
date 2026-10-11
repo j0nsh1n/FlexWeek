@@ -51,7 +51,8 @@ fn test_focus_candidates_drop_elapsed_sessions_and_offer_overdue_homework() {
         .expect("overdue homework row");
     assert_eq!(overdue["title"], "Bio reading, overdue");
     assert!(overdue["start"].is_null());
-    assert_eq!(overdue["block_id"], "bio-session");
+    assert_eq!(overdue["assignment_id"], "bio");
+    assert!(overdue.get("block_id").is_none());
 }
 
 #[test]
