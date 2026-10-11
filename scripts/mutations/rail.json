@@ -2,8 +2,8 @@
  {
   "file": "desktop/native/window.py",
   "name": "the plan bar counts the trace, School included",
-  "old": "            self.plan_review.set_trace(fresh, titles, self.session.week_start, self.session.plan_counts)\n",
-  "new": "            self.plan_review.set_trace(\n                fresh, titles, self.session.week_start, (len(fresh.get(\"placed\") or []), 0)\n            )\n",
+  "old": "            self.plan_review.set_trace(\n                fresh,\n                titles,\n                self.session.week_start,\n                self.session.plan_counts,\n                self.session.assignments,\n            )\n",
+  "new": "            self.plan_review.set_trace(\n                fresh,\n                titles,\n                self.session.week_start,\n                (len(fresh.get(\"placed\") or []), 0),\n                self.session.assignments,\n            )\n",
   "test": "desktop/tests/test_layouts_window.py::test_the_plan_bar_counts_what_the_toast_counts"
  },
  {
