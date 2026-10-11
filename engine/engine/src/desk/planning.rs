@@ -737,18 +737,29 @@ fn plannable_days(
     blocks: &[Value],
 ) -> EngineResult<(i64, i64)> {
     let mut this_week = 0;
-    let mut all_days = 0;
-    for day in first_day.clamp(0, 6)..=last_day.min(41) {
+    for day in first_day.clamp(0, 6)..=6 {
         let after = if day == first_day {
             first_minute
         } else {
             DAY_START_MIN
         };
-        if has_free_study_slot(day % 7, after, work_windows, blocks)? {
+        if has_free_study_slot(day, after, work_windows, blocks)? {
+            this_week += 1;
+        }
+    }
+    let beyond_this_week = (last_day - 6).max(0);
+    let full_weeks = beyond_this_week / 7;
+    let tail_days = beyond_this_week % 7;
+    let mut plannable_per_week = 0;
+    for day in 0..7 {
+        if has_free_study_slot(day, DAY_START_MIN, work_windows, &[])? {
+            plannable_per_week += 1;
+        }
+    }
+    let mut all_days = this_week + full_weeks * plannable_per_week;
+    for day in 0..tail_days {
+        if has_free_study_slot(day, DAY_START_MIN, work_windows, &[])? {
             all_days += 1;
-            if day <= 6 {
-                this_week += 1;
-            }
         }
     }
     Ok((this_week, all_days))

@@ -71,6 +71,13 @@ fn due_next_monday_keeps_all_of_it_this_week() {
 }
 
 #[test]
+fn work_due_seven_days_from_today_is_not_shared() {
+    let (blocks, notes) = share(&[session("s1", 120)], "2026-10-12T23:59", 120, 0, &["s1"]);
+    assert_eq!(blocks[0]["duration_min"], json!(120));
+    assert!(notes.is_empty());
+}
+
+#[test]
 fn homework_due_within_seven_days_keeps_its_unplaced_session_with_existing_time() {
     let mut held = session("held", 45);
     held["start"] = json!("16:00");
@@ -171,4 +178,21 @@ fn today_counts_when_a_free_slot_remains_after_the_clock() {
     )
     .unwrap();
     assert_eq!(blocks[0]["duration_min"], json!(45));
+}
+
+#[test]
+fn later_due_dates_count_their_full_study_calendar() {
+    let windows = vec![json!({"days": [0, 1, 2, 3, 4], "start": "19:00", "end": "21:00"})];
+    let (blocks, _) = fair_share(
+        &[session("s1", 120)],
+        &science("2026-12-13T23:59", 120),
+        &json!([]),
+        WEEK,
+        0,
+        0,
+        &windows,
+        &["s1".to_string()],
+    )
+    .unwrap();
+    assert_eq!(blocks[0]["duration_min"], json!(15));
 }
