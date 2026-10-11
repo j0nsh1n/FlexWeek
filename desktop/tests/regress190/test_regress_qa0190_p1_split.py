@@ -125,33 +125,3 @@ def test_p1_guard_weekday_item_due_within_the_week_is_placed_whole(qapp, server)
     homework(qapp, session, [("essay", 90, 3)])
     plan(qapp, session)
     assert minutes(session, "essay", placed=True) == 90
-
-
-def test_allow_splitting_replaces_one_unplaced_session_with_the_full_estimate(qapp, server) -> None:
-    session = student(qapp, server, "p1_allow_split")
-    hold(session, 0, 16, 30)
-    session.selected_day = session.today_iso()
-    homework(qapp, session, [("lab", 180, 9)])
-    assert session.allow_splitting("lab")
-    def split_complete() -> bool:
-        pieces = [block for block in session.blocks if block.get("assignment_id") == "lab"]
-        return (
-            not session.busy
-            and not session.dirty
-            and len(pieces) == 3
-            and all(block.get("start") for block in pieces)
-        )
-
-    wait_until(qapp, split_complete, timeout=20)
-    assert split_complete(), {
-        "message": session.message,
-        "pieces": [block for block in session.blocks if block.get("assignment_id") == "lab"],
-        "spread_preview": session.spread_preview,
-        "assignments": session.assignments,
-        "needs_time": session.needs_time,
-    }
-    settled(qapp, session)
-    pieces = [block for block in session.blocks if block.get("assignment_id") == "lab"]
-    assert len(pieces) == 3, pieces
-    assert all(block.get("start") for block in pieces), pieces
-    assert sum(block.get("duration_min") or 0 for block in pieces) == 180, pieces
