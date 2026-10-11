@@ -1309,6 +1309,9 @@ def setup_rules(palette: dict, radius: int, text: float | str, pad: int, depth: 
     # A chip that adds something rather than picks it, such as a planning-hours preset: the same pill.
     adds = 'QPushButton[chip="true"]'
     pills = f"QPushButton#setupChip, {day}, {adds}, QPushButton#setupStudyChip"
+    pills_focus = (
+        f"QPushButton#setupChip:focus, {day}:focus, {adds}:focus, QPushButton#setupStudyChip:focus"
+    )
     pills_hover = f"QPushButton#setupChip:hover, {day}:hover, {adds}:hover, QPushButton#setupStudyChip:hover"
     return (
         f"QWidget#setupRail {{ background: {palette['panel']}; }}"
@@ -1368,12 +1371,18 @@ def setup_rules(palette: dict, radius: int, text: float | str, pad: int, depth: 
         f"QPushButton#setupDot[chosen=\"true\"] {{ background: {palette['accent']}; "
         f"border: 2px solid {palette['accent']}; }}"
         f"QFrame#setupGroup {{ background: {palette['panel']}; border-radius: {card_radius}px; {edges} }}"
-        f"{pills} {{ background: {palette['field']}; color: {palette['text']}; {edges} "
-        f"border-radius: 14px; padding: 4px 12px; font-weight: {WEIGHT_REGULAR}; min-height: 0; }}"
+        f"{pills} {{ background: {palette['field']}; color: {palette['text']}; "
+        f"border: 1px solid {readable_edge(palette)}; "
+        f"border-radius: 10px; padding: 4px 12px; font-weight: {WEIGHT_REGULAR}; min-height: 0; }}"
         f"{day} {{ padding: 4px 6px; }}"
+        f"{pills_focus} {{ border: 2px solid {readable_focus_edge(palette)}; padding: 3px 11px; }}"
+        f"{day}:focus {{ padding: 3px 5px; }}"
         f"{pills_hover} {{ background: {mix(palette['accent'], palette['field'], 0.14)}; }}"
         f"QPushButton#setupChip:checked, {day}:checked {{ background: {palette['accent']}; "
         f"color: {palette['accent_ink']}; }}"
+        f"QPushButton#setupChip:checked, {day}:checked {{ border-color: {palette['accent']}; }}"
+        f"QPushButton#setupChip:checked:focus, {day}:checked:focus "
+        f"{{ border-color: {readable_focus_edge(palette)}; }}"
         # Days that cannot change, as under "This day only": the picked one still reads as picked.
         f"{day}:disabled {{ background: {palette['field']}; "
         f"color: {mix(palette['text'], palette['field'], 0.5)}; }}"

@@ -135,8 +135,8 @@ from desktop.native.look import (
     FOCUS_GAP_PX,
     FOCUS_RING_PX,
     RING_BUTTONS,
+    readable_edge,
     resolved_palette,
-    switch_track_edge,
 )
 from desktop.native.menus import Menu
 from desktop.native.motion import (
@@ -1443,11 +1443,16 @@ def _art_file(shape: str, colour: str) -> str:
     return path.as_posix()
 
 
-def _switch_file(on: bool, track: str, knob: str) -> str:
+def _switch_file(on: bool, track: str, knob: str, outline: str | None = None) -> str:
     """A switch's pill and knob as one image, the knob at the right when on. Drawn at twice the
     34 by 20 the style sheet shows it."""
     folder = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.CacheLocation))
-    names = (QColor(track).name()[1:], QColor(knob).name()[1:], "on" if on else "off")
+    names = (
+        QColor(track).name()[1:],
+        QColor(knob).name()[1:],
+        QColor(outline).name()[1:] if outline else "plain",
+        "on" if on else "off",
+    )
     path = folder / f"flexweek-switch-{'-'.join(names)}.png"
     if not path.is_file():
         folder.mkdir(parents=True, exist_ok=True)
@@ -1458,6 +1463,12 @@ def _switch_file(on: bool, track: str, knob: str) -> str:
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(track))
         painter.drawRoundedRect(0, 0, 68, 40, 20, 20)
+        if outline:
+            pen = QPen(QColor(outline), 4)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(QRectF(2, 2, 64, 36), 18, 18)
+            painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(knob))
         painter.drawEllipse(32 if on else 4, 4, 32, 32)
         painter.end()
@@ -1479,15 +1490,16 @@ def control_art(palette: dict) -> dict[str, str]:
     """The images the control rules in `pack_stylesheet` draw with: a tick in the accent's ink,
     chevrons for dropdowns and steppers in the muted ink, a switch on, off and greyed, and the
     chevron after More in the text colour."""
+    off_outline = readable_edge(palette)
     return {
         "more": _icon_file("chevron-down", palette["text"]),
         "tick": _art_file("tick", palette["accent_ink"]),
         "down": _art_file("down", palette["muted"]),
         "up": _art_file("up", palette["muted"]),
         "switch_on": _switch_file(True, palette["accent"], palette["accent_ink"]),
-        "switch_off": _switch_file(False, switch_track_edge(palette), "#ffffff"),
-        "switch_on_off": _switch_file(True, palette["hairline_strong"], palette["hairline"]),
-        "switch_off_off": _switch_file(False, palette["hairline"], palette["hairline_strong"]),
+        "switch_off": _switch_file(False, palette["panel"], off_outline, off_outline),
+        "switch_on_off": _switch_file(True, palette["panel"], off_outline, off_outline),
+        "switch_off_off": _switch_file(False, palette["panel"], off_outline, off_outline),
     }
 
 

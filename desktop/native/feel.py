@@ -19,6 +19,7 @@ from PySide6.QtGui import (
     QLinearGradient,
     QPainter,
     QPainterPath,
+    QPalette,
     QPen,
     QRegion,
     QResizeEvent,
@@ -53,6 +54,8 @@ from desktop.native.look import (
     FONT_FAMILIES,
     HEADING_NAMES,
     pack_stylesheet,
+    readable_edge,
+    readable_focus_edge,
     text_scale,
 )
 from desktop.native.tokens import (
@@ -329,6 +332,15 @@ def extra_stylesheet(
     if feel.key == "plain":
         return ""
     extra = radius_rules(base, feel.shape, nested) + edge_rules(tokens, palette, feel.shape)
+    if feel.shape.edge == "bevel":
+        pill = 'QPushButton[pill="true"]'
+        edge, focus = readable_edge(palette), readable_focus_edge(palette)
+        extra += (
+            f"{FIELDS}:focus {{ border: 2px solid {focus}; }}"
+            f"{pill} {{ border: 1px solid {edge}; border-radius: 10px; }}"
+            f"{pill}:checked {{ border-color: {palette['accent']}; }}"
+            f"{pill}:focus, {pill}:checked:focus {{ border: 2px solid {focus}; }}"
+        )
     extra += face_rules(feel, tokens, text_scale(look))
     if feel.chrome == "hero" and hero_names:
         extra += hero_rules(tokens, text_scale(look), hero_names)
@@ -790,6 +802,8 @@ def bevel_kind(widget: QWidget) -> str | None:
     segment = isinstance(widget, QRadioButton) and widget.property("segment")
     if segment or isinstance(widget, QPushButton):
         if (
+            widget.property("pill")
+            or
             name in BEVEL_SKIP
             or (isinstance(widget, QPushButton) and widget.isFlat())
             or widget.property("quiet")
@@ -813,6 +827,8 @@ def bevel_kind(widget: QWidget) -> str | None:
 
 
 _BEVEL_WATCH = {
+    QEvent.Type.FocusIn,
+    QEvent.Type.FocusOut,
     QEvent.Type.Resize,
     QEvent.Type.Show,
     QEvent.Type.LayoutRequest,
@@ -910,6 +926,8 @@ class BevelPane(QWidget):
                 parent = parent.parentWidget()
             if skip or not widget.isVisible() or widget.width() < 6 or widget.height() < 6:
                 continue
+            if widget.hasFocus():
+                continue
             if _chrome_on(widget) is not None:
                 continue
             kind = bevel_kind(widget)
@@ -921,7 +939,22 @@ class BevelPane(QWidget):
             painter.save()
             painter.setClipRegion(clip)
             top_left = widget.mapTo(self._host, QPoint(0, 0))
-            retro.bevel(painter, QRect(top_left, widget.size()), colours, kind)
+            ground_role = (
+                QPalette.ColorRole.Base
+                if isinstance(widget, (QLineEdit, QComboBox, QAbstractSpinBox))
+                else QPalette.ColorRole.Window
+            )
+            ground = widget.palette().color(ground_role).name()
+            edge = readable_edge(
+                {
+                    "field": ground,
+                    "panel": ground,
+                    "text": self._tokens["text"],
+                    "card_edge": self._tokens["line"],
+                    "hairline_strong": self._tokens["line"],
+                }
+            )
+            retro.bevel(painter, QRect(top_left, widget.size()), colours, kind, ground, edge)
             painter.restore()
         painter.end()
 
