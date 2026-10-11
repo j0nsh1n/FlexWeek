@@ -8,6 +8,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ### Fixed
 - On the 12-hour clock, an end time typed without AM or PM is read as the one after its start: School from 8:30 AM to "3:15" ends at 3:15 PM, not 3:15 AM. An end at or before its start is said under End ("End needs to be later than Start (8:30 AM)."), and in Setup and School hours it offers the other half ("Did you mean 3:15 PM?" with Use 3:15 PM). Next and Save keep the keyboard on End until it is right.
 - Skip in Setup no longer throws away School or an activity you changed without asking. It asks to fix times that don't work, or to keep what you entered and go on ("Keep School and go on"), and Esc never throws anything away. A skipped step is marked Skipped in the side list instead of with a tick, and the last page says "Your week: skipped". When Next can't go on, the keyboard goes to the time that needs fixing, with its problem under it.
+- Plan's Undo message no longer goes early: it stays while the pointer rests anywhere on it and pauses while FlexWeek is minimised or in the background. Undo shows the seconds left ("Undo · 8 s"), also with reduced motion, is the first Tab stop after the week, and Replan all my homework now ends with Undo too, even when it waits for a save.
 
 ## [0.19.1] - 2026-10-10
 

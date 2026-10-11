@@ -2198,7 +2198,7 @@ def test_finishing_from_my_day_offers_undo_on_the_notice(qapp: QApplication, win
     assert window.session.assignments["essay"]["completed"] is True
     assert window.toast.button.isVisible()
     assert window.toast.text() == "Finished History essay."
-    assert window.toast.button.text() == "Undo"
+    assert window.toast.button.accessibleName() == "Undo" and window.toast.button.text().startswith("Undo")
 
 
 FREE_TODAY = (

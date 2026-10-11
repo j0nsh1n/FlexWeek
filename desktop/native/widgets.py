@@ -687,7 +687,8 @@ TOAST_RESUME_MS = 4000
 TOAST_FLASH_MS = 150
 TOAST_MARGIN = 24
 TOAST_MIN_WIDTH = 280
-TOAST_MAX_WIDTH = 420
+# Wide enough for a short notice's words on one line beside Undo's widest countdown.
+TOAST_MAX_WIDTH = 440
 # Room round the toast's card for its shadow.
 TOAST_SHADOW = 4
 # Between the toast's bottom edge and the foot of the hours, and between its words and its button.
@@ -1015,16 +1016,24 @@ class Toast(QWidget):
         self._paused = False
         self._pointer = False
         self._keys = False
+        self._window_paused = False
         self._progress = ToastProgress(self.card)
         self._progress.hide()
         self._tick = QTimer(self)
+        # Often enough for the line to shrink smoothly; the seconds on Undo change only when they do.
         self._tick.setInterval(50)
         self._tick.timeout.connect(self.sync_progress)
+        self._pointer_tick = QTimer(self)
+        self._pointer_tick.setInterval(100)
+        self._pointer_tick.timeout.connect(self._poll_state)
         # The card lets the pointer through, so the window's events say whether it is over the card.
         self.button.installEventFilter(self)
+        host = self.parentWidget()
+        if host is not None:
+            host.installEventFilter(self)
         app = QApplication.instance()
         if app is not None:
-            app.installEventFilter(self)
+            app.applicationStateChanged.connect(self._poll_state)
         # The window's Animations level. A notice rises into place and fades when it goes.
         self.motion = "normal"
         self.hide()
@@ -1045,10 +1054,14 @@ class Toast(QWidget):
         self.label.setText(text)
         self.setAccessibleName(text)
         self.setAccessibleDescription(text)
-        self.button.setText(button)
+        self.button.setText(
+            f"Undo · {(ACTION_TOAST_MS + 999) // 1000} s" if button == "Undo" else button
+        )
         self._dress_button()
+        self._fit_button(button == "Undo")
         self._callback = callback if button else None
-        size = self.button.sizeHint() if button else QSize(0, 0)
+        self.button.setAccessibleName("Undo" if button == "Undo" else button)
+        size = self._button_size() if button else QSize(0, 0)
         self._slot.changeSize(size.width(), size.height(), QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.card.layout().invalidate()
         # The last notice's rise ends where it was going, and its fade-out ends it, so this one
@@ -1073,6 +1086,9 @@ class Toast(QWidget):
             # The button is the window's own child, so it rises beside the card rather than with it.
             appear(self, self.motion, rise=True)
             appear(self.button, self.motion, rise=True)
+        announce(self, text)
+        if button:
+            self._set_tab_order()
         # One with something to press stays long enough to reach for it.
         self._limit = ACTION_TOAST_MS if button else TOAST_MS
         self._paused = False
@@ -1082,11 +1098,12 @@ class Toast(QWidget):
         self._progress.set_colour(self._action_colour)
         self.sync_progress()
         self._pointer = self._cursor_over()
+        self._pointer_tick.start() if button else self._pointer_tick.stop()
         self._sync_pause()
 
     def _dress_button(self) -> None:
         # Undo is the one button with a picture: the arrow back, in the button's own colour.
-        undo = self.button.text() == "Undo"
+        undo = self.button.text().startswith("Undo")
         self.button.setIcon(icons.icon("undo-2", self._action_colour) if undo else QIcon())
         self.button.setIconSize(QSize(14, 14))
 
@@ -1131,13 +1148,32 @@ class Toast(QWidget):
         if self.isHidden():
             self._timer.stop()
             self._tick.stop()
+            self._pointer_tick.stop()
             self._paused = False
             self.button.hide()
             self._progress.hide()
 
+    def _fit_button(self, counts: bool) -> None:
+        """Undo's seconds tick down, so it keeps the width of its widest count and the words beside
+        it never lose room as the number changes."""
+        if not counts:
+            self.button.setMinimumWidth(0)
+            return
+        shown = self.button.text()
+        digits = len(str((ACTION_TOAST_MS + 999) // 1000))
+        self.button.setMinimumWidth(0)
+        self.button.setText("Undo · " + "8" * digits + " s")
+        width = self.button.sizeHint().width()
+        self.button.setText(shown)
+        self.button.setMinimumWidth(width)
+
+    def _button_size(self) -> QSize:
+        hint = self.button.sizeHint()
+        return QSize(max(hint.width(), self.button.minimumWidth()), hint.height())
+
     def _place_button(self) -> None:
         inside = self.card.contentsRect().translated(self.card.pos())
-        size = self.button.sizeHint()
+        size = self._button_size()
         self.button.setGeometry(
             self.x() + inside.right() + 1 - size.width(),
             self.y() + inside.top() + (inside.height() - size.height()) // 2,
@@ -1169,8 +1205,12 @@ class Toast(QWidget):
         stays put while the toast is paused."""
         show = self.isVisible() and self.motion not in ("off", "reduce") and self._limit > 0
         self._progress.setVisible(show)
+        self._sync_button_text()
         if not show:
-            self._tick.stop()
+            if self.button.isVisible() and not self._paused:
+                self._tick.start()
+            else:
+                self._tick.stop()
             return
         width = self.card.width()
         span = round(width * self._fraction())
@@ -1193,7 +1233,8 @@ class Toast(QWidget):
         return left if left >= 0 else 0
 
     def _sync_pause(self) -> None:
-        hold = self.isVisible() and (self._pointer or self._keys)
+        self._window_paused = self._window_unavailable()
+        hold = self._pointer or self._keys or self._window_paused
         if hold and not self._paused:
             left = self._timer.remainingTime()
             self._held_ms = left if left >= 0 else self._limit
@@ -1210,6 +1251,38 @@ class Toast(QWidget):
         if not self.isVisible():
             return False
         return self._over_point(QCursor.pos())
+
+    def _window_unavailable(self) -> bool:
+        host = self.parentWidget()
+        return host is None or not host.isVisible() or host.isMinimized() or not host.isActiveWindow()
+
+    def _poll_state(self) -> None:
+        if self.isHidden() or self.button.isHidden():
+            return
+        pointer = self._cursor_over() if self.isVisible() else False
+        if pointer != self._pointer:
+            self._pointer = pointer
+        self._sync_pause()
+
+    def _sync_button_text(self) -> None:
+        if not self.button.isVisible() or not self.button.text().startswith("Undo"):
+            return
+        seconds = max(0, (self._left_ms() + 999) // 1000)
+        said = f"Undo · {seconds} s"
+        if self.button.text() != said:
+            self.button.setText(said)
+        self.button.setAccessibleName("Undo")
+
+    def _set_tab_order(self) -> None:
+        # Only the order is set, never read back: the chain's next widget from the hours is the window
+        # itself, and asking for it (nextInFocusChain) made PySide drop the window's menu actions. A
+        # hidden button is skipped by Tab, so it can stay where it was put.
+        host = self.parentWidget()
+        surfaces = host._week_surfaces() if host is not None and hasattr(host, "_week_surfaces") else []
+        canvas = next((surface for surface in surfaces if surface.isVisible()), None)
+        if canvas is None:
+            return
+        QWidget.setTabOrder(canvas, self.button)
 
     def _over_point(self, pos: QPoint) -> bool:
         on_card = self.card.rect().contains(self.card.mapFromGlobal(pos))
@@ -1237,13 +1310,15 @@ class Toast(QWidget):
             point = self._global_point(event)
             self._pointer = self._over_point(point) if point is not None else False
             self._sync_pause()
-        elif self.isVisible() and kind in (QEvent.Type.MouseMove, QEvent.Type.HoverMove):
-            point = self._global_point(event)
-            if point is not None:
-                over = self._over_point(point)
-                if over != self._pointer:
-                    self._pointer = over
-                    self._sync_pause()
+        elif watched is self.parentWidget() and kind in (
+            QEvent.Type.Show,
+            QEvent.Type.Hide,
+            QEvent.Type.WindowStateChange,
+            QEvent.Type.WindowActivate,
+            QEvent.Type.WindowDeactivate,
+            QEvent.Type.ActivationChange,
+        ):
+            self._poll_state()
         return False
 
     def _flash(self) -> None:

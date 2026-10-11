@@ -232,13 +232,14 @@ class NativeSession(QObject):
         self._join_step = False
         # New homework to give a time once its save lands, when the student plans as they add.
         self._plan_after_save: set[str] = set()
+        self._replan_after_save = False
         self._spread_after_save: tuple[str, int, str] | None = None
         self._redo: list[dict] = []
         self._committed_blocks: list[dict] = []
         self._committed_assignments: dict[str, dict] = {}
         self._history_label = "editing the week"
         self._pending_step: dict | None = None
-        self._plan_step: dict | None = None
+        self._plan_step_id: str | None = None
         self._traveling: str | None = None
         self._travel_step: dict | None = None
         self.clipboard: dict | None = None
@@ -371,7 +372,8 @@ class NativeSession(QObject):
         self._committed_blocks = []
         self._committed_assignments = {}
         self._pending_step = None
-        self._plan_step = None
+        self._plan_step_id = None
+        self._replan_after_save = False
         self._traveling = None
         self._travel_step = None
         self.clipboard = None
@@ -1651,6 +1653,7 @@ class NativeSession(QObject):
         record_history: bool = True,
         status: str | None = None,
         join: bool = False,
+        plan: bool = False,
     ) -> None:
         if self.account is None or self.conflict:
             return
@@ -1697,6 +1700,10 @@ class NativeSession(QObject):
                     self.assignments,
                     set(self.dirty_assignments),
                 )
+                if self._pending_step is not None:
+                    self._pending_step["id"] = str(uuid4())
+                    if plan:
+                        self._plan_step_id = self._pending_step["id"]
         self._post_pending()
 
     def _post_pending(self, ticket: int | None = None) -> None:
@@ -1744,7 +1751,12 @@ class NativeSession(QObject):
                 push_step(self._undo, self._travel_step)
                 self._say("Redid " + self._travel_step["label"] + ".")
             else:
-                planned = self._pending_step is not None and self._pending_step is self._plan_step
+                # Steps built by hand, such as a move to another date, carry no id, so no id never matches.
+                planned = (
+                    self._pending_step is not None
+                    and self._plan_step_id is not None
+                    and self._pending_step.get("id") == self._plan_step_id
+                )
                 if self._pending_step is not None:
                     stored_weeks = {week["week_start"]: week for week in data.get("weeks") or []}
                     for entry in self._pending_step["weeks"]:
@@ -1768,7 +1780,7 @@ class NativeSession(QObject):
             self._traveling = None
             self._travel_step = None
             self._pending_step = None
-            self._plan_step = None
+            self._plan_step_id = None
             self._join_step = False
             self.pending_save = None
             self._save_status = None
@@ -1779,6 +1791,9 @@ class NativeSession(QObject):
             if planned_next:
                 # Plan it for me as I add it: the new homework's time, joined to the add in one step.
                 QTimer.singleShot(0, lambda: self.solve(only=planned_next, join=True))
+            replan_next, self._replan_after_save = self._replan_after_save, False
+            if replan_next:
+                QTimer.singleShot(0, lambda: self.solve(everything=True))
             if current is not None:
                 self._committed_blocks = deepcopy(self.blocks)
                 self._committed_assignments = deepcopy(self.assignments)
@@ -1807,6 +1822,7 @@ class NativeSession(QObject):
                 return
             # A plan waiting on this save must not fire after some later, unrelated one.
             self._plan_after_save = set()
+            self._replan_after_save = False
             self._spread_after_save = None
             self._join_step = False
             refused_travel = bool(self._traveling) and error.status == 409
@@ -1872,6 +1888,10 @@ class NativeSession(QObject):
             self._say("This week changed in another window. Reload it from More, then plan again.")
             return
         if self.pending_save is not None:
+            if everything:
+                self._replan_after_save = True
+                self._say("Saving your last change… Plan will work in a moment.")
+                return
             self._say("Saving your last change… Plan will work in a moment.")
             return
         self.plan_asked_week = self.week_start
@@ -1958,8 +1978,8 @@ class NativeSession(QObject):
             self.message = placed_note
             self.week_changed.emit()
             self.dirty = self.dirty or changed
-            self.save(status=placed_note, join=join)
-            self._plan_step = None if join or not changed else self._pending_step
+            self._plan_step_id = None
+            self.save(status=placed_note, join=join, plan=changed and not (join and only is not None))
 
         self.client.request(
             "POST",

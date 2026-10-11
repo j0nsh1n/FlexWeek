@@ -49,7 +49,7 @@ def test_3r_guard_plan_offers_undo(qapp, window) -> None:
 
 @pytest.mark.parametrize(
     "bar",
-    [False, pytest.param(True, marks=pytest.mark.xfail(strict=True, reason=KNOWN_TAB))],
+    [False, True],
     ids=["no-plan-bar", "plan-bar-open"],
 )
 def test_3r_first_tab_from_the_week_after_plan_goes_to_undo(qapp, window, bar) -> None:
@@ -98,7 +98,6 @@ def test_3r_replan_all_my_homework_ends_with_placed_and_undo(qapp, window, split
     assert window.toast.button.isVisible() and window.toast.button.text().startswith("Undo")
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_SECONDS)
 @pytest.mark.parametrize("motion", ["normal", "reduce"])
 def test_3r_undo_says_how_many_seconds_are_left(qapp, window, motion) -> None:
     window.session.preferences = {**(window.session.preferences or {}), "motion": motion}
@@ -109,7 +108,6 @@ def test_3r_undo_says_how_many_seconds_are_left(qapp, window, motion) -> None:
     assert window.toast.button.accessibleName() in ("Undo", "")
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_FILTER)
 def test_3r_a_toast_installs_no_app_wide_event_filter(qapp, monkeypatch) -> None:
     installed: list = []
     real = qapp.installEventFilter

@@ -42,13 +42,15 @@ def planned(qapp, window) -> QPushButton:
     QTest.mouseClick(solve, Qt.MouseButton.LeftButton)
     wait_until(qapp, lambda: window.toast.isVisible() and window.toast.button.isVisible())
     settled(qapp, window)
-    assert (window.toast.text(), window.toast.button.text()) == (PLACED, "Undo")
+    assert window.toast.text() == PLACED
+    assert window.toast.button.accessibleName() == "Undo"
+    assert window.toast.button.text().startswith("Undo")
     return solve
 
 
 def undo_still_offered(window) -> tuple[bool, str, bool, str]:
     toast = window.toast
-    return toast.isVisible(), toast.text(), toast.button.isVisible(), toast.button.text()
+    return toast.isVisible(), toast.text(), toast.button.isVisible(), toast.button.accessibleName()
 
 
 def test_plan_offers_undo_in_its_toast(qapp, window) -> None:

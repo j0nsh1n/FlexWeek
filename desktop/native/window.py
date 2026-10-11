@@ -2396,7 +2396,11 @@ class NativeWindow(QMainWindow):
             self.toast.hide()
 
     def _toast_offers_undo(self) -> bool:
-        return self.toast.isVisible() and self.toast.button.isVisible() and self.toast.button.text() == "Undo"
+        return (
+            self.toast.isVisible()
+            and self.toast.button.isVisible()
+            and self.toast.button.accessibleName() == "Undo"
+        )
 
     def _sync_undo_enabled(self) -> None:
         undo = self.findChild(QPushButton, "undoButton")

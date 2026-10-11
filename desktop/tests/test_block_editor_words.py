@@ -217,7 +217,7 @@ def test_a_deleted_block_can_be_undone_from_the_notice(
     settled(qapp, window)
     assert session.blocks == []
     assert window.toast.text() == "Deleted Soccer practice."
-    assert window.toast.button.text() == "Undo"
+    assert window.toast.button.accessibleName() == "Undo" and window.toast.button.text().startswith("Undo")
     window.toast.button.click()
     wait_until(qapp, lambda: [block["id"] for block in session.blocks] == ["soccer"])
 

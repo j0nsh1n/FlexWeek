@@ -38,13 +38,15 @@ def planned(qapp, window) -> QPushButton:
     QTest.mouseClick(solve, Qt.MouseButton.LeftButton)
     wait_until(qapp, lambda: window.toast.isVisible() and window.toast.button.isVisible())
     settled(qapp, window)
-    assert (window.toast.text(), window.toast.button.text()) == (PLACED, "Undo")
+    assert window.toast.text() == PLACED
+    assert window.toast.button.accessibleName() == "Undo"
+    assert window.toast.button.text().startswith("Undo")
     return solve
 
 
 def undo_still_offered(window) -> tuple[bool, str, bool, str]:
     toast = window.toast
-    return toast.isVisible(), toast.text(), toast.button.isVisible(), toast.button.text()
+    return toast.isVisible(), toast.text(), toast.button.isVisible(), toast.button.accessibleName()
 
 
 def test_plan_offers_undo_in_its_toast(qapp, window) -> None:
@@ -53,7 +55,6 @@ def test_plan_offers_undo_in_its_toast(qapp, window) -> None:
     assert undo_still_offered(window) == (True, PLACED, True, "Undo")
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN)
 def test_a_second_plan_click_with_nothing_to_do_keeps_the_undo_toast(qapp, window) -> None:
     solve = planned(qapp, window)
     QTest.mouseClick(solve, Qt.MouseButton.LeftButton)
@@ -61,7 +62,6 @@ def test_a_second_plan_click_with_nothing_to_do_keeps_the_undo_toast(qapp, windo
     assert undo_still_offered(window) == (True, PLACED, True, "Undo")
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN)
 def test_space_on_plan_with_nothing_to_do_keeps_the_undo_toast(qapp, window) -> None:
     solve = planned(qapp, window)
     solve.setFocus(Qt.FocusReason.MouseFocusReason)
@@ -70,7 +70,6 @@ def test_space_on_plan_with_nothing_to_do_keeps_the_undo_toast(qapp, window) -> 
     assert undo_still_offered(window) == (True, PLACED, True, "Undo")
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN)
 def test_a_plan_with_nothing_to_do_from_any_design_keeps_the_undo_toast(qapp, window) -> None:
     """The session's own Plan (what every design's Plan calls), not tied to one button."""
     planned(qapp, window)

@@ -230,7 +230,7 @@ def test_delete_homework_asks_first_and_takes_it_away_with_an_undo(
     assert asked == ["Delete homework"]
     assert "math" not in window.session.assignments
     assert window.toast.text() == "Deleted Math worksheet."
-    assert window.toast.button.text() == "Undo"
+    assert window.toast.button.accessibleName() == "Undo" and window.toast.button.text().startswith("Undo")
     window.toast.button.click()
     settled(qapp, window)
     assert window.session.assignments["math"]["title"] == "Math worksheet"
