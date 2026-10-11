@@ -363,6 +363,8 @@ BAR_ICON_PX = 20
 # Between the week's date and the view switcher beside it: at 6 px they ran together at Large text (#84).
 TITLE_SWITCHER_GAP = 16
 AUTH_CARD_WIDTH = 420
+# The pages that wear the look carried over from the last student (_worn_look), not the account's own.
+ENTRY_PAGES = ("authPage", "recoveryPage", "forgotPage")
 # The room a card's large shadow needs above and below it, which its holder keeps (a widget clips what
 # it holds, shadow included).
 AUTH_SHADOW_ABOVE = SHADOW_LARGE.blur - SHADOW_LARGE.y
@@ -626,6 +628,9 @@ class NativeWindow(QMainWindow):
         self._spotify.late.connect(self._spotify_late)
         self._spotify.heard.connect(self._spotify_heard)
         self._look = sanitize_look(None)
+        # Read once, and again at sign-out: signing in writes the file, which must not change the card
+        # the student is still looking at.
+        self._carried = self._read_carried()
         self._allow_week_page = True
         self._load_look()
         for hours in (self.week_table.scroll, self.day_view.scroll):
@@ -911,6 +916,8 @@ class NativeWindow(QMainWindow):
                     left = "" if leaving is None else leaving.objectName()
                     if left == "authPage":
                         self._clear_auth_status()
+                else:
+                    left = ""
                 if name == "settingsPage":
                     slide_over(self._stack, page, self._motion)
                 elif leaving is not None and leaving.objectName() == "settingsPage":
@@ -919,6 +926,10 @@ class NativeWindow(QMainWindow):
                     switch_page(self._stack, page, self._motion)
                 if page is not leaving and left == "recoveryPage":
                     self._discard_recovery_page(leaving)
+                if left in ENTRY_PAGES and name not in ENTRY_PAGES:
+                    # The card is now a picture fading out, so the account's own look dresses the page
+                    # behind it without the card changing.
+                    self._apply_appearance()
                 return
 
     def _entry_card(self, name: str, pinned: bool = False) -> QVBoxLayout:
@@ -1661,9 +1672,17 @@ class NativeWindow(QMainWindow):
         self.session.save()
         self._set_notice(f"Finished {title}.", "Undo", self._undo_from_notice)
 
+    def _wears_carried_look(self) -> bool:
+        """Nobody is signed in, or the card the student signed in on is still on screen. Switching to the
+        account's own look under a card that has not left would resize or flash it."""
+        if self.session.account is None:
+            return True
+        page = self._stack.currentWidget()
+        return page is not None and page.objectName() in ENTRY_PAGES
+
     def _look_inputs(self) -> tuple[str, bool, str]:
         system_dark = QGuiApplication.palette().color(QPalette.ColorRole.Window).lightness() < 128
-        if self.session.account is None:
+        if self._wears_carried_look():
             # Nobody is signed in: the device's own look, not the last account's (#74).
             return "system", system_dark, "default"
         pack = (self.session.preferences or {}).get("theme_pack") or "system"
@@ -1671,8 +1690,28 @@ class NativeWindow(QMainWindow):
         return pack, system_dark, accent
 
     def _worn_look(self) -> dict:
-        """The look on screen: the device's own while nobody is signed in, else the one kept here."""
-        return self._look if self.session.account is not None else sanitize_look(None)
+        """The look on screen: before sign-in only the text size and High contrast of the last look
+        worn here, else the one kept here."""
+        if not self._wears_carried_look():
+            return self._look
+        if self._carried is None:
+            return sanitize_look(None)
+        text, contrast = self._carried
+        return sanitize_look({"preset": "high-contrast" if contrast else "default", "knobs": {"text": text}})
+
+    def _read_carried(self) -> tuple[str, bool] | None:
+        return self.session.kept.carried_look() if self.session.kept is not None else None
+
+    def _carry_look(self) -> None:
+        """Keep the two things the sign-in screens borrow from the look, when it changes."""
+        kept, account = self.session.kept, self.session.account
+        if kept is None or account is None:
+            return
+        custom = self._look.get("custom")
+        contrast = (custom["base"] if custom is not None else self._look["preset"]) == "high-contrast"
+        # Only the sign-in screens' look, so a failed write is left for the next change to retry.
+        with contextlib.suppress(OSError):
+            kept.carry_look(str(account["id"]), effective_look(self._look)["text"], contrast)
 
     def _account_id(self) -> str | None:
         account = self.session.account
@@ -1916,6 +1955,7 @@ class NativeWindow(QMainWindow):
             self._setup_work_windows = None
             self._setup_week = False
             self._sync_auth_mode()
+            self._carried = self._read_carried()
             self.username.clear()
             self.password.clear()
             # Left shown on a shared computer, the next student's password would be shown too.
@@ -1925,6 +1965,7 @@ class NativeWindow(QMainWindow):
             return
         if self._block_spare_account != str(account["id"]):
             self._discard_block_spare()
+        self._carry_look()
         self._apply_appearance()
         if self._settings is not None and self._settings.account_id != account["id"]:
             self._discard_settings_page()
@@ -4633,6 +4674,7 @@ class NativeWindow(QMainWindow):
     def _save_look(self) -> None:
         import json
 
+        self._carry_look()
         path = self._look_path()
         try:
             path.parent.mkdir(parents=True, exist_ok=True)

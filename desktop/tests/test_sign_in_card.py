@@ -42,6 +42,8 @@ def card(window: NativeWindow, page: str = "authPage") -> QFrame:
 def dress(window: NativeWindow, monkeypatch: pytest.MonkeyPatch, pack: str, **look: object) -> None:
     # Signed out, the page wears the device's look (#74); these tests dress it as an account's.
     window.session.account = {"id": "dressed", "username": "dressed"}
+    # The card is still on screen, which wears the look carried from the last student until it leaves.
+    monkeypatch.setattr(window, "_wears_carried_look", lambda: False)
     monkeypatch.setattr(window, "_look_inputs", lambda: (pack, False, "default"))
     window._look = sanitize_look(look)
     window._apply_appearance()

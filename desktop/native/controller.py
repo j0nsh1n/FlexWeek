@@ -3482,11 +3482,14 @@ class NativeSession(QObject):
     def delete_account(self, password: str) -> None:
         ticket = self._begin()
         self._say("Deleting account…")
+        owner = str(self.account["id"]) if self.account else None
 
         def ok(_data: dict) -> None:
             if not self._alive(ticket):
                 return
             self._forget_session()
+            if self.kept is not None and owner is not None:
+                self.kept.forget_look(owner)
             self.client.reset()
             self._clear_local()
             self.busy = False
