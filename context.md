@@ -21,8 +21,7 @@
 - Tests that pick a day of the current week on the real clock can fail on later weekdays since item
   2: hold the clock (`grid_support.hold_clock`, `session.now_ms`).
 - Since 0.18.5: new accounts start on a 12-hour clock (the desktop conftest sets 24-hour per test
-  unless a test chooses); tests fail on any error inside a Qt slot (`no_error_is_lost_inside_a_qt_slot`;
-  pass `QTimer.singleShot(0, receiver, fn)`, never a bare bound method).
+  unless a test chooses); tests fail on any error inside a Qt slot (`no_error_is_lost_inside_a_qt_slot`).
 - Probing motion: `~/.flexweek-ui-harness/scratch/0.18.4/j14/claude-r3/probe_noprof.py` (copy into
   `desktop/tests/` as `test_zz_*.py`, run through fwtest with `-s`; `PROBE_DRAIN=1` waits for
   Settings' design previews, which otherwise land in the timed window; `PROBE_NOPROF=1` for real
