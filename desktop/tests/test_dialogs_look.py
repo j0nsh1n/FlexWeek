@@ -427,10 +427,14 @@ def test_the_repeat_scope_is_a_choice_of_two_under_the_days_only_for_a_repeating
     one_day = shown(qapp, BlockDialog(parent, soccer(), occurrence_day=3))
     scope = one_day.findChild(Segmented, "editScope")
     assert scope.isVisibleTo(one_day)
-    assert [button.text() for button in scope.buttons()] == ["This day only", "Every selected day"]
+    assert [button.text() for button in scope.buttons()] == ["This day only", "Every Tue and Thu"]
+    assert scope.buttons()[0].isChecked(), "This day only is the narrowest default"
     assert one_day.findChildren(QCheckBox, "scopeOccurrence") == [], "no radio buttons over the title"
     assert middle_y(scope, one_day) > middle_y(one_day.days[0], one_day), "under the days"
     assert middle_y(scope, one_day) > middle_y(one_day.title, one_day)
+    scope.buttons()[1].click()
+    one_day.days[4].click()
+    assert scope.buttons()[1].text() == "Every Tue, Thu and Fri"
     scope.buttons()[0].click()
     assert one_day.scope() == "occurrence"
     for other in (

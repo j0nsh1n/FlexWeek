@@ -2736,7 +2736,9 @@ class NativeWindow(QMainWindow):
         if not self._run_sheet(dialog):
             return
         if dialog.deleted():
-            self._delete_block(dialog.block(), dialog.scope(), dialog.occurrence_day())
+            self._delete_block(
+                dialog.block(), dialog.scope(), dialog.occurrence_day(), every_week=dialog.delete_every_week()
+            )
             return
         before = {item["id"] for item in self.session.blocks}
         self.session.add_block(dialog.block(), scope=dialog.scope(), day=dialog.occurrence_day())
@@ -2930,14 +2932,18 @@ class NativeWindow(QMainWindow):
             # School and Setup's activities are in every week, so taking one out asks which.
             sheet = ConfirmSheet(
                 self,
-                "Remove " + title,
-                f"Remove {title} from this week only, or from this week and every week after it?",
+                f"Delete {title}?",
+                (
+                    "Delete it from this week only, or from this week and every week after? "
+                    "Earlier weeks keep it."
+                ),
                 (
                     ("stay", "Cancel", "outlined"),
-                    ("week", "Just this week", ""),
-                    ("every", "Every week", "danger"),
+                    ("week", "This week only", ""),
+                    ("every", "This week and later", "danger"),
                 ),
-                default="stay",
+                default="week",
+                note="This week and later can't be undone.",
             )
             sheet.exec()
             if sheet.answer not in ("week", "every"):
@@ -2947,10 +2953,13 @@ class NativeWindow(QMainWindow):
         self.session.save()
         if every_week:
             # Undo takes back this week only, so the toast offers none.
-            self._set_notice(f"Removed {title} from this week and every week after it.", "", None)
+            self._set_notice(f"Deleted {title} from this week and every week after.", "", None)
             return
-        # The question before deleting promised an undo; this is where it is.
-        self._set_notice(f"Deleted {title}.", "Undo", self._undo_from_notice)
+        if scope == "occurrence" and day is not None:
+            words = f"Deleted {title} on {DAY_FULL[day]} from this week."
+            self._set_notice(words, "Undo", self._undo_from_notice)
+            return
+        self._set_notice(f"Deleted {title} from this week.", "Undo", self._undo_from_notice)
 
     def _school_hours(self) -> None:
         """School's days and times, asked as setup asks them: the student's School if they have one,

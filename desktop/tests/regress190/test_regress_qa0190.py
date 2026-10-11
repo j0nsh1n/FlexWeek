@@ -3,8 +3,7 @@ F3 (a bare end time on the 12-hour clock reads as AM), T1 (Delete in a repeating
 to every day) and T-W1 (a 12-hour range ending at midnight loses its first AM/PM).
 
 Keys go through the window system (QTest on the window's QWindow), as in the 0.18.4 suite. The clock
-setting is put back to 24-hour after every test by desktop/tests/conftest.py. Known failures are
-xfail(strict=True).
+setting is put back to 24-hour after every test by desktop/tests/conftest.py.
 """
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
@@ -27,7 +26,6 @@ KNOWN_F3 = (
     "morning Start"
 )
 KNOWN_F3B = "known failure (F3.B): an End at or before Start shows no problem line under End"
-KNOWN_T1 = "known failure (T1): BlockDialog sets scope_choice to 'Every selected day' (index 1) by default"
 KNOWN_TW1 = "known failure (T-W1): range_label(540, 1440) is '9–12 AM'; the start loses its AM"
 
 
@@ -90,7 +88,6 @@ def test_f3_guard_24_hour_end_is_unchanged(block_editor) -> None:
     assert dialog.end.time() == QTime(15, 15)
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_T1)
 def test_t1_editor_opened_from_one_day_of_a_repeating_block_defaults_to_this_day(qapp) -> None:
     soccer = {"id": "soccer", "title": "Soccer", "kind": "locked", "category": "extra", "start": "16:00",
               "duration_min": 90, "days": [1, 3]}

@@ -8,6 +8,7 @@ Delete was the biggest button in the dialog and deleted without asking.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import date, timedelta
 
 import pytest
 
@@ -27,8 +28,9 @@ from PySide6.QtWidgets import (
 )
 
 from desktop.native import widgets
+from desktop.native.calendar import date_for_day
 from desktop.native.look import resolved_palette, sanitize_look
-from desktop.native.widgets import AppStyle, BlockDialog
+from desktop.native.widgets import AppStyle, BlockDialog, ConfirmSheet
 from desktop.native.window import NativeWindow
 from desktop.tests.window_support import (  # noqa: F401
     host,
@@ -183,7 +185,9 @@ def test_delete_asks_first_and_does_nothing_when_refused(
     dialog = BlockDialog(host, soccer())
     dialog.show()
     dialog.delete_button.click()
-    assert asked == [("Delete event", "Delete Soccer practice? You can undo this.", "Delete")]
+    assert asked == [
+        ("Delete Soccer practice?", "Delete Soccer practice on every Tue and Thu this week?", "Delete")
+    ]
     assert dialog.result() != QDialog.DialogCode.Accepted and dialog.deleted() is False
     assert dialog.isVisible(), "refusing leaves the editor open"
     answer[0] = True
@@ -192,7 +196,14 @@ def test_delete_asks_first_and_does_nothing_when_refused(
     one_day = BlockDialog(host, soccer(), occurrence_day=3)
     one_day.scope_occurrence.setChecked(True)
     one_day.delete_button.click()
-    assert asked[-1][1] == "Delete Soccer practice on Thursday? You can undo this."
+    today = date.today()
+    occurrence_date = today - timedelta(days=today.weekday()) + timedelta(days=3)
+    date_text = f"{occurrence_date.day} {occurrence_date.strftime('%b')}"
+    assert asked[-1] == (
+        "Delete Soccer practice?",
+        f"Delete Soccer practice on Thursday {date_text} only?",
+        "Delete",
+    )
 
 
 def test_a_deleted_block_can_be_undone_from_the_notice(
@@ -216,7 +227,7 @@ def test_a_deleted_block_can_be_undone_from_the_notice(
     window._commit_block(dialog)
     settled(qapp, window)
     assert session.blocks == []
-    assert window.toast.text() == "Deleted Soccer practice."
+    assert window.toast.text() == "Deleted Soccer practice from this week."
     assert window.toast.button.accessibleName() == "Undo" and window.toast.button.text().startswith("Undo")
     window.toast.button.click()
     wait_until(qapp, lambda: [block["id"] for block in session.blocks] == ["soccer"])
@@ -271,3 +282,66 @@ def test_the_question_before_deleting_draws_its_answer_red_and_cancel_plain(
     at = answer.mapTo(leave, QPoint(answer.width() // 2, 4))
     assert picture.pixelColor(at.x(), at.y()) != red, "filled in the accent, not red"
     leave.close()
+
+
+def test_setup_delete_from_one_day_uses_one_sheet_and_offers_undo(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    setup = {"id": "activity-1", "title": "Soccer", "kind": "locked", "category": "extra",
+             "start": "16:00", "duration_min": 90, "days": [1, 3]}
+    window.session.set_setup_blocks([setup])
+    shown: list[ConfirmSheet] = []
+
+    def choose_week(sheet: ConfirmSheet) -> int:
+        shown.append(sheet)
+        sheet.answer = "week"
+        return 0
+
+    monkeypatch.setattr(ConfirmSheet, "exec", choose_week)
+    dialog = BlockDialog(window, setup, occurrence_day=1)
+    dialog._delete()
+    assert len(shown) == 1
+    sheet = shown[0]
+    assert sheet.windowTitle() == "Delete Soccer?"
+    occurrence_date = date.fromisoformat(date_for_day(window.session.week_start, 1))
+    date_text = f"{occurrence_date.day} {occurrence_date.strftime('%b')}"
+    assert sheet.question.text() == f"Delete Soccer on Tuesday {date_text} only? Earlier weeks keep it."
+    assert sheet.buttons["day"].isDefault()
+    assert [button.text() for button in sheet.buttons.values()] == [
+        "Cancel", "This day only", "This week only", "This week and later"
+    ]
+    window._delete_block(
+        dialog.block(), dialog.scope(), dialog.occurrence_day(), every_week=dialog.delete_every_week()
+    )
+    assert len(shown) == 1, "the week choice did not open a second Setup confirmation"
+    wait_until(qapp, lambda: not window.session.busy and not window.session.dirty)
+    soccer_now = next(block for block in window.session.blocks if block["id"] == "activity-1")
+    assert soccer_now["missed_days"] == [1, 3]
+    assert window.toast.text() == "Deleted Soccer from this week."
+    assert window.toast.button.isVisible() and window.toast.button.text().startswith("Undo")
+    window._undo_from_notice()
+    wait_until(qapp, lambda: not window.session.busy and not window.session.dirty)
+    restored = next(block for block in window.session.blocks if block["id"] == "activity-1")
+    assert restored.get("missed_days", []) == []
+
+
+def test_non_setup_repeat_delete_names_all_selected_days(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dialog = BlockDialog(window, soccer(), occurrence_day=1)
+    asked: list[tuple[str, str, str]] = []
+
+    def yes(_parent, title: str, question: str, button: str) -> bool:
+        asked.append((title, question, button))
+        return True
+
+    monkeypatch.setattr("desktop.native.widgets.confirm", yes)
+    dialog.scope_series.setChecked(True)
+    dialog._delete()
+    assert asked == [
+        ("Delete Soccer practice?", "Delete Soccer practice on every Tue and Thu this week?", "Delete")
+    ]

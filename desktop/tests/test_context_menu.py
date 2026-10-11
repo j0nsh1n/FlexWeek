@@ -200,7 +200,7 @@ def test_delete_asks_first_and_takes_school_off_that_day_only(
     school = [block for block in window.session.blocks if block["title"] == "School"]
     days = sorted(day for block in school for day in block["days"])
     assert days == [0, 1, 3, 4]
-    assert window.toast.text() == "Deleted School."
+    assert window.toast.text() == "Deleted School on Wednesday from this week."
 
 
 def test_homework_with_no_time_has_a_menu_too(qapp: QApplication, window: NativeWindow, menus: dict) -> None:

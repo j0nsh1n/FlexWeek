@@ -110,7 +110,9 @@ from desktop.native.calendar import (
     DAY_FULL,
     DAYS,
     SETUP_SCHOOL_ID,
+    date_for_day,
     is_series,
+    is_setup_block,
     local_stamp,
     monday_of,
     past_problem,
@@ -217,6 +219,14 @@ def day_range_words(days: list[int] | tuple[int, ...]) -> str:
         else:
             parts.extend(DAYS[day] for day in run)
     return ", ".join(parts)
+
+
+def day_range_and_words(days: list[int] | tuple[int, ...]) -> str:
+    words = day_range_words(days)
+    if ", " not in words:
+        return words
+    head, last = words.rsplit(", ", 1)
+    return f"{head} and {last}"
 
 
 SWATCH_PX = 12
@@ -3047,6 +3057,7 @@ class BlockDialog(Dialog):
             self._original = _preset_locked(category, day, start, duration_min)
         self._result: dict | None = None
         self._deleted = False
+        self._delete_every_week = False
         self._occurrence_day = occurrence_day
         self._series_days: list[bool] | None = None
         existing = block is not None
@@ -3073,19 +3084,23 @@ class BlockDialog(Dialog):
         form.addRow("Days", days_field)
         # Which days a change reaches matters only for a block that repeats, opened on one of its days:
         # a choice of two, under the days it is about (decision 23 of 0.17).
-        scopes = (("This day only", "occurrence"), ("Every selected day", "series"))
+        scopes = (
+            ("This day only", "occurrence"),
+            (f"Every {day_range_and_words(self._original.get('days') or [])}", "series"),
+        )
         self.scope_choice = Segmented(scopes, "editScope")
         self.scope_occurrence, self.scope_series = self.scope_choice.buttons()
         self.scope_occurrence.setObjectName("scopeOccurrence")
         self.scope_series.setObjectName("scopeSeries")
-        self.scope_choice.setCurrentIndex(1)
+        self.scope_choice.setCurrentIndex(0)
+        self.day_picker.changed.connect(self._sync_scope_label)
         scope_box = self.scope_choice
         form.addRow("Apply to", scope_box)
         form.setRowVisible(scope_box, bool(series and occurrence_day is not None))
         note = QLabel("Changes apply to every selected day in this series.")
         note.setObjectName("seriesScope")
         # isHidden, not isVisible: nothing is visible before the dialog is shown, so the note stood over
-        # "This day only" and "Every selected day" and contradicted the first.
+        # "This day only" and "Every Tue and Thu" and contradicted the first.
         form.addRow("", note)
         repeating = existing and len(self._original.get("days") or []) > 1
         form.setRowVisible(note, repeating and scope_box.isHidden())
@@ -3251,6 +3266,18 @@ class BlockDialog(Dialog):
         if not occurrence:
             self._series_days = None
         self.repeat_note.setVisible(not occurrence)
+        self._sync_scope_label()
+
+    def _sync_scope_label(self) -> None:
+        if self.scope_occurrence.isChecked():
+            days = (
+                [index for index, selected in enumerate(self._series_days) if selected]
+                if self._series_days is not None
+                else self._original.get("days") or []
+            )
+        else:
+            days = [index for index, check in enumerate(self.days) if check.isChecked()]
+        self.scope_series.setText(f"Every {day_range_and_words(days)}")
 
     def _clock_to_minutes(self, clock: QTime) -> int:
         return clock.hour() * 60 + clock.minute()
@@ -3341,6 +3368,9 @@ class BlockDialog(Dialog):
     def deleted(self) -> bool:
         return self._deleted
 
+    def delete_every_week(self) -> bool:
+        return self._delete_every_week
+
     def recover_missed(self) -> bool:
         # The window asks after exec() returns. isVisible() is false for every child of a closed dialog,
         # so it made this box do nothing; isHidden() only says whether the box was ever offered.
@@ -3352,10 +3382,43 @@ class BlockDialog(Dialog):
         )
 
     def _delete(self) -> None:
-        name = self.title.text().strip() or self._original.get("title") or "this event"
-        if self.scope() == "occurrence" and self._occurrence_day is not None:
-            name += " on " + DAY_FULL[self._occurrence_day]
-        if not confirm(self, "Delete event", f"Delete {name}? You can undo this.", "Delete"):
+        name = self._original.get("title") or "this event"
+        days = self._original.get("days") or []
+        occurrence = self.scope() == "occurrence" and self._occurrence_day is not None
+        week_start = getattr(getattr(self.parent(), "session", None), "week_start", None)
+        setup = is_setup_block(self._original)
+        if occurrence:
+            if not isinstance(week_start, str):
+                week_start = monday_of(date.today().isoformat())
+            occurrence_date = date.fromisoformat(date_for_day(week_start, self._occurrence_day))
+            date_text = f"{occurrence_date.day} {occurrence_date.strftime('%b')}"
+            question = f"Delete {name} on {DAY_FULL[self._occurrence_day]} {date_text} only?"
+        else:
+            selected_days = day_range_and_words(days)
+            question = f"Delete {name} on every {selected_days} this week?"
+        if setup:
+            question += " Earlier weeks keep it."
+            answers = [("stay", "Cancel", "outlined")]
+            if occurrence:
+                answers.append(("day", "This day only", ""))
+            answers.extend((("week", "This week only", ""), ("every", "This week and later", "danger")))
+            sheet = ConfirmSheet(
+                self,
+                f"Delete {name}?",
+                question,
+                tuple(answers),
+                default="day" if occurrence else "week",
+                note="This week and later can't be undone.",
+            )
+            sheet.exec()
+            if sheet.answer not in ("day", "week", "every"):
+                return
+            self._delete_every_week = sheet.answer == "every"
+            if sheet.answer == "day":
+                self.scope_occurrence.setChecked(True)
+            else:
+                self.scope_series.setChecked(True)
+        elif not confirm(self, f"Delete {name}?", question, "Delete"):
             return
         self._deleted = True
         super().accept()
