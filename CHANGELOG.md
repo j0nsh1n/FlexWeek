@@ -13,6 +13,9 @@ All notable changes to FlexWeek are documented here. Format follows
 - A time range that ends at midnight on the 12-hour clock keeps both AM/PM marks: "9 AM–12 AM", not "9–12 AM".
 - A week, a backup file or a restore point that gives two blocks the same id is refused with a message that names it, and nothing is saved.
 - Chips, the off switch and Retro's fields are easier to see: chip edges and their keyboard focus ring reach 3:1 in every look, the off switch is an outlined track with a knob you can see in dark looks, and a focused field in Retro shows its focus ring.
+- Light, Dark and System can be reached with Tab while one of the More looks is worn.
+- Setup's Sports or Activity choice is read out by its name, not by its current value.
+- The recovery codes are cleared from FlexWeek once you press Continue to my week, instead of staying in a hidden page.
 
 ## [0.19.1] - 2026-10-10
 

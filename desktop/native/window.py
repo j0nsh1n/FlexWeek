@@ -911,15 +911,14 @@ class NativeWindow(QMainWindow):
                     left = "" if leaving is None else leaving.objectName()
                     if left == "authPage":
                         self._clear_auth_status()
-                    if left == "recoveryPage":
-                        self.recovery_status.clear()
-                        self.recovery_status.setVisible(False)
                 if name == "settingsPage":
                     slide_over(self._stack, page, self._motion)
                 elif leaving is not None and leaving.objectName() == "settingsPage":
                     slide_over(self._stack, page, self._motion, back=True)
                 else:
                     switch_page(self._stack, page, self._motion)
+                if page is not leaving and left == "recoveryPage":
+                    self._discard_recovery_page(leaving)
                 return
 
     def _entry_card(self, name: str, pinned: bool = False) -> QVBoxLayout:
@@ -2109,8 +2108,27 @@ class NativeWindow(QMainWindow):
             )
         self.setup_page.show_test_result(said)
 
+    def _discard_recovery_page(self, page: QWidget) -> None:
+        """The codes live on this page only while it is on screen: left in a hidden label they stayed in
+        memory and in the accessibility tree for the whole session. `_show_recovery` builds it again."""
+        self.recovery_list.clear()
+        self.recovery_status.clear()
+        self._recovery_said.stop()
+        self._recovery_said.deleteLater()
+        self._entry_cards.remove(page.findChild(QFrame, "authCard"))
+        self._stack.removeWidget(page)
+        page.hide()
+        # Unnamed now, so a lookup by name cannot find it while it waits to be deleted.
+        page.setObjectName("")
+        page.deleteLater()
+
     def _show_recovery(self, codes: list) -> None:
         self._allow_week_page = False
+        if self.findChild(QWidget, "recoveryPage") is None:
+            self._build_recovery()
+            # Dressed again, since the look is only applied when it changes.
+            self._dressed = ()
+            self._apply_appearance()
         self.recovery_list.setText("\n".join(str(code) for code in codes))
         self._reset_recovery_buttons()
         self.recovery_status.setVisible(False)

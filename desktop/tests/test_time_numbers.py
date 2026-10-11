@@ -46,6 +46,8 @@ def test_the_week_title_uses_the_same_short_date_at_every_width(
 
 
 def test_recovery_codes_use_the_bundled_mono_face(window: NativeWindow) -> None:
+    # R1: the codes' page is gone once the week is open, and made again when new codes come.
+    window.session.recovery_codes.emit(["aaaa-bbbb-cccc-dddd"] * 8)
     assert window.recovery_list.font().family() == "JetBrains Mono"
 
 
