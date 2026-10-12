@@ -1058,6 +1058,7 @@ class NativeWindow(QMainWindow):
         self.recovery_code.setObjectName("recoveryCode")
         self.recovery_code.setPlaceholderText("Recovery code")
         self.recovery_code.setAccessibleName("Recovery code")
+        self.recovery_code.returnPressed.connect(self._submit_auth)
         self.recovery_code_problem = ProblemLine(self.recovery_code)
         self.recovery_code_problem.setObjectName("recoveryCodeProblem")
         layout.addWidget(self.recovery_code)
@@ -1067,6 +1068,7 @@ class NativeWindow(QMainWindow):
         self.new_recovery_password.setMaxLength(128)
         self.new_recovery_password.setPlaceholderText("New password")
         self.new_recovery_password.setAccessibleName("New password")
+        self.new_recovery_password.returnPressed.connect(self._submit_auth)
         self.recovery_password_problem = ProblemLine(self.new_recovery_password)
         self.recovery_password_problem.setObjectName("recoveryPasswordProblem")
         layout.addWidget(self.new_recovery_password)
@@ -1083,6 +1085,8 @@ class NativeWindow(QMainWindow):
         self.sign_in_button.setObjectName("signIn")
         self.sign_in_button.setDefault(True)
         self.sign_in_button.clicked.connect(self._sign_in)
+        self.username.returnPressed.connect(self._submit_auth)
+        self.password.returnPressed.connect(self._submit_auth)
         layout.addWidget(self.sign_in_button)
         self.create_button = QPushButton("Create account")
         self.create_button.setObjectName("createAccount")
@@ -2576,6 +2580,14 @@ class NativeWindow(QMainWindow):
 
     def _on_recovery_ack(self, checked: bool) -> None:
         self.recovery_continue.setEnabled(checked and not self.session.busy)
+
+    def _submit_auth(self) -> None:
+        if self._entry_mode == CREATE:
+            self._create_account()
+        elif self._entry_mode == RESET:
+            self._recover_account()
+        else:
+            self._sign_in()
 
     def _create_account(self) -> None:
         self._refresh_auth_problems(focus=True, mode=CREATE)

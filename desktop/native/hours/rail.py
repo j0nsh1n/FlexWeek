@@ -11,7 +11,7 @@ behind "Not placed yet" and opens on a wrapping row under that line.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import date, timedelta
 
 from PySide6.QtCore import (
@@ -951,8 +951,17 @@ class Rail(QFrame):
         rows = self.tasks.count()
         if rows:
             self.tasks.ensurePolished()
-            # Row by row, as the list lays them out at its width: a long name takes two lines (#84), so
-            # the first row's height times the count cut off the rows after a taller one.
+            width = max(1, self.tasks.viewport().width())
+            delegate = self.tasks.itemDelegate()
+            body, _small = self.fonts()
+            for row in range(rows):
+                item = self.tasks.item(row)
+                index = self.tasks.indexFromItem(item)
+                lines, below, timing = delegate.row_lines(index, width)
+                height = QFontMetricsF(body).lineSpacing() * len(lines) + 10
+                if below:
+                    height += QFontMetricsF(timing).lineSpacing()
+                item.setSizeHint(QSize(width, round(max(30.0, height))))
             self.tasks.doItemsLayout()
             tall = sum(self.tasks.visualItemRect(self.tasks.item(row)).height() for row in range(rows))
             margins = self.tasks.contentsMargins()
@@ -973,8 +982,6 @@ class Rail(QFrame):
             chip.deleteLater()
         self._chips = []
         for index, item in enumerate(waiting):
-            if amounts and item.assignment_id in amounts:
-                item = replace(item, minutes=amounts[item.assignment_id])
             chip = RailChip(self.hand, item)
             chip.setObjectName(f"classicWaiting{index}")
             chip.colours, chip.look = self.colours, self.look

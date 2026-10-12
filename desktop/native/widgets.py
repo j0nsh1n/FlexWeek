@@ -3660,6 +3660,7 @@ class DueField(QWidget):
         # window has room for with the Sessions rows in: test_sheets holds Add homework to 90 % of it.
         outer.addSpacing(DUE_SWITCH_EXTRA)
         self.date = DateField()
+        self.date.week_steps = True
         self.date.setObjectName(name)
         self.date.setDisplayFormat(DUE_DATE_FORMAT)
         self.date.setMinimumDate(QDate(2000, 1, 1))

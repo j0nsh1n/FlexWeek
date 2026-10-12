@@ -282,6 +282,7 @@ class DateField(QDateEdit):
         # The day a typed date is counted from; the window's clock where it has one.
         self.today: QDate | None = None
         self._typed = False
+        self.week_steps = False
         self.editingFinished.connect(self._next_matching_date)
         self.setCalendarPopup(True)
         # The month is made on the first press or key, before Qt opens its popup: built with the
@@ -324,6 +325,16 @@ class DateField(QDateEdit):
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802 - Qt virtual
         self._ensure_look_calendar()
+        steps = {
+            Qt.Key.Key_Up: 1,
+            Qt.Key.Key_Down: -1,
+            Qt.Key.Key_PageUp: -7,
+            Qt.Key.Key_PageDown: 7,
+        }
+        if self.week_steps and event.key() in steps:
+            self.setDate(self.date().addDays(steps[event.key()]))
+            event.accept()
+            return
         if event.text().strip() and event.text().isprintable():
             # Typing in the year gives a year; typing a day or a month leaves it to the field.
             self._typed = self.currentSection() != QDateTimeEdit.Section.YearSection
