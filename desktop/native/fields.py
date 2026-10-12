@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 
-from PySide6.QtCore import QDate, QDateTime, QEvent, QObject, QRect, QRectF, Qt, QTime, QTimer, Signal
+from PySide6.QtCore import QDate, QDateTime, QEvent, QObject, QRect, QRectF, QSize, Qt, QTime, QTimer, Signal
 from PySide6.QtGui import (
     QAccessible,
     QAccessibleAnnouncementEvent,
@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
     QDateTimeEdit,
     QFormLayout,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -392,64 +393,130 @@ class ProblemLine(QFrame):
     def __init__(self, field: QWidget) -> None:
         super().__init__(field.parentWidget() or field)
         self.field = field
-        self._overlay = True
+        self.overlay = True
+        # The row this line sits under when the field shares its row with others.
+        self._row_width: Callable[[], int] | None = None
         self.setProperty("problem", False)
         self.setObjectName("clockError")
-        row = QHBoxLayout(self)
+        row = QGridLayout(self)
         row.setContentsMargins(8, 4, 8, 4)
         row.setSpacing(6)
+        row.setColumnStretch(1, 1)
         self.icon = QLabel()
         self.icon.setObjectName("clockErrorIcon")
-        row.addWidget(self.icon, 0, Qt.AlignmentFlag.AlignTop)
+        row.addWidget(self.icon, 0, 0, Qt.AlignmentFlag.AlignTop)
         self.text = QLabel()
         self.text.setObjectName("clockErrorText")
         self.text.setWordWrap(True)
-        row.addWidget(self.text, 1)
+        row.addWidget(self.text, 0, 1)
         self.action = QPushButton()
         self.action.setObjectName("clockErrorUse")
         self.action.setProperty("outlined", True)
         self.action.setAutoDefault(False)
         self.action.hide()
-        row.addWidget(self.action, 0, Qt.AlignmentFlag.AlignVCenter)
+        row.addWidget(self.action, 0, 2, Qt.AlignmentFlag.AlignVCenter)
         self._take: Callable[[], None] | None = None
         self.action.clicked.connect(self._act)
         self.hide()
         field.destroyed.connect(self.deleteLater)
 
     def attach(self, layout, index: int) -> None:
-        """Reserve a row under fields whose forms have a layout."""
+        """Reserve a row under fields whose forms have a layout. A field that shares its row with
+        others (Start beside End, the "from" and "to" boxes) gets the line as a row of its own under
+        that whole row, so the other fields stay where they were and the row never stretches."""
         if isinstance(layout, QFormLayout):
             row, _role = layout.getWidgetPosition(self.field)
             if row < 0:
                 return
             layout.insertRow(row + 1, self)
         elif isinstance(layout, QBoxLayout):
-            if layout.direction() == QBoxLayout.Direction.TopToBottom:
+            if layout.direction() == QBoxLayout.Direction.TopToBottom and index >= 0:
                 layout.insertWidget(index, self)
-            else:
-                editor = getattr(self.field, "lineEdit", lambda: None)()
-                typed_text = editor.text() if editor is not None else None
-                holder = QWidget(layout.parentWidget())
-                column = QVBoxLayout(holder)
-                column.setContentsMargins(0, 0, 0, 0)
-                column.setSpacing(0)
-                layout.replaceWidget(self.field, holder)
-                self.field.setParent(holder)
-                self.setParent(holder)
-                column.addWidget(self.field)
-                column.addWidget(self)
-                if editor is not None and typed_text is not None:
-                    editor.setText(typed_text)
+            elif not self._attach_under_row(layout):
+                return
+        elif isinstance(layout, QGridLayout):
+            self._attach_in_grid(layout)
         else:
             return
-        self._overlay = False
+        self.overlay = False
+
+    def _attach_in_grid(self, grid: QGridLayout) -> None:
+        # A row of the grid's own, as wide as the row above it, whatever the line says.
+        # Read off the widgets, not the grid's items: a Python wrapper of a layout item outlives it, and
+        # a new object at its address was handed back as that item.
+        above = [w for w in grid.parentWidget().children() if isinstance(w, QWidget) and w is not self]
+        gaps = grid.horizontalSpacing() * (len(above) - 1)
+        self._row_width = lambda: gaps + sum(widget.sizeHint().width() for widget in above)
+        grid.addWidget(self, grid.rowCount(), 0, 1, grid.columnCount())
+        # A line as narrow as a pair of time boxes keeps its button under the words, not beside them.
+        inside = self.layout()
+        inside.removeWidget(self.action)
+        inside.addWidget(self.action, 1, 1, 1, 2, Qt.AlignmentFlag.AlignLeft)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+
+    def _attach_under_row(self, layout: QBoxLayout) -> bool:
+        row = layout.parentWidget()
+        above = row.parentWidget().layout() if row is not None and row.parentWidget() is not None else None
+        if isinstance(above, QFormLayout):
+            at, _role = above.getWidgetPosition(row)
+            if at < 0:
+                return False
+            above.insertRow(at + 1, self)
+        elif isinstance(above, QBoxLayout) and above.direction() == QBoxLayout.Direction.TopToBottom:
+            at = above.indexOf(row)
+            if at < 0:
+                return False
+            above.insertWidget(at + 1, self)
+        else:
+            return False
+        self._row_width = lambda: row.sizeHint().width()
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        return True
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        self._tell_host()
+
+    def hideEvent(self, event) -> None:  # noqa: N802
+        super().hideEvent(event)
+        self._tell_host()
+
+    def _tell_host(self) -> None:
+        # A line that takes room makes its sheet taller or shorter: a sheet sized when it opened would
+        # scroll for the few pixels it now needs.
+        refit = getattr(self.window(), "refit", None)
+        if not self.overlay and callable(refit):
+            refit()
+
+    def hasHeightForWidth(self) -> bool:  # noqa: N802
+        return self._row_width is not None
+
+    def heightForWidth(self, width: int) -> int:  # noqa: N802
+        layout = self.layout()
+        return layout.totalHeightForWidth(width) if layout is not None else super().heightForWidth(width)
+
+    def sizeHint(self) -> QSize:  # noqa: N802
+        # Under a row, as wide as that row asks, so a long sentence wraps instead of widening the row
+        # (and a flow of rows into the next line).
+        if self._row_width is None:
+            return super().sizeHint()
+        width = self._row_width()
+        return QSize(width, self.heightForWidth(width))
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802
+        if self._row_width is None:
+            return super().minimumSizeHint()
+        # Its height is for a comfortable width, not for the narrowest: a form that asks for the narrow
+        # height scrolls for rows that are never that tall once laid out at the width it has.
+        width = self._row_width()
+        return QSize(width, self.heightForWidth(max(width, self.MAX_WIDTH)))
 
     def offer(self, words: str, take: Callable[[], None] | None) -> None:
         """A button beside the problem that puts it right ("Use 3:15 PM"), or none."""
         self._take = take
         self.action.setText(words)
         self.action.setVisible(bool(words) and take is not None)
-        if self.isVisible():
+        if self.isVisible() and self.overlay:
             self.place()
 
     def _act(self) -> None:
@@ -463,10 +530,10 @@ class ProblemLine(QFrame):
         self.setProperty("problem", True)
         self.style().unpolish(self)
         self.style().polish(self)
-        if self._overlay:
+        if self.overlay:
             self.place()
         self.show()
-        if self._overlay:
+        if self.overlay:
             self.raise_()
 
     def place(self) -> None:
@@ -682,8 +749,7 @@ class ClockField(QTimeEdit):
             layout = self.parentWidget().layout() if self.parentWidget() is not None else None
             if layout is not None:
                 index = layout.indexOf(self)
-                if index >= 0:
-                    self._line.attach(layout, index + 1)
+                self._line.attach(layout, index + 1 if index >= 0 else -1)
         self._line.say(words)
         if fresh:
             announce(self, words, assertive=True)
@@ -818,7 +884,8 @@ class ClockField(QTimeEdit):
 
     def _follow(self) -> None:
         if self._problem and self._line is not None and self.isVisible():
-            self._line.place()
+            if self._line.overlay:
+                self._line.place()
             self._line.show()
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802

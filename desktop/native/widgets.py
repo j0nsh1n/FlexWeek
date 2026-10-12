@@ -57,6 +57,7 @@ from PySide6.QtWidgets import (
     QAbstractScrollArea,
     QAbstractSpinBox,
     QApplication,
+    QBoxLayout,
     QButtonGroup,
     QCheckBox,
     QComboBox,
@@ -2752,6 +2753,12 @@ class Dialog(QDialog):
             self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
             self.setProperty("sheet", True)
 
+    def return_focus_to(self, widget: QWidget) -> None:
+        """Put the keyboard on `widget` when the sheet closes, in place of where it was when the sheet
+        opened: a sheet that sends the student to a box to fix would otherwise hand it back to the
+        button they pressed."""
+        self._came_from = widget
+
     def card_body(self, title: str, width: int = SHEET_FORM) -> QVBoxLayout:
         """The layout the dialog's content goes in, on its one card: the sheet itself, or the card on a
         window's page. The body is the card, not a box drawn inside it. The card is `width` wide and
@@ -2946,7 +2953,7 @@ class Dialog(QDialog):
         card = self.card
         shadow = 2 * SHEET_ROOM
         # The card is its width on the scale, narrower only in a window without room for it.
-        inner = min(self.scaled_width(), most_w - shadow)
+        inner = self.fit_width(most_w - shadow)
         card.setFixedWidth(inner)
         hint = card.sizeHint().expandedTo(card.minimumSizeHint()).expandedTo(card.minimumSize())
         # Words that wrap need the height they take at this width, not at the width they would like.
@@ -2981,6 +2988,12 @@ class Dialog(QDialog):
                 child.waiting = False
                 return child
         return None
+
+    def fit_width(self, room: int) -> int:
+        """The card's width, given the most the window leaves it: its place on the scale, or less in
+        a window without room for that. A sheet whose content needs more than the scale gives it
+        widens here, up to `room`."""
+        return min(self.scaled_width(), room)
 
     def scaled_width(self) -> int:
         """The card's width on the scale at the student's text size: 440 and 600 are at Normal, and
@@ -3039,11 +3052,29 @@ class ConfirmSheet(Dialog):
             self.buttons[key] = button
             return button
 
-        sheet_footer(
-            box,
-            *(made(*answer) for answer in answers),
-            left=made(*left) if left is not None else None,
-        )
+        self._answers = [made(*answer) for answer in answers]
+        self._left = made(*left) if left is not None else None
+        self._row = sheet_footer(box, *self._answers, left=self._left)
+
+    def _lay_out(self, direction: QBoxLayout.Direction) -> None:
+        self._row.setDirection(direction)
+        # The row is a layout inside the card's: the card's keeps the size it had until it is told.
+        self.card.layout().invalidate()
+
+    def fit_width(self, room: int) -> int:
+        """Every answer is as wide as its words and padding. The sheet widens to hold them side by side
+        when its window has room; past that they stand one above the other, and the words keep their
+        size either way."""
+        wide = super().fit_width(room)
+        buttons = ([self._left] if self._left is not None else []) + self._answers
+        for button in buttons:
+            button.ensurePolished()
+        self._lay_out(QBoxLayout.Direction.LeftToRight)
+        side_by_side = self.card.minimumSizeHint().width()
+        beside = side_by_side <= room
+        if not beside:
+            self._lay_out(QBoxLayout.Direction.TopToBottom)
+        return max(wide, side_by_side) if beside else wide
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)

@@ -922,18 +922,21 @@ class TimeRange(QWidget):
     def __init__(self, start: str, end: str, name: str) -> None:
         super().__init__()
         self.setObjectName("setupRow")
-        line = QHBoxLayout(self)
+        # A grid: the boxes are its first row, and a problem under End is a row of its own below, so it
+        # neither widens End nor moves the boxes beside it.
+        line = QGridLayout(self)
         line.setContentsMargins(0, 0, 0, 0)
-        line.setSpacing(6)
+        line.setHorizontalSpacing(6)
+        line.setVerticalSpacing(4)
         self.start = QuarterTime(start)
         self.start.setAccessibleName(f"{name} starts")
         self.end = QuarterTime(end, end=True)
         self.end.setAccessibleName(f"{name} ends")
         self.end.pair_with(self.start, name)
-        line.addWidget(_label("from", "setupFieldLabel", wrap=False))
-        line.addWidget(self.start)
-        line.addWidget(_label("to", "setupFieldLabel", wrap=False))
-        line.addWidget(self.end)
+        line.addWidget(_label("from", "setupFieldLabel", wrap=False), 0, 0)
+        line.addWidget(self.start, 0, 1)
+        line.addWidget(_label("to", "setupFieldLabel", wrap=False), 0, 2)
+        line.addWidget(self.end, 0, 3)
 
     def span(self) -> tuple[str, int]:
         return self.start.hhmm(), self.end.minutes() - self.start.minutes()
@@ -1749,6 +1752,8 @@ class SetupPage(QWidget):
                     ("keep", f"Keep {what} and go on", "filled"),
                 )
             sheet = ConfirmSheet(self, "Skip this step?", question, answers, default=stay)
+            if bad is not None:
+                sheet.return_focus_to(bad[0])
             sheet.exec()
             # Esc or the close button is the answer Enter gives: nothing is thrown away by leaving.
             answer = sheet.answer or stay
@@ -1916,7 +1921,7 @@ class SetupPage(QWidget):
         self.back.setVisible(self._step != STYLE)
         self.skip.setVisible(self._step != DONE)
         self.next.setText(FINISH_LABEL if self._step == DONE else NEXT_LABEL)
-        for index, (_name, steps) in enumerate(RAIL):
+        for index, (name, steps) in enumerate(RAIL):
             item = self.rail_items[index]
             current = self._step in steps
             done = max(steps) < self._step or (self._furthest >= DONE and steps[0] != DONE)
@@ -1928,8 +1933,10 @@ class SetupPage(QWidget):
             skipped = not current and done and index in self._skipped
             state = CURRENT if current else SKIPPED if skipped else FINISHED if done else PENDING
             item.setIcon(self._badge(index + 1, state, item.font().family()))
-            item.setAccessibleDescription(RAIL_STATES[state])
-            item.setToolTip(RAIL_STATES[state])
+            where = RAIL_STATES[state]
+            item.setAccessibleName(f"Step {index + 1}: {name}" + (f", {where.lower()}" if where else ""))
+            item.setAccessibleDescription(where)
+            item.setToolTip(where)
         self._fit_rail()
 
     def _fit_rail(self) -> None:
