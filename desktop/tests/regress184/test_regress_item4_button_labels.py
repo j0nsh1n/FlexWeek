@@ -56,38 +56,9 @@ KNOWN_CLIP = "known failure (item 4): 'Accept late start' is clipped in this loo
 KNOWN_ROOMY = (
     "known failure (item 4): the 20 px side padding / 36-40 px height is only on roomy buttons"
 )
-# Measured on 0.18.4 offscreen: (design, look, size) where 'Accept late start' is clipped today.
-CLIPPED_TODAY: set[tuple[str, str, str]] = {
-    ("classic", "terminal", "small"),
-    ("clay", "terminal", "small"),
-    ("dial", "terminal", "small"),
-    ("mission", "terminal", "small"),
-    ("one", "terminal", "small"),
-    ("bento", "terminal", "large"),
-    ("bento", "terminal", "normal"),
-    ("classic", "high-contrast", "normal"),
-    ("classic", "poster", "normal"),
-    ("classic", "terminal", "large"),
-    ("classic", "terminal", "normal"),
-    ("clay", "high-contrast", "normal"),
-    ("clay", "poster", "normal"),
-    ("clay", "terminal", "large"),
-    ("clay", "terminal", "normal"),
-    ("dial", "high-contrast", "normal"),
-    ("dial", "poster", "normal"),
-    ("dial", "terminal", "large"),
-    ("dial", "terminal", "normal"),
-    ("mission", "high-contrast", "normal"),
-    ("mission", "poster", "normal"),
-    ("mission", "terminal", "large"),
-    ("mission", "terminal", "normal"),
-    ("one", "high-contrast", "normal"),
-    ("one", "poster", "normal"),
-    ("one", "terminal", "large"),
-    ("one", "terminal", "normal"),
-    ("timeline", "terminal", "large"),
-    ("timeline", "terminal", "normal"),
-}
+# Measured on 0.18.4 offscreen, 29 looks clipped 'Accept late start'. Running late's buttons now stack
+# at the left edge with the room for it, so none clips (0.19.2, qa-b).
+CLIPPED_TODAY: set[tuple[str, str, str]] = set()
 
 
 def params(combos, known: set | None, reason: str) -> list:

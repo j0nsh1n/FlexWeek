@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 from collections.abc import Callable, Collection
 from copy import deepcopy
 from datetime import date, datetime, time, timedelta
@@ -18,7 +19,9 @@ from PySide6.QtCore import (
     QElapsedTimer,
     QEvent,
     QEventLoop,
+    QModelIndex,
     QObject,
+    QPersistentModelIndex,
     QPoint,
     QRect,
     QRectF,
@@ -83,8 +86,10 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QStackedWidget,
     QStyle,
+    QStyledItemDelegate,
     QStyleOptionButton,
     QStyleOptionSlider,
+    QStyleOptionViewItem,
     QStylePainter,
     QTimeEdit,
     QToolButton,
@@ -5366,6 +5371,17 @@ class RoutineDialog(Dialog):
         super().accept()
 
 
+class _RowsDrawnByWidgets(QStyledItemDelegate):
+    """A list whose rows are widgets set with setItemWidget: the row's own text stays for tests and
+    screen readers but is not painted under the widget, which printed every row twice."""
+
+    def initStyleOption(  # noqa: N802
+        self, option: QStyleOptionViewItem, index: QModelIndex | QPersistentModelIndex
+    ) -> None:
+        super().initStyleOption(option, index)
+        option.text = ""
+
+
 class LateDialog(Dialog):
     preview_requested = Signal()
 
@@ -5394,20 +5410,21 @@ class LateDialog(Dialog):
         layout.addWidget(self.summary)
         self.changes = QListWidget()
         self.changes.setObjectName("lateChanges")
+        self.changes.setItemDelegate(_RowsDrawnByWidgets(self.changes))
         # Shown with the preview: before it, an empty box said nothing.
         self.changes.setVisible(False)
         layout.addWidget(self.changes)
         self.error = _error_label()
         layout.addWidget(self.error)
-        # Preview at the left and the answers at the right; with no room for both, the answers go under.
-        buttons = EndsLayout(gap=SPACING[1])
-        first = QHBoxLayout()
-        first.setContentsMargins(0, 0, 0, 0)
+        # Preview, then the answers under it on the same left edge. Side by side they needed more than
+        # the card has, so the answers wrapped under Preview but stayed at the right, off its edge.
+        buttons = QVBoxLayout()
+        buttons.setSpacing(SPACING[1])
         preview = QPushButton("Preview")
         preview.setObjectName("latePreview")
         preview.setProperty("outlined", True)
         preview.clicked.connect(self.preview_requested.emit)
-        # The answers where the platform puts them; Preview is a step before them, at the left.
+        # The answers where the platform puts them; Preview is a step before them.
         answers = QDialogButtonBox()
         self.accept_button = answers.addButton("Accept late start", QDialogButtonBox.ButtonRole.AcceptRole)
         self.accept_button.setObjectName("lateAccept")
@@ -5417,12 +5434,16 @@ class LateDialog(Dialog):
         cancel.setProperty("quiet", True)
         answers.accepted.connect(self.accept)
         answers.rejected.connect(self.reject)
+        first = QHBoxLayout()
+        first.setContentsMargins(0, 0, 0, 0)
         first.addWidget(preview)
+        first.addStretch(1)
         last = QHBoxLayout()
         last.setContentsMargins(0, 0, 0, 0)
         last.addWidget(answers)
-        buttons.add_group(first)
-        buttons.add_group(last)
+        last.addStretch(1)
+        buttons.addLayout(first)
+        buttons.addLayout(last)
         layout.addLayout(buttons)
         layout.addWidget(WhyOff(self.accept_button, LATE_WAIT))
 
@@ -5444,9 +5465,10 @@ class LateDialog(Dialog):
             self.changes.addItem(item)
             label = QLabel()
             label.setTextFormat(Qt.TextFormat.RichText)
+            label.setWordWrap(True)
             background = self.palette().color(QPalette.ColorRole.Base).name()
             muted = fit_lightness(self.palette().color(QPalette.ColorRole.Mid).name(), (background,), 4.5)
-            label.setText(_late_move_markup(move, block, muted))
+            label.setText(_late_move_markup(move, block, title, muted))
             self.changes.setItemWidget(item, label)
         for block in trace.get("unplaced") or []:
             self.changes.addItem(block["title"] + " no longer fits and will stay on the task list.")
@@ -5460,8 +5482,23 @@ class LateDialog(Dialog):
         self.summary.setVisible(True)
         announce(self.summary, summary)
         self.changes.setVisible(True)
+        self._fit_rows()
         self.accept_button.setEnabled(True)
         self.minutes.setEnabled(False)
+
+
+    def _fit_rows(self) -> None:
+        """Each widget row as tall as its words need at the list's width, so a long title wraps instead
+        of being cut or drawn over the next row."""
+        layout = self.layout()
+        if layout is not None:
+            layout.activate()
+        width = self.changes.viewport().width()
+        for index in range(self.changes.count()):
+            item = self.changes.item(index)
+            label = self.changes.itemWidget(item)
+            if label is not None:
+                item.setSizeHint(QSize(width, max(label.heightForWidth(width), label.sizeHint().height())))
 
 
 def _late_summary(moved: int, unplaced: int) -> str:
@@ -5482,9 +5519,11 @@ def _late_move(move: dict, block: dict, title: str) -> str:
     if was and now and old_day is not None and new_day is not None:
         old = range_label(hhmm_to_minutes(was), hhmm_to_minutes(was) + duration)
         new = range_label(hhmm_to_minutes(now), hhmm_to_minutes(now) + duration)
-        return f"{DAY_FULL[old_day][:3]} {old} → {DAY_FULL[new_day][:3]} {new}"
+        return f"{title}: {DAY_FULL[old_day][:3]} {old} → {DAY_FULL[new_day][:3]} {new}"
     if now and was:
         return f"{title}: from {hhmm_text(was)} to {hhmm_text(now)}"
+    if now and new_day is not None:
+        return f"{title}, placed {DAY_FULL[new_day][:3]} {hhmm_text(now)}"
     if now:
         return f"{title}: placed at {hhmm_text(now)}"
     if was:
@@ -5501,19 +5540,24 @@ def _late_move_words(move: dict, block: dict, title: str) -> str:
         new = range_label(hhmm_to_minutes(now), hhmm_to_minutes(now) + duration).replace("–", " to ")
         day_change = " different day" if old_day != new_day else ""
         return f"{title}, moves from {DAY_FULL[old_day]} {old} to {DAY_FULL[new_day]} {new}{day_change}"
+    if now and not was and new_day is not None:
+        return f"{title}, placed {DAY_FULL[new_day]} {hhmm_text(now)}"
     return f"{title}, moved to {now or was or 'no time'}"
 
 
-def _late_move_markup(move: dict, block: dict, muted: str) -> str:
+def _late_move_markup(move: dict, block: dict, title: str, muted: str) -> str:
     was, now = move.get("from_start"), move.get("to_start")
     old_day, new_day = move.get("from_day"), move.get("to_day")
     duration = int(block.get("duration_min") or 0)
     if not was or not now or old_day is None or new_day is None:
-        return _late_move(move, block, "")
+        return html.escape(_late_move(move, block, title))
     old = range_label(hhmm_to_minutes(was), hhmm_to_minutes(was) + duration)
     new = range_label(hhmm_to_minutes(now), hhmm_to_minutes(now) + duration)
     to_day = f"<b>{DAY_FULL[new_day][:3]}</b>" if old_day != new_day else DAY_FULL[new_day][:3]
-    return f'<span style="color:{muted}">{DAY_FULL[old_day][:3]} {old}</span> → {to_day} {new}'
+    return (
+        f'{html.escape(title)}: <span style="color:{muted}">{DAY_FULL[old_day][:3]} {old}</span>'
+        f" → {to_day} {new}"
+    )
 
 
 class SpreadDialog(Dialog):

@@ -77,7 +77,7 @@ from desktop.native.client import (
     sign_up_problem,
 )
 from desktop.native.command_bar import Command, CommandBar
-from desktop.native.controller import ROUTINE_STATUS, NativeSession
+from desktop.native.controller import ROUTINE_STATUS, NativeSession, _late_summary
 from desktop.native.custom_look import sanitize_saved
 from desktop.native.elevation import lift
 from desktop.native.feel import Context, apply_feel, context_for, current, extra_stylesheet, set_current
@@ -3963,10 +3963,13 @@ class NativeWindow(QMainWindow):
             lambda: self.session.preview_running_late(dialog.chosen_minutes(), starting)
         )
         self._late_dialog = dialog
-        self.session.status.connect(dialog.error.setText)
+        def say(text: str) -> None:
+            self._late_problem(dialog, text)
+
+        self.session.status.connect(say)
         accepted = dialog.exec() == QDialog.DialogCode.Accepted
         with contextlib.suppress(RuntimeError, TypeError):
-            self.session.status.disconnect(dialog.error.setText)
+            self.session.status.disconnect(say)
         preview = self.session.late_preview
         self._late_dialog = None
         if accepted:
@@ -3976,6 +3979,16 @@ class NativeWindow(QMainWindow):
             if preview is not None:
                 # The preview's "N tasks move" stood under the week as if something had moved.
                 self.session._say("")
+
+    def _late_problem(self, dialog: LateDialog, text: str) -> None:
+        """The dialog's red line is for real problems. The session also says "Replanning…" and the
+        preview's "3 tasks move" through the same signal; the dialog shows that count itself, as status."""
+        preview = self.session.late_preview or {}
+        trace = preview.get("trace") or {}
+        summary = _late_summary(len(trace.get("moves") or []), len(trace.get("unplaced") or []))
+        if text == "Replanning…" or (preview and text == summary):
+            text = ""
+        dialog.error.setText(text)
 
     def _commit_late(self, preview: dict | None) -> None:
         block = None if preview is None else preview.get("block")
