@@ -12,7 +12,7 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QAbstractButton, QApplication
 
 from desktop.native import window as window_module
 from desktop.native.hours.canvas import HoursCanvas
@@ -56,7 +56,7 @@ def window(qapp: QApplication, signed_in: NativeWindow) -> Iterator[NativeWindow
     signed_in.session.add_block({**PIANO, "id": "early", "title": "Early", "start": "06:00", "days": [0]})
     signed_in.session.save()
     settled(qapp, signed_in)
-    signed_in.findChild(QPushButton, "viewWeek").click()
+    signed_in.findChild(QAbstractButton, "viewWeek").click()
     settled(qapp, signed_in)
     signed_in.show()
     assert QTest.qWaitForWindowExposed(signed_in)

@@ -22,7 +22,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QPoint, QStandardPaths
-    from PySide6.QtWidgets import QApplication, QPushButton, QStyle, QWidget
+    from PySide6.QtWidgets import QAbstractButton, QApplication, QPushButton, QStyle, QWidget
 
     from desktop.native.calendar import monday_of, sunday_due
     from desktop.native.layouts.registry import sanitize_layout
@@ -125,8 +125,8 @@ BAR = (
 )
 
 
-def bar_widgets(window: NativeWindow) -> list[QPushButton]:
-    found = (window.findChild(QPushButton, name) for name in BAR)
+def bar_widgets(window: NativeWindow) -> list[QAbstractButton]:
+    found = (window.findChild(QAbstractButton, name) for name in BAR)
     return [button for button in found if button is not None and button.isVisible()]
 
 
@@ -137,9 +137,9 @@ def text_size(window: NativeWindow, size: str) -> None:
 
 def cut_on_the_bar(window: NativeWindow) -> list[str]:
     return [
-        f"{button.text()!r} {button.width()} of {QPushButton.sizeHint(button).width()} px"
+        f"{button.text()!r} {button.width()} of {button.sizeHint().width()} px"
         for button in bar_widgets(window)
-        if button.width() < QPushButton.sizeHint(button).width()
+        if button.width() < button.sizeHint().width()
     ]
 
 
@@ -152,7 +152,7 @@ def test_the_top_bar_is_never_cut_mid_word(qapp: QApplication, window: NativeWin
     for text, widths in sizes:
         text_size(window, text)
         for view in ("week", "day", "month"):
-            window.findChild(QPushButton, f"view{view.title()}").click()
+            window.findChild(QAbstractButton, f"view{view.title()}").click()
             wait_until(qapp, lambda: not session.busy)
             whole = (planner_title(session, view), planner_title(session, view, short=True))
             for width in widths:
@@ -184,7 +184,7 @@ def test_the_top_bar_is_never_cut_mid_word(qapp: QApplication, window: NativeWin
     window._sync_chrome()
     text_size(window, "normal")
     window.resize(1150, 768)
-    window.findChild(QPushButton, "viewWeek").click()
+    window.findChild(QAbstractButton, "viewWeek").click()
     for _ in range(4):
         qapp.processEvents()
     title_foot = window.week_title.mapTo(window, QPoint(0, window.week_title.height())).y()
@@ -209,7 +209,7 @@ def test_the_bar_is_fitted_as_large_text_arrives_not_later(
     text_size(window, "large")
     for _ in range(4):
         qapp.processEvents()
-    week = window.findChild(QPushButton, "viewWeek")
+    week = window.findChild(QAbstractButton, "viewWeek")
     title_foot = window.week_title.mapTo(window, QPoint(0, window.week_title.height())).y()
     assert window.solve_button.mapTo(window, QPoint(0, 0)).y() < title_foot, week_start
     seen = (window.solve_button.text(), window.more_button.text(), week.mapTo(window, QPoint(0, 0)))
@@ -255,7 +255,7 @@ def test_retry_save_shows_only_after_a_save_fails(qapp: QApplication, window: Na
     the week with Retry save showing, and the view buttons jumped 129 pixels left under the pointer.
     A save that failed keeps Retry showing, greyed, while it is tried again."""
     session = window.session
-    month = window.findChild(QPushButton, "viewMonth")
+    month = window.findChild(QAbstractButton, "viewMonth")
     month.click()
     wait_until(qapp, lambda: session.month_data is not None and not session.busy)
     page = window._week_page.layout()
@@ -310,7 +310,7 @@ def test_the_title_keeps_sixteen_pixels_from_the_view_switcher(
     even where that shortens Plan (1157 px at Large text). At 6 px they ran together."""
     window._look = sanitize_look({"preset": preset, "knobs": {"text": text}})
     window._apply_appearance()
-    window.findChild(QPushButton, "viewWeek").click()
+    window.findChild(QAbstractButton, "viewWeek").click()
     segments = window.findChild(QWidget, "segments")
     one_row = []
     # Every width, not a few: where the bar has room to spare the gap is wide whatever the rule says.

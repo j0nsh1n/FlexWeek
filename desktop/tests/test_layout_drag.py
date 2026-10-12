@@ -24,7 +24,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QEvent, QPoint, QStandardPaths, Qt
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QPushButton, QVBoxLayout, QWidget
+    from PySide6.QtWidgets import QAbstractButton, QApplication, QPushButton, QVBoxLayout, QWidget
 
     from desktop.native.calendar import sunday_due
     from desktop.native.hours.canvas import BlockPainter, HoursCanvas
@@ -250,7 +250,7 @@ def test_retro_keeps_the_hours_where_they_were_scrolled_through_a_drop(
 
 def test_how_close_the_hours_are_is_kept_for_this_device(qapp: QApplication, window: NativeWindow) -> None:
     """A zoom chosen on Week is in the look file, and the next window opens the Week at it."""
-    window.findChild(QPushButton, "viewWeek").click()
+    window.findChild(QAbstractButton, "viewWeek").click()
     qapp.processEvents()
     QTest.mouseClick(window.findChild(QPushButton, "weekZoomIn"), Qt.MouseButton.LeftButton)
     assert window.week_table.scroll.px == 64
@@ -367,7 +367,7 @@ def test_a_new_window_opens_a_designs_hours_at_the_remembered_level(
 def test_a_design_that_never_zooms_leaves_the_kept_levels_alone(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    window.findChild(QPushButton, "viewWeek").click()
+    window.findChild(QAbstractButton, "viewWeek").click()
     qapp.processEvents()
     QTest.mouseClick(window.findChild(QPushButton, "weekZoomIn"), Qt.MouseButton.LeftButton)
     view = zooming_design(qapp, window, monkeypatch)
@@ -397,7 +397,7 @@ def test_month_stays_where_the_student_scrolled_it_through_a_refresh(
     """Month opens on the week the student is in, once. It used to scroll back there every time
     anything refreshed, such as a save, undoing the student's own scrolling."""
     window.resize(900, 560)
-    window.findChild(QPushButton, "viewMonth").click()
+    window.findChild(QAbstractButton, "viewMonth").click()
     wait_until(qapp, lambda: window.session.month_data is not None and not window.session.busy)
     for _ in range(10):
         qapp.processEvents()
@@ -439,7 +439,7 @@ def test_a_designs_month_stays_where_the_student_scrolled_it_through_a_refresh(
 ) -> None:
     window.resize(900, 560)
     view = use(qapp, window, "timeline")
-    window.findChild(QPushButton, "viewMonth").click()
+    window.findChild(QAbstractButton, "viewMonth").click()
     wait_until(qapp, lambda: window.session.month_data is not None and not window.session.busy)
     for _ in range(10):
         qapp.processEvents()

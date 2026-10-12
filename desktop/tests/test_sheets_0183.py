@@ -16,6 +16,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QPoint
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QAbstractButton,
     QApplication,
     QComboBox,
     QLabel,
@@ -220,7 +221,7 @@ def test_running_late_is_greyed_on_another_week_with_the_reason(
     window: NativeWindow,  # noqa: F811
 ) -> None:
     """#53: greyed while viewing next week, instead of refusing after the click."""
-    window.findChild(QPushButton, "viewWeek").click()
+    window.findChild(QAbstractButton, "viewWeek").click()
     settled(qapp, window)
     late = window.findChild(QPushButton, "runningLate")
     assert late.isEnabled()

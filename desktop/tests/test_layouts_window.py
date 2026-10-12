@@ -27,6 +27,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtGui import QImage
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import (
+        QAbstractButton,
         QApplication,
         QCheckBox,
         QComboBox,
@@ -137,7 +138,7 @@ def window(qapp: QApplication, tmp_path: Path) -> Iterator[NativeWindow]:
 
 
 def click(window: NativeWindow, name: str) -> None:
-    window.findChild(QPushButton, name).click()
+    window.findChild(QAbstractButton, name).click()
 
 
 def one_thing(window: NativeWindow) -> None:
@@ -157,12 +158,12 @@ def test_my_day_puts_planning_away_and_back_brings_it_back(qapp: QApplication, w
     click(window, "viewMyDay")
     assert isinstance(window.planner.currentWidget(), OneThingView)
     assert window.solve_button.isVisible() is True
-    assert window.findChild(QPushButton, "viewMyDay").isChecked() is True
-    assert window.findChild(QPushButton, "viewWeek").isChecked() is False
+    assert window.findChild(QAbstractButton, "viewMyDay").isChecked() is True
+    assert window.findChild(QAbstractButton, "viewWeek").isChecked() is False
     click(window, "oneBack")
     assert window.planner.currentWidget() is window.week_table
     assert window.solve_button.isVisible() is True
-    assert window.findChild(QPushButton, "viewWeek").isChecked() is True
+    assert window.findChild(QAbstractButton, "viewWeek").isChecked() is True
 
 
 def test_the_day_screen_reads_the_real_week_at_the_real_minute(

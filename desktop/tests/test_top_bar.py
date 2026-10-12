@@ -70,14 +70,14 @@ def shown(qapp: QApplication, window: NativeWindow, view: str) -> None:
         window.session.add_block(SCHOOL)
         window.session.save()
         settled(qapp, window)
-    window.findChild(QPushButton, f"view{view.title()}").click()
+    window.findChild(QAbstractButton, f"view{view.title()}").click()
     wait_until(qapp, lambda: not window.session.busy)
     for _ in range(3):
         qapp.processEvents()
 
 
-def bar(window: NativeWindow, name: str) -> QPushButton:
-    found = window.findChild(QPushButton, name)
+def bar(window: NativeWindow, name: str) -> QAbstractButton:
+    found = window.findChild(QAbstractButton, name)
     assert found is not None, name
     return found
 

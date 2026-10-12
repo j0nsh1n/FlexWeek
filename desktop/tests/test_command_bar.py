@@ -15,7 +15,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QPoint, QStandardPaths, Qt
 from PySide6.QtGui import QColor
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog, QPushButton, QWidget
+from PySide6.QtWidgets import QAbstractButton, QApplication, QDialog, QPushButton, QWidget
 
 from desktop.native.calendar import sunday_due
 from desktop.native.command_bar import (
@@ -92,7 +92,7 @@ def window(qapp: QApplication, tmp_path: Path) -> Iterator[NativeWindow]:
             session.add_homework({"id": key, "title": title, "due": due, "estimate_min": 60, "revision": 0})
         session.save()
         settled(qapp, made)
-        made.findChild(QPushButton, "viewWeek").click()
+        made.findChild(QAbstractButton, "viewWeek").click()
         settled(qapp, made)
         made.week_table.hours.setFocus()
         yield made

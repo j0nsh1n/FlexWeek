@@ -23,7 +23,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QAbstractAnimation, QPoint, QPointF, QStandardPaths
-    from PySide6.QtWidgets import QApplication, QPushButton, QScrollBar
+    from PySide6.QtWidgets import QAbstractButton, QApplication, QPushButton, QScrollBar
 
     from desktop.native import motion
     from desktop.native.calendar import monday_of, sunday_due
@@ -179,7 +179,7 @@ def test_todays_app_opens_an_empty_next_week_at_eight_once_there_is_homework(
     window._apply_appearance()
     window._on_week()
     for name in ("viewWeek", "nextWeek"):
-        window.findChild(QPushButton, name).click()
+        window.findChild(QAbstractButton, name).click()
         wait_until(qapp, lambda: not session.busy)
     assert window.planner.currentWidget() is not window.empty_week
     opens_at(qapp, window, 8 * 60, "classic next Week, empty")
@@ -192,7 +192,7 @@ def test_every_design_opens_at_now_or_the_first_block_and_again_on_another_day_o
     thursday = (date.fromisoformat(session.week_start) + timedelta(days=3)).isoformat()
 
     def press(name: str) -> None:
-        window.findChild(QPushButton, name).click()
+        window.findChild(QAbstractButton, name).click()
         wait_until(qapp, lambda: not session.busy)
 
     for design in DESIGNS:
@@ -237,7 +237,7 @@ def test_todays_app_keeps_its_scroll_after_a_page_or_look_change(
     window._on_week()
 
     def press(name: str) -> None:
-        window.findChild(QPushButton, name).click()
+        window.findChild(QAbstractButton, name).click()
         wait_until(qapp, lambda: not session.busy)
 
     def away() -> None:
@@ -279,7 +279,7 @@ def test_after_plan_the_week_scrolls_to_the_first_homework_it_placed(
     window._layout = sanitize_layout({"main": "classic", "day": "one"})
     window._apply_appearance()
     window._on_week()
-    window.findChild(QPushButton, "viewWeek").click()
+    window.findChild(QAbstractButton, "viewWeek").click()
     wait_until(qapp, lambda: not session.busy)
     session.add_homework(
         {"id": "essay", "title": "History essay", "due": sunday_due(session.week_start), "estimate_min": 60,
@@ -313,16 +313,16 @@ def test_month_and_mini_month_use_today_at_a_week_boundary(
     wait_until(qapp, lambda: not session.busy)
     window._on_week()
     assert window.rail.month.title.text() == ("September 2026" if month.endswith("09") else "October 2026")
-    window.findChild(QPushButton, "viewMonth").click()
+    window.findChild(QAbstractButton, "viewMonth").click()
     wait_until(qapp, lambda: session.month_data is not None)
     assert session.selected_month == month
     assert [cell.iso for cell in window.month_grid.canvas.cells if cell.today] == [today]
-    window.findChild(QPushButton, "viewDay").click()
+    window.findChild(QAbstractButton, "viewDay").click()
     wait_until(qapp, lambda: not session.busy)
     assert session.selected_day == today
-    window.findChild(QPushButton, "viewWeek").click()
+    window.findChild(QAbstractButton, "viewWeek").click()
     wait_until(qapp, lambda: not session.busy)
-    window.findChild(QPushButton, "viewMyDay").click()
+    window.findChild(QAbstractButton, "viewMyDay").click()
     qapp.processEvents()
     expected = {"2026-09-29": "Tuesday 29 September", "2026-10-01": "Thursday 1 October",
                 "2026-10-04": "Sunday 4 October"}
@@ -361,7 +361,7 @@ def test_each_design_keeps_day_and_week_scroll_until_today_is_pressed(
     window._on_week()
 
     def press(name: str) -> None:
-        window.findChild(QPushButton, name).click()
+        window.findChild(QAbstractButton, name).click()
         wait_until(qapp, lambda: not session.busy)
         for _ in range(4):
             qapp.processEvents()
@@ -428,7 +428,7 @@ def test_today_opens_this_week_at_now_and_leaves_the_week_it_was_pressed_from_wh
     window._on_week()
 
     def press(name: str) -> None:
-        window.findChild(QPushButton, name).click()
+        window.findChild(QAbstractButton, name).click()
         wait_until(qapp, lambda: not session.busy)
         for _ in range(4):
             qapp.processEvents()
@@ -469,7 +469,7 @@ def test_each_design_keeps_the_week_where_it_was_through_a_new_text_size(
     window._layout = sanitize_layout({"main": design, "day": "one"})
     window._apply_appearance()
     window._on_week()
-    window.findChild(QPushButton, "viewWeek").click()
+    window.findChild(QAbstractButton, "viewWeek").click()
     wait_until(qapp, lambda: not session.busy)
     for _ in range(4):
         qapp.processEvents()

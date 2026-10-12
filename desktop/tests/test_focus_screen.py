@@ -14,7 +14,7 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QStandardPaths, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QPushButton
+from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QLineEdit, QPushButton
 
 from desktop.native.calendar import sunday_due
 from desktop.native.focus import format_countdown, phase_duration_ms, remaining_ms
@@ -85,7 +85,7 @@ def window(qapp: QApplication, tmp_path: Path) -> Iterator[NativeWindow]:
         session.add_block({**essay, "start": "19:00", "days": [3], "pinned": True})
         session.save()
         settled(qapp, made)
-        made.findChild(QPushButton, "viewWeek").click()
+        made.findChild(QAbstractButton, "viewWeek").click()
         settled(qapp, made)
         yield made
     finally:
@@ -177,7 +177,7 @@ def test_start_focus_from_the_strip_opens_it_on_that_homework(
 def test_start_focus_on_my_day_opens_it(qapp: QApplication, window: NativeWindow) -> None:
     # One thing has the Start focus button; Day dial, the default since 0.16, has none.
     window._layout = sanitize_layout({**window._layout, "day": "one"})
-    window.findChild(QPushButton, "viewMyDay").click()
+    window.findChild(QAbstractButton, "viewMyDay").click()
     window.findChild(QPushButton, "oneFocus").click()
     wait_until(qapp, lambda: window.session.focus is not None)
     assert on_screen(window) == "focusPage"

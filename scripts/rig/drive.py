@@ -242,7 +242,15 @@ def report_run(
 def child_main(args: argparse.Namespace) -> int:
     from PySide6.QtCore import QObject, QPoint, QPointF, QRect, QSize, QStandardPaths, Qt, QTimer
     from PySide6.QtGui import QColor, QCursor, QPainter, QPen
-    from PySide6.QtWidgets import QApplication, QDialog, QLabel, QLineEdit, QPushButton, QWidget
+    from PySide6.QtWidgets import (
+        QAbstractButton,
+        QApplication,
+        QDialog,
+        QLabel,
+        QLineEdit,
+        QPushButton,
+        QWidget,
+    )
 
     QStandardPaths.setTestModeEnabled(True)
     app = QApplication(["flexweek-rig"])
@@ -456,7 +464,7 @@ def child_main(args: argparse.Namespace) -> int:
         # Where things are
 
         def tab(self, name: str) -> Step:
-            button = window.findChild(QPushButton, f"view{name.title()}")
+            button = window.findChild(QAbstractButton, f"view{name.title()}")
             yield from self.click(button.mapToGlobal(button.rect().center()))
             yield ("wait", 150)
             # A fixed wait was short on a slow CI runner: the week was not drawn yet when the next step
@@ -1101,7 +1109,7 @@ def child_main(args: argparse.Namespace) -> int:
         # The window manager's resize and the larger text can land after that wait, and the bar then
         # moves: a click on Week found from where it had been landed beside Day. Wait until the
         # window is the new size and the bar has kept still for 300 ms.
-        week = window.findChild(QPushButton, "viewWeek")
+        week = window.findChild(QAbstractButton, "viewWeek")
         seen: dict = {"at": None, "since": 0.0}
 
         def still() -> bool:
@@ -1556,7 +1564,7 @@ def child_main(args: argparse.Namespace) -> int:
         # Measured once the top bar has settled: measured straight after a save, it was still laid
         # out a button to the left, and the click landed on Month.
         yield ("wait", 300)
-        button = window.findChild(QPushButton, "viewMyDay")
+        button = window.findChild(QAbstractButton, "viewMyDay")
         yield from r.click(button.mapToGlobal(button.rect().center()))
         yield ("wait", 500)
         shown = window.planner.currentWidget()

@@ -13,7 +13,7 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
 from PySide6.QtGui import QContextMenuEvent, QKeyEvent, QMouseEvent
-from PySide6.QtWidgets import QApplication, QDialog, QPushButton, QWidget
+from PySide6.QtWidgets import QAbstractButton, QApplication, QDialog, QWidget
 
 from desktop.native import window as window_module
 from desktop.native.calendar import sunday_due
@@ -56,7 +56,7 @@ def window(qapp: QApplication, signed_in: NativeWindow) -> Iterator[NativeWindow
     session.place_session(essay["id"], 2, 18 * 60)
     session.save()
     settled(qapp, signed_in)
-    signed_in.findChild(QPushButton, "viewWeek").click()
+    signed_in.findChild(QAbstractButton, "viewWeek").click()
     settled(qapp, signed_in)
     signed_in.week_table.hours.reveal(2, 17 * 60, 19 * 60)
     qapp.processEvents()
@@ -239,7 +239,7 @@ def test_delete_homework_asks_first_and_takes_it_away_with_an_undo(
 def test_a_months_chip_has_the_same_menu_but_only_in_the_open_week(
     qapp: QApplication, window: NativeWindow, menus: dict
 ) -> None:
-    window.findChild(QPushButton, "viewMonth").click()
+    window.findChild(QAbstractButton, "viewMonth").click()
     canvas = window.month_grid.canvas
     wait_until(qapp, lambda: bool(canvas.cells))
     monday = date.fromisoformat(window.session.week_start)
@@ -468,7 +468,7 @@ def test_every_design_with_shared_hours_has_the_free_time_menu(
 def test_day_has_the_free_time_menu_at_its_own_day(
     qapp: QApplication, window: NativeWindow, menus: dict
 ) -> None:
-    window.findChild(QPushButton, "viewDay").click()
+    window.findChild(QAbstractButton, "viewDay").click()
     settled(qapp, window)
     hours = window.day_view.hours
     day = date.fromisoformat(window.session.selected_day).weekday()

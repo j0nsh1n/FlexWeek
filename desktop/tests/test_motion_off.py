@@ -16,7 +16,7 @@ pytestmark = pytest.mark.skipif(
 
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QEvent
-    from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
+    from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QPushButton, QWidget
 
     import desktop.native.motion as motion
     from desktop.native.layouts.registry import sanitize_layout
@@ -80,7 +80,7 @@ def design(qapp: QApplication, window: NativeWindow, main: str, day: str = "one"
 
 
 def press(qapp: QApplication, window: NativeWindow, name: str) -> None:  # noqa: F811
-    window.findChild(QPushButton, name).click()
+    window.findChild(QAbstractButton, name).click()
     qapp.processEvents()
 
 
@@ -129,7 +129,7 @@ def test_every_main_transition_at_off_starts_no_clock_and_leaves_nothing_moving(
     retro = window._layout_view("retro")
     for key in list(retro._windows):
         retro._hide(key)
-        retro._bring(key, window.findChild(QPushButton, "viewWeek"))
+        retro._bring(key, window.findChild(QAbstractButton, "viewWeek"))
         check(f"Retro: window {key} opened")
     for day in ("dial", "one"):
         design(qapp, window, "classic", day)

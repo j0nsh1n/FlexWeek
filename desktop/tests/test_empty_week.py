@@ -11,7 +11,7 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QDate, QStandardPaths, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton
+from PySide6.QtWidgets import QAbstractButton, QApplication, QDialog, QLabel, QPushButton
 
 from desktop.native.calendar import sunday_due
 from desktop.native.layouts.empty import EMPTY_BUTTON, EMPTY_HEADING, EMPTY_LINE
@@ -37,7 +37,7 @@ def window(qapp: QApplication, signed_in: NativeWindow) -> Iterator[NativeWindow
     """A new account just past setup, with no school block: Today's app, on Week."""
     signed_in.resize(1280, 860)
     signed_in._layout = {"main": "classic", "day": "one", "options": {}}
-    signed_in.findChild(QPushButton, "viewWeek").click()
+    signed_in.findChild(QAbstractButton, "viewWeek").click()
     settled(qapp, signed_in)
     yield signed_in
     look_file().unlink(missing_ok=True)
@@ -62,10 +62,10 @@ def test_a_new_accounts_week_offers_one_button_instead_of_empty_hours(
     for name in ("weekTitle", "viewWeek", "solveButton", "moreButton"):
         assert window.findChild(QLabel if name == "weekTitle" else QPushButton, name).isVisible(), name
 
-    window.findChild(QPushButton, "viewDay").click()
+    window.findChild(QAbstractButton, "viewDay").click()
     settled(qapp, window)
     assert shown(window) is window.empty_week, "Today's app's Day of an empty week says the same"
-    window.findChild(QPushButton, "viewMonth").click()
+    window.findChild(QAbstractButton, "viewMonth").click()
     settled(qapp, window)
     assert shown(window) is window.month_grid, "Month is a calendar, empty or not"
 

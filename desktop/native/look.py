@@ -1720,7 +1720,7 @@ def top_bar_rules(
     text, muted, page = palette["text"], palette["muted"], palette["window"]
     contrast_look = palette.get("family") == "contrast"
     ring = palette["accent"] if contrast_look else mix(palette["accent"], page, 0.4)
-    ring_names = ", ".join(f'QPushButton#{name}[keyfocus="true"]:focus' for name in RING_BUTTONS)
+    ring_names = ", ".join(f'QAbstractButton#{name}[keyfocus="true"]:focus' for name in RING_BUTTONS)
     track = page if contrast_look else mix(text, page, 0.06)
     dark = palette.get("axis") == "dark"
     chosen = palette["accent"] if contrast_look else palette["hairline_strong"] if dark else palette["panel"]
@@ -1735,7 +1735,7 @@ def top_bar_rules(
     quiet_ink = text if contrast_look else muted
 
     def views(state: str = "") -> str:
-        return ", ".join(f"QPushButton#{name}{state}" for name in VIEW_BUTTONS)
+        return ", ".join(f"QRadioButton#{name}{state}" for name in VIEW_BUTTONS)
 
     menu = (
         # The chevron's room is added to the width by Qt; the padding only keeps it off the word.
@@ -1746,13 +1746,16 @@ def top_bar_rules(
         else ""
     )
     return (
-        f"QFrame#segments {{ background: transparent; border: none; border-radius: 0; padding: 3px; "
+        f"QGroupBox#segments {{ background: transparent; border: none; border-radius: 0; padding: 3px; "
         f"alternate-background-color: {track}; selection-background-color: {chosen}; color: {outline}; "
         f"qproperty-shade: {shade}; qproperty-ring: {selected_ring}; }}"
         f"{views()} {{ background: transparent; color: {quiet_ink}; font-weight: {WEIGHT_REGULAR}; "
         # Inside a track 3 pixels in from the bar's other controls: a view's own padding is that much
         # less, or the track squeezed it and cut the tails off "Day" and "My day".
-        f"border: 2px solid transparent; padding: {max(pad - 7, 0)}px {pad}px; min-height: 0; }}"
+        f"border: 2px solid transparent; padding: {max(pad - 7, 0)}px {pad}px; min-height: 24px; "
+        # A radio's indicator is not drawn. `spacing` is the gap Qt still reserves beside it.
+        f"spacing: 0px; }}"
+        f"{views('::indicator')} {{ width: 0; height: 0; border: none; margin: 0; padding: 0; }}"
         f"{views(':hover')} {{ background: transparent; color: {text}; }}"
         f"{views(':checked')} {{ background: transparent; color: {chosen_words}; "
         f"font-weight: {WEIGHT_STRONG}; }}"

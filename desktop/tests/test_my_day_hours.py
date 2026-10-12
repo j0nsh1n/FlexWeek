@@ -26,7 +26,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QPoint, QStandardPaths, Qt
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
+    from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QPushButton, QWidget
 
     from desktop.native.calendar import sunday_due
     from desktop.native.hours.geometry import Span
@@ -134,7 +134,7 @@ def due_thursday_at_eight(qapp: QApplication, window: NativeWindow) -> None:
 def my_day(qapp: QApplication, window: NativeWindow, screen: str) -> tuple[LayoutView, QWidget]:
     """Open My day on `screen` from the top bar, and find the one surface it moves blocks on."""
     window._layout = sanitize_layout({"main": "classic", "day": screen})
-    window.findChild(QPushButton, "viewMyDay").click()
+    window.findChild(QAbstractButton, "viewMyDay").click()
     for _ in range(10):
         qapp.processEvents()
     view = window.planner.currentWidget()

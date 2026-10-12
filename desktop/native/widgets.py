@@ -68,6 +68,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QGraphicsOpacityEffect,
     QGridLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLayout,
@@ -503,7 +504,31 @@ def overlaid(widget: object) -> bool:
     return isinstance(widget, QScrollBar) and bool(widget.property("overlay"))
 
 
-class SegmentTrack(QFrame):
+def _choice_key_target(key: int, current: int, count: int) -> int | None:
+    if key in (Qt.Key.Key_Left, Qt.Key.Key_Up):
+        return (current - 1) % count
+    if key in (Qt.Key.Key_Right, Qt.Key.Key_Down):
+        return (current + 1) % count
+    if key == Qt.Key.Key_Home:
+        return 0
+    if key == Qt.Key.Key_End:
+        return count - 1
+    if key in (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter):
+        return current
+    return None
+
+
+def _choice_tab_stops(buttons: list[QAbstractButton], index: int) -> None:
+    stop = max(index, 0)
+    for at, button in enumerate(buttons):
+        button.setFocusPolicy(
+            Qt.FocusPolicy.ClickFocus
+            | (Qt.FocusPolicy.TabFocus if at == stop else Qt.FocusPolicy.NoFocus)
+        )
+        button.setAccessibleDescription(f"{at + 1} of {len(buttons)}")
+
+
+class SegmentTrack(QGroupBox):
     """A segmented control's track, a pill, with the chosen segment raised on it as a pill of its own
     and lifted with the small shadow. Painted, since a stylesheet's corner cannot follow a height
     that the text size sets, and so the chosen pill can slide to the segment chosen next (decision
@@ -514,12 +539,33 @@ class SegmentTrack(QFrame):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        # QGroupBox is what Qt exposes as one grouping to a screen reader. Flat and untitled, it
+        # draws nothing of its own; paintEvent draws the track.
+        self.setTitle("")
+        self.setFlat(True)
+        self.setAccessibleName("Planner view")
+        self._buttons: list[Segment] = []
+        self._group = QButtonGroup(self)
+        self._group.setExclusive(True)
         self._shade = 0
         self._ring = QColor("transparent")
         # Where the chosen pill was last drawn, and where it leaves from for the segment just chosen.
         self._drawn: QRectF | None = None
         self._from = QRectF()
         self._slide = Clock(self)
+
+    def sizeHint(self) -> QSize:  # noqa: N802
+        return self.minimumSizeHint()
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802
+        # QGroupBox reserves a title band. This track has no title, so the row would grow by that
+        # band and push Month off a 1024x640 window.
+        if not self._buttons:
+            return QSize(0, 0)
+        gaps = 2 * (len(self._buttons) - 1)
+        width = sum(button.sizeHint().width() for button in self._buttons) + gaps + 6
+        height = max(button.sizeHint().height() for button in self._buttons)
+        return QSize(width, height)
 
     def _get_shade(self) -> int:
         return self._shade
@@ -541,15 +587,38 @@ class SegmentTrack(QFrame):
 
     def add(self, button: QAbstractButton) -> None:
         self.layout().addWidget(button)
+        self._buttons.append(button)
+        self._group.addButton(button)
+        button.installEventFilter(self)
         button.toggled.connect(self._chosen)
+        chosen = next((index for index, item in enumerate(self._buttons) if item.isChecked()), 0)
+        _choice_tab_stops(self._buttons, chosen)
 
     def _chosen(self, on: bool) -> None:
+        if on:
+            selected = self.sender()
+            _choice_tab_stops(self._buttons, self._buttons.index(selected))
         length = duration(SEGMENT_MS)
         if on and self._drawn is not None and self.isVisible() and length:
             self._from = QRectF(self._drawn)
             self._slide.stop()
             self._slide.start(length, lambda _at: self.update())
         self.update()
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if watched not in self._buttons or event.type() != QEvent.Type.KeyPress:
+            return super().eventFilter(watched, event)
+        current = self._buttons.index(watched)
+        target = _choice_key_target(event.key(), current, len(self._buttons))
+        if target is None:
+            return super().eventFilter(watched, event)
+        button = self._buttons[target]
+        button.setProperty("keyfocus", True)
+        button.style().unpolish(button)
+        button.style().polish(button)
+        button.click()
+        button.setFocus(Qt.FocusReason.OtherFocusReason)
+        return True
 
     def _pills(self, target: QRectF) -> list[tuple[QRectF, float]]:
         """The chosen pill as drawn now, with its opacity: sliding from where it was, or where things
@@ -596,17 +665,28 @@ class SegmentTrack(QFrame):
         painter.end()
 
 
-class Segment(QPushButton):
-    """One choice on a SegmentTrack, always as wide as its words at the chosen weight, so choosing it
-    moves nothing and cuts nothing."""
+# Border 2px each side, plus 8px of horizontal padding each side (the comfortable view rule).
+_VIEW_CHROME = 20
+
+
+class Segment(QRadioButton):
+    """One choice on a SegmentTrack. Width is the words at the weight it is wearing, plus the
+    same padding as the others."""
+
+    def __init__(self, text: str, parent: QWidget | None = None) -> None:
+        super().__init__(text, parent)
+        # Minimum would let the row hand out spare pixels, and the gaps would stop matching.
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
     def sizeHint(self) -> QSize:  # noqa: N802
         hint = super().sizeHint()
         words = self.text()
-        extra = QFontMetrics(weighted(self.font(), WEIGHT_STRONG)).horizontalAdvance(words)
-        return QSize(
-            hint.width() + max(0, extra - self.fontMetrics().horizontalAdvance(words)), hint.height()
-        )
+        worn = QFontMetrics(
+            weighted(self.font(), WEIGHT_STRONG if self.isChecked() else WEIGHT_REGULAR)
+        ).horizontalAdvance(words)
+        # Border 2px each side plus the view rule's horizontal padding. Taken from the style's
+        # own hint it flickers by a pixel between labels, and the gaps stop matching.
+        return QSize(worn + _VIEW_CHROME, hint.height())
 
     def minimumSizeHint(self) -> QSize:  # noqa: N802
         return self.sizeHint()
@@ -2098,11 +2178,7 @@ class Segmented(Choices):
         stop = max(index, 0)
         for at, button in enumerate(self._buttons):
             button.setChecked(at == index)
-            button.setFocusPolicy(
-                Qt.FocusPolicy.ClickFocus
-                | (Qt.FocusPolicy.TabFocus if at == stop else Qt.FocusPolicy.NoFocus)
-            )
-            button.setAccessibleDescription(f"{at + 1} of {len(self._buttons)}")
+        _choice_tab_stops(self._buttons, stop)
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
         if watched not in self._buttons:
@@ -2116,21 +2192,13 @@ class Segmented(Choices):
             self.style().unpolish(self)
             self.style().polish(self)
         elif event.type() == QEvent.Type.KeyPress:
-            key = event.key()
             current = self._buttons.index(watched)
-            if key in (Qt.Key.Key_Left, Qt.Key.Key_Up):
-                target = (current - 1) % len(self._buttons)
-            elif key in (Qt.Key.Key_Right, Qt.Key.Key_Down):
-                target = (current + 1) % len(self._buttons)
-            elif key == Qt.Key.Key_Home:
-                target = 0
-            elif key == Qt.Key.Key_End:
-                target = len(self._buttons) - 1
-            elif key in (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            target = _choice_key_target(event.key(), current, len(self._buttons))
+            if target is None:
+                return super().eventFilter(watched, event)
+            if target == current:
                 self.setCurrentIndex(current)
                 return True
-            else:
-                return super().eventFilter(watched, event)
             self.setCurrentIndex(target)
             self._buttons[target].setFocus(Qt.FocusReason.OtherFocusReason)
             return True

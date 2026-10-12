@@ -13,7 +13,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
 from PySide6.QtGui import QContextMenuEvent, QMouseEvent
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton, QWidget
+from PySide6.QtWidgets import QAbstractButton, QApplication, QDialog, QLabel, QPushButton, QWidget
 from shiboken6 import isValid
 
 from desktop.native import icons
@@ -61,7 +61,7 @@ def window(qapp: QApplication, signed_in: NativeWindow) -> Iterator[NativeWindow
     session.place_session(block["id"], 2, 17 * 60)
     session.save()
     settled(qapp, signed_in)
-    signed_in.findChild(QPushButton, "viewWeek").click()
+    signed_in.findChild(QAbstractButton, "viewWeek").click()
     settled(qapp, signed_in)
     yield signed_in
 

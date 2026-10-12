@@ -16,7 +16,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtWidgets import QApplication, QPushButton
+    from PySide6.QtWidgets import QAbstractButton, QApplication
 
     import desktop.native.motion as motion
     from desktop.native.layouts.registry import sanitize_layout
@@ -47,7 +47,7 @@ def test_week_to_month_to_the_next_month_never_shows_an_empty_grid(
     qapp: QApplication, window: NativeWindow  # noqa: F811
 ) -> None:
     seeded(qapp, window)
-    window.findChild(QPushButton, "viewMonth").click()
+    window.findChild(QAbstractButton, "viewMonth").click()
     wait_until(qapp, lambda: window.session.month_data is not None)
     still(window)
     first = month_days(window)
@@ -76,7 +76,7 @@ def test_the_undo_toast_survives_a_design_change_and_still_undoes(
         window._on_week()
         qapp.processEvents()
         assert window.toast.isVisible() and window.toast.button.isVisible(), main
-    window.findChild(QPushButton, "viewMonth").click()
+    window.findChild(QAbstractButton, "viewMonth").click()
     settled(qapp, window)
     assert window.toast.button.isVisible()
     window.toast.button.click()

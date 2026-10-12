@@ -18,7 +18,7 @@ pytestmark = pytest.mark.skipif(
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QRect, QRectF
     from PySide6.QtGui import QFontMetricsF, QPainter
-    from PySide6.QtWidgets import QApplication, QPushButton
+    from PySide6.QtWidgets import QAbstractButton, QApplication
 
     from desktop.native.hours import canvas as canvas_module
     from desktop.native.hours.zoom import HoursScroll
@@ -116,7 +116,7 @@ def test_the_hours_and_now_label_fit_their_painted_boxes(
             for _text, box, painted, width, _height in calls
         ), (design, chosen, text_size, window_px, calls)
     for tab in ("viewWeek", "viewDay"):
-        window.findChild(QPushButton, tab).click()
+        window.findChild(QAbstractButton, tab).click()
         wait_until(qapp, lambda: not session.busy)
         if tab == "viewDay":
             session.open_day(datetime.fromtimestamp(session.now_ms() / 1000).date().isoformat())

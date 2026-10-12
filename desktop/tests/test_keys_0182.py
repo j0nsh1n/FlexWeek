@@ -15,7 +15,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QStandardPaths, Qt
 from PySide6.QtGui import QColor
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog, QPushButton
+from PySide6.QtWidgets import QAbstractButton, QApplication, QDialog, QPushButton
 
 from desktop.native.calendar import sunday_due
 from desktop.native.command_bar import KEY_ROLE, match_span
@@ -82,7 +82,7 @@ def window(qapp: QApplication, tmp_path: Path) -> Iterator[NativeWindow]:
         )
         session.save()
         settled(qapp, made)
-        made.findChild(QPushButton, "viewWeek").click()
+        made.findChild(QAbstractButton, "viewWeek").click()
         settled(qapp, made)
         made.week_table.hours.setFocus()
         yield made

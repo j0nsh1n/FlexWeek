@@ -45,6 +45,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QRadioButton,
     QStackedWidget,
     QSystemTrayIcon,
     QVBoxLayout,
@@ -2303,7 +2304,7 @@ class NativeWindow(QMainWindow):
             self.planner.setCurrentWidget(shown)
         self._release_travel()
         for name in ("viewDay", "viewWeek", "viewMonth", "viewMyDay"):
-            button = self.findChild(QPushButton, name)
+            button = self.findChild(QRadioButton, name)
             if button is not None:
                 button.setChecked(name == ("viewMyDay" if self._day_mode else f"view{view.title()}"))
         month = view == "month"
@@ -5080,7 +5081,7 @@ class NativeWindow(QMainWindow):
         """Esc in the hours: the keyboard goes up to the button for the view shown, which does nothing
         when pressed by mistake."""
         name = {"day": "viewDay", "month": "viewMonth"}.get(self.session.planner_view, "viewWeek")
-        button = self.findChild(QPushButton, name)
+        button = self.findChild(QRadioButton, name)
         if button is not None:
             button.setFocus(Qt.FocusReason.ShortcutFocusReason)
 

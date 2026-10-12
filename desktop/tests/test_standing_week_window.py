@@ -9,7 +9,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QAbstractButton, QApplication
 
 from desktop.native.widgets import ConfirmSheet
 from desktop.native.window import NativeWindow
@@ -29,7 +29,7 @@ SOCCER = {"id": "activity-1", "title": "Soccer", "kind": "locked", "category": "
 @pytest.fixture()
 def window(qapp: QApplication, signed_in: NativeWindow) -> Iterator[NativeWindow]:
     """Setup's Soccer in the open week."""
-    signed_in.findChild(QPushButton, "viewWeek").click()
+    signed_in.findChild(QAbstractButton, "viewWeek").click()
     settled(qapp, signed_in)
     signed_in.session.set_setup_blocks([dict(SOCCER)])
     signed_in.session.save()

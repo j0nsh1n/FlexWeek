@@ -13,7 +13,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QPoint, QRectF, Qt
 from PySide6.QtGui import QFont, QFontMetricsF
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QLabel, QPushButton
+from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QPushButton
 
 from desktop.native.calendar import sunday_due
 from desktop.native.hours.canvas import BlockPainter, Drawn
@@ -107,7 +107,7 @@ def test_the_rail_holds_next_not_placed_yet_and_the_focus_list_left_of_the_week(
     row_bottom = row.mapTo(window, QPoint(0, row.height())).y()
     assert window.planner.mapTo(window, QPoint(0, 0)).y() - row_bottom < 32
     # Day keeps the rail, and says what is next there instead of in a band above its hours.
-    window.findChild(QPushButton, "viewDay").click()
+    window.findChild(QAbstractButton, "viewDay").click()
     wait_until(qapp, lambda: window.planner.currentWidget() is window.day_view)
     qapp.processEvents()
     assert rail.isVisible() and card.isVisible()
