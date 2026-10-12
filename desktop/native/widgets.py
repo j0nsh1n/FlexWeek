@@ -42,6 +42,7 @@ from PySide6.QtGui import (
     QMoveEvent,
     QPainter,
     QPainterPath,
+    QPaintEvent,
     QPalette,
     QPen,
     QPixmap,
@@ -137,6 +138,7 @@ from desktop.native.look import (
     FOCUS_GAP_PX,
     FOCUS_RING_PX,
     RING_BUTTONS,
+    count_pill,
     readable_edge,
     resolved_palette,
 )
@@ -857,10 +859,45 @@ class MoreButton(FittedButton):
         super().__init__("More", "", parent)
         self.setIconSize(QSize(20, 20))
         icons.tint(self, "ellipsis")
+        self._count = 0
+        self._pill: tuple[str, str] | None = None
 
     def sizeHint(self) -> QSize:  # noqa: N802
         # As Plan's: the window picks the words, so this asks for the room of those shown.
         return QSize(self._wide(self.text()), QPushButton.sizeHint(self).height())
+
+    def set_count(self, count: int) -> None:
+        """How much homework still needs a time, as a pill over the button's corner. It is painted, not
+        part of the button's words, so a count coming or going never changes the size the top bar sees."""
+        if count == self._count:
+            return
+        self._count = count
+        verb = "needs" if count == 1 else "need"
+        self.setAccessibleName(f"{self._full}, {count} homework still {verb} time" if count else self._full)
+        self.update()
+
+    def set_palette(self, palette: dict) -> None:
+        self._pill = count_pill(palette)
+        self.update()
+
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
+        super().paintEvent(event)
+        if not self._count or self._pill is None:
+            return
+        fill, ink = self._pill
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setFont(weighted(caption(self.font()), WEIGHT_STRONG))
+        words = str(self._count) if self._count < 100 else "99+"
+        height = painter.fontMetrics().height() + 2
+        width = max(height, painter.fontMetrics().horizontalAdvance(words) + 8)
+        pill = QRectF(self.width() - width - 1, 1, width, height)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(fill))
+        painter.drawRoundedRect(pill, height / 2, height / 2)
+        painter.setPen(QColor(ink))
+        painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, words)
+        painter.end()
 
     def _fit(self) -> None:
         # NativeWindow._fit_plan_and_more sets both labels; a resize mid-layout must not reset them.
@@ -4668,7 +4705,7 @@ class UnfinishedPanel(QWidget):
         super().__init__(parent)
         self.setObjectName("unfinishedReview")
         layout = QVBoxLayout(self)
-        heading = QLabel("Unfinished homework from earlier weeks")
+        heading = QLabel("Unfinished homework")
         heading.setObjectName("unfinishedHeading")
         layout.addWidget(heading)
         self.list = QListWidget()
@@ -4702,15 +4739,17 @@ class UnfinishedPanel(QWidget):
             text = QLabel(f"{item['title']} · {length_label(int(item['remaining_min']))} left")
             text.setObjectName("unfinishedRow")
             row_layout.addWidget(text, 1)
-            button = QPushButton("Plan here")
-            button.setObjectName(f"planUnfinished-{item['id']}")
-            # The row's answer, drawn as a tint beside the outlined Delete, each with room round its words.
-            button.setProperty("tonal", True)
-            button.setProperty("roomy", True)
-            button.clicked.connect(
-                lambda _checked=False, item_id=item["id"]: self.plan_requested.emit(item_id)
-            )
-            row_layout.addWidget(button)
+            if item.get("plannable", True):
+                button = QPushButton("Plan here")
+                button.setObjectName(f"planUnfinished-{item['id']}")
+                # The row's answer, drawn as a tint beside the outlined Delete, each with room round
+                # its words.
+                button.setProperty("tonal", True)
+                button.setProperty("roomy", True)
+                button.clicked.connect(
+                    lambda _checked=False, item_id=item["id"]: self.plan_requested.emit(item_id)
+                )
+                row_layout.addWidget(button)
             delete = QPushButton("Delete")
             delete.setObjectName(f"deleteUnfinished-{item['id']}")
             delete.setProperty("outlined", True)

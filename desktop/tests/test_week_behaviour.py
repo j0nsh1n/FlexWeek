@@ -166,7 +166,7 @@ def test_routines_with_none_saved_says_so(qapp: QApplication) -> None:  # noqa: 
     qapp.processEvents()
 
 
-def test_unfinished_collapses_to_a_badge_after_the_first_showing(
+def test_unfinished_collapses_to_the_more_count_after_the_first_showing(
     qapp: QApplication, signed_in: NativeWindow  # noqa: F811
 ) -> None:
     session = signed_in.session
@@ -191,14 +191,15 @@ def test_unfinished_collapses_to_a_badge_after_the_first_showing(
     items = session.unfinished()
     assert items
     panel = signed_in.unfinished_panel
-    badge = signed_in.findChild(QPushButton, "unfinishedBadge")
-    assert badge is not None
+    more = signed_in.more_button
+    reopen = signed_in.findChild(QPushButton, "unfinishedOpen")
+    assert reopen is not None
     panel.set_items(items)
     assert panel.isVisible()
     panel.findChild(QPushButton, "unfinishedDismiss").click()
     qapp.processEvents()
-    assert not panel.isVisible() and badge.isVisible()
-    badge.click()
+    assert not panel.isVisible() and more.accessibleName() == "More, 1 homework still needs time"
+    reopen.click()
     qapp.processEvents()
     assert panel.isVisible()
 

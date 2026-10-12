@@ -1469,19 +1469,12 @@ class NativeWindow(QMainWindow):
         # Neither is inside the planning chrome, which a design of its own hides: More > Unfinished
         # and Plan can be pressed from any design, and what they show is the point of pressing them.
         self.unfinished_panel = UnfinishedPanel()
-        self.unfinished_badge = QPushButton()
-        self.unfinished_badge.setObjectName("unfinishedBadge")
-        self.unfinished_badge.setProperty("quiet", True)
-        self.unfinished_badge.hide()
-        self.unfinished_badge.clicked.connect(self._open_unfinished_from_badge)
-        self._unfinished_introduced = False
-        # Opened by the student, from More or its badge: a change to the week refreshes it, never folds it.
+        # Opened by the student, from More: a change to the week refreshes it, never folds it.
         self._unfinished_opened = False
         self.unfinished_panel.plan_requested.connect(self._plan_unfinished)
         self.unfinished_panel.delete_requested.connect(self._delete_homework)
         self.unfinished_panel.collapsed.connect(self._collapse_unfinished)
         column.addWidget(self.unfinished_panel)
-        column.addWidget(self.unfinished_badge)
         # Item 1b: after Plan, homework whose time was in an earlier week and never ticked done. Plan
         # never moves it on its own; the student says which.
         self.left_chip = QFrame()
@@ -2263,7 +2256,7 @@ class NativeWindow(QMainWindow):
             self.toast.hide()
         if self.unfinished_panel.isVisible():
             # A row deleted, planned or finished leaves the list, and an Undo brings it back.
-            self._fill_unfinished(self._unfinished_items())
+            self._fill_unfinished(self._counted_items())
         self._sync_left_chip()
         if self.session.dirty:
             # Every change reaches here, so this is where the clock on "stopped changing" restarts.
@@ -2373,29 +2366,19 @@ class NativeWindow(QMainWindow):
                 paste.setText("Paste into a selected day")
             else:
                 paste.setText("Paste into " + DAY_FULL[destination[0]])
-        items = self._unfinished_items()
+        needed = self.session.homework_time_needed()
         unfinished = self.findChild(QPushButton, "unfinishedOpen")
         if unfinished is not None:
-            unfinished.setEnabled(bool(items))
+            unfinished.setEnabled(bool(needed))
+        self.more_button.set_count(len(needed))
         prompt = self._unfinished_items(self.session.consume_unfinished())
         if prompt:
             self._fill_unfinished(prompt)
-            self._unfinished_introduced = True
-            self.unfinished_badge.hide()
-        elif self.session.homework_time_needed_elsewhere() and not self._unfinished_introduced:
+        elif self._unfinished_opened and not self.unfinished_panel.isHidden():
+            self._fill_unfinished(self._counted_items())
+        else:
             self._unfinished_opened = False
             self.unfinished_panel.hide()
-            self._sync_unfinished_badge(items)
-        elif (items or self.session.homework_time_needed_elsewhere()) and self._unfinished_introduced:
-            if self._unfinished_opened and not self.unfinished_panel.isHidden():
-                self._fill_unfinished(items)
-            else:
-                self._unfinished_opened = False
-                self.unfinished_panel.hide()
-                self._sync_unfinished_badge(items)
-        elif not items:
-            self.unfinished_panel.hide()
-            self.unfinished_badge.hide()
         if self._late_dialog is not None and self.session.late_preview:
             titles = {block["id"]: block["title"] for block in self.session.blocks}
             self._late_dialog.show_trace(self.session.late_preview["trace"], titles)
@@ -2500,12 +2483,13 @@ class NativeWindow(QMainWindow):
 
     def _sync_more_menu(self) -> None:
         self._sync_undo_enabled()
+        needed = self.session.homework_time_needed()
+        count = len(needed)
         unfinished = self.findChild(QPushButton, "unfinishedOpen")
         if unfinished is not None:
             # Worked out as the menu opens: the busy flag turns every action back on when a save
             # ends, and left to that "Unfinished" was pressable with nothing to show.
-            unfinished.setEnabled(not self.session.busy and bool(self._unfinished_items()))
-        count = len(self._unfinished_items())
+            unfinished.setEnabled(not self.session.busy and bool(needed))
         for action, button in self._more_pairs:
             action.setEnabled(button.isEnabled())
             tip = self._more_tip(button.objectName(), button.isEnabled())
@@ -3828,28 +3812,21 @@ class NativeWindow(QMainWindow):
             self.session.client.request("GET", f"/api/week?week_start={dest}", None, ok, err)
             return
 
-    def _sync_unfinished_badge(self, items: list[dict]) -> None:
-        count = len(self.session.homework_time_needed_elsewhere())
-        self.unfinished_badge.setText(
-            f"Unfinished homework · {count} item{'s' if count != 1 else ''}"
-        )
-        self.unfinished_badge.setVisible(bool(count))
-
     def _collapse_unfinished(self) -> None:
-        self._unfinished_introduced = True
         self._unfinished_opened = False
-        items = self._unfinished_items()
-        if items:
-            self._sync_unfinished_badge(items)
 
-    def _open_unfinished_from_badge(self) -> None:
-        items = self._unfinished_items()
-        if not items:
-            self.unfinished_badge.hide()
-            return
-        self.unfinished_badge.hide()
-        self._fill_unfinished(items)
-        self._unfinished_opened = True
+    def _counted_items(self) -> list[dict]:
+        """The homework the More count counts, as the panel lists it: the time each still needs, and
+        Plan only where it would place something."""
+        return [
+            {
+                "id": item["assignment_id"],
+                "title": item["title"],
+                "remaining_min": item["minutes"],
+                "plannable": self.session.remaining_for(item["assignment_id"]) >= 15,
+            }
+            for item in self.session.homework_time_needed()
+        ]
 
     def _unfinished_items(self, items: list[dict] | None = None) -> list[dict]:
         """Unfinished homework: late, or left in an earlier week whether or not it is due yet (1b).
@@ -3900,10 +3877,9 @@ class NativeWindow(QMainWindow):
         self.session.copy_last_week_fixed_rows(offer)
 
     def _show_unfinished(self) -> None:
-        items = self._unfinished_items()
+        items = self._counted_items()
         if not items:
             self.session._say(NOTHING_UNFINISHED)
-        self.unfinished_badge.hide()
         self._fill_unfinished(items)
         self._unfinished_opened = bool(items)
 
@@ -4843,6 +4819,7 @@ class NativeWindow(QMainWindow):
             self.week_table.set_look(look, palette)
             self.day_view.set_look(look, palette)
             self.rail.set_look(look, palette)
+            self.more_button.set_palette(palette)
             self.month_grid.set_palette(palette)
             self.add_menu.set_palette(palette, chips)
             self._dress_entry(palette, look)

@@ -2244,21 +2244,6 @@ class NativeSession(QObject):
     def homework_time_needed(self) -> list[dict]:
         return time_still_needed(self.assignments, self.blocks, self.week_start)
 
-    def homework_time_needed_elsewhere(self) -> list[dict]:
-        """The count the More badge reads. Work due this week that already shows as a chip in Not placed
-        yet is left out: the rail owns it, and a bar above the hours that came and went as the last
-        chip was dropped moved the whole week under the student's pointer."""
-        chipped = {
-            block.get("assignment_id")
-            for block in self.blocks
-            if block.get("assignment_id") and not block.get("start") and not block.get("completed")
-        }
-        return [
-            item
-            for item in self.homework_time_needed()
-            if not (item["period"] == "this_week" and item["assignment_id"] in chipped)
-        ]
-
     def paste_destination(self, today: date | None = None) -> tuple[int, str | None] | None:
         if self.selected_block_id and self.selected_occurrence_day is not None:
             source = next((item for item in self.blocks if item["id"] == self.selected_block_id), None)

@@ -239,7 +239,7 @@ def test_unfinished_stays_open_when_the_week_changes_after_it_is_opened(
     window._on_week()
     qapp.processEvents()
     assert window.unfinished_panel.isVisibleTo(window), "a change to the week closed the list"
-    assert not window.unfinished_badge.isVisibleTo(window)
+    assert window.more_button.accessibleName() == "More, 1 homework still needs time"
 
 
 def test_more_badge_counts_open_homework_before_an_earlier_week_prompt(
@@ -262,16 +262,15 @@ def test_more_badge_counts_open_homework_before_an_earlier_week_prompt(
     window._unfinished_introduced = False
     window._on_week()
     assert len(session.homework_time_needed()) == 1
-    assert window.unfinished_badge.isVisibleTo(window)
-    assert window.unfinished_badge.text() == "Unfinished homework · 1 item"
+    assert window.more_button.accessibleName() == "More, 1 homework still needs time"
 
 
-def test_more_badge_leaves_out_work_due_this_week_that_the_rail_already_lists(
+def test_more_badge_counts_work_due_this_week_that_the_rail_already_lists(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
 ) -> None:
-    """Work due this week with a chip in Not placed yet is counted there. A bar above the hours for it
-    came and went with each chip, moving the week under the pointer."""
+    """Work due this week with a chip in Not placed yet is counted there and on More: the count is a pill
+    on More's corner, so it never moves the week (0.19.2, P1 rule d)."""
     session = window.session
     due = (date.fromisoformat(session.week_start) + timedelta(days=6)).isoformat() + "T23:59"
     session.add_homework(
@@ -282,17 +281,17 @@ def test_more_badge_leaves_out_work_due_this_week_that_the_rail_already_lists(
     window._unfinished_introduced = False
     window._on_week()
     assert [item["assignment_id"] for item in session.homework_time_needed()] == ["math"]
-    assert not window.unfinished_badge.isVisibleTo(window)
+    assert window.more_button.accessibleName() == "More, 1 homework still needs time"
     assert window.rail.waiting_count.text() == "1"
 
 
-def test_unfinished_is_greyed_when_every_item_is_not_yet_overdue(
+def test_unfinished_is_on_for_work_that_is_not_yet_overdue(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """#14: Unfinished listed work due today and tomorrow. The button stayed on while the panel
-    would be empty. It follows the overdue-only list the panel shows."""
+    """#14 asked the button to follow the overdue-only list. 0.19.2 (P1 rule d) made the count the one the
+    rail shows: work still needing time is listed and counted whether or not it is overdue."""
     from datetime import datetime
 
     from desktop.native import widgets as widgets_module
@@ -327,10 +326,11 @@ def test_unfinished_is_greyed_when_every_item_is_not_yet_overdue(
     assert session.unfinished()
     action = unfinished_action(window)
     button = window.findChild(QPushButton, "unfinishedOpen")
-    assert action.isEnabled() is False
-    assert button is not None and button.isEnabled() is False
+    assert action.isEnabled() is True
+    assert action.text() == "Unfinished\t1 left"
+    assert button is not None and button.isEnabled() is True
     window._show_unfinished()
-    assert not window.unfinished_panel.isVisibleTo(window) or window.unfinished_panel.list.count() == 0
+    assert window.unfinished_panel.isVisibleTo(window) and window.unfinished_panel.list.count() == 1
 
 
 def test_about_gives_the_version_what_flexweek_is_and_opens_the_folder_its_data_lives_in(

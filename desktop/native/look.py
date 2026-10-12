@@ -1680,6 +1680,17 @@ FOCUS_GAP_PX = 2
 ZOOM_PILL_PX = 24
 
 
+def count_pill(palette: dict) -> tuple[str, str]:
+    """The fill and ink of the count drawn over More's corner: the accent where it reads 3 to 1 on the
+    page, moved in lightness only as far as that takes, with the palette's own ink or the best of black
+    and white when it moved."""
+    fill = palette["accent"]
+    if palette.get("family") != "contrast":
+        fill = fit_lightness(fill, (palette["window"],), AA_GRAPHIC)
+    ink = palette["accent_ink"] if fill == palette["accent"] else readable_ink(fill)
+    return fill, ink
+
+
 def focus_ring(palette: dict) -> str:
     """The keyboard focus ring: the accent itself where it reads 3 to 1 on the page, else moved in
     lightness only as far as that takes. High contrast's accent is its yellow and stays."""
