@@ -151,5 +151,7 @@ values make a retried write return the first result.
   no skips or xfails; `fwtest rig`: 249/249. Pushed and opened as a PR to main on Jonathan's word; merge and
   publish v0.19.2 as latest (CI builds the installers on publish; release notes in
   `docs/release-notes-v0.19.2.md`).
-- After that, 1.0.0: the roadmap's "1.0.0 — running list" (deferred items, N1-N14, QA leftovers, the two
-  design-round picks, Android and sync). The design demo site is `~/.flexweek-ui-harness/scratch/design-1.0.0/`.
+- 2026-10-12, `docs/1.0.0-design-rounds` (from main at v0.19.2): all four design rounds are picked and on
+  the roadmap's "1.0.0 — running list" (planning rail, step sheet, Android agenda, Month date pane, My day
+  shared fix on both day screens). The demo site is `~/.flexweek-ui-harness/scratch/design-1.0.0/`
+  (`index.html` links every round). Next: cut 1.0.0 lanes from that list; native code after the demo.

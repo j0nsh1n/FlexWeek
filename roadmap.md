@@ -762,8 +762,39 @@ v0.19.2 ships. Design rounds first produce a page in the demo site
   (What, When, How long) with answers as clickable crumbs and Enter
   advancing, the same component for the phone. Open: whether Edit homework
   steps too.
-- Next design rounds in order: Android companion screens, then Month and
-  My day.
+- Design round, Android companion (his pick 2026-10-12, demo `android.html`):
+  the shared phone system (the desktop tokens on a 360 dp phone, 48 dp
+  targets, the desktop's words only, a sync line under the title that never
+  changes height, Material only where Android owns it) and Today as the
+  Agenda, the rail on a phone: 7 day chips, one time-ordered list, the Now
+  or Up next row carries the day-screen buttons and its minutes left, a
+  48 dp tick on homework, done rows stay in place struck with Undo in the
+  snackbar, nothing changes height. Pairing by QR first with "Type the code
+  instead" and one problem line; reminders as a system notification with the
+  permission ask saying why and "Exact reminders" as an opt-in. v2 on the
+  same screen: Add homework as the three-step bottom sheet, Plan and Running
+  late as the record sheet (placed N of M, where each went, why not,
+  Undo / Accept), Week as the shape of the week in colour bars with no words,
+  a tap opening the day in Today. B (now card) and C (hours with a sheet)
+  stay in the demo for comparison only.
+- Design round, Month and My day (his pick 2026-10-12, demo `month.html`).
+  Month: the shared fix (opens with its first row on screen and this week
+  banded; Sunday never under the scroll bar; a chip keeps its time and whole
+  words at Large text; "+N more" opens the date's list in place; the overdue
+  line joins the status strip; R11's radio group), then B, the date pane:
+  the grid left, the selected date's list right in the rail's shape (due
+  first, then blocks with times, planned and completed study time, Open
+  Day), no "+N more" because the pane holds the rest, a drawer under
+  1150 px, with C's study-time bar per date behind a "Show study time per
+  date" switch. My day: the shared fix (a time never breaks inside itself;
+  the not-placed row is a fixed strip; the evening line follows the clock;
+  one action row in one order with Running late only while homework is
+  left; another week says so in one line), applied to both day screens with
+  A's tightening on One thing (the ring gives way before the Then list drops
+  rows, the day bar switches days, the actions never wrap) and B's true
+  list twin on the Day dial (every arc is a row with its check and Start
+  focus, the free-time line from the clock). C, the phone's Today on
+  desktop, waits until the day-screen count is decided.
 - Tooling: fwtest's hidden session inherits the caller's environment, so a
   rig started from a Codex agent dies for want of XDG_RUNTIME_DIR; default
   it. The rig can inherit another run's look. A play's `text: large` is
