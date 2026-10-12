@@ -24,6 +24,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - The Running late preview shows each change once, with the homework's title, the day and both times ("History essay: Thu 7–8 PM → Thu 7:30–8:30 PM"), and homework placed by the move reads "Math worksheet, placed Fri 3:30 PM". "3 tasks move" shows once as a normal line, not as a red error, and the card's buttons line up.
 - Tabbing through the week no longer makes the grid jump. The list of this week's blocks for keyboard and screen-reader users now opens from a fixed "Week as a list · Ctrl+Shift+L" row before the grid, in a panel over the week, and Esc closes it and puts you back where you were.
 - The "Week as a list · Ctrl+Shift+L" row above the week shows its words whole in every look and text size (28 px tall, 32 at Large text).
+- Pressing Enter in any box of Sign in, Create account or Reset password submits it, the same as the button, and the keyboard goes to the first problem. Not placed yet shows each part of a split homework with its own time (1 h and 30 min, not 1 h 30 min twice). The due date in Add homework steps a day with Up and Down and a week with Page Up and Page Down, past the end of this week.
 - Sign in, Create account and Reset password keep the last text size and High contrast you used on this computer, so Large text and High contrast no longer drop back to the default look when you sign out. Colours, accent and theme are not carried over.
 
 ### Changed
