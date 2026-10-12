@@ -24,6 +24,9 @@ All notable changes to FlexWeek are documented here. Format follows
 - Tabbing through the week no longer makes the grid jump. The list of this week's blocks for keyboard and screen-reader users now opens from a fixed "Week as a list · Ctrl+Shift+L" row before the grid, in a panel over the week, and Esc closes it and puts you back where you were.
 - Sign in, Create account and Reset password keep the last text size and High contrast you used on this computer, so Large text and High contrast no longer drop back to the default look when you sign out. Colours, accent and theme are not carried over.
 
+### Changed
+- The "Unfinished homework" bar above the week is gone. More shows a small count of the homework that still needs a time, the same count as Not placed yet; More > Unfinished shows it too and opens that list. The count coming or going never moves the week.
+
 ## [0.19.1] - 2026-10-10
 
 ### Fixed
