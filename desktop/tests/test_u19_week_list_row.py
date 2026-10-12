@@ -12,9 +12,11 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication, QPushButton, QStyle, QStyleOptionButton
 
 from desktop.native.layouts.base import NARROW_WIDTH
+from desktop.native.layouts.registry import LAYOUTS
+from desktop.native.look import LOOK_PRESETS
 from desktop.tests.window_support import qapp, server, settled, signed_out, window  # noqa: F401
 
 CTRL_SHIFT = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier
@@ -44,6 +46,34 @@ def test_u19_the_row_is_always_there_28_px_with_its_name_and_a_tab_stop(qapp, wi
     assert row.accessibleName() == ROW_NAME and row.text() == ROW_NAME
     assert row.focusPolicy() & Qt.FocusPolicy.TabFocus
     assert not window.week_list_panel.isVisible()
+
+
+# Every design on the default look, and every look on Today's app, as the roomy-button tests do.
+CLIP_COMBOS = [(design, "default") for design in LAYOUTS] + [
+    ("classic", preset) for preset in LOOK_PRESETS if preset != "default"
+]
+
+
+@pytest.mark.parametrize("size", ["small", "normal", "large"])
+@pytest.mark.parametrize(("design", "preset"), CLIP_COMBOS)
+def test_u19_the_row_is_28_px_32_at_large_and_its_words_get_the_full_height_the_font_needs(
+    qapp, window, design, preset, size
+) -> None:
+    window.resize(1280, 860)
+    window._layout = {"main": design, "day": "one", "options": {}}
+    window._look = {"preset": preset, "knobs": {"text": size}}
+    window.session.look = window._look
+    window._apply_appearance()
+    settled(qapp, window)
+    row = window.week_list_row
+    option = QStyleOptionButton()
+    row.initStyleOption(option)
+    contents = row.style().subElementRect(QStyle.SubElement.SE_PushButtonContents, option, row)
+    expected = {"small": 28, "normal": 28, "large": 32}[size]
+    assert row.height() == expected, f"{design}/{preset}/{size}: row is {row.height()} px, not {expected}"
+    assert contents.height() >= row.fontMetrics().height(), (
+        f"{design}/{preset}/{size}: words box {contents.height()} px, font needs {row.fontMetrics().height()}"
+    )
 
 
 def test_u19_the_row_comes_before_the_grid_in_tab_order_and_in_the_layout(qapp, window) -> None:

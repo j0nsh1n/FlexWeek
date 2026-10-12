@@ -101,6 +101,7 @@ from desktop.native.layouts.registry import MATCH, options_for, sanitize_layout,
 from desktop.native.layouts.views import VIEW_CLASSES
 from desktop.native.look import (
     MENU_EDGE,
+    WEEK_LIST_ROW_HEIGHT,
     effective_look,
     look_measures,
     look_motion,
@@ -259,7 +260,6 @@ BUSY_BUTTONS = (
 VIEW_ORDER = ("day", "week", "month")
 # The week list for screen readers opens over the grid, so the grid never moves: a fixed row above
 # it is the way in, and the list floats at this width (the whole planner on a narrow window).
-WEEK_LIST_ROW_HEIGHT = 28
 WEEK_LIST_ROW_NAME = "Week as a list · Ctrl+Shift+L"
 WEEK_LIST_PANEL_WIDTH = 360
 PLAN_LABEL = "Plan my homework"
@@ -1509,7 +1509,6 @@ class NativeWindow(QMainWindow):
         self.week_list_row.setObjectName("weekListRow")
         self.week_list_row.setProperty("quiet", True)
         self.week_list_row.setAccessibleName(WEEK_LIST_ROW_NAME)
-        self.week_list_row.setFixedHeight(WEEK_LIST_ROW_HEIGHT)
         self.week_list_row.clicked.connect(self._toggle_week_access_list)
         self.week_list_row.installEventFilter(self)
         self.week_list_panel = QFrame(page)
@@ -4824,6 +4823,8 @@ class NativeWindow(QMainWindow):
         if dressed != self._dressed:
             self._dressed = dressed
             self.setStyleSheet(sheet)
+            # Fixed within a text size, so tabbing never moves the grid; a new size re-lays out anyway.
+            self.week_list_row.setFixedHeight(WEEK_LIST_ROW_HEIGHT[effective_look(look)["text"]])
             self._keep_bar_whole()
             apply_ui_effects(self._motion)
             self.toast.motion = self._motion

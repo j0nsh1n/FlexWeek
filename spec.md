@@ -324,7 +324,7 @@ when it offers Undo, held while the pointer or the keyboard is on it, with a
 thin line showing the time left), on a change of week, or when its Undo is
 used; a switch of view or design keeps it, and Plan finding nothing new leaves
 an Undo toast up. There is no status line. Before the week grid, a fixed row,
-"Week as a list · Ctrl+Shift+L", is a Tab stop; it, Enter or Space opens a
+"Week as a list · Ctrl+Shift+L", 28 px tall (32 at Large text), is a Tab stop; it, Enter or Space opens a
 list of the week's blocks for screen readers and the keyboard in a panel over
 the grid, and Esc closes it and returns the keyboard to where it was. Opening
 or closing it never moves the grid. Month opens
