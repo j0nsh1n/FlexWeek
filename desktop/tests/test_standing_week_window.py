@@ -1,4 +1,4 @@
-"""Deleting School or a Setup activity asks "Just this week" or "Every week" (fix-specs item 1)."""
+"""Deleting School or a Setup activity asks "This week only" or "This week and later" (T-W2)."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
@@ -60,19 +60,24 @@ def delete_soccer(qapp: QApplication, window: NativeWindow) -> None:
     settled(qapp, window)
 
 
-def test_just_this_week_keeps_soccer_here_missed_on_every_day(qapp, window, monkeypatch) -> None:
+def test_this_week_only_keeps_soccer_here_missed_on_every_day(qapp, window, monkeypatch) -> None:
     asked = pick(monkeypatch, "week")
     delete_soccer(qapp, window)
     assert asked
     assert soccer(window)["missed_days"] == [1, 3]
-    assert window.toast.text() == "Deleted Soccer."
+    assert window.toast.text() == "Deleted Soccer from this week."
+    assert window.toast.button.isVisible() and window.toast.button.text().startswith("Undo")
+    window.toast.button.click()
+    wait_until(qapp, lambda: not window.session.busy and not window.session.dirty)
+    assert not soccer(window).get("missed_days")
 
 
-def test_every_week_takes_soccer_out_and_says_so(qapp, window, monkeypatch) -> None:
+def test_this_week_and_later_takes_soccer_out_and_says_so(qapp, window, monkeypatch) -> None:
     pick(monkeypatch, "every")
     delete_soccer(qapp, window)
     assert soccer(window) is None
-    assert window.toast.text() == "Removed Soccer from this week and every week after it."
+    assert window.toast.text() == "Deleted Soccer from this week and every week after."
+    assert not window.toast.button.isVisible(), "the irreversible deletion has no Undo"
 
 
 def test_cancel_deletes_nothing(qapp, window, monkeypatch) -> None:

@@ -24,8 +24,9 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QRectF, QStandardPaths
+    from PySide6.QtCore import QRectF, QStandardPaths, Qt
     from PySide6.QtGui import QColor
+    from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QPushButton, QVBoxLayout, QWidget
 
     from desktop.native.calendar import CATEGORIES
@@ -424,3 +425,29 @@ def test_todays_name_above_the_week_is_marked_and_no_other(qapp: QApplication) -
             for y in range(0, image.height(), 2)
         )
         assert (lit > 20) == (day == 2), f"day {day}: {lit} accent pixels"
+
+
+def test_wearing_a_more_looks_card_leaves_light_dark_system_reachable_by_tab(qapp: QApplication) -> None:
+    """A28: with High contrast worn none of the three was a Tab stop, so the keyboard skipped the row."""
+    dialog = settings({})
+    dialog.look.setCurrentIndex(dialog.look.findData("preset:high-contrast"))
+    dialog.show()
+    light, dark, system = dialog.look.main.buttons()
+    assert dialog.look.main.currentIndex() == -1
+    before = light.previousInFocusChain()
+    while before.focusPolicy() & Qt.FocusPolicy.TabFocus == 0 or before in (light, dark, system):
+        before = before.previousInFocusChain()
+    before.setFocus(Qt.FocusReason.TabFocusReason)
+    # The window is not the active one under test, so focus is read from the window, not the application.
+    for _ in range(3):
+        if dialog.focusWidget() is light:
+            break
+        dialog.focusNextChild()
+    assert dialog.focusWidget() is light
+    QTest.keyClick(light, Qt.Key.Key_Right)
+    assert dialog.focusWidget() is dark
+    QTest.keyClick(dark, Qt.Key.Key_Left)
+    QTest.keyClick(light, Qt.Key.Key_Return)
+    assert dialog.look.currentData() == "pack:light-frost"
+    assert dialog.look.main.currentIndex() == 0
+    dialog.close()

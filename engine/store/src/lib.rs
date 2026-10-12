@@ -106,6 +106,8 @@ pub enum StoreError {
     },
     Io(std::io::Error),
     Date(String),
+    /// A week whose block list uses one id twice: a block is keyed by (user, week, id).
+    RepeatedBlockId(String),
 }
 
 impl std::fmt::Display for StoreError {
@@ -116,6 +118,12 @@ impl std::fmt::Display for StoreError {
             Self::Json { error, .. } => write!(f, "{error}"),
             Self::Io(e) => write!(f, "{e}"),
             Self::Date(msg) => write!(f, "{msg}"),
+            Self::RepeatedBlockId(id) => {
+                write!(
+                    f,
+                    "Two blocks in this week share the id \"{id}\". Each block needs its own id."
+                )
+            }
         }
     }
 }

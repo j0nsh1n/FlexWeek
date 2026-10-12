@@ -17,6 +17,7 @@ from datetime import date, timedelta
 from PySide6.QtCore import (
     QEvent,
     QModelIndex,
+    QObject,
     QPersistentModelIndex,
     QPointF,
     QRectF,
@@ -64,6 +65,7 @@ from desktop.native.weekmodel import (
     Waiting,
     WeekModel,
     clock_label,
+    due_label,
     hhmm_text,
     length_label,
     minute_of,
@@ -668,6 +670,7 @@ class Rail(QFrame):
     date_chosen = Signal(str)
     # The month was folded away (False) or shown again (True), to be kept on this computer.
     month_shown_changed = Signal(bool)
+    allow_split_requested = Signal(str)
 
     def __init__(self, hand: Hand, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -683,6 +686,8 @@ class Rail(QFrame):
         self._minute: int | None = None
         self._tasks: tuple = ()
         self._waiting: tuple[Waiting, ...] = ()
+        self._waiting_amounts: dict[str, int] = {}
+        self._time_needed_count = 0
         self._chips: list[RailChip] = []
         self._waiting_open = False
         self._due: frozenset[str] = frozenset()
@@ -726,6 +731,12 @@ class Rail(QFrame):
         self.waiting_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.waiting_head.addWidget(self.waiting_count)
         waiting_box.addLayout(self.waiting_head)
+        self.one_go = QWidget(self.waiting)
+        self.one_go.setObjectName("railOneGo")
+        self.one_go_box = QVBoxLayout(self.one_go)
+        self.one_go_box.setContentsMargins(0, 0, 0, 0)
+        self.one_go_box.setSpacing(SPACING[0])
+        waiting_box.addWidget(self.one_go)
         self.tray = QVBoxLayout()
         self.tray.setSpacing(2)
         waiting_box.addLayout(self.tray)
@@ -746,6 +757,9 @@ class Rail(QFrame):
         self.tasks.setObjectName("focusTasks")
         self.tasks.setItemDelegate(FocusRows(self, self.tasks))
         self.tasks.setMouseTracking(True)
+        # The list gets its width when its section is shown, after the rows were measured; the rail's
+        # own resize does not say so when the rail did not change.
+        self.tasks.viewport().installEventFilter(self)
         self.tasks.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         overlay_scroll_bars(self.tasks)
         self.tasks.setFrameShape(QFrame.Shape.NoFrame)
@@ -830,7 +844,15 @@ class Rail(QFrame):
 
     # What it shows
 
-    def set_week(self, week: WeekModel, today: int | None, minute: int | None, assignments: dict) -> None:
+    def set_week(
+        self,
+        week: WeekModel,
+        today: int | None,
+        minute: int | None,
+        assignments: dict,
+        time_needed: list[dict] | None = None,
+        one_go_unplaced: set[str] | None = None,
+    ) -> None:
         self._week, self._today, self._minute = week, today, minute
         due = frozenset(
             str(item.get("due") or "")[:10]
@@ -840,7 +862,51 @@ class Rail(QFrame):
         self._due = due
         now = date.today() if today is None else week.date_of(today)
         self.month.show_week(week.week_start, now, due)
-        self.set_waiting(week.waiting)
+        amounts = {item["assignment_id"]: item["minutes"] for item in time_needed or []}
+        self.set_waiting(week.waiting, amounts)
+        while self.one_go_box.count():
+            entry = self.one_go_box.takeAt(0)
+            if entry.widget() is not None:
+                entry.widget().deleteLater()
+        for needed in time_needed or []:
+            assignment = (assignments or {}).get(needed["assignment_id"], {})
+            if (
+                assignment.get("spread", "one") != "one"
+                or needed["assignment_id"] not in (one_go_unplaced or set())
+            ):
+                continue
+            line = (
+                f"{needed['title']} doesn't fit in one go before "
+                f"{due_label(assignment.get('due'), week.week_start)}. Allow splitting?"
+            )
+            row = QWidget(self.one_go)
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            message = QLabel(line, row)
+            message.setObjectName("railOneGoMessage")
+            message.setWordWrap(True)
+            row_layout.addWidget(message, 1)
+            action = QPushButton("Allow splitting", row)
+            action.setObjectName("railAllowSplitting")
+            action.setAccessibleName(line)
+            action.clicked.connect(
+                lambda _=False, key=needed["assignment_id"]: self.allow_split_requested.emit(key)
+            )
+            row_layout.addWidget(action)
+            self.one_go_box.addWidget(row)
+        self.one_go.setVisible(bool(self.one_go_box.count()))
+        count = len(time_needed or [])
+        self._time_needed_count = count
+        if count:
+            lines = [
+                f"{item['title']} · {length_label(item['minutes'])} left"
+                for item in time_needed or []
+            ]
+            self.none_waiting.setText("\n".join(lines))
+            self.waiting_count.setText(str(count))
+        else:
+            self.none_waiting.setText("Everything has a time.")
+        self.waiting_count.setText(str(self._time_needed_count) if self._time_needed_count else "")
         self._show()
 
     def set_clock(self, today: int | None, minute: int | None) -> None:
@@ -889,22 +955,32 @@ class Rail(QFrame):
         rows = self.tasks.count()
         if rows:
             self.tasks.ensurePolished()
-            # Row by row, as the list lays them out at its width: a long name takes two lines (#84), so
-            # the first row's height times the count cut off the rows after a taller one.
+            width = max(1, self.tasks.viewport().width())
+            delegate = self.tasks.itemDelegate()
+            body, _small = self.fonts()
+            for row in range(rows):
+                item = self.tasks.item(row)
+                index = self.tasks.indexFromItem(item)
+                lines, below, timing = delegate.row_lines(index, width)
+                height = QFontMetricsF(body).lineSpacing() * len(lines) + 10
+                if below:
+                    height += QFontMetricsF(timing).lineSpacing()
+                item.setSizeHint(QSize(width, round(max(30.0, height))))
             self.tasks.doItemsLayout()
             tall = sum(self.tasks.visualItemRect(self.tasks.item(row)).height() for row in range(rows))
             margins = self.tasks.contentsMargins()
             self.tasks.setFixedHeight(tall + margins.top() + margins.bottom() + 2)
 
-    def set_waiting(self, waiting: tuple[Waiting, ...]) -> None:
+    def set_waiting(self, waiting: tuple[Waiting, ...], amounts: dict[str, int] | None = None) -> None:
         if self.hand.busy:
             # Rebuilding would delete the chip the pointer is holding. The release refreshes.
             return
         # Every save comes through here. Chips made again for the same homework were shown a frame
         # after the old ones went, so the tray blinked empty on each save.
-        if waiting == self._waiting:
+        if waiting == self._waiting and (amounts or {}) == self._waiting_amounts:
             return
         self._waiting = waiting
+        self._waiting_amounts = amounts or {}
         for chip in self._chips:
             chip.setParent(None)
             chip.deleteLater()
@@ -984,8 +1060,7 @@ class Rail(QFrame):
         listed = self.tasks.count() > 0
         self.focus.setVisible(wide and listed)
         self.none_waiting.setVisible(not self._chips)
-        self.waiting_count.setText(str(len(self._chips)))
-        self.waiting_count.setVisible(bool(self._chips))
+        self.waiting_count.setVisible(bool(self.waiting_count.text()))
         # With the month folded, the way back sits on the first header the rail shows.
         for head in (self.next.head, self.waiting_head, self.focus_head):
             head.removeWidget(self.show_month)
@@ -1037,11 +1112,18 @@ class Rail(QFrame):
         self._wait_words.setText(words)
         self._wait_words.setMinimumWidth(self._wait_words.fontMetrics().horizontalAdvance(words))
 
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        # A row is as tall as its lines at the list's width, so a list that changes width wraps others.
+        if (
+            watched is self.tasks.viewport()
+            and event.type() == QEvent.Type.Resize
+            and event.size().width() != event.oldSize().width()
+        ):
+            self._fit_tasks()
+        return super().eventFilter(watched, event)
+
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)
-        # A narrower rail wraps more focus rows onto two lines.
-        if event.size().width() != event.oldSize().width():
-            self._fit_tasks()
         if self.folded:
             self._fit_waiting_words()
 

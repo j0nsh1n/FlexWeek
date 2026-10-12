@@ -340,6 +340,251 @@ pub fn solve_request(
     Ok((payload, targets))
 }
 
+/// Add one open session for homework with time remaining and no open session in this week.
+/// The deterministic id makes applying the operation repeatedly safe.
+pub fn open_rest_sessions(
+    blocks: &[Value],
+    assignments: &serde_json::Map<String, Value>,
+    week_start: &str,
+    earlier_blocks: &[Value],
+) -> EngineResult<Vec<Value>> {
+    let monday = from_iso(week_start)?;
+    let mut out = blocks.to_vec();
+    for (id, assignment) in assignments {
+        if truthy(get(assignment, "completed")?)
+            || int_of(&or_default(get(assignment, "unplanned_min")?, json!(0)))? <= 0
+        {
+            continue;
+        }
+        let Some(due) = assignment.get("due").and_then(Value::as_str) else {
+            continue;
+        };
+        if crate::model::parse_due(due)?.0 < monday {
+            continue;
+        }
+        let has_open = out.iter().any(|block| {
+            block.get("assignment_id").and_then(Value::as_str) == Some(id)
+                && !truthy(block.get("start"))
+                && !block
+                    .get("completed")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+        });
+        let already_placed_earlier = earlier_blocks.iter().any(|block| {
+            block.get("assignment_id").and_then(Value::as_str) == Some(id)
+                && truthy(block.get("start"))
+                && !truthy(block.get("completed"))
+        });
+        if has_open || already_placed_earlier {
+            continue;
+        }
+        let minutes = floor_slot(int_of(subscript(assignment, "unplanned_min")?)?);
+        if minutes < SLOT_MIN {
+            continue;
+        }
+        let due = subscript(assignment, "due")?;
+        out.push(json!({
+            "id": format!("{id}-rest-{week_start}"),
+            "kind": "flexible",
+            "assignment_id": id,
+            "title": assignment.get("title").cloned().unwrap_or(Value::Null),
+            "duration_min": minutes,
+            "days": session_days(week_start, due)?,
+            "priority": assignment.get("priority").cloned().unwrap_or(json!(2)),
+            "energy": assignment.get("energy").cloned().unwrap_or(json!("medium")),
+            "completed": false
+        }));
+    }
+    Ok(out)
+}
+
+/// Move open sessions from earlier weeks into this week and return both sides of each write.
+pub fn move_earlier_homework(
+    blocks: &[Value],
+    earlier_weeks: &[Value],
+    assignments: &serde_json::Map<String, Value>,
+    week_start: &str,
+) -> EngineResult<Value> {
+    let monday = from_iso(week_start)?;
+    let mut current = blocks.to_vec();
+    let mut moved = Vec::new();
+    let mut updates = Vec::new();
+    for saved in earlier_weeks {
+        let source_week = py_str(subscript(saved, "week_start")?);
+        if source_week.as_str() >= week_start {
+            continue;
+        }
+        let before = list_field(saved, "blocks")?;
+        let before_blocks = iterate(&before)?;
+        let mut after = Vec::new();
+        let mut groups: Vec<(String, Vec<Value>)> = Vec::new();
+        for block in before_blocks {
+            let Some(assignment_id) = block.get("assignment_id").and_then(Value::as_str) else {
+                after.push(block);
+                continue;
+            };
+            let Some(assignment) = assignments.get(assignment_id) else {
+                after.push(block);
+                continue;
+            };
+            let is_open = eq(get(&block, "kind")?.unwrap_or(null()), &json!("flexible"))
+                && !truthy(get(&block, "start")?)
+                && !truthy(get(&block, "completed")?)
+                && !truthy(get(assignment, "completed")?);
+            let Some(due) = assignment.get("due").and_then(Value::as_str) else {
+                after.push(block);
+                continue;
+            };
+            if !is_open || crate::model::parse_due(due)?.0 < monday {
+                after.push(block);
+                continue;
+            }
+            if let Some((_, sessions)) = groups.iter_mut().find(|(id, _)| id == assignment_id) {
+                sessions.push(block);
+            } else {
+                groups.push((assignment_id.to_string(), vec![block]));
+            }
+        }
+        let mut changed = false;
+        for (assignment_id, sessions) in &groups {
+            let minutes: i64 = sessions
+                .iter()
+                .map(|block| {
+                    block
+                        .get("duration_min")
+                        .and_then(Value::as_i64)
+                        .unwrap_or(0)
+                })
+                .sum();
+            let existing = current.iter().position(|block| {
+                block.get("assignment_id").and_then(Value::as_str) == Some(assignment_id)
+                    && eq(
+                        get(block, "kind").ok().flatten().unwrap_or(null()),
+                        &json!("flexible"),
+                    )
+                    && !truthy(block.get("start"))
+                    && !truthy(block.get("completed"))
+            });
+            let Some(assignment) = assignments.get(assignment_id) else {
+                after.extend(sessions.iter().cloned());
+                continue;
+            };
+            let mut moved_block = if let Some(at) = existing {
+                let block = &mut current[at];
+                let duration = block
+                    .get("duration_min")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0);
+                if let Some(fields) = block.as_object_mut() {
+                    fields.insert("duration_min".into(), json!(duration + minutes));
+                    fields.insert(
+                        "days".into(),
+                        Value::Array(
+                            session_days(week_start, subscript(assignment, "due")?)?
+                                .into_iter()
+                                .map(Value::from)
+                                .collect(),
+                        ),
+                    );
+                }
+                block.clone()
+            } else {
+                if current.len() as i64 >= crate::desk::reuse::MAX_WEEK_BLOCKS {
+                    after.extend(sessions.iter().cloned());
+                    continue;
+                }
+                let mut block = sessions[0].clone();
+                let Value::Object(fields) = &mut block else {
+                    after.extend(sessions.iter().cloned());
+                    continue;
+                };
+                fields.insert("duration_min".into(), json!(minutes));
+                fields.insert(
+                    "days".into(),
+                    Value::Array(
+                        session_days(week_start, subscript(assignment, "due")?)?
+                            .into_iter()
+                            .map(Value::from)
+                            .collect(),
+                    ),
+                );
+                fields.shift_remove("start");
+                fields.shift_remove("earliest");
+                fields.shift_remove("pinned");
+                current.push(block.clone());
+                block
+            };
+            if let Some(fields) = moved_block.as_object_mut() {
+                fields.insert("duration_min".into(), json!(minutes));
+            }
+            moved.push(moved_block);
+            changed = true;
+        }
+        if changed {
+            updates.push(json!({
+                "week_start": source_week,
+                "before": before,
+                "after": after,
+                "revision": get(saved, "revision")?.cloned().unwrap_or(Value::Null),
+            }));
+        }
+    }
+    Ok(json!({"blocks": current, "moved": moved, "weeks": updates}))
+}
+
+/// Count homework time that still needs a time, grouped by deadline week relative to this week.
+pub fn time_still_needed(
+    assignments: &serde_json::Map<String, Value>,
+    open_week_blocks: &[Value],
+    week_start: &str,
+) -> EngineResult<Vec<Value>> {
+    let monday = from_iso(week_start)?;
+    let mut result = Vec::new();
+    for (id, assignment) in assignments {
+        if truthy(get(assignment, "completed")?) {
+            continue;
+        }
+        let waiting: i64 = open_week_blocks
+            .iter()
+            .filter(|block| {
+                block.get("assignment_id").and_then(Value::as_str) == Some(id)
+                    && !truthy(block.get("start"))
+                    && !block
+                        .get("completed")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false)
+            })
+            .map(|block| {
+                block
+                    .get("duration_min")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0)
+            })
+            .sum();
+        let unplanned = int_of(&or_default(get(assignment, "unplanned_min")?, json!(0)))?;
+        let minutes = floor_slot(unplanned.max(waiting));
+        if minutes == 0 {
+            continue;
+        }
+        let due = assignment.get("due").and_then(Value::as_str);
+        let offset = due
+            .map(|text| crate::model::parse_due(text).map(|(day, _)| (day - monday).num_days()))
+            .transpose()?;
+        let period = match offset {
+            Some(day) if day < 0 => "earlier",
+            Some(day) if day <= 6 => "this_week",
+            _ => "later",
+        };
+        result.push(json!({
+            "assignment_id": id,
+            "title": assignment.get("title").cloned().unwrap_or(Value::Null),
+            "minutes": minutes,
+            "period": period
+        }));
+    }
+    Ok(result)
+}
+
 pub fn due_point(due: &Value, week_start: &str) -> EngineResult<Option<(i64, i64)>> {
     if !truthy(Some(due)) {
         return Ok(None);
@@ -570,6 +815,96 @@ pub fn floor_slot(minutes: i64) -> i64 {
     (minutes.max(0) / SLOT_MIN) * SLOT_MIN
 }
 
+fn has_free_study_slot(
+    day: i64,
+    after: i64,
+    work_windows: &[Value],
+    blocks: &[Value],
+) -> EngineResult<bool> {
+    let windows: Vec<(i64, i64)> = if work_windows.is_empty() {
+        vec![(DAY_START_MIN, DAY_END_MIN)]
+    } else {
+        let mut windows = Vec::new();
+        for window in work_windows {
+            if !window
+                .get("days")
+                .and_then(Value::as_array)
+                .is_some_and(|days| days.iter().any(|value| value.as_i64() == Some(day)))
+            {
+                continue;
+            }
+            windows.push((
+                minutes_of(subscript(window, "start")?)?,
+                minutes_of(subscript(window, "end")?)?,
+            ));
+        }
+        windows
+    };
+    for (start, end) in windows {
+        let mut slot = ceil_slot(start.max(after));
+        while slot + SLOT_MIN <= end {
+            let occupied = blocks.iter().any(|block| {
+                let Some(block_start) = block
+                    .get("start")
+                    .and_then(Value::as_str)
+                    .and_then(|value| hhmm_to_minutes(value).ok())
+                else {
+                    return false;
+                };
+                let days = block.get("days").and_then(Value::as_array);
+                let duration = block
+                    .get("duration_min")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0);
+                days.is_some_and(|days| days.iter().any(|value| value.as_i64() == Some(day)))
+                    && slot < block_start + duration
+                    && block_start < slot + SLOT_MIN
+            });
+            if !occupied {
+                return Ok(true);
+            }
+            slot += SLOT_MIN;
+        }
+    }
+    Ok(false)
+}
+
+fn plannable_days(
+    first_day: i64,
+    first_minute: i64,
+    last_day: i64,
+    work_windows: &[Value],
+    blocks: &[Value],
+) -> EngineResult<(i64, i64)> {
+    let mut this_week = 0;
+    for day in first_day.clamp(0, 6)..=6 {
+        let after = if day == first_day {
+            first_minute
+        } else {
+            DAY_START_MIN
+        };
+        if has_free_study_slot(day, after, work_windows, blocks)? {
+            this_week += 1;
+        }
+    }
+    let beyond_this_week = (last_day - 6).max(0);
+    let full_weeks = beyond_this_week / 7;
+    let tail_days = beyond_this_week % 7;
+    let mut plannable_per_week = 0;
+    for day in 0..7 {
+        if has_free_study_slot(day, DAY_START_MIN, work_windows, &[])? {
+            plannable_per_week += 1;
+        }
+    }
+    let mut all_days = this_week + full_weeks * plannable_per_week;
+    for day in 0..tail_days {
+        if has_free_study_slot(day, DAY_START_MIN, work_windows, &[])? {
+            all_days += 1;
+        }
+    }
+    Ok((this_week, all_days))
+}
+
 pub fn available_homework_minutes(
     assignment: &Value,
     blocks: &Value,
@@ -702,6 +1037,152 @@ pub fn copy_label(block: &Value, source_day: &Value, scope: &Value) -> EngineRes
     Ok(title)
 }
 
+fn ceil_slot(minutes: i64) -> i64 {
+    (minutes.max(0) + SLOT_MIN - 1) / SLOT_MIN * SLOT_MIN
+}
+
+/// Keep homework due within seven days whole. Farther deadlines may receive a fair share.
+pub fn fair_share(
+    blocks: &[Value],
+    assignments: &serde_json::Map<String, Value>,
+    committed: &Value,
+    week_start: &str,
+    first_day: i64,
+    first_minute: i64,
+    work_windows: &[Value],
+    targets: &[String],
+) -> EngineResult<(Vec<Value>, Vec<Value>)> {
+    let monday = from_iso(week_start)?;
+    let id_of = |block: &Value| block.get("id").and_then(Value::as_str).map(str::to_string);
+    let homework_of = |block: &Value| {
+        block
+            .get("assignment_id")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    };
+    let duration = |block: &Value| {
+        block
+            .get("duration_min")
+            .and_then(Value::as_i64)
+            .unwrap_or(0)
+    };
+    let mut order: Vec<String> = Vec::new();
+    for block in blocks {
+        if let (Some(id), Some(homework)) = (id_of(block), homework_of(block))
+            && targets.contains(&id)
+            && !order.contains(&homework)
+        {
+            order.push(homework);
+        }
+    }
+    let mut out = blocks.to_vec();
+    let mut notes = Vec::new();
+    for homework in order {
+        let Some(assignment) = assignments.get(&homework) else {
+            continue;
+        };
+        if assignment
+            .get("spread")
+            .and_then(Value::as_str)
+            .unwrap_or("one")
+            == "one"
+        {
+            continue;
+        }
+        let Some(due) = assignment.get("due").and_then(Value::as_str) else {
+            continue;
+        };
+        let due_offset = (crate::model::parse_due(due)?.0 - monday).num_days();
+        if due_offset - first_day.clamp(0, 6) <= 7 {
+            continue;
+        }
+        let (this_week, all_days) = plannable_days(
+            first_day,
+            first_minute,
+            due_offset,
+            work_windows,
+            &iterate(committed)?,
+        )?;
+        let left = available_homework_minutes(assignment, &json!([]), committed)?;
+        if this_week == 0 || all_days == 0 {
+            notes.push(json!({
+                "assignment_id": homework,
+                "title": assignment.get("title").cloned().unwrap_or(Value::Null),
+                "this_week_min": 0,
+                "left_min": left,
+            }));
+            continue;
+        }
+        let share = ceil_slot((left * this_week + all_days - 1) / all_days).min(left);
+        let held: i64 = out
+            .iter()
+            .filter(|block| {
+                homework_of(block).as_deref() == Some(homework.as_str())
+                    && !id_of(block).is_some_and(|id| targets.contains(&id))
+                    && !block
+                        .get("completed")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false)
+            })
+            .map(duration)
+            .sum();
+        let mut budget = (share - held).max(0);
+        let mut placed = held;
+        let mut cut = false;
+        let mut kept = Vec::with_capacity(out.len());
+        for block in out {
+            let target = homework_of(&block).as_deref() == Some(homework.as_str())
+                && id_of(&block).is_some_and(|id| targets.contains(&id));
+            if !target {
+                kept.push(block);
+                continue;
+            }
+            let wanted = duration(&block);
+            let given = floor_slot(wanted.min(budget));
+            if given < wanted {
+                cut = true;
+            }
+            if given < SLOT_MIN {
+                continue;
+            }
+            budget -= given;
+            placed += given;
+            let mut trimmed = block;
+            if let Some(fields) = trimmed.as_object_mut() {
+                fields.insert("duration_min".into(), json!(given));
+            }
+            kept.push(trimmed);
+        }
+        out = kept;
+        if cut {
+            let remainder = (left - placed).max(0);
+            if remainder >= SLOT_MIN {
+                let rest_id = format!("{homework}-rest-{week_start}");
+                out.retain(|block| id_of(block).as_deref() != Some(rest_id.as_str()));
+                let due = subscript(assignment, "due")?;
+                out.push(json!({
+                    "id": rest_id,
+                    "title": assignment.get("title").cloned().unwrap_or(Value::Null),
+                    "kind": "flexible",
+                    "assignment_id": homework,
+                    "duration_min": remainder,
+                    "days": session_days(week_start, due)?,
+                    "priority": assignment.get("priority").cloned().unwrap_or(json!(2)),
+                    "energy": assignment.get("energy").cloned().unwrap_or(json!("medium")),
+                    "completed": false
+                }));
+            }
+            notes.push(json!({
+                "assignment_id": homework,
+                "title": assignment.get("title").cloned().unwrap_or(Value::Null),
+                "this_week_min": placed,
+                "left_min": remainder,
+            }));
+        }
+    }
+    Ok((out, notes))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -749,115 +1230,4 @@ mod tests {
             None
         );
     }
-}
-
-fn ceil_slot(minutes: i64) -> i64 {
-    (minutes.max(0) + SLOT_MIN - 1) / SLOT_MIN * SLOT_MIN
-}
-
-/// Item 1c, part C: homework due after this Sunday gets only a fair share of this week. The share is
-/// the minutes it has left from this week on, times the days left in this week from `first_day`,
-/// over the days from `first_day` to its due day; the rest waits for next week's Plan. Worked out from
-/// what is left, not from the session, so planning again never shrinks it further. The `targets`
-/// sessions Plan is about to place are cut to fit the share after any time it already has this week;
-/// one with nothing left to hold is taken out of the week. Returns the week's blocks and, for each
-/// homework cut, `{assignment_id, title, this_week_min, left_min}`.
-pub fn fair_share(
-    blocks: &[Value],
-    assignments: &serde_json::Map<String, Value>,
-    committed: &Value,
-    week_start: &str,
-    first_day: i64,
-    targets: &[String],
-) -> EngineResult<(Vec<Value>, Vec<Value>)> {
-    let monday = from_iso(week_start)?;
-    let id_of = |block: &Value| block.get("id").and_then(Value::as_str).map(str::to_string);
-    let homework_of = |block: &Value| {
-        block
-            .get("assignment_id")
-            .and_then(Value::as_str)
-            .map(str::to_string)
-    };
-    let duration = |block: &Value| {
-        block
-            .get("duration_min")
-            .and_then(Value::as_i64)
-            .unwrap_or(0)
-    };
-    let mut order: Vec<String> = Vec::new();
-    for block in blocks {
-        if let (Some(id), Some(homework)) = (id_of(block), homework_of(block))
-            && targets.contains(&id)
-            && !order.contains(&homework)
-        {
-            order.push(homework);
-        }
-    }
-    let mut out = blocks.to_vec();
-    let mut notes = Vec::new();
-    for homework in order {
-        let Some(assignment) = assignments.get(&homework) else {
-            continue;
-        };
-        let Some(due) = assignment.get("due").and_then(Value::as_str) else {
-            continue;
-        };
-        let due_offset = (crate::model::parse_due(due)?.0 - monday).num_days();
-        if due_offset <= 6 {
-            continue;
-        }
-        let left = available_homework_minutes(assignment, &json!([]), committed)?;
-        let this_week = 7 - first_day.clamp(0, 6);
-        let all_days = (due_offset - first_day.clamp(0, 6)).max(this_week);
-        let share = ceil_slot((left * this_week + all_days - 1) / all_days).min(left);
-        let held: i64 = out
-            .iter()
-            .filter(|block| {
-                homework_of(block).as_deref() == Some(homework.as_str())
-                    && !id_of(block).is_some_and(|id| targets.contains(&id))
-                    && !block
-                        .get("completed")
-                        .and_then(Value::as_bool)
-                        .unwrap_or(false)
-            })
-            .map(duration)
-            .sum();
-        let mut budget = (share - held).max(0);
-        let mut placed = held;
-        let mut cut = false;
-        let mut kept = Vec::with_capacity(out.len());
-        for block in out {
-            let target = homework_of(&block).as_deref() == Some(homework.as_str())
-                && id_of(&block).is_some_and(|id| targets.contains(&id));
-            if !target {
-                kept.push(block);
-                continue;
-            }
-            let wanted = duration(&block);
-            let given = floor_slot(wanted.min(budget));
-            if given < wanted {
-                cut = true;
-            }
-            if given < SLOT_MIN {
-                continue;
-            }
-            budget -= given;
-            placed += given;
-            let mut trimmed = block;
-            if let Some(fields) = trimmed.as_object_mut() {
-                fields.insert("duration_min".into(), json!(given));
-            }
-            kept.push(trimmed);
-        }
-        out = kept;
-        if cut {
-            notes.push(json!({
-                "assignment_id": homework,
-                "title": assignment.get("title").cloned().unwrap_or(Value::Null),
-                "this_week_min": placed,
-                "left_min": (left - placed).max(0),
-            }));
-        }
-    }
-    Ok((out, notes))
 }

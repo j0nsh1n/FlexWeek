@@ -228,7 +228,7 @@ def notice(window: NativeWindow) -> tuple[bool, str, str]:
     toast = window.toast
     if not toast.isVisible() or not toast.button.isVisible():
         return False, "", ""
-    return True, toast.text(), toast.button.text()
+    return True, toast.text(), toast.button.accessibleName()
 
 
 def toast(window: NativeWindow) -> str:

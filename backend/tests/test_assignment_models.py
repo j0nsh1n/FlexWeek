@@ -59,6 +59,13 @@ def test_assignment_rejects_unknown_fields() -> None:
         Assignment.model_validate(assignment(planned_min=30))
 
 
+def test_assignment_keeps_an_explicit_spread_choice_and_defaults_to_one_go() -> None:
+    assert "spread" not in Assignment.model_validate(assignment()).model_dump()
+    assert Assignment.model_validate(assignment(spread="spread")).model_dump()["spread"] == "spread"
+    with pytest.raises(ValidationError, match="spread"):
+        Assignment.model_validate(assignment(spread="sometimes"))
+
+
 def test_assignment_due_accepts_a_date_without_a_time() -> None:
     saved = Assignment.model_validate(assignment(due="2026-09-15"))
     assert saved.due == "2026-09-15"

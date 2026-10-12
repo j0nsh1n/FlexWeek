@@ -528,7 +528,7 @@ def test_plan_says_what_it_did_with_an_undo_that_takes_it_all_back(
     assert planned != before
     assert window.toast.button.isVisible()
     assert window.toast.text() == "Placed 3 homework blocks."
-    assert window.toast.button.text() == "Undo"
+    assert window.toast.button.accessibleName() == "Undo" and window.toast.button.text().startswith("Undo")
 
     window.toast.button.click()
     settled(qapp, window)
@@ -553,7 +553,7 @@ def test_replan_all_is_one_undo_step(qapp: QApplication, window: NativeWindow) -
     window.findChild(QPushButton, "replanAll").click()
     settled(qapp, window)
     assert stored_blocks(window) != before
-    assert window.toast.button.text() == "Undo"
+    assert window.toast.button.accessibleName() == "Undo" and window.toast.button.text().startswith("Undo")
     window.toast.button.click()
     settled(qapp, window)
     assert stored_blocks(window) == before
@@ -683,8 +683,9 @@ def test_homework_editor_refuses_each_field_in_its_own_words(
             monkeypatch.setattr(HomeworkDialog, "_chosen_due", lambda _dialog: value)
         dialog.accept()
         assert dialog.isVisible(), "invalid homework stays open"
-        assert dialog.error.text() == said
-        assert "Value error" not in dialog.error.text()
+        error = dialog.title_problem if field == "title" else dialog.error
+        assert error.text() == said
+        assert "Value error" not in error.text()
     finally:
         dialog.close()
 

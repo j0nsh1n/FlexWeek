@@ -121,8 +121,8 @@
  {
   "file": "desktop/native/widgets.py",
   "name": "deleting a block asks first",
-  "old": "if not confirm(self, \"Delete event\", f\"Delete {name}? You can undo this.\", \"Delete\"):",
-  "new": "if False:",
+  "old": "elif not confirm(self, f\"Delete {name}?\", question, \"Delete\"):",
+  "new": "elif False:",
   "test": "desktop/tests/test_block_editor_words.py::test_delete_asks_first_and_does_nothing_when_refused"
  },
  {

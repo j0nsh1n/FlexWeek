@@ -188,6 +188,57 @@ def test_a_rail_chip_shortens_its_title_to_the_rail_and_keeps_its_length(qapp: Q
     assert chip.shown_title() == title, "given room again, it says it all"
 
 
+def test_rail_says_when_one_go_does_not_fit_and_offers_to_split(qapp: QApplication) -> None:
+    from desktop.native.hours.rail import Rail
+
+    assignment = {
+        "id": "poster",
+        "title": "Science poster",
+        "due": "2026-09-25T23:59",
+        "estimate_min": 90,
+        "spread": "one",
+    }
+    poster = {
+        "id": "poster-1",
+        "title": "Science poster",
+        "kind": "flexible",
+        "category": "homework",
+        "assignment_id": "poster",
+        "duration_min": 90,
+        "days": [0, 1, 2, 3, 4],
+    }
+    rail = Rail(a_hand())
+    week = build_week("2026-09-21", [poster], {"poster": assignment})
+    rail.set_week(
+        week,
+        0,
+        16 * 60 + 30,
+        {"poster": assignment},
+        [{"assignment_id": "poster", "title": assignment["title"], "minutes": 90}],
+        set(),
+    )
+    assert rail.findChild(QLabel, "railOneGoMessage") is None
+    rail.set_week(
+        week,
+        0,
+        16 * 60 + 30,
+        {"poster": assignment},
+        [{"assignment_id": "poster", "title": assignment["title"], "minutes": 90}],
+        {"poster"},
+    )
+    message = rail.findChild(QLabel, "railOneGoMessage")
+    assert message is not None and "doesn't fit in one go" in message.text()
+    action = rail.findChild(QPushButton, "railAllowSplitting")
+    assert action is not None
+    assert action.accessibleName() == (
+        "Science poster doesn't fit in one go before Fri 25 Sep. Allow splitting?"
+    )
+    selected: list[str] = []
+    rail.allow_split_requested.connect(selected.append)
+    action.click()
+    assert selected == ["poster"]
+
+
 def test_a_tray_chip_shortens_its_title_and_keeps_its_length_whole(qapp: QApplication) -> None:
     """The length is the number the chip is for, so the title gives way first: "Science pos… ·
     1 h 30 min", not "Science poster · 1 h …". With no room for a letter of the title beside the

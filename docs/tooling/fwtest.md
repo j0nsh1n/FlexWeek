@@ -69,6 +69,8 @@ fwtest clean
   allocated is allowed, including `:0`. `FLEXWEEK_RIG_KEEP` is removed
   before the driver starts, and the run always stops the session afterwards by the PIDs recorded in
   its state file. `fwtest rig --list` does not start a session.
+- `rig --play PLAY.json` runs the steps in a file instead of the fixed scenarios. See
+  [Playing the app](#playing-the-app).
 - `run` runs any command as a job, with the guarantees above. It exists for the picture tours and
   the one-off scripts that currently go through `run-alone.sh`.
 - `clean` stops every process recorded by a job that is no longer running. It also stops a hidden
@@ -89,6 +91,104 @@ these exists, `fwtest` says so and exits 2 rather than falling back to the syste
 Exit codes: 0 when everything passed; 1 when a check failed or a mutation survived; 124 when a job
 timed out; 75 when another suite outside `fwtest` held the machine for 30 minutes; 2 for a usage
 error.
+
+## Playing the app
+
+`fwtest rig --play PLAY.json [--out DIR]` lets an agent use FlexWeek the way a student does. The rig starts
+the app on its hidden desktop (never the developer's display or bus), signs in a throwaway account against
+a local server, holds the clock, and then does what the file says with the real pointer and keyboard
+(xdotool, as the scenarios do). It records what the screen showed after each step. `--play` does not
+combine with `--design`, `--tab`, `--scenario`, `--option` or `--list`. The sound is off.
+
+A play file is JSON, with `setup` (all of it optional) and `steps`:
+
+```json
+{
+  "setup": {
+    "clock": "2026-10-15T17:00",
+    "seed": "rig",
+    "size": [1280, 800],
+    "design": "classic",
+    "clock_24h": false,
+    "text": "normal",
+    "look": "terminal"
+  },
+  "steps": [
+    {"click": "objectName"},
+    {"click": [640, 300]},
+    {"click": {"text": "Button words"}},
+    {"double_click": "objectName"},
+    {"right_click": "objectName"},
+    {"drag": ["objectName", [700, 420]]},
+    {"type": "words"},
+    {"key": "shift+Tab"},
+    {"wait": 500},
+    {"advance_clock": 30},
+    {"shot": "label"},
+    {"tree": "label"},
+    {"say": "a note for the log"}
+  ]
+}
+```
+
+Setup:
+
+| Key | Meaning | Default |
+|---|---|---|
+| `clock` | Local time the clock is held at, `YYYY-MM-DDTHH:MM`. The week shown is that date's week. | Thursday 15:40 of the current week, as the scenarios use |
+| `seed` | `rig`: the scenarios' week (School, Soccer, three homework items). `setup-done`: a new account that skipped Setup, so an empty week with the defaults. `empty`: a new account on the first Setup page. | `rig` |
+| `size` | Window size in pixels, 640x480 up to 3840x2160 | `[1280, 800]` |
+| `design` | Any rig design (`classic`, `timeline`, `mission`, `bento`, `retro`, `clay`) or a My day screen (`one`, `dial`; shown on the My day tab) | `classic` |
+| `clock_24h` | The 24-hour clock. Ignored for `empty`, where Setup asks. | `false` |
+| `text` | `normal` or `large` text | `normal` |
+| `look` | A look preset (`high-contrast`, `paper`, `ink`, `terminal`, `poster`, `pastel`) or a theme pack (`system`, `light-frost`, `dark-frost`, `nocturne`, `slate`). Ignored for the pack when `seed` is `empty`. | the pack's own |
+
+Steps, each an object with one action:
+
+- A target is an `objectName`, a point `[x, y]` in window pixels, or `{"text": "Button words"}`, which
+  matches a button, a label, an accessible name or a menu row by the words a student reads (case and a
+  trailing "..." do not matter; an exact match wins over a partial one, then the topmost, leftmost).
+  A menu or dialog that is still opening is waited for, up to 2 s.
+- `click`, `double_click`, `right_click`: move the pointer onto the target, press and release.
+- `drag`: `[from, to]`, each a target. Press, travel in steps, let go.
+- `type`: the words, typed key by key into whatever has the keyboard focus. A newline presses Return.
+- `key`: one xdotool key name or combination: `Tab`, `shift+Tab`, `ctrl+z`, `Escape`, `Return`, `space`.
+- `wait`: milliseconds, up to 60000.
+- `advance_clock`: minutes. Moves the held clock forward and runs the app's reminder, focus-timer and
+  layout timers once, so what changes with the time shows up now.
+- `shot`: PNG of the window, and one more of each open dialog or menu.
+- `tree`: JSON of every visible widget: class, `objectName`, `accessibleName`, `accessibleDescription`,
+  text, geometry in window pixels, enabled, has focus, checked; menu rows too. It also names the focused
+  widget and the open dialog. Password boxes show `(hidden)`.
+- `say`: a note in the log.
+
+Every step writes one line to `DIR/log.txt`: what it did, where the pointer went, the widget with focus,
+the open dialog and the open menu. A step that cannot be done (no such widget or text, a dialog in the
+way, xdotool failing) logs `NOT DONE` and why, and the play goes on. A final shot and tree are always
+taken. The play file is checked before the session starts, and every mistake in it is named with its step
+number. Files are numbered by step (`04-after-tab.png`, `04-after-tab.json`); a dialog or menu gets the
+class name added to the shot's name. `DIR` is `~/.flexweek-ui-harness/scratch/plays/<time>-<play name>/`
+unless `--out` names it.
+
+Example: a new account that skipped Setup, Add fixed time, type a title, Tab, look at the result.
+
+```json
+{
+  "setup": {"seed": "setup-done"},
+  "steps": [
+    {"click": "addArrow"},
+    {"key": "Escape"},
+    {"key": "space"},
+    {"click": {"text": "Add fixed time"}},
+    {"type": "Band practice"},
+    {"key": "Tab"},
+    {"shot": "after-tab"}
+  ]
+}
+```
+
+The `Escape` then `space` after the click is deliberate. On a fresh window the first click on a menu
+button sometimes only focuses it (cause not found), so the keyboard opens the menu either way.
 
 ## Data
 

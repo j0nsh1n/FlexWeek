@@ -13,7 +13,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QAccessible
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
@@ -74,10 +74,9 @@ def unnamed(root: QWidget) -> list[str]:
         if isinstance(field, QComboBox):
             # Qt 6.11 answers a combo box's accessible Name with its current text whatever is set, so
             # a screen reader takes its label from the "labelled by" relation that a buddy creates.
-            # A combo with no visible label carries its own accessible name instead.
-            own = field.accessibleName().strip()
-            if field not in buddies and (not own or own == field.currentText()):
-                bad.append(f"{label} has no buddy label and no name of its own")
+            # A name of its own does not stand in for the buddy.
+            if field not in buddies:
+                bad.append(f"{label} has no buddy label")
             continue
         name = a11y_name(field).strip()
         value = field.currentText() if isinstance(field, Segmented) else ""
@@ -168,7 +167,7 @@ def test_0g_after_fixing_the_username_focus_goes_to_password(qapp, signed_out) -
     w.username.selectAll()
     QTest.keyClicks(w.username, "good_name")
     qapp.processEvents()
-    assert QApplication.focusWidget() is w.password or w.password.isAncestorOf(QApplication.focusWidget())
+    assert QApplication.focusWidget() is w.username and w.username.text() == "good_name"
     assert "password" in w.password.accessibleDescription().lower()
 
 
@@ -268,6 +267,7 @@ def test_0k_a_week_list_names_each_block_with_its_day_and_times(qapp, window) ->
                        "start": "08:30", "duration_min": 405, "days": [0, 1, 2, 3, 4]})
     session.save()
     settled(qapp, window)
+    press(window, Qt.Key.Key_L, Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)
     rows = []
     for listing in window.findChildren(QListWidget):
         if listing.isVisible() or listing.isVisibleTo(window):
@@ -292,6 +292,7 @@ def test_0k_the_week_list_precedes_the_grid_and_enter_opens_a_block(qapp, window
     settled(qapp, window)
     listing = window.week_access_list
     canvas = window.week_table.hours
+    press(window, Qt.Key.Key_L, Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)
     assert listing.isVisible()
     cursor = listing.nextInFocusChain()
     seen: list[QWidget] = []
@@ -333,16 +334,25 @@ def test_0k_week_shortcut_and_mini_month_have_accessible_names(qapp, window) -> 
 
 
 def test_0k_the_week_list_takes_no_room_until_the_keyboard_reaches_it(qapp, window) -> None:
-    # The list is for keyboard and screen-reader use: the week keeps its room until then.
+    # The list is for keyboard and screen-reader use: the week keeps its room until then, and
+    # afterwards (U19): a fixed row is the way in and the grid never moves.
+    # An empty week shows its card instead of the grid, so the grid needs a block to take the keyboard.
+    window.session.add_block({"id": "school", "title": "School", "kind": "locked", "category": "class",
+                              "start": "08:30", "duration_min": 405, "days": [0, 1, 2, 3, 4]})
     settled(qapp, window)
-    listing = window.week_access_list
-    assert listing.isVisible() and listing.height() == 0
+    row = window.week_list_row
+    assert row.isVisible() and row.height() == 28
+    assert not window.week_list_panel.isVisible()
+    grid_top = window.planner.mapTo(window, QPoint(0, 0)).y()
     window.week_table.hours.setFocus(Qt.FocusReason.OtherFocusReason)
     mods = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier
     press(window.week_table.hours, Qt.Key.Key_L, mods)
     settled(qapp, window)
-    assert QApplication.focusWidget() is listing
-    assert listing.height() >= 100
-    window.week_table.hours.setFocus(Qt.FocusReason.OtherFocusReason)
+    assert QApplication.focusWidget() is window.week_access_list
+    assert window.week_list_panel.isVisible() and window.week_access_list.height() >= 100
+    assert window.planner.mapTo(window, QPoint(0, 0)).y() == grid_top
+    press(window.week_access_list, Qt.Key.Key_Escape)
     settled(qapp, window)
-    assert listing.height() == 0
+    assert QApplication.focusWidget() is window.week_table.hours
+    assert not window.week_list_panel.isVisible()
+    assert row.height() == 28 and window.planner.mapTo(window, QPoint(0, 0)).y() == grid_top

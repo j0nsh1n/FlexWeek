@@ -151,6 +151,7 @@ pub fn solve_with(
         extra_occ,
         work,
         Some(&DeadlineOverrides::default()),
+        None,
         SOLVE_BUDGET_MS,
         elapsed_ms,
     )
@@ -227,6 +228,7 @@ pub fn late_legacy(
         None,
         Some(&work),
         Some(&DeadlineOverrides::default()),
+        None,
         SOLVE_BUDGET_MS,
         &real_clock(),
     )

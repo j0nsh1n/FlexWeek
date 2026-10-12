@@ -2,8 +2,8 @@
  {
   "file": "desktop/native/window.py",
   "name": "the plan bar counts the trace, School included",
-  "old": "            self.plan_review.set_trace(fresh, titles, self.session.week_start, self.session.plan_counts)\n",
-  "new": "            self.plan_review.set_trace(\n                fresh, titles, self.session.week_start, (len(fresh.get(\"placed\") or []), 0)\n            )\n",
+  "old": "            self.plan_review.set_trace(\n                fresh,\n                titles,\n                self.session.week_start,\n                self.session.plan_counts,\n                self.session.assignments,\n            )\n",
+  "new": "            self.plan_review.set_trace(\n                fresh,\n                titles,\n                self.session.week_start,\n                (len(fresh.get(\"placed\") or []), 0),\n                self.session.assignments,\n            )\n",
   "test": "desktop/tests/test_layouts_window.py::test_the_plan_bar_counts_what_the_toast_counts"
  },
  {
@@ -30,8 +30,8 @@
  {
   "file": "engine/engine/src/desk/weekmodel.rs",
   "name": "a 12-hour range says PM twice",
-  "old": "    if first_half == last_half {\n",
-  "new": "    if false && first_half == last_half {\n",
+  "old": "    if first_half == last_half && !ends_at_midnight {\n",
+  "new": "    if false && first_half == last_half && !ends_at_midnight {\n",
   "test": "desktop/tests/test_clock.py::test_the_hours_words"
  },
  {

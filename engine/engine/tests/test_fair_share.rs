@@ -1,7 +1,8 @@
-//! Item 1c, part C: work due after this Sunday gets a fair share of this week, and the rest waits
-//! for next week's Plan.
+//! P1 keeps the homework estimate intact while sharing only work due beyond the coming week.
 
-use flexweek_engine::desk::planning::fair_share;
+use flexweek_engine::desk::planning::{
+    fair_share, move_earlier_homework, open_rest_sessions, time_still_needed,
+};
 use serde_json::{Map, Value, json};
 
 const WEEK: &str = "2026-10-05"; // Monday
@@ -11,7 +12,7 @@ fn science(due: &str, estimate: i64) -> Map<String, Value> {
     table.insert(
         "sci".into(),
         json!({"id": "sci", "title": "Science project", "due": due, "estimate_min": estimate,
-               "focus_minutes": 0}),
+               "focus_minutes": 0, "spread": "spread"}),
     );
     table
 }
@@ -35,29 +36,25 @@ fn share(
         &json!([]),
         WEEK,
         first_day,
+        0,
+        &[],
         &targets,
     )
     .unwrap()
 }
 
 #[test]
-fn due_next_wednesday_planned_on_saturday_gets_two_of_its_four_days() {
-    // Sat and Sun this week, Mon and Tue next week: 2 h over 4 days is 1 h this week.
+fn due_next_wednesday_planned_on_saturday_stays_whole_within_seven_days() {
     let (blocks, notes) = share(&[session("s1", 120)], "2026-10-14T23:59", 120, 5, &["s1"]);
-    assert_eq!(blocks[0]["duration_min"], json!(60));
-    assert_eq!(
-        notes,
-        vec![
-            json!({"assignment_id": "sci", "title": "Science project", "this_week_min": 60, "left_min": 60})
-        ]
-    );
+    assert_eq!(blocks[0]["duration_min"], json!(120));
+    assert!(notes.is_empty());
 }
 
 #[test]
-fn the_share_rounds_up_to_the_quarter_hour() {
-    // Monday plan, due Wednesday next week: 7 of 9 days, 105 min * 7 / 9 = 81.7, so 90.
-    let (blocks, _) = share(&[session("s1", 105)], "2026-10-14T23:59", 105, 0, &["s1"]);
-    assert_eq!(blocks[0]["duration_min"], json!(90));
+fn due_wednesday_after_next_week_gets_a_fair_share_by_plannable_days() {
+    let (blocks, notes) = share(&[session("s1", 105)], "2026-10-14T23:59", 105, 0, &["s1"]);
+    assert_eq!(blocks[0]["duration_min"], json!(75));
+    assert_eq!(notes[0]["left_min"], json!(30));
 }
 
 #[test]
@@ -76,7 +73,14 @@ fn due_next_monday_keeps_all_of_it_this_week() {
 }
 
 #[test]
-fn time_already_held_this_week_counts_toward_the_share() {
+fn work_due_seven_days_from_today_is_not_shared() {
+    let (blocks, notes) = share(&[session("s1", 120)], "2026-10-12T23:59", 120, 0, &["s1"]);
+    assert_eq!(blocks[0]["duration_min"], json!(120));
+    assert!(notes.is_empty());
+}
+
+#[test]
+fn homework_due_within_seven_days_keeps_its_unplaced_session_with_existing_time() {
     let mut held = session("held", 45);
     held["start"] = json!("16:00");
     held["days"] = json!([5]);
@@ -87,12 +91,12 @@ fn time_already_held_this_week_counts_toward_the_share() {
         5,
         &["s1"],
     );
-    assert_eq!(blocks[1]["duration_min"], json!(15));
-    assert_eq!(notes[0]["this_week_min"], json!(60));
+    assert_eq!(blocks[1]["duration_min"], json!(75));
+    assert!(notes.is_empty());
 }
 
 #[test]
-fn a_session_with_no_share_left_leaves_the_week() {
+fn homework_due_within_seven_days_is_not_removed_when_another_session_is_held() {
     let mut held = session("held", 60);
     held["start"] = json!("16:00");
     let (blocks, notes) = share(
@@ -102,19 +106,199 @@ fn a_session_with_no_share_left_leaves_the_week() {
         5,
         &["s1"],
     );
-    assert_eq!(
-        blocks
-            .iter()
-            .map(|b| b["id"].as_str().unwrap())
-            .collect::<Vec<_>>(),
-        vec!["held"]
-    );
-    assert_eq!(notes[0]["left_min"], json!(60));
+    assert_eq!(blocks.len(), 2);
+    assert!(notes.is_empty());
 }
 
 #[test]
-fn planning_again_does_not_shrink_it_further() {
-    // The first plan left a 60 min session; the second plan is worked out from the 120 min left.
-    let (blocks, _) = share(&[session("s1", 60)], "2026-10-14T23:59", 120, 5, &["s1"]);
-    assert_eq!(blocks[0]["duration_min"], json!(60));
+fn spreading_a_partial_session_keeps_the_estimate_across_both_sessions() {
+    let (blocks, _) = share(&[session("s1", 60)], "2026-10-21T23:59", 120, 5, &["s1"]);
+    assert_eq!(
+        blocks
+            .iter()
+            .map(|block| block["duration_min"].as_i64().unwrap())
+            .sum::<i64>(),
+        120
+    );
+}
+
+#[test]
+fn open_rest_adds_one_idempotent_session_for_homework_due_after_this_week() {
+    let mut assignments = science("2026-10-14T23:59", 120);
+    assignments["sci"]["unplanned_min"] = json!(120);
+    let first = open_rest_sessions(&[], &assignments, WEEK, &[]).unwrap();
+    assert_eq!(first.len(), 1);
+    assert_eq!(first[0]["duration_min"], json!(120));
+    assert_eq!(
+        open_rest_sessions(&first, &assignments, WEEK, &[]).unwrap(),
+        first
+    );
+}
+
+#[test]
+fn open_rest_does_not_duplicate_homework_already_placed_in_an_earlier_week() {
+    let mut assignments = science("2026-10-21T23:59", 120);
+    assignments["sci"]["unplanned_min"] = json!(120);
+    let earlier = [json!({
+        "id": "sci-session",
+        "assignment_id": "sci",
+        "start": "16:00",
+        "duration_min": 120,
+        "completed": false
+    })];
+
+    let blocks = open_rest_sessions(&[], &assignments, WEEK, &earlier).unwrap();
+
+    assert!(blocks.is_empty());
+}
+
+#[test]
+fn time_still_needed_reports_the_open_session_amount() {
+    let mut assignments = science("2026-10-14T23:59", 120);
+    assignments["sci"]["unplanned_min"] = json!(0);
+    let counts = time_still_needed(&assignments, &[session("s1", 120)], WEEK).unwrap();
+    assert_eq!(counts[0]["minutes"], json!(120));
+    assert_eq!(counts[0]["period"], json!("later"));
+}
+
+#[test]
+fn time_still_needed_does_not_double_count_an_open_week_remainder() {
+    let mut assignments = science("2026-10-14T23:59", 120);
+    assignments["sci"]["unplanned_min"] = json!(60);
+    let counts = time_still_needed(&assignments, &[session("s1", 30)], WEEK).unwrap();
+    assert_eq!(counts[0]["minutes"], json!(60));
+}
+
+#[test]
+fn days_without_study_windows_are_not_part_of_this_weeks_share() {
+    let windows = vec![json!({"days": [0, 1, 2, 3, 4], "start": "19:00", "end": "21:00"})];
+    let (blocks, notes) = fair_share(
+        &[session("s1", 120)],
+        &science("2026-10-21T23:59", 120),
+        &json!([]),
+        WEEK,
+        5,
+        825,
+        &windows,
+        &["s1".to_string()],
+    )
+    .unwrap();
+    assert_eq!(blocks[0]["duration_min"], json!(120));
+    assert_eq!(notes[0]["this_week_min"], json!(0));
+    assert_eq!(notes[0]["left_min"], json!(120));
+}
+
+#[test]
+fn today_counts_when_a_free_slot_remains_after_the_clock() {
+    let windows = vec![json!({"days": [6], "start": "10:00", "end": "12:00"})];
+    let (blocks, _) = fair_share(
+        &[session("s1", 120)],
+        &science("2026-10-28T23:59", 120),
+        &json!([]),
+        WEEK,
+        6,
+        660,
+        &windows,
+        &["s1".to_string()],
+    )
+    .unwrap();
+    assert_eq!(blocks[0]["duration_min"], json!(45));
+}
+
+#[test]
+fn today_does_not_count_when_a_commitment_uses_every_slot_after_the_clock() {
+    let windows = vec![json!({"days": [6], "start": "10:00", "end": "12:00"})];
+    let held = json!([{
+        "id": "appointment",
+        "kind": "locked",
+        "days": [6],
+        "start": "11:00",
+        "duration_min": 60
+    }]);
+    let (blocks, notes) = fair_share(
+        &[session("s1", 120)],
+        &science("2026-10-28T23:59", 120),
+        &held,
+        WEEK,
+        6,
+        660,
+        &windows,
+        &["s1".to_string()],
+    )
+    .unwrap();
+    assert_eq!(blocks[0]["duration_min"], json!(120));
+    assert_eq!(notes[0]["this_week_min"], json!(0));
+    assert_eq!(notes[0]["left_min"], json!(120));
+}
+
+#[test]
+fn later_due_dates_count_their_full_study_calendar() {
+    let windows = vec![json!({"days": [0, 1, 2, 3, 4], "start": "19:00", "end": "21:00"})];
+    let (blocks, _) = fair_share(
+        &[session("s1", 120)],
+        &science("2026-12-13T23:59", 120),
+        &json!([]),
+        WEEK,
+        0,
+        0,
+        &windows,
+        &["s1".to_string()],
+    )
+    .unwrap();
+    assert_eq!(blocks[0]["duration_min"], json!(15));
+}
+
+#[test]
+fn homework_set_to_one_go_never_gets_a_fair_share() {
+    let mut assignments = science("2026-10-21T23:59", 180);
+    assignments["sci"]["spread"] = json!("one");
+    let (blocks, notes) = fair_share(
+        &[session("s1", 180)],
+        &assignments,
+        &json!([]),
+        WEEK,
+        0,
+        0,
+        &[],
+        &["s1".to_string()],
+    )
+    .unwrap();
+    assert_eq!(blocks[0]["duration_min"], json!(180));
+    assert!(notes.is_empty());
+}
+
+#[test]
+fn earlier_open_homework_moves_into_this_week_with_both_week_writes() {
+    let assignments = science("2026-10-21T23:59", 60);
+    let prior = vec![json!({
+        "week_start": WEEK,
+        "revision": 3,
+        "blocks": [session("old-session", 60)]
+    })];
+    let moved = move_earlier_homework(&[], &prior, &assignments, "2026-10-12").unwrap();
+    assert_eq!(moved["blocks"][0]["id"], json!("old-session"));
+    assert_eq!(moved["blocks"][0]["duration_min"], json!(60));
+    assert_eq!(moved["blocks"][0]["days"], json!([0, 1, 2, 3, 4, 5, 6]));
+    assert_eq!(moved["weeks"][0]["before"].as_array().unwrap().len(), 1);
+    assert!(moved["weeks"][0]["after"].as_array().unwrap().is_empty());
+    let repeated = move_earlier_homework(
+        moved["blocks"].as_array().unwrap(),
+        &moved["weeks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| {
+                json!({
+                    "week_start": item["week_start"],
+                    "revision": item["revision"],
+                    "blocks": item["after"]
+                })
+            })
+            .collect::<Vec<_>>(),
+        &assignments,
+        "2026-10-12",
+    )
+    .unwrap();
+    assert_eq!(repeated["blocks"], moved["blocks"]);
+    assert!(repeated["weeks"].as_array().unwrap().is_empty());
 }

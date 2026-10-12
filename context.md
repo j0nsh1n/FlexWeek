@@ -1,6 +1,16 @@
 # context.md — FlexWeek
 
 ## Current State
+- 2026-10-11: v0.19.2 prepared on `release/0.19.2` (worktree `~/.worktrees/flexweek-0190`, `.venv` is
+  `venv-0192-rel`): the 0.19.1 QA handoff's Fix first items (F3, F3b, 3-R, L12, T-W1, R10, 0l-R, A28,
+  0f-R, R1, N15, S1, A27, T1, P1, U19) and the fixes from two QA testers who used the app through
+  `fwtest rig --play` (question sheets never cut their words; Running late's preview draws each
+  change once with its title; Enter submits the account cards; split homework rows show their own
+  time; due dates step past the week; the More count reads the one engine count and sits on the
+  More button, not a bar above the week; the "Week as a list" row is 28 px, 32 at Large text).
+  Regression Tester's suites live in desktop/tests/regress184, regress190 and backend/tests/regress184,
+  collected only with FLEXWEEK_REGRESS=1 (regress184 waits for its conftest). `scripts/rig/play.py`
+  gives agents a play mode (steps, shots and widget trees). R11 and 1b-R moved to 1.0.0.
 - 2026-10-10: v0.19.1 on `release/0.19.1` (same worktree and venv as 0.19.0): J19, the Add fixed time
   sheet built ahead while idle (`_block_spare`, one account and one look, dropped on either change;
   editing a block still builds on demand); the sign-in card holds its height only while its page
@@ -137,11 +147,9 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
-- 2026-10-10, `release/0.19.1`: J19 (a GPT-6 Luna lane, reviewed and fixed by Claude), the Retro
-  Large-text window height and Month at 1024x640, on Jonathan's full go for 0.19.1 (push, PR, merge,
-  release). Kept as they are, his to revisit: "12:00 AM" for the end of the day on the 12-hour clock,
-  the shorter sign-in reset note, a whole series' typed start in the past allowed, the stacked dated
-  day chips. A Grok audit of 0.19.0 is running on his side.
-- Next: 1.0.0 with the Android companion (Rust core via UniFFI, Kotlin and Compose) and iroh device
-  sync with background sync on the phone (about Oct 22); plan in
-  `~/.flexweek-ui-harness/scratch/PLAN-0185-to-100.md`.
+- 2026-10-11, `release/0.19.2`: every lane merged. Final `fwtest gate --workers 3` on the branch: 4838 passed,
+  no skips or xfails; `fwtest rig`: 249/249. Pushed and opened as a PR to main on Jonathan's word; merge and
+  publish v0.19.2 as latest (CI builds the installers on publish; release notes in
+  `docs/release-notes-v0.19.2.md`).
+- After that, 1.0.0: the roadmap's "1.0.0 — running list" (deferred items, N1-N14, QA leftovers, the two
+  design-round picks, Android and sync). The design demo site is `~/.flexweek-ui-harness/scratch/design-1.0.0/`.

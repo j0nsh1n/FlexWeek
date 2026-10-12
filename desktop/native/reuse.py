@@ -136,6 +136,8 @@ def fair_share(
     committed: list[dict],
     week_start: str,
     first_day: int,
+    first_minute: int,
+    work_windows: list[dict],
     targets: set[str],
 ) -> tuple[list[dict], list[dict]]:
     """Work due after this Sunday cut to its fair share of this week (item 1c, part C), and a note for
@@ -146,9 +148,42 @@ def fair_share(
         json.dumps(committed),
         week_start,
         first_day,
+        json.dumps({"first_minute": first_minute, "work_windows": work_windows}),
         list(targets),
     )
     return json.loads(week), json.loads(notes)
+
+
+def open_rest_sessions(
+    blocks: list[dict], assignments: dict, week_start: str, earlier_blocks: tuple[dict, ...] | list[dict] = ()
+) -> list[dict]:
+    return json.loads(
+        flexweek_engine.reuse_open_rest(
+            json.dumps(blocks), json.dumps(assignments), week_start, json.dumps(earlier_blocks)
+        )
+    )
+
+
+def move_earlier_homework(
+    blocks: list[dict], earlier_weeks: list[dict], assignments: dict, week_start: str
+) -> tuple[list[dict], list[dict], list[dict]]:
+    result = json.loads(
+        flexweek_engine.reuse_move_earlier_homework(
+            json.dumps(blocks),
+            json.dumps(earlier_weeks),
+            json.dumps(assignments),
+            week_start,
+        )
+    )
+    return result["blocks"], result["moved"], result["weeks"]
+
+
+def time_still_needed(assignments: dict, open_week_blocks: list[dict], week_start: str) -> list[dict]:
+    return json.loads(
+        flexweek_engine.reuse_time_still_needed(
+            json.dumps(assignments), json.dumps(open_week_blocks), week_start
+        )
+    )
 
 
 def due_point(due: str | None, week_start: str) -> tuple[int, int] | None:

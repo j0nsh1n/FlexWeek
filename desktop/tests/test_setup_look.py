@@ -33,6 +33,7 @@ if importlib.util.find_spec("PySide6") is not None:
         PENDING,
         REMINDERS,
         SETUP_COLUMN,
+        SKIPPED,
         STYLE,
         WEEK,
         SetupPage,
@@ -114,17 +115,36 @@ def test_a_finished_step_shows_a_tick_on_the_rail(
     qapp: QApplication, dressed: tuple[SetupPage, dict]
 ) -> None:
     setup, palette = dressed
-    setup.skip.click()
-    setup.skip.click()
+    setup.next.click()
+    setup.next.click()
     assert setup.step == HOMEWORK
     states = [FINISHED, FINISHED, CURRENT, PENDING, PENDING, PENDING]
     for index, state in enumerate(states):
         assert picture(setup, index) == badge(index + 1, state, setup, palette), (index, state)
-    assert [item.accessibleDescription() for item in setup.rail_items[:3]] == ["Done", "Done", ""]
+    assert [item.accessibleDescription() for item in setup.rail_items[:3]] == ["Done", "Done", "Current step"]
     tick = badge(1, FINISHED, setup, palette)
     # Above the tick and inside the ring.
     assert tick.pixelColor(BADGE_PX // 2, 4) == QColor(palette["accent"]), "a tick on the accent"
     assert badge(1, PENDING, setup, palette).pixelColor(BADGE_PX // 2, 4).alpha() == 0, "a ring, not filled"
+
+
+def test_a_skipped_step_is_marked_skipped_not_done(
+    qapp: QApplication, dressed: tuple[SetupPage, dict]
+) -> None:
+    """F3b: a step left by Skip is not done, so it shows a dash in a dashed ring, not the tick."""
+    setup, palette = dressed
+    setup.skip.click()
+    setup.skip.click()
+    assert setup.step == HOMEWORK
+    states = [SKIPPED, SKIPPED, CURRENT, PENDING, PENDING, PENDING]
+    for index, state in enumerate(states):
+        assert picture(setup, index) == badge(index + 1, state, setup, palette), (index, state)
+    assert [item.accessibleDescription() for item in setup.rail_items[:3]] == [
+        "Skipped",
+        "Skipped",
+        "Current step",
+    ]
+    assert badge(1, SKIPPED, setup, palette) != badge(1, FINISHED, setup, palette)
 
 
 def filled(setup: SetupPage, accent: str) -> list[str]:

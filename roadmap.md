@@ -13,11 +13,12 @@ this file's git history, in `CHANGELOG.md`, and in `docs/cac-build-plan.md`.
   Month; J14 to J17) is released as latest. v0.18.3 (2026-10-08), v0.18.2
   (2026-10-04) and v0.18.1 (2026-10-03) came before it. v0.18.0 brought the
   Rust engine.
-- v0.18.5 (Consistency and polish) and v0.19.0 (the QA handoff's Fix first
-  items and the Codex audit's findings, 2026-10-10) are released. v0.19.1
-  (J19, Retro at Large text on a laptop, Month at 1024x640) is prepared on
-  `release/0.19.1`. Next: 1.0.0 with the Android companion and device sync
-  (about Oct 22).
+- v0.18.5 (Consistency and polish), v0.19.0 (the QA handoff's Fix first
+  items and the Codex audit's findings, 2026-10-10) and v0.19.1 (J19, Retro at
+  Large text on a laptop, Month at 1024x640) are released. v0.19.2 (the
+  0.19.1 QA handoff's Fix first items plus the fixes from two QA testers who
+  used the app) is prepared on `release/0.19.2`. Next: 1.0.0 with the Android
+  companion and device sync (about Oct 22) and the list under "1.0.0".
 - Decisions left open by 0.18.1 are listed under "Open after 0.18.1".
 - 16 days to the contest submission (Phase 8).
 
@@ -716,6 +717,57 @@ clock-change "2 h".
 Coverage: Fix first (20) all in 0.18.1. Next patch (65): #6 #7 #42 #46 #50 #53
 #76 ride along in 0.18.1, the other 58 are in 0.18.2 and 0.18.3. Maybe on
 purpose (12) decided at 0.18.2 (#41) and 0.18.3. Deliberate (5) closed.
+
+### 1.0.0 — running list (from 0.19.2, 2026-10-11)
+Jonathan keeps all of these for 1.0.0; lanes are cut from this list after
+v0.19.2 ships. Design rounds first produce a page in the demo site
+(`~/.flexweek-ui-harness/scratch/design-1.0.0/`), then native code.
+- Deferred from 0.19.2: R11 (Day/Week/Month/My day as one keyboard radio
+  group; Month stopped fitting 1024x640 after two tries, measure the top bar
+  first; patch `R11-for-1.0.0.patch`), 1b-R (overdue and carried-over
+  homework; its full gate hung at ~93% four times; patches in
+  `1bR-for-1.0.0/`).
+- The handoff's Next patch N1-N14 (`flexweek-0191-handoff/01-fix-specs.md`)
+  and its wording items from T-W3 on (`03-wording-audit.md`).
+- The two QA testers' leftovers (`scratch/0.19.2/qa-triage.md`): Running
+  late also places homework that had no time yet and counts it as "moves"
+  (product call); stale outlines after Undo of Running late and after Plan;
+  Month opens scrolled past its first row and Sunday sits under the scroll
+  bar at 1280x800; Large text at 1024x640 crowds or drops the day names and
+  cuts Month's block names; High contrast's empty-week text over the hour
+  labels and a 3.98:1 look-card focus ring; a focused Settings switch under
+  the Done footer; a new Add fixed time sheet says "End moved to …" before
+  anything changed; a toast after saving homework names no homework; Esc in
+  Add homework drops typed text without asking; the Reset password and
+  Create account cards move up as problem lines appear; "PM" alone on a line
+  in Running late's preview and in My day at 1024x640 Large; the focus timer
+  list's wrapped row (qa-c round 2 if it is not in 0.19.2); small Setup label
+  and segment nits; Retro draws "Add fixed time" as "Add Axed time".
+- Standing design decisions: J8 Timeline's draggable fold and J10 Clay's
+  dimmed, still neighbours, both mocked up first.
+- Design round, planning screen (Jonathan's pick 2026-10-11): the Agenda
+  rail (one time-ordered list: Next with Start focus inline, No time yet
+  chips, Due this week; the mini month behind the title; the rail never
+  changes height) and the shared bar fix for every design (one bar with Plan
+  carrying the not-placed count, a 28 px status strip with Next on the left
+  and the keyboard list link on the right in place of the bare row, two-line
+  day headers at Large text). How many of the six designs stay is decided
+  once the rail exists in one design.
+- Design round, sheets and forms (his pick 2026-10-11): the shared form
+  grammar in every sheet, row form and card (a caption label above each
+  field; the problem as a line in the field's width with no frame; a row's
+  problem spans the row; buttons as wide as their words, stacking when they
+  do not fit; one problem at a time on the account cards with the keyboard
+  sent to it), then Add homework and Add fixed time as three questions
+  (What, When, How long) with answers as clickable crumbs and Enter
+  advancing, the same component for the phone. Open: whether Edit homework
+  steps too.
+- Next design rounds in order: Android companion screens, then Month and
+  My day.
+- Tooling: fwtest's hidden session inherits the caller's environment, so a
+  rig started from a Codex agent dies for want of XDG_RUNTIME_DIR; default
+  it. The rig can inherit another run's look. A play's `text: large` is
+  ignored with the empty seed.
 
 ## Later
 - Android, after the contest; decide phone–laptop sync first.

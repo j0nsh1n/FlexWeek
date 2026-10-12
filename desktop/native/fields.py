@@ -7,8 +7,9 @@ it."""
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
-from PySide6.QtCore import QDate, QDateTime, QEvent, QObject, QRect, QRectF, Qt, QTime, QTimer, Signal
+from PySide6.QtCore import QDate, QDateTime, QEvent, QObject, QRect, QRectF, QSize, Qt, QTime, QTimer, Signal
 from PySide6.QtGui import (
     QAccessible,
     QAccessibleAnnouncementEvent,
@@ -26,10 +27,13 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QAbstractSpinBox,
+    QBoxLayout,
     QCalendarWidget,
     QDateEdit,
     QDateTimeEdit,
+    QFormLayout,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -45,7 +49,7 @@ from backend.slots import SLOT_MIN
 from desktop.native import icons
 from desktop.native.calendar import DAY_FULL, DAYS
 from desktop.native.tokens import WEIGHT_STRONG
-from desktop.native.weekmodel import clock_text, time_format
+from desktop.native.weekmodel import clock_text, end_after_start_words, time_format
 
 # A day of another month, and the letters over the days, as shares of the text colour on the card.
 FAINT = 0.45
@@ -279,6 +283,7 @@ class DateField(QDateEdit):
         # The day a typed date is counted from; the window's clock where it has one.
         self.today: QDate | None = None
         self._typed = False
+        self.week_steps = False
         self.editingFinished.connect(self._next_matching_date)
         self.setCalendarPopup(True)
         # The month is made on the first press or key, before Qt opens its popup: built with the
@@ -321,6 +326,16 @@ class DateField(QDateEdit):
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802 - Qt virtual
         self._ensure_look_calendar()
+        steps = {
+            Qt.Key.Key_Up: 1,
+            Qt.Key.Key_Down: -1,
+            Qt.Key.Key_PageUp: -7,
+            Qt.Key.Key_PageDown: 7,
+        }
+        if self.week_steps and event.key() in steps:
+            self.setDate(self.date().addDays(steps[event.key()]))
+            event.accept()
+            return
         if event.text().strip() and event.text().isprintable():
             # Typing in the year gives a year; typing a day or a month leaves it to the field.
             self._typed = self.currentSection() != QDateTimeEdit.Section.YearSection
@@ -370,9 +385,7 @@ def announce(widget: QWidget, words: str, *, assertive: bool = False) -> None:
 
 
 class ProblemLine(QFrame):
-    """A short problem written under a field, with a warning icon, in a frame of its own: it floats over
-    what is below, so it needs no room kept for it in forms of every shape. It is a child of the nearest
-    ancestor that can hold it, so it scrolls with the field."""
+    """A short problem written under a field, with a warning icon, in a frame of its own."""
 
     GAP = 4
     MAX_WIDTH = 360
@@ -380,25 +393,148 @@ class ProblemLine(QFrame):
     def __init__(self, field: QWidget) -> None:
         super().__init__(field.parentWidget() or field)
         self.field = field
+        self.overlay = True
+        # The row this line sits under when the field shares its row with others.
+        self._row_width: Callable[[], int] | None = None
+        self.setProperty("problem", False)
         self.setObjectName("clockError")
-        row = QHBoxLayout(self)
+        row = QGridLayout(self)
         row.setContentsMargins(8, 4, 8, 4)
         row.setSpacing(6)
+        row.setColumnStretch(1, 1)
         self.icon = QLabel()
         self.icon.setObjectName("clockErrorIcon")
-        row.addWidget(self.icon, 0, Qt.AlignmentFlag.AlignTop)
+        row.addWidget(self.icon, 0, 0, Qt.AlignmentFlag.AlignTop)
         self.text = QLabel()
         self.text.setObjectName("clockErrorText")
         self.text.setWordWrap(True)
-        row.addWidget(self.text, 1)
+        row.addWidget(self.text, 0, 1)
+        self.action = QPushButton()
+        self.action.setObjectName("clockErrorUse")
+        self.action.setProperty("outlined", True)
+        self.action.setAutoDefault(False)
+        self.action.hide()
+        row.addWidget(self.action, 0, 2, Qt.AlignmentFlag.AlignVCenter)
+        self._take: Callable[[], None] | None = None
+        self.action.clicked.connect(self._act)
         self.hide()
         field.destroyed.connect(self.deleteLater)
 
+    def attach(self, layout, index: int) -> None:
+        """Reserve a row under fields whose forms have a layout. A field that shares its row with
+        others (Start beside End, the "from" and "to" boxes) gets the line as a row of its own under
+        that whole row, so the other fields stay where they were and the row never stretches."""
+        if isinstance(layout, QFormLayout):
+            row, _role = layout.getWidgetPosition(self.field)
+            if row < 0:
+                return
+            layout.insertRow(row + 1, self)
+        elif isinstance(layout, QBoxLayout):
+            if layout.direction() == QBoxLayout.Direction.TopToBottom and index >= 0:
+                layout.insertWidget(index, self)
+            elif not self._attach_under_row(layout):
+                return
+        elif isinstance(layout, QGridLayout):
+            self._attach_in_grid(layout)
+        else:
+            return
+        self.overlay = False
+
+    def _attach_in_grid(self, grid: QGridLayout) -> None:
+        # A row of the grid's own, as wide as the row above it, whatever the line says.
+        # Read off the widgets, not the grid's items: a Python wrapper of a layout item outlives it, and
+        # a new object at its address was handed back as that item.
+        above = [w for w in grid.parentWidget().children() if isinstance(w, QWidget) and w is not self]
+        gaps = grid.horizontalSpacing() * (len(above) - 1)
+        self._row_width = lambda: gaps + sum(widget.sizeHint().width() for widget in above)
+        grid.addWidget(self, grid.rowCount(), 0, 1, grid.columnCount())
+        # A line as narrow as a pair of time boxes keeps its button under the words, not beside them.
+        inside = self.layout()
+        inside.removeWidget(self.action)
+        inside.addWidget(self.action, 1, 1, 1, 2, Qt.AlignmentFlag.AlignLeft)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+
+    def _attach_under_row(self, layout: QBoxLayout) -> bool:
+        row = layout.parentWidget()
+        above = row.parentWidget().layout() if row is not None and row.parentWidget() is not None else None
+        if isinstance(above, QFormLayout):
+            at, _role = above.getWidgetPosition(row)
+            if at < 0:
+                return False
+            above.insertRow(at + 1, self)
+        elif isinstance(above, QBoxLayout) and above.direction() == QBoxLayout.Direction.TopToBottom:
+            at = above.indexOf(row)
+            if at < 0:
+                return False
+            above.insertWidget(at + 1, self)
+        else:
+            return False
+        self._row_width = lambda: row.sizeHint().width()
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        return True
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        self._tell_host()
+
+    def hideEvent(self, event) -> None:  # noqa: N802
+        super().hideEvent(event)
+        self._tell_host()
+
+    def _tell_host(self) -> None:
+        # A line that takes room makes its sheet taller or shorter: a sheet sized when it opened would
+        # scroll for the few pixels it now needs.
+        refit = getattr(self.window(), "refit", None)
+        if not self.overlay and callable(refit):
+            refit()
+
+    def hasHeightForWidth(self) -> bool:  # noqa: N802
+        return self._row_width is not None
+
+    def heightForWidth(self, width: int) -> int:  # noqa: N802
+        layout = self.layout()
+        return layout.totalHeightForWidth(width) if layout is not None else super().heightForWidth(width)
+
+    def sizeHint(self) -> QSize:  # noqa: N802
+        # Under a row, as wide as that row asks, so a long sentence wraps instead of widening the row
+        # (and a flow of rows into the next line).
+        if self._row_width is None:
+            return super().sizeHint()
+        width = self._row_width()
+        return QSize(width, self.heightForWidth(width))
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802
+        if self._row_width is None:
+            return super().minimumSizeHint()
+        # Its height is for a comfortable width, not for the narrowest: a form that asks for the narrow
+        # height scrolls for rows that are never that tall once laid out at the width it has.
+        width = self._row_width()
+        return QSize(width, self.heightForWidth(max(width, self.MAX_WIDTH)))
+
+    def offer(self, words: str, take: Callable[[], None] | None) -> None:
+        """A button beside the problem that puts it right ("Use 3:15 PM"), or none."""
+        self._take = take
+        self.action.setText(words)
+        self.action.setVisible(bool(words) and take is not None)
+        if self.isVisible() and self.overlay:
+            self.place()
+
+    def _act(self) -> None:
+        if self._take is not None:
+            self._take()
+
     def say(self, words: str) -> None:
         self.text.setText(words)
-        self.place()
+        colour = self.text.palette().color(QPalette.ColorRole.WindowText).name()
+        self.icon.setPixmap(icons.pixmap("triangle-alert", colour, 16))
+        self.setProperty("problem", True)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        if self.overlay:
+            self.place()
         self.show()
-        self.raise_()
+        if self.overlay:
+            self.raise_()
 
     def place(self) -> None:
         field = self.field
@@ -447,6 +583,9 @@ class ClockField(QTimeEdit):
     _line: ProblemLine | None = None
     _first_click = False
     _before: int | None = None
+    _start: ClockField | None = None
+    _subject = ""
+    _other = 0
 
     def __init__(
         self, time: QTime | None = None, parent: QWidget | None = None, *, end: bool = False
@@ -472,6 +611,30 @@ class ClockField(QTimeEdit):
     def problem(self) -> str:
         """The line shown under the box while its text says no time, else an empty string."""
         return self._problem
+
+    def pair_with(self, start: ClockField, subject: str = "") -> None:
+        """Make this the end box of `start`. A time typed without AM or PM is read as the one that ends
+        after the start soonest, and an end at or before the start is said under this box. `subject`
+        names what ends ("School") in the line that offers the other half of the day."""
+        self._start = start
+        self._subject = subject
+        start.settled.connect(self._start_settled)
+
+    def _read(self, text: str, *, whole: bool = True) -> int | None:
+        """`text` as read_clock reads it; on the 12-hour clock an end box's bare hour takes AM or PM by
+        its start: 8:30 AM to "3:15" is 3:15 PM, which a bare 3:15 on its own is not (F3)."""
+        minutes = read_clock(text, end=self._end, whole=whole)
+        found = WRITTEN_TIME.fullmatch(text.strip().lower())
+        if minutes is None or self._start is None or found is None or found[3] or "AP" not in time_format():
+            return minutes
+        hour = int(found[1])
+        if not 1 <= hour <= 12:
+            return minutes
+        morning = hour % 12 * 60 + int(found[2] or 0)
+        start = self._start.minutes()
+        later = [END_OF_DAY if at == 0 else at for at in (morning, morning + 12 * 60)]
+        after = [at for at in later if at > start]
+        return min(after) if after else minutes
 
     def _minutes_of(self, time: QTime) -> int:
         minutes = time.hour() * 60 + time.minute()
@@ -505,7 +668,7 @@ class ClockField(QTimeEdit):
         self._touched = True
         if self._before is None:
             self._before = self.minutes()
-        minutes = read_clock(text, end=self._end)
+        minutes = self._read(text)
         if minutes is not None:
             self._take(minutes, as_typed=True)
 
@@ -515,7 +678,7 @@ class ClockField(QTimeEdit):
         one from before they began (a half-typed "15:15" of "15:15x" was taken on the way), and is never
         23:59."""
         line = self.lineEdit()
-        minutes = read_clock(line.text(), end=self._end, whole=False)
+        minutes = self._read(line.text(), whole=False)
         low, high = self._limits()
         before, self._before = self._before, None
         if minutes is None or not low <= minutes <= high:
@@ -538,9 +701,43 @@ class ClockField(QTimeEdit):
         line.blockSignals(True)
         line.setText(clock_text(self.minutes()))
         line.blockSignals(False)
+        self.check_after_start()
         if self._touched:
             self._touched = False
             self.settled.emit(True)
+
+    def check_after_start(self) -> None:
+        """An end at or before its start is said under the end box, where the student is, and Save and
+        Next stay on it (held_on_problem); the form's own line was below the buttons."""
+        if self._start is None or self._problem:
+            return
+        start, end = self._start.minutes(), self.minutes()
+        if end > start:
+            return
+        other = end + 12 * 60 if end < 12 * 60 else end - 12 * 60
+        self._other = other if self._subject and start < other <= END_OF_DAY else 0
+        if self._other:
+            self._complain(
+                f"{self._subject} ends at {clock_text(end)}, before it starts at {clock_text(start)}. "
+                f"Did you mean {clock_text(other)}?"
+            )
+            if self._line is not None:
+                self._line.offer(f"Use {clock_text(other)}", self._use_other)
+        else:
+            self._complain(end_after_start_words(clock_text(start)))
+
+    def _use_other(self) -> None:
+        other, self._other = self._other, 0
+        if other:
+            self._take(other)
+            self.setFocus(Qt.FocusReason.OtherFocusReason)
+            self.settled.emit(True)
+
+    def _start_settled(self, _by_hand: bool) -> None:
+        # A start moved before the end takes back the problem it caused; a new one waits until the end
+        # box is left, never said while the student is still on the start.
+        if self._problem and self._start is not None and self.minutes() > self._start.minutes():
+            self._mend()
 
     def _complain(self, words: str) -> None:
         fresh = words != self._problem
@@ -549,17 +746,29 @@ class ClockField(QTimeEdit):
         self._outline(True)
         if self._line is None:
             self._line = ProblemLine(self)
+            layout = self.parentWidget().layout() if self.parentWidget() is not None else None
+            if layout is not None:
+                index = layout.indexOf(self)
+                self._line.attach(layout, index + 1 if index >= 0 else -1)
         self._line.say(words)
         if fresh:
             announce(self, words, assertive=True)
+
+    def clear_problem(self) -> None:
+        """Take the problem line away when what the box belongs to no longer counts, such as School
+        with no days ticked."""
+        self._mend()
 
     def _mend(self) -> None:
         if not self._problem:
             return
         self._problem = ""
+        self._other = 0
         self.setAccessibleDescription("")
         self._outline(False)
         if self._line is not None:
+            self._line.offer("", None)
+            self._line.setProperty("problem", False)
             self._line.hide()
 
     def _outline(self, on: bool) -> None:
@@ -568,10 +777,13 @@ class ClockField(QTimeEdit):
         self.style().polish(self)
 
     def textFromDateTime(self, dateTime: QDateTime) -> str:  # noqa: N802, N803
-        return self.lineEdit().text() if self._typing else clock_text(self._minutes_of(dateTime.time()))
+        # Qt asks again whenever the box is shown, reparented or restyled; a problem line under the box
+        # means the text is what the student wrote, which no re-render may replace with the last good time.
+        keep = self._typing or bool(self._problem)
+        return self.lineEdit().text() if keep else clock_text(self._minutes_of(dateTime.time()))
 
     def dateTimeFromText(self, text: str) -> QDateTime:  # noqa: N802
-        minutes = read_clock(text, end=self._end, whole=False)
+        minutes = self._read(text, whole=False)
         if minutes is None:
             return self.dateTime()
         # In the box's own zone: Qt 6.11 keeps its value in UTC, and a local one moved it by the offset.
@@ -672,7 +884,8 @@ class ClockField(QTimeEdit):
 
     def _follow(self) -> None:
         if self._problem and self._line is not None and self.isVisible():
-            self._line.place()
+            if self._line.overlay:
+                self._line.place()
             self._line.show()
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802

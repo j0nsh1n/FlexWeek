@@ -226,7 +226,11 @@ def save_week_row(
     revision: int,
 ) -> tuple[list[dict], int]:
     encoded = json.dumps(blocks, sort_keys=True, separators=(",", ":"))
-    status, stored_revision = db.save_week(user_id, week_start, encoded, revision)
+    try:
+        status, stored_revision = db.save_week(user_id, week_start, encoded, revision)
+    except ValueError as error:
+        # The store refuses a list that repeats a block id and says which one; `encoded` is always valid JSON.
+        raise HTTPException(422, str(error)) from error
     if status == "conflict":
         raise HTTPException(409, WEEK_CONFLICT)
     return blocks, stored_revision
@@ -305,7 +309,11 @@ def replace_account(db: Connection, user_id: int, snapshot: dict) -> dict:
     assignments = [
         (item["id"], canonical(item["body"]), int(item["revision"])) for item in snapshot["assignments"]
     ]
-    db.replace_account(user_id, weeks, assignments)
+    try:
+        db.replace_account(user_id, weeks, assignments)
+    except ValueError as error:
+        # The store refuses a week that repeats a block id and says which one.
+        raise HTTPException(422, str(error)) from error
     return {
         "weeks": [{"week_start": start, "revision": revision} for start, _blocks, revision in weeks],
         "assignments": [
@@ -1558,6 +1566,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 slack_deadlines=extra_slack,
                 extra_occ=extra_occ,
                 work_windows=work_windows,
+                now_floor=week.running_late.now_floor,
             ).model_dump()
         return solve(
             blocks,
@@ -1565,6 +1574,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             slack_deadlines=extra_slack,
             extra_occ=extra_occ,
             work_windows=work_windows,
+            now_floor=week.now_floor,
         ).model_dump()
 
     @app.get("/api/health")

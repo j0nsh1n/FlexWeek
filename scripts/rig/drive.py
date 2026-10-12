@@ -4,6 +4,7 @@
     fwtest rig --design bento --tab day
     fwtest rig --design bento --option hero=today          # a design's saved option
     fwtest rig --design dial --tab myday                   # My day's screens: one, dial
+    fwtest rig --play PLAY.json [--out DIR]                 # an agent's own steps; see play.py
     .venv/bin/python scripts/rig/drive.py --list
 
 Every scenario starts from the same seeded week with the clock held at Thursday 15:40. It opens its
@@ -45,6 +46,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from play import PlayError, default_play_folder, load_play, run_play  # noqa: E402
+
 DESIGNS = ("classic", "timeline", "mission", "bento", "retro", "clay")
 # My day's screens run only the My day scenarios, and the designs only the others.
 MY_DAY = ("one", "dial")
@@ -78,6 +81,29 @@ def parse_options(design: str | None, pairs: list[str]) -> dict[str, str]:
             )
         chosen[key] = value
     return chosen
+
+
+def play_looks() -> tuple[str, ...]:
+    """The names a play's "look" may take: a look preset or a theme pack."""
+    from desktop.native.look import LOOK_PRESETS, PACKS
+
+    return (*(name for name in LOOK_PRESETS if name != "default"), *PACKS)
+
+
+def check_play(args: argparse.Namespace) -> None:
+    """Refuse a play that cannot run, with every mistake named, before a session is started for it."""
+    if not args.play:
+        return
+    if args.design or args.tab or args.scenario or args.option or args.list:
+        raise SystemExit(
+            "--play runs its own steps; --design, --tab, --scenario, --option and --list do not mix with it."
+        )
+    path = Path(args.play).expanduser().resolve()
+    try:
+        load_play(path, (*DESIGNS, *MY_DAY), play_looks())
+    except PlayError as wrong:
+        raise SystemExit(f"{path}:\n{wrong}") from None
+    args.play = str(path)
 
 
 def default_runs_folder(runs_key: str) -> Path:
@@ -116,6 +142,52 @@ def prune_runs(folder: Path) -> None:
     runs = sorted(item for item in folder.iterdir() if item.is_dir() and RUN_NAME.fullmatch(item.name))
     for old in runs[:-KEEP_RUNS]:
         shutil.rmtree(old, ignore_errors=True)
+
+
+def seed_rig_week(app: object, session: object) -> None:
+    """The rig's week: school and soccer, three homework items, and the essay pinned on Thursday evening."""
+    from desktop.native.calendar import sunday_due
+    from desktop.tests.logic_support import wait_until
+
+    due_sunday = sunday_due(session.week_start)
+    due_friday = (
+        datetime.fromisoformat(session.week_start) + timedelta(days=4)
+    ).date().isoformat() + "T23:59"
+    session.add_block(
+        {
+            "id": "school",
+            "title": "School",
+            "kind": "locked",
+            "category": "class",
+            "start": "08:00",
+            "duration_min": 390,
+            "days": [0, 1, 2, 3, 4],
+        }
+    )
+    session.add_block(
+        {
+            "id": "soccer",
+            "title": "Soccer",
+            "kind": "locked",
+            "category": "exercise",
+            "start": "16:00",
+            "duration_min": 90,
+            "days": [1, 3],
+        }
+    )
+    for key, title, due in (
+        ("essay", "History essay", due_sunday),
+        ("math", "Math worksheet", due_sunday),
+        ("poster", "Science poster", due_friday),
+    ):
+        session.add_homework({"id": key, "title": title, "due": due, "estimate_min": 60, "revision": 0})
+    session.save()
+    wait_until(app, lambda: not session.busy and not session.dirty, 20)
+    essay = next(b for b in session.blocks if b.get("assignment_id") == "essay")
+    session.add_block({**essay, "start": "19:00", "days": [3], "pinned": True})
+    session.save()
+    wait_until(app, lambda: not session.busy and not session.dirty, 20)
+
 
 Step = Generator[tuple, object]
 
@@ -207,48 +279,14 @@ def child_main(args: argparse.Namespace) -> int:
     wait_until(app, lambda: window._stack.currentWidget().objectName() == "recoveryPage", 20)
     window.recovery_ack.setChecked(True)
     window.recovery_continue.click()
+    if args.play:
+        play = load_play(Path(args.play), (*DESIGNS, *MY_DAY), play_looks())
+        return run_play(app, window, window.session, server, out, play, seed_rig_week, python_errors)
     past_setup(app, window)
     session = window.session
     thursday = datetime.fromisoformat(session.week_start) + timedelta(days=3, hours=15, minutes=40)
     session.now_ms = lambda: int(thursday.timestamp() * 1000)
-    due_sunday = sunday_due(session.week_start)
-    due_friday = (
-        datetime.fromisoformat(session.week_start) + timedelta(days=4)
-    ).date().isoformat() + "T23:59"
-    session.add_block(
-        {
-            "id": "school",
-            "title": "School",
-            "kind": "locked",
-            "category": "class",
-            "start": "08:00",
-            "duration_min": 390,
-            "days": [0, 1, 2, 3, 4],
-        }
-    )
-    session.add_block(
-        {
-            "id": "soccer",
-            "title": "Soccer",
-            "kind": "locked",
-            "category": "exercise",
-            "start": "16:00",
-            "duration_min": 90,
-            "days": [1, 3],
-        }
-    )
-    for key, title, due in (
-        ("essay", "History essay", due_sunday),
-        ("math", "Math worksheet", due_sunday),
-        ("poster", "Science poster", due_friday),
-    ):
-        session.add_homework({"id": key, "title": title, "due": due, "estimate_min": 60, "revision": 0})
-    session.save()
-    wait_until(app, lambda: not session.busy and not session.dirty, 20)
-    essay = next(b for b in session.blocks if b.get("assignment_id") == "essay")
-    session.add_block({**essay, "start": "19:00", "days": [3], "pinned": True})
-    session.save()
-    wait_until(app, lambda: not session.busy and not session.dirty, 20)
+    seed_rig_week(app, session)
     seed = [dict(block) for block in session.blocks]
     # What a scenario may change on the window itself, put back before the next one.
     base_now, base_request, base_look = session.now_ms, session.client.request, dict(window._look)
@@ -1860,9 +1898,15 @@ def main() -> int:
         metavar="KEY=VALUE",
         help="set one of --design's saved options, e.g. hero=today; repeat for more",
     )
+    parser.add_argument(
+        "--play",
+        metavar="PLAY.json",
+        help="run the steps in this file and record each (see docs/tooling/fwtest.md, Playing the app)",
+    )
     parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     parse_options(args.design, args.option)
+    check_play(args)
     if args.list and not args.child:
         args.out = tempfile.mkdtemp()
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -1874,8 +1918,13 @@ def main() -> int:
 
 def drive(args: argparse.Namespace, display: str, bus: str, runs_key: str) -> int:
     """Run the scenarios in a child on the hidden display, and return its exit code."""
-    runs = None if args.out else default_runs_folder(runs_key)
-    out = Path(args.out) if args.out else runs / f"{datetime.now():%Y%m%d-%H%M%S}-{os.getpid()}"
+    runs = None if args.out or args.play else default_runs_folder(runs_key)
+    if args.out:
+        out = Path(args.out)
+    elif args.play:
+        out = default_play_folder(Path(args.play).stem, datetime.now())
+    else:
+        out = runs / f"{datetime.now():%Y%m%d-%H%M%S}-{os.getpid()}"
     out.mkdir(parents=True, exist_ok=True)
     env = {
         key: value
@@ -1898,6 +1947,8 @@ def drive(args: argparse.Namespace, display: str, bus: str, runs_key: str) -> in
             command += [f"--{flag}", getattr(args, flag)]
     for pair in args.option:
         command += ["--option", pair]
+    if args.play:
+        command += ["--play", args.play]
     try:
         return subprocess.run(command, env=env, cwd=ROOT).returncode
     finally:

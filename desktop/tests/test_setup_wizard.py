@@ -708,7 +708,10 @@ def test_school_has_to_end_after_it_starts(qapp: QApplication) -> None:
     setup._show(WEEK)
     setup.school_times.set_span("15:00", 0)
     setup.next.click()
-    assert setup.step == WEEK and "School" in setup.error.text()
+    # F3b: the problem is said under End, which keeps the keyboard; the bar only counts what is left.
+    assert setup.step == WEEK and setup.error.text() == "1 thing to fix on this step"
+    end = setup.school_times.end
+    assert end.problem() == "End needs to be later than Start (3:00 PM)." and end.hasFocus()
     setup.school_days.set_days([])
     setup.next.click()
     assert setup.step == HOMEWORK, "no school days means no school, so its hours do not matter"

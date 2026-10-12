@@ -625,6 +625,7 @@ pub fn solve(
     extra_occ: Option<&[u128]>,
     work_windows: Option<&[WorkWindow]>,
     overrides: Option<&DeadlineOverrides>,
+    now_floor: Option<(i64, i64)>,
     budget_ms: f64,
     elapsed_ms: &dyn Fn() -> f64,
 ) -> EngineResult<SolveTrace> {
@@ -700,13 +701,17 @@ pub fn solve(
         .iter()
         .enumerate()
         .map(|(idx, block)| {
-            domain(
+            let mut choices = domain(
                 block,
                 &occ_locked,
                 parsed_deadlines[idx],
                 earliest[idx],
                 &planning_windows,
-            )
+            )?;
+            if let Some(floor) = now_floor {
+                choices.retain(|(day, slot)| (*day, DAY_START_MIN + slot * SLOT_MIN) >= floor);
+            }
+            Ok(choices)
         })
         .collect::<EngineResult<Vec<_>>>()?;
 
@@ -947,6 +952,7 @@ pub fn reschedule_after_miss(
         extra_occ,
         work_windows,
         overrides,
+        None,
         budget_ms,
         elapsed_ms,
     )?;
@@ -968,6 +974,7 @@ pub fn reschedule_running_late(
     extra_occ: Option<&[u128]>,
     work_windows: Option<&[WorkWindow]>,
     overrides: Option<&DeadlineOverrides>,
+    now_floor: Option<(i64, i64)>,
     budget_ms: f64,
     elapsed_ms: &dyn Fn() -> f64,
 ) -> EngineResult<SolveTrace> {
@@ -976,14 +983,49 @@ pub fn reschedule_running_late(
         .map(|v| v.to_vec())
         .unwrap_or_else(|| vec![0u128; 7]);
     let combined = merge_occupancy(&base, &late)?;
-    let trace = solve(
-        blocks,
+    let running_id = previous_placed.iter().find_map(|placed| {
+        if placed.kind != "flexible"
+            || placed.completed
+            || placed.days.len() != 1
+            || placed.days[0] != day
+        {
+            return None;
+        }
+        let floor = now_floor?;
+        let start = hhmm_to_minutes(placed.start.as_deref()?).ok()?;
+        (placed.days[0] == floor.0 && start <= floor.1 && floor.1 < start + placed.duration_min)
+            .then(|| placed.id.clone())
+    });
+    let mut shifted_blocks = blocks.to_vec();
+    let mut was_pinned = None;
+    if let Some(id) = &running_id
+        && let Some(block) = shifted_blocks.iter_mut().find(|block| &block.id == id)
+    {
+        let start = hhmm_to_minutes(block.start.as_deref().unwrap_or("00:00"))? + minutes;
+        block.start = Some(slot_to_hhmm((start - DAY_START_MIN) / SLOT_MIN)?);
+        block.pinned = true;
+        was_pinned = Some((
+            id.clone(),
+            blocks
+                .iter()
+                .find(|b| &b.id == id)
+                .is_some_and(|b| b.pinned),
+        ));
+    }
+    let mut trace = solve(
+        &shifted_blocks,
         Some(&combined),
         work_windows,
         overrides,
+        now_floor,
         budget_ms,
         elapsed_ms,
     )?;
+    if let Some((id, pinned)) = was_pinned
+        && let Some(block) = trace.placed.iter_mut().find(|block| block.id == id)
+    {
+        block.pinned = pinned;
+    }
     Ok(reshape_moves(
         trace,
         blocks,
@@ -1256,6 +1298,7 @@ mod tests {
             None,
             Some(&legacy_work_windows()),
             None,
+            None,
             SOLVE_BUDGET_MS,
             &noop_elapsed(),
         )
@@ -1277,6 +1320,7 @@ mod tests {
             None,
             Some(&legacy_work_windows()),
             None,
+            None,
             SOLVE_BUDGET_MS,
             &noop_elapsed(),
         )
@@ -1288,5 +1332,108 @@ mod tests {
         let start = hhmm_to_minutes(hw_placed.start.as_ref().unwrap()).unwrap();
         assert!((6 * 60..8 * 60).contains(&start));
         assert_eq!(hw_placed.start.as_deref(), Some("06:00"));
+    }
+
+    #[test]
+    fn placements_respect_the_now_floor() {
+        let task = flex("hw", "Homework", 60, &[0], "high");
+        let trace = solve(
+            &[task],
+            None,
+            None,
+            None,
+            Some((0, 17 * 60)),
+            SOLVE_BUDGET_MS,
+            &noop_elapsed(),
+        )
+        .unwrap();
+        let placed = trace.placed.iter().find(|block| block.id == "hw").unwrap();
+        assert_eq!(placed.start.as_deref(), Some("17:00"));
+    }
+
+    #[test]
+    fn a_running_flexible_block_shifts_and_keeps_its_pin() {
+        let mut running = flex("running", "Late test", 60, &[0], "low");
+        running.start = Some("16:45".into());
+        running.pinned = true;
+        let trace = reschedule_running_late(
+            &[running.clone()],
+            0,
+            30,
+            "17:00",
+            &[running],
+            None,
+            None,
+            None,
+            Some((0, 17 * 60)),
+            SOLVE_BUDGET_MS,
+            &noop_elapsed(),
+        )
+        .unwrap();
+        let placed = trace
+            .placed
+            .iter()
+            .find(|block| block.id == "running")
+            .unwrap();
+        assert_eq!(placed.start.as_deref(), Some("17:15"));
+        assert!(placed.pinned);
+        assert_eq!(trace.moves.len(), 1);
+        assert_eq!(trace.moves[0].to_start.as_deref(), Some("17:15"));
+    }
+
+    #[test]
+    fn without_a_running_block_other_work_moves_only_after_now() {
+        let mut other = flex("other", "Other", 60, &[0], "high");
+        other.start = Some("17:15".into());
+        let trace = reschedule_running_late(
+            &[other.clone()],
+            0,
+            30,
+            "17:00",
+            &[other],
+            None,
+            None,
+            None,
+            Some((0, 17 * 60)),
+            SOLVE_BUDGET_MS,
+            &noop_elapsed(),
+        )
+        .unwrap();
+        let placed = trace
+            .placed
+            .iter()
+            .find(|block| block.id == "other")
+            .unwrap();
+        assert_eq!(placed.start.as_deref(), Some("17:30"));
+        assert_eq!(trace.moves.len(), 1);
+    }
+
+    #[test]
+    fn a_pinned_block_that_is_not_running_does_not_move() {
+        let mut pinned = flex("pinned", "Pinned", 60, &[0], "high");
+        pinned.start = Some("17:15".into());
+        pinned.pinned = true;
+        let trace = reschedule_running_late(
+            &[pinned.clone()],
+            0,
+            30,
+            "17:00",
+            &[pinned],
+            None,
+            None,
+            None,
+            Some((0, 17 * 60)),
+            SOLVE_BUDGET_MS,
+            &noop_elapsed(),
+        )
+        .unwrap();
+        let placed = trace
+            .placed
+            .iter()
+            .find(|block| block.id == "pinned")
+            .unwrap();
+        assert_eq!(placed.start.as_deref(), Some("17:15"));
+        assert!(placed.pinned);
+        assert!(trace.moves.is_empty());
     }
 }

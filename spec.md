@@ -104,10 +104,12 @@ Contract for the finished app:
   student omit or adjust one-week exceptions without changing the routine.
 - School and Setup's activities make the account's standing week: one row per
   block, keyed by its Setup id and the week it stands from, so every week shows
-  them unless that week has its own copy. Changing or removing School or an
-  activity asks "Just this week" or "Every week"; every week rewrites the saved
-  later weeks in the same save (`standing` in `/api/changes`), and only the open
-  week's part has Undo. Restore points and account exports carry the standing
+  them unless that week has its own copy. Deleting School or an
+  activity asks once, naming the days: "This day only" (when opened from one
+  day), "This week only" or "This week and later"; earlier weeks keep it, and
+  this week and later rewrites the saved later weeks in the same save
+  (`standing` in `/api/changes`) and can't be undone; only the open week's part
+  has Undo. Restore points and account exports carry the standing
   rows.
 - A later week reviews unfinished homework using the original assignment ID,
   exact deadline and progress. Repeated planning and request retries cannot
@@ -157,10 +159,29 @@ Contract for the finished app:
   the student, with the button reading Suggest times. Homework dragged onto a
   time, or given one with Choose a time, is `pinned`: every plan, Replan all
   included, keeps it where the student put it, even beside a fixed block. The
-  planner places homework at the earliest times that fit. Work due after this
-  Sunday gets only a fair share of this week (the minutes left divided by the
-  plannable days up to its due date), and the review says what waits ("Science
-  project: 1 h this week, 1 h left for next week"). After a plan, the review
+  planner places homework at the earliest times that fit and never shortens a
+  homework's length. Work due within the coming week (due at most seven days
+  after today) is never split: Plan places as much of it as fits in what is
+  left of this week. Work due later gets a fair share of this week: its minutes
+  left divided by the plannable days up to its due date, where this week counts
+  only the days still left with study hours, and today only while a study
+  window still has a free 15 minutes after now. An "In one go" homework is
+  never shared out: it gets one gap of its full length before it is due, or
+  stays in Not placed yet with "Doesn't fit in one go before Wed 21. Allow
+  splitting?". Whatever is not placed stays time that needs a place: the placed
+  part keeps its session and the rest is a second open session of the same
+  homework. Before placing anything in a week, Plan and Replan give that week
+  one session for each open homework with time still needed that is due on or
+  after that week's Monday and has no open session there; unplaced time left in
+  an earlier week moves into it in the same save. Until placed it shows in Not
+  placed yet with its amount ("History · 1 h left"). One engine count of the
+  time still needed (this week, an earlier week, a later week) feeds the plan
+  review, the message after Plan, Not placed yet and More; "All your homework
+  already has a time" and "Everything has a time" show only when it is 0. The
+  plan review hides when the week changes. The review says what was placed
+  ("History: 1 h this week (Sun), 1 h left for next week"), or with nothing
+  placed: "No homework time left this week. History, Math and Bio are due next
+  week; plan them there." After a plan, the review
   names each day with more than 3 hours of homework on it ("Thursday has
   5 h 30 min of homework.") and moves nothing itself. A time already past is
   refused wherever a time is chosen (a drag, Choose a time, Do it at): "That's
@@ -302,9 +323,11 @@ the bottom right of the page, with Undo when the step can be undone. It goes aft
 when it offers Undo, held while the pointer or the keyboard is on it, with a
 thin line showing the time left), on a change of week, or when its Undo is
 used; a switch of view or design keeps it, and Plan finding nothing new leaves
-an Undo toast up. There is no status line. Before the week grid, a list of the
-week's blocks for screen readers and the keyboard stays folded until the
-keyboard reaches it (Tab, or Ctrl+Shift+L). Month opens
+an Undo toast up. There is no status line. Before the week grid, a fixed row,
+"Week as a list · Ctrl+Shift+L", 28 px tall (32 at Large text), is a Tab stop; it, Enter or Space opens a
+list of the week's blocks for screen readers and the keyboard in a panel over
+the grid, and Esc closes it and returns the keyboard to where it was. Opening
+or closing it never moves the grid. Month opens
 with the student's week as its first row. A new account with no homework sees
 "Nothing here yet." and one "Add your first homework" button in place of empty
 hours. A focus timer has a screen of its own (Start focus, Quick focus or F):

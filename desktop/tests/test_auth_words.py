@@ -8,6 +8,7 @@ heading (decision 25), and since 0.18.5 (#74) it is "Sign in" on a first launch 
 from __future__ import annotations
 
 import contextlib
+import re
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -15,7 +16,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QEvent, QSize, Qt
 from PySide6.QtGui import QFont, QFontMetrics
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
 
@@ -229,3 +230,51 @@ def test_both_cards_show_the_icon_beside_the_wordmark(
         assert icon.parentWidget() is brand.parentWidget()
         assert icon.geometry().right() < brand.geometry().left(), "the icon comes first"
         assert abs(icon.geometry().center().y() - brand.geometry().center().y()) <= 4
+
+
+CODE_SHAPE = re.compile(r"[0-9a-f]{4}(?:-[0-9a-f]{4}){3}")
+
+
+def words_held(widget: QWidget) -> list[str]:
+    """Every text a widget gives out, to the eye or to a screen reader."""
+    held = [widget.accessibleName(), widget.accessibleDescription(), widget.toolTip()]
+    for reader in ("text", "toPlainText"):
+        read = getattr(widget, reader, None)
+        # A few of the app's own widgets keep a child called `text`, which is not a reader.
+        if callable(read) and isinstance(said := read(), str):
+            held.append(said)
+    return held
+
+
+def test_no_widget_holds_a_recovery_code_once_the_week_is_open(
+    qapp: QApplication,  # noqa: F811
+    recovering: NativeWindow,
+) -> None:
+    """R1: eight codes stayed in a hidden label, in memory and in the accessibility tree."""
+    saved = codes(recovering)
+    assert len(saved) == 8 and all(CODE_SHAPE.fullmatch(code) for code in saved)
+    recovering.recovery_ack.setChecked(True)
+    recovering.recovery_continue.click()
+    wait_until(qapp, lambda: page(recovering) != "recoveryPage" and not recovering.session.busy)
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    QApplication.processEvents()
+    for widget in QApplication.allWidgets():
+        for text in words_held(widget):
+            assert not CODE_SHAPE.search(text), (widget.objectName(), text)
+    assert recovering.findChild(QWidget, "recoveryPage") is None
+
+
+def test_the_recovery_page_comes_back_with_its_look_when_new_codes_are_made(
+    qapp: QApplication,  # noqa: F811
+    recovering: NativeWindow,
+) -> None:
+    """R1: the page is deleted after the first save, so replacing the codes has to build it again."""
+    recovering.recovery_ack.setChecked(True)
+    recovering.recovery_continue.click()
+    wait_until(qapp, lambda: page(recovering) != "recoveryPage" and not recovering.session.busy)
+    recovering.session.recovery_codes.emit(["aaaa-bbbb-cccc-dddd"] * 8)
+    assert page(recovering) == "recoveryPage"
+    assert codes(recovering) == ["aaaa-bbbb-cccc-dddd"] * 8
+    assert recovering.recovery_list.font().family() == "JetBrains Mono"
+    recovering.recovery_copy.click()
+    assert QApplication.clipboard().text().splitlines() == codes(recovering)

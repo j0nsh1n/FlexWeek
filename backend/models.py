@@ -255,6 +255,7 @@ class AssignmentContent(BaseModel):
     spotify_url: str | None = Field(default=None, max_length=500)
     due: str
     estimate_min: int = Field(le=ESTIMATE_MAX_MIN)
+    spread: Literal["one", "spread"] = Field(default="one", exclude_if=lambda value: value == "one")
     focus_minutes: int = Field(default=0, ge=0, le=71400)
     focus_sessions: int = Field(default=0, ge=0, le=9999)
     completed: bool = False
@@ -622,6 +623,7 @@ class RunningLateRequest(BaseModel):
     minutes: Literal[15, 30, 60]
     from_start: str = Field(min_length=5, max_length=5)
     previous_placed: list[TimeBlock] = Field(max_length=100)
+    now_floor: tuple[int, int] | None = None
 
     @field_validator("from_start")
     @classmethod
@@ -646,6 +648,7 @@ class SolveRequest(WeekRequest):
     recover: RecoveryRequest | None = None
     running_late: RunningLateRequest | None = None
     week_start: str | None = None
+    now_floor: tuple[int, int] | None = None
 
     @field_validator("week_start")
     @classmethod

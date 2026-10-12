@@ -1127,8 +1127,10 @@ def control_rules(palette: dict, radius: int, text: float | str, art: dict[str, 
         "padding: 2px; }"
         f"QLineEdit:focus, QComboBox:focus, QAbstractSpinBox:focus, QPlainTextEdit:focus {{ "
         f"border: 2px solid {readable_focus_edge(palette)}; }}"
-        # The line under a time box whose text says no time.
-        f"QFrame#clockError {{ background: {palette['panel']}; border: 1px solid {palette['error']}; "
+        # The line under a field that says what is wrong. Keyed on the property, not the object name: the
+        # sign-in lines are renamed, and the generic QFrame rule took their edge.
+        f"QFrame[problem=\"true\"] {{ background: {palette['panel']}; "
+        f"border: 1px solid {palette['error']}; "
         f"border-radius: {radius}px; }}"
         f"QLabel#clockErrorText {{ color: {palette['error']}; }}"
         # A switch is a check box whose box is a pill with a knob, drawn whole by `control_art`.
@@ -1223,6 +1225,9 @@ def _rgba(colour: str, alpha: float) -> str:
     return f"rgba({red}, {green}, {blue}, {round(alpha * 255)})"
 
 
+# The week-list row above the grid (U19) is this tall at each text size, in every look and design. It
+# is fixed within a size so tabbing never moves the grid; Large text needs 4 px more for its words.
+WEEK_LIST_ROW_HEIGHT = {"small": 28, "normal": 28, "large": 32}
 DISABLED = 0.4
 CONFLICT_FILL, CONFLICT_TEXT = "#fff4d6", "#6b4a00"
 # A roomy button: 8 pixels above and below its words, 20 at the sides, and at least 36 pixels tall in all,
@@ -1309,6 +1314,9 @@ def setup_rules(palette: dict, radius: int, text: float | str, pad: int, depth: 
     # A chip that adds something rather than picks it, such as a planning-hours preset: the same pill.
     adds = 'QPushButton[chip="true"]'
     pills = f"QPushButton#setupChip, {day}, {adds}, QPushButton#setupStudyChip"
+    pills_focus = (
+        f"QPushButton#setupChip:focus, {day}:focus, {adds}:focus, QPushButton#setupStudyChip:focus"
+    )
     pills_hover = f"QPushButton#setupChip:hover, {day}:hover, {adds}:hover, QPushButton#setupStudyChip:hover"
     return (
         f"QWidget#setupRail {{ background: {palette['panel']}; }}"
@@ -1368,12 +1376,18 @@ def setup_rules(palette: dict, radius: int, text: float | str, pad: int, depth: 
         f"QPushButton#setupDot[chosen=\"true\"] {{ background: {palette['accent']}; "
         f"border: 2px solid {palette['accent']}; }}"
         f"QFrame#setupGroup {{ background: {palette['panel']}; border-radius: {card_radius}px; {edges} }}"
-        f"{pills} {{ background: {palette['field']}; color: {palette['text']}; {edges} "
-        f"border-radius: 14px; padding: 4px 12px; font-weight: {WEIGHT_REGULAR}; min-height: 0; }}"
+        f"{pills} {{ background: {palette['field']}; color: {palette['text']}; "
+        f"border: 1px solid {readable_edge(palette)}; "
+        f"border-radius: 10px; padding: 4px 12px; font-weight: {WEIGHT_REGULAR}; min-height: 0; }}"
         f"{day} {{ padding: 4px 6px; }}"
+        f"{pills_focus} {{ border: 2px solid {readable_focus_edge(palette)}; padding: 3px 11px; }}"
+        f"{day}:focus {{ padding: 3px 5px; }}"
         f"{pills_hover} {{ background: {mix(palette['accent'], palette['field'], 0.14)}; }}"
         f"QPushButton#setupChip:checked, {day}:checked {{ background: {palette['accent']}; "
         f"color: {palette['accent_ink']}; }}"
+        f"QPushButton#setupChip:checked, {day}:checked {{ border-color: {palette['accent']}; }}"
+        f"QPushButton#setupChip:checked:focus, {day}:checked:focus "
+        f"{{ border-color: {readable_focus_edge(palette)}; }}"
         # Days that cannot change, as under "This day only": the picked one still reads as picked.
         f"{day}:disabled {{ background: {palette['field']}; "
         f"color: {mix(palette['text'], palette['field'], 0.5)}; }}"
@@ -1649,6 +1663,12 @@ def button_rules(
         f'QPushButton[quiet="true"]:pressed {{ background: {_veil(text, 0.10)}; }}',
         f'QPushButton[quiet="true"]:disabled {{ background: transparent; color: {mix(text, page, 0.4)}; }}',
         f'QPushButton[keyfocus="true"]:focus {{ border-color: {ring}; }}',
+        # U19's list row is a fixed strip: vertical padding or the 2 to 6 px edges leave its words less
+        # height than the font needs and clip them. A 1 px edge and no padding give them all but 2 px, and
+        # the min-height is named (not 0) because a stylesheet min-height of 0 also drops the widget's
+        # own fixed height. It names the colour not at all, so the focus ring still shows.
+        f"QPushButton#weekListRow {{ padding: 0 {pad * 2}px; border-width: 1px; "
+        f"min-height: {WEEK_LIST_ROW_HEIGHT['large' if large else 'normal'] - 2}px; }}",
     ]
     return "".join(rules)
 
@@ -1667,6 +1687,17 @@ RING_BUTTONS = (*BAR_BUTTON_NAMES, *VIEW_BUTTONS)
 FOCUS_RING_PX = 2
 FOCUS_GAP_PX = 2
 ZOOM_PILL_PX = 24
+
+
+def count_pill(palette: dict) -> tuple[str, str]:
+    """The fill and ink of the count drawn over More's corner: the accent where it reads 3 to 1 on the
+    page, moved in lightness only as far as that takes, with the palette's own ink or the best of black
+    and white when it moved."""
+    fill = palette["accent"]
+    if palette.get("family") != "contrast":
+        fill = fit_lightness(fill, (palette["window"],), AA_GRAPHIC)
+    ink = palette["accent_ink"] if fill == palette["accent"] else readable_ink(fill)
+    return fill, ink
 
 
 def focus_ring(palette: dict) -> str:

@@ -5,6 +5,33 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.19.2] - 2026-10-11
+
+### Fixed
+- On the 12-hour clock, an end time typed without AM or PM is read as the one after its start: School from 8:30 AM to "3:15" ends at 3:15 PM, not 3:15 AM. An end at or before its start is said under End ("End needs to be later than Start (8:30 AM)."), and in Setup and School hours it offers the other half ("Did you mean 3:15 PM?" with Use 3:15 PM). Next and Save keep the keyboard on End until it is right.
+- Skip in Setup no longer throws away School or an activity you changed without asking. It asks to fix times that don't work, or to keep what you entered and go on ("Keep School and go on"), and Esc never throws anything away. A skipped step is marked Skipped in the side list instead of with a tick, and the last page says "Your week: skipped". When Next can't go on, the keyboard goes to the time that needs fixing, with its problem under it.
+- Plan's Undo message no longer goes early: it stays while the pointer rests anywhere on it and pauses while FlexWeek is minimised or in the background. Undo shows the seconds left ("Undo · 8 s"), also with reduced motion, is the first Tab stop after the week, and Replan all my homework now ends with Undo too, even when it waits for a save.
+- Running late moves a block already under way by the delay you chose, keeping its length, and never moves anything to a time already past. Its preview names the day and the whole before and after times ("Mon 4:45–5:45 PM → Mon 5:15–6:15 PM"), says which block is under way, and counts in plain words ("1 task moves").
+- A time range that ends at midnight on the 12-hour clock keeps both AM/PM marks: "9 AM–12 AM", not "9–12 AM".
+- A week, a backup file or a restore point that gives two blocks the same id is refused with a message that names it, and nothing is saved.
+- Chips, the off switch and Retro's fields are easier to see: chip edges and their keyboard focus ring reach 3:1 in every look, the off switch is an outlined track with a knob you can see in dark looks, and a focused field in Retro shows its focus ring.
+- Light, Dark and System can be reached with Tab while one of the More looks is worn.
+- Setup's Sports or Activity choice is read out by its name, not by its current value.
+- The recovery codes are cleared from FlexWeek once you press Continue to my week, instead of staying in a hidden page.
+- A problem with what you typed now appears on its own line right under the field, pushing what is below it down instead of covering it, in the error colour and as wide as the field. The field's hint steps aside while it shows. Typing never moves the cursor to another field; only Sign in, Create account or Save does. An unreadable time stays as you typed it. Add and Edit homework say "That's in the past." and Title problems under their field the same way, read out once, with the cursor on the field when you press Save.
+- Deleting a repeating block asks once, starting from the day you opened it on, and names the days ("Delete Soccer on every Tue and Thu this week?"). For School and Setup activities the choices are "This day only", "This week only" and "This week and later"; earlier weeks keep it, and "This week and later" says it can't be undone.
+- Plan no longer loses homework time. Work due within a week is never cut into a share; work due later gets a share of the days you can still study this week; an "In one go" homework is never cut, and if it does not fit before it is due it waits in Not placed yet with "Allow splitting?". What does not fit this week stays as time that still needs a place and moves into the next week you plan, and the plan message, Not placed yet and More all count the same time still needed. The plan details say what was actually placed.
+- The Running late preview shows each change once, with the homework's title, the day and both times ("History essay: Thu 7–8 PM → Thu 7:30–8:30 PM"), and homework placed by the move reads "Math worksheet, placed Fri 3:30 PM". "3 tasks move" shows once as a normal line, not as a red error, and the card's buttons line up.
+- Tabbing through the week no longer makes the grid jump. The list of this week's blocks for keyboard and screen-reader users now opens from a fixed "Week as a list · Ctrl+Shift+L" row before the grid, in a panel over the week, and Esc closes it and puts you back where you were.
+- The "Week as a list · Ctrl+Shift+L" row above the week shows its words whole in every look and text size (28 px tall, 32 at Large text).
+- Pressing Enter in any box of Sign in, Create account or Reset password submits it, the same as the button, and the keyboard goes to the first problem. Not placed yet shows each part of a split homework with its own time (1 h and 30 min, not 1 h 30 min twice). The due date in Add homework steps a day with Up and Down and a week with Page Up and Page Down, past the end of this week.
+- Question boxes (Skip this step, Delete a block) show every button's words in full and stack the buttons when there is no room for them side by side. Skip, then "Fix them" or Esc, puts the keyboard back on the time to fix with it selected. A time problem under a box sits on its own line under the row and no longer stretches the box or covers the fields below. The Setup side list says "skipped" in its spoken name.
+- Long homework names in the "Start a focus timer" list wrap in a row tall enough for them instead of printing over the next row.
+- Sign in, Create account and Reset password keep the last text size and High contrast you used on this computer, so Large text and High contrast no longer drop back to the default look when you sign out. Colours, accent and theme are not carried over.
+
+### Changed
+- The "Unfinished homework" bar above the week is gone. More shows a small count of the homework that still needs a time, the same count as Not placed yet; More > Unfinished shows it too and opens that list. The count coming or going never moves the week.
+
 ## [0.19.1] - 2026-10-10
 
 ### Fixed

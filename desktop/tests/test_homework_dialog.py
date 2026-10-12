@@ -53,8 +53,8 @@ def test_saving_with_no_title_asks_for_one_in_words(qapp: QApplication) -> None:
     qapp.processEvents()
     dialog.accept()
     assert dialog.result() != dialog.DialogCode.Accepted
-    assert dialog.error.text() == "Give the homework a title."
-    assert dialog.error.isVisible()
+    assert dialog.title_problem.text() == "Give the homework a title."
+    assert dialog.title_problem.isVisible()
     dialog.close()
 
 
