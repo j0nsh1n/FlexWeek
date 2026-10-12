@@ -39,7 +39,7 @@
   "name": "a plan is not told when now is",
   "old": "    out.insert(\"earliest\".into(), json!(earliest));\n",
   "new": "",
-  "test": "desktop/tests/test_homework_plan.py::test_plan_on_a_thursday_leaves_monday_to_wednesday_and_the_hours_before_now_alone"
+  "test": "desktop/tests/test_homework_plan.py::test_plan_sends_earliest_from_not_before_not_a_stored_session_field"
  },
  {
   "file": "engine/engine/src/desk/planning.rs",
