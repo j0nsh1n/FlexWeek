@@ -17,6 +17,7 @@ from datetime import date, timedelta
 from PySide6.QtCore import (
     QEvent,
     QModelIndex,
+    QObject,
     QPersistentModelIndex,
     QPointF,
     QRectF,
@@ -756,6 +757,9 @@ class Rail(QFrame):
         self.tasks.setObjectName("focusTasks")
         self.tasks.setItemDelegate(FocusRows(self, self.tasks))
         self.tasks.setMouseTracking(True)
+        # The list gets its width when its section is shown, after the rows were measured; the rail's
+        # own resize does not say so when the rail did not change.
+        self.tasks.viewport().installEventFilter(self)
         self.tasks.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         overlay_scroll_bars(self.tasks)
         self.tasks.setFrameShape(QFrame.Shape.NoFrame)
@@ -1108,11 +1112,18 @@ class Rail(QFrame):
         self._wait_words.setText(words)
         self._wait_words.setMinimumWidth(self._wait_words.fontMetrics().horizontalAdvance(words))
 
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        # A row is as tall as its lines at the list's width, so a list that changes width wraps others.
+        if (
+            watched is self.tasks.viewport()
+            and event.type() == QEvent.Type.Resize
+            and event.size().width() != event.oldSize().width()
+        ):
+            self._fit_tasks()
+        return super().eventFilter(watched, event)
+
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)
-        # A narrower rail wraps more focus rows onto two lines.
-        if event.size().width() != event.oldSize().width():
-            self._fit_tasks()
         if self.folded:
             self._fit_waiting_words()
 
