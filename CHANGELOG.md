@@ -26,6 +26,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - The "Week as a list · Ctrl+Shift+L" row above the week shows its words whole in every look and text size (28 px tall, 32 at Large text).
 - Pressing Enter in any box of Sign in, Create account or Reset password submits it, the same as the button, and the keyboard goes to the first problem. Not placed yet shows each part of a split homework with its own time (1 h and 30 min, not 1 h 30 min twice). The due date in Add homework steps a day with Up and Down and a week with Page Up and Page Down, past the end of this week.
 - Question boxes (Skip this step, Delete a block) show every button's words in full and stack the buttons when there is no room for them side by side. Skip, then "Fix them" or Esc, puts the keyboard back on the time to fix with it selected. A time problem under a box sits on its own line under the row and no longer stretches the box or covers the fields below. The Setup side list says "skipped" in its spoken name.
+- Long homework names in the "Start a focus timer" list wrap in a row tall enough for them instead of printing over the next row.
 - Sign in, Create account and Reset password keep the last text size and High contrast you used on this computer, so Large text and High contrast no longer drop back to the default look when you sign out. Colours, accent and theme are not carried over.
 
 ### Changed
