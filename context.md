@@ -1,6 +1,16 @@
 # context.md — FlexWeek
 
 ## Current State
+- 2026-10-11: v0.19.2 prepared on `release/0.19.2` (worktree `~/.worktrees/flexweek-0190`, `.venv` is
+  `venv-0192-rel`): the 0.19.1 QA handoff's Fix first items (F3, F3b, 3-R, L12, T-W1, R10, 0l-R, A28,
+  0f-R, R1, N15, S1, A27, T1, P1, U19) and the fixes from two QA testers who used the app through
+  `fwtest rig --play` (question sheets never cut their words; Running late's preview draws each
+  change once with its title; Enter submits the account cards; split homework rows show their own
+  time; due dates step past the week; the More count reads the one engine count and sits on the
+  More button, not a bar above the week; the "Week as a list" row is 28 px, 32 at Large text).
+  Regression Tester's suites live in desktop/tests/regress184, regress190 and backend/tests/regress184,
+  collected only with FLEXWEEK_REGRESS=1 (regress184 waits for its conftest). `scripts/rig/play.py`
+  gives agents a play mode (steps, shots and widget trees). R11 and 1b-R moved to 1.0.0.
 - 2026-10-10: v0.19.1 on `release/0.19.1` (same worktree and venv as 0.19.0): J19, the Add fixed time
   sheet built ahead while idle (`_block_spare`, one account and one look, dropped on either change;
   editing a block still builds on demand); the sign-in card holds its height only while its page
@@ -137,12 +147,10 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
-- 2026-10-11, `release/0.19.2` (local only, not pushed): the QA handoff's Fix first items from
-  `flexweek-0191-handoff`. In: F3, F3b, 3-R, L12, T-W1, R10, 0l-R, A28, 0f-R, R1, N15, S1, A27, T1, P1 (with
-  spec.md's planning text, written under Jonathan's overnight grant for his review). Gate 4668 passed; rig
-  249/249 at 8981d4fa. Regression Tester's suites live in desktop/tests/regress184, regress190 and
-  backend/tests/regress184, collected only with FLEXWEEK_REGRESS=1 (regress184 waits for its conftest).
-- Not in yet: 1b-R (in worktree ~/.worktrees/flexweek-0192-p1, one commit d7a71eb3 plus uncommitted UI work,
-  gate not green yet), U19 (finished, uncommitted in ~/.worktrees/flexweek-0192-u19, waiting for Jonathan's OK
-  on the 0k test change), R11 (not started). Next patch items N1-N14 moved to 1.0.0.
-- Then: version 0.19.2, release notes, rig, PR on Jonathan's word. After that, 1.0.0 (Android, iroh sync).
+- 2026-10-11, `release/0.19.2` (local only until Jonathan's word): all lanes merged except qa-c round 2
+  (the focus timer list's wrapped row still overlaps in the real app; worktree ~/.worktrees/flexweek-0192-qa-c
+  on 34c923d0). Then: final `fwtest gate --workers 3` and `fwtest rig` on the release branch, commit these
+  docs and `docs/release-notes-v0.19.2.md`, push, PR to main, merge, publish v0.19.2 as latest (CI builds the
+  installers on publish).
+- After that, 1.0.0: the roadmap's "1.0.0 — running list" (deferred items, N1-N14, QA leftovers, the two
+  design-round picks, Android and sync). The design demo site is `~/.flexweek-ui-harness/scratch/design-1.0.0/`.
