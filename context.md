@@ -147,10 +147,9 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
-- 2026-10-11, `release/0.19.2` (local only until Jonathan's word): all lanes merged except qa-c round 2
-  (the focus timer list's wrapped row still overlaps in the real app; worktree ~/.worktrees/flexweek-0192-qa-c
-  on 34c923d0). Then: final `fwtest gate --workers 3` and `fwtest rig` on the release branch, commit these
-  docs and `docs/release-notes-v0.19.2.md`, push, PR to main, merge, publish v0.19.2 as latest (CI builds the
-  installers on publish).
+- 2026-10-11, `release/0.19.2`: every lane merged. Final `fwtest gate --workers 3` on the branch: 4838 passed,
+  no skips or xfails; `fwtest rig`: 249/249. Pushed and opened as a PR to main on Jonathan's word; merge and
+  publish v0.19.2 as latest (CI builds the installers on publish; release notes in
+  `docs/release-notes-v0.19.2.md`).
 - After that, 1.0.0: the roadmap's "1.0.0 — running list" (deferred items, N1-N14, QA leftovers, the two
   design-round picks, Android and sync). The design demo site is `~/.flexweek-ui-harness/scratch/design-1.0.0/`.
