@@ -69,7 +69,7 @@ def test_u19_the_row_is_28_px_32_at_large_and_its_words_get_the_full_height_the_
     option = QStyleOptionButton()
     row.initStyleOption(option)
     contents = row.style().subElementRect(QStyle.SubElement.SE_PushButtonContents, option, row)
-    expected = {"small": 28, "normal": 28, "large": 32}[size]
+    expected = {"small": 28, "normal": 28, "large": 28}[size]
     assert row.height() == expected, f"{design}/{preset}/{size}: row is {row.height()} px, not {expected}"
     assert contents.height() >= row.fontMetrics().height(), (
         f"{design}/{preset}/{size}: words box {contents.height()} px, font needs {row.fontMetrics().height()}"

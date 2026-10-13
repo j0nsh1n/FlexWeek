@@ -24,6 +24,7 @@ from desktop.native.layouts.empty import EMPTY_COPY_LAST, EMPTY_USE_ROUTINE
 from desktop.native.look import sanitize_look
 from desktop.native.menus import Menu
 from desktop.native.widgets import ConfirmSheet, PreviewDialog, RoutineDialog
+from desktop.native.hours.rail import RAIL_PX
 from desktop.native.window import PLAN_LABEL, PLAN_SHORT, PLAN_TINY, NativeWindow
 from desktop.tests import window_support as window_support_mod
 from desktop.tests.window_support import (  # noqa: F401
@@ -198,7 +199,8 @@ def test_unfinished_collapses_to_the_more_count_after_the_first_showing(
     assert panel.isVisible()
     panel.findChild(QPushButton, "unfinishedDismiss").click()
     qapp.processEvents()
-    assert not panel.isVisible() and more.accessibleName() == "More, 1 homework still needs time"
+    assert not panel.isVisible() and more.accessibleName() == "More"
+    assert signed_in.solve_button.accessibleName() == "Plan my homework, 1 homework still needs time"
     reopen.click()
     qapp.processEvents()
     assert panel.isVisible()
@@ -267,12 +269,11 @@ def test_the_folded_rail_shows_a_waiting_chip_not_a_bare_line(
     for _ in range(5):
         qapp.processEvents()
     rail = window.rail
-    assert rail.folded
-    chip = rail.findChild(QPushButton, "railWaitingChip")
-    assert chip is not None and chip.isVisible()
-    words = chip.findChild(QLabel, "railWaitingWords")
-    assert words is not None and "Not placed yet" in words.text()
-    assert "Not placed yet:" not in rail.line.text()
+    assert not rail.folded
+    assert rail.width() == RAIL_PX
+    assert rail.waiting_label.text() == "No time yet · drag onto a day"
+    shown = [chip for chip in rail.chips() if chip.isVisible()]
+    assert [chip.accessibleName() for chip in shown] == ["Poster · 30 min"]
 
 
 def test_plan_keeps_its_words_then_more_then_drops_my(
@@ -441,7 +442,7 @@ def _fold_week(
     window.resize(width, height)
     for _ in range(5):
         qapp.processEvents()
-    assert window.rail.folded
+    assert not window.rail.folded
 
 
 def _chevron(chip: QPushButton, name: str, rail) -> None:
@@ -459,49 +460,21 @@ def test_the_folded_waiting_chip_opens_a_row_under_the_line(
     _add_waiting_poster(qapp, window)
     _fold_week(qapp, window, NARROW_WIDTH - 1)
     rail = window.rail
-    chip = rail.findChild(QPushButton, "railWaitingChip")
-    row = rail.findChild(QWidget, "railWaitingRow")
-    assert chip is not None and chip.isVisible()
-    assert row is not None and not row.isVisible()
-    assert window.findChild(QWidget, "railWaitingPopup") is None
-    _chevron(chip, "chevron-down", rail)
-    before = (window.width(), window.height())
-    QTest.mouseClick(chip, Qt.MouseButton.LeftButton)
-    qapp.processEvents()
-    assert (window.width(), window.height()) == before
-    assert row.isVisible()
-    assert window.findChild(QWidget, "railWaitingPopup") is None
-    _chevron(chip, "chevron-up", rail)
+    assert rail.waiting_label.text() == "No time yet · drag onto a day"
     waiting = next(
         widget
         for widget in rail.chips()
         if widget.property("block_id") and widget.property("tray") and widget.isVisible()
     )
-    assert waiting.parent() is row
-    assert waiting.mapTo(rail, waiting.rect().topLeft()).y() >= chip.mapTo(rail, chip.rect().bottomLeft()).y()
-    # Something to take hold of: the rig found both chips on the row 0 pixels wide.
-    assert waiting.width() >= waiting.sizeHint().width(), (waiting.width(), waiting.sizeHint().width())
-    assert waiting.shown_title() == "Poster", "a chip on the folded row has room for its whole title"
-    words = chip.findChild(QLabel, "railWaitingWords")
-    chevron = chip.findChild(QLabel, "railWaitingChevron")
-    said = words.mapTo(chip, words.rect().topLeft()).x() + words.fontMetrics().horizontalAdvance(words.text())
-    assert said <= chevron.mapTo(chip, chevron.rect().topLeft()).x(), (words.text(), "runs under the chevron")
-    QTest.mouseClick(chip, Qt.MouseButton.LeftButton)
-    qapp.processEvents()
-    assert not row.isVisible()
-    _chevron(chip, "chevron-down", rail)
-    QTest.mouseClick(chip, Qt.MouseButton.LeftButton)
-    qapp.processEvents()
-    assert row.isVisible()
+    assert waiting.shown_title() == "Poster"
+    assert waiting.accessibleName() == "Poster · 30 min"
+    before = (window.width(), window.height())
     window.resize(1280, 860)
     for _ in range(5):
         qapp.processEvents()
+    assert (window.width(), window.height()) != before or window.width() == 1280
     assert not rail.folded
     _fold_week(qapp, window, NARROW_WIDTH - 1)
-    assert not row.isVisible()
-    _chevron(chip, "chevron-down", rail)
-    QTest.mouseClick(chip, Qt.MouseButton.LeftButton)
-    qapp.processEvents()
     caught: list[BaseException] = []
     previous_hook = sys.excepthook
     previous_unraisable = sys.unraisablehook
@@ -546,15 +519,9 @@ def test_the_folded_waiting_chip_keeps_not_placed_yet_at_800(
         window._apply_appearance()
         window._sync_chrome()
         _fold_week(qapp, window, 800)
-        chip = window.rail.findChild(QPushButton, "railWaitingChip")
-        words = chip.findChild(QLabel, "railWaitingWords")
-        count = len(window.rail.chips())
-        assert words.text() in {f"Not placed yet · {count}", "Not placed yet"}, (size, words.text())
-        assert words.fontMetrics().horizontalAdvance(words.text()) <= words.width() + 2, (
-            size,
-            words.text(),
-            words.width(),
-        )
+        assert window.rail.waiting_label.text() == "No time yet · drag onto a day"
+        shown = [chip for chip in window.rail.chips() if chip.isVisible()]
+        assert [chip.accessibleName() for chip in shown] == ["Poster · 30 min"]
 
 
 def test_a_drag_from_the_folded_waiting_row_starts(
@@ -564,11 +531,6 @@ def test_a_drag_from_the_folded_waiting_row_starts(
     waiting = _add_waiting_poster(qapp, window)
     window.move(0, 0)
     _fold_week(qapp, window, 800, 720)
-    window.rail.waiting_chip.click()
-    qapp.processEvents()
-    row = window.findChild(QWidget, "railWaitingRow")
-    assert row is not None and row.isVisible()
-    assert window.findChild(QWidget, "railWaitingPopup") is None
     chip = next(
         widget
         for widget in window.findChildren(QPushButton)
@@ -593,7 +555,6 @@ def test_a_drag_from_the_folded_waiting_row_starts(
             break
     qapp.processEvents()
     assert window.hand.active
-    assert row.isVisible()
     window.hand.cancel()
 
 

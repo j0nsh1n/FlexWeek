@@ -93,7 +93,8 @@ def test_badge_more_row_panel_and_rail_show_the_same_items_and_minutes(
     minutes = {item["title"]: item["minutes"] for item in needed}
     assert minutes == {"History essay": 120, "Math worksheet": 60, "Chem lab": 90}
     lines = sorted(f"{title} · {length_label(amount)} left" for title, amount in minutes.items())
-    assert window.more_button.accessibleName() == "More, 3 homework still need time"
+    assert window.more_button.accessibleName() == "More"
+    assert window.solve_button.accessibleName() == "Plan my homework, 3 homework still need time"
     enabled, row = more_row(window)
     assert enabled and row == "Unfinished\t3 left"
     assert window.rail.waiting_count.text() == "3"
@@ -125,7 +126,8 @@ def test_work_due_this_week_with_a_chip_is_counted(
     window._on_week()
     assert [item["assignment_id"] for item in window.session.homework_time_needed()] == ["math"]
     assert window.rail.waiting_count.text() == "1"
-    assert window.more_button.accessibleName() == "More, 1 homework still needs time"
+    assert window.more_button.accessibleName() == "More"
+    assert window.solve_button.accessibleName() == "Plan my homework, 1 homework still needs time"
     assert more_row(window) == (True, "Unfinished\t1 left")
 
 
@@ -161,19 +163,22 @@ def test_the_count_goes_up_and_down_and_nothing_moves(
 
     before = geometry()
     assert window.more_button.accessibleName() == "More"
+    assert window.solve_button.accessibleName() == "Plan my homework"
     add(window, "history", "History", 120, due_in(window, 9))
     window.session.save()
     settled(qapp, window)
     window._on_week()
     qapp.processEvents()
-    assert window.more_button.accessibleName() == "More, 1 homework still needs time"
+    assert window.more_button.accessibleName() == "More"
+    assert window.solve_button.accessibleName() == "Plan my homework, 1 homework still needs time"
     assert geometry() == before
     add(window, "bio", "Bio", 60, due_in(window, 5))
     window.session.save()
     settled(qapp, window)
     window._on_week()
     qapp.processEvents()
-    assert window.more_button.accessibleName() == "More, 2 homework still need time"
+    assert window.more_button.accessibleName() == "More"
+    assert window.solve_button.accessibleName() == "Plan my homework, 2 homework still need time"
     assert geometry() == before
     for key in ("history", "bio"):
         settled(qapp, window)
@@ -183,6 +188,7 @@ def test_the_count_goes_up_and_down_and_nothing_moves(
     qapp.processEvents()
     assert window.session.homework_time_needed() == []
     assert window.more_button.accessibleName() == "More"
+    assert window.solve_button.accessibleName() == "Plan my homework"
     assert geometry() == before
     assert more_row(window) == (False, "Unfinished\tNone left")
 

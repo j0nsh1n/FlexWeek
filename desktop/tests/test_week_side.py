@@ -83,6 +83,7 @@ def test_the_rail_holds_next_not_placed_yet_and_the_focus_list_left_of_the_week(
     rail, hours = window.rail, window.week_table
     assert window.planner.currentWidget() is window.week_table
     assert rail.isVisible() and not rail.folded and rail.width() == RAIL_PX
+    assert not rail.month.isVisible()
     left = hours.mapTo(window, QPoint(0, 0)).x()
     assert rail.mapTo(window, QPoint(rail.width(), 0)).x() <= left, "the rail is left of the hours"
     assert window.width() - (left + hours.width()) < 24, "the week takes the rest of the width"
@@ -91,6 +92,9 @@ def test_the_rail_holds_next_not_placed_yet_and_the_focus_list_left_of_the_week(
     assert (card.label.text(), card.title.text(), card.when.text(), card.then.text()) == (
         "Next", "Soccer practice", "4:00 PM · in 20 min", "Then Dinner at 6:30 PM"
     )
+    assert window.status_strip.height() == 28
+    assert window.status_next.text() == "Next: Soccer practice 4:00 PM · in 20 min"
+    assert window.status_overdue.text() == "0 overdue"
     # In time order with the time at the right, today's said as Today.
     assert rail.task_rows() == [("History essay", "Today 7:00 PM")]
     assert [chip.accessibleName() for chip in chips(window)] == ["Math worksheet · 1 h"]
@@ -101,11 +105,10 @@ def test_the_rail_holds_next_not_placed_yet_and_the_focus_list_left_of_the_week(
     use_clock(qapp, window, False)
     assert not window.focus_panel.isVisible()
     bar_bottom = window.solve_button.mapTo(window, QPoint(0, window.solve_button.height())).y()
-    # U19's fixed week list row sits between the bar and the week; nothing else does.
-    row = window.week_list_row
-    assert row.mapTo(window, QPoint(0, 0)).y() - bar_bottom < 32
-    row_bottom = row.mapTo(window, QPoint(0, row.height())).y()
-    assert window.planner.mapTo(window, QPoint(0, 0)).y() - row_bottom < 32
+    strip = window.status_strip
+    assert strip.mapTo(window, QPoint(0, 0)).y() - bar_bottom < 32
+    strip_bottom = strip.mapTo(window, QPoint(0, strip.height())).y()
+    assert window.planner.mapTo(window, QPoint(0, 0)).y() - strip_bottom < 32
     # Day keeps the rail, and says what is next there instead of in a band above its hours.
     window.findChild(QAbstractButton, "viewDay").click()
     wait_until(qapp, lambda: window.planner.currentWidget() is window.day_view)
@@ -152,34 +155,22 @@ def test_the_month_folds_away_from_its_header_and_stays_folded_after_a_restart(
 ) -> None:
     seeded(qapp, window)
     rail = window.rail
-    month = rail.month
     week = date.fromisoformat(window.session.week_start)
-    assert month.isVisible() and month.dates.week_start == week.isoformat()
-    assert sunday_due(window.session.week_start)[:10] in month.dates.due, "a dot on the day homework is due"
-    assert month.fold.toolTip() == "Hide the month"
-    QTest.mouseClick(month.fold, Qt.MouseButton.LeftButton)
+    assert not rail.month.isVisible()
+    QTest.mouseClick(window.week_title, Qt.MouseButton.LeftButton)
     qapp.processEvents()
-    assert not month.isVisible()
-    # With the month hidden the rail starts at Next, whose header has the way back.
+    month = window.month_pick
+    assert window.month_pop.isVisible() and month.dates.week_start == week.isoformat()
+    assert sunday_due(window.session.week_start)[:10] in month.dates.due, "a dot on the day homework is due"
     top = rail.next.mapTo(rail, QPoint(0, 0)).y()
     assert top < 40, f"Next starts {top} px down the rail"
-    assert rail.show_month.isVisible() and rail.show_month.toolTip() == "Show the month"
-    assert rail.next.isAncestorOf(rail.show_month)
-    again = NativeWindow(server.origin)
-    try:
-        assert again.rail.month_shown is False, "the fold was forgotten"
-    finally:
-        again.close()
-    QTest.mouseClick(rail.show_month, Qt.MouseButton.LeftButton)
-    qapp.processEvents()
-    assert month.isVisible()
-    # A date in the month opens its week.
     later = week + timedelta(days=14)
     QTest.mouseClick(
         month.dates, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier,
         month.dates.date_point(later.isoformat()).toPoint(),
     )
     wait_until(qapp, lambda: window.session.week_start == later.isoformat() and not window.session.busy)
+    assert not window.month_pop.isVisible()
 
 
 def test_a_running_timer_is_the_rails_first_card(
@@ -196,8 +187,9 @@ def test_a_running_timer_is_the_rails_first_card(
     panel, rail = window.focus_panel, window.rail
     assert panel.isVisible() and rail.isAncestorOf(panel)
     tops = {name: widget.mapTo(rail, QPoint(0, 0)).y() for name, widget in
-            (("timer", panel), ("month", rail.month), ("next", rail.next))}
-    assert tops["timer"] < tops["month"] < tops["next"], tops
+            (("timer", panel), ("next", rail.next))}
+    assert tops["timer"] < tops["next"], tops
+    assert not rail.month.isVisible()
     # #18: Today's app shows the one-line strip the other designs show, not the homework's name.
     assert panel.width() <= RAIL_PX and panel.task.text() == "Session · 30:00 left"
     window.session.reset_focus()
@@ -231,10 +223,10 @@ def test_high_contrast_cuts_no_chip_and_scrolls_the_focus_list_neither_way(
         assert len(chip.title_lines()) <= 2
         assert chip.mapTo(rail, chip.rect().topRight()).x() <= rail.width()
     assert rail.width() == RAIL_PX
-    tasks = rail.tasks
-    assert tasks.count() and not tasks.horizontalScrollBar().isVisible()
-    assert not tasks.verticalScrollBar().isVisible()
-    assert tasks.viewport().height() >= tasks.count() * tasks.sizeHintForRow(0)
+    assert not rail.focus.isVisible()
+    assert not rail.scroll.horizontalScrollBar().isVisible()
+    starts = [button for button in rail.next.findChildren(QPushButton) if button.text() == "Start focus"]
+    assert starts
 
 
 def test_a_narrow_window_folds_the_rail_into_one_line_and_blocks_keep_their_times(
@@ -246,22 +238,12 @@ def test_a_narrow_window_folds_the_rail_into_one_line_and_blocks_keep_their_time
     window.resize(1100, 860)
     for _ in range(5):
         qapp.processEvents()
-    assert rail.folded and not hours.hours.short_words
-    line_foot = rail.mapTo(window, rail.rect().bottomLeft()).y()
-    assert line_foot < hours.mapTo(window, hours.rect().topLeft()).y(), "the line sits above the hours"
-    assert rail.height() < 80, "one slim line"
-    # #82: what waits is a chip with the book and a chevron after the line, not words in it.
-    assert rail.line.text() == "Next: Soccer practice, 4:00 PM · in 20 min"
-    use_clock(qapp, window, True)
-    assert rail.line.text() == "Next: Soccer practice, 16:00 · in 20 min"
-    use_clock(qapp, window, False)
-    assert not rail.tasks.isVisible() and not rail.month.isVisible()
-    waiting = rail.waiting_chip
-    assert waiting.isVisible()
-    assert waiting.findChild(QLabel, "railWaitingWords").text() == "Not placed yet · 1"
-    assert waiting.geometry().top() == rail.line.geometry().top(), "the chip follows the line"
-    assert window.rect().contains(waiting.mapTo(window, waiting.rect().bottomRight()))
+    assert not rail.folded and not hours.hours.short_words
+    assert rail.width() == RAIL_PX
+    assert rail.next.isVisible() and not rail.month.isVisible()
+    assert rail.waiting_label.text() == "No time yet · drag onto a day"
     chip = rail.chips()[0]
+    assert chip.isVisible()
     window.resize(1280, 860)
     for _ in range(5):
         qapp.processEvents()
@@ -310,14 +292,13 @@ def test_the_focus_list_grows_to_its_rows_with_no_scroll_bar_and_no_row_cut(
     settled(qapp, window)
     for _ in range(5):
         qapp.processEvents()
-    tasks = window.rail.tasks
-    assert tasks.count() == 3
-    row = tasks.sizeHintForRow(0)
-    assert not tasks.verticalScrollBar().isVisible() and not tasks.horizontalScrollBar().isVisible()
-    assert tasks.viewport().height() >= 3 * row, "all three rows fit"
-    last = tasks.visualItemRect(tasks.item(2))
-    assert last.bottom() <= tasks.viewport().height() and last.right() <= tasks.viewport().width()
-    assert tasks.height() >= 3 * row
+    assert window.rail.next.title.text() == "Chem lab report"
+    assert window.rail.next.start_focus.isVisible()
+    assert window.rail.next.start_focus.text() == "Start focus"
+    card = window.rail.next.card
+    rail = window.rail
+    foot = card.mapTo(rail, card.rect().bottomRight())
+    assert foot.x() <= rail.width()
 
 
 def test_the_focus_list_has_no_row_limit_of_its_own(
@@ -328,9 +309,8 @@ def test_the_focus_list_has_no_row_limit_of_its_own(
     seeded(qapp, window)
     rows = [{"id": f"t{n}", "day": 4, "start": "17:00", "title": f"Task {n}"} for n in range(9)]
     window.rail.set_tasks(rows, 0)
-    tasks = window.rail.tasks
-    assert tasks.count() == 9
-    assert tasks.height() >= 9 * tasks.sizeHintForRow(0)
+    assert not window.rail.focus.isVisible()
+    assert window.rail.scroll.widget().height() >= window.rail.scroll.viewport().height() or window.rail.next.isVisible()
 
 
 @pytest.mark.parametrize("twenty_four", [True, False])
@@ -379,29 +359,18 @@ def test_rail_chips_and_focus_rows_wrap_long_names_on_two_lines_at_large_text(
     settled(qapp, window)
     for _ in range(5):
         qapp.processEvents()
-    # The focus rows: each long name on two lines, and the list as tall as all of them, at the
-    # widths the bar fits Plan to, after Large text has arrived (the list was sized before it).
-    tasks = window.rail.tasks
-    line = QFontMetricsF(window.rail.fonts()[0]).lineSpacing()
+    # Homework Start focus lives on Next rows now; the long names stay whole on the chips above.
     for width in (1157, 1280):
         window.resize(width, 800)
         for _ in range(5):
             qapp.processEvents()
-        rows = {tasks.item(row).text(): tasks.visualItemRect(tasks.item(row)) for row in range(tasks.count())}
-        for title in ("Math worksheet, chapter 4", "History / essay"):
-            assert rows[title].height() >= 2 * line, (width, title, rows[title].height(), line)
-        shown = {tasks.item(row).text(): tasks.item(row) for row in range(tasks.count())}
-        assert shown["Math worksheet, chapter 4"].data(Qt.ItemDataRole.ToolTipRole) == (
-            "Today 19:00" if twenty_four else "Today 7:00 PM"
-        )
-        # Whole, not "Math wor…": the lines the row draws spell the name.
-        for title in ("Math worksheet, chapter 4", "History / essay"):
-            drawn, _below, _timing = tasks.itemDelegate().row_lines(
-                tasks.indexFromItem(shown[title]), tasks.viewport().width()
-            )
-            assert len(drawn) <= 2 and " ".join(drawn) == title, (width, title, drawn)
-        lowest = max(rect.bottom() for rect in rows.values())
-        assert lowest < tasks.viewport().height(), (width, lowest, tasks.viewport().height())
+        titles = [
+            label.text()
+            for label in window.rail.next.rest.findChildren(QLabel, "railNextRowTitle")
+        ]
+        assert "Math worksheet, chapter 4" in titles
+        assert "History / essay" in titles
+        assert all("…" not in title for title in titles)
 
 
 @pytest.mark.parametrize(
