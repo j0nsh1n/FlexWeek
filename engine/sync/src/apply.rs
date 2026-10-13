@@ -50,10 +50,9 @@ fn bad(record: &Record) -> Option<&'static str> {
                     .get("title")
                     .and_then(Value::as_str)
                     .is_some_and(|s| !s.is_empty() && within(s, 80))
-                && body
-                    .get("due")
-                    .and_then(Value::as_str)
-                    .is_some_and(time::is_calendar_date)
+                && body.get("due").and_then(Value::as_str).is_some_and(|due| {
+                    due.is_ascii() && flexweek_engine::model::valid_due(due).is_ok()
+                })
                 && body
                     .get("estimate_min")
                     .and_then(Value::as_i64)

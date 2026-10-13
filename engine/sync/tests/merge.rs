@@ -837,3 +837,77 @@ fn the_clock_guard_is_exactly_24_hours() {
     assert_eq!(get_assignment(&b, "edge"), Some(assignment("edge", "T")));
     assert_eq!(get_assignment(&b, "past"), None);
 }
+
+fn captured_desktop_due(name: &str) -> String {
+    let captured: Value =
+        serde_json::from_str(include_str!("fixtures/desktop-due-writes.json")).unwrap();
+    captured[name].as_str().unwrap().to_string()
+}
+
+fn assert_homework_due_round_trips(due: &str) {
+    let mut desktop = db("desktop", true);
+    let mut phone = db("phone", true);
+    let body = json!({"id": "due-case", "title": "History essay", "due": due, "estimate_min": 60});
+    desktop
+        .execute(
+            "INSERT INTO assignments(user_id,id,body) VALUES (1,'due-case',?1)",
+            [body.to_string()],
+        )
+        .unwrap();
+    scan(&mut desktop, 1, 1_000).unwrap();
+    let sent = batch(&desktop, 0, "phone");
+    let report = apply_batch(&mut phone, &sent, 1_000).unwrap();
+    assert_eq!(report.quarantined, 0);
+    assert_eq!(get_assignment(&phone, "due-case"), Some(body));
+}
+
+#[test]
+fn desktop_date_only_homework_due_syncs() {
+    assert_homework_due_round_trips(&captured_desktop_due("date_only"));
+}
+
+#[test]
+fn desktop_minute_precision_homework_due_syncs() {
+    assert_homework_due_round_trips(&captured_desktop_due("minutes"));
+}
+
+#[test]
+fn desktop_kept_end_of_day_homework_due_syncs() {
+    assert_homework_due_round_trips(&captured_desktop_due("end_of_day"));
+}
+
+#[test]
+fn malformed_homework_due_stays_quarantined() {
+    for due in [
+        "2026-02-30T09:30",
+        "2026-10-14T24:00",
+        "2026-10-14T09:30:00",
+        "2026-10-14T09:30Z",
+        "2026-10-14 09:30",
+        "2026-10-14T09:30+00:00",
+        "２０２６-10-14T09:30",
+    ] {
+        let mut desktop = db("desktop", true);
+        let mut phone = db("phone", true);
+        let body = json!({"id":"bad-due", "title":"History essay", "due":due, "estimate_min":60});
+        desktop
+            .execute(
+                "INSERT INTO assignments(user_id,id,body) VALUES (1,'bad-due',?1)",
+                [body.to_string()],
+            )
+            .unwrap();
+        scan(&mut desktop, 1, 1_000).unwrap();
+        let sent = batch(&desktop, 0, "phone");
+        let report = apply_batch(&mut phone, &sent, 1_000).unwrap();
+        assert_eq!(report.quarantined, 1, "{due}");
+        assert_eq!(get_assignment(&phone, "bad-due"), None, "{due}");
+        let reason: String = phone
+            .query_row(
+                "SELECT reason FROM sync_quarantine WHERE key='bad-due'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(reason, "malformed or unknown record");
+    }
+}
