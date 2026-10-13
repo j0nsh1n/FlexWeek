@@ -33,6 +33,7 @@ from desktop.tests.grid_support import (  # noqa: F401
 from desktop.tests.window_support import free
 
 PAST_REFUSAL = "That time has passed. Choose 2:15 PM or later today, or another day."
+PAST_DAY_REFUSAL = "That time has passed. The day is over, so choose another day."
 
 TUESDAY, SUNDAY = 1, 6
 NOW = 14 * 60 + 7  # the window fixture holds Wednesday 14:07
@@ -85,7 +86,8 @@ def test_dragging_a_block_to_an_earlier_day_is_refused(qapp, window) -> None:
     """Guard: refused today, and must stay refused."""
     block = homework(qapp, window, "16:00")
     verdict = window._judge_span(block["id"], WEDNESDAY, TUESDAY, 16 * 60, 17 * 60)
-    assert (verdict.ok, verdict.words) == (False, PAST_REFUSAL)
+    # A past day uses the 1.0.0 T-W4 wording; it cannot offer a later time today.
+    assert (verdict.ok, verdict.words) == (False, PAST_DAY_REFUSAL)
 
 
 def test_dragging_a_block_to_later_today_is_allowed(qapp, window) -> None:
@@ -124,11 +126,16 @@ def choose(qapp, window, monkeypatch, day: int, minute: int) -> tuple[bool, str]
 
 
 @pytest.mark.parametrize(
-    ("day", "minute"), [(TUESDAY, 16 * 60), (WEDNESDAY, 14 * 60)], ids=["Tue16:00", "Wed14:00"]
+    ("day", "minute", "expected"),
+    [
+        (TUESDAY, 16 * 60, PAST_DAY_REFUSAL),
+        (WEDNESDAY, 14 * 60, PAST_REFUSAL),
+    ],
+    ids=["Tue16:00", "Wed14:00"],
 )
-def test_choose_a_time_refuses_a_past_time(qapp, window, monkeypatch, day, minute) -> None:
+def test_choose_a_time_refuses_a_past_time(qapp, window, monkeypatch, day, minute, expected) -> None:
     homework(qapp, window)
-    assert choose(qapp, window, monkeypatch, day, minute) == (False, PAST_REFUSAL)
+    assert choose(qapp, window, monkeypatch, day, minute) == (False, expected)
 
 
 def test_choose_a_time_accepts_later_today(qapp, window, monkeypatch) -> None:
@@ -176,12 +183,17 @@ def do_it_at(qapp, window, day: int, minute: int) -> tuple[int, str]:
 
 
 @pytest.mark.parametrize(
-    ("day", "minute"), [(WEDNESDAY, 9 * 60), (TUESDAY, 18 * 60)], ids=["Wed09:00", "Tue18:00"]
+    ("day", "minute", "expected"),
+    [
+        (WEDNESDAY, 9 * 60, PAST_REFUSAL),
+        (TUESDAY, 18 * 60, PAST_DAY_REFUSAL),
+    ],
+    ids=["Wed09:00", "Tue18:00"],
 )
-def test_do_it_at_refuses_a_past_time_and_keeps_the_sheet_open(qapp, window, day, minute) -> None:
+def test_do_it_at_refuses_a_past_time_and_keeps_the_sheet_open(qapp, window, day, minute, expected) -> None:
     homework(qapp, window)
     result, problem = do_it_at(qapp, window, day, minute)
-    assert (result, problem) == (QDialog.DialogCode.Rejected.value, PAST_REFUSAL)
+    assert (result, problem) == (QDialog.DialogCode.Rejected.value, expected)
 
 
 def test_do_it_at_saves_later_today(qapp, window) -> None:
