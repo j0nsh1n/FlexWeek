@@ -24,7 +24,19 @@ def editor(qapp: QApplication):
 
     def open_editor(start: str, twelve: bool = True) -> BlockDialog:
         set_clock_24h(not twelve)
-        dialog = BlockDialog(None, day=1, start=start, duration_min=60)
+        # Edit stays one page (Add is stepped). F3 is the End box, which Add hides until When.
+        dialog = BlockDialog(
+            None,
+            {
+                "id": "club",
+                "title": "Club",
+                "kind": "locked",
+                "start": start,
+                "duration_min": 60,
+                "days": [1],
+                "category": "extra",
+            },
+        )
         _up(qapp, dialog)
         made.append(dialog)
         return dialog
@@ -37,7 +49,9 @@ def editor(qapp: QApplication):
 
 
 def typed_end(field, text: str) -> None:
-    enter(field, "tab-in")
+    # Form 21031111: Start and End sit side by side under their captions. Tab-from-previous
+    # can miss End; a click is how a student reaches it.
+    enter(field, "click-middle")
     type_text(field, text)
     press(field, Qt.Key.Key_Tab)
 
