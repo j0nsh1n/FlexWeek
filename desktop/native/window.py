@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import json
 import time
+import weakref
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import replace
@@ -18,6 +19,7 @@ from PySide6.QtGui import (
     QCloseEvent,
     QContextMenuEvent,
     QDesktopServices,
+    QFont,
     QGuiApplication,
     QIcon,
     QKeyEvent,
@@ -94,7 +96,7 @@ from desktop.native.fields import ProblemLine, announce
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
 from desktop.native.focus import focus_now, phase_duration_ms
 from desktop.native.focus_screen import QUICK_TITLE, FocusScreen
-from desktop.native.fonts import load_fonts
+from desktop.native.fonts import load_fonts, without_ligatures
 from desktop.native.hours.canvas import Drawn, HoursCanvas, plan_placed
 from desktop.native.hours.classic import ClassicDay, ClassicWeek
 from desktop.native.hours.geometry import Span, drag_step, next_slot
@@ -5260,7 +5262,24 @@ class NativeWindow(QMainWindow):
         set_current(ctx)
         if dressed != self._dressed:
             self._dressed = dressed
+            # Retro sets its words letter by letter (fonts.without_ligatures); other looks keep the app font.
+            app_font = QApplication.font()
+            if ctx.feel.key == "retro":
+                if not hasattr(self, "_retro_fonts"):
+                    children = (self, *self.findChildren(QWidget))
+                    self._retro_fonts = weakref.WeakKeyDictionary(
+                        {child: QFont(child.font()) for child in children}
+                    )
+                no_ligatures = without_ligatures(app_font)
+                for child in (self, *self.findChildren(QWidget)):
+                    child.setFont(no_ligatures)
+            else:
+                self.setFont(app_font)
             self.setStyleSheet(sheet)
+            if ctx.feel.key != "retro" and hasattr(self, "_retro_fonts"):
+                for child, font in self._retro_fonts.items():
+                    child.setFont(font)
+                del self._retro_fonts
             # Fixed within a text size, so tabbing never moves the grid; a new size re-lays out anyway.
             self.status_strip.setFixedHeight(STATUS_STRIP_PX)
             self.week_list_row.setFixedHeight(STATUS_STRIP_PX)

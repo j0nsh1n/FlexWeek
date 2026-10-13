@@ -16,7 +16,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtGui import QFont, QFontDatabase, QFontInfo, QFontMetricsF
-    from PySide6.QtWidgets import QApplication, QLineEdit, QTimeEdit
+    from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QTimeEdit
 
     from desktop.native.fonts import (
         FACES,
@@ -27,9 +27,12 @@ if importlib.util.find_spec("PySide6") is not None:
         load_fonts,
         time_font,
         weighted,
+        without_ligatures,
     )
     from desktop.native.tokens import WEIGHT_STRONG, type_pt
     from desktop.native.widgets import use_app_style
+    from desktop.native.window import NativeWindow
+    from desktop.tests.window_support import server, signed_out, window  # noqa: F401
 
 
 @pytest.fixture(scope="module")
@@ -74,6 +77,44 @@ def test_retros_face_takes_its_figures_from_vt323(qapp: QApplication) -> None:
             wide = vt.horizontalAdvance(figure) * 1.28
             assert metrics.horizontalAdvance(figure) == pytest.approx(wide, abs=1), (weight, figure)
         assert metrics.horizontalAdvance("S") != pytest.approx(vt.horizontalAdvance("S") * 1.28, abs=1)
+
+
+def test_pixelify_sets_fi_as_one_glyph_unless_ligatures_are_off(qapp: QApplication) -> None:
+    """Q17: Pixelify Sans joins "fi" into one glyph that reads as "A", so Retro showed "Add Axed time".
+    The same word measured with ligatures off is a different width from the plain face, which is what
+    proves the check measures the ligature and not kerning."""
+    load_fonts()
+    plain = QFont("Pixelify Sans", 14)
+    assert QFontMetricsF(plain).horizontalAdvance("fixed") != pytest.approx(
+        QFontMetricsF(without_ligatures(plain)).horizontalAdvance("fixed"), abs=0.5
+    )
+    assert QFontMetricsF(without_ligatures(plain)).horizontalAdvance("fixed") == pytest.approx(
+        QFontMetricsF(without_ligatures(plain)).horizontalAdvance("f")
+        + QFontMetricsF(without_ligatures(plain)).horizontalAdvance("ixed"),
+        abs=0.5,
+    )
+
+
+def test_retros_window_hands_its_words_the_font_without_ligatures(
+    qapp: QApplication, window: NativeWindow  # noqa: F811
+) -> None:
+    """Q17: a label set in Pixelify Sans inside the window takes its font features from the window, so
+    Retro's window must turn them off and any other look's must not."""
+    load_fonts()
+    label = QLabel("fixed", window)
+    label.setStyleSheet("QLabel { font-family: 'Pixelify Sans'; }")
+    window._layout = {"main": "retro", "day": "one", "options": {}}
+    window._apply_appearance()
+    qapp.processEvents()
+    assert label.font().family() == "Pixelify Sans"
+    plain_words = QFontMetricsF(label.font()).horizontalAdvance("fixed")
+    spaced = QFontMetricsF(without_ligatures(label.font())).horizontalAdvance("fixed")
+    assert label.fontMetrics().horizontalAdvance("fixed") == pytest.approx(spaced, abs=0.5)
+    window._layout = {"main": "classic", "day": "one", "options": {}}
+    window._apply_appearance()
+    qapp.processEvents()
+    assert label.fontMetrics().horizontalAdvance("fixed") != pytest.approx(spaced, abs=0.5), plain_words
+    label.deleteLater()
 
 
 def test_a_time_takes_as_much_room_whatever_its_figures(qapp: QApplication) -> None:
