@@ -296,9 +296,9 @@
  {
   "file": "desktop/native/hours/rail.py",
   "name": "an empty Next card still takes its room",
-  "old": "        self.next.setVisible(wide and has_next)\n",
-  "new": "        self.next.setVisible(wide)\n",
-  "test": "desktop/tests/test_now_next.py::test_the_next_and_now_countdowns_move_with_the_minute_without_a_focus_timer"
+  "old": "        self.card.setVisible(bool(said[1]))\n",
+  "new": "        self.card.setVisible(True)\n",
+  "test": "desktop/tests/test_mutation_guards_100.py::test_a_next_card_with_nothing_to_say_hides_its_card"
  },
  {
   "file": "desktop/native/controller.py",
@@ -408,9 +408,9 @@
  {
   "file": "desktop/native/window.py",
   "name": "the rail never folds",
-  "old": "        narrow = self.width() < NARROW_WIDTH\n        if narrow != self.rail.folded:\n",
-  "new": "        narrow = False\n        if narrow != self.rail.folded:\n",
-  "test": "desktop/tests/test_week_side.py::test_a_narrow_window_folds_the_rail_into_one_line_and_blocks_keep_their_times"
+  "old": "        self.rail.setVisible(shown)\n",
+  "new": "        self.rail.setVisible(shown)\n        self.rail.set_folded(self.width() < NARROW_WIDTH)\n",
+  "test": "desktop/tests/test_week_behaviour.py::test_the_folded_rail_shows_a_waiting_chip_not_a_bare_line"
  },
  {
   "file": "desktop/native/hours/canvas.py",

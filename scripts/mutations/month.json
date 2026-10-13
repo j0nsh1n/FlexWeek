@@ -127,17 +127,17 @@
  },
  {
   "file": "desktop/native/hours/month.py",
-  "name": "Month opens with past weeks on top",
-  "old": "        canvas.lead_with(row)\n",
-  "new": "",
-  "test": "desktop/tests/test_hours_month.py::test_month_opens_with_the_students_week_as_its_first_row"
+  "name": "Month opens on its first row",
+  "old": "        self.scroll.verticalScrollBar().setValue(0)\n",
+  "new": "        self.scroll.verticalScrollBar().setValue(self.scroll.verticalScrollBar().maximum())\n",
+  "test": "desktop/tests/test_mutation_guards_100.py::test_month_opens_at_its_first_row_when_the_grid_scrolls"
  },
  {
   "file": "desktop/native/hours/month.py",
   "name": "Month sizes its rows before it has a height",
   "old": "        if not self.scroll.viewport().isVisible() and tries > 0:\n",
   "new": "        if False:\n",
-  "test": "desktop/tests/test_hours_month.py::test_a_month_revealed_before_its_first_layout_still_opens_on_the_week"
+  "test": "desktop/tests/test_hours_month.py::test_a_month_revealed_before_its_first_layout_still_opens_on_the_first_row"
  },
  {
   "file": "desktop/native/hours/month.py",

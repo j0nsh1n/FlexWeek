@@ -65,7 +65,7 @@
  {
   "file": "desktop/native/window.py",
   "name": "a running timer above the hours, not in the rail",
-  "old": "        in_rail = shown and not narrow\n",
+  "old": "        in_rail = shown\n",
   "new": "        in_rail = False\n",
   "test": "desktop/tests/test_week_side.py::test_a_running_timer_is_the_rails_first_card"
  },
