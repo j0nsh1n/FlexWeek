@@ -6,6 +6,8 @@ import android.app.NotificationManager
 import android.os.Build
 import com.flexweek.app.core.FlexWeekCore
 import com.flexweek.app.core.FlexWeekCoreFactory
+import com.flexweek.app.system.ReminderScheduler
+import com.flexweek.app.system.SyncScheduler
 
 class FlexWeekApp : Application() {
     lateinit var core: FlexWeekCore
@@ -16,6 +18,13 @@ class FlexWeekApp : Application() {
         core = FlexWeekCoreFactory.create(this)
         core.open(filesDir.resolve("flexweek.db").absolutePath, "Phone")
         createNotificationChannels()
+        SyncScheduler.installPeriodic(this)
+        ReminderScheduler.refreshAsync(this)
+    }
+
+    fun afterLocalEdit() {
+        ReminderScheduler.refreshAsync(this)
+        SyncScheduler.requestExpeditedSync(this)
     }
 
     private fun createNotificationChannels() {

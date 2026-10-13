@@ -2,6 +2,8 @@ package com.flexweek.app.core
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 
@@ -119,15 +121,40 @@ class FakeFlexWeekCore : FlexWeekCore {
     }
 
     override fun upcomingReminders(fromLocal: String, hours: Int): String {
+        val from = LocalDateTime.parse(fromLocal, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+        val until = from.plusHours(hours.toLong())
         val arr = JSONArray()
-        arr.put(
-            jsonObject {
-                put("title", "History essay")
-                put("starts_at", "7:00 PM")
-                put("lead_minutes", leadMinutes)
-            },
-        )
+        for (block in blocks) {
+            if (!block.homework || isDone(block)) continue
+            val fire = blockReminderFire(block)
+            if (fire.isBefore(from) || !fire.isBefore(until)) continue
+            val startLabel = DemoSchedule.formatTime(block.startMinute)
+            arr.put(
+                jsonObject {
+                    put("key", reminderKey(block))
+                    put("fire_at_local", fire.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
+                    put("title", block.title)
+                    put(
+                        "body",
+                        "$startLabel · ${DemoSchedule.formatLength(block.lengthMinutes)}",
+                    )
+                },
+            )
+        }
         return arr.toString()
+    }
+
+    /** Test hook: moving a block changes its reminder key so reschedule drops the old alarm. */
+    fun moveBlock(
+        blockId: String,
+        newDayIndex: Int,
+        newStartMinute: Int,
+    ) {
+        val idx = blocks.indexOfFirst { it.id == blockId }
+        if (idx < 0) return
+        val old = blocks[idx]
+        blocks[idx] =
+            old.copy(dayIndex = newDayIndex, startMinute = newStartMinute)
     }
 
     override fun settingsForPhone(): String =
@@ -510,6 +537,22 @@ class FakeFlexWeekCore : FlexWeekCore {
     private fun isoForDay(dayIndex: Int): String {
         val day = DemoSchedule.dayDates[dayIndex]
         return "2025-10-${day.toString().padStart(2, '0')}"
+    }
+
+    private fun reminderKey(block: DemoSchedule.Block): String {
+        val start = "%02d:%02d".format(block.startMinute / 60, block.startMinute % 60)
+        return listOf(DemoSchedule.WEEK_START, block.id, block.dayIndex.toString(), start).joinToString("|")
+    }
+
+    private fun blockReminderFire(block: DemoSchedule.Block): LocalDateTime {
+        val date = isoForDay(block.dayIndex)
+        val fireMinute = (block.startMinute - leadMinutes).coerceAtLeast(0)
+        val hour = fireMinute / 60
+        val minute = fireMinute % 60
+        return LocalDateTime.parse(
+            "$date" + "T" + "%02d:%02d:00".format(hour, minute),
+            DateTimeFormatter.ISO_LOCAL_DATE_TIME,
+        )
     }
 }
 
