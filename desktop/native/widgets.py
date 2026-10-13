@@ -6212,6 +6212,11 @@ class LateDialog(Dialog):
                 item.setSizeHint(QSize(width, max(label.heightForWidth(width), label.sizeHint().height())))
 
 
+def _unbroken_time(text: str) -> str:
+    """Keep AM/PM on the same line as the time in Running late's preview."""
+    return text.replace(" AM", "\u00a0AM").replace(" PM", "\u00a0PM")
+
+
 def _late_summary(moved: int) -> str:
     if not moved:
         return "Nothing needs to move."
@@ -6225,15 +6230,15 @@ def _late_move(move: dict, block: dict, title: str) -> str:
     if was and now and old_day is not None and new_day is not None:
         old = range_label(hhmm_to_minutes(was), hhmm_to_minutes(was) + duration)
         new = range_label(hhmm_to_minutes(now), hhmm_to_minutes(now) + duration)
-        return f"{title}: {DAY_FULL[old_day][:3]} {old} → {DAY_FULL[new_day][:3]} {new}"
+        return _unbroken_time(f"{title}: {DAY_FULL[old_day][:3]} {old} → {DAY_FULL[new_day][:3]} {new}")
     if now and was:
-        return f"{title}: from {hhmm_text(was)} to {hhmm_text(now)}"
+        return _unbroken_time(f"{title}: from {hhmm_text(was)} to {hhmm_text(now)}")
     if now and new_day is not None:
-        return f"{title}, placed {DAY_FULL[new_day][:3]} {hhmm_text(now)}"
+        return _unbroken_time(f"{title}, placed {DAY_FULL[new_day][:3]} {hhmm_text(now)}")
     if now:
-        return f"{title}: placed at {hhmm_text(now)}"
+        return _unbroken_time(f"{title}: placed at {hhmm_text(now)}")
     if was:
-        return f"{title}: moves off {hhmm_text(was)} and is not placed"
+        return _unbroken_time(f"{title}: moves off {hhmm_text(was)} and is not placed")
     return f"{title}: not placed"
 
 
@@ -6245,9 +6250,11 @@ def _late_move_words(move: dict, block: dict, title: str) -> str:
         old = range_label(hhmm_to_minutes(was), hhmm_to_minutes(was) + duration).replace("–", " to ")
         new = range_label(hhmm_to_minutes(now), hhmm_to_minutes(now) + duration).replace("–", " to ")
         day_change = " different day" if old_day != new_day else ""
-        return f"{title}, moves from {DAY_FULL[old_day]} {old} to {DAY_FULL[new_day]} {new}{day_change}"
+        return _unbroken_time(
+            f"{title}, moves from {DAY_FULL[old_day]} {old} to {DAY_FULL[new_day]} {new}{day_change}"
+        )
     if now and not was and new_day is not None:
-        return f"{title}, placed {DAY_FULL[new_day]} {hhmm_text(now)}"
+        return _unbroken_time(f"{title}, placed {DAY_FULL[new_day]} {hhmm_text(now)}")
     return f"{title}, moved to {now or was or 'no time'}"
 
 
@@ -6257,8 +6264,8 @@ def _late_move_markup(move: dict, block: dict, title: str, muted: str) -> str:
     duration = int(block.get("duration_min") or 0)
     if not was or not now or old_day is None or new_day is None:
         return html.escape(_late_move(move, block, title))
-    old = range_label(hhmm_to_minutes(was), hhmm_to_minutes(was) + duration)
-    new = range_label(hhmm_to_minutes(now), hhmm_to_minutes(now) + duration)
+    old = _unbroken_time(range_label(hhmm_to_minutes(was), hhmm_to_minutes(was) + duration))
+    new = _unbroken_time(range_label(hhmm_to_minutes(now), hhmm_to_minutes(now) + duration))
     to_day = f"<b>{DAY_FULL[new_day][:3]}</b>" if old_day != new_day else DAY_FULL[new_day][:3]
     return (
         f'{html.escape(title)}: <span style="color:{muted}">{DAY_FULL[old_day][:3]} {old}</span>'

@@ -44,9 +44,9 @@ def _dialog() -> LateDialog:
 def test_running_late_preview_shows_day_and_both_full_ranges(qapp: QApplication) -> None:  # noqa: F811
     dialog = _dialog()
     item = dialog.changes.item(0)
-    assert item.text() == "Late test: Mon 4:45–5:45 PM → Mon 5:15–6:15 PM"
+    assert item.text() == "Late test: Mon 4:45–5:45\u00a0PM → Mon 5:15–6:15\u00a0PM"
     assert item.data(Qt.ItemDataRole.AccessibleTextRole) == (
-        "Late test, moves from Monday 4:45 to 5:45 PM to Monday 5:15 to 6:15 PM"
+        "Late test, moves from Monday 4:45 to 5:45\u00a0PM to Monday 5:15 to 6:15\u00a0PM"
     )
     assert dialog.summary.text() == "1 task moves"
     dialog.show_trace({"moves": [], "placed": [], "unplaced": [{"id": "lost", "title": "Lost"}]}, {})
@@ -168,9 +168,9 @@ def test_running_late_preview_draws_each_change_once_with_its_title(qapp: QAppli
         assert row.text().startswith(title)
         assert title in label.text()
         assert title in row.data(Qt.ItemDataRole.AccessibleTextRole)
-    assert rows[1].text() == "Science poster, placed Fri 3:30 PM"
-    assert rows[1].data(Qt.ItemDataRole.AccessibleTextRole) == "Science poster, placed Friday 3:30 PM"
-    assert rows[0].text() == "History essay: Thu 7–8 PM → Thu 7:30–8:30 PM"
+    assert rows[1].text() == "Science poster, placed Fri 3:30\u00a0PM"
+    assert rows[1].data(Qt.ItemDataRole.AccessibleTextRole) == "Science poster, placed Friday 3:30\u00a0PM"
+    assert rows[0].text() == "History essay: Thu 7–8\u00a0PM → Thu 7:30–8:30\u00a0PM"
     set_clock_24h(True)
     dialog.close()
 
