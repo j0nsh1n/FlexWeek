@@ -107,7 +107,7 @@ def test_1br_plan_with_overdue_work_asks_first(qapp, window) -> None:
     def look() -> None:
         sheet = QApplication.activeModalWidget()
         if sheet is not None:
-            asked.append(" ".join(b.text() for b in sheet.findChildren(QPushButton)))
+            asked.append([b.text() for b in sheet.findChildren(QPushButton)])
             sheet.reject()
 
     QTimer.singleShot(300, look)
@@ -115,7 +115,8 @@ def test_1br_plan_with_overdue_work_asks_first(qapp, window) -> None:
     for _ in range(12):
         QTest.qWait(50)
     settled(qapp, window)
-    assert asked and "Plan them" in asked[0] and "I did these" in asked[0], asked
+    # T-W5 (1.0.0 wording audit) renamed the box's buttons from "Plan them" / "I did these".
+    assert asked and asked[0] == ["Plan into this week", "Mark as finished", "Not now"], asked
 
 
 def test_1br_guard_plan_never_moves_the_overdue_session(qapp, window) -> None:
