@@ -181,7 +181,12 @@ def answer_editors(monkeypatch: pytest.MonkeyPatch, *titles: str | None) -> list
         else:
             dialog.title.selectAll()
             QTest.keyClicks(dialog.title, title)
-            QTest.mouseClick(buttons.button(QDialogButtonBox.StandardButton.Save), LEFT)
+            save = buttons.button(QDialogButtonBox.StandardButton.Save)
+            # Add is What / When / Category; Save on What is Next. Edit stays one page.
+            while getattr(dialog, "_add_step", None) is not None and dialog._add_step < 2:
+                QTest.mouseClick(save, LEFT)
+                QApplication.processEvents()
+            QTest.mouseClick(save, LEFT)
         return dialog.result()
 
     monkeypatch.setattr(BlockDialog, "exec", run)
