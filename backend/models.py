@@ -165,6 +165,8 @@ class TimeBlock(BaseModel):
     pomodoro_index: int | None = Field(default=None, ge=1, le=999, exclude_if=lambda value: value is None)
     # Homework the student placed by hand. No plan moves it; a fixed block over it still takes its time.
     pinned: bool = Field(default=False, exclude_if=lambda value: value is False)
+    # Solve-only. An overdue plan asks for the first free time from now, not the energy window.
+    prefer_earliest: bool = Field(default=False, exclude_if=lambda value: value is False)
     assignment_id: str | None = Field(
         default=None, min_length=1, max_length=80, exclude_if=lambda value: value is None
     )

@@ -1086,19 +1086,28 @@ fn reuse_solve_request(
 /// Takes the time away from planned homework whose slot no longer works. `keep` is read as the
 /// Python wrapper wrote it: a set or frozenset as the list of its members, anything else as it is.
 #[pyfunction]
+#[pyo3(signature = (blocks, assignments, week_start, keep, after_deadline=None))]
 fn reuse_settle_placements(
     blocks: &str,
     assignments: &str,
     week_start: &str,
     keep: &Bound<'_, PyAny>,
+    after_deadline: Option<&str>,
 ) -> PyResult<(String, String)> {
     let (blocks, assignments) = (parse(blocks)?, parse(assignments)?);
     let (keep, keep_is_set) = crate::desk::members_of(keep)?;
     let keep = parse(&keep)?;
+    let after_deadline = parse(after_deadline.unwrap_or("[]"))?;
     guard(|| {
-        let (kept, lost) =
-            planning::settle_placements(&blocks, &assignments, week_start, &keep, keep_is_set)
-                .map_err(crate::raise)?;
+        let (kept, lost) = planning::settle_placements_after_deadline(
+            &blocks,
+            &assignments,
+            week_start,
+            &keep,
+            keep_is_set,
+            &after_deadline,
+        )
+        .map_err(crate::raise)?;
         Ok((dump(&kept), array(lost)))
     })
 }

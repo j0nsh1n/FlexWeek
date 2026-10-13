@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
-from backend.models import Assignment, ProtectedWindow, TimeBlock, WorkWindow
+from backend.models import Assignment, ProtectedWindow, TimeBlock, WorkWindow, parse_due
 from backend.slots import DAY_END_MIN, DAY_START_MIN, hhmm_to_minutes, minutes_to_hhmm
 from backend.weeks import current_week_start
 from desktop.native.calendar import (
@@ -868,7 +868,14 @@ class NativeSession(QObject):
     def _touch(self, label: str | None = None, keep: set[str] | frozenset[str] = frozenset()) -> None:
         if label:
             self._history_label = label
-        self.blocks, lost = settle_placements(self.blocks, self.assignments, self.week_start, keep)
+        overdue = self._overdue_assignment_ids()
+        after_deadline = {
+            block["id"] for block in self.blocks
+            if block.get("start") and block.get("assignment_id") in overdue
+        }
+        self.blocks, lost = settle_placements(
+            self.blocks, self.assignments, self.week_start, keep, after_deadline=after_deadline
+        )
         self.blocks = clear_stale_pins(self.blocks)
         if self.selected_block_id not in {item["id"] for item in self.blocks}:
             self.select_block(None, None)
@@ -1928,6 +1935,8 @@ class NativeSession(QObject):
         only: set[str] | None = None,
         join: bool = False,
         _prepared_weeks: dict[str, dict] | None = None,
+        _overdue: set[str] | None = None,
+        _new_left: set[str] | None = None,
     ) -> None:
         """Plan my homework. Homework that already has a time keeps it.
 
@@ -2004,7 +2013,7 @@ class NativeSession(QObject):
             for block in week.get("blocks", [])
             if block.get("start") and not block.get("completed")
         ]
-        open_blocks = open_rest_sessions(
+        open_blocks = planning_blocks if only is not None else open_rest_sessions(
             planning_blocks, self.assignments, self.week_start, earlier_blocks
         )
         payload, targets = solve_request(
@@ -2040,6 +2049,16 @@ class NativeSession(QObject):
             # Homework left in an earlier week is not this plan's to move; the window offers it.
             self.week_changed.emit()
             return
+        if _overdue:
+            # Only the solve copy loses its deadline link. Saved sessions keep their homework ID
+            # and the homework keeps its missed deadline.
+            payload = [
+                {**block, "assignment_id": None, "latest": None, "earliest": None, "pinned": False,
+                 "prefer_earliest": True,
+                 "days": list(range(first_day, 7))}
+                if block["id"] in _overdue else block
+                for block in payload
+            ]
         ticket = self._begin(planning=True)
         self._say("Planning…")
 
@@ -2051,6 +2070,17 @@ class NativeSession(QObject):
             self.blocks = apply_plan(
                 week, data, targets=targets, assignments=self.assignments, week_start=self.week_start
             )
+            if _overdue:
+                placed_ids = {item["id"] for item in data["placed"] if item.get("start")}
+                failed = _overdue - placed_ids
+                originals = {block["id"]: block for block in original_blocks}
+                self.blocks = [
+                    originals[block["id"]] if block["id"] in failed else block
+                    for block in self.blocks
+                    if block["id"] not in (failed & (_new_left or set()))
+                ]
+                for block in self.blocks:
+                    block.pop("prefer_earliest", None)
             sources = {block["id"]: block for block in self.blocks}
             for share in shares:
                 assigned = [
@@ -2076,7 +2106,8 @@ class NativeSession(QObject):
                 "shares": shares,
                 "placed": [
                     sources.get(item["id"], item)
-                    if item.get("kind") == "locked" and item["id"] in sources
+                    if (item.get("kind") == "locked" or item["id"] in (_overdue or set()))
+                    and item["id"] in sources
                     else item
                     for item in data.get("placed") or []
                 ],
@@ -2120,7 +2151,7 @@ class NativeSession(QObject):
                     self._pending_step["weeks"].extend(deepcopy(prior_updates))
                     self._pending_step["id"] = str(uuid4())
                     self._plan_step_id = self._pending_step["id"]
-            placed_note = homework_time_sentence(self.unfinished(), self.homework_time_needed())
+            placed_note = plan_sentence(placed, waiting)
             if split_note:
                 placed_note += split_note
             if not changed and not self.dirty and not self.dirty_assignments:
@@ -2135,6 +2166,13 @@ class NativeSession(QObject):
             self._plan_step_id = None
             self.save(status=placed_note, join=join, plan=changed and not (join and only is not None))
 
+        def err(error: ApiError) -> None:
+            if self._alive(ticket) and _new_left:
+                self.blocks = [block for block in self.blocks if block["id"] not in _new_left]
+                self._forget_settled_notes()
+                self.week_changed.emit()
+            self._fail(ticket, error)
+
         self.client.request(
             "POST",
             "/api/solve",
@@ -2144,7 +2182,7 @@ class NativeSession(QObject):
                 "now_floor": list(start) if start is not None else None,
             },
             ok,
-            lambda error: self._fail(ticket, error),
+            err,
         )
 
     def _apply_auto_split(self, trace: dict) -> str:
@@ -2609,7 +2647,7 @@ class NativeSession(QObject):
         moment = datetime.fromtimestamp(self.now_ms() / 1000)
         today = moment.date()
         today_week = monday_of(today.isoformat())
-        return left_over_items(
+        items = left_over_items(
             self.assignments,
             self.saved_weeks,
             today_week,
@@ -2617,6 +2655,18 @@ class NativeSession(QObject):
             self.blocks,
             self._committed_blocks,
         )
+        return [
+            item for item in items
+            if self.week_start == today_week or item.get("left_over_state") == "overdue"
+        ]
+
+    def _overdue_assignment_ids(self) -> set[str]:
+        now = datetime.fromtimestamp(self.now_ms() / 1000)
+        moment = (now.date(), now.hour * 60 + now.minute)
+        return {
+            key for key, item in self.assignments.items()
+            if item.get("due") and not item.get("completed") and parse_due(item["due"]) <= moment
+        }
 
     def consume_unfinished(self) -> list[dict]:
         items = self.unfinished()
@@ -2655,24 +2705,50 @@ class NativeSession(QObject):
     def plan_left(self, assignment_ids: list[str]) -> None:
         """"Plan into this week": each one gets a session in this week for the time it has left, and Plan
         finds those times as it does any homework's. The time left in the earlier week stays where it was."""
-        today = datetime.fromtimestamp(self.now_ms() / 1000).date()
+        if self.busy or self.conflict or self.pending_save is not None:
+            return
+        now = datetime.fromtimestamp(self.now_ms() / 1000)
+        start = plan_start(self.week_start, now)
+        if start is not None and start[0] > 6:
+            self._say(WEEK_OVER)
+            return
+        first_day = start[0] if start else 0
+        overdue = self._overdue_assignment_ids()
         made: set[str] = set()
+        targets: set[str] = set()
+        late_targets: set[str] = set()
         for assignment_id in assignment_ids:
             item = self.assignments.get(assignment_id)
-            minutes = self.remaining_for(assignment_id)
-            if item is None or minutes < 15:
+            if item is None or item.get("completed"):
                 continue
-            days = days_through(
-                due_day_in_week(item.get("due"), self.week_start), first_plannable_day(self.week_start, today)
+            late = assignment_id in overdue
+            for block in self.blocks:
+                if block.get("assignment_id") != assignment_id or block.get("completed"):
+                    continue
+                if block.get("start") and not late:
+                    continue
+                targets.add(block["id"])
+                if late:
+                    late_targets.add(block["id"])
+            minutes = self.remaining_for(assignment_id)
+            if minutes < 15:
+                continue
+            days = list(range(first_day, 7)) if late else days_through(
+                due_day_in_week(item.get("due"), self.week_start), first_day
             )
             block = copied_homework_block(item, days[0] if days else 0, minutes, str(uuid4()))
             block["days"] = days or [0]
             self.blocks = [*self.blocks, block]
             made.add(block["id"])
-        if not made:
+            targets.add(block["id"])
+            if late:
+                late_targets.add(block["id"])
+        if not targets:
+            self._say("That homework already has a time.")
             return
-        self._touch("planning homework from last week")
-        self.solve(only=made)
+        if made:
+            self._touch("planning unfinished homework")
+        self.solve(only=targets, _overdue=late_targets, _new_left=made)
 
     def did_these(self, assignment_ids: list[str]) -> None:
         """"Mark as finished": the student finished them after all, as one Undo step."""
@@ -3132,7 +3208,8 @@ class NativeSession(QObject):
                     "assignmentId": block_id,
                     "day": None,
                     "start": None,
-                    "title": f"{assignment['title']}, overdue",
+                    "title": f"{assignment['title']}, overdue" if block_id in self._overdue_assignment_ids()
+                    else assignment["title"],
                 }
             else:
                 block = next((item for item in self.blocks if item["id"] == block_id), None)
@@ -3269,7 +3346,7 @@ class NativeSession(QObject):
 
     def credit_focus_session(self) -> None:
         state = self.focus
-        if state is None or not state.get("blockId"):
+        if state is None or not (state.get("blockId") or state.get("assignmentId")):
             return
         credit = (dict(state), work_minutes(state, self.preferences))
         if self.busy:

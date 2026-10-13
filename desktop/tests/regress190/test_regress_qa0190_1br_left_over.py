@@ -79,11 +79,12 @@ def test_1br_the_status_strip_counts_the_overdue_session(qapp, window) -> None:
     assert window.status_overdue.text() == "1 overdue"
 
 
-def test_1br_more_greys_unfinished_when_the_overdue_session_already_has_a_time(qapp, window) -> None:
-    # More counts homework that still needs a time (Jonathan, 2026-10-12); this one has a time.
+def test_1br_more_keeps_unfinished_open_when_the_overdue_session_already_has_a_time(qapp, window) -> None:
+    # More counts homework that still needs a time (Jonathan, 2026-10-12): none here, so "None left";
+    # the row stays enabled because the Unfinished panel holds the overdue row and its Start focus.
     overdue_this_week(qapp, window)
     enabled, words = more_unfinished_row(window)
-    assert (enabled, words) == (False, "Unfinished\tNone left")
+    assert (enabled, words) == (True, "Unfinished\tNone left")
 
 
 def test_1br_more_row_says_unfinished_with_the_count_left(qapp, window) -> None:

@@ -1537,6 +1537,7 @@ class NativeWindow(QMainWindow):
         # Opened by the student, from More: a change to the week refreshes it, never folds it.
         self._unfinished_opened = False
         self.unfinished_panel.plan_requested.connect(self._plan_unfinished)
+        self.unfinished_panel.focus_requested.connect(lambda item_id: self._start_focus(item_id, None))
         self.unfinished_panel.delete_requested.connect(self._delete_homework)
         self.unfinished_panel.collapsed.connect(self._collapse_unfinished)
         column.addWidget(self.unfinished_panel)
@@ -2537,7 +2538,7 @@ class NativeWindow(QMainWindow):
         needed = self.session.homework_time_needed()
         unfinished = self.findChild(QPushButton, "unfinishedOpen")
         if unfinished is not None:
-            unfinished.setEnabled(bool(needed))
+            unfinished.setEnabled(bool(self._panel_items()))
         self.more_button.set_count(0)
         self.solve_button.set_count(len(needed))
         self._sync_status_strip()
@@ -2660,16 +2661,15 @@ class NativeWindow(QMainWindow):
         unfinished = self.findChild(QPushButton, "unfinishedOpen")
         if unfinished is not None:
             # Worked out as the menu opens: the busy flag turns every action back on when a save
-            # ends, and left to that "Unfinished" was pressable with nothing to show. Overdue
-            # homework that already has a time lives on the status strip, not this row.
-            unfinished.setEnabled(not self.session.busy and bool(needed))
+            # ends, and left to that "Unfinished" was pressable with nothing to show.
+            unfinished.setEnabled(not self.session.busy and bool(self._panel_items()))
         for action, button in self._more_pairs:
             action.setEnabled(button.isEnabled())
             tip = self._more_tip(button.objectName(), button.isEnabled())
             # Greyed with nothing to show, Unfinished says so on its row, not only in a tooltip (T23).
             said = f"\t{NONE_UNFINISHED}" if tip == NOTHING_UNFINISHED else ""
-            if button.objectName() == "unfinishedOpen" and count:
-                said = f"\t{count} left"
+            if button.objectName() == "unfinishedOpen":
+                said = f"\t{count} left" if count else f"\t{NONE_UNFINISHED}"
             action.setText(button.text() + said)
             action.setToolTip(tip)
         if self._spotify_action is not None:
@@ -4089,7 +4089,6 @@ class NativeWindow(QMainWindow):
     def _plan_left(self) -> None:
         items = self._unfinished_items()
         self.session.plan_left([item["id"] for item in items])
-        self.session.solve()
 
     def _did_left(self) -> None:
         left = self._unfinished_items()
@@ -4123,10 +4122,6 @@ class NativeWindow(QMainWindow):
         box.exec()
         if box.clickedButton() is plan:
             self.session.plan_left([item["id"] for item in items])
-            if everything:
-                self.session.solve(everything=True)
-            else:
-                self.session.solve()
         elif box.clickedButton() is did:
             self.session.did_these([item["id"] for item in items])
         else:
@@ -4154,7 +4149,7 @@ class NativeWindow(QMainWindow):
         return left + [item for item in self._counted_items() if item["id"] not in seen]
 
     def _show_unfinished(self) -> None:
-        items = self._panel_items() if self.session.homework_time_needed() else []
+        items = self._panel_items()
         if not items:
             self.session._say(NOTHING_UNFINISHED)
         self._fill_unfinished(items)
@@ -4162,6 +4157,9 @@ class NativeWindow(QMainWindow):
         self._sync_left_chip()
 
     def _plan_unfinished(self, assignment_id: str) -> None:
+        if assignment_id in self.session._overdue_assignment_ids():
+            self.session.plan_left([assignment_id])
+            return
         item = self.session.assignments.get(assignment_id)
         rows = self.session.plan_unfinished(assignment_id)
         self._show_preview(

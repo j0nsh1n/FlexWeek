@@ -197,6 +197,8 @@ def settle_placements(
     assignments: dict,
     week_start: str,
     keep: set[str] | frozenset[str] = frozenset(),
+    *,
+    after_deadline: set[str] | frozenset[str] = frozenset(),
 ) -> tuple[list[dict], list[dict]]:
     """Take the time away from planned homework whose slot no longer works, and from nothing else.
 
@@ -209,7 +211,7 @@ def settle_placements(
     it takes time from nothing, since the student chose to put the two side by side.
     """
     kept, lost = flexweek_engine.reuse_settle_placements(
-        json.dumps(blocks), json.dumps(assignments), week_start, keep
+        json.dumps(blocks), json.dumps(assignments), week_start, keep, json.dumps(list(after_deadline))
     )
     return json.loads(kept), json.loads(lost)
 
