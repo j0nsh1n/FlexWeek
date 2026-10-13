@@ -850,7 +850,7 @@ def resolved_palette(pack: object, system_dark: bool, look: dict | None, accent:
         palette["accent_ink"] = readable_ink(readable)
     tint = mix(palette["accent"], palette["window"], 0.10)
     palette["accent_text"] = fit_lightness(
-        palette["accent"], (palette["window"], palette["panel"], palette["grid"], tint), AA_TEXT,
+        palette["accent"], (palette["window"], palette["panel"], palette["grid"], tint), AA_TEXT + 0.1,
     )
     fills = tuple(category_paint(key, palette)[0] for key in CATEGORIES)
     # A line, not text, so it keeps as much of the accent as 3 to 1 allows.

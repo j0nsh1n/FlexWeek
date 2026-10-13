@@ -59,7 +59,7 @@ from desktop.native.look import (
     setup_rules,
     switch_track_edge,
 )
-from desktop.native.tokens import SINK, TEXT_SCALE, mix_oklab, oklab, oklch_of
+from desktop.native.tokens import SINK, TEXT_SCALE, mix, mix_oklab, oklab, oklch_of
 from desktop.native.widgets import control_art
 from desktop.tests.window_support import qapp  # noqa: F401
 
@@ -623,6 +623,18 @@ def test_homework_outline_is_class_colour_not_error_red(kind: str, name: str) ->
     assert outline.lower() not in {palette["error"].lower(), "#831a1d"}
     assert contrast(outline, card) >= AA_GRAPHIC
     assert class_outline(palette, fill) == outline
+
+
+@pytest.mark.parametrize(("kind", "name"), STANDARD_LOOKS + EXPERIMENTAL_LOOKS)
+def test_plan_button_label_reads_with_margin_in_every_look(kind: str, name: str) -> None:
+    """U6: Plan's secondary label is 4.6:1 on its 10% accent tint; High contrast is on the window."""
+    if kind == "pack":
+        palette = resolved_palette(name, name in {"dark-frost", "nocturne"}, None)
+    else:
+        palette = resolved_palette("system", False, look_of(name))
+    tint = mix(palette["accent"], palette["window"], 0.10)
+    ground = palette["window"] if palette.get("family") == "contrast" else tint
+    assert contrast(palette["accent_text"], ground) >= AA_TEXT + 0.1, name
 
 
 def test_a_filled_block_is_readable_on_every_category_colour() -> None:
