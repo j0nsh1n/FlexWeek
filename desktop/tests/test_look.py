@@ -100,7 +100,12 @@ def test_control_edges_have_three_to_one_contrast(preset: str, system_dark: bool
         "switch_off_off": "off-disabled",
         "switch_on_off": "on-disabled",
     }
-    assert f"border: 2px solid {focus}" in control_rules(palette, 6, "normal", switch_art)
+    controls = control_rules(palette, 6, "normal", switch_art)
+    assert (
+        f'QPushButton[step="true"] {{ background: {palette["window"]}; color: {palette["muted"]}; '
+        f'border: 1px solid {border}; padding: 0; min-width: 34px; max-width: 34px; min-height: 0; }}'
+    ) in controls
+    assert f"border: 2px solid {focus}" in controls
     switch_grounds = (palette["field"], palette["panel"], palette["window"])
     assert min(contrast(switch_edge, ground) for ground in switch_grounds) >= 3
 

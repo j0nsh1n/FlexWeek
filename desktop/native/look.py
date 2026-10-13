@@ -1063,7 +1063,7 @@ def control_rules(palette: dict, radius: int, text: float | str, art: dict[str, 
         # A stepped number: − and + joined to its box, on the page's colour (5.2 A of 0.17.2).
         'QAbstractSpinBox[stepped="true"] { border-radius: 0; }'
         f'QPushButton[step="true"] {{ background: {palette["window"]}; color: {palette["muted"]}; '
-        f'border: 1px solid {palette["hairline_strong"]}; padding: 0; min-width: 34px; max-width: 34px; '
+        f'border: 1px solid {readable_edge(palette)}; padding: 0; min-width: 34px; max-width: 34px; '
         "min-height: 0; }"
         f'QPushButton[step="true"]:hover {{ background: {palette["hairline"]}; color: {palette["text"]}; }}'
         f'QPushButton[step="true"]:disabled {{ background: {palette["window"]}; '
