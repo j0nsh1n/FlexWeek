@@ -1,5 +1,5 @@
-"""Under Due, Add and Edit homework asks "Let FlexWeek pick a time" or "Do it at" a day and time
-(finding 32 of the 0.17.2 audit). "Do it at" pins the homework's time, so no plan moves it; the other
+"""Under Due, Add and Edit homework asks "FlexWeek picks the time" or "Pin to a time" a day and time
+(finding 32 of the 0.17.2 audit, T-W14). Pinning the homework's time means no plan moves it; the other
 choice frees it. A drop on the grid pins too, and reopening the homework shows where it was put."""
 
 from __future__ import annotations
@@ -79,14 +79,37 @@ def test_new_homework_asks_who_picks_the_time_and_starts_with_flexweek(qapp: QAp
     dialog = opened(parent)
     go_when(dialog)
     assert [dialog.when.itemText(i) for i in range(dialog.when.count())] == [
-        "Let FlexWeek pick a time",
-        "Do it at",
+        "FlexWeek picks the time",
+        "Pin to a time",
     ]
     assert dialog.when.currentData() == "plan"
     assert not dialog.when_day.isVisible() and not dialog.when_time.isVisible()
     assert not dialog.when_note.isVisible(), "the sheet is tall enough already; the choice's name says it"
     free(dialog)
     free(parent)
+
+
+def test_pinned_time_accessible_names_and_help_keep_pinned_homework(
+    qapp: QApplication,  # noqa: F811
+) -> None:
+    from desktop.native.controller import NativeSession
+    from desktop.native.settings import HELP_PLANNING
+
+    parent = host()
+    dialog = opened(parent)
+    go_when(dialog)
+    dialog.when.setCurrentIndex(1)
+    assert dialog.when_time.accessibleName() == "Pinned time"
+    assert dialog.when_problem.accessibleName() == "Pinned time error"
+    free(dialog)
+    free(parent)
+    assert HELP_PLANNING == (
+        "Add homework with its due date and length. Press Plan my homework and FlexWeek finds free time for "
+        "it in your study hours, around your fixed times, before it is due. Homework that already has a time "
+        "keeps it. Replan all starts fresh but keeps pinned homework. Anything that does not "
+        "fit stays under Not placed yet, and Details says why. From the keyboard, press Ctrl+K and type Plan."
+    )
+    assert "unpinning " in NativeSession.unpin_assignment.__code__.co_consts
 
 
 def test_do_it_at_shows_one_day_and_a_time_and_says_where_it_stays(qapp: QApplication) -> None:  # noqa: F811

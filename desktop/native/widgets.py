@@ -4604,13 +4604,15 @@ class HomeworkDialog(Dialog):
         ]
 
     def _add_when(self, form: Form) -> None:
-        """Under Due: "Let FlexWeek pick a time", or "Do it at" a day and time, which pins the time
+        """Under Due: "FlexWeek picks the time", or "Pin to a time" a day and time, which pins the time
         so no plan moves it. Homework spread over several times keeps Spread's own way."""
         self._form = form
         sessions = self._open_sessions()
         placed = next((block for block in sessions if block.get("pinned") and block.get("start")), None)
         self._placed = (placed["days"][0], placed["start"]) if placed else None
-        self.when = Segmented((("Let FlexWeek pick a time", "plan"), ("Do it at", "fixed")), "homeworkWhen")
+        self.when = Segmented(
+            (("FlexWeek picks the time", "plan"), ("Pin to a time", "fixed")), "homeworkWhen"
+        )
         form.addRow("When", self.when)
         fixed = bare(QWidget())
         fixed.setObjectName("homeworkFixed")
@@ -4626,12 +4628,12 @@ class HomeworkDialog(Dialog):
         clock.setContentsMargins(0, 0, 0, 0)
         self.when_time = ClockField(QTime(start // 60, start % 60))
         self.when_time.setObjectName("homeworkWhenTime")
-        self.when_time.setAccessibleName("Do it at time")
+        self.when_time.setAccessibleName("Pinned time")
         clock.addWidget(self.when_time)
         clock.addStretch(1)
         column.addLayout(clock)
         self.when_problem = _error_label()
-        self.when_problem.setAccessibleName("Do it at problem")
+        self.when_problem.setAccessibleName("Pinned time error")
         self.when_problem.setVisible(False)
         column.addWidget(self.when_problem)
         form.addRow("", fixed)
@@ -4690,7 +4692,7 @@ class HomeworkDialog(Dialog):
         self.when_problem.setVisible(False)
         self.when_time.setAccessibleDescription("")
         self.when_problem.clear()
-        self.when_problem.setAccessibleName("")
+        self.when_problem.setAccessibleName("Pinned time error")
         self.when_note.setText(
             f"Pinned to {DAYS[fixed['day']]} at {hhmm_text(fixed['start'])}. Plan won't move it."
             if fixed
@@ -4989,7 +4991,7 @@ class HomeworkDialog(Dialog):
         prompts = ("What is it?", "When is it due?", "How long will it take?")
         self.step_prompt.setText(prompts[step])
         names = ("What", "When", "How long")
-        when = "FlexWeek picks" if self.when.currentData() == "plan" else "do it at"
+        when = "FlexWeek picks" if self.when.currentData() == "plan" else "pinned"
         done = (self.title.text().strip(), f"due {self.due.date.text()}, {when}")
         for index, crumb in enumerate(self._crumbs):
             if index < step:

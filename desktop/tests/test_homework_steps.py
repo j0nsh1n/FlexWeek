@@ -88,7 +88,7 @@ def test_do_it_at_crumb_says_do_it_at(qapp: QApplication) -> None:  # noqa: F811
     dialog.when.setCurrentIndex(1)
     dialog._save.click()
     QApplication.processEvents()
-    assert crumbs(dialog)[1] == "✓ due Tue 15 Sep, do it at"
+    assert crumbs(dialog)[1] == "✓ due Tue 15 Sep, pinned"
     free(dialog)
     free(parent)
 

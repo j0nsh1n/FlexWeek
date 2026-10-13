@@ -1553,7 +1553,7 @@ class NativeSession(QObject):
             return False
         self.blocks = blocks
         title = (self.assignments.get(assignment_id) or {}).get("title") or "homework"
-        self._touch("letting FlexWeek move " + title)
+        self._touch("unpinning " + title)
         return True
 
     def delete_block(
