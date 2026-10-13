@@ -142,7 +142,7 @@ def test_a_change_still_saving_is_finished_before_anything_is_deleted(
     )
     assert session.dirty
     assert session.delete_homework("essay") is False
-    assert "still saving" in session.message
+    assert session.message == "Saving your last change… Delete will work in a moment."
 
 
 def test_the_editor_offers_delete_only_for_homework_that_exists(

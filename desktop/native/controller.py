@@ -1437,7 +1437,7 @@ class NativeSession(QObject):
         if item is None or self.account is None or self.conflict:
             return False
         if self.busy or self.dirty or self.pending_save is not None:
-            self._say("Wait a moment: your last change is still saving. Then delete it.")
+            self._say("Saving your last change… Delete will work in a moment.")
             return False
         title = str(item.get("title") or "the homework")
         before = deepcopy(self.blocks)
@@ -1938,7 +1938,7 @@ class NativeSession(QObject):
             self._say("Planning… one moment.")
             return
         if self.conflict:
-            self._say("This week changed in another window. Reload it from More, then plan again.")
+            self._say("This week changed in another window. Choose More > Reload this week, then try again.")
             return
         if self.pending_save is not None:
             if everything:

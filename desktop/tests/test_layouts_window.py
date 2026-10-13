@@ -221,7 +221,7 @@ def test_a_blocked_running_late_toasts_why(qapp: QApplication, window: NativeWin
 
     window.session.dirty = True
     window._open_late()
-    saving = "Your last change is still saving. Try again in a moment."
+    saving = "Saving your last change… Running late will work in a moment."
     assert window.toast.isVisible() is True
     assert window.toast.text() == saving
     assert window.toast._timer.interval() == TOAST_MS
@@ -229,7 +229,7 @@ def test_a_blocked_running_late_toasts_why(qapp: QApplication, window: NativeWin
     window.session.dirty = False
     window.session.conflict = True
     window._open_late()
-    conflict = "This week was changed somewhere else. Reload it first."
+    conflict = "This week changed in another window. Choose More > Reload this week, then try again."
     assert window.toast.text() == conflict
 
 
@@ -903,7 +903,7 @@ def test_plan_and_more_stay_on_the_bar_in_every_layout(qapp: QApplication, windo
     wanted = {
         "Running late",
         "Routines",
-        "Reload this week as it is saved",
+        "Reload this week",
         "Undo",
         "Redo",
         "Undo, copy and save",

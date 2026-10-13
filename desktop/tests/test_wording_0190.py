@@ -114,7 +114,10 @@ def test_undo_of_new_homework_says_adding_and_of_a_changed_one_says_editing(
     ("planning", "conflict", "pending", "said"),
     [
         (True, False, False, "Planning… one moment."),
-        (False, True, True, "This week changed in another window. Reload it from More, then plan again."),
+        (
+            False, True, True,
+            "This week changed in another window. Choose More > Reload this week, then try again.",
+        ),
         (False, False, True, "Saving your last change… Plan will work in a moment."),
     ],
 )
@@ -141,7 +144,7 @@ def test_the_greyed_tip_names_the_same_three_causes(
     session = window.session
     session.conflict = True
     assert window._more_tip("solveButton", False) == (
-        "This week changed in another window. Reload it from More first."
+        "This week changed in another window. Choose More > Reload this week, then try again."
     )
     session.conflict = False
     monkeypatch.setattr(type(session), "planning", property(lambda _self: True))

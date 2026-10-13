@@ -43,7 +43,8 @@ from desktop.tests.window_support import (  # noqa: F401
     window,
 )
 
-NOTHING_UNFINISHED = "Nothing is unfinished: no homework from earlier weeks still needs time."
+# The row says it too ("Unfinished  None left"), so the reason and the toast are the same two words.
+NOTHING_UNFINISHED = "None left"
 ADDING = {
     "Add homework…": (
         "Add an assignment with its due date and how long it will take. FlexWeek finds time for it."
@@ -81,7 +82,7 @@ TOOLTIPS = {
         "Save a copy of this week, or go back to an earlier one. FlexWeek keeps a restore point "
         "before big changes."
     ),
-    "Reload this week as it is saved": (
+    "Reload this week": (
         "Load this week again as it is saved. Use it if something looks out of date."
     ),
 }
@@ -208,8 +209,17 @@ def test_unfinished_opens_its_list_in_any_design(
     panel = window.unfinished_panel
     assert panel.isVisibleTo(window), "Timeline showed nothing"
     rows = [label.text() for label in panel.findChildren(QLabel) if label.isVisibleTo(window)]
-    assert "History essay · 2 h left" in rows
-    assert action.toolTip() == "Homework from earlier weeks that still needs time. Plan it into this week."
+    due = date.today() - timedelta(days=3)
+    assert f"History essay · 2 h left · due {due:%a} {due.day} {due:%b} · Overdue" in rows
+    assert action.toolTip() == (
+        "Overdue and earlier-week homework that still needs time. Plan it into this week."
+    )
+
+
+def assert_count_on_plan_not_on_more(window: NativeWindow) -> None:  # noqa: F811
+    """The 1.0.0 week bar counts homework that needs a time on Plan's pill; More carries no count."""
+    assert window.more_button.accessibleName() == "More"
+    assert window.solve_button.accessibleName().endswith(", 1 homework still needs time")
 
 
 def test_unfinished_stays_open_when_the_week_changes_after_it_is_opened(
@@ -239,7 +249,7 @@ def test_unfinished_stays_open_when_the_week_changes_after_it_is_opened(
     window._on_week()
     qapp.processEvents()
     assert window.unfinished_panel.isVisibleTo(window), "a change to the week closed the list"
-    assert window.more_button.accessibleName() == "More, 1 homework still needs time"
+    assert_count_on_plan_not_on_more(window)
 
 
 def test_more_badge_counts_open_homework_before_an_earlier_week_prompt(
@@ -262,7 +272,7 @@ def test_more_badge_counts_open_homework_before_an_earlier_week_prompt(
     window._unfinished_introduced = False
     window._on_week()
     assert len(session.homework_time_needed()) == 1
-    assert window.more_button.accessibleName() == "More, 1 homework still needs time"
+    assert_count_on_plan_not_on_more(window)
 
 
 def test_more_badge_counts_work_due_this_week_that_the_rail_already_lists(
@@ -281,7 +291,7 @@ def test_more_badge_counts_work_due_this_week_that_the_rail_already_lists(
     window._unfinished_introduced = False
     window._on_week()
     assert [item["assignment_id"] for item in session.homework_time_needed()] == ["math"]
-    assert window.more_button.accessibleName() == "More, 1 homework still needs time"
+    assert_count_on_plan_not_on_more(window)
     assert window.rail.waiting_count.text() == "1"
 
 
@@ -297,23 +307,28 @@ def test_unfinished_is_on_for_work_that_is_not_yet_overdue(
     from desktop.native import widgets as widgets_module
     from desktop.native import window as window_module
 
-    now = datetime(2026, 10, 3, 18, 0)
+    week = date.fromisoformat(window.session.week_start)
+    # Saturday evening of the open week while the essay is planned; Monday morning of the next week
+    # once it is open. The essay is due that Tuesday, so it is not overdue, but it is left from a week
+    # that was saved before the clock's week.
+    saturday = datetime.combine(week + timedelta(days=5), datetime.min.time()).replace(hour=18)
+    monday = datetime.combine(week + timedelta(days=7), datetime.min.time()).replace(hour=9)
+    clock = [saturday]
 
     class Clock(datetime):
         @classmethod
         def now(cls, tz: object = None) -> datetime:
-            return now
+            return clock[0]
 
     monkeypatch.setattr(widgets_module, "datetime", Clock)
     monkeypatch.setattr(window_module, "datetime", Clock)
     session = window.session
     # Item 1b: the window asks with the session's own clock.
-    monkeypatch.setattr(session, "now_ms", lambda: int(now.timestamp() * 1000))
-    week = date.fromisoformat(session.week_start)
+    monkeypatch.setattr(session, "now_ms", lambda: int(clock[0].timestamp() * 1000))
     session.add_block({"id": "school", "title": "School", "kind": "locked", "start": "08:00",
                        "duration_min": 390, "days": [0, 1, 2, 3, 4]})
     session.add_homework({"id": "essay", "title": "History essay", "estimate_min": 120, "revision": 0,
-                          "due": "2026-10-04T15:30"})
+                          "due": (week + timedelta(days=8)).isoformat() + "T15:30"})
     session.save()
     settled(qapp, window)
     planned = next(block for block in session.blocks if block.get("assignment_id") == "essay")
@@ -323,6 +338,7 @@ def test_unfinished_is_on_for_work_that_is_not_yet_overdue(
     later = (week + timedelta(days=7)).isoformat()
     session.load_week(later)
     wait_until(qapp, lambda: session.week_start == later and not session.busy)
+    clock[0] = monday
     assert session.unfinished()
     action = unfinished_action(window)
     button = window.findChild(QPushButton, "unfinishedOpen")

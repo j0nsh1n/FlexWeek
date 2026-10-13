@@ -544,11 +544,13 @@ fn test_running_late_occupies_from_a_snapped_start_until_the_day_end() {
     );
     assert_eq!(
         running_late_refusal("2026-09-14", today, true, false, 0),
-        Some("Your last change is still saving. Try again in a moment.")
+        Some("Saving your last change… Running late will work in a moment.")
     );
     assert_eq!(
         running_late_refusal("2026-09-14", today, false, true, 0),
-        Some("This week was changed somewhere else. Reload it first.")
+        Some(
+            "This week changed in another window. Choose More > Reload this week, then try again."
+        )
     );
 }
 

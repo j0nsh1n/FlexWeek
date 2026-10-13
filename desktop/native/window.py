@@ -380,7 +380,7 @@ REPLACE_WEEK_QUESTION = (
 )
 WAIT_TIP = "Saving your last change… this will work in a moment."
 PLANNING_TIP = "Planning… one moment."
-CONFLICT_TIP = "This week changed in another window. Reload it from More first."
+CONFLICT_TIP = "This week changed in another window. Choose More > Reload this week, then try again."
 SIGN_OUT_QUESTION = "Your week is saved on {where}, under this account. Sign in again to see it."
 RECOVERY_KEEP = "Keep this file somewhere private. Anyone who has it can reset your password."
 RECOVERY_CHOOSE = "Choose where to save"
@@ -1374,7 +1374,7 @@ class NativeWindow(QMainWindow):
         retry = QPushButton("Retry save")
         retry.setObjectName("retrySave")
         retry.clicked.connect(self.session.retry_save)
-        reload_week = QPushButton("Reload this week as it is saved")
+        reload_week = QPushButton("Reload this week")
         reload_week.setObjectName("reloadWeek")
         reload_week.clicked.connect(self.session.reload)
         copy_block = QPushButton("Copy")
