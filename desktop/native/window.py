@@ -11,6 +11,7 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from flexweek_engine import SyncError, SyncService  # type: ignore[import-untyped]
 from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QSize, QStandardPaths, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import (
     QAction,
@@ -86,6 +87,7 @@ from desktop.native.client import (
 from desktop.native.command_bar import Command, CommandBar
 from desktop.native.controller import ROUTINE_STATUS, NativeSession, _late_summary
 from desktop.native.custom_look import sanitize_saved
+from desktop.native.devices import SyncDot, live_phones, sync_state
 from desktop.native.elevation import lift
 from desktop.native.feel import Context, apply_feel, context_for, current, extra_stylesheet, set_current
 from desktop.native.fields import ProblemLine, announce
@@ -520,6 +522,7 @@ class NativeWindow(QMainWindow):
         icon: QIcon | None = None,
         parent: QWidget | None = None,
         kept: KeptSession | None = None,
+        sync: SyncService | None = None,
     ) -> None:
         super().__init__(parent)
         application = QApplication.instance()
@@ -532,6 +535,10 @@ class NativeWindow(QMainWindow):
         self.session = NativeSession(origin, self, kept)
         self._instance_server: QLocalServer | None = None
         self.setWindowTitle("FlexWeek")
+        # This computer's sync service (None when it could not start), and the generation the week
+        # was last loaded at; a change in it means a linked phone's edits arrived.
+        self._sync = sync
+        self._sync_generation = sync.generation() if sync is not None else None
         if icon is not None:
             self.setWindowIcon(icon)
         self.resize(*WINDOW_SIZE)
@@ -1566,6 +1573,13 @@ class NativeWindow(QMainWindow):
         self.status_next.setObjectName("weekStatusNext")
         self.status_next.set_full_text(NOTHING_MORE_TODAY)
         strip.addWidget(self.status_next, 1)
+        self.sync_dot = SyncDot()
+        strip.addWidget(self.sync_dot)
+        self._sync_timer = QTimer(self)
+        self._sync_timer.setInterval(1000)
+        self._sync_timer.timeout.connect(self._sync_tick)
+        if self._sync is not None:
+            self._sync_timer.start()
         self.status_overdue = QLabel()
         self.status_overdue.setObjectName("weekStatusOverdue")
         strip.addWidget(self.status_overdue)
@@ -4686,9 +4700,44 @@ class NativeWindow(QMainWindow):
             self.session.reminder_limits,
             self._layout,
             saved_looks=self._saved_looks,
+            sync=self._sync,
         )
         page.account_id = account["id"]
+        page.devices.refresh()
         return page
+
+    def _sync_tick(self) -> None:
+        """Once a second: the sync status dot, and the week reloaded when a linked phone's edits arrive."""
+        service = self._sync
+        if service is None:
+            return
+        account = self.session.account
+        try:
+            linked = account is not None and bool(live_phones(service, account["id"]))
+        except SyncError:
+            linked = False
+        generation = service.generation()
+        if generation != self._sync_generation and self._sync_arrived(service):
+            self._sync_generation = generation
+        self.sync_dot.show_state(sync_state(service.status(), linked))
+
+    def _sync_arrived(self, service: SyncService) -> bool:
+        """Loads the week again after a phone's edits land. With unsaved edits here, it marks the week
+        as changed instead, so the existing Reload and Keep mine choice is offered. False while a
+        request is in flight; the next tick asks again."""
+        session = self.session
+        if session.account is None:
+            return True
+        if session.busy:
+            return False
+        if session.dirty or session.dirty_assignments or session.pending_save is not None:
+            session.conflict = True
+            session.week_changed.emit()
+            return True
+        names = [row["name"] for row in live_phones(service, session.account["id"])]
+        who = names[0] if len(names) == 1 else "a linked phone"
+        session.load_week(session.week_start, discard=True, said=f"Updated from {who}.")
+        return True
 
     def _attach_settings_page(self, page: SettingsPage) -> None:
         if self._settings is not None:

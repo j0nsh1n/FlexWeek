@@ -8,6 +8,7 @@ from copy import deepcopy
 from pathlib import Path
 from uuid import uuid4
 
+from flexweek_engine import SyncService  # type: ignore[import-untyped]
 from PySide6.QtCore import QEvent, QMargins, QObject, QSize, Qt, QTime, QTimer, QUrl, Signal
 from PySide6.QtGui import (
     QColor,
@@ -56,6 +57,7 @@ from desktop.native import autostart
 from desktop.native.calendar import DAY_FULL
 from desktop.native.controller import ROUTINE_STATUS
 from desktop.native.custom_look import UNNAMED, sanitize_saved, wear
+from desktop.native.devices import DevicesPanel
 from desktop.native.fields import ClockField, DayPicker, Stepper, held_on_problem
 from desktop.native.focus import FOCUS_PHASE_LABEL, format_countdown, more_time_choices, remaining_ms
 from desktop.native.fonts import time_font
@@ -682,6 +684,7 @@ class SettingsPage(QWidget):
         reminder_limits: dict,
         week_layout: dict | None = None,
         saved_looks: list[dict] | None = None,
+        sync: SyncService | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("settingsPage")
@@ -1038,7 +1041,10 @@ class SettingsPage(QWidget):
         update_col.addWidget(check_updates)
         computer_form.addRow("Updates", update_col)
         self.computer_buttons = (open_account, run_setup, check_updates)
-        computer = _section_page("This computer", (start_card, computer_card))
+        devices_card, devices_form = _card("Devices")
+        self.devices = DevicesPanel(sync, lambda: self.account_id or None)
+        devices_form.addRow(self.devices)
+        computer = _section_page("This computer", (start_card, computer_card, devices_card))
         # Their values start at one x, so each one's labels share a column.
         self._aligned = (focus, alerts, computer)
         rail = QWidget()

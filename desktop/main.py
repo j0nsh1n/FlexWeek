@@ -40,6 +40,7 @@ try:
 
     import backend
     from desktop.native.calendar import sunday_due
+    from desktop.native.devices import start_service
     from desktop.native.fonts import load_fonts
     from desktop.native.kept import KeptSession
     from desktop.native.setup import DONE as SETUP_DONE
@@ -274,6 +275,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     server: LocalServer | None = None
+    sync = None
     if not hosted:
         database = database_arg if database_arg is not None else Path(root) / "flexweek.db"
         try:
@@ -284,11 +286,14 @@ def main(argv: list[str] | None = None) -> int:
             QMessageBox.critical(None, "FlexWeek", f"Could not start FlexWeek: {error}")
             return 3
         app.aboutToQuit.connect(server.stop)
+        sync = start_service(database)
+        if sync is not None:
+            app.aboutToQuit.connect(sync.stop)
     assert origin is not None
 
     # Keep me signed in is per database, like the running-instance check.
     kept = KeptSession(Path(root) / "signed-in" / f"{instance}.json")
-    window = NativeWindow(origin, icon=QIcon(str(app_icon_path())), kept=kept)
+    window = NativeWindow(origin, icon=QIcon(str(app_icon_path())), kept=kept, sync=sync)
     if report is None:
         window.listen_for_instances(instance)
     smoke = NativeSmoke(window, report, walk_setup=not hosted) if report is not None else None
