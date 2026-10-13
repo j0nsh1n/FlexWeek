@@ -46,7 +46,7 @@ def test_the_import_preview_counts_what_changes_in_words(qapp: QApplication) -> 
     dialog = TransferPreviewDialog(None, PREVIEW)
     assert dialog.windowTitle() == "Import backup file?"
     assert texts(dialog) == [
-        "From joo2's backup: 1 week added, 2 weeks replaced, 3 homework added. "
+        "From joo2's backup: adds 1 week and replaces 2 of your weeks. 3 homework change. "
         "Your settings will be replaced.",
         "FlexWeek saves a restore point first, so you can go back.",
     ]

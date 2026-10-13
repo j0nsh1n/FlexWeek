@@ -1912,22 +1912,40 @@ class AlarmRingDialog(QDialog):
         self.playing.show()
 
 
+def _joined(parts: list[str]) -> str:
+    """"a", "a and b", "a, b, and c"."""
+    if len(parts) < 3:
+        return " and ".join(parts)
+    return ", ".join(parts[:-1]) + ", and " + parts[-1]
+
+
+def _gone_from_backup(count: int, noun: str) -> str:
+    return f"{count} of your {noun} that {'isn' if count == 1 else 'aren'}'t in the backup"
+
+
 def transfer_summary(preview: dict) -> str:
-    """What importing a backup file will do, in sentences: how many weeks, homework and routines it adds,
-    replaces or removes, and whether the settings change."""
+    """What importing a backup file will do, in sentences: the weeks it adds, replaces and deletes (the
+    deleted ones are the account's own, named as such), the homework and routines that change, and
+    whether the settings change."""
     changes = preview.get("changes") or {}
-    said = []
-    for key, one, many, changed in (
-        ("weeks", "week", "weeks", "replaced"),
-        ("assignments", "homework", "homework", "changed"),
-        ("routines", "routine", "routines", "changed"),
-    ):
+    weeks = changes.get("weeks") or {}
+    added, replaced, deleted = (len(weeks.get(kind) or []) for kind in ("added", "changed", "removed"))
+    parts = []
+    if added:
+        parts.append(f"adds {added} {'week' if added == 1 else 'weeks'}")
+    if replaced:
+        parts.append(f"replaces {replaced} of your weeks")
+    if deleted:
+        parts.append("deletes " + _gone_from_backup(deleted, "weeks"))
+    lines = [_joined(parts) + "."] if parts else []
+    for key, one, many in (("assignments", "homework", "homework"), ("routines", "routine", "routines")):
         part = changes.get(key) or {}
-        for kind, word in (("added", "added"), ("changed", changed), ("removed", "removed")):
-            count = len(part.get(kind) or [])
-            if count:
-                said.append(f"{count} {one if count == 1 else many} {word}")
-    lines = [", ".join(said) + "."] if said else []
+        differ = len(part.get("added") or []) + len(part.get("changed") or [])
+        gone = len(part.get("removed") or [])
+        if differ:
+            lines.append(f"{differ} {one if differ == 1 else many} {'changes' if differ == 1 else 'change'}.")
+        if gone:
+            lines.append("It also deletes " + _gone_from_backup(gone, many) + ".")
     if changes.get("preferences_changed"):
         lines.append("Your settings will be replaced.")
     if not lines:
