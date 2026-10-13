@@ -114,14 +114,14 @@
  {
   "file": "desktop/native/widgets.py",
   "name": "the block editor is titled as a student says it",
-  "old": "self.card_body(\"Edit event\" if existing else \"Add fixed time\")",
+  "old": "self.card_body(\"Edit fixed time\" if existing else \"Add fixed time\")",
   "new": "self.card_body(\"Edit fixed commitment\" if existing else \"Add fixed commitment\")",
   "test": "desktop/tests/test_block_editor_words.py::test_the_editor_is_titled_as_a_student_says_it"
  },
  {
   "file": "desktop/native/widgets.py",
   "name": "deleting a block asks first",
-  "old": "elif not confirm(self, f\"Delete {name}?\", question, \"Delete\"):",
+  "old": "elif not confirm(self, \"Delete fixed time\", question, \"Delete\"):",
   "new": "elif False:",
   "test": "desktop/tests/test_block_editor_words.py::test_delete_asks_first_and_does_nothing_when_refused"
  },
@@ -415,9 +415,9 @@
  {
   "file": "desktop/native/hours/canvas.py",
   "name": "a narrow block keeps its times and cuts its name",
-  "old": "    if drawn.short:\n",
-  "new": "    if False:\n",
-  "test": "desktop/tests/test_week_side.py::test_a_short_block_word_gives_its_name_the_room_its_times_took"
+  "old": "    times = drawn.times if shown[0] else \"\"\n    length = drawn.length if shown[1] else flags\n",
+  "new": "    times = \"\"\n    length = drawn.length if shown[1] else flags\n",
+  "test": "desktop/tests/test_week_side.py::test_a_short_block_keeps_its_whole_time_and_cuts_its_name_first"
  },
  {
   "file": "desktop/native/controller.py",
