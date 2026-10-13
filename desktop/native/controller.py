@@ -875,6 +875,8 @@ class NativeSession(QObject):
             self._history_label = label
         self.blocks, lost = settle_placements(self.blocks, self.assignments, self.week_start, keep)
         self.blocks = clear_stale_pins(self.blocks)
+        if self.selected_block_id not in {item["id"] for item in self.blocks}:
+            self.select_block(None, None)
         for note in lost:
             self.needs_time[note["block_id"]] = note["message"]
         self._forget_settled_notes()
@@ -1951,6 +1953,8 @@ class NativeSession(QObject):
             self._say("Saving your last change… Plan will work in a moment.")
             return
         self.plan_asked_week = self.week_start
+        # Plan can move the block the outline is on, so the outline does not stay on it.
+        self.select_block(None, None)
         start = plan_start(self.week_start, datetime.fromtimestamp(self.now_ms() / 1000))
         if start is not None and start[0] > 6:
             self._say(WEEK_OVER)
@@ -3787,7 +3791,7 @@ class NativeSession(QObject):
 
     def export_account(self, password: str, on_snapshot) -> None:
         if self.account is None or self.dirty or self.dirty_assignments:
-            self._say("Save, retry or download your unsaved changes before transferring account data.")
+            self._say("Save your last change first (More > Retry save), then export.")
             return
         ticket = self._begin()
 
@@ -3795,7 +3799,6 @@ class NativeSession(QObject):
             if not self._idle(ticket):
                 return
             on_snapshot(data)
-            self._say("Account file ready. Keep it private.")
 
         self.client.request(
             "POST",
@@ -3807,7 +3810,7 @@ class NativeSession(QObject):
 
     def preview_account_import(self, snapshot: dict, on_preview=None) -> None:
         if self.account is None or self.dirty or self.dirty_assignments:
-            self._say("Save, retry or download your unsaved changes before transferring account data.")
+            self._say("Save your last change first (More > Retry save), then import.")
             return
         ticket = self._begin()
 
@@ -3837,7 +3840,7 @@ class NativeSession(QObject):
         if self.account is None or preview is None:
             return
         if self.dirty or self.dirty_assignments:
-            self._say("Save, retry or download your unsaved changes before transferring account data.")
+            self._say("Save your last change first (More > Retry save), then import.")
             return
         key = f"import|{self.account['id']}|{preview.get('state_token')}"
         ticket = self._begin()

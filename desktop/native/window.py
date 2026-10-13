@@ -373,6 +373,7 @@ GREYED_TIPS = {
 # Said without the system's own words, which a student cannot act on.
 READ_FAILED = "Couldn't open that file. Choose a FlexWeek backup file (it ends in .json)."
 WRITE_FAILED = "Couldn't save there. Choose another folder, like Documents."
+ACCOUNT_SAVED = "Saved your backup file to {path}. Keep it private: it has all your weeks and homework."
 REPLACE_WEEK_QUESTION = (
     "Replace everything in {week} with this file? Other weeks aren't changed. You can undo this."
 )
@@ -408,7 +409,7 @@ CREATE_HEADING = "Create your account"
 CREATE_NOTE = (
     "FlexWeek fits homework around school and sports. "
     "Your week is saved on this computer, under this account. "
-    "Export a backup file now and then, in Settings."
+    "Export a backup file now and then (Settings > This computer > Manage account)."
 )
 RESET_HEADING = "Reset your password"
 RESET_NOTE = (
@@ -1550,12 +1551,12 @@ class NativeWindow(QMainWindow):
         self.left_chip_text = QLabel()
         self.left_chip_text.setObjectName("leftChipText")
         chip_row.addWidget(self.left_chip_text, 1)
-        plan_them = QPushButton("Plan them")
+        plan_them = QPushButton("Plan into this week")
         plan_them.setObjectName("leftPlan")
         plan_them.setProperty("tonal", True)
         plan_them.clicked.connect(self._plan_left)
         chip_row.addWidget(plan_them)
-        did_these = QPushButton("I did these")
+        did_these = QPushButton("Mark as finished")
         did_these.setObjectName("leftDone")
         did_these.setProperty("outlined", True)
         did_these.clicked.connect(self._did_left)
@@ -4115,8 +4116,8 @@ class NativeWindow(QMainWindow):
         box = QMessageBox(self)
         box.setWindowTitle("Before planning")
         box.setText(", ".join(parts))
-        plan = box.addButton("Plan them", QMessageBox.ButtonRole.AcceptRole)
-        did = box.addButton("I did these", QMessageBox.ButtonRole.ActionRole)
+        plan = box.addButton("Plan into this week", QMessageBox.ButtonRole.AcceptRole)
+        did = box.addButton("Mark as finished", QMessageBox.ButtonRole.ActionRole)
         box.addButton("Not now", QMessageBox.ButtonRole.RejectRole)
         box.exec()
         if box.clickedButton() is plan:
@@ -5067,18 +5068,23 @@ class NativeWindow(QMainWindow):
 
     def _write_account_file(self, snapshot: dict) -> None:
         name = "flexweek-account-" + snapshot.get("username", "account") + ".json"
-        self._write_json(name, snapshot)
+        path = self._write_json(name, snapshot)
+        if path:
+            self.session._say(ACCOUNT_SAVED.format(path=path))
 
-    def _write_json(self, name: str, payload: dict) -> None:
+    def _write_json(self, name: str, payload: dict) -> str:
+        """Writes the file the student picks and returns its path, or "" when nothing was written."""
         import json
 
         path, _ = QFileDialog.getSaveFileName(self, "Save FlexWeek file", name, "JSON (*.json)")
         if not path:
-            return
+            return ""
         try:
             Path(path).write_text(json.dumps(payload, indent=2) + "\n")
         except OSError:
             self.session._say(WRITE_FAILED)
+            return ""
+        return path
 
     def _look_path(self) -> Path:
         root = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation))

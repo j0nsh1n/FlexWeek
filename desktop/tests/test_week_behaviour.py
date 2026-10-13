@@ -595,3 +595,22 @@ def test_a_click_on_the_grid_beside_the_empty_week_card_opens_the_free_time_menu
     local = hours.mapFromGlobal(at)
     QApplication.sendEvent(hours, QContextMenuEvent(QContextMenuEvent.Reason.Mouse, local, at))
     assert menus["rows"] and any("Add fixed time" in row for row in menus["rows"][0])
+
+
+def test_a_block_that_is_gone_takes_its_outline_with_it(qapp: QApplication, signed_in: NativeWindow) -> None:  # noqa: F811
+    session = signed_in.session
+    session.add_block({"id": "gym", "title": "Gym", "kind": "locked", "category": "extra",
+                       "start": "16:00", "duration_min": 60, "days": [0]})
+    session.select_block("gym", None)
+    session.blocks = [block for block in session.blocks if block["id"] != "gym"]
+    session._touch("running late")
+    assert session.selected_block_id is None
+
+
+def test_plan_takes_the_outline_off_the_block_it_was_on(qapp: QApplication, signed_in: NativeWindow) -> None:  # noqa: F811
+    session = signed_in.session
+    session.add_block({"id": "school", "title": "School", "kind": "locked", "category": "class",
+                       "start": "08:30", "duration_min": 405, "days": [0, 1, 2, 3, 4]})
+    session.select_block("school", None)
+    session.solve()
+    assert session.selected_block_id is None

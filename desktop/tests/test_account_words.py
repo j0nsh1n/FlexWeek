@@ -335,3 +335,31 @@ def test_manage_account_password_boxes_have_the_eye_sign_in_has(
         eye.click()
         assert field.echoMode() == QLineEdit.EchoMode.Password
     dialog.close()
+
+
+def test_a_backup_file_says_where_it_was_saved(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+    tmp_path,
+    monkeypatch,
+) -> None:
+    target = tmp_path / "flexweek-account-joo.json"
+    picked = (str(target), "")
+    monkeypatch.setattr(window_module.QFileDialog, "getSaveFileName", lambda *args, **kwargs: picked)
+    window._write_account_file({"username": "joo"})
+    assert target.is_file()
+    assert window.session.message == (
+        f"Saved your backup file to {target}. Keep it private: it has all your weeks and homework."
+    )
+
+
+def test_export_and_import_refusals_say_to_save_first_with_retry(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    session = window.session
+    session.dirty = True
+    session.export_account("unused", lambda data: None)
+    assert session.message == "Save your last change first (More > Retry save), then export."
+    session.preview_account_import({"username": "joo"})
+    assert session.message == "Save your last change first (More > Retry save), then import."

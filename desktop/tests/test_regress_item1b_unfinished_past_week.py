@@ -3,11 +3,11 @@ to More.
 
 The spec's guard: homework due Wednesday of week 2 with its only session on Friday of week 1, never
 ticked; open week 2 (clock: Monday 07:00 of week 2): More shows 1 unfinished; Plan leaves the session
-where it is and shows the "1 unfinished from last week" chip; "Plan them" places it in week 2 before
-Wednesday; in a second run "I did these" marks it done, More shows 0 and Plan then places nothing new.
+where it is and shows the "1 unfinished from last week" chip; "Plan into this week" places it in week 2 before
+Wednesday; in a second run "Mark as finished" marks it done, More shows 0 and Plan then places nothing new.
 
 The chip and its two buttons are found by their words (UI Designer's: "... unfinished from last
-week", "Plan them", "I did these"), design-agnostic.
+week", "Plan into this week", "Mark as finished"), design-agnostic.
 """
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
@@ -103,14 +103,15 @@ def test_plan_shows_the_unfinished_from_last_week_chip(qapp, window) -> None:
         label.text() for label in window.findChildren(QLabel)
         if label.isVisible() and "left from last week" in label.text()
     ]
-    assert chip and visible_button(window, "Plan them") and visible_button(window, "I did these")
+    assert chip and visible_button(window, "Plan into this week")
+    assert visible_button(window, "Mark as finished")
 
 
 def test_plan_them_places_it_in_week_two_before_wednesday(qapp, window) -> None:
     left_in_week_one(qapp, window)
     plan(qapp, window)
-    button = visible_button(window, "Plan them")
-    assert button is not None, "no Plan them"
+    button = visible_button(window, "Plan into this week")
+    assert button is not None, "no Plan into this week"
     button.click()
     settled(qapp, window)
     placed = [b for b in lab_sessions(window) if b.get("start")]
@@ -120,8 +121,8 @@ def test_plan_them_places_it_in_week_two_before_wednesday(qapp, window) -> None:
 def test_i_did_these_marks_it_done_more_shows_none_and_plan_places_nothing(qapp, window) -> None:
     left_in_week_one(qapp, window)
     plan(qapp, window)
-    button = visible_button(window, "I did these")
-    assert button is not None, "no I did these"
+    button = visible_button(window, "Mark as finished")
+    assert button is not None, "no Mark as finished"
     button.click()
     settled(qapp, window)
     enabled, words = more_unfinished_row(window)

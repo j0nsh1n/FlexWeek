@@ -14,7 +14,9 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QLabel, QPushButton
+from PySide6.QtCore import QTimer
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 
 from desktop.native.weekmodel import length_label, range_label
 from desktop.tests.grid_support import (  # noqa: F401
@@ -47,6 +49,27 @@ def overdue_this_week(qapp, window) -> str:
     session.week_changed.emit()
     settled(qapp, window)
     return block["id"]
+
+
+def test_1br_chip_and_planning_box_say_plan_into_this_week_and_mark_as_finished(qapp, window) -> None:
+    overdue_this_week(qapp, window)
+    assert window.findChild(QPushButton, "leftPlan").text() == "Plan into this week"
+    assert window.findChild(QPushButton, "leftDone").text() == "Mark as finished"
+    asked: list[list[str]] = []
+
+    def look() -> None:
+        sheet = QApplication.activeModalWidget()
+        if sheet is not None:
+            asked.append([b.text() for b in sheet.findChildren(QPushButton)])
+            sheet.reject()
+
+    QTimer.singleShot(300, look)
+    window.findChild(QPushButton, "solveButton").click()
+    for _ in range(12):
+        QTest.qWait(50)
+    settled(qapp, window)
+    assert asked and "Plan into this week" in asked[0] and "Mark as finished" in asked[0], asked
+    assert "I did these" not in asked[0] and "Plan them" not in asked[0], asked
 
 
 def test_1br_the_week_list_row_says_overdue_with_the_due_date(qapp, window) -> None:
