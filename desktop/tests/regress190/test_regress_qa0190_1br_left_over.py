@@ -73,15 +73,17 @@ def test_1br_the_overdue_session_says_overdue_in_the_week_list(qapp, window) -> 
     assert rows == [expected]
 
 
-def test_1br_the_sidebar_counts_the_overdue_session(qapp, window) -> None:
+def test_1br_the_status_strip_counts_the_overdue_session(qapp, window) -> None:
+    # 1.0.0 planning screen (pick A): the overdue count moved from the sidebar to the status strip.
     overdue_this_week(qapp, window)
-    assert window.rail.none_waiting.text() == "1 overdue · 1 h still needs a time"
+    assert window.status_overdue.text() == "1 overdue"
 
 
-def test_1br_more_counts_the_overdue_session(qapp, window) -> None:
+def test_1br_more_greys_unfinished_when_the_overdue_session_already_has_a_time(qapp, window) -> None:
+    # More counts homework that still needs a time (Jonathan, 2026-10-12); this one has a time.
     overdue_this_week(qapp, window)
     enabled, words = more_unfinished_row(window)
-    assert (enabled, words) == (True, "Overdue · 1")
+    assert (enabled, words) == (False, "Unfinished\tNone left")
 
 
 def test_1br_more_row_says_unfinished_with_the_count_left(qapp, window) -> None:
