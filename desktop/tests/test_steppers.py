@@ -8,8 +8,9 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QPoint
-from PySide6.QtWidgets import QAbstractSpinBox, QApplication, QDateEdit, QSpinBox, QWidget
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QAbstractSpinBox, QApplication, QButtonGroup, QDateEdit, QSpinBox, QWidget
 
 from desktop.native.fields import QUICK_LENGTHS, Stepper
 from desktop.native.settings import SettingsPage
@@ -87,6 +88,39 @@ def test_a_homework_length_steps_by_a_quarter_and_has_quick_lengths(
     stepper.chips[2].click()
     stepper.less.click()
     assert dialog.estimate.value() == 30 and stepper.chips[1].isChecked()
+    free(dialog)
+
+
+def test_length_chips_are_one_group_with_arrows_and_one_tab_stop(
+    qapp: QApplication,  # noqa: F811
+    host: QWidget,  # noqa: F811
+) -> None:
+    dialog = HomeworkDialog(host, today=WEEK)
+    stepper = dialog.estimate.parentWidget()
+    assert isinstance(stepper, Stepper)
+    group = stepper.findChild(QButtonGroup)
+    assert group is not None and list(group.buttons()) == stepper.chips
+    assert [chip.accessibleDescription() for chip in stepper.chips] == [
+        "1 of 5",
+        "2 of 5",
+        "3 of 5",
+        "4 of 5",
+        "5 of 5",
+    ]
+    tabbed = [chip for chip in stepper.chips if chip.focusPolicy() & Qt.FocusPolicy.TabFocus]
+    assert tabbed == [stepper.chips[3]]
+    stepper.chips[3].setFocus()
+    QTest.keyClick(stepper.chips[3], Qt.Key.Key_Right)
+    assert dialog.estimate.value() == 90
+    assert stepper.chips[4].isChecked()
+    tabbed = [chip for chip in stepper.chips if chip.focusPolicy() & Qt.FocusPolicy.TabFocus]
+    assert tabbed == [stepper.chips[4]]
+    QTest.keyClick(stepper.chips[4], Qt.Key.Key_Home)
+    assert dialog.estimate.value() == 15 and stepper.chips[0].isChecked()
+    stepper.box.setValue(75)
+    assert not any(chip.isChecked() for chip in stepper.chips)
+    tabbed = [chip for chip in stepper.chips if chip.focusPolicy() & Qt.FocusPolicy.TabFocus]
+    assert tabbed == [stepper.chips[0]]
     free(dialog)
 
 

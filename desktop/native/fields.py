@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QAbstractSpinBox,
     QBoxLayout,
+    QButtonGroup,
     QCalendarWidget,
     QDateEdit,
     QDateTimeEdit,
@@ -1021,6 +1022,8 @@ class Stepper(QWidget):
         line.addStretch(1)
         column.addLayout(line)
         self.chips: list[QPushButton] = []
+        self._chip_group = QButtonGroup(self)
+        self._chip_group.setExclusive(False)
         if quick:
             chips = QHBoxLayout()
             chips.setContentsMargins(0, 0, 0, 0)
@@ -1035,6 +1038,8 @@ class Stepper(QWidget):
                 chip.setAccessibleName(f"{minutes} minutes")
                 chip.setCursor(Qt.CursorShape.PointingHandCursor)
                 chip.clicked.connect(self._pick)
+                chip.installEventFilter(self)
+                self._chip_group.addButton(chip, len(self.chips))
                 chips.addWidget(chip)
                 self.chips.append(chip)
             chips.addStretch(1)
@@ -1077,8 +1082,36 @@ class Stepper(QWidget):
         for chip in self.chips:
             chip.setChecked(chip.property("minutes") == self.box.value())
             chip.setEnabled(live)
+        self._chip_tab_stops()
+
+    def _chip_tab_stops(self) -> None:
+        if not self.chips:
+            return
+        checked = next((at for at, chip in enumerate(self.chips) if chip.isChecked()), 0)
+        for at, chip in enumerate(self.chips):
+            chip.setFocusPolicy(
+                Qt.FocusPolicy.ClickFocus
+                | (Qt.FocusPolicy.TabFocus if at == checked else Qt.FocusPolicy.NoFocus)
+            )
+            chip.setAccessibleDescription(f"{at + 1} of {len(self.chips)}")
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if watched in self.chips and event.type() == QEvent.Type.KeyPress:
+            current = self.chips.index(watched)
+            key = event.key()
+            target = None
+            if key in (Qt.Key.Key_Left, Qt.Key.Key_Up):
+                target = (current - 1) % len(self.chips)
+            elif key in (Qt.Key.Key_Right, Qt.Key.Key_Down):
+                target = (current + 1) % len(self.chips)
+            elif key == Qt.Key.Key_Home:
+                target = 0
+            elif key == Qt.Key.Key_End:
+                target = len(self.chips) - 1
+            if target is not None:
+                self.chips[target].click()
+                self.chips[target].setFocus(Qt.FocusReason.TabFocusReason)
+                return True
         if watched is self.box and event.type() == QEvent.Type.EnabledChange:
             self._follow()
         return False
