@@ -4073,7 +4073,7 @@ class NativeWindow(QMainWindow):
         self.left_chip_icon.setPixmap(
             icons.pixmap("history", self.palette().color(QPalette.ColorRole.Mid).name(), 16)
         )
-        self.left_chip.setVisible(bool(left))
+        self.left_chip.setVisible(bool(left) and not self.unfinished_panel.isVisible())
         if words and words != getattr(self, "_left_chip_words", ""):
             announce(self.left_chip_text, words)
         self._left_chip_words = words
@@ -4151,6 +4151,7 @@ class NativeWindow(QMainWindow):
             self.session._say(NOTHING_UNFINISHED)
         self._fill_unfinished(items)
         self._unfinished_opened = bool(items)
+        self._sync_left_chip()
 
     def _plan_unfinished(self, assignment_id: str) -> None:
         item = self.session.assignments.get(assignment_id)
@@ -5589,6 +5590,8 @@ class NativeWindow(QMainWindow):
             self.month_grid.set_tight(
                 any(panel.isVisibleTo(self._week_page) for panel in (self.plan_review, self.unfinished_panel))
             )
+            if watched is self.unfinished_panel:
+                self._sync_left_chip()
         if event.type() != QEvent.Type.KeyPress:
             return super().eventFilter(watched, event)
         if isinstance(watched, EDITABLE):

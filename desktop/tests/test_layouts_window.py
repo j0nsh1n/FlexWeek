@@ -3080,29 +3080,22 @@ def test_mission_counts_focus_minutes_while_a_session_runs(qapp: QApplication, w
 def test_month_fits_a_1024_by_640_window_with_the_unfinished_card_open(
     qapp: QApplication, window: NativeWindow
 ) -> None:
-    """#28: with the panel above it open, Month's last row was half cut and a scroll bar showed."""
+    """Month fits at 1024x640 with overdue homework in the open Unfinished panel."""
+    from desktop.tests.test_1br_left_over_guards import overdue_this_week
+
     window.resize(1024, 640)
     window.show()
     click(window, "viewMonth")
     settled(qapp, window)
     wait_until(qapp, lambda: window.month_grid.canvas.rows() > 1)
-    # Real homework that still needs a time, opened as More's Unfinished opens it: a card filled by hand
-    # is emptied again by the next week reload, which lists the session's own homework. Not overdue, so
-    # the left-over chip stays away and the card is the only panel above Month.
-    friday_noon = datetime.fromisoformat(window.session.week_start) + timedelta(days=4, hours=12)
-    window.session.add_homework(
-        {"id": "old", "title": "Old", "due": friday_noon.isoformat(timespec="minutes"), "estimate_min": 60}
-    )
-    window.session.save()
-    settled(qapp, window)
-    window._on_week()
-    window._show_unfinished()
+    overdue_this_week(qapp, window)
     wait_until(qapp, lambda: window.unfinished_panel.isVisible())
     for _ in range(5):
         qapp.processEvents()
     grid = window.month_grid
     canvas, view = grid.canvas, grid.scroll.viewport().height()
     assert window.unfinished_panel.isVisible()
+    assert not window.left_chip.isVisibleTo(window)
     assert grid.scroll.verticalScrollBar().maximum() == 0, "no scroll bar"
     last = canvas.cell_rect((canvas.rows() - 1) * 7)
     assert last.bottom() <= view, f"the last row ends at {last.bottom():.0f} in a view of {view}"

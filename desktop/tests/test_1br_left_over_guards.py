@@ -80,6 +80,36 @@ def test_1br_more_badge_opens_the_shared_left_over_rows(qapp, window) -> None:
     assert row.findChild(QLabel, "unfinishedRow").text() == words
 
 
+def test_1br_overdue_chip_hides_with_unfinished_and_returns_when_hidden(qapp, window) -> None:
+    overdue_this_week(qapp, window)
+    monday = date.fromisoformat(window.session.week_start)
+    due = (monday + timedelta(days=FRIDAY)).isoformat() + "T23:59"
+    window.session.add_homework(
+        {"id": "chem", "title": "Chem lab", "due": due, "estimate_min": 60, "revision": 0}
+    )
+    window.session.save()
+    settled(qapp, window)
+    window._on_week()
+    settled(qapp, window)
+    if window.unfinished_panel.isVisibleTo(window):
+        window.unfinished_panel.findChild(QPushButton, "unfinishedDismiss").click()
+        settled(qapp, window)
+    assert window.left_chip.isVisibleTo(window)
+
+    window.findChild(QPushButton, "unfinishedOpen").click()
+    settled(qapp, window)
+    assert window.unfinished_panel.isVisibleTo(window)
+    assert not window.left_chip.isVisibleTo(window)
+    window.session.week_changed.emit()
+    settled(qapp, window)
+    assert not window.left_chip.isVisibleTo(window)
+
+    window.unfinished_panel.findChild(QPushButton, "unfinishedDismiss").click()
+    settled(qapp, window)
+    assert not window.unfinished_panel.isVisibleTo(window)
+    assert window.left_chip.isVisibleTo(window)
+
+
 def test_1br_deadline_timer_refreshes_tags_sidebar_and_focus(qapp, window, monkeypatch) -> None:
     session = window.session
     monday = date.fromisoformat(session.week_start)
