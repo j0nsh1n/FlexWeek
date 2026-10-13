@@ -695,7 +695,7 @@ fn test_a_deadline_that_has_already_passed_says_so() {
     assert_eq!(ids(&trace.unplaced), ["hw"]);
     let (reason, message) = unplaced_reason(&trace, "hw");
     assert_eq!(reason, "DEADLINE_PASSED");
-    assert_eq!(message, "That time has already passed.");
+    assert_eq!(message, "That due time has passed. Choose a later one.");
     assert!(
         trace
             .failed_constraints

@@ -4,7 +4,7 @@ use flexweek_engine::plan::{sentence, slack_sentence};
 fn test_a_passed_deadline_and_no_study_time_today_have_their_own_sentences() {
     assert_eq!(
         sentence("DEADLINE_PASSED").unwrap(),
-        "That time has already passed."
+        "That due time has passed. Choose a later one."
     );
     assert_eq!(
         sentence("NO_STUDY_TIME_TODAY").unwrap(),

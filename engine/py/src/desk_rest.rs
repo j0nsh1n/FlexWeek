@@ -290,9 +290,7 @@ fn calendar_past_problem(
     now_min: i64,
 ) -> PyResult<Option<String>> {
     guard(|| {
-        let found = grid::past_problem(week_start, day, start_min, now_iso, now_min)
-            .map_err(crate::raise)?;
-        Ok(found.map(str::to_string))
+        grid::past_problem(week_start, day, start_min, now_iso, now_min).map_err(crate::raise)
     })
 }
 

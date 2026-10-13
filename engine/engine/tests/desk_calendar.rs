@@ -5,8 +5,8 @@ mod common;
 use common::desk::{fresh_ids, object};
 use flexweek_engine::desk::calendar::{days_through, is_series_checked};
 use flexweek_engine::desk::grid::{
-    apply_block_edit, apply_block_times, create_click_range, due_day_of, due_soon_for, span_clash,
-    span_problem, split_occurrence, sunday_due,
+    apply_block_edit, apply_block_times, create_click_range, due_day_of, due_soon_for, past_problem,
+    span_clash, span_problem, split_occurrence, sunday_due,
 };
 use flexweek_engine::desk::planning::due_point;
 use serde_json::{Value, json};
@@ -245,4 +245,17 @@ fn test_due_point_and_span_problem_cover_date_only_and_timed_dues() {
         .map(|item| item["id"].as_str().expect("id"))
         .collect();
     assert_eq!(ids, ["morning", "allday"]);
+}
+
+#[test]
+fn test_a_past_start_names_the_next_quarter_hour_today() {
+    let week = "2026-10-05";
+    let thursday = "2026-10-08";
+    let at = 15 * 60 + 10;
+    assert_eq!(
+        past_problem(week, 3, 15 * 60, thursday, at)
+            .expect("a verdict")
+            .as_deref(),
+        Some("That time has passed. Choose a time after 15:15 today, or another day.")
+    );
 }

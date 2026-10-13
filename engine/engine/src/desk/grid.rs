@@ -13,7 +13,16 @@ use crate::desk::pyops::{
 use crate::desk::pyval::{subscript, type_error};
 use crate::error::{EngineError, EngineResult};
 use crate::stored::{attribute_error, py_int, py_str, text, truthy, type_name};
-use crate::time::{DAY_END_MIN, DAY_START_MIN, hhmm_to_minutes, minutes_to_hhmm};
+use crate::desk::weekmodel::clock_text;
+use crate::time::{DAY_END_MIN, DAY_START_MIN, SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm};
+
+const CHOOSE_FIRST_MIN: i64 = 6 * 60;
+
+fn next_choose_slot(now_min: i64) -> i64 {
+    let last = DAY_END_MIN - SLOT_MIN;
+    let slot = (-(-now_min).div_euclid(SLOT_MIN)) * SLOT_MIN;
+    slot.clamp(CHOOSE_FIRST_MIN, last)
+}
 
 type Fresh<'a> = &'a mut dyn FnMut() -> String;
 
@@ -791,7 +800,7 @@ pub fn past_problem(
     start_min: i64,
     now_iso: &str,
     now_min: i64,
-) -> EngineResult<Option<&'static str>> {
+) -> EngineResult<Option<String>> {
     let Ok(monday) = from_iso(week_start) else {
         return Ok(None);
     };
@@ -802,7 +811,10 @@ pub fn past_problem(
         return Ok(None);
     };
     if target < now || (target == now && start_min < now_min) {
-        return Ok(Some("That's in the past."));
+        let after = clock_text(next_choose_slot(now_min));
+        return Ok(Some(format!(
+            "That time has passed. Choose a time after {after} today, or another day."
+        )));
     }
     Ok(None)
 }
@@ -899,14 +911,15 @@ mod tests {
         let week = "2026-10-05";
         let thursday = "2026-10-08";
         let at = 15 * 60 + 10;
+        let refused = "That time has passed. Choose a time after 15:15 today, or another day.";
         assert_eq!(
-            past_problem(week, 1, 16 * 60, thursday, at).unwrap(),
-            Some("That's in the past."),
+            past_problem(week, 1, 16 * 60, thursday, at).unwrap().as_deref(),
+            Some(refused),
             "Tuesday of this week"
         );
         assert_eq!(
-            past_problem(week, 3, 15 * 60, thursday, at).unwrap(),
-            Some("That's in the past."),
+            past_problem(week, 3, 15 * 60, thursday, at).unwrap().as_deref(),
+            Some(refused),
             "earlier today"
         );
         assert_eq!(
@@ -920,8 +933,8 @@ mod tests {
             "later today"
         );
         assert_eq!(
-            past_problem("2026-09-28", 4, 18 * 60, thursday, at).unwrap(),
-            Some("That's in the past."),
+            past_problem("2026-09-28", 4, 18 * 60, thursday, at).unwrap().as_deref(),
+            Some(refused),
             "last week"
         );
         assert_eq!(

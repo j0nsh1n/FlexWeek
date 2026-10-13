@@ -31,7 +31,7 @@ pub const REASON_COPY: &[(&str, &str)] = &[
         "DEADLINE_MISS",
         "There is not enough time left before it is due, even with nothing else planned.",
     ),
-    ("DEADLINE_PASSED", "That time has already passed."),
+    ("DEADLINE_PASSED", "That due time has passed. Choose a later one."),
     (
         "NO_SLOT_LEFT",
         "Your other homework is using every free gap before it's due. Move or shorten one, or choose a time yourself.",
