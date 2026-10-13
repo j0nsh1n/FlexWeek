@@ -766,6 +766,18 @@ def word_elide(text: str, metrics: QFontMetricsF, width: float) -> str:
     return metrics.elidedText(text, Qt.TextElideMode.ElideRight, width)
 
 
+def _fit_times_line(times: str, metrics: QFontMetricsF, width: float) -> str | None:
+    """The range on one line in `width`, eliding only when the full range cannot fit."""
+    if not times:
+        return None
+    if metrics.horizontalAdvance(times) <= width:
+        return times
+    elided = metrics.elidedText(times, Qt.TextElideMode.ElideRight, int(width))
+    if elided and metrics.horizontalAdvance(elided) <= width and len(elided.strip("…")) >= 4:
+        return elided
+    return None
+
+
 def name_kept(lines: list[str], title: str) -> int:
     """How much of a block's name these lines of it keep: 3 the whole of it, 2 shortened at a word,
     1 cut inside a word ("Robot…" for "Robotics club"), 0 nothing."""
@@ -863,10 +875,19 @@ def _block_words(
         return _wide_layout(drawn, tm, sm, room, line_top, indent, book)
 
     def stack(most: int, extras: tuple[str, ...], cut: bool) -> list[Written] | None:
-        if any(sm.horizontalAdvance(extra) > width for extra in extras):
-            return None
+        fitted: list[str] = []
+        for extra in extras:
+            if extra == times:
+                line = _fit_times_line(extra, sm, width)
+            elif sm.horizontalAdvance(extra) <= width:
+                line = extra
+            else:
+                line = None
+            if line is None:
+                return None
+            fitted.append(line)
         count = min(len(lines), most)
-        need = tl * count + sl * len(extras)
+        need = tl * count + sl * len(fitted)
         if count > 1 or extras:
             if need > budget + 0.5:
                 return None
@@ -880,7 +901,7 @@ def _block_words(
             left = room.left() + (indent if at == 0 else 0)
             out.append(Written(text, True, QRectF(left, top, room.right() - left, tl), book=book and at == 0))
             top += tl
-        for extra in extras:
+        for extra in fitted:
             out.append(Written(extra, False, QRectF(room.left(), top, width, sl)))
             top += sl
         return out
@@ -901,31 +922,22 @@ def _block_words(
         written.append(Written(after, False, QRectF(at, line_top + _beside(tm, sm), after_width + 1, sl)))
         return written
 
-    start = short_clock(drawn.span.start) if shown[0] else ""
-    if drawn.short:
-        # Hours too narrow for the name and its times: the name whole, times left to the editor.
-        time_ways = []
-        name_ways = [lambda cut: stack(3, (), cut), lambda cut: stack(1, (), cut)]
-    else:
-        said = ((drawn.done, "Finished"), (drawn.missed, "Missed"))
-        flags = " · ".join(word for flag, word in said if flag)
-        times = drawn.times if shown[0] else ""
-        length = drawn.length if shown[1] else flags
-        # Two title lines in a full column; one when the block shares the column, so a leftover
-        # word of the title is not read as another event beside the neighbour.
-        title_lines = 1 if drawn.columns > 1 else 2
-        time_ways = [
-            lambda cut, most=title_lines: stack(most, tuple(part for part in (times, length) if part), cut),
-            lambda cut, most=title_lines: stack(most, tuple(part for part in (times,) if part), cut),
-            lambda cut: stack(1, tuple(part for part in (times,) if part), cut),
-            lambda cut, most=title_lines: stack(most, (start,) if start else (), cut),
-            lambda cut: stack(1, (start,) if start else (), cut),
-            lambda cut: one_line(start, cut) if start else None,
-        ]
-        name_ways = [
-            lambda cut, most=title_lines: stack(most, (), cut),
-            lambda cut: stack(1, (), cut),
-        ]
+    said = ((drawn.done, "Finished"), (drawn.missed, "Missed"))
+    flags = " · ".join(word for flag, word in said if flag)
+    times = drawn.times if shown[0] else ""
+    length = drawn.length if shown[1] else flags
+    # Two title lines in a full column; one when the block shares the column, so a leftover
+    # word of the title is not read as another event beside the neighbour.
+    title_lines = 1 if drawn.columns > 1 or drawn.short else 2
+    time_ways = [
+        lambda cut, most=title_lines: stack(most, tuple(part for part in (times, length) if part), cut),
+        lambda cut, most=title_lines: stack(most, tuple(part for part in (times,) if part), cut),
+        lambda cut: stack(1, tuple(part for part in (times,) if part), cut),
+    ]
+    name_ways = [
+        lambda cut, most=title_lines: stack(most, (), cut),
+        lambda cut: stack(1, (), cut),
+    ]
 
     def kept(lay: list[Written] | None) -> int:
         if not lay:
@@ -935,33 +947,19 @@ def _block_words(
     # Uncut times, then an uncut wrapped name while two title lines fit (Swimming / gala), then a
     # start kept by shortening the title at a word. Cutting inside a word to keep the start used to
     # beat dropping the icon, so "Piano lesson" became "Pian…".
-    wrap = budget + 0.5 >= 2 * tl
-    shortened = word_elide(drawn.title, tm, width)
-    name_at_a_word = name_kept([shortened], drawn.title) >= 2
     for way in time_ways:
         found = way(False)
         if found is not None:
             return found
-    if wrap:
-        for way in name_ways:
-            found = way(False)
-            if found is not None:
-                return found
     for way in time_ways:
         found = way(True)
-        if found is not None and kept(found) >= 2:
+        if found is not None:
             return found
+    time_line = _fit_times_line(times, sm, width) if times else None
+    if time_line and sl <= budget + 0.5:
+        return [Written(time_line, False, QRectF(room.left(), line_top, width, sl))]
     for way in name_ways:
         found = way(False)
-        if found is not None:
-            return found
-    if name_at_a_word:
-        for way in name_ways:
-            found = way(True)
-            if found is not None and kept(found) >= 2:
-                return found
-    for way in time_ways:
-        found = way(True)
         if found is not None:
             return found
     for way in name_ways:
