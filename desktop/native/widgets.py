@@ -2275,12 +2275,16 @@ class Choices(QFrame):
 class Segmented(Choices):
     """Two or three choices side by side in one track, the chosen one raised."""
 
-    def __init__(self, choices: tuple[tuple[str, object], ...] = (), name: str = "") -> None:
+    def __init__(
+        self, choices: tuple[tuple[str, object], ...] = (), name: str = "", *, stacked: bool = False
+    ) -> None:
         super().__init__()
         self.setProperty("segmented", True)
         if name:
             self.setObjectName(name)
-        self._line = QHBoxLayout(self)
+        # Stacked, the choices sit one above the other: for choices whose words are too long to sit side by
+        # side in a sheet's column at every text size.
+        self._line = QVBoxLayout(self) if stacked else QHBoxLayout(self)
         self._line.setContentsMargins(2, 2, 2, 2)
         self._line.setSpacing(2)
         self._buttons: list[QRadioButton] = []
@@ -4677,8 +4681,9 @@ class HomeworkDialog(Dialog):
         sessions = self._open_sessions()
         placed = next((block for block in sessions if block.get("pinned") and block.get("start")), None)
         self._placed = (placed["days"][0], placed["start"]) if placed else None
+        # Stacked: side by side the two choices were wider than the sheet's column (T-W14's words).
         self.when = Segmented(
-            (("FlexWeek picks the time", "plan"), ("Pin to a time", "fixed")), "homeworkWhen"
+            (("FlexWeek picks the time", "plan"), ("Pin to a time", "fixed")), "homeworkWhen", stacked=True
         )
         form.addRow("When", self.when)
         fixed = bare(QWidget())
