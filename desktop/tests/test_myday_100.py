@@ -19,7 +19,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import Qt
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QFrame, QLabel, QPushButton, QScrollArea
+    from PySide6.QtWidgets import QApplication, QFrame, QLabel, QPushButton, QScrollArea, QWidget
 
     from desktop.native.layouts.base import Scene
     from desktop.native.layouts.dial import DayDialView, DialFace
@@ -315,3 +315,21 @@ def test_another_week_says_then_not_later_today(qapp: QApplication) -> None:
     view.show()
     qapp.processEvents()
     assert view.findChild(QLabel, "oneThenLabel").text() == "Then"
+
+
+@pytest.mark.parametrize(
+    ("width", "height", "large"), [(1024, 640, True), (1280, 800, False), (1440, 900, False)]
+)
+def test_one_things_right_column_runs_list_then_actions_then_evening_then_day_bar(
+    qapp: QApplication, width: int, height: int, large: bool
+) -> None:
+    """The demo's order down the right of One thing (pick A): Later today, the action row, the evening line,
+    then the day bar with its letters. Tab order alone can match while the rows are drawn in another order."""
+    view = shown(qapp, OneThingView, "15:40", width, height, large)
+
+    def top(name: str) -> int:
+        widget = view.findChild(QWidget, name)
+        assert widget is not None and widget.isVisible(), name
+        return widget.mapTo(view, widget.rect().topLeft()).y()
+
+    assert top("oneLate") < top("oneEvening") < top("oneDayBar") < top("oneDay0")
