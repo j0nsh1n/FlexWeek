@@ -15,6 +15,7 @@ from PySide6.QtCore import QPoint
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QSpinBox, QWidget
 
+from desktop.native import settings as settings_module
 from desktop.native.look import ACCENT_COLORS, look_menu_token, resolved_palette
 from desktop.native.settings import SETTINGS_COLUMN, SettingsPage
 from desktop.native.widgets import Segmented, Swatches
@@ -156,4 +157,31 @@ def test_high_contrast_says_it_keeps_its_own_yellow(qapp: QApplication, window: 
     for _ in range(5):
         qapp.processEvents()
     assert note.isVisibleTo(page)
+    page.close_page()
+
+
+def test_high_contrast_names_its_text_suggestion_and_the_button_says_what_it_does(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T-W10 and N13-A31: "Suggests Large text" with a bare "Use", and "Kept for every look."."""
+    spoken: list[str] = []
+    monkeypatch.setattr(settings_module, "announce", lambda _widget, words, **_kw: spoken.append(words))
+    page = open_settings(qapp, window)
+    box = page.look
+    box.setCurrentIndex(box.findData("preset:high-contrast"))
+    qapp.processEvents()
+    assert page.text_suggest.isVisibleTo(page)
+    words = [label.text() for label in page.text_suggest.findChildren(QLabel)]
+    assert words == ["High contrast is easiest to read with Large text."]
+    use = page.findChild(QPushButton, "prefTextSuggestUse")
+    assert use.text() == "Use Large text"
+    notes = [label.text() for label in page.findChildren(QLabel, "settingsCardNote")]
+    assert "Your text size stays the same when you change looks." in notes
+    assert page.knobs["text"].currentData() == "normal"
+    use.click()
+    qapp.processEvents()
+    assert page.knobs["text"].currentData() == "large"
+    assert spoken == ["Text size is now Large."]
     page.close_page()

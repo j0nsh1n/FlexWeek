@@ -57,7 +57,7 @@ from desktop.native.calendar import DAY_FULL
 from desktop.native.controller import ROUTINE_STATUS
 from desktop.native.custom_look import UNNAMED, sanitize_saved, wear
 from desktop.native.devices import DevicesPanel, SyncHost
-from desktop.native.fields import ClockField, DayPicker, Stepper, held_on_problem
+from desktop.native.fields import ClockField, DayPicker, Stepper, announce, held_on_problem
 from desktop.native.focus import FOCUS_PHASE_LABEL, format_countdown, more_time_choices, remaining_ms
 from desktop.native.fonts import time_font
 from desktop.native.hours.geometry import drag_step
@@ -147,8 +147,11 @@ MORE_LOOKS = "More looks"
 # card a little more (ChoiceCard).
 LOOK_TILE = 150
 ACCENT_LABELS = {"default": "Blue"}
-TEXT_KEPT_NOTE = "Kept for every look."
+TEXT_KEPT_NOTE = "Your text size stays the same when you change looks."
 STUDY_HOURS_LINE = "Choose when FlexWeek may plan homework, including hours kept for one class."
+TEXT_SUGGEST = "High contrast is easiest to read with Large text."
+USE_LARGE_TEXT = "Use Large text"
+USE_LARGE_ANNOUNCED = "Text size is now Large."
 OWN_ACCENT_NOTE = "High contrast keeps its own yellow, whatever accent is picked."
 # A look of the student's own sets the accent and every knob (look.py's resolved_palette and
 # effective_look), so while one is worn they show its values and say where they change instead.
@@ -857,10 +860,11 @@ class SettingsPage(QWidget):
         self.text_suggest.setObjectName("prefTextSuggest")
         suggest_row = QHBoxLayout(self.text_suggest)
         suggest_row.setContentsMargins(0, 0, 0, 0)
-        suggest_row.addWidget(QLabel("Suggests Large text"))
-        use_large = _page_button("Use", "prefTextSuggestUse")
+        suggest_row.addWidget(QLabel(TEXT_SUGGEST))
+        use_large = _page_button(USE_LARGE_TEXT, "prefTextSuggestUse")
         text_box = self.knobs["text"]
         use_large.clicked.connect(lambda: text_box.setCurrentIndex(text_box.findData("large")))
+        use_large.clicked.connect(lambda: announce(use_large, USE_LARGE_ANNOUNCED))
         suggest_row.addWidget(use_large)
         suggest_row.addStretch(1)
         text_form.addRow(self.text_suggest)
