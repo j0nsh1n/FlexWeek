@@ -196,7 +196,8 @@ def test_done_keeps_the_look_by_its_name_and_more_looks_offers_it_beside_the_ten
     assert stored["custom"]["colours"]["card"] == "#262d3b"
     more = page.look.more
     assert [card.accessibleName() for card in more.cards].count("High contrast") == 1
-    assert [card.accessibleName() for card in page.look.yours.cards] == ["Night study"]
+    # The worn look's card says so to a screen reader (N14): "<name>, selected".
+    assert [card.accessibleName() for card in page.look.yours.cards] == ["Night study, selected"]
     assert page.look.yours_heading.text() == "Your looks"
     assert page.look.currentText() == "Night study", "Look shows the saved look worn"
     assert page.look.yours.cards[0].is_selected()
