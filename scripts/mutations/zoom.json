@@ -149,8 +149,8 @@
  {
   "file": "desktop/native/hours/canvas.py",
   "name": "a block with no room for three letters draws dots",
-  "old": "    if width < indent + tm.horizontalAdvance(drawn.title.strip()[:3]) or tight.height() + 0.5 < tl:\n",
-  "new": "    if tight.height() + 0.5 < tl:\n",
+  "old": "    if width < indent + tm.horizontalAdvance(drawn.title.strip()[:3]) or tight.height() + 0.5 < min(tl, sl):\n",
+  "new": "    if tight.height() + 0.5 < min(tl, sl):\n",
   "test": "desktop/tests/test_hours_painter.py::test_a_block_with_no_room_for_three_letters_is_its_colour_alone"
  },
  {

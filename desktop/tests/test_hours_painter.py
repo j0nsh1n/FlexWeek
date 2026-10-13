@@ -414,8 +414,9 @@ def test_a_block_says_the_most_it_can_without_cutting_a_word_or_ending_a_line_in
     qapp: QApplication, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Decision 14 of 0.17. Club at 19:00 for an hour says its name and its times at the week's 48
-    pixels an hour, and its length on a line of its own once there is room; a half-hour Dinner says
-    "Dinner 18:30" on one line. No line ends in "·", which 0.16 left dangling after every time."""
+    pixels an hour, and its length on a line of its own once there is room. A half-hour Dinner has no
+    room for its name beside its range, so the range alone stays (T-W35: the time line first, the
+    title cut first). No line ends in "·", which 0.16 left dangling after every time."""
     monkeypatch.setattr(canvas_module, "QPainter", Said)
     for hour_px, club in ((HOUR_PX, ["Club", "19:00–20:00"]), (96, ["Club", "19:00–20:00", "1 h"])):
         canvas = three_days(blocks=(CLUB, DINNER), hour_px=hour_px)
@@ -426,9 +427,7 @@ def test_a_block_says_the_most_it_can_without_cutting_a_word_or_ending_a_line_in
     canvas = three_days(blocks=(DINNER,))
     Said.words = []
     canvas.grab()
-    assert words_on(canvas, "dinner", 1) == ["Dinner", "18:30"]
-    dinner = [where for text, where in Said.words if text in ("Dinner", "18:30")]
-    assert abs(dinner[0].center().y() - dinner[1].center().y()) < 3, "Dinner and its time on one line"
+    assert words_on(canvas, "dinner", 1) == ["18:30–19:00"]
 
 
 def test_a_word_too_wide_for_its_block_is_shortened_only_when_nothing_else_fits(qapp: QApplication) -> None:
@@ -678,12 +677,13 @@ def test_a_custom_look_can_leave_out_a_blocks_times_or_its_length(
         assert shown in written and missing not in written, custom
 
 
-def test_a_short_block_at_large_text_keeps_its_title_first_and_whole_words(qapp: QApplication) -> None:
-    """At Large text a 45-minute block on the week has room for one line. Homework keeps its name
-    before its start; "Math worksheet", which cannot be said whole beside 19:00, gives way at a space,
-    "Math…", not "Mat… 19:00" or "Math works…". When the range alone fits, the range stays (T-W35)."""
+def test_a_short_block_at_large_text_keeps_its_time_range_whole(qapp: QApplication) -> None:
+    """At Large text a 45-minute block on the week has room for one line. The range "19:00–19:45"
+    stays whole (T-W35): beside it there is no room for "Piano lesson" or "Math worksheet", so the
+    title is what goes, whether or not it is homework. The words are whole, never a cut range."""
     from desktop.native.hours.canvas import TEXT_LEFT, TEXT_RIGHT, TEXT_TOP, block_layout, word_elide
     from desktop.native.hours.geometry import Span
+    from desktop.native.weekmodel import range_label
 
     large = {"preset": "default", "knobs": {"text": "large"}}
     title, small = BlockPainter(resolved_palette("system", False, None), large).fonts(QFont("Inter", 15))
@@ -697,10 +697,9 @@ def test_a_short_block_at_large_text_keeps_its_title_first_and_whole_words(qapp:
         drawn = Drawn(name, name, "assignments" if homework else "extra", homework, span, 0, 1)
         return [line.text for line in block_layout(drawn, title, small, room, tight=tight, book=homework)]
 
-    piano = said("Piano lesson", False)
-    assert any("19:00" in line for line in piano), piano
-    math = said("Math worksheet", True)
-    assert any("19:00" in line for line in math), math
+    whole = range_label(19 * 60, 19 * 60 + 45)
+    assert said("Piano lesson", False) == [whole]
+    assert said("Math worksheet", True) == [whole]
     # Qt's elide keeps a letter of the next word ("Math w…"); the title gives way at a space.
     metrics = QFontMetricsF(title)
     assert word_elide("Math worksheet", metrics, 77) == "Math…"
@@ -710,8 +709,8 @@ def test_a_half_hour_in_high_contrast_says_its_name_on_the_week(
     qapp: QApplication, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """High contrast's text is Large, where a half-hour on the week is one caption line exactly. Kept a
-    pixel clear of its top, Dinner said nothing, and High contrast draws blocks as outlines, so there
-    was no colour to say it either: an empty box."""
+    pixel clear of its top, the words said nothing, and High contrast draws blocks as outlines, so
+    there was no colour to say it either: an empty box. Its range, which T-W35 keeps first, says it."""
     monkeypatch.setattr(canvas_module, "QPainter", Said)
     look = {"preset": "high-contrast", "knobs": {}}
     palette = resolved_palette("system", False, look)
@@ -728,7 +727,7 @@ def test_a_half_hour_in_high_contrast_says_its_name_on_the_week(
     canvas.set_painter(BlockPainter(palette, look))
     Said.words = []
     canvas.grab()
-    assert "Dinner" in [text for text, _where in Said.words]
+    assert "18:30–19:00" in [text for text, _where in Said.words]
 
 
 def test_a_paint_that_raises_still_ends_its_painter(

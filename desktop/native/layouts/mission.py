@@ -251,6 +251,9 @@ class MissionPainter(BlockPainter):
     block where the lane is free, then its first word, then its colour alone. The hours are named
     every other hour over the first lane, and the time now is a pill there, a faint line down every
     lane and a strong one down today's."""
+    # Writes its own words, not yet with room for tag pills (N11); see BlockPainter.draws_pills.
+    draws_pills = False
+
 
     def __init__(self, tokens: dict[str, str], *, day: bool = False) -> None:
         soft = mix_oklab(tokens["line"], tokens["surface"], 0.5)

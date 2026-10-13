@@ -70,6 +70,8 @@ def _small(font: QFont) -> QFont:
 class BarPainter(BlockPainter):
     """The day as one thin bar: every block a segment, the thing on screen in the accent, now as a
     tick. A carried block is drawn where it would land, outlined, with its words on a pill above."""
+    # A segment has no words, so it has no tag pills (N11); see BlockPainter.draws_pills.
+    draws_pills = False
 
     def __init__(self, tokens: dict[str, str], chosen: str | None, caption: str = "") -> None:
         super().__init__(

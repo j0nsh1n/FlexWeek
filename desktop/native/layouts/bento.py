@@ -1100,6 +1100,9 @@ class BentoPainter(ClassicPainter):
     line with its time on a pill in the gutter, and blocks in the category family with their 3-pixel
     edge. A block's name and times are in the caption size, as the mock-up writes them, so a
     half-hour block still says its name."""
+    # Writes its own words, not yet with room for tag pills (N11); see BlockPainter.draws_pills.
+    draws_pills = False
+
 
     trims_narrow = True
 

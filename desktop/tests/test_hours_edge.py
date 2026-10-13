@@ -101,23 +101,22 @@ def test_homework_being_carried_has_no_gaps_in_its_edge(qapp: QApplication) -> N
     assert len({pixel.name() for pixel in edge}) == 1
 
 
-def test_history_tags_fit_a_30_minute_block_at_large_text(qapp: QApplication) -> None:  # noqa: F811
+def test_a_30_minute_block_at_large_text_draws_no_pill_outside_itself(qapp: QApplication) -> None:  # noqa: F811
+    """N11: a half-hour block at Large has no room for a pill above its words, so the paint loop does not
+    draw one (see BlockPainter.pills_fit). A pill drawn anyway must still stay inside its block."""
     look = {"preset": "default", "knobs": {"text": "large"}}
     painter = BlockPainter(PALETTE, look)
     for state in ("Overdue", "Left from last week"):
+        span = Span(3, 17 * 60, 17 * 60 + 30)
+        drawn = Drawn("essay", "History essay", CATEGORY, True, span, 0, 1, history=state)
+        block = QRectF(0, 0, 128, 30 * 48 / 60 - 3)
+        assert not painter.pills_fit(QFont("Inter", 14), block, drawn, QRectF(0, 0, 128, 200)), state
         image = QImage(100, 70, QImage.Format.Format_ARGB32)
         image.fill(QColor("white"))
         paint = QPainter(image)
         paint.setFont(QFont("Inter", 14))
-        drawn = Drawn("essay", "History essay", CATEGORY, True, Span(3, 17 * 60, 17 * 60 + 30), 0, 1,
-                      history=state)
         painter.history_tag(paint, QRectF(15, 15, 70, 38), drawn)
         paint.end()
-        assert any(
-            image.pixelColor(x, y) != QColor("white")
-            for x in range(15, 85)
-            for y in range(15, 53)
-        ), state
         assert all(
             image.pixelColor(x, y) == QColor("white")
             for x in range(100)
@@ -234,7 +233,6 @@ def test_hour_rules_sit_on_one_pixel_row_at_125_percent_scale(qapp: QApplication
     from desktop.native.hours.geometry import FIRST, LAST, LinearTrack
 
     track = LinearTrack(0, QRectF(0, 0, 200, 400), first=FIRST, last=LAST)
-    rule = QColor(PALETTE.get("rule") or PALETTE["hairline"])
     image = QImage(200, 400, QImage.Format.Format_ARGB32)
     image.fill(QColor("white"))
     paint = QPainter(image)
@@ -257,3 +255,35 @@ def test_hour_rules_sit_on_one_pixel_row_at_125_percent_scale(qapp: QApplication
             )
     assert rows[1] > max(rows[0], rows[2], 1), rows
     assert rows[1] >= 2 * max(rows[0], rows[2]), rows
+
+
+def test_a_track_edge_is_one_inked_row_or_column_at_100_percent(qapp: QApplication) -> None:  # noqa: F811
+    """U17: an across track (mission, one_thing) is closed by a horizontal rule on its top row, a down
+    track by a vertical rule on its left column, each one pixel wide and inked end to end."""
+    from PySide6.QtGui import QImage, QPainter
+
+    from desktop.native.hours.geometry import FIRST, LAST, Axis, LinearTrack
+
+    painter_obj = ClassicPainter(PALETTE)
+    white = QColor("white")
+    across = LinearTrack(0, QRectF(10, 10, 200, 60), axis=Axis.ACROSS, first=FIRST, last=LAST)
+    image = QImage(240, 100, QImage.Format.Format_ARGB32)
+    image.fill(white)
+    paint = QPainter(image)
+    try:
+        painter_obj.track(paint, across, False)
+    finally:
+        paint.end()
+    top_row = [image.pixelColor(x, 10) for x in range(20, 200)]
+    assert all(c != white for c in top_row), "across track has no horizontal top edge"
+
+    down = LinearTrack(0, QRectF(10, 10, 60, 200), axis=Axis.DOWN, first=FIRST, last=LAST)
+    image = QImage(100, 240, QImage.Format.Format_ARGB32)
+    image.fill(white)
+    paint = QPainter(image)
+    try:
+        painter_obj.track(paint, down, False)
+    finally:
+        paint.end()
+    left_column = [image.pixelColor(10, y) for y in range(20, 200)]
+    assert all(c != white for c in left_column), "down track has no vertical left edge"

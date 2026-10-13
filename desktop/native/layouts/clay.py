@@ -335,6 +335,9 @@ class ClayPainter(BlockPainter):
     """Hours on a clay card: a faint rule at each hour, blocks as soft clay in the category family with
     the category's bar just inside their start edge, and the time now as an accent line from a dot,
     its time on a pill. The card in front says each block's times and length; a neighbour its times."""
+    # Writes its own words, not yet with room for tag pills (N11); see BlockPainter.draws_pills.
+    draws_pills = False
+
 
     # The pill sits left of the hours, where their labels are: an hour label under it is left out.
     now_in_gutter = True

@@ -95,7 +95,7 @@ from desktop.native.files import EXPORT_FORMAT, parse_import_payload
 from desktop.native.focus import focus_now, phase_duration_ms
 from desktop.native.focus_screen import QUICK_TITLE, FocusScreen
 from desktop.native.fonts import load_fonts
-from desktop.native.hours.canvas import Drawn, HoursCanvas
+from desktop.native.hours.canvas import Drawn, HoursCanvas, plan_placed
 from desktop.native.hours.classic import ClassicDay, ClassicWeek
 from desktop.native.hours.geometry import Span, drag_step, next_slot
 from desktop.native.hours.hand import Create, Hand, Move, MoveDate, Place, span_words
@@ -3270,6 +3270,7 @@ class NativeWindow(QMainWindow):
                     pinned=occurrence.pinned,
                     history=occurrence.history,
                     history_due=occurrence.due,
+                    placed_by_plan=plan_placed(occurrence),
                 )
                 detail = drawn.detail
                 if not occurrence.work:

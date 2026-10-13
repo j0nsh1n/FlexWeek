@@ -520,6 +520,9 @@ class RetroPainter(BlockPainter):
     """Week.exe's hours: the white field with grey rules, blocks in the category family with a
     three-pixel edge and a one-pixel bevel, and now as a line in the title bar's colour, dotted across
     the other days, with its time on a Windows 98 tooltip in the gutter."""
+    # Writes its own words, not yet with room for tag pills (N11); see BlockPainter.draws_pills.
+    draws_pills = False
+
 
     now_in_gutter = True
     trims_narrow = True
