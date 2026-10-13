@@ -244,12 +244,17 @@ def test_deleting_soccer_every_week_takes_it_from_later_weeks_only(qapp, after_s
                            "duration_min": 60, "days": [2]})
     save_and_settle(qapp, after_setup)  # week 3 is saved, with its own copy of Soccer
     go_to(qapp, after_setup, plus_weeks(setup_week, 1))
+    school = next(b for b in after_setup.blocks if b["id"] == "school")
+    after_setup.add_block({**school, "start": "09:00", "duration_min": 360})
+    save_and_settle(qapp, after_setup)
     after_setup.delete_block("activity-1", every_week=True)
     save_and_settle(qapp, after_setup)
     assert "activity-1" not in standing(after_setup)
     for later in (2, 3):
         go_to(qapp, after_setup, plus_weeks(setup_week, later))
         assert "activity-1" not in standing(after_setup), later
+        school = next(b for b in after_setup.blocks if b["id"] == "school")
+        assert (school["start"], school["duration_min"]) == ("08:30", 405), later
     go_to(qapp, after_setup, setup_week)
     assert standing(after_setup) == EXPECTED
 
@@ -262,8 +267,9 @@ def test_new_school_hours_reach_this_week_on_and_keep_a_later_missed_day(qapp, a
     save_and_settle(qapp, after_setup)
     go_to(qapp, after_setup, plus_weeks(setup_week, 1))
     school = next(b for b in after_setup.blocks if b["id"] == "school")
-    after_setup.add_block({**school, "start": "09:00", "duration_min": 360})
-    after_setup.stand_open_week()
+    later = {**school, "start": "09:00", "duration_min": 360}
+    after_setup.add_block(later)
+    after_setup.stand_open_week([later])
     save_and_settle(qapp, after_setup)
     assert standing(after_setup)["school"] == ("09:00", 360, [0, 1, 2, 3, 4])
     go_to(qapp, after_setup, plus_weeks(setup_week, 2))

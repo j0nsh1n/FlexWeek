@@ -3167,8 +3167,12 @@ class NativeWindow(QMainWindow):
         made = dialog.block()
         if made is not None:
             self.session.add_block(made)
-            self.session.stand_open_week()
+            self.session.stand_open_week([made])
             self.session.save()
+            start = hhmm_text(made["start"])
+            end = hhmm_text(minutes_to_hhmm(hhmm_to_minutes(made["start"]) + made["duration_min"]))
+            # Later weeks change with no Undo, so the toast offers none.
+            self._set_notice(f"School now {start}–{end} every week", "", None)
         elif school is not None:
             self._delete_block(school, "series", None, every_week=True)
 

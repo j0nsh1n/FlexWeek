@@ -402,12 +402,18 @@ STANDING_RULE = (
 )
 
 
+class StandingStop(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, max_length=80)
+    stop: Literal[True]
+
+
 class StandingWeek(BaseModel):
-    """The School and activities that stand in every week from `week_start` on."""
+    """Setup blocks to change, or ids to stop, from `week_start` on."""
 
     model_config = ConfigDict(extra="forbid")
     week_start: str
-    blocks: list[TimeBlock] = Field(max_length=MAX_STANDING)
+    blocks: list[TimeBlock | StandingStop] = Field(max_length=MAX_STANDING)
 
     _week_start = field_validator("week_start")(a_week_start)
 
@@ -415,9 +421,12 @@ class StandingWeek(BaseModel):
     def blocks_are_setups(self) -> StandingWeek:
         ids = [block.id for block in self.blocks]
         if len(set(ids)) != len(ids) or not all(
-            block.kind == "locked"
-            and block.start
-            and flexweek_engine.calendar_setup_block(json.dumps(block.model_dump()))
+            isinstance(block, StandingStop)
+            or (
+                block.kind == "locked"
+                and block.start
+                and flexweek_engine.calendar_setup_block(json.dumps(block.model_dump()))
+            )
             for block in self.blocks
         ):
             raise ValueError(STANDING_RULE)
@@ -1328,7 +1337,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 changed_weeks = db.set_standing(
                     account["id"],
                     batch.standing.week_start,
-                    json.dumps(dump_blocks(batch.standing.blocks)),
+                    json.dumps([block.model_dump() for block in batch.standing.blocks]),
                 )
             for entry in week_results:
                 entry["blocks"] = week_with_standing(

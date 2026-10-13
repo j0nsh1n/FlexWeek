@@ -9,8 +9,10 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QAbstractButton, QApplication
+from PySide6.QtWidgets import QAbstractButton, QApplication, QDialog
 
+from desktop.native import window as window_module
+from desktop.native.weekmodel import set_clock_24h
 from desktop.native.widgets import ConfirmSheet
 from desktop.native.window import NativeWindow
 from desktop.tests.window_support import (  # noqa: F401
@@ -85,3 +87,27 @@ def test_cancel_deletes_nothing(qapp, window, monkeypatch) -> None:
     delete_soccer(qapp, window)
     kept = soccer(window)
     assert kept is not None and not kept.get("missed_days")
+
+
+def test_new_school_hours_say_every_week_and_offer_no_undo(qapp, window, monkeypatch) -> None:
+    set_clock_24h(False)
+    made = {"id": "school", "title": "School", "kind": "locked", "category": "class", "start": "09:00",
+            "duration_min": 360, "days": [0, 1, 2, 3, 4]}
+
+    class Sheet:
+        DialogCode = QDialog.DialogCode
+
+        def __init__(self, parent, school) -> None:
+            pass
+
+        def exec(self) -> QDialog.DialogCode:
+            return QDialog.DialogCode.Accepted
+
+        def block(self) -> dict:
+            return dict(made)
+
+    monkeypatch.setattr(window_module, "SchoolHoursDialog", Sheet)
+    window._school_hours()
+    wait_until(qapp, lambda: not window.session.busy and not window.session.dirty)
+    assert window.toast.text() == "School now 9:00 AM–3:00 PM every week"
+    assert not window.toast.button.isVisible()

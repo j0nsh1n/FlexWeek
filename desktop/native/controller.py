@@ -1017,24 +1017,30 @@ class NativeSession(QObject):
     def set_setup_blocks(self, blocks: list[dict]) -> None:
         """Replace the school and activities setup made with `blocks`, as one Undo step. Anything the
         student added another way stays where it is."""
+        previous = {
+            block["id"]: {key: value for key, value in block.items() if key != "missed_days"}
+            for block in self.blocks
+            if is_setup_block(block) and block.get("kind") == "locked" and block.get("start")
+        }
         kept = [block for block in self.blocks if not is_setup_block(block)]
         made = [TimeBlock.model_validate(block).model_dump(mode="json") for block in blocks]
         self.blocks = kept + made
         self._touch("setting up your week")
-        self.stand_open_week()
+        updates = [
+            block
+            for block in made
+            if {key: value for key, value in block.items() if key != "missed_days"}
+            != previous.get(block["id"])
+        ]
+        gone = previous.keys() - {block["id"] for block in made}
+        updates.extend({"id": block_id, "stop": True} for block_id in gone)
+        self.stand_open_week(updates)
 
-    def stand_open_week(self) -> None:
-        """School and activities as the open week has them now stand in every week from it on. The
-        next save carries this, so the open week's part stays its Undo step; later weeks change with
-        no Undo."""
-        self._standing = {
-            "week_start": self.week_start,
-            "blocks": [
-                {key: value for key, value in block.items() if key != "missed_days"}
-                for block in self.blocks
-                if is_setup_block(block) and block.get("kind") == "locked" and block.get("start")
-            ],
-        }
+    def stand_open_week(self, updates: list[dict]) -> None:
+        """Stand only the Setup blocks changed from this week on."""
+        pending = {change["id"]: change for change in (self._standing or {}).get("blocks", [])}
+        pending.update({change["id"]: change for change in updates})
+        self._standing = {"week_start": self.week_start, "blocks": list(pending.values())}
 
     def plan_after_save(self, assignment_id: str) -> None:
         """Give this homework's sessions that need a time one once the save now under way lands."""
@@ -1561,7 +1567,7 @@ class NativeSession(QObject):
             self.blocks = delete_occurrence(self.blocks, block_id, day)
         if is_setup_block(block) and not any(item["id"] == block_id for item in self.blocks):
             if every_week:
-                self.stand_open_week()
+                self.stand_open_week([{"id": block_id, "stop": True}])
             else:
                 missed = {**block, "missed_days": list(block.get("days") or [])}
                 self.blocks = [*self.blocks, missed]
