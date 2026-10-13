@@ -15,12 +15,13 @@ from PySide6.QtGui import QFont, QFontMetricsF
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QPushButton
 
-from desktop.native.calendar import sunday_due
+from desktop.native.calendar import DAY_FULL, sunday_due
 from desktop.native.hours.canvas import BlockPainter, Drawn, HoursCanvas
 from desktop.native.hours.geometry import Span
 from desktop.native.hours.rail import RAIL_PX
 from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.settings import HELP_KEYS
+from desktop.native.weekmodel import length_label, range_label
 from desktop.native.window import WINDOW_MIN_WIDTH, NativeWindow
 from desktop.tests.window_support import (  # noqa: F401
     qapp,
@@ -164,6 +165,25 @@ def test_the_week_list_has_one_name_and_its_shortcut_is_in_help(
     (week_view,) = [canvas for canvas in window.findChildren(HoursCanvas) if canvas.isVisible()]
     assert week_view.accessibleDescription().endswith(hint)
     assert ("[Ctrl]+[Shift]+[L]", "Week as a list") in HELP_KEYS
+
+
+def test_the_week_list_keeps_each_blocks_title(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+    server,  # noqa: F811
+) -> None:
+    """T-W35: a dropped on-block title stays in the week list; the hours keep their own name."""
+    seeded(qapp, window)
+    listed = [window.week_access_list.item(i).text() for i in range(window.week_access_list.count())]
+    soccer = (
+        f"{DAY_FULL[3]}: Soccer practice, {range_label(16 * 60, 17 * 60 + 30)} · "
+        f"{length_label(90)} · Fixed time"
+    )
+    essay = f"{DAY_FULL[3]}: History essay, {range_label(19 * 60, 20 * 60)} · {length_label(60)} · Pinned"
+    assert soccer in listed
+    assert essay in listed
+    (week_view,) = [canvas for canvas in window.findChildren(HoursCanvas) if canvas.isVisible()]
+    assert week_view.accessibleName() == "Week view, hours"
 
 
 def test_the_mini_month_names_its_week_in_the_apps_date_order(

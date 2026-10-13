@@ -36,7 +36,7 @@ from PySide6.QtGui import (
     QResizeEvent,
     QWheelEvent,
 )
-from PySide6.QtWidgets import QScrollArea, QWidget
+from PySide6.QtWidgets import QScrollArea, QToolTip, QWidget
 
 from backend.slots import SLOT_MIN
 from desktop.native import icons
@@ -1717,6 +1717,32 @@ class HoursCanvas(QWidget):
             return ""
         return f"{drawn.title} · {drawn.detail}"
 
+    def _focus_hit(self) -> tuple[Drawn, QRectF, LinearTrack] | None:
+        block = self.focus_block()
+        if block is None or self._cursor is None:
+            return None
+        track = self.track_for(*self._cursor)
+        if track is None:
+            return None
+        for drawn, rect in self.drawn(track):
+            if drawn.block_id == block[0] and not drawn.held:
+                return drawn, rect, track
+        return None
+
+    def _show_focus_tip(self) -> None:
+        """The hover tooltip also shows on keyboard focus when the block dropped its name (T-W35)."""
+        if not self.hasFocus():
+            QToolTip.hideText()
+            return
+        hit = self._focus_hit()
+        tip = self._block_tip(hit) if hit is not None else ""
+        if not tip:
+            QToolTip.hideText()
+            return
+        rect = self.focus_rect()
+        at = rect.center().toPoint() if rect is not None else QPoint(0, 0)
+        QToolTip.showText(self.mapToGlobal(at), tip, self)
+
     def _resize_cursor(self, track: LinearTrack) -> Qt.CursorShape:
         return Qt.CursorShape.SizeVerCursor if track.axis is Axis.DOWN else Qt.CursorShape.SizeHorCursor
 
@@ -1784,6 +1810,7 @@ class HoursCanvas(QWidget):
 
     def focusOutEvent(self, event: QFocusEvent) -> None:  # noqa: N802
         super().focusOutEvent(event)
+        QToolTip.hideText()
         self.update()
 
     # Where the keyboard is
@@ -1837,6 +1864,7 @@ class HoursCanvas(QWidget):
                 self.reveal(placed[1], placed[2], placed[2] + SLOT_MIN)
         elif ring and self._here() is not None:
             self._arrive()
+        self._show_focus_tip()
         self.update()
 
     def _taken(self, day: int, minute: int) -> bool:
@@ -1898,6 +1926,7 @@ class HoursCanvas(QWidget):
             self.hand.clear_selection()
         if not self.in_view(day, minute):
             self.reveal(day, minute, minute + SLOT_MIN)
+        self._show_focus_tip()
         self.update()
 
     def _ask_here(self) -> None:

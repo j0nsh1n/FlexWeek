@@ -17,12 +17,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QRectF
     from PySide6.QtGui import QFont
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QToolTip, QWidget
 
-    from desktop.native.hours.canvas import INNER_PAD, BlockPainter, Drawn, block_layout
-    from desktop.native.hours.geometry import Span
+    from desktop.native.hours.canvas import INNER_PAD, BlockPainter, Drawn, HoursCanvas, block_layout
+    from desktop.native.hours.geometry import LinearTrack, Span
+    from desktop.native.hours.hand import Hand, Verdict
     from desktop.native.look import EXPERIMENTAL_LOOKS, STANDARD_LOOKS, resolved_palette
-    from desktop.native.weekmodel import clock_label, range_label
+    from desktop.native.weekmodel import Occurrence, clock_label, length_label, range_label
 
 
 LOOKS = STANDARD_LOOKS + EXPERIMENTAL_LOOKS
@@ -91,3 +92,37 @@ def test_a_block_whose_name_has_no_room_says_so_for_its_tooltip(qapp: QApplicati
     tall = Drawn("piano", "Piano lesson", "extra", False, Span(1, 19 * 60, 21 * 60), 0, 1)
     assert not painter_obj.title_shown(font, QRectF(0, 0, 128, 45 * 48 / 60 - 3), short, visible)
     assert painter_obj.title_shown(font, QRectF(0, 0, 128, 2 * 48 - 3), tall, visible)
+
+
+def test_keyboard_focus_shows_the_dropped_title_in_the_tooltip(qapp: QApplication) -> None:
+    """T-W35: when a block drops its name, the tooltip also shows on keyboard focus."""
+    look = {"preset": "default", "knobs": {"text": "large"}}
+    palette = resolved_palette("system", False, look)
+    host = QWidget()
+    host.resize(200, 80)
+    canvas = HoursCanvas(
+        Hand(lambda *_: Verdict(True, ""), host),
+        BlockPainter(palette, look),
+        lambda _area: [LinearTrack(1, QRectF(8, 8, 128, 48), first=19 * 60, last=20 * 60)],
+        parent=host,
+    )
+    canvas.setFont(QFont("Inter", 15))
+    canvas.set_week(
+        [
+            Occurrence(
+                "piano", "Piano lesson", "extra", 1, 19 * 60, 19 * 60 + 45,
+                False, False, False, None, None, None,
+            )
+        ]
+    )
+    host.show()
+    qapp.processEvents()
+    canvas.relayout()
+    canvas.take_focus(True, ("piano", 1, 19 * 60))
+    qapp.processEvents()
+    detail = f"{range_label(19 * 60, 19 * 60 + 45)} · {length_label(45)}"
+    assert QToolTip.text() == f"Piano lesson · {detail}"
+    assert canvas.accessibleName() == "Week view, hours"
+    canvas.clearFocus()
+    qapp.processEvents()
+    assert QToolTip.text() == ""
