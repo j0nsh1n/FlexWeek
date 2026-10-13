@@ -21,6 +21,17 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+
+    buildTypes {
+        debug {
+            buildConfigField("boolean", "V2_ENABLED", "true")
+        }
+        release {
+            buildConfigField("boolean", "V2_ENABLED", "false")
+            isMinifyEnabled = false
+        }
     }
 
     compileOptions {

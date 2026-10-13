@@ -77,4 +77,16 @@ internal object DemoSchedule {
         }
         return "$minutes min"
     }
+
+    /** Demo placement for Plan: first open slot from today through due day. */
+    fun fakePlace(chip: NoTimeChip): Pair<Int, Int>? {
+        if (chip.id == "math") return null
+        for (d in TODAY_INDEX..chip.dueDayIndex) {
+            val start = if (d == TODAY_INDEX) 13 * 60 else 13 * 60
+            if (start + chip.lengthMinutes <= 22 * 60) {
+                return d to start
+            }
+        }
+        return null
+    }
 }

@@ -38,4 +38,20 @@ interface FlexWeekCore {
     fun unlink()
 
     fun isPaired(): Boolean
+
+    /** v2 (S8): draft JSON with title, due, when, estimate_min, sessions. Returns ok or error text. */
+    fun saveHomework(draftJson: String, opId: String): String
+
+    /** v2: returns preview JSON (preview_id, placed, not_placed, …). */
+    fun planWeek(weekStart: String): String
+
+    fun acceptPlan(previewId: String, opId: String): String
+
+    /** v2: preview moves for Running late on [dayIndex] by [minutes]. */
+    fun runningLate(dayIndex: Int, minutes: Int, opId: String): String
+
+    fun acceptRunningLate(previewId: String, opId: String): String
+
+    /** v2: colour bars per day, no words. */
+    fun weekShape(weekStart: String): String
 }

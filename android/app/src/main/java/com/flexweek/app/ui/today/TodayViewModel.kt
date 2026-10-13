@@ -76,6 +76,14 @@ class TodayViewModel(
         refresh()
     }
 
+    fun refreshAgenda(snackbar: SnackbarState? = uiState.snackbar) {
+        refresh(snackbar)
+    }
+
+    fun showMessage(message: String) {
+        refresh(snackbar = SnackbarState(message, null))
+    }
+
     private fun refresh(snackbar: SnackbarState? = uiState.snackbar) {
         val parsed = TodayJson.parse(core.today(todayIso(), nowMinute))
         uiState = parsed.copy(snackbar = snackbar)
