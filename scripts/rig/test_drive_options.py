@@ -206,3 +206,20 @@ def test_the_rig_forgets_the_look_an_earlier_run_left_behind():
     # Nothing left behind is not a mistake.
     assert drive.clean_look_file() == left
     assert not left.exists()
+
+
+def test_the_rig_forgets_the_carried_look_an_earlier_run_left_behind():
+    from PySide6.QtCore import QStandardPaths
+
+    from desktop.native.kept import KeptSession
+
+    QStandardPaths.setTestModeEnabled(True)
+    kept = KeptSession(drive.kept_session_path())
+    kept.carry_look("acct-1", "large", True)
+    assert kept.look.exists()
+    assert kept.carried_look() == ("large", True)
+    drive.clean_look_file()
+    assert not kept.look.exists()
+    assert kept.carried_look() is None
+    drive.clean_look_file()
+    assert not kept.look.exists()

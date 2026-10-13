@@ -90,14 +90,26 @@ def play_looks() -> tuple[str, ...]:
     return (*(name for name in LOOK_PRESETS if name != "default"), *PACKS)
 
 
+def kept_session_path() -> Path:
+    """Where this rig run's kept session (and its carried look) live under Qt test-mode AppData."""
+    from PySide6.QtCore import QStandardPaths
+
+    root = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation))
+    return root / "signed-in" / "flexweek.json"
+
+
 def clean_look_file() -> Path:
     """The look an earlier run left behind (its zoom and text size) is gone before this one starts, so a
-    play sees only the look it asks for. Call after QStandardPaths' test mode is on."""
+    play sees only the look it asks for. Also deletes the carried look next to the kept session
+    (`flexweek.look.json`). Call after QStandardPaths' test mode is on."""
     from PySide6.QtCore import QStandardPaths
+
+    from desktop.native.kept import KeptSession
 
     root = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
     look_path = Path(root) / "flexweek-look.json"
     look_path.unlink(missing_ok=True)
+    KeptSession(kept_session_path()).look.unlink(missing_ok=True)
     return look_path
 
 
@@ -280,6 +292,7 @@ def child_main(args: argparse.Namespace) -> int:
     from desktop.native.hours.geometry import FIRST, Axis
     from desktop.native.hours.hand import surface_at
     from desktop.native.hours.zoom import HoursScroll
+    from desktop.native.kept import KeptSession
     from desktop.native.layouts.registry import options_for, sanitize_layout
     from desktop.native.look import sanitize_look
     from desktop.native.window import NativeWindow
@@ -289,7 +302,7 @@ def child_main(args: argparse.Namespace) -> int:
     out = Path(args.out)
     server = LocalServer(Path(tempfile.mkdtemp()) / "rig.db")
     server.start()
-    window = NativeWindow(server.origin)
+    window = NativeWindow(server.origin, kept=KeptSession(kept_session_path()))
     window.resize(1280, 820)
     window.move(0, 0)
     window.show()
