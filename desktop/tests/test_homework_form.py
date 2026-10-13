@@ -251,7 +251,7 @@ def test_edit_says_where_the_homework_is_placed(qapp: QApplication) -> None:  # 
     parent = host(session(4, "15:30"))
     dialog = opened(parent, essay())
     line = placed_line(dialog)
-    assert line.isVisible() and line.text() == "Placed Fri 15:30"
+    assert line.isVisible() and line.text() == "Planned Fri 18 · due Fri 25"
     free(dialog)
     free(parent)
 
@@ -261,9 +261,36 @@ def test_edit_counts_every_time_it_is_placed(qapp: QApplication) -> None:  # noq
         session(5, "10:00"), session(4, "15:30"), session(2, None), session(1, "09:00", completed=True)
     )
     dialog = opened(parent, essay())
-    assert placed_line(dialog).text() == "Placed Fri 15:30 and Sat 10:00 · 2 times"
+    assert placed_line(dialog).text() == "Planned Fri 18 and Sat 19 · due Fri 25 · 2 times"
     free(dialog)
     free(parent)
+
+
+def test_placed_line_matches_the_audit_day_and_due_numbers(qapp: QApplication) -> None:  # noqa: F811
+    parent = QWidget()
+    parent.session = SimpleNamespace(  # type: ignore[attr-defined]
+        now_ms=lambda: int(datetime(2026, 10, 12, 12, 0).timestamp() * 1000),
+        blocks=[session(4, "15:30"), session(5, "10:00")],
+        week_start="2026-10-12",
+    )
+    dialog = HomeworkDialog(parent, essay(due="2026-10-21"), "2026-10-12")
+    dialog.show()
+    QApplication.processEvents()
+    assert placed_line(dialog).text() == "Planned Fri 16 and Sat 17 · due Wed 21 · 2 times"
+    free(dialog)
+    free(parent)
+    one = QWidget()
+    one.session = SimpleNamespace(  # type: ignore[attr-defined]
+        now_ms=lambda: int(datetime(2026, 10, 12, 12, 0).timestamp() * 1000),
+        blocks=[session(4, "15:30")],
+        week_start="2026-10-12",
+    )
+    single = HomeworkDialog(one, essay(due="2026-10-21"), "2026-10-12")
+    single.show()
+    QApplication.processEvents()
+    assert placed_line(single).text() == "Planned Fri 16 · due Wed 21"
+    free(single)
+    free(one)
 
 
 def test_nothing_is_said_when_it_is_not_placed_or_new(qapp: QApplication) -> None:  # noqa: F811

@@ -4570,16 +4570,35 @@ class HomeworkDialog(Dialog):
         return min(hhmm_to_minutes(school["start"]) + int(school["duration_min"]), 23 * 60 + 45)
 
     def _placed_words(self) -> str:
-        """"Placed Fri 15:30", or with several times "Placed Fri 15:30 and Sat 10:00 · 2 times"; empty
-        when none of this homework's times has a place on the calendar."""
+        """"Planned Fri 16 · due Wed 21", or with several times
+        "Planned Fri 16 and Sat 17 · due Wed 21 · 2 times"; empty when none of this homework's
+        times has a place on the calendar."""
         placed = [block for block in self._open_sessions() if block.get("start")]
         at = sorted((block["days"][0], block["start"]) for block in placed)
         if not at:
             return ""
-        names = [f"{DAYS[day]} {hhmm_text(start)}" for day, start in at]
+        session = getattr(self.parent(), "session", None)
+        week = getattr(session, "week_start", None) or self._today
+        monday = monday_of(week) if week else None
+
+        def day_stamp(day: int) -> str:
+            if monday:
+                number = date.fromisoformat(date_for_day(monday, day)).day
+                return f"{DAYS[day]} {number}"
+            return DAYS[day]
+
+        names = [day_stamp(day) for day, _start in at]
         if len(names) == 1:
-            return f"Placed {names[0]}"
-        return f"Placed {', '.join(names[:-1])} and {names[-1]} · {len(names)} times"
+            planned = f"Planned {names[0]}"
+        else:
+            planned = f"Planned {', '.join(names[:-1])} and {names[-1]}"
+        due = self._original.get("due")
+        due_bit = ""
+        if due:
+            due_day = date.fromisoformat(str(due)[:10])
+            due_bit = f" · due {DAYS[due_day.weekday()]} {due_day.day}"
+        times = f" · {len(names)} times" if len(names) > 1 else ""
+        return planned + due_bit + times
 
     def _name_toggle(self, open_: bool) -> None:
         self.more_details.setText("Fewer details" if open_ else "More details")
