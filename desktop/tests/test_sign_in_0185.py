@@ -15,6 +15,7 @@ from PySide6.QtCore import QPoint, QSize
 from PySide6.QtGui import QColor, QGuiApplication, QPalette
 from PySide6.QtWidgets import QApplication, QFrame, QLabel, QToolButton, QWidget
 
+from desktop.native.client import TOO_MANY_TRIES
 from desktop.native.look import resolved_palette, sanitize_look
 from desktop.native.tokens import contrast
 from desktop.native.window import NativeWindow
@@ -152,6 +153,22 @@ def test_a_wrong_sign_in_is_still_said_right_under_the_password_box(signed_out) 
         window.password.mapTo(held, QPoint(0, 0)).y() + window.password.height()
     )
     assert gap == 4
+
+
+def test_too_many_tries_is_shown_under_its_field(qapp, signed_out) -> None:
+    window = signed_out
+    go(window, "sign in")
+    window.session._say(TOO_MANY_TRIES)
+    pump()
+    assert window.password_problem.text.text() == TOO_MANY_TRIES
+    assert window.password_problem.isVisibleTo(window)
+    assert window.password.hasFocus()
+    assert window.auth_status.text() == ""
+    go(window, "reset")
+    window.session._say(TOO_MANY_TRIES)
+    pump()
+    assert window.recovery_code_problem.text.text() == TOO_MANY_TRIES
+    assert window.recovery_code.hasFocus()
 
 
 # The eye.

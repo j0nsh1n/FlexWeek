@@ -74,6 +74,7 @@ from desktop.native.client import (
     SIGN_IN_WHY,
     SIGN_IN_WHY_LINK,
     SIGN_IN_WRONG,
+    TOO_MANY_TRIES,
     TYPE_RECOVERY_CODE,
     USERNAME_ERROR,
     USERNAME_HINT,
@@ -739,11 +740,13 @@ class NativeWindow(QMainWindow):
         words = message.lower()
         if message == SIGN_IN_AGAIN:
             return None
+        if message == TOO_MANY_TRIES:
+            return self.recovery_code if self._entry_mode == RESET else self.password
         if message == USERNAME_ERROR:
             return self.username
         if message.startswith("Wrong username or password"):
             return self.password
-        if "recovery code" in words or "each code" in words or "too many tries" in words:
+        if "recovery code" in words or "each code" in words:
             return self.recovery_code
         if "username" in words:
             return self.username

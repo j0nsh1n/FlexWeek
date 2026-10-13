@@ -6,6 +6,9 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Changed
+- Account cards say "Add 1 more character" at 11 letters, hint "3 to 32 letters, numbers or underscores." and "At least 12 characters.", Manage account "Wrong password. Try again.", Reset "Type a recovery code.", and the try limit "Too many tries. Wait 5 minutes, then try again."
+- "Too many tries. Wait 5 minutes, then try again." is shown under Password on Sign in and Create account, and under the recovery code on Reset, matching the server.
+- Keep me signed in lasts 30 days; unticked lasts 7. Using FlexWeek renews that length. An expired session says "Your session ended. Sign in again."
 - Month opens on its first row with this week banded. Clicking a date fills the date pane; Open Day opens that day. A cell shows at most three chips and "and N more". At Large text a chip wraps so its time and whole words stay. Sunday stays clear of the scroll bar. Month uses the same 28 px status strip as Week for the overdue count, not a second line under the grid. The date pane has "Show study time per date" and becomes a drawer under 1150 px.
 - Add homework and Add fixed time ask three questions: What, When, How long. Answers show as clickable crumbs. Enter goes to the next question. Edit homework and Edit event stay one page.
 - Week planning uses one bar. Plan shows how many homework items still need a time. Click the week title to open a mini month.
