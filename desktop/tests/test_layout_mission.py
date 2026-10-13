@@ -252,7 +252,8 @@ def test_a_bar_opens_and_gives_its_name_and_times_on_hover(qapp: QApplication) -
     QTest.mouseRelease(hours, Qt.MouseButton.LeftButton, pos=local)
     assert opened == ["chem-1"]
     QApplication.sendEvent(hours, QHelpEvent(QEvent.Type.ToolTip, local, box.center()))
-    assert QToolTip.text() == "Chem-1\n20:00–21:30 · 1 h 30 min"
+    # N11: "Placed by Plan" lives in the tooltip, never on the bar (it must not push out the time).
+    assert QToolTip.text() == "Chem-1\n20:00–21:30 · 1 h 30 min · Placed by Plan"
 
 
 def test_full_day_reaches_early_block_and_quarter_hour(qapp: QApplication) -> None:
