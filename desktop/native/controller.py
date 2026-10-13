@@ -678,7 +678,7 @@ class NativeSession(QObject):
         self._clear_local()
         self.account_changed.emit(None)
         self.week_changed.emit()
-        self._say(SIGN_IN_AGAIN)
+        self._say(SESSION_ENDED)
 
     def register(self, username: str, password: str) -> None:
         ticket = self._begin()
