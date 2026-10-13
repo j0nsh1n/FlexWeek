@@ -85,7 +85,15 @@ def seen(image: QImage, x: int, y: int, behind: str) -> QColor:
 
 
 def tile(page: SettingsPage, name: str) -> ChoiceCard:
-    return next(card for card in page.look.more.cards if card.accessibleName() == name)
+    # N14: the worn card's accessible name is "<name>, selected".
+    for card in page.look.more.cards:
+        look = getattr(card, "_look_name", None)
+        if look == name:
+            return card
+        shown = card.accessibleName()
+        if shown == name or shown == f"{name}, selected":
+            return card
+    raise LookupError(name)
 
 
 def where(widget: QWidget, within: QWidget) -> QPoint:
@@ -195,6 +203,8 @@ def test_the_chosen_look_card_is_ringed_and_says_wearing_inside_the_card(
     worn = tile(page, "Nocturne")
     ring = worn.grab().toImage()
     assert near(ring.pixelColor(worn.width() // 2, 1), accent)
+    # N14: worn card "<Name>, selected"; the note inside the card still says Wearing.
+    assert worn.accessibleName() == "Nocturne, selected"
     inside = [label.text() for label in worn.findChildren(QLabel) if label.isVisibleTo(worn)]
     assert "Wearing" in inside
     for other in page.look.more.cards:

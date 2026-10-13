@@ -26,7 +26,15 @@ MORE = ["High contrast", "Nocturne", "Slate", "Poster", "Terminal", "Paper", "In
 
 
 def tile(dialog: SettingsPage, name: str) -> ChoiceCard:
-    return next(card for card in dialog.look.more.cards if card.accessibleName() == name)
+    # N14: the worn card's accessible name is "<name>, selected".
+    for card in dialog.look.more.cards:
+        look = getattr(card, "_look_name", None)
+        if look == name:
+            return card
+        shown = card.accessibleName()
+        if shown == name or shown == f"{name}, selected":
+            return card
+    raise LookupError(name)
 
 
 def test_more_looks_is_a_grid_of_named_pictures(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
@@ -85,11 +93,14 @@ def test_one_click_wears_a_look_and_marks_it_and_says_so(qapp: QApplication, win
     assert dialog.look.worn.isHidden(), "Light is worn: the segment shows it"
     tile(dialog, "Nocturne").chosen.emit()
     assert dialog.look.currentData() == "pack:nocturne"
-    assert tile(dialog, "Nocturne").is_selected()
+    worn = tile(dialog, "Nocturne")
+    assert worn.is_selected()
+    # N14: worn card "<Name>, selected"
+    assert worn.accessibleName() == "Nocturne, selected"
     assert [card.is_selected() for card in dialog.look.more.cards].count(True) == 1
     assert dialog.look.main.currentIndex() == -1, "Light, Dark and System show none"
     assert dialog.look.worn.isHidden(), "the card says it, inside itself, not a line under the grid"
-    assert tile(dialog, "Nocturne").note.text() == "Wearing"
+    assert worn.note.text() == "Wearing"
     dialog.look.main.buttons()[0].click()
     assert not any(card.is_selected() for card in dialog.look.more.cards)
     assert dialog.look.worn.isHidden()
