@@ -237,11 +237,20 @@ def test_the_page_fades_into_the_footer(qapp: QApplication) -> None:
         for _ in range(5):
             setup._add_activity()
         qapp.processEvents()
-        setup.pages[WEEK].verticalScrollBar().setValue(0)
+        bar = setup.pages[WEEK].verticalScrollBar()
+        bar.setValue(0)
         qapp.processEvents()
-        picture = setup.grab().toImage()
         top = under_footer(setup)
-        x = setup.activities[0].mapTo(setup, QPoint(40, 0)).x()
+        # A card has to reach from above the fade to below it. Since the shared form grammar puts labels
+        # above fields an activity card is taller and the first one ends right at the fade, so the page is
+        # scrolled to bring the second card's top 40 px above the fade.
+        row = setup.activities[1]
+        bar.setValue(bar.value() + row.mapTo(setup, QPoint(0, 0)).y() - (top - 40))
+        qapp.processEvents()
+        card_top, card_bottom = (row.mapTo(setup, QPoint(0, y)).y() for y in (0, row.height()))
+        assert card_top <= top - 4 and card_bottom > top + FADE_PX, "the card spans the fade"
+        picture = setup.grab().toImage()
+        x = row.mapTo(setup, QPoint(40, 0)).x()
         ground, card = QColor(palette["window"]), QColor(palette["panel"])
         assert ground != card
         above = picture.pixelColor(x, top - 4)
