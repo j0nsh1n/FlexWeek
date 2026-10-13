@@ -148,6 +148,17 @@ def test_a_days_homework_length_is_never_cut_at_any_window_width(
         assert fits, f"{words!r} is cut at {width} px: {label.width()} wide"
 
 
+def test_the_mini_month_names_its_week_in_the_apps_date_order(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+    server,  # noqa: F811
+) -> None:
+    seeded(qapp, window)
+    rail = window.rail
+    rail.month.show_week("2026-10-05", date(2026, 10, 7), frozenset())
+    assert rail.month.dates.accessibleDescription() == "Shows the week of Mon 5 Oct."
+
+
 def test_the_month_folds_away_from_its_header_and_stays_folded_after_a_restart(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811

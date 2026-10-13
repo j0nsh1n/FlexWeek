@@ -54,7 +54,7 @@ from PySide6.QtWidgets import (
 from shiboken6 import isValid
 
 from desktop.native import icons
-from desktop.native.calendar import DAYS, month_title
+from desktop.native.calendar import DAYS, day_short, month_title
 from desktop.native.fonts import at_scale, time_font, weighted
 from desktop.native.hours.chips import TrayChip
 from desktop.native.hours.hand import Hand
@@ -346,7 +346,7 @@ class MonthCard(QWidget):
         self.title.setText(month_title(month))
         self.dates.setAccessibleName(f"Month, {month_title(month)}")
         self.dates.setAccessibleDescription(
-            f"Shows the week beginning {self.dates.week_start}." if self.dates.week_start else ""
+            f"Shows the week of {day_short(self.dates.week_start)}." if self.dates.week_start else ""
         )
         self.dates.updateGeometry()
         self.dates.update()
