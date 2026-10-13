@@ -9,6 +9,8 @@ xfail(strict=True).
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 
 pytest.importorskip("PySide6")
@@ -330,7 +332,10 @@ def test_0k_week_shortcut_and_mini_month_have_accessible_names(qapp, window) -> 
     assert QApplication.focusWidget() is window.week_access_list
     month = window.findChild(MonthCard).dates
     assert month.accessibleName().startswith("Month, ")
-    assert "week beginning" in month.accessibleDescription().lower()
+    # T-W8 (1.0.0 wording audit): the mini month names its week in the app's date order.
+    monday = date.fromisoformat(window.session.week_start[:10])
+    week = f"{monday.strftime('%a')} {monday.day} {monday.strftime('%b')}"
+    assert month.accessibleDescription() == f"Shows the week of {week}."
 
 
 def test_0k_the_week_list_takes_no_room_until_the_keyboard_reaches_it(qapp, window) -> None:
