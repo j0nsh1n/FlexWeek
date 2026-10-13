@@ -85,6 +85,8 @@ def test_control_edges_have_three_to_one_contrast(preset: str, system_dark: bool
         10,
     )
     assert f"QWidget#authCard QLineEdit:focus {{ border: 2px solid {focus}; }}" in auth
+    assert f"QToolButton#passwordReveal:focus {{ border: 2px solid {focus}; }}" in auth
+    assert contrast(focus, palette["field"]) >= AA_GRAPHIC
     if preset != "high-contrast":
         assert min(contrast(focus, ground) for ground in grounds) > min(
             contrast(border, ground) for ground in grounds

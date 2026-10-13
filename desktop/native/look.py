@@ -1420,7 +1420,6 @@ def auth_rules(palette: dict, knobs: dict, radius: int, card_radius: int) -> str
     inset = SPACING[5] if knobs["density"] == "comfortable" else SPACING[4]
     title = f"font-size: {type_pt('title', text)}pt; font-weight: {WEIGHT_STRONG};"
     sheet = RADIUS_SHEET if card_radius else 0
-    ring = mix(palette["accent"], palette["field"], 0.4)
     # Only a look that draws soft hairlines: a flat look draws none, and a bold one its own heavy ones.
     field_rules = (
         f"QWidget#authCard QLineEdit {{ border: 1px solid {readable_edge(palette)}; }}"
@@ -1458,7 +1457,7 @@ def auth_rules(palette: dict, knobs: dict, radius: int, card_radius: int) -> str
         f"QToolButton#passwordReveal {{ background: transparent; border: none; padding: 0; "
         f"border-radius: {radius}px; }}"
         f"QToolButton#passwordReveal:hover {{ background: {palette['hairline']}; }}"
-        f"QToolButton#passwordReveal:focus {{ border: 2px solid {ring}; }}"
+        f"QToolButton#passwordReveal:focus {{ border: 2px solid {readable_focus_edge(palette)}; }}"
         # Creating an account is the way in for most students on a first run, so it is the link that
         # carries weight and Forgot password sits quieter under it.
         f"{links} {{ background: transparent; color: {accent_words(palette)}; border: none; "
