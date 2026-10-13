@@ -24,7 +24,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QPoint, QPointF, Qt
-    from PySide6.QtGui import QColor, QFont, QFontMetricsF, QPalette
+    from PySide6.QtGui import QColor, QFontMetricsF, QPalette
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication, QFrame, QLabel, QPushButton, QScrollArea, QWidget
 
@@ -94,7 +94,11 @@ def rows(view: DayDialView) -> list[tuple[str, str, str, str, str]]:
 
 
 def actions(view: DayDialView) -> list[tuple[str, str]]:
-    found = [item for item in view.findChildren(QPushButton) if item.property("kind") != "row"]
+    found = [
+        item
+        for item in view.findChildren(QPushButton)
+        if item.property("kind") != "row" and not item.objectName().startswith("dialRow")
+    ]
     return [(item.objectName(), item.property("kind") or "") for item in found]
 
 
@@ -146,22 +150,21 @@ def paint(tokens: dict[str, str], category: str) -> tuple[str, str]:
     return category_paint(category, {"family": "light", "panel": tokens["surface"]})
 
 
-def test_between_blocks_the_card_says_what_is_up_next_and_in_how_long(qapp: QApplication) -> None:
+def test_between_blocks_the_left_card_follows_the_clock(qapp: QApplication) -> None:
     view = shown(qapp, "15:40")
     assert text(view, "dialKicker") == "Up next"
-    assert text(view, "dialIn") == "in 2 h 20 min"
-    assert text(view, "dialTitle") == "Dinner"
-    assert text(view, "dialThen") == "18:00–18:30 · 30 min · then Essay-1 at 18:45"
+    assert text(view, "dialFreeLine") == "2 h 20 min free until 18:00"
+    assert text(view, "dialListLabel") == "3 things left today"
+    assert view.findChild(QFrame, "dialCard") is None
     # One filled button, the step this minute is for: with no homework on, Running late.
     assert actions(view) == [("dialLate", "main"), ("dialBack", "")]
 
 
-def test_during_homework_the_card_says_so_and_what_comes_after(qapp: QApplication) -> None:
+def test_during_homework_the_left_card_counts_down_and_actions_stay_in_one_row(qapp: QApplication) -> None:
     view = shown(qapp, "19:00")
     assert text(view, "dialKicker") == "Now"
-    assert text(view, "dialIn") == "45 min left"
-    assert text(view, "dialTitle") == "Essay-1"
-    assert text(view, "dialThen") == "18:45–19:45 · 1 h · then Chem-1 at 20:00"
+    assert text(view, "dialFreeLine") == "45 min left"
+    assert text(view, "dialListLabel") == "2 things left today"
     assert actions(view) == [
         ("dialFinished", "main"),
         ("dialFocus", ""),
@@ -182,10 +185,10 @@ def test_the_buttons_are_rounded_rectangles_not_pills(qapp: QApplication) -> Non
 def test_the_list_reads_the_day_in_columns_marking_what_is_over_done(qapp: QApplication) -> None:
     view = shown(qapp, "19:00")
     assert rows(view) == [
-        ("08:00", "School", "6 h 30 min", "Done", "past"),
-        ("18:00", "Dinner", "30 min", "Done", "past"),
-        ("18:45", "Essay-1", "1 h", "", "now"),
-        ("20:00", "Chem-1", "1 h 30 min", "", ""),
+        ("08:00–14:30", "School", "6 h 30 min", "Done", "past"),
+        ("18:00–18:30", "Dinner", "30 min", "Done", "past"),
+        ("18:45–19:45", "Essay-1", "1 h", "Now", "now"),
+        ("20:00–21:30", "Chem-1", "1 h 30 min", "", ""),
     ]
     # Marked, not struck through: a line through the words made them hard to read.
     assert not any(row.findChild(FittedLabel, "dialRowName").font().strikeOut() for row in row_buttons(view))
@@ -206,34 +209,27 @@ def test_times_and_lengths_line_up_however_wide_they_are(qapp: QApplication) -> 
         set_clock_24h(True)
 
 
-def test_nothing_else_today_is_said_once(qapp: QApplication) -> None:
-    def said(view: DayDialView) -> list[str]:
-        return [
-            item.text()
-            for item in view.findChildren(QLabel)
-            if item.text().startswith("Nothing else") and item.isVisibleTo(view)
-        ]
-
+def test_the_clock_card_and_list_name_their_empty_states(qapp: QApplication) -> None:
     view = shown(qapp, "15:40")
-    assert said(view) == ["Nothing else today"]
-    assert text(view, "dialNoneTime") == "21:30"
-    # Once the day is over the card says it, and the list does not say it again.
-    view = shown(qapp, "22:30")
-    assert said(view) == ["Nothing else scheduled today"]
-    assert view.findChild(QLabel, "dialNoneTime") is None
+    assert text(view, "dialFreeLine") == "2 h 20 min free until 18:00"
+    empty = shown(qapp, "13:40", [])
+    assert text(empty, "dialFreeLine") == "Free until 22:00"
+    assert text(empty, "dialListEmpty") == "Nothing planned"
+    late = shown(qapp, "22:30")
+    assert text(late, "dialFreeLine") == "Nothing left today"
+    assert late.findChild(QLabel, "dialListEmpty") is None, "the day's rows are still listed, all over"
 
 
-def test_homework_with_no_time_is_counted_with_the_book_and_named(qapp: QApplication) -> None:
+def test_homework_with_no_time_stays_in_the_fixed_waiting_strip(qapp: QApplication) -> None:
     view = shown(qapp, "19:00")
-    assert text(view, "dialWaiting") == "1 homework not placed yet"
-    assert view.findChild(FittedLabel, "dialWaitingList").full_text() == "· Poster-1"
-    unplaced = view.findChild(QWidget, "dialUnplaced")
-    assert any(not item.pixmap().isNull() for item in unplaced.findChildren(QLabel))
+    strip = view.findChild(QFrame, "dialUnplacedStrip")
+    assert text(view, "dialWaitingStrip") == "1 homework not placed yet"
+    assert strip.height() == 36
     vocab = {"id": "vocab", "title": "Spanish vocab", "due": "2026-09-19T08:00", "completed": False}
     more = [*BLOCKS, block("vocab-1", "flexible", [], None, 30, assignment_id="vocab")]
     view = shown(qapp, "19:00", more, homework={**HOMEWORK, "vocab": vocab})
-    assert text(view, "dialWaiting") == "2 homework not placed yet"
-    assert view.findChild(FittedLabel, "dialWaitingList").full_text() == "· Vocab-1, Poster-1"
+    assert text(view, "dialWaitingStrip") == "2 homework not placed yet"
+    assert view.findChild(QFrame, "dialUnplacedStrip").height() == 36
 
 
 def test_every_segment_has_a_row_a_keyboard_can_reach(qapp: QApplication) -> None:
@@ -397,8 +393,8 @@ def test_the_weeks_small_dials_are_labelled_with_todays_hand_and_past_days_paler
 def test_a_small_dial_opens_that_day_and_today_is_one_press_back(qapp: QApplication) -> None:
     view = shown(qapp, "19:00")
     QTest.mouseClick(view.findChild(DialFace, "dialMini0"), Qt.MouseButton.LeftButton)
-    assert text(view, "dialKicker") == "Monday 14 September"
-    assert text(view, "dialTitle") == "45 min planned · 45 min done"
+    assert text(view, "dialKicker") == "Monday"
+    assert text(view, "dialListLabel") == "Monday"
     assert [(name, tag, state) for _time, name, _length, tag, state in rows(view)] == [
         ("School", "Done", "past"),
         ("Math-1", "Done", "past"),
@@ -410,8 +406,10 @@ def test_a_small_dial_opens_that_day_and_today_is_one_press_back(qapp: QApplicat
 
 def test_in_another_week_it_shows_the_week_but_claims_no_now(qapp: QApplication) -> None:
     view = shown(qapp, "19:00", today=None)
-    assert text(view, "dialKicker") == "Monday 14 September"
-    assert text(view, "dialThen") == "This is not the current week, so there is no now to show."
+    assert text(view, "dialKicker") == "Monday"
+    assert text(view, "dialWeekNotice") == (
+        "Not this week — Go back to planning and open this week to see today."
+    )
     assert view.findChild(QPushButton, "dialToday") is None
     assert view.findChild(QPushButton, "dialFinished") is None
     assert view.findChild(QPushButton, "dialBack") is not None
@@ -440,16 +438,14 @@ def test_night_is_the_navy_colourway_saved_as_midnight(qapp: QApplication) -> No
 
 
 @pytest.mark.parametrize("colour", ["match", "midnight"])
-def test_the_minutes_to_go_read_in_every_accent(qapp: QApplication, colour: str) -> None:
-    """Accent words on a tenth of the accent: FlexWeek's blue read 4.33 to 1 on white's tint and
-    3.2 on Night's, so the words take the least darker or lighter shade that reads."""
+def test_the_primary_action_reads_in_every_accent(qapp: QApplication, colour: str) -> None:
     failures = []
     for pack, accent in itertools.product(("light-frost", "dark-frost"), ACCENTS):
         palette = resolved_palette(pack, pack == "dark-frost", None, accent)
         view = shown(qapp, "15:40", palette=palette, colour=colour)
-        pill = view.findChild(QLabel, "dialIn")
-        ground = Seen(view).at(pill, QPoint(pill.width() // 2, 2)).name()
-        words = pill.palette().color(QPalette.ColorRole.WindowText).name()
+        pill = view.findChild(QPushButton, "dialLate")
+        ground = Seen(view).at(pill, QPoint(pill.width() // 2, pill.height() // 2)).name()
+        words = pill.palette().color(QPalette.ColorRole.ButtonText).name()
         if contrast(words, ground) < 4.5:
             failures.append((pack, accent, words, ground, round(contrast(words, ground), 2)))
     assert failures == []
@@ -543,7 +539,10 @@ def test_names_are_written_along_the_arcs_that_fit_and_left_off_the_ones_that_do
     assert "School" in words
     assert "Dinner" not in words
     assert "Earlier today" in words, "free time already gone"
-    assert "Free until 18:00" in words, "free time still ahead, to where the next block begins"
+    # The demo's face is 320 px, too small to write "Free until 18:00" along the 3 h 30 min before Dinner;
+    # a free stretch that does fit keeps its words: School alone leaves the rest of the day free.
+    only_school = [block("school", "locked", [3], "08:00", 390)]
+    assert "Free until 22:00" in arc_words(shown(qapp, "13:40", only_school)), "free time still ahead"
     # Nothing is written that is wider than its arc: the names would overlap what is next to them.
     dial = face(view)
     _centre, inner, outer = dial._radii()
@@ -603,64 +602,29 @@ def test_the_words_are_painted_on_the_arc(qapp: QApplication, monkeypatch: pytes
     assert changed > 40, f"only {changed} pixels differ"
 
 
-def key_of(view: DayDialView) -> tuple[QFrame, list[str]]:
-    key = view.findChild(QFrame, "dialKey")
-    return key, [item.text() for item in key.findChildren(QLabel, "dialKeyWord")]
-
-
-def test_the_key_above_the_list_names_the_kinds_of_arc_the_ring_shows(qapp: QApplication) -> None:
-    # School is over at 15:40; Dinner and the homework are still to come.
+def test_the_rows_replace_the_separate_ring_key(qapp: QApplication) -> None:
     view = shown(qapp, "15:40")
-    key, words = key_of(view)
-    assert key.findChild(QLabel, "dialListLabel").text() == "Reading the ring"
-    assert words == ["Still to come", "Already over", "Free time, still ahead", "Free time, already gone"]
-    # At 13:40 School is still running, so nothing is over yet.
-    assert key_of(shown(qapp, "13:40"))[1] == [
-        "Still to come",
-        "Free time, still ahead",
-        "Free time, already gone",
-    ]
-    assert key.mapTo(view, key.rect().topLeft()).y() < view.findChild(QFrame, "dialList").y()
-    # With nothing planned only the two kinds of free time are on the ring.
-    assert key_of(shown(qapp, "13:40", []))[1] == ["Free time, still ahead", "Free time, already gone"]
-    # With the day over, what was planned is over, and the evening left is still ahead.
-    assert key_of(shown(qapp, "22:30"))[1] == [
-        "Already over",
-        "Free time, still ahead",
-        "Free time, already gone",
-    ]
-    # Each row carries the colours of its arcs.
-    kinds = face(view).key_rows()
-    assert [len(colours) for _words, colours in kinds] == [2, 1, 1, 1], "Dinner and homework, School"
-    assert len(key.findChildren(QWidget, "dialKeySwatch")) == 4
+    assert view.findChild(QFrame, "dialKey") is None
 
 
-def test_the_key_is_whole_in_view_at_1300_by_720_with_school_running(qapp: QApplication) -> None:
-    """Under the Today list the key sat below the fold of the page scroller at this size, so the
-    words that explain the arcs were out of sight."""
-    view = shown(qapp, "13:40")
-    scroll = view.findChild(QScrollArea, "dialScroll")
-    key = view.findChild(QFrame, "dialKey")
-    assert key.isVisible()
-    top = key.mapTo(scroll.viewport(), key.rect().topLeft()).y()
-    bottom = key.mapTo(scroll.viewport(), key.rect().bottomLeft()).y()
-    assert top >= 0 and bottom < scroll.viewport().height(), (top, bottom, scroll.viewport().height())
+def test_the_list_scroller_keeps_actions_below_the_rows(qapp: QApplication) -> None:
+    view = shown(qapp, "13:40", size=(1300, 720))
+    scroll = view.findChild(QScrollArea, "dialListScroll")
+    assert scroll is not None and scroll.isVisibleTo(view)
+    late = view.findChild(QPushButton, "dialLate")
+    assert late.mapTo(view, late.rect().topLeft()).y() >= scroll.mapTo(view, scroll.rect().bottomLeft()).y()
 
 
-def test_with_nothing_else_planned_the_card_heading_drops_to_the_heading_size(qapp: QApplication) -> None:
-    """#25: "Nothing else scheduled today" was set in the 20 pt title size, as big as the date in the top
-    bar, for a sentence about having nothing to do."""
-    view = shown(qapp, "13:40", [])
-    title = view.findChild(QLabel, "dialTitle")
-    title.ensurePolished()
-    assert title.font().pointSizeF() == type_pt("heading") == 15
-    assert title.font().weight() == QFont.Weight.DemiBold
-    assert text(view, "dialThen") == "Your evening is free until 22:00."
-    # A running block keeps the title size.
-    busy = shown(qapp, "13:40").findChild(QLabel, "dialTitle")
-    busy.ensurePolished()
-    assert busy.font().pointSizeF() == type_pt("title") == 20
-    # Once the evening is over there is nothing to say about it.
-    late = shown(qapp, "22:30")
-    assert text(late, "dialTitle") == "Nothing else scheduled today"
-    assert late.findChild(QLabel, "dialThen") is None
+def test_the_free_time_card_changes_as_the_clock_moves(qapp: QApplication) -> None:
+    assert text(shown(qapp, "13:40", []), "dialFreeLine") == "Free until 22:00"
+    assert text(shown(qapp, "19:00"), "dialFreeLine") == "45 min left"
+    assert text(shown(qapp, "22:30"), "dialFreeLine") == "Nothing left today"
+
+
+def test_nothing_to_do_is_not_set_in_the_title_size(qapp: QApplication) -> None:
+    """The title size was for a block that is running. Once the free line has no block to name, it is
+    a sentence and stays at body size, as the demo's free line does."""
+    for view in (shown(qapp, "13:40", []), shown(qapp, "22:30")):
+        line = view.findChild(QLabel, "dialFreeLine")
+        line.ensurePolished()
+        assert line.font().pointSizeF() < type_pt("title")

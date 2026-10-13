@@ -28,7 +28,6 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QFrame,
-    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -76,7 +75,6 @@ from desktop.native.weekmodel import (
     Occurrence,
     clock_label,
     length_label,
-    planned_line,
     range_label,
     short_clock,
 )
@@ -84,7 +82,7 @@ from desktop.native.widgets import FittedLabel
 
 # The mock-up's face at Normal text: 600 across, the ring from 190 to 232 about its centre, and room
 # outside it for the ticks and the hour labels.
-FACE_MAX, FACE_MIN = 600, 240
+FACE_MIN = 240
 INNER_SHARE = 190 / 232
 LABEL_ROOM = 62
 GAP, MINI_GAP = 2.0, 3.0
@@ -96,18 +94,11 @@ TIME_SHARE = 0.31
 # How far the time sits from the hub, and its note below it, at the full size.
 HUB_GAP, NOTE_GAP = 31, 34
 EVENING = 22 * 60
+NOT_THIS_WEEK = "Not this week — Go back to planning and open this week to see today."
 # The words written along an arc keep this far from its ends, and need this much over their height
-# in the ring's thickness; a name that does not fit is left off, and the key still explains the ring.
+# in the ring's thickness; a name that does not fit is left off, and its list row still says it.
 ARC_PAD = 6
 ARC_ROOM = 4
-# The key above the list names each kind of arc the ring shows, in this order.
-KEY_TITLE = "Reading the ring"
-KEY_WORDS = {
-    "coming": "Still to come",
-    "over": "Already over",
-    "ahead": "Free time, still ahead",
-    "gone": "Free time, already gone",
-}
 # The hand easing to where the time has moved it (decision 35 of 0.17), as the mock-up's does.
 HAND_MS = 240
 ICON = 18
@@ -487,25 +478,6 @@ class DialFace(QWidget):
                 painter.drawText(QPointF(-metrics.horizontalAdvance(char) / 2, 0), char)
                 painter.restore()
 
-    def key_rows(self) -> list[tuple[str, list[str]]]:
-        """The kinds of arc this ring shows, each with its words and up to three colours: the key under
-        the day's list."""
-        seen: dict[str, list[str]] = {}
-        for piece in segments(self._shown()):
-            item = piece.item
-            if item is None:
-                if piece.end > self._over:
-                    seen.setdefault("ahead", [self._free(False).name()])
-                if piece.start < self._over:
-                    seen.setdefault("gone", [self._free(True).name()])
-                continue
-            fill, mark = self._paint_of(item.category)
-            kind, colour = ("over", fill) if piece.end <= self._over or not item.live else ("coming", mark)
-            colours = seen.setdefault(kind, [])
-            if colour not in colours and len(colours) < 3:
-                colours.append(colour)
-        return [(KEY_WORDS[kind], seen[kind]) for kind in KEY_WORDS if kind in seen]
-
     def _paint_ticks(self, painter: QPainter, centre: QPointF, outer: float) -> None:
         """Labels every two hours, with ticks only between them so no tick reads as a minus sign."""
         scale, tokens = self._scale, self._tokens
@@ -585,9 +557,9 @@ class DialFace(QWidget):
             top = centre.y() - metrics.capHeight() / 2
         else:
             top = centre.y() + HUB_GAP * shrink
-            below = QRectF(centre.x() - width / 2, top, width, height)
+            below = QRectF(centre.x() - width / 2, top, width, height).adjusted(-2, -2, 2, 2)
             tip = self._hand_tip(centre, inner)
-            if any(below.contains(centre + (tip - centre) * (step / 40)) for step in range(41)):
+            if any(below.contains(centre + (tip - centre) * (step / 100)) for step in range(101)):
                 top = centre.y() - HUB_GAP * shrink - height
         return (
             QRectF(centre.x() - width / 2, top, width, height),
@@ -762,34 +734,6 @@ def _quiet(widget: QWidget) -> QWidget:
     return widget
 
 
-class _Swatch(QWidget):
-    """A small rounded chip of an arc's colours, side by side, in the key."""
-
-    def __init__(self, colours: list[str], edge: str, width: int, height: int) -> None:
-        super().__init__()
-        self.colours, self._edge = colours, edge
-        self.setObjectName("dialKeySwatch")
-        self.setFixedSize(width, height)
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-
-    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        box = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        shape = QPainterPath()
-        shape.addRoundedRect(box, 3, 3)
-        painter.setClipPath(shape)
-        share = box.width() / max(len(self.colours), 1)
-        for index, colour in enumerate(self.colours):
-            stripe = QRectF(box.left() + index * share, box.top(), share + 1, box.height())
-            painter.fillRect(stripe, QColor(colour))
-        painter.setClipping(False)
-        painter.setPen(QPen(QColor(self._edge), 1))
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawPath(shape)
-        painter.end()
-
-
 class DayDialView(LayoutView):
     """The day as a dial (0.17's Dial): the ring on the left, the Next card and the day's list beside
     it, and the week's small dials along the bottom."""
@@ -803,6 +747,7 @@ class DayDialView(LayoutView):
         # The day and minute the hand last pointed at, for it to ease on from there.
         self._hand_was: tuple[int, int] | None = None
         self._side: QWidget | None = None
+        self._unplaced_row: QWidget | None = None
         # A view's minimum height must not become the window's: three designs pushed it past a 768 pixel
         # laptop screen. Inside a scroll area, what does not fit scrolls and the window keeps its size.
         outer = self._outer = QVBoxLayout(self)
@@ -820,6 +765,11 @@ class DayDialView(LayoutView):
         self._strip_host.setObjectName("dialStrip")
         self._strip = QVBoxLayout(self._strip_host)
         outer.addWidget(self._strip_host)
+        self._unplaced_row = QFrame()
+        self._unplaced_row.setObjectName("dialUnplacedStrip")
+        self._unplaced_layout = QHBoxLayout(self._unplaced_row)
+        self._unplaced_layout.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(self._unplaced_row)
 
     def shown_day(self, scene: Scene) -> int:
         return self._day if self._day is not None else (scene.today if scene.today is not None else 0)
@@ -854,18 +804,58 @@ class DayDialView(LayoutView):
         if was is not None and was[0] == day and now is not None:
             self._face.ease_hand(was[1])
         self._face.block_clicked.connect(self.block_activated.emit)
-        self._root.addWidget(self._face, 0, Qt.AlignmentFlag.AlignTop)
+        left = QWidget()
+        left.setObjectName("dialLeftColumn")
+        left_column = QVBoxLayout(left)
+        left_column.setContentsMargins(0, px(SPACING[4]), 0, 0)
+        left_column.setSpacing(px(SPACING[3]))
+        if is_today:
+            found = scene.week.day_queue(day, scene.minute)
+            kicker = (
+                "Now"
+                if found.current is not None
+                else "Up next" if found.queue else "Nothing left today"
+            )
+        else:
+            kicker = DAY_FULL[day]
+        left_column.addWidget(label(kicker, "dialKicker"))
+        if scene.today is None:
+            left_column.addWidget(label(NOT_THIS_WEEK, "dialWeekNotice"))
+        left_column.addWidget(self._face, 0, Qt.AlignmentFlag.AlignHCenter)
+        left_column.addWidget(self._free_card(scene, day, is_today))
+        left_column.addStretch(1)
+        self._root.addWidget(left, 0)
         self._side = QWidget()
         self._side.setObjectName("dialSide")
         side = QVBoxLayout(self._side)
         side.setContentsMargins(0, px(SPACING[4]), 0, 0)
         side.setSpacing(px(SPACING[3]))
-        side.addWidget(self._card(scene, day, is_today))
         # Above the list, which can run long: under it the key sat below the fold at 1300 by 720.
-        side.addWidget(self._key(scene, self._face.key_rows()))
         if scene.options.get("list") != "hide":
-            side.addWidget(self._list(scene, day, is_today))
-        side.addStretch(1)
+            content = self._list(scene, day, is_today)
+            listing = QScrollArea()
+            listing.setObjectName("dialListScroll")
+            listing.setWidgetResizable(True)
+            listing.setFrameShape(QFrame.Shape.NoFrame)
+            listing.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            listing.setWidget(content)
+            side.addWidget(listing, 1)
+        else:
+            side.addStretch(1)
+        action_host = QWidget()
+        action_host.setObjectName("dialActions")
+        action_line = QHBoxLayout(action_host)
+        action_line.setContentsMargins(0, 0, 0, 0)
+        action_line.setSpacing(px(SPACING[2]))
+        item = self._primary(scene, day, is_today)
+        made = day_buttons(self, scene, item, "dial", is_today)
+        if not is_today and scene.today is not None:
+            today = button("Back to today", "dialToday", "main")
+            today.clicked.connect(lambda _=False, target=scene.today: self._show_day(target))
+            made.insert(len(made) - 1, today)
+        for entry in made:
+            action_line.addWidget(entry)
+        side.addWidget(action_host)
         self._root.addWidget(self._side, 1)
         empty(self._strip)
         wanted = scene.options.get("week") != "hide"
@@ -875,7 +865,38 @@ class DayDialView(LayoutView):
         # Shown now rather than on the event loop's next pass, so _fit measures them.
         for part in (self._face, self._side, *self._strip_host.findChildren(QFrame, "dialWeek")):
             part.show()
+        self._unplaced_row.setFixedHeight(36)
+        empty(self._unplaced_layout)
+        waiting = len(scene.week.waiting)
+        self._unplaced_layout.setContentsMargins(px(24), 0, px(24), 0)
+        self._unplaced_layout.addWidget(label(f"{waiting} homework not placed yet", "dialWaitingStrip"))
+        self._unplaced_layout.addStretch(1)
+        self._unplaced_row.show()
         self._fit()
+
+    def _primary(self, scene: Scene, day: int, is_today: bool) -> Occurrence | None:
+        if not is_today:
+            return None
+        found = scene.week.day_queue(day, scene.minute)
+        return found.queue[0] if found.queue else None
+
+    def _free_card(self, scene: Scene, day: int, is_today: bool) -> QFrame:
+        card = QFrame()
+        card.setObjectName("dialFreeCard")
+        line = QHBoxLayout(card)
+        line.setContentsMargins(scene.px(16), scene.px(12), scene.px(16), scene.px(12))
+        word = self._evening_line(scene, day) if is_today else day_long(scene.week.date_of(day))
+        line.addWidget(label(word, "dialFreeLine"), 1, Qt.AlignmentFlag.AlignCenter)
+        return card
+
+    def _evening_line(self, scene: Scene, day: int) -> str:
+        found = scene.week.day_queue(day, scene.minute)
+        if found.current is not None:
+            return f"{length_label(found.current.end - scene.minute)} left"
+        next_item = next((item for item in found.queue if item.start > scene.minute), None)
+        if next_item is not None:
+            return f"{length_label(next_item.start - scene.minute)} free until {clock_label(next_item.start)}"
+        return f"Free until {short_clock(EVENING)}" if scene.minute < EVENING else "Nothing left today"
 
     def _sheet(self, scene: Scene) -> str:
         tokens = scene.tokens
@@ -896,28 +917,16 @@ class DayDialView(LayoutView):
             self.objectName(),
             {
                 "#dialScroll, #dialPage, #dialSide, #dialStrip": css(background=tokens["bg"]),
-                "#dialCard, #dialList, #dialKey, #dialWeek": css(
+                "#dialList, #dialWeek, #dialFreeCard": css(
                     background=card, border=edge, border_radius=f"{round(RADIUS_CARD * 1.4)}px"
                 ),
-                "#dialCard QLabel, #dialList QLabel, #dialKey QLabel, #dialWeek QLabel": css(
+                "#dialList QLabel, #dialWeek QLabel": css(
                     color=text, font_size=size("body")
                 ),
                 "QLabel#dialKicker, QLabel#dialListLabel": css(color=muted, font_weight=WEIGHT_STRONG),
-                "QLabel#dialIn": css(
-                    color=fit_lightness(tokens["accent"], (tint,), 4.5),
-                    background=tint,
-                    font_weight=WEIGHT_STRONG,
-                    border_radius=pill("body", 2),
-                    padding="2px 10px",
-                ),
-                "QLabel#dialTitle": css(font_size=size("title"), font_weight=WEIGHT_STRONG),
-                # Nothing else planned: a sentence of words, not the screen's headline (#25).
-                'QLabel#dialTitle[quiet="true"]': css(font_size=size("heading"), font_weight=WEIGHT_STRONG),
-                "QLabel#dialKeyWord": css(color=muted, font_size=size("caption")),
-                "QLabel#dialThen, QLabel#dialCount, QLabel#dialRowLength, QLabel#dialWaitingList": css(
-                    color=muted
-                ),
-                "QLabel#dialRowName, QLabel#dialWaiting": css(font_weight=WEIGHT_STRONG),
+                "QLabel#dialWeekNotice, QLabel#dialListEmpty": css(color=muted),
+                "QLabel#dialRowLength, QLabel#dialFreeLine, QLabel#dialWaitingStrip": css(color=muted),
+                "QLabel#dialRowName": css(font_weight=WEIGHT_STRONG),
                 'QPushButton[state="past"] #dialRowTime, QPushButton[state="past"] #dialRowName': css(
                     color=muted
                 ),
@@ -928,8 +937,9 @@ class DayDialView(LayoutView):
                     color=muted, font_size=size("caption"), font_weight=WEIGHT_REGULAR
                 ),
                 # Styled so their rule is drawn, and clear so the window's page colour is not.
-                "#dialNone, #dialUnplaced": css(background="transparent", border_top=edge),
-                "#dialNone QLabel": css(color=muted),
+                "#dialUnplacedStrip": css(
+                    background="transparent", border_top=edge
+                ),
                 "QLabel#dialMiniName": css(color=muted, font_size=size("caption")),
                 "QLabel#dialMiniDate": css(font_size=size("caption"), font_weight=WEIGHT_STRONG),
                 'QLabel#dialMiniName[chosen="true"]': css(color=text, font_weight=WEIGHT_STRONG),
@@ -950,6 +960,10 @@ class DayDialView(LayoutView):
                     font_weight=WEIGHT_STRONG,
                 ),
                 "QPushButton:hover": css(background=mix_oklab(text, card, 0.06)),
+                "QPushButton#dialFinished, QPushButton#dialFocus, QPushButton#dialLate, "
+                "QPushButton#dialBack": css(
+                    padding=f"0 {scene.px(4)}px"
+                ),
                 'QPushButton[kind="main"]': css(
                     background=tokens["accent"], color=tokens["accent_ink"], border_color=tokens["accent"]
                 ),
@@ -969,96 +983,6 @@ class DayDialView(LayoutView):
             },
         )
 
-    def _card(self, scene: Scene, day: int, is_today: bool) -> QFrame:
-        """What is on now or next, with the day's buttons; or, for another day, what it holds."""
-        card = QFrame()
-        card.setObjectName("dialCard")
-        px = scene.px
-        inner = QVBoxLayout(card)
-        inner.setContentsMargins(px(SPACING[4]), px(SPACING[3]), px(SPACING[4]), px(SPACING[4]))
-        inner.setSpacing(0)
-        top = QHBoxLayout()
-        top.setSpacing(px(SPACING[2]))
-        heading = QHBoxLayout()
-        heading.setSpacing(px(10))
-        item, pill, line, quiet = None, "", "", False
-        if is_today:
-            found = scene.week.day_queue(day, scene.minute)
-            item = found.queue[0] if found.queue else None
-            if item is None:
-                kicker, title, line = scene.week.leftover_parts(day)
-                quiet = kicker == title
-                if quiet and scene.minute < EVENING:
-                    line = f"Your evening is free until {clock_label(EVENING)}."
-            elif item == found.current:
-                kicker, title, pill = "Now", item.title, f"{length_label(item.end - scene.minute)} left"
-            else:
-                kicker, title, pill = "Up next", item.title, f"in {length_label(item.start - scene.minute)}"
-            if item is not None:
-                line = f"{range_label(item.start, item.end)} · {length_label(item.minutes)}"
-                if len(found.queue) > 1:
-                    after = found.queue[1]
-                    line += f" · then {after.title} at {clock_label(after.start)}"
-            made = day_buttons(self, scene, item, "dial")
-        else:
-            work = [entry for entry in scene.week.on_day(day) if entry.work]
-            date = scene.week.date_of(day)
-            kicker = day_long(date)
-            title = planned_line(
-                sum(entry.minutes for entry in work), sum(entry.minutes for entry in work if entry.done)
-            )
-            made = []
-            if scene.today is not None:
-                today = button("Back to today", "dialToday", "main")
-                today.clicked.connect(lambda _=False, target=scene.today: self._show_day(target))
-                made.append(today)
-            else:
-                line = "This is not the current week, so there is no now to show."
-            back = button("Back to planning", "dialBack")
-            back.clicked.connect(self.back_requested.emit)
-            made.append(back)
-        said = label(kicker, "dialKicker")
-        # Said once: a heading that only repeats the title goes. Only ever hidden here: the row has no
-        # parent yet, and shown now the label would open as a window of its own for a moment.
-        if kicker == title:
-            said.hide()
-        top.addWidget(said)
-        top.addStretch()
-        if pill:
-            top.addWidget(label(pill, "dialIn"))
-        inner.addLayout(top)
-        inner.addSpacing(px(SPACING[1]))
-        if item is not None:
-            dot = QFrame()
-            dot.setObjectName("dialDot")
-            dot.setFixedSize(10, 10)
-            dot.setStyleSheet(
-                f"background: {self._mark(scene, item.category)}; border-radius: 5px; border: none;"
-            )
-            heading.addWidget(dot, 0, Qt.AlignmentFlag.AlignVCenter)
-        words = label(title, "dialTitle", wrap=True)
-        words.setProperty("quiet", quiet)
-        heading.addWidget(words, 1)
-        inner.addLayout(heading)
-        if line:
-            inner.addSpacing(px(SPACING[0]))
-            inner.addWidget(label(line, "dialThen", wrap=True))
-        inner.addSpacing(px(SPACING[3]))
-        # Two to a row, so the card stays narrow enough to leave the dial its room.
-        actions = QGridLayout()
-        actions.setHorizontalSpacing(px(SPACING[1]))
-        actions.setVerticalSpacing(px(SPACING[1]))
-        for index, entry in enumerate(made):
-            actions.addWidget(entry, index // 2, index % 2)
-        actions.setColumnStretch(2, 1)
-        inner.addLayout(actions)
-        return card
-
-    def _mark(self, scene: Scene, category: str) -> str:
-        tokens = scene.tokens
-        mark = category_paint(category, {"family": family(tokens), "panel": tokens["surface"]})[1]
-        return mark or tokens["muted"]
-
     def _list(self, scene: Scene, day: int, is_today: bool) -> QFrame:
         """The day in rows: start time, category mark, title and length, in columns. What is over is
         marked Done rather than struck through, and every row opens its block."""
@@ -1070,66 +994,59 @@ class DayDialView(LayoutView):
         column.setSpacing(0)
         blocks = scene.week.on_day(day)
         header = QHBoxLayout()
-        header.addWidget(label("Today" if is_today else DAY_FULL[day], "dialListLabel"))
+        if is_today:
+            left = len(scene.week.day_queue(day, scene.minute).queue)
+            title = f"{plural(left, 'thing')} left today" if left else "Nothing left today"
+        else:
+            title = DAY_FULL[day]
+        header.addWidget(label(title, "dialListLabel"))
         header.addStretch()
-        header.addWidget(label(plural(len(blocks), "thing"), "dialCount"))
         column.addLayout(header)
         column.addSpacing(px(SPACING[0]))
         found = scene.week.day_queue(day, scene.minute) if is_today else None
-        closing = found is not None and bool(found.queue)
+        primary = (found.current or (found.queue[0] if found.queue else None)) if found else None
         times = QFontMetrics(at_scale(self.font(), "body", scene.scale))
-        shown = [item.start for item in blocks] + ([max(item.end for item in blocks)] if closing else [])
-        time_width = max((times.horizontalAdvance(clock_label(minute)) for minute in shown), default=0) + 2
+        time_width = max(
+            (times.horizontalAdvance(range_label(item.start, item.end)) for item in blocks), default=0
+        ) + 2
         over = over_until(scene, day)
         for index, item in enumerate(blocks):
             current = found.current if found is not None else None
-            column.addWidget(self._row(scene, index, item, item == current, over, time_width))
-        if closing:
-            # Said once, where the day ends: the card is still about what comes next.
-            column.addWidget(self._closing(scene, max(item.end for item in blocks), time_width))
-        if scene.week.waiting:
-            column.addWidget(self._unplaced(scene))
-        return box
-
-    def _key(self, scene: Scene, rows: list[tuple[str, list[str]]]) -> QFrame:
-        """"Reading the ring": what each kind of arc on the face means, for the kinds it shows."""
-        box = QFrame()
-        box.setObjectName("dialKey")
-        px = scene.px
-        column = QVBoxLayout(box)
-        column.setContentsMargins(px(SPACING[4]), px(SPACING[3]), px(SPACING[4]), px(SPACING[3]))
-        column.setSpacing(px(SPACING[1]))
-        column.addWidget(label(KEY_TITLE, "dialListLabel"))
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(px(SPACING[4]))
-        grid.setVerticalSpacing(px(SPACING[1]))
-        for index, (words, colours) in enumerate(rows):
-            cell = QHBoxLayout()
-            cell.setSpacing(px(SPACING[1]))
-            cell.addWidget(_Swatch(colours, scene.tokens["line"], px(22), px(10)))
-            cell.addWidget(label(words, "dialKeyWord"), 1)
-            grid.addLayout(cell, index // 2, index % 2)
-        grid.setColumnStretch(0, 1)
-        grid.setColumnStretch(1, 1)
-        column.addLayout(grid)
+            column.addWidget(
+                self._row(scene, index, item, item == current, item == primary, over, time_width)
+            )
+        if not blocks:
+            column.addWidget(label("Nothing planned", "dialListEmpty"))
         return box
 
     def _row(
-        self, scene: Scene, index: int, item: Occurrence, is_now: bool, over: int, time_width: int
+        self,
+        scene: Scene,
+        index: int,
+        item: Occurrence,
+        is_now: bool,
+        is_primary: bool,
+        over: int,
+        time_width: int,
     ) -> QPushButton:
         px, tokens = scene.px, scene.tokens
         past = not item.live or item.end <= over
         state = "now" if is_now else "past" if past else ""
         row = button("", f"dialRow{index}", "row")
         row.setProperty("state", state)
-        tag = "Missed" if item.missed else "Done" if past else ""
+        row.setProperty("blockId", item.block_id)
+        tag = (
+            "Missed"
+            if item.missed
+            else "Done" if past else "Now" if is_now else "Up next" if is_primary else ""
+        )
         pinned = "Pinned" if item.pinned else ""
         said = [clock_label(item.start), item.title, length_label(item.minutes), tag, pinned]
         row.setAccessibleName(", ".join(part for part in said if part))
         line = QHBoxLayout(row)
         line.setContentsMargins(0, 0, 0, 0)
         line.setSpacing(px(SPACING[2]))
-        when = label(clock_label(item.start), "dialRowTime")
+        when = label(range_label(item.start, item.end), "dialRowTime")
         when.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         when.setFixedWidth(time_width)
         line.addWidget(_quiet(when))
@@ -1164,6 +1081,28 @@ class DayDialView(LayoutView):
         length.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         length.setMinimumWidth(px(80))
         line.addWidget(_quiet(length))
+        tail = QWidget()
+        tail.setObjectName("dialRowTail")
+        controls = QHBoxLayout(tail)
+        controls.setContentsMargins(0, 0, 0, 0)
+        controls.setSpacing(px(SPACING[1]))
+        controls.addStretch(1)
+        line.addWidget(tail)
+        if item.work and item.assignment_id:
+            finished = button("✓", f"dialRowFinished{index}")
+            finished.setAccessibleName(f"{item.title} finished")
+            finished.setCheckable(True)
+            finished.setChecked(item.done)
+            finished.clicked.connect(
+                lambda _=False, key=item.assignment_id: self.finished_requested.emit(key)
+            )
+            controls.addWidget(finished)
+            if is_primary and not item.done:
+                focus = button("Start focus", f"dialRowFocus{index}")
+                focus.clicked.connect(
+                    lambda _=False, key=item.block_id, target=item.day: self.focus_requested.emit(key, target)
+                )
+                controls.addWidget(focus)
         row.clicked.connect(lambda _=False, key=item.block_id: self.block_activated.emit(key))
         return row
 
@@ -1180,43 +1119,6 @@ class DayDialView(LayoutView):
         line.addWidget(label(word, "dialRowTagText"))
         tag.setFixedHeight(scene.px(20))
         return tag
-
-    def _closing(self, scene: Scene, minute: int, time_width: int) -> QWidget:
-        row = QWidget()
-        row.setObjectName("dialNone")
-        row.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        row.setMinimumHeight(scene.px(40))
-        line = QHBoxLayout(row)
-        line.setContentsMargins(0, 0, 0, 0)
-        line.setSpacing(scene.px(SPACING[2]))
-        when = label(clock_label(minute), "dialNoneTime")
-        when.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        when.setFixedWidth(time_width)
-        line.addWidget(when)
-        line.addSpacing(4)
-        line.addWidget(label("Nothing else today", "dialNoneName"), 1)
-        return row
-
-    def _unplaced(self, scene: Scene) -> QWidget:
-        """Homework with no time yet, counted, and named after it as far as there is room."""
-        waiting = scene.week.waiting
-        row = QWidget()
-        row.setObjectName("dialUnplaced")
-        row.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        line = QHBoxLayout(row)
-        line.setContentsMargins(0, scene.px(SPACING[2]), 0, scene.px(SPACING[1]))
-        line.setSpacing(scene.px(SPACING[1]))
-        book = QLabel()
-        book.setPixmap(
-            pixmap("book-open", self._mark(scene, "assignments"), 16, self.devicePixelRatioF())
-        )
-        line.addWidget(book)
-        line.addWidget(label(f"{len(waiting)} homework not placed yet", "dialWaiting"))
-        names = FittedLabel(minimum=40)
-        names.setObjectName("dialWaitingList")
-        names.set_full_text("· " + ", ".join(item.title for item in waiting))
-        line.addWidget(names, 1)
-        return row
 
     def _week(self, scene: Scene, day: int) -> QFrame:
         """The week's small dials, labelled, today's with its hand and the days gone by paler."""
@@ -1271,8 +1173,17 @@ class DayDialView(LayoutView):
         across = self._scroll.width() - bar - margins.left() - margins.right() - self._root.spacing()
         across -= max(side.minimumSizeHint().width(), scene.px(SIDE_MIN))
         down = self._scroll.height() - margins.top() - margins.bottom()
-        size = max(min(scene.px(FACE_MAX), across, down), scene.px(FACE_MIN))
+        size = min(320, across, down)
+        size = max(size, FACE_MIN)
         face.setFixedSize(size, size)
+        # Every row's controls take the widest row's width, so the lengths before them stay one column.
+        tails = self.findChildren(QWidget, "dialRowTail")
+        for tail in tails:
+            tail.setMinimumWidth(0)
+            tail.setMaximumWidth(16_777_215)
+        wide = max((tail.sizeHint().width() for tail in tails), default=0)
+        for tail in tails:
+            tail.setFixedWidth(wide)
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)
