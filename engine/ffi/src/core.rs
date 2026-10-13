@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -8,6 +9,14 @@ use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Value, json};
 
 use crate::sync_api::{NotPairedSync, SyncApi};
+
+#[derive(Clone, Debug)]
+pub(crate) struct Preview {
+    pub week_start: String,
+    pub blocks: Value,
+    pub earlier: Vec<Value>,
+    pub revision: i64,
+}
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum FfiError {
@@ -48,6 +57,7 @@ pub struct FlexWeek {
     pub(crate) device_name: String,
     pub(crate) host: Arc<dyn Host>,
     pub(crate) sync: Box<dyn SyncApi>,
+    pub(crate) previews: Mutex<HashMap<String, Preview>>,
 }
 
 #[uniffi::export]
@@ -76,6 +86,7 @@ impl FlexWeek {
             device_name,
             host,
             sync: Box::new(NotPairedSync),
+            previews: Mutex::new(HashMap::new()),
         }))
     }
 
@@ -175,6 +186,31 @@ impl FlexWeek {
     pub fn join_from_pairing(&self, payload: String) -> String {
         self.sync.join_from_pairing(&payload)
     }
+
+    pub fn save_homework(&self, draft_json: String, op_id: String) -> Result<String, FfiError> {
+        crate::homework::save_homework(self, &draft_json, &op_id)
+    }
+
+    pub fn plan_week(&self, week_start: String, elapsed_ms: f64) -> Result<String, FfiError> {
+        crate::plan_week::plan_week(self, &week_start, elapsed_ms)
+    }
+
+    pub fn accept_plan(&self, preview_id: String) -> Result<String, FfiError> {
+        crate::plan_week::accept_plan(self, &preview_id)
+    }
+
+    pub fn running_late(
+        &self,
+        day: i64,
+        minutes: i64,
+        elapsed_ms: f64,
+    ) -> Result<String, FfiError> {
+        crate::running_late::running_late(self, day, minutes, elapsed_ms)
+    }
+
+    pub fn week_shape(&self, week_start: String) -> Result<String, FfiError> {
+        crate::week_shape::week_shape(self, &week_start)
+    }
 }
 
 pub(crate) fn require_user(week: &FlexWeek) -> Result<i64, FfiError> {
@@ -200,6 +236,10 @@ pub(crate) fn parse_local(text: &str) -> Result<DateTime<FixedOffset>, FfiError>
 
 pub(crate) fn parse_date(text: &str) -> Result<NaiveDate, FfiError> {
     NaiveDate::parse_from_str(text, "%Y-%m-%d").map_err(failure)
+}
+
+pub(crate) fn hex_preview(host: &dyn Host) -> String {
+    format!("p-{}", crate::account::hex_id(&host.random_bytes(8)))
 }
 
 /// `YYYY-MM-DDTHH:MM`, the stamp `calendar.local_stamp` stores on finished homework.
@@ -236,6 +276,10 @@ pub(crate) mod tests_support {
     }
 
     pub fn open_test(name: &str) -> (Arc<FlexWeek>, std::path::PathBuf) {
+        open_at(name, "2026-10-12T15:40:00-07:00")
+    }
+
+    pub fn open_at(name: &str, local: &str) -> (Arc<FlexWeek>, std::path::PathBuf) {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/ffi-tests");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join(format!("{name}-{}.sqlite", std::process::id()));
@@ -246,7 +290,7 @@ pub(crate) mod tests_support {
         flexweek_store::insert_preferences(&db, user_id, 2).unwrap();
         db.execute_batch("COMMIT").unwrap();
         let host = Arc::new(TestHost {
-            local: "2026-10-12T15:40:00-07:00".into(),
+            local: local.into(),
             now: AtomicI64::new(1_792_000_000_000),
         });
         let week = FlexWeek {
@@ -255,6 +299,7 @@ pub(crate) mod tests_support {
             device_name: "test-phone".into(),
             host,
             sync: Box::new(NotPairedSync),
+            previews: Mutex::new(HashMap::new()),
         };
         (Arc::new(week), path)
     }
