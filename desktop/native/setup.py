@@ -655,14 +655,14 @@ class StyleCarousel(QFrame):
         line.setSpacing(10)
         line.addStretch(1)
         line.addWidget(self.previous)
-        for style in self._order:
+        for number, style in enumerate(self._order, start=1):
             dot = QPushButton()
             dot.setObjectName("setupDot")
             dot.setFixedSize(DOT_PX, DOT_PX)
             dot.setIconSize(QSize(DOT_PX - 4, DOT_PX - 4))
             dot.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             dot.setCursor(Qt.CursorShape.PointingHandCursor)
-            dot.setAccessibleName(f"Show {style.name}")
+            dot.setAccessibleName(f"Show {style.name}, {number} of {len(self._order)}")
             dot.clicked.connect(lambda _checked=False, key=style.key: self.go_to(key))
             self.dots[style.key] = dot
             line.addWidget(dot)
@@ -805,6 +805,10 @@ class StyleCarousel(QFrame):
         arrows = {Qt.Key.Key_Left: -1, Qt.Key.Key_Right: 1}
         if event.key() in arrows and not event.modifiers():
             self.step(arrows[event.key()])
+            return
+        ends = {Qt.Key.Key_Home: self._order[0], Qt.Key.Key_End: self._order[-1]}
+        if event.key() in ends and not event.modifiers():
+            self.go_to(ends[event.key()].key)
             return
         super().keyPressEvent(event)
 

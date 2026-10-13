@@ -173,6 +173,27 @@ def test_left_and_right_move_the_middle_and_wrap_round(qapp: QApplication) -> No
         assert middle(setup) == "plain"
 
 
+def test_home_and_end_go_to_the_first_and_last_style(qapp: QApplication) -> None:
+    """N13-A29: Home and End jump to the ends of the row, as they do in a radio group."""
+    with dressed(qapp) as (setup, _palette):
+        order = [style.key for style in setup.carousel._order]
+        setup.carousel.setFocus()
+        QTest.keyClick(setup.carousel, Qt.Key.Key_End)
+        assert middle(setup) == order[-1] == "retro"
+        assert setup.carousel.is_chosen()
+        QTest.keyClick(setup.carousel, Qt.Key.Key_Home)
+        assert middle(setup) == order[0] == "plain"
+
+
+def test_each_dot_says_its_place_in_the_row(qapp: QApplication) -> None:
+    """N13-A29: a dot is announced with its number, as "Show Plain, 1 of 9"."""
+    with dressed(qapp) as (setup, _palette):
+        order = setup.carousel._order
+        for number, style in enumerate(order, start=1):
+            name = setup.carousel.dots[style.key].accessibleName()
+            assert name == f"Show {style.name}, {number} of {len(order)}"
+
+
 def test_the_arrows_and_the_dots_move_it_too(qapp: QApplication) -> None:
     with dressed(qapp) as (setup, _palette):
         setup.carousel.following.click()
