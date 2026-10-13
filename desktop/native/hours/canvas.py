@@ -127,6 +127,9 @@ class Drawn:
     short: bool = False
     history: str = ""
     history_due: str | None = None
+    # Hand-shrunk below the homework estimate (N11); plan-placed homework that is not pinned (N11).
+    estimate_min: int | None = None
+    placed_by_plan: bool = False
 
     @property
     def times(self) -> str:
@@ -147,15 +150,14 @@ class Drawn:
         if self.held and self.verdict is not None:
             return self.verdict.words
         words = f"{self.times} · {self.length}"
-        if self.history:
-            state = self.history
-            if state == "Overdue" and self.history_due:
+        for tag in block_tag_words(self):
+            if tag.startswith("Overdue") and self.history_due:
                 try:
                     due = date.fromisoformat(self.history_due[:10])
-                    state += f", was due {due.strftime('%a')} {due.day} {due.strftime('%b')}"
+                    tag = f"{tag}, was due {due.strftime('%a')} {due.day} {due.strftime('%b')}"
                 except ValueError:
                     pass
-            words += f" · {state}"
+            words += f" · {tag}"
         return words + " · Pinned" if self.pinned and not self.done else words
 
 
@@ -166,6 +168,24 @@ class Started(Drawn):
     @property
     def times(self) -> str:
         return clock_label(self.span.start)
+
+
+def block_tag_words(drawn: Drawn) -> tuple[str, ...]:
+    """Pill labels on a block, in order: Overdue, Short, Left from last week, Placed by Plan."""
+    tags: list[str] = []
+    if drawn.history == "Overdue":
+        tags.append("Overdue")
+    if (
+        drawn.work
+        and drawn.estimate_min is not None
+        and drawn.span.minutes < drawn.estimate_min
+    ):
+        tags.append(f"Short {length_label(drawn.span.minutes)}")
+    if drawn.history == "Left from last week":
+        tags.append("Left from last week")
+    if drawn.placed_by_plan:
+        tags.append("Placed by Plan")
+    return tuple(tags)
 
 
 class BlockPainter:
@@ -311,53 +331,71 @@ class BlockPainter:
         self.words(painter, rect, drawn, ink, visible, fill, edge)
 
     def history_tag(self, painter: QPainter, rect: QRectF, drawn: Drawn) -> None:
-        """Keep deadline state visible across every design without using the error colour."""
-        font = at_scale(painter.font(), "caption", self.scale(painter.font()), WEIGHT_STRONG)
-        text = "Overdue" if drawn.history == "Overdue" else "Left from last week"
-        warning = drawn.history == "Overdue"
-        pad, gap = 3.0, 3.0
-        max_width, max_height = rect.width() - 6, rect.height() - 6
-        lines = [text]
-        if not warning and QFontMetricsF(font).horizontalAdvance(text) + 2 * pad > max_width:
-            lines = ["Left from", "last week"]
-        while font.pointSizeF() > 7:
-            metrics = QFontMetricsF(font)
-            icon_side = max(8.0, metrics.height() - 2.0)
-            icon_room = icon_side + gap if warning else 0.0
-            width = max(metrics.horizontalAdvance(line) for line in lines) + 2 * pad + icon_room
-            height = len(lines) * metrics.height() + 2 * pad
-            if width <= max_width and height <= max_height:
-                break
-            font.setPointSizeF(font.pointSizeF() - 0.5)
-        else:
+        """One pill per block state, stacked from the top inside the block."""
+        tags = block_tag_words(drawn)
+        if not tags:
             return
-        tag = QRectF(rect.left() + 3, rect.top() + 3, width, height)
+        pad, gap = 3.0, 3.0
+        inset = float(INNER_PAD)
+        max_width = rect.width() - 2 * inset
+        top = rect.top() + inset
         fill, ink, _outline, _edge = self.fills(drawn)
-        painter.save()
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(fill)
-        painter.drawRoundedRect(tag, 4, 4)
-        painter.setFont(font)
-        painter.setPen(ink)
-        left = tag.left() + pad
-        if warning:
-            painter.drawPixmap(
-                QPointF(left, tag.top() + pad + 1),
-                icons.pixmap("triangle-alert", ink.name(), round(icon_side)),
-            )
-            left += icon_room
-        for index, line in enumerate(lines):
-            painter.drawText(
-                QRectF(
-                    left,
-                    tag.top() + pad + index * metrics.height(),
-                    metrics.horizontalAdvance(line) + 1,
-                    metrics.height(),
-                ),
-                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                line,
-            )
-        painter.restore()
+        short_fill = QColor(self.colours.get("accent", self.colours["warning"]))
+        short_ink = QColor(readable_ink(short_fill.name()))
+        for text in tags:
+            font = at_scale(painter.font(), "caption", self.scale(painter.font()), WEIGHT_STRONG)
+            warning = text == "Overdue"
+            short = text.startswith("Short ")
+            lines = [text]
+            if text == "Left from last week" and QFontMetricsF(font).horizontalAdvance(text) + 2 * pad > max_width:
+                lines = ["Left from", "last week"]
+            while font.pointSizeF() > 7:
+                metrics = QFontMetricsF(font)
+                icon_side = max(8.0, metrics.height() - 2.0)
+                icon_room = icon_side + gap if warning or short else 0.0
+                width = max(metrics.horizontalAdvance(line) for line in lines) + 2 * pad + icon_room
+                height = len(lines) * metrics.height() + 2 * pad
+                if width <= max_width and top + height <= rect.bottom() - inset:
+                    break
+                font.setPointSizeF(font.pointSizeF() - 0.5)
+            else:
+                continue
+            tag = QRectF(rect.left() + inset, top, width, height)
+            painter.save()
+            painter.setPen(Qt.PenStyle.NoPen)
+            if short:
+                painter.setBrush(short_fill)
+            else:
+                painter.setBrush(fill)
+            painter.drawRoundedRect(tag, 4, 4)
+            painter.setFont(font)
+            painter.setPen(short_ink if short else ink)
+            left = tag.left() + pad
+            if warning:
+                painter.drawPixmap(
+                    QPointF(left, tag.top() + pad + 1),
+                    icons.pixmap("triangle-alert", ink.name(), round(icon_side)),
+                )
+                left += icon_room
+            elif short:
+                painter.drawPixmap(
+                    QPointF(left, tag.top() + pad + 1),
+                    icons.pixmap("triangle-alert", short_ink.name(), round(icon_side)),
+                )
+                left += icon_room
+            for index, line in enumerate(lines):
+                painter.drawText(
+                    QRectF(
+                        left,
+                        tag.top() + pad + index * metrics.height(),
+                        metrics.horizontalAdvance(line) + 1,
+                        metrics.height(),
+                    ),
+                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                    line,
+                )
+            painter.restore()
+            top += height + gap
 
     def crossing(self, painter: QPainter, rect: QRectF, around: list[QRectF] | None = None) -> None:
         """The time now drawn again inside `rect`, over what a block has painted there, when the
@@ -445,7 +483,8 @@ class BlockPainter:
         # away, and a block just coming into view says what fits, or nothing but its colour.
         trim = SHARED_TRIM if drawn.columns > 1 or (self.trims_narrow and rect.width() < NARROW_BLOCK) else 0
         left, right = TEXT_LEFT - trim, TEXT_RIGHT - trim
-        start = QPointF(rect.left() + left, rect.top() + TEXT_TOP)
+        tag_top = self._tag_stack_bottom(drawn, rect) - rect.top()
+        start = QPointF(rect.left() + left, rect.top() + max(float(TEXT_TOP), tag_top))
         room = QRectF(start, QPointF(rect.right() - right, rect.bottom() - INNER_PAD))
         room = room.intersected(visible.adjusted(INNER_PAD, INNER_PAD, -right, -INNER_PAD))
         paper = fill if fill is not None else self.c("window")
@@ -487,6 +526,25 @@ class BlockPainter:
             icon_name=category_icon(drawn.category) or BOOK,
             block=rect,
         )
+
+    def _tag_stack_bottom(self, drawn: Drawn, rect: QRectF) -> float:
+        """Where the tag pills end, so words stay below them."""
+        tags = block_tag_words(drawn)
+        if not tags:
+            return rect.top() + INNER_PAD
+        pad, gap = 3.0, 3.0
+        top = rect.top() + INNER_PAD
+        font = at_scale(caption(QFont()), "caption", self.scale(QFont()), WEIGHT_STRONG)
+        for text in tags:
+            lines = [text]
+            if text == "Left from last week":
+                metrics = QFontMetricsF(font)
+                if metrics.horizontalAdvance(text) + 2 * pad > rect.width() - 2 * INNER_PAD:
+                    lines = ["Left from", "last week"]
+            metrics = QFontMetricsF(font)
+            height = len(lines) * metrics.height() + 2 * pad
+            top += height + gap
+        return top
 
     def _book_colour(self, drawn: Drawn, ink: QColor, paper: QColor, edge: QColor | None) -> QColor | None:
         """A category icon is the category's mark, moved only as far as 4.5 to 1 on its own block takes
@@ -1255,6 +1313,8 @@ class HoursCanvas(QWidget):
                     short=self.short_words,
                     history=item.history,
                     history_due=item.due,
+                    estimate_min=getattr(item, "estimate_min", None),
+                    placed_by_plan=bool(getattr(item, "placed_by_plan", item.work and not item.pinned)),
                 )
             )
         if (
@@ -1365,7 +1425,7 @@ class HoursCanvas(QWidget):
                     elif not drawn.held and key in self._fresh:
                         painter.setOpacity(self._progress)
                     self.painter.block(painter, rect, drawn, upright_visible)
-                    if drawn.history:
+                    if block_tag_words(drawn):
                         self.painter.history_tag(painter, rect, drawn)
             if (
                 preview is not None
