@@ -1,7 +1,7 @@
 # context.md — FlexWeek
 
 ## Current State
-- 2026-10-12: 1.0.0 lane 1 More-row wording follows Jonathan's demo call. More says `Unfinished` with `N left` when homework still needs a time. Leftover Unfinished-panel rows show due date and Overdue / Left from last week on screen. The rail lists each not-placed homework line when any still need a time. Overdue-with-a-time (nothing still needs a time) still uses the 1b-R More words and T-W36 sidebar sentence; whether that row should grey out is unanswered.
+- 2026-10-12: 1.0.0 lane 2 planning screen is on `release/1.0.0`. One bar; Plan carries the not-placed count; the week title opens a mini month. A 28 px strip (also at Large text) says Next or Nothing more today, `{n} overdue`, and `Week as a list · Ctrl+Shift+L`. The Agenda rail is Next (Start focus on homework), No time yet chips, and Due this week. Day headers go two-line at Large text. More still says `Unfinished` with `N left`. Overdue homework that already has a time stays as in `38c04c92`. The Week demo has no overdue words; the strip still shows the count because the resume said so.
 - 2026-10-11: v0.19.2 prepared on `release/0.19.2` (worktree `~/.worktrees/flexweek-0190`, `.venv` is
   `venv-0192-rel`): the 0.19.1 QA handoff's Fix first items (F3, F3b, 3-R, L12, T-W1, R10, 0l-R, A28,
   0f-R, R1, N15, S1, A27, T1, P1, U19) and the fixes from two QA testers who used the app through
@@ -148,8 +148,7 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
-- 2026-10-12, `release/1.0.0` in `~/.worktrees/flexweek-0190`. R11 is `3b5406dd`. 1b-R is `f32aad90`
-  through `16422ec1`, then the More-row wording follow-up on this branch. Report:
-  `~/.flexweek-ui-harness/scratch/1.0.0/lane-1-report.md`.
-- Next: lane 2, Planning screen and Agenda rail (`demo.html`, pick A). Do not start lane 9 until
-  `javac -version` works.
+- 2026-10-12, `release/1.0.0` in `~/.worktrees/flexweek-0190`. Lane 1 stays `38c04c92`. Lane 2
+  planning screen is implemented. Report: `~/.flexweek-ui-harness/scratch/1.0.0/lane-2-report.md`.
+- Next: lane 3, sheets and forms (`forms.html` pick C). Whether Edit homework also steps is open.
+  Do not start lane 9 until `javac -version` works.

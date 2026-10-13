@@ -6,6 +6,10 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Changed
+- Week planning uses one bar. Plan shows how many homework items still need a time. Click the week title to open a mini month.
+- A 28 px strip under the bar says what is next (or Nothing more today), how many items are overdue, and Week as a list · Ctrl+Shift+L. The list row stays 28 px at Large text.
+- The left rail is a fixed Agenda: Next, with Start focus on homework; No time yet chips to drag onto a day; and Due this week. The mini month is not a block in the rail.
+- At Large text, each day header puts the date under the day name.
 - More > Unfinished keeps the words `Unfinished` with `N left` for homework that still needs a time. Each leftover row in that list shows its due date and whether it is overdue or left from last week.
 
 ## [0.19.2] - 2026-10-11
