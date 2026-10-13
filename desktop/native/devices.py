@@ -7,6 +7,7 @@ import socket
 import sqlite3
 import sys
 import threading
+import weakref
 from collections.abc import Callable
 from contextlib import closing, suppress
 from datetime import datetime
@@ -172,9 +173,18 @@ def run_off_ui(
     """Runs `work` on a worker thread, then `done(result, problem)` on the window's thread. The sync
     calls block for up to a few seconds, so none of them may run on the window's thread."""
     answer = _Answer(owner)
+    owner_ref = weakref.ref(owner)
+    if getattr(done, "__self__", None) is not None:
+        done_ref = weakref.WeakMethod(done)
+    else:
+        def done_ref() -> Callable[[Any, Exception | None], None]:
+            return done
+
     def deliver(result: Any, problem: Exception | None) -> None:
-        if isValid(owner):
-            done(result, problem)
+        live_owner = owner_ref()
+        live_done = done_ref()
+        if live_owner is not None and live_done is not None and isValid(live_owner):
+            live_done(result, problem)
 
     answer.ready.connect(deliver, Qt.ConnectionType.QueuedConnection)
 
