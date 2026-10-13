@@ -3759,7 +3759,13 @@ class BlockDialog(Dialog):
         self._show_length()
 
     def _moved_sentence(self, end: int, kept_length: int) -> str:
-        return f"End moved to {clock_text(end)} to keep it {length_label(kept_length)}."
+        end_words = clock_text(end)
+        if end == 24 * 60 and kept_length < self._length:
+            return (
+                f"End moved to the end of the day ({end_words}). "
+                f"It's now {length_label(kept_length)}, not {length_label(self._length)}."
+            )
+        return f"End moved to {end_words} to keep it {length_label(kept_length)}."
 
     def _keep_length(self, *_args: object) -> None:
         """A settled start moves the end with it, as a calendar does, so the length stays, up to the end
@@ -3772,15 +3778,17 @@ class BlockDialog(Dialog):
             self._moved = ""
         elif not self._end_by_hand:
             end_moved = end != self.end.minutes()
+            start_moved = start != self._settled_start_min
             if end_moved:
                 self._following = True
                 try:
                     self.end.setTime(self._minutes_clock(end))
                 finally:
                     self._following = False
-            if end_moved:
+            if end_moved or (start_moved and kept < self._length):
                 self._moved = self._moved_sentence(end, kept)
-                announce(self.end, self._moved)
+                if end_moved or start_moved:
+                    announce(self.end, self._moved)
         self._settled_start_min = start
         self._show_length()
 
