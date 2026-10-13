@@ -908,6 +908,53 @@ class PlanButton(FittedButton):
     """Plan my homework: the window shrinks More to its icon before this shortens. The window picks
     its words (`NativeWindow._fit_plan_and_more`), so it asks for the room the words shown take."""
 
+    def __init__(self, text: str, short: str, parent: QWidget | None = None) -> None:
+        super().__init__(text, short, parent)
+        self._count = 0
+        self._pill: tuple[str, str] | None = None
+
+    def set_texts(self, text: str, short: str) -> None:
+        super().set_texts(text, short)
+        self._name_count()
+
+    def set_count(self, count: int) -> None:
+        """How much homework still needs a time, as a pill beside Plan."""
+        if count == self._count:
+            self._name_count()
+            return
+        self._count = count
+        self._name_count()
+        self.update()
+
+    def _name_count(self) -> None:
+        verb = "needs" if self._count == 1 else "need"
+        self.setAccessibleName(
+            f"{self._full}, {self._count} homework still {verb} time" if self._count else self._full
+        )
+
+    def set_palette(self, palette: dict) -> None:
+        self._pill = count_pill(palette)
+        self.update()
+
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
+        super().paintEvent(event)
+        if not self._count or self._pill is None:
+            return
+        fill, ink = self._pill
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setFont(weighted(caption(self.font()), WEIGHT_STRONG))
+        words = str(self._count) if self._count < 100 else "99+"
+        height = painter.fontMetrics().height() + 2
+        width = max(height, painter.fontMetrics().horizontalAdvance(words) + 8)
+        pill = QRectF(self.width() - width - 1, 1, width, height)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(fill))
+        painter.drawRoundedRect(pill, height / 2, height / 2)
+        painter.setPen(QColor(ink))
+        painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, words)
+        painter.end()
+
     def sizeHint(self) -> QSize:  # noqa: N802
         return QSize(self._wide(self.text()), QPushButton.sizeHint(self).height())
 
