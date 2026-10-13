@@ -116,7 +116,7 @@ pub fn create_session_row(
     )?;
     defer_write(
         conn,
-        "INSERT INTO sessions VALUES (?1, ?2, ?3)",
+        "INSERT INTO sessions (token_hash, user_id, expires) VALUES (?1, ?2, ?3)",
         params![token_hash, user_id, expires],
     )?;
     Ok(())

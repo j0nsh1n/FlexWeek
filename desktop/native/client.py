@@ -48,6 +48,7 @@ SIGN_UP_LONG_PASSWORD = "Use 128 characters or fewer."
 USERNAME_TAKEN = "That username is taken. Try another."
 # Said when a session ends; about no one field, though its words name two.
 SIGN_IN_AGAIN = "Please sign in again, or check your username and password."
+SESSION_ENDED = "Your session ended. Sign in again."
 logger = logging.getLogger(__name__)
 
 
@@ -128,6 +129,8 @@ def _error(status: int, detail: object = None) -> ApiError:
         return ApiError(status, USERNAME_TAKEN)
     if status == 401 and detail == "Incorrect username or recovery code":
         return ApiError(status, "Wrong username or recovery code. Each code works once; try another one.")
+    if status == 401 and detail == SESSION_ENDED:
+        return ApiError(status, SESSION_ENDED)
     if status == 422:
         named = _password_error(detail) or _username_error(detail)
         if named:

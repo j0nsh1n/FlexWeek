@@ -51,10 +51,10 @@ from backend.restore import canonical, diff_snapshots, diff_transfer, state_toke
 from backend.slots import DAY_END_MIN, SLOT_MIN
 from backend.solver import reschedule_after_miss, reschedule_running_late, solve
 from backend.storage import (
-    SESSION_SECONDS,
     Connection,
     Row,
     connect,
+    cookie_age,
     create_session,
     delete_account,
     digest,
@@ -92,6 +92,8 @@ RESTORE_STALE = "This preview is out of date. Refresh it before restoring."
 IMPORT_STALE = "This preview is out of date. Refresh it before importing."
 RECOVER_WRONG = "Incorrect username or recovery code"
 PASSWORD_WRONG = "Incorrect password"
+TOO_MANY_TRIES = "Too many tries. Wait 5 minutes, then try again."
+SESSION_ENDED = "Your session ended. Sign in again."
 PASSWORD_SAME = "New password must be different"
 OPERATION_CONFLICT = "This operation was already used with different data."
 MAX_ASSIGNMENTS = 1000
@@ -366,6 +368,7 @@ class Credentials(BaseModel):
     model_config = ConfigDict(extra="forbid")
     username: str = Field(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_]+$")
     password: str = Field(min_length=12, max_length=128)
+    keep: bool = False
 
     @field_validator("username")
     @classmethod
@@ -653,6 +656,7 @@ class RecoverRequest(BaseModel):
     username: str = Field(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_]+$")
     code: str = Field(min_length=8, max_length=64)
     password: str = Field(min_length=12, max_length=128)
+    keep: bool = False
 
     @field_validator("username")
     @classmethod
@@ -962,26 +966,33 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     def user(request: Request) -> dict:
         token = request.cookies.get(COOKIE, "")
+        now = int(time.time())
+        token_hash = digest(token)
         with connect(path) as db:
-            found = db.session_user(digest(token), int(time.time()))
+            found = db.session_user(token_hash, now)
+            ended = found is None and db.session_expired(token_hash, now)
         if found is None:
-            raise HTTPException(401, "Please sign in")
+            raise HTTPException(401, SESSION_ENDED if ended else "Please sign in")
         expected = request.headers.get("X-FlexWeek-Account")
         if expected is not None and expected != str(found[0]):
             raise HTTPException(401, "Account changed. Please sign in again.")
         return {"id": found[0], "username": found[1]}
 
-    def session_response(response: Response, token: str) -> None:
+    def session_response(response: Response, token: str, keep: bool = False) -> None:
         response.set_cookie(
-            COOKIE, token, max_age=SESSION_SECONDS, httponly=True, secure=secure, samesite="strict", path="/"
+            COOKIE,
+            token,
+            max_age=cookie_age(keep),
+            httponly=True,
+            secure=secure,
+            samesite="strict",
+            path="/",
         )
 
     def authenticate(data: Credentials, request: Request, response: Response, register: bool) -> dict:
         address = request.client.host if request.client else "unknown"
         if not throttle(path, address, data.username):
-            raise HTTPException(
-                429, "Too many attempts. Try again in five minutes.", headers={"Retry-After": "300"}
-            )
+            raise HTTPException(429, TOO_MANY_TRIES, headers={"Retry-After": "300"})
         codes: list[str] | None = None
         if register:
             encoded = password_hash(data.password)
@@ -991,7 +1002,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                     user_id = db.insert_user(data.username, encoded)
                     new_preferences(db, user_id)
                     replace_recovery_codes(db, user_id, codes)
-                    token = create_session(db, user_id)
+                    token = create_session(db, user_id, data.keep)
             except sqlite3.IntegrityError as exc:
                 raise HTTPException(409, "Username unavailable") from exc
         else:
@@ -1009,10 +1020,10 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 db.begin_immediate()
                 if db.password_hash_of(user_id) != encoded:
                     raise HTTPException(401, "Incorrect username or password")
-                token = create_session(db, user_id)
+                token = create_session(db, user_id, data.keep)
         with connect(path) as db:
             db.delete_session(digest(request.cookies.get(COOKIE, "")))
-        session_response(response, token)
+        session_response(response, token, data.keep)
         result = {"id": user_id, "username": data.username}
         if codes is not None:
             result["recovery_codes"] = codes
@@ -1041,9 +1052,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
     def deny_if_throttled(request: Request, username: str) -> None:
         address = request.client.host if request.client else "unknown"
         if not throttle(path, address, username):
-            raise HTTPException(
-                429, "Too many attempts. Try again in five minutes.", headers={"Retry-After": "300"}
-            )
+            raise HTTPException(429, TOO_MANY_TRIES, headers={"Retry-After": "300"})
 
     def require_password(db: Connection, user_id: int, password: str) -> None:
         # Called inside the caller's transaction so a password rotated by another
@@ -1074,10 +1083,10 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 raise HTTPException(401, RECOVER_WRONG)
             db.use_recovery_code(found[0], matched)
             db.rotate_password(found[0], new_hash)
-            token = create_session(db, found[0])
+            token = create_session(db, found[0], data.keep)
             user_id = found[0]
             username = found[1]
-        session_response(response, token)
+        session_response(response, token, data.keep)
         return {"id": user_id, "username": username}
 
     @app.get("/api/auth/recovery-status")

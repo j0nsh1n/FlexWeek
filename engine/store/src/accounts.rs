@@ -2,22 +2,54 @@
 
 use rusqlite::{Connection, OptionalExtension, params};
 
-use crate::{StoreResult, defer_write};
+use flexweek_engine::EngineError;
+
+use crate::{StoreError, StoreResult, defer_write};
 
 pub fn session_user(
     conn: &Connection,
     token_hash: &str,
     now: i64,
 ) -> StoreResult<Option<(i64, String)>> {
-    Ok(conn
+    let found = conn
         .query_row(
-            "SELECT users.id, users.username FROM sessions
+            "SELECT users.id, users.username, sessions.lifetime FROM sessions
             JOIN users ON users.id = sessions.user_id
             WHERE token_hash = ?1 AND expires > ?2",
             params![token_hash, now],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<i64>>(2)?,
+                ))
+            },
         )
-        .optional()?)
+        .optional()?;
+    let Some((user_id, username, lifetime)) = found else {
+        return Ok(None);
+    };
+    let length = lifetime.unwrap_or(crate::SESSION_SECONDS);
+    let expires = now
+        .checked_add(length)
+        .ok_or_else(|| StoreError::Engine(EngineError::overflow("int too big to convert")))?;
+    defer_write(
+        conn,
+        "UPDATE sessions SET expires = ?1 WHERE token_hash = ?2",
+        params![expires, token_hash],
+    )?;
+    Ok(Some((user_id, username)))
+}
+
+pub fn session_expired(conn: &Connection, token_hash: &str, now: i64) -> StoreResult<bool> {
+    let expires: Option<i64> = conn
+        .query_row(
+            "SELECT expires FROM sessions WHERE token_hash = ?1",
+            params![token_hash],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(expires.is_some_and(|expires| expires <= now))
 }
 
 /// The new row's id. A taken name is SQLite's own constraint error, which the caller maps to 409.

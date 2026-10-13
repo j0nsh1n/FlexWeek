@@ -161,7 +161,7 @@ mod weeks;
 
 pub use accounts::{
     count_recovery_codes, delete_session, find_user, insert_user, password_hash_of,
-    recovery_hashes, rotate_password, session_user, use_recovery_code,
+    recovery_hashes, rotate_password, session_expired, session_user, use_recovery_code,
 };
 pub use assignments::{
     AssignmentDelete, AssignmentSave, assignment_bodies, assignment_body, assignment_exists,
@@ -607,7 +607,8 @@ pub fn initialize(path: &Path, current_week_start: &str) -> StoreResult<()> {
             );
             CREATE TABLE IF NOT EXISTS sessions (
                 token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id),
-                expires INTEGER NOT NULL
+                expires INTEGER NOT NULL,
+                lifetime INTEGER
             );
             {WEEKS_TABLE};
             {ASSIGNMENTS_TABLE};
@@ -623,6 +624,7 @@ pub fn initialize(path: &Path, current_week_start: &str) -> StoreResult<()> {
         "#
     );
     db.execute_batch(&init_script)?;
+    ensure_session_lifetime_column(&db)?;
     date_legacy_weeks(&db, current_week_start)?;
     migrate_preferences(&db)?;
     allow_system_theme(&db)?;
@@ -679,14 +681,48 @@ pub fn password_matches_index(password: &str, encoded: &str) -> StoreResult<bool
 }
 
 pub const SESSION_SECONDS: i64 = 7 * 24 * 60 * 60;
+pub const SESSION_SECONDS_KEEP: i64 = 30 * 24 * 60 * 60;
 
-pub fn open_session(conn: &Connection, token: &str, user_id: i64, now: i64) -> StoreResult<()> {
-    let expires = now.checked_add(SESSION_SECONDS).ok_or_else(|| {
+fn session_length(keep: bool) -> i64 {
+    if keep {
+        SESSION_SECONDS_KEEP
+    } else {
+        SESSION_SECONDS
+    }
+}
+
+fn ensure_session_lifetime_column(db: &Connection) -> StoreResult<()> {
+    let names: Vec<String> = db
+        .prepare("PRAGMA table_info(sessions)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<_, _>>()?;
+    if !names.iter().any(|name| name == "lifetime") {
+        db.execute("ALTER TABLE sessions ADD COLUMN lifetime INTEGER", [])?;
+    }
+    Ok(())
+}
+
+pub fn open_session(
+    conn: &Connection,
+    token: &str,
+    user_id: i64,
+    now: i64,
+    keep: bool,
+) -> StoreResult<()> {
+    let lifetime = session_length(keep);
+    let expires = now.checked_add(lifetime).ok_or_else(|| {
         StoreError::Engine(flexweek_engine::EngineError::overflow(
             "int too big to convert",
         ))
     })?;
-    create_session_row(conn, &digest(token), user_id, expires, now)
+    let token_hash = digest(token);
+    create_session_row(conn, &token_hash, user_id, expires, now)?;
+    defer_write(
+        conn,
+        "UPDATE sessions SET lifetime = ?1 WHERE token_hash = ?2",
+        params![lifetime, token_hash],
+    )?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -868,7 +904,7 @@ mod tests {
         let conn = open_connection(&path).unwrap();
         let user = insert_user(&conn, "ada", "hash").unwrap();
         create_session_row(&conn, "old", user, 100, 100).unwrap();
-        open_session(&conn, "token-value", user, 1_700_000_000).unwrap();
+        open_session(&conn, "token-value", user, 1_700_000_000, false).unwrap();
         let mut stmt = conn
             .prepare("SELECT token_hash, user_id, expires FROM sessions")
             .unwrap();
@@ -878,6 +914,103 @@ mod tests {
             .map(|row| row.unwrap())
             .collect();
         assert_eq!(rows, vec![(digest("token-value"), user, 1_700_604_800)]);
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn session_lengths_are_seven_and_thirty_days() {
+        assert_eq!(SESSION_SECONDS, 7 * 24 * 60 * 60);
+        assert_eq!(SESSION_SECONDS_KEEP, 30 * 24 * 60 * 60);
+    }
+
+    #[test]
+    fn a_kept_session_lasts_thirty_days_and_a_used_one_renews() {
+        let folder = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/store-tests");
+        std::fs::create_dir_all(&folder).unwrap();
+        let path = folder.join(format!("session-keep-{}.sqlite", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        initialize(&path, "2026-09-29").unwrap();
+        let conn = open_connection(&path).unwrap();
+        let user = insert_user(&conn, "ada", "hash").unwrap();
+        let day = 24 * 60 * 60;
+        open_session(&conn, "kept-unused", user, 0, true).unwrap();
+        let kept_expires: i64 = conn
+            .query_row(
+                "SELECT expires FROM sessions WHERE token_hash = ?1",
+                [digest("kept-unused")],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(kept_expires, SESSION_SECONDS_KEEP);
+        assert!(!session_expired(&conn, &digest("kept-unused"), 29 * day).unwrap());
+        assert!(
+            session_user(&conn, &digest("kept-unused"), 29 * day)
+                .unwrap()
+                .is_some()
+        );
+        open_session(&conn, "kept-idle", user, 0, true).unwrap();
+        assert!(
+            session_user(&conn, &digest("kept-idle"), 31 * day)
+                .unwrap()
+                .is_none()
+        );
+        assert!(session_expired(&conn, &digest("kept-idle"), 31 * day).unwrap());
+        open_session(&conn, "week-idle", user, 0, false).unwrap();
+        assert!(
+            session_user(&conn, &digest("week-idle"), 8 * day)
+                .unwrap()
+                .is_none()
+        );
+        open_session(&conn, "week-used", user, 0, false).unwrap();
+        assert!(
+            session_user(&conn, &digest("week-used"), 6 * day)
+                .unwrap()
+                .is_some()
+        );
+        let renewed: i64 = conn
+            .query_row(
+                "SELECT expires FROM sessions WHERE token_hash = ?1",
+                [digest("week-used")],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(renewed, 6 * day + SESSION_SECONDS);
+        open_session(&conn, "week-alive", user, 0, false).unwrap();
+        assert!(
+            session_user(&conn, &digest("week-alive"), 6 * day)
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            session_user(&conn, &digest("week-alive"), 12 * day)
+                .unwrap()
+                .is_some()
+        );
+        open_session(&conn, "week-gone", user, 0, false).unwrap();
+        assert!(
+            session_user(&conn, &digest("week-gone"), 6 * day)
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            session_user(&conn, &digest("week-gone"), 13 * day)
+                .unwrap()
+                .is_none()
+        );
+        create_session_row(&conn, &digest("old"), user, SESSION_SECONDS, 0).unwrap();
+        assert!(
+            session_user(&conn, &digest("old"), 6 * day)
+                .unwrap()
+                .is_some()
+        );
+        let old_renewed: i64 = conn
+            .query_row(
+                "SELECT expires FROM sessions WHERE token_hash = ?1",
+                [digest("old")],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(old_renewed, 6 * day + SESSION_SECONDS);
         std::fs::remove_file(&path).unwrap();
     }
 }

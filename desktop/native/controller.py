@@ -699,7 +699,7 @@ class NativeSession(QObject):
         self.client.request(
             "POST",
             "/api/auth/register",
-            {"username": username, "password": password},
+            {"username": username, "password": password, "keep": self.keep_signed_in},
             ok,
             lambda error: self._fail(ticket, auth_error(error, creating=True)),
         )
@@ -720,7 +720,7 @@ class NativeSession(QObject):
         self.client.request(
             "POST",
             "/api/auth/login",
-            {"username": username, "password": password},
+            {"username": username, "password": password, "keep": self.keep_signed_in},
             ok,
             lambda error: self._fail(ticket, auth_error(error, creating=False)),
         )
@@ -3602,7 +3602,7 @@ class NativeSession(QObject):
         self.client.request(
             "POST",
             "/api/auth/recover",
-            {"username": username, "code": code, "password": password},
+            {"username": username, "code": code, "password": password, "keep": self.keep_signed_in},
             ok,
             lambda error: self._fail(ticket, error),
         )
