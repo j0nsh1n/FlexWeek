@@ -207,6 +207,10 @@ pub fn inside(args: &[String]) -> i32 {
     // SAFETY: this process is single-threaded here. exec replaces it, so the
     // variables live only in the driver.
     unsafe {
+        if std::env::var_os("XDG_RUNTIME_DIR").is_none() {
+            let uid = nix::libc::getuid();
+            std::env::set_var("XDG_RUNTIME_DIR", format!("/run/user/{uid}"));
+        }
         std::env::set_var("FLEXWEEK_RIG_DISPLAY", &started.display);
         std::env::set_var("FLEXWEEK_RIG_BUS", &started.bus);
         std::env::set_var("FLEXWEEK_RIG_RUNS_KEY", &started.runs_key);

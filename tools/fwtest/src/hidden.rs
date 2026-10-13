@@ -446,13 +446,19 @@ where
     K: AsRef<str>,
     V: AsRef<str>,
 {
-    vars.into_iter()
+    let mut env: Env = vars
+        .into_iter()
         .filter(|(key, _)| {
             let key = key.as_ref();
             key != "QT_IM_MODULE" && key != "XMODIFIERS"
         })
         .map(|(key, value)| (key.as_ref().to_string(), value.as_ref().to_string()))
-        .collect()
+        .collect();
+    if !env.contains_key("XDG_RUNTIME_DIR") {
+        let uid = unsafe { nix::libc::getuid() };
+        env.insert("XDG_RUNTIME_DIR".to_string(), format!("/run/user/{uid}"));
+    }
+    env
 }
 
 fn which(name: &str) -> bool {
@@ -1948,6 +1954,30 @@ mod tests {
         let _ = child.kill();
         let _ = child.wait();
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn filtered_env_defaults_xdg_runtime_dir_when_absent() {
+        let vars = vec![("PATH", "/usr/bin"), ("USER", "student")];
+        let env = filtered_env(vars);
+        let uid = unsafe { nix::libc::getuid() };
+        assert_eq!(
+            env.get("XDG_RUNTIME_DIR").map(String::as_str),
+            Some(format!("/run/user/{uid}").as_str())
+        );
+    }
+
+    #[test]
+    fn filtered_env_preserves_callers_xdg_runtime_dir() {
+        let vars = vec![
+            ("PATH", "/usr/bin"),
+            ("XDG_RUNTIME_DIR", "/custom/runtime/dir"),
+        ];
+        let env = filtered_env(vars);
+        assert_eq!(
+            env.get("XDG_RUNTIME_DIR").map(String::as_str),
+            Some("/custom/runtime/dir")
+        );
     }
 
     #[test]
