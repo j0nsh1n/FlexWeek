@@ -273,6 +273,8 @@ def test_past_do_it_at_save_focuses_field_and_announces_one_description(
     assert dialog.when_time.accessibleDescription() == message
     assert dialog.when_problem.accessibleName() == message
     assert dialog.when_time.hasFocus() or dialog.when_time.lineEdit().hasFocus()
+    line = dialog.when_time.lineEdit()
+    assert line.selectedText() == line.text()
     assert said == [(dialog.when_time, message, True)]
     free(dialog)
     free(parent)

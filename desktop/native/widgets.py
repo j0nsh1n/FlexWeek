@@ -4789,6 +4789,8 @@ class HomeworkDialog(Dialog):
         line.setAccessibleName(text)
         line.setVisible(True)
         field.setFocus(Qt.FocusReason.OtherFocusReason)
+        if isinstance(field, ClockField):
+            field.lineEdit().selectAll()
         self._scroll.ensureWidgetVisible(line)
         announce(field, text, assertive=True)
 
