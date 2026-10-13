@@ -1000,11 +1000,10 @@ class ActivityRow(QFrame):
         self.category = QComboBox()
         self.category.setObjectName("setupActivityCategory")
         self.category.setAccessibleName("Sports or Activity")
-        # Qt reads a combo by its current text; a buddy label gives screen readers its name. Hidden,
-        # since the row shows no field name.
-        category_label = QLabel("Sports or Activity", self)
+        name_label = _label("Name", "fieldLabel", wrap=False)
+        name_label.setBuddy(self.name)
+        category_label = _label("Sports or Activity", "fieldLabel", wrap=False)
         category_label.setBuddy(self.category)
-        category_label.hide()
         self.category.addItem("Activity", "extra")
         self.category.addItem("Sports", "exercise")
         self.category.setCurrentIndex(max(0, self.category.findData(category)))
@@ -1013,10 +1012,18 @@ class ActivityRow(QFrame):
         self.name.textChanged.connect(self._guess_category)
         if guess and title:
             self._guess_category(title)
+        named = QVBoxLayout()
+        named.setSpacing(4)
+        named.addWidget(name_label)
+        named.addWidget(self.name)
+        chosen = QVBoxLayout()
+        chosen.setSpacing(4)
+        chosen.addWidget(category_label)
+        chosen.addWidget(self.category)
         top = QHBoxLayout()
-        top.addWidget(self.name, 1)
-        top.addWidget(self.category)
-        top.addWidget(remove)
+        top.addLayout(named, 1)
+        top.addLayout(chosen)
+        top.addWidget(remove, 0, Qt.AlignmentFlag.AlignBottom)
         box.addLayout(top)
         # The days and times as School's line has them, under the name, so the two columns of times
         # stand at one x down the page.
@@ -1078,28 +1085,26 @@ class HomeworkRow(QFrame):
         remove = _outlined("Remove")
         remove.setAccessibleName("Remove this homework")
         remove.clicked.connect(lambda: self.removed.emit(self))
-        name_label = _label("Name", "setupFieldLabel", wrap=False)
+        name_label = _label("Name", "fieldLabel", wrap=False)
         name_label.setBuddy(self.name)
-        grid.addWidget(name_label, 0, 0)
-        grid.addWidget(self.name, 0, 1, 1, 3)
-        grid.addWidget(remove, 0, 4)
-        # On the line of the box, not the middle of the box and the lengths under it.
-        takes_label = _label("Takes", "setupFieldLabel", wrap=False)
+        grid.addWidget(name_label, 0, 0, 1, 4)
+        grid.addWidget(self.name, 1, 0, 1, 3)
+        grid.addWidget(remove, 1, 4, Qt.AlignmentFlag.AlignBottom)
+        takes_label = _label("Takes", "fieldLabel", wrap=False)
         takes_label.setBuddy(self.minutes)
-        takes = Level(takes_label, self.minutes)
-        grid.addWidget(takes, 1, 0, Qt.AlignmentFlag.AlignTop)
         stepper = Stepper(self.minutes, QUICK_LENGTHS)
-        grid.addWidget(stepper, 1, 1)
-        due_label = _label("Due", "setupFieldLabel", wrap=False)
+        grid.addWidget(takes_label, 2, 1)
+        grid.addWidget(stepper, 3, 1, Qt.AlignmentFlag.AlignTop)
+        due_label = _label("Due", "fieldLabel", wrap=False)
         due_label.setBuddy(self.due)
-        grid.addWidget(due_label, 1, 2)
-        grid.addWidget(self.due, 1, 3, 1, 2)
+        grid.addWidget(due_label, 2, 3)
+        grid.addWidget(self.due, 3, 3, 1, 2, Qt.AlignmentFlag.AlignTop)
         grid.setColumnStretch(3, 1)
         # Tab order follows the screen: name, remove, then the length, the due date.
         self.stops = [
             self.name,
             remove,
-            *_focus_stops(takes),
+            *_focus_stops(self.minutes),
             *_focus_stops(stepper),
             *_focus_stops(self.due),
         ]
@@ -1420,14 +1425,13 @@ class SetupPage(QWidget):
         fill_cutoff(self.cutoff, None)
         bedtime = QFrame()
         bedtime.setObjectName("setupGroup")
-        bedtime_line = QHBoxLayout(bedtime)
+        bedtime_line = QVBoxLayout(bedtime)
         bedtime_line.setContentsMargins(12, 10, 12, 10)
-        bedtime_line.setSpacing(8)
-        cutoff_label = _label("No homework after", "setupFieldLabel", wrap=False)
+        bedtime_line.setSpacing(4)
+        cutoff_label = _label("No homework after", "fieldLabel", wrap=False)
         cutoff_label.setBuddy(self.cutoff)
         bedtime_line.addWidget(cutoff_label)
-        bedtime_line.addWidget(self.cutoff)
-        bedtime_line.addStretch(1)
+        bedtime_line.addWidget(self.cutoff, 0, Qt.AlignmentFlag.AlignLeft)
         box.addWidget(bedtime)
         return content
 

@@ -317,3 +317,17 @@ def test_after_sign_in_the_week_wears_the_accounts_look_not_the_carried_one(
         qapp.processEvents()
     assert w._look_inputs()[2] == (w.session.preferences or {}).get("accent", "default")
     assert w._worn_look() is w._look
+
+
+def test_create_account_fits_768_px_tall_at_large_text(qapp: QApplication, device: Device) -> None:
+    device.kept.carry_look("someone", "large", False)
+    w = device.open()
+    w._entry_mode = "create"
+    w._sync_auth_mode()
+    w.resize(1000, 768)
+    for _ in range(5):
+        qapp.processEvents()
+    assert w.height() == 768, "the window grew past a 768 px screen"
+    card = w._auth_card
+    assert card.mapTo(w, QPoint(0, card.height())).y() <= 768
+    assert w.create_button.mapTo(w, QPoint(0, w.create_button.height())).y() <= 768

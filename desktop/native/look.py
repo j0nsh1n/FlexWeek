@@ -1127,11 +1127,10 @@ def control_rules(palette: dict, radius: int, text: float | str, art: dict[str, 
         "padding: 2px; }"
         f"QLineEdit:focus, QComboBox:focus, QAbstractSpinBox:focus, QPlainTextEdit:focus {{ "
         f"border: 2px solid {readable_focus_edge(palette)}; }}"
-        # The line under a field that says what is wrong. Keyed on the property, not the object name: the
-        # sign-in lines are renamed, and the generic QFrame rule took their edge.
-        f"QFrame[problem=\"true\"] {{ background: {palette['panel']}; "
-        f"border: 1px solid {palette['error']}; "
-        f"border-radius: {radius}px; }}"
+        # The line under a field that says what is wrong. No box: the generic QFrame rule would draw an
+        # edge, and the sign-in lines are renamed, so the property is what clears it. Keyed on the
+        # property, not the object name.
+        f"QFrame[problem=\"true\"] {{ background: transparent; border: 0; padding: 0; }}"
         f"QLabel#clockErrorText {{ color: {palette['error']}; }}"
         # A switch is a check box whose box is a pill with a knob, drawn whole by `control_art`.
         'QCheckBox[switch="true"] { spacing: 10px; }'

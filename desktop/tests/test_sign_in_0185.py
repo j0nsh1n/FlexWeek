@@ -138,7 +138,8 @@ def test_a_hint_sits_4_px_under_its_own_field_and_16_px_before_the_next(signed_o
         return top(widget) + widget.height()
 
     assert top(window.username_hint) - bottom(window.username) == 4
-    assert top(window.password) - bottom(window.username_hint) == 16
+    # The Password caption now sits above its field, so the 16 px gap runs to the caption.
+    assert top(window.password_caption) - bottom(window.username_hint) == 16
     assert top(window.password_hint) - bottom(window.password) == 4
     assert top(window.keep_signed_in) - bottom(window.password_hint) == 16
 

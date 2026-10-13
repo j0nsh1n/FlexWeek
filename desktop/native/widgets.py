@@ -279,7 +279,7 @@ OVERFULL_DAY_MIN = 3 * 60
 UNFINISHED_ROWS = 3.5
 REPEAT_NOTE = "Pick more days to repeat it."
 SCHOOL_HOURS_NOTE = "The days and times you are at school, so nothing is planned then."
-ROUTINE_LIST_HEIGHT = 104
+ROUTINE_LIST_HEIGHT = 96
 REPLAN_TIP = (
     "Find new times for all of this week's homework, as if none had a time yet. Homework you placed "
     "yourself stays put. Use it when your week has changed a lot."
@@ -2006,25 +2006,86 @@ def footer_line() -> QFrame:
     return line
 
 
+def caption_above(words: str, field: QWidget) -> QLabel:
+    """The shared caption: muted words above a field, read as that field's name."""
+    label = QLabel(words)
+    label.setObjectName("fieldLabel")
+    label.setBuddy(field)
+    if not field.accessibleName():
+        field.setAccessibleName(words)
+    return label
+
+
+def _captioned(words: str, field: QWidget) -> QVBoxLayout:
+    """A field with its caption above it, for a row that puts a button beside the field."""
+    column = QVBoxLayout()
+    column.setSpacing(SPACING[0])
+    column.addWidget(caption_above(words, field))
+    column.addWidget(field)
+    return column
+
+
+class AnswerRow(QWidget):
+    """A sheet's answers, each as wide as its words. They stand in a row at the right, and stack to
+    the full width when that row is too narrow to hold them side by side."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("answerRow")
+        self.row = QBoxLayout(QBoxLayout.Direction.LeftToRight, self)
+        self.row.setContentsMargins(0, 0, 0, 0)
+        self.row.setSpacing(SPACING[2])
+        self._stacked = False
+        self._stretch: QWidget | None = None
+
+    def add(self, widget: QWidget, *, stretch_before: bool = False) -> None:
+        if stretch_before and self._stretch is None:
+            self.row.addStretch(1)
+            self._stretch = widget
+        words = widget.text().replace("&", "") if isinstance(widget, QAbstractButton) else ""
+        if words.strip():
+            widget.setMinimumWidth(widget.fontMetrics().horizontalAdvance(words))
+        self.row.addWidget(widget)
+
+    def set_stacked(self, stacked: bool) -> None:
+        if stacked == self._stacked:
+            return
+        self._stacked = stacked
+        self.row.setDirection(
+            QBoxLayout.Direction.TopToBottom if stacked else QBoxLayout.Direction.LeftToRight
+        )
+
+    def side_by_side(self) -> int:
+        """How wide the answers are on one line, including the gaps between them."""
+        stacked = self._stacked
+        self.set_stacked(False)
+        self.ensurePolished()
+        width = self.minimumSizeHint().width()
+        self.set_stacked(stacked)
+        return width
+
+    def fit(self, width: int) -> None:
+        """Stack when `width` cannot hold the words side by side."""
+        self.set_stacked(self.side_by_side() > width)
+
+
 def sheet_footer(
     box: QVBoxLayout, *answers: QWidget, left: QWidget | None = None, divided: bool = False
-) -> QHBoxLayout:
+) -> AnswerRow:
     """A sheet's answers in a row at its bottom right, the quietest first and the filled one last, as
     the mock-ups draw them. `left` is a step before them, at the left edge. `divided` puts the thin line
-    over the row, for a sheet whose body scrolls."""
+    over the row, for a sheet whose body scrolls. The row stacks when the words do not fit."""
     if divided:
         box.addWidget(footer_line())
     else:
         box.addSpacing(SPACING[1])
-    row = QHBoxLayout()
-    row.setSpacing(SPACING[2])
+    host = AnswerRow()
     if left is not None:
-        row.addWidget(left)
-    row.addStretch(1)
+        host.add(left)
     for answer in answers:
-        row.addWidget(answer)
-    box.addLayout(row)
-    return row
+        host.add(answer, stretch_before=True)
+    box.addWidget(host)
+    return host
 
 
 def sheet_button(words: str, kind: str = "", name: str = "") -> QPushButton:
@@ -2665,6 +2726,11 @@ def fit_buttons(root: QWidget, *, roomy: bool = False) -> None:
             item.style().polish(item)
         # Setting the icon clears the cached size hint, and asks the layout to ask again.
         item.setIcon(item.icon())
+        words = item.text().replace("&", "")
+        if words.strip() and not is_roomy_exception(item):
+            need = item.fontMetrics().horizontalAdvance(words)
+            if item.minimumWidth() < need:
+                item.setMinimumWidth(need)
 
 
 def is_roomy_exception(button: QPushButton) -> bool:
@@ -3107,6 +3173,8 @@ class Dialog(QDialog):
         shadow = 2 * SHEET_ROOM
         # The card is its width on the scale, narrower only in a window without room for it.
         inner = self.fit_width(most_w - shadow)
+        for answers in self.findChildren(AnswerRow):
+            answers.fit(max(0, inner - 2 * SHEET_PAD))
         card.setFixedWidth(inner)
         hint = card.sizeHint().expandedTo(card.minimumSizeHint()).expandedTo(card.minimumSize())
         # Words that wrap need the height they take at this width, not at the width they would like.
@@ -3207,11 +3275,11 @@ class ConfirmSheet(Dialog):
 
         self._answers = [made(*answer) for answer in answers]
         self._left = made(*left) if left is not None else None
-        self._row = sheet_footer(box, *self._answers, left=self._left)
+        self._answers_row = sheet_footer(box, *self._answers, left=self._left)
 
     def _lay_out(self, direction: QBoxLayout.Direction) -> None:
-        self._row.setDirection(direction)
-        # The row is a layout inside the card's: the card's keeps the size it had until it is told.
+        self._answers_row.set_stacked(direction == QBoxLayout.Direction.TopToBottom)
+        # The row is a widget inside the card's layout: the card keeps the size it had until it is told.
         self.card.layout().invalidate()
 
     def fit_width(self, room: int) -> int:
@@ -4392,9 +4460,9 @@ class HomeworkDialog(Dialog):
         add_link.setProperty("quiet", True)
         add_link.setObjectName("addHomeworkLink")
         add_link.clicked.connect(self._add_link)
-        link_row.addWidget(self.link_label)
-        link_row.addWidget(self.link_url)
-        link_row.addWidget(add_link)
+        link_row.addLayout(_captioned("Link text", self.link_label), 1)
+        link_row.addLayout(_captioned("Link address", self.link_url), 2)
+        link_row.addWidget(add_link, 0, Qt.AlignmentFlag.AlignBottom)
         details_layout.addLayout(link_row)
         self.links = QListWidget()
         self.links.setObjectName("homeworkLinks")
@@ -4413,8 +4481,8 @@ class HomeworkDialog(Dialog):
         add_check.setProperty("quiet", True)
         add_check.setObjectName("addHomeworkCheck")
         add_check.clicked.connect(self._add_check)
-        check_row.addWidget(self.check_text)
-        check_row.addWidget(add_check)
+        check_row.addLayout(_captioned("Step text", self.check_text), 1)
+        check_row.addWidget(add_check, 0, Qt.AlignmentFlag.AlignBottom)
         details_layout.addLayout(check_row)
         self.checks = QListWidget()
         self.checks.setObjectName("homeworkChecklist")
@@ -5821,7 +5889,7 @@ class RoutineDialog(Dialog):
             "Tick the fixed times to keep, give them a name, and copy them into any week later.",
         )
         self.name = _line("routineName")
-        self.name.setPlaceholderText("Routine name")
+        self.name.setAccessibleName("Routine name")
         self.choices = QListWidget()
         self.choices.setObjectName("routineBlocks")
         # Room for about four fixed times before it scrolls; squeezed, it showed one and a half, and
@@ -5838,10 +5906,14 @@ class RoutineDialog(Dialog):
         save = QPushButton("Save routine")
         save.setObjectName("saveRoutine")
         save.clicked.connect(self._save)
-        # The name and the button that keeps it on one line, under the times they keep.
+        # The name, with its caption, and the button that keeps it, under the times they keep.
         keep = QHBoxLayout()
-        keep.addWidget(self.name, 1)
-        keep.addWidget(save)
+        named = QVBoxLayout()
+        named.setSpacing(STACKED_GAP)
+        named.addWidget(caption_above("Name", self.name))
+        named.addWidget(self.name)
+        keep.addLayout(named, 1)
+        keep.addWidget(save, 0, Qt.AlignmentFlag.AlignBottom)
         column.addLayout(keep)
         column.addSpacing(SPACING[2])
         sheet_section(

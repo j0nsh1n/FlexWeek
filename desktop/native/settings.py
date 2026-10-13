@@ -111,6 +111,7 @@ from desktop.native.widgets import (
     Swatches,
     Switch,
     bare,
+    caption_above,
     even_fields,
     even_labels,
     fit_buttons,
@@ -1671,7 +1672,8 @@ class RestoreDialog(QDialog):
         layout.addWidget(location)
         self.label = QLineEdit()
         self.label.setObjectName("restoreLabel")
-        self.label.setPlaceholderText("Restore point name")
+        self.label.setAccessibleName("Restore point name")
+        layout.addWidget(caption_above("Restore point name", self.label))
         layout.addWidget(self.label)
         create = QPushButton("Save restore point")
         create.setProperty("outlined", True)

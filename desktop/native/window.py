@@ -206,6 +206,7 @@ from desktop.native.widgets import (
     UnfinishedPanel,
     WhyOff,
     add_heading,
+    caption_above,
     confirm,
     control_art,
     dim_window,
@@ -788,6 +789,52 @@ class NativeWindow(QMainWindow):
         if hasattr(self, "username_hint"):
             self.username_hint.setVisible(self._entry_mode == CREATE)
             self.password_hint.setVisible(self._entry_mode == CREATE)
+        self._release_auth_top()
+
+    def _auth_stage(self) -> QWidget | None:
+        page = self._stack.currentWidget()
+        if page is not None and page.objectName() == "authPage" and self._auth_holder is not None:
+            return page
+        return None
+
+    def _hold_auth_top(self, before: int) -> None:
+        """Keep the card's top at `before` (its page y before the problem). Extra top margin grows the
+        card downward; a pass that went too far is pulled back to the same pixel."""
+        page = self._auth_stage()
+        card = self._auth_card
+        if page is None or card is None or not card.isVisible():
+            return
+        for _ in range(4):
+            widget = card
+            while widget is not None:
+                layout = widget.layout()
+                if layout is not None:
+                    layout.activate()
+                if widget is page:
+                    break
+                widget = widget.parentWidget()
+            delta = before - card.mapTo(page, QPoint(0, 0)).y()
+            if delta == 0:
+                return
+            margins = page.layout().contentsMargins()
+            if getattr(self, "_auth_top_base", None) is None:
+                self._auth_top_base = margins.top()
+            new_top = margins.top() + delta
+            if new_top == margins.top():
+                return
+            page.layout().setContentsMargins(margins.left(), new_top, margins.right(), margins.bottom())
+
+    def _release_auth_top(self) -> None:
+        """Give the page back the top margin it had before a problem line held the card."""
+        self._auth_hold_token = None
+        page = self._auth_stage()
+        base = getattr(self, "_auth_top_base", None)
+        if page is None or base is None:
+            return
+        margins = page.layout().contentsMargins()
+        if margins.top() != base:
+            page.layout().setContentsMargins(margins.left(), base, margins.right(), margins.bottom())
+        self._auth_top_base = None
 
     def _show_auth_problem(self, field: QLineEdit, message: str, *, focus: bool) -> None:
         line = {
@@ -796,15 +843,38 @@ class NativeWindow(QMainWindow):
             self.recovery_code: self.recovery_code_problem,
             self.new_recovery_password: self.recovery_password_problem,
         }[field]
+        page = self._auth_stage()
+        card = self._auth_card
+        before = (
+            card.mapTo(page, QPoint(0, 0)).y()
+            if page is not None and card is not None and card.isVisible()
+            else None
+        )
         field.setAccessibleDescription(message)
         field.setProperty("invalid", True)
         field.style().unpolish(field)
         field.style().polish(field)
         line.say(message)
+        # The hint leaves before the hold is measured: hiding it afterwards moved the card a pixel.
         if field is self.username:
             self.username_hint.hide()
         elif field is self.password:
             self.password_hint.hide()
+        if before is not None:
+            self._hold_auth_top(before)
+            # A layout posted by showing the line can still move the card after this returns.
+            token = object()
+            self._auth_hold_token = token
+
+            def again(tries: int = 3, token: object = token, before: int = before) -> None:
+                if getattr(self, "_auth_hold_token", None) is not token:
+                    return
+                self._hold_auth_top(before)
+                if tries > 1:
+                    # Tied to the window: a retry that lands after the window is gone is dropped.
+                    QTimer.singleShot(0, self, lambda: again(tries - 1))
+
+            QTimer.singleShot(0, self, again)
         if focus:
             field.setFocus(Qt.FocusReason.OtherFocusReason)
             field.selectAll()
@@ -886,7 +956,16 @@ class NativeWindow(QMainWindow):
         note = {SIGN_IN: "", CREATE: CREATE_NOTE, RESET: RESET_NOTE}[mode]
         self.auth_note.setText(note)
         self.auth_note.setVisible(bool(note))
+        # The holder pins every page to the tallest card. Create's larger text needs smaller gaps too,
+        # or its height makes even Reset grow beyond a 768 px screen.
+        gap = SPACING[1] if mode == RESET else SPACING[3]
+        if mode == CREATE and text_scale(self._worn_look()) > 1:
+            gap = SPACING[2]
+        self._auth_card.layout().setSpacing(gap)
         self.password.setVisible(mode != RESET)
+        self.password_caption.setVisible(mode != RESET)
+        self.recovery_code_caption.setVisible(mode == RESET)
+        self.recovery_password_caption.setVisible(mode == RESET)
         self.password_hint.setVisible(mode == CREATE)
         self.username_hint.setVisible(mode == CREATE)
         self.sign_in_button.setVisible(mode == SIGN_IN)
@@ -1052,10 +1131,10 @@ class NativeWindow(QMainWindow):
         self.username = QLineEdit()
         self.username.setObjectName("username")
         self.username.setMaxLength(32)
-        self.username.setPlaceholderText("Username")
         self.username.setAccessibleName("Username")
         username_box = QVBoxLayout()
         username_box.setSpacing(SPACING[0])
+        username_box.addWidget(caption_above("Username", self.username))
         username_box.addWidget(self.username)
         self.username_problem = ProblemLine(self.username)
         self.username_problem.setObjectName("usernameProblem")
@@ -1068,11 +1147,13 @@ class NativeWindow(QMainWindow):
         self.password = PasswordField()
         self.password.setObjectName("password")
         self.password.setMaxLength(128)
-        self.password.setPlaceholderText("Password")
         self.password.setAccessibleName("Password")
         self.password_reveal = self.password.reveal
         password_box = QVBoxLayout()
+        password_box.setContentsMargins(0, 0, 0, 0)
         password_box.setSpacing(SPACING[0])
+        self.password_caption = caption_above("Password", self.password)
+        password_box.addWidget(self.password_caption)
         password_box.addWidget(self.password)
         self.password_problem = ProblemLine(self.password)
         self.password_problem.setObjectName("passwordProblem")
@@ -1108,23 +1189,36 @@ class NativeWindow(QMainWindow):
         layout.addLayout(password_box)
         self.recovery_code = QLineEdit()
         self.recovery_code.setObjectName("recoveryCode")
-        self.recovery_code.setPlaceholderText("Recovery code")
         self.recovery_code.setAccessibleName("Recovery code")
         self.recovery_code.returnPressed.connect(self._submit_auth)
         self.recovery_code_problem = ProblemLine(self.recovery_code)
         self.recovery_code_problem.setObjectName("recoveryCodeProblem")
-        layout.addWidget(self.recovery_code)
-        self.recovery_code_problem.attach(layout, layout.indexOf(self.recovery_code) + 1)
+        # Caption and field stand together, 4 px apart, as the other fields do.
+        code_box = QVBoxLayout()
+        code_box.setContentsMargins(0, 0, 0, 0)
+        code_box.setSpacing(SPACING[0])
+        self.recovery_code_caption = caption_above("Recovery code", self.recovery_code)
+        code_box.addWidget(self.recovery_code_caption)
+        code_box.addWidget(self.recovery_code)
+        self.recovery_code_problem.attach(code_box, code_box.indexOf(self.recovery_code) + 1)
         self.new_recovery_password = PasswordField()
         self.new_recovery_password.setObjectName("recoverPassword")
         self.new_recovery_password.setMaxLength(128)
-        self.new_recovery_password.setPlaceholderText("New password")
         self.new_recovery_password.setAccessibleName("New password")
         self.new_recovery_password.returnPressed.connect(self._submit_auth)
         self.recovery_password_problem = ProblemLine(self.new_recovery_password)
         self.recovery_password_problem.setObjectName("recoveryPasswordProblem")
-        layout.addWidget(self.new_recovery_password)
-        self.recovery_password_problem.attach(layout, layout.indexOf(self.new_recovery_password) + 1)
+        password_new_box = QVBoxLayout()
+        password_new_box.setContentsMargins(0, 0, 0, 0)
+        password_new_box.setSpacing(SPACING[0])
+        self.recovery_password_caption = caption_above("New password", self.new_recovery_password)
+        password_new_box.addWidget(self.recovery_password_caption)
+        password_new_box.addWidget(self.new_recovery_password)
+        self.recovery_password_problem.attach(
+            password_new_box, password_new_box.indexOf(self.new_recovery_password) + 1
+        )
+        layout.addLayout(code_box)
+        layout.addLayout(password_new_box)
         # On by default: most students plan on their own laptop, and signing in was the first thing
         # FlexWeek asked at every launch. Log out forgets it, for a shared computer.
         self.keep_signed_in = QCheckBox("Keep me signed in on this computer")

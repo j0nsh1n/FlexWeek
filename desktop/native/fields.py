@@ -385,9 +385,12 @@ def announce(widget: QWidget, words: str, *, assertive: bool = False) -> None:
 
 
 class ProblemLine(QFrame):
-    """A short problem written under a field, with a warning icon, in a frame of its own."""
+    """A short problem under a field: as wide as that field, with no frame. A field that shares its
+    row (Start beside End) gets the line as wide as the whole row."""
 
     GAP = 4
+    # Used only to pick a comfortable height for the size hint. The line drawn is the field's width,
+    # or the row's, never a fixed box.
     MAX_WIDTH = 360
 
     def __init__(self, field: QWidget) -> None:
@@ -396,10 +399,12 @@ class ProblemLine(QFrame):
         self.overlay = True
         # The row this line sits under when the field shares its row with others.
         self._row_width: Callable[[], int] | None = None
+        self._row_widget: QWidget | None = None
+        self.setFrameShape(QFrame.Shape.NoFrame)
         self.setProperty("problem", False)
         self.setObjectName("clockError")
         row = QGridLayout(self)
-        row.setContentsMargins(8, 4, 8, 4)
+        row.setContentsMargins(0, self.GAP, 0, 0)
         row.setSpacing(6)
         row.setColumnStretch(1, 1)
         self.icon = QLabel()
@@ -418,12 +423,35 @@ class ProblemLine(QFrame):
         self._take: Callable[[], None] | None = None
         self.action.clicked.connect(self._act)
         self.hide()
+        field.installEventFilter(self)
         field.destroyed.connect(self.deleteLater)
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        # A field sized after the line (one width per kind) keeps the line as wide as the field.
+        if watched is self.field and event.type() == QEvent.Type.Resize and not self.overlay:
+            self._match_width()
+        return False
+
+    def _match_width(self) -> None:
+        """A field's line is exactly that field wide. A row's line is the layout's, as wide as the row."""
+        if self._row_widget is not None:
+            return
+        width = self.field.width()
+        if width > 0 and self.width() != width:
+            self.setFixedWidth(width)
 
     def attach(self, layout, index: int) -> None:
         """Reserve a row under fields whose forms have a layout. A field that shares its row with
-        others (Start beside End, the "from" and "to" boxes) gets the line as a row of its own under
-        that whole row, so the other fields stay where they were and the row never stretches."""
+        others (Start beside End) gets the line under that whole row, so the other fields stay where
+        they were and the line is as wide as the row."""
+        # A caption column inside a side-by-side row is itself a vertical box. The line belongs under
+        # the row, not under this one column, or it would be only as wide as End.
+        shared = self._shared_row()
+        if shared is not None:
+            if not self._attach_under_widget(shared):
+                return
+            self.overlay = False
+            return
         if isinstance(layout, QFormLayout):
             row, _role = layout.getWidgetPosition(self.field)
             if row < 0:
@@ -447,6 +475,7 @@ class ProblemLine(QFrame):
         above = [w for w in grid.parentWidget().children() if isinstance(w, QWidget) and w is not self]
         gaps = grid.horizontalSpacing() * (len(above) - 1)
         self._row_width = lambda: gaps + sum(widget.sizeHint().width() for widget in above)
+        self._row_widget = grid.parentWidget()
         grid.addWidget(self, grid.rowCount(), 0, 1, grid.columnCount())
         # A line as narrow as a pair of time boxes keeps its button under the words, not beside them.
         inside = self.layout()
@@ -454,14 +483,63 @@ class ProblemLine(QFrame):
         inside.addWidget(self.action, 1, 1, 1, 2, Qt.AlignmentFlag.AlignLeft)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
+    def _form_holding(self, widget: QWidget) -> QFormLayout | None:
+        """The form `widget` was added to, including one nested in the page's column."""
+        host = widget.parentWidget()
+        if host is None:
+            return None
+        layout = host.layout()
+        if isinstance(layout, QFormLayout):
+            return layout
+        if isinstance(layout, QBoxLayout):
+            for index in range(layout.count()):
+                child = layout.itemAt(index).layout()
+                if isinstance(child, QFormLayout) and child.indexOf(widget) >= 0:
+                    return child
+        return None
+
+    def _shared_row(self) -> QWidget | None:
+        """The horizontal row whose caption columns this field sits in, when there is more than one."""
+        column = self.field.parentWidget()
+        if column is None:
+            return None
+        row = column.parentWidget()
+        if row is None:
+            return None
+        row_layout = row.layout()
+        column_layout = column.layout()
+        if (
+            not isinstance(row_layout, QBoxLayout)
+            or not isinstance(column_layout, QBoxLayout)
+            or row_layout.direction() == QBoxLayout.Direction.TopToBottom
+            or column_layout.direction() != QBoxLayout.Direction.TopToBottom
+        ):
+            return None
+        columns = 0
+        for at in range(row_layout.count()):
+            item = row_layout.itemAt(at)
+            if item is not None and item.layout() is not None:
+                columns += 1
+        if columns < 2:
+            return None
+        return row
+
     def _attach_under_row(self, layout: QBoxLayout) -> bool:
         row = layout.parentWidget()
-        above = row.parentWidget().layout() if row is not None and row.parentWidget() is not None else None
-        if isinstance(above, QFormLayout):
-            at, _role = above.getWidgetPosition(row)
+        if row is None:
+            return False
+        return self._attach_under_widget(row)
+
+    def _attach_under_widget(self, row: QWidget) -> bool:
+        if row.parentWidget() is None:
+            return False
+        above = row.parentWidget().layout()
+        form = above if isinstance(above, QFormLayout) else self._form_holding(row)
+        if form is not None:
+            at, _role = form.getWidgetPosition(row)
             if at < 0:
                 return False
-            above.insertRow(at + 1, self)
+            form.insertRow(at + 1, self)
         elif isinstance(above, QBoxLayout) and above.direction() == QBoxLayout.Direction.TopToBottom:
             at = above.indexOf(row)
             if at < 0:
@@ -469,12 +547,14 @@ class ProblemLine(QFrame):
             above.insertWidget(at + 1, self)
         else:
             return False
-        self._row_width = lambda: row.sizeHint().width()
+        self._row_widget = row
+        self._row_width = lambda: row.width() or row.sizeHint().width()
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         return True
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
+        self._match_width()
         self._tell_host()
 
     def hideEvent(self, event) -> None:  # noqa: N802
@@ -550,7 +630,13 @@ class ProblemLine(QFrame):
         if self.parentWidget() is not holder:
             self.setParent(holder)
         at = field.mapTo(holder, field.rect().topLeft())
-        width = max(120, min(self.MAX_WIDTH, holder.width() - at.x() - 8))
+        # As wide as the field. A row's line is laid out with the row instead, and never drawn here.
+        width = field.width()
+        room = holder.width() - at.x()
+        if width <= 0:
+            width = max(120, min(self.MAX_WIDTH, room)) if room > 0 else 120
+        elif room > 0:
+            width = min(width, room)
         self.ensurePolished()
         words = self.text.palette().color(QPalette.ColorRole.WindowText).name()
         self.icon.setPixmap(icons.pixmap("triangle-alert", words, 16))
