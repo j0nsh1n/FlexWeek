@@ -183,6 +183,11 @@ fn a_phone_with_another_account_refuses_to_pair() {
     let error = phone.service.pair_from_qr(&offer.qr, 20_000).unwrap_err();
     assert!(matches!(error, NetError::AlreadyLinked), "{error}");
     assert_eq!(error.kind(), "already_linked");
+    assert!(
+        second.service.peers(1).unwrap().is_empty(),
+        "a phone that could not finish must not stay admitted"
+    );
+    assert_eq!(phone.service.peers(1).unwrap().len(), 1);
 }
 
 #[test]
@@ -212,5 +217,64 @@ fn the_desktop_scan_loop_stamps_edits_made_by_another_connection() {
         stamped("a1"),
         1,
         "the loop should stamp a new assignment on its own"
+    );
+}
+
+#[test]
+fn a_big_push_from_the_phone_arrives_in_several_batches() {
+    let desktop = device("desktop", true);
+    let phone = device("phone", false);
+    let desktop_id = pair(&desktop, &phone);
+    phone.service.sync_once(&desktop_id, 20_000).unwrap();
+    let notes = "n".repeat(900);
+    {
+        let conn = phone.db();
+        for index in 0..600 {
+            put_assignment(
+                &conn,
+                &format!("p{index}"),
+                &format!("Phone task {index}"),
+                &notes,
+            );
+        }
+    }
+    let summary = phone.service.sync_once(&desktop_id, 40_000).unwrap();
+    assert!(summary.exchanges >= 3, "{summary:?}");
+    assert_eq!(summary.sent, 600);
+    let on_desktop = desktop.db();
+    let count: i64 = on_desktop
+        .query_row(
+            "SELECT count(*) FROM assignments WHERE user_id = 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 600);
+    for index in [0, 300, 599] {
+        assert_eq!(
+            get_assignment(&on_desktop, &format!("p{index}")).unwrap()["title"],
+            format!("Phone task {index}")
+        );
+    }
+}
+
+#[test]
+fn sync_all_visits_every_paired_device() {
+    let desktop = device("desktop", true);
+    let (first, second) = (device("first", false), device("second", false));
+    pair(&desktop, &first);
+    pair(&desktop, &second);
+    put_assignment(&first.db(), "never-synced", "Before", "");
+    let mut results = desktop.service.sync_all(20_000).unwrap();
+    results.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut expected = [first.id(), second.id()];
+    expected.sort();
+    assert_eq!(
+        results.iter().map(|r| r.0.clone()).collect::<Vec<_>>(),
+        expected
+    );
+    assert!(
+        results.iter().all(|(_, result)| result.is_ok()),
+        "{results:?}"
     );
 }

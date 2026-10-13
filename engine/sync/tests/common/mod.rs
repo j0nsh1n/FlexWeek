@@ -159,45 +159,122 @@ pub fn raw_endpoint() -> iroh::Endpoint {
     })
 }
 
-/// Speaks the pairing wire format directly, so a test can send a proof made from another code, or
-/// claim another endpoint's id, which the real client never does.
-pub fn raw_pair(
-    client: &iroh::Endpoint,
-    qr: &str,
-    key_code: &str,
-    proof_code: &str,
-    claim: Option<&iroh::Endpoint>,
-) -> Value {
-    use flexweek_sync::net::protocol::{PAIR_ALPN, derive_pair_keys, hello_proof};
-    flexweek_sync::net::runtime::block_on(async {
-        let payload = flexweek_sync::net::qr::parse(qr).unwrap();
-        let host_keys = derive_pair_keys(key_code).unwrap();
-        let proof_keys = derive_pair_keys(proof_code).unwrap();
-        let mut address = iroh::EndpointAddr::new(host_keys.secret.public());
-        for hint in &payload.hints {
-            address = address.with_ip_addr(*hint);
+/// Speaks the pairing wire format directly, so a test can send a proof made from another code,
+/// claim another endpoint's id, or walk away without confirming, which the real client never does.
+pub struct RawPair<'a> {
+    client: &'a iroh::Endpoint,
+    qr: &'a str,
+    key_code: &'a str,
+    proof_code: &'a str,
+    claim: Option<&'a iroh::Endpoint>,
+    device_id: Option<&'a str>,
+    confirm: bool,
+}
+
+impl<'a> RawPair<'a> {
+    pub fn new(client: &'a iroh::Endpoint, qr: &'a str, code: &'a str) -> Self {
+        Self {
+            client,
+            qr,
+            key_code: code,
+            proof_code: code,
+            claim: None,
+            device_id: None,
+            confirm: true,
         }
-        let connection = client.connect(address, PAIR_ALPN).await.unwrap();
-        let claimed = claim.unwrap_or(client).id();
-        let nonce = [7u8; 16];
-        let proof = hello_proof(
-            &proof_keys.proof_key,
-            &nonce,
-            claimed.as_bytes(),
-            "raw",
-            "Raw phone",
-        );
-        let hello = json!({
-            "proto": 1, "device_id": "raw", "device_name": "Raw phone",
-            "endpoint_id": claimed.to_string(), "nonce": hex_of(&nonce), "proof": hex_of(&proof),
+    }
+
+    pub fn proof_from(mut self, code: &'a str) -> Self {
+        self.proof_code = code;
+        self
+    }
+
+    pub fn claiming(mut self, other: &'a iroh::Endpoint) -> Self {
+        self.claim = Some(other);
+        self
+    }
+
+    pub fn device_id(mut self, id: &'a str) -> Self {
+        self.device_id = Some(id);
+        self
+    }
+
+    pub fn without_confirming(mut self) -> Self {
+        self.confirm = false;
+        self
+    }
+
+    pub fn run(self) -> Value {
+        let confirm = self.confirm;
+        let session = self.open();
+        let reply = session.reply.clone();
+        if confirm && reply["ok"] == true {
+            session.confirm();
+        } else {
+            session.leave();
+        }
+        reply
+    }
+
+    /// Sends the hello and returns with the reply read, the connection still open.
+    pub fn open(self) -> RawSession {
+        use flexweek_sync::net::protocol::{PAIR_ALPN, derive_pair_keys, hello_proof};
+        flexweek_sync::net::runtime::block_on(async {
+            let payload = flexweek_sync::net::qr::parse(self.qr).unwrap();
+            let host_keys = derive_pair_keys(self.key_code).unwrap();
+            let proof_keys = derive_pair_keys(self.proof_code).unwrap();
+            let mut address = iroh::EndpointAddr::new(host_keys.secret.public());
+            for hint in &payload.hints {
+                address = address.with_ip_addr(*hint);
+            }
+            let connection = self.client.connect(address, PAIR_ALPN).await.unwrap();
+            let claimed = self.claim.unwrap_or(self.client).id();
+            let device_id = self
+                .device_id
+                .map_or_else(|| claimed.to_string(), str::to_owned);
+            let nonce = [7u8; 16];
+            let proof = hello_proof(
+                &proof_keys.proof_key,
+                &nonce,
+                claimed.as_bytes(),
+                &device_id,
+                "Raw phone",
+            );
+            let hello = json!({
+                "proto": 1, "device_id": device_id, "device_name": "Raw phone",
+                "endpoint_id": claimed.to_string(), "nonce": hex_of(&nonce), "proof": hex_of(&proof),
+            });
+            let (mut send, mut recv) = connection.open_bi().await.unwrap();
+            send.write_all(hello.to_string().as_bytes()).await.unwrap();
+            send.finish().unwrap();
+            let reply: Value =
+                serde_json::from_slice(&recv.read_to_end(1 << 20).await.unwrap()).unwrap();
+            RawSession { connection, reply }
+        })
+    }
+}
+
+pub struct RawSession {
+    pub connection: iroh::endpoint::Connection,
+    pub reply: Value,
+}
+
+impl RawSession {
+    pub fn confirm(self) {
+        flexweek_sync::net::runtime::block_on(async {
+            let (mut send, mut recv) = self.connection.open_bi().await.unwrap();
+            send.write_all(br#"{"op":"confirm"}"#).await.unwrap();
+            send.finish().unwrap();
+            let answer: Value =
+                serde_json::from_slice(&recv.read_to_end(1 << 16).await.unwrap()).unwrap();
+            assert_eq!(answer["ok"], true);
+            self.connection.close(0u32.into(), b"done");
         });
-        let (mut send, mut recv) = connection.open_bi().await.unwrap();
-        send.write_all(hello.to_string().as_bytes()).await.unwrap();
-        send.finish().unwrap();
-        let reply = recv.read_to_end(1 << 20).await.unwrap();
-        connection.close(0u32.into(), b"done");
-        serde_json::from_slice(&reply).unwrap()
-    })
+    }
+
+    pub fn leave(self) {
+        self.connection.close(0u32.into(), b"done");
+    }
 }
 
 fn hex_of(bytes: &[u8]) -> String {

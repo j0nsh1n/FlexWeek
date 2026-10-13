@@ -137,8 +137,12 @@ impl ProtocolHandler for SyncHandler {
                 break;
             };
             let response = respond(ctx, &remote, request).await;
-            let sent = send.write_all(&encode(&response)).await;
-            if sent.is_err() || send.finish().is_err() {
+            let sent = timeout(
+                Duration::from_millis(EXCHANGE_MS),
+                send.write_all(&encode(&response)),
+            )
+            .await;
+            if !sent.is_ok_and(|result| result.is_ok()) || send.finish().is_err() {
                 break;
             }
         }
@@ -375,6 +379,13 @@ async fn rounds(
             .ok_or_else(|| NetError::Protocol("response is missing ack_through".into()))?;
         if batch.account_uuid != push.account_uuid {
             return Err(NetError::Protocol("response is for another account".into()));
+        }
+        // A cursor is only ever raised, so one absurd value would stop this peer's records for
+        // good. The acknowledgement must be exactly what was sent, and a pull cannot go backwards.
+        if ack_through != push.next_since || batch.next_since < cursors.pulled_seq {
+            return Err(NetError::Protocol(
+                "the other device sent positions that do not add up".into(),
+            ));
         }
         let (path, peer_id, clock) = (
             ctx.cfg.db_path.clone(),

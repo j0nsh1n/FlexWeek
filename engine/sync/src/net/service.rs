@@ -40,6 +40,7 @@ pub(crate) struct StatusInner {
     running: usize,
     last_sync_ms: Option<i64>,
     last_error: Option<String>,
+    scan_error: Option<String>,
 }
 
 impl Ctx {
@@ -329,16 +330,21 @@ impl SyncService {
         result
     }
 
-    /// `sync_once` with every paired, not removed device, one after the other.
-    pub fn sync_all(&self, deadline_ms: u64) -> Vec<(String, NetResult<SyncSummary>)> {
-        let peers = self.all_peers().unwrap_or_default();
-        peers
-            .into_iter()
-            .map(|peer| {
-                let result = self.sync_once(&peer.device_id, deadline_ms);
-                (peer.device_id, result)
-            })
-            .collect()
+    /// `sync_once` with every paired, not removed device, one after the other. `cancel_sync`
+    /// ends the one running and skips the rest.
+    pub fn sync_all(&self, deadline_ms: u64) -> NetResult<Vec<(String, NetResult<SyncSummary>)>> {
+        let base = *self.ctx.cancel.borrow();
+        let mut results = Vec::new();
+        for peer in self.all_peers()? {
+            let cancelled = *self.ctx.cancel.borrow() != base;
+            let result = if cancelled {
+                Err(NetError::Cancelled)
+            } else {
+                self.sync_once(&peer.device_id, deadline_ms)
+            };
+            results.push((peer.device_id, result));
+        }
+        Ok(results)
     }
 
     /// Ends a running `sync_once` at once. Does nothing when none is running.
@@ -518,10 +524,10 @@ async fn scan_loop(ctx: Arc<Ctx>, interval: Duration) {
             Ok((db, version)) => {
                 conn = Some(db);
                 seen = Some(version);
-                ctx.status.lock().expect("status").last_error = None;
+                ctx.status.lock().expect("status").scan_error = None;
             }
             Err(error) => {
-                ctx.status.lock().expect("status").last_error = Some(error.to_string());
+                ctx.status.lock().expect("status").scan_error = Some(error.to_string());
             }
         }
     }

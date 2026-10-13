@@ -27,7 +27,9 @@ use super::protocol::{
 use super::service::{Ctx, bind_endpoint, local_addrs};
 use super::session::{scan_and_export, touch_peer};
 use super::{NetError, NetResult, PairRefusal, blocking, open_db, qr};
-use crate::{Batch, Peer, SyncError, account_uuid, apply_batch, scan, set_account, upsert_peer};
+use crate::{
+    Batch, Peer, SyncError, account_uuid, apply_batch, revoke_peer, scan, set_account, upsert_peer,
+};
 
 /// How long after the code expires the pairing endpoint keeps answering, so a late phone gets
 /// "expired" instead of silence. Measured in real time, not by the injectable clock.
@@ -59,7 +61,6 @@ pub enum PairStatus {
     Paired(PairedPeer),
     Expired,
     TooManyTries,
-    Cancelled,
 }
 
 /// What the phone learns when pairing succeeds.
@@ -94,7 +95,7 @@ impl PairHost {
         if let Some(peer) = &state.paired {
             PairStatus::Paired(peer.clone())
         } else if state.cancelled {
-            PairStatus::Cancelled
+            PairStatus::Idle
         } else if state.tries >= PAIR_MAX_TRIES {
             PairStatus::TooManyTries
         } else if now_ms >= state.expires_at_ms {
@@ -192,11 +193,22 @@ pub(crate) async fn start(ctx: &Arc<Ctx>, user_id: i64) -> NetResult<PairOffer> 
             let _ = timeout(Duration::from_secs(2), host.router.shutdown()).await;
         }
     });
-    let previous = ctx.pairing.lock().expect("pairing slot").replace(PairHost {
+    let host = PairHost {
         state,
         router,
         reaper,
-    });
+    };
+    // `stop` sets the flag before it empties the slot, so either this sees it or `stop` sees the
+    // new window; one of the two always shuts it down.
+    let previous = {
+        let mut slot = ctx.pairing.lock().expect("pairing slot");
+        if ctx.stopping.load(std::sync::atomic::Ordering::SeqCst) {
+            drop(slot);
+            host.shutdown(true).await;
+            return Err(NetError::Stopped);
+        }
+        slot.replace(host)
+    };
     if let Some(previous) = previous {
         previous.shutdown(true).await;
     }
@@ -231,14 +243,43 @@ impl ProtocolHandler for PairHandler {
         let Ok(Ok(hello)) = hello else {
             return Ok(());
         };
-        let reply = self.decide(connection.remote_id(), &hello).await;
-        if send.write_all(&encode(&reply)).await.is_ok() {
-            let _ = send.finish();
+        let (reply, pending) = self.decide(connection.remote_id(), &hello).await;
+        if write_reply(&mut send, &reply).await
+            && let Some(pending) = pending
+        {
+            // The phone confirms on a second stream once it has stored this device. Only then is
+            // the peer recorded and the code spent, so a phone that cannot finish (another
+            // account, a deadline, a dropped connection) leaves nothing behind on this side.
+            let confirmed = timeout(Duration::from_secs(15), async {
+                let (send, mut recv) = connection.accept_bi().await.ok()?;
+                let bytes = recv.read_to_end(1024).await.ok()?;
+                let asked = decode(&bytes).ok()?;
+                (asked.get("op").and_then(Value::as_str) == Some("confirm")).then_some(send)
+            })
+            .await;
+            if let Ok(Some(mut answer)) = confirmed {
+                let result = self.commit(pending).await;
+                let body = match result {
+                    Ok(()) => json!({"ok": true}),
+                    Err(error) => refusal("failed", &error.to_string()),
+                };
+                write_reply(&mut answer, &body).await;
+            }
         }
         // The phone closes once it has read the reply; waiting keeps the reply from being cut off.
         let _ = timeout(Duration::from_secs(5), connection.closed()).await;
         Ok(())
     }
+}
+
+/// A peer that stops reading must not pin this task, so the write has its own limit.
+async fn write_reply(send: &mut iroh::endpoint::SendStream, reply: &Value) -> bool {
+    let sent = timeout(Duration::from_secs(10), send.write_all(&encode(reply))).await;
+    let wrote = sent.is_ok_and(|result| result.is_ok());
+    if wrote {
+        let _ = send.finish();
+    }
+    wrote
 }
 
 struct Hello {
@@ -281,25 +322,35 @@ fn parse_hello(bytes: &[u8]) -> Option<Hello> {
     })
 }
 
+/// A phone that passed the proof and was sent the account, waiting for its confirmation. Holding
+/// the gate keeps a second phone out until this one confirms or gives up.
+struct Pending {
+    _gate: tokio::sync::OwnedMutexGuard<()>,
+    hello: Hello,
+    user_id: i64,
+}
+
 impl PairHandler {
-    async fn decide(&self, remote: EndpointId, bytes: &[u8]) -> Value {
-        let _decision = self.gate.lock().await;
+    async fn decide(&self, remote: EndpointId, bytes: &[u8]) -> (Value, Option<Pending>) {
+        let gate = self.gate.clone().lock_owned().await;
         let now = (self.ctx.cfg.clock)();
         let (user_id, proof_key) = {
             let state = self.state.lock().expect("pair state");
             if state.paired.is_some() {
-                return refusal("used", "this code was already used");
+                return (refusal("used", "this code was already used"), None);
             }
             if state.tries >= PAIR_MAX_TRIES {
-                return refusal("too_many_tries", "too many wrong tries");
+                return (refusal("too_many_tries", "too many wrong tries"), None);
             }
             if state.cancelled || now >= state.expires_at_ms {
-                return refusal("expired", "this code has expired");
+                return (refusal("expired", "this code has expired"), None);
             }
             (state.user_id, state.proof_key)
         };
+        // The device id is the endpoint id, so a phone cannot take over another device's row.
         let hello = parse_hello(bytes).filter(|hello| {
             hello.endpoint_id == remote
+                && hello.device_id == hello.endpoint_id.to_string()
                 && hello_proof_matches(
                     &proof_key,
                     &hello.nonce,
@@ -310,23 +361,18 @@ impl PairHandler {
                 )
         });
         let Some(hello) = hello else {
-            let mut state = self.state.lock().expect("pair state");
-            state.tries += 1;
-            return refusal("wrong_code", "that code is not right");
+            self.state.lock().expect("pair state").tries += 1;
+            return (refusal("wrong_code", "that code is not right"), None);
         };
         let (path, clock) = (self.ctx.cfg.db_path.clone(), self.ctx.cfg.clock.clone());
         let (device_id, device_name) =
             (self.ctx.device_id.clone(), self.ctx.cfg.device_name.clone());
-        let stored = (
-            hello.device_id.clone(),
-            hello.device_name.clone(),
-            hello.endpoint_id.to_string(),
-        );
+        let requester = hello.device_id.clone();
         let outcome = blocking(move || {
             let mut conn = open_db(&path)?;
             let now = clock();
             let uuid = account_uuid(&conn, user_id)?;
-            let first = scan_and_export(&mut conn, user_id, now, 0, &stored.0, 1)?;
+            let first = scan_and_export(&mut conn, user_id, now, 0, &requester, 1)?;
             let username: String = conn
                 .query_row(
                     "SELECT username FROM users WHERE id = ?1",
@@ -334,24 +380,15 @@ impl PairHandler {
                     |row| row.get(0),
                 )
                 .map_err(SyncError::from)?;
-            record_peer(&conn, user_id, &stored.0, &stored.2, &stored.1, now)?;
             Ok((uuid, username, first))
         })
         .await;
         let (uuid, username, first) = match outcome {
             Ok(done) => done,
-            Err(error) => return refusal("failed", &error.to_string()),
+            Err(error) => return (refusal("failed", &error.to_string()), None),
         };
-        self.ctx
-            .add_hints(&hello.endpoint_id.to_string(), &hello.addrs);
-        self.state.lock().expect("pair state").paired = Some(PairedPeer {
-            user_id,
-            device_id: hello.device_id,
-            device_name: hello.device_name,
-            endpoint_id: hello.endpoint_id.to_string(),
-        });
         let addrs = local_addrs(&self.ctx.endpoint, &self.ctx.cfg.transport, 6).await;
-        json!({
+        let reply = json!({
             "ok": true,
             "account_uuid": uuid,
             "username": username,
@@ -360,22 +397,65 @@ impl PairHandler {
             "endpoint_id": self.ctx.endpoint.id().to_string(),
             "addrs": addrs.iter().map(SocketAddr::to_string).collect::<Vec<_>>(),
             "first": first.to_value(),
+        });
+        (
+            reply,
+            Some(Pending {
+                _gate: gate,
+                hello,
+                user_id,
+            }),
+        )
+    }
+
+    /// Records the phone and spends the code. `paired` is set inside the blocking task, right
+    /// after the commit, so cancelling the window cannot land between the two.
+    async fn commit(&self, pending: Pending) -> NetResult<()> {
+        let Pending { hello, user_id, .. } = &pending;
+        let (path, clock, state) = (
+            self.ctx.cfg.db_path.clone(),
+            self.ctx.cfg.clock.clone(),
+            self.state.clone(),
+        );
+        let peer = PairedPeer {
+            user_id: *user_id,
+            device_id: hello.device_id.clone(),
+            device_name: hello.device_name.clone(),
+            endpoint_id: hello.endpoint_id.to_string(),
+        };
+        let (ctx, addrs) = (self.ctx.clone(), hello.addrs.clone());
+        blocking(move || {
+            let mut conn = open_db(&path)?;
+            record_peer(
+                &mut conn,
+                peer.user_id,
+                &peer.device_id,
+                &peer.endpoint_id,
+                &peer.device_name,
+                clock(),
+            )?;
+            ctx.add_hints(&peer.endpoint_id, &addrs);
+            state.lock().expect("pair state").paired = Some(peer);
+            Ok(())
         })
+        .await
     }
 }
 
 /// Both sides start the cursors at 0 on a new pairing. Records are idempotent, so resending is
-/// harmless, and it covers a peer that came back with an empty database.
+/// harmless, and it covers a peer that came back with an empty database. One transaction, so a
+/// failure in the middle cannot leave a half-written peer that is admitted.
 fn record_peer(
-    conn: &rusqlite::Connection,
+    conn: &mut rusqlite::Connection,
     user_id: i64,
     device_id: &str,
     endpoint_id: &str,
     name: &str,
     now_ms: i64,
 ) -> NetResult<()> {
+    let tx = conn.transaction().map_err(SyncError::from)?;
     upsert_peer(
-        conn,
+        &tx,
         user_id,
         &Peer {
             device_id: device_id.to_owned(),
@@ -388,12 +468,14 @@ fn record_peer(
             pushed_seq: 0,
         },
     )?;
-    conn.execute(
+    tx.execute(
         "UPDATE sync_peer SET pulled_seq = 0, pushed_seq = 0 WHERE user_id = ?1 AND peer_device_id = ?2",
         params![user_id, device_id],
     )
     .map_err(SyncError::from)?;
-    touch_peer(conn, user_id, device_id, now_ms)
+    touch_peer(&tx, user_id, device_id, now_ms)?;
+    tx.commit().map_err(SyncError::from)?;
+    Ok(())
 }
 
 /// The phone's side: derive the pairing endpoint from the code, prove knowledge of it, and keep
@@ -454,9 +536,15 @@ pub(crate) async fn pair_dial(
         decode(&bytes)
     }
     .await;
-    connection.close(CLOSE_DONE.into(), b"done");
-    let reply = reply?;
+    let reply = match reply {
+        Ok(reply) => reply,
+        Err(error) => {
+            connection.close(CLOSE_DONE.into(), b"done");
+            return Err(error);
+        }
+    };
     if reply.get("ok").and_then(Value::as_bool) != Some(true) {
+        connection.close(CLOSE_DONE.into(), b"done");
         let message = reply
             .get("message")
             .and_then(Value::as_str)
@@ -483,6 +571,12 @@ pub(crate) async fn pair_dial(
         text("device_name")?,
         text("endpoint_id")?,
     );
+    if host.2 != host.4 {
+        connection.close(CLOSE_DONE.into(), b"done");
+        return Err(NetError::Protocol(
+            "pairing reply has a device id that is not its endpoint id".into(),
+        ));
+    }
     let first = Batch::from_value(reply.get("first").unwrap_or(&Value::Null))?;
     let host_addrs: Vec<SocketAddr> = reply
         .get("addrs")
@@ -496,7 +590,7 @@ pub(crate) async fn pair_dial(
         .unwrap_or_default();
     let (path, clock) = (ctx.cfg.db_path.clone(), ctx.cfg.clock.clone());
     let finished = host.clone();
-    let user_id = blocking(move || {
+    let stored = blocking(move || {
         let mut conn = open_db(&path)?;
         let other: Option<String> = conn
             .query_row(
@@ -526,11 +620,38 @@ pub(crate) async fn pair_dial(
         let user_id = report
             .user_id
             .ok_or_else(|| NetError::Protocol("pairing reply has no account".into()))?;
-        record_peer(&conn, user_id, &finished.2, &finished.4, &finished.3, now)?;
+        record_peer(
+            &mut conn,
+            user_id,
+            &finished.2,
+            &finished.4,
+            &finished.3,
+            now,
+        )?;
         Ok(user_id)
     })
+    .await;
+    let user_id = match stored {
+        Ok(user_id) => user_id,
+        Err(error) => {
+            connection.close(CLOSE_DONE.into(), b"done");
+            return Err(error);
+        }
+    };
+    // The desktop records this phone only once it hears this; if it cannot, undo our side too.
+    let confirmed = confirm(&connection).await;
+    connection.close(CLOSE_DONE.into(), b"done");
+    if let Err(error) = confirmed {
+        let (path, device) = (ctx.cfg.db_path.clone(), host.2.clone());
+        let _ = blocking(move || Ok(revoke_peer(&open_db(&path)?, user_id, &device)?)).await;
+        return Err(error);
+    }
+    let (hints_ctx, hints_id) = (ctx.clone(), host.4.clone());
+    blocking(move || {
+        hints_ctx.add_hints(&hints_id, &host_addrs);
+        Ok(())
+    })
     .await?;
-    ctx.add_hints(&host.4, &host_addrs);
     Ok(PairedHost {
         user_id,
         account_uuid: host.0,
@@ -539,4 +660,32 @@ pub(crate) async fn pair_dial(
         host_name: host.3,
         host_endpoint_id: host.4,
     })
+}
+
+async fn confirm(connection: &Connection) -> NetResult<()> {
+    let answer = timeout(Duration::from_secs(10), async {
+        let (mut send, mut recv) = connection
+            .open_bi()
+            .await
+            .map_err(|e| NetError::Unreachable(e.to_string()))?;
+        send.write_all(&encode(&json!({"op": "confirm"})))
+            .await
+            .map_err(|e| NetError::Unreachable(e.to_string()))?;
+        send.finish()
+            .map_err(|e| NetError::Unreachable(e.to_string()))?;
+        let bytes = recv
+            .read_to_end(MAX_MESSAGE_BYTES)
+            .await
+            .map_err(|e| NetError::Unreachable(e.to_string()))?;
+        decode(&bytes)
+    })
+    .await
+    .map_err(|_| NetError::Unreachable("the desktop did not confirm the pairing".into()))??;
+    if answer.get("ok").and_then(Value::as_bool) == Some(true) {
+        Ok(())
+    } else {
+        Err(NetError::Protocol(
+            "the desktop could not finish pairing".into(),
+        ))
+    }
 }

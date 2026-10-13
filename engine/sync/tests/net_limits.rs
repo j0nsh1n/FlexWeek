@@ -34,6 +34,10 @@ struct Hole {
 }
 
 fn black_hole() -> Hole {
+    host_with(BlackHole)
+}
+
+fn host_with(handler: impl ProtocolHandler) -> Hole {
     block_on(async {
         let endpoint = Endpoint::builder(presets::Minimal)
             .relay_mode(RelayMode::Disabled)
@@ -46,9 +50,7 @@ fn black_hole() -> Hole {
             .unwrap();
         let addr = endpoint.bound_sockets()[0];
         let id = endpoint.id().to_string();
-        let router = Router::builder(endpoint)
-            .accept(SYNC_ALPN, BlackHole)
-            .spawn();
+        let router = Router::builder(endpoint).accept(SYNC_ALPN, handler).spawn();
         Hole {
             _router: router,
             id,
@@ -196,10 +198,13 @@ fn a_removed_phone_is_refused() {
     let desktop_id = pair(&desktop, &phone);
     phone.service.sync_once(&desktop_id, 20_000).unwrap();
     desktop.service.unlink(1, &phone.id(), false).unwrap();
+    put_assignment(&desktop.db(), "a1", "After removal", "");
     let error = phone.service.sync_once(&desktop_id, 20_000).unwrap_err();
     assert_eq!(error.kind(), "not_paired", "{error}");
-    put_assignment(&desktop.db(), "a1", "After removal", "");
-    assert!(get_assignment(&phone.db(), "a1").is_none());
+    assert!(
+        get_assignment(&phone.db(), "a1").is_none(),
+        "a removed phone must receive nothing new"
+    );
 }
 
 #[test]
@@ -266,20 +271,75 @@ fn starting_on_the_default_network_does_not_wait_for_it() {
 
 #[test]
 fn no_source_waits_for_the_relay_to_come_online() {
-    for (name, source) in [
-        ("mod.rs", include_str!("../src/net/mod.rs")),
-        ("pair.rs", include_str!("../src/net/pair.rs")),
-        ("protocol.rs", include_str!("../src/net/protocol.rs")),
-        ("service.rs", include_str!("../src/net/service.rs")),
-        ("session.rs", include_str!("../src/net/session.rs")),
-    ] {
+    let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/net");
+    let mut checked = 0;
+    for entry in std::fs::read_dir(folder).unwrap() {
+        let path = entry.unwrap().path();
+        let source = std::fs::read_to_string(&path).unwrap();
         for (number, line) in source.lines().enumerate() {
             let code = line.split("//").next().unwrap_or("");
             assert!(
-                !code.contains(".online()"),
-                "{name}:{} awaits online()",
+                !code.replace(' ', "").contains(".online()"),
+                "{}:{} awaits online()",
+                path.display(),
                 number + 1
             );
         }
+        checked += 1;
     }
+    assert!(checked >= 8, "the scan should cover every file in net/");
+}
+
+/// Answers every sync with an acknowledgement that does not match what was sent.
+#[derive(Debug, Clone)]
+struct LyingPeer {
+    account_uuid: String,
+}
+
+impl ProtocolHandler for LyingPeer {
+    async fn accept(&self, connection: Connection) -> Result<(), AcceptError> {
+        let (mut send, mut recv) = connection.accept_bi().await?;
+        let _ = recv.read_to_end(1 << 22).await;
+        let reply = serde_json::json!({
+            "ok": true,
+            "ack_through": 999_999,
+            "batch": {"account_uuid": self.account_uuid, "from_device": "x", "records": [], "next_since": 0, "more": false},
+        });
+        send.write_all(reply.to_string().as_bytes())
+            .await
+            .map_err(AcceptError::from_err)?;
+        send.finish()?;
+        let _ = tokio::time::timeout(Duration::from_secs(5), connection.closed()).await;
+        Ok(())
+    }
+}
+
+#[test]
+fn a_peer_that_acknowledges_the_wrong_position_is_refused_and_no_cursor_moves() {
+    let desktop = device("desktop", true);
+    let phone = device("phone", false);
+    let desktop_id = pair(&desktop, &phone);
+    let uuid: String = phone
+        .db()
+        .query_row("SELECT account_uuid FROM sync_account", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    let hole = host_with(LyingPeer { account_uuid: uuid });
+    let conn = phone.db();
+    let peer: Peer = list_peers(&conn, 1).unwrap().remove(0);
+    upsert_peer(
+        &conn,
+        1,
+        &Peer {
+            endpoint_id: hole.id.clone(),
+            ..peer
+        },
+    )
+    .unwrap();
+    phone.service.set_peer_addrs(&hole.id, &[hole.addr]);
+    let error = phone.service.sync_once(&desktop_id, 10_000).unwrap_err();
+    assert_eq!(error.kind(), "protocol", "{error}");
+    let after = list_peers(&conn, 1).unwrap().remove(0);
+    assert_eq!((after.pushed_seq, after.pulled_seq), (0, 0));
 }
