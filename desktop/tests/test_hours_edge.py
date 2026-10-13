@@ -30,7 +30,15 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.layouts.registry import LAYOUTS, MATCH, tokens_for
     from desktop.native.layouts.retro import RetroPainter, scheme
     from desktop.native.layouts.timeline import TimelinePainter
-    from desktop.native.look import EXPERIMENTAL_LOOKS, STANDARD_LOOKS, category_paint, resolved_palette
+    from desktop.native.look import (
+        EXPERIMENTAL_LOOKS,
+        STANDARD_LOOKS,
+        block_paint,
+        category_paint,
+        class_outline,
+        contrast,
+        resolved_palette,
+    )
     from desktop.native.weekmodel import Occurrence
 
 RECT = QRectF(20, 20, 140, 100)
@@ -90,9 +98,37 @@ def test_homework_flexweek_planned_has_no_dashed_red_edge(qapp: QApplication, lo
 
 @pytest.mark.parametrize("look", LOOKS.values(), ids=LOOKS.keys())
 def test_homework_the_student_placed_has_a_solid_edge(qapp: QApplication, look: dict | None) -> None:  # noqa: F811
-    mark = mark_colour()
+    fill, _mark = category_paint(CATEGORY, PALETTE)
+    outline = class_outline(PALETTE, fill)
     edge = top_edge(block(pinned=True), look)
-    assert share(edge, mark) > 0.97 and runs(edge, mark) == 0
+    assert share(edge, outline) > 0.97 and runs(edge, outline) == 0
+
+
+@pytest.mark.parametrize(("kind", "name"), STANDARD_LOOKS + EXPERIMENTAL_LOOKS)
+def test_homework_outline_is_not_error_red_in_every_look(
+    qapp: QApplication, kind: str, name: str  # noqa: F811
+) -> None:
+    """U5: an outlined homework block's edge is the class colour at 3:1 on the card, never error red."""
+    if kind == "pack":
+        palette = resolved_palette(name, name in {"dark-frost", "nocturne"}, None)
+        look = {"preset": "default", "knobs": {"blocks": "outline"}}
+    else:
+        look = {"preset": name, "knobs": {"blocks": "outline"}}
+        palette = resolved_palette("system", False, look)
+    fill, mark = category_paint(CATEGORY, palette)
+    outline = class_outline(palette, fill)
+    assert outline.lower() not in {palette["error"].lower(), "#831a1d"}
+    assert contrast(outline, palette["grid"]) >= 3.0
+    assert block_paint(look, palette, fill, "flexible", mark, category=CATEGORY)["outline"] == outline
+    image = QImage(200, 140, QImage.Format.Format_ARGB32)
+    image.fill(QColor(palette["grid"]))
+    painter = QPainter(image)
+    BlockPainter(palette, look).body(painter, RECT, block())
+    painter.end()
+    y = int(RECT.top()) + 1
+    edge = [image.pixelColor(x, y) for x in range(int(RECT.left()) + 16, int(RECT.right()) - 16)]
+    assert share(edge, outline) > 0.5, name
+    assert share(edge, palette["error"]) < 0.05, name
 
 
 def test_homework_being_carried_has_no_gaps_in_its_edge(qapp: QApplication) -> None:  # noqa: F811

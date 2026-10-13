@@ -21,6 +21,7 @@ from desktop.native.look import (
     AA_GRAPHIC,
     AA_TEXT,
     ACCENTS,
+    EXPERIMENTAL_LOOKS,
     FONT_FAMILIES,
     HEADING_NAMES,
     KNOB_LABELS,
@@ -29,10 +30,12 @@ from desktop.native.look import (
     LOOK_KNOBS,
     LOOK_PRESETS,
     PACKS,
+    STANDARD_LOOKS,
     auth_rules,
     block_paint,
     block_time_colour,
     category_paint,
+    class_outline,
     contrast,
     control_rules,
     effective_look,
@@ -602,6 +605,24 @@ def test_a_block_shows_its_category_colour_in_the_place_the_knob_names() -> None
     outlined_pale = block_paint(look_of("default", blocks="outline"), palette, pale, "locked", strong)
     assert outlined_pale["outline"] == strong
     assert block_paint(look_of("default", blocks="edge"), palette, pale, "locked", strong)["edge"] == strong
+
+
+@pytest.mark.parametrize(("kind", "name"), STANDARD_LOOKS + EXPERIMENTAL_LOOKS)
+def test_homework_outline_is_class_colour_not_error_red(kind: str, name: str) -> None:
+    """U5: homework's outline is the class colour at 3:1 on the card, never the error red."""
+    if kind == "pack":
+        palette = resolved_palette(name, name in {"dark-frost", "nocturne"}, None)
+        look = look_of("default", blocks="outline")
+    else:
+        look = look_of(name, blocks="outline")
+        palette = resolved_palette("system", False, look)
+    fill, mark = category_paint("assignments", palette)
+    paint = block_paint(look, palette, fill, "flexible", mark, category="assignments")
+    outline, card = paint["outline"], paint["fill"]
+    assert outline
+    assert outline.lower() not in {palette["error"].lower(), "#831a1d"}
+    assert contrast(outline, card) >= AA_GRAPHIC
+    assert class_outline(palette, fill) == outline
 
 
 def test_a_filled_block_is_readable_on_every_category_colour() -> None:

@@ -56,6 +56,7 @@ from desktop.native.look import (
     block_paint,
     block_time_colour,
     category_paint,
+    class_outline,
     look_measures,
     readable_ink,
     text_scale,
@@ -316,7 +317,14 @@ class BlockPainter:
     def fills(self, drawn: Drawn) -> tuple[QColor, QColor, QColor | None, QColor | None]:
         """Fill, ink, outline and edge for a block: the Blocks look knob and the category."""
         fill, mark = category_paint(drawn.category, self.colours)
-        paint = block_paint(self.look, self.colours, fill, "flexible" if drawn.work else "locked", mark)
+        paint = block_paint(
+            self.look,
+            self.colours,
+            fill,
+            "flexible" if drawn.work else "locked",
+            mark,
+            category=drawn.category,
+        )
         return (
             QColor(paint["fill"]),
             QColor(paint["ink"]),
@@ -423,8 +431,11 @@ class BlockPainter:
         homework = drawn.work and not drawn.done
         if outline is not None or homework and (drawn.pinned or drawn.held):
             if outline is None:
-                mark = category_paint(drawn.category, self.colours)[1]
-                outline = QColor(mark or self.colours["block_edge"])
+                fill_hex, mark = category_paint(drawn.category, self.colours)
+                if homework and fill_hex:
+                    outline = QColor(class_outline(self.colours, fill_hex))
+                else:
+                    outline = QColor(mark or self.colours["block_edge"])
             painter.setPen(QPen(outline, 2))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), RADIUS_BLOCK - 1, RADIUS_BLOCK - 1)

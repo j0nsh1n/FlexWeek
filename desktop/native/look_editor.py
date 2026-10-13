@@ -768,7 +768,7 @@ class CategoryRow(QWidget):
         measures = look_measures(look)
         radius = measures["radius"]
         self.colour.show_colour(self._fill, chrome["hairline_strong"], radius)
-        drawn = block_paint(look, palette, fill, CATEGORIES[self.key]["kind"], mark)
+        drawn = block_paint(look, palette, fill, CATEGORIES[self.key]["kind"], mark, category=self.key)
         if drawn["mode"] == "outline":
             paint = f"background: {drawn['fill']}; border: 2px solid {drawn['outline']};"
         elif drawn["mode"] == "edge":

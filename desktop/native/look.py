@@ -916,18 +916,28 @@ def _sunk(tone: str, panel: str) -> str:
     return mix_oklab(tone, panel, SINK)
 
 
+def class_outline(palette: dict, class_colour: str) -> str:
+    """A block outline in its class colour, moved only as far as 3:1 on the card takes. Homework's
+    dark red mark is for errors only, so an outline starts from the fill, not from #831a1d."""
+    card = palette.get("grid") or palette.get("panel") or palette["window"]
+    grounds = (card, palette["panel"]) if palette.get("panel") else (card,)
+    return fit_lightness(class_colour, grounds, AA_GRAPHIC)
+
+
 def block_paint(
     look: dict | None,
     palette: dict,
     category_color: str | None,
     kind: str = "locked",
     mark: str | None = None,
+    category: str | None = None,
 ) -> dict:
     """How one calendar block is drawn: its fill, its ink, and where the category colour goes.
 
     `category_color` is the fill and `mark` the strong colour of the same category, both as
     `category_paint` gives them for the look. A pale outline vanishes on a light pack, so an outline
-    or an edge is drawn with the mark. Edge is Filled with the mark down the block's left side.
+    or an edge is drawn with the mark. Homework's outline uses the class colour at 3:1 on the card,
+    never the error red. Edge is Filled with the mark down the block's left side.
     """
     flexible = kind == "flexible"
     neutral = palette["block_flex" if flexible else "block_locked"]
@@ -936,7 +946,16 @@ def block_paint(
     selected = sanitize_look(look)
     mode = effective_look(selected)["blocks"]
     if mode == "outline":
-        return {"mode": mode, "fill": palette["grid"], "ink": palette["text"], "outline": mark, "edge": None}
+        outline = mark
+        if category in ("assignments", "homework") and category_color:
+            outline = class_outline(palette, category_color)
+        return {
+            "mode": mode,
+            "fill": palette["grid"],
+            "ink": palette["text"],
+            "outline": outline,
+            "edge": None,
+        }
     edge = mark if mode == "edge" else None
     if category_color:
         text = palette["text"]
