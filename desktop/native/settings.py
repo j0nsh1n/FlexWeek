@@ -8,7 +8,6 @@ from copy import deepcopy
 from pathlib import Path
 from uuid import uuid4
 
-from flexweek_engine import SyncService  # type: ignore[import-untyped]
 from PySide6.QtCore import QEvent, QMargins, QObject, QSize, Qt, QTime, QTimer, QUrl, Signal
 from PySide6.QtGui import (
     QColor,
@@ -57,7 +56,7 @@ from desktop.native import autostart
 from desktop.native.calendar import DAY_FULL
 from desktop.native.controller import ROUTINE_STATUS
 from desktop.native.custom_look import UNNAMED, sanitize_saved, wear
-from desktop.native.devices import DevicesPanel
+from desktop.native.devices import DevicesPanel, SyncHost
 from desktop.native.fields import ClockField, DayPicker, Stepper, held_on_problem
 from desktop.native.focus import FOCUS_PHASE_LABEL, format_countdown, more_time_choices, remaining_ms
 from desktop.native.fonts import time_font
@@ -684,7 +683,7 @@ class SettingsPage(QWidget):
         reminder_limits: dict,
         week_layout: dict | None = None,
         saved_looks: list[dict] | None = None,
-        sync: SyncService | None = None,
+        sync: SyncHost | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("settingsPage")

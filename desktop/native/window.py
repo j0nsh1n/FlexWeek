@@ -11,7 +11,7 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from flexweek_engine import SyncError, SyncService  # type: ignore[import-untyped]
+from flexweek_engine import SyncService  # type: ignore[import-untyped]
 from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QSize, QStandardPaths, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import (
     QAction,
@@ -87,7 +87,7 @@ from desktop.native.client import (
 from desktop.native.command_bar import Command, CommandBar
 from desktop.native.controller import ROUTINE_STATUS, NativeSession, _late_summary
 from desktop.native.custom_look import sanitize_saved
-from desktop.native.devices import SyncDot, live_phones, sync_state
+from desktop.native.devices import SyncDot, SyncHost, live_phones, run_off_ui, sync_state
 from desktop.native.elevation import lift
 from desktop.native.feel import Context, apply_feel, context_for, current, extra_stylesheet, set_current
 from desktop.native.fields import ProblemLine, announce
@@ -522,7 +522,7 @@ class NativeWindow(QMainWindow):
         icon: QIcon | None = None,
         parent: QWidget | None = None,
         kept: KeptSession | None = None,
-        sync: SyncService | None = None,
+        sync: SyncHost | None = None,
     ) -> None:
         super().__init__(parent)
         application = QApplication.instance()
@@ -535,10 +535,19 @@ class NativeWindow(QMainWindow):
         self.session = NativeSession(origin, self, kept)
         self._instance_server: QLocalServer | None = None
         self.setWindowTitle("FlexWeek")
-        # This computer's sync service (None when it could not start), and the generation the week
-        # was last loaded at; a change in it means a linked phone's edits arrived.
-        self._sync = sync
-        self._sync_generation = sync.generation() if sync is not None else None
+        # This computer's sync host, and the running service once it has started (None until then). The
+        # generation is the one the week was last loaded at; a change in it means a linked phone's edits
+        # arrived. The phone list is read off this thread, so it lags the service by up to a second.
+        self._sync_host = sync
+        self._sync = sync.service if sync is not None else None
+        self._sync_generation = self._sync.generation() if self._sync is not None else None
+        self._phones: list[dict] = []
+        self._phones_user: int | None = None
+        self._phones_reading = False
+        if sync is not None:
+            # The window owns its host, so Qt, not the garbage collector, frees it with the window.
+            sync.setParent(self)
+            sync.started.connect(self._sync_started)
         if icon is not None:
             self.setWindowIcon(icon)
         self.resize(*WINDOW_SIZE)
@@ -4700,11 +4709,17 @@ class NativeWindow(QMainWindow):
             self.session.reminder_limits,
             self._layout,
             saved_looks=self._saved_looks,
-            sync=self._sync,
+            sync=self._sync_host,
         )
         page.account_id = account["id"]
         page.devices.refresh()
         return page
+
+    def _sync_started(self, service: SyncService) -> None:
+        self._sync = service
+        self._sync_generation = service.generation()
+        self._sync_timer.start()
+        self._show_sync_dot()
 
     def _sync_tick(self) -> None:
         """Once a second: the sync status dot, and the week reloaded when a linked phone's edits arrive."""
@@ -4712,14 +4727,36 @@ class NativeWindow(QMainWindow):
         if service is None:
             return
         account = self.session.account
-        try:
-            linked = account is not None and bool(live_phones(service, account["id"]))
-        except SyncError:
-            linked = False
+        if account is not None and not self._phones_reading:
+            # The phone list is a database read; it runs off this thread and lands in _phones_read.
+            self._phones_reading = True
+            user_id = account["id"]
+            run_off_ui(
+                self,
+                lambda: live_phones(service, user_id),
+                lambda rows, _problem: self._phones_read(user_id, rows),
+            )
         generation = service.generation()
         if generation != self._sync_generation and self._sync_arrived(service):
             self._sync_generation = generation
-        self.sync_dot.show_state(sync_state(service.status(), linked))
+        self._show_sync_dot()
+
+    def _phones_read(self, user_id: int, rows: list[dict] | None) -> None:
+        self._phones_reading = False
+        self._phones = rows or []
+        self._phones_user = user_id
+        self._show_sync_dot()
+
+    def _linked_phones(self) -> list[dict]:
+        account = self.session.account
+        if account is None or self._phones_user != account["id"]:
+            return []
+        return self._phones
+
+    def _show_sync_dot(self) -> None:
+        if self._sync is None:
+            return
+        self.sync_dot.show_state(sync_state(self._sync.status(), bool(self._linked_phones())))
 
     def _sync_arrived(self, service: SyncService) -> bool:
         """Loads the week again after a phone's edits land. With unsaved edits here, it marks the week
@@ -4734,7 +4771,7 @@ class NativeWindow(QMainWindow):
             session.conflict = True
             session.week_changed.emit()
             return True
-        names = [row["name"] for row in live_phones(service, session.account["id"])]
+        names = [row["name"] for row in self._linked_phones()]
         who = names[0] if len(names) == 1 else "a linked phone"
         session.load_week(session.week_start, discard=True, said=f"Updated from {who}.")
         return True

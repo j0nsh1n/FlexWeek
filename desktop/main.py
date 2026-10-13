@@ -40,7 +40,7 @@ try:
 
     import backend
     from desktop.native.calendar import sunday_due
-    from desktop.native.devices import start_service
+    from desktop.native.devices import SyncHost
     from desktop.native.fonts import load_fonts
     from desktop.native.kept import KeptSession
     from desktop.native.setup import DONE as SETUP_DONE
@@ -286,9 +286,9 @@ def main(argv: list[str] | None = None) -> int:
             QMessageBox.critical(None, "FlexWeek", f"Could not start FlexWeek: {error}")
             return 3
         app.aboutToQuit.connect(server.stop)
-        sync = start_service(database)
-        if sync is not None:
-            app.aboutToQuit.connect(sync.stop)
+        sync = SyncHost(database)
+        app.aboutToQuit.connect(sync.stop)
+        sync.start_if_paired()
     assert origin is not None
 
     # Keep me signed in is per database, like the running-instance check.

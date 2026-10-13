@@ -4,10 +4,11 @@ dot in the week's status strip, and the start-up of the sync service itself."""
 from __future__ import annotations
 
 import socket
+import sqlite3
 import sys
 import threading
 from collections.abc import Callable
-from contextlib import suppress
+from contextlib import closing, suppress
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,7 @@ from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QPainter, QPalette
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
+from desktop.native.feel import current
 from desktop.native.widgets import Dialog, sheet_button, sheet_footer
 
 SYNC_SCAN_MS = 1000
@@ -37,7 +39,6 @@ DOT_WORDS = {
     "synced": "Synced with your phone",
     "problem": "Could not reach your phone",
 }
-PROBLEM_COLOUR = "#b42318"
 
 
 def start_service(database: Path) -> SyncService | None:
@@ -52,6 +53,61 @@ def start_service(database: Path) -> SyncService | None:
     except (OSError, SyncError) as error:
         print(f"FlexWeek sync did not start: {error}", file=sys.stderr)
         return None
+
+
+def linked_phone_at_launch(database: Path) -> bool:
+    """True when the database already holds a phone that was not removed. Read-only, so a database or
+    table that does not exist yet counts as no phone and creates nothing."""
+    try:
+        with closing(sqlite3.connect(f"{database.resolve().as_uri()}?mode=ro", uri=True)) as conn:
+            row = conn.execute("SELECT 1 FROM sync_peer WHERE revoked = 0 LIMIT 1").fetchone()
+    except sqlite3.Error:
+        return False
+    return row is not None
+
+
+class SyncHost(QObject):
+    """Holds this computer's sync service. It starts only when a phone is already linked at launch or
+    when the student presses Pair a phone, and never on the window's thread. Once started it runs until
+    the app quits. With no service, FlexWeek opens no network endpoint."""
+
+    started = Signal(object)
+
+    def __init__(self, database: Path, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self.database = database
+        self.service: SyncService | None = None
+        self._waiting: list[Callable[[SyncService | None], None]] = []
+
+    @property
+    def starting(self) -> bool:
+        return bool(self._waiting)
+
+    def start_if_paired(self) -> None:
+        if linked_phone_at_launch(self.database):
+            self.ensure(lambda _service: None)
+
+    def ensure(self, ready: Callable[[SyncService | None], None]) -> None:
+        """Calls `ready` with the running service, now if it runs, otherwise once it has started (None
+        when it could not start). Only the first call starts it."""
+        if self.service is not None:
+            ready(self.service)
+            return
+        self._waiting.append(ready)
+        if len(self._waiting) == 1:
+            run_off_ui(self, lambda: start_service(self.database), self._started)
+
+    def _started(self, service: SyncService | None, _problem: Exception | None) -> None:
+        self.service = service
+        waiting, self._waiting = self._waiting, []
+        if service is not None:
+            self.started.emit(service)
+        for ready in waiting:
+            ready(service)
+
+    def stop(self) -> None:
+        if self.service is not None:
+            self.service.stop()
 
 
 def live_phones(sync: SyncService, user_id: int | None) -> list[dict]:
@@ -155,17 +211,23 @@ class SyncDot(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
-        if self._state == "problem":
-            colour = QColor(PROBLEM_COLOUR)
-        elif self._state == "idle":
-            colour = self.palette().color(QPalette.ColorRole.Mid)
-        elif self._state == "syncing":
-            colour = self.palette().color(QPalette.ColorRole.Highlight)
-        else:
-            colour = self.palette().color(QPalette.ColorRole.Text)
-        painter.setBrush(colour)
+        painter.setBrush(dot_colour(self._state, self.palette()))
         painter.drawEllipse(self.rect())
         painter.end()
+
+
+def dot_colour(state: str, palette: QPalette) -> QColor:
+    """The dot's fill. A problem uses the look's error colour, so it reads in every look."""
+    if state == "problem":
+        context = current()
+        if context is not None:
+            return QColor(context.palette["error"])
+        return palette.color(QPalette.ColorRole.Text)
+    if state == "idle":
+        return palette.color(QPalette.ColorRole.Mid)
+    if state == "syncing":
+        return palette.color(QPalette.ColorRole.Highlight)
+    return palette.color(QPalette.ColorRole.Text)
 
 
 class PairDialog(Dialog):
@@ -292,11 +354,11 @@ class DevicesPanel(QWidget):
     Sync now, and the relay sentence. `owner_id` gives the signed-in account's id when asked."""
 
     def __init__(
-        self, sync: SyncService | None, owner_id: Callable[[], int | None], parent: QWidget | None = None
+        self, host: SyncHost | None, owner_id: Callable[[], int | None], parent: QWidget | None = None
     ) -> None:
         super().__init__(parent)
         self.setObjectName("devicesPanel")
-        self.sync = sync
+        self.host = host
         self.owner_id = owner_id
         # The sheet now open (pairing or removing), so a test or a focus change can reach it.
         self.dialog: QWidget | None = None
@@ -330,6 +392,8 @@ class DevicesPanel(QWidget):
         relay.setObjectName("devicesRelay")
         relay.setWordWrap(True)
         column.addWidget(relay)
+        if host is not None:
+            host.started.connect(self._service_started)
         self.refresh()
 
     def refresh(self) -> None:
@@ -337,13 +401,17 @@ class DevicesPanel(QWidget):
             item = self.phones.takeAt(0)
             if item.widget() is not None:
                 _discard(item.widget())
-        if self.sync is None:
+        if self.host is None:
             self._disable(NO_SYNC_WORDS)
             return
-        self.pair_button.setEnabled(self.owner_id() is not None)
-        self.sync_button.setEnabled(True)
+        self._set_buttons()
+        service = self.host.service
+        if service is None:
+            # No phone was linked at launch, so there is nothing to list until one is paired.
+            self.phones.addWidget(QLabel(NO_PHONE_WORDS))
+            return
         try:
-            phones = live_phones(self.sync, self.owner_id())
+            phones = live_phones(service, self.owner_id())
         except SyncError as error:
             self.phones.addWidget(QLabel(f"Could not read your phones: {error}"))
             return
@@ -370,6 +438,14 @@ class DevicesPanel(QWidget):
             holder.setLayout(row)
             self.phones.addWidget(holder)
 
+    def _set_buttons(self) -> None:
+        # Pair is off while the service is starting, so a second press cannot start a second code.
+        self.pair_button.setEnabled(self.owner_id() is not None and not self.host.starting)
+        self.sync_button.setEnabled(self.host.service is not None)
+
+    def _service_started(self, _service: object) -> None:
+        self.refresh()
+
     def _disable(self, words: str) -> None:
         self.pair_button.setEnabled(False)
         self.sync_button.setEnabled(False)
@@ -377,15 +453,24 @@ class DevicesPanel(QWidget):
 
     def _pair(self) -> None:
         user_id = self.owner_id()
-        if self.sync is None or user_id is None:
+        if self.host is None or user_id is None:
             return
-        dialog = PairDialog(self, self.sync, user_id)
+        self.pair_button.setEnabled(False)
+        self.host.ensure(lambda service: self._pairing(service, user_id))
+
+    def _pairing(self, service: SyncService | None, user_id: int) -> None:
+        self._set_buttons()
+        if service is None:
+            self.problem.setText(NO_SYNC_WORDS)
+            return
+        dialog = PairDialog(self, service, user_id)
         dialog.paired.connect(self.refresh)
         self._open_sheet(dialog)
 
     def _remove(self, phone: dict) -> None:
         user_id = self.owner_id()
-        if self.sync is None or user_id is None:
+        service = self.host.service if self.host is not None else None
+        if service is None or user_id is None:
             return
         dialog = RemoveDialog(self, phone["name"])
 
@@ -397,7 +482,6 @@ class DevicesPanel(QWidget):
         def confirmed(result: int) -> None:
             if result != 1:
                 return
-            service = self.sync
             run_off_ui(self, lambda: service.unlink(user_id, phone["device_id"], True), gone)
 
         dialog.finished.connect(confirmed)
@@ -415,9 +499,9 @@ class DevicesPanel(QWidget):
         dialog.open()
 
     def _sync_now(self) -> None:
-        if self.sync is None:
+        service = self.host.service if self.host is not None else None
+        if service is None:
             return
-        service = self.sync
         self.sync_button.setEnabled(False)
         run_off_ui(self, lambda: service.sync_all(SYNC_DEADLINE_MS), self._synced)
 
