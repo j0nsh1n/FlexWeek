@@ -18,7 +18,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QSpinBox, QWidg
 from desktop.native import settings as settings_module
 from desktop.native.look import ACCENT_COLORS, look_menu_token, resolved_palette
 from desktop.native.settings import SETTINGS_COLUMN, SettingsPage
-from desktop.native.widgets import Segmented, Swatches
+from desktop.native.widgets import Segmented, Swatches, Switch
 from desktop.native.window import NativeWindow
 from desktop.tests.window_support import qapp, server, signed_out, window  # noqa: F401
 
@@ -104,6 +104,33 @@ def test_the_accent_is_swatches_in_the_looks_own_colours(qapp: QApplication, win
     ring = sea.SIZE + 8
     edge = QPoint(sea.width() // 2 - sea.SIZE // 2 + 3, ring // 2)
     assert picture.pixelColor(edge).name() == ACCENT_COLORS["sea"][axis][0]
+    page.close_page()
+
+
+def test_tab_to_the_last_switch_on_look_scrolls_it_above_the_footer(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    """Q9: the footer covers the bottom of the page, and a switch focused by Tab under it could not be
+    seen. Focus scrolls the section so the switch ends above the footer."""
+    page = open_settings(qapp, window)
+    area = page.stack.widget(0)
+    switches = area.widget().findChildren(Switch)
+    last = max(switches, key=lambda switch: switch.mapTo(area.widget(), QPoint(0, 0)).y())
+    bar = area.verticalScrollBar()
+    bar.setValue(0)
+    window.activateWindow()
+    qapp.setActiveWindow(window)
+    for _ in range(5):
+        qapp.processEvents()
+    last.setFocus()
+    for _ in range(5):
+        qapp.processEvents()
+    assert qapp.focusWidget() is last, "the switch did not take the focus, so this proves nothing"
+    assert bar.maximum() > 0, "the section does not run under the footer, so this proves nothing"
+    top = last.mapTo(page, QPoint(0, 0)).y()
+    footer_top = page.footer.mapTo(page, QPoint(0, 0)).y()
+    assert top + last.height() <= footer_top, (top + last.height(), footer_top)
     page.close_page()
 
 

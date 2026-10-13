@@ -24,6 +24,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QBoxLayout,
     QButtonGroup,
     QComboBox,
@@ -1109,6 +1110,7 @@ class SettingsPage(QWidget):
         stage_grid.addWidget(self.stack, 0, 0)
         stage_grid.addWidget(footer, 0, 0, Qt.AlignmentFlag.AlignBottom)
         self.footer_fade = FooterFade(stage, self.stack, footer)
+        QApplication.instance().focusChanged.connect(self._follow_focus)
         footer.raise_()
         self._clear_footer()
         # Settings, and over them the look editor while it is open.
@@ -1295,6 +1297,15 @@ class SettingsPage(QWidget):
         if watched is self.footer and event.type() == QEvent.Type.Resize:
             self._clear_footer()
         return super().eventFilter(watched, event)
+
+    def _follow_focus(self, _was: QWidget | None, now: QWidget | None) -> None:
+        """Scrolls the section so the control that has the focus sits above the footer, not under it. The
+        footer covers the bottom of the page, so Tab could otherwise reach a switch the student cannot see."""
+        if now is None or not self.isVisible() or not self.stack.isAncestorOf(now):
+            return
+        area = self.stack.currentWidget()
+        if isinstance(area, QScrollArea):
+            area.ensureWidgetVisible(now, 0, self.footer.height())
 
     def _clear_footer(self) -> None:
         """Every section padded below its last card by the footer's height, so the end of a section
