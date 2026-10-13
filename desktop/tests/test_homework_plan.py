@@ -22,12 +22,13 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QDate, QPoint, QStandardPaths, Qt, QTime
+    from PySide6.QtCore import QDate, QPoint, QStandardPaths, Qt, QTime, QTimer
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import (
         QApplication,
         QCalendarWidget,
         QDialog,
+        QMessageBox,
         QPushButton,
         QTableView,
         QWidget,
@@ -301,6 +302,18 @@ def test_plan_sends_earliest_from_not_before_not_a_stored_session_field() -> Non
     assert blocks[0].get("earliest") is None
 
 
+def _plan_them_if_asked() -> None:
+    """Solve asks 'Before planning' when homework was left over; answer it with Plan into this week."""
+    box = QApplication.activeModalWidget()
+    if isinstance(box, QMessageBox) and box.windowTitle() == "Before planning":
+        next(button for button in box.buttons() if button.text() == "Plan into this week").click()
+
+
+def _press_solve(window: NativeWindow) -> None:
+    QTimer.singleShot(0, _plan_them_if_asked)
+    window.findChild(QPushButton, "solveButton").click()
+
+
 def test_plan_on_a_thursday_leaves_monday_to_wednesday_and_the_hours_before_now_alone(
     qapp: QApplication, window: NativeWindow
 ) -> None:
@@ -316,7 +329,7 @@ def test_plan_on_a_thursday_leaves_monday_to_wednesday_and_the_hours_before_now_
     session.save()
     settled(qapp, window)
     before = {block["id"]: (block["days"], block.get("start")) for block in session.blocks}
-    window.findChild(QPushButton, "solveButton").click()
+    session.solve()
     settled(qapp, window)
 
     after = {block["id"]: (block["days"], block.get("start")) for block in session.blocks}
@@ -377,7 +390,7 @@ def test_plan_on_a_week_that_is_over_places_nothing_and_says_so(
                           "revision": 0})
     session.save()
     settled(qapp, window)
-    window.findChild(QPushButton, "solveButton").click()
+    _press_solve(window)
     settled(qapp, window)
     assert not session_of(window, "late").get("start")
     assert window.toast.text() == PAST_WEEK
@@ -520,7 +533,7 @@ def test_plan_says_what_it_did_with_an_undo_that_takes_it_all_back(
         show(toast, text, button, callback)
 
     monkeypatch.setattr(Toast, "show_message", recorded)
-    window.findChild(QPushButton, "solveButton").click()
+    _press_solve(window)
     settled(qapp, window)
     monkeypatch.undo()
     assert shown == [("Placed 3 homework blocks.", "Undo")], "said once, with its Undo, not rewrapped"
@@ -543,7 +556,7 @@ def test_plan_says_what_it_did_with_an_undo_that_takes_it_all_back(
 
 def test_replan_all_is_one_undo_step(qapp: QApplication, window: NativeWindow) -> None:
     session = window.session
-    window.findChild(QPushButton, "solveButton").click()
+    _press_solve(window)
     settled(qapp, window)
     session.add_homework({"id": "poster", "title": "Science poster", "due": sunday_due(session.week_start),
                           "estimate_min": 45, "revision": 0})
@@ -594,7 +607,7 @@ def test_plan_undo_notice_disappears_after_a_later_save(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     session = window.session
-    window.findChild(QPushButton, "solveButton").click()
+    _press_solve(window)
     settled(qapp, window)
     assert window.toast.button.isVisible()
 
@@ -622,7 +635,7 @@ def test_a_plan_that_places_nothing_does_not_offer_a_false_undo(
     settled(qapp, window)
     before = stored_blocks(window)
     undo_steps = len(session._undo)
-    window.findChild(QPushButton, "solveButton").click()
+    session.solve()
     settled(qapp, window)
     assert stored_blocks(window) == before
     assert len(session._undo) == undo_steps, "no plan change means no Undo step"
@@ -637,7 +650,7 @@ def test_plan_waits_for_a_failed_save_before_offering_undo(
     session.pending_save = {"weeks": [], "assignments": [], "operation_id": "failed-save"}
     # A save that failed was tried just now, so the autosave tick does not retry it mid-test.
     window._last_try_ms = session.now_ms()
-    window.findChild(QPushButton, "solveButton").click()
+    _press_solve(window)
     qapp.processEvents()
     assert stored_blocks(window) == before
     assert session.message == "Saving your last change… Plan will work in a moment."
@@ -794,7 +807,7 @@ def test_the_rail_and_the_plan_panel_count_the_same_homework_without_a_time(
     )
     session.save()
     settled(qapp, window)
-    window.findChild(QPushButton, "solveButton").click()
+    _press_solve(window)
     settled(qapp, window)
     assert window.plan_review.heading.text() == plan_sentence(1, 1)
     assert window.rail.waiting_count.text() == "1"
