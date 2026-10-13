@@ -44,7 +44,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.tests.logic_support import fail_once, past_setup
 
 PASSWORD = "a-long-test-password"
-TOO_LATE = "That time has already passed."
+TOO_LATE = "That due time has passed. Choose a later one."
 PAST_WEEK = "This week is over, so nothing was planned. Plan this week or a later one."
 
 

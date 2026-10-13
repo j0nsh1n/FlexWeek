@@ -256,7 +256,7 @@ def test_a_settings_label_sits_beside_its_field_on_its_line_of_words(qapp: QAppl
         (lambda parent: HomeworkDialog(parent, {"id": "e", "title": "Essay", "due": WEEK, "estimate_min": 60,
                                                 "revision": 1}), "Edit homework"),
         (lambda parent: BlockDialog(parent, day=3, start="17:00"), "Add fixed time"),
-        (lambda parent: BlockDialog(parent, soccer(), occurrence_day=3), "Edit event"),
+        (lambda parent: BlockDialog(parent, soccer(), occurrence_day=3), "Edit fixed time"),
     ],
 )
 def test_a_sheet_says_what_it_is_and_closes_from_its_corner(

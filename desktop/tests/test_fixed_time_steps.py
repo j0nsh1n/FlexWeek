@@ -107,7 +107,7 @@ def test_edit_event_stays_one_page(qapp: QApplication, host: QWidget) -> None:  
     dialog = BlockDialog(host, soccer)
     dialog.show()
     QApplication.processEvents()
-    assert dialog.windowTitle() == "Edit event"
+    assert dialog.windowTitle() == "Edit fixed time"
     assert dialog.findChild(QWidget, "blockSteps") is None
     assert dialog.title.isVisibleTo(dialog)
     assert dialog.day_picker.isVisibleTo(dialog)

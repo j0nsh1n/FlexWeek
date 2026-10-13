@@ -176,7 +176,7 @@ def test_add_fixed_time_is_titled_that_and_guesses_category_from_the_start(
     assert not added.more_details.isVisibleTo(added), "Add fixed time has no More details on the three steps"
     free(added)
     edited = shown(qapp, BlockDialog(parent, soccer(), occurrence_day=3))
-    assert edited.windowTitle() == "Edit event"
+    assert edited.windowTitle() == "Edit fixed time"
     edited.more_details.setChecked(True)
     qapp.processEvents()
     assert edited.spotify.isVisibleTo(edited)
