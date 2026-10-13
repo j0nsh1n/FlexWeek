@@ -171,3 +171,41 @@ def _rgb(colour: str) -> tuple[int, int, int]:
 def test_the_start_note_says_unsaved_changes_will_be_lost() -> None:
     """T-W23: "What you have not saved is left behind" did not say lost, and "Pick" is a retired word."""
     assert START_NOTE == "Choose a look to start from. Changes you haven't saved will be lost."
+
+
+def test_discard_is_not_next_to_save_on_the_leave_sheet(qapp) -> None:
+    """U3: Discard sits on the left; the right side is Keep without saving, Cancel, Save."""
+    from PySide6.QtWidgets import QWidget
+
+    from desktop.native.look_editor import leave_sheet
+
+    parent = QWidget()
+    sheet = leave_sheet(parent, "Evening", True)
+    visual = ([sheet._left] if sheet._left is not None else []) + list(sheet._answers)
+    texts = [button.text() for button in visual]
+    assert texts == ["Discard changes", "Keep without saving", "Cancel", "Save"]
+    assert abs(texts.index("Discard changes") - texts.index("Save")) > 1
+    assert sheet.buttons["save"].isDefault()
+    assert sheet.buttons["discard"].property("outlined") and sheet.buttons["discard"].property("danger")
+    assert sheet.buttons["keep"].property("quiet") and sheet.buttons["stay"].property("quiet")
+    sheet.close()
+    parent.deleteLater()
+
+
+def test_escape_on_the_leave_sheet_stays_in_the_look_editor(qapp, window) -> None:
+    """U3: Esc on Leave the look editor is Cancel, so the editor stays open."""
+    from PySide6.QtCore import Qt, QTimer
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QApplication
+
+    from desktop.tests.test_look_editor import open_editor, pump, type_colour
+
+    page, editor = open_editor(qapp, window)
+    type_colour(qapp, editor, "page", "#1e2430")
+    QTimer.singleShot(200, lambda: QTest.keyClick(QApplication.activeModalWidget(), Qt.Key.Key_Escape))
+    assert editor.ask_leave() is None
+    assert page.editor is editor
+    QTimer.singleShot(200, lambda: QApplication.activeModalWidget().buttons["discard"].click())
+    editor.back.click()
+    pump(qapp)
+    assert page.editor is None

@@ -426,17 +426,18 @@ def _icon_button(icon: str | None, name: str, tip: str) -> QPushButton:
 
 
 def leave_sheet(parent: QWidget, name: str, saved: bool) -> ConfirmSheet:
-    """The one question on the way out of the editor with changes not saved: Save is the filled answer,
-    Discard is outlined in red, Cancel and Keep are quiet."""
+    """The one question on the way out of the editor with changes not saved: Discard sits on the left,
+    away from Save; the right side is Keep without saving, Cancel, then Save. Save is the filled
+    answer, Esc is Cancel and stays in the editor."""
     return ConfirmSheet(
         parent,
         LEAVE_TITLE,
         (LEAVE_SAVED if saved else LEAVE_NEW).format(name=name),
-        (("stay", CANCEL, "quiet"), ("discard", DISCARD, "outlined danger"), ("save", SAVE, "")),
+        (("keep", KEEP, "quiet"), ("stay", CANCEL, "quiet"), ("save", SAVE, "")),
         default="save",
         note=LEAVE_NOTE,
         width=LEAVE_WIDTH,
-        left=("keep", KEEP, "quiet"),
+        left=("discard", DISCARD, "outlined danger"),
     )
 
 

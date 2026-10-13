@@ -296,10 +296,10 @@ def test_the_leave_sheet_has_a_filled_save_an_outlined_red_discard_and_quiet_can
     sheet = shown(qapp, leave_sheet(parent, "Evening", True))
     save, discard = sheet.buttons["save"], sheet.buttons["discard"]
     assert [button.text() for button in sheet.buttons.values()] == [
-        "Cancel",
-        "Discard changes",
-        "Save",
         "Keep without saving",
+        "Cancel",
+        "Save",
+        "Discard changes",
     ]
     assert save.isDefault() and not save.property("outlined") and not save.property("quiet")
     assert discard.property("outlined") and discard.property("danger")
