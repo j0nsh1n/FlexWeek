@@ -1329,7 +1329,8 @@ def test_unsaved_changes_block_account_import(qapp: QApplication, server: LocalS
     session.add_block(soccer())
     session.preview_account_import({"format": 3})
     assert session.transfer_preview is None
-    assert "unsaved" in session.message
+    # T-W12's sentence for a change not saved yet, with import in place of export.
+    assert session.message == "Save your last change first (More > Retry save), then import."
 
 
 def test_moving_into_a_break_says_so_with_the_break_tone(qapp: QApplication, server: LocalServer) -> None:
