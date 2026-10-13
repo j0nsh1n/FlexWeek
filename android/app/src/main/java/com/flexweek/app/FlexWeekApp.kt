@@ -6,31 +6,63 @@ import android.app.NotificationManager
 import android.os.Build
 import com.flexweek.app.core.FlexWeekCore
 import com.flexweek.app.core.FlexWeekCoreFactory
+import com.flexweek.app.core.openForPhone
 import com.flexweek.app.system.ReminderScheduler
 import com.flexweek.app.system.SyncScheduler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+
+data class StartupState(val core: FlexWeekCore? = null, val paired: Boolean = false, val problem: String? = null)
 
 class FlexWeekApp : Application() {
     lateinit var core: FlexWeekCore
         private set
+    private val _startup = MutableStateFlow(StartupState())
+    val startup = _startup.asStateFlow()
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
-        core = FlexWeekCoreFactory.create(this) { scope ->
-            if (scope == "sync" || scope == "phone_settings") {
-                ReminderScheduler.refreshAsync(this)
-            } else {
-                afterLocalEdit()
+        createNotificationChannels()
+        applicationScope.launch {
+            try {
+                val opened = FlexWeekCoreFactory.create(this@FlexWeekApp) { scope ->
+                    if (scope == "sync" || scope == "phone_settings") {
+                        ReminderScheduler.refreshAsync(this@FlexWeekApp)
+                    } else {
+                        afterLocalEdit()
+                    }
+                }
+                val paired = opened.openForPhone(filesDir.resolve("flexweek.db").absolutePath)
+                withContext(Dispatchers.Main) {
+                    core = opened
+                    _startup.value = StartupState(core = opened, paired = paired)
+                    SyncScheduler.installPeriodic(this@FlexWeekApp)
+                    SyncScheduler.requestExpeditedSync(this@FlexWeekApp)
+                    ReminderScheduler.refreshAsync(this@FlexWeekApp)
+                }
+            } catch (error: Exception) {
+                withContext(Dispatchers.Main) {
+                    _startup.value = StartupState(problem = error.message ?: "Could not open FlexWeek.")
+                }
             }
         }
-        core.open(filesDir.resolve("flexweek.db").absolutePath, "Phone")
-        createNotificationChannels()
-        SyncScheduler.installPeriodic(this)
-        ReminderScheduler.refreshAsync(this)
     }
 
     fun afterLocalEdit() {
         ReminderScheduler.refreshAsync(this)
         SyncScheduler.requestExpeditedSync(this)
+    }
+
+    suspend fun awaitCore(): FlexWeekCore? {
+        val ready = startup.first { it.core != null || it.problem != null }
+        return ready.core
     }
 
     private fun createNotificationChannels() {

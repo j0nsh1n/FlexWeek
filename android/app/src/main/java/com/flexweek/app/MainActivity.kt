@@ -23,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -51,24 +52,29 @@ import androidx.compose.material3.TextButton
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
-import com.flexweek.app.system.SyncScheduler
 import com.flexweek.app.system.syncWhileForeground
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val app = application as FlexWeekApp
         val tweaks = ScreenshotTweaks.fromIntent(intent)
-        if (app.core is com.flexweek.app.core.FakeFlexWeekCore && tweaks.prePaired && !app.core.isPaired()) {
-            app.core.pairWithCode(com.flexweek.app.core.DemoSchedule.VALID_PAIR_CODE)
-        }
-        (app.core as? com.flexweek.app.core.FakeFlexWeekCore)?.setSyncState(tweaks.syncState)
-        SyncScheduler.requestExpeditedSync(this)
         setContent {
             FlexWeekTheme(darkTheme = tweaks.darkTheme, largeText = tweaks.largeText) {
-                FlexWeekRoot(app, tweaks, this@MainActivity)
+                val startup by app.startup.collectAsState()
+                val core = startup.core
+                if (core == null) {
+                    StartupScreen(startup.problem)
+                } else {
+                    if (core is com.flexweek.app.core.FakeFlexWeekCore) {
+                        if (tweaks.prePaired && !core.isPaired()) {
+                            core.pairWithCode(com.flexweek.app.core.DemoSchedule.VALID_PAIR_CODE)
+                        }
+                        core.setSyncState(tweaks.syncState)
+                    }
+                    FlexWeekRoot(core, startup.paired, tweaks, this@MainActivity)
+                }
             }
         }
     }
@@ -149,15 +155,24 @@ private enum class ActiveSheet {
 }
 
 @Composable
+private fun StartupScreen(problem: String?) {
+    Surface(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().padding(24.dp)) {
+            Text(problem ?: "Opening FlexWeek…", style = MaterialTheme.typography.bodyLarge)
+        }
+    }
+}
+
+@Composable
 private fun FlexWeekRoot(
-    app: FlexWeekApp,
+    core: com.flexweek.app.core.FlexWeekCore,
+    initiallyPaired: Boolean,
     tweaks: ScreenshotTweaks,
     activity: ComponentActivity,
 ) {
-    val core = app.core
     val v2 = BuildConfig.V2_ENABLED
     val demo = core is com.flexweek.app.core.FakeFlexWeekCore
-    var paired by remember { mutableStateOf(core.isPaired() || (demo && tweaks.prePaired)) }
+    var paired by remember { mutableStateOf(initiallyPaired || (demo && tweaks.prePaired)) }
     var pairingRequested by remember { mutableStateOf(false) }
     // Survives rotation so a second pair screen cannot start while the first pairing is still running.
     var pairEpoch by rememberSaveable { mutableIntStateOf(0) }
@@ -233,13 +248,7 @@ private fun FlexWeekRoot(
             remindersVm.allowNotifications()
         }
     val weekVm = if (v2) viewModel { WeekViewModel(core) } else null
-    val syncLine =
-        remember(todayVm.uiState.syncLine, remindersVm.state) {
-            val sync = JSONObject(core.syncStatus())
-            val problem = remindersVm.state.problem
-            if (problem != null) SyncLine("unreachable", problem)
-            else SyncLine(sync.getString("state"), sync.getString("line"))
-        }
+    val syncLine = remindersVm.state.problem?.let { SyncLine("unreachable", it) } ?: todayVm.uiState.syncLine
     val closeSheet: () -> Unit = {
         sheet = ActiveSheet.None
         todayVm.refreshAgenda()

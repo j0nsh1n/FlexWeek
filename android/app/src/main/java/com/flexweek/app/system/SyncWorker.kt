@@ -15,12 +15,13 @@ class SyncWorker(
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val app = applicationContext as FlexWeekApp
-        if (!app.core.isPaired() || !JSONObject(app.core.syncStatus()).optBoolean("paired", true)) {
+        val core = app.awaitCore() ?: return Result.retry()
+        if (!core.isPaired() || !JSONObject(core.syncStatus()).optBoolean("paired", true)) {
             return Result.success()
         }
         return try {
             withContext(Dispatchers.IO) {
-                val raw = app.core.syncOnce(SYNC_DEADLINE_MS)
+                val raw = core.syncOnce(SYNC_DEADLINE_MS)
                 val ok = JSONObject(raw).optBoolean("ok", true)
                 if (ok) {
                     ReminderScheduler.refreshAsync(applicationContext)
@@ -30,13 +31,13 @@ class SyncWorker(
                 }
             }
         } catch (e: CancellationException) {
-            app.core.cancelSync()
+            core.cancelSync()
             throw e
         } catch (_: Throwable) {
             Result.retry()
         } finally {
             if (isStopped) {
-                app.core.cancelSync()
+                core.cancelSync()
             }
         }
     }

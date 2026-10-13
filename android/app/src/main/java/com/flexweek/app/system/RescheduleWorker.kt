@@ -15,12 +15,13 @@ class RescheduleWorker(
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val app = applicationContext as FlexWeekApp
+        val core = app.awaitCore() ?: return Result.retry()
         val am = applicationContext.getSystemService(AlarmManager::class.java)
         val book = AlarmBook(applicationContext)
         val scheduler = AndroidAlarmScheduler(applicationContext, am, book)
         val fromLocal = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
         rescheduleRemindersNow(
-            core = app.core,
+            core = core,
             scheduler = scheduler,
             fromLocal = fromLocal,
             nowMs = System.currentTimeMillis(),

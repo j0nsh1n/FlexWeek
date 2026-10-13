@@ -12,6 +12,9 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.test.resetMain
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RemindersViewModelTest {
@@ -72,6 +75,38 @@ class RemindersViewModelTest {
             assertFalse(pairingOffered)
             assertEquals("Could not unlink. Try again.", vm.state.problem)
             assertFalse(vm.state.syncing)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+    @Test fun rustReminderReadsAndWritesRunOffTheMainThread() {
+        val dispatcher = UnconfinedTestDispatcher()
+        Dispatchers.setMain(dispatcher)
+        try {
+            val uiThread = Thread.currentThread()
+            val calledOffMain = AtomicBoolean(true)
+            val settingsRead = CountDownLatch(2)
+            val leadWritten = CountDownLatch(1)
+            val delegate = FakeFlexWeekCore().also { it.pairWithCode(DemoSchedule.VALID_PAIR_CODE) }
+            val core = object : FlexWeekCore by delegate {
+                override fun settingsForPhone(): String {
+                    calledOffMain.compareAndSet(true, Thread.currentThread() !== uiThread)
+                    settingsRead.countDown()
+                    return delegate.settingsForPhone()
+                }
+
+                override fun setLeadMinutes(minutes: Int) {
+                    calledOffMain.compareAndSet(true, Thread.currentThread() !== uiThread)
+                    delegate.setLeadMinutes(minutes)
+                    leadWritten.countDown()
+                }
+            }
+            val vm = RemindersViewModel(core)
+            vm.setLeadMinutes(15)
+
+            assertTrue("settings reads did not finish", settingsRead.await(5, TimeUnit.SECONDS))
+            assertTrue("lead time write did not finish", leadWritten.await(5, TimeUnit.SECONDS))
+            assertTrue("Rust calls must leave the UI thread", calledOffMain.get())
         } finally {
             Dispatchers.resetMain()
         }

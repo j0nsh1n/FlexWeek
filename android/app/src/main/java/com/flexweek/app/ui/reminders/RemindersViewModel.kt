@@ -24,6 +24,14 @@ data class RemindersUiState(
     val problem: String? = null,
 )
 
+private data class ReminderSettings(
+    val leadMinutes: Int,
+    val exactReminders: Boolean,
+    val deviceName: String,
+    val pairedAt: String,
+    val reachable: Boolean,
+)
+
 class RemindersViewModel(
     private val core: FlexWeekCore,
     private val workerDispatcher: CoroutineDispatcher = Dispatchers.IO,
@@ -36,18 +44,54 @@ class RemindersViewModel(
     }
 
     fun reload() {
+        if (core !is com.flexweek.app.core.FakeFlexWeekCore) {
+            viewModelScope.launch {
+                val refreshed = withContext(workerDispatcher) { readSettings() }
+                state = state.copy(
+                    leadMinutes = refreshed.leadMinutes,
+                    exactReminders = refreshed.exactReminders,
+                    deviceName = refreshed.deviceName,
+                    pairedAt = refreshed.pairedAt,
+                    reachable = refreshed.reachable,
+                )
+            }
+            return
+        }
+        applySettings(readSettings())
+    }
+
+    private fun readSettings(): ReminderSettings {
         val settings = JSONObject(core.settingsForPhone())
-        state =
-            state.copy(
-                leadMinutes = settings.getInt("lead_minutes"),
-                exactReminders = settings.getBoolean("exact_reminders"),
-                deviceName = settings.getString("device_name"),
-                pairedAt = settings.getString("paired_at"),
-                reachable = settings.getBoolean("reachable"),
-            )
+        return ReminderSettings(
+            leadMinutes = settings.getInt("lead_minutes"),
+            exactReminders = settings.getBoolean("exact_reminders"),
+            deviceName = settings.getString("device_name"),
+            pairedAt = settings.getString("paired_at"),
+            reachable = settings.getBoolean("reachable"),
+        )
+    }
+
+    private fun applySettings(refreshed: ReminderSettings) {
+        state = state.copy(
+            leadMinutes = refreshed.leadMinutes,
+            exactReminders = refreshed.exactReminders,
+            deviceName = refreshed.deviceName,
+            pairedAt = refreshed.pairedAt,
+            reachable = refreshed.reachable,
+        )
     }
 
     fun setLeadMinutes(minutes: Int) {
+        if (core !is com.flexweek.app.core.FakeFlexWeekCore) {
+            viewModelScope.launch {
+                val refreshed = withContext(workerDispatcher) {
+                    core.setLeadMinutes(minutes)
+                    readSettings()
+                }
+                applySettings(refreshed)
+            }
+            return
+        }
         core.setLeadMinutes(minutes)
         reload()
     }
@@ -56,6 +100,16 @@ class RemindersViewModel(
         val next = !state.exactReminders
         if (next) {
             onRequestExactSetting()
+        }
+        if (core !is com.flexweek.app.core.FakeFlexWeekCore) {
+            viewModelScope.launch {
+                val refreshed = withContext(workerDispatcher) {
+                    core.setExactReminders(next)
+                    readSettings()
+                }
+                applySettings(refreshed)
+            }
+            return
         }
         core.setExactReminders(next)
         reload()
