@@ -143,11 +143,37 @@ def test_a_share_note_names_the_days_that_received_time(qapp: QApplication) -> N
         "moves": [],
         "explanations": [],
         "shares": [
-            {"title": "History", "this_week_min": 60, "left_min": 60, "placed_days": [6]}
+            {
+                "title": "Science project",
+                "this_week_min": 60,
+                "left_min": 60,
+                "due": "2026-10-13",
+            }
         ],
     }
-    assert PlanReview().rows_for(trace, {}, WEEK) == [
-        "History: 1 h this week (Sun), 1 h left for next week"
+    assert PlanReview().rows_for(trace, {}, "2026-10-12") == [
+        "Science project (due Tue 13 Oct): 1 h planned this week. FlexWeek saves the other 1 h "
+        "for next week so this week isn't overloaded. Press Plan next week to place it."
+    ]
+
+
+def test_a_share_note_looks_up_due_from_assignments(qapp: QApplication) -> None:
+    panel = PlanReview()
+    panel._assignments = {
+        "sci": {"id": "sci", "title": "Science project", "due": "2026-10-13"}
+    }
+    trace = {
+        "placed": [],
+        "unplaced": [],
+        "moves": [],
+        "explanations": [],
+        "shares": [
+            {"title": "Science project", "assignment_id": "sci", "this_week_min": 60, "left_min": 60}
+        ],
+    }
+    assert panel.rows_for(trace, {}, "2026-10-12") == [
+        "Science project (due Tue 13 Oct): 1 h planned this week. FlexWeek saves the other 1 h "
+        "for next week so this week isn't overloaded. Press Plan next week to place it."
     ]
 
 

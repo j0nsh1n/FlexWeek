@@ -5629,11 +5629,22 @@ class PlanReview(QFrame):
         for share in shares:
             if not share["this_week_min"]:
                 continue
-            days = ", ".join(DAY_FULL[day][:3] for day in share.get("placed_days") or [])
-            on_days = f" ({days})" if days else ""
+            due = share.get("due")
+            assignments = getattr(self, "_assignments", None) or {}
+            if not due:
+                aid = share.get("assignment_id")
+                found = assignments.get(aid) if aid else None
+                if found is None:
+                    found = next(
+                        (item for item in assignments.values() if item.get("title") == share["title"]),
+                        None,
+                    )
+                due = (found or {}).get("due")
+            due_bit = f" (due {due_label(due, week_start)})" if due else ""
             said.append(
-                f"{share['title']}: {length_label(share['this_week_min'])} this week{on_days}, "
-                f"{length_label(share['left_min'])} left for next week"
+                f"{share['title']}{due_bit}: {length_label(share['this_week_min'])} planned this week. "
+                f"FlexWeek saves the other {length_label(share['left_min'])} for next week so this week "
+                f"isn't overloaded. Press Plan next week to place it."
             )
         return said
 
