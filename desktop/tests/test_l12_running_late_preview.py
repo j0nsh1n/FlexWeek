@@ -14,7 +14,7 @@ from desktop.native.weekmodel import set_clock_24h
 from desktop.native.widgets import LateDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.logic_support import qapp, server, settled, signed_in, wait_until  # noqa: F401
-from desktop.tests.test_drag_results import window  # noqa: F401
+from desktop.tests.test_drag_results import session_of, window  # noqa: F401
 
 
 def _dialog() -> LateDialog:
@@ -50,7 +50,7 @@ def test_running_late_preview_shows_day_and_both_full_ranges(qapp: QApplication)
     )
     assert dialog.summary.text() == "1 task moves"
     dialog.show_trace({"moves": [], "placed": [], "unplaced": [{"id": "lost", "title": "Lost"}]}, {})
-    assert dialog.summary.text() == "1 task no longer fits"
+    assert dialog.summary.text() == "Nothing needs to move."
     set_clock_24h(True)
     dialog.close()
 
@@ -107,7 +107,7 @@ def test_running_late_preview_uses_singular_plural_and_omits_zero_counts(qapp: Q
         },
         {"late-test": "Late test", "other": "Other"},
     )
-    assert dialog.summary.text() == "2 tasks move · 1 task no longer fits"
+    assert dialog.summary.text() == "2 tasks move"
     dialog.show_trace(
         {
             "moves": [
@@ -224,6 +224,12 @@ def test_running_late_summary_is_status_not_an_error(
     session = window.session
     thursday = datetime.fromisoformat(session.week_start) + timedelta(days=3, hours=15, minutes=40)
     session.now_ms = lambda: int(thursday.timestamp() * 1000)
+    # Running late moves what already has a time and never places homework that waits, so the
+    # Math worksheet is given Thursday 4 PM first.
+    math = session_of(window, "math")
+    session.add_block({**math, "start": "16:00", "days": [3]})
+    session.save()
+    settled(qapp, session)
     seen: dict = {}
 
     def run(dialog: LateDialog) -> int:

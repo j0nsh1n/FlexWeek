@@ -4262,7 +4262,7 @@ class NativeWindow(QMainWindow):
         preview's "3 tasks move" through the same signal; the dialog shows that count itself, as status."""
         preview = self.session.late_preview or {}
         trace = preview.get("trace") or {}
-        summary = _late_summary(len(trace.get("moves") or []), len(trace.get("unplaced") or []))
+        summary = _late_summary(len(trace.get("moves") or []))
         if text == "Replanning…" or (preview and text == summary):
             text = ""
         dialog.error.setText(text)

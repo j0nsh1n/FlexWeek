@@ -189,15 +189,10 @@ ROUTINE_STATUS = frozenset(
 )
 
 
-def _late_summary(moved: int, unplaced: int) -> str:
-    parts = []
-    if moved:
-        parts.append(f"{moved} task{'s' if moved != 1 else ''} {'moves' if moved == 1 else 'move'}")
-    if unplaced:
-        noun = "task" if unplaced == 1 else "tasks"
-        verb = "no longer fits" if unplaced == 1 else "no longer fit"
-        parts.append(f"{unplaced} {noun} {verb}")
-    return " · ".join(parts) or "Nothing needs to move."
+def _late_summary(moved: int) -> str:
+    if not moved:
+        return "Nothing needs to move."
+    return f"{moved} task{'s' if moved != 1 else ''} {'moves' if moved == 1 else 'move'}"
 
 
 class NativeSession(QObject):
@@ -2773,7 +2768,7 @@ class NativeSession(QObject):
         def run(previous: list[dict]) -> None:
             payload = {
                 "week_start": self.week_start,
-                "blocks": self._dump_blocks(),
+                "blocks": self._dump_blocks(self._late_blocks()),
                 "running_late": {
                     "day": day,
                     "minutes": minutes,
@@ -2794,9 +2789,7 @@ class NativeSession(QObject):
                     "block": running_late_block(day, from_start, minutes, late_id(operation_id)),
                     "stale": False,
                 }
-                moved = len(trace.get("moves") or [])
-                unplaced = len(trace.get("unplaced") or [])
-                self._say(_late_summary(moved, unplaced))
+                self._say(_late_summary(len(trace.get("moves") or [])))
                 self.week_changed.emit()
 
             self.client.request(
@@ -2822,10 +2815,19 @@ class NativeSession(QObject):
         self.client.request(
             "POST",
             "/api/solve",
-            {"week_start": self.week_start, "blocks": self._dump_blocks()},
+            {"week_start": self.week_start, "blocks": self._dump_blocks(self._late_blocks())},
             base_ok,
             lambda error: self._fail(ticket, error),
         )
+
+    def _late_blocks(self) -> list[dict]:
+        """The week as Running late replans it. Homework still waiting for a time stays out, so a late
+        start never places it: Plan places that homework."""
+        return [
+            block
+            for block in self.blocks
+            if not (block.get("kind") == "flexible" and block.get("assignment_id") and not block.get("start"))
+        ]
 
     def accept_running_late(self) -> bool:
         preview = self.late_preview

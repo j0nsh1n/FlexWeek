@@ -6021,9 +6021,7 @@ class LateDialog(Dialog):
             self.changes.addItem(block["title"] + " no longer fits and will stay on the task list.")
         if self.changes.count() == 0:
             self.changes.addItem("No homework needs to move.")
-        moved = len(trace.get("moves") or [])
-        unplaced = len(trace.get("unplaced") or [])
-        summary = _late_summary(moved, unplaced)
+        summary = _late_summary(len(trace.get("moves") or []))
         self.summary.setText(summary)
         self.summary.setAccessibleName(summary)
         self.summary.setVisible(True)
@@ -6048,15 +6046,10 @@ class LateDialog(Dialog):
                 item.setSizeHint(QSize(width, max(label.heightForWidth(width), label.sizeHint().height())))
 
 
-def _late_summary(moved: int, unplaced: int) -> str:
-    parts = []
-    if moved:
-        parts.append(f"{moved} task{'s' if moved != 1 else ''} {'moves' if moved == 1 else 'move'}")
-    if unplaced:
-        noun = "task" if unplaced == 1 else "tasks"
-        verb = "no longer fits" if unplaced == 1 else "no longer fit"
-        parts.append(f"{unplaced} {noun} {verb}")
-    return " · ".join(parts) or "Nothing needs to move."
+def _late_summary(moved: int) -> str:
+    if not moved:
+        return "Nothing needs to move."
+    return f"{moved} task{'s' if moved != 1 else ''} {'moves' if moved == 1 else 'move'}"
 
 
 def _late_move(move: dict, block: dict, title: str) -> str:
