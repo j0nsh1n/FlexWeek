@@ -204,7 +204,15 @@ class DayName(QLabel):
 
     def sizeHint(self) -> QSize:  # noqa: N802
         _body, strong, small = self._fonts()
-        wide = QFontMetricsF(strong).horizontalAdvance(f"{self.name} 00") + 2 * SPACING[2] + 12
+        name_wide = QFontMetricsF(strong).horizontalAdvance(f"{self.name} 00") + 2 * SPACING[2] + 12
+        if self.homework:
+            book = round(QFontMetricsF(small).ascent())
+            homework_wide = (
+                SPACING[2] + book + SPACING[0] + QFontMetricsF(small).horizontalAdvance(self.homework_words())
+            )
+            wide = max(name_wide, homework_wide + SPACING[1])
+        else:
+            wide = name_wide
         return QSize(round(wide), round(self._top() + QFontMetricsF(small).height() + 2 * SPACING[1]))
 
     def minimumSizeHint(self) -> QSize:  # noqa: N802
@@ -269,10 +277,15 @@ class DayName(QLabel):
                 )
             painter.setFont(small)
             painter.setPen(QColor(colours.muted))
+            room = self._homework_room(size)
+            words = self.homework_words()
+            metrics = QFontMetricsF(small)
+            if metrics.horizontalAdvance(words) > room:
+                words = metrics.elidedText(words, Qt.TextElideMode.ElideRight, int(room))
             painter.drawText(
-                QRectF(self._homework_left(size), below, self._homework_room(size), line),
+                QRectF(self._homework_left(size), below, room, line),
                 Qt.AlignmentFlag.AlignVCenter,
-                self.homework_words(),
+                words,
             )
         painter.end()
 

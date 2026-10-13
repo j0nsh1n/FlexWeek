@@ -465,3 +465,25 @@ def test_a_focus_row_cuts_a_homework_title_only_when_the_row_has_no_room_for_it(
     index = rail.tasks.indexFromItem(rail.tasks.item(0))
     cut = said(200)
     assert cut[0] == "Today 16:15" and cut[-1].endswith("…"), cut
+
+
+def test_sundays_header_total_is_whole_at_810_px_large(qapp: QApplication) -> None:
+    """U25: at 810 px and Large text, Sunday's homework total is not clipped in its column."""
+    from PySide6.QtGui import QFontMetricsF
+
+    from desktop.native.hours.classic import Colours, DayName, GUTTER, column_widths
+
+    look = {"preset": "default", "knobs": {"text": "large"}}
+    palette = resolved_palette("system", False, look)
+    widths = column_widths(810 - GUTTER, frozenset({6}), days=tuple(range(7)))
+    name = DayName(6)
+    name.colours = Colours.of(palette)
+    name.look = look
+    name.show_day("Sun", "12", 45, False)
+    name.resize(int(widths[6]), name.sizeHint().height())
+    _body, _strong, small = name._fonts()
+    icon = round(QFontMetricsF(small).ascent())
+    room = name._homework_room(icon)
+    words = name.homework_words()
+    assert words == "45 min"
+    assert QFontMetricsF(small).horizontalAdvance(words) <= room + 0.5, (room, words, widths[6])
