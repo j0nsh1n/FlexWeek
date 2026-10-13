@@ -11,6 +11,7 @@ from __future__ import annotations
 import importlib.util
 import os
 from collections.abc import Callable, Iterator
+from unittest.mock import Mock
 
 import pytest
 
@@ -25,7 +26,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtGui import QColor
     from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QPushButton, QWidget
 
-    from desktop.native import look_editor, settings, widgets
+    from desktop.native import devices, look_editor, settings, widgets
     from desktop.native.look import pack_stylesheet, resolved_palette
     from desktop.native.widgets import control_art
     from desktop.tests.test_ui_dialogs import _dialog_classes, school
@@ -51,6 +52,9 @@ def makers() -> dict[type, list[Callable[[QWidget], QDialog]]]:
         "checked": True,
     }
     windows = {"work_windows": [{"days": [0, 1], "start": "16:00", "end": "18:00"}]}
+    sync = Mock(spec=devices.SyncService)
+    sync.pair_start.return_value = None
+    sync.pair_status.return_value = {"state": "idle", "expires_at_ms": 0, "tries_left": 0}
     return {
         widgets.BlockDialog: [
             lambda host: widgets.BlockDialog(host, school(), occurrence_day=1),
@@ -91,6 +95,8 @@ def makers() -> dict[type, list[Callable[[QWidget], QDialog]]]:
         ],
         look_editor.ColourSheet: [lambda host: look_editor.ColourSheet(host, "#3d6fc4")],
         look_editor.StartSheet: [lambda host: look_editor.StartSheet(host, "base:light", [])],
+        devices.PairDialog: [lambda host: devices.PairDialog(host, sync, 1)],
+        devices.RemoveDialog: [lambda host: devices.RemoveDialog(host, "Pixel")],
         settings.RestoreDialog: [
             lambda host: settings.RestoreDialog(host, [RESTORE_POINT], None, None)
         ],
