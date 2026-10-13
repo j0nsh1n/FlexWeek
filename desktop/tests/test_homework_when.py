@@ -14,7 +14,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QDate, QTime
 from PySide6.QtWidgets import QApplication, QDialog, QWidget
 
-from desktop.native.widgets import HomeworkDialog
+from desktop.native.widgets import NO_TIME_LEFT, ChooseTimeDialog, HomeworkDialog
 from desktop.tests.test_homework_form import go_when
 from desktop.tests.test_homework_plan import (  # noqa: F401
     opened_with,
@@ -364,3 +364,25 @@ def test_a_drop_on_the_grid_pins_the_homework_and_reopening_shows_where(
     assert dialog.when.currentData() == "fixed"
     assert chosen_day(dialog) == [4]
     assert dialog.when_time.time() == QTime(16, 0)
+
+
+def test_no_time_left_this_week_says_to_close_and_go_to_next_week(
+    qapp: QApplication,  # noqa: F811
+) -> None:
+    assert NO_TIME_LEFT == (
+        "No time is left this week. Close this, go to next week, then choose a time there."
+    )
+    waiting = {
+        "id": "essay",
+        "title": "History essay",
+        "duration_min": 60,
+        "days": [6],
+    }
+    dialog = ChooseTimeDialog(
+        None, waiting, WEEK, [6], [], None, today=6, minute=23 * 60 + 50
+    )
+    dialog.show()
+    QApplication.processEvents()
+    assert dialog.problem.text() == NO_TIME_LEFT
+    assert dialog.problem.isVisible()
+    free(dialog)

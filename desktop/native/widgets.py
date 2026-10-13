@@ -5690,7 +5690,9 @@ class PlanReview(QFrame):
         self.show()
 
 
-NO_TIME_LEFT = "No time left this week. Choose a day in next week."
+NO_TIME_LEFT = (
+    "No time is left this week. Close this, go to next week, then choose a time there."
+)
 
 
 def dated_day_labels(week_start: str) -> list[str]:
