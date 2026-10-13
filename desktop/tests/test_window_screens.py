@@ -275,6 +275,7 @@ def test_the_view_track_sits_level_with_the_rest_of_the_bar(
         view = window.findChild(QAbstractButton, name)
         middle = view.mapTo(window, view.rect().center()).y()
         assert abs(middle - middle_of_today) <= 2, f"{text} text, {name}"
+    text_size(window, "normal")
 
 
 @pytest.mark.parametrize("text", ["normal", "large"])
@@ -288,6 +289,7 @@ def test_the_week_titles_chevron_is_no_wider_than_an_icon_button(
         qapp.processEvents()
     arrow = window.findChild(QAbstractButton, "nextWeek")
     assert window.week_title_mark.width() < arrow.width(), text
+    text_size(window, "normal")
 
 
 def test_retry_save_shows_only_after_a_save_fails(qapp: QApplication, window: NativeWindow) -> None:
