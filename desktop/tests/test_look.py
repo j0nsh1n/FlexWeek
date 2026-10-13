@@ -13,7 +13,7 @@ from itertools import product
 from math import dist
 
 import pytest
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QColor, QImage
 
 import desktop.native.look as look_module
 from desktop.native.calendar import CATEGORIES
@@ -59,6 +59,7 @@ from desktop.native.look import (
     setup_rules,
     switch_track_edge,
 )
+from desktop.native.look_preview import look_preview
 from desktop.native.tokens import SINK, TEXT_SCALE, mix, mix_oklab, oklab, oklch_of
 from desktop.native.widgets import control_art
 from desktop.tests.window_support import qapp  # noqa: F401
@@ -635,6 +636,29 @@ def test_plan_button_label_reads_with_margin_in_every_look(kind: str, name: str)
     tint = mix(palette["accent"], palette["window"], 0.10)
     ground = palette["window"] if palette.get("family") == "contrast" else tint
     assert contrast(palette["accent_text"], ground) >= AA_TEXT + 0.1, name
+
+
+def test_poster_preview_column_rules_match_the_week(qapp) -> None:  # noqa: F811
+    """U11: Settings > Look > Poster preview draws the week's rule colour, not hairline black."""
+    look = look_of("poster")
+    palette = resolved_palette("system", False, look)
+    week_rule = palette.get("rule") or palette["hairline"]
+    assert week_rule == mix("#111111", "#fff8e7", 0.14)
+    assert week_rule != palette["hairline"]
+    image = look_preview("system", look, 150).toImage()
+    rule_rgb = QColor(week_rule).getRgb()[:3]
+    hair_rgb = QColor(palette["hairline"]).getRgb()[:3]
+    found_rule = found_hair = 0
+    bar = round(image.height() * 0.2)
+    for y in range(bar + 8, image.height() - 8, 4):
+        for x in range(image.width()):
+            rgb = image.pixelColor(x, y).getRgb()[:3]
+            if all(abs(a - b) <= 8 for a, b in zip(rgb, rule_rgb, strict=True)):
+                found_rule += 1
+            if all(abs(a - b) <= 8 for a, b in zip(rgb, hair_rgb, strict=True)):
+                found_hair += 1
+    assert found_rule > 0
+    assert found_rule > found_hair
 
 
 def test_a_filled_block_is_readable_on_every_category_colour() -> None:

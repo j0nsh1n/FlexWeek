@@ -66,7 +66,7 @@ def look_preview(pack: str, look: dict, width: int) -> QPixmap:
     painter.drawRoundedRect(QRectF(width * 0.78, bar * 0.28, width * 0.16, bar * 0.44), radius, radius)
     body_top, body_height = bar + 4, height - bar - 8
     column = (width - 8) / DAYS
-    painter.setBrush(QColor(palette["hairline"]))
+    painter.setBrush(QColor(palette.get("rule") or palette["hairline"]))
     for day in range(1, DAYS):
         painter.drawRect(QRectF(4 + column * day, body_top, 1, body_height))
     for day, top, tall, category in BLOCKS:
