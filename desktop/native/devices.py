@@ -349,6 +349,13 @@ class RemoveDialog(Dialog):
         sheet_footer(layout, keep, remove)
 
 
+def _note(words: str) -> QLabel:
+    """A line of words in the card that wraps: Settings scrolls down, never sideways."""
+    label = QLabel(words)
+    label.setWordWrap(True)
+    return label
+
+
 class DevicesPanel(QWidget):
     """The Devices card's body: each linked phone with its last sync and Remove, then Pair a phone and
     Sync now, and the relay sentence. `owner_id` gives the signed-in account's id when asked."""
@@ -408,15 +415,15 @@ class DevicesPanel(QWidget):
         service = self.host.service
         if service is None:
             # No phone was linked at launch, so there is nothing to list until one is paired.
-            self.phones.addWidget(QLabel(NO_PHONE_WORDS))
+            self.phones.addWidget(_note(NO_PHONE_WORDS))
             return
         try:
             phones = live_phones(service, self.owner_id())
         except SyncError as error:
-            self.phones.addWidget(QLabel(f"Could not read your phones: {error}"))
+            self.phones.addWidget(_note(f"Could not read your phones: {error}"))
             return
         if not phones:
-            self.phones.addWidget(QLabel(NO_PHONE_WORDS))
+            self.phones.addWidget(_note(NO_PHONE_WORDS))
             return
         now_ms = _now_ms()
         for phone in phones:
@@ -449,7 +456,7 @@ class DevicesPanel(QWidget):
     def _disable(self, words: str) -> None:
         self.pair_button.setEnabled(False)
         self.sync_button.setEnabled(False)
-        self.phones.addWidget(QLabel(words))
+        self.phones.addWidget(_note(words))
 
     def _pair(self) -> None:
         user_id = self.owner_id()
