@@ -11,6 +11,8 @@ button width at least the words, stack when the row cannot hold them, one error,
 
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 import pytest
 
 pytest.importorskip("PySide6")
@@ -32,6 +34,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from desktop.native.devices import PairDialog, RemoveDialog, SyncService
 from desktop.native.fields import ClockField, ProblemLine
 from desktop.native.look import pack_stylesheet, resolved_palette
 from desktop.native.settings import AccountDialog, RestoreDialog
@@ -106,7 +109,11 @@ def _sheets(parent: QWidget) -> list[QDialog]:
         "due": "2026-10-16",
         "unplanned_min": 60,
     }
+    sync = Mock(spec=SyncService)
+    sync.pair_start.return_value = None
     return [
+        PairDialog(parent, sync, 1),
+        RemoveDialog(parent, "Pixel"),
         BlockDialog(parent, soccer(), occurrence_day=3),
         HomeworkDialog(parent, essay, today=WEEK),
         SchoolHoursDialog(parent),
@@ -238,6 +245,18 @@ def test_captions_sit_above_fields_on_every_sheet(qapp: QApplication) -> None:  
         shown(qapp, dialog)
         opened.append(dialog)
         _assert_captions(dialog)
+        if isinstance(dialog, AvailabilityDialog):
+            for kind in ("study", "protected"):
+                dialog._open_picker(kind=kind, day=0)
+                qapp.processEvents()
+                _assert_captions(dialog)
+                if kind == "protected":
+                    assert dialog.picker_title.isVisibleTo(dialog)
+                    assert _caption_for(dialog.picker_title, dialog).text() == "Name (optional)"
+            dialog._close_picker()
+            dialog.tabs.setCurrentIndex(dialog.tabs.findData("cutoff"))
+            qapp.processEvents()
+            _assert_captions(dialog)
         # More details hides the link, checklist and Spotify fields until it is pressed.
         details = getattr(dialog, "more_details", None)
         if details is not None and not details.isChecked():
@@ -326,7 +345,7 @@ def test_account_cards_keep_their_top_when_a_problem_appears(qapp, signed_out) -
     window.resize(1366, 768)
     pump()
     page = window._stack.currentWidget()
-    for mode in ("create", "reset"):
+    for mode in ("sign in", "create", "reset"):
         go(window, mode)
         held = card_of(window)
         before = _top(held, page)
@@ -334,8 +353,10 @@ def test_account_cards_keep_their_top_when_a_problem_appears(qapp, signed_out) -
             window.username.setText("ab")
             window.password.setText("short")
             window.create_button.click()
-        else:
+        elif mode == "reset":
             window.recover_button.click()
+        else:
+            window.sign_in_button.click()
         pump()
         assert _top(held, page) == before, mode
         window._clear_auth_problems()
@@ -392,3 +413,10 @@ def test_add_fixed_time_third_step_asks_for_category(qapp: QApplication) -> None
     assert not block.duration_line.isVisibleTo(block)
     free(block)
     free(parent)
+
+
+def test_captions_sit_above_account_fields(qapp, signed_out) -> None:  # noqa: F811
+    window = signed_out
+    for mode in ("sign in", "create", "reset"):
+        go(window, mode)
+        _assert_captions(card_of(window))
