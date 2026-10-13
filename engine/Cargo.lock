@@ -164,6 +164,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "flexweek-sync"
+version = "0.1.0"
+dependencies = [
+ "flexweek-engine",
+ "hex",
+ "rusqlite",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "foldhash"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
