@@ -290,7 +290,8 @@ def test_choose_a_time_with_nothing_waiting_says_so(
     assert bar.shown_words() == ["Choose a time…"]
     QTest.keyClick(bar.input, Qt.Key.Key_Return)
     qapp.processEvents()
-    assert window.toast.text() == "All your homework already has a time."
+    # Decision: sidebar / leftover copy is "Everything has a time." when every item has a time.
+    assert window.toast.text() == "Everything has a time."
 
 
 def test_plan_says_suggest_times_for_a_student_who_plans_by_hand(
