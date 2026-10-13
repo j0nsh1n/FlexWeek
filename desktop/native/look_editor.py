@@ -108,7 +108,7 @@ from desktop.native.widgets import (
 
 TITLE = "Look editor"
 START_FROM = "Start from"
-START_NOTE = "Pick a look to start your own from. What you have not saved is left behind."
+START_NOTE = "Choose a look to start from. Changes you haven't saved will be lost."
 START_YOURS = "Your look"
 START_TILE = 112
 NAME = "Name"

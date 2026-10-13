@@ -11,7 +11,7 @@ import pytest
 
 from desktop.native.custom_look import apply_fix, readability
 from desktop.native.look import pack_stylesheet, resolved_palette
-from desktop.native.look_editor import fix_all, problem_rows
+from desktop.native.look_editor import START_NOTE, fix_all, problem_rows
 from desktop.native.tokens import contrast, oklch_of
 from desktop.tests.window_support import qapp, server, signed_out, window  # noqa: F401
 
@@ -166,3 +166,8 @@ def test_reset_all_export_and_import_are_outlined_like_save_as_new(qapp, window)
 
 def _rgb(colour: str) -> tuple[int, int, int]:
     return int(colour[1:3], 16), int(colour[3:5], 16), int(colour[5:7], 16)
+
+
+def test_the_start_note_says_unsaved_changes_will_be_lost() -> None:
+    """T-W23: "What you have not saved is left behind" did not say lost, and "Pick" is a retired word."""
+    assert START_NOTE == "Choose a look to start from. Changes you haven't saved will be lost."
