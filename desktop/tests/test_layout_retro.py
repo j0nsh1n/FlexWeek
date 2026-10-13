@@ -593,7 +593,7 @@ def test_closing_the_notepad_cannot_hide_what_has_no_time(qapp: QApplication) ->
     waiting = view.findChild(TrayChip, "retroWaiting0")
     assert waiting.text() == "Poster-1 · 2 h"
     assert waiting.hand is view.hand
-    assert "There is not enough time left before it is due" in waiting.toolTip()
+    assert "There isn't enough time left before it's due" in waiting.toolTip()
 
 
 def test_redraw_keeps_each_tabs_scroll_zoom_and_position(qapp: QApplication) -> None:

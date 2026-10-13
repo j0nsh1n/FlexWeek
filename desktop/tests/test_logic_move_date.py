@@ -156,14 +156,14 @@ def test_date_problem_and_move_to_date_refuse_homework_past_due(
     wednesday = date_for_day(session.week_start, 2)
     friday = date_for_day(session.week_start, 4)
     assert session.date_problem(waiting["id"], wednesday, friday) == (
-        "That ends after it is due, so it stayed where it was."
+        "That ends after it's due, so it stayed where it was."
     )
     before = read_week(qapp, session, session.week_start)
     assert session.move_to_date(waiting["id"], wednesday, friday) is False
     settled(qapp, session)
     after = read_week(qapp, session, session.week_start)
     assert after["blocks"] == before["blocks"]
-    assert session.message == "That ends after it is due, so it stayed where it was."
+    assert session.message == "That ends after it's due, so it stayed where it was."
 
 
 def test_move_to_date_keeps_homework_pinned_on_the_new_week(qapp: QApplication, server: LocalServer) -> None:
@@ -428,7 +428,7 @@ def test_date_problem_judges_a_chip_when_its_week_is_not_loaded(
     settled(qapp, session)
     assert session.week_start == second
     assert all(block.get("id") != chip["id"] for block in session.blocks)
-    past_due = "That ends after it is due, so it stayed where it was."
+    past_due = "That ends after it's due, so it stayed where it was."
     assert (
         session.date_problem(
             chip["id"],

@@ -413,7 +413,7 @@ def test_a_look_exports_to_a_small_file_imports_back_and_a_file_that_is_not_one_
     other = tmp_path / "notes.json"
     other.write_text(json.dumps({"kind": "a shopping list"}))
     assert not editor.import_from(other)
-    assert editor.said() == "This file is not a FlexWeek look."
+    assert editor.said() == "This file isn't a FlexWeek look."
     assert [look["name"] for look in editor._saved] == ["Exams"]
     assert not editor.import_from(tmp_path / "missing.json")
     assert editor.said() == look_editor.NOT_OPENED

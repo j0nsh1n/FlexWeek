@@ -239,7 +239,7 @@ def test_do_it_at_after_it_is_due_is_refused_in_words(qapp: QApplication) -> Non
     dialog.accept()
     assert dialog.result() != QDialog.DialogCode.Accepted
     assert dialog.when_problem.isVisible()
-    assert dialog.when_problem.text() == "That ends after it is due."
+    assert dialog.when_problem.text() == "That ends after it's due."
     free(dialog)
     free(parent)
 
