@@ -1518,7 +1518,7 @@ def test_the_week_toolbar_keeps_only_what_is_reached_for(qapp: QApplication, win
     page = window._stack.currentWidget()
     shown = [
         button.objectName()
-        for button in page.findChildren(QPushButton)
+        for button in page.findChildren(QAbstractButton)
         # The calendar's own controls, such as zooming its hours or paging the rail's month, belong to
         # it, not to the toolbar.
         if button.isVisible()
@@ -1531,6 +1531,7 @@ def test_the_week_toolbar_keeps_only_what_is_reached_for(qapp: QApplication, win
         "prevWeek",
         "nextWeek",
         "todayWeek",
+        "weekTitleMark",
         "viewDay",
         "viewWeek",
         "viewMonth",
