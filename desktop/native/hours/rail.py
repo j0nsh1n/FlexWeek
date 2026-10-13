@@ -443,7 +443,8 @@ class NextCard(QWidget):
     def show_next(self, week: WeekModel | None, today: int | None, minute: int | None) -> bool:
         """Whether there is anything to say: nothing now or later today, or not this week, says nothing."""
         said = next_words(week, today, minute)
-        queue = week.day_queue(today, minute).queue if week is not None and today is not None and minute is not None else ()
+        known = week is not None and today is not None and minute is not None
+        queue = week.day_queue(today, minute).queue if known else ()
         first = queue[0] if queue else None
         if said != self.shown:
             self.shown = said

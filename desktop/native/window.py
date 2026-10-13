@@ -199,7 +199,6 @@ from desktop.native.widgets import (
     Toast,
     UnfinishedPanel,
     WhyOff,
-    overdue_unfinished,
     add_heading,
     confirm,
     control_art,
@@ -207,6 +206,7 @@ from desktop.native.widgets import (
     drop_waiting_dim,
     fit_buttons,
     keyboard_focus_rings,
+    overdue_unfinished,
     steady_wheel,
     swatch,
     use_app_style,
@@ -5457,7 +5457,8 @@ class NativeWindow(QMainWindow):
         ):
             week_list_row.click()
             return True
-        if week_access_list is not None and watched is week_access_list and event.type() == QEvent.Type.KeyPress:
+        typed = event.type() == QEvent.Type.KeyPress
+        if week_access_list is not None and watched is week_access_list and typed:
             key = event.key()
             if key == Qt.Key.Key_Escape and not event.modifiers():
                 self._close_week_access_list()

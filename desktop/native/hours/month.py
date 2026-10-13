@@ -26,6 +26,7 @@ from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QColor,
     QContextMenuEvent,
+    QFont,
     QFontMetrics,
     QMouseEvent,
     QPainter,
@@ -354,7 +355,8 @@ class MonthCanvas(QWidget):
         self.cells = cells
         self._fit()
         self.setAccessibleDescription(
-            "Click a date to see it. Open Day opens that day. Drag a block with a time to another date to move it there."
+            "Click a date to see it. Open Day opens that day. "
+            "Drag a block with a time to another date to move it there."
         )
         self.update()
 

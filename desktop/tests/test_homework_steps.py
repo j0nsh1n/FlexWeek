@@ -15,7 +15,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
 
 from desktop.native.widgets import HomeworkDialog
-from desktop.tests.test_homework_form import TODAY, go_length, go_when, host, opened
+from desktop.tests.test_homework_form import go_length, go_when, host, opened
 from desktop.tests.window_support import free, qapp  # noqa: F401
 
 
