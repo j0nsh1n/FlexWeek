@@ -2653,8 +2653,8 @@ class NativeSession(QObject):
         return [item for item in self.unfinished() if item.get("left_over_state") == "left_from_last_week"]
 
     def plan_left(self, assignment_ids: list[str]) -> None:
-        """"Plan them": each one gets a session in this week for the time it has left, and Plan finds
-        those times as it does any homework's. The time left in the earlier week stays where it was."""
+        """"Plan into this week": each one gets a session in this week for the time it has left, and Plan
+        finds those times as it does any homework's. The time left in the earlier week stays where it was."""
         today = datetime.fromtimestamp(self.now_ms() / 1000).date()
         made: set[str] = set()
         for assignment_id in assignment_ids:
@@ -2675,7 +2675,7 @@ class NativeSession(QObject):
         self.solve(only=made)
 
     def did_these(self, assignment_ids: list[str]) -> None:
-        """"I did these": the student finished them after all, as one Undo step."""
+        """"Mark as finished": the student finished them after all, as one Undo step."""
         for assignment_id in assignment_ids:
             if assignment_id in self.assignments:
                 self.complete_homework(assignment_id)
