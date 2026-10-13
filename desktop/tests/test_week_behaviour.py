@@ -36,7 +36,7 @@ from desktop.tests.window_support import (  # noqa: F401
 )
 from desktop.tests.window_support import window as signed_in  # noqa: F401
 
-PAST_REFUSAL = "That's in the past."
+PAST_REFUSAL = "That time has passed. Choose a time after 12:00 PM today, or another day."
 
 
 def send_mouse(widget, kind, at: QPoint, held: bool) -> None:
@@ -68,6 +68,9 @@ def window(qapp: QApplication, signed_in: NativeWindow) -> Iterator[NativeWindow
 
 def essay_on_past_day(window: NativeWindow) -> None:
     """Clock on Thursday; essay sits Wednesday so dragging it to Monday is in the past."""
+    from desktop.native.weekmodel import set_clock_24h
+
+    set_clock_24h(False)
     session = window.session
     thursday = datetime.fromisoformat(session.week_start) + timedelta(days=3, hours=12)
     session.now_ms = lambda: int(thursday.timestamp() * 1000)

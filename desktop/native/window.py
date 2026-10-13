@@ -3118,7 +3118,7 @@ class NativeWindow(QMainWindow):
     def _delete_block(
         self, block: dict, scope: str, day: int | None, every_week: bool | None = None
     ) -> None:
-        title = block.get("title") or "the event"
+        title = block.get("title") or "this fixed time"
         whole = scope != "occurrence" or len(block.get("days") or []) <= 1
         if every_week is None and whole and is_setup_block(block):
             # School and Setup's activities are in every week, so taking one out asks which.
@@ -3844,7 +3844,7 @@ class NativeWindow(QMainWindow):
                 self._delete_block(block, "occurrence" if one_day else "series", on)
                 return
             name = (block.get("title") or "this event") + (f" on {DAY_FULL[on]}" if one_day else "")
-            if confirm(self, "Delete event", f"Delete {name}? You can undo this.", "Delete"):
+            if confirm(self, "Delete fixed time", f"Delete {name}? You can undo this.", "Delete"):
                 self._delete_block(block, "occurrence" if one_day else "series", on)
             return
         if not block.get("start"):

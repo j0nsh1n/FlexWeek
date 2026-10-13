@@ -1,6 +1,7 @@
 """Regression (item 2): a time that has already passed is refused everywhere a student can
 give homework a time by hand: dropping a block (and its drag preview), Choose a time, and Edit
-homework > Do it at. The refusal reads "That's in the past." (controller.PAST_DROP).
+homework > Do it at. The refusal reads "That time has passed. Choose a time after 2:15 PM
+today, or another day."
 
 The clock is held through `session.now_ms` (grid_support.hold_clock), the injectable clock the window,
 the dialogs (`HomeworkDialog._now`) and the planner already read. """
@@ -16,7 +17,7 @@ from PySide6.QtCore import QTime
 from PySide6.QtWidgets import QDialog, QDialogButtonBox
 
 from desktop.native.calendar import sunday_due
-from desktop.native.controller import PAST_DROP
+from desktop.native.weekmodel import set_clock_24h
 from desktop.native.widgets import ChooseTimeDialog, HomeworkDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.grid_support import (  # noqa: F401
@@ -31,12 +32,15 @@ from desktop.tests.grid_support import (  # noqa: F401
 )
 from desktop.tests.window_support import free
 
+PAST_REFUSAL = "That time has passed. Choose a time after 2:15 PM today, or another day."
+
 TUESDAY, SUNDAY = 1, 6
 NOW = 14 * 60 + 7  # the window fixture holds Wednesday 14:07
 
 
 def homework(qapp, window: NativeWindow, start: str | None = None, day: int = WEDNESDAY) -> dict:
     """The History essay, due Sunday, with one session: waiting for a time, or placed at `start`."""
+    set_clock_24h(False)
     session = window.session
     session.add_homework({"id": "essay", "title": "History essay", "due": sunday_due(session.week_start),
                           "estimate_min": 60, "revision": 0})
@@ -63,7 +67,7 @@ def where(window: NativeWindow, block_id: str) -> tuple[list[int], str | None]:
 def test_dragging_a_block_to_earlier_today_is_refused_in_preview_and_drop(qapp, window) -> None:
     block = homework(qapp, window, "16:00")
     verdict = window._judge_span(block["id"], WEDNESDAY, WEDNESDAY, 7 * 60, 8 * 60)
-    assert (verdict.ok, verdict.words) == (False, PAST_DROP), "the live preview must refuse"
+    assert (verdict.ok, verdict.words) == (False, PAST_REFUSAL), "the live preview must refuse"
     window._move_block(block["id"], WEDNESDAY, WEDNESDAY, 7 * 60, 8 * 60)
     settled(qapp, window)
     assert where(window, block["id"]) == ([WEDNESDAY], "16:00"), "the drop must leave it where it was"
@@ -81,7 +85,7 @@ def test_dragging_a_block_to_an_earlier_day_is_refused(qapp, window) -> None:
     """Guard: refused today, and must stay refused."""
     block = homework(qapp, window, "16:00")
     verdict = window._judge_span(block["id"], WEDNESDAY, TUESDAY, 16 * 60, 17 * 60)
-    assert (verdict.ok, verdict.words) == (False, PAST_DROP)
+    assert (verdict.ok, verdict.words) == (False, PAST_REFUSAL)
 
 
 def test_dragging_a_block_to_later_today_is_allowed(qapp, window) -> None:
@@ -124,7 +128,7 @@ def choose(qapp, window, monkeypatch, day: int, minute: int) -> tuple[bool, str]
 )
 def test_choose_a_time_refuses_a_past_time(qapp, window, monkeypatch, day, minute) -> None:
     homework(qapp, window)
-    assert choose(qapp, window, monkeypatch, day, minute) == (False, PAST_DROP)
+    assert choose(qapp, window, monkeypatch, day, minute) == (False, PAST_REFUSAL)
 
 
 def test_choose_a_time_accepts_later_today(qapp, window, monkeypatch) -> None:
@@ -177,7 +181,7 @@ def do_it_at(qapp, window, day: int, minute: int) -> tuple[int, str]:
 def test_do_it_at_refuses_a_past_time_and_keeps_the_sheet_open(qapp, window, day, minute) -> None:
     homework(qapp, window)
     result, problem = do_it_at(qapp, window, day, minute)
-    assert (result, problem) == (QDialog.DialogCode.Rejected.value, PAST_DROP)
+    assert (result, problem) == (QDialog.DialogCode.Rejected.value, PAST_REFUSAL)
 
 
 def test_do_it_at_saves_later_today(qapp, window) -> None:

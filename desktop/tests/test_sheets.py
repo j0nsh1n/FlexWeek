@@ -469,6 +469,35 @@ def test_a_confirmation_is_a_sheet_whose_default_is_cancel_and_whose_answer_is_r
         free(sheet)
 
 
+def test_return_on_sign_out_presses_the_focused_button(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
+    """N12: Return activates the focused answer, not always Cancel."""
+    sheet = ConfirmSheet(
+        window,
+        "Sign out",
+        "Your week is saved on this computer, under this account. Sign in again to see it.",
+        (("stay", "Cancel", "outlined"), ("yes", "Sign out", "")),
+        default="stay",
+    )
+    shown(qapp, sheet)
+    yes = sheet.buttons["yes"]
+    yes.setFocus()
+    QTest.keyClick(sheet, Qt.Key.Key_Return)
+    assert sheet.answer == "yes"
+    free(sheet)
+    again = ConfirmSheet(
+        window,
+        "Sign out",
+        "Sure?",
+        (("stay", "Cancel", "outlined"), ("yes", "Sign out", "")),
+        default="stay",
+    )
+    shown(qapp, again)
+    again.question.setFocus()
+    QTest.keyClick(again, Qt.Key.Key_Return)
+    assert again.answer == "stay"
+    free(again)
+
+
 def test_confirm_answers_true_only_for_the_yes_button(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
     QTimer.singleShot(200, lambda: QApplication.activeModalWidget().buttons["yes"].click())
     assert confirm(window, "Sign out", "Sure?", "Sign out", danger=False) is True

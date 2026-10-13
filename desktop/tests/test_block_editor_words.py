@@ -9,13 +9,15 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QPoint
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QColor
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -30,8 +32,10 @@ from PySide6.QtWidgets import (
 from desktop.native import widgets
 from desktop.native.calendar import date_for_day
 from desktop.native.look import resolved_palette, sanitize_look
+from desktop.native.weekmodel import set_clock_24h
 from desktop.native.widgets import AppStyle, BlockDialog, ConfirmSheet
 from desktop.native.window import NativeWindow
+from desktop.tests.grid_support import hold_clock
 from desktop.tests.window_support import (  # noqa: F401
     host,
     qapp,
@@ -78,7 +82,7 @@ def icon_style(qapp: QApplication) -> Iterator[None]:  # noqa: F811
 
 def test_the_editor_is_titled_as_a_student_says_it(qapp: QApplication, host: QWidget) -> None:  # noqa: F811
     assert BlockDialog(host, day=3, start="17:15").windowTitle() == "Add fixed time"
-    assert BlockDialog(host, soccer()).windowTitle() == "Edit event"
+    assert BlockDialog(host, soccer()).windowTitle() == "Edit fixed time"
 
 
 def test_it_says_that_ticking_another_day_repeats_it(qapp: QApplication, host: QWidget) -> None:  # noqa: F811
@@ -192,7 +196,11 @@ def test_delete_asks_first_and_does_nothing_when_refused(
     dialog.show()
     dialog.delete_button.click()
     assert asked == [
-        ("Delete Soccer practice?", "Delete Soccer practice on every Tue and Thu this week?", "Delete")
+        (
+            "Delete fixed time",
+            "Delete Soccer practice on every Tue and Thu this week?",
+            "Delete",
+        )
     ]
     assert dialog.result() != QDialog.DialogCode.Accepted and dialog.deleted() is False
     assert dialog.isVisible(), "refusing leaves the editor open"
@@ -206,7 +214,7 @@ def test_delete_asks_first_and_does_nothing_when_refused(
     occurrence_date = today - timedelta(days=today.weekday()) + timedelta(days=3)
     date_text = f"{occurrence_date.day} {occurrence_date.strftime('%b')}"
     assert asked[-1] == (
-        "Delete Soccer practice?",
+        "Delete fixed time",
         f"Delete Soccer practice on Thursday {date_text} only?",
         "Delete",
     )
@@ -261,7 +269,7 @@ def test_the_question_before_deleting_draws_its_answer_red_and_cancel_plain(
     pack, dark, accent = window._look_inputs()
     red = QColor(resolved_palette(pack, dark, window._look, accent)["error"])
     question = "Delete Soccer practice? You can undo this."
-    box = widgets.confirm_sheet(window, "Delete event", question, "Delete")
+    box = widgets.confirm_sheet(window, "Delete fixed time", question, "Delete")
     box.show()
     qapp.processEvents()
     still(box)
@@ -349,5 +357,94 @@ def test_non_setup_repeat_delete_names_all_selected_days(
     dialog.scope_series.setChecked(True)
     dialog._delete()
     assert asked == [
-        ("Delete Soccer practice?", "Delete Soccer practice on every Tue and Thu this week?", "Delete")
+        (
+            "Delete fixed time",
+            "Delete Soccer practice on every Tue and Thu this week?",
+            "Delete",
+        )
     ]
+
+
+def test_thats_in_the_past_is_not_used_anywhere_in_native() -> None:
+    root = Path(__file__).resolve().parents[1] / "native"
+    hits = [
+        path
+        for path in root.rglob("*.py")
+        if "That's in the past." in path.read_text(encoding="utf-8")
+    ]
+    assert hits == []
+
+
+def test_a_new_fixed_block_at_a_past_time_is_refused(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    """N1: new blocks are checked on every chosen day; Fri in the future still saves."""
+    from desktop.tests.test_fixed_time_steps import go_when
+
+    set_clock_24h(False)
+    hold_clock(window, 3, 16 * 60 + 40)
+    dialog = BlockDialog(window, day=1, start="09:00")
+    dialog.title.setText("Early club")
+    go_when(dialog)
+    dialog.accept()
+    assert dialog.result() != QDialog.DialogCode.Accepted
+    # Thursday 4:40 PM: the next quarter hour is 4:45 PM (the sentence from the 1.0.0 wording audit, T-W4).
+    assert dialog.duration_line.text() == (
+        "That time has passed. Choose a time after 4:45 PM today, or another day."
+    )
+    dialog.close()
+    future = BlockDialog(window, day=4, start="09:00")
+    future.title.setText("Friday club")
+    go_when(future)
+    future.accept()
+    assert future.result() == QDialog.DialogCode.Accepted
+    future.close()
+
+
+def test_the_duration_line_follows_start_before_it_settles(
+    qapp: QApplication,  # noqa: F811
+    host: QWidget,  # noqa: F811
+) -> None:
+    """N2: while Start is half-typed, Duration previews where End will move."""
+    from desktop.tests.test_fixed_time_steps import go_when
+    from desktop.tests.test_regress_item0_time_boxes import enter, press, type_text
+
+    set_clock_24h(False)
+    dialog = BlockDialog(host, day=3, start="16:00", duration_min=120)
+    dialog.show()
+    dialog.title.setText("Club")
+    go_when(dialog)
+    enter(dialog.start, "tab-in")
+    for char in "4:30 PM":
+        type_text(dialog.start, char)
+    assert dialog.duration_line.text() == "End will move to 6:30 PM (2 h)"
+    dialog.close()
+    hand = BlockDialog(host, day=3, start="16:30", duration_min=90)
+    hand.show()
+    hand.title.setText("Hand end")
+    go_when(hand)
+    enter(hand.end, "tab-in")
+    type_text(hand.end, "6:00 PM")
+    press(hand.end, Qt.Key.Key_Tab)
+    enter(hand.start, "tab-in")
+    for char in "4:30 PM":
+        type_text(hand.start, char)
+    assert hand.duration_line.text() == "1 h 30 min"
+    hand.close()
+
+
+def test_add_fixed_time_does_not_say_end_moved_before_start_changes(
+    qapp: QApplication,  # noqa: F811
+    host: QWidget,  # noqa: F811
+) -> None:
+    """Q10: Tab out of Start on a fresh sheet must not announce a move."""
+    dialog = BlockDialog(host, day=3, start="16:00", duration_min=60)
+    dialog.title.setText("Club")
+    from desktop.tests.test_fixed_time_steps import go_when
+
+    go_when(dialog)
+    dialog.start.setFocus()
+    QTest.keyClick(dialog.start, Qt.Key.Key_Tab)
+    assert "End moved" not in dialog.duration_line.text()
+    dialog.close()

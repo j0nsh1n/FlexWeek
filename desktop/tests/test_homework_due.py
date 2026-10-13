@@ -74,7 +74,7 @@ def test_a_day_that_has_passed_is_refused_beside_the_date(qapp: QApplication) ->
     go_when(dialog)
     dialog.due.date.setDate(QDate(2026, 9, 13))
     assert not saved(dialog)
-    assert dialog.due.problem.text() == "That time has already passed."
+    assert dialog.due.problem.text() == "That due time has passed. Choose a later one."
     assert dialog.due.problem.isVisible()
     assert dialog.due.problem.objectName() == "validationError", "the sheet's error colour"
     assert not dialog.error.isVisible(), "beside the field, not in the form's last line"
@@ -95,7 +95,7 @@ def test_a_time_earlier_today_is_refused_and_a_later_one_is_not(qapp: QApplicati
     dialog.due.timed.setChecked(True)
     dialog.due.time.setTime(QTime(14, 0))
     assert not saved(dialog), "14:00 is an hour ago at 15:00"
-    assert dialog.due.problem.text() == "That time has already passed."
+    assert dialog.due.problem.text() == "That due time has passed. Choose a later one."
     dialog.due.time.setTime(QTime(15, 30))
     assert saved(dialog)
     assert dialog.assignment()["due"] == "2026-09-14T15:30"
@@ -137,7 +137,7 @@ def test_a_new_deadline_on_old_homework_is_checked_too(qapp: QApplication) -> No
     dialog = HomeworkDialog(parent, homework("2026-09-20"), TODAY)
     dialog.due.date.setDate(QDate(2026, 9, 12))
     assert not saved(dialog)
-    assert dialog.due.problem.text() == "That time has already passed."
+    assert dialog.due.problem.text() == "That due time has passed. Choose a later one."
     free(dialog)
     free(parent)
 

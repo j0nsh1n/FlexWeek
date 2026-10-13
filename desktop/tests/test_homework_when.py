@@ -228,7 +228,9 @@ def test_past_do_it_at_save_focuses_field_and_announces_one_description(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from desktop.native import widgets as widgets_module
+    from desktop.native.weekmodel import set_clock_24h
 
+    set_clock_24h(False)
     said = []
     monkeypatch.setattr(
         widgets_module,
@@ -243,7 +245,8 @@ def test_past_do_it_at_save_focuses_field_and_announces_one_description(
     dialog.when_time.setTime(QTime(10, 0))
     dialog.accept()
     message = dialog.when_problem.text()
-    assert message == "That's in the past."
+    # Monday 12:00 (the held clock): the next quarter hour today is 12:00 PM.
+    assert message == "That time has passed. Choose a time after 12:00 PM today, or another day."
     assert dialog.when_time.accessibleDescription() == message
     assert dialog.when_problem.accessibleName() == message
     assert dialog.when_time.hasFocus() or dialog.when_time.lineEdit().hasFocus()

@@ -257,7 +257,7 @@ DIALOG_MAX_HEIGHT = 700
 SLOT_HINT = "Use a multiple of 15 minutes, such as 15, 30, or\u00a045."
 DUE_BY_HINT = "FlexWeek plans it before this time."
 TYPE_HINT = "Tests are planned first, then quizzes, then everyday homework, then reading."
-DUE_PASSED = "That time has already passed."
+DUE_PASSED = "That due time has passed. Choose a later one."
 ESTIMATE_ERROR = "That time is not a multiple of 15 minutes."
 ESTIMATE_SHORT = "Give it at least 15 minutes."
 ESTIMATE_LONG = "That is more than 24 hours. Split it into parts and add each part as its own homework."
@@ -3201,7 +3201,7 @@ class ConfirmSheet(Dialog):
             button.setProperty("answer", key)
             button.clicked.connect(self._pressed)
             button.setDefault(key == default)
-            button.setAutoDefault(key == default)
+            button.setAutoDefault(False)
             self.buttons[key] = button
             return button
 
@@ -3234,6 +3234,19 @@ class ConfirmSheet(Dialog):
         # The keyboard starts on the answer Enter gives, not on whichever button is first.
         if self._default in self.buttons:
             self.buttons[self._default].setFocus()
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            focused = QApplication.focusWidget()
+            if isinstance(focused, QPushButton) and focused in self.buttons.values():
+                focused.click()
+                event.accept()
+                return
+            if self._default in self.buttons:
+                self.buttons[self._default].click()
+                event.accept()
+                return
+        super().keyPressEvent(event)
 
     def _pressed(self) -> None:
         self.answer = self.sender().property("answer")
@@ -3288,12 +3301,13 @@ class BlockDialog(Dialog):
         self._series_days: list[bool] | None = None
         self._syncing_scope_days = False
         existing = block is not None
+        self._existing = existing
         series = existing and is_series(self._original)
         # Add fixed time is What / When / How long, matching Add homework. Edit stays one page.
         self._add_step: int | None = None if existing else 0
         self._hiding_add = self._add_step is not None
         self.setObjectName("blockDialog")
-        layout = self.card_body("Edit event" if existing else "Add fixed time")
+        layout = self.card_body("Edit fixed time" if existing else "Add fixed time")
         body = QWidget()
         body_layout = QVBoxLayout(body)
         body_layout.setContentsMargins(0, 0, 0, 0)
@@ -3391,7 +3405,10 @@ class BlockDialog(Dialog):
         self._end_by_hand = False
         self._following = False
         self._moved = ""
+        self._preview = ""
+        self._settled_start_min = self.start.minutes()
         self.start.settled.connect(self._keep_length)
+        self.start.timeChanged.connect(self._start_preview)
         self.end.settled.connect(self._end_settled)
         self.end.timeChanged.connect(self._end_changed)
         self._show_length()
@@ -3497,6 +3514,8 @@ class BlockDialog(Dialog):
         self._end_by_hand = False
         self._following = False
         self._moved = ""
+        self._preview = ""
+        self._settled_start_min = self.start.minutes()
         self.start.setTime(QTime.fromString(self._original["start"], "HH:mm"))
         self.end.setTime(
             self._minutes_clock(self.start.minutes() + self._original["duration_min"])
@@ -3684,13 +3703,21 @@ class BlockDialog(Dialog):
         week = getattr(session, "week_start", None)
         if session is None or not isinstance(week, str):
             return ""
+        from desktop.native.remind import clock_parts
+
+        clock = clock_parts(session.now_ms())
+        now_iso = clock["iso"]
+        now_min = int(clock["minute"])
         chosen = [index for index, check in enumerate(self.days) if check.isChecked()]
         original_days = set(self._original.get("days") or [])
         original_start = self._original.get("start") or ""
         new_start = self.start.time().toString("HH:mm")
-        now = datetime.fromtimestamp(session.now_ms() / 1000)
-        now_iso = now.date().isoformat()
-        now_min = now.hour * 60 + now.minute
+        if not self._existing:
+            for day in chosen:
+                past = past_problem(week, day, self.start.minutes(), now_iso, now_min)
+                if past:
+                    return past
+            return ""
         single = len(chosen) == 1
         for day in chosen:
             added = day not in original_days
@@ -3710,24 +3737,51 @@ class BlockDialog(Dialog):
         if self._following:
             return
         self._moved = ""
+        self._preview = ""
         if not self._span_problem():
             self._length = self._span()
         self._show_length()
 
+    def _start_preview(self, *_args: object) -> None:
+        if self._following:
+            return
+        self._moved = ""
+        if self._span_problem():
+            self._preview = ""
+            self._show_length()
+            return
+        start = self.start.minutes()
+        if self._end_by_hand:
+            self._preview = length_label(max(0, self.end.minutes() - start))
+        else:
+            end = min(start + self._length, 24 * 60)
+            self._preview = f"End will move to {clock_text(end)} ({length_label(self._length)})"
+        self._show_length()
+
+    def _moved_sentence(self, end: int, kept_length: int) -> str:
+        return f"End moved to {clock_text(end)} to keep it {length_label(kept_length)}."
+
     def _keep_length(self, *_args: object) -> None:
         """A settled start moves the end with it, as a calendar does, so the length stays, up to the end
         of the day. Once End was typed here, it is the student's and stays."""
-        end = min(self.start.minutes() + self._length, 24 * 60)
-        if self._end_by_hand:
+        self._preview = ""
+        start = self.start.minutes()
+        end = min(start + self._length, 24 * 60)
+        kept = end - start
+        if self._end_by_hand or (start == self._settled_start_min and end == self.end.minutes()):
             self._moved = ""
-        elif end != self.end.minutes():
-            self._following = True
-            try:
-                self.end.setTime(self._minutes_clock(end))
-            finally:
-                self._following = False
-            self._moved = f"End moved to {clock_text(end)}"
-            announce(self.end, self._moved)
+        elif not self._end_by_hand:
+            end_moved = end != self.end.minutes()
+            if end_moved:
+                self._following = True
+                try:
+                    self.end.setTime(self._minutes_clock(end))
+                finally:
+                    self._following = False
+            if end_moved:
+                self._moved = self._moved_sentence(end, kept)
+                announce(self.end, self._moved)
+        self._settled_start_min = start
         self._show_length()
 
     def _show_length(self) -> None:
@@ -3736,7 +3790,15 @@ class BlockDialog(Dialog):
         said_by_end = bool(self.end.problem())
         problem = "" if said_by_end else self._span_problem()
         length = "" if said_by_end else length_label(self._span())
-        self.duration_line.setText(problem or (f"{self._moved} ({length})" if self._moved else length))
+        if problem:
+            line = problem
+        elif self._moved:
+            line = self._moved
+        elif self._preview:
+            line = self._preview
+        else:
+            line = length
+        self.duration_line.setText(line)
         self.duration_line.setProperty("problem", bool(problem))
         self.duration_line.style().unpolish(self.duration_line)
         self.duration_line.style().polish(self.duration_line)
@@ -3766,7 +3828,7 @@ class BlockDialog(Dialog):
         )
 
     def _delete(self) -> None:
-        name = self._original.get("title") or "this event"
+        name = self._original.get("title") or "this fixed time"
         days = self._original.get("days") or []
         occurrence = self.scope() == "occurrence" and self._occurrence_day is not None
         week_start = getattr(getattr(self.parent(), "session", None), "week_start", None)
@@ -3802,7 +3864,7 @@ class BlockDialog(Dialog):
                 self.scope_occurrence.setChecked(True)
             else:
                 self.scope_series.setChecked(True)
-        elif not confirm(self, f"Delete {name}?", question, "Delete"):
+        elif not confirm(self, "Delete fixed time", question, "Delete"):
             return
         self._deleted = True
         super().accept()
@@ -4606,7 +4668,7 @@ class HomeworkDialog(Dialog):
             now = self._now()
             past = past_problem(week, fixed["day"], start, now.date().isoformat(), now.hour * 60 + now.minute)
             if past:
-                return "That's in the past."
+                return past
         sessions = self._open_sessions()
         length = int(sessions[0]["duration_min"]) if sessions else self.estimate.value()
         problem = span_problem([], "", fixed["day"], start, start + length, due_point(due, week))
@@ -5545,9 +5607,7 @@ def days_already_past(week_start: str, now_iso: str) -> int | None:
 
 
 def _past_words() -> str:
-    from desktop.native.controller import PAST_DROP
-
-    return PAST_DROP
+    return "That time has passed."
 
 
 def _when(day: object, start: object) -> str:

@@ -141,8 +141,9 @@ def plan_sentence(placed: int, waiting: int) -> str:
     return said
 
 
-PAST_DROP = "That's in the past."
-SETUP_ALREADY_HERE = "Your Setup times are already in this week."
+SETUP_ALREADY_HERE = (
+    "Nothing to copy: School and the fixed times you added in Setup are already in every week."
+)
 
 
 def _assignment_write(item_id: str, item: dict | None, revision: int) -> dict:
@@ -1107,7 +1108,10 @@ class NativeSession(QObject):
         """Why a block cannot land here, including a start that is already past."""
         block = next((item for item in self.blocks if item["id"] == block_id), None)
         if block is not None and self._starts_in_the_past(block, day, start, from_day):
-            return PAST_DROP
+            clock = clock_parts(self.now_ms())
+            return past_problem(
+                self.week_start, day, start, clock["iso"], int(clock["minute"])
+            )
         if block is None:
             return None
         due = due_point(

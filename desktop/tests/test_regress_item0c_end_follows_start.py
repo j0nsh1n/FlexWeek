@@ -96,7 +96,9 @@ def test_the_duration_line_says_end_moved(editor) -> None:
     enter(dialog.start, "tab-in")
     type_text(dialog.start, "16:30")
     press(dialog.start, Qt.Key.Key_Tab)
-    assert "End moved to 17:30" in dialog.duration_line.text()
+    from desktop.native.weekmodel import clock_text
+
+    assert dialog.duration_line.text() == f"End moved to {clock_text(17 * 60 + 30)} to keep it 1 h."
 
 
 @pytest.mark.parametrize("where", ["setup-school", "setup-activity", "school-hours"])
@@ -155,4 +157,4 @@ def test_end_moved_is_announced_once_politely(editor, monkeypatch) -> None:
     monkeypatch.setattr("desktop.native.widgets.announce", record)
     dialog = editor()
     dialog.start.setTime(QTime(16, 30))
-    assert said == [("End moved to 17:30", False)]
+    assert said == [("End moved to 17:30 to keep it 1 h.", False)]
