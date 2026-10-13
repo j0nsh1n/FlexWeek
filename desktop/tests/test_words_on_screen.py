@@ -121,6 +121,12 @@ def test_cancelling_running_late_takes_its_preview_off_the_screen(
                           "due": (thursday.date() + timedelta(days=2)).isoformat() + "T23:59"})
     session.save()
     settled(qapp, window)
+    # Q1: Running late moves only blocks that already have a time. Re-seed so the essay
+    # is on Thursday at 16:00; keep asserting the summary is a status with "1 task moves".
+    essay = next(block for block in session.blocks if block.get("assignment_id") == "essay")
+    session.add_block({**essay, "start": "16:00", "days": [3]})
+    session.save()
+    settled(qapp, window)
 
     def run(dialog: LateDialog) -> int:
         dialog.show()
