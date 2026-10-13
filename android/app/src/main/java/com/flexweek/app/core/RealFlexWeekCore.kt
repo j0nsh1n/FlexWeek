@@ -1,6 +1,8 @@
 package com.flexweek.app.core
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import com.flexweek.app.bindings.FfiException
 import com.flexweek.app.bindings.FlexWeek
 import com.flexweek.app.bindings.Host
@@ -11,7 +13,8 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.concurrent.ConcurrentHashMap
 
-class RealFlexWeekCore(context: Context) : FlexWeekCore {
+class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> Unit) : FlexWeekCore {
+    private val main = Handler(Looper.getMainLooper())
     private val localSettings = context.getSharedPreferences("phone-settings", Context.MODE_PRIVATE)
     private lateinit var native: FlexWeek
     private var selected: String? = null
@@ -22,7 +25,7 @@ class RealFlexWeekCore(context: Context) : FlexWeekCore {
         override fun nowUnixMs(): Long = System.currentTimeMillis()
         override fun localNow(): String = LocalDateTime.now().withNano(0).toString()
         override fun randomBytes(count: UInt): ByteArray = ByteArray(count.toInt()).also(random::nextBytes)
-        override fun dataChanged(scope: String) = Unit
+        override fun dataChanged(scope: String) { main.post { onDataChanged(scope) } }
     }
 
     override fun open(dbPath: String, deviceName: String) {
@@ -62,7 +65,7 @@ class RealFlexWeekCore(context: Context) : FlexWeekCore {
     override fun upcomingReminders(fromLocal: String, hours: Int): String = JSONArray().also { items ->
         native.upcomingReminders(fromLocal.take(19), hours.toUInt()).forEach { reminder ->
             items.put(JSONObject().put("key", reminder.id).put("fire_at_local", reminder.localTime)
-                .put("title", reminder.title).put("body", reminder.title))
+                .put("title", reminder.title).put("body", RustPhoneJson.reminderBody(reminder.startTime, reminder.durationMin)))
         }
     }.toString()
 
@@ -72,20 +75,24 @@ class RealFlexWeekCore(context: Context) : FlexWeekCore {
         return settings.put("lead_minutes", settings.getInt("reminder_lead_min"))
             .put("exact_reminders", localSettings.getBoolean("exact-reminders", false))
             .put("device_name", sync.optString("peer_name", "Your computer"))
-            .put("paired_at", sync.optString("paired_at", ""))
+            .put("paired_at", RustPhoneJson.pairedDate(sync.optString("paired_at", "")))
             .put("reachable", sync.optString("state") != "unreachable").toString()
     }
 
     override fun setLeadMinutes(minutes: Int) = native.setReminderLead(minutes.toLong())
     override fun setExactReminders(on: Boolean) {
         localSettings.edit().putBoolean("exact-reminders", on).apply()
+        onDataChanged("phone_settings")
     }
     override fun syncStatus(): String = RustPhoneJson.sync(native.syncStatus())
     override fun syncOnce(deadlineMs: Long): String = native.syncOnce(deadlineMs)
     override fun pairWithCode(code: String): String = native.pairWithCode(code)
     override fun pairFromQr(text: String): String = native.pairFromQr(text)
     override fun cancelSync() { native.cancelSync() }
-    override fun unlink() { native.unlink() }
+    override fun unlink() {
+        val result = JSONObject(native.unlink())
+        check(result.optBoolean("ok")) { result.optString("error", "Could not unlink. Try again.") }
+    }
     override fun isPaired(): Boolean = JSONObject(syncStatus()).optBoolean("has_account")
 
     private fun result(call: () -> String): String = try {

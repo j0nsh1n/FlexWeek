@@ -7,6 +7,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.flexweek.app.core.FlexWeekCore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -19,10 +21,12 @@ data class RemindersUiState(
     val pairedAt: String = "8 Oct",
     val reachable: Boolean = true,
     val syncing: Boolean = false,
+    val problem: String? = null,
 )
 
 class RemindersViewModel(
     private val core: FlexWeekCore,
+    private val workerDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
     var state by mutableStateOf(RemindersUiState())
         private set
@@ -67,11 +71,28 @@ class RemindersViewModel(
 
     fun syncNow() {
         if (state.syncing) return
-        state = state.copy(syncing = true)
+        state = state.copy(syncing = true, problem = null)
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { core.syncOnce(45_000) }
+            withContext(workerDispatcher) { core.syncOnce(45_000) }
             state = state.copy(syncing = false)
             reload()
+        }
+    }
+
+    fun unpair(onUnpaired: () -> Unit) {
+        if (state.syncing) return
+        state = state.copy(syncing = true, problem = null)
+        viewModelScope.launch {
+            try {
+                withContext(workerDispatcher) { core.unlink() }
+                onUnpaired()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                state = state.copy(problem = error.message ?: "Could not unlink. Try again.")
+            } finally {
+                state = state.copy(syncing = false)
+            }
         }
     }
 }

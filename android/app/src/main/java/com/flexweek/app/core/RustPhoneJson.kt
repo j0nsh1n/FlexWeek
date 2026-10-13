@@ -4,6 +4,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.Instant
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -12,6 +14,16 @@ internal object RustPhoneJson {
     private val dayFormat = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.ENGLISH)
 
     fun time(value: String): String = LocalTime.parse(value).format(timeFormat)
+
+    fun length(minutes: Long): String {
+        if (minutes < 60) return "$minutes min"
+        val hours = minutes / 60
+        val rest = minutes % 60
+        return if (rest == 0L) "$hours h" else "$hours h $rest min"
+    }
+
+    fun reminderBody(start: String, duration: Long?): String =
+        time(start) + if (duration == null) "" else " · ${length(duration)}"
 
     fun today(raw: String, today: String, sync: String): String {
         val root = JSONObject(raw)
@@ -36,8 +48,9 @@ internal object RustPhoneJson {
         }
         for (i in 0 until rows.length()) {
             val row = rows.getJSONObject(i)
+            row.put("past", selected == current && row.getBoolean("past"))
             val range = "${time(row.getString("start"))}–${time(row.getString("end"))}"
-            val detail = "$range · ${row.getInt("duration_min")} min"
+            val detail = "$range · ${length(row.getLong("duration_min"))}"
             val isNow = selected == current && row.getString("id") == now?.getString("block_id")
             row.put("type", if (isNow) "now" else "item")
             row.put("time_label", time(row.getString("start")))
@@ -62,7 +75,7 @@ internal object RustPhoneJson {
         val noTime = root.getJSONArray("no_time_yet")
         for (i in 0 until noTime.length()) {
             val item = noTime.getJSONObject(i)
-            item.put("length_label", "${item.getInt("minutes")} min")
+            item.put("length_label", length(item.getLong("minutes")))
             item.put("due_label", if (item.isNull("due")) "" else LocalDate.parse(item.getString("due").take(10))
                 .format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)))
         }
@@ -75,8 +88,22 @@ internal object RustPhoneJson {
         return root.toString()
     }
 
-    fun sync(raw: String): String = if (raw.startsWith("{")) raw else JSONObject()
-        .put("paired", false).put("state", "unreachable").put("line", "No computer is linked yet.").toString()
+    fun sync(raw: String, zone: ZoneId = ZoneId.systemDefault()): String {
+        if (!raw.startsWith("{")) return JSONObject().put("paired", false)
+            .put("state", "unreachable").put("line", "No computer is linked yet.").toString()
+        val root = JSONObject(raw)
+        if (root.optString("state") == "unreachable" && root.optBoolean("paired") && !root.isNull("last_sync_ms")) {
+            val at = Instant.ofEpochMilli(root.getLong("last_sync_ms")).atZone(zone).format(timeFormat)
+            root.put("line", "Your computer isn't reachable. Showing what synced at $at.")
+        }
+        return root.toString()
+    }
+
+    fun pairedDate(raw: String, zone: ZoneId = ZoneId.systemDefault()): String {
+        val milliseconds = raw.toLongOrNull() ?: return ""
+        return Instant.ofEpochMilli(milliseconds).atZone(zone)
+            .format(DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH))
+    }
 
     fun week(raw: String, today: String): String {
         val root = JSONObject(raw)

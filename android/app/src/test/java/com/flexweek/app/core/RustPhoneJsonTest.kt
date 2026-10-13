@@ -9,6 +9,21 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class RustPhoneJsonTest {
+    @Test fun reminderBodyShowsTheStartAndLength() {
+        assertEquals("6:00 PM · 30 min", RustPhoneJson.reminderBody("18:00", 30))
+        assertEquals("7:00 PM · 1 h", RustPhoneJson.reminderBody("19:00", 60))
+        assertEquals("7:00 AM", RustPhoneJson.reminderBody("07:00", null))
+    }
+    @Test fun nativeTimesUseThePhoneTimeZone() {
+        val milliseconds = java.time.Instant.parse("2026-10-13T18:30:00Z").toEpochMilli()
+        val zone = java.time.ZoneId.of("America/Los_Angeles")
+        assertEquals("13 Oct", RustPhoneJson.pairedDate(milliseconds.toString(), zone))
+        val raw = JSONObject().put("paired", true).put("state", "unreachable")
+            .put("last_sync_ms", milliseconds).toString()
+        val sync = JSONObject(RustPhoneJson.sync(raw, zone))
+        assertEquals("Your computer isn't reachable. Showing what synced at 11:30 AM.", sync.getString("line"))
+    }
+
     private fun agenda(): String {
         val days = JSONArray()
         for (day in 0..6) days.put(JSONObject().put("day", day)
@@ -34,12 +49,14 @@ class RustPhoneJsonTest {
         assertEquals("essay-session", now.id)
         assertEquals("Up next", now.kick)
         assertEquals("in 20 min", now.minsLabel)
-        assertEquals("7:00 PM–8:00 PM · 60 min", now.whenLine)
+        assertEquals("7:00 PM–8:00 PM · 1 h", now.whenLine)
         assertEquals("Fri 9 Oct", state.noTime.single().dueLabel)
     }
 
     @Test fun anotherDateHasOrdinaryRowsAndAJumpBackToToday() {
-        val state = TodayJson.parse(RustPhoneJson.today(agenda(), "2026-10-09", sync))
+        val raw = JSONObject(agenda())
+        raw.getJSONArray("rows").getJSONObject(0).put("past", true)
+        val state = TodayJson.parse(RustPhoneJson.today(raw.toString(), "2026-10-09", sync))
         assertEquals("Thursday", state.title)
         assertEquals("Thursday 8 October", state.daySubtitle)
         assertTrue(state.showTodayJump)
@@ -48,6 +65,7 @@ class RustPhoneJsonTest {
         assertEquals("essay-session", item.id)
         assertEquals("7:00 PM", item.timeLabel)
         assertFalse(item.done)
+        assertFalse(item.past)
     }
 
     @Test fun nativeWeekSegmentsBecomeDayBars() {

@@ -34,6 +34,7 @@ fun RemindersScreen(
     onLeadChange: (Int) -> Unit,
     onToggleExact: () -> Unit,
     onSyncNow: () -> Unit,
+    onUnpair: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.padding(horizontal = 16.dp)) {
@@ -114,7 +115,7 @@ fun RemindersScreen(
                 title = state.deviceName,
                 subtitle = "Paired ${state.pairedAt} · ${if (state.reachable) "on the same Wi‑Fi" else "not reachable now"}",
                 trailing = {
-                    TextButton(onClick = {}, modifier = Modifier.height(48.dp)) { Text("Unpair") }
+                    TextButton(onClick = onUnpair, enabled = !state.syncing, modifier = Modifier.height(48.dp)) { Text("Unpair") }
                 },
             )
             Text(

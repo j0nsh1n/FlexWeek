@@ -50,6 +50,8 @@ pub struct Reminder {
     pub title: String,
     pub local_time: String,
     pub kind: String,
+    pub start_time: String,
+    pub duration_min: Option<i64>,
 }
 
 #[derive(uniffi::Object)]
@@ -282,6 +284,7 @@ pub(crate) mod tests_support {
     pub struct TestHost {
         pub local: String,
         pub now: AtomicI64,
+        pub events: Mutex<Vec<String>>,
     }
 
     impl Host for TestHost {
@@ -297,7 +300,9 @@ pub(crate) mod tests_support {
             vec![0; count as usize]
         }
 
-        fn data_changed(&self, _scope: String) {}
+        fn data_changed(&self, scope: String) {
+            self.events.lock().unwrap().push(scope);
+        }
     }
 
     pub fn open_test(name: &str) -> (Arc<FlexWeek>, std::path::PathBuf) {
@@ -317,6 +322,7 @@ pub(crate) mod tests_support {
         let host = Arc::new(TestHost {
             local: local.into(),
             now: AtomicI64::new(1_792_000_000_000),
+            events: Mutex::new(Vec::new()),
         });
         let week = FlexWeek {
             db: Mutex::new(flexweek_store::open_connection(&path).unwrap()),
@@ -345,6 +351,7 @@ pub(crate) mod tests_support {
         let host = Arc::new(TestHost {
             local: "2026-10-12T15:40:00-07:00".into(),
             now: AtomicI64::new(1_792_000_000_000),
+            events: Mutex::new(Vec::new()),
         });
         let week = FlexWeek::open(
             path.to_string_lossy().to_string(),

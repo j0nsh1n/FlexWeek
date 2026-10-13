@@ -15,7 +15,13 @@ class FlexWeekApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        core = FlexWeekCoreFactory.create(this)
+        core = FlexWeekCoreFactory.create(this) { scope ->
+            if (scope == "sync" || scope == "phone_settings") {
+                ReminderScheduler.refreshAsync(this)
+            } else {
+                afterLocalEdit()
+            }
+        }
         core.open(filesDir.resolve("flexweek.db").absolutePath, "Phone")
         createNotificationChannels()
         SyncScheduler.installPeriodic(this)

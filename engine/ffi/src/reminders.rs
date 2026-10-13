@@ -47,7 +47,7 @@ pub(crate) fn upcoming(
 ) -> Result<Vec<Reminder>, FfiError> {
     let (from, until) = reminder_days(from_local, hours)?;
     let mut reminders = Vec::new();
-    let Some(user_id) = week.user_id else {
+    let Some(user_id) = week.account_id() else {
         return Ok(reminders);
     };
     let db = db_lock(week)?;
@@ -134,6 +134,8 @@ pub(crate) fn upcoming(
                             .to_string(),
                         local_time: local_stamp(fire_date, hour, minute),
                         kind: "block".into(),
+                        start_time: start_text.into(),
+                        duration_min: block.get("duration_min").and_then(Value::as_i64),
                     });
                 }
             }
@@ -180,6 +182,8 @@ pub(crate) fn upcoming(
                     .to_string(),
                 local_time: format!("{date_text}T{time}"),
                 kind: "alarm".into(),
+                start_time: time.into(),
+                duration_min: None,
             });
         }
     }

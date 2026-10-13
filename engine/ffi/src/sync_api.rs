@@ -281,6 +281,7 @@ mod tests {
         let host = Arc::new(TestHost {
             local: "2026-10-13T15:40:00".into(),
             now: AtomicI64::new(1_792_000_000_000),
+            events: Mutex::new(Vec::new()),
         });
         let transport = Transport::LanOnly {
             bind: Some("127.0.0.1:0".parse().unwrap()),
@@ -301,7 +302,7 @@ mod tests {
             db: Mutex::new(flexweek_store::open_connection(&phone_path).unwrap()),
             user_id: None,
             device_name: "Phone".into(),
-            host,
+            host: host.clone(),
             sync: Box::new(native),
             previews: Mutex::new(HashMap::new()),
         };
@@ -316,7 +317,7 @@ mod tests {
         flexweek_store::insert_assignment(&desktop_db, user, "essay",
             r#"{"id":"essay","title":"History essay","due":"2026-10-14T21:00","estimate_min":60,"focus_minutes":0,"completed":false}"#).unwrap();
         flexweek_store::save_week(&desktop_db, user, "2026-10-12",
-            r#"[{"id":"essay-session","assignment_id":"essay","title":"History essay","kind":"flexible","days":[1],"start":"19:00","duration_min":60}]"#, 0).unwrap();
+            r#"[{"id":"essay-session","assignment_id":"essay","title":"History essay","kind":"flexible","days":[1],"start":"19:00","duration_min":60},{"id":"school","title":"School tomorrow","kind":"locked","days":[2],"start":"18:00","duration_min":30}]"#, 0).unwrap();
         desktop_db.execute_batch("COMMIT").unwrap();
         let synced: Value = serde_json::from_str(&phone.sync_once(15_000)).unwrap();
         assert_eq!(synced["ok"], true, "{synced}");
@@ -354,6 +355,18 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<Value>(&phone.sync_once(1000)).unwrap()["kind"],
             "not_paired"
+        );
+        let reminders = phone
+            .upcoming_reminders("2026-10-13T21:00".into(), 48)
+            .unwrap();
+        assert_eq!(reminders.len(), 1);
+        assert_eq!(reminders[0].title, "School tomorrow");
+        assert_eq!(reminders[0].local_time, "2026-10-14T17:55");
+        assert_eq!(reminders[0].start_time, "18:00");
+        assert_eq!(reminders[0].duration_min, Some(30));
+        assert_eq!(
+            *host.events.lock().unwrap(),
+            vec!["account", "sync", "homework"]
         );
         phone_service.stop();
         desktop.stop();
