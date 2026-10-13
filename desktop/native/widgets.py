@@ -5159,6 +5159,9 @@ class UnfinishedPanel(QWidget):
         super().__init__(parent)
         self.setObjectName("unfinishedReview")
         layout = QVBoxLayout(self)
+        # Month at 1024x640 with this card open and the 28 px status strip above it needs the card's
+        # height trimmed (#28): 7 px above the heading and below Hide, and no padding above or below a row.
+        layout.setContentsMargins(11, 7, 11, 7)
         heading = QLabel("Overdue and left from last week")
         heading.setObjectName("unfinishedHeading")
         layout.addWidget(heading)
@@ -5190,6 +5193,8 @@ class UnfinishedPanel(QWidget):
         for item in items:
             row = QWidget()
             row_layout = QHBoxLayout(row)
+            sides = row_layout.contentsMargins()
+            row_layout.setContentsMargins(sides.left(), 0, sides.right(), 0)
             text = QLabel(f"{item['title']} · {length_label(int(item['remaining_min']))} left")
             text.setObjectName("unfinishedRow")
             state = item.get("left_over_state")

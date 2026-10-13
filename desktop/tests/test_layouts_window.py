@@ -3065,9 +3065,17 @@ def test_month_fits_a_1024_by_640_window_with_the_unfinished_card_open(
     click(window, "viewMonth")
     settled(qapp, window)
     wait_until(qapp, lambda: window.month_grid.canvas.rows() > 1)
-    window.unfinished_panel.set_items(
-        [{"id": "old", "title": "Old", "remaining_min": 60, "due": "2020-01-01T10:00"}]
+    # Real homework that still needs a time, opened as More's Unfinished opens it: a card filled by hand
+    # is emptied again by the next week reload, which lists the session's own homework. Not overdue, so
+    # the left-over chip stays away and the card is the only panel above Month.
+    friday_noon = datetime.fromisoformat(window.session.week_start) + timedelta(days=4, hours=12)
+    window.session.add_homework(
+        {"id": "old", "title": "Old", "due": friday_noon.isoformat(timespec="minutes"), "estimate_min": 60}
     )
+    window.session.save()
+    settled(qapp, window)
+    window._on_week()
+    window._show_unfinished()
     wait_until(qapp, lambda: window.unfinished_panel.isVisible())
     for _ in range(5):
         qapp.processEvents()
