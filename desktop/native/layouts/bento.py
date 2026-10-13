@@ -843,7 +843,7 @@ class DayTile(QPushButton):
         parts = [f"{DAY_FULL[shown.day]} {shown.date}"]
         if shown.first is not None:
             parts.append(f"first {shown.first.title} at {clock_label(shown.first.start)}")
-        parts.append(f"{length_label(shown.planned)} planned" if shown.planned else "nothing planned")
+        parts.append(f"{length_label(shown.planned)} planned" if shown.planned else "Nothing planned")
         if shown.homework:
             parts.append(f"{shown.homework} homework")
         if shown.due:

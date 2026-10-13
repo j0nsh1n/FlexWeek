@@ -768,7 +768,7 @@ pub fn span_problem(
 ) -> EngineResult<Option<&'static str>> {
     if start_min < DAY_START_MIN || end_min > DAY_END_MIN {
         return Ok(Some(
-            "That is outside the hours FlexWeek plans in, so it stayed where it was.",
+            "That's outside the hours FlexWeek plans in, so it stayed where it was.",
         ));
     }
     if !due.is_null() {
@@ -783,7 +783,7 @@ pub fn span_problem(
         };
         if later {
             return Ok(Some(
-                "That ends after it is due, so it stayed where it was.",
+                "That ends after it's due, so it stayed where it was.",
             ));
         }
     }

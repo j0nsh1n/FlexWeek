@@ -333,7 +333,7 @@ pub fn sanitize_custom(raw: &Value) -> (Option<Map<String, Value>>, Vec<String>)
             return (
                 None,
                 vec![format!(
-                    "It starts from a look FlexWeek does not have: {}.",
+                    "It starts from a look FlexWeek doesn't have: {}.",
                     py_repr(&first(&shown, 40))
                 )],
             );
@@ -351,7 +351,7 @@ pub fn sanitize_custom(raw: &Value) -> (Option<Map<String, Value>>, Vec<String>)
             || CUSTOM_RANGES.iter().any(|(name, ..)| name == key);
         if !known {
             problems.push(format!(
-                "{} is not a look setting, so it was left out.",
+                "{} isn't a look setting, so it was left out.",
                 py_repr(&first(key, 40))
             ));
         }
@@ -765,7 +765,7 @@ pub fn rename_look(saved: &Value, old: &str, new_name: &str) -> EngineResult<Vec
         && other != at
     {
         return Err(EngineError::look_name(format!(
-            "There is already a look called {clean}."
+            "There's already a look called {clean}."
         )));
     }
     let mut kept = copies(saved)?;
@@ -885,13 +885,13 @@ pub fn import_look(size: usize, raw: Option<&Value>) -> ImportedLook {
         return refused("This file is too large to be a FlexWeek look.");
     }
     let Some(raw) = raw else {
-        return refused("This file is not a FlexWeek look: it could not be read as one.");
+        return refused("This file isn't a FlexWeek look: it could not be read as one.");
     };
     let Value::Object(fields) = raw else {
-        return refused("This file is not a FlexWeek look.");
+        return refused("This file isn't a FlexWeek look.");
     };
     if fields.get("kind") != Some(&json!(FILE_KIND)) {
-        return refused("This file is not a FlexWeek look.");
+        return refused("This file isn't a FlexWeek look.");
     }
     let version = match fields.get("version") {
         Some(Value::Number(found)) if !found.to_string().contains(['.', 'e', 'E']) => {
@@ -1394,7 +1394,7 @@ mod tests {
         assert!(got.look.is_none());
         assert_eq!(
             got.problems,
-            vec!["It starts from a look FlexWeek does not have: 'nan'."]
+            vec!["It starts from a look FlexWeek doesn't have: 'nan'."]
         );
     }
 

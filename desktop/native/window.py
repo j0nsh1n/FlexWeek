@@ -296,7 +296,7 @@ class ClickyTitle(FittedLabel):
 PLAN_LABEL = "Plan my homework"
 SUGGEST_LABEL = "Suggest times"
 PLAN_TIP = (
-    "Find a time for homework that has none, around your fixed times and before it is due. Homework "
+    "Find a time for homework that has none, around your fixed times and before it's due. Homework "
     "that already has a time keeps it."
 )
 SUGGEST_TIP = "Give homework without a time a suggested time. Drag any of them somewhere else if you like."
@@ -338,7 +338,7 @@ MORE_TIPS = {
     "addHomework": (
         "Add an assignment with its due date and how long it will take. FlexWeek finds time for it."
     ),
-    "schoolHours": "Set the days and times you are at school, so nothing is planned then.",
+    "schoolHours": "Set the days and times you're at school, so nothing is planned then.",
     "addFixed": (
         "Add something that happens at a set time, like practice or a lesson. Homework is planned around it."
     ),
@@ -360,7 +360,7 @@ MORE_TIPS = {
         "Save a copy of this week, or go back to an earlier one. FlexWeek keeps a restore point "
         "before big changes."
     ),
-    "reloadWeek": "Load this week again as it is saved. Use it if something looks out of date.",
+    "reloadWeek": "Load this week again as it's saved. Use it if something looks out of date.",
     "helpButton": "What each screen is for, and the keyboard shortcuts.",
     "aboutButton": "The version, and where your plans are saved.",
     "signOut": "Sign out on this computer. Your plans stay saved in your account.",
@@ -1274,7 +1274,7 @@ class NativeWindow(QMainWindow):
         heading.setWordWrap(True)
         layout.addWidget(heading)
         note = QLabel(
-            "They are the only way to reset your password. FlexWeek cannot email you. "
+            "They are the only way to reset your password. FlexWeek can't email you. "
             "Copy them somewhere you will still have if this computer is gone."
         )
         note.setWordWrap(True)
@@ -1374,7 +1374,7 @@ class NativeWindow(QMainWindow):
         segment_row.setSpacing(2)
         for view, label, tip in (
             ("day", "Day", "One day as a list"),
-            ("week", "Week", "The week you are planning"),
+            ("week", "Week", "The week you're planning"),
             ("month", "Month", "The month as a calendar"),
         ):
             button = Segment(label)
@@ -3358,7 +3358,7 @@ class NativeWindow(QMainWindow):
         for day in range(7):
             items = sorted(week.on_day(day), key=lambda item: (item.start, item.end, item.title))
             if not items:
-                words = f"{DAY_FULL[day]}: nothing planned"
+                words = f"{DAY_FULL[day]}: Nothing planned"
                 row = QListWidgetItem(words)
                 self.week_access_list.addItem(row)
                 continue
@@ -4230,7 +4230,7 @@ class NativeWindow(QMainWindow):
                 return
             self._show_preview(
                 "Copy last week's fixed times",
-                "Uncheck anything you do not want before saving.",
+                "Uncheck anything you don't want before saving.",
                 rows,
                 label="last week's fixed times",
                 existing=self.session.blocks,
@@ -4513,7 +4513,7 @@ class NativeWindow(QMainWindow):
             Command("addFixed", "Add fixed time", MORE_TIPS["addFixed"], "Add", "clock"),
             Command("schoolHours", "School hours", MORE_TIPS["schoolHours"], "Add", "school"),
             Command("day", "Day", "One day as a list", "Go to", "list", "D"),
-            Command("week", "Week", "The week you are planning", "Go to", "calendar-days", "W"),
+            Command("week", "Week", "The week you're planning", "Go to", "calendar-days", "W"),
             Command("month", "Month", "The month as a calendar", "Go to", "calendar", "M"),
             Command("myDay", "My day", "Watch today", "Go to", "sun", "T"),
             Command("focus", "Focus screen", "The focus timer on its own, large.", "Go to", "timer", "F"),
@@ -5044,7 +5044,7 @@ class NativeWindow(QMainWindow):
         """The setting used to be stored on the account and obeyed by nothing. It is applied to this
         machine, since starting at login is a property of the machine rather than of the account."""
         if autostart.sync(wanted) is None and wanted:
-            self.session._say("This machine does not support starting at login.")
+            self.session._say("This machine doesn't support starting at login.")
 
     def _open_restore(self) -> None:
         dialog = RestoreDialog(

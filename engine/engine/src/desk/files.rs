@@ -290,7 +290,7 @@ pub fn import_tail(head: &Value, blocks: &[Value], assignments: &[Value]) -> Eng
                 && !homework_ids.iter().any(|held| eq(held, linked))
             {
                 return Ok(refused(format!(
-                    "Block {} points at homework the file does not include. Nothing was imported.",
+                    "Block {} points at homework the file doesn't include. Nothing was imported.",
                     index + 1
                 )));
             }

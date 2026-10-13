@@ -477,7 +477,7 @@ class DaySummary(QWidget):
     def text(self) -> str:
         """The summary in words, a line each, as a screen reader hears it."""
         if not self.shares:
-            return "Nothing planned."
+            return "Nothing planned"
         return "\n".join(f"{share.name}: {length_label(share.minutes)}" for share in self.shares)
 
     def set_shares(self, shares: list[Share]) -> None:

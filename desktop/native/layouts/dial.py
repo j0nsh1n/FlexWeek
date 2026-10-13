@@ -240,7 +240,7 @@ class DialFace(QWidget):
     ) -> None:
         """`over` is the minute before which the day is over, drawn paler; `now` draws the hand."""
         self._blocks, self._over, self._tokens, self._now, self._scale = blocks, over, tokens, now, scale
-        said = ", ".join(f"{item.title} {clock_label(item.start)}" for item in blocks) or "nothing planned"
+        said = ", ".join(f"{item.title} {clock_label(item.start)}" for item in blocks) or "Nothing planned"
         self.setAccessibleName(f"{DAY_FULL[self.day]}: {said}")
         # The time and its note are painted, so they are said here too.
         time = clock_label(now) if now is not None else ""

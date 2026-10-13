@@ -26,11 +26,11 @@ SYNC_SCAN_MS = 1000
 SYNC_DEADLINE_MS = 45_000
 PAIR_TICK_MS = 1000
 RELAY_SENTENCE = (
-    "When your computer is not on the same Wi-Fi, FlexWeek uses a public relay run by n0. "
+    "When your computer isn't on the same Wi-Fi, FlexWeek uses a public relay run by n0. "
     "It sees that two devices are talking, not what they send."
 )
 UNREACHABLE_WORDS = "Could not reach your phone. Make sure FlexWeek is open on it."
-NO_SYNC_WORDS = "Syncing is not available on this computer right now. Your week is still saved here."
+NO_SYNC_WORDS = "Syncing isn't available on this computer right now. Your week is still saved here."
 NO_PHONE_WORDS = "No phone is linked yet."
 DOT_WORDS = {
     "off": "",

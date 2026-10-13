@@ -1142,7 +1142,7 @@ class MissionView(LayoutView):
         dues = {(item.due or "")[:10] for item in todo}
         foot = "The bar is how much of each is placed in the week."
         if len(todo) == 1:
-            foot = "The bar is how much of it is placed in the week."
+            foot = "The bar is how much of it's placed in the week."
         elif len(dues) == 1 and "" not in dues:
             foot = f"All {len(todo)} are due {_due_day(todo[0].due)}. {foot}"
         box.addSpacing(px(12))
@@ -1278,7 +1278,7 @@ class MissionView(LayoutView):
         if not coming:
             heading, title, _line = week.leftover_parts(today)
             waits = week.leftover_kind(today) == "needs_time"
-            words = f"{title} is not placed yet." if waits else f"{heading}."
+            words = f"{title} isn't placed yet." if waits else f"{heading}."
             rows.append(Wrapped(words, "missionHint"))
         foot = ""
         after = today + 1
@@ -1343,7 +1343,7 @@ class MissionView(LayoutView):
             for item in items
         ]
         if not items:
-            rows.append(Wrapped("Nothing planned.", "missionHint"))
+            rows.append(Wrapped("Nothing planned", "missionHint"))
         total = sum(item.minutes for item in items)
         aside = f"{plural(len(items), 'thing')}, {self._figure(length_label(total))} in all"
         return self._list_card(scene, "missionDayList", DAY_FULL[day], aside, rows)

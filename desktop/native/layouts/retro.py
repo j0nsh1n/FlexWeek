@@ -498,7 +498,7 @@ def planned_words(items: tuple[Occurrence, ...], ahead: int | None) -> str:
     """ "2 h 30 min planned, 3 still to come.", homework only, or without what is to come on another day."""
     minutes = homework_planned(items)
     if not minutes:
-        return "Nothing planned."
+        return "Nothing planned"
     words = f"{unbroken(length_label(minutes))} planned"
     return f"{words}, {ahead} still to come." if ahead is not None else f"{words}."
 

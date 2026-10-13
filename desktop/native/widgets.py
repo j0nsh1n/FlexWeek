@@ -259,9 +259,9 @@ SLOT_HINT = "Use a multiple of 15 minutes, such as 15, 30, or\u00a045."
 DUE_BY_HINT = "FlexWeek plans it before this time."
 TYPE_HINT = "Tests are planned first, then quizzes, then everyday homework, then reading."
 DUE_PASSED = "That due time has passed. Choose a later one."
-ESTIMATE_ERROR = "That time is not a multiple of 15 minutes."
+ESTIMATE_ERROR = "That time isn't a multiple of 15 minutes."
 ESTIMATE_SHORT = "Give it at least 15 minutes."
-ESTIMATE_LONG = "That is more than 24 hours. Split it into parts and add each part as its own homework."
+ESTIMATE_LONG = "That's more than 24 hours. Split it into parts and add each part as its own homework."
 HOMEWORK_PROBLEMS = {
     "due": "Choose a valid due date.",
     "course": "Keep the course name under 40 characters.",
@@ -279,7 +279,7 @@ OVERFULL_DAY_MIN = 3 * 60
 # How many rows of Unfinished homework show before the list scrolls: the half row says there is more.
 UNFINISHED_ROWS = 3.5
 REPEAT_NOTE = "Pick more days to repeat it."
-SCHOOL_HOURS_NOTE = "The days and times you are at school, so nothing is planned then."
+SCHOOL_HOURS_NOTE = "The days and times you're at school, so nothing is planned then."
 ROUTINE_LIST_HEIGHT = 96
 REPLAN_TIP = (
     "Find new times for all of this week's homework, as if none had a time yet. Homework you placed "
@@ -295,10 +295,10 @@ PREVIEW_NONE = "Select at least one item before saving."
 BLOCK_PROBLEMS = {
     "title": "Give it a title.",
     "days": "Tick at least one day.",
-    "spotify_url": "That is not a Spotify share link. Paste one that starts with https://open.spotify.com, "
+    "spotify_url": "That's not a Spotify share link. Paste one that starts with https://open.spotify.com, "
     "or leave it empty.",
 }
-BLOCK_REFUSED = "FlexWeek cannot keep this block as it is. Check its title, days and times."
+BLOCK_REFUSED = "FlexWeek can't keep this block as it is. Check its title, days and times."
 
 
 def _block_problem(error: ValidationError) -> str:
@@ -4229,7 +4229,7 @@ def spread_words(sessions: list[dict], due: str, today: date) -> str:
     whole = sizes.count(full)
     lead = f"{whole} × {full} min" if whole > 1 else f"{full} min"
     parts = lead if whole == len(sizes) else f"{lead} and {sizes[-1]} min"
-    ahead = f"before it is due {due_label(due, today)}."
+    ahead = f"before it's due {due_label(due, today)}."
     if len(sizes) == 1:
         return f"{parts} in one session {ahead}"
     days = len({item["date"] for item in sessions})
@@ -6258,7 +6258,7 @@ def _late_move(move: dict, block: dict, title: str) -> str:
     if now:
         return _unbroken_time(f"{title}: placed at {hhmm_text(now)}")
     if was:
-        return _unbroken_time(f"{title}: moves off {hhmm_text(was)} and is not placed")
+        return _unbroken_time(f"{title}: moves off {hhmm_text(was)} and isn't placed")
     return f"{title}: not placed"
 
 

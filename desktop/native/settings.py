@@ -225,15 +225,15 @@ ABOUT_LOGO_PX = 56
 # How far the words fade out at a scroll edge with more past it.
 FADE_PX = 24
 HELP_SCREENS = (
-    ("Day", "One day hour by hour, with homework that is not placed yet beside it, ready to drag in."),
+    ("Day", "One day hour by hour, with homework that isn't placed yet beside it, ready to drag in."),
     ("Week", "Monday to Sunday: drag a block to move it, or drag across empty time to add one."),
     ("Month", "Each date's blocks and the homework due that day; click a date to open it in Day."),
     ("My day", "What is on now and what comes next, to follow once your plan is made."),
 )
 HELP_PLANNING = (
     "Add homework with its due date and length. Press Plan my homework and FlexWeek finds free time for "
-    "it in your study hours, around your fixed times, before it is due. Homework that already has a time "
-    "keeps it. Replan all starts fresh but keeps pinned homework. Anything that does not "
+    "it in your study hours, around your fixed times, before it's due. Homework that already has a time "
+    "keeps it. Replan all starts fresh but keeps pinned homework. Anything that doesn't "
     "fit stays under Not placed yet, and Details says why. From the keyboard, press Ctrl+K and type Plan."
 )
 # Each key in brackets is drawn as a keycap; the words between are drawn plain.

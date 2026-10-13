@@ -1409,7 +1409,7 @@ class SetupPage(QWidget):
         self.fine.setVisible(False)
         fine.toggled.connect(self.fine.setVisible)
         left.addWidget(self.fine)
-        left.addWidget(_label("Day screen, for when you are doing the plan", "setupSection"))
+        left.addWidget(_label("Day screen, for when you're doing the plan", "setupSection"))
         self.day_screen = Chips(
             _design_chips(layouts_for("day", False)), "Day screen", _design_chips(layouts_for("day", True))
         )

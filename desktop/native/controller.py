@@ -1190,7 +1190,7 @@ class NativeSession(QObject):
 
     def copy_last_week_fixed_rows(self, done: Callable[[list[dict] | None], None]) -> None:
         """Fixed times from last week for the empty-week copy sheet. Never parks a draft."""
-        nothing = "There is nothing to copy from last week yet."
+        nothing = "There's nothing to copy from last week yet."
         if self.account is None:
             done(None)
             return
@@ -1259,7 +1259,7 @@ class NativeSession(QObject):
         try:
             start_min = hhmm_to_minutes(clock)
         except ValueError:
-            return "That is outside the hours FlexWeek plans in, so it stayed where it was."
+            return "That's outside the hours FlexWeek plans in, so it stayed where it was."
         if block is None or not block.get("completed"):
             clock_now = clock_parts(self.now_ms())
             past = past_problem(to_week, to_day, start_min, clock_now["iso"], int(clock_now["minute"]))
@@ -1383,7 +1383,7 @@ class NativeSession(QObject):
         to_day = date.fromisoformat(to_iso).weekday()
         block = next((item for item in source["blocks"] if item["id"] == block_id), None)
         if block is None or from_day not in (block.get("days") or []) or not block.get("start"):
-            self._say("That block is not on that date.")
+            self._say("That block isn't on that date.")
             return False
         start = hhmm_to_minutes(block["start"])
         assignment = self.assignments.get(block.get("assignment_id") or "")
@@ -1400,7 +1400,7 @@ class NativeSession(QObject):
             None if to_week == from_week else dest["blocks"],
         )
         if moved is None:
-            self._say("That block is not on that date.")
+            self._say("That block isn't on that date.")
             return False
         source_after, dest_after, _made = moved
         if dest_after is not None and len(dest_after) > MAX_WEEK_BLOCKS:
@@ -1655,7 +1655,7 @@ class NativeSession(QObject):
     def undo(self) -> None:
         if not self.can_undo():
             if self._undo and self._undo[-1].get("stale"):
-                self._say("That change cannot be undone. Reload and try again.")
+                self._say("That change can't be undone. Reload and try again.")
             return
         step = self._undo.pop()
         if step.get("weeks") and not any(week["week_start"] == self.week_start for week in step["weeks"]):
@@ -1670,7 +1670,7 @@ class NativeSession(QObject):
     def redo(self) -> None:
         if not self.can_redo():
             if self._redo and self._redo[-1].get("stale"):
-                self._say("That change cannot be redone. Reload and try again.")
+                self._say("That change can't be redone. Reload and try again.")
             return
         step = self._redo.pop()
         if step.get("weeks") and not any(week["week_start"] == self.week_start for week in step["weeks"]):
@@ -1924,7 +1924,7 @@ class NativeSession(QObject):
                 self.load_week(
                     self.week_start,
                     discard=True,
-                    said="Undo did not go through. Your week was reloaded as it is saved.",
+                    said="Undo did not go through. Your week was reloaded as it's saved.",
                 )
 
         self.client.request("POST", "/api/changes", deepcopy(payload), ok, err)
@@ -2445,12 +2445,12 @@ class NativeSession(QObject):
             self._say("Select at least one item before saving.")
             return False
         if any(row.get("invalid") for row in checked):
-            self._say("Uncheck what cannot be added before saving.")
+            self._say("Uncheck what can't be added before saving.")
             return False
         op_id = operation_id or (self._operation(attempt_key) if attempt_key else str(uuid4()))
         groups = merge_preview_rows(rows, op_id)
         if not groups:
-            self._say("There is nothing available to add.")
+            self._say("There's nothing available to add.")
             return False
         by_week: dict[str, list[dict]] = {}
         for group in groups:
@@ -2632,7 +2632,7 @@ class NativeSession(QObject):
             return False
         proposals = rows if rows is not None else self.apply_routine_rows(routine_id, week_start, days)
         if not proposals:
-            self._say("There is nothing available to add.")
+            self._say("There's nothing available to add.")
             return False
         key = (
             f"routine|{self.account['id']}|{routine_id}|{routine['revision']}|"
@@ -2950,7 +2950,7 @@ class NativeSession(QObject):
             if not sessions:
                 if remaining:
                     self._say(
-                        f"{length_label(remaining)} remains, but it does not fit the 15-minute planning grid."
+                        f"{length_label(remaining)} remains, but it doesn't fit the 15-minute planning grid."
                     )
                 else:
                     self._say("All of this homework is already focused or planned.")
@@ -2979,7 +2979,7 @@ class NativeSession(QObject):
             summary = spread_ready_sentence(item["title"], total, item["due"], self.today_iso())
             if remaining:
                 summary += (
-                    f" {length_label(remaining)} cannot fit the 15-minute grid and has not been "
+                    f" {length_label(remaining)} can't fit the 15-minute grid and has not been "
                     "dropped from the homework total."
                 )
             self.spread_preview = {
@@ -3219,7 +3219,7 @@ class NativeSession(QObject):
             else:
                 block = next((item for item in self.blocks if item["id"] == block_id), None)
                 if block is None or block.get("completed") or block.get("pomodoro_role") == "break":
-                    self._say("Place a work block that is not finished before starting focus.")
+                    self._say("Place a work block that isn't finished before starting focus.")
                     return False
                 placed = block if block.get("start") else None
                 if placed is None and self.trace:
@@ -3232,7 +3232,7 @@ class NativeSession(QObject):
                         None,
                     )
                 if placed is None or not placed.get("start"):
-                    self._say("Place a work block that is not finished before starting focus.")
+                    self._say("Place a work block that isn't finished before starting focus.")
                     return False
                 target = {
                     "weekStart": self.week_start,

@@ -184,7 +184,7 @@ LAYOUTS: dict[str, LayoutSpec] = {
             "one",
             "day",
             "One thing",
-            "The whole window is the thing that is on now.",
+            "The whole window is the thing that's on now.",
             (
                 _colour(ONE),
                 Option(

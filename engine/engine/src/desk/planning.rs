@@ -734,11 +734,11 @@ pub fn settle_placements_after_deadline(
                 .map(|(_, _, title)| title.clone())
         };
         let why = if start < DAY_START_MIN || end > DAY_END_MIN {
-            Some("that is outside the hours FlexWeek plans in".to_string())
+            Some("that's outside the hours FlexWeek plans in".to_string())
         } else if due.is_some_and(|due| (int_of(&day).unwrap_or(0), end) > due)
             && !contains(after_deadline, subscript(block, "id")?)?
         {
-            Some("that is after it is due".to_string())
+            Some("that's after it's due".to_string())
         } else {
             clash.map(|title| format!("{} is there now", py_str(&title)))
         };

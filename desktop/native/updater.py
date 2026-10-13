@@ -236,7 +236,7 @@ def apply_update(downloaded: str, kind: str | None = None) -> str | None:
         if how == "appimage":
             current = os.environ.get("APPIMAGE")
             if not current:
-                return "This copy does not know where its AppImage is."
+                return "This copy doesn't know where its AppImage is."
             return _swap_file(source, Path(current))
         return _swap_tree(source)
     finally:
@@ -247,7 +247,7 @@ def apply_update(downloaded: str, kind: str | None = None) -> str | None:
 
 def _swap_file(source: Path, target: Path) -> str | None:
     if not writable(target.parent):
-        return f"{target.parent} cannot be written, so the update was not applied."
+        return f"{target.parent} can't be written, so the update was not applied."
     try:
         beside = target.with_suffix(target.suffix + ".new")
         shutil.copy2(source, beside)
@@ -266,7 +266,7 @@ def _swap_tree(source: Path) -> str | None:
     """
     root = bundle_root()
     if not writable(root.parent):
-        return f"{root.parent} cannot be written, so the update was not applied."
+        return f"{root.parent} can't be written, so the update was not applied."
     staging = root.parent / (root.name + ".update")
     previous = root.parent / (root.name + ".old")
     try:

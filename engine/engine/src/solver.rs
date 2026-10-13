@@ -17,7 +17,7 @@ const TIGHT_SLACK_MIN: i64 = 3 * 60;
 const DANGER_SLACK_MIN: i64 = 60;
 
 const CLUSTER_COPY: &str = "Several tasks are short on time. Shorten a session, pick another day, \
-    or free some protected hours. Work that cannot fit stays unplaced.";
+    or free some protected hours. Work that can't fit stays unplaced.";
 const LATE_COPY: &str = "Moved after you ran late so the rest of the day still fits.";
 
 fn energy_window(energy: &str) -> (i64, i64) {
@@ -149,10 +149,10 @@ fn amount(minutes: i64) -> String {
 
 fn slack_sentence(slack_min: i64, status: &str) -> String {
     if slack_min == 0 {
-        return "Finishes right when it is due.".into();
+        return "Finishes right when it's due.".into();
     }
     let only = if status == "danger" { "only " } else { "" };
-    format!("Finishes {only}{} before it is due.", amount(slack_min))
+    format!("Finishes {only}{} before it's due.", amount(slack_min))
 }
 
 // --- `backend/availability.py`, the one copy in `plan` ---
