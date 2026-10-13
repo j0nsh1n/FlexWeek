@@ -214,17 +214,17 @@ class BlockPainter:
         for minute in range(-(-track.first // 60) * 60, track.last + 1, 60):
             offset = track.offset(minute)
             if track.axis is Axis.DOWN:
-                painter.drawLine(
-                    QPointF(area.left(), area.top() + offset), QPointF(area.right(), area.top() + offset)
-                )
+                y = int(area.top() + offset) + 0.5
+                painter.drawLine(QPointF(area.left(), y), QPointF(area.right(), y))
             else:
-                painter.drawLine(
-                    QPointF(area.left() + offset, area.top()), QPointF(area.left() + offset, area.bottom())
-                )
+                x = int(area.left() + offset) + 0.5
+                painter.drawLine(QPointF(x, area.top()), QPointF(x, area.bottom()))
         if track.axis is Axis.DOWN:
-            painter.drawLine(area.topLeft(), area.bottomLeft())
+            y = int(area.top()) + 0.5
+            painter.drawLine(QPointF(area.left(), y), QPointF(area.left(), area.bottom()))
         else:
-            painter.drawLine(area.topLeft(), area.topRight())
+            x = int(area.left()) + 0.5
+            painter.drawLine(QPointF(x, area.top()), QPointF(x, area.bottom()))
 
     def hour_gutter(self, base: QFont, first: int, last: int, now: int | None) -> float:
         """The room the hour labels from `first` to `last` need beside the hours, in their clock,

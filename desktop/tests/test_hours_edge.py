@@ -225,3 +225,35 @@ def test_each_design_paints_homework_in_its_own_colours(
     finally:
         paint.end()
     assert "block_edge" in painter.colours
+
+
+def test_hour_rules_sit_on_one_pixel_row_at_125_percent_scale(qapp: QApplication) -> None:  # noqa: F811
+    """U17: a 1 px pen on fractional y draws two pale rows; snap rules to half pixels."""
+    from PySide6.QtGui import QImage, QPainter
+
+    from desktop.native.hours.geometry import FIRST, LAST, LinearTrack
+
+    track = LinearTrack(0, QRectF(0, 0, 200, 400), first=FIRST, last=LAST)
+    rule = QColor(PALETTE.get("rule") or PALETTE["hairline"])
+    image = QImage(200, 400, QImage.Format.Format_ARGB32)
+    image.fill(QColor("white"))
+    paint = QPainter(image)
+    paint.scale(1.25, 1.25)
+    paint.setFont(QFont("Inter", 12))
+    ClassicPainter(PALETTE).track(paint, track, False)
+    paint.end()
+    minute = FIRST + 60
+    y = int((track.area.top() + track.offset(minute)) * 1.25)
+    rows = []
+    for offset in (-1, 0, 1):
+        row = y + offset
+        if 0 <= row < image.height():
+            rows.append(
+                sum(
+                    1
+                    for x in range(20, 180)
+                    if (c := image.pixelColor(x, row)).red() < 250 or c.green() < 250 or c.blue() < 250
+                )
+            )
+    assert rows[1] > max(rows[0], rows[2], 1), rows
+    assert rows[1] >= 2 * max(rows[0], rows[2]), rows
