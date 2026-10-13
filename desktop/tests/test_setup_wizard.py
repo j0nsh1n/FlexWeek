@@ -22,7 +22,8 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QPoint, QStandardPaths, QTime, QTimer
+    from PySide6.QtCore import QPoint, QStandardPaths, Qt, QTime, QTimer
+    from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication, QComboBox, QDateTimeEdit, QLabel, QPushButton, QWidget
 
     from desktop.native.calendar import monday_of, sunday_due
@@ -971,6 +972,21 @@ def test_choosing_24_hour_in_setup_sticks(qapp: QApplication, server: LocalServe
     assert again.session.preferences["clock_24h"] is True
     assert clock_text(15 * 60 + 30) == "15:30"
     close(qapp, again)
+
+
+def test_home_and_end_pick_the_12_and_24_hour_clock(qapp: QApplication) -> None:
+    """N13-A30: Home and End move between the two clock radios, as the arrows do."""
+    setup = SetupPage()
+    state = SetupState("system", sanitize_look(None), sanitize_layout(None), {}, [], "")
+    setup.open(state, WEEK)
+    assert setup.clock_buttons[False].isChecked()
+    QTest.keyClick(setup.clock_buttons[False], Qt.Key.Key_End)
+    assert setup.clock_buttons[True].isChecked()
+    assert clock_text(15 * 60) == "15:00"
+    QTest.keyClick(setup.clock_buttons[True], Qt.Key.Key_Home)
+    assert setup.clock_buttons[False].isChecked()
+    assert clock_text(15 * 60) == "3:00 PM"
+    setup.deleteLater()
 
 
 def test_a_clock_tried_and_skipped_on_the_page_is_put_back(qapp: QApplication) -> None:

@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from uuid import uuid4
 
-from PySide6.QtCore import QRect, QRectF, QSize, Qt, QTime, QTimer, Signal
+from PySide6.QtCore import QEvent, QObject, QRect, QRectF, QSize, Qt, QTime, QTimer, Signal
 from PySide6.QtGui import (
     QAccessible,
     QAccessibleAnnouncementEvent,
@@ -365,6 +365,24 @@ def step_badge(number: int, state: str, palette: dict, family: str, ratio: float
 def _rail_row(step: int) -> int:
     """The side list's row that holds `step`."""
     return next(index for index, (_name, steps) in enumerate(RAIL) if step in steps)
+
+
+class _RadioEnds(QObject):
+    """Home and End in a radio group go to its first and last button, as the arrow keys go to the next
+    and the one before. Qt gives a group only the arrows."""
+
+    def __init__(self, buttons: list[QRadioButton], parent: QObject) -> None:
+        super().__init__(parent)
+        self._buttons = buttons
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if event.type() == QEvent.Type.KeyPress and watched in self._buttons:
+            ends = {Qt.Key.Key_Home: self._buttons[0], Qt.Key.Key_End: self._buttons[-1]}
+            if event.key() in ends and not event.modifiers():
+                ends[event.key()].click()
+                ends[event.key()].setFocus(Qt.FocusReason.OtherFocusReason)
+                return True
+        return super().eventFilter(watched, event)
 
 
 def _repolish(widget: QWidget) -> None:
@@ -1396,6 +1414,9 @@ class SetupPage(QWidget):
             self.clock_buttons[twenty_four] = button
             clock_line.addWidget(button)
         clock_line.addStretch(1)
+        clock_ends = _RadioEnds(list(self.clock_buttons.values()), clock)
+        for button in self.clock_buttons.values():
+            button.installEventFilter(clock_ends)
         box.addWidget(clock)
         self.clock_choice.buttonToggled.connect(lambda _button, _on: self._follow_clock())
         self._section(box, "School")
