@@ -20,8 +20,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -157,6 +159,8 @@ private fun FlexWeekRoot(
     val demo = core is com.flexweek.app.core.FakeFlexWeekCore
     var paired by remember { mutableStateOf(core.isPaired() || (demo && tweaks.prePaired)) }
     var pairingRequested by remember { mutableStateOf(false) }
+    // Survives rotation so a second pair screen cannot start while the first pairing is still running.
+    var pairEpoch by rememberSaveable { mutableIntStateOf(0) }
     var pendingNotifPrompt by remember { mutableStateOf(false) }
     var tab by remember {
         mutableStateOf(
@@ -184,15 +188,15 @@ private fun FlexWeekRoot(
                 tweaks.startScreen != ScreenshotTweaks.StartScreen.Reminders &&
                 tweaks.startScreen != ScreenshotTweaks.StartScreen.Week)
     if (showPair) {
-        val vm =
-            remember {
-                PairViewModel(core) {
-                    paired = true
-                    pairingRequested = false
-                    pendingNotifPrompt = true
-                }
-            }
+        val vm = viewModel(key = "pair-$pairEpoch") { PairViewModel(core) }
         val pairState by vm.uiState
+        LaunchedEffect(pairState.paired) {
+            if (pairState.paired) {
+                paired = true
+                pairingRequested = false
+                pendingNotifPrompt = true
+            }
+        }
         PairScreen(
             state = pairState,
             onShowCode = vm::showCodeEntry,
@@ -336,7 +340,10 @@ private fun FlexWeekRoot(
                                 remindersVm.syncNow()
                             },
                             onUnpair = {
-                                remindersVm.unpair { pairingRequested = true }
+                                remindersVm.unpair {
+                                    pairEpoch += 1
+                                    pairingRequested = true
+                                }
                             },
                         )
                 }

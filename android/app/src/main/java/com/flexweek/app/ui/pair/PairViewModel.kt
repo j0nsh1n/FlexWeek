@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.util.concurrent.atomic.AtomicBoolean
 
 data class PairUiState(
     val mode: PairInputMode = PairInputMode.Qr,
@@ -17,6 +18,7 @@ data class PairUiState(
     val tried: Boolean = false,
     val problem: String? = null,
     val joining: Boolean = false,
+    val paired: Boolean = false,
     val canScan: Boolean = false,
 )
 
@@ -28,7 +30,7 @@ enum class PairInputMode {
 class PairViewModel(
     private val core: FlexWeekCore,
     private val workerDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val onPaired: () -> Unit,
+    private val onPaired: () -> Unit = {},
 ) : ViewModel() {
     val uiState = mutableStateOf(PairUiState(
         mode = if (core is FakeFlexWeekCore) PairInputMode.Qr else PairInputMode.Code,
@@ -54,7 +56,7 @@ class PairViewModel(
     }
 
     fun submitPair() {
-        if (uiState.value.joining) return
+        if (uiState.value.joining || uiState.value.paired) return
         val digits = uiState.value.code.filter { it.isDigit() }
         uiState.value = uiState.value.copy(tried = true)
         if (digits.length != 8) {
@@ -64,20 +66,31 @@ class PairViewModel(
                 )
             return
         }
+        if (!pairingInFlight.compareAndSet(false, true)) {
+            uiState.value =
+                uiState.value.copy(problem = "Pairing is already running. Wait for it to finish.")
+            return
+        }
         uiState.value = uiState.value.copy(joining = true, problem = null)
         viewModelScope.launch {
-            val result = withContext(workerDispatcher) { JSONObject(core.pairWithCode(digits)) }
-            if (result.optBoolean("ok")) {
-                onPaired()
-            } else {
-                val problem = when (result.optString("kind")) {
-                    "timeout", "unreachable" -> "Check the code and that FlexWeek is open on both devices."
-                    "already_linked" -> "This phone is already linked to another FlexWeek account."
-                    "code_expired" -> "That code has expired. Start a new one on your computer."
-                    "too_many_tries" -> "Too many wrong tries. Start a new code on your computer."
-                    else -> "That code didn't match. Codes last 5 minutes; ask your computer for a new one."
+            try {
+                val result = withContext(workerDispatcher) { JSONObject(core.pairWithCode(digits)) }
+                if (result.optBoolean("ok")) {
+                    // Drop the code once pairing has succeeded. It is not stored anywhere else.
+                    uiState.value = uiState.value.copy(joining = false, paired = true, code = "")
+                    onPaired()
+                } else {
+                    val problem = when (result.optString("kind")) {
+                        "timeout", "unreachable" -> "Check the code and that FlexWeek is open on both devices."
+                        "already_linked" -> "This phone is already linked to another FlexWeek account."
+                        "code_expired" -> "That code has expired. Start a new one on your computer."
+                        "too_many_tries" -> "Too many wrong tries. Start a new code on your computer."
+                        else -> "That code didn't match. Codes last 5 minutes; ask your computer for a new one."
+                    }
+                    uiState.value = uiState.value.copy(joining = false, problem = problem)
                 }
-                uiState.value = uiState.value.copy(joining = false, problem = problem)
+            } finally {
+                pairingInFlight.set(false)
             }
         }
     }
@@ -86,5 +99,14 @@ class PairViewModel(
     fun pairFromTypedCode(digits: String) {
         uiState.value = uiState.value.copy(code = digits, mode = PairInputMode.Code)
         submitPair()
+    }
+
+    companion object {
+        // One pairing for the whole process. A recreated screen must not start a second one.
+        private val pairingInFlight = AtomicBoolean(false)
+
+        internal fun resetPairingGateForTest() {
+            pairingInFlight.set(false)
+        }
     }
 }

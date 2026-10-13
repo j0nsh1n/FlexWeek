@@ -22,7 +22,10 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 class PairViewModelTest {
     private val dispatcher = UnconfinedTestDispatcher()
     @Before fun setUp() { Dispatchers.setMain(dispatcher) }
-    @After fun tearDown() { Dispatchers.resetMain() }
+    @After fun tearDown() {
+        Dispatchers.resetMain()
+        PairViewModel.resetPairingGateForTest()
+    }
     @Test
     fun shortCodeShowsLengthProblem() {
         val core = FakeFlexWeekCore()
@@ -53,6 +56,7 @@ class PairViewModelTest {
         assertNull(vm.uiState.value.problem)
         assertEquals(true, paired)
         assertEquals(true, core.isPaired())
+        assertEquals("", vm.uiState.value.code)
     }
 
     @Test
@@ -75,5 +79,29 @@ class PairViewModelTest {
         advanceUntilIdle()
         assertEquals(1, calls)
         assertEquals(true, paired)
+        assertEquals("", vm.uiState.value.code)
+    }
+
+    @Test
+    fun aSecondScreenCannotStartPairingWhileTheFirstIsStillRunning() = runTest {
+        val fake = FakeFlexWeekCore()
+        var calls = 0
+        val core = object : FlexWeekCore by fake {
+            override fun pairWithCode(code: String): String {
+                calls += 1
+                return fake.pairWithCode(code)
+            }
+        }
+        val first = PairViewModel(core, StandardTestDispatcher(testScheduler)) {}
+        val second = PairViewModel(core, StandardTestDispatcher(testScheduler)) {}
+        first.pairFromTypedCode("48127390")
+        second.pairFromTypedCode("48127390")
+        assertEquals(0, calls)
+        assertEquals("Pairing is already running. Wait for it to finish.", second.uiState.value.problem)
+        advanceUntilIdle()
+        assertEquals(1, calls)
+        assertEquals(true, first.uiState.value.paired)
+        assertEquals("", first.uiState.value.code)
+        assertEquals(false, second.uiState.value.paired)
     }
 }
