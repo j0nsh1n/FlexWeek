@@ -1189,7 +1189,8 @@ class Rail(QFrame):
         wide = not self.folded
         has_next = self.next.show_next(self._week, self._today, self._minute)
         self.next.card.set_edge(self._next_edge())
-        self.next.setVisible(wide)
+        # Nothing now or next today: the card takes no room (the strip says "Nothing more today").
+        self.next.setVisible(wide and has_next)
         self.month.setVisible(False)
         self.focus.setVisible(False)
         self.none_waiting.setVisible(not self._chips)
