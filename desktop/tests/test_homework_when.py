@@ -92,7 +92,6 @@ def test_new_homework_asks_who_picks_the_time_and_starts_with_flexweek(qapp: QAp
 def test_pinned_time_accessible_names_and_help_keep_pinned_homework(
     qapp: QApplication,  # noqa: F811
 ) -> None:
-    from desktop.native.controller import NativeSession
     from desktop.native.settings import HELP_PLANNING
 
     parent = host()
@@ -109,7 +108,6 @@ def test_pinned_time_accessible_names_and_help_keep_pinned_homework(
         "keeps it. Replan all starts fresh but keeps pinned homework. Anything that does not "
         "fit stays under Not placed yet, and Details says why. From the keyboard, press Ctrl+K and type Plan."
     )
-    assert "unpinning " in NativeSession.unpin_assignment.__code__.co_consts
 
 
 def test_do_it_at_shows_one_day_and_a_time_and_says_where_it_stays(qapp: QApplication) -> None:  # noqa: F811
@@ -411,3 +409,15 @@ def test_no_time_left_this_week_says_to_close_and_go_to_next_week(
     assert dialog.problem.text() == NO_TIME_LEFT
     assert dialog.problem.isVisible()
     free(dialog)
+
+
+def test_undoing_an_unpin_says_undid_unpinning_the_homework(
+    qapp: QApplication,  # noqa: F811
+    window,  # noqa: F811
+) -> None:
+    window.session.unpin_assignment("essay")
+    window.session.save()
+    settled(qapp, window)
+    window.session.undo()
+    settled(qapp, window)
+    assert window.session.message == "Undid unpinning History essay."
