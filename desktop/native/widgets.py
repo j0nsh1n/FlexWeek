@@ -6351,7 +6351,7 @@ class AvailabilityDialog(Dialog):
         self._hours = _by_day(deepcopy(preferences.get("work_windows") or []))
         self._protected = _by_day(deepcopy(preferences.get("protected") or []))
         self._picking: tuple[str, int] | None = None
-        layout = self.card_body("Availability")
+        layout = self.card_body("Study hours")
         body = QWidget()
         self._body = body
         body.installEventFilter(self)

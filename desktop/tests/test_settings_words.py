@@ -216,6 +216,20 @@ def test_focus_says_what_the_long_break_counts(
     dialog.close_page()
 
 
+def test_the_study_hours_card_and_its_button_use_one_name(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    """T-W21: the card said "Study hours" but sent the student to "Availability…"; the More item and the
+    sheet's title said it too."""
+    dialog = prefs(window)
+    card = page(dialog, 1)
+    lines = [label.text() for label in card.findChildren(QLabel)]
+    assert "Choose when FlexWeek may plan homework, including hours kept for one class." in lines
+    assert dialog.findChild(QPushButton, "prefsAvailability").text() == "Study hours"
+    assert window.findChild(QPushButton, "availabilityButton").text() == "Study hours"
+
+
 def test_account_has_its_own_row_and_availability_is_under_planning(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
@@ -226,7 +240,7 @@ def test_account_has_its_own_row_and_availability_is_under_planning(
     assert account.text() == "Manage account…"
     assert label_for(account) == "Account"
     assert page(dialog, 4).isAncestorOf(account)
-    assert availability.text() == "Availability…"
+    assert availability.text() == "Study hours"
     assert page(dialog, 1).isAncestorOf(availability), "Availability is about when to plan"
     asked: list[str] = []
     # The window's own answer is a dialog that waits for a click; only the request is under test.

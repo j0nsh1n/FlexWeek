@@ -148,6 +148,7 @@ MORE_LOOKS = "More looks"
 LOOK_TILE = 150
 ACCENT_LABELS = {"default": "Blue"}
 TEXT_KEPT_NOTE = "Kept for every look."
+STUDY_HOURS_LINE = "Choose when FlexWeek may plan homework, including hours kept for one class."
 OWN_ACCENT_NOTE = "High contrast keeps its own yellow, whatever accent is picked."
 # A look of the student's own sets the accent and every knob (look.py's resolved_palette and
 # effective_look), so while one is worn they show its values and say where they change instead.
@@ -902,9 +903,9 @@ class SettingsPage(QWidget):
             hint.setContentsMargins(26, 0, 0, 4)
             planning_form.addRow(hint)
         where_card, where_form = _card(
-            "Study hours", "Preferred study hours, including ones kept for one subject, are in Availability."
+            "Study hours", STUDY_HOURS_LINE
         )
-        open_availability = _page_button("Availability…", "prefsAvailability")
+        open_availability = _page_button("Study hours", "prefsAvailability")
         open_availability.clicked.connect(self.availability_requested.emit)
         where_form.addRow(open_availability)
         drag_card, drag_form = _card("Dragging", DRAG_STEP_QUESTION)

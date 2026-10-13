@@ -1492,7 +1492,7 @@ class NativeWindow(QMainWindow):
         late = QPushButton("Running late")
         late.setObjectName("runningLate")
         late.clicked.connect(self._open_late)
-        availability = QPushButton("Availability")
+        availability = QPushButton("Study hours")
         availability.setObjectName("availabilityButton")
         availability.clicked.connect(self._open_availability)
         settings = QPushButton("Settings")

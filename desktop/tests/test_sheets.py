@@ -214,7 +214,7 @@ def week_anchor(window: NativeWindow) -> QWidget:  # noqa: F811
 
 
 def test_availability_is_a_sheet_that_esc_closes(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
-    escape_closes(qapp, window, window._open_availability, "Availability", week_anchor(window))
+    escape_closes(qapp, window, window._open_availability, "Study hours", week_anchor(window))
 
 
 def test_plan_homework_is_a_sheet_that_esc_closes(
