@@ -32,6 +32,9 @@ def test_the_block_editor_takes_an_end_at_midnight(
     set_clock_24h(twenty_four)
     dialog = BlockDialog(host, day=3, start="22:00", duration_min=60)
     dialog.title.setText("Late club")
+    from desktop.tests.test_fixed_time_steps import go_when
+
+    go_when(dialog)
     type_over(dialog.end, way)
     assert dialog.duration_line.text() == length_label(120)
     assert dialog.duration_line.property("problem") is False
@@ -65,6 +68,9 @@ def test_an_event_that_ends_at_midnight_opens_and_saves_as_it_was(
 def test_the_block_editor_still_refuses_an_end_before_its_start(qapp: QApplication, host: QWidget) -> None:
     dialog = BlockDialog(host, day=3, start="22:00", duration_min=60)
     dialog.title.setText("Club")
+    from desktop.tests.test_fixed_time_steps import go_when
+
+    go_when(dialog)
     type_over(dialog.end, "21:00")
     dialog.accept()
     assert dialog.result() != dialog.DialogCode.Accepted

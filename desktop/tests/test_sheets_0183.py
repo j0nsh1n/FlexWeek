@@ -154,7 +154,11 @@ def test_add_fixed_time_is_titled_that_and_guesses_category_from_the_start(
     added = shown(qapp, BlockDialog(parent, day=3, start="10:00"))
     assert added.windowTitle() == "Add fixed time"
     assert added.findChild(QLabel, "sheetTitle").text() == "Add fixed time"
+    from desktop.tests.test_fixed_time_steps import go_length, go_when
+
+    go_when(added)
     assert added.findChild(QLabel, "blockRepeatNote").text() == "Pick more days to repeat it."
+    go_length(added)
     duration = next(label for label in added.findChildren(QLabel) if label.text() == "Duration")
     assert duration.isVisibleTo(added)
     assert added.category.currentData() == "class"
@@ -169,12 +173,13 @@ def test_add_fixed_time_is_titled_that_and_guesses_category_from_the_start(
     assert added.findChild(QLineEdit, "blockSpotify") is None or not added.findChild(
         QLineEdit, "blockSpotify"
     ).isVisibleTo(added)
-    added.more_details.setChecked(True)
-    qapp.processEvents()
-    assert added.spotify.isVisibleTo(added)
+    assert not added.more_details.isVisibleTo(added), "Add fixed time has no More details on the three steps"
     free(added)
     edited = shown(qapp, BlockDialog(parent, soccer(), occurrence_day=3))
     assert edited.windowTitle() == "Edit event"
+    edited.more_details.setChecked(True)
+    qapp.processEvents()
+    assert edited.spotify.isVisibleTo(edited)
     free(edited)
     free(parent)
 

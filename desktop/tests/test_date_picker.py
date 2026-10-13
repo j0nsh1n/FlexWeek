@@ -181,6 +181,9 @@ def test_the_date_calendar_is_not_built_until_its_popup_opens(
     dialog.show()
     for _ in range(6):
         qapp.processEvents()
+    from desktop.tests.test_homework_form import go_when
+
+    go_when(dialog)
     assert made == 0
     field = dialog.due.date
     QTest.mouseClick(

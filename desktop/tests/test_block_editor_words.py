@@ -84,6 +84,9 @@ def test_the_editor_is_titled_as_a_student_says_it(qapp: QApplication, host: QWi
 def test_it_says_that_ticking_another_day_repeats_it(qapp: QApplication, host: QWidget) -> None:  # noqa: F811
     dialog = BlockDialog(host, day=3, start="17:15", duration_min=30, from_range=True)
     dialog.show()
+    from desktop.tests.test_fixed_time_steps import go_when
+
+    go_when(dialog)
     note = dialog.findChild(QLabel, "blockRepeatNote")
     assert note.text() == "Pick more days to repeat it."
     assert note.isVisibleTo(dialog)
@@ -105,6 +108,9 @@ def test_the_repeat_note_sits_whole_under_the_day_boxes(
     dialog = BlockDialog(window, day=3, start="17:15", duration_min=30, from_range=True)
     dialog.show()
     qapp.processEvents()
+    from desktop.tests.test_fixed_time_steps import go_when
+
+    go_when(dialog)
     note = dialog.findChild(QLabel, "blockRepeatNote")
     thursday = dialog.findChild(QPushButton, "blockDay3")
     below = note.mapTo(dialog, QPoint(0, 0)).y() - thursday.mapTo(dialog, QPoint(0, thursday.height())).y()

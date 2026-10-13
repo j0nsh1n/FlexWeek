@@ -415,6 +415,9 @@ def test_new_homework_is_due_on_a_day_and_a_time_only_when_asked(qapp: QApplicat
     dialog.show()
     qapp.processEvents()
     assert dialog.due.value() == "2026-09-15", "tomorrow, whatever the hour"
+    from desktop.tests.test_homework_form import go_when
+
+    go_when(dialog)
     assert not dialog.due.time.isVisible(), "no time box until the student says it is due at one"
     dialog.due.timed.setChecked(True)
     assert dialog.due.time.isVisible()

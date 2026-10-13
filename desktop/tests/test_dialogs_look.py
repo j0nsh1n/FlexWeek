@@ -142,8 +142,11 @@ def test_the_editors_and_the_seven_others_are_sheets_over_the_dimmed_week(
         assert window.rect().contains(on_window), f"{name}: the card is inside the window"
         if make in editors:
             assert QApplication.focusWidget() is dialog.title, "typing starts in the title"
-            save = next(button for button in dialog.findChildren(QPushButton) if button.text() == "Save")
-            assert save.isDefault(), "Enter saves"
+            primary = dialog._save
+            if dialog.windowTitle() == "Add homework":
+                assert primary.text() == "Next" and primary.isDefault()
+            else:
+                assert primary.text() == "Save" and primary.isDefault(), "Enter saves"
         # Still a modal dialog to Qt, so the week's keys wait for it and the rig can find it.
         seen: list[object] = []
         dialog.hide()
@@ -213,6 +216,9 @@ def test_a_sheets_labels_sit_above_their_fields_at_one_edge(qapp: QApplication) 
         assert words == "End" or left_x(field, block) == edge, words
     assert block.end.mapTo(block, QPoint()).y() == block.start.mapTo(block, QPoint()).y()
     homework = shown(qapp, HomeworkDialog(parent, today=WEEK))
+    from desktop.tests.test_homework_form import go_when
+
+    go_when(homework)
     due = next(label for label in homework.findChildren(QLabel) if label.text() == "Due")
     assert due.mapTo(homework, QPoint(0, due.height())).y() <= homework.due.date.mapTo(homework, QPoint()).y()
     assert left_x(due, homework) == left_x(homework.due.date, homework) == left_x(homework.title, homework)

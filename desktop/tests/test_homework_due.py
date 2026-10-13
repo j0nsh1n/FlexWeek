@@ -14,6 +14,7 @@ from PySide6.QtCore import QDate, QTime
 from PySide6.QtWidgets import QApplication, QCheckBox, QLabel, QWidget
 
 from desktop.native.widgets import HomeworkDialog
+from desktop.tests.test_homework_form import go_when
 from desktop.tests.window_support import free, qapp  # noqa: F401
 
 TODAY = "2026-09-14"
@@ -52,6 +53,7 @@ def test_the_time_choice_is_called_due_by_and_says_what_it_does(qapp: QApplicati
     dialog = HomeworkDialog(parent, today=TODAY)
     dialog.show()
     qapp.processEvents()
+    go_when(dialog)
     switch = dialog.due.timed
     assert isinstance(switch, QCheckBox) and switch.text() == "Due by"
     assert "At a set time" not in [box.text() for box in dialog.findChildren(QCheckBox)]
@@ -69,6 +71,7 @@ def test_a_day_that_has_passed_is_refused_beside_the_date(qapp: QApplication) ->
     parent = clocked()
     dialog = HomeworkDialog(parent, today=TODAY)
     dialog.title.setText("History essay")
+    go_when(dialog)
     dialog.due.date.setDate(QDate(2026, 9, 13))
     assert not saved(dialog)
     assert dialog.due.problem.text() == "That time has already passed."
@@ -88,6 +91,7 @@ def test_a_time_earlier_today_is_refused_and_a_later_one_is_not(qapp: QApplicati
     parent = clocked()
     dialog = HomeworkDialog(parent, today=TODAY, due=TODAY)
     dialog.title.setText("History essay")
+    go_when(dialog)
     dialog.due.timed.setChecked(True)
     dialog.due.time.setTime(QTime(14, 0))
     assert not saved(dialog), "14:00 is an hour ago at 15:00"
@@ -103,6 +107,7 @@ def test_a_day_with_no_time_is_due_at_the_end_of_it_so_today_is_fine(qapp: QAppl
     parent = clocked()
     dialog = HomeworkDialog(parent, today=TODAY, due=TODAY)
     dialog.title.setText("History essay")
+    go_when(dialog)
     assert dialog.due.value() == TODAY
     assert saved(dialog)
     free(dialog)

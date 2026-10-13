@@ -15,6 +15,7 @@ from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
 
 from desktop.native.widgets import HomeworkDialog
+from desktop.tests.test_homework_form import go_length
 from desktop.tests.window_support import free, qapp  # noqa: F401
 
 TODAY = "2026-09-14"
@@ -71,6 +72,8 @@ def test_the_choice_is_shown_from_60_minutes_up_in_add_and_in_edit(qapp: QApplic
     parent = host()
     for assignment in (None, essay()):
         dialog = opened(parent, assignment)
+        if assignment is None:
+            go_length(dialog)
         assert dialog.spread_choice.isVisible()
         assert not dialog.spread_line.isVisible(), "the line says what Spread will do, not one go"
         spread(dialog)
@@ -193,6 +196,7 @@ def test_saving_with_spread_hands_the_unsaved_values_and_the_plan_to_the_window(
     parent = host()
     dialog = opened(parent)
     dialog.title.setText("Science project")
+    go_length(dialog)
     dialog.estimate.setValue(180)
     dialog.due.date.setDate(QDate(2026, 9, 18))
     spread(dialog)

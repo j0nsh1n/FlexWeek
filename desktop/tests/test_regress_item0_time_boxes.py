@@ -224,6 +224,9 @@ def school_hours_end(qapp, host):
 def _block_editor(qapp, host, end: bool) -> Box:
     dialog = _up(qapp, BlockDialog(host, day=3, start="16:00", duration_min=60))
     dialog.title.setText("Club")
+    from desktop.tests.test_fixed_time_steps import go_when
+
+    go_when(dialog)
     if end:
         dialog.start.setTime(QTime(14, 0))
 
@@ -247,6 +250,9 @@ def homework_due_time(qapp, host):
     dialog = HomeworkDialog(host, today="2026-10-05", category="assignments", due="2026-10-07",
                             now=datetime(2026, 10, 5, 7, 0))
     dialog.title.setText("Essay")
+    from desktop.tests.test_homework_form import go_when
+
+    go_when(dialog)
     dialog.due.timed.setChecked(True)
     dialog.due.time.setTime(QTime(9, 0))
     _up(qapp, dialog)
@@ -262,6 +268,9 @@ def do_it_at_time(qapp, host):
     dialog = HomeworkDialog(host, today="2026-10-05", category="assignments", due="2026-10-11",
                             now=datetime(2026, 10, 5, 7, 0))
     dialog.title.setText("Essay")
+    from desktop.tests.test_homework_form import go_when
+
+    go_when(dialog)
     dialog.when.setCurrentIndex(1)  # Do it at
     _up(qapp, dialog)
 

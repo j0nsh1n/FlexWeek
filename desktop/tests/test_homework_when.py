@@ -15,6 +15,7 @@ from PySide6.QtCore import QDate, QTime
 from PySide6.QtWidgets import QApplication, QDialog, QWidget
 
 from desktop.native.widgets import HomeworkDialog
+from desktop.tests.test_homework_form import go_when
 from desktop.tests.test_homework_plan import (  # noqa: F401
     opened_with,
     qapp,
@@ -76,6 +77,7 @@ def chosen_day(dialog: HomeworkDialog) -> list[int]:
 def test_new_homework_asks_who_picks_the_time_and_starts_with_flexweek(qapp: QApplication) -> None:  # noqa: F811
     parent = host()
     dialog = opened(parent)
+    go_when(dialog)
     assert [dialog.when.itemText(i) for i in range(dialog.when.count())] == [
         "Let FlexWeek pick a time",
         "Do it at",
@@ -90,6 +92,7 @@ def test_new_homework_asks_who_picks_the_time_and_starts_with_flexweek(qapp: QAp
 def test_do_it_at_shows_one_day_and_a_time_and_says_where_it_stays(qapp: QApplication) -> None:  # noqa: F811
     parent = host()
     dialog = opened(parent)
+    go_when(dialog)
     dialog.when.setCurrentIndex(1)
     assert dialog.when_day.isVisible() and dialog.when_time.isVisible()
     dialog.when_day.set_days([3])
@@ -102,6 +105,7 @@ def test_do_it_at_shows_one_day_and_a_time_and_says_where_it_stays(qapp: QApplic
 def test_do_it_at_starts_today_at_the_next_sensible_time(qapp: QApplication) -> None:  # noqa: F811
     noon = host()
     dialog = opened(noon)
+    go_when(dialog)
     dialog.when.setCurrentIndex(1)
     assert chosen_day(dialog) == [0], "Monday is today"
     assert dialog.when_time.time() == QTime(16, 0), "after school, not at noon"
@@ -110,6 +114,7 @@ def test_do_it_at_starts_today_at_the_next_sensible_time(qapp: QApplication) -> 
 
     evening = host(now=datetime(2026, 9, 14, 17, 10))
     late = opened(evening)
+    go_when(late)
     late.when.setCurrentIndex(1)
     assert late.when_time.time() == QTime(17, 15), "never in the past"
     free(late)
@@ -119,6 +124,7 @@ def test_do_it_at_starts_today_at_the_next_sensible_time(qapp: QApplication) -> 
 def test_only_one_day_can_be_picked(qapp: QApplication) -> None:  # noqa: F811
     parent = host()
     dialog = opened(parent)
+    go_when(dialog)
     dialog.when.setCurrentIndex(1)
     dialog.when_day.buttons[3].setChecked(True)
     assert chosen_day(dialog) == [3], "ticking Thursday unticks Monday"
@@ -132,6 +138,7 @@ def test_saving_do_it_at_hands_over_the_day_and_time(qapp: QApplication) -> None
     parent = host()
     dialog = opened(parent)
     dialog.title.setText("History essay")
+    go_when(dialog)
     dialog.due.date.setDate(QDate(2026, 9, 20))
     dialog.when.setCurrentIndex(1)
     dialog.when_day.buttons[4].setChecked(True)
@@ -230,6 +237,7 @@ def test_past_do_it_at_save_focuses_field_and_announces_one_description(
     )
     parent = host()
     dialog = opened(parent)
+    go_when(dialog)
     dialog.when.setCurrentIndex(1)
     dialog.when_day.set_days([0])
     dialog.when_time.setTime(QTime(10, 0))

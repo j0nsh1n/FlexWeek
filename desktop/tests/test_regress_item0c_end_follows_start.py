@@ -30,6 +30,9 @@ def editor(qapp):
     def open_editor(start: str = "16:00", minutes: int = 60) -> BlockDialog:
         dialog = _up(qapp, BlockDialog(host, day=3, start=start, duration_min=minutes))
         dialog.title.setText("Club")
+        from desktop.tests.test_fixed_time_steps import go_when
+
+        go_when(dialog)
         made.append(dialog)
         return dialog
 
