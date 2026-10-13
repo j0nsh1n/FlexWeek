@@ -187,7 +187,8 @@ def test_a_drop_after_the_due_date_is_refused_and_changes_nothing(
     poster_id = session_of(window, "poster")["id"]
     saturday = Span(5, 17 * 60, 18 * 60)
     said = window._hand_judge(poster_id, -1, saturday)
-    assert (said.ok, said.words) == (False, "That ends after it is due, so it stayed where it was.")
+    # T-W25: contractions in the app's own words ("it's due").
+    assert (said.ok, said.words) == (False, "That ends after it's due, so it stayed where it was.")
     revision = window.session.revision
     window.hand.commit(Place(poster_id, saturday))
     settled(qapp, window)
@@ -522,5 +523,6 @@ def test_a_chip_from_a_week_that_is_not_open_is_judged_by_its_own_time_and_homew
     open_month_of(qapp, window, thursday)
     late = window._date_judge(essay["id"], thursday, (first + timedelta(days=7)).isoformat())
     fine = window._date_judge(essay["id"], thursday, (first + timedelta(days=5)).isoformat())
-    assert (late.ok, late.words) == (False, "That ends after it is due, so it stayed where it was.")
+    # T-W25: contractions in the app's own words ("it's due").
+    assert (late.ok, late.words) == (False, "That ends after it's due, so it stayed where it was.")
     assert (fine.ok, fine.words) == (True, "")
