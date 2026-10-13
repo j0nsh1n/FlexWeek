@@ -264,7 +264,8 @@ def create_session(db: Connection, user_id: int, keep: bool = False) -> str:
 
 
 def cookie_age(keep: bool) -> int:
-    return SESSION_SECONDS_KEEP if keep else SESSION_SECONDS
+    ages = {False: SESSION_SECONDS, True: SESSION_SECONDS_KEEP}
+    return ages[keep]
 
 
 def throttle(path: Path, address: str, username: str) -> bool:

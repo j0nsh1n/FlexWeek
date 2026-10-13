@@ -126,6 +126,7 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 | storage | initialize | ADAPTER | One `store_initialize_today` call. The binding reads the clock. |
 | storage | delete_account | ADAPTER | Forwards to the connection. |
 | storage | create_session | STAYS | Reads `secrets` for the token and `time.time` for the timestamp. Expiry is `open_session`. |
+| storage | cookie_age | ADAPTER | Looks up `SESSION_SECONDS` or `SESSION_SECONDS_KEEP` from the keep flag. |
 | storage | throttle | STAYS | Reads `time.time` and passes that instant to one engine call. |
 | transfer | transfer_apply_envelope | ADAPTER | Encodes the snapshot, one call, JSON decoded. |
 | transfer | transfer_apply_bytes | ADAPTER | Encodes the snapshot, one call. |
@@ -418,6 +419,7 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | weekmodel | short_clock | ADAPTER | encodes, makes one engine call, decodes |
 | weekmodel | range_label | ADAPTER | encodes, makes one engine call, decodes |
 | weekmodel | length_label | ADAPTER | encodes, makes one engine call, decodes |
+| weekmodel | homework_time_sentence | LOGIC | leftover counts and the "still needs a time" sentence from already-classified `left_over_state`; length words go through `length_label` |
 | weekmodel | planned_line | ADAPTER | encodes, makes one engine call, decodes |
 | weekmodel | due_label | ADAPTER | encodes, makes one engine call, decodes |
 | weekmodel | moved_words | ADAPTER | encodes, makes one engine call, decodes |
