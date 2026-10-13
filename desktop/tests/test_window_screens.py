@@ -135,11 +135,20 @@ def text_size(window: NativeWindow, size: str) -> None:
     window._apply_appearance()
 
 
+def words_width(button: QAbstractButton) -> int:
+    """The width the button's current words need. A push button is asked through the base class, because
+    FittedButton and PlanButton answer with their longest words, not the ones shown now (R11's radio
+    buttons have no such override)."""
+    if isinstance(button, QPushButton):
+        return QPushButton.sizeHint(button).width()
+    return button.sizeHint().width()
+
+
 def cut_on_the_bar(window: NativeWindow) -> list[str]:
     return [
-        f"{button.text()!r} {button.width()} of {button.sizeHint().width()} px"
+        f"{button.text()!r} {button.width()} of {words_width(button)} px"
         for button in bar_widgets(window)
-        if button.width() < button.sizeHint().width()
+        if button.width() < words_width(button)
     ]
 
 
