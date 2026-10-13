@@ -201,7 +201,7 @@ pub fn restore_state(
         }
     }
     let mut title = json!("Quick focus");
-    if truthy(Some(&block_id)) {
+    if truthy(Some(&block_id)) || assignment.is_some() {
         let source = match assignment {
             Some(found) if truthy(Some(found)) => found.clone(),
             _ => match &block {
@@ -338,7 +338,7 @@ pub fn credit_target(
     block: &Value,
     work_min: i64,
 ) -> EngineResult<Option<Value>> {
-    if !truthy(get(state, "blockId")?) {
+    if !truthy(get(state, "blockId")?) && !truthy(get(state, "assignmentId")?) {
         return Ok(None);
     }
     let amount = MAX_FOCUS_MINUTES.min(i128::from(work_min));

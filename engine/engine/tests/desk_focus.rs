@@ -101,6 +101,26 @@ fn test_quick_focus_credits_nothing() {
 }
 
 #[test]
+fn test_assignment_only_focus_credits_and_restores_the_homework() {
+    let target = json!({"blockId": null, "assignmentId": "bio", "title": "Bio reading, overdue", "weekStart": "2026-10-12"});
+    let assignment = json!({"id": "bio", "title": "Bio reading", "completed": false, "focus_minutes": 0, "focus_sessions": 0});
+    let updated = credit_target(&target, &assignment, &Value::Null, 25)
+        .unwrap()
+        .unwrap();
+    assert_eq!(updated["focus_minutes"], 25);
+    assert_eq!(updated["focus_sessions"], 1);
+    assert_eq!(updated["completed"], false);
+    let begun = begin_state(&target, &json!({"timer_work_min": 25}), 1_000).unwrap();
+    let saved = persist_payload(&begun).unwrap().unwrap();
+    let restored = restore_state(&saved, &json!({"bio": assignment}), &json!([]), 2_000)
+        .unwrap()
+        .unwrap();
+    assert_eq!(restored["title"], "Bio reading");
+    assert_eq!(restored["assignmentId"], "bio");
+    assert_eq!(restored["blockId"], Value::Null);
+}
+
+#[test]
 fn test_homework_credit_increments_once_on_the_assignment() {
     let updated = credit_target(
         &json!({"blockId": "sess", "assignmentId": "essay"}),

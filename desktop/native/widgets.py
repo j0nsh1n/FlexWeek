@@ -5227,6 +5227,7 @@ def _deadline_passed(due: object, now: datetime) -> bool:
 
 class UnfinishedPanel(QWidget):
     plan_requested = Signal(str)
+    focus_requested = Signal(str)
     delete_requested = Signal(str)
     collapsed = Signal()
 
@@ -5264,6 +5265,18 @@ class UnfinishedPanel(QWidget):
         ticked done, so it shows whether or not it is due yet."""
         late = {item["id"] for item in overdue_unfinished(items, now)}
         items = [item for item in items if item["id"] in late or item["id"] in left]
+        # clear() keeps the old row widgets as hidden children, so a lookup by object name
+        # found the discarded Start focus button instead of the one on screen.
+        for index in range(self.list.count()):
+            row = self.list.itemWidget(self.list.item(index))
+            if row is None:
+                continue
+            for child in row.findChildren(QWidget):
+                child.setObjectName("")
+            row.hide()
+            self.list.removeItemWidget(self.list.item(index))
+            row.setParent(None)
+            row.deleteLater()
         self.list.clear()
         for item in items:
             row = QWidget()
@@ -5293,6 +5306,15 @@ class UnfinishedPanel(QWidget):
             row.setAccessibleName(row_words)
             text.setText(row_words)
             row_layout.addWidget(text, 1)
+            if state in {"overdue", "left_from_last_week"}:
+                focus = QPushButton("Start focus")
+                focus.setObjectName(f"focusUnfinished-{item['id']}")
+                focus.setAccessibleName(f"Start focus on {item['title']}")
+                focus.setProperty("outlined", True)
+                focus.clicked.connect(
+                    lambda _checked=False, item_id=item["id"]: self.focus_requested.emit(item_id)
+                )
+                row_layout.addWidget(focus)
             if item.get("plannable", True):
                 button = QPushButton("Find a time")
                 button.setObjectName(f"planUnfinished-{item['id']}")
