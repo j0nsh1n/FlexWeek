@@ -782,9 +782,7 @@ pub fn span_problem(
             }
         };
         if later {
-            return Ok(Some(
-                "That ends after it's due, so it stayed where it was.",
-            ));
+            return Ok(Some("That ends after it's due, so it stayed where it was."));
         }
     }
     Ok(None)

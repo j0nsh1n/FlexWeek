@@ -31,8 +31,5 @@ fn test_a_slack_sentence_uses_the_apps_lengths_and_needs_no_colon_of_its_own() {
         "Finishes 2 h 15 min before it's due."
     );
     assert_eq!(slack_sentence(300, "ok"), "Finishes 5 h before it's due.");
-    assert_eq!(
-        slack_sentence(0, "danger"),
-        "Finishes right when it's due."
-    );
+    assert_eq!(slack_sentence(0, "danger"), "Finishes right when it's due.");
 }

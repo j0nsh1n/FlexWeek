@@ -1843,10 +1843,7 @@ mod tests {
             slack_sentence(29, "danger"),
             "Finishes only 29 min before it's due."
         );
-        assert_eq!(
-            slack_sentence(45, "ok"),
-            "Finishes 45 min before it's due."
-        );
+        assert_eq!(slack_sentence(45, "ok"), "Finishes 45 min before it's due.");
         assert_eq!(
             sentence("NO_SLOT_LEFT").unwrap(),
             "Your other homework is using every free gap before it's due. Move or shorten one, or choose a time yourself."
