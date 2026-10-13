@@ -4556,6 +4556,41 @@ class HomeworkDialog(Dialog):
         if not self.sheet:
             fit_scroll_dialog(self)
         self.title.setFocus(Qt.FocusReason.OtherFocusReason)
+        if not hasattr(self, "_opened_as"):
+            self._opened_as = self._typed_picture()
+
+    def _typed_picture(self) -> tuple:
+        when = self.when.currentData() if hasattr(self, "when") else None
+        day = tuple(self.when_day.days()) if hasattr(self, "when_day") else ()
+        start = self.when_time.time().toString("HH:mm") if hasattr(self, "when_time") else ""
+        notes = self.notes.toPlainText() if hasattr(self, "notes") else ""
+        course = self.course.text() if hasattr(self, "course") else ""
+        return (
+            self.title.text(),
+            self.due.value(),
+            self.estimate.value(),
+            when,
+            day,
+            start,
+            notes,
+            course,
+            self.completed.isChecked() if hasattr(self, "completed") else False,
+        )
+
+    def reject(self) -> None:
+        """Esc and Cancel ask before dropping typed words; an untouched sheet closes at once."""
+        if getattr(self, "_opened_as", None) is not None and self._typed_picture() != self._opened_as:
+            sheet = ConfirmSheet(
+                self,
+                "Discard what you typed?",
+                "Discard what you typed?",
+                (("stay", "Keep editing", "quiet"), ("discard", "Discard", "outlined danger")),
+                default="stay",
+            )
+            sheet.exec()
+            if sheet.answer != "discard":
+                return
+        super().reject()
 
     def _school_end(self) -> int:
         """The minute school ends, from the saved school hours, or 15:00 with none: work due at a set

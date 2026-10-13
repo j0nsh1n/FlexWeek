@@ -10,9 +10,9 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton, QWidget
 
 from desktop.native.widgets import HomeworkDialog
 from desktop.tests.test_homework_form import go_length, go_when, host, opened
@@ -141,5 +141,63 @@ def test_edit_homework_stays_one_page(qapp: QApplication) -> None:  # noqa: F811
     labels = [label.text() for label in dialog.findChildren(QLabel) if label.objectName() == "fieldLabel"]
     assert "Due" in labels
     assert "Estimated time" in labels
+    free(dialog)
+    free(parent)
+
+
+def test_esc_on_untouched_add_homework_closes(qapp: QApplication) -> None:  # noqa: F811
+    parent = host()
+    dialog = opened(parent)
+    dialog.reject()
+    assert dialog.result() == QDialog.DialogCode.Rejected
+    free(dialog)
+    free(parent)
+
+
+def test_esc_after_typing_asks_discard_what_you_typed(qapp: QApplication) -> None:  # noqa: F811
+    parent = host()
+    dialog = opened(parent)
+    dialog.title.setText("History essay")
+    seen: dict[str, object] = {}
+
+    def peek() -> None:
+        sheet = QApplication.activeModalWidget()
+        seen["title"] = sheet.windowTitle() if sheet is not None else None
+        seen["question"] = sheet.question.text() if sheet is not None else None
+        seen["stay"] = sheet.buttons["stay"].text() if sheet is not None else None
+        seen["discard"] = sheet.buttons["discard"].text() if sheet is not None else None
+        seen["default"] = sheet.buttons["stay"].isDefault() if sheet is not None else None
+        if sheet is not None:
+            sheet.buttons["stay"].click()
+
+    QTimer.singleShot(0, peek)
+    dialog.reject()
+    qapp.processEvents()
+    assert seen["title"] == "Discard what you typed?"
+    assert seen["question"] == "Discard what you typed?"
+    assert seen["stay"] == "Keep editing"
+    assert seen["discard"] == "Discard"
+    assert seen["default"] is True
+    assert dialog.isVisible()
+    assert dialog.title.text() == "History essay"
+    assert dialog.step_prompt.text() == "What is it?"
+    free(dialog)
+    free(parent)
+
+
+def test_discard_closes_typed_add_homework(qapp: QApplication) -> None:  # noqa: F811
+    parent = host()
+    dialog = opened(parent)
+    dialog.title.setText("History essay")
+
+    def peek() -> None:
+        sheet = QApplication.activeModalWidget()
+        if sheet is not None:
+            sheet.buttons["discard"].click()
+
+    QTimer.singleShot(0, peek)
+    dialog.reject()
+    qapp.processEvents()
+    assert dialog.result() == QDialog.DialogCode.Rejected
     free(dialog)
     free(parent)
