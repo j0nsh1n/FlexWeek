@@ -319,6 +319,7 @@ def child_main(args: argparse.Namespace) -> int:
     session = window.session
     thursday = datetime.fromisoformat(session.week_start) + timedelta(days=3, hours=15, minutes=40)
     session.now_ms = lambda: int(thursday.timestamp() * 1000)
+    window.toast.clock_ms = session.now_ms
     seed_rig_week(app, session)
     seed = [dict(block) for block in session.blocks]
     # What a scenario may change on the window itself, put back before the next one.

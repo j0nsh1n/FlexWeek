@@ -321,6 +321,7 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
 
     held = {"now": datetime.now()}
     session.now_ms = lambda: int(held["now"].timestamp() * 1000)
+    window.toast.clock_ms = session.now_ms
     setup = play.setup
 
     # Setup
@@ -618,6 +619,7 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
         window._alert_tick.timeout.emit()
         window._layout_tick.timeout.emit()
         session.tick_focus()
+        window.toast.sync_progress()
 
     def do_step(number: int, step: Step):
         action, value = step.action, step.value

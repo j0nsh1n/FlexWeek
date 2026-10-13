@@ -223,3 +223,43 @@ def test_the_rig_forgets_the_carried_look_an_earlier_run_left_behind():
     assert kept.carried_look() is None
     drive.clean_look_file()
     assert not kept.look.exists()
+
+
+def test_undo_countdown_reads_the_held_clock():
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication, QWidget
+
+    from desktop.native.widgets import ACTION_TOAST_MS, Toast
+
+    app = QApplication.instance() or QApplication(["flexweek-undo-clock-test"])
+    held = {"now": 10_000_000}
+    host = QWidget()
+    host.resize(400, 200)
+    toast = Toast(host, host)
+    toast.motion = "off"
+    toast.clock_ms = lambda: held["now"]
+    toast._window_unavailable = lambda: False
+    host.show()
+    toast.show_message("Moved History essay to Fri 18:00.", "Undo", lambda: None)
+    app.processEvents()
+    toast._paused = False
+    toast._pointer = False
+    toast._keys = False
+    start = (ACTION_TOAST_MS + 999) // 1000
+    assert toast.isVisible()
+    assert toast.button.isVisible()
+    assert toast.button.text() == f"Undo · {start} s"
+    assert toast._left_ms() == ACTION_TOAST_MS
+    held["now"] += 5_000
+    assert toast._left_ms() == ACTION_TOAST_MS - 5_000
+    toast.sync_progress()
+    assert toast.button.text() == f"Undo · {start - 5} s"
+    held["now"] += ACTION_TOAST_MS
+    assert toast._left_ms() == 0
+    toast.sync_progress()
+    assert toast.isHidden() or not toast.button.isVisible()
+    host.removeEventFilter(toast)
+    toast.hide()
+    host.hide()

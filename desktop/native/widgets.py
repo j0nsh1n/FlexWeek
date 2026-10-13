@@ -1234,6 +1234,9 @@ class Toast(QWidget):
             app.applicationStateChanged.connect(self._poll_state)
         # The window's Animations level. A notice rises into place and fades when it goes.
         self.motion = "normal"
+        # When set (the rig's held clock), Undo seconds and hide follow this instead of a wall timer.
+        self.clock_ms: Callable[[], int] | None = None
+        self._clock_start = 0
         self.hide()
 
     def set_look(self, action_colour: str, shadow: Shadow | None, dark: bool = False) -> None:
@@ -1266,6 +1269,12 @@ class Toast(QWidget):
         # comes in on its own.
         settle(self)
         settle(self.button)
+        # The held clock must be armed before show(): reposition resizes, and that would otherwise
+        # see clock_ms() against a zero start and hide the toast at once. The wall timer, pause and
+        # keys stay after show, as they did, so a Plan Undo is not replaced mid-rise.
+        if self.clock_ms is not None:
+            self._clock_start = self.clock_ms()
+            self._timer.stop()
         was_shown = self.isVisible()
         self.show()
         self.reposition()
@@ -1292,7 +1301,10 @@ class Toast(QWidget):
         self._paused = False
         self._keys = self.button.hasFocus()
         self._pointer = False
-        self._timer.start(self._limit)
+        if self.clock_ms is not None:
+            self._tick.start()
+        else:
+            self._timer.start(self._limit)
         self._progress.set_colour(self._action_colour)
         self.sync_progress()
         self._pointer = self._cursor_over()
@@ -1393,6 +1405,10 @@ class Toast(QWidget):
             self._paused = True
             self._timer.stop()
             self._tick.stop()
+        elif self.clock_ms is not None:
+            self._clock_start = self.clock_ms()
+            self._timer.stop()
+            self.sync_progress()
         else:
             self._timer.start(self._limit)
             self.sync_progress()
@@ -1401,6 +1417,9 @@ class Toast(QWidget):
     def sync_progress(self) -> None:
         """The line matches the time left. It is hidden when animations are off or reduced, and it
         stays put while the toast is paused."""
+        if self.clock_ms is not None and self.isVisible() and not self._paused and self._left_ms() <= 0:
+            self._go()
+            return
         show = self.isVisible() and self.motion not in ("off", "reduce") and self._limit > 0
         self._progress.setVisible(show)
         self._sync_button_text()
@@ -1427,6 +1446,8 @@ class Toast(QWidget):
     def _left_ms(self) -> int:
         if self._paused:
             return self._held_ms
+        if self.clock_ms is not None:
+            return max(0, self._limit - (self.clock_ms() - self._clock_start))
         left = self._timer.remainingTime()
         return left if left >= 0 else 0
 
@@ -1434,15 +1455,22 @@ class Toast(QWidget):
         self._window_paused = self._window_unavailable()
         hold = self._pointer or self._keys or self._window_paused
         if hold and not self._paused:
-            left = self._timer.remainingTime()
-            self._held_ms = left if left >= 0 else self._limit
+            if self.clock_ms is not None:
+                self._held_ms = self._left_ms()
+            else:
+                left = self._timer.remainingTime()
+                self._held_ms = left if left >= 0 else self._limit
             self._timer.stop()
             self._tick.stop()
             self._paused = True
             return
         if not hold and self._paused:
             self._paused = False
-            self._timer.start(max(self._held_ms, TOAST_RESUME_MS))
+            if self.clock_ms is not None:
+                self._clock_start = self.clock_ms() - (self._limit - self._held_ms)
+                self._tick.start()
+            else:
+                self._timer.start(max(self._held_ms, TOAST_RESUME_MS))
             self.sync_progress()
 
     def _cursor_over(self) -> bool:
