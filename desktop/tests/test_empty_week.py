@@ -153,12 +153,18 @@ def test_a_blank_week_cards_height_follows_its_wrapped_line_at_large_high_contra
     card = EmptyWeek()
     card.set_blank(True)
     card.set_over_hours(True)
-    look = {"preset": "high-contrast", "knobs": {"text": "large"}}
-    card.setStyleSheet(pack_stylesheet("system", False, look))
+    worn = {"preset": "high-contrast", "knobs": {"text": "large"}}
+    card.setStyleSheet(pack_stylesheet("system", False, worn))
     card.heading.setWordWrap(True)
     card.line.setWordWrap(True)
+    card.show()
     card.adjustSize()
+    # The copy-last row is what the old fixed 200 px floor was for; the card must be shown to take
+    # that branch.
+    assert card.copy_last.isVisible()
+    # The layout needs more than the old 200 px floor at Large High contrast (about 229 px).
     hint = card.sizeHint()
-    assert hint.height() >= 200
+    assert hint.height() >= card.layout().totalMinimumSize().height()
     assert hint.height() >= card.heading.sizeHint().height() + card.line.sizeHint().height() + 80
     assert BLANK_LINE in card.line.text()
+    card.close()
