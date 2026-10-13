@@ -14,6 +14,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
 
+from desktop.native.controller import spread_ready_sentence
 from desktop.native.widgets import HomeworkDialog
 from desktop.tests.test_homework_form import go_length
 from desktop.tests.window_support import free, qapp  # noqa: F401
@@ -252,3 +253,10 @@ def test_the_choice_comes_after_estimated_time_in_the_tab_order(qapp: QApplicati
     assert Qt.FocusPolicy.NoFocus not in {button.focusPolicy() for button in dialog.spread_choice.buttons()}
     free(dialog)
     free(parent)
+
+
+def test_spread_summary_starts_with_the_homework_title() -> None:
+    assert (
+        spread_ready_sentence("History essay", 90, "2026-10-10", "2026-10-05")
+        == "History essay: 1 h 30 min ready to add before Sat 10 Oct."
+    )

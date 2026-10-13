@@ -141,6 +141,11 @@ def plan_sentence(placed: int, waiting: int) -> str:
     return said
 
 
+def spread_ready_sentence(title: str, minutes: int, due: str, today: str) -> str:
+    """Spread preview: names the homework and how much is ready before it is due."""
+    return f"{title}: {length_label(minutes)} ready to add before {due_label(due, today)}."
+
+
 SETUP_ALREADY_HERE = (
     "Nothing to copy: School and the fixed times you added in Setup are already in every week."
 )
@@ -2971,7 +2976,7 @@ class NativeSession(QObject):
                 )
             # Time, not a count of sessions, and the deadline as a student says it: this read
             # "3 sessions · 180 minutes ready to add before 2026-09-27T23:59."
-            summary = f"{length_label(total)} ready to add before {due_label(item['due'], self.today_iso())}."
+            summary = spread_ready_sentence(item["title"], total, item["due"], self.today_iso())
             if remaining:
                 summary += (
                     f" {length_label(remaining)} cannot fit the 15-minute grid and has not been "

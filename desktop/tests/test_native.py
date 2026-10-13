@@ -931,7 +931,7 @@ def test_spread_keeps_assignment_identity_across_sessions(qapp: QApplication, se
     assert all(row["block"]["assignment_id"] == "project" for row in session.spread_preview["rows"])
     # Time, not a count of sessions, and the deadline as a student says it.
     assert session.spread_preview["summary"] == (
-        f"3 h ready to add before {due_label(due, session.week_start)}."
+        f"Project: 3 h ready to add before {due_label(due, session.week_start)}."
     )
     assert session.confirm_spread()
     wait_until(qapp, lambda: not session.busy)
