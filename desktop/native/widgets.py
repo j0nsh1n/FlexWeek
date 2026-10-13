@@ -397,9 +397,12 @@ class KeyFocus(QObject):
             if reason in KEYED or reason == Qt.FocusReason.MouseFocusReason:
                 keyed = reason in KEYED
                 if bool(watched.property("keyfocus")) != keyed:
+                    height = watched.height()
                     watched.setProperty("keyfocus", keyed)
                     watched.style().unpolish(watched)
                     watched.style().polish(watched)
+                    if watched.objectName() in RING_BUTTONS:
+                        watched.setMinimumHeight(max(watched.minimumHeight(), height))
             if watched.objectName() in RING_BUTTONS:
                 if watched.property("keyfocus"):
                     self._ring_round(watched)
@@ -2744,6 +2747,8 @@ def fit_buttons(root: QWidget, *, roomy: bool = False) -> None:
             item.style().polish(item)
         # Setting the icon clears the cached size hint, and asks the layout to ask again.
         item.setIcon(item.icon())
+        if item.property("formStep"):
+            item.setMinimumWidth(item.sizeHint().width())
         words = item.text().replace("&", "")
         if words.strip() and not is_roomy_exception(item):
             need = item.fontMetrics().horizontalAdvance(words)
@@ -2756,7 +2761,8 @@ def is_roomy_exception(button: QPushButton) -> bool:
     small ones and a sheet's close. Waiting chips wrap or shorten their title to the rail; pinning
     them to the whole title's width pushed High contrast's long chip past the rail's edge."""
     return button.objectName() == "sheetClose" or any(
-        button.property(name) for name in ("step", "segment", "pill", "chip", "small", "tray", "railChip")
+        button.property(name)
+        for name in ("step", "formStep", "segment", "pill", "chip", "small", "tray", "railChip")
     )
 
 
@@ -3418,6 +3424,7 @@ class BlockDialog(Dialog):
                     crumbs.addWidget(QLabel("·"))
                 crumb = QPushButton(f"{index + 1} {name}")
                 crumb.setObjectName(f"blockCrumb{index}")
+                crumb.setProperty("formStep", True)
                 crumb.setProperty("quiet", True)
                 crumb.setAutoDefault(False)
                 crumb.clicked.connect(self._crumb_clicked)
@@ -4338,6 +4345,7 @@ class HomeworkDialog(Dialog):
                     crumbs.addWidget(QLabel("·"))
                 crumb = QPushButton(f"{index + 1} {name}")
                 crumb.setObjectName(f"homeworkCrumb{index}")
+                crumb.setProperty("formStep", True)
                 crumb.setProperty("quiet", True)
                 crumb.setAutoDefault(False)
                 crumb.clicked.connect(self._crumb_clicked)
