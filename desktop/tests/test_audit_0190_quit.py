@@ -72,6 +72,12 @@ def test_quit_waits_for_a_week_save_that_failed_and_is_being_retried(
     wait_until(qapp, lambda: not session.busy and [b["id"] for b in session.blocks] == ["soccer"])
 
 
+QUIT_FAILED = (
+    "Couldn't save, so FlexWeek stayed open. Your changes are still on screen. "
+    "Choose Retry save, then close FlexWeek again."
+)
+
+
 def test_quit_that_cannot_save_stays_open_and_says_so(
     qapp: QApplication, window: NativeWindow, leaving: Leaving
 ) -> None:
@@ -81,7 +87,7 @@ def test_quit_that_cannot_save_stays_open_and_says_so(
     session.save()
     wait_until(qapp, lambda: not session.busy and session.pending_save is not None)
     window.quit_app()
-    wait_until(qapp, lambda: "Not saved" in session.message and not window._quitting)
+    wait_until(qapp, lambda: session.message == QUIT_FAILED and not window._quitting)
     assert leaving.calls == []
     assert window._quitting is False
     assert session.pending_save is not None
@@ -96,7 +102,7 @@ def test_a_wait_that_runs_out_stays_open_and_says_so(
     monkeypatch.setattr(window_module, "LEAVE_WAIT_MS", 300)
     session.add_block(fixed("soccer", "Soccer", 0, "16:00"))
     window.quit_app()
-    wait_until(qapp, lambda: "Not saved" in session.message)
+    wait_until(qapp, lambda: session.message == QUIT_FAILED)
     assert leaving.calls == []
 
 

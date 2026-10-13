@@ -5308,7 +5308,10 @@ class NativeWindow(QMainWindow):
 
         def give_up() -> None:
             stop()
-            session._say("Not saved, so FlexWeek is still open. Your changes are still here.")
+            session._say(
+                "Couldn't save, so FlexWeek stayed open. Your changes are still on screen. "
+                "Choose Retry save, then close FlexWeek again."
+            )
             self.restore_window()
 
         def poll() -> None:
