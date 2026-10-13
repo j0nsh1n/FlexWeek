@@ -16,6 +16,7 @@ mod desk;
 mod desk_rest;
 mod more;
 mod rest;
+mod sync;
 
 pub(crate) fn raise(err: EngineError) -> PyErr {
     match err.kind {
@@ -349,5 +350,6 @@ fn flexweek_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     db::add(m)?;
     desk::add(m)?;
     desk_rest::add(m)?;
+    sync::add(m)?;
     Ok(())
 }
