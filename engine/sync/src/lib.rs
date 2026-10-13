@@ -5,6 +5,7 @@ use serde_json::Value;
 
 mod apply;
 mod clock;
+pub mod net;
 mod peers;
 mod records;
 mod scan;
