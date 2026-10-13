@@ -1455,7 +1455,7 @@ class NativeWindow(QMainWindow):
         undo.clicked.connect(self.session.undo)
         redo = QPushButton("Redo")
         redo.setObjectName("redoButton")
-        redo.clicked.connect(self.session.redo)
+        redo.clicked.connect(self._redo_with_focus)
         solve = PlanButton(PLAN_LABEL, PLAN_SHORT)
         solve.setObjectName("solveButton")
         # Second only to Add: accent words on a tint, not a third outlined button beside Today and More.
@@ -2675,6 +2675,12 @@ class NativeWindow(QMainWindow):
         # month has scrolled to its first row, which is a turn of the event loop after this.
         if sliding_in(self.planner):
             QTimer.singleShot(0, self, self._retake_slide)
+        if getattr(self, "_plan_focus_pending", False):
+            self._plan_focus_pending = False
+            QTimer.singleShot(0, self, self._focus_after_plan)
+        if getattr(self, "_redo_focus_pending", False):
+            self._redo_focus_pending = False
+            QTimer.singleShot(0, self, self._focus_after_redo)
         self._finish_turn(turn)
 
     def _retake_slide(self) -> None:
@@ -3705,10 +3711,21 @@ class NativeWindow(QMainWindow):
         # The week redraws in this same turn and can take the keyboard (a Clay day header, or More
         # on Dial). Focusing on the next turn lands after that.
         self._focus_placed = self._first_placed()
-        QTimer.singleShot(0, self, self._focus_after_plan)
+        self._plan_focus_pending = True
 
     def _focus_after_plan(self) -> None:
+        self.activateWindow()
         self._focus_week(getattr(self, "_focus_placed", None))
+
+    def _focus_after_redo(self) -> None:
+        self.activateWindow()
+        self._focus_week()
+
+    def _redo_with_focus(self) -> None:
+        self._redo_focus_pending = True
+        self.session.redo()
+        if self.session._traveling != "redo":
+            self._redo_focus_pending = False
 
     def _on_plan_conflicts(self, lost: list) -> None:
         if not lost:
@@ -5597,13 +5614,13 @@ class NativeWindow(QMainWindow):
                 return
             if key == Qt.Key.Key_Z:
                 if mods & Qt.KeyboardModifier.ShiftModifier:
-                    self._told(self.session.redo)
+                    self._told(self._redo_with_focus)
                 else:
                     self._told(self.session.undo)
                 event.accept()
                 return
             if key == Qt.Key.Key_Y:
-                self._told(self.session.redo)
+                self._told(self._redo_with_focus)
                 event.accept()
                 return
             if key == Qt.Key.Key_C:
