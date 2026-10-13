@@ -2045,8 +2045,14 @@ class AnswerRow(QWidget):
             self._stretch = widget
         words = widget.text().replace("&", "") if isinstance(widget, QAbstractButton) else ""
         if words.strip():
-            widget.setMinimumWidth(widget.fontMetrics().horizontalAdvance(words))
+            self._fit_answer(widget, words)
         self.row.addWidget(widget)
+
+    def _fit_answer(self, widget: QWidget, words: str) -> None:
+        """As wide as the words plus the stylesheet's padding, never just the ink."""
+        widget.ensurePolished()
+        words_px = widget.fontMetrics().horizontalAdvance(words) + 2
+        widget.setMinimumWidth(max(widget.sizeHint().width(), words_px))
 
     def set_stacked(self, stacked: bool) -> None:
         if stacked == self._stacked:
@@ -2055,6 +2061,11 @@ class AnswerRow(QWidget):
         self.row.setDirection(
             QBoxLayout.Direction.TopToBottom if stacked else QBoxLayout.Direction.LeftToRight
         )
+        for at in range(self.row.count()):
+            item = self.row.itemAt(at)
+            widget = item.widget() if item is not None else None
+            if isinstance(widget, QAbstractButton) and widget.text().strip():
+                self._fit_answer(widget, widget.text().replace("&", ""))
 
     def side_by_side(self) -> int:
         """How wide the answers are on one line, including the gaps between them."""
@@ -2675,14 +2686,16 @@ class Form(QFormLayout):
         line.setContentsMargins(0, 0, 0, 0)
         line.setSpacing(SPACING[3])
         for words, field in fields:
-            column = QVBoxLayout()
-            column.setSpacing(STACKED_GAP)
+            column = bare(QWidget())
+            box = QVBoxLayout(column)
+            box.setContentsMargins(0, 0, 0, 0)
+            box.setSpacing(STACKED_GAP)
             label = QLabel(words)
             label.setObjectName("fieldLabel")
             _name_field(label, field, words)
-            column.addWidget(label)
-            column.addWidget(field)
-            line.addLayout(column)
+            box.addWidget(label)
+            box.addWidget(field)
+            line.addWidget(column)
         line.addStretch(1)
         super().addRow(row)
         return row
@@ -3300,6 +3313,9 @@ class ConfirmSheet(Dialog):
         buttons = ([self._left] if self._left is not None else []) + self._answers
         for button in buttons:
             button.ensurePolished()
+            words = button.text().replace("&", "")
+            if words.strip():
+                self._answers_row._fit_answer(button, words)
         self._lay_out(QBoxLayout.Direction.LeftToRight)
         side_by_side = self.card.minimumSizeHint().width()
         beside = side_by_side <= room

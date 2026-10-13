@@ -525,7 +525,14 @@ class ProblemLine(QFrame):
         columns = 0
         for at in range(row_layout.count()):
             item = row_layout.itemAt(at)
-            if item is not None and item.layout() is not None:
+            if item is None:
+                continue
+            if item.layout() is not None:
+                columns += 1
+                continue
+            child = item.widget()
+            nested = child.layout() if child is not None else None
+            if isinstance(nested, QBoxLayout) and nested.direction() == QBoxLayout.Direction.TopToBottom:
                 columns += 1
         if columns < 2:
             return None
