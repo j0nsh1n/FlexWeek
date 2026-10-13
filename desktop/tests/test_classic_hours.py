@@ -487,3 +487,75 @@ def test_sundays_header_total_is_whole_at_810_px_large(qapp: QApplication) -> No
     words = name.homework_words()
     assert words == "45 min"
     assert QFontMetricsF(small).horizontalAdvance(words) <= room + 0.5, (room, words, widths[6])
+
+
+def test_sundays_header_total_stays_in_its_header_at_810_large_with_the_rail(
+    qapp: QApplication, tmp_path
+) -> None:
+    """U25 window-level: 810 px, Large text, Agenda rail shown, Sunday's '45 min' whole in its header."""
+    from PySide6.QtCore import QRectF, QStandardPaths
+    from PySide6.QtGui import QFontMetricsF
+    from PySide6.QtWidgets import QPushButton
+
+    from desktop.native.calendar import sunday_due
+    from desktop.native.layouts.registry import sanitize_layout
+    from desktop.native.look import sanitize_look
+    from desktop.native.window import NativeWindow
+    from desktop.server import LocalServer
+    from desktop.tests.logic_support import past_setup
+    from desktop.tests.window_support import still, wait_until
+
+    QStandardPaths.setTestModeEnabled(True)
+    database = tmp_path / "u25.db"
+    server = LocalServer(database)
+    server.start()
+    try:
+        window = NativeWindow(server.origin)
+        window.show()
+        wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "authPage")
+        window.username.setText("u25_sunday")
+        window.password.setText("a-long-test-password")
+        window.findChild(QPushButton, "createAccount").click()
+        wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "recoveryPage")
+        window.recovery_ack.setChecked(True)
+        window.recovery_continue.click()
+        past_setup(qapp, window)
+        still(window)
+        session = window.session
+        due = sunday_due(session.week_start)
+        session.add_homework(
+            {"id": "sun45", "title": "Sunday reading", "due": due, "estimate_min": 45, "revision": 0}
+        )
+        session.save()
+        wait_until(qapp, lambda: not session.busy and not session.dirty)
+        block = next(block for block in session.blocks if block.get("assignment_id") == "sun45")
+        session.add_block({**block, "start": "16:00", "days": [6], "pinned": True})
+        session.save()
+        wait_until(qapp, lambda: not session.busy and not session.dirty)
+        window._look = sanitize_look({"preset": "default", "knobs": {"text": "large"}})
+        window.session.look = window._look
+        window._layout = sanitize_layout({"main": "classic", "day": "one"})
+        window._apply_appearance()
+        session.set_view("week")
+        window.resize(810, 860)
+        window._on_week()
+        for _ in range(8):
+            qapp.processEvents()
+        sunday = window.week_table._name_labels[6]
+        words = sunday.homework_words()
+        text = sunday.homework_text_rect()
+        header = QRectF(0, 0, sunday.width(), sunday.height())
+        icon = round(QFontMetricsF(sunday._fonts()[2]).ascent())
+        room = sunday._homework_room(icon)
+        assert window.rail.isVisible() and not window.rail.folded
+        assert sunday.homework == 45
+        assert words == "45 min"
+        assert QFontMetricsF(sunday._fonts()[2]).horizontalAdvance(words) <= room + 0.5, (
+            room,
+            sunday.width(),
+            words,
+        )
+        assert header.contains(text), (text, header, sunday.width())
+        window.close()
+    finally:
+        server.stop()

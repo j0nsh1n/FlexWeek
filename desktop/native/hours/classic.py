@@ -182,6 +182,7 @@ class DayName(QLabel):
         )
         self.setAccessibleName(words)
         self.setToolTip(f"Open {DAY_FULL[self._day]}")
+        self.setMinimumWidth(self.homework_min_width())
         self.update()
 
     def _fonts(self) -> tuple[QFont, QFont, QFont]:
@@ -215,8 +216,27 @@ class DayName(QLabel):
             wide = name_wide
         return QSize(round(wide), round(self._top() + QFontMetricsF(small).height() + 2 * SPACING[1]))
 
+    def homework_min_width(self) -> int:
+        """The least width that still holds the day's homework total whole, without the book."""
+        if not self.homework:
+            return 0
+        _body, _strong, small = self._fonts()
+        words = self.homework_words()
+        return int(SPACING[0] + QFontMetricsF(small).horizontalAdvance(words) + SPACING[1] + 1)
+
     def minimumSizeHint(self) -> QSize:  # noqa: N802
-        return QSize(0, self.sizeHint().height())
+        return QSize(self.homework_min_width(), self.sizeHint().height())
+
+    def homework_text_rect(self) -> QRectF:
+        """The rectangle of the un-elided homework total, as paintEvent places it."""
+        _body, _strong, small = self._fonts()
+        line = QFontMetricsF(small).height()
+        size = round(QFontMetricsF(small).ascent())
+        y = (self.height() - self._top() - line) / 2
+        below = y + self._top()
+        words = self.homework_words()
+        wide = QFontMetricsF(small).horizontalAdvance(words)
+        return QRectF(self._homework_left(size), below, wide, line)
 
     def _homework_left(self, icon: int) -> float:
         if self.width() < 110:
@@ -352,8 +372,27 @@ class ClassicWeek(QFrame):
         box.setSpacing(0)
         box.addWidget(self.scroll, 1)
 
+    def _fit_header_totals(self, widths: list[float], total: float) -> list[float]:
+        """Widen a day whose homework total would be cut, taking the extra from days that have slack."""
+        mins = [float(label.homework_min_width()) for label in self._name_labels]
+        short = [max(0.0, mins[i] - widths[i]) for i in range(len(widths))]
+        need = sum(short)
+        if need <= 0:
+            return widths
+        slack = [max(0.0, widths[i] - mins[i]) for i in range(len(widths))]
+        pool = sum(slack)
+        if pool <= 0:
+            return widths
+        scale = min(1.0, pool / need)
+        out = [
+            widths[i] + short[i] * scale - (slack[i] / pool * need * scale)
+            for i in range(len(widths))
+        ]
+        out[-1] += total - sum(out)
+        return out
+
     def _seven_columns(self, area: QRectF) -> list[LinearTrack]:
-        widths = column_widths(area.width(), self._empty)
+        widths = self._fit_header_totals(column_widths(area.width(), self._empty), area.width())
         left = area.left()
         tracks = []
         for day, width in enumerate(widths):
