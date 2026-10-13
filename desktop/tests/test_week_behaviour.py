@@ -12,19 +12,18 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
 from PySide6.QtGui import QContextMenuEvent, QMouseEvent
-from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QAbstractButton, QApplication, QDialog, QLabel, QPushButton, QWidget
 from shiboken6 import isValid
 
 from desktop.native import icons
 from desktop.native import window as window_module
 from desktop.native.calendar import monday_of, sunday_due
+from desktop.native.hours.rail import RAIL_PX
 from desktop.native.layouts.base import NARROW_WIDTH
 from desktop.native.layouts.empty import EMPTY_COPY_LAST, EMPTY_USE_ROUTINE
 from desktop.native.look import sanitize_look
 from desktop.native.menus import Menu
 from desktop.native.widgets import ConfirmSheet, PreviewDialog, RoutineDialog
-from desktop.native.hours.rail import RAIL_PX
 from desktop.native.window import PLAN_LABEL, PLAN_SHORT, PLAN_TINY, NativeWindow
 from desktop.tests import window_support as window_support_mod
 from desktop.tests.window_support import (  # noqa: F401
@@ -468,12 +467,13 @@ def test_the_folded_waiting_chip_opens_a_row_under_the_line(
     )
     assert waiting.shown_title() == "Poster"
     assert waiting.accessibleName() == "Poster · 30 min"
-    before = (window.width(), window.height())
+    # Something to take hold of: the rig once found the not-placed chips 0 pixels wide at this width.
+    assert waiting.width() >= waiting.sizeHint().width(), (waiting.width(), waiting.sizeHint().width())
+    assert rail.width() == RAIL_PX
     window.resize(1280, 860)
     for _ in range(5):
         qapp.processEvents()
-    assert (window.width(), window.height()) != before or window.width() == 1280
-    assert not rail.folded
+    assert not rail.folded and rail.width() == RAIL_PX
     _fold_week(qapp, window, NARROW_WIDTH - 1)
     caught: list[BaseException] = []
     previous_hook = sys.excepthook

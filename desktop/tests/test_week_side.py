@@ -308,9 +308,13 @@ def test_the_focus_list_has_no_row_limit_of_its_own(
     """The rail scrolls as a whole, so the list never needs a scroll bar of its own."""
     seeded(qapp, window)
     rows = [{"id": f"t{n}", "day": 4, "start": "17:00", "title": f"Task {n}"} for n in range(9)]
+    before = window.rail.height()
     window.rail.set_tasks(rows, 0)
+    qapp.processEvents()
     assert not window.rail.focus.isVisible()
-    assert window.rail.scroll.widget().height() >= window.rail.scroll.viewport().height() or window.rail.next.isVisible()
+    # The Agenda rail never changes height (pick A), however many rows it is given.
+    assert window.rail.height() == before
+    assert not window.rail.scroll.horizontalScrollBar().isVisible()
 
 
 @pytest.mark.parametrize("twenty_four", [True, False])
