@@ -72,9 +72,12 @@ def said(drawn: Drawn, title: QFont, small: QFont, room: QRectF, tight: QRectF) 
 
 
 def test_a_short_block_says_its_name_then_its_start(qapp: QApplication) -> None:
-    """A 45-minute Math worksheet at 17:00. Today's app, Paper and Timeline wrote the name only;
-    Clay and Retro already wrote the start. Every design writes the name, then the start."""
+    """T-W35: a 45-minute Math worksheet at 17:00 always keeps its whole range; the title
+    is what gives way. At Large text the name does not fit, so the painted words are the
+    range alone (title in tooltip + focus tooltip, test_block_range). Older tests said
+    every design writes the name, then the start."""
     start = clock_label(17 * 60)
+    ranged = range_label(17 * 60, 17 * 60 + 45)
     for short, started, large in (
         (False, False, False),
         (False, False, True),
@@ -82,8 +85,11 @@ def test_a_short_block_says_its_name_then_its_start(qapp: QApplication) -> None:
     ):
         drawn, title, small, room, tight = _math(short=short, started=started, large=large)
         words = said(drawn, title, small, room, tight)
-        assert any("Math" in line for line in words), (short, started, large, words)
-        assert any(start in line for line in words), (short, started, large, words)
+        assert ranged in words or start in words, (short, started, large, words)
+        if large:
+            assert words == [ranged], (short, started, large, words)
+        else:
+            assert any("Math" in line for line in words), (short, started, large, words)
 
 
 def test_a_blocks_range_stays_on_one_line_and_the_two_times_are_never_stacked(
@@ -269,10 +275,13 @@ def test_mission_timeline_and_clay_painters_at_810_keep_a_short_blocks_start_and
         if name == "mission":
             painter.taken = {math.span.day: (0.0, 800.0, []), school.span.day: (0.0, 800.0, [])}
         short_words = said(painter, short_rect, math)
-        assert any("Math" in text for text in short_words), (name, short_words)
-        # Timeline's 45-minute block at 810 is 78.5×24 px: 17:00 cannot sit with three letters of the
-        # name. Mission writes the start beside the bar; Clay's card is wide enough for both.
-        if name != "timeline":
+        # T-W35: Timeline's 45-minute block at 810 is 78.5×24 px. The whole range does not
+        # fit, so the start stands alone and the name goes to the tooltip. Mission writes
+        # the start beside the bar; Clay's card is wide enough for name and start.
+        if name == "timeline":
+            assert short_words == ["17:00"], (name, short_words)
+        else:
+            assert any("Math" in text for text in short_words), (name, short_words)
             assert any("17:00" in text for text in short_words), (name, short_words)
         range_words = said(painter, range_rect, school)
         extras = [text for text in range_words if text in (start, end, ranged) or "–" in text]
