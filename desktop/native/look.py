@@ -969,10 +969,10 @@ def block_paint(
 
 def block_time_colour(ink: str, fill: str) -> str:
     """A block's times and length: its ink laid `MUTED_INK` over its fill, quieter than the title, or
-    as much more of the ink as it takes to read at 4.5 to 1 on the fill."""
+    as much more of the ink as it takes to read at 4.6 to 1 on the fill."""
     for step in range(round(MUTED_INK * 100), 101, 2):
         muted = mix(ink, fill, step / 100)
-        if contrast(muted, fill) >= AA_TEXT:
+        if contrast(muted, fill) >= AA_TEXT + 0.1:
             return muted
     return ink
 

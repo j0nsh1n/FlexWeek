@@ -645,6 +645,23 @@ def test_a_filled_block_is_readable_on_every_category_colour() -> None:
         assert ratio >= AA_TEXT, f"{name} {color}: best ink is only {ratio:.2f} to 1"
 
 
+@pytest.mark.parametrize(("kind", "name"), STANDARD_LOOKS + EXPERIMENTAL_LOOKS)
+def test_block_time_line_reads_with_margin_in_every_look(kind: str, name: str) -> None:
+    """U7: a block's time line is 4.6:1 on its fill, so Terminal, Ink and Nocturne keep a margin."""
+    if kind == "pack":
+        palette = resolved_palette(name, name in {"dark-frost", "nocturne"}, None)
+        look = look_of("default")
+    else:
+        look = look_of(name)
+        palette = resolved_palette("system", False, look)
+    for category_name, category in CATEGORIES.items():
+        fill, mark = category_paint(category_name, palette)
+        drawn = block_paint(look, palette, fill, category["kind"], mark)
+        paper = drawn["fill"] or palette["window"]
+        ratio = contrast(block_time_colour(drawn["ink"], paper), paper)
+        assert ratio >= AA_TEXT + 0.1, f"{name} {category_name}: {ratio:.2f}"
+
+
 def test_a_blocks_times_read_in_every_look_and_block_style() -> None:
     """Times and length are drawn quieter than the title, but Terminal's read at 3.95 to 1: they give
     up quiet before they give up 4.5 to 1."""
