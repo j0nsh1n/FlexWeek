@@ -37,7 +37,7 @@ if importlib.util.find_spec("PySide6") is not None:
         SetupState,
     )
     from desktop.native.tokens import contrast
-    from desktop.native.widgets import control_art
+    from desktop.native.widgets import Segmented, control_art
 
 SIZES = ((1280, 800), (1100, 720))
 STEPS = tuple(range(8))
@@ -152,15 +152,37 @@ def test_remove_and_skip_are_outlined_buttons(qapp: QApplication) -> None:
             assert edge_differs(button), button.text()
 
 
-def test_takes_is_on_the_line_of_its_box(qapp: QApplication) -> None:
+def test_takes_and_due_labels_share_a_baseline(qapp: QApplication) -> None:
     with dressed(qapp) as (setup, _palette):
         setup._show(FIRST)
         qapp.processEvents()
         row = setup.homework_rows[0]
         label = next(child for child in row.findChildren(QLabel) if child.text() == "Takes")
-        label_mid = label.mapTo(setup, QPoint(0, label.height() // 2)).y()
-        box_mid = row.minutes.mapTo(setup, QPoint(0, row.minutes.height() // 2)).y()
-        assert abs(label_mid - box_mid) <= 2, (label_mid, box_mid)
+        due_label = next(child for child in row.findChildren(QLabel) if child.text() == "Due")
+        takes_baseline = label.mapTo(setup, QPoint(0, label.fontMetrics().ascent())).y()
+        due_baseline = due_label.mapTo(setup, QPoint(0, due_label.fontMetrics().ascent())).y()
+        assert takes_baseline == due_baseline, (takes_baseline, due_baseline)
+
+
+def test_the_week_note_has_a_subject(qapp: QApplication) -> None:
+    with dressed(qapp) as (setup, _palette):
+        note = setup.pages[WEEK].findChild(QLabel, "setupNote")
+        assert note.text() == "FlexWeek works around fixed times. Skip anything you don't have."
+
+
+def test_do_it_at_segments_are_inset_from_their_track(qapp: QApplication) -> None:
+    with dressed(qapp) as (setup, _palette):
+        when = Segmented((("Let FlexWeek pick a time", "plan"), ("Do it at", "fixed")), "homeworkWhen")
+        when.setParent(setup)
+        when.adjustSize()
+        when.show()
+        qapp.processEvents()
+        assert len(when.buttons()) == 2
+        for button in when.buttons():
+            assert button.geometry().left() - when.rect().left() >= 2
+            assert button.geometry().top() - when.rect().top() >= 2
+            assert when.rect().right() - button.geometry().right() >= 2
+            assert when.rect().bottom() - button.geometry().bottom() >= 2
 
 
 def test_the_summary_says_things_one_way(qapp: QApplication) -> None:

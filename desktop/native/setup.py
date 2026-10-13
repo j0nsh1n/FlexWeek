@@ -152,7 +152,7 @@ NOTES = {
     STYLE: "Each sets the view, the colours and the text size together. Change any of it later in Settings.",
     LOOK: "Each one shows the same week its own way.",
     COLOURS: "The picture follows what you pick.",
-    WEEK: "Fixed times the planner works around. Skip anything you don't have.",
+    WEEK: "FlexWeek works around fixed times. Skip anything you don't have.",
     HOMEWORK: "You can change this any time in Settings, under Planning.",
     REMINDERS: (
         "Pick the sound for reminders, alarms and the end of a focus session. A Spotify song plays for"
