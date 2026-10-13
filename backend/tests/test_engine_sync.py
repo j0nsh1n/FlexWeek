@@ -88,7 +88,7 @@ def test_a_phone_pairs_by_qr_and_the_desktop_lists_it_then_removes_it(desk, phon
     offer = running.pair_start(user_id)
     assert re.fullmatch(r"\d{4} \d{4}", offer["display_code"])
     assert offer["code"] == offer["display_code"].replace(" ", "")
-    assert offer["qr"].startswith("flexweek://pair?c=" + offer["code"])
+    assert offer["qr"].startswith("flexweek://pair/2?c=" + offer["code"])
     assert abs(offer["expires_at_ms"] - time.time() * 1000 - PAIR_MS) < 10_000
     waiting = running.pair_status()
     assert waiting["state"] == "waiting"

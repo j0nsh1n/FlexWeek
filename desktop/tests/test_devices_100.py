@@ -192,7 +192,7 @@ def pair_a_phone(qapp: QApplication, window: NativeWindow, phone: SyncService) -
     code = sheet.findChild(QLabel, "pairCode")
     wait_until(qapp, lambda: re.fullmatch(r"\d{4} \d{4}", code.text()) is not None)
     text = sheet.findChild(QLineEdit, "pairQr").text()
-    assert text.startswith("flexweek://pair?c=" + code.text().replace(" ", ""))
+    assert text.startswith("flexweek://pair/2?c=" + code.text().replace(" ", ""))
     phone.pair_from_qr(text, PAIR_DEADLINE_MS)
     wait_until(qapp, lambda: listed_phones(panel) == [PHONE_NAME])
     return panel
