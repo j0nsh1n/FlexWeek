@@ -372,6 +372,7 @@ GREYED_TIPS = {
 }
 # Said without the system's own words, which a student cannot act on.
 READ_FAILED = "Couldn't open that file. Choose a FlexWeek backup file (it ends in .json)."
+READ_WEEK_FAILED = "Couldn't open that file. Choose a FlexWeek week or day file (it ends in .json)."
 WRITE_FAILED = "Couldn't save there. Choose another folder, like Documents."
 ACCOUNT_SAVED = "Saved your backup file to {path}. Keep it private: it has all your weeks and homework."
 REPLACE_WEEK_QUESTION = (
@@ -5042,7 +5043,7 @@ class NativeWindow(QMainWindow):
             try:
                 raw = Path(path).read_text()
             except (OSError, UnicodeDecodeError):
-                self.session._say(READ_FAILED)
+                self.session._say(READ_WEEK_FAILED)
                 return
             parsed = parse_import_payload(raw)
             if parsed.get("error"):

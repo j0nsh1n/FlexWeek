@@ -19,7 +19,10 @@ if importlib.util.find_spec("PySide6") is not None:
 def test_a_header_whose_format_is_not_text_is_refused_with_a_complaint(format_: object) -> None:
     raw = json.dumps({"format": format_, "version": 2, "blocks": [], "assignments": []})
     result = parse_import_payload(raw)
-    assert result["error"] == "Unrecognized export format."
+    assert result["error"] == (
+        "Nothing imported: this isn't a FlexWeek week or day file, or it's damaged. "
+        "Export it again from FlexWeek."
+    )
 
 
 def test_a_file_nested_too_deep_to_read_is_refused_not_raised() -> None:

@@ -6,6 +6,7 @@ Expected words come from the audit's suggestions (03-wording-audit.md), not from
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -214,8 +215,12 @@ def test_a_file_for_another_week_says_nothing_was_imported_and_where_to_go(
     qapp: QApplication, server: LocalServer
 ) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
-    other = {**session.week_file(), "week_start": "2026-10-12"}
-    other_label = week_label("2026-10-12", session.today_iso())
+    # The test holds its own clock, so "another week" is the week after the open one on any day.
+    monday = datetime.fromisoformat(session.week_start) + timedelta(hours=10)
+    session.now_ms = lambda: int(monday.timestamp() * 1000)
+    other_start = (monday + timedelta(days=7)).date().isoformat()
+    other = {**session.week_file(), "week_start": other_start}
+    other_label = week_label(other_start, session.today_iso())
     assert session.import_week_file(json.dumps(other)) is False
     assert session.message == (
         f"Nothing imported: this file is for {other_label}. Go to that week, then import again."
@@ -265,9 +270,12 @@ def test_a_file_that_will_not_open_says_how_to_choose_one(
     monkeypatch.setattr(AccountDialog, "exec", lambda dialog: _choose(dialog, action))
     monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *_args: (str(missing), ""))
     window._open_account()
-    assert window.session.message == (
-        "Couldn't open that file. Choose a FlexWeek backup file (it ends in .json)."
-    )
+    # Import week or day names week and day files; the backup import keeps its own wording.
+    expected = {
+        "import": "Couldn't open that file. Choose a FlexWeek backup file (it ends in .json).",
+        "import-week": "Couldn't open that file. Choose a FlexWeek week or day file (it ends in .json).",
+    }[action]
+    assert window.session.message == expected
 
 
 def test_a_file_that_will_not_be_written_says_to_choose_another_folder(
