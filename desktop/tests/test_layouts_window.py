@@ -1365,10 +1365,7 @@ def test_every_dialog_fits_a_laptop_screen(qapp: QApplication, window: NativeWin
     # screen, which is why a screen-sized bound caught nothing; 700 square is the real rule.
     wrong = {name: size for name, size in sizes.items() if size[0] > 700 or size[1] > 768 or size[0] < 320}
     assert wrong == {}
-    short = {
-        name: size for name, size in sizes.items() if name == "Add homework" and size[1] < 400
-    }
-    assert short == {}
+    # Add homework What is title only (forms.html pick C). 400 px was the one-page sheet.
 
 
 def test_the_focus_timer_reads_as_one_status_line(qapp: QApplication, window: NativeWindow) -> None:
@@ -2112,9 +2109,20 @@ def test_settings_and_homework_open_tall_enough_to_read(
     homework.show()
     qapp.processEvents()
     _squeeze(qapp, homework)
-    assert homework.height() >= 400, (pack, size, homework.width(), homework.height())
-    for field in (homework.title, homework.due, homework.estimate):
-        assert _dialog_shows(homework, field)
+    assert _dialog_shows(homework, homework.title)
+    assert homework.title.isVisibleTo(homework)
+    assert not homework.due.isVisibleTo(homework)
+    assert not homework.estimate.isVisibleTo(homework)
+    from desktop.tests.test_homework_form import go_length, go_when
+
+    go_when(homework)
+    _squeeze(qapp, homework)
+    assert homework.due.isVisibleTo(homework)
+    assert _dialog_shows(homework, homework.due)
+    go_length(homework)
+    _squeeze(qapp, homework)
+    assert homework.estimate.isVisibleTo(homework)
+    assert _dialog_shows(homework, homework.estimate)
     buttons = homework.findChild(QDialogButtonBox, "dialogButtons")
     assert buttons is not None and _dialog_shows(homework, buttons)
     homework.close()
