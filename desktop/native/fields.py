@@ -318,6 +318,8 @@ class DateField(QDateEdit):
         popup.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         popup.layout().setContentsMargins(POPUP_PAD, POPUP_PAD, POPUP_PAD, POPUP_PAD)
         popup.installEventFilter(PopupCard(self))
+        for button in QDateEdit.calendarWidget(self).findChildren(QToolButton):
+            button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         for watcher in self._popup_filters:
             popup.installEventFilter(watcher)
 
@@ -341,6 +343,10 @@ class DateField(QDateEdit):
             # Typing in the year gives a year; typing a day or a month leaves it to the field.
             self._typed = self.currentSection() != QDateTimeEdit.Section.YearSection
         super().keyPressEvent(event)
+
+    def focusNextPrevChild(self, next: bool) -> bool:  # noqa: A002
+        # One box, not one section per stop.
+        return QWidget.focusNextPrevChild(self, next)
 
     def _next_matching_date(self) -> None:
         """A date typed with no year is the next one that day and month come round, not one already

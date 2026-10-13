@@ -10,8 +10,8 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QDate, QTime
-from PySide6.QtWidgets import QApplication, QCheckBox, QLabel, QWidget
+from PySide6.QtCore import QDate, Qt, QTime
+from PySide6.QtWidgets import QApplication, QCheckBox, QLabel, QToolButton, QWidget
 
 from desktop.native.widgets import HomeworkDialog
 from desktop.tests.test_homework_form import go_when
@@ -147,3 +147,25 @@ def test_the_problem_line_is_named_for_screen_readers(qapp: QApplication) -> Non
     labels = [label for label in dialog.findChildren(QLabel) if label.accessibleName() == "Due date problem"]
     assert len(labels) == 1
     free(dialog)
+
+
+def test_due_date_is_one_tab_stop(qapp: QApplication) -> None:  # noqa: F811
+    parent = clocked()
+    dialog = HomeworkDialog(parent, homework("2026-09-25"), TODAY)
+    dialog.show()
+    qapp.processEvents()
+    dialog.title.setFocus()
+    dialog.focusNextChild()
+    date = dialog.due.date
+    focused = dialog.focusWidget()
+    assert focused is date or focused is date.lineEdit()
+    date.setFocus()
+    date.focusNextPrevChild(True)
+    focused = dialog.focusWidget()
+    assert focused is not date and focused is not date.lineEdit()
+    date.calendarWidget()
+    tools = date.calendarWidget().findChildren(QToolButton)
+    assert tools
+    assert all(button.focusPolicy() == Qt.FocusPolicy.NoFocus for button in tools)
+    free(dialog)
+    free(parent)
