@@ -23,12 +23,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QPoint, QStandardPaths, Qt, QTime, QTimer
+    from PySide6.QtGui import QColor
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication, QComboBox, QDateTimeEdit, QLabel, QPushButton, QWidget
 
     from desktop.native.calendar import monday_of, sunday_due
     from desktop.native.layouts.registry import EXPERIMENTAL, sanitize_layout
-    from desktop.native.look import pack_stylesheet, sanitize_look
+    from desktop.native.look import pack_stylesheet, resolved_palette, sanitize_look
     from desktop.native.setup import (
         COLOURS,
         DONE,
@@ -45,8 +46,9 @@ if importlib.util.find_spec("PySide6") is not None:
         SetupState,
         activity_category_for,
     )
+    from desktop.native.tokens import contrast
     from desktop.native.weekmodel import clock_text
-    from desktop.native.widgets import AvailabilityDialog
+    from desktop.native.widgets import AvailabilityDialog, control_art
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
 
@@ -987,6 +989,63 @@ def test_home_and_end_pick_the_12_and_24_hour_clock(qapp: QApplication) -> None:
     assert setup.clock_buttons[False].isChecked()
     assert clock_text(15 * 60) == "3:00 PM"
     setup.deleteLater()
+
+
+CLOCK_RING_LOOKS = (
+    ("light", "light-frost", "default"),
+    ("dark", "dark-frost", "default"),
+    ("high-contrast", "light-frost", "high-contrast"),
+    ("nocturne", "nocturne", "default"),
+    ("slate", "slate", "default"),
+    ("poster", "light-frost", "poster"),
+    ("terminal", "light-frost", "terminal"),
+    ("paper", "light-frost", "paper"),
+    ("ink", "light-frost", "ink"),
+    ("pastel", "light-frost", "pastel"),
+)
+
+
+def _clock_ring_colours(qapp: QApplication, button) -> tuple[QColor, QColor]:
+    parent = button.parentWidget()
+    assert parent is not None
+    button.clearFocus()
+    qapp.processEvents()
+    rest = parent.grab().toImage()
+    button.setFocus(Qt.FocusReason.TabFocusReason)
+    qapp.processEvents()
+    focused = parent.grab().toImage()
+    top = button.mapTo(parent, QPoint(button.width() // 2, 0))
+    ring = QColor(focused.pixel(top.x(), top.y() + 1))
+    was = QColor(rest.pixel(top.x(), top.y() + 1))
+    if ring.getRgb()[:3] == was.getRgb()[:3]:
+        raise AssertionError("no ring pixels appeared on keyboard focus")
+    above = max(0, top.y() - 3)
+    outside = QColor(focused.pixel(top.x(), above))
+    return ring, outside
+
+
+@pytest.mark.parametrize("name,pack,preset", CLOCK_RING_LOOKS)
+def test_clock_radio_focus_ring_reads_three_to_one(
+    qapp: QApplication, name: str, pack: str, preset: str
+) -> None:
+    """N13-A30: the focused clock radio's ring is at least 3:1 on the pixels just outside it."""
+    look = sanitize_look({"preset": preset})
+    palette = resolved_palette(pack, False, look)
+    host = QWidget()
+    host.setStyleSheet(pack_stylesheet(pack, False, look, "default", palette, control_art(palette)))
+    setup = SetupPage(host)
+    setup.motion = "off"
+    setup.set_palette(palette)
+    setup.open(SetupState(pack, look, sanitize_layout(None), {}, [], monday_of("2026-09-23")), WEEK)
+    host.resize(900, 700)
+    setup.resize(900, 700)
+    host.show()
+    qapp.processEvents()
+    ring, outside = _clock_ring_colours(qapp, setup.clock_buttons[False])
+    assert contrast(ring.name(), outside.name()) >= 3.0, (name, ring.name(), outside.name())
+    host.close()
+    host.deleteLater()
+    qapp.processEvents()
 
 
 def test_a_clock_tried_and_skipped_on_the_page_is_put_back(qapp: QApplication) -> None:

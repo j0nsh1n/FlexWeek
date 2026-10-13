@@ -34,6 +34,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
+    QApplication,
     QButtonGroup,
     QCheckBox,
     QComboBox,
@@ -85,6 +86,7 @@ from desktop.native.look import (
     PACKS,
     effective_look,
     look_menu_items,
+    readable_focus_edge,
     resolved_palette,
     sanitize_look,
 )
@@ -382,6 +384,35 @@ class _RadioEnds(QObject):
                 ends[event.key()].click()
                 ends[event.key()].setFocus(Qt.FocusReason.OtherFocusReason)
                 return True
+        return super().eventFilter(watched, event)
+
+
+class _ClockRing(QObject):
+    """A 2 px ring on the focused clock radio, in a colour that reads 3 to 1 on the group."""
+
+    def __init__(self, buttons: list[QRadioButton], parent: QObject) -> None:
+        super().__init__(parent)
+        self._buttons = buttons
+        self._edge = QColor("#000000")
+
+    def set_edge(self, colour: str) -> None:
+        self._edge = QColor(colour)
+        for button in self._buttons:
+            button.update()
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if event.type() == QEvent.Type.Paint and watched in self._buttons:
+            watched.removeEventFilter(self)
+            QApplication.sendEvent(watched, event)
+            watched.installEventFilter(self)
+            if watched.hasFocus():
+                painter = QPainter(watched)
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                painter.setPen(QPen(self._edge, 2))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawRoundedRect(QRectF(watched.rect()).adjusted(1, 1, -1, -1), 6, 6)
+                painter.end()
+            return True
         return super().eventFilter(watched, event)
 
 
@@ -1419,9 +1450,13 @@ class SetupPage(QWidget):
             self.clock_buttons[twenty_four] = button
             clock_line.addWidget(button)
         clock_line.addStretch(1)
-        clock_ends = _RadioEnds(list(self.clock_buttons.values()), clock)
-        for button in self.clock_buttons.values():
+        radios = list(self.clock_buttons.values())
+        clock_ends = _RadioEnds(radios, clock)
+        self._clock_ring = _ClockRing(radios, clock)
+        for button in radios:
             button.installEventFilter(clock_ends)
+            button.installEventFilter(self._clock_ring)
+        self._dress_clock_ring()
         box.addWidget(clock)
         self.clock_choice.buttonToggled.connect(lambda _button, _on: self._follow_clock())
         self._section(box, "School")
@@ -2010,7 +2045,11 @@ class SetupPage(QWidget):
         self._palette = palette
         for play in self.play_buttons:
             play.setIcon(icons.icon("circle-play", palette["accent"]))
+        self._dress_clock_ring()
         self._sync_chrome()
+
+    def _dress_clock_ring(self) -> None:
+        self._clock_ring.set_edge(readable_focus_edge(self._palette))
 
     def _place_marker(self, animate: bool) -> None:
         current = next(
