@@ -144,7 +144,7 @@ def test_a_design_of_its_own_draws_its_own_empty_week(
 
 
 def test_a_blank_week_cards_height_follows_its_wrapped_line_at_large_high_contrast(
-    qapp: QApplication,
+    qapp: QApplication,  # noqa: F811
 ) -> None:
     """A34: the empty-week card is tall enough for Large text in High contrast, not a fixed 200 px."""
     from desktop.native.layouts.empty import BLANK_LINE, EmptyWeek
@@ -153,7 +153,8 @@ def test_a_blank_week_cards_height_follows_its_wrapped_line_at_large_high_contra
     card = EmptyWeek()
     card.set_blank(True)
     card.set_over_hours(True)
-    card.setStyleSheet(pack_stylesheet("system", False, {"preset": "high-contrast", "knobs": {"text": "large"}}))
+    look = {"preset": "high-contrast", "knobs": {"text": "large"}}
+    card.setStyleSheet(pack_stylesheet("system", False, look))
     card.heading.setWordWrap(True)
     card.line.setWordWrap(True)
     card.adjustSize()

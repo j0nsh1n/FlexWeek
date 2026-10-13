@@ -471,7 +471,7 @@ def test_sundays_header_total_is_whole_at_810_px_large(qapp: QApplication) -> No
     """U25: at 810 px and Large text, Sunday's homework total is not clipped in its column."""
     from PySide6.QtGui import QFontMetricsF
 
-    from desktop.native.hours.classic import Colours, DayName, GUTTER, column_widths
+    from desktop.native.hours.classic import GUTTER, Colours, DayName, column_widths
 
     look = {"preset": "default", "knobs": {"text": "large"}}
     palette = resolved_palette("system", False, look)
