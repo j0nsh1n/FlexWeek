@@ -1610,8 +1610,10 @@ class NativeWindow(QMainWindow):
         self._week_list_return: QWidget | None = None
         self.week_access_list = QListWidget()
         self.week_access_list.setObjectName("weekAccessList")
-        self.week_access_list.setAccessibleName("This week's blocks")
-        self.week_access_list.setAccessibleDescription("A list of each day and its blocks in time order.")
+        self.week_access_list.setAccessibleName("Week as a list")
+        self.week_access_list.setAccessibleDescription(
+            "Every block this week, day by day, in time order. Press Enter to open one."
+        )
         panel_layout.addWidget(self.week_access_list)
         self.week_access_list.itemActivated.connect(self._week_access_activate)
         self.week_access_list.installEventFilter(self)

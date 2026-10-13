@@ -16,10 +16,11 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QPushButton
 
 from desktop.native.calendar import sunday_due
-from desktop.native.hours.canvas import BlockPainter, Drawn
+from desktop.native.hours.canvas import BlockPainter, Drawn, HoursCanvas
 from desktop.native.hours.geometry import Span
 from desktop.native.hours.rail import RAIL_PX
 from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.settings import HELP_KEYS
 from desktop.native.window import WINDOW_MIN_WIDTH, NativeWindow
 from desktop.tests.window_support import (  # noqa: F401
     qapp,
@@ -146,6 +147,23 @@ def test_a_days_homework_length_is_never_cut_at_any_window_width(
         room = label.width() - label._homework_left(icon)
         fits = QFontMetricsF(label._fonts()[2]).horizontalAdvance(words) <= room
         assert fits, f"{words!r} is cut at {width} px: {label.width()} wide"
+
+
+def test_the_week_list_has_one_name_and_its_shortcut_is_in_help(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+    server,  # noqa: F811
+) -> None:
+    seeded(qapp, window)
+    listed = window.week_access_list
+    assert listed.accessibleName() == "Week as a list"
+    assert listed.accessibleDescription() == (
+        "Every block this week, day by day, in time order. Press Enter to open one."
+    )
+    hint = "Press Ctrl+Shift+L for the week as a list."
+    (week_view,) = [canvas for canvas in window.findChildren(HoursCanvas) if canvas.isVisible()]
+    assert week_view.accessibleDescription().endswith(hint)
+    assert ("[Ctrl]+[Shift]+[L]", "Week as a list") in HELP_KEYS
 
 
 def test_the_mini_month_names_its_week_in_the_apps_date_order(

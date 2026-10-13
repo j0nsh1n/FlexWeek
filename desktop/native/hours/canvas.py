@@ -1184,7 +1184,7 @@ class HoursCanvas(QWidget):
         self.setAccessibleDescription(
             "Drag a block to move it, its top or bottom edge to resize it, or empty time to add something. "
             "Click a block, or press Enter, to open it. Right-click it for more. "
-            "Press Ctrl+Shift+L for a list of this week."
+            "Press Ctrl+Shift+L for the week as a list."
         )
         self.hand, self.painter = hand, painter
         self._lay_out = lay_out

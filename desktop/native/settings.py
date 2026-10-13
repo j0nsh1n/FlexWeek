@@ -237,6 +237,7 @@ HELP_KEYS = (
     ("[F1]", "Help"),
     ("[Ctrl]+[N]", "Add homework"),
     ("[Ctrl]+[K]", "Command bar"),
+    ("[Ctrl]+[Shift]+[L]", "Week as a list"),
     ("[Ctrl]+[Z]", "Undo"),
     ("[Ctrl]+[Y] or [Ctrl]+[Shift]+[Z]", "Redo"),
     ("[Ctrl]+[C] then [Ctrl]+[V]", "Copy the selected block, then paste it into the selected day"),
