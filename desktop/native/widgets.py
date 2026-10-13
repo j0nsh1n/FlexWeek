@@ -884,9 +884,13 @@ class FittedButton(QPushButton):
         self._fit()
 
     def _wide(self, words: str) -> int:
+        # Measured as QPushButton measures its text (the text's size, not its advance): with the advance,
+        # the chrome came out a pixel off whichever words were showing, and "Suggest times" shown made
+        # the room for "Suggest" a pixel short.
         fonts = self.fontMetrics()
-        chrome = super().sizeHint().width() - fonts.horizontalAdvance(self.text())
-        return chrome + fonts.horizontalAdvance(words)
+        shown = Qt.TextFlag.TextShowMnemonic
+        chrome = super().sizeHint().width() - (fonts.size(shown, self.text()).width() if self.text() else 0)
+        return chrome + (fonts.size(shown, words).width() if words else 0)
 
     def sizeHint(self) -> QSize:  # noqa: N802
         return QSize(self._wide(self._full), super().sizeHint().height())
