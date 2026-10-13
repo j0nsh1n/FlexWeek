@@ -186,7 +186,9 @@ def test_homework_finished_finishes_it_the_way_the_product_does(
     assert window.session.assignments["essay"]["completed"] is True
     assert window.session.can_undo() is True
     view = window.planner.currentWidget()
-    assert view.findChild(QLabel, "oneTitle").text() == "All homework finished"
+    # The ring may set the title over two lines; the words are whole either way.
+    title = view.findChild(QLabel, "oneTitle")
+    assert (" ".join(title.text().split()), title.accessibleName()) == ("All homework finished",) * 2
 
 
 def test_start_focus_keeps_the_timer_in_view_on_a_day_screen(
@@ -1464,7 +1466,9 @@ def test_the_plan_bar_counts_what_the_toast_counts(qapp: QApplication, window: N
     assert len(session.trace.get("placed") or []) > 1, "the trace also lists School"
     placed, waiting = session.plan_counts
     assert waiting == 1
-    assert window.toast.text().endswith("10 h still needs a time")
+    # T-W15 (decisions.md): the toast counts homework placed by this Plan and the homework with no time yet.
+    # The essay was given 18:45 when it was added, so this Plan places nothing new.
+    assert window.toast.text() == "Nothing placed. 1 with no time yet."
     assert window.plan_review.isVisible()
     assert window.plan_review.heading.text() == plan_sentence(placed, waiting)
 
@@ -1525,7 +1529,8 @@ def test_the_plan_notice_counts_homework_blocks(qapp: QApplication, window: Nati
     window.session.solve(everything=True)
     wait_until(qapp, lambda: not window.session.busy)
     qapp.processEvents()
-    assert window.toast.text() == "Everything has a time."
+    # Plan's toast counts the blocks it placed (decisions.md); "Everything has a time." is the sidebar's.
+    assert window.toast.text() == "Placed 1 homework block."
     assert " of " not in window.toast.text()
 
 
@@ -2262,7 +2267,8 @@ def visible_copy(root: QWidget) -> str:
         if not child.isVisible():
             continue
         if isinstance(child, (QLabel, QPushButton)):
-            text = child.text().strip()
+            # One label's words, even where the label breaks them over two lines (One thing's ring title).
+            text = " ".join(child.text().split())
             if text:
                 bits.append(text)
     return "\n".join(bits)
