@@ -2435,7 +2435,7 @@ class NativeWindow(QMainWindow):
         self.next_nav.setToolTip(f"Next {period}")
         self.prev_nav.setAccessibleName(f"Previous {period}")
         self.next_nav.setAccessibleName(f"Next {period}")
-        self._show_week_list_row(view == "week" and not self._day_mode)
+        self._show_week_list_row(view in {"week", "month"} and not self._day_mode)
         title_view = "myday" if self._day_mode else view
         watched = shown.watched_date() if self._day_mode and isinstance(shown, LayoutView) else None
         self.week_title.set_full_text(
@@ -3241,7 +3241,7 @@ class NativeWindow(QMainWindow):
                 row = QListWidgetItem(words)
                 row.setData(Qt.ItemDataRole.UserRole, (occurrence.block_id, day))
                 self.week_access_list.addItem(row)
-        self._show_week_list_row(self.session.planner_view == "week" and not self._day_mode)
+        self._show_week_list_row(self.session.planner_view in {"week", "month"} and not self._day_mode)
         if selected_key is not None:
             for index in range(self.week_access_list.count()):
                 row = self.week_access_list.item(index)

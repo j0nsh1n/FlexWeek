@@ -72,7 +72,7 @@ class Stage:
 
     def __init__(self, qapp: QApplication, judge=None) -> None:
         self.window = QWidget()
-        self.window.setGeometry(0, 0, 760, 720)
+        self.window.setGeometry(0, 0, 1280, 720)
         self.said: list[object] = []
         self.hand = Hand(lambda block_id, from_day, span: Verdict(True, ""), self.window)
         self.hand.date_judge = judge
@@ -210,7 +210,9 @@ def test_a_chip_let_go_on_its_own_date_moves_nothing_and_a_clicked_one_opens_it(
     stage.send(QEvent.Type.MouseButtonPress, at, True)
     stage.send(QEvent.Type.MouseButtonRelease, at, False)
     assert stage.said == []
-    assert stage.opened == ["2026-09-22"], "a chip clicked, not carried, opens its date as the date does"
+    assert stage.opened == []
+    assert stage.grid.canvas.selected == "2026-09-22"
+    assert stage.grid.pane.heading.text() == "Tuesday 22 September"
 
 
 def test_a_deadline_is_not_carried(qapp: QApplication) -> None:
@@ -403,17 +405,13 @@ def first_row_shown(grid: MonthGrid) -> int:
     return next(row for row in range(canvas.rows()) if round(canvas.cell_rect(row * 7).top()) == value)
 
 
-def test_month_opens_with_the_students_week_as_its_first_row(qapp: QApplication) -> None:
-    """A whole month fits a laptop's screen, so it opened with the weeks already gone on top. It opens
-    on the student's week now, the weeks after it filling the view and the ones before a scroll away;
-    a week late in the month still shows the week after it."""
+def test_month_opens_on_its_first_row_with_this_week_banded(qapp: QApplication) -> None:
+    """The first row of the month is fully visible; this week is banded wherever it sits."""
     from PySide6.QtTest import QTest
-
-    from desktop.native.hours.month import LEAST_AHEAD
 
     grid = MonthGrid()
     grid.resize(900, 700)
-    grid.set_month(september(), False)
+    grid.set_month(september(), False, "2026-09-16")
     grid.show()
     qapp.processEvents()
     room = grid.scroll.viewport().height()
@@ -423,22 +421,19 @@ def test_month_opens_with_the_students_week_as_its_first_row(qapp: QApplication)
     for iso in ("2026-09-03", "2026-09-24", "2026-09-30"):
         grid.reveal(iso)
         QTest.qWait(50)
-        row = canvas.index_of(iso) // 7
         top = first_row_shown(grid)
-        below = canvas.height() - round(canvas.cell_rect(top * 7).top())
-        shown.append((iso, top, below >= room, canvas.rows() - top >= LEAST_AHEAD, top == row))
+        below = canvas.height() - round(canvas.cell_rect(0).top())
+        shown.append((iso, top, below >= room, canvas.selected == iso))
     grid.close()
     assert shown == [
-        ("2026-09-03", 0, True, True, True),
-        ("2026-09-24", 3, True, True, True),
-        # The month's last row: the week before it stays above, so two weeks show.
-        ("2026-09-30", 3, True, True, False),
+        ("2026-09-03", 0, True, True),
+        ("2026-09-24", 0, True, True),
+        ("2026-09-30", 0, True, True),
     ]
 
 
-def test_a_month_revealed_before_its_first_layout_still_opens_on_the_week(qapp: QApplication) -> None:
-    """The window asks as the month is switched to, before it has a height of its own. Rows sized to
-    that height put another week on top once the month was laid out."""
+def test_a_month_revealed_before_its_first_layout_still_opens_on_the_first_row(qapp: QApplication) -> None:
+    """The window asks as the month is switched to, before it has a height of its own."""
     from PySide6.QtTest import QTest
 
     grid = MonthGrid()
@@ -451,13 +446,12 @@ def test_a_month_revealed_before_its_first_layout_still_opens_on_the_week(qapp: 
     below = grid.canvas.height() - grid.scroll.verticalScrollBar().value()
     room = grid.scroll.viewport().height()
     grid.close()
-    assert (shown, below >= room) == (3, True)
+    assert (shown, below >= room) == (0, True)
 
 
 def test_a_weeks_row_is_as_tall_as_its_busiest_date_and_this_week_is_banded(qapp: QApplication) -> None:
-    """Decision 17 of 0.17: not six even rows with empty space in the quiet weeks. A week's row grows
-    with its busiest date, up to six chips, and the week with today is banded in a little of the text
-    colour, not the accent."""
+    """A week's row grows with its busiest date, up to three chips, and the week with today is banded
+    in a little of the text colour, not the accent."""
     from PySide6.QtGui import QColor
 
     from desktop.native.hours.month import MOST_CHIPS
