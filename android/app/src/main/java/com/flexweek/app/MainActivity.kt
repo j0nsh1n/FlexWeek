@@ -35,8 +35,14 @@ import com.flexweek.app.ui.v2.PlanRecordSheet
 import com.flexweek.app.ui.v2.PlanRecordViewModel
 import com.flexweek.app.ui.v2.RunningLateSheet
 import com.flexweek.app.ui.v2.RunningLateViewModel
+import com.flexweek.app.ui.v2.SheetScrim
 import com.flexweek.app.ui.v2.WeekScreen
 import com.flexweek.app.ui.v2.WeekViewModel
+import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.MaterialTheme
 import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
@@ -295,6 +301,15 @@ private fun FlexWeekRoot(core: com.flexweek.app.core.FlexWeekCore, tweaks: Scree
                     }
                 planVm.record?.let { record ->
                     PlanRecordSheet(record, onUndo = planVm::undo, onAccept = planVm::accept)
+                } ?: planVm.error?.let { err ->
+                    SheetScrim({ sheet = ActiveSheet.None }) {
+                        Surface(shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)) {
+                            Column(Modifier.padding(16.dp)) {
+                                Text(err, color = MaterialTheme.colorScheme.error)
+                                TextButton(onClick = { sheet = ActiveSheet.None }) { Text("Close") }
+                            }
+                        }
+                    }
                 }
             }
             if (v2 && sheet == ActiveSheet.Late) {

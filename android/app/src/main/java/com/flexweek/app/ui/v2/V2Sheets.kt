@@ -81,7 +81,7 @@ fun AddHomeworkSheet(
                     }
                     1 -> {
                         Text("When is it due?", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
-                        ChipRow(listOf("Fri 9 Oct", "Sun 11 Oct", "Wed 14 Oct"), draft.due, onDuePick)
+                        ChipRow(listOf("Fri 9 Oct", "Sun 11 Oct"), draft.due, onDuePick)
                         Text("When to do it", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 12.dp))
                         ChipRow(listOf("FlexWeek picks a time", "I'll pick on the week"), draft.whenMode, { v ->
                             onWhenMode(if (v.startsWith("FlexWeek")) "pick" else "at")
@@ -96,6 +96,11 @@ fun AddHomeworkSheet(
                         ChipRow(listOf("In one go", "Spread over days"), draft.sessions) { label ->
                             onSessions(if (label.startsWith("In")) "one" else "spread")
                         }
+                    }
+                }
+                stepProblem?.let {
+                    if (draft.step > 0) {
+                        Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp))
                     }
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
