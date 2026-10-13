@@ -595,6 +595,12 @@ class SegmentTrack(QGroupBox):
         _choice_tab_stops(self._buttons, chosen)
 
     def _chosen(self, on: bool) -> None:
+        # The chosen segment's words are heavier and a pixel wider, set by the stylesheet, which does not
+        # tell the layout: every segment and the track ask again, or the old choice keeps the new one's pixel.
+        for button in self._buttons:
+            button.updateGeometry()
+        self.layout().invalidate()
+        self.updateGeometry()
         if on:
             selected = self.sender()
             _choice_tab_stops(self._buttons, self._buttons.index(selected))
