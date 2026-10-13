@@ -2,7 +2,7 @@
 
 use serde_json::{Map, Value, json};
 
-use crate::desk::planning::{available_homework_minutes, occurrence_days};
+use crate::desk::planning::{available_homework_minutes, floor_slot, occurrence_days};
 use crate::desk::pyops::{
     Cmp, PyDict, compare, contains, eq, get, hashable, in_set, iterate, or_default, order, py_dict,
     sub,
@@ -519,26 +519,16 @@ pub fn left_over_items(
             .map(crate::model::parse_due)
             .transpose()?
             .is_some_and(|deadline| deadline <= moment);
-        let overdue_sessions: i64 = if overdue {
-            iterate(blocks)?
-                .iter()
-                .filter(|block| {
-                    block.get("assignment_id").and_then(Value::as_str)
-                        == get(assignment, "id").ok().flatten().and_then(Value::as_str)
-                        && !truthy(block.get("completed"))
-                        && block.get("duration_min").and_then(Value::as_i64).is_some()
-                })
-                .map(|block| {
-                    block
-                        .get("duration_min")
-                        .and_then(Value::as_i64)
-                        .unwrap_or(0)
-                })
-                .sum()
+        // Placed unfinished minutes are still left to do. `available` subtracts them, and
+        // `unplanned_min` from the server can hide them, so overdue remaining is the homework
+        // itself: estimate minus focus, placed or not.
+        let remaining = if overdue {
+            let estimate = whole(&or_default(get(assignment, "estimate_min")?, json!(0)))?;
+            let focus = whole(&or_default(get(assignment, "focus_minutes")?, json!(0)))?;
+            floor_slot((estimate - focus).max(0))
         } else {
-            0
+            available
         };
-        let remaining = available.max(overdue_sessions);
         if remaining < SLOT_MIN {
             continue;
         }

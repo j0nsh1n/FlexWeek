@@ -486,6 +486,60 @@ fn test_left_over_classifies_deadlines_against_today_not_the_open_week() {
 }
 
 #[test]
+fn test_overdue_minutes_add_allocated_and_unallocated_work() {
+    let assignment = with(
+        essay(),
+        json!({"estimate_min": 120, "unplanned_min": 60, "due": "2026-10-16"}),
+    );
+    let placed = json!({"id": "session", "assignment_id": "essay", "duration_min": 60, "start": "15:00", "days": [2]});
+    for (blocks, committed) in [
+        (json!([placed.clone()]), json!([])),
+        (
+            json!([placed.clone()]),
+            json!([{"assignment_id": "essay", "duration_min": 60}]),
+        ),
+        (
+            json!([placed.clone(), {"id": "rest", "assignment_id": "essay", "duration_min": 60.0}]),
+            json!([{"assignment_id": "essay", "duration_min": 60}]),
+        ),
+    ] {
+        let items = clipboard::left_over_items(
+            &json!({"essay": assignment}),
+            &json!([]),
+            "2026-10-12",
+            "2026-10-17T10:00",
+            &blocks,
+            &committed,
+        )
+        .unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["remaining_min"], 120);
+    }
+}
+
+#[test]
+fn test_after_deadline_exception_preserves_only_the_named_session() {
+    let blocks = json!([
+        {"id": "bio-session", "assignment_id": "bio", "kind": "flexible", "duration_min": 60, "days": [5], "start": "11:00", "title": "Bio"},
+        {"id": "math-session", "assignment_id": "math", "kind": "flexible", "duration_min": 60, "days": [5], "start": "12:00", "title": "Math"}
+    ]);
+    let assignments = json!({"bio": {"due": "2026-10-16"}, "math": {"due": "2026-10-16"}});
+    let (kept, lost) = planning::settle_placements_after_deadline(
+        &blocks,
+        &assignments,
+        "2026-10-12",
+        &json!([]),
+        true,
+        &json!(["bio-session"]),
+    )
+    .unwrap();
+    assert_eq!(kept[0]["start"], "11:00");
+    assert_eq!(kept[1]["start"], Value::Null);
+    assert_eq!(lost.len(), 1);
+    assert_eq!(lost[0]["block_id"], "math-session");
+}
+
+#[test]
 fn test_days_through_due_matches_the_web_planner() {
     assert_eq!(
         due_day_of(&json!("2026-09-11T08:10"), "2026-09-07").expect("a day"),
