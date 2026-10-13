@@ -191,9 +191,16 @@ class DayName(QLabel):
         small = time_font(_scaled(self.font(), "caption", self.look))
         return body, strong, small
 
+    def _twoline(self) -> bool:
+        knobs = (self.look or {}).get("knobs") or {}
+        return knobs.get("text") == "large"
+
     def _top(self) -> float:
         _body, strong, _small = self._fonts()
-        return max(26.0, QFontMetricsF(strong).height() + 6)
+        line = QFontMetricsF(strong).height() + 6
+        if self._twoline():
+            return max(26.0, line) * 2
+        return max(26.0, line)
 
     def sizeHint(self) -> QSize:  # noqa: N802
         _body, strong, small = self._fonts()
@@ -204,6 +211,8 @@ class DayName(QLabel):
         return QSize(0, self.sizeHint().height())
 
     def _homework_left(self, icon: int) -> float:
+        if self.width() < 110:
+            return SPACING[0]
         return SPACING[2] + icon + SPACING[0]
 
     def _homework_room(self, icon: int) -> float:
@@ -227,13 +236,16 @@ class DayName(QLabel):
         ink = colours.text if self.heading else colours.accent_text if today else colours.muted
         painter.setPen(QColor(ink))
         name_width = QFontMetricsF(name_font).horizontalAdvance(self.name)
-        painter.drawText(QRectF(x, y, name_width + 1, top), Qt.AlignmentFlag.AlignVCenter, self.name)
-        x += name_width + SPACING[0]
+        name_h = top / 2 if self._twoline() else top
+        painter.drawText(QRectF(x, y, name_width + 1, name_h), Qt.AlignmentFlag.AlignVCenter, self.name)
+        date_x = x if self._twoline() else x + name_width + SPACING[0]
+        date_y = y + name_h if self._twoline() else y
+        date_h = name_h if self._twoline() else top
         if self.date:
             painter.setFont(strong)
             date_width = QFontMetricsF(strong).horizontalAdvance(self.date)
             if today:
-                chip = QRectF(x, y + (top - 26) / 2 + 1, max(28.0, date_width + 10), 24)
+                chip = QRectF(date_x, date_y + (date_h - 26) / 2 + 1, max(28.0, date_width + 10), 24)
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.setBrush(QColor(colours.accent))
                 painter.drawRoundedRect(chip, 12, 12)
@@ -241,15 +253,20 @@ class DayName(QLabel):
                 painter.drawText(chip, Qt.AlignmentFlag.AlignCenter, self.date)
             else:
                 painter.setPen(QColor(colours.text))
-                painter.drawText(QRectF(x, y, date_width + 1, top), Qt.AlignmentFlag.AlignVCenter, self.date)
+                painter.drawText(
+                    QRectF(date_x, date_y, date_width + 1, date_h),
+                    Qt.AlignmentFlag.AlignVCenter,
+                    self.date,
+                )
         if self.homework:
             line = QFontMetricsF(small).height()
             size = round(QFontMetricsF(small).ascent())
             below = y + top
-            painter.drawPixmap(
-                QPointF(SPACING[2], below + (line - size) / 2),
-                icons.pixmap("book-open", colours.homework, size, self.devicePixelRatioF()),
-            )
+            if self.width() >= 110:
+                painter.drawPixmap(
+                    QPointF(SPACING[2], below + (line - size) / 2),
+                    icons.pixmap("book-open", colours.homework, size, self.devicePixelRatioF()),
+                )
             painter.setFont(small)
             painter.setPen(QColor(colours.muted))
             painter.drawText(
