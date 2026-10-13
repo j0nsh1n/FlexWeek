@@ -98,13 +98,17 @@ def test_the_kept_undo_still_takes_the_plan_back(qapp, window) -> None:
 
 def test_the_undo_timer_pauses_while_its_button_has_the_keyboard(qapp, window) -> None:
     planned(qapp, window)
+    window.activateWindow()
+    wait_until(qapp, window.isActiveWindow)
     toast = window.toast
-    toast._timer.start(1_000)
-    toast.button.setFocus(Qt.FocusReason.TabFocusReason)
-    qapp.processEvents()
-    assert toast._timer.isActive() is False
     window.solve_button.setFocus(Qt.FocusReason.TabFocusReason)
     qapp.processEvents()
+    toast._timer.start(1_000)
+    toast.button.setFocus(Qt.FocusReason.TabFocusReason)
+    wait_until(qapp, lambda: toast._keys and not toast._timer.isActive())
+    assert toast._timer.isActive() is False
+    window.solve_button.setFocus(Qt.FocusReason.TabFocusReason)
+    wait_until(qapp, lambda: not toast._keys and toast._timer.isActive())
     assert toast._timer.isActive() is True
     # `start` was given at least 4s. A little of that has already run by the time this reads it back.
     assert toast._timer.interval() >= RESUME_MS
@@ -112,13 +116,17 @@ def test_the_undo_timer_pauses_while_its_button_has_the_keyboard(qapp, window) -
 
 def test_the_undo_timer_pauses_while_the_pointer_is_over_its_button(qapp, window) -> None:
     planned(qapp, window)
+    window.activateWindow()
+    wait_until(qapp, window.isActiveWindow)
     toast = window.toast
+    QTest.mouseMove(window.solve_button)
+    wait_until(qapp, lambda: not toast._pointer)
     toast._timer.start(1_000)
     QTest.mouseMove(toast.button)
-    qapp.processEvents()
+    wait_until(qapp, lambda: toast._pointer and not toast._timer.isActive())
     assert toast._timer.isActive() is False
     QTest.mouseMove(window.solve_button)
-    qapp.processEvents()
+    wait_until(qapp, lambda: not toast._pointer and toast._timer.isActive())
     assert toast._timer.isActive() is True
     assert toast._timer.interval() >= RESUME_MS
 
