@@ -74,8 +74,10 @@ from desktop.native.client import (
     SIGN_IN_WHY,
     SIGN_IN_WHY_LINK,
     SIGN_IN_WRONG,
+    TYPE_RECOVERY_CODE,
     USERNAME_ERROR,
     USERNAME_HINT,
+    short_password_needed,
     sign_in_problem,
     sign_up_problem,
 )
@@ -4287,12 +4289,11 @@ class NativeWindow(QMainWindow):
         if not self.username.text().strip():
             return "Type your username."
         if not self.recovery_code.text().strip():
-            return "Enter a recovery code."
+            return TYPE_RECOVERY_CODE
         if not password:
             return "Choose a password with at least 12 characters."
         if len(password) < 12:
-            remaining = 12 - len(password)
-            return f"Add {remaining} more characters. Passwords need at least 12."
+            return short_password_needed(12 - len(password))
         return ""
 
     def _start_focus(self, block_id: str, day: object) -> None:
