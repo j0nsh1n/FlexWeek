@@ -1334,7 +1334,7 @@ def setup_rules(palette: dict, radius: int, text: float | str, pad: int, depth: 
         f"QPushButton#setupRailItem[done=\"true\"] {{ color: {palette['text']}; }}"
         f"QPushButton#setupRailItem[current=\"true\"] {{ color: {palette['text']}; {strong} }}"
         f"QPushButton#setupRailItem:disabled {{ background: transparent; "
-        f"color: {mix(palette['muted'], palette['panel'], 0.55)}; }}"
+        f"color: {rail_future_ink(palette)}; }}"
         f"QFrame#setupRailMarker {{ background: {palette['accent']}; border: none; padding: 0; "
         f"border-radius: 1px; }}"
         f"QLabel#setupTitle {{ font-size: {type_pt('title', text)}pt; {strong} }}"
@@ -1500,6 +1500,12 @@ def accent_words(palette: dict) -> str:
     Readability offers its fix; words in it are drawn darker until then (0.17.2)."""
     grounds = (palette["window"], palette["panel"], palette.get("grid", palette["panel"]))
     return fit_lightness(palette["accent"], grounds, AA_TEXT)
+
+
+def rail_future_ink(palette: dict) -> str:
+    """The text of a Setup step not reached yet: the quietest mix of the text into the rail that still
+    reads at 4.5 to 1 on the rail and on the page."""
+    return _derived_muted(palette["text"], palette["panel"], palette["window"])
 
 
 def readable_edge(palette: dict) -> str:

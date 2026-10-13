@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -35,6 +36,7 @@ if importlib.util.find_spec("PySide6") is not None:
         SetupPage,
         SetupState,
     )
+    from desktop.native.tokens import contrast
     from desktop.native.widgets import control_art
 
 SIZES = ((1280, 800), (1100, 720))
@@ -226,3 +228,41 @@ def test_the_page_fades_into_the_footer(qapp: QApplication) -> None:
         assert above == card, "above the fade the card is as it is"
         assert high not in (card, ground) and low not in (card, ground), (high, low)
         assert abs(low.red() - ground.red()) < abs(high.red() - ground.red()) < abs(card.red() - ground.red())
+
+
+@pytest.mark.parametrize("pack", ["light-frost", "dark-frost", "nocturne", "slate"])
+@pytest.mark.parametrize(
+    "preset", ["default", "high-contrast", "paper", "ink", "poster", "terminal", "pastel"]
+)
+def test_a_future_step_on_the_rail_reads_at_4_5_to_1(qapp: QApplication, pack: str, preset: str) -> None:
+    """N8-U23: a step you cannot reach yet is drawn in the rail's disabled colour. It was a 2.3 to 1 grey
+    on the white rail in Light, below what text needs."""
+    look = sanitize_look({"preset": preset, "knobs": {}})
+    palette = resolved_palette(pack, False, look)
+    sheet = pack_stylesheet(pack, False, look, "default", palette, control_art(palette))
+    rule = re.search(r"QPushButton#setupRailItem:disabled \{[^}]*color: (#[0-9a-fA-F]{6});", sheet)
+    assert rule is not None
+    assert contrast(rule.group(1), palette["panel"]) >= 4.5, (rule.group(1), palette["panel"])
+
+
+def test_the_add_row_clears_the_footer_fade_on_a_short_window(qapp: QApplication) -> None:
+    """N8-U23: "+ Add a sport, club or job" sat under the footer's fade at 810 px tall, so it looked
+    dimmed and could not be read; the page must scroll it above the fade."""
+    with dressed(qapp, (1100, 810)) as (setup, _palette):
+        setup._show(WEEK)
+        for _ in range(3):
+            setup._add_activity()
+        page = setup.pages[WEEK]
+        bar = page.verticalScrollBar()
+        # The page learns its new height a little after each change, so wait for it to settle first.
+        for _ in range(6):
+            time.sleep(0.05)
+            qapp.processEvents()
+        assert bar.maximum() > 0, "the page does not run past the window, so this proves nothing"
+        bar.setValue(bar.maximum())
+        for _ in range(6):
+            time.sleep(0.05)
+            qapp.processEvents()
+        button = setup.add_activity
+        bottom = button.mapTo(setup, QPoint(0, button.height())).y()
+        assert bottom <= under_footer(setup), (bottom, under_footer(setup))
