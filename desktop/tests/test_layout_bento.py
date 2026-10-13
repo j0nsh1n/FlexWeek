@@ -290,7 +290,9 @@ def test_free_time_runs_from_the_first_block_to_ten_and_from_now_on_today() -> N
 def test_a_half_hour_block_says_its_name_at_the_level_the_hours_open_at(
     qapp: QApplication, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Dinner is half an hour. In the body size the week's 44 pixels an hour left it no line."""
+    """Dinner is half an hour. T-W35: a block always shows its range; the title is what
+    gets cut. In the body size the week's 44 pixels an hour leave no room for the name,
+    so the week paints 18:00–18:30 (name in tooltip)."""
     written: list[str] = []
     real = canvas_module._paint_layout
 
@@ -302,7 +304,7 @@ def test_a_half_hour_block_says_its_name_at_the_level_the_hours_open_at(
     for surface, name in (("week", "bentoWeekHours"), ("day", "bentoDayHours")):
         written.clear()
         hours(shown(qapp, surface), name).grab()
-        assert any(line.startswith("Dinner") for line in written), (surface, written)
+        assert "18:00–18:30" in written, (surface, written)
 
 
 def test_the_week_keeps_school_s_time_where_its_times_do_not_fit(
