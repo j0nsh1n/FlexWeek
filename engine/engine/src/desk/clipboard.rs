@@ -515,7 +515,7 @@ pub fn left_over_items(
     today_week: &str,
     now: &str,
     blocks: &Value,
-    committed_blocks: &Value,
+    _committed_blocks: &Value,
 ) -> EngineResult<Vec<Value>> {
     let (today, minute) = crate::model::parse_due(now)?;
     let moment = (today, minute);
@@ -524,7 +524,6 @@ pub fn left_over_items(
     };
     let mut items = Vec::new();
     for assignment in table.values() {
-        let available = available_homework_minutes(assignment, blocks, committed_blocks)?;
         if truthy(get(assignment, "completed")?) {
             continue;
         }
@@ -533,17 +532,13 @@ pub fn left_over_items(
             .map(crate::model::parse_due)
             .transpose()?
             .is_some_and(|deadline| deadline <= moment);
-        // Placed unfinished minutes are still left to do. `available` subtracts them, and
-        // `unplanned_min` from the server can hide them, so overdue remaining is the homework
-        // itself: estimate minus focus minutes and minutes of sessions ticked done, placed or not.
-        let remaining = if overdue {
-            let estimate = whole(&or_default(get(assignment, "estimate_min")?, json!(0)))?;
-            let focus = whole(&or_default(get(assignment, "focus_minutes")?, json!(0)))?;
-            let done = done_session_minutes(blocks, subscript(assignment, "id")?)?;
-            floor_slot((estimate - focus - done).max(0))
-        } else {
-            available
-        };
+        // Placed unfinished minutes are still left to do, so only sessions ticked done come off.
+        // `unplanned_min` from the server can hide them, so both states use the homework itself:
+        // estimate minus focus minutes minus done sessions.
+        let estimate = whole(&or_default(get(assignment, "estimate_min")?, json!(0)))?;
+        let focus = whole(&or_default(get(assignment, "focus_minutes")?, json!(0)))?;
+        let done = done_session_minutes(blocks, subscript(assignment, "id")?)?;
+        let remaining = floor_slot((estimate - focus - done).max(0));
         if remaining < SLOT_MIN {
             continue;
         }
