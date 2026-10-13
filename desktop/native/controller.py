@@ -35,7 +35,7 @@ from desktop.native.calendar import (
     shifted_month,
     span_problem,
 )
-from desktop.native.client import SIGN_IN_AGAIN, ApiError, NativeClient, auth_error
+from desktop.native.client import SESSION_ENDED, ApiError, NativeClient, auth_error
 from desktop.native.files import (
     export_day_payload,
     export_week_payload,

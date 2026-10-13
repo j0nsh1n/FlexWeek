@@ -1318,6 +1318,7 @@ def test_session_expiry_forgets_the_focus_timer(qapp: QApplication, server: Loca
     session.start_quick_focus()
     assert account_id in session.focus_store
     session._on_expired()
+    assert session.message == "Your session ended. Sign in again."
     assert session.account is None
     assert account_id not in session.focus_store
     assert session.focus is None

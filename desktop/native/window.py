@@ -70,6 +70,7 @@ from desktop.native.calendar import (
 )
 from desktop.native.client import (
     PASSWORD_LENGTH_HINT,
+    SESSION_ENDED,
     SIGN_IN_AGAIN,
     SIGN_IN_WHY,
     SIGN_IN_WHY_LINK,
@@ -738,7 +739,7 @@ class NativeWindow(QMainWindow):
 
     def _auth_problem_field(self, message: str) -> QLineEdit | None:
         words = message.lower()
-        if message == SIGN_IN_AGAIN:
+        if message in {SIGN_IN_AGAIN, SESSION_ENDED}:
             return None
         if message == TOO_MANY_TRIES:
             return self.recovery_code if self._entry_mode == RESET else self.password
