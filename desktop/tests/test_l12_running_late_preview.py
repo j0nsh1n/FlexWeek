@@ -320,3 +320,11 @@ def test_running_late_buttons_share_one_left_edge(qapp: QApplication) -> None:  
     accept = dialog.accept_button.mapTo(dialog, dialog.accept_button.rect().topLeft()).x()
     assert accept == left
     dialog.close()
+
+
+def test_only_a_times_own_am_pm_is_kept_with_it() -> None:
+    from desktop.native.widgets import _unbroken_time
+
+    assert _unbroken_time("PM club AMERICAN: Mon 4:45–5:45 PM → Tue 7 AM") == (
+        "PM club AMERICAN: Mon 4:45–5:45 PM → Tue 7 AM"
+    )

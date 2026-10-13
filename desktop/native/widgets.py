@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import re
 from collections.abc import Callable, Collection
 from copy import deepcopy
 from datetime import date, datetime, time, timedelta
@@ -6225,8 +6226,9 @@ class LateDialog(Dialog):
 
 
 def _unbroken_time(text: str) -> str:
-    """Keep AM/PM on the same line as the time in Running late's preview."""
-    return text.replace(" AM", "\u00a0AM").replace(" PM", "\u00a0PM")
+    """Keep AM/PM on the same line as the time in Running late's preview. Only a time's own AM/PM:
+    a title such as "PM review" keeps its plain space."""
+    return re.sub(r"(?<=\d) ([AP]M)\b", "\u00a0\\1", text)
 
 
 def _late_summary(moved: int) -> str:
