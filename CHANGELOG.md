@@ -6,6 +6,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Changed
+- Month opens on its first row with this week banded. Clicking a date fills the date pane; Open Day opens that day. A cell shows at most three chips and "and N more". At Large text a chip wraps so its time and whole words stay. Sunday stays clear of the scroll bar. Month uses the same 28 px status strip as Week for the overdue count, not a second line under the grid. The date pane has "Show study time per date" and becomes a drawer under 1150 px.
 - Add homework and Add fixed time ask three questions: What, When, How long. Answers show as clickable crumbs. Enter goes to the next question. Edit homework and Edit event stay one page.
 - Week planning uses one bar. Plan shows how many homework items still need a time. Click the week title to open a mini month.
 - A 28 px strip under the bar says what is next (or Nothing more today), how many items are overdue, and Week as a list · Ctrl+Shift+L. The list row stays 28 px at Large text.

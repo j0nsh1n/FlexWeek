@@ -1,7 +1,7 @@
 # context.md — FlexWeek
 
 ## Current State
-- 2026-10-12: 1.0.0 lane 3 sheets are on `release/1.0.0`. Add homework and Add fixed time are What / When / How long with clickable crumbs. Edit homework stays one page. Lane 2 (one bar, 28 px overdue strip, Agenda rail, two-line Large day headers, Unfinished + N left) is already on this branch.
+- 2026-10-12: 1.0.0 lane 4 Month is on `release/1.0.0`: first row visible with this week banded, Sunday clear of the scroll bar, wrapping chips at Large text, overdue on the 28 px strip, date pane with "Show study time per date" (drawer under 1150 px). Lane 3 sheets and lane 2 bar/strip stay as they were. Edit homework stays one page.
 - 2026-10-11: v0.19.2 prepared on `release/0.19.2` (worktree `~/.worktrees/flexweek-0190`, `.venv` is
   `venv-0192-rel`): the 0.19.1 QA handoff's Fix first items (F3, F3b, 3-R, L12, T-W1, R10, 0l-R, A28,
   0f-R, R1, N15, S1, A27, T1, P1, U19) and the fixes from two QA testers who used the app through
@@ -149,7 +149,8 @@ values make a retried write return the first result.
 
 ## Session Handoff
 - 2026-10-12, `release/1.0.0` in `~/.worktrees/flexweek-0190`. Lane 1 stays `38c04c92`. Lane 2
-  stays through `61fad7c5`. Lane 3 Add homework and Add fixed time three-step sheets are implemented.
-  Reports: `~/.flexweek-ui-harness/scratch/1.0.0/lane-2-report.md`, `lane-3-report.md`.
-- Next: lane 4, Month (`month.html?view=month&month=b`). Whether Edit homework also steps is open.
+  stays through `61fad7c5`. Lane 3 stays `0b8dc729` / `b1fcd367` / `9c09aada`. Lane 4 Month is
+  implemented. Reports: `lane-2-report.md`, `lane-3-report.md`, `lane-4-report.md` under
+  `~/.flexweek-ui-harness/scratch/1.0.0/`.
+- Next: lane 5, My day (`month.html?view=myday`, shared fix plus A and B; C is not built).
   Do not start lane 9 until `javac -version` works.
