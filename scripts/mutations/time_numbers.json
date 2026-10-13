@@ -30,9 +30,9 @@
   {
     "name": "Narrow blocks omit their stacked start and end",
     "file": "desktop/native/hours/canvas.py",
-    "old": "            lambda cut, most=title_lines: stack(most, (start,) if start else (), cut),\n            lambda cut: stack(1, (start,) if start else (), cut),",
-    "new": "            lambda cut, most=title_lines: stack(most, (), cut),\n            lambda cut: stack(1, (), cut),",
-    "test": "desktop/tests/test_time_numbers.py::test_narrow_week_blocks_still_include_their_times"
+    "old": "    if metrics.horizontalAdvance(times) <= width:\n        return times\n    if metrics.horizontalAdvance(start) <= width:\n        return start\n    return None\n",
+    "new": "    return None\n",
+    "test": "desktop/tests/test_week_words.py::test_a_blocks_range_stays_on_one_line_and_the_two_times_are_never_stacked"
   },
   {
     "name": "Now is drawn after the blocks, over their words",
