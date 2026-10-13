@@ -17,6 +17,7 @@ from flexweek_engine import SyncError, SyncService  # type: ignore[import-untype
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QPainter, QPalette
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPushButton, QSizePolicy, QVBoxLayout, QWidget
+from shiboken6 import isValid
 
 from desktop.native.feel import current
 from desktop.native.widgets import Dialog, caption_above, sheet_button, sheet_footer
@@ -171,7 +172,11 @@ def run_off_ui(
     """Runs `work` on a worker thread, then `done(result, problem)` on the window's thread. The sync
     calls block for up to a few seconds, so none of them may run on the window's thread."""
     answer = _Answer(owner)
-    answer.ready.connect(done, Qt.ConnectionType.QueuedConnection)
+    def deliver(result: Any, problem: Exception | None) -> None:
+        if isValid(owner):
+            done(result, problem)
+
+    answer.ready.connect(deliver, Qt.ConnectionType.QueuedConnection)
 
     def run() -> None:
         try:
@@ -288,7 +293,7 @@ class PairDialog(Dialog):
         run_off_ui(self, lambda: self.sync.pair_start(self.user_id), self._made)
 
     def _made(self, offer: dict | None, problem: Exception | None) -> None:
-        if self.closed:
+        if not isValid(self) or self.closed:
             # Cancel came while the code was being made: end the code rather than leave it open.
             if offer is not None:
                 self.sync.pair_cancel()
@@ -307,6 +312,8 @@ class PairDialog(Dialog):
         self._tick()
 
     def _tick(self) -> None:
+        if not isValid(self):
+            return
         status = self.sync.pair_status()
         state = status["state"]
         if state == "paired":
@@ -405,6 +412,8 @@ class DevicesPanel(QWidget):
         self.refresh()
 
     def refresh(self) -> None:
+        if not isValid(self):
+            return
         while self.phones.count():
             item = self.phones.takeAt(0)
             if item.widget() is not None:
@@ -452,6 +461,8 @@ class DevicesPanel(QWidget):
         self.sync_button.setEnabled(self.host.service is not None)
 
     def _service_started(self, _service: object) -> None:
+        if not isValid(self):
+            return
         self.refresh()
 
     def _disable(self, words: str) -> None:
@@ -467,6 +478,8 @@ class DevicesPanel(QWidget):
         self.host.ensure(lambda service: self._pairing(service, user_id))
 
     def _pairing(self, service: SyncService | None, user_id: int) -> None:
+        if not isValid(self):
+            return
         self._set_buttons()
         if service is None:
             self.problem.setText(NO_SYNC_WORDS)
@@ -483,12 +496,14 @@ class DevicesPanel(QWidget):
         dialog = RemoveDialog(self, phone["name"])
 
         def gone(answer: Any, problem: Exception | None) -> None:
+            if not isValid(self):
+                return
             if problem is not None:
                 self.problem.setText(f"Could not remove {phone['name']}: {problem}")
             self.refresh()
 
         def confirmed(result: int) -> None:
-            if result != 1:
+            if not isValid(self) or result != 1:
                 return
             run_off_ui(self, lambda: service.unlink(user_id, phone["device_id"], True), gone)
 
@@ -496,6 +511,8 @@ class DevicesPanel(QWidget):
         self._open_sheet(dialog)
 
     def _forget_sheet(self, dialog: Dialog) -> None:
+        if not isValid(self):
+            return
         if self.dialog is dialog:
             self.dialog = None
 
@@ -514,6 +531,8 @@ class DevicesPanel(QWidget):
         run_off_ui(self, lambda: service.sync_all(SYNC_DEADLINE_MS), self._synced)
 
     def _synced(self, rows: list | None, problem: Exception | None) -> None:
+        if not isValid(self):
+            return
         self.sync_button.setEnabled(True)
         if problem is not None:
             self.problem.setText(f"Sync failed: {problem}")

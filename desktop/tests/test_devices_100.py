@@ -22,8 +22,10 @@ pytestmark = pytest.mark.skipif(
 
 if importlib.util.find_spec("PySide6") is not None:
     from flexweek_engine import SyncError, SyncService  # type: ignore[import-untyped]
+    from PySide6.QtCore import QEvent
     from PySide6.QtGui import QPalette
     from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QPushButton
+    from shiboken6 import delete, isValid
 
     from backend.storage import initialize
     from desktop.native import devices
@@ -381,3 +383,49 @@ def test_pressing_pair_starts_the_service_once_and_opens_the_pairing_sheet(
     code = panel.dialog.findChild(QLabel, "pairCode")
     wait_until(qapp, lambda: re.fullmatch(r"\d{4} \d{4}", code.text()) is not None)
     panel.dialog.reject()
+
+
+@pytest.mark.parametrize("callback", ["refresh", "started", "pairing", "synced"])
+def test_a_deleted_devices_card_ignores_late_callbacks(qapp, tmp_path, callback) -> None:
+    panel = DevicesPanel(SyncHost(tmp_path / "late.db"), lambda: 1)
+    delete(panel)
+    assert not isValid(panel)
+    if callback == "refresh":
+        panel.refresh()
+    elif callback == "started":
+        panel._service_started(None)
+    elif callback == "pairing":
+        panel._pairing(None, 1)
+    else:
+        panel._synced(None, RuntimeError("late sync"))
+
+
+def test_a_deleted_pairing_sheet_ignores_a_late_timer(qapp, tmp_path, monkeypatch) -> None:
+    from unittest.mock import Mock
+
+    from PySide6.QtWidgets import QWidget
+
+    monkeypatch.setattr(devices, "run_off_ui", lambda *args: None)
+    sync = Mock(spec=SyncService)
+    parent = QWidget()
+    dialog = PairDialog(parent, sync, 1)
+    delete(parent)
+    assert not isValid(dialog)
+    dialog._tick()
+    dialog._made({"display_code": "1234 5678"}, None)
+    sync.pair_status.assert_not_called()
+    sync.pair_cancel.assert_called_once_with()
+
+
+def test_settings_can_close_before_the_pairing_service_starts(qapp, lazy_desk, monkeypatch) -> None:
+    window, host, _started = lazy_desk
+    panel = devices_panel(window)
+    pending = []
+    monkeypatch.setattr(devices, "run_off_ui", lambda owner, work, done: pending.append(done))
+    panel.pair_button.click()
+    assert len(pending) == 1
+    window._discard_settings_page()
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert not isValid(panel)
+    pending[0](None, None)
+    assert window._settings is None
