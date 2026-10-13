@@ -12,7 +12,7 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton, QWidget
+from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QPushButton, QWidget
 
 from desktop.native.widgets import HomeworkDialog
 from desktop.tests.test_homework_form import go_length, go_when, host, opened
@@ -145,10 +145,14 @@ def test_edit_homework_stays_one_page(qapp: QApplication) -> None:  # noqa: F811
     free(parent)
 
 
+def esc(dialog: HomeworkDialog) -> None:
+    QTest.keyClick(dialog, Qt.Key.Key_Escape)
+
+
 def test_esc_on_untouched_add_homework_closes(qapp: QApplication) -> None:  # noqa: F811
     parent = host()
     dialog = opened(parent)
-    dialog.reject()
+    esc(dialog)
     assert dialog.result() == QDialog.DialogCode.Rejected
     free(dialog)
     free(parent)
@@ -171,7 +175,7 @@ def test_esc_after_typing_asks_discard_what_you_typed(qapp: QApplication) -> Non
             sheet.buttons["stay"].click()
 
     QTimer.singleShot(0, peek)
-    dialog.reject()
+    esc(dialog)
     qapp.processEvents()
     assert seen["title"] == "Discard what you typed?"
     assert seen["question"] == "Discard what you typed?"
@@ -196,8 +200,60 @@ def test_discard_closes_typed_add_homework(qapp: QApplication) -> None:  # noqa:
             sheet.buttons["discard"].click()
 
     QTimer.singleShot(0, peek)
-    dialog.reject()
+    esc(dialog)
     qapp.processEvents()
     assert dialog.result() == QDialog.DialogCode.Rejected
+    free(dialog)
+    free(parent)
+
+
+def test_esc_on_the_question_itself_keeps_editing(qapp: QApplication) -> None:  # noqa: F811
+    parent = host()
+    dialog = opened(parent)
+    dialog.title.setText("History essay")
+
+    def peek() -> None:
+        sheet = QApplication.activeModalWidget()
+        if sheet is not None:
+            QTest.keyClick(sheet, Qt.Key.Key_Escape)
+
+    QTimer.singleShot(0, peek)
+    esc(dialog)
+    qapp.processEvents()
+    assert dialog.isVisible()
+    assert dialog.title.text() == "History essay"
+    free(dialog)
+    free(parent)
+
+
+def test_cancel_after_typing_asks_too(qapp: QApplication) -> None:  # noqa: F811
+    parent = host()
+    dialog = opened(parent)
+    dialog.title.setText("History essay")
+    asked: list[bool] = []
+
+    def peek() -> None:
+        sheet = QApplication.activeModalWidget()
+        asked.append(sheet is not None)
+        if sheet is not None:
+            sheet.buttons["stay"].click()
+
+    QTimer.singleShot(0, peek)
+    dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Cancel).click()
+    qapp.processEvents()
+    assert asked == [True]
+    assert dialog.isVisible()
+    free(dialog)
+    free(parent)
+
+
+def test_closing_from_code_never_asks(qapp: QApplication) -> None:  # noqa: F811
+    """A close that is not a key or a button has nobody to answer the question: it must not wait."""
+    parent = host()
+    dialog = opened(parent)
+    dialog.title.setText("History essay")
+    dialog.reject()
+    assert dialog.result() == QDialog.DialogCode.Rejected
+    assert QApplication.activeModalWidget() is None
     free(dialog)
     free(parent)

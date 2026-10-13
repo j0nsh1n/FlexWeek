@@ -2972,6 +2972,10 @@ class Dialog(QDialog):
             self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
             self.setProperty("sheet", True)
 
+    def _close_asked(self) -> None:
+        """What Esc, Cancel and the close button do; a dialog that must ask first overrides this."""
+        self.reject()
+
     def return_focus_to(self, widget: QWidget) -> None:
         """Put the keyboard on `widget` when the sheet closes, in place of where it was when the sheet
         opened: a sheet that sends the student to a box to fix would otherwise hand it back to the
@@ -3004,7 +3008,7 @@ class Dialog(QDialog):
         close.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         close.setAutoDefault(False)
         icons.tint(close, "x")
-        close.clicked.connect(self.reject)
+        close.clicked.connect(self._close_asked)
         head.addWidget(self.heading, 1)
         head.addWidget(close, 0, Qt.AlignmentFlag.AlignTop)
         inner.addLayout(head)
@@ -4545,7 +4549,7 @@ class HomeworkDialog(Dialog):
             buttons.accepted.connect(self.accept)
         else:
             buttons.accepted.connect(self._add_primary)
-        buttons.rejected.connect(self.reject)
+        buttons.rejected.connect(self._close_asked)
         row.addWidget(buttons)
         layout.addLayout(row)
         if self._add_step is not None:
@@ -4577,8 +4581,9 @@ class HomeworkDialog(Dialog):
             self.completed.isChecked() if hasattr(self, "completed") else False,
         )
 
-    def reject(self) -> None:
-        """Esc and Cancel ask before dropping typed words; an untouched sheet closes at once."""
+    def _close_asked(self) -> None:
+        """Esc, Cancel and the close button ask before dropping typed words; an untouched sheet closes
+        at once. Closing from code (reject, close) never asks: nothing is there to answer it."""
         if getattr(self, "_opened_as", None) is not None and self._typed_picture() != self._opened_as:
             sheet = ConfirmSheet(
                 self,
@@ -4590,7 +4595,14 @@ class HomeworkDialog(Dialog):
             sheet.exec()
             if sheet.answer != "discard":
                 return
-        super().reject()
+        self.reject()
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+        if event.key() == Qt.Key.Key_Escape:
+            event.accept()
+            self._close_asked()
+            return
+        super().keyPressEvent(event)
 
     def _school_end(self) -> int:
         """The minute school ends, from the saved school hours, or 15:00 with none: work due at a set
