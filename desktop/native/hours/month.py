@@ -28,6 +28,7 @@ from PySide6.QtGui import (
     QContextMenuEvent,
     QFont,
     QFontMetrics,
+    QKeyEvent,
     QMouseEvent,
     QPainter,
     QPaintEvent,
@@ -51,6 +52,7 @@ from desktop.native.hours.geometry import Span
 from desktop.native.hours.hand import Gesture, Hand, Held, Verdict
 from desktop.native.look import category_paint, luminance, resolved_palette
 from desktop.native.tokens import WEIGHT_STRONG, mix, text_knob
+from desktop.native.weekmodel import HOMEWORK as SESSION_CATEGORY
 from desktop.native.weekmodel import WeekModel, clock_label, hhmm_text, length_label
 from desktop.native.widgets import OverlayBar, Switch, overlay_scroll_bars
 
@@ -71,6 +73,7 @@ PANE_PX = 300
 PANE_NARROW = 1150
 LOAD_CAP = 180
 LOAD_WORDS = "Show study time per date"
+CLOSE_PANE = "Close"
 OPEN_DAY = "Open Day"
 HOMEWORK = frozenset({"homework", "assignments"})
 
@@ -193,7 +196,8 @@ def month_cells(snapshot: dict | None, weeks: Mapping[str, WeekModel], today_iso
                     MonthChip(
                         f"block:{item['id']}",
                         str(item.get("title") or "Untitled"),
-                        str(item.get("category") or ""),
+                        # A homework session is saved with no category unless the student picked one.
+                        str(item.get("category") or (SESSION_CATEGORY if item.get("assignment_id") else "")),
                         block_id=str(item["id"]),
                         start=int(start[:2]) * 60 + int(start[3:]),
                         minutes=int(item.get("duration_min") or 0),
@@ -325,6 +329,9 @@ class MonthCanvas(QWidget):
 
     takes_dates = True
     date_opened = Signal(str)
+    # Arrow keys move the selected date; Enter or Space opens it.
+    date_moved = Signal(str)
+    date_entered = Signal(str)
 
     def __init__(self, hand: Hand, painter: MonthPainter, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -590,6 +597,22 @@ class MonthCanvas(QWidget):
             return
         self._pressed = self.date_at(point)
 
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+        steps = {Qt.Key.Key_Left: -1, Qt.Key.Key_Right: 1, Qt.Key.Key_Up: -7, Qt.Key.Key_Down: 7}
+        at = self.index_of(self.selected) if self.selected else None
+        key = event.key()
+        if key in steps and self.cells and not event.modifiers():
+            target = 0 if at is None else min(max(at + steps[key], 0), len(self.cells) - 1)
+            self.date_moved.emit(self.cells[target].iso)
+            event.accept()
+            return
+        opens = key in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space)
+        if opens and self.selected and at is not None:
+            self.date_entered.emit(self.selected)
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:  # noqa: N802
         """A right-click on a block of the open week asks for its menu. A deadline has none."""
         found = self._chip_at(QPointF(event.pos()))
@@ -731,6 +754,7 @@ class DatePane(QFrame):
 
     open_day = Signal()
     load_toggled = Signal(bool)
+    close_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -738,10 +762,18 @@ class DatePane(QFrame):
         self.setFixedWidth(PANE_PX)
         self.setFrameShape(QFrame.Shape.StyledPanel)
         layout = QVBoxLayout(self)
+        top = QHBoxLayout()
         self.heading = QLabel()
         self.heading.setObjectName("monthPaneHeading")
         self.heading.setWordWrap(True)
-        layout.addWidget(self.heading)
+        top.addWidget(self.heading, 1)
+        # Only a drawer closes; beside the grid the pane is always there.
+        self.close_button = QPushButton(CLOSE_PANE)
+        self.close_button.setObjectName("monthPaneClose")
+        self.close_button.clicked.connect(self.close_requested.emit)
+        self.close_button.hide()
+        top.addWidget(self.close_button, 0, Qt.AlignmentFlag.AlignTop)
+        layout.addLayout(top)
         self.load_switch = Switch(LOAD_WORDS)
         self.load_switch.setObjectName("monthLoadSwitch")
         self.load_switch.toggled.connect(self.load_toggled.emit)
@@ -757,6 +789,16 @@ class DatePane(QFrame):
         self.open.setObjectName("monthOpenDay")
         self.open.clicked.connect(self.open_day.emit)
         layout.addWidget(self.open)
+
+    def set_drawer(self, drawer: bool) -> None:
+        self.close_button.setVisible(drawer)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+        if event.key() == Qt.Key.Key_Escape and self.close_button.isVisible():
+            self.close_requested.emit()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def fill(self, cell: MonthCell | None) -> None:
         if not isValid(self):
@@ -786,7 +828,7 @@ def _pane_line(chip: MonthChip) -> str:
         return chip.words
     when = clock_label(chip.start or 0)
     length = f" · {length_label(chip.minutes)}" if chip.minutes else ""
-    mark = "✓ " if chip.category in HOMEWORK else ""
+    mark = "✓ " if chip.category in HOMEWORK and chip.done else ""
     return f"{mark}{when} {chip.title}{length}"
 
 
@@ -810,7 +852,9 @@ class MonthGrid(QWidget):
         )
         self._palette = resolved_palette("system", False, None)
         self.canvas = MonthCanvas(self.hand, MonthPainter(self._palette))
-        self.canvas.date_opened.connect(self.select)
+        self.canvas.date_opened.connect(self._date_chosen)
+        self.canvas.date_moved.connect(self._date_moved)
+        self.canvas.date_entered.connect(self._date_entered)
         self.scroll = MonthScroll(self.canvas)
         self.body = QWidget()
         split = QHBoxLayout(self.body)
@@ -820,6 +864,9 @@ class MonthGrid(QWidget):
         self.pane = DatePane()
         self.pane.open_day.connect(self._open_day)
         self.pane.load_toggled.connect(self.canvas.set_show_load)
+        self.pane.close_requested.connect(self.close_drawer)
+        # Under PANE_NARROW the pane is a drawer over the grid, closed until a date is chosen.
+        self._drawer_open = False
         split.addWidget(self.pane)
         self._split = split
         layout.addWidget(self.body, 1)
@@ -923,6 +970,34 @@ class MonthGrid(QWidget):
         self.pane.fill(cell)
         self.canvas.update()
 
+    def drawer(self) -> bool:
+        return self.width() < PANE_NARROW
+
+    def _date_chosen(self, iso: str) -> None:
+        self.select(iso)
+        if self.drawer():
+            self._drawer_open = True
+            self._place_pane()
+
+    def _date_moved(self, iso: str) -> None:
+        self.select(iso)
+        self.canvas.reveal(iso)
+
+    def _date_entered(self, iso: str) -> None:
+        if self.drawer() and not self._drawer_open:
+            self._date_chosen(iso)
+            self.pane.open.setFocus(Qt.FocusReason.OtherFocusReason)
+        else:
+            self.select(iso)
+            self._open_day()
+
+    def close_drawer(self) -> None:
+        if not self._drawer_open:
+            return
+        self._drawer_open = False
+        self._place_pane()
+        self.canvas.setFocus(Qt.FocusReason.OtherFocusReason)
+
     def _open_day(self) -> None:
         if self.canvas.selected:
             self.day_activated.emit(self.canvas.selected)
@@ -932,18 +1007,23 @@ class MonthGrid(QWidget):
         self._place_pane()
 
     def _place_pane(self) -> None:
-        drawer = self.width() < PANE_NARROW
+        drawer = self.drawer()
         self.pane.setFixedWidth(PANE_PX)
+        self.pane.set_drawer(drawer)
         if drawer:
             if self._split.indexOf(self.pane) >= 0:
                 self._split.removeWidget(self.pane)
-            self.pane.setParent(self)
+                self.pane.setParent(self)
             top = 0 if self.warning.isHidden() else self.warning.sizeHint().height()
             self.pane.setGeometry(max(0, self.width() - PANE_PX), top, PANE_PX, max(0, self.height() - top))
-            self.pane.show()
-            self.pane.raise_()
-        elif self._split.indexOf(self.pane) < 0:
-            self._split.addWidget(self.pane)
+            # Closed, all seven days are on screen; open, it covers the right of the grid until closed.
+            self.pane.setVisible(self._drawer_open)
+            if self._drawer_open:
+                self.pane.raise_()
+        else:
+            self._drawer_open = False
+            if self._split.indexOf(self.pane) < 0:
+                self._split.addWidget(self.pane)
             self.pane.show()
 
     def reveal(self, iso_day: str) -> None:
