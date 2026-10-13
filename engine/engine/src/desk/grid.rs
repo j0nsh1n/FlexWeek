@@ -924,8 +924,8 @@ mod tests {
             past_problem(week, 1, 16 * 60, thursday, at)
                 .unwrap()
                 .as_deref(),
-            Some(refused),
-            "Tuesday of this week"
+            Some("That time has passed. The day is over, so choose another day."),
+            "Tuesday of this week is over, so it offers no time later today"
         );
         assert_eq!(
             past_problem(week, 3, 15 * 60, thursday, at)
@@ -948,8 +948,8 @@ mod tests {
             past_problem("2026-09-28", 4, 18 * 60, thursday, at)
                 .unwrap()
                 .as_deref(),
-            Some(refused),
-            "last week"
+            Some("That time has passed. The day is over, so choose another day."),
+            "last week is over"
         );
         assert_eq!(
             past_problem("2026-10-12", 0, 8 * 60, thursday, at).unwrap(),

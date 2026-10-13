@@ -36,7 +36,8 @@ from desktop.tests.window_support import (  # noqa: F401
 )
 from desktop.tests.window_support import window as signed_in  # noqa: F401
 
-PAST_REFUSAL = "That time has passed. Choose 12:00 PM or later today, or another day."
+# A drop on an earlier day than today: that day is over (1.0.0 decision on the past-time sentence).
+DAY_OVER = "That time has passed. The day is over, so choose another day."
 
 
 def send_mouse(widget, kind, at: QPoint, held: bool) -> None:
@@ -84,10 +85,10 @@ def test_a_drop_on_a_past_day_is_refused_and_says_why(
     essay_on_past_day(window)
     essay = next(b for b in window.session.blocks if b.get("assignment_id") == "math")
     before = [dict(b) for b in window.session.blocks]
-    # Wednesday → Monday: a different day already past. Synthetic moves never leave the origin
-    # column (Hand asks widgetAt), so the judge is the drop rule the window uses on release.
+    # Wednesday → Monday: a different day already past, so it is over. Synthetic moves never leave
+    # the origin column (Hand asks widgetAt), so the judge is the drop rule the window uses on release.
     verdict = window._judge_span(essay["id"], 2, 0, 17 * 60, 17 * 60 + 45)
-    assert (verdict.ok, verdict.words) == (False, PAST_REFUSAL)
+    assert (verdict.ok, verdict.words) == (False, DAY_OVER)
     window._move_block(essay["id"], 2, 0, 17 * 60, 17 * 60 + 45)
     assert window.session.blocks == before
     assert essay["days"] == [2]
