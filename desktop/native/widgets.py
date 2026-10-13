@@ -3251,13 +3251,48 @@ class BlockDialog(Dialog):
         self._syncing_scope_days = False
         existing = block is not None
         series = existing and is_series(self._original)
+        # Add fixed time is What / When / How long, matching Add homework. Edit stays one page.
+        self._add_step: int | None = None if existing else 0
+        self._hiding_add = self._add_step is not None
         self.setObjectName("blockDialog")
         layout = self.card_body("Edit event" if existing else "Add fixed time")
         body = QWidget()
-        form = Form(body, stacked=True)
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        if self._add_step is not None:
+            self.step_bar = QWidget()
+            self.step_bar.setObjectName("blockSteps")
+            crumbs = QHBoxLayout(self.step_bar)
+            crumbs.setContentsMargins(0, 0, 0, 0)
+            crumbs.setSpacing(8)
+            self._crumbs: list[QPushButton] = []
+            for index, name in enumerate(("What", "When", "How long")):
+                if index:
+                    crumbs.addWidget(QLabel("·"))
+                crumb = QPushButton(f"{index + 1} {name}")
+                crumb.setObjectName(f"blockCrumb{index}")
+                crumb.setProperty("quiet", True)
+                crumb.setAutoDefault(False)
+                crumb.clicked.connect(self._crumb_clicked)
+                crumbs.addWidget(crumb)
+                self._crumbs.append(crumb)
+            crumbs.addStretch(1)
+            self.step_prompt = QLabel("What is it?")
+            self.step_prompt.setObjectName("blockPrompt")
+            body_layout.addWidget(self.step_bar)
+            body_layout.addWidget(self.step_prompt)
+        form = Form(stacked=True)
         form.setContentsMargins(0, 0, 0, 0)
+        body_layout.addLayout(form)
+        self._form = form
         self.title = _line("blockTitle", self._original["title"])
+        if self._add_step is not None:
+            self.title.setMinimumHeight(44)
         form.addRow("Title", self.title)
+        self.title_problem = _error_label()
+        self.title_problem.setVisible(False)
+        form.addRow("", self.title_problem)
+        self.title.textChanged.connect(self._clear_title_problem)
         self.day_picker = DayPicker(self._original["days"], "blockDay")
         self.days = self.day_picker.buttons
         for index, check in enumerate(self.days):
@@ -3269,12 +3304,12 @@ class BlockDialog(Dialog):
         # height for one line of words, or one line's height for two.
         self.repeat_note = QLabel(REPEAT_NOTE)
         self.repeat_note.setObjectName("blockRepeatNote")
-        days_field = bare(QWidget())
-        days_column = QVBoxLayout(days_field)
+        self._days_field = bare(QWidget())
+        days_column = QVBoxLayout(self._days_field)
         days_column.setContentsMargins(0, 0, 0, 0)
         days_column.addWidget(self.day_picker)
         days_column.addWidget(self.repeat_note)
-        form.addRow("Days", days_field)
+        form.addRow("Days", self._days_field)
         # Which days a change reaches matters only for a block that repeats, opened on one of its days:
         # a choice of two, under the days it is about (decision 23 of 0.17).
         scopes = (
@@ -3292,6 +3327,7 @@ class BlockDialog(Dialog):
         form.setRowVisible(scope_box, bool(series and occurrence_day is not None))
         note = QLabel("Changes apply to every selected day in this series.")
         note.setObjectName("seriesScope")
+        self._series_note = note
         # isHidden, not isVisible: nothing is visible before the dialog is shown, so the note stood over
         # "This day only" and "Every Tue and Thu" and contradicted the first.
         form.addRow("", note)
@@ -3308,7 +3344,7 @@ class BlockDialog(Dialog):
         )
         self.end.setObjectName("blockEnd")
         self.end.pair_with(self.start)
-        form.add_pair(("Start", self.start), ("End", self.end))
+        self._time_row = form.add_pair(("Start", self.start), ("End", self.end))
         self.duration_line = QLabel()
         self.duration_line.setObjectName("blockDurationLine")
         form.addRow("Duration", self.duration_line)
@@ -3353,6 +3389,7 @@ class BlockDialog(Dialog):
         self.spotify.setPlaceholderText("https://open.spotify.com/…")
         extra.addRow("Spotify link", self.spotify)
         form.addRow("", details)
+        self._details = details
         self.more_details.toggled.connect(details.setVisible)
         open_details = bool(self._original.get("spotify_url"))
         self.more_details.setChecked(open_details)
@@ -3380,13 +3417,26 @@ class BlockDialog(Dialog):
         self.delete_button.setVisible(existing)
         self.delete_button.clicked.connect(self._delete)
         row.addWidget(self.delete_button)
+        self.back_button = QPushButton("Back")
+        self.back_button.setObjectName("blockBack")
+        self.back_button.setProperty("quiet", True)
+        self.back_button.setAutoDefault(False)
+        self.back_button.clicked.connect(self._add_back)
+        self.back_button.setVisible(False)
+        row.addWidget(self.back_button)
         row.addStretch(1)
         buttons = _buttons(self)
-        buttons.accepted.connect(self.accept)
+        self._save = buttons.button(QDialogButtonBox.StandardButton.Save)
+        if self._add_step is None:
+            buttons.accepted.connect(self.accept)
+        else:
+            buttons.accepted.connect(self._add_primary)
         buttons.rejected.connect(self.reject)
         row.addWidget(buttons)
         layout.addLayout(row)
         self._sync_scope()
+        if self._add_step is not None:
+            self._apply_add_step()
 
     def fill_new(
         self,
@@ -3424,7 +3474,96 @@ class BlockDialog(Dialog):
         self._show_length()
         self.error.clear()
         self.title.setFocus(Qt.FocusReason.OtherFocusReason)
+        if self._add_step is not None:
+            self._add_step = 0
+            self._apply_add_step()
         self.refit()
+
+    def _clear_title_problem(self, *_args: object) -> None:
+        self.title.setAccessibleDescription("")
+        self.title_problem.clear()
+        self.title_problem.setAccessibleName("")
+        self.title_problem.setVisible(False)
+
+    def _crumb_clicked(self) -> None:
+        name = self.sender().objectName()
+        self._crumb_to(int(name[-1]))
+
+    def _crumb_to(self, index: int) -> None:
+        if self._add_step is None or index >= self._add_step:
+            return
+        self._add_step = index
+        self._apply_add_step()
+
+    def _add_back(self) -> None:
+        if self._add_step:
+            self._add_step -= 1
+            self._apply_add_step()
+
+    def _add_primary(self) -> None:
+        if held_on_problem(self):
+            return
+        if self._add_step is None or self._add_step >= 2:
+            self.accept()
+            return
+        if self._add_step == 0 and not self.title.text().strip():
+            self.title.setAccessibleDescription(BLOCK_PROBLEMS["title"])
+            self.title_problem.setText(BLOCK_PROBLEMS["title"])
+            self.title_problem.setAccessibleName(BLOCK_PROBLEMS["title"])
+            self.title_problem.setVisible(True)
+            self.title.setFocus(Qt.FocusReason.OtherFocusReason)
+            announce(self.title, BLOCK_PROBLEMS["title"], assertive=True)
+            self._form.setRowVisible(self.title_problem, True)
+            return
+        self._add_step += 1
+        self._apply_add_step()
+        if self._add_step == 1:
+            self.start.setFocus(Qt.FocusReason.OtherFocusReason)
+        else:
+            self.category.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _apply_add_step(self) -> None:
+        step = self._add_step
+        if step is None:
+            return
+        self._hiding_add = True
+        prompts = ("What is it?", "When is it?", "How long will it take?")
+        self.step_prompt.setText(prompts[step])
+        names = ("What", "When", "How long")
+        days = day_range_and_words([index for index, check in enumerate(self.days) if check.isChecked()])
+        done = (self.title.text().strip(), f"{days}, {self.start.time().toString('HH:mm')}")
+        for index, crumb in enumerate(self._crumbs):
+            if index < step:
+                crumb.setText(f"✓ {done[index]}")
+                crumb.setEnabled(True)
+            else:
+                crumb.setText(f"{index + 1} {names[index]}")
+                crumb.setEnabled(False)
+        what = (self.title, self.title_problem)
+        when = (self._days_field, self._time_row)
+        length = (self.category,)
+        for index, group in enumerate((what, when, length)):
+            shown = index == step
+            for widget in group:
+                self._form.setRowVisible(widget, shown)
+        self._form.setRowVisible(self.duration_line, step >= 1)
+        if step == 0:
+            self._form.setRowVisible(self.title_problem, bool(self.title_problem.text()))
+        title_label = self._form.labelForField(self.title)
+        if title_label is not None:
+            title_label.setVisible(False)
+        for extra in (self.more_details, self._details, self.missed, self.error, self._series_note):
+            self._form.setRowVisible(extra, False)
+        self._form.setRowVisible(self.scope_choice, False)
+        self.back_button.setVisible(step > 0)
+        self._save.setText("Save" if step >= 2 else "Next")
+        self._hiding_add = False
+        if self.isVisible():
+            self.refit()
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
+        super().showEvent(event)
+        self.title.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _name_block_toggle(self, open_: bool) -> None:
         self.more_details.setText("Fewer details" if open_ else "More details")
@@ -3965,6 +4104,9 @@ class HomeworkDialog(Dialog):
         self._spread = False
         # "choose" to pick a time for a session that needs one, "unpin" to let FlexWeek move it again.
         self._request: str | None = None
+        # Add homework is What / When / How long. Edit stays one page until Jonathan says otherwise.
+        self._add_step: int | None = None if assignment is not None else 0
+        self._hiding_add = self._add_step is not None
         self.setObjectName("homeworkDialog")
         layout = self.card_body("Edit homework" if assignment else "Add homework")
         # The body scrolls so the dialog cannot outgrow a laptop screen. It already carried notes,
@@ -3972,11 +4114,35 @@ class HomeworkDialog(Dialog):
         body = QWidget()
         body_layout = QVBoxLayout(body)
         body_layout.setContentsMargins(0, 0, 0, 0)
+        if self._add_step is not None:
+            self.step_bar = QWidget()
+            self.step_bar.setObjectName("homeworkSteps")
+            crumbs = QHBoxLayout(self.step_bar)
+            crumbs.setContentsMargins(0, 0, 0, 0)
+            crumbs.setSpacing(8)
+            self._crumbs: list[QPushButton] = []
+            for index, name in enumerate(("What", "When", "How long")):
+                if index:
+                    crumbs.addWidget(QLabel("·"))
+                crumb = QPushButton(f"{index + 1} {name}")
+                crumb.setObjectName(f"homeworkCrumb{index}")
+                crumb.setProperty("quiet", True)
+                crumb.setAutoDefault(False)
+                crumb.clicked.connect(self._crumb_clicked)
+                crumbs.addWidget(crumb)
+                self._crumbs.append(crumb)
+            crumbs.addStretch(1)
+            self.step_prompt = QLabel("What is it?")
+            self.step_prompt.setObjectName("homeworkPrompt")
+            body_layout.addWidget(self.step_bar)
+            body_layout.addWidget(self.step_prompt)
         form = Form(stacked=True)
         body_layout.addLayout(form)
         self.title = _line("homeworkTitle", self._original["title"])
         # Homework saved with no category is still homework, so it gets the same hint.
         self.title.setPlaceholderText("e.g. History essay")
+        if self._add_step is not None:
+            self.title.setMinimumHeight(44)
         form.addRow("Title", self.title)
         self.title_problem = _error_label()
         self.title_problem.setVisible(False)
@@ -4179,17 +4345,31 @@ class HomeworkDialog(Dialog):
         self.delete_button.setVisible(assignment is not None)
         self.delete_button.clicked.connect(self._delete)
         row.addWidget(self.delete_button)
+        self.back_button = QPushButton("Back")
+        self.back_button.setObjectName("homeworkBack")
+        self.back_button.setProperty("quiet", True)
+        self.back_button.setAutoDefault(False)
+        self.back_button.clicked.connect(self._add_back)
+        self.back_button.setVisible(False)
+        row.addWidget(self.back_button)
         row.addStretch(1)
         buttons = _buttons(self)
-        buttons.accepted.connect(self.accept)
+        self._save = buttons.button(QDialogButtonBox.StandardButton.Save)
+        if self._add_step is None:
+            buttons.accepted.connect(self.accept)
+        else:
+            buttons.accepted.connect(self._add_primary)
         buttons.rejected.connect(self.reject)
         row.addWidget(buttons)
         layout.addLayout(row)
+        if self._add_step is not None:
+            self._apply_add_step()
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
         if not self.sheet:
             fit_scroll_dialog(self)
+        self.title.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _school_end(self) -> int:
         """The minute school ends, from the saved school hours, or 15:00 with none: work due at a set
@@ -4334,6 +4514,8 @@ class HomeworkDialog(Dialog):
         self.when_from.setText(hint)
         if not self._spread_out:
             self._form.setRowVisible(self.when_from, bool(hint))
+        if self._add_step is not None and not self._hiding_add and hasattr(self, "_save"):
+            self._apply_add_step()
 
     def _when_changed(self) -> bool:
         """Whether the student changed what the dialog opened with. A choice they left alone is not
@@ -4482,6 +4664,8 @@ class HomeworkDialog(Dialog):
             self.spread_line.setText(spread_words(sessions, self._chosen_due(), self._now().date()))
         if self.isVisible():
             self.refit()
+        if self._add_step is not None and not self._hiding_add and hasattr(self, "_save"):
+            self._apply_add_step()
 
     def spread_requested(self) -> bool:
         return self._spread
@@ -4583,6 +4767,86 @@ class HomeworkDialog(Dialog):
 
     def _clear_due_problem(self) -> None:
         self.due.show_problem("")
+
+    def _crumb_clicked(self) -> None:
+        name = self.sender().objectName()
+        self._crumb_to(int(name[-1]))
+
+    def _crumb_to(self, index: int) -> None:
+        if self._add_step is None or index >= self._add_step:
+            return
+        self._add_step = index
+        self._apply_add_step()
+
+    def _add_back(self) -> None:
+        if self._add_step:
+            self._add_step -= 1
+            self._apply_add_step()
+
+    def _add_primary(self) -> None:
+        if held_on_problem(self):
+            return
+        if self._add_step is None or self._add_step >= 2:
+            self.accept()
+            return
+        if self._add_step == 0 and not self.title.text().strip():
+            self._show_field_problem(self.title, self.title_problem, "Give the homework a title.")
+            return
+        self._add_step += 1
+        self._apply_add_step()
+        if self._add_step == 1:
+            self.due.setFocus(Qt.FocusReason.OtherFocusReason)
+        else:
+            self.estimate.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _apply_add_step(self) -> None:
+        step = self._add_step
+        if step is None:
+            return
+        self._hiding_add = True
+        prompts = ("What is it?", "When is it due?", "How long will it take?")
+        self.step_prompt.setText(prompts[step])
+        names = ("What", "When", "How long")
+        when = "FlexWeek picks" if self.when.currentData() == "plan" else "do it at"
+        done = (self.title.text().strip(), f"due {self.due.date.text()}, {when}")
+        for index, crumb in enumerate(self._crumbs):
+            if index < step:
+                crumb.setText(f"✓ {done[index]}")
+                crumb.setEnabled(True)
+            else:
+                crumb.setText(f"{index + 1} {names[index]}")
+                crumb.setEnabled(False)
+        for field in (self.title, self.stepper):
+            label = self._form.labelForField(field)
+            if label is not None:
+                label.setVisible(False)
+        what = (self.title, self.title_problem)
+        when_row = (self.due, self.when, self._fixed_row, self.when_note, self.when_from)
+        length = (self.stepper,)
+        for index, group in enumerate((what, when_row, length)):
+            shown = index == step
+            for widget in group:
+                if self._form.indexOf(widget) < 0:
+                    continue
+                self._form.setRowVisible(widget, shown)
+        if step == 0:
+            self._form.setRowVisible(self.title_problem, bool(self.title_problem.text()))
+        if step == 1:
+            pinned = self._fixed_at() is not None and not self._spread_out
+            self._form.setRowVisible(self._fixed_row, pinned)
+            self._form.setRowVisible(self.when_note, pinned)
+        if step == 2:
+            self._follow_spread()
+        else:
+            self._form.setRowVisible(self.spread_choice, False)
+            self._form.setRowVisible(self.spread_line, False)
+        for extra in (self.completed, self.more_details, self._details, self.error, self.placed_line):
+            self._form.setRowVisible(extra, False)
+        self.back_button.setVisible(step > 0)
+        self._save.setText("Save" if step >= 2 else "Next")
+        self._hiding_add = False
+        if self.isVisible():
+            self.refit()
 
     def accept(self) -> None:
         if held_on_problem(self):
