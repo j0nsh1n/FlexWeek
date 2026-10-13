@@ -95,13 +95,16 @@ def enter(field: ClockField, how: str) -> None:
     """Get the keyboard into the box the way a student does."""
     if how == "tab-in":
         # A real Tab from the widget before the box in the focus chain.
+        # The chain is a ring: a dialog that was never shown has no visible widget in it, so stop
+        # after one lap instead of walking it forever.
         before = field.previousInFocusChain()
-        while before is not None and not (
-            before.isVisible() and before.isEnabled() and before.focusPolicy() & Qt.FocusPolicy.TabFocus
-            and before is not field.lineEdit()
-        ):
+        for _lap in range(len(QApplication.allWidgets()) + 2):
+            if before.isVisible() and before.isEnabled() and before.focusPolicy() & Qt.FocusPolicy.TabFocus \
+                    and before is not field.lineEdit():
+                break
             before = before.previousInFocusChain()
-        assert before is not None
+        else:
+            raise AssertionError("no visible, tab-focusable widget before the box: is its dialog shown?")
         before.setFocus(Qt.FocusReason.OtherFocusReason)
         QApplication.processEvents()
         press(field, Qt.Key.Key_Tab)
