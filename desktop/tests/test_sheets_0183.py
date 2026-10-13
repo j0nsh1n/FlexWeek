@@ -160,7 +160,8 @@ def test_add_fixed_time_is_titled_that_and_guesses_category_from_the_start(
     assert added.findChild(QLabel, "blockRepeatNote").text() == "Pick more days to repeat it."
     go_length(added)
     duration = next(label for label in added.findChildren(QLabel) if label.text() == "Duration")
-    assert duration.isVisibleTo(added)
+    assert not duration.isVisibleTo(added), "the Category step asks only for Category"
+    assert added.category.isVisibleTo(added)
     assert added.category.currentData() == "class"
     added.start.setTime(added.start.time().addSecs(8 * 3600))
     qapp.processEvents()

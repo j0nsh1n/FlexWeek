@@ -1,8 +1,7 @@
 """Add fixed time as three questions, same grammar as Add homework pick C.
 
-The HTML demo's `fixed()` has no C branch; Jonathan still picked What / When / How long for Add
-fixed time. What is the title, When is days plus Start and End, How long is Duration and Category.
-Edit event stays one page.
+The HTML demo's `fixed()` has no C branch. What is the title, When is days plus Start and End, and
+the third step is Category (the field it actually asks), not How long. Edit event stays one page.
 """
 
 from __future__ import annotations
@@ -49,7 +48,7 @@ def test_add_fixed_time_opens_on_what_and_hides_days_and_duration(qapp: QApplica
     dialog = opened(host)
     assert dialog.windowTitle() == "Add fixed time"
     assert dialog.step_prompt.text() == "What is it?"
-    assert crumbs(dialog) == ["1 What", "2 When", "3 How long"]
+    assert crumbs(dialog) == ["1 What", "2 When", "3 Category"]
     assert dialog.title.isVisibleTo(dialog)
     assert not dialog.day_picker.isVisibleTo(dialog)
     assert not dialog.start.isVisibleTo(dialog)
@@ -71,7 +70,7 @@ def test_empty_title_on_next_says_give_it_a_title(qapp: QApplication, host: QWid
     free(dialog)
 
 
-def test_next_shows_when_then_how_long(qapp: QApplication, host: QWidget) -> None:  # noqa: F811
+def test_next_shows_when_then_category(qapp: QApplication, host: QWidget) -> None:  # noqa: F811
     dialog = opened(host)
     dialog.title.setText("Club")
     dialog._save.click()
@@ -81,13 +80,15 @@ def test_next_shows_when_then_how_long(qapp: QApplication, host: QWidget) -> Non
     assert dialog.day_picker.isVisibleTo(dialog)
     assert dialog.start.isVisibleTo(dialog)
     assert dialog.end.isVisibleTo(dialog)
+    assert dialog.duration_line.isVisibleTo(dialog)
     assert not dialog.category.isVisibleTo(dialog)
     assert dialog.back_button.text() == "Back"
     assert dialog._save.text() == "Next"
     dialog._save.click()
     QApplication.processEvents()
-    assert dialog.step_prompt.text() == "How long will it take?"
-    assert dialog.duration_line.isVisibleTo(dialog)
+    assert dialog.step_prompt.text() == "What category is it?"
+    assert crumbs(dialog) == ["✓ Club", crumbs(dialog)[1], "3 Category"]
+    assert not dialog.duration_line.isVisibleTo(dialog)
     assert dialog.category.isVisibleTo(dialog)
     assert dialog._save.text() == "Save"
     assert not dialog.start.isVisibleTo(dialog)

@@ -3303,7 +3303,8 @@ class BlockDialog(Dialog):
         existing = block is not None
         self._existing = existing
         series = existing and is_series(self._original)
-        # Add fixed time is What / When / How long, matching Add homework. Edit stays one page.
+        # Add fixed time is What / When / Category. Step 3 asks for Category, not length: Start and
+        # End on When already set how long it is. Edit stays one page.
         self._add_step: int | None = None if existing else 0
         self._hiding_add = self._add_step is not None
         self.setObjectName("blockDialog")
@@ -3318,7 +3319,7 @@ class BlockDialog(Dialog):
             crumbs.setContentsMargins(0, 0, 0, 0)
             crumbs.setSpacing(8)
             self._crumbs: list[QPushButton] = []
-            for index, name in enumerate(("What", "When", "How long")):
+            for index, name in enumerate(("What", "When", "Category")):
                 if index:
                     crumbs.addWidget(QLabel("·"))
                 crumb = QPushButton(f"{index + 1} {name}")
@@ -3584,9 +3585,9 @@ class BlockDialog(Dialog):
         if step is None:
             return
         self._hiding_add = True
-        prompts = ("What is it?", "When is it?", "How long will it take?")
+        prompts = ("What is it?", "When is it?", "What category is it?")
         self.step_prompt.setText(prompts[step])
-        names = ("What", "When", "How long")
+        names = ("What", "When", "Category")
         days = day_range_and_words([index for index, check in enumerate(self.days) if check.isChecked()])
         done = (self.title.text().strip(), f"{days}, {self.start.time().toString('HH:mm')}")
         for index, crumb in enumerate(self._crumbs):
@@ -3603,7 +3604,7 @@ class BlockDialog(Dialog):
             shown = index == step
             for widget in group:
                 self._form.setRowVisible(widget, shown)
-        self._form.setRowVisible(self.duration_line, step >= 1)
+        self._form.setRowVisible(self.duration_line, step == 1)
         if step == 0:
             self._form.setRowVisible(self.title_problem, bool(self.title_problem.text()))
         title_label = self._form.labelForField(self.title)
