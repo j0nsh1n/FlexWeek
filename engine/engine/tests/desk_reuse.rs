@@ -584,6 +584,46 @@ fn test_left_from_last_week_subtracts_focus_and_sessions_ticked_done() {
 }
 
 #[test]
+fn test_block_without_duration_counts_as_zero_minutes_in_both_states() {
+    // A completed block with no length counts as 0 minutes, so the 2 h essay keeps all 2 h.
+    // An unticked block with no length is not read at all in either state.
+    let untimed_done = json!({"id": "done", "assignment_id": "essay", "completed": true});
+    let untimed_open = json!({"id": "open", "assignment_id": "essay", "completed": false});
+    let overdue = with(
+        essay(),
+        json!({"estimate_min": 120, "unplanned_min": 120, "due": "2026-10-16"}),
+    );
+    let carried = with(
+        essay(),
+        json!({"estimate_min": 120, "unplanned_min": 120, "due": "2026-10-21"}),
+    );
+    for (assignment, saved, now, state) in [
+        (overdue, json!([]), "2026-10-17T10:00", "overdue"),
+        (
+            carried,
+            json!(["2026-10-05"]),
+            "2026-10-12T10:00",
+            "left_from_last_week",
+        ),
+    ] {
+        for blocks in [json!([untimed_done.clone()]), json!([untimed_open.clone()])] {
+            let items = clipboard::left_over_items(
+                &json!({"essay": assignment}),
+                &saved,
+                "2026-10-12",
+                now,
+                &blocks,
+                &json!([]),
+            )
+            .expect("a block with no length must not be an error");
+            assert_eq!(items.len(), 1);
+            assert_eq!(items[0]["left_over_state"], state);
+            assert_eq!(items[0]["remaining_min"], 120);
+        }
+    }
+}
+
+#[test]
 fn test_after_deadline_exception_preserves_only_the_named_session() {
     let blocks = json!([
         {"id": "bio-session", "assignment_id": "bio", "kind": "flexible", "duration_min": 60, "days": [5], "start": "11:00", "title": "Bio"},

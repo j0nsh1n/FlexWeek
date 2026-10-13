@@ -503,7 +503,8 @@ fn done_session_minutes(blocks: &Value, assignment_id: &Value) -> EngineResult<i
             assignment_id,
         ) && truthy(get(&block, "completed")?)
         {
-            total += py_int(subscript(&block, "duration_min")?)?;
+            // A block with no length counts as nothing, the same as a block with a zero length.
+            total += whole(&or_default(get(&block, "duration_min")?, json!(0)))?;
         }
     }
     Ok(total)
