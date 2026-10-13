@@ -1555,8 +1555,10 @@ class NativeWindow(QMainWindow):
         strip = QHBoxLayout(self.status_strip)
         strip.setContentsMargins(16, 0, 16, 0)
         strip.setSpacing(24)
-        self.status_next = QLabel(NOTHING_MORE_TODAY)
+        # Shortens with an ellipsis rather than push the overdue count and Week as a list off the edge.
+        self.status_next = FittedLabel()
         self.status_next.setObjectName("weekStatusNext")
+        self.status_next.set_full_text(NOTHING_MORE_TODAY)
         strip.addWidget(self.status_next, 1)
         self.status_overdue = QLabel()
         self.status_overdue.setObjectName("weekStatusOverdue")
@@ -3259,7 +3261,7 @@ class NativeWindow(QMainWindow):
         """Next or Nothing more today on the left, overdue count, Week as a list on the right."""
         today, minute = self._clock_in_week()
         heading, title, when, _then = next_words(self.rail._week, today, minute)
-        self.status_next.setText(f"{heading}: {title} {when}" if title else NOTHING_MORE_TODAY)
+        self.status_next.set_full_text(f"{heading}: {title} {when}" if title else NOTHING_MORE_TODAY)
         stamp = self.session.now_ms() / 1000
         overdue = overdue_unfinished(self.session.unfinished(), datetime.fromtimestamp(stamp))
         words = f"{len(overdue)} overdue"

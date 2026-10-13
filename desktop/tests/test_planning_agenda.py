@@ -142,3 +142,48 @@ def test_the_strip_names_overdue_homework_that_already_has_a_time(
     assert more_row(window) == (False, "Unfinished\tNone left")
     window._show_unfinished()
     assert not window.unfinished_panel.isVisibleTo(window)
+
+
+def test_the_next_rows_keep_the_keyboard_as_the_minutes_pass(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    """The clock redraws Next every minute; a row's Start focus with the keyboard on it stays put, and
+    each one says whose focus it starts."""
+    seeded(qapp, window)
+    rail = window.rail
+    button = rail.next.rest.findChild(QPushButton, "railNextRowFocus")
+    assert button.accessibleName() == "Start focus on History essay"
+    window.activateWindow()
+    button.setFocus(Qt.FocusReason.TabFocusReason)
+    qapp.processEvents()
+    today, minute = rail._today, rail._minute
+    for later in (1, 2, 3):
+        rail.set_clock(today, minute + later)
+        qapp.processEvents()
+    assert rail.next.when.text() == "4:00 PM · in 17 min"
+    assert rail.next.rest.findChild(QPushButton, "railNextRowFocus") is button
+    assert button.hasFocus()
+
+
+def test_a_long_next_title_shortens_in_the_strip_instead_of_pushing_it_off_the_window(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    seeded(qapp, window)
+    soccer = next(block for block in window.session.blocks if block["id"] == "soccer")
+    title = "Soccer practice with the whole regional development squad and their parents"
+    window.session.add_block({**soccer, "title": title})
+    window.session.save()
+    settled(qapp, window)
+    window.resize(800, 860)
+    for _ in range(5):
+        qapp.processEvents()
+    full = f"Next: {title} 4:00 PM · in 20 min"
+    assert window.status_next.accessibleName() == full
+    assert window.status_next.text() != full and window.status_next.text().endswith("…")
+    strip = window.status_strip
+    link = window.week_list_row
+    assert link.isVisible()
+    assert link.mapTo(strip, link.rect().topRight()).x() < strip.width()
+    assert link.width() >= link.sizeHint().width()

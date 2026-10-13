@@ -11,6 +11,7 @@ behind "Not placed yet" and opens on a wrapping row under that line.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -434,6 +435,9 @@ class NextCard(QWidget):
         self.rest_box.setSpacing(SPACING[0])
         box.addWidget(self.rest)
         self.shown: tuple[str, str, str, str] = ("", "", "", "")
+        # What the rows under the card say. The clock calls show_next every minute; rows rebuilt then
+        # would take the keyboard off a row's Start focus.
+        self._rest_shown: tuple = ()
         self._first_id = ""
         self._first_day: object = None
         self.start_focus.clicked.connect(
@@ -457,14 +461,28 @@ class NextCard(QWidget):
         self._first_id = first.block_id if first is not None else ""
         self._first_day = first.day if first is not None else None
         self.start_focus.setVisible(bool(first is not None and first.work))
+        focus_name = f"Start focus on {first.title}" if first is not None else "Start focus"
+        self.start_focus.setAccessibleName(focus_name)
         self.card.setVisible(bool(said[1]))
+        rest = queue[1:]
+        rest_shown = (
+            time_format(),
+            tuple((row.block_id, row.day, row.title, row.start, row.minutes, row.work) for row in rest),
+        )
+        if rest_shown != self._rest_shown:
+            self._rest_shown = rest_shown
+            self._fill_rest(rest)
+        self.rest.setVisible(self.rest_box.count() > 0)
+        return bool(said[1])
+
+    def _fill_rest(self, items: Sequence[Occurrence]) -> None:
         while self.rest_box.count():
             entry = self.rest_box.takeAt(0)
             widget = entry.widget()
             if widget is not None:
                 widget.setParent(None)
                 widget.deleteLater()
-        for item in queue[1:]:
+        for item in items:
             row = QWidget()
             row.setObjectName("railNextRow")
             row_box = QHBoxLayout(row)
@@ -481,14 +499,13 @@ class NextCard(QWidget):
             if item.work:
                 start = QPushButton("Start focus")
                 start.setObjectName("railNextRowFocus")
+                start.setAccessibleName(f"Start focus on {item.title}")
                 start.setFixedHeight(30)
                 start.clicked.connect(
                     lambda _=False, key=item.block_id, day=item.day: self.focus_requested.emit(key, day)
                 )
                 row_box.addWidget(start)
             self.rest_box.addWidget(row)
-        self.rest.setVisible(self.rest_box.count() > 0)
-        return bool(said[1])
 
 
 def next_words(week: WeekModel | None, today: int | None, minute: int | None) -> tuple[str, str, str, str]:
