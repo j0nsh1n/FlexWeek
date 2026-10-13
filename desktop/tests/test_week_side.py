@@ -262,17 +262,25 @@ def test_the_window_is_never_narrower_than_800(
     assert window.width() == 800
 
 
-def test_a_short_block_word_gives_its_name_the_room_its_times_took(qapp: QApplication) -> None:  # noqa: F811
-    """At 800 pixels "Soccer practice" read "Soccer …" above its times. Short of room its name is
-    whole, and the times are left to its editor."""
+def test_a_short_block_keeps_its_whole_time_and_cuts_its_name_first(qapp: QApplication) -> None:  # noqa: F811
+    """T-W35 (1.0.0) reverses the old rule that a short block gave its name the room its times took: the
+    time always shows, whole, and the name is what gets cut. A range that does not fit shows its start time
+    alone, never a time cut part-way."""
     from desktop.native.hours.canvas import block_layout
+    from desktop.native.weekmodel import clock_label, range_label
 
     title, small = BlockPainter({}).fonts(QFont("Inter", 12))
     room = QRectF(0, 0, 120, 72)
     soccer = Drawn("soccer", "Soccer practice", "sport", False, Span(3, 16 * 60, 17 * 60 + 30), 0, 1)
-    assert any("16:00" in line.text for line in block_layout(soccer, title, small, room))
-    short = Drawn(**{**soccer.__dict__, "short": True})
-    assert [line.text for line in block_layout(short, title, small, room)] == ["Soccer practice"]
+    whole_times = (range_label(16 * 60, 17 * 60 + 30), clock_label(16 * 60))
+    for drawn in (soccer, Drawn(**{**soccer.__dict__, "short": True})):
+        lines = [line.text for line in block_layout(drawn, title, small, room)]
+        assert any(line in whole_times for line in lines), lines
+        assert not any(line.startswith("16:") and line not in whole_times for line in lines), lines
+    # Narrow room: the time still shows whole, and the name gives way.
+    narrow = QRectF(0, 0, 60, 72)
+    lines = [line.text for line in block_layout(soccer, title, small, narrow)]
+    assert any(line in whole_times for line in lines), lines
 
 
 def test_the_focus_list_grows_to_its_rows_with_no_scroll_bar_and_no_row_cut(
