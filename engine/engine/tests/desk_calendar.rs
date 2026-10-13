@@ -208,11 +208,11 @@ fn test_a_time_on_another_block_is_allowed_and_named_but_not_outside_the_day_or_
     assert_eq!(problem(1, h(22, 30), h(23, 30), None), None);
     assert_eq!(
         problem(1, h(23, 30), h(24, 30), None),
-        Some("That is outside the hours FlexWeek plans in, so it stayed where it was.")
+        Some("That's outside the hours FlexWeek plans in, so it stayed where it was.")
     );
     assert_eq!(
         problem(3, h(19, 0), h(20, 0), Some((3, h(19, 30)))),
-        Some("That ends after it is due, so it stayed where it was.")
+        Some("That ends after it's due, so it stayed where it was.")
     );
     assert_eq!(problem(3, h(18, 0), h(19, 30), Some((3, h(19, 30)))), None);
 }
@@ -230,7 +230,7 @@ fn test_due_point_and_span_problem_cover_date_only_and_timed_dues() {
         due_day_of(&json!("2026-09-15"), week).expect("a day"),
         Some(1)
     );
-    let after_due = Some("That ends after it is due, so it stayed where it was.");
+    let after_due = Some("That ends after it's due, so it stayed where it was.");
     assert_eq!(problem(1, 23 * 60, 23 * 60 + 45, date_only), None);
     assert_eq!(problem(1, 23 * 60, 23 * 60 + 45, legacy), None);
     assert_eq!(problem(1, 9 * 60, 9 * 60 + 15, timed), after_due);

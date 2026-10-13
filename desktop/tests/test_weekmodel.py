@@ -50,19 +50,19 @@ TRACE = {
     "explanations": [
         {
             "block_id": "chem-1",
-            "message": "Finishes only 2 h 29 min before it is due.",
+            "message": "Finishes only 2 h 29 min before it's due.",
             "slack_min": 149,
             "slack_status": "danger",
         },
         {
             "block_id": "essay-1",
-            "message": "Finishes 25 h 15 min before it is due.",
+            "message": "Finishes 25 h 15 min before it's due.",
             "slack_min": 1515,
             "slack_status": "tight",
         },
         {
             "block_id": "poster-1",
-            "message": "There is not enough time left before it is due, even with nothing else planned.",
+            "message": "There isn't enough time left before it's due, even with nothing else planned.",
             "reason": "DEADLINE_MISS",
         },
     ],

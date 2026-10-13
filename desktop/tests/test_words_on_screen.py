@@ -47,7 +47,7 @@ def test_running_late_says_where_each_block_goes_in_words(qapp: QApplication) ->
     assert rows == [
         "History essay: from 16:00 to 17:30",
         "Maths: placed at 18:00",
-        "Club: moves off 19:00 and is not placed",
+        "Club: moves off 19:00 and isn't placed",
     ]
 
 

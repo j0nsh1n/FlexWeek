@@ -83,7 +83,7 @@ def test_the_pairing_sheet_says_its_countdown_tries_and_problems_in_plain_words(
 
 def test_the_relay_sentence_is_the_agreed_one() -> None:
     assert RELAY_SENTENCE == (
-        "When your computer is not on the same Wi-Fi, FlexWeek uses a public relay run by n0. "
+        "When your computer isn't on the same Wi-Fi, FlexWeek uses a public relay run by n0. "
         "It sees that two devices are talking, not what they send."
     )
 

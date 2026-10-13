@@ -896,7 +896,7 @@ fn test_a_deadline_moved_earlier_takes_the_time_away_and_says_why() {
     let messages: Vec<&str> = lost.iter().map(message_of).collect();
     assert_eq!(
         messages,
-        ["English essay no longer fits Monday at 15:45: that is after it is due."]
+        ["English essay no longer fits Monday at 15:45: that's after it's due."]
     );
     assert_eq!(times(&settled)["s-eng"], at(&[0], None));
     assert_eq!(times(&settled)["s-math"], at(&[0], Some("15:15")));

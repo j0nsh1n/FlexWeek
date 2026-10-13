@@ -287,7 +287,7 @@ def test_a_fixed_activity_the_editor_cannot_save_is_explained_in_the_apps_words(
     assert said == {
         "title": "Give it a title.",
         "days": "Tick at least one day.",
-        "spotify": "That is not a Spotify share link. Paste one that starts with https://open.spotify.com, "
+        "spotify": "That's not a Spotify share link. Paste one that starts with https://open.spotify.com, "
         "or leave it empty.",
     }
 

@@ -119,7 +119,7 @@ def test_the_grey_line_says_what_plan_will_do_before_the_due(qapp: QApplication)
     parent = host()
     dialog = opened(parent, essay())
     spread(dialog)
-    assert dialog.spread_line.text() == "2 × 60 min on different days before it is due Sun 20 Sep."
+    assert dialog.spread_line.text() == "2 × 60 min on different days before it's due Sun 20 Sep."
     free(dialog)
     free(parent)
 
@@ -129,13 +129,13 @@ def test_the_line_follows_the_values_not_yet_saved(qapp: QApplication) -> None: 
     dialog = opened(parent, essay())
     spread(dialog)
     dialog.estimate.setValue(180)
-    assert dialog.spread_line.text() == "3 × 60 min on different days before it is due Sun 20 Sep."
+    assert dialog.spread_line.text() == "3 × 60 min on different days before it's due Sun 20 Sep."
     dialog.estimate.setValue(90)
-    assert dialog.spread_line.text() == "60 min and 30 min on different days before it is due Sun 20 Sep."
+    assert dialog.spread_line.text() == "60 min and 30 min on different days before it's due Sun 20 Sep."
     dialog.due.date.setDate(QDate(2026, 9, 18))
-    assert dialog.spread_line.text().endswith("before it is due Fri 18 Sep.")
+    assert dialog.spread_line.text().endswith("before it's due Fri 18 Sep.")
     dialog.due.timed.setChecked(True)
-    assert dialog.spread_line.text().endswith("before it is due Fri 18 Sep, 15:00.")
+    assert dialog.spread_line.text().endswith("before it's due Fri 18 Sep, 15:00.")
     free(dialog)
     free(parent)
 
@@ -145,9 +145,9 @@ def test_sessions_beyond_the_days_left_share_days_and_the_line_says_so(qapp: QAp
     dialog = opened(parent, essay(due="2026-09-15"), )
     spread(dialog)
     dialog.estimate.setValue(240)
-    assert dialog.spread_line.text() == "4 × 60 min over 2 days before it is due Tue 15 Sep."
+    assert dialog.spread_line.text() == "4 × 60 min over 2 days before it's due Tue 15 Sep."
     dialog.due.date.setDate(QDate(2026, 9, 14))
-    assert dialog.spread_line.text() == "4 × 60 min on the same day before it is due Mon 14 Sep."
+    assert dialog.spread_line.text() == "4 × 60 min on the same day before it's due Mon 14 Sep."
     free(dialog)
     free(parent)
 
@@ -156,9 +156,9 @@ def test_edit_spreads_only_what_focus_has_not_already_covered(qapp: QApplication
     parent = host()
     dialog = opened(parent, essay(estimate_min=240, focus_minutes=60))
     spread(dialog)
-    assert dialog.spread_line.text() == "3 × 60 min on different days before it is due Sun 20 Sep."
+    assert dialog.spread_line.text() == "3 × 60 min on different days before it's due Sun 20 Sep."
     dialog.estimate.setValue(300)
-    assert dialog.spread_line.text() == "4 × 60 min on different days before it is due Sun 20 Sep."
+    assert dialog.spread_line.text() == "4 × 60 min on different days before it's due Sun 20 Sep."
     free(dialog)
     free(parent)
 
@@ -185,7 +185,7 @@ def test_the_days_start_at_the_day_on_screen_when_it_is_ahead(qapp: QApplication
     dialog = opened(parent, essay(estimate_min=180))
     spread(dialog)
     # Sat 19 and Sun 20: three sessions, two days.
-    assert dialog.spread_line.text() == "3 × 60 min over 2 days before it is due Sun 20 Sep."
+    assert dialog.spread_line.text() == "3 × 60 min over 2 days before it's due Sun 20 Sep."
     assert dialog.spread_plan() == {"session_min": 60, "from_date": "2026-09-19"}
     free(dialog)
     free(parent)

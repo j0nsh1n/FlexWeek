@@ -52,7 +52,7 @@ ADDING = {
     "Add fixed time…": (
         "Add something that happens at a set time, like practice or a lesson. Homework is planned around it."
     ),
-    "School hours…": "Set the days and times you are at school, so nothing is planned then.",
+    "School hours…": "Set the days and times you're at school, so nothing is planned then.",
 }
 TOOLTIPS = {
     "Running late": (
@@ -83,11 +83,11 @@ TOOLTIPS = {
         "before big changes."
     ),
     "Reload this week": (
-        "Load this week again as it is saved. Use it if something looks out of date."
+        "Load this week again as it's saved. Use it if something looks out of date."
     ),
 }
 PLAN = (
-    "Find a time for homework that has none, around your fixed times and before it is due. Homework "
+    "Find a time for homework that has none, around your fixed times and before it's due. Homework "
     "that already has a time keeps it."
 )
 SUGGEST = "Give homework without a time a suggested time. Drag any of them somewhere else if you like."
@@ -400,7 +400,7 @@ def test_help_explains_each_screen_and_the_keys_and_promises_nothing(
     assert "tutorial" not in said.lower() and "coming" not in said.lower()
     for line in (
         "Day",
-        "One day hour by hour, with homework that is not placed yet beside it, ready to drag in.",
+        "One day hour by hour, with homework that isn't placed yet beside it, ready to drag in.",
         "Week",
         "Monday to Sunday: drag a block to move it, or drag across empty time to add one.",
         "Month",

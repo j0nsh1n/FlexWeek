@@ -376,8 +376,8 @@ def test_a_day_tile_says_its_first_item_its_load_its_homework_and_what_is_due(qa
     # Monday: School, the finished Math worksheet and Dinner. Friday: the essay is due. Sunday: the
     # poster is due and only Dinner is planned.
     assert said(0) == "Monday 14, first School at 08:00, 45 min planned, 1 homework"
-    assert said(4) == "Friday 18, first School at 08:00, nothing planned, 1 due"
-    assert said(6) == "Sunday 20, first Dinner at 18:00, nothing planned, 1 due"
+    assert said(4) == "Friday 18, first School at 08:00, Nothing planned, 1 due"
+    assert said(6) == "Sunday 20, first Dinner at 18:00, Nothing planned, 1 due"
 
 
 def test_a_pointed_at_day_lifts_and_does_not_rise_with_animations_off_or_reduced(qapp: QApplication) -> None:

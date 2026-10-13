@@ -465,7 +465,7 @@ fn test_moves_record_unplaced_reasons() {
         item.block_id == "quiz"
             && item.reason.as_deref() == Some("DEADLINE_MISS")
             && item.message
-                == "There is not enough time left before it is due, even with nothing else planned."
+                == "There isn't enough time left before it's due, even with nothing else planned."
     }));
 }
 

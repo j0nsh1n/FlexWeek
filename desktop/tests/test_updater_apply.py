@@ -69,7 +69,7 @@ def test_a_directory_that_cannot_be_written_is_reported_not_forced(tmp_path: Pat
     if writable(locked):
         pytest.skip("running as a user that can write anywhere")
     problem = _swap_file(source, target)
-    assert problem is not None and "cannot be written" in problem
+    assert problem is not None and "can't be written" in problem
 
 
 def test_a_tree_swap_replaces_the_bundle_with_the_new_one(

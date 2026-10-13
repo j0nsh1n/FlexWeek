@@ -312,7 +312,7 @@ fn test_parse_rejects_oversize_dangling_and_pomodoro_pairs() {
         "assignments": [],
     })
     .to_string();
-    assert!(error_of(&dangling).contains("does not include"));
+    assert!(error_of(&dangling).contains("doesn't include"));
     let repeated = json!({
         "format": "flexweek-week",
         "version": 2,

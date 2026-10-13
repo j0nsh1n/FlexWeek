@@ -22,7 +22,7 @@ pytestmark = pytest.mark.skipif(
 from desktop.tests.logic_support import qapp, server, settled, signed_in, wait_until  # noqa: F401,E402
 
 SETUP_HERE = "Nothing to copy: School and the fixed times you added in Setup are already in every week."
-NOTHING = "There is nothing to copy from last week yet."
+NOTHING = "There's nothing to copy from last week yet."
 
 SCHOOL = {
     "id": "school",
