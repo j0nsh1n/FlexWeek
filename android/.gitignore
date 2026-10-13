@@ -4,3 +4,4 @@
 /captures
 *.iml
 .idea
+/app/src/main/jniLibs/

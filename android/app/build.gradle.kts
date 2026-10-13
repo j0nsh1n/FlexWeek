@@ -3,6 +3,33 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+abstract class GenerateRustBindings : Exec() {
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+}
+
+val generateRustBindings = tasks.register<GenerateRustBindings>("generateRustBindings") {
+    workingDir(rootProject.projectDir.parentFile)
+    commandLine("bash", "scripts/android/generate-bindings.sh")
+    inputs.files(fileTree("../../engine/ffi/src"), file("../../engine/ffi/Cargo.toml"),
+        file("../../engine/ffi/uniffi.toml"), file("../../engine/Cargo.lock"),
+        file("../../scripts/android/generate-bindings.sh"))
+    outputDirectory.set(layout.buildDirectory.dir("generated/uniffi"))
+}
+
+val buildRust = tasks.register<Exec>("buildRust") {
+    dependsOn(generateRustBindings)
+    workingDir(rootProject.projectDir.parentFile)
+    commandLine("bash", "scripts/android/build-rust.sh")
+    inputs.files(fileTree("../../engine") {
+        include("**/*.rs", "**/Cargo.toml", "Cargo.lock")
+        exclude("target/**")
+    }, file("../../scripts/android/build-rust.sh"))
+    outputs.dir("src/main/jniLibs")
+}
+
+tasks.named("preBuild") { dependsOn(buildRust) }
+
 android {
     namespace = "com.flexweek.app"
     compileSdk = 36
@@ -24,6 +51,7 @@ android {
         buildConfig = true
     }
 
+
     buildTypes {
         debug {
             buildConfigField("boolean", "V2_ENABLED", "true")
@@ -44,7 +72,12 @@ android {
     }
 }
 
+androidComponents.onVariants { variant ->
+    variant.sources.java?.addGeneratedSourceDirectory(generateRustBindings) { it.outputDirectory }
+}
+
 dependencies {
+    implementation("${libs.jna.get()}@aar")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)

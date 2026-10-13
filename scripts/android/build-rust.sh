@@ -12,7 +12,6 @@ cargo ndk -t arm64-v8a -t x86_64 -o "$jni_libs" build --release -p flexweek-ffi
 
 for abi in arm64-v8a x86_64; do
     abi_dir="$jni_libs/$abi"
-    find "$abi_dir" -maxdepth 1 -type f ! -name libflexweek_ffi.so -delete
     count="$(find "$abi_dir" -maxdepth 1 -type f -name '*.so' | wc -l)"
     if [[ "$count" != 1 || ! -f "$abi_dir/libflexweek_ffi.so" ]]; then
         printf 'expected only libflexweek_ffi.so under %s\n' "$abi_dir" >&2

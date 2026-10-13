@@ -1,0 +1,4 @@
+[bindings.kotlin]
+package_name = "com.flexweek.app.bindings"
+cdylib_name = "flexweek_ffi"
+android = true
