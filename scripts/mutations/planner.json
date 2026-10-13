@@ -65,9 +65,9 @@
  {
   "file": "desktop/native/controller.py",
   "name": "a week that is over is planned",
-  "old": "        if start is not None and start[0] > 6:\n",
-  "new": "        if False:\n",
-  "test": "desktop/tests/test_homework_plan.py::test_plan_on_a_week_that_is_over_places_nothing_and_says_so"
+  "old": "        if start is not None and start[0] > 6:\n            self._say(WEEK_OVER)\n            return\n        if _prepared_weeks is None:\n",
+  "new": "        if False:\n            self._say(WEEK_OVER)\n            return\n        if _prepared_weeks is None:\n",
+  "test": "desktop/tests/test_homework_plan.py::test_plan_on_a_week_that_is_over_does_not_ask_the_solver"
  },
  {
   "file": "desktop/native/controller.py",

@@ -397,6 +397,26 @@ def test_plan_on_a_week_that_is_over_places_nothing_and_says_so(
     assert window.toast.text() == PAST_WEEK
 
 
+def test_plan_on_a_week_that_is_over_does_not_ask_the_solver(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The session refuses a week that is over before Plan talks to the solver. The engine
+    also refuses, so the window test still passes if this check is skipped."""
+    session = window.session
+    last = (date.fromisoformat(session.week_start) - timedelta(days=7)).isoformat()
+    session.load_week(last)
+    wait_until(qapp, lambda: session.week_start == last and not session.busy)
+    said: list[str] = []
+    monkeypatch.setattr(session, "_say", said.append)
+
+    def no_solver(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("Plan talked to the solver for a week that is over")
+
+    monkeypatch.setattr(session.client, "request", no_solver)
+    session.solve()
+    assert said == [PAST_WEEK]
+
+
 # Length
 
 
