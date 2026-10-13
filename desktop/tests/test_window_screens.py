@@ -268,6 +268,19 @@ def test_the_view_track_sits_level_with_the_rest_of_the_bar(
         assert abs(middle - middle_of_today) <= 2, f"{text} text, {name}"
 
 
+@pytest.mark.parametrize("text", ["normal", "large"])
+def test_the_week_titles_chevron_is_no_wider_than_an_icon_button(
+    qapp: QApplication, window: NativeWindow, text: str
+) -> None:
+    """The chevron is one glyph: with a word button's 20-pixel sides it was 47 px wide and put Plan on
+    a second row at Large text, 1150 to 1195 px."""
+    text_size(window, text)
+    for _ in range(4):
+        qapp.processEvents()
+    arrow = window.findChild(QAbstractButton, "nextWeek")
+    assert window.week_title_mark.width() < arrow.width(), text
+
+
 def test_retry_save_shows_only_after_a_save_fails(qapp: QApplication, window: NativeWindow) -> None:
     """A save on its way is not a failed one. Month's own fetch landing while the week saved drew
     the week with Retry save showing, and the view buttons jumped 129 pixels left under the pointer.

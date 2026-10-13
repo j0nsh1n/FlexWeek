@@ -1768,9 +1768,15 @@ def top_bar_rules(
         # their words. The icon buttons take the same height so the row stays level.
         f"{BAR_BUTTONS} {{ padding-top: {ROOMY_PAD}px; padding-bottom: {ROOMY_PAD}px; "
         f"min-height: {roomy_height(large)}px; }}"
+        # The week title's chevron is one glyph: a word button's 20-pixel sides put Plan on a second row
+        # at Large text.
+        f"QPushButton#weekTitleMark {{ padding-left: {SPACING[0]}px; padding-right: {SPACING[0]}px; "
+        "min-width: 0px; }"
         "QPushButton#prevWeek, QPushButton#nextWeek, QPushButton#settingsGear { "
         f"padding-left: {max(pad - 2, 2)}px; padding-right: {max(pad - 2, 2)}px; }}"
         f"{BAR_WORDS} {{ padding-left: {ROOMY_SIDE}px; padding-right: {ROOMY_SIDE}px; }}"
+        f'QPushButton#moreButton[iconOnly="true"] {{ padding-left: {max(pad - 2, 2)}px; '
+        f"padding-right: {max(pad - 2, 2)}px; }}"
         "QPushButton#addButton { border-top-right-radius: 0; border-bottom-right-radius: 0; }"
         f"QPushButton#addArrow {{ padding: {ROOMY_PAD}px {pad // 2 + 2}px; border-top-left-radius: 0; "
         f"border-bottom-left-radius: 0; border-left-width: 1px; border-left-color: {divider}; }}"

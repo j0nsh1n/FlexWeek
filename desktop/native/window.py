@@ -2039,6 +2039,12 @@ class NativeWindow(QMainWindow):
             title.setText(date_words)
             plan.setText(plan_words)
             more.setText(more_words)
+            # More as its icon alone takes an icon button's sides, not a word button's 20 pixels each.
+            icon_only = not more_words
+            if more.property("iconOnly") != icon_only:
+                more.setProperty("iconOnly", icon_only)
+                more.style().unpolish(more)
+                more.style().polish(more)
             for widget in (title, plan, more):
                 widget.updateGeometry()
             # Each group keeps its own size until told; the bar's invalidate does not reach them.
