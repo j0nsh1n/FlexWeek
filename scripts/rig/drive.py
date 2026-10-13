@@ -90,6 +90,17 @@ def play_looks() -> tuple[str, ...]:
     return (*(name for name in LOOK_PRESETS if name != "default"), *PACKS)
 
 
+def clean_look_file() -> Path:
+    """The look an earlier run left behind (its zoom and text size) is gone before this one starts, so a
+    play sees only the look it asks for. Call after QStandardPaths' test mode is on."""
+    from PySide6.QtCore import QStandardPaths
+
+    root = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
+    look_path = Path(root) / "flexweek-look.json"
+    look_path.unlink(missing_ok=True)
+    return look_path
+
+
 def check_play(args: argparse.Namespace) -> None:
     """Refuse a play that cannot run, with every mistake named, before a session is started for it."""
     if not args.play:
@@ -253,6 +264,7 @@ def child_main(args: argparse.Namespace) -> int:
     )
 
     QStandardPaths.setTestModeEnabled(True)
+    clean_look_file()
     app = QApplication(["flexweek-rig"])
     python_errors: list[str] = []
 

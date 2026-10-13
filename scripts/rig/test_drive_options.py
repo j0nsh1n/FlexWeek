@@ -188,3 +188,21 @@ def test_a_finished_run_where_every_scenario_passed_still_says_passed():
     assert code == 0
     assert line == "1/1 passed."
     assert payload == results
+
+
+
+def test_the_rig_forgets_the_look_an_earlier_run_left_behind():
+    from pathlib import Path
+
+    from PySide6.QtCore import QStandardPaths
+
+    QStandardPaths.setTestModeEnabled(True)
+    root = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation))
+    root.mkdir(parents=True, exist_ok=True)
+    left = root / "flexweek-look.json"
+    left.write_text('{"preset": "terminal", "knobs": {"text": "large"}}')
+    assert drive.clean_look_file() == left
+    assert not left.exists()
+    # Nothing left behind is not a mistake.
+    assert drive.clean_look_file() == left
+    assert not left.exists()

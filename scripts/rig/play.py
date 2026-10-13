@@ -299,16 +299,14 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
             session.selected_day = held["now"].date().isoformat()
         if setup.seed == "rig":
             seed_week(app, session)
-        pack = look = None
+        pack = None
+        preset = "default"
         if setup.look is not None:
             preset = setup.look if setup.look in LOOK_PRESETS else "default"
             pack = None if setup.look in LOOK_PRESETS else setup.look
-            look = {"preset": preset, "knobs": {"text": setup.text}}
-        elif setup.text != "normal":
-            look = {"preset": "default", "knobs": {"text": setup.text}}
-        if look is not None:
-            window._look = sanitize_look(look)
-            session.look = window._look
+        look = {"preset": preset, "knobs": {"text": setup.text}}
+        window._look = sanitize_look(look)
+        session.look = window._look
         # Each slot takes the design only if it is that kind of screen; the other keeps its default.
         window._layout = sanitize_layout({"main": setup.design, "day": setup.design, "options": {}})
         if setup.seed == "empty":
