@@ -15,6 +15,7 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
+    from PySide6.QtCore import Qt
     from PySide6.QtGui import QFont, QFontDatabase, QFontInfo, QFontMetricsF
     from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QTimeEdit
 
@@ -114,6 +115,52 @@ def test_retros_window_hands_its_words_the_font_without_ligatures(
     window._apply_appearance()
     qapp.processEvents()
     assert label.fontMetrics().horizontalAdvance("fixed") != pytest.approx(spaced, abs=0.5), plain_words
+    label.deleteLater()
+
+
+def test_retro_keeps_a_times_even_figures_and_a_strong_words_weight(
+    qapp: QApplication, window: NativeWindow  # noqa: F811
+) -> None:
+    """Q17 review: turning ligatures off in Retro changes only the features. A time keeps tabular figures
+    and its weight, and after Retro it has its own font back with no ligature setting left on it."""
+    load_fonts()
+    label = QLabel("10:00", window)
+    label.setFont(time_font(weighted(label.font(), WEIGHT_STRONG)))
+    window._layout = {"main": "retro", "day": "one", "options": {}}
+    window._apply_appearance()
+    qapp.processEvents()
+    worn = label.font()
+    assert (worn.featureValue(QFont.Tag("tnum")), worn.weight()) == (1, WEIGHT_STRONG)
+    assert worn.featureValue(QFont.Tag("liga")) == 0
+    window._layout = {"main": "classic", "day": "one", "options": {}}
+    window._apply_appearance()
+    qapp.processEvents()
+    back = label.font()
+    assert (back.featureValue(QFont.Tag("tnum")), back.weight()) == (1, WEIGHT_STRONG)
+    assert QFont.Tag("liga") not in back.featureTags()
+    label.deleteLater()
+
+
+def test_a_label_made_while_in_retro_takes_the_plain_font_after_it(
+    qapp: QApplication, window: NativeWindow  # noqa: F811
+) -> None:
+    """Q17 review: a widget made while Retro is worn does not keep Retro's no-ligature font into the next
+    look, so the next look's words join as that look's face means them to."""
+    load_fonts()
+    window._layout = {"main": "retro", "day": "one", "options": {}}
+    window._apply_appearance()
+    qapp.processEvents()
+    label = QLabel("fixed", window)
+    # Restyled while Retro is still worn, as a new accent or text size does.
+    window._dressed = None
+    window._apply_appearance()
+    qapp.processEvents()
+    assert label.font().featureValue(QFont.Tag("liga")) == 0
+    window._layout = {"main": "classic", "day": "one", "options": {}}
+    window._apply_appearance()
+    qapp.processEvents()
+    assert QFont.Tag("liga") not in label.font().featureTags()
+    assert not label.testAttribute(Qt.WidgetAttribute.WA_SetFont)
     label.deleteLater()
 
 

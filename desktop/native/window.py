@@ -5262,24 +5262,22 @@ class NativeWindow(QMainWindow):
         set_current(ctx)
         if dressed != self._dressed:
             self._dressed = dressed
-            # Retro sets its words letter by letter (fonts.without_ligatures); other looks keep the app font.
-            app_font = QApplication.font()
+            # Retro sets its words letter by letter (fonts.without_ligatures). Only the features change, so
+            # a time keeps its even figures and a strong word its weight; each sweep also reaches widgets made
+            # since the last, and leaving Retro gives every widget back the font it had, or its parent's.
             if ctx.feel.key == "retro":
                 if not hasattr(self, "_retro_fonts"):
-                    children = (self, *self.findChildren(QWidget))
-                    self._retro_fonts = weakref.WeakKeyDictionary(
-                        {child: QFont(child.font()) for child in children}
-                    )
-                no_ligatures = without_ligatures(app_font)
+                    self._retro_fonts = weakref.WeakKeyDictionary()
                 for child in (self, *self.findChildren(QWidget)):
-                    child.setFont(no_ligatures)
-            else:
-                self.setFont(app_font)
-            self.setStyleSheet(sheet)
-            if ctx.feel.key != "retro" and hasattr(self, "_retro_fonts"):
-                for child, font in self._retro_fonts.items():
-                    child.setFont(font)
+                    if child not in self._retro_fonts:
+                        own = child.testAttribute(Qt.WidgetAttribute.WA_SetFont)
+                        self._retro_fonts[child] = (QFont(child.font()), own)
+                    child.setFont(without_ligatures(child.font()))
+            elif hasattr(self, "_retro_fonts"):
+                for child, (font, own) in list(self._retro_fonts.items()):
+                    child.setFont(font if own else QFont())
                 del self._retro_fonts
+            self.setStyleSheet(sheet)
             # Fixed within a text size, so tabbing never moves the grid; a new size re-lays out anyway.
             self.status_strip.setFixedHeight(STATUS_STRIP_PX)
             self.week_list_row.setFixedHeight(STATUS_STRIP_PX)
