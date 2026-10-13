@@ -1,6 +1,14 @@
 use flexweek_engine::plan::{sentence, slack_sentence};
 
 #[test]
+fn test_tests_first_reason_says_what_to_do_next() {
+    assert_eq!(
+        sentence("PRIORITY_PREEMPT").unwrap(),
+        "Tests and other homework that's planned first used the free time before it's due. Move one of them, shorten this, or choose a time yourself."
+    );
+}
+
+#[test]
 fn test_a_passed_deadline_and_no_study_time_today_have_their_own_sentences() {
     assert_eq!(
         sentence("DEADLINE_PASSED").unwrap(),

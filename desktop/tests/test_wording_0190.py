@@ -171,8 +171,11 @@ def test_the_two_no_room_reasons_say_who_is_in_the_way_and_what_to_do() -> None:
 
 def test_the_type_reason_names_the_order_instead_of_priority() -> None:
     reason = sentence("PRIORITY_PREEMPT")
+    assert reason == (
+        "Tests and other homework that's planned first used the free time before it's due. "
+        "Move one of them, shorten this, or choose a time yourself."
+    )
     assert "priority" not in reason.lower()
-    assert "tests, then quizzes, then everyday homework, then reading" in reason
 
 
 def test_the_homework_form_asks_for_a_type_not_a_priority(qapp: QApplication) -> None:

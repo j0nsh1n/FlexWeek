@@ -210,7 +210,8 @@ def test_an_unplaced_task_with_no_explanation_still_says_something(qapp: QApplic
         "explanations": [],
     }
     assert PlanReview().rows_for(bare, TITLES, WEEK) == [
-        "Science fair poster has no time yet. There was no room for it this week."
+        "Science fair poster has no time yet. There was no room for it before it's due. "
+        "Shorten it, split it, or choose a time yourself."
     ]
 
 

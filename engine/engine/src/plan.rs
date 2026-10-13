@@ -41,7 +41,7 @@ pub const REASON_COPY: &[(&str, &str)] = &[
     ),
     (
         "PRIORITY_PREEMPT",
-        "Homework planned ahead of it (tests, then quizzes, then everyday homework, then reading) used the free time before it's due.",
+        "Tests and other homework that's planned first used the free time before it's due. Move one of them, shorten this, or choose a time yourself.",
     ),
     (
         "ENERGY_MISMATCH",

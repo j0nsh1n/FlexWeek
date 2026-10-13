@@ -5585,7 +5585,7 @@ class PlanReview(QFrame):
                     for item in trace.get("explanations") or []
                     if item.get("block_id") == block["id"] and item.get("message")
                 ),
-                "There was no room for it this week.",
+                "There was no room for it before it's due. Shorten it, split it, or choose a time yourself.",
             )
             said.append(f"{name} has no time yet. {why}")
         stranded = {block["id"] for block in trace.get("unplaced") or []}
