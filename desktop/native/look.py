@@ -1227,7 +1227,7 @@ def _rgba(colour: str, alpha: float) -> str:
 
 # The week-list row above the grid (U19) is this tall at each text size, in every look and design. It
 # is fixed within a size so tabbing never moves the grid; Large text needs 4 px more for its words.
-WEEK_LIST_ROW_HEIGHT = {"small": 28, "normal": 28, "large": 32}
+WEEK_LIST_ROW_HEIGHT = {"small": 28, "normal": 28, "large": 28}
 DISABLED = 0.4
 CONFLICT_FILL, CONFLICT_TEXT = "#fff4d6", "#6b4a00"
 # A roomy button: 8 pixels above and below its words, 20 at the sides, and at least 36 pixels tall in all,
@@ -1663,12 +1663,10 @@ def button_rules(
         f'QPushButton[quiet="true"]:pressed {{ background: {_veil(text, 0.10)}; }}',
         f'QPushButton[quiet="true"]:disabled {{ background: transparent; color: {mix(text, page, 0.4)}; }}',
         f'QPushButton[keyfocus="true"]:focus {{ border-color: {ring}; }}',
-        # U19's list row is a fixed strip: vertical padding or the 2 to 6 px edges leave its words less
-        # height than the font needs and clip them. A 1 px edge and no padding give them all but 2 px, and
-        # the min-height is named (not 0) because a stylesheet min-height of 0 also drops the widget's
-        # own fixed height. It names the colour not at all, so the focus ring still shows.
-        f"QPushButton#weekListRow {{ padding: 0 {pad * 2}px; border-width: 1px; "
-        f"min-height: {WEEK_LIST_ROW_HEIGHT['large' if large else 'normal'] - 2}px; }}",
+        # U19's list row is a fixed 28 px strip. No vertical padding and no edge, so the words get
+        # the full height. A stylesheet min-height of 0 also drops the widget's own fixed height.
+        f"QPushButton#weekListRow {{ padding: 0 {pad * 2}px; border-width: 0; "
+        f"min-height: {WEEK_LIST_ROW_HEIGHT['large' if large else 'normal']}px; }}",
     ]
     return "".join(rules)
 
