@@ -321,7 +321,7 @@ class NativeClient(QObject):
                 if epoch != self.epoch:
                     return
                 status = reply.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute) or 0
-                body = bytes(reply.readAll())
+                body = bytes(reply.readAll().data())
                 result: object = None
                 if len(body) <= MAX_RESPONSE_BYTES:
                     with contextlib.suppress(ValueError, UnicodeDecodeError):
