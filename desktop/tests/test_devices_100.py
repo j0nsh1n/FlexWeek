@@ -412,9 +412,40 @@ def test_a_deleted_pairing_sheet_ignores_a_late_timer(qapp, tmp_path, monkeypatc
     delete(parent)
     assert not isValid(dialog)
     dialog._tick()
+    pending = []
+    monkeypatch.setattr(devices, "run_off_ui", lambda owner, work, done: pending.append(work))
     dialog._made({"display_code": "1234 5678"}, None)
     sync.pair_status.assert_not_called()
+    assert len(pending) == 1
+    pending[0]()
     sync.pair_cancel.assert_called_once_with()
+
+
+def test_cancel_closes_before_a_slow_pair_cancel_finishes(qapp, tmp_path) -> None:
+    import threading
+    import time
+    from unittest.mock import Mock
+
+    from PySide6.QtWidgets import QWidget
+
+    finished = threading.Event()
+    sync = Mock(spec=SyncService)
+
+    def slow_cancel() -> None:
+        time.sleep(0.35)
+        finished.set()
+
+    sync.pair_cancel.side_effect = slow_cancel
+    parent = QWidget()
+    dialog = PairDialog(parent, sync, 1)
+    started = time.monotonic()
+    dialog.reject()
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 0.2
+    assert not dialog.isVisible()
+    assert finished.wait(2)
+    free(parent)
 
 
 def test_settings_can_close_before_the_pairing_service_starts(qapp, lazy_desk, monkeypatch) -> None:

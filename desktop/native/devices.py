@@ -306,7 +306,7 @@ class PairDialog(Dialog):
         if not isValid(self) or self.closed:
             # Cancel came while the code was being made: end the code rather than leave it open.
             if offer is not None:
-                self.sync.pair_cancel()
+                run_off_ui(self, self.sync.pair_cancel, lambda _result, _problem: None)
             return
         if problem is not None or offer is None:
             self.code.setText("")
@@ -343,8 +343,8 @@ class PairDialog(Dialog):
     def reject(self) -> None:
         self.closed = True
         self.timer.stop()
-        self.sync.pair_cancel()
         super().reject()
+        run_off_ui(self, self.sync.pair_cancel, lambda _result, _problem: None)
 
 
 class RemoveDialog(Dialog):
