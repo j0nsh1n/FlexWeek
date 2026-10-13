@@ -39,7 +39,8 @@ if importlib.util.find_spec("PySide6") is not None:
 
 PASSWORD = "a-long-test-password"
 LAYOUTS = Path(__file__).resolve().parents[1] / "native" / "layouts"
-REFUSED = "That ends after it is due, so it stayed where it was."
+# T-W25: contractions in the app's own words ("it's due").
+REFUSED = "That ends after it's due, so it stayed where it was."
 THURSDAY = 3
 
 
@@ -281,7 +282,7 @@ def test_homework_due_today_with_no_time_is_given_one_by_carrying_its_title_onto
     view, bar = my_day(qapp, window, "one")
     said = reported(window)
     title = view.findChild(QLabel, "oneTitle")
-    assert title.text() == "Math worksheet"
+    assert title.text().replace("\n", " ") == "Math worksheet"
     start = title.mapToGlobal(title.rect().center())
     end = bar.point_for(THURSDAY, 21 * 60)
     carry(qapp, title, [start + (end - start) * step / 8 for step in range(9)])
