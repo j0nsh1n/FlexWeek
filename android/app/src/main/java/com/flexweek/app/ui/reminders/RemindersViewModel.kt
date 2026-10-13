@@ -4,7 +4,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.flexweek.app.core.FlexWeekCore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 data class RemindersUiState(
@@ -62,9 +66,12 @@ class RemindersViewModel(
     }
 
     fun syncNow() {
+        if (state.syncing) return
         state = state.copy(syncing = true)
-        core.syncOnce(45_000)
-        state = state.copy(syncing = false)
-        reload()
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { core.syncOnce(45_000) }
+            state = state.copy(syncing = false)
+            reload()
+        }
     }
 }

@@ -159,7 +159,7 @@ pub(crate) fn today(week: &FlexWeek, date: &str, now_minute: i64) -> Result<Stri
     let parsed_date = parse_date(date)?;
     let monday = time::monday_of(date).map_err(engine_failure)?;
     let day = i64::from(parsed_date.weekday().num_days_from_monday());
-    let Some(user_id) = week.user_id else {
+    let Some(user_id) = week.account_id() else {
         return empty_today(week, date, &monday, day);
     };
     let db = db_lock(week)?;

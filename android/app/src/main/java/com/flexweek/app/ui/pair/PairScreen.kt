@@ -105,11 +105,13 @@ fun PairScreen(
                 )
             }
             Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onShowQr, modifier = Modifier.weight(1f).height(48.dp)) {
-                    Text("Scan instead")
+                if (state.canScan) {
+                    TextButton(onClick = onShowQr, modifier = Modifier.weight(1f).height(48.dp)) {
+                        Text("Scan instead")
+                    }
                 }
-                Button(onClick = onPair, modifier = Modifier.weight(1f).height(48.dp)) {
-                    Text("Pair")
+                Button(onClick = onPair, enabled = !state.joining, modifier = Modifier.weight(1f).height(48.dp)) {
+                    Text(if (state.joining) "Pairing…" else "Pair")
                 }
             }
         }

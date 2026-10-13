@@ -806,6 +806,7 @@ dependencies = [
  "chrono",
  "flexweek-engine",
  "flexweek-store",
+ "flexweek-sync",
  "rusqlite",
  "serde_json",
  "thiserror 2.0.18",

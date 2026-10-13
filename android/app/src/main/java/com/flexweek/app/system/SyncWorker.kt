@@ -15,7 +15,7 @@ class SyncWorker(
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val app = applicationContext as FlexWeekApp
-        if (!app.core.isPaired()) {
+        if (!app.core.isPaired() || !JSONObject(app.core.syncStatus()).optBoolean("paired", true)) {
             return Result.success()
         }
         return try {

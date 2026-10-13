@@ -86,7 +86,7 @@ class RealFlexWeekCore(context: Context) : FlexWeekCore {
     override fun pairFromQr(text: String): String = native.pairFromQr(text)
     override fun cancelSync() { native.cancelSync() }
     override fun unlink() { native.unlink() }
-    override fun isPaired(): Boolean = JSONObject(syncStatus()).optBoolean("paired")
+    override fun isPaired(): Boolean = JSONObject(syncStatus()).optBoolean("has_account")
 
     private fun result(call: () -> String): String = try {
         JSONObject(call()).put("ok", true).toString()
@@ -105,7 +105,7 @@ class RealFlexWeekCore(context: Context) : FlexWeekCore {
             if (date.isBefore(LocalDate.now())) date = date.plusYears(1)
             draft.put("due", "${date}T23:59")
         }
-        draft.put("from_date", currentDate()).put("spread", draft.optString("sessions") != "one")
+        draft.put("from_date", currentDate()).put("spread", if (draft.optString("sessions") == "one") "one" else "spread")
         native.saveHomework(draft.toString(), opId)
     }
     override fun planWeek(weekStart: String): String = result { RustPhoneJson.plan(native.planWeek(weekStart, 0.0)) }

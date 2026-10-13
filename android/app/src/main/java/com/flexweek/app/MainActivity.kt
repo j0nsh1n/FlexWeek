@@ -50,6 +50,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
 import com.flexweek.app.system.SyncScheduler
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
@@ -57,7 +61,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val app = application as FlexWeekApp
         val tweaks = ScreenshotTweaks.fromIntent(intent)
-        if (tweaks.prePaired && !app.core.isPaired()) {
+        if (app.core is com.flexweek.app.core.FakeFlexWeekCore && tweaks.prePaired && !app.core.isPaired()) {
             app.core.pairWithCode(com.flexweek.app.core.DemoSchedule.VALID_PAIR_CODE)
         }
         (app.core as? com.flexweek.app.core.FakeFlexWeekCore)?.setSyncState(tweaks.syncState)
@@ -152,7 +156,8 @@ private fun FlexWeekRoot(
 ) {
     val core = app.core
     val v2 = BuildConfig.V2_ENABLED
-    var paired by remember { mutableStateOf(core.isPaired() || tweaks.prePaired) }
+    val demo = core is com.flexweek.app.core.FakeFlexWeekCore
+    var paired by remember { mutableStateOf(core.isPaired() || (demo && tweaks.prePaired)) }
     var pendingNotifPrompt by remember { mutableStateOf(false) }
     var tab by remember {
         mutableStateOf(
@@ -175,6 +180,7 @@ private fun FlexWeekRoot(
     }
     val showPair =
         tweaks.startScreen == ScreenshotTweaks.StartScreen.Pair ||
+            (!paired && !demo) ||
             (!paired && tweaks.startScreen != ScreenshotTweaks.StartScreen.Today &&
                 tweaks.startScreen != ScreenshotTweaks.StartScreen.Reminders &&
                 tweaks.startScreen != ScreenshotTweaks.StartScreen.Week)
@@ -199,6 +205,16 @@ private fun FlexWeekRoot(
     }
     val todayVm = viewModel { TodayViewModel(core) }
     val remindersVm = viewModel { RemindersViewModel(core) }
+    LaunchedEffect(core) {
+        if (!demo) {
+            while (isActive) {
+                withContext(Dispatchers.IO) { core.syncOnce(10_000) }
+                todayVm.tick(java.time.LocalTime.now().let { it.hour * 60 + it.minute })
+                remindersVm.reload()
+                delay(5_000)
+            }
+        }
+    }
     LaunchedEffect(pendingNotifPrompt) {
         if (pendingNotifPrompt) {
             remindersVm.showPostPairBanner()

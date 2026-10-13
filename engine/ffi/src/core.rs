@@ -8,7 +8,9 @@ use flexweek_engine::time::monday_of;
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Value, json};
 
-use crate::sync_api::{NotPairedSync, SyncApi};
+#[cfg(test)]
+use crate::sync_api::NotPairedSync;
+use crate::sync_api::{NativeSync, SyncApi};
 
 #[derive(Clone, Debug)]
 pub(crate) struct Preview {
@@ -80,12 +82,13 @@ impl FlexWeek {
             })
             .optional()
             .map_err(failure)?;
+        let sync = NativeSync::new(path, &device_name, host.clone(), user_id);
         Ok(Arc::new(Self {
             db: Mutex::new(db),
             user_id,
             device_name,
             host,
-            sync: Box::new(NotPairedSync),
+            sync: Box::new(sync),
             previews: Mutex::new(HashMap::new()),
         }))
     }
@@ -126,7 +129,7 @@ impl FlexWeek {
     }
 
     pub fn settings_for_phone(&self) -> Result<String, FfiError> {
-        let Some(user_id) = self.user_id else {
+        let Some(user_id) = self.account_id() else {
             return Ok(json!({
                 "reminders_enabled": true,
                 "reminder_lead_min": 5,
@@ -229,8 +232,14 @@ impl FlexWeek {
     }
 }
 
+impl FlexWeek {
+    pub(crate) fn account_id(&self) -> Option<i64> {
+        self.sync.account_id().or(self.user_id)
+    }
+}
+
 pub(crate) fn require_user(week: &FlexWeek) -> Result<i64, FfiError> {
-    week.user_id
+    week.account_id()
         .ok_or_else(|| failure("not paired: no account is stored on this phone"))
 }
 
@@ -350,14 +359,25 @@ pub(crate) mod tests_support {
         let agenda: Value =
             serde_json::from_str(&week.today("2026-10-12".into(), 15 * 60).unwrap()).unwrap();
         assert_eq!(agenda["days"].as_array().unwrap().len(), 7);
-        assert_eq!(agenda["sync_status"], "not paired");
-        assert_eq!(week.sync_status(), "not paired");
-        assert_eq!(week.sync_once(1000), "not paired");
-        assert_eq!(week.pair_with_code("12345678".into()), "not paired");
-        assert_eq!(week.pair_from_qr("qr".into()), "not paired");
-        assert_eq!(week.cancel_sync(), "not paired");
-        assert_eq!(week.unlink(), "not paired");
-        assert_eq!(week.join_from_pairing("payload".into()), "not paired");
+        let status: Value = serde_json::from_str(&week.sync_status()).unwrap();
+        assert_eq!(status["paired"], false);
+        assert_eq!(status["state"], "unreachable");
+        assert_eq!(
+            serde_json::from_str::<Value>(&week.sync_once(1000)).unwrap()["kind"],
+            "not_paired"
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(&week.cancel_sync()).unwrap()["ok"],
+            true
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(&week.unlink()).unwrap()["ok"],
+            true
+        );
+        assert!(
+            !path.with_file_name("device.key").exists(),
+            "reading an unpaired core opens no endpoint"
+        );
     }
 
     #[test]
