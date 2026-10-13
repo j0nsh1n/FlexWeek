@@ -481,10 +481,11 @@ def test_every_dialog_is_freed_once_it_has_closed_and_is_let_go(qapp: QApplicati
     was deleted directly", then a bus error."""
     import gc
     import weakref
+    from unittest.mock import Mock
 
     from PySide6.QtCore import QTimer
 
-    from desktop.native import look_editor, settings, widgets
+    from desktop.native import devices, look_editor, settings, widgets
 
     homework = {"id": "essay", "title": "Essay", "due": "2026-09-27T23:59", "estimate_min": 60, "revision": 0}
     pasted = {
@@ -493,7 +494,11 @@ def test_every_dialog_is_freed_once_it_has_closed_and_is_let_go(qapp: QApplicati
         "fixed": True,
         "checked": True,
     }
+    sync = Mock(spec=devices.SyncService)
+    sync.pair_start.return_value = None
     made = {
+        devices.PairDialog: [lambda host: devices.PairDialog(host, sync, 1)],
+        devices.RemoveDialog: [lambda host: devices.RemoveDialog(host, "Pixel")],
         widgets.Dialog: [lambda host: widgets.Dialog(host)],
         widgets.ConfirmSheet: [
             lambda host: widgets.ConfirmSheet(

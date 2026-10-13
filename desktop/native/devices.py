@@ -19,7 +19,7 @@ from PySide6.QtGui import QColor, QPainter, QPalette
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
 from desktop.native.feel import current
-from desktop.native.widgets import Dialog, sheet_button, sheet_footer
+from desktop.native.widgets import Dialog, caption_above, sheet_button, sheet_footer
 
 SYNC_SCAN_MS = 1000
 # The whole of one "Sync now" call. flexweek-sync's own default is 45 s.
@@ -254,6 +254,7 @@ class PairDialog(Dialog):
         self.qr_text.setObjectName("pairQr")
         self.qr_text.setReadOnly(True)
         self.qr_text.setAccessibleName("Pairing text for the phone's scanner")
+        layout.addWidget(caption_above(self.qr_text.accessibleName(), self.qr_text))
         layout.addWidget(self.qr_text)
         self.picture = QVBoxLayout()
         layout.addLayout(self.picture)
