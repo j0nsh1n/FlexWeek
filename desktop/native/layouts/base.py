@@ -361,10 +361,13 @@ class LayoutView(QWidget):
 DAY_ICONS = {"Finished": "check", "Focus": "timer", "Late": "clock", "Back": "chevron-left"}
 
 
-def day_buttons(view: LayoutView, scene: Scene, item: Occurrence | None, prefix: str) -> list[QPushButton]:
+def day_buttons(
+    view: LayoutView, scene: Scene, item: Occurrence | None, prefix: str, on_today: bool = True
+) -> list[QPushButton]:
     """What a student does while living the day, written once for every day screen: finish the
     homework, start focus, say they are running late, go back to planning. One is filled, the step
-    this minute is for: Homework finished, or else Running late."""
+    this minute is for: Homework finished, or else Running late. On another day than today only
+    Back to planning is offered, because the others act on now."""
     made = []
     if scene.options.get("actions") != "hide":
         if item is not None and item.work and item.assignment_id:
@@ -377,7 +380,7 @@ def day_buttons(view: LayoutView, scene: Scene, item: Occurrence | None, prefix:
                 lambda _=False, entry=item: view.focus_requested.emit(entry.block_id, entry.day)
             )
             made += [finished, focus]
-        if work_left(scene):
+        if on_today and work_left(scene):
             late = button("Running late", f"{prefix}Late", "" if made else "main")
             late.clicked.connect(view.late_requested.emit)
             made.append(late)

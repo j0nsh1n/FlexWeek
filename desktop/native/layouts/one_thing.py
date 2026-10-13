@@ -10,8 +10,9 @@ from __future__ import annotations
 
 from PySide6.QtCore import QRect, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QFont, QFontMetrics, QKeyEvent, QMouseEvent, QPainter, QPen, QResizeEvent
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
+from desktop.native.calendar import DAYS
 from desktop.native.fonts import at_scale
 from desktop.native.hours.canvas import BlockPainter, Drawn, HoursCanvas
 from desktop.native.hours.geometry import Axis, LinearTrack, Span
@@ -26,7 +27,6 @@ from desktop.native.layouts.base import (
     empty,
     family,
     label,
-    plural,
     rules,
 )
 from desktop.native.layouts.dial import free_minutes
@@ -48,8 +48,8 @@ DAY_START, DAY_END = 6 * 60, 22 * 60
 BAR_TALL = 22
 # The bar's hours are named every three hours from its start, and its end (#25).
 HOUR_EVERY = 180
-# The ring's side in the mock-up at Normal text. Then's rows give way before it goes under RING_ROOMY.
-RING_MAX, RING_ROOMY, RING_MIN = 440, 320, 200
+# The ring's side in the mock-up at Normal text, and the least it shrinks to.
+RING_MAX, RING_MIN = 440, 200
 THEN_ROWS = 4
 # The most of the ring's inside the title may take, so the number stays the thing that is read.
 TITLE_SHARE = 0.4
@@ -203,6 +203,7 @@ class DayBar(HoursCanvas):
     time, and a tap on one opens it. Free time makes nothing: this screen does not plan."""
 
     block_clicked = Signal(str)
+    day_clicked = Signal(int)
 
     def __init__(
         self, hand: Hand, day: int, tokens: dict[str, str], chosen: str | None, caption: str = ""
@@ -332,15 +333,45 @@ class OneThingView(LayoutView):
         self._title_words = ""
         self._ring: CountdownRing | None = None
         self._then: QWidget | None = None
-        self._rows: list[QWidget] = []
+        self._day: int | None = None
+        self._daybar: DayBar | None = None
         self._root = QVBoxLayout(self)
-        self._root.setContentsMargins(SPACING[5] * 2, SPACING[4], SPACING[5] * 2, SPACING[5])
+        self._root.setContentsMargins(SPACING[4], SPACING[4], SPACING[4], SPACING[4])
         self._root.setSpacing(0)
 
+    def shown_day(self, scene: Scene) -> int | None:
+        return self._day if self._day is not None else scene.today
+
+    def _on_today(self, scene: Scene) -> bool:
+        """Both sides can be None when the week is not the current one, so that is not a match."""
+        return scene.today is not None and self.shown_day(scene) == scene.today
+
+    def _selected(self, scene: Scene) -> int:
+        """The day the bar and letters show; Monday is day 0, so this is not an `or`."""
+        day = self.shown_day(scene)
+        return scene.today if day is None else day
+
+    def watched_date(self) -> str | None:
+        scene = self._scene
+        day = self.shown_day(scene) if scene is not None else None
+        return scene.week.date_of(day).isoformat() if scene is not None and day is not None else None
+
+    def _show_day(self, day: int) -> None:
+        scene = self._scene
+        if scene is None:
+            return
+        self._day = None if day == scene.today else day
+        self._skip = 0
+        self.render(scene, False)
+        self.watched_day_changed.emit(scene.week.date_of(day).isoformat())
+
     def _queue(self, scene: Scene) -> tuple[tuple[Occurrence, ...], Occurrence | None]:
-        if scene.today is None:
+        day = self.shown_day(scene)
+        if day is None:
             return (), None
-        found = scene.week.day_queue(scene.today, scene.minute)
+        if day != scene.today:
+            return tuple(item for item in scene.week.on_day(day) if item.live), None
+        found = scene.week.day_queue(day, scene.minute)
         if scene.options.get("lead") == "next" and found.current is not None:
             return found.queue[1:], None
         return found.queue, found.current
@@ -348,6 +379,7 @@ class OneThingView(LayoutView):
     def render(self, scene: Scene, week_changed: bool) -> None:
         if week_changed:
             self._skip = 0
+            self._day = None
         queue, current = self._queue(scene)
         self._skip = min(self._skip, max(len(queue) - 1, 0))
         item = queue[self._skip] if queue else None
@@ -356,39 +388,138 @@ class OneThingView(LayoutView):
         # The ring is made again below: the new one carries on from what this one draws.
         drawn = self._ring.left() if self._ring is not None else None
         empty(self._root)
-        top = QHBoxLayout()
-        top.addWidget(label(f"Now {clock_label(scene.minute)}", "oneDate"))
-        top.addStretch()
-        top.addWidget(label(self._left_text(scene), "oneLeft"))
-        self._root.addLayout(top)
-        self._root.addStretch(1)
+        content = QWidget()
+        content.setObjectName("oneMain")
+        main = QHBoxLayout(content)
+        main.setContentsMargins(scene.px(24), scene.px(16), scene.px(24), scene.px(16))
+        main.setSpacing(scene.px(24))
+        left = QWidget()
+        left.setObjectName("oneLeftColumn")
+        left_box = QVBoxLayout(left)
+        left_box.setContentsMargins(0, 0, 0, 0)
+        left_box.setSpacing(scene.px(8))
+        kicker = label(self._heading(scene, item, current), "oneLabel")
+        kicker.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        left_box.addWidget(kicker)
         self._ring = self._dial(scene, item, is_now, current is not None, drawn)
-        self._root.addWidget(self._ring, 0, Qt.AlignmentFlag.AlignHCenter)
-        self._root.addSpacing(scene.px(SPACING[4]))
-        self._then = self._then_list(scene, queue[self._skip + 1 : self._skip + 1 + THEN_ROWS])
-        self._root.addWidget(self._then, 0, Qt.AlignmentFlag.AlignHCenter)
-        self._root.addSpacing(scene.px(SPACING[4]))
-        self._root.addLayout(self._actions(scene, item))
-        self._root.addStretch(1)
+        left_box.addWidget(self._ring, 0, Qt.AlignmentFlag.AlignHCenter)
+        main.addWidget(left, 0)
+        right = QWidget()
+        right.setObjectName("oneRightColumn")
+        right_box = QVBoxLayout(right)
+        right_box.setContentsMargins(0, 0, 0, 0)
+        right_box.setSpacing(scene.px(12))
+        right_box.addStretch(1)
+        later = tuple(queue[self._skip + 1 :])
+        heading = "Later today" if self._on_today(scene) else "Then"
+        then_contents = self._then_list(scene, later, heading)
+        self._then = QScrollArea()
+        self._then.setObjectName("oneThenScroll")
+        self._then.setWidgetResizable(True)
+        self._then.setFrameShape(QFrame.Shape.NoFrame)
+        self._then.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._then.setWidget(then_contents)
+        right_box.addWidget(self._then)
+        action_row = self._actions(scene, item)
+        right_box.addLayout(action_row)
+        evening = self._evening_line(scene, self.shown_day(scene), queue, current)
+        if evening:
+            right_box.addWidget(label(evening, "oneEvening"))
+        if self.shown_day(scene) is None:
+            notice = self._words(scene, item, is_now, current is not None)[1]
+            right_box.addWidget(label(notice, "oneWeekNotice"))
+        self._daybar = None
         if scene.options.get("daybar") != "hide" and scene.today is not None:
-            bar = DayBar(
+            self._daybar = DayBar(
                 self.hand,
-                scene.today,
+                self._selected(scene),
                 scene.tokens,
                 item.block_id if item is not None else None,
                 self._bar_caption(scene),
             )
-            bar.set_week(scene.week.on_day(scene.today), scene.today, scene.minute)
-            bar.block_clicked.connect(self.block_activated.emit)
-            self._root.addWidget(bar)
+            selected = self._selected(scene)
+            self._daybar.set_week(scene.week.on_day(selected), scene.today, scene.minute)
+            self._daybar.block_clicked.connect(self.block_activated.emit)
+            self._daybar.day_clicked.connect(self._show_day)
+            navigation = QWidget()
+            navigation.setObjectName("oneDayNavigation")
+            nav_box = QVBoxLayout(navigation)
+            nav_box.setContentsMargins(0, 0, 0, 0)
+            nav_box.setSpacing(0)
+            nav_box.addWidget(self._daybar)
+            nav_box.addWidget(self._day_letters(scene, self._selected(scene)))
+            right_box.addWidget(navigation)
+        right_box.addStretch(1)
+        main.addWidget(right, 1)
+        self._main = content
+        self._root.addWidget(content, 1)
+        waiting = self._unplaced(scene)
+        self._root.addWidget(waiting)
         self._fit()
+
+    def _heading(
+        self, scene: Scene, item: Occurrence | None, current: Occurrence | None
+    ) -> str:
+        day = self.shown_day(scene)
+        if day is None:
+            return "Not this week"
+        if day != scene.today:
+            return DAYS[day]
+        if item is None:
+            return "Nothing left today"
+        return self._words(scene, item, item == current, current is not None)[0]
+
+    def _unplaced(self, scene: Scene) -> QWidget:
+        row = QFrame()
+        row.setObjectName("oneUnplaced")
+        row.setFixedHeight(36)
+        line = QHBoxLayout(row)
+        line.setContentsMargins(scene.px(24), 0, scene.px(24), 0)
+        count = len(scene.week.waiting)
+        line.addWidget(label(f"{count} homework not placed yet", "oneWaiting"))
+        line.addStretch(1)
+        return row
+
+    def _evening_line(
+        self, scene: Scene, day: int | None, queue: tuple[Occurrence, ...], current: Occurrence | None
+    ) -> str:
+        if day is None or day != scene.today:
+            return ""
+        ends = [item.end for item in queue]
+        if current is not None:
+            ends.append(current.end)
+        if not ends:
+            return f"Free until {short_clock(DAY_END)}" if scene.minute < DAY_END else ""
+        if scene.minute < 14 * 60 + 30:
+            return ""
+        end = max(ends)
+        return f"Free from {short_clock(end)} until {short_clock(DAY_END)}" if end < DAY_END else ""
 
     def _bar_caption(self, scene: Scene) -> str:
         """What the day bar is: the day's hours, and that nothing is planned on it when nothing is."""
-        words = f"Today, {clock_label(DAY_START)} to {clock_label(DAY_END)}."
-        if scene.today is not None and not scene.week.on_day(scene.today):
+        day = self.shown_day(scene)
+        name = "Today" if day is None or day == scene.today else DAYS[day]
+        words = f"{name}, {clock_label(DAY_START)} to {clock_label(DAY_END)}."
+        if day is not None and not scene.week.on_day(day):
             words += " Nothing planned."
         return words
+
+    def _day_letters(self, scene: Scene, selected: int) -> QWidget:
+        row = QWidget()
+        row.setObjectName("oneDayLetters")
+        line = QHBoxLayout(row)
+        line.setContentsMargins(0, 0, 0, 0)
+        line.setSpacing(0)
+        for index, name in enumerate(DAYS):
+            choice = QPushButton(name[0])
+            choice.setObjectName(f"oneDay{index}")
+            choice.setAccessibleName(name)
+            choice.setProperty("chosen", index == selected)
+            choice.setCheckable(True)
+            choice.setChecked(index == selected)
+            choice.clicked.connect(lambda _=False, day=index: self._show_day(day))
+            line.addWidget(choice, 1)
+        return row
 
     def _sheet(self, scene: Scene) -> str:
         tokens = scene.tokens
@@ -401,9 +532,11 @@ class OneThingView(LayoutView):
         return base_sheet(self.objectName(), tokens) + rules(
             self.objectName(),
             {
-                "#oneDate, #oneLeft, #oneLine, #oneRowTime, #oneRowLength": css(
+                "#oneLine, #oneRowTime, #oneRowLength, #oneThenEmpty": css(
                     color=muted, font_size=size("body")
                 ),
+                "#oneEvening, #oneWaiting, #oneWeekNotice": css(color=muted, font_size=size("body")),
+                "#oneUnplaced": css(background=tokens["surface"], border_top=f"1px solid {tokens['line']}"),
                 "#oneLabel": css(color=muted, font_size=size("heading"), font_weight=strong),
                 "#oneTitle": css(color=ink, font_size=size("title"), font_weight=strong),
                 "#oneThenLabel": css(color=muted, font_size=size("body"), font_weight=strong),
@@ -421,6 +554,15 @@ class OneThingView(LayoutView):
                     font_weight=strong,
                 ),
                 "QPushButton:hover": css(background=tokens["surface"]),
+                "QPushButton#oneFinished, QPushButton#oneFocus, QPushButton#oneLate, "
+                "QPushButton#oneBack": css(
+                    padding=f"0 {scene.px(4)}px"
+                ),
+                "QPushButton#oneDay0, QPushButton#oneDay1, QPushButton#oneDay2, QPushButton#oneDay3, "
+                "QPushButton#oneDay4, QPushButton#oneDay5, QPushButton#oneDay6": css(
+                    min_height=f"{scene.px(28)}px", padding="0px", border="none", color=muted
+                ),
+                'QPushButton[chosen="true"]': css(color=ink, background=tokens["surface"]),
                 'QPushButton[kind="main"]': css(
                     background=tokens["accent"], color=tokens["accent_ink"], border_color=tokens["accent"]
                 ),
@@ -452,7 +594,9 @@ class OneThingView(LayoutView):
             ring.set_quiet(True)
         else:
             ring.set_scale(12, ("0", "15", "30", "45"))
-        heading, line = self._words(scene, item, is_now, has_current)
+        line = self._words(scene, item, is_now, has_current)[1]
+        if self.shown_day(scene) is None:
+            line = ""
         self._title = Thing(self.hand)
         self._title_words = item.title if item else self._empty_title(scene)
         self._title.setText(self._title_words)
@@ -461,31 +605,31 @@ class OneThingView(LayoutView):
         # The thing itself can be carried onto the day bar, to a later time.
         needs_time = scene.today is not None and scene.week.leftover_kind(scene.today) == "needs_time"
         self._title.carry(item or (scene.week.due_today_unplaced(scene.today)[0] if needs_time else None))
-        kicker = label(heading, "oneLabel")
-        kicker.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        if heading == self._title_words:
-            kicker.hide()
-        ring.above.addWidget(kicker)
         ring.above.addWidget(self._title)
-        when = label(line, "oneLine", wrap=True)
+        when = label(line, "oneLine")
         when.setAlignment(Qt.AlignmentFlag.AlignCenter)
         ring.below.addWidget(when)
         to_go = 0 if item is None else (item.end if is_now else item.start) - scene.minute
         share = min(to_go, 60) / 60
         ring.run_down(share if drawn is None else drawn, share, app_level())
+        day = self.shown_day(scene)
         if item is not None:
-            ring.set_number(*countdown(to_go))
-            ring.setAccessibleName(f"{length_label(to_go)} {'left' if is_now else 'until it starts'}")
+            if day != scene.today:
+                ring.set_number(clock_label(item.start))
+                ring.setAccessibleName(f"{clock_label(item.start)}, {length_label(item.minutes)}")
+            else:
+                ring.set_number(*countdown(to_go))
+                ring.setAccessibleName(f"{length_label(to_go)} {'left' if is_now else 'until it starts'}")
         return ring
 
-    def _then_list(self, scene: Scene, then: tuple[Occurrence, ...]) -> QWidget:
+    def _then_list(self, scene: Scene, then: tuple[Occurrence, ...], heading: str) -> QWidget:
         """What comes after, a row each: its time, its category's dot, its name and its length."""
         box = QWidget()
         box.setObjectName("oneThen")
         column = QVBoxLayout(box)
         column.setContentsMargins(0, 0, 0, 0)
         column.setSpacing(0)
-        column.addWidget(label("Then", "oneThenLabel"))
+        column.addWidget(label(heading, "oneThenLabel"))
         column.addSpacing(scene.px(SPACING[1]))
         rule = QFrame()
         rule.setObjectName("oneRule")
@@ -495,17 +639,16 @@ class OneThingView(LayoutView):
         paint = {"family": family(tokens), "panel": tokens["surface"]}
         times = QFontMetrics(at_scale(self.font(), "body", scene.scale))
         time_width = max((times.horizontalAdvance(clock_label(entry.start)) for entry in then), default=0)
-        self._rows = []
         for entry in then:
             row = QFrame()
             row.setObjectName("oneRow")
-            row.setMinimumHeight(scene.px(36))
+            row.setMinimumHeight(44)
             line = QHBoxLayout(row)
             line.setContentsMargins(0, 0, 0, 0)
-            line.setSpacing(scene.px(SPACING[2]))
+            line.setSpacing(10)
             when = label(clock_label(entry.start), "oneRowTime")
             when.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            when.setFixedWidth(time_width + 2)
+            when.setFixedWidth(max(time_width + 2, 90))
             line.addWidget(when)
             dot = QFrame()
             dot.setFixedSize(10, 10)
@@ -522,25 +665,26 @@ class OneThingView(LayoutView):
             line.addWidget(name, 1)
             line.addWidget(label(length_label(entry.minutes), "oneRowLength"))
             column.addWidget(row)
-            self._rows.append(row)
+        if not then:
+            column.addWidget(label("Nothing planned", "oneThenEmpty"))
         return box
 
-    def _left_text(self, scene: Scene) -> str:
-        if scene.today is None:
-            return "Another week"
-        left = sum(1 for item in scene.week.on_day(scene.today) if item.live and item.end > scene.minute)
-        return f"{plural(left, 'thing')} left today" if left else "Nothing left today"
-
     def _empty_title(self, scene: Scene) -> str:
-        if scene.today is None:
+        day = self.shown_day(scene)
+        if day is None:
             return "Day screens show today"
-        return scene.week.leftover_parts(scene.today)[1]
+        return scene.week.leftover_parts(day)[1]
 
     def _words(
         self, scene: Scene, item: Occurrence | None, is_now: bool, has_current: bool
     ) -> tuple[str, str]:
-        if scene.today is None:
+        day = self.shown_day(scene)
+        if day is None:
             return "Not this week", "Go back to planning and open this week to see today."
+        if day != scene.today:
+            if item is None:
+                return "Nothing planned", ""
+            return "Then", range_label(item.start, item.end)
         if item is None:
             heading, _title, line = scene.week.leftover_parts(scene.today)
             tomorrow = scene.week.on_day(scene.today + 1)
@@ -562,37 +706,32 @@ class OneThingView(LayoutView):
         row = QHBoxLayout()
         row.setSpacing(scene.px(SPACING[2]))
         row.addStretch()
-        for entry in day_buttons(self, scene, item, "one"):
+        on_today = self._on_today(scene)
+        for entry in day_buttons(self, scene, item if on_today else None, "one", on_today):
             row.addWidget(entry)
         row.addStretch()
         return row
 
     def _fit(self) -> None:
-        """The ring as large as the window allows, up to its size in the mock-up. Then's rows give way
-        from the bottom before the ring goes under RING_ROOMY, so a short window keeps the countdown."""
-        ring, then = self._ring, self._then
-        if ring is None or then is None:
+        """Keep the ring at the demo's width tier and let the Then list scroll after four rows."""
+        ring, then, scene = self._ring, self._then, self._scene
+        if ring is None or then is None or scene is None:
             return
-        scale = self._scene.scale if self._scene else 1.0
         for child in self.findChildren(QWidget):
             child.ensurePolished()
-        margins = self._root.contentsMargins()
-        across = self.width() - margins.left() - margins.right()
-        ring.setFixedSize(RING_MIN, RING_MIN)
-        shown = len(self._rows)
-        while True:
-            for index, row in enumerate(self._rows):
-                row.setVisible(index < shown)
-            then.setVisible(shown > 0)
-            self._root.invalidate()
-            others = self._root.totalMinimumSize().height() - RING_MIN
-            side = min(across, round(RING_MAX * scale), self.height() - others)
-            if shown == 0 or side >= round(RING_ROOMY * scale):
-                break
-            shown -= 1
-        side = max(side, RING_MIN)
-        ring.setFixedSize(side, side)
-        then.setFixedWidth(max(min(across, round(RING_MAX * scale)), 0))
+        if self.width() >= 1440:
+            wanted = RING_MAX
+        elif self.width() >= 1280:
+            wanted = 320
+        else:
+            wanted = 200 if scene.scale > 1 else 280
+        usable = max(self._main.height() - scene.px(32), RING_MIN)
+        ring.setFixedSize(min(wanted, usable), min(wanted, usable))
+        contents = then.widget()
+        head = contents.findChild(QLabel, "oneThenLabel").sizeHint().height() + scene.px(SPACING[1]) + 1
+        rows = contents.findChildren(QFrame, "oneRow")
+        row_height = max([44, *(row.sizeHint().height() for row in rows)])
+        then.setMaximumHeight(head + THEN_ROWS * row_height)
         self._fit_title()
 
     def _fit_title(self) -> None:

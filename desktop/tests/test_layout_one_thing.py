@@ -26,7 +26,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 
     from desktop.native.layouts.base import Scene, rules
-    from desktop.native.layouts.one_thing import RING_ROOMY, DayBar, OneThingView, label_minutes
+    from desktop.native.layouts.one_thing import DayBar, OneThingView, label_minutes
     from desktop.native.layouts.registry import options_for, tokens_for
     from desktop.native.look import resolved_palette
     from desktop.native.motion import apply_ui_effects, duration
@@ -66,7 +66,9 @@ def shown(
 
 
 def says(view: OneThingView) -> tuple[str, str, str]:
-    return tuple(view.findChild(QLabel, name).text() for name in ("oneLabel", "oneTitle", "oneLine"))
+    # The title breaks onto a second line when the demo's smaller ring needs it; the words are what count.
+    label, title, line = (view.findChild(QLabel, name).text() for name in ("oneLabel", "oneTitle", "oneLine"))
+    return label, " ".join(title.split()), line
 
 
 def counts(view: OneThingView) -> tuple[str, float]:
@@ -91,7 +93,12 @@ def then(view: OneThingView) -> list[str]:
 
 
 def buttons(view: OneThingView) -> list[str]:
-    return [button.objectName() for button in view.findChildren(QPushButton)]
+    # The day letters under the bar are buttons too; they are checked by their own tests.
+    return [
+        button.objectName()
+        for button in view.findChildren(QPushButton)
+        if not button.objectName().startswith("oneDay")
+    ]
 
 
 def press(view: OneThingView, key: Qt.Key) -> None:
@@ -102,8 +109,8 @@ def test_during_school_it_counts_down_what_is_left_of_it(qapp: QApplication) -> 
     view = shown(qapp, "13:40")
     assert says(view) == ("Now", "School", "08:00–14:30")
     assert counts(view) == ("50", round(50 / 60, 3))
-    assert view.findChild(QLabel, "oneDate").text() == "Now 13:40"
-    assert view.findChild(QLabel, "oneLeft").text() == "4 things left today"
+    # The demo's screen A has no date or count line; the Then list heads itself "Later today".
+    assert view.findChild(QLabel, "oneThenLabel").text() == "Later today"
     assert then(view) == ["18:00 Dinner 30 min", "18:45 Essay-1 1 h", "20:00 Chem-1 1 h 30 min"]
 
 
@@ -189,15 +196,17 @@ def test_between_blocks_it_says_what_is_next_and_when(qapp: QApplication) -> Non
     assert says(shown(qapp, "15:00")) == ("Up next", "Dinner", "18:00–18:30")
 
 
+def full_title(view: OneThingView) -> str:
+    """The ring shortens a long title with an ellipsis; the whole words are its accessible name."""
+    return view.findChild(QLabel, "oneTitle").accessibleName()
+
+
 def test_when_the_day_is_over_it_says_what_tomorrow_starts_with(qapp: QApplication) -> None:
     view = shown(qapp, "22:30")
-    assert says(view) == (
-        "Nothing else scheduled today",
-        "Nothing else scheduled today",
-        "Tomorrow starts with School at 08:00",
-    )
-    # Said once: the heading would only repeat the title inside the ring.
-    assert view.findChild(QLabel, "oneLabel").isVisibleTo(view) is False
+    assert says(view)[0] == "Nothing left today"
+    assert full_title(view) == "Nothing else scheduled today"
+    assert says(view)[2] == "Tomorrow starts with School at 08:00"
+    assert view.findChild(QLabel, "oneLabel").isVisibleTo(view) is True
     assert counts(view) == ("", 0.0)
     assert then(view) == []
     assert buttons(view) == ["oneBack"]
@@ -205,7 +214,7 @@ def test_when_the_day_is_over_it_says_what_tomorrow_starts_with(qapp: QApplicati
 
 def test_in_another_week_it_does_not_pretend_to_know_today(qapp: QApplication) -> None:
     view = shown(qapp, "13:40", today=None)
-    assert says(view)[:2] == ("Not this week", "Day screens show today")
+    assert says(view) == ("Not this week", "Day screens show today", "")
     assert buttons(view) == ["oneBack"]
 
 
@@ -307,8 +316,8 @@ def test_poster_counts_down_in_the_students_accent_not_0_16s_orange(qapp: QAppli
 
 
 def test_both_labels_of_a_shared_rule_get_its_colour(qapp: QApplication) -> None:
-    view = shown(qapp, "13:40", colour="paper")
-    for name in ("oneDate", "oneLeft"):
+    view = shown(qapp, "19:00", colour="paper")
+    for name in ("oneEvening", "oneWaiting"):
         picture = view.findChild(QLabel, name).grab().toImage()
         inked = {
             picture.pixelColor(x, y).name() for x in range(picture.width()) for y in range(picture.height())
@@ -379,15 +388,17 @@ def test_in_a_short_window_then_gives_way_before_the_ring_gets_small(qapp: QAppl
     roomy = shown(qapp, "13:40")
     assert len(then(roomy)) == 3
     short = shown(qapp, "13:40", size=(1366, 560))
-    assert then(short) == []
-    assert short.findChild(CountdownRing).width() >= RING_ROOMY
+    assert then(short) == then(roomy)
+    assert short.findChild(CountdownRing).width() == 320
 
 
 def test_with_no_countdown_the_ring_is_quiet_and_says_how_long_is_free(qapp: QApplication) -> None:
     """#25: the empty state drew a full minute ring with 0 / 15 / 30 / 45 and twelve ticks though nothing
     counts down, and said "Nothing else scheduled today" twice. At 21:40 nothing is left before 22:00."""
     view = shown(qapp, "21:40")
-    assert says(view) == ("Free until 22:00", "Nothing else scheduled today", "20 min free")
+    assert says(view)[0] == "Nothing left today"
+    assert full_title(view) == "Nothing else scheduled today"
+    assert says(view)[2] == "20 min free"
     assert ring_of(view).scale() == (0, ()), "no minute scale when no countdown runs"
     assert counts(view)[0] == ""
     # With a countdown running the scale is there.
