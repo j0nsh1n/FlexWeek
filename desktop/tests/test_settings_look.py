@@ -11,13 +11,15 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QPoint
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QColor
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QSpinBox, QWidget
 
 from desktop.native import settings as settings_module
 from desktop.native.look import ACCENT_COLORS, look_menu_token, resolved_palette
 from desktop.native.settings import SETTINGS_COLUMN, SettingsPage
+from desktop.native.tokens import contrast
 from desktop.native.widgets import Segmented, Swatches, Switch
 from desktop.native.window import NativeWindow
 from desktop.tests.window_support import qapp, server, signed_out, window  # noqa: F401
@@ -87,6 +89,89 @@ def test_look_is_light_dark_or_system_and_the_other_looks_are_under_more_looks(
     main.buttons()[1].click()
     assert page.updates()["theme_pack"] == "dark-frost"
     assert not any(card.is_selected() for card in more.cards), "no picture is marked once Dark is"
+    page.close_page()
+
+
+def test_look_cards_announce_selection_position_and_wearing_badge(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:  # noqa: F811
+    page = open_settings(qapp, window)
+    card = next(card for card in page.look.more.cards if card.accessibleName() == "High contrast")
+    assert (
+        card.accessibleDescription()
+        == f"{page.look.more.cards.index(card) + 1} of {len(page.look.more.cards)}"
+    )
+    card.chosen.emit()
+    assert card.accessibleName() == "High contrast, selected"
+    assert (
+        card.accessibleDescription()
+        == f"{page.look.more.cards.index(card) + 1} of {len(page.look.more.cards)}"
+    )
+    assert card.note.text() == "Wearing"
+    # The page redraws what its style sheet cannot (the badge's colours) on the next turn of the event loop.
+    qapp.processEvents()
+    # The badge is a 24 px circle 10 px down and 12 px in from the card's top right, with a 16 px check in
+    # its middle. Sampled on the circle around the check, on all four sides; the preview picture under it
+    # must not be the accent at all four, or the check would pass without a badge.
+    accent = palette_of(window)["accent"]
+    w = card.width()
+    ring = [(w - 34, 22), (w - 24, 12), (w - 14, 22), (w - 24, 32)]
+    worn = card.grab().toImage()
+    assert [worn.pixelColor(x, y).name() for x, y in ring] == [accent] * 4
+    card.select(False)
+    plain = card.grab().toImage()
+    assert any(plain.pixelColor(x, y).name() != accent for x, y in ring)
+    card.select(True)
+    page.close_page()
+
+
+def test_a_look_card_reached_by_keyboard_has_a_ring_outside_its_face(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    """N14/Q8: the focused card gets a 2 px ring with a 2 px gap outside its face, reading at 3 to 1 on what
+    is behind it; a click gives no ring."""
+    page = open_settings(qapp, window)
+    grid = page.look.more
+    grid.ensurePolished()
+
+    def column(card: QWidget) -> tuple[QColor, QColor, QColor]:
+        qapp.processEvents()
+        picture = grid.grab().toImage()
+        middle = card.y() + card.height() // 2
+        # 4 px out is the ring's middle, 1 px out the gap, 9 px out the background between cards.
+        return tuple(picture.pixelColor(card.x() - out, middle) for out in (4, 1, 9))
+
+    tabbed, clicked = grid.cards[1], grid.cards[2]
+    tabbed.setFocus(Qt.FocusReason.TabFocusReason)
+    ring, gap, behind = column(tabbed)
+    assert contrast(ring.name(), behind.name()) >= 3.0, (ring.name(), behind.name())
+    assert gap.name() == behind.name()
+    clicked.setFocus(Qt.FocusReason.MouseFocusReason)
+    for card in (tabbed, clicked):
+        edge, _, ground = column(card)
+        assert edge.name() == ground.name()
+    page.close_page()
+
+
+def test_arrows_home_and_end_move_between_look_cards_without_wearing_one(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    """N14: the cards are one group to the keyboard. Arrows and Home/End move the focus; only Space or Enter
+    wears a look."""
+    page = open_settings(qapp, window)
+    cards = page.look.more.cards
+    worn = page.look_choice()
+    cards[0].setFocus(Qt.FocusReason.TabFocusReason)
+    QTest.keyClick(cards[0], Qt.Key.Key_Right)
+    assert cards[1].hasFocus()
+    QTest.keyClick(cards[1], Qt.Key.Key_End)
+    assert cards[-1].hasFocus()
+    QTest.keyClick(cards[-1], Qt.Key.Key_Home)
+    assert cards[0].hasFocus()
+    assert page.look_choice() == worn
     page.close_page()
 
 

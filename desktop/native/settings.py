@@ -8,7 +8,7 @@ from copy import deepcopy
 from pathlib import Path
 from uuid import uuid4
 
-from PySide6.QtCore import QEvent, QMargins, QObject, QSize, Qt, QTime, QTimer, QUrl, Signal
+from PySide6.QtCore import QEvent, QMargins, QObject, QRectF, QSize, Qt, QTime, QTimer, QUrl, Signal
 from PySide6.QtGui import (
     QColor,
     QDesktopServices,
@@ -19,6 +19,7 @@ from PySide6.QtGui import (
     QPainter,
     QPaintEvent,
     QPalette,
+    QPen,
     QPixmap,
     QShowEvent,
 )
@@ -80,6 +81,7 @@ from desktop.native.look import (
     look_motion,
     look_overrides,
     parse_look_menu_token,
+    readable_focus_edge,
     resolved_palette,
     sanitize_look,
     text_scale,
@@ -357,18 +359,107 @@ def _section_page(title: str, cards: tuple[QWidget, ...]) -> QWidget:
     return page
 
 
+BADGE_PX = 24
+
+
 class LookCard(ChoiceCard):
     """A look's card. The one worn is ringed and says so inside the card. Every card keeps that line
     (a space when it is not worn), so wearing another look moves nothing on the page."""
 
+    # ChoiceCard's own __init__ calls select() before this class's __init__ can name the card.
+    _look_name = ""
+
     def __init__(self, name: str, width: int) -> None:
         super().__init__(name, "", width)
+        self._look_name = name
         self.note.setVisible(True)
+        # The worn card's check badge. A child of its own, outside the layout and raised, because the card's
+        # picture is a child too and would paint over anything the card drew itself.
+        self.badge = QLabel(self)
+        self.badge.setObjectName("lookCardBadge")
+        self.badge.setFixedSize(BADGE_PX, BADGE_PX)
+        self.badge.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.select(False)
+
+    def set_marks(self, fill: str, ink: str) -> None:
+        ratio = self.devicePixelRatioF()
+        drawn = QPixmap(round(BADGE_PX * ratio), round(BADGE_PX * ratio))
+        drawn.setDevicePixelRatio(ratio)
+        drawn.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(drawn)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(fill))
+        painter.drawEllipse(QRectF(0, 0, BADGE_PX, BADGE_PX))
+        inset = (BADGE_PX - 16) // 2
+        painter.drawPixmap(inset, inset, icon_pixmap("check", ink, 16, ratio))
+        painter.end()
+        self.badge.setPixmap(drawn)
+
+    def resizeEvent(self, event: QEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self.badge.move(self.width() - BADGE_PX - 12, 10)
+        self.badge.raise_()
 
     def select(self, on: bool) -> None:
         super().select(on)
+        if hasattr(self, "badge"):
+            self.badge.setVisible(on)
+            self.badge.raise_()
         self.note.setText(WORN if on else " ")
-        self.setAccessibleDescription(WORN if on else "")
+        self.setAccessibleName(f"{self._look_name}, selected" if on else self._look_name)
+
+    def set_position(self, position: int, total: int) -> None:
+        self.setAccessibleDescription(f"{position} of {total}")
+
+    def focusInEvent(self, event: QEvent) -> None:  # noqa: N802
+        super().focusInEvent(event)
+        self.setProperty(
+            "keyboardFocus",
+            event.reason()
+            in (
+                Qt.FocusReason.TabFocusReason,
+                Qt.FocusReason.BacktabFocusReason,
+                Qt.FocusReason.ShortcutFocusReason,
+                Qt.FocusReason.OtherFocusReason,
+            ),
+        )
+        self.parentWidget().update()
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+        grid = self.parentWidget()
+        if event.key() in (
+            Qt.Key.Key_Left,
+            Qt.Key.Key_Right,
+            Qt.Key.Key_Up,
+            Qt.Key.Key_Down,
+            Qt.Key.Key_Home,
+            Qt.Key.Key_End,
+        ):
+            positions = [grid._grid.getItemPosition(index)[:2] for index in range(len(grid.cards))]
+            current = grid.cards.index(self)
+            row, column = positions[current]
+            if event.key() == Qt.Key.Key_Home:
+                target = 0
+            elif event.key() == Qt.Key.Key_End:
+                target = len(grid.cards) - 1
+            else:
+                dr, dc = {
+                    Qt.Key.Key_Left: (0, -1),
+                    Qt.Key.Key_Right: (0, 1),
+                    Qt.Key.Key_Up: (-1, 0),
+                    Qt.Key.Key_Down: (1, 0),
+                }[event.key()]
+                candidates = [
+                    (abs(r - (row + dr)) + abs(c - (column + dc)), i)
+                    for i, (r, c) in enumerate(positions)
+                    if (dr and r == row + dr) or (dc and c == column + dc)
+                ]
+                target = min(candidates)[1] if candidates else current
+            grid.cards[target].setFocus(Qt.FocusReason.OtherFocusReason)
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
 
 class LookGrid(CardGrid):
@@ -379,6 +470,39 @@ class LookGrid(CardGrid):
     def __init__(self, card_width: int, gap: int, draw: Callable[[ChoiceCard, int], None]) -> None:
         super().__init__(card_width, gap)
         self._draw = draw
+        self._ring = QColor("transparent")
+        self._badge: tuple[str, str] | None = None
+
+    def set_marks(self, ring: str, badge_fill: str, badge_ink: str) -> None:
+        self._ring = QColor(ring)
+        self._badge = (badge_fill, badge_ink)
+        for card in self.cards:
+            if isinstance(card, LookCard):
+                card.set_marks(badge_fill, badge_ink)
+        self.update()
+
+    def set_cards(self, cards: list[ChoiceCard]) -> None:
+        super().set_cards(cards)
+        for position, card in enumerate(self.cards, 1):
+            if isinstance(card, LookCard):
+                card.set_position(position, len(self.cards))
+                # Cards rebuilt after the page was dressed (a look saved or deleted) take its badge colours.
+                if self._badge is not None:
+                    card.set_marks(*self._badge)
+
+    def paintEvent(self, event: object) -> None:  # noqa: N802
+        super().paintEvent(event)
+        card = next((item for item in self.cards if item.hasFocus()), None)
+        if card is None or not bool(card.property("keyboardFocus")):
+            return
+        corner = card.mapTo(self, card.rect().topLeft())
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(self._ring, 2))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(
+            QRectF(corner.x() - 4, corner.y() - 4, card.width() + 8, card.height() + 8), 8, 8
+        )
 
     def _place(self, room: int) -> None:
         super()._place(room)
@@ -1235,6 +1359,9 @@ class SettingsPage(QWidget):
             + PREFS_NAV_PAD
         )
         ring = palette["accent"]
+        focus_ring = readable_focus_edge(palette)
+        for grid in (self.look.more, self.look.yours):
+            grid.set_marks(focus_ring, palette["accent"], palette["accent_ink"])
         self.alarm_list.setStyleSheet(
             f"QListWidget#alarmList {{ border: 2px solid transparent; border-radius: 8px; padding: 2px; }}"
             f"QListWidget#alarmList:focus {{ border-color: {ring}; }}"
