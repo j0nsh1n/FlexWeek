@@ -69,7 +69,8 @@ EDGE_PX = 7
 # Decision 14 of 0.17: a 3-pixel category edge, and the words kept this far inside a block.
 EDGE_WIDTH = 3
 RADIUS_BLOCK = RADIUS_CONTROL
-TEXT_LEFT, TEXT_RIGHT, TEXT_TOP = 8, 5, 3
+INNER_PAD = 4
+TEXT_LEFT, TEXT_RIGHT, TEXT_TOP = 8, INNER_PAD, INNER_PAD
 # Blocks that share a time are half a column or less, so their words keep this much less at each side.
 SHARED_TRIM = 2
 # So do blocks narrower than this, on the designs that set `trims_narrow`: a week column at the
@@ -445,8 +446,8 @@ class BlockPainter:
         trim = SHARED_TRIM if drawn.columns > 1 or (self.trims_narrow and rect.width() < NARROW_BLOCK) else 0
         left, right = TEXT_LEFT - trim, TEXT_RIGHT - trim
         start = QPointF(rect.left() + left, rect.top() + TEXT_TOP)
-        room = QRectF(start, QPointF(rect.right() - right, rect.bottom() - 1))
-        room = room.intersected(visible.adjusted(TEXT_TOP, TEXT_TOP, -right, -1))
+        room = QRectF(start, QPointF(rect.right() - right, rect.bottom() - INNER_PAD))
+        room = room.intersected(visible.adjusted(INNER_PAD, INNER_PAD, -right, -INNER_PAD))
         paper = fill if fill is not None else self.c("window")
         muted = QColor(block_time_colour(ink.name(), paper.name()))
         book = self._book_colour(drawn, ink, paper, edge)
@@ -456,19 +457,36 @@ class BlockPainter:
             words = drawn.detail if fits else ""
             lay = held_layout(drawn.title, words, title_font, small, room, book is not None)
             return _paint_layout(
-                painter, lay, title_font, small, ink, self.c("error") if refused else muted, book,
+                painter,
+                lay,
+                title_font,
+                small,
+                ink,
+                self.c("error") if refused else muted,
+                book,
                 icon_name=category_icon(drawn.category) or BOOK,
+                block=rect,
             )
         # One line may take the block's whole height: at Large text a half-hour on the week is one
         # caption line exactly, and High contrast's outlined Dinner said nothing, an empty box.
-        tight = QRectF(room.left(), max(rect.top(), visible.top(), room.top() - TEXT_TOP), room.width(), 0)
+        tight = QRectF(room.left(), room.top(), room.width(), 0)
         tight.setBottom(min(rect.bottom(), visible.bottom()))
         shown = (self.measures["show_times"], self.measures["show_lengths"])
         lay = block_layout(
             drawn, title_font, small, room, tight=tight, wide=self.wide, book=book is not None, shown=shown
         )
-        return _paint_layout(painter, lay, title_font, small, ink, muted, book, muted,
-                             icon_name=category_icon(drawn.category) or BOOK)
+        return _paint_layout(
+            painter,
+            lay,
+            title_font,
+            small,
+            ink,
+            muted,
+            book,
+            muted,
+            icon_name=category_icon(drawn.category) or BOOK,
+            block=rect,
+        )
 
     def _book_colour(self, drawn: Drawn, ink: QColor, paper: QColor, edge: QColor | None) -> QColor | None:
         """A category icon is the category's mark, moved only as far as 4.5 to 1 on its own block takes
@@ -990,7 +1008,9 @@ def _paint_layout(
     muted: QColor,
     book: QColor | None,
     pin: QColor | None = None,
-    *, icon_name: str = BOOK,
+    *,
+    icon_name: str = BOOK,
+    block: QRectF | None = None,
 ) -> list[QRectF]:
     """Writes the lines and draws their icons, and returns where: each line's words as wide as they
     are, not the room they were given, and each icon."""
@@ -1009,8 +1029,12 @@ def _paint_layout(
         if line.book and book is not None:
             left = line.box.left() - _book_room(metrics)
             side = book_px(metrics)
-            # A line shorter than the icon lets it hang below, never above the block's top.
             top = line.box.top() + max(metrics.height() - side, 0) / 2
+            if block is not None:
+                left = max(block.left() + INNER_PAD, left)
+                top = max(block.top() + INNER_PAD, top)
+                if top + side > block.bottom() - INNER_PAD:
+                    top = block.bottom() - INNER_PAD - side
             painter.drawPixmap(QPointF(left, top), icons.pixmap(icon_name, book.name(), side, ratio))
             written.append(QRectF(left, top, side, side))
         if line.pin and pin is not None:
