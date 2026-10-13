@@ -8,7 +8,7 @@ drag the thing itself onto it, to put it later, as Running late does.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QRect, QRectF, Qt, Signal
+from PySide6.QtCore import QRect, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QFont, QFontMetrics, QKeyEvent, QMouseEvent, QPainter, QPen, QResizeEvent
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
@@ -619,6 +619,15 @@ class OneThingView(LayoutView):
         title.setToolTip(words if shown != words else "")
         title.setAccessibleName(words)
         ring.lines_changed()
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802
+        """With the ring at its smallest, not at the size the window's height last gave it: the ring
+        is fixed at that size, so reporting it made the window's own minimum follow its height and a
+        tall window could not be dragged shorter in one go."""
+        hint = super().minimumSizeHint()
+        if self._ring is None:
+            return hint
+        return QSize(hint.width(), hint.height() - max(self._ring.height() - RING_MIN, 0))
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)

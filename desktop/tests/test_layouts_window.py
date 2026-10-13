@@ -1044,6 +1044,27 @@ def test_every_layout_fits_a_laptop_at_large_text_once_signed_in(
     assert window._auth_holder.minimumHeight() > window._auth_card.sizeHint().height()
 
 
+def test_my_day_lets_a_tall_window_shrink_to_a_laptop_at_large_text(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """My day's ring is fixed at the size the window's height last gave it. Counted in the window's own
+    minimum, a window dragged tall could not come back to 768 px in one go: each resize left it 50 px
+    taller than asked, and the check above passed or failed by how tall the window happened to be."""
+    from desktop.native.look import sanitize_look
+
+    knobs = {**window._look.get("knobs", {}), "text": "large"}
+    window._look = sanitize_look({**window._look, "knobs": knobs})
+    window._apply_appearance()
+    window._day_mode = True
+    window._layout = {"main": "classic", "day": "one", "options": {}}
+    window._on_week()
+    window.resize(1100, 1000)
+    qapp.processEvents()
+    window.resize(1100, 700)
+    qapp.processEvents()
+    assert window.height() == 700
+
+
 def test_the_dialog_fits_a_laptop_with_every_level_open(qapp: QApplication) -> None:
     busiest = {
         "main": "timeline",
