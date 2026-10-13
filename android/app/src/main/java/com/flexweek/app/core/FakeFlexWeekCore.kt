@@ -209,6 +209,227 @@ class FakeFlexWeekCore : FlexWeekCore {
 
     override fun isPaired(): Boolean = paired
 
+    private var planPreviewId: String? = null
+    private var planPreviewPlacedIds: List<String> = emptyList()
+    private var planPreviewChipIds: List<String> = emptyList()
+    private var lastPlanNewIds: Set<String> = emptySet()
+    private var runningLatePreviewId: String? = null
+
+    override fun saveHomework(draftJson: String, opId: String): String {
+        val draft = JSONObject(draftJson)
+        val title = draft.optString("title", "").trim()
+        if (title.isEmpty()) {
+            return jsonString {
+                put("ok", false)
+                put("error", "Give the homework a title.")
+            }
+        }
+        if (title.length > 80) {
+            return jsonString {
+                put("ok", false)
+                put("error", "Title must be 80 characters or fewer.")
+            }
+        }
+        val est = draft.optInt("estimate_min", 0)
+        if (est <= 0 || est % 15 != 0) {
+            return jsonString {
+                put("ok", false)
+                put("error", "Choose a length in 15-minute steps.")
+            }
+        }
+        val dueLabel = draft.optString("due", "Fri 9 Oct")
+        val dueIndex =
+            when (dueLabel) {
+                "Fri 9 Oct" -> 4
+                "Sun 11 Oct" -> 6
+                else -> 4
+            }
+        val id = "hw_${System.nanoTime()}"
+        noTime.add(
+            DemoSchedule.NoTimeChip(
+                id = id,
+                title = title,
+                lengthMinutes = est,
+                dueDayIndex = dueIndex,
+            ),
+        )
+        return jsonString {
+            put("ok", true)
+            put("id", id)
+            put("message", "$title added. No time yet.")
+        }
+    }
+
+    override fun planWeek(weekStart: String): String {
+        if (noTime.isEmpty()) {
+            return jsonString {
+                put("ok", false)
+                put("error", "Nothing to plan.")
+            }
+        }
+        val previewId = UUID.randomUUID().toString()
+        planPreviewId = previewId
+        val placedIds = mutableListOf<String>()
+        val chipIds = mutableListOf<String>()
+        val lines = JSONArray()
+        var placedMinutes = 0
+        for (chip in noTime.toList()) {
+            val slot = DemoSchedule.fakePlace(chip)
+            if (slot != null) {
+                val blockId = "planned_${chip.id}"
+                placedIds += blockId
+                chipIds += chip.id
+                placedMinutes += chip.lengthMinutes
+                lines.put(
+                    jsonObject {
+                        put("title", chip.title)
+                        put("detail", "")
+                        put("right", "${DemoSchedule.dayLabels[slot.first]} ${DemoSchedule.formatTime(slot.second)}")
+                    },
+                )
+            } else {
+                lines.put(
+                    jsonObject {
+                        put("title", chip.title)
+                        put("detail", "")
+                        put(
+                            "why",
+                            "No ${DemoSchedule.formatLength(chip.lengthMinutes)} gap before " +
+                                "${DemoSchedule.dayLabels[chip.dueDayIndex]} ${DemoSchedule.dayDates[chip.dueDayIndex]}. " +
+                                "Move something, or allow splitting on your computer.",
+                        )
+                        put("right", "not placed")
+                    },
+                )
+            }
+        }
+        lines.put(
+            jsonObject {
+                put("title", "History essay")
+                put("detail", "already had a time")
+                put("right", "Thu ${DemoSchedule.formatTime(19 * 60)}")
+            },
+        )
+        planPreviewPlacedIds = placedIds
+        planPreviewChipIds = chipIds
+        val placedCount = placedIds.size
+        val leftCount = noTime.size - placedCount
+        return jsonString {
+            put("ok", true)
+            put("preview_id", previewId)
+            put(
+                "summary",
+                "Placed $placedCount of ${noTime.size} · ${DemoSchedule.formatLength(placedMinutes)}" +
+                    if (leftCount == 0) " · nothing left over" else "",
+            )
+            put("lines", lines)
+            put("placed_ids", JSONArray(placedIds))
+        }
+    }
+
+    override fun acceptPlan(previewId: String, opId: String): String {
+        if (planPreviewId != previewId) {
+            return jsonString {
+                put("ok", false)
+                put("error", "That plan preview expired. Plan again.")
+            }
+        }
+        val chipsById = noTime.associateBy { it.id }
+        for (chipId in planPreviewChipIds) {
+            val chip = chipsById[chipId] ?: continue
+            val slot = DemoSchedule.fakePlace(chip) ?: continue
+            val blockId = "planned_$chipId"
+            blocks.add(
+                DemoSchedule.Block(
+                    id = blockId,
+                    title = chip.title,
+                    category = "hw",
+                    dayIndex = slot.first,
+                    startMinute = slot.second,
+                    lengthMinutes = chip.lengthMinutes,
+                    homework = true,
+                ),
+            )
+            noTime.removeAll { it.id == chipId }
+        }
+        lastPlanNewIds = planPreviewPlacedIds.toSet()
+        planPreviewId = null
+        planPreviewPlacedIds = emptyList()
+        planPreviewChipIds = emptyList()
+        return jsonString { put("ok", true) }
+    }
+
+    override fun runningLate(dayIndex: Int, minutes: Int, opId: String): String {
+        val previewId = UUID.randomUUID().toString()
+        runningLatePreviewId = previewId
+        val moves = JSONArray()
+        moves.put(
+            jsonObject {
+                put("title", "History essay")
+                put("detail", "7–8 PM → 7:30–8:30 PM")
+                put("why", "Soccer runs 30 min over, so the essay starts after it ends.")
+            },
+        )
+        moves.put(
+            jsonObject {
+                put("title", "Soccer")
+                put("detail", "stays")
+                put("why", "Fixed time. It is not moved, only finished later.")
+            },
+        )
+        return jsonString {
+            put("ok", true)
+            put("preview_id", previewId)
+            put("minutes", minutes)
+            put("moves", moves)
+        }
+    }
+
+    override fun acceptRunningLate(previewId: String, opId: String): String {
+        if (runningLatePreviewId != previewId) {
+            return jsonString {
+                put("ok", false)
+                put("error", "That preview expired.")
+            }
+        }
+        runningLatePreviewId = null
+        return jsonString { put("ok", true) }
+    }
+
+    override fun weekShape(weekStart: String): String {
+        val firstHour = 8f
+        val lastHour = 22f
+        val span = lastHour - firstHour
+        val days = JSONArray()
+        for (d in 0..6) {
+            val dayBlocks = blocks.filter { it.dayIndex == d }.sortedBy { it.startMinute }
+            val bars = JSONArray()
+            for (b in dayBlocks) {
+                val top = (b.startMinute / 60f - firstHour) / span
+                val height = b.lengthMinutes / 60f / span
+                bars.put(
+                    jsonObject {
+                        put("category", b.category)
+                        put("top", top.coerceIn(0f, 1f))
+                        put("height", height.coerceAtLeast(0.02f))
+                        put("is_new", b.id in lastPlanNewIds)
+                    },
+                )
+            }
+            days.put(
+                jsonObject {
+                    put("index", d)
+                    put("is_today", d == DemoSchedule.TODAY_INDEX)
+                    put("bars", bars)
+                },
+            )
+        }
+        return jsonString {
+            put("title", "5 – 11 Oct")
+            put("days", days)
+        }
+    }
+
     fun setLeadMinutes(minutes: Int) {
         leadMinutes = minutes
     }
@@ -243,6 +464,14 @@ class FakeFlexWeekCore : FlexWeekCore {
         }
     }
 
+    private fun homeworkLeftToday(nowMinute: Int): Boolean =
+        blocks.any { b ->
+            b.dayIndex == DemoSchedule.TODAY_INDEX &&
+                b.homework &&
+                !isDone(b) &&
+                b.startMinute + b.lengthMinutes > nowMinute
+        }
+
     private fun buildNowRow(
         block: DemoSchedule.Block,
         isNow: Boolean,
@@ -256,6 +485,7 @@ class FakeFlexWeekCore : FlexWeekCore {
             } else {
                 "in ${block.startMinute - nowMinute} min"
             }
+        val hwLeft = homeworkLeftToday(nowMinute)
         return jsonObject {
             put("type", "now")
             put("id", block.id)
@@ -268,6 +498,8 @@ class FakeFlexWeekCore : FlexWeekCore {
                     DemoSchedule.formatLength(block.lengthMinutes),
             )
             put("homework", block.homework)
+            put("show_finish_focus", block.homework)
+            put("show_running_late", hwLeft)
             if (next != null) {
                 put("then_title", next.title)
                 put("then_time", DemoSchedule.formatTime(next.startMinute))

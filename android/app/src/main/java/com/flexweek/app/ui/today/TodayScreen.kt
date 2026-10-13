@@ -49,6 +49,10 @@ fun TodayScreen(
     onToggleHomework: (String) -> Unit,
     onUndo: () -> Unit,
     onDismissSnack: () -> Unit,
+    onFinishHomework: (String) -> Unit = onToggleHomework,
+    onStartFocus: () -> Unit = {},
+    onRunningLate: () -> Unit = {},
+    v2Extras: TodayV2Extras? = null,
 ) {
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -80,7 +84,13 @@ fun TodayScreen(
                 state.rows.forEach { row ->
                     when (row) {
                         is AgendaRow.Item -> AgendaItemRow(row, onToggleHomework)
-                        is AgendaRow.Now -> NowRow(row)
+                        is AgendaRow.Now ->
+                            NowRow(
+                                row,
+                                onFinishHomework,
+                                onStartFocus,
+                                onRunningLate,
+                            )
                         AgendaRow.NothingLeft ->
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
@@ -99,7 +109,21 @@ fun TodayScreen(
                             )
                     }
                 }
-                NoTimeSection(state)
+                NoTimeSection(state, v2Extras?.onPlan)
+            }
+        }
+        v2Extras?.let { extras ->
+            if (extras.showFab) {
+                Button(
+                    onClick = extras.onAdd,
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 16.dp, bottom = 88.dp)
+                            .height(56.dp),
+                ) {
+                    Text("+ Add")
+                }
             }
         }
         state.snackbar?.let { snack ->
@@ -113,6 +137,12 @@ fun TodayScreen(
     }
 }
 
+data class TodayV2Extras(
+    val showFab: Boolean,
+    val onAdd: () -> Unit,
+    val onPlan: () -> Unit,
+)
+
 @Composable
 private fun DayChipRow(days: List<DayChip>, onSelectDay: (Int) -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -124,9 +154,10 @@ private fun DayChipRow(days: List<DayChip>, onSelectDay: (Int) -> Unit) {
                         .weight(1f)
                         .heightIn(min = 52.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
                         .then(
-                            if (day.isToday && !selected) {
+                            if (selected) {
+                                Modifier.background(MaterialTheme.colorScheme.primary)
+                            } else if (day.isToday) {
                                 Modifier.border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
                             } else {
                                 Modifier
@@ -159,7 +190,7 @@ private fun DayChipRow(days: List<DayChip>, onSelectDay: (Int) -> Unit) {
                                 if (selected) {
                                     MaterialTheme.colorScheme.onPrimary
                                 } else {
-                                    MaterialTheme.colorScheme.error
+                                    categoryColor("hw")
                                 },
                             ),
                     )
@@ -230,20 +261,41 @@ private fun AgendaItemRow(row: AgendaRow.Item, onToggle: (String) -> Unit) {
 }
 
 @Composable
-private fun NowRow(row: AgendaRow.Now) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        tonalElevation = 1.dp,
+private fun NowRow(
+    row: AgendaRow.Now,
+    onFinishHomework: (String) -> Unit,
+    onStartFocus: () -> Unit,
+    onRunningLate: () -> Unit,
+) {
+    Row(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .padding(vertical = 4.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surface)
                 .border(width = 1.dp, color = MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp)),
     ) {
-        Column(Modifier.padding(14.dp)) {
+        Box(
+            Modifier
+                .width(4.dp)
+                .heightIn(min = 120.dp)
+                .background(MaterialTheme.colorScheme.primary),
+        )
+        Column(Modifier.weight(1f).padding(14.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(row.kick.uppercase(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
-                Text(row.minsLabel, style = MaterialTheme.typography.labelSmall)
+                Text(
+                    row.kick.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    row.minsLabel.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             Text(row.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 4.dp))
             Text(row.whenLine, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -254,10 +306,20 @@ private fun NowRow(row: AgendaRow.Now) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (row.homework) {
+            val acts = row.showFinishFocus || row.showRunningLate
+            if (acts) {
                 Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {}, modifier = Modifier.height(48.dp)) { Text("Homework finished") }
-                    Button(onClick = {}, modifier = Modifier.height(48.dp)) { Text("Start focus") }
+                    if (row.showFinishFocus) {
+                        Button(onClick = { onFinishHomework(row.id) }, modifier = Modifier.height(48.dp)) {
+                            Text("Homework finished")
+                        }
+                        Button(onClick = onStartFocus, modifier = Modifier.height(48.dp)) { Text("Start focus") }
+                    }
+                    if (row.showRunningLate) {
+                        TextButton(onClick = onRunningLate, modifier = Modifier.height(48.dp)) {
+                            Text("Running late")
+                        }
+                    }
                 }
             }
         }
@@ -265,14 +327,26 @@ private fun NowRow(row: AgendaRow.Now) {
 }
 
 @Composable
-private fun NoTimeSection(state: TodayUiState) {
-    Text(
-        if (state.noTimeCount == 0) "No time yet" else "No time yet · ${state.noTimeCount}",
-        style = MaterialTheme.typography.bodyMedium,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 18.dp, bottom = 6.dp),
-    )
+private fun NoTimeSection(state: TodayUiState, onPlan: (() -> Unit)? = null) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 18.dp, bottom = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            if (state.noTimeCount == 0) "No time yet" else "No time yet · ${state.noTimeCount}",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (onPlan != null && state.noTimeCount > 0) {
+            TextButton(onClick = onPlan, modifier = Modifier.height(40.dp)) {
+                Text("Plan ${state.noTimeCount}")
+            }
+        }
+    }
     if (state.noTime.isEmpty()) {
         Text("Everything has a time.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     } else {
@@ -292,12 +366,14 @@ private fun NoTimeSection(state: TodayUiState) {
                 }
             }
         }
-        Text(
-            "Plan these on your computer, or drag them onto a day there. The phone shows what it planned.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp),
-        )
+        if (onPlan == null) {
+            Text(
+                "Plan these on your computer, or drag them onto a day there. The phone shows what it planned.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
     }
 }
 

@@ -49,6 +49,20 @@ class TodayViewModelTest {
     }
 
     @Test
+    fun nowRowOffersRunningLateWhileHomeworkRemains() {
+        core.pairWithCode(DemoSchedule.VALID_PAIR_CODE)
+        val vm = TodayViewModel(core)
+        val beforeSoccer = vm.uiState.rows.filterIsInstance<AgendaRow.Now>().single()
+        assertEquals(true, beforeSoccer.showRunningLate)
+        assertEquals(false, beforeSoccer.showFinishFocus)
+        vm.tick(17 * 60 + 30)
+        val essayUpNext = vm.uiState.rows.filterIsInstance<AgendaRow.Now>().single()
+        assertEquals("essay", essayUpNext.id)
+        assertEquals(true, essayUpNext.showFinishFocus)
+        assertEquals(true, essayUpNext.showRunningLate)
+    }
+
+    @Test
     fun syncStatesSurfaceInSyncLine() {
         core.pairWithCode(DemoSchedule.VALID_PAIR_CODE)
         val vm = TodayViewModel(core)

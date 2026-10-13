@@ -66,6 +66,9 @@ fun FlexWeekTheme(
 }
 
 @Composable
+fun syncOkColor(): Color = if (isSystemInDarkTheme()) OkDark else OkLight
+
+@Composable
 fun categoryColor(category: String): Color {
     val dark = isSystemInDarkTheme()
     return when (category) {

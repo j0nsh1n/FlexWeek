@@ -32,6 +32,8 @@ sealed class AgendaRow {
         val homework: Boolean,
         val thenTitle: String?,
         val thenTime: String?,
+        val showFinishFocus: Boolean,
+        val showRunningLate: Boolean,
     ) : AgendaRow()
 
     data object NothingLeft : AgendaRow()
@@ -116,6 +118,8 @@ object TodayJson {
                                 homework = r.getBoolean("homework"),
                                 thenTitle = r.optString("then_title", null),
                                 thenTime = r.optString("then_time", null),
+                                showFinishFocus = r.optBoolean("show_finish_focus", r.getBoolean("homework")),
+                                showRunningLate = r.getBoolean("show_running_late"),
                             ),
                         )
                     "nothing_left" -> add(AgendaRow.NothingLeft)

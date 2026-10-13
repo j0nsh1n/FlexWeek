@@ -19,6 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.flexweek.app.model.SyncLine
+import com.flexweek.app.ui.theme.syncOkColor
 
 @Composable
 fun SyncLineBar(sync: SyncLine, modifier: Modifier = Modifier) {
@@ -33,7 +34,7 @@ fun SyncLineBar(sync: SyncLine, modifier: Modifier = Modifier) {
             when (sync.state) {
                 "syncing" -> MaterialTheme.colorScheme.primary
                 "unreachable" -> MaterialTheme.colorScheme.onSurfaceVariant
-                else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                else -> syncOkColor()
             }
         Box(
             Modifier
