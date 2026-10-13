@@ -11,9 +11,9 @@ use crate::desk::pyops::{
     order,
 };
 use crate::desk::pyval::{subscript, type_error};
+use crate::desk::weekmodel::clock_text;
 use crate::error::{EngineError, EngineResult};
 use crate::stored::{attribute_error, py_int, py_str, text, truthy, type_name};
-use crate::desk::weekmodel::clock_text;
 use crate::time::{DAY_END_MIN, DAY_START_MIN, SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm};
 
 /// The next quarter hour at or after `now_min`, or None when rounding up reaches midnight.
@@ -809,7 +809,13 @@ pub fn past_problem(
         return Ok(None);
     };
     if target < now || (target == now && start_min < now_min) {
-        let message = match next_choose_slot(now_min) {
+        // An earlier day is over whatever the clock says; only today can offer a later time.
+        let slot = if target < now {
+            None
+        } else {
+            next_choose_slot(now_min)
+        };
+        let message = match slot {
             Some(slot) => format!(
                 "That time has passed. Choose {} or later today, or another day.",
                 clock_text(slot)
@@ -915,12 +921,16 @@ mod tests {
         let at = 15 * 60 + 10;
         let refused = "That time has passed. Choose 15:15 or later today, or another day.";
         assert_eq!(
-            past_problem(week, 1, 16 * 60, thursday, at).unwrap().as_deref(),
+            past_problem(week, 1, 16 * 60, thursday, at)
+                .unwrap()
+                .as_deref(),
             Some(refused),
             "Tuesday of this week"
         );
         assert_eq!(
-            past_problem(week, 3, 15 * 60, thursday, at).unwrap().as_deref(),
+            past_problem(week, 3, 15 * 60, thursday, at)
+                .unwrap()
+                .as_deref(),
             Some(refused),
             "earlier today"
         );
@@ -935,7 +945,9 @@ mod tests {
             "later today"
         );
         assert_eq!(
-            past_problem("2026-09-28", 4, 18 * 60, thursday, at).unwrap().as_deref(),
+            past_problem("2026-09-28", 4, 18 * 60, thursday, at)
+                .unwrap()
+                .as_deref(),
             Some(refused),
             "last week"
         );

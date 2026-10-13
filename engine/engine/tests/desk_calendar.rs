@@ -5,8 +5,8 @@ mod common;
 use common::desk::{fresh_ids, object};
 use flexweek_engine::desk::calendar::{days_through, is_series_checked};
 use flexweek_engine::desk::grid::{
-    apply_block_edit, apply_block_times, create_click_range, due_day_of, due_soon_for, past_problem,
-    span_clash, span_problem, split_occurrence, sunday_due,
+    apply_block_edit, apply_block_times, create_click_range, due_day_of, due_soon_for,
+    past_problem, span_clash, span_problem, split_occurrence, sunday_due,
 };
 use flexweek_engine::desk::planning::due_point;
 use serde_json::{Value, json};
@@ -287,6 +287,19 @@ fn test_a_past_start_rounds_the_clock_up_to_the_next_quarter_hour() {
         refused_at(5 * 60 + 10, 5 * 60),
         "That time has passed. Choose 05:15 or later today, or another day.",
         "no 6:00 floor: early morning gets the early quarter hour"
+    );
+}
+
+#[test]
+fn test_a_start_on_an_earlier_day_says_that_day_is_over() {
+    let week = "2026-10-05";
+    let thursday = "2026-10-08";
+    assert_eq!(
+        past_problem(week, 1, 18 * 60, thursday, 9 * 60)
+            .expect("a verdict")
+            .as_deref(),
+        Some("That time has passed. The day is over, so choose another day."),
+        "Tuesday at 18:00 seen on Thursday morning offers no time 'later today'"
     );
 }
 

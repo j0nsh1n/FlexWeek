@@ -4163,6 +4163,15 @@ def _day_on_screen(today: str | None, now: datetime | None) -> date:
     return date.fromisoformat(today) if today else (now or datetime.now()).date()
 
 
+def today_from_words(minute: int) -> str:
+    """"Today from 3:15 PM onward.": the next quarter hour from `minute`, rounded up the way the past-time
+    sentence rounds it (no 6:00 AM floor), or nothing once the day has no quarter hour left."""
+    ahead, slot = next_slot(minute, first=0, last=DAY_END_MIN - SLOT_MIN)
+    if ahead:
+        return ""
+    return f"Today from {clock_text(slot)} onward."
+
+
 class HomeworkDialog(Dialog):
     _most_share = SHEET_MOST
 
@@ -4659,11 +4668,7 @@ class HomeworkDialog(Dialog):
             return ""
         if fixed["day"] != now.weekday():
             return ""
-        minute = now.hour * 60 + now.minute
-        ahead, slot = next_slot(minute, first=6 * 60, last=DAY_END_MIN - SLOT_MIN)
-        if ahead:
-            return ""
-        return f"Today from {clock_text(slot)} onward."
+        return today_from_words(now.hour * 60 + now.minute)
 
     def _fixed_problem(self, fixed: dict, due: str) -> str:
         """Why that day and time cannot be kept, in the words a drop on the calendar uses."""
