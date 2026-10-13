@@ -6,6 +6,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Changed
+- Add homework and Add fixed time ask three questions: What, When, How long. Answers show as clickable crumbs. Enter goes to the next question. Edit homework and Edit event stay one page.
 - Week planning uses one bar. Plan shows how many homework items still need a time. Click the week title to open a mini month.
 - A 28 px strip under the bar says what is next (or Nothing more today), how many items are overdue, and Week as a list · Ctrl+Shift+L. The list row stays 28 px at Large text.
 - The left rail is a fixed Agenda: Next, with Start focus on homework; No time yet chips to drag onto a day; and Due this week. The mini month is not a block in the rail.
