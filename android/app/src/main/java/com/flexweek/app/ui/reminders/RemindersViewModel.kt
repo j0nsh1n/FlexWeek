@@ -4,7 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
-import com.flexweek.app.core.FakeFlexWeekCore
 import com.flexweek.app.core.FlexWeekCore
 import org.json.JSONObject
 
@@ -41,7 +40,7 @@ class RemindersViewModel(
     }
 
     fun setLeadMinutes(minutes: Int) {
-        (core as? FakeFlexWeekCore)?.setLeadMinutes(minutes)
+        core.setLeadMinutes(minutes)
         reload()
     }
 
@@ -50,7 +49,7 @@ class RemindersViewModel(
         if (next) {
             onRequestExactSetting()
         }
-        (core as? FakeFlexWeekCore)?.setExactReminders(next)
+        core.setExactReminders(next)
         reload()
     }
 

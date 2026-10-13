@@ -4,6 +4,21 @@ package com.flexweek.app.core
  * Kotlin-facing API matching the planned UniFFI surface (S3). JSON payloads use org.json on callers.
  */
 interface FlexWeekCore {
+    fun currentDate(): String = java.time.LocalDate.now().toString()
+
+    fun currentDayIndex(): Int = java.time.LocalDate.parse(currentDate()).dayOfWeek.value - 1
+
+    fun currentWeekStart(): String = java.time.LocalDate.parse(currentDate())
+        .minusDays(currentDayIndex().toLong()).toString()
+
+    fun selectedDate(): String = currentDate()
+
+    fun selectDay(index: Int)
+
+    fun setLeadMinutes(minutes: Int)
+
+    fun setExactReminders(on: Boolean)
+
     fun engineVersion(): String
 
     fun open(dbPath: String, deviceName: String)

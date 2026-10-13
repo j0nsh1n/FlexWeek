@@ -5,7 +5,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
-import com.flexweek.app.core.DemoSchedule
 import com.flexweek.app.core.FlexWeekCore
 import com.flexweek.app.core.newOpId
 import com.flexweek.app.model.RunningLatePreview
@@ -33,7 +32,7 @@ class RunningLateViewModel(
     }
 
     private fun loadPreview() {
-        val raw = core.runningLate(DemoSchedule.TODAY_INDEX, minutes, newOpId())
+        val raw = core.runningLate(core.currentDayIndex(), minutes, newOpId())
         val root = JSONObject(raw)
         if (root.optBoolean("ok", false)) {
             preview = V2Json.parseRunningLate(raw)

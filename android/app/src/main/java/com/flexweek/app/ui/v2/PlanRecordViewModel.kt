@@ -4,7 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
-import com.flexweek.app.core.DemoSchedule
 import com.flexweek.app.core.FlexWeekCore
 import com.flexweek.app.core.newOpId
 import com.flexweek.app.model.PlanRecordState
@@ -28,7 +27,7 @@ class PlanRecordViewModel(
 
     fun loadPlan() {
         error = null
-        val raw = core.planWeek(DemoSchedule.WEEK_START)
+        val raw = core.planWeek(core.currentWeekStart())
         val root = JSONObject(raw)
         if (!root.optBoolean("ok", false)) {
             error = root.optString("error", "Could not plan.")

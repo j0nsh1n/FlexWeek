@@ -159,6 +159,22 @@ impl FlexWeek {
         Ok(result.to_string())
     }
 
+    pub fn set_reminder_lead(&self, minutes: i64) -> Result<(), FfiError> {
+        if !(0..=60).contains(&minutes) {
+            return Err(failure("Choose a reminder lead between 0 and 60 minutes."));
+        }
+        let user_id = require_user(self)?;
+        let db = db_lock(self)?;
+        db.execute(
+            "UPDATE preferences SET reminder_lead_min=?1 WHERE user_id=?2",
+            rusqlite::params![minutes, user_id],
+        )
+        .map_err(failure)?;
+        drop(db);
+        self.host.data_changed("preferences".into());
+        Ok(())
+    }
+
     pub fn sync_status(&self) -> String {
         self.sync.status()
     }
@@ -363,5 +379,19 @@ pub(crate) mod tests_support {
         assert_eq!(settings["reminders_enabled"], false);
         assert_eq!(settings["reminder_lead_min"], 15);
         assert_eq!(settings["alarms"][0]["name"], "Wake up");
+    }
+
+    #[test]
+    fn phone_reminder_lead_is_saved_and_rejects_out_of_range_values() {
+        let (week, _path) = open_test("reminder-lead");
+        week.set_reminder_lead(15).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&week.settings_for_phone().unwrap()).unwrap()["reminder_lead_min"],
+            15
+        );
+        assert_eq!(
+            week.set_reminder_lead(61).unwrap_err().to_string(),
+            "Choose a reminder lead between 0 and 60 minutes."
+        );
     }
 }

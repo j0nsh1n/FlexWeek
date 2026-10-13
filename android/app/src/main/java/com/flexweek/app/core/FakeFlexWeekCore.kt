@@ -8,6 +8,9 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 
 class FakeFlexWeekCore : FlexWeekCore {
+    override fun currentDate(): String = "2025-10-08"
+    override fun currentDayIndex(): Int = DemoSchedule.TODAY_INDEX
+    override fun currentWeekStart(): String = DemoSchedule.WEEK_START
     private var paired = false
     private var selectedDay = DemoSchedule.TODAY_INDEX
     private val doneIds = mutableSetOf<String>()
@@ -102,7 +105,7 @@ class FakeFlexWeekCore : FlexWeekCore {
         }
     }
 
-    fun selectDay(index: Int) {
+    override fun selectDay(index: Int) {
         selectedDay = index.coerceIn(0, 6)
     }
 
@@ -457,11 +460,11 @@ class FakeFlexWeekCore : FlexWeekCore {
         }
     }
 
-    fun setLeadMinutes(minutes: Int) {
+    override fun setLeadMinutes(minutes: Int) {
         leadMinutes = minutes
     }
 
-    fun setExactReminders(on: Boolean) {
+    override fun setExactReminders(on: Boolean) {
         exactReminders = on
     }
 

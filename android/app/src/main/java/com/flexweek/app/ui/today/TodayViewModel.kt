@@ -20,7 +20,10 @@ class TodayViewModel(
     var uiState by mutableStateOf(emptyToday())
         private set
 
-    private var nowMinute by mutableIntStateOf(DemoSchedule.DEMO_NOW_MINUTE)
+    private var nowMinute by mutableIntStateOf(
+        if (core is FakeFlexWeekCore) DemoSchedule.DEMO_NOW_MINUTE
+        else java.time.LocalTime.now().let { it.hour * 60 + it.minute },
+    )
     private var pendingUndo: Pair<String, Boolean>? = null
 
     init {
@@ -33,12 +36,12 @@ class TodayViewModel(
     }
 
     fun selectDay(index: Int) {
-        (core as? FakeFlexWeekCore)?.selectDay(index)
+        core.selectDay(index)
         refresh()
     }
 
     fun jumpToToday() {
-        selectDay(DemoSchedule.TODAY_INDEX)
+        selectDay(core.currentDayIndex())
     }
 
     fun toggleHomework(id: String) {
@@ -89,7 +92,7 @@ class TodayViewModel(
         uiState = parsed.copy(snackbar = snackbar)
     }
 
-    private fun todayIso(): String = "2025-10-08"
+    private fun todayIso(): String = core.selectedDate()
 
     private fun emptyToday(): TodayUiState =
         TodayUiState(
