@@ -3,11 +3,11 @@ to More.
 
 The spec's guard: homework due Wednesday of week 2 with its only session on Friday of week 1, never
 ticked; open week 2 (clock: Monday 07:00 of week 2): More shows 1 unfinished; Plan leaves the session
-where it is and shows the "1 unfinished from last week" chip; "Plan into this week" places it in week 2 before
+where it is and shows the "1 left from last week" chip; "Plan into this week" places it in week 2 before
 Wednesday; in a second run "Mark as finished" marks it done, More shows 0 and Plan then places nothing new.
 
-The chip and its two buttons are found by their words (UI Designer's: "... unfinished from last
-week", "Plan into this week", "Mark as finished"), design-agnostic.
+The chip and its buttons follow the 1.0.0 decision: "1 left from last week" is hidden while the
+"Overdue and left from last week" panel is open, so the tests hide that panel before finding the chip.
 """
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
@@ -33,6 +33,8 @@ from desktop.tests.grid_support import (  # noqa: F401
 )
 
 FRIDAY, WEDNESDAY = 4, 2
+PLAN_IT = "Plan into this week"
+FINISHED = "Mark as finished"
 
 
 def left_in_week_one(qapp, window) -> tuple[str, str]:
@@ -83,6 +85,13 @@ def plan(qapp, window) -> None:
     settled(qapp, window)
 
 
+def hide_the_panel(qapp, window) -> None:
+    hide = window.findChild(QPushButton, "unfinishedDismiss")
+    if hide is not None and hide.isVisible():
+        hide.click()
+        settled(qapp, window)
+
+
 def test_more_counts_the_session_left_in_last_week(qapp, window) -> None:
     left_in_week_one(qapp, window)
     enabled, words = more_unfinished_row(window)
@@ -99,19 +108,18 @@ def test_plan_never_moves_last_weeks_session_on_its_own(qapp, window) -> None:
 def test_plan_shows_the_unfinished_from_last_week_chip(qapp, window) -> None:
     left_in_week_one(qapp, window)
     plan(qapp, window)
-    chip = [
-        label.text() for label in window.findChildren(QLabel)
-        if label.isVisible() and "left from last week" in label.text()
-    ]
-    assert chip and visible_button(window, "Plan into this week")
-    assert visible_button(window, "Mark as finished")
+    hide_the_panel(qapp, window)
+    chip = [label.text() for label in window.findChildren(QLabel) if label.isVisible()]
+    assert "1 left from last week" in chip, chip
+    assert visible_button(window, PLAN_IT) and visible_button(window, FINISHED)
 
 
 def test_plan_them_places_it_in_week_two_before_wednesday(qapp, window) -> None:
     left_in_week_one(qapp, window)
     plan(qapp, window)
-    button = visible_button(window, "Plan into this week")
-    assert button is not None, "no Plan into this week"
+    hide_the_panel(qapp, window)
+    button = visible_button(window, PLAN_IT)
+    assert button is not None, f"no {PLAN_IT}"
     button.click()
     settled(qapp, window)
     placed = [b for b in lab_sessions(window) if b.get("start")]
@@ -121,8 +129,9 @@ def test_plan_them_places_it_in_week_two_before_wednesday(qapp, window) -> None:
 def test_i_did_these_marks_it_done_more_shows_none_and_plan_places_nothing(qapp, window) -> None:
     left_in_week_one(qapp, window)
     plan(qapp, window)
-    button = visible_button(window, "Mark as finished")
-    assert button is not None, "no Mark as finished"
+    hide_the_panel(qapp, window)
+    button = visible_button(window, FINISHED)
+    assert button is not None, f"no {FINISHED}"
     button.click()
     settled(qapp, window)
     enabled, words = more_unfinished_row(window)
