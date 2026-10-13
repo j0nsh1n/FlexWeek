@@ -1578,6 +1578,14 @@ class SetupPage(QWidget):
     def step(self) -> int:
         return self._step
 
+    def wear_look(self, look: dict) -> None:
+        """Keep the style page, wear this look's preset and text size. The rig's play uses this so
+        Setup does not stay on the style default after the window look is set."""
+        chosen = sanitize_look(look)
+        knobs = {**self._look.get("knobs", {}), **chosen["knobs"]}
+        self._look = sanitize_look({"preset": chosen["preset"], "knobs": knobs})
+        self._state.look = deepcopy(self._look)
+
     def open(self, state: SetupState, step: int = STYLE) -> None:
         """Fill every page from what is in place now and show `step`, without animating."""
         self._state = deepcopy(state)

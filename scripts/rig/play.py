@@ -241,6 +241,50 @@ def matches_words(wanted: str, shown: str) -> int:
     return 1 if want in have else 0
 
 
+def list_item_targets(widget: object, wanted: str) -> list[tuple[int, object, str]]:
+    """Visible QListWidget rows matching `wanted`, as (score, global centre, label). Settings nav
+    items are list rows, not buttons, so a play's {\"text\": \"Look\"} has to find them here."""
+    from PySide6.QtWidgets import QListWidget
+
+    if not isinstance(widget, QListWidget):
+        return []
+    found: list[tuple[int, object, str]] = []
+    for row in range(widget.count()):
+        item = widget.item(row)
+        if item is None or item.isHidden():
+            continue
+        score = matches_words(wanted, item.text())
+        if not score:
+            continue
+        rect = widget.visualItemRect(item)
+        if rect.isEmpty():
+            continue
+        found.append((score, widget.mapToGlobal(rect.center()), f'list item "{item.text()}"'))
+    return found
+
+
+def apply_play_look(window, session, setup: Setup) -> str | None:
+    """Wear the play's look and text size. Setup otherwise keeps the style default (preset default,
+    normal text) because it opened before this ran. Returns a theme pack name when `look` is a pack."""
+    from desktop.native.look import LOOK_PRESETS, sanitize_look
+
+    pack = None
+    preset = "default"
+    if setup.look is not None:
+        if setup.look in LOOK_PRESETS:
+            preset = setup.look
+        else:
+            pack = setup.look
+    look = sanitize_look({"preset": preset, "knobs": {"text": setup.text}})
+    window._look = look
+    session.look = look
+    if setup.seed == "empty":
+        window.setup_page.wear_look(look)
+    window._carry_look()
+    window._carried = window._read_carried()
+    return pack
+
+
 class CannotDo(Exception):
     """The step cannot be done now (no such widget, a dialog in the way). Logged, and the play goes on."""
 
@@ -263,7 +307,6 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
     )
 
     from desktop.native.layouts.registry import sanitize_layout
-    from desktop.native.look import LOOK_PRESETS, sanitize_look
     from desktop.tests.logic_support import past_setup, wait_until
 
     out.mkdir(parents=True, exist_ok=True)
@@ -299,14 +342,7 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
             session.selected_day = held["now"].date().isoformat()
         if setup.seed == "rig":
             seed_week(app, session)
-        pack = None
-        preset = "default"
-        if setup.look is not None:
-            preset = setup.look if setup.look in LOOK_PRESETS else "default"
-            pack = None if setup.look in LOOK_PRESETS else setup.look
-        look = {"preset": preset, "knobs": {"text": setup.text}}
-        window._look = sanitize_look(look)
-        session.look = window._look
+        pack = apply_play_look(window, session, setup)
         # Each slot takes the design only if it is that kind of screen; the other keeps its default.
         window._layout = sanitize_layout({"main": setup.design, "day": setup.design, "options": {}})
         if setup.seed == "empty":
@@ -417,6 +453,9 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
                 score = max(matches_words(wanted, own), matches_words(wanted, widget.accessibleName()))
             if score:
                 found.append((score, widget.mapToGlobal(shown.center()), describe(widget), widget.window()))
+            if kind == "text":
+                for score, spot, label in list_item_targets(widget, wanted):
+                    found.append((score, spot, label, widget.window()))
         return sorted(found, key=lambda item: (-item[0], item[1].y(), item[1].x()))
 
     def locate(target: tuple[str, object]) -> tuple[QPoint, str]:

@@ -227,3 +227,97 @@ def test_a_good_play_path_is_made_absolute_for_the_child(tmp_path, monkeypatch):
     args = _args(play="p.json")
     drive.check_play(args)
     assert args.play == str(tmp_path / "p.json")
+
+
+def test_click_text_finds_a_settings_nav_item():
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication, QListWidget
+
+    app = QApplication.instance() or QApplication(["flexweek-nav-text-test"])
+    nav = QListWidget()
+    nav.setObjectName("prefsNav")
+    nav.setAccessibleName("Settings sections")
+    for name in ("Look", "Planning", "Focus", "Alerts", "This computer"):
+        nav.addItem(name)
+    nav.resize(220, 320)
+    nav.show()
+    app.processEvents()
+    hits = play.list_item_targets(nav, "Look")
+    assert [(score, label) for score, _spot, label in hits] == [(2, 'list item "Look"')]
+    planning = play.list_item_targets(nav, "Planning")
+    assert planning[0][0] == 2
+    assert planning[0][2] == 'list item "Planning"'
+    assert play.parse_target({"text": "Look"}) == ("text", "Look")
+
+
+def _window_on_setup(tmp_path):
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import QStandardPaths
+    from PySide6.QtWidgets import QApplication, QPushButton
+
+    from desktop.native.window import NativeWindow
+    from desktop.server import LocalServer
+    from desktop.tests.logic_support import PASSWORD, wait_until
+    from desktop.tests.window_support import look_file
+
+    QStandardPaths.setTestModeEnabled(True)
+    look_file().unlink(missing_ok=True)
+    app = QApplication.instance() or QApplication(["flexweek-play-look-test"])
+    server = LocalServer(tmp_path / "flexweek.db")
+    server.start()
+    window = NativeWindow(server.origin)
+    window.show()
+    window.username.setText("play_student")
+    window.password.setText(PASSWORD)
+    window.findChild(QPushButton, "createAccount").click()
+    wait_until(app, lambda: window._stack.currentWidget().objectName() == "recoveryPage")
+    window.recovery_ack.setChecked(True)
+    window.recovery_continue.click()
+    wait_until(app, lambda: window._stack.currentWidget().objectName() == "setupPage")
+    return app, server, window
+
+
+def test_empty_seed_honours_large_text(tmp_path):
+    from desktop.native.look import effective_look
+    from desktop.tests.window_support import free
+
+    app, server, window = _window_on_setup(tmp_path)
+    try:
+        play.apply_play_look(window, window.session, play.Setup(seed="empty", text="large"))
+        window._apply_appearance()
+        app.processEvents()
+        assert effective_look(window._worn_look())["text"] == "large"
+        assert effective_look(window.setup_page._look)["text"] == "large"
+    finally:
+        window.hide()
+        free(window)
+        server.stop()
+
+
+def test_the_look_setup_key_wears_the_preset(tmp_path):
+    from desktop.tests.logic_support import past_setup
+    from desktop.tests.window_support import free
+
+    app, server, window = _window_on_setup(tmp_path)
+    try:
+        play.apply_play_look(
+            window, window.session, play.Setup(seed="empty", look="high-contrast", text="large")
+        )
+        window._apply_appearance()
+        app.processEvents()
+        assert window._worn_look()["preset"] == "high-contrast"
+        assert window.setup_page._look["preset"] == "high-contrast"
+        past_setup(app, window)
+        play.apply_play_look(window, window.session, play.Setup(look="terminal"))
+        window._apply_appearance()
+        app.processEvents()
+        assert window._look["preset"] == "terminal"
+        assert window._worn_look()["preset"] == "terminal"
+    finally:
+        window.hide()
+        free(window)
+        server.stop()
