@@ -391,7 +391,7 @@ def test_a_new_fixed_block_at_a_past_time_is_refused(
     assert dialog.result() != QDialog.DialogCode.Accepted
     # Thursday 4:40 PM: the next quarter hour is 4:45 PM (the sentence from the 1.0.0 wording audit, T-W4).
     assert dialog.duration_line.text() == (
-        "That time has passed. Choose a time after 4:45 PM today, or another day."
+        "That time has passed. Choose 4:45 PM or later today, or another day."
     )
     dialog.close()
     future = BlockDialog(window, day=4, start="09:00")

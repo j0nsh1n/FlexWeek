@@ -246,7 +246,7 @@ def test_past_do_it_at_save_focuses_field_and_announces_one_description(
     dialog.accept()
     message = dialog.when_problem.text()
     # Monday 12:00 (the held clock): the next quarter hour today is 12:00 PM.
-    assert message == "That time has passed. Choose a time after 12:00 PM today, or another day."
+    assert message == "That time has passed. Choose 12:00 PM or later today, or another day."
     assert dialog.when_time.accessibleDescription() == message
     assert dialog.when_problem.accessibleName() == message
     assert dialog.when_time.hasFocus() or dialog.when_time.lineEdit().hasFocus()

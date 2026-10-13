@@ -1,6 +1,6 @@
 """Regression (item 2): a time that has already passed is refused everywhere a student can
 give homework a time by hand: dropping a block (and its drag preview), Choose a time, and Edit
-homework > Do it at. The refusal reads "That time has passed. Choose a time after 2:15 PM
+homework > Do it at. The refusal reads "That time has passed. Choose 2:15 PM or later
 today, or another day."
 
 The clock is held through `session.now_ms` (grid_support.hold_clock), the injectable clock the window,
@@ -32,7 +32,7 @@ from desktop.tests.grid_support import (  # noqa: F401
 )
 from desktop.tests.window_support import free
 
-PAST_REFUSAL = "That time has passed. Choose a time after 2:15 PM today, or another day."
+PAST_REFUSAL = "That time has passed. Choose 2:15 PM or later today, or another day."
 
 TUESDAY, SUNDAY = 1, 6
 NOW = 14 * 60 + 7  # the window fixture holds Wednesday 14:07

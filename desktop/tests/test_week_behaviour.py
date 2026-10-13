@@ -36,7 +36,7 @@ from desktop.tests.window_support import (  # noqa: F401
 )
 from desktop.tests.window_support import window as signed_in  # noqa: F401
 
-PAST_REFUSAL = "That time has passed. Choose a time after 12:00 PM today, or another day."
+PAST_REFUSAL = "That time has passed. Choose 12:00 PM or later today, or another day."
 
 
 def send_mouse(widget, kind, at: QPoint, held: bool) -> None:

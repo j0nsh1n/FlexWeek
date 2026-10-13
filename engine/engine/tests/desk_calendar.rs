@@ -256,6 +256,54 @@ fn test_a_past_start_names_the_next_quarter_hour_today() {
         past_problem(week, 3, 15 * 60, thursday, at)
             .expect("a verdict")
             .as_deref(),
-        Some("That time has passed. Choose a time after 15:15 today, or another day.")
+        Some("That time has passed. Choose 15:15 or later today, or another day.")
+    );
+}
+
+#[test]
+fn test_a_past_start_rounds_the_clock_up_to_the_next_quarter_hour() {
+    let week = "2026-10-05";
+    let thursday = "2026-10-08";
+    let refused_at = |now: i64, start: i64| {
+        past_problem(week, 3, start, thursday, now)
+            .expect("a verdict")
+            .expect("a refusal")
+    };
+    assert_eq!(
+        refused_at(15 * 60 + 7, 15 * 60),
+        "That time has passed. Choose 15:15 or later today, or another day."
+    );
+    assert_eq!(
+        refused_at(15 * 60 + 15, 15 * 60 + 10),
+        "That time has passed. Choose 15:15 or later today, or another day.",
+        "a clock already on the quarter hour is not rounded past it"
+    );
+    assert_eq!(
+        past_problem(week, 3, 15 * 60 + 15, thursday, 15 * 60 + 15).unwrap(),
+        None,
+        "15:15 itself is not past"
+    );
+    assert_eq!(
+        refused_at(5 * 60 + 10, 5 * 60),
+        "That time has passed. Choose 05:15 or later today, or another day.",
+        "no 6:00 floor: early morning gets the early quarter hour"
+    );
+}
+
+#[test]
+fn test_a_past_start_after_11_45_pm_says_the_day_is_over() {
+    let week = "2026-10-05";
+    let thursday = "2026-10-08";
+    assert_eq!(
+        past_problem(week, 3, 23 * 60 + 30, thursday, 23 * 60 + 50)
+            .expect("a verdict")
+            .as_deref(),
+        Some("That time has passed. The day is over, so choose another day.")
+    );
+    assert_eq!(
+        past_problem(week, 3, 23 * 60 + 30, thursday, 23 * 60 + 45)
+            .expect("a verdict")
+            .as_deref(),
+        Some("That time has passed. Choose 23:45 or later today, or another day.")
     );
 }

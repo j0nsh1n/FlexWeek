@@ -16,12 +16,10 @@ use crate::stored::{attribute_error, py_int, py_str, text, truthy, type_name};
 use crate::desk::weekmodel::clock_text;
 use crate::time::{DAY_END_MIN, DAY_START_MIN, SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm};
 
-const CHOOSE_FIRST_MIN: i64 = 6 * 60;
-
-fn next_choose_slot(now_min: i64) -> i64 {
-    let last = DAY_END_MIN - SLOT_MIN;
+/// The next quarter hour at or after `now_min`, or None when rounding up reaches midnight.
+fn next_choose_slot(now_min: i64) -> Option<i64> {
     let slot = (-(-now_min).div_euclid(SLOT_MIN)) * SLOT_MIN;
-    slot.clamp(CHOOSE_FIRST_MIN, last)
+    (slot < DAY_END_MIN).then_some(slot)
 }
 
 type Fresh<'a> = &'a mut dyn FnMut() -> String;
@@ -811,10 +809,14 @@ pub fn past_problem(
         return Ok(None);
     };
     if target < now || (target == now && start_min < now_min) {
-        let after = clock_text(next_choose_slot(now_min));
-        return Ok(Some(format!(
-            "That time has passed. Choose a time after {after} today, or another day."
-        )));
+        let message = match next_choose_slot(now_min) {
+            Some(slot) => format!(
+                "That time has passed. Choose {} or later today, or another day.",
+                clock_text(slot)
+            ),
+            None => "That time has passed. The day is over, so choose another day.".to_string(),
+        };
+        return Ok(Some(message));
     }
     Ok(None)
 }
@@ -911,7 +913,7 @@ mod tests {
         let week = "2026-10-05";
         let thursday = "2026-10-08";
         let at = 15 * 60 + 10;
-        let refused = "That time has passed. Choose a time after 15:15 today, or another day.";
+        let refused = "That time has passed. Choose 15:15 or later today, or another day.";
         assert_eq!(
             past_problem(week, 1, 16 * 60, thursday, at).unwrap().as_deref(),
             Some(refused),
