@@ -250,6 +250,24 @@ def test_at_1150_large_text_timeline_day_keeps_the_top_bar_on_one_row(
     assert cut_on_the_bar(window) == []
 
 
+@pytest.mark.parametrize("text", ["normal", "large"])
+def test_the_view_track_sits_level_with_the_rest_of_the_bar(
+    qapp: QApplication, window: NativeWindow, text: str
+) -> None:
+    """The track is a group box, and every group box keeps a title band above it: Day, Week, Month and
+    My day were drawn about 32 px below Today and the arrows. The track has no title, so none is kept."""
+    text_size(window, text)
+    window.resize(1280, 860)
+    for _ in range(4):
+        qapp.processEvents()
+    today = window.findChild(QAbstractButton, "todayWeek")
+    middle_of_today = today.mapTo(window, today.rect().center()).y()
+    for name in ("viewDay", "viewWeek", "viewMonth", "viewMyDay"):
+        view = window.findChild(QAbstractButton, name)
+        middle = view.mapTo(window, view.rect().center()).y()
+        assert abs(middle - middle_of_today) <= 2, f"{text} text, {name}"
+
+
 def test_retry_save_shows_only_after_a_save_fails(qapp: QApplication, window: NativeWindow) -> None:
     """A save on its way is not a failed one. Month's own fetch landing while the week saved drew
     the week with Retry save showing, and the view buttons jumped 129 pixels left under the pointer.

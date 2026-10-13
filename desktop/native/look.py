@@ -1744,7 +1744,10 @@ def top_bar_rules(
         else ""
     )
     return (
+        # No margin: every QGroupBox keeps a title band above it (look.py), and the untitled track would
+        # draw its views that far down, below the rest of the bar.
         f"QGroupBox#segments {{ background: transparent; border: none; border-radius: 0; padding: 3px; "
+        "margin: 0px; "
         f"alternate-background-color: {track}; selection-background-color: {chosen}; color: {outline}; "
         f"qproperty-shade: {shade}; qproperty-ring: {selected_ring}; }}"
         f"{views()} {{ background: transparent; color: {quiet_ink}; font-weight: {WEIGHT_REGULAR}; "
