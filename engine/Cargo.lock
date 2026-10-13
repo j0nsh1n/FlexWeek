@@ -168,6 +168,7 @@ name = "flexweek-sync"
 version = "0.1.0"
 dependencies = [
  "flexweek-engine",
+ "flexweek-store",
  "hex",
  "rusqlite",
  "serde_json",

@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashSet};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 
-use crate::{Batch, SyncError, SyncResult, account_uuid};
+use crate::{Batch, SyncError, SyncResult, account_uuid, digest};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Record {
@@ -222,23 +222,43 @@ pub fn export_since(
         [],
         |row| row.get(0),
     )?;
+    // One snapshot, so a desktop write between the two reads cannot make a record look changed.
+    let conn = &*conn.unchecked_transaction()?;
     let live = live(conn, user_id)?;
-    let mut stmt = conn.prepare("SELECT entity, key, hlc, device_id, deleted, seq FROM sync_record WHERE user_id = ?1 AND seq > ?2 ORDER BY seq")?;
+    let mut stmt = conn.prepare("SELECT entity, key, hlc, device_id, deleted, hash, seq FROM sync_record WHERE user_id = ?1 AND seq > ?2 ORDER BY seq")?;
+    let mut rows = stmt
+        .query_map(params![user_id, since], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, i64>(6)?,
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    // A new device cannot apply anything without the account record, and that record's seq can be
+    // anywhere (a password change after the first scan), so the first batch always leads with it.
+    let promoted = if since == 0 {
+        rows.iter()
+            .position(|row| row.0 == "account" && row.3 != requester_device)
+            .map(|index| {
+                let row = rows.remove(index);
+                rows.insert(0, row);
+            })
+            .is_some()
+    } else {
+        false
+    };
     let mut records = Vec::new();
     let mut next_since = since;
     let mut more = false;
     let mut bytes = 0usize;
-    for row in stmt.query_map(params![user_id, since], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, String>(1)?,
-            row.get::<_, i64>(2)?,
-            row.get::<_, String>(3)?,
-            row.get::<_, i64>(4)?,
-            row.get::<_, i64>(5)?,
-        ))
-    })? {
-        let (entity, key, hlc, origin, deleted, seq) = row?;
+    for (index, row) in rows.into_iter().enumerate() {
+        let lead = promoted && index == 0;
+        let (entity, key, hlc, origin, deleted, hash, seq) = row;
         if origin == requester_device {
             next_since = seq;
             continue;
@@ -248,7 +268,7 @@ pub fn export_since(
         } else {
             live.get(&(entity.clone(), key.clone())).cloned()
         };
-        if deleted == 0 && body.is_none() {
+        if deleted == 0 && body.as_ref().is_none_or(|body| digest(body) != hash) {
             return Err(SyncError::Invalid("record changed since last scan".into()));
         }
         let record = Record {
@@ -260,12 +280,17 @@ pub fn export_since(
             seq,
         };
         let size = record.to_value().to_string().len();
+        if size > 256 * 1024 {
+            return Err(SyncError::Invalid("record exceeds batch size".into()));
+        }
         if records.len() >= limit || bytes + size > 256 * 1024 {
             more = true;
             break;
         }
         bytes += size;
-        next_since = seq;
+        if !lead {
+            next_since = seq;
+        }
         records.push(record);
     }
     Ok(Batch {

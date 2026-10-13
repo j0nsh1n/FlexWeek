@@ -3,6 +3,8 @@ use std::collections::HashSet;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde_json::Value;
 
+use flexweek_engine::time;
+
 use crate::{
     ApplyReport, Batch, Record, SyncError, SyncResult, canonical, clock, digest,
     records::allowed_pref,
@@ -19,8 +21,8 @@ fn bad(record: &Record) -> Option<&'static str> {
         return Some("invalid record header");
     }
     let Some(body) = &record.body else {
-        return if record.entity == "account" {
-            Some("account cannot be deleted")
+        return if record.entity == "account" || record.entity == "pref" {
+            Some("account and preferences cannot be deleted")
         } else {
             None
         };
@@ -31,11 +33,12 @@ fn bad(record: &Record) -> Option<&'static str> {
     match record.entity.as_str() {
         "account"
             if record.key == "-"
+                && only_keys(body, &["account_uuid", "username", "password_hash"])
                 && body.get("account_uuid").and_then(Value::as_str).is_some()
                 && body
                     .get("username")
                     .and_then(Value::as_str)
-                    .is_some_and(|s| !s.is_empty() && s.len() <= 80)
+                    .is_some_and(|s| !s.is_empty() && within(s, 80))
                 && body.get("password_hash").and_then(Value::as_str).is_some() =>
         {
             None
@@ -46,25 +49,65 @@ fn bad(record: &Record) -> Option<&'static str> {
                 && body
                     .get("title")
                     .and_then(Value::as_str)
-                    .is_some_and(|s| !s.is_empty() && s.len() <= 80)
+                    .is_some_and(|s| !s.is_empty() && within(s, 80))
+                && body
+                    .get("due")
+                    .and_then(Value::as_str)
+                    .is_some_and(time::is_calendar_date)
                 && body
                     .get("estimate_min")
                     .and_then(Value::as_i64)
-                    .is_some_and(|n| (0..=1440).contains(&n)) =>
+                    .is_some_and(|n| (15..=1440).contains(&n) && n % 15 == 0)
+                && optional_text(body, "course", 40)
+                && optional_text(body, "category", 32)
+                && optional_text(body, "spotify_url", 500)
+                && optional_text(body, "notes", 4000)
+                && optional_array(body, "links", 20)
+                && optional_array(body, "checklist", 40) =>
         {
             None
         }
         "block"
-            if record.key.rsplit_once('/').is_some_and(|(_, id)| {
-                !id.is_empty()
-                    && id.len() <= 80
+            if record.key.split_once('/').is_some_and(|(week, id)| {
+                time::is_week_start(week)
+                    && !id.is_empty()
+                    && within(id, 80)
                     && body.get("id").and_then(Value::as_str) == Some(id)
-            }) && body.as_object().is_some() =>
+            }) && body.as_object().is_some()
+                && body
+                    .get("title")
+                    .and_then(Value::as_str)
+                    .is_some_and(|s| !s.is_empty() && within(s, 80))
+                && body
+                    .get("kind")
+                    .and_then(Value::as_str)
+                    .is_some_and(|s| s == "locked" || s == "flexible")
+                && body
+                    .get("duration_min")
+                    .and_then(Value::as_i64)
+                    .is_some_and(|n| (1..=7140).contains(&n))
+                && body
+                    .get("days")
+                    .and_then(Value::as_array)
+                    .is_some_and(|days| {
+                        !days.is_empty()
+                            && days.len() <= 7
+                            && days
+                                .iter()
+                                .all(|day| day.as_i64().is_some_and(|n| (0..=6).contains(&n)))
+                    })
+                && optional_text(body, "course", 40)
+                && optional_text(body, "category", 32)
+                && optional_text(body, "spotify_url", 500) =>
         {
             None
         }
         "standing"
-            if record.key.rsplit_once('/').is_some()
+            if record
+                .key
+                .rsplit_once('/')
+                .is_some_and(|(id, week)| !id.is_empty() && time::is_week_start(week))
+                && only_keys(body, &["position", "body"])
                 && body.get("position").and_then(Value::as_i64).is_some()
                 && body
                     .get("body")
@@ -73,19 +116,57 @@ fn bad(record: &Record) -> Option<&'static str> {
             None
         }
         "routine"
-            if body
-                .get("name")
-                .and_then(Value::as_str)
-                .is_some_and(|s| !s.is_empty() && s.len() <= 80)
+            if only_keys(body, &["name", "body", "created_at", "updated_at"])
+                && body
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .is_some_and(|s| !s.is_empty() && within(s, 80))
                 && body.get("body").is_some_and(Value::is_object)
                 && body.get("created_at").and_then(Value::as_str).is_some()
                 && body.get("updated_at").and_then(Value::as_str).is_some() =>
         {
             None
         }
-        "pref" if allowed_pref(&record.key) && (body.is_string() || body.is_number()) => None,
+        "pref" if allowed_pref(&record.key) && valid_pref(&record.key, body) => None,
         "recovery" if body.as_object().is_some_and(|obj| obj.is_empty()) => None,
         _ => Some("malformed or unknown record"),
+    }
+}
+
+fn within(text: &str, max: usize) -> bool {
+    text.chars().count() <= max
+}
+
+fn only_keys(body: &Value, keys: &[&str]) -> bool {
+    body.as_object().is_some_and(|object| {
+        object.len() == keys.len() && keys.iter().all(|k| object.contains_key(*k))
+    })
+}
+
+fn optional_text(body: &Value, key: &str, max: usize) -> bool {
+    body.get(key)
+        .is_none_or(|value| value.is_null() || value.as_str().is_some_and(|text| within(text, max)))
+}
+
+fn optional_array(body: &Value, key: &str, max: usize) -> bool {
+    body.get(key)
+        .is_none_or(|value| value.as_array().is_some_and(|array| array.len() <= max))
+}
+
+fn valid_pref(key: &str, body: &Value) -> bool {
+    match key {
+        "alarms_json" => body.as_str().is_some_and(|text| {
+            serde_json::from_str::<Value>(text).is_ok_and(|value| value.is_array())
+        }),
+        "availability_json" => body.as_str().is_some_and(|text| {
+            serde_json::from_str::<Value>(text).is_ok_and(|value| value.is_object())
+        }),
+        "reminder_lead_min" => body.as_i64().is_some_and(|n| (0..=120).contains(&n)),
+        "reminders_enabled"
+        | "reminder_sound"
+        | "reminder_dnd_override"
+        | "auto_split_pomodoro" => body.as_i64().is_some_and(|n| n == 0 || n == 1),
+        _ => body.as_i64().is_some_and(|n| n > 0 && n <= 1_440),
     }
 }
 
@@ -116,7 +197,7 @@ fn write_real(tx: &Connection, user_id: i64, record: &Record) -> SyncResult<()> 
         "block" => {
             let (week, id) = record
                 .key
-                .rsplit_once('/')
+                .split_once('/')
                 .ok_or_else(|| SyncError::Invalid("bad block key".into()))?;
             let previous: Option<String> = tx
                 .query_row(
@@ -125,10 +206,14 @@ fn write_real(tx: &Connection, user_id: i64, record: &Record) -> SyncResult<()> 
                     |row| row.get(0),
                 )
                 .optional()?;
+            let previous_missing = previous.is_none();
             let mut blocks: Vec<Value> = previous
                 .map(|text| serde_json::from_str(&text))
                 .transpose()?
                 .unwrap_or_default();
+            if previous_missing && body.is_none() {
+                return Ok(());
+            }
             let mut ids = HashSet::new();
             if !blocks.iter().all(|block| {
                 block
@@ -138,14 +223,16 @@ fn write_real(tx: &Connection, user_id: i64, record: &Record) -> SyncResult<()> 
             }) {
                 return Err(SyncError::Invalid("week repeats block id".into()));
             }
-            if let Some(index) = blocks
+            let index = blocks
                 .iter()
-                .position(|block| block.get("id").and_then(Value::as_str) == Some(id))
-            {
-                blocks.remove(index);
-            }
-            if let Some(body) = body {
-                blocks.push(body.clone());
+                .position(|block| block.get("id").and_then(Value::as_str) == Some(id));
+            match (index, body) {
+                (Some(index), Some(body)) => blocks[index] = body.clone(),
+                (Some(index), None) => {
+                    blocks.remove(index);
+                }
+                (None, Some(body)) => blocks.push(body.clone()),
+                (None, None) => {}
             }
             tx.execute("INSERT INTO weeks(user_id, week_start, blocks, revision) VALUES (?1, ?2, ?3, 1) ON CONFLICT(user_id, week_start) DO UPDATE SET blocks=excluded.blocks, revision=revision+1", params![user_id, week, canonical(&Value::Array(blocks))])?;
         }
@@ -223,12 +310,6 @@ fn quarantine(
 pub fn apply_batch(conn: &mut Connection, batch: &Batch, now_ms: i64) -> SyncResult<ApplyReport> {
     let mut tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
     let mut report = ApplyReport::default();
-    let local_device: (String, i64, i64) = tx.query_row(
-        "SELECT device_id, hlc_last, seq_last FROM sync_device WHERE singleton=1",
-        [],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-    )?;
-    let (device_id, mut hlc_last, mut seq_last) = local_device;
     let mut user_id: Option<i64> = tx
         .query_row(
             "SELECT user_id FROM sync_account WHERE account_uuid=?1",
@@ -236,6 +317,9 @@ pub fn apply_batch(conn: &mut Connection, batch: &Batch, now_ms: i64) -> SyncRes
             |row| row.get(0),
         )
         .optional()?;
+    if let Some(id) = user_id {
+        crate::scan::scan_in(&tx, id, now_ms)?;
+    }
     if user_id.is_none() {
         let account = batch
             .records
@@ -247,6 +331,7 @@ pub fn apply_batch(conn: &mut Connection, batch: &Batch, now_ms: i64) -> SyncRes
                         .body
                         .as_ref()
                         .is_some_and(|body| body["account_uuid"] == batch.account_uuid)
+                    && record.hlc >> 16 <= now_ms.saturating_add(clock::MAX_FUTURE_MS)
                     && bad(record).is_none()
             })
             .ok_or_else(|| SyncError::Invalid("first batch has no valid account".into()))?;
@@ -265,6 +350,12 @@ pub fn apply_batch(conn: &mut Connection, batch: &Batch, now_ms: i64) -> SyncRes
         )?;
         user_id = Some(id);
     }
+    let local_device: (String, i64, i64) = tx.query_row(
+        "SELECT device_id, hlc_last, seq_last FROM sync_device WHERE singleton=1",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    let (device_id, mut hlc_last, mut seq_last) = local_device;
     let id = user_id.unwrap();
     for record in &batch.records {
         let future = record.hlc >> 16 > now_ms.saturating_add(clock::MAX_FUTURE_MS);

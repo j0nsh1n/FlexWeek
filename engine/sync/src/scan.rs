@@ -1,10 +1,20 @@
+use std::collections::HashMap;
+
 use rusqlite::{Connection, params};
 
 use crate::{SyncResult, clock::next_hlc, digest, records::live};
 
 pub fn scan(conn: &mut Connection, user_id: i64, now_ms: i64) -> SyncResult<usize> {
     let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-    let current = live(&tx, user_id)?;
+    let count = scan_in(&tx, user_id, now_ms)?;
+    tx.commit()?;
+    Ok(count)
+}
+
+/// Runs inside the caller's write transaction, so a remote record can never overwrite a local
+/// edit that has not been stamped yet.
+pub(crate) fn scan_in(tx: &Connection, user_id: i64, now_ms: i64) -> SyncResult<usize> {
+    let current = live(tx, user_id)?;
     let mut stmt =
         tx.prepare("SELECT entity, key, deleted, hash FROM sync_record WHERE user_id = ?1")?;
     let old = stmt
@@ -17,6 +27,10 @@ pub fn scan(conn: &mut Connection, user_id: i64, now_ms: i64) -> SyncResult<usiz
         })?
         .collect::<Result<Vec<_>, _>>()?;
     drop(stmt);
+    let known: HashMap<&(String, String), (bool, &str)> = old
+        .iter()
+        .map(|(name, deleted, hash)| (name, (*deleted, hash.as_str())))
+        .collect();
     let device: (String, i64, i64) = tx.query_row(
         "SELECT device_id, hlc_last, seq_last FROM sync_device WHERE singleton = 1",
         [],
@@ -26,9 +40,10 @@ pub fn scan(conn: &mut Connection, user_id: i64, now_ms: i64) -> SyncResult<usiz
     let mut count = 0;
     for ((entity, key), body) in &current {
         let hash = digest(body);
-        if old.iter().any(|(name, deleted, prior)| {
-            name == &(entity.clone(), key.clone()) && !deleted && prior == &hash
-        }) {
+        if known
+            .get(&(entity.clone(), key.clone()))
+            .is_some_and(|(deleted, prior)| !deleted && *prior == hash)
+        {
             continue;
         }
         hlc = next_hlc(hlc, now_ms)?;
@@ -49,6 +64,5 @@ pub fn scan(conn: &mut Connection, user_id: i64, now_ms: i64) -> SyncResult<usiz
         "UPDATE sync_device SET hlc_last=?1, seq_last=?2 WHERE singleton=1",
         params![hlc, seq],
     )?;
-    tx.commit()?;
     Ok(count)
 }

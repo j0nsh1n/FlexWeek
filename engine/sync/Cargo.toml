@@ -11,3 +11,6 @@ rusqlite = { version = "0.37.0", features = ["bundled"] }
 serde_json = { version = "1.0.145", features = ["float_roundtrip", "arbitrary_precision", "preserve_order"] }
 sha2 = "0.10.9"
 hex = "0.4.3"
+
+[dev-dependencies]
+flexweek-store = { path = "../store" }
