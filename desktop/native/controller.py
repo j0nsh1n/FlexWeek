@@ -137,7 +137,7 @@ def plan_sentence(placed: int, waiting: int) -> str:
     else:
         said = f"Placed {placed} homework block{'s' if placed != 1 else ''}."
     if waiting:
-        said += f" {waiting} still need{'s' if waiting == 1 else ''} a time."
+        said += f" {waiting} with no time yet."
     return said
 
 
