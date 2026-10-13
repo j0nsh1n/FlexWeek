@@ -518,6 +518,39 @@ fn test_overdue_minutes_add_allocated_and_unallocated_work() {
 }
 
 #[test]
+fn test_overdue_left_subtracts_focus_and_sessions_ticked_done() {
+    let essay_2h = with(
+        essay(),
+        json!({"estimate_min": 120, "unplanned_min": 120, "due": "2026-10-16"}),
+    );
+    let done_hour =
+        json!({"id": "done", "assignment_id": "essay", "duration_min": 60, "completed": true});
+    let open_hour =
+        json!({"id": "open", "assignment_id": "essay", "duration_min": 60, "completed": false});
+    // 2 h essay, 1 h session ticked done: 1 h left. Adding 30 min of focus leaves 30 min.
+    // An unticked session does not count as done.
+    for (focus, blocks, expected) in [
+        (0, json!([done_hour.clone()]), 60),
+        (30, json!([done_hour.clone()]), 30),
+        (0, json!([open_hour]), 120),
+    ] {
+        let assignment = with(essay_2h.clone(), json!({"focus_minutes": focus}));
+        let items = clipboard::left_over_items(
+            &json!({"essay": assignment}),
+            &json!([]),
+            "2026-10-12",
+            "2026-10-17T10:00",
+            &blocks,
+            &json!([]),
+        )
+        .unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["left_over_state"], "overdue");
+        assert_eq!(items[0]["remaining_min"], expected);
+    }
+}
+
+#[test]
 fn test_after_deadline_exception_preserves_only_the_named_session() {
     let blocks = json!([
         {"id": "bio-session", "assignment_id": "bio", "kind": "flexible", "duration_min": 60, "days": [5], "start": "11:00", "title": "Bio"},

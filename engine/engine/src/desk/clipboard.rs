@@ -495,6 +495,20 @@ pub fn unfinished_items(
     Ok(keyed.into_iter().map(|(_, item)| item).collect())
 }
 
+fn done_session_minutes(blocks: &Value, assignment_id: &Value) -> EngineResult<i64> {
+    let mut total = 0;
+    for block in iterate(blocks)? {
+        if eq(
+            get(&block, "assignment_id")?.unwrap_or(null()),
+            assignment_id,
+        ) && truthy(get(&block, "completed")?)
+        {
+            total += py_int(subscript(&block, "duration_min")?)?;
+        }
+    }
+    Ok(total)
+}
+
 pub fn left_over_items(
     assignments: &Value,
     saved_weeks: &Value,
@@ -521,11 +535,12 @@ pub fn left_over_items(
             .is_some_and(|deadline| deadline <= moment);
         // Placed unfinished minutes are still left to do. `available` subtracts them, and
         // `unplanned_min` from the server can hide them, so overdue remaining is the homework
-        // itself: estimate minus focus, placed or not.
+        // itself: estimate minus focus minutes and minutes of sessions ticked done, placed or not.
         let remaining = if overdue {
             let estimate = whole(&or_default(get(assignment, "estimate_min")?, json!(0)))?;
             let focus = whole(&or_default(get(assignment, "focus_minutes")?, json!(0)))?;
-            floor_slot((estimate - focus).max(0))
+            let done = done_session_minutes(blocks, subscript(assignment, "id")?)?;
+            floor_slot((estimate - focus - done).max(0))
         } else {
             available
         };
