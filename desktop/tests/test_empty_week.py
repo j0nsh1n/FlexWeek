@@ -141,3 +141,23 @@ def test_a_design_of_its_own_draws_its_own_empty_week(
     window._on_week()
     assert shown(window) is not window.empty_week
     assert shown(window).layout_id == "bento"
+
+
+def test_a_blank_week_cards_height_follows_its_wrapped_line_at_large_high_contrast(
+    qapp: QApplication,
+) -> None:
+    """A34: the empty-week card is tall enough for Large text in High contrast, not a fixed 200 px."""
+    from desktop.native.layouts.empty import BLANK_LINE, EmptyWeek
+    from desktop.native.look import pack_stylesheet
+
+    card = EmptyWeek()
+    card.set_blank(True)
+    card.set_over_hours(True)
+    card.setStyleSheet(pack_stylesheet("system", False, {"preset": "high-contrast", "knobs": {"text": "large"}}))
+    card.heading.setWordWrap(True)
+    card.line.setWordWrap(True)
+    card.adjustSize()
+    hint = card.sizeHint()
+    assert hint.height() >= 200
+    assert hint.height() >= card.heading.sizeHint().height() + card.line.sizeHint().height() + 80
+    assert BLANK_LINE in card.line.text()
