@@ -43,6 +43,7 @@ pub enum NetError {
     PairRefused(PairRefusal),
     /// The code or QR text is not eight digits.
     BadCode,
+    PairVersionMismatch,
     /// This device already holds a different FlexWeek account.
     AlreadyLinked,
     /// The database was made by a device with another key.
@@ -66,6 +67,7 @@ impl NetError {
             Self::PairRefused(PairRefusal::Used) => "code_used",
             Self::PairRefused(PairRefusal::TooManyTries) => "too_many_tries",
             Self::BadCode => "bad_code",
+            Self::PairVersionMismatch => "version_mismatch",
             Self::AlreadyLinked => "already_linked",
             Self::DeviceMismatch => "device_mismatch",
             Self::Key(_) => "key",
@@ -90,6 +92,10 @@ impl std::fmt::Display for NetError {
                 write!(f, "too many wrong tries, start a new code")
             }
             Self::BadCode => write!(f, "a pairing code is eight digits"),
+            Self::PairVersionMismatch => write!(
+                f,
+                "these devices use different pairing versions; update FlexWeek on both devices"
+            ),
             Self::AlreadyLinked => {
                 write!(
                     f,

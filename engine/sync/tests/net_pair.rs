@@ -1,10 +1,102 @@
-mod common;
-
-use common::*;
+use crate::common::*;
 use flexweek_sync::net::protocol::PAIR_EXPIRY_MS;
 use flexweek_sync::net::{NetError, PairRefusal, PairStatus};
 
 const WRONG: &str = "00000000";
+
+#[derive(Debug)]
+struct VersionReply(serde_json::Value);
+
+impl iroh::protocol::ProtocolHandler for VersionReply {
+    async fn accept(
+        &self,
+        connection: iroh::endpoint::Connection,
+    ) -> Result<(), iroh::protocol::AcceptError> {
+        let (mut send, mut recv) = connection.accept_bi().await?;
+        recv.read_to_end(1 << 20)
+            .await
+            .map_err(std::io::Error::other)?;
+        send.write_all(self.0.to_string().as_bytes())
+            .await
+            .map_err(std::io::Error::other)?;
+        send.finish()?;
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(5), connection.closed()).await;
+        Ok(())
+    }
+}
+
+#[test]
+fn incompatible_pairing_replies_are_refused_before_saving_an_account() {
+    use flexweek_sync::net::protocol::{PAIR_ALPN, derive_pair_keys};
+    use flexweek_sync::net::runtime::block_on;
+    use iroh::endpoint::presets;
+    use iroh::protocol::Router;
+    use serde_json::json;
+
+    for reply in [
+        json!({"ok": true, "proto": 1}),
+        json!({"ok": true}),
+        json!({"ok": true, "proto": 3}),
+        json!({"ok": false, "code": "version_mismatch"}),
+    ] {
+        let phone = device("phone", false);
+        let (router, addr) = block_on(async {
+            let endpoint = iroh::Endpoint::builder(presets::Minimal)
+                .relay_mode(iroh::RelayMode::Disabled)
+                .clear_ip_transports()
+                .bind_addr("127.0.0.1:0")
+                .unwrap()
+                .secret_key(derive_pair_keys("12345678").unwrap().secret)
+                .bind()
+                .await
+                .unwrap();
+            let addr = endpoint.bound_sockets()[0];
+            let router = Router::builder(endpoint)
+                .accept(PAIR_ALPN, VersionReply(reply))
+                .spawn();
+            (router, addr)
+        });
+        let error = phone
+            .service
+            .pair_with_code("12345678", &[addr], 20_000)
+            .unwrap_err();
+        assert_eq!(error.kind(), "version_mismatch");
+        assert_eq!(
+            error.to_string(),
+            "these devices use different pairing versions; update FlexWeek on both devices"
+        );
+        assert!(phone.service.peers(1).unwrap().is_empty());
+        let count: i64 = phone
+            .db()
+            .query_row("SELECT COUNT(*) FROM users", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
+        block_on(async { router.shutdown().await.unwrap() });
+    }
+}
+
+#[test]
+fn incompatible_pairing_versions_do_not_spend_a_try_or_admit_a_peer() {
+    let desktop = device("desktop", true);
+    let offer = desktop.service.pair_start(1).unwrap();
+    let client = raw_endpoint();
+    for version in [Some(1), None, Some(3)] {
+        let reply = RawPair::new(&client, &offer.qr, &offer.code)
+            .version(version)
+            .run();
+        assert_eq!(reply["ok"], false);
+        assert_eq!(reply["code"], "version_mismatch");
+        assert_eq!(
+            reply["message"],
+            "these devices use different pairing versions; update FlexWeek on both devices"
+        );
+        assert_eq!(tries_left(&desktop), 3);
+        assert!(desktop.service.peers(1).unwrap().is_empty());
+    }
+    let reply = RawPair::new(&client, &offer.qr, &offer.code).run();
+    assert_eq!(reply["ok"], true);
+    assert_eq!(reply["proto"], 2);
+}
 
 fn tries_left(desktop: &Device) -> u32 {
     match desktop.service.pair_status() {

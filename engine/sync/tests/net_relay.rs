@@ -1,11 +1,10 @@
 //! Needs the internet: both devices use n0's public relays and name lookup, with no address hints.
-//! Run by hand: `cargo test -p flexweek-sync --test net_relay -- --ignored`.
+//! Run by hand: `cargo test -p flexweek-sync --lib net_relay -- --ignored`.
 
-mod common;
+use crate::common::*;
 
 use std::sync::Arc;
 
-use common::*;
 use flexweek_sync::net::{SyncService, Transport};
 
 fn online_device(name: &str, account: bool) -> Device {

@@ -1,10 +1,9 @@
-mod common;
+use crate::common::*;
 
 use std::net::SocketAddr;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use common::*;
 use flexweek_sync::net::protocol::{CLOSE_NOT_PAIRED, SYNC_ALPN};
 use flexweek_sync::net::runtime::block_on;
 use flexweek_sync::net::{NetError, SyncService};

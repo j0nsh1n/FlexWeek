@@ -1,6 +1,5 @@
-mod common;
+use crate::common::*;
 
-use common::*;
 use flexweek_sync::net::{NetError, PairStatus};
 
 #[test]

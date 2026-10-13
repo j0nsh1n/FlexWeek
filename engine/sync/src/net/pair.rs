@@ -21,7 +21,7 @@ use tokio::time::timeout;
 use super::identity::fill_random;
 use super::protocol::{
     CLOSE_DONE, CONNECT_TIMEOUT_MS, MAX_MESSAGE_BYTES, PAIR_ALPN, PAIR_EXPIRY_MS, PAIR_MAX_TRIES,
-    PROTO_VERSION, decode, derive_pair_keys, display_code, encode, hello_proof,
+    PAIR_VERSION, check_pair_version, decode, derive_pair_keys, display_code, encode, hello_proof,
     hello_proof_matches, normalize_code, refusal,
 };
 use super::service::{Ctx, bind_endpoint, local_addrs};
@@ -293,9 +293,7 @@ struct Hello {
 
 fn parse_hello(bytes: &[u8]) -> Option<Hello> {
     let value = decode(bytes).ok()?;
-    if value.get("proto").and_then(Value::as_i64) != Some(PROTO_VERSION) {
-        return None;
-    }
+    check_pair_version(&value).ok()?;
     let text = |key: &str, max: usize| {
         value
             .get(key)
@@ -333,6 +331,11 @@ struct Pending {
 impl PairHandler {
     async fn decide(&self, remote: EndpointId, bytes: &[u8]) -> (Value, Option<Pending>) {
         let gate = self.gate.clone().lock_owned().await;
+        if let Ok(value) = decode(bytes)
+            && let Err(error) = check_pair_version(&value)
+        {
+            return (refusal(error.kind(), &error.to_string()), None);
+        }
         let now = (self.ctx.cfg.clock)();
         let (user_id, proof_key) = {
             let state = self.state.lock().expect("pair state");
@@ -390,6 +393,7 @@ impl PairHandler {
         let addrs = local_addrs(&self.ctx.endpoint, &self.ctx.cfg.transport, 6).await;
         let reply = json!({
             "ok": true,
+            "proto": PAIR_VERSION,
             "account_uuid": uuid,
             "username": username,
             "device_id": device_id,
@@ -511,7 +515,7 @@ pub(crate) async fn pair_dial(
     );
     let addrs = local_addrs(&ctx.endpoint, &ctx.cfg.transport, 6).await;
     let hello = json!({
-        "proto": PROTO_VERSION,
+        "proto": PAIR_VERSION,
         "device_id": ctx.device_id,
         "device_name": ctx.cfg.device_name,
         "endpoint_id": ctx.endpoint.id().to_string(),
@@ -554,8 +558,13 @@ pub(crate) async fn pair_dial(
             Some("expired") => NetError::PairRefused(PairRefusal::Expired),
             Some("used") => NetError::PairRefused(PairRefusal::Used),
             Some("too_many_tries") => NetError::PairRefused(PairRefusal::TooManyTries),
+            Some("version_mismatch") => NetError::PairVersionMismatch,
             _ => NetError::Protocol(message.to_owned()),
         });
+    }
+    if let Err(error) = check_pair_version(&reply) {
+        connection.close(CLOSE_DONE.into(), b"done");
+        return Err(error);
     }
     let text = |key: &str| {
         reply

@@ -6,7 +6,7 @@ use std::net::SocketAddr;
 use super::NetError;
 use super::protocol::normalize_code;
 
-const PREFIX: &str = "flexweek://pair?";
+const PREFIX: &str = "flexweek://pair/2?";
 const MAX_HINTS: usize = 8;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -26,8 +26,13 @@ pub fn build(code: &str, hints: &[SocketAddr]) -> String {
 }
 
 pub fn parse(text: &str) -> Result<QrPayload, NetError> {
+    let text = text.trim();
+    if !text.starts_with(PREFIX)
+        && (text.starts_with("flexweek://pair?") || text.starts_with("flexweek://pair/"))
+    {
+        return Err(NetError::PairVersionMismatch);
+    }
     let query = text
-        .trim()
         .strip_prefix(PREFIX)
         .ok_or_else(|| NetError::Protocol("this is not a FlexWeek pairing code".into()))?;
     let mut code = None;

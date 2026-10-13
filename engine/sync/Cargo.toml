@@ -4,6 +4,15 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+autotests = false
+
+[[test]]
+name = "merge"
+path = "tests/merge.rs"
+
+[[test]]
+name = "pair_cost"
+path = "tests/pair_cost.rs"
 
 [dependencies]
 flexweek-engine = { path = "../engine" }

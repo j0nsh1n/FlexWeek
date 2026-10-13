@@ -1,6 +1,4 @@
-mod common;
-
-use common::*;
+use crate::common::*;
 use flexweek_sync::net::SyncService;
 use flexweek_sync::net::identity::load_or_create_key;
 use flexweek_sync::net::protocol::{
@@ -96,16 +94,12 @@ fn a_code_always_derives_the_same_endpoint_and_another_code_a_different_one() {
 
 #[test]
 fn the_code_stretch_matches_an_independent_scrypt() {
-    // Python: hashlib.scrypt(b"12345678", salt=b"flexweek-pair-v1", n=32768, r=8, p=1, dklen=64);
-    // the first 32 bytes are the endpoint's secret key, the last 32 the proof key.
+    // Independent Python hashlib.scrypt vector for the test-only N=16, r=8, p=1 cost.
     let keys = derive_pair_keys("12345678").unwrap();
+    let output = [keys.secret.to_bytes(), keys.proof_key].concat();
     assert_eq!(
-        hex(&keys.secret.to_bytes()),
-        "e42017c81dd5e6bacb808a9880b0c6e5a020a2c909e9df6537c02b381f48a285"
-    );
-    assert_eq!(
-        hex(&keys.proof_key),
-        "771c723c517b6ab3e58994626f98b43360041cd759aa05bfb14833bda9b0e492"
+        hex(&output),
+        "6ee5ffefd2fd6a9c1af74724db5a2e71745da1dc4bac4a59f4a0d1eab1a1745568c19f2f80762c37253c55960b5b5d004d834da6cbeb4fc0a260e7e76267f109"
     );
 }
 
@@ -204,13 +198,13 @@ fn the_qr_text_round_trips() {
     let text = qr::build("12345678", &hints);
     assert_eq!(
         text,
-        "flexweek://pair?c=12345678&a=192.168.1.5:5555,[fd00::1]:6000"
+        "flexweek://pair/2?c=12345678&a=192.168.1.5:5555,[fd00::1]:6000"
     );
     let parsed = qr::parse(&text).unwrap();
     assert_eq!(parsed.code, "12345678");
     assert_eq!(parsed.hints, hints);
     let bare = qr::build("12345678", &[]);
-    assert_eq!(bare, "flexweek://pair?c=12345678");
+    assert_eq!(bare, "flexweek://pair/2?c=12345678");
     assert!(qr::parse(&bare).unwrap().hints.is_empty());
 }
 
@@ -218,11 +212,29 @@ fn the_qr_text_round_trips() {
 fn unreadable_qr_text_is_refused() {
     for text in [
         "https://example.test/?c=12345678",
-        "flexweek://pair?a=1.2.3.4:5",
-        "flexweek://pair?c=1234",
-        "flexweek://pair?c=12345678&a=not-an-address",
+        "flexweek://pair/2?a=1.2.3.4:5",
+        "flexweek://pair/2?c=1234",
+        "flexweek://pair/2?c=12345678&a=not-an-address",
     ] {
         assert!(qr::parse(text).is_err(), "{text:?}");
+    }
+}
+
+#[test]
+fn old_and_future_qr_versions_are_refused_before_pairing() {
+    let phone = device("phone", false);
+    for text in [
+        "flexweek://pair?c=12345678",
+        "flexweek://pair/1?c=12345678",
+        "flexweek://pair/3?c=12345678",
+    ] {
+        let error = phone.service.pair_from_qr(text, 20_000).unwrap_err();
+        assert_eq!(error.kind(), "version_mismatch");
+        assert_eq!(
+            error.to_string(),
+            "these devices use different pairing versions; update FlexWeek on both devices"
+        );
+        assert!(phone.service.peers(1).unwrap().is_empty());
     }
 }
 

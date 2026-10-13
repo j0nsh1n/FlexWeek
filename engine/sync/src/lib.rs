@@ -11,6 +11,28 @@ mod records;
 mod scan;
 mod schema;
 
+// Network tests run inside the crate so cfg(test) cannot weaken a shipped library.
+#[cfg(test)]
+extern crate self as flexweek_sync;
+#[cfg(test)]
+#[path = "../tests/common/mod.rs"]
+mod common;
+#[cfg(test)]
+#[path = "../tests/net_identity.rs"]
+mod net_identity;
+#[cfg(test)]
+#[path = "../tests/net_limits.rs"]
+mod net_limits;
+#[cfg(test)]
+#[path = "../tests/net_pair.rs"]
+mod net_pair;
+#[cfg(test)]
+#[path = "../tests/net_relay.rs"]
+mod net_relay;
+#[cfg(test)]
+#[path = "../tests/net_sync.rs"]
+mod net_sync;
+
 pub use apply::apply_batch;
 pub use clock::{next_hlc, observe};
 pub use peers::{Peer, acknowledge_pull, acknowledge_push, list_peers, revoke_peer, upsert_peer};

@@ -18,7 +18,15 @@ pub fn loopback() -> Transport {
 }
 
 pub fn scratch(label: &str) -> PathBuf {
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+    let root = std::env::var_os("FLEXWEEK_SYNC_TEST_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(
+                option_env!("CARGO_TARGET_TMPDIR")
+                    .unwrap_or(concat!(env!("CARGO_MANIFEST_DIR"), "/../target/tmp")),
+            )
+        });
+    let dir = root.join(format!(
         "net-{}-{}-{label}",
         std::process::id(),
         NEXT.fetch_add(1, Ordering::Relaxed)
@@ -169,6 +177,7 @@ pub struct RawPair<'a> {
     claim: Option<&'a iroh::Endpoint>,
     device_id: Option<&'a str>,
     confirm: bool,
+    version: Option<i64>,
 }
 
 impl<'a> RawPair<'a> {
@@ -181,6 +190,7 @@ impl<'a> RawPair<'a> {
             claim: None,
             device_id: None,
             confirm: true,
+            version: Some(flexweek_sync::net::protocol::PAIR_VERSION),
         }
     }
 
@@ -201,6 +211,11 @@ impl<'a> RawPair<'a> {
 
     pub fn without_confirming(mut self) -> Self {
         self.confirm = false;
+        self
+    }
+
+    pub fn version(mut self, version: Option<i64>) -> Self {
+        self.version = version;
         self
     }
 
@@ -240,10 +255,13 @@ impl<'a> RawPair<'a> {
                 &device_id,
                 "Raw phone",
             );
-            let hello = json!({
-                "proto": 1, "device_id": device_id, "device_name": "Raw phone",
+            let mut hello = json!({
+                "device_id": device_id, "device_name": "Raw phone",
                 "endpoint_id": claimed.to_string(), "nonce": hex_of(&nonce), "proof": hex_of(&proof),
             });
+            if let Some(version) = self.version {
+                hello["proto"] = json!(version);
+            }
             let (mut send, mut recv) = connection.open_bi().await.unwrap();
             send.write_all(hello.to_string().as_bytes()).await.unwrap();
             send.finish().unwrap();
