@@ -11,7 +11,7 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QSize, QStandardPaths, Qt, QTimer, QUrl
+from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QSize, QStandardPaths, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import (
     QAction,
     QCloseEvent,
@@ -21,6 +21,7 @@ from PySide6.QtGui import (
     QIcon,
     QKeyEvent,
     QKeySequence,
+    QMouseEvent,
     QPalette,
     QPixmap,
     QResizeEvent,
@@ -94,7 +95,7 @@ from desktop.native.hours.geometry import Span, drag_step, next_slot
 from desktop.native.hours.hand import Create, Hand, Move, MoveDate, Place, span_words
 from desktop.native.hours.hand import Verdict as HandVerdict
 from desktop.native.hours.month import MonthGrid
-from desktop.native.hours.rail import Rail
+from desktop.native.hours.rail import MonthCard, Rail, next_words
 from desktop.native.hours.zoom import ZOOM_KEYS, HoursScroll, sanitize_zoom
 from desktop.native.kept import KeptSession
 from desktop.native.layouts.base import NARROW_WIDTH, LayoutView, Scene
@@ -103,7 +104,6 @@ from desktop.native.layouts.registry import MATCH, options_for, sanitize_layout,
 from desktop.native.layouts.views import VIEW_CLASSES
 from desktop.native.look import (
     MENU_EDGE,
-    WEEK_LIST_ROW_HEIGHT,
     effective_look,
     look_measures,
     look_motion,
@@ -199,6 +199,7 @@ from desktop.native.widgets import (
     Toast,
     UnfinishedPanel,
     WhyOff,
+    overdue_unfinished,
     add_heading,
     confirm,
     control_art,
@@ -264,6 +265,25 @@ VIEW_ORDER = ("day", "week", "month")
 # it is the way in, and the list floats at this width (the whole planner on a narrow window).
 WEEK_LIST_ROW_NAME = "Week as a list · Ctrl+Shift+L"
 WEEK_LIST_PANEL_WIDTH = 360
+STATUS_STRIP_PX = 28
+NOTHING_MORE_TODAY = "Nothing more today"
+
+
+class ClickyTitle(FittedLabel):
+    """The week range in the bar: a click opens the mini month, which is not on the rail."""
+
+    clicked = Signal()
+
+    def __init__(self, parent: QWidget | None = None, minimum: int = 96) -> None:
+        super().__init__(parent, minimum)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+            event.accept()
+            return
+        super().mousePressEvent(event)
 PLAN_LABEL = "Plan my homework"
 SUGGEST_LABEL = "Suggest times"
 PLAN_TIP = (
@@ -1214,9 +1234,16 @@ class NativeWindow(QMainWindow):
         where.addSpacing(SPACING[1])
         # Thirteen buttons of equal weight and no title at all was the clutter: nothing told the eye
         # where to land.
-        self.week_title = FittedLabel()
+        self.week_title = ClickyTitle()
         self.week_title.setObjectName("weekTitle")
+        self.week_title.clicked.connect(self._toggle_week_month)
         where.addWidget(self.week_title)
+        self.week_title_mark = QPushButton("▾")
+        self.week_title_mark.setObjectName("weekTitleMark")
+        self.week_title_mark.setProperty("quiet", True)
+        self.week_title_mark.setAccessibleName("Pick a week")
+        self.week_title_mark.clicked.connect(self._toggle_week_month)
+        where.addWidget(self.week_title_mark)
         # One control, not four loose buttons: switching view is one decision.
         segments = SegmentTrack()
         segments.setObjectName("segments")
@@ -1521,12 +1548,26 @@ class NativeWindow(QMainWindow):
         self.planner.setObjectName("plannerStack")
         # A row of fixed height is the Tab stop: the list opens over the grid from it, so Tab never
         # moves the week.
+        self.status_strip = QWidget()
+        self.status_strip.setObjectName("weekStatusStrip")
+        self.status_strip.setFixedHeight(STATUS_STRIP_PX)
+        self.status_strip.setAccessibleName("Status")
+        strip = QHBoxLayout(self.status_strip)
+        strip.setContentsMargins(16, 0, 16, 0)
+        strip.setSpacing(24)
+        self.status_next = QLabel(NOTHING_MORE_TODAY)
+        self.status_next.setObjectName("weekStatusNext")
+        strip.addWidget(self.status_next, 1)
+        self.status_overdue = QLabel()
+        self.status_overdue.setObjectName("weekStatusOverdue")
+        strip.addWidget(self.status_overdue)
         self.week_list_row = QPushButton(WEEK_LIST_ROW_NAME)
         self.week_list_row.setObjectName("weekListRow")
         self.week_list_row.setProperty("quiet", True)
         self.week_list_row.setAccessibleName(WEEK_LIST_ROW_NAME)
         self.week_list_row.clicked.connect(self._toggle_week_access_list)
         self.week_list_row.installEventFilter(self)
+        strip.addWidget(self.week_list_row)
         self.week_list_panel = QFrame(page)
         self.week_list_panel.setObjectName("weekListPanel")
         self.week_list_panel.hide()
@@ -1563,6 +1604,15 @@ class NativeWindow(QMainWindow):
         self.rail.date_chosen.connect(self._go_to_date)
         self.rail.allow_split_requested.connect(self.session.allow_splitting)
         self.rail.month_shown_changed.connect(self._keep_rail)
+        self.month_pop = QWidget(self, Qt.WindowType.Popup)
+        self.month_pop.setObjectName("weekMonthPopover")
+        self.month_pop.hide()
+        pop_box = QVBoxLayout(self.month_pop)
+        pop_box.setContentsMargins(8, 8, 8, 8)
+        self.month_pick = MonthCard()
+        self.month_pick.fold.hide()
+        self.month_pick.date_chosen.connect(self._pick_week_date)
+        pop_box.addWidget(self.month_pick)
         body.addWidget(self.rail)
         body.addLayout(column, 1)
         self.day_view = ClassicDay(self.hand)
@@ -1586,7 +1636,7 @@ class NativeWindow(QMainWindow):
             widget.installEventFilter(self)
         # The calendar is the point of this page, so it takes whatever height the rest does not need,
         # down to the window's foot. Notices float over it rather than taking a row.
-        column.addWidget(self.week_list_row)
+        column.addWidget(self.status_strip)
         column.addWidget(self.planner, 1)
         self.planner.installEventFilter(self)
         layout.addLayout(body, 1)
@@ -1889,6 +1939,9 @@ class NativeWindow(QMainWindow):
         # Quick focus is in the action row whenever there is one, so the panel's own copy would be
         # the same button twice; it belongs to the panel only where no action row is shown.
         self.focus_panel.quick.setVisible(own and self._day_mode)
+        needed = self.session.homework_time_needed()
+        self.more_button.set_count(0)
+        self.solve_button.set_count(len(needed))
 
     def _set_clock(self) -> bool:
         """Whether the clock changed. Only a change redraws the week, so this is safe to call from
@@ -2442,7 +2495,9 @@ class NativeWindow(QMainWindow):
         unfinished = self.findChild(QPushButton, "unfinishedOpen")
         if unfinished is not None:
             unfinished.setEnabled(bool(needed))
-        self.more_button.set_count(len(needed))
+        self.more_button.set_count(0)
+        self.solve_button.set_count(len(needed))
+        self._sync_status_strip()
         prompt = self._unfinished_items(self.session.consume_unfinished())
         if prompt:
             self._fill_unfinished(prompt)
@@ -2560,25 +2615,14 @@ class NativeWindow(QMainWindow):
         needed = self.session.homework_time_needed()
         count = len(needed)
         unfinished = self.findChild(QPushButton, "unfinishedOpen")
-        left_over = self.session.unfinished()
         if unfinished is not None:
             # Worked out as the menu opens: the busy flag turns every action back on when a save
-            # ends, and left to that "Unfinished" was pressable with nothing to show.
-            unfinished.setEnabled(not self.session.busy and (bool(needed) or bool(left_over)))
+            # ends, and left to that "Unfinished" was pressable with nothing to show. Overdue
+            # homework that already has a time lives on the status strip, not this row.
+            unfinished.setEnabled(not self.session.busy and bool(needed))
         for action, button in self._more_pairs:
             action.setEnabled(button.isEnabled())
             tip = self._more_tip(button.objectName(), button.isEnabled())
-            if button is unfinished and left_over and not needed:
-                overdue = sum(item.get("left_over_state") == "overdue" for item in left_over)
-                carried = len(left_over) - overdue
-                parts = []
-                if carried:
-                    parts.append(f"Left from last week · {carried}")
-                if overdue:
-                    parts.append(f"Overdue · {overdue}")
-                action.setText(" · ".join(parts))
-                action.setToolTip(tip)
-                continue
             # Greyed with nothing to show, Unfinished says so on its row, not only in a tooltip (T23).
             said = f"\t{NONE_UNFINISHED}" if tip == NOTHING_UNFINISHED else ""
             if button.objectName() == "unfinishedOpen" and count:
@@ -3162,6 +3206,7 @@ class NativeWindow(QMainWindow):
         )
         self.month_grid.set_unsaved(self.session.unsaved_weeks())
         self.month_grid.set_week(week)
+        self._sync_status_strip()
 
     def _sync_week_access_list(self, week) -> None:
         selected = self.week_access_list.currentItem()
@@ -3205,9 +3250,49 @@ class NativeWindow(QMainWindow):
                     break
 
     def _show_week_list_row(self, shown: bool) -> None:
+        self.status_strip.setVisible(shown)
         self.week_list_row.setVisible(shown)
         if not shown:
             self._close_week_access_list(restore_focus=False)
+
+    def _sync_status_strip(self) -> None:
+        """Next or Nothing more today on the left, overdue count, Week as a list on the right."""
+        today, minute = self._clock_in_week()
+        heading, title, when, _then = next_words(self.rail._week, today, minute)
+        self.status_next.setText(f"{heading}: {title} {when}" if title else NOTHING_MORE_TODAY)
+        stamp = self.session.now_ms() / 1000
+        overdue = overdue_unfinished(self.session.unfinished(), datetime.fromtimestamp(stamp))
+        words = f"{len(overdue)} overdue"
+        previous = getattr(self, "_overdue_words", None)
+        self.status_overdue.setText(words)
+        if words != previous and (previous is not None or overdue):
+            announce(self.status_overdue, words)
+        self._overdue_words = words
+
+    def _toggle_week_month(self) -> None:
+        if self.month_pop.isVisible():
+            self.month_pop.hide()
+            return
+        week = self.session.week_start
+        today, _minute = self._clock_in_week()
+        now = date.today() if today is None else date.fromisoformat(week) + timedelta(days=today)
+        due = frozenset(
+            str(item.get("due") or "")[:10]
+            for item in (self.session.assignments or {}).values()
+            if item.get("due") and not item.get("completed")
+        )
+        self.month_pick.dates.look = self._look
+        self.month_pick.dates.colours = self.rail.colours
+        self.month_pick.show_week(week, now, due)
+        at = self.week_title.mapToGlobal(QPoint(0, self.week_title.height() + 4))
+        self.month_pop.adjustSize()
+        self.month_pop.move(at)
+        self.month_pop.show()
+        self.month_pop.raise_()
+
+    def _pick_week_date(self, iso: str) -> None:
+        self.month_pop.hide()
+        self._go_to_date(iso)
 
     def _focus_week_access_list(self) -> None:
         """Open the week list over the grid with the keyboard on its first row."""
@@ -3291,19 +3376,15 @@ class NativeWindow(QMainWindow):
         self._save_look()
 
     def _place_rail(self, shown: bool) -> None:
-        """The rail beside the planner, or folded into a line above it on a narrow window; and the
-        running timer at the top of the rail while it shows."""
-        narrow = self.width() < NARROW_WIDTH
-        if narrow != self.rail.folded:
+        """The Agenda rail stays beside the planner at a fixed width. The running timer sits at its
+        top while the rail shows."""
+        if self.rail.folded:
             for home in (self._rail_row, self._column):
                 home.removeWidget(self.rail)
-            if narrow:
-                self._column.insertWidget(self._column.indexOf(self.planner), self.rail)
-            else:
-                self._rail_row.insertWidget(0, self.rail)
-            self.rail.set_folded(narrow)
+            self._rail_row.insertWidget(0, self.rail)
+            self.rail.set_folded(False)
         self.rail.setVisible(shown)
-        in_rail = shown and not narrow
+        in_rail = shown
         slot = self.rail.timer_slot
         if in_rail and slot.indexOf(self.focus_panel) < 0:
             self._column.removeWidget(self.focus_panel)
@@ -4025,7 +4106,7 @@ class NativeWindow(QMainWindow):
         return left + [item for item in self._counted_items() if item["id"] not in seen]
 
     def _show_unfinished(self) -> None:
-        items = self._panel_items()
+        items = self._panel_items() if self.session.homework_time_needed() else []
         if not items:
             self.session._say(NOTHING_UNFINISHED)
         self._fill_unfinished(items)
@@ -4973,7 +5054,8 @@ class NativeWindow(QMainWindow):
             self._dressed = dressed
             self.setStyleSheet(sheet)
             # Fixed within a text size, so tabbing never moves the grid; a new size re-lays out anyway.
-            self.week_list_row.setFixedHeight(WEEK_LIST_ROW_HEIGHT[effective_look(look)["text"]])
+            self.status_strip.setFixedHeight(STATUS_STRIP_PX)
+            self.week_list_row.setFixedHeight(STATUS_STRIP_PX)
             self._keep_bar_whole()
             apply_ui_effects(self._motion)
             self.toast.motion = self._motion
@@ -4983,6 +5065,7 @@ class NativeWindow(QMainWindow):
             self.day_view.set_look(look, palette)
             self.rail.set_look(look, palette)
             self.more_button.set_palette(palette)
+            self.solve_button.set_palette(palette)
             self.month_grid.set_palette(palette)
             self.add_menu.set_palette(palette, chips)
             self._dress_entry(palette, look)
@@ -5352,22 +5435,29 @@ class NativeWindow(QMainWindow):
         super().keyPressEvent(event)
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        planner = getattr(self, "planner", None)
+        week_list_panel = getattr(self, "week_list_panel", None)
+        week_list_row = getattr(self, "week_list_row", None)
+        week_access_list = getattr(self, "week_access_list", None)
         if (
-            watched is self.planner
+            planner is not None
+            and watched is planner
             and event.type() == QEvent.Type.Resize
-            and self.week_list_panel.isVisible()
+            and week_list_panel is not None
+            and week_list_panel.isVisible()
         ):
             self._layout_week_list()
         # A push button answers Space only; Enter opens the list as well.
         if (
-            watched is self.week_list_row
+            week_list_row is not None
+            and watched is week_list_row
             and event.type() == QEvent.Type.KeyPress
             and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
             and not event.modifiers()
         ):
-            self.week_list_row.click()
+            week_list_row.click()
             return True
-        if watched is self.week_access_list and event.type() == QEvent.Type.KeyPress:
+        if week_access_list is not None and watched is week_access_list and event.type() == QEvent.Type.KeyPress:
             key = event.key()
             if key == Qt.Key.Key_Escape and not event.modifiers():
                 self._close_week_access_list()
@@ -5384,11 +5474,14 @@ class NativeWindow(QMainWindow):
                     )
                     self._block_menu(block_id, day, point)
                 return True
-        if event.type() == QEvent.Type.Resize and watched in (self.week_table, self.day_view):
+        if event.type() == QEvent.Type.Resize and watched in (
+            getattr(self, "week_table", None),
+            getattr(self, "day_view", None),
+        ):
             self._center_empty_card()
         if event.type() in (QEvent.Type.Show, QEvent.Type.Hide) and watched in (
-            self.plan_review,
-            self.unfinished_panel,
+            getattr(self, "plan_review", None),
+            getattr(self, "unfinished_panel", None),
         ):
             self.month_grid.set_tight(
                 any(panel.isVisibleTo(self._week_page) for panel in (self.plan_review, self.unfinished_panel))
