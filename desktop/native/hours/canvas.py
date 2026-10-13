@@ -41,7 +41,7 @@ from PySide6.QtWidgets import QScrollArea, QToolTip, QWidget
 from backend.slots import SLOT_MIN
 from desktop.native import icons
 from desktop.native.calendar import DAYS, category_icon, create_click_range
-from desktop.native.fonts import at_scale, caption, time_font, weighted
+from desktop.native.fonts import at_scale, caption, shrink, time_font, weighted
 from desktop.native.hours.geometry import (
     BETWEEN,
     Axis,
@@ -368,7 +368,7 @@ class BlockPainter:
                 height = len(lines) * metrics.height() + 2 * pad
                 if width <= max_width and top + height <= rect.bottom() - inset:
                     break
-                font.setPointSizeF(font.pointSizeF() - 0.5)
+                font = shrink(font)
             else:
                 continue
             tag = QRectF(rect.left() + inset, top, width, height)

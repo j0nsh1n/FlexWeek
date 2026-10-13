@@ -94,3 +94,10 @@ def caption(base: QFont) -> QFont:
     knob = text_knob(base.pointSizeF())
     made.setPointSizeF(type_pt("caption", knob) if knob else max(base.pointSizeF() * 0.86, 7))
     return made
+
+
+def shrink(base: QFont, step: float = 0.5, floor: float = 7.0) -> QFont:
+    """One step smaller, not below `floor`. Painted tags shrink until they fit a block."""
+    made = QFont(base)
+    made.setPointSizeF(max(floor, made.pointSizeF() - step))
+    return made
