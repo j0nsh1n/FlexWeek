@@ -245,10 +245,10 @@ fn gate_from_a_subdirectory_still_runs_at_the_checkout() {
     let mut job_cwds = Vec::new();
     let mut lines = log.lines();
     while let Some(line) = lines.next() {
-        if line.contains(" ruff ") || line.contains(" mypy ") || line.contains(" pytest ") {
-            if let Some(cwd) = lines.next() {
-                job_cwds.push(cwd.to_string());
-            }
+        if (line.contains(" ruff ") || line.contains(" mypy ") || line.contains(" pytest "))
+            && let Some(cwd) = lines.next()
+        {
+            job_cwds.push(cwd.to_string());
         }
     }
     assert!(
