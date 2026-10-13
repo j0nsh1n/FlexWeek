@@ -668,19 +668,23 @@ class StyleCarousel(QFrame):
             self.slides[style.key] = slide
         self.previous = self._arrow("chevron-left", "Previous style", -1)
         self.following = self._arrow("chevron-right", "Next style", 1)
-        self.dots: dict[str, QPushButton] = {}
+        self.dots: dict[str, QRadioButton] = {}
+        self.dot_group = QButtonGroup(self)
+        self.dot_group.setExclusive(True)
         line = QHBoxLayout()
         line.setSpacing(10)
         line.addStretch(1)
         line.addWidget(self.previous)
         for number, style in enumerate(self._order, start=1):
-            dot = QPushButton()
+            dot = QRadioButton()
             dot.setObjectName("setupDot")
             dot.setFixedSize(DOT_PX, DOT_PX)
             dot.setIconSize(QSize(DOT_PX - 4, DOT_PX - 4))
-            dot.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            dot.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
             dot.setCursor(Qt.CursorShape.PointingHandCursor)
             dot.setAccessibleName(f"Show {style.name}, {number} of {len(self._order)}")
+            dot.setAccessibleDescription(f"{number} of {len(self._order)}")
+            self.dot_group.addButton(dot)
             dot.clicked.connect(lambda _checked=False, key=style.key: self.go_to(key))
             self.dots[style.key] = dot
             line.addWidget(dot)
@@ -812,6 +816,7 @@ class StyleCarousel(QFrame):
             dot = self.dots[style.key]
             dot.setProperty("current", here)
             dot.setProperty("chosen", here and self._chosen)
+            dot.setChecked(here)
             icons.tint(dot, "check" if here and self._chosen else None)
             _repolish(dot)
         self.name.setText(current.name)

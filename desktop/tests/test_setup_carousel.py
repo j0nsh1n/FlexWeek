@@ -19,7 +19,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QPoint, QStandardPaths, Qt
-    from PySide6.QtGui import QColor
+    from PySide6.QtGui import QAccessible, QColor
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication, QGraphicsOpacityEffect, QPushButton, QWidget
 
@@ -192,6 +192,17 @@ def test_each_dot_says_its_place_in_the_row(qapp: QApplication) -> None:
         for number, style in enumerate(order, start=1):
             name = setup.carousel.dots[style.key].accessibleName()
             assert name == f"Show {style.name}, {number} of {len(order)}"
+
+
+def test_style_dots_are_radio_buttons_with_the_current_style_checked(qapp: QApplication) -> None:
+    """N13-A29: each dot exposes a radio role, its position, and the checked style."""
+    with dressed(qapp) as (setup, _palette):
+        for number, style in enumerate(setup.carousel._order, start=1):
+            dot = setup.carousel.dots[style.key]
+            face = QAccessible.queryAccessibleInterface(dot)
+            assert face.role() == QAccessible.Role.RadioButton
+            assert bool(face.state().checked) is (style.key == middle(setup))
+            assert face.text(QAccessible.Text.Description) == f"{number} of {len(setup.carousel._order)}"
 
 
 def test_the_arrows_and_the_dots_move_it_too(qapp: QApplication) -> None:
