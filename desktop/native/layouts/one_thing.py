@@ -427,6 +427,14 @@ class OneThingView(LayoutView):
         self._then.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._then.setWidget(then_contents)
         main.addWidget(self._then, 1, 1, Qt.AlignmentFlag.AlignTop)
+        action_row = self._actions(scene, item)
+        main.addLayout(action_row, 2, 1)
+        evening = self._evening_line(scene, self.shown_day(scene), queue, current)
+        if evening:
+            main.addWidget(label(evening, "oneEvening"), 3, 1)
+        if self.shown_day(scene) is None:
+            notice = self._words(scene, item, is_now, current is not None)[1]
+            main.addWidget(label(notice, "oneWeekNotice"), 4, 1)
         self._daybar = None
         if scene.options.get("daybar") != "hide" and scene.today is not None:
             self._daybar = DayBar(
@@ -447,15 +455,7 @@ class OneThingView(LayoutView):
             nav_box.setSpacing(0)
             nav_box.addWidget(self._daybar)
             nav_box.addWidget(self._day_letters(scene, self._selected(scene)))
-            main.addWidget(navigation, 2, 1)
-        action_row = self._actions(scene, item)
-        main.addLayout(action_row, 3, 1)
-        evening = self._evening_line(scene, self.shown_day(scene), queue, current)
-        if evening:
-            main.addWidget(label(evening, "oneEvening"), 4, 1)
-        if self.shown_day(scene) is None:
-            notice = self._words(scene, item, is_now, current is not None)[1]
-            main.addWidget(label(notice, "oneWeekNotice"), 5, 1)
+            main.addWidget(navigation, 5, 1)
         self._main = content
         self._root.addWidget(content, 1)
         waiting = self._unplaced(scene)
