@@ -87,10 +87,6 @@ def homework_time_sentence(left_over: list[dict], needed: list[dict]) -> str:
     overdue = sum(item.get("left_over_state") == "overdue" for item in left_over)
     carried = sum(item.get("left_over_state") == "left_from_last_week" for item in left_over)
     minutes = {item.get("assignment_id"): int(item.get("minutes", 0)) for item in needed}
-    for item in left_over:
-        if item.get("left_over_state") == "overdue":
-            key = item.get("id")
-            minutes[key] = max(minutes.get(key, 0), int(item.get("remaining_min", 0)))
     total = sum(minutes.values())
     if not overdue and not carried and not total:
         return "Everything has a time."

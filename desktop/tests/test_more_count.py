@@ -20,6 +20,7 @@ from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.look import contrast, count_pill, resolved_palette
 from desktop.native.weekmodel import length_label
 from desktop.native.window import NativeWindow
+from desktop.tests.test_1br_left_over_guards import overdue_this_week
 from desktop.tests.window_support import (  # noqa: F401
     qapp,
     server,
@@ -237,6 +238,25 @@ def test_a_greyed_unfinished_opens_nothing(
     assert more_row(window) == (False, "Unfinished\tNone left")
     window._show_unfinished()
     assert not window.unfinished_panel.isVisibleTo(window)
+
+
+def test_more_counts_only_panel_rows_that_need_a_time(qapp, window) -> None:  # noqa: F811
+    overdue_this_week(qapp, window)
+    add(window, "art", "Art", 30, due_in(window, 6))
+    window.session.save()
+    settled(qapp, window)
+    assert more_row(window) == (True, "Unfinished\t1 left")
+    window._show_unfinished()
+    settled(qapp, window)
+    assert window.unfinished_panel.list.count() == 2
+    assert {item["assignment_id"] for item in window.session.homework_time_needed()} == {"art"}
+    buttons = [
+        window.unfinished_panel.list.itemWidget(window.unfinished_panel.list.item(index)).findChild(
+            QPushButton, "focusUnfinished-bio"
+        )
+        for index in range(window.unfinished_panel.list.count())
+    ]
+    assert any(button is not None for button in buttons)
 
 
 @pytest.mark.parametrize(

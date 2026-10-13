@@ -139,9 +139,10 @@ def test_the_strip_names_overdue_homework_that_already_has_a_time(
     assert window.rail.none_waiting.text() == "Everything has a time."
     assert window.more_button.accessibleName() == "More"
     assert window.solve_button.accessibleName() == "Plan my homework"
-    assert more_row(window) == (False, "Unfinished\tNone left")
+    assert more_row(window) == (True, "Unfinished\tNone left")
     window._show_unfinished()
-    assert not window.unfinished_panel.isVisibleTo(window)
+    settled(qapp, window)
+    assert window.unfinished_panel.isVisibleTo(window)
 
 
 def test_the_next_rows_keep_the_keyboard_as_the_minutes_pass(

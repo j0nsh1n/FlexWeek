@@ -76,7 +76,10 @@ def test_homework_time_sentence_includes_overdue_carried_and_unplaced_work() -> 
             {"id": "chem", "left_over_state": "left_from_last_week", "remaining_min": 30},
         ],
         [{"assignment_id": "chem", "minutes": 30}, {"assignment_id": "art", "minutes": 15}],
-    ) == "1 overdue · 1 left from last week · 1 h 45 min still needs a time"
+    ) == "1 overdue · 1 left from last week · 45 min still needs a time"
+    assert homework_time_sentence(
+        [{"id": "bio", "left_over_state": "overdue", "remaining_min": 60}], []
+    ) == "1 overdue"
     assert homework_time_sentence([], []) == "Everything has a time."
 
 
