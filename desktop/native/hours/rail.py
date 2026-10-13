@@ -899,7 +899,14 @@ class Rail(QFrame):
         self.one_go.setVisible(bool(self.one_go_box.count()))
         count = len(time_needed or [])
         self._time_needed_count = count
-        words = homework_time_sentence(left_over or [], time_needed or [])
+        if count:
+            words = "\n".join(
+                f"{item['title']} · {length_label(item['minutes'])} left" for item in time_needed or []
+            )
+        elif left_over:
+            words = homework_time_sentence(left_over, [])
+        else:
+            words = "Everything has a time."
         self.none_waiting.setText(words)
         self.none_waiting.setAccessibleName(words)
         previous = getattr(self, "_history_words", None)
@@ -908,8 +915,6 @@ class Rail(QFrame):
 
             announce(self.none_waiting, words)
         self._history_words = words
-        if count:
-            self.waiting_count.setText(str(count))
         self.waiting_count.setText(str(self._time_needed_count) if self._time_needed_count else "")
         self._show()
 

@@ -109,7 +109,7 @@ def window(qapp: QApplication, tmp_path: Path) -> Iterator[NativeWindow]:
         look_file().unlink(missing_ok=True)
 
 
-def show(qapp: QApplication, window: NativeWindow, design: str, tab: str) -> QPushButton:
+def show(qapp: QApplication, window: NativeWindow, design: str, tab: str) -> QAbstractButton:
     """Put `design` on screen at `tab`, by a click on the tab's button, which keeps the keyboard."""
     window._layout = sanitize_layout({"main": design, "day": "one"})
     window._apply_appearance()

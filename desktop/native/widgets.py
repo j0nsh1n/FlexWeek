@@ -4844,7 +4844,6 @@ class UnfinishedPanel(QWidget):
             text = QLabel(f"{item['title']} · {length_label(int(item['remaining_min']))} left")
             text.setObjectName("unfinishedRow")
             state = item.get("left_over_state")
-            state_words = "Overdue" if state == "overdue" or item["id"] in late else "Left from last week"
             due = item.get("due")
             due_words = ""
             if isinstance(due, str) and due:
@@ -4854,7 +4853,14 @@ class UnfinishedPanel(QWidget):
                 except ValueError:
                     pass
             length = length_label(int(item["remaining_min"]))
-            row_words = f"{item['title']} · {length} left{due_words} · {state_words}"
+            label_text = f"{item['title']} · {length} left"
+            if state == "overdue" or item["id"] in late:
+                state_words = "Overdue"
+            elif state == "left_from_last_week":
+                state_words = "Left from last week"
+            else:
+                state_words = ""
+            row_words = f"{label_text}{due_words} · {state_words}" if state_words else label_text
             row.setAccessibleName(row_words)
             text.setText(row_words)
             row_layout.addWidget(text, 1)

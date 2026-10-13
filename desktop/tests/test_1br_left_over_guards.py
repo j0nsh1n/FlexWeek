@@ -14,8 +14,9 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QPushButton
+from PySide6.QtWidgets import QLabel, QPushButton
 
+from desktop.native.weekmodel import length_label, range_label
 from desktop.tests.grid_support import (  # noqa: F401
     qapp,
     server,
@@ -51,10 +52,16 @@ def overdue_this_week(qapp, window) -> str:
 def test_1br_the_week_list_row_says_overdue_with_the_due_date(qapp, window) -> None:
     overdue_this_week(qapp, window)
     listing = window.week_access_list
-    rows = [listing.item(i).text() for i in range(listing.count()) if "Bio" in listing.item(i).text()]
+    rows = [
+        listing.item(i).text()
+        for i in range(listing.count())
+        if listing.item(i).text().startswith("Wednesday: Bio reading, ")
+    ]
     due = date.fromisoformat(window.session.assignments["bio"]["due"][:10])
     due_words = f"Overdue, was due {due.strftime('%a')} {due.day} {due.strftime('%b')}"
-    assert rows and all(due_words in row for row in rows), rows
+    times = range_label(15 * 60 + 15, 16 * 60 + 15)
+    expected = f"Wednesday: Bio reading, {times} · {length_label(60)} · {due_words} · Pinned"
+    assert rows == [expected]
 
 
 def test_1br_more_badge_opens_the_shared_left_over_rows(qapp, window) -> None:
@@ -65,10 +72,12 @@ def test_1br_more_badge_opens_the_shared_left_over_rows(qapp, window) -> None:
     assert window.unfinished_panel.isVisible()
     row = window.unfinished_panel.list.itemWidget(window.unfinished_panel.list.item(0))
     due = date.fromisoformat(window.session.assignments["lab"]["due"][:10])
-    assert row.accessibleName() == (
+    words = (
         f"Lab report · 1 h left · due {due.strftime('%a')} {due.day} {due.strftime('%b')} "
         "· Left from last week"
     )
+    assert row.accessibleName() == words
+    assert row.findChild(QLabel, "unfinishedRow").text() == words
 
 
 def test_1br_deadline_timer_refreshes_tags_sidebar_and_focus(qapp, window, monkeypatch) -> None:
@@ -100,11 +109,17 @@ def test_1br_deadline_timer_refreshes_tags_sidebar_and_focus(qapp, window, monke
     settled(qapp, window)
     assert session.unfinished()[0]["left_over_state"] == "overdue"
     rows = [window.week_access_list.item(i).text() for i in range(window.week_access_list.count())]
-    assert any("Bio reading" in row and "Overdue" in row for row in rows)
-    assert "1 overdue" in window.rail.none_waiting.text()
+    due = friday
+    due_words = f"Overdue, was due {due.strftime('%a')} {due.day} {due.strftime('%b')}"
+    times = range_label(15 * 60 + 15, 16 * 60 + 15)
+    expected = f"Wednesday: Bio reading, {times} · {length_label(60)} · {due_words} · Pinned"
+    bio_rows = [row for row in rows if row.startswith("Wednesday: Bio reading, ")]
+    assert bio_rows == [expected]
+    leftover_words = "1 overdue · 1 h still needs a time"
+    assert window.rail.none_waiting.text() == leftover_words
     assert any(item["title"] == "Bio reading, overdue" for item in session.focus_tasks())
     sidebar = [item for item in announcements if item[0] is window.rail.none_waiting]
-    assert sidebar == [(window.rail.none_waiting, "1 overdue · 1 h still needs a time", False)]
+    assert sidebar == [(window.rail.none_waiting, leftover_words, False)]
     window._deadline_changed()
     settled(qapp, window)
     assert [item for item in announcements if item[0] is window.rail.none_waiting] == sidebar

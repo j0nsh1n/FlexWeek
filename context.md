@@ -1,6 +1,7 @@
 # context.md — FlexWeek
 
 ## Current State
+- 2026-10-12: 1.0.0 lane 1 More-row wording follows Jonathan's demo call. More says `Unfinished` with `N left` when homework still needs a time. Leftover Unfinished-panel rows show due date and Overdue / Left from last week on screen. The rail lists each not-placed homework line when any still need a time. Overdue-with-a-time (nothing still needs a time) still uses the 1b-R More words and T-W36 sidebar sentence; whether that row should grey out is unanswered.
 - 2026-10-11: v0.19.2 prepared on `release/0.19.2` (worktree `~/.worktrees/flexweek-0190`, `.venv` is
   `venv-0192-rel`): the 0.19.1 QA handoff's Fix first items (F3, F3b, 3-R, L12, T-W1, R10, 0l-R, A28,
   0f-R, R1, N15, S1, A27, T1, P1, U19) and the fixes from two QA testers who used the app through
@@ -147,11 +148,8 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
-- 2026-10-11, `release/0.19.2`: every lane merged. Final `fwtest gate --workers 3` on the branch: 4838 passed,
-  no skips or xfails; `fwtest rig`: 249/249. Pushed and opened as a PR to main on Jonathan's word; merge and
-  publish v0.19.2 as latest (CI builds the installers on publish; release notes in
-  `docs/release-notes-v0.19.2.md`).
-- 2026-10-12, `docs/1.0.0-design-rounds` (from main at v0.19.2): all four design rounds are picked and on
-  the roadmap's "1.0.0 — running list" (planning rail, step sheet, Android agenda, Month date pane, My day
-  shared fix on both day screens). The demo site is `~/.flexweek-ui-harness/scratch/design-1.0.0/`
-  (`index.html` links every round). Next: cut 1.0.0 lanes from that list; native code after the demo.
+- 2026-10-12, `release/1.0.0` in `~/.worktrees/flexweek-0190`. R11 is `3b5406dd`. 1b-R is `f32aad90`
+  through `16422ec1`, then the More-row wording follow-up on this branch. Report:
+  `~/.flexweek-ui-harness/scratch/1.0.0/lane-1-report.md`.
+- Next: lane 2, Planning screen and Agenda rail (`demo.html`, pick A). Do not start lane 9 until
+  `javac -version` works.

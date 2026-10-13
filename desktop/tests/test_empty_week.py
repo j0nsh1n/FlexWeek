@@ -60,7 +60,7 @@ def test_a_new_accounts_week_offers_one_button_instead_of_empty_hours(
     assert [button.text() for button in buttons] == [EMPTY_BUTTON]
     # The top bar stays: where you are, the views, Plan and More.
     for name in ("weekTitle", "viewWeek", "solveButton", "moreButton"):
-        assert window.findChild(QLabel if name == "weekTitle" else QPushButton, name).isVisible(), name
+        assert window.findChild(QLabel if name == "weekTitle" else QAbstractButton, name).isVisible(), name
 
     window.findChild(QAbstractButton, "viewDay").click()
     settled(qapp, window)

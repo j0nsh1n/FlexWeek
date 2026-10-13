@@ -5,6 +5,9 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+- More > Unfinished keeps the words `Unfinished` with `N left` for homework that still needs a time. Each leftover row in that list shows its due date and whether it is overdue or left from last week.
+
 ## [0.19.2] - 2026-10-11
 
 ### Fixed

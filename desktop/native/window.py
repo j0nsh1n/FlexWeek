@@ -28,6 +28,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtNetwork import QLocalServer
 from PySide6.QtWidgets import (
+    QAbstractButton,
     QAbstractSpinBox,
     QApplication,
     QCheckBox,
@@ -1338,7 +1339,7 @@ class NativeWindow(QMainWindow):
         routines = QPushButton("Routines")
         routines.setObjectName("routinesButton")
         routines.clicked.connect(self._open_routines)
-        unfinished = QPushButton(NONE_UNFINISHED)
+        unfinished = QPushButton("Unfinished")
         unfinished.setObjectName("unfinishedOpen")
         unfinished.clicked.connect(self._show_unfinished)
         late = QPushButton("Running late")
@@ -1840,7 +1841,7 @@ class NativeWindow(QMainWindow):
         self._fill_classic()
         self._refresh_layout()
         if self.unfinished_panel.isVisible():
-            self._fill_unfinished(self._unfinished_items())
+            self._fill_unfinished(self._panel_items())
         self._sync_left_chip()
         self._show_next()
         self.rail.set_tasks(self.session.focus_tasks(), self._clock_in_week()[0])
@@ -2325,7 +2326,9 @@ class NativeWindow(QMainWindow):
             self.toast.hide()
         if self.unfinished_panel.isVisible():
             # A row deleted, planned or finished leaves the list, and an Undo brings it back.
-            self._fill_unfinished(self._counted_items())
+            # Overdue and carried homework stay listed when the week changes; they are not the
+            # "still needs a time" count.
+            self._fill_unfinished(self._panel_items())
         self._sync_left_chip()
         if self.session.dirty:
             # Every change reaches here, so this is where the clock on "stopped changing" restarts.
@@ -2443,8 +2446,9 @@ class NativeWindow(QMainWindow):
         prompt = self._unfinished_items(self.session.consume_unfinished())
         if prompt:
             self._fill_unfinished(prompt)
+            self._unfinished_opened = True
         elif self._unfinished_opened and not self.unfinished_panel.isHidden():
-            self._fill_unfinished(self._counted_items())
+            self._fill_unfinished(self._panel_items())
         else:
             self._unfinished_opened = False
             self.unfinished_panel.hide()
@@ -2554,6 +2558,7 @@ class NativeWindow(QMainWindow):
     def _sync_more_menu(self) -> None:
         self._sync_undo_enabled()
         needed = self.session.homework_time_needed()
+        count = len(needed)
         unfinished = self.findChild(QPushButton, "unfinishedOpen")
         left_over = self.session.unfinished()
         if unfinished is not None:
@@ -2563,7 +2568,7 @@ class NativeWindow(QMainWindow):
         for action, button in self._more_pairs:
             action.setEnabled(button.isEnabled())
             tip = self._more_tip(button.objectName(), button.isEnabled())
-            if button is unfinished and left_over:
+            if button is unfinished and left_over and not needed:
                 overdue = sum(item.get("left_over_state") == "overdue" for item in left_over)
                 carried = len(left_over) - overdue
                 parts = []
@@ -2576,6 +2581,8 @@ class NativeWindow(QMainWindow):
                 continue
             # Greyed with nothing to show, Unfinished says so on its row, not only in a tooltip (T23).
             said = f"\t{NONE_UNFINISHED}" if tip == NOTHING_UNFINISHED else ""
+            if button.objectName() == "unfinishedOpen" and count:
+                said = f"\t{count} left"
             action.setText(button.text() + said)
             action.setToolTip(tip)
         if self._spotify_action is not None:
@@ -2602,7 +2609,7 @@ class NativeWindow(QMainWindow):
         if busy:
             self._leave_greyed_button()
         for name in BUSY_BUTTONS:
-            button = self.findChild(QPushButton, name)
+            button = self.findChild(QAbstractButton, name)
             if button is not None and button.property("busyGuard") is None:
                 button.setProperty("busyGuard", True)
                 button.installEventFilter(self._busy_guard)
@@ -2641,7 +2648,7 @@ class NativeWindow(QMainWindow):
         """A button greyed with the keyboard on it hands the keyboard to the next one along, such as the
         previous-week arrow; it goes to the week instead."""
         focus = QApplication.focusWidget()
-        if isinstance(focus, QPushButton) and focus.objectName() in BUSY_BUTTONS:
+        if isinstance(focus, QAbstractButton) and focus.objectName() in BUSY_BUTTONS:
             self._focus_week()
 
     def _grey_while_busy(self) -> None:
@@ -2649,7 +2656,7 @@ class NativeWindow(QMainWindow):
         if busy:
             self._leave_greyed_button()
         for name in BUSY_BUTTONS:
-            button = self.findChild(QPushButton, name)
+            button = self.findChild(QAbstractButton, name)
             if button is not None:
                 button.setEnabled(not busy)
         self._sync_running_late()
@@ -4011,8 +4018,14 @@ class NativeWindow(QMainWindow):
 
         self.session.copy_last_week_fixed_rows(offer)
 
+    def _panel_items(self) -> list[dict]:
+        """Overdue and carried homework, then homework that still needs a time and is not already listed."""
+        left = self._unfinished_items()
+        seen = {item["id"] for item in left}
+        return left + [item for item in self._counted_items() if item["id"] not in seen]
+
     def _show_unfinished(self) -> None:
-        items = self._unfinished_items() or self._counted_items()
+        items = self._panel_items()
         if not items:
             self.session._say(NOTHING_UNFINISHED)
         self._fill_unfinished(items)

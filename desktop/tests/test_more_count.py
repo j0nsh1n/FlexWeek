@@ -101,7 +101,17 @@ def test_badge_more_row_panel_and_rail_show_the_same_items_and_minutes(
     window.findChild(QPushButton, "unfinishedOpen").click()
     qapp.processEvents()
     assert window.unfinished_panel.isVisibleTo(window)
-    assert sorted(panel_rows(window)) == lines
+    essay_due = date.today() - timedelta(days=3)
+    due_words = f"due {essay_due.strftime('%a')} {essay_due.day} {essay_due.strftime('%b')}"
+    panel_lines = sorted(
+        (
+            f"{title} · {length_label(amount)} left · {due_words} · Overdue"
+            if title == "History essay"
+            else f"{title} · {length_label(amount)} left"
+        )
+        for title, amount in minutes.items()
+    )
+    assert sorted(panel_rows(window)) == panel_lines
     assert window.unfinished_panel.findChild(QPushButton, "planUnfinished-essay") is not None
 
 
