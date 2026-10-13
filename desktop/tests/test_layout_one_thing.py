@@ -22,8 +22,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QPointF, Qt
-    from PySide6.QtGui import QKeyEvent
-    from PySide6.QtWidgets import QApplication, QLabel, QPushButton
+    from PySide6.QtGui import QFontMetricsF, QKeyEvent
+    from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QScrollArea
 
     from desktop.native.layouts.base import Scene, rules
     from desktop.native.layouts.one_thing import DayBar, OneThingView, label_minutes
@@ -205,7 +205,10 @@ def test_when_the_day_is_over_it_says_what_tomorrow_starts_with(qapp: QApplicati
     view = shown(qapp, "22:30")
     assert says(view)[0] == "Nothing left today"
     assert full_title(view) == "Nothing else scheduled today"
-    assert says(view)[2] == "Tomorrow starts with School at 08:00"
+    line = view.findChild(QLabel, "oneLine")
+    assert line.text() == ""
+    assert line.accessibleName() == "Tomorrow starts with School at 08:00"
+    assert line.toolTip() == "Tomorrow starts with School at 08:00"
     assert view.findChild(QLabel, "oneLabel").isVisibleTo(view) is True
     assert counts(view) == ("", 0.0)
     assert then(view) == []
@@ -392,6 +395,64 @@ def test_in_a_short_window_then_gives_way_before_the_ring_gets_small(qapp: QAppl
     assert short.findChild(CountdownRing).width() == 320
 
 
+@pytest.mark.parametrize("width,height", [(1024, 640), (1280, 800), (1440, 900)])
+@pytest.mark.parametrize("large", [False, True])
+@pytest.mark.parametrize("line_case", ["timed", "empty", "tomorrow"])
+def test_ring_text_fits_inside_at_demo_sizes(
+    qapp: QApplication, width: int, height: int, large: bool, line_case: str
+) -> None:
+    minute = {"timed": "13:40", "empty": "13:40", "tomorrow": "22:30"}[line_case]
+    base = scene(minute)
+    view = OneThingView()
+    view.resize(width, height)
+    week = build_week(WEEK, [], {}, TRACE) if line_case == "empty" else base.week
+    view.show_week(
+        Scene(week, base.today, base.minute, base.options, base.tokens, scale=1.2 if large else 1.0)
+    )
+    view.show()
+    qapp.processEvents()
+    ring = ring_of(view)
+    ring_text_width = ring.inside().width()
+    for name in ("oneTitle", "oneLine"):
+        text = view.findChild(QLabel, name)
+        metrics = QFontMetricsF(text.font())
+        widest = max((metrics.horizontalAdvance(line) for line in text.text().splitlines()), default=0)
+        assert widest <= ring_text_width, (name, text.text(), widest, ring_text_width)
+        if name == "oneLine":
+            expected = {
+                "timed": "08:00–14:30",
+                "empty": "No homework added",
+                "tomorrow": "Tomorrow starts with School at 08:00",
+            }[line_case]
+            assert text.accessibleName() == expected
+            if text.text() == "":
+                assert text.toolTip() == expected
+
+    number, unit = ring._fonts()
+    widest_number = QFontMetricsF(number).horizontalAdvance(ring.number())
+    if unit.pointSizeF() > 0:
+        widest_number += QFontMetricsF(unit).horizontalAdvance(f" {ring._unit}")
+    assert widest_number <= 2 * ring._inner()
+
+
+@pytest.mark.parametrize("width,height", [(1024, 640), (1280, 800), (1440, 900)])
+@pytest.mark.parametrize("large", [False, True])
+def test_ring_top_aligns_with_then_at_demo_sizes(
+    qapp: QApplication, width: int, height: int, large: bool
+) -> None:
+    base = scene("13:40")
+    view = OneThingView()
+    view.resize(width, height)
+    view.show_week(
+        Scene(base.week, base.today, base.minute, base.options, base.tokens, scale=1.2 if large else 1.0)
+    )
+    view.show()
+    qapp.processEvents()
+    ring = ring_of(view)
+    scroll = view.findChild(QScrollArea, "oneThenScroll")
+    assert ring.mapTo(view, ring.rect().topLeft()).y() == scroll.mapTo(view, scroll.rect().topLeft()).y()
+
+
 def test_with_no_countdown_the_ring_is_quiet_and_says_how_long_is_free(qapp: QApplication) -> None:
     """#25: the empty state drew a full minute ring with 0 / 15 / 30 / 45 and twelve ticks though nothing
     counts down, and said "Nothing else scheduled today" twice. At 21:40 nothing is left before 22:00."""
@@ -425,7 +486,9 @@ def test_the_quiet_rings_surroundings_are_bare_where_the_scale_would_be(qapp: QA
 
 def test_the_empty_state_keeps_its_old_words_once_the_evening_is_over(qapp: QApplication) -> None:
     view = shown(qapp, "22:30")
-    assert says(view)[2] == "Tomorrow starts with School at 08:00"
+    line = view.findChild(QLabel, "oneLine")
+    assert line.text() == ""
+    assert line.accessibleName() == "Tomorrow starts with School at 08:00"
     assert ring_of(view).scale() == (0, ())
 
 

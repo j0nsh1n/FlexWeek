@@ -10,7 +10,16 @@ from __future__ import annotations
 
 from PySide6.QtCore import QRect, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QFont, QFontMetrics, QKeyEvent, QMouseEvent, QPainter, QPen, QResizeEvent
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
 
 from desktop.native.calendar import DAYS
 from desktop.native.fonts import at_scale
@@ -331,10 +340,12 @@ class OneThingView(LayoutView):
         self._skip = 0
         self._title = Thing(self.hand)
         self._title_words = ""
+        self._line: QLabel | None = None
         self._ring: CountdownRing | None = None
         self._then: QWidget | None = None
         self._day: int | None = None
         self._daybar: DayBar | None = None
+        self._line_words = ""
         self._root = QVBoxLayout(self)
         self._root.setContentsMargins(SPACING[4], SPACING[4], SPACING[4], SPACING[4])
         self._root.setSpacing(0)
@@ -390,26 +401,22 @@ class OneThingView(LayoutView):
         empty(self._root)
         content = QWidget()
         content.setObjectName("oneMain")
-        main = QHBoxLayout(content)
+        main = QGridLayout(content)
         main.setContentsMargins(scene.px(24), scene.px(16), scene.px(24), scene.px(16))
-        main.setSpacing(scene.px(24))
-        left = QWidget()
-        left.setObjectName("oneLeftColumn")
-        left_box = QVBoxLayout(left)
-        left_box.setContentsMargins(0, 0, 0, 0)
-        left_box.setSpacing(scene.px(8))
+        main.setHorizontalSpacing(scene.px(24))
+        main.setVerticalSpacing(scene.px(12))
+        main.setColumnStretch(1, 1)
+        main.setRowStretch(7, 1)
         kicker = label(self._heading(scene, item, current), "oneLabel")
         kicker.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        left_box.addWidget(kicker)
+        main.addWidget(kicker, 0, 0)
         self._ring = self._dial(scene, item, is_now, current is not None, drawn)
-        left_box.addWidget(self._ring, 0, Qt.AlignmentFlag.AlignHCenter)
-        main.addWidget(left, 0)
-        right = QWidget()
-        right.setObjectName("oneRightColumn")
-        right_box = QVBoxLayout(right)
-        right_box.setContentsMargins(0, 0, 0, 0)
-        right_box.setSpacing(scene.px(12))
-        right_box.addStretch(1)
+        main.addWidget(
+            self._ring,
+            1,
+            0,
+            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter,
+        )
         later = tuple(queue[self._skip + 1 :])
         heading = "Later today" if self._on_today(scene) else "Then"
         then_contents = self._then_list(scene, later, heading)
@@ -419,15 +426,7 @@ class OneThingView(LayoutView):
         self._then.setFrameShape(QFrame.Shape.NoFrame)
         self._then.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._then.setWidget(then_contents)
-        right_box.addWidget(self._then)
-        action_row = self._actions(scene, item)
-        right_box.addLayout(action_row)
-        evening = self._evening_line(scene, self.shown_day(scene), queue, current)
-        if evening:
-            right_box.addWidget(label(evening, "oneEvening"))
-        if self.shown_day(scene) is None:
-            notice = self._words(scene, item, is_now, current is not None)[1]
-            right_box.addWidget(label(notice, "oneWeekNotice"))
+        main.addWidget(self._then, 1, 1, Qt.AlignmentFlag.AlignTop)
         self._daybar = None
         if scene.options.get("daybar") != "hide" and scene.today is not None:
             self._daybar = DayBar(
@@ -448,9 +447,15 @@ class OneThingView(LayoutView):
             nav_box.setSpacing(0)
             nav_box.addWidget(self._daybar)
             nav_box.addWidget(self._day_letters(scene, self._selected(scene)))
-            right_box.addWidget(navigation)
-        right_box.addStretch(1)
-        main.addWidget(right, 1)
+            main.addWidget(navigation, 2, 1)
+        action_row = self._actions(scene, item)
+        main.addLayout(action_row, 3, 1)
+        evening = self._evening_line(scene, self.shown_day(scene), queue, current)
+        if evening:
+            main.addWidget(label(evening, "oneEvening"), 4, 1)
+        if self.shown_day(scene) is None:
+            notice = self._words(scene, item, is_now, current is not None)[1]
+            main.addWidget(label(notice, "oneWeekNotice"), 5, 1)
         self._main = content
         self._root.addWidget(content, 1)
         waiting = self._unplaced(scene)
@@ -597,6 +602,7 @@ class OneThingView(LayoutView):
         line = self._words(scene, item, is_now, has_current)[1]
         if self.shown_day(scene) is None:
             line = ""
+        self._line_words = line
         self._title = Thing(self.hand)
         self._title_words = item.title if item else self._empty_title(scene)
         self._title.setText(self._title_words)
@@ -608,6 +614,8 @@ class OneThingView(LayoutView):
         ring.above.addWidget(self._title)
         when = label(line, "oneLine")
         when.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        when.setAccessibleName(line)
+        self._line = when
         ring.below.addWidget(when)
         to_go = 0 if item is None else (item.end if is_now else item.start) - scene.minute
         share = min(to_go, 60) / 60
@@ -733,6 +741,7 @@ class OneThingView(LayoutView):
         row_height = max([44, *(row.sizeHint().height() for row in rows)])
         then.setMaximumHeight(head + THEN_ROWS * row_height)
         self._fit_title()
+        self._fit_line()
 
     def _fit_title(self) -> None:
         """Inside the ring, in at most TITLE_SHARE of its height and two lines: at the title size, at
@@ -748,7 +757,12 @@ class OneThingView(LayoutView):
         for role in ("title", "heading"):
             metrics = QFontMetrics(at_scale(title.font(), role, scale, WEIGHT_STRONG))
             tall = metrics.boundingRect(QRect(0, 0, width, 10_000), int(Qt.TextFlag.TextWordWrap), words)
-            if round(tall.height() / metrics.lineSpacing()) <= 2 and tall.height() <= budget:
+            wide = max((metrics.horizontalAdvance(line) for line in words.splitlines()), default=0)
+            if (
+                wide <= width
+                and round(tall.height() / metrics.lineSpacing()) <= 2
+                and tall.height() <= budget
+            ):
                 break
         else:
             lines = 2 if metrics.lineSpacing() * 2 <= budget else 1
@@ -767,6 +781,24 @@ class OneThingView(LayoutView):
         if self._ring is None:
             return hint
         return QSize(hint.width(), hint.height() - max(self._ring.height() - RING_MIN, 0))
+
+    def _fit_line(self) -> None:
+        """Shrink the secondary line to the ring's inside width, or leave it out if it cannot fit."""
+        ring, line = self._ring, self._line
+        if ring is None or line is None:
+            return
+        words = self._line_words
+        scale = self._scene.scale if self._scene else 1.0
+        font = at_scale(line.font(), "body", scale)
+        width = ring.inside().width()
+        while words and QFontMetrics(font).horizontalAdvance(words) > width and font.pointSizeF() > 8:
+            font.setPointSizeF(max(8, font.pointSizeF() - 0.5))
+        shown = words if QFontMetrics(font).horizontalAdvance(words) <= width else ""
+        line.setStyleSheet(f"font-size: {font.pointSizeF()}pt;")
+        line.setText(shown)
+        line.setAccessibleName(words)
+        line.setToolTip(words if shown != words else "")
+        ring.lines_changed()
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)

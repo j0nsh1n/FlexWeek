@@ -222,7 +222,7 @@ def test_dial_marks_the_next_row_and_empty_then_says_so(qapp: QApplication) -> N
 def test_shared_action_visibility_and_evening_copy_follow_the_clock(qapp: QApplication) -> None:
     view = shown(qapp, OneThingView, "15:40")
     names = [button.objectName() for button in view.findChildren(QPushButton)]
-    assert names == ["oneLate", "oneBack", *(f"oneDay{day}" for day in range(7))]
+    assert names == [*(f"oneDay{day}" for day in range(7)), "oneLate", "oneBack"]
     assert view.findChild(QLabel, "oneEvening").text() == "Free from 8 PM until 10 PM"
     dial = shown(qapp, DayDialView, "15:40")
     assert dial.findChild(QLabel, "dialFreeLine").text() == "20 min free until 4:00 PM"
