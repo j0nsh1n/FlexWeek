@@ -45,10 +45,17 @@ class RemindersViewModel(
         reload()
     }
 
-    fun toggleExact() {
+    fun toggleExact(onRequestExactSetting: () -> Unit = {}) {
         val next = !state.exactReminders
+        if (next) {
+            onRequestExactSetting()
+        }
         (core as? FakeFlexWeekCore)?.setExactReminders(next)
         reload()
+    }
+
+    fun showPostPairBanner() {
+        state = state.copy(showPermissionBanner = true)
     }
 
     fun allowNotifications() {

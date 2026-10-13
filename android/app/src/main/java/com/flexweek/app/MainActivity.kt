@@ -1,8 +1,14 @@
 package com.flexweek.app
 
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -43,6 +49,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
+import com.flexweek.app.system.SyncScheduler
 import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
@@ -54,9 +61,10 @@ class MainActivity : ComponentActivity() {
             app.core.pairWithCode(com.flexweek.app.core.DemoSchedule.VALID_PAIR_CODE)
         }
         (app.core as? com.flexweek.app.core.FakeFlexWeekCore)?.setSyncState(tweaks.syncState)
+        SyncScheduler.requestExpeditedSync(this)
         setContent {
             FlexWeekTheme(darkTheme = tweaks.darkTheme, largeText = tweaks.largeText) {
-                FlexWeekRoot(app.core, tweaks)
+                FlexWeekRoot(app, tweaks, this@MainActivity)
             }
         }
     }
@@ -137,9 +145,15 @@ private enum class ActiveSheet {
 }
 
 @Composable
-private fun FlexWeekRoot(core: com.flexweek.app.core.FlexWeekCore, tweaks: ScreenshotTweaks) {
+private fun FlexWeekRoot(
+    app: FlexWeekApp,
+    tweaks: ScreenshotTweaks,
+    activity: ComponentActivity,
+) {
+    val core = app.core
     val v2 = BuildConfig.V2_ENABLED
     var paired by remember { mutableStateOf(core.isPaired() || tweaks.prePaired) }
+    var pendingNotifPrompt by remember { mutableStateOf(false) }
     var tab by remember {
         mutableStateOf(
             when (tweaks.startScreen) {
@@ -167,7 +181,11 @@ private fun FlexWeekRoot(core: com.flexweek.app.core.FlexWeekCore, tweaks: Scree
     if (showPair) {
         val vm =
             remember {
-                PairViewModel(core) { paired = true }
+                PairViewModel(core) {
+                    paired = true
+                    pendingNotifPrompt = true
+                    app.afterLocalEdit()
+                }
             }
         val pairState by vm.uiState
         PairScreen(
@@ -181,6 +199,22 @@ private fun FlexWeekRoot(core: com.flexweek.app.core.FlexWeekCore, tweaks: Scree
     }
     val todayVm = viewModel { TodayViewModel(core) }
     val remindersVm = viewModel { RemindersViewModel(core) }
+    LaunchedEffect(pendingNotifPrompt) {
+        if (pendingNotifPrompt) {
+            remindersVm.showPostPairBanner()
+            pendingNotifPrompt = false
+        }
+    }
+    LaunchedEffect(tweaks.prePaired) {
+        if (tweaks.prePaired) {
+            remindersVm.showPostPairBanner()
+        }
+    }
+    val afterEdit = { app.afterLocalEdit() }
+    val notifLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { _ ->
+            remindersVm.allowNotifications()
+        }
     val weekVm = if (v2) viewModel { WeekViewModel(core) } else null
     val syncLine =
         remember(todayVm.uiState.syncLine, remindersVm.state.syncing) {
@@ -191,7 +225,6 @@ private fun FlexWeekRoot(core: com.flexweek.app.core.FlexWeekCore, tweaks: Scree
         sheet = ActiveSheet.None
         todayVm.refreshAgenda()
         weekVm?.refresh()
-        Unit
     }
     Scaffold(
         bottomBar = {
@@ -227,10 +260,19 @@ private fun FlexWeekRoot(core: com.flexweek.app.core.FlexWeekCore, tweaks: Scree
                             state = todayVm.uiState,
                             onSelectDay = todayVm::selectDay,
                             onJumpToday = todayVm::jumpToToday,
-                            onToggleHomework = todayVm::toggleHomework,
-                            onUndo = todayVm::undoLast,
+                            onToggleHomework = {
+                                todayVm.toggleHomework(it)
+                                afterEdit()
+                            },
+                            onUndo = {
+                                todayVm.undoLast()
+                                afterEdit()
+                            },
                             onDismissSnack = todayVm::dismissSnackbar,
-                            onFinishHomework = todayVm::toggleHomework,
+                            onFinishHomework = {
+                                todayVm.toggleHomework(it)
+                                afterEdit()
+                            },
                             onStartFocus = { todayVm.showMessage("Focus timer: a notification with the countdown, Pause and Finish.") },
                             onRunningLate = { if (v2) sheet = ActiveSheet.Late },
                             v2Extras =
@@ -261,10 +303,29 @@ private fun FlexWeekRoot(core: com.flexweek.app.core.FlexWeekCore, tweaks: Scree
                         RemindersScreen(
                             syncLine = syncLine,
                             state = remindersVm.state,
-                            onAllowNotifications = remindersVm::allowNotifications,
-                            onLeadChange = remindersVm::setLeadMinutes,
-                            onToggleExact = remindersVm::toggleExact,
-                            onSyncNow = remindersVm::syncNow,
+                            onAllowNotifications = {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                } else {
+                                    remindersVm.allowNotifications()
+                                }
+                            },
+                            onLeadChange = {
+                                remindersVm.setLeadMinutes(it)
+                                afterEdit()
+                            },
+                            onToggleExact = {
+                                remindersVm.toggleExact {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                        activity.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM))
+                                    }
+                                }
+                                afterEdit()
+                            },
+                            onSyncNow = {
+                                remindersVm.syncNow()
+                                afterEdit()
+                            },
                         )
                 }
             }

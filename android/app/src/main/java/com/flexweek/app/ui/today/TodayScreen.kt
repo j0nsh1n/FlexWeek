@@ -19,7 +19,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -316,7 +319,7 @@ private fun NowRow(
                         Button(onClick = onStartFocus, modifier = Modifier.height(48.dp)) { Text("Start focus") }
                     }
                     if (row.showRunningLate) {
-                        TextButton(onClick = onRunningLate, modifier = Modifier.height(48.dp)) {
+                        FilledTonalButton(onClick = onRunningLate, modifier = Modifier.height(48.dp)) {
                             Text("Running late")
                         }
                     }
@@ -342,8 +345,14 @@ private fun NoTimeSection(state: TodayUiState, onPlan: (() -> Unit)? = null) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (onPlan != null && state.noTimeCount > 0) {
-            TextButton(onClick = onPlan, modifier = Modifier.height(40.dp)) {
-                Text("Plan ${state.noTimeCount}")
+            BadgedBox(
+                badge = {
+                    Badge { Text(state.noTimeCount.toString()) }
+                },
+            ) {
+                FilledTonalButton(onClick = onPlan, modifier = Modifier.height(40.dp)) {
+                    Text("Plan")
+                }
             }
         }
     }
