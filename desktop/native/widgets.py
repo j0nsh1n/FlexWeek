@@ -2739,10 +2739,11 @@ def fit_buttons(root: QWidget, *, roomy: bool = False) -> None:
 
 
 def is_roomy_exception(button: QPushButton) -> bool:
-    """The buttons that are not roomy on purpose: steps, segments, pills, chips, small ones and a
-    sheet's close."""
+    """The buttons that are not roomy on purpose: steps, segments, pills, chips, waiting chips,
+    small ones and a sheet's close. Waiting chips wrap or shorten their title to the rail; pinning
+    them to the whole title's width pushed High contrast's long chip past the rail's edge."""
     return button.objectName() == "sheetClose" or any(
-        button.property(name) for name in ("step", "segment", "pill", "chip", "small")
+        button.property(name) for name in ("step", "segment", "pill", "chip", "small", "tray", "railChip")
     )
 
 
