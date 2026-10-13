@@ -236,12 +236,16 @@ def test_homework_rows_expose_state_and_tab_through_each_action(qapp: QApplicati
         "Bio reading · 1 h left · due Wed 14 Oct · Overdue",
         "Chem lab · 30 min left · due Wed 21 Oct · Left from last week",
     ]
+    # Overdue / left-from-last-week rows offer Start focus next to Find a time (overdue-focus).
     actions = [
+        panel.findChild(QPushButton, "focusUnfinished-bio"),
         panel.findChild(QPushButton, "planUnfinished-bio"),
         panel.findChild(QPushButton, "deleteUnfinished-bio"),
+        panel.findChild(QPushButton, "focusUnfinished-chem"),
         panel.findChild(QPushButton, "planUnfinished-chem"),
         panel.findChild(QPushButton, "deleteUnfinished-chem"),
     ]
+    assert all(button is not None for button in actions)
     for current, following in zip(actions, actions[1:], strict=False):
         current.setFocus()
         QTest.keyClick(current, Qt.Key.Key_Tab)
