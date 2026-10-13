@@ -920,12 +920,13 @@ class DayDialView(LayoutView):
                 "#dialList, #dialWeek, #dialFreeCard": css(
                     background=card, border=edge, border_radius=f"{round(RADIUS_CARD * 1.4)}px"
                 ),
-                "#dialList QLabel, #dialWeek QLabel": css(
+                "#dialList QLabel, #dialWeek QLabel, #dialFreeCard QLabel": css(
                     color=text, font_size=size("body")
                 ),
                 "QLabel#dialKicker, QLabel#dialListLabel": css(color=muted, font_weight=WEIGHT_STRONG),
                 "QLabel#dialWeekNotice, QLabel#dialListEmpty": css(color=muted),
-                "QLabel#dialRowLength, QLabel#dialFreeLine, QLabel#dialWaitingStrip": css(color=muted),
+                "QLabel#dialRowLength, QLabel#dialWaitingStrip": css(color=muted),
+                "QLabel#dialFreeLine": css(color=muted, font_weight=WEIGHT_STRONG),
                 "QLabel#dialRowName": css(font_weight=WEIGHT_STRONG),
                 'QPushButton[state="past"] #dialRowTime, QPushButton[state="past"] #dialRowName': css(
                     color=muted

@@ -24,7 +24,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QPoint, QPointF, Qt
-    from PySide6.QtGui import QColor, QFontMetricsF, QPalette
+    from PySide6.QtGui import QColor, QFont, QFontMetricsF, QPalette
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication, QFrame, QLabel, QPushButton, QScrollArea, QWidget
 
@@ -627,4 +627,5 @@ def test_nothing_to_do_is_not_set_in_the_title_size(qapp: QApplication) -> None:
     for view in (shown(qapp, "13:40", []), shown(qapp, "22:30")):
         line = view.findChild(QLabel, "dialFreeLine")
         line.ensurePolished()
-        assert line.font().pointSizeF() < type_pt("title")
+        assert line.font().pointSizeF() == type_pt("body")
+        assert line.font().weight() == QFont.Weight.DemiBold
