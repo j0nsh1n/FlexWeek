@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from shiboken6 import isValid
 
 from desktop.native.layouts.base import empty
 from desktop.native.layouts.registry import (
@@ -118,7 +119,7 @@ class DesignPicker(Choices):
         # first waits until the page has slid in at the slowest level: each picture takes over
         # 100 ms, and drawn from the start they left Settings' first slide three frames.
         self._waiting = list(range(len(self.cards)))
-        QTimer.singleShot(duration(OVER_MS, "extra") + PICTURES_AFTER_SLIDE_MS, self._draw_next)
+        QTimer.singleShot(duration(OVER_MS, "extra") + PICTURES_AFTER_SLIDE_MS, self, self._draw_next)
 
     def _width_changed(self, card: ChoiceCard, width: int) -> None:
         index = int(card.property("index"))
@@ -137,7 +138,8 @@ class DesignPicker(Choices):
         if self._scheduled or not self._waiting:
             return
         self._scheduled = True
-        QTimer.singleShot(1, self._draw_next)
+        # Tied to this picker, so a picture still waiting when it closes is never drawn on a freed card.
+        QTimer.singleShot(1, self, self._draw_next)
 
     def _draw_one(self) -> bool:
         if not self._waiting:
@@ -148,7 +150,11 @@ class DesignPicker(Choices):
         look = looks[0][0] if looks else "your"
         card = self.cards[index]
         width = card.picture.width()
-        card.set_picture(Previews().get(layout_id, look, self._pack, None, width))
+        picture = Previews().get(layout_id, look, self._pack, None, width)
+        # Drawing a picture lets the event loop run, and Settings may have closed meanwhile.
+        if not isValid(card) or not isValid(card.picture):
+            return False
+        card.set_picture(picture)
         self._drawn[index] = width
         return True
 
@@ -160,7 +166,7 @@ class DesignPicker(Choices):
             if self.isVisible():
                 self._picture_waits += 1
             self._scheduled = True
-            QTimer.singleShot(PICTURE_WAIT_MS, self._draw_next)
+            QTimer.singleShot(PICTURE_WAIT_MS, self, self._draw_next)
             return
         self._picture_waits = 0
         if not self._draw_one():
