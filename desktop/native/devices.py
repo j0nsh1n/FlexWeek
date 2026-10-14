@@ -184,7 +184,9 @@ def run_off_ui(
 ) -> None:
     """Runs `work` on a worker thread, then `done(result, problem)` on the window's thread. The sync
     calls block for up to a few seconds, so none of them may run on the window's thread."""
-    answer = _Answer(owner)
+    # No parent: a parent freed while the call ran (Pair a phone closed) deleted the answer with it, under
+    # the worker emitting on it, and the app crashed. _IN_FLIGHT keeps it until the worker has ended.
+    answer = _Answer()
     owner_ref = weakref.ref(owner)
     if getattr(done, "__self__", None) is not None:
         done_ref = weakref.WeakMethod(done)

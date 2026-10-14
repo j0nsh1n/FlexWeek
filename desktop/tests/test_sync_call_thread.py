@@ -46,3 +46,33 @@ def test_the_answer_is_freed_on_the_window_thread(qapp: QApplication, monkeypatc
         time.sleep(0.01)
     assert got == ["done"]
     assert freed_on == [threading.main_thread().name]
+
+
+def test_closing_the_caller_while_its_call_runs_frees_nothing_under_the_worker(qapp: QApplication) -> None:
+    """Pair a phone closed while its call ran deleted the call's answer with it, while the worker was
+    emitting on it: a segfault in the 1.0.0 gate. The answer outlives its caller; nothing is told."""
+    import shiboken6
+
+    owner = QObject()
+    started = threading.Event()
+    release = threading.Event()
+    got: list[object] = []
+
+    def work() -> str:
+        started.set()
+        release.wait(2)
+        return "late"
+
+    devices.run_off_ui(owner, work, lambda result, _problem: got.append(result))
+    started.wait(2)
+    (answer, _worker), = list(devices._IN_FLIGHT)
+    owner.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert shiboken6.isValid(answer), "the answer went with its caller"
+    release.set()
+    deadline = time.monotonic() + 5
+    while devices._IN_FLIGHT and time.monotonic() < deadline:
+        qapp.processEvents()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        time.sleep(0.01)
+    assert got == [] and not devices._IN_FLIGHT
