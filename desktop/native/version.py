@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import flexweek_engine  # type: ignore[import-untyped]
 
-VERSION = "0.19.2"
+VERSION = "1.0.0"
 
 
 def parse(value: str) -> tuple[int, ...] | None:
