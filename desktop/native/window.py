@@ -2045,7 +2045,8 @@ class NativeWindow(QMainWindow):
         words = self.session.now_next_text()
         today, minute = self._clock_in_week()
         self.rail.set_clock(today, minute)
-        self.focus_panel.show_now_next("" if self._rail_shown() else words)
+        month = self.session.planner_view == "month" and not self._day_mode
+        self.focus_panel.show_now_next("" if self._rail_shown() or month else words)
 
     def _sync_chrome(self) -> None:
         """Planning chips and the clipboard line step aside for a design of its own. Plan my
@@ -2564,6 +2565,7 @@ class NativeWindow(QMainWindow):
             switch_page(self.planner, shown, self._motion)
         else:
             self.planner.setCurrentWidget(shown)
+        self._show_next()
         self._release_travel()
         for name in ("viewDay", "viewWeek", "viewMonth", "viewMyDay"):
             button = self.findChild(QRadioButton, name)

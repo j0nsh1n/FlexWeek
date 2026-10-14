@@ -272,6 +272,15 @@ def test_todays_app_keeps_its_scroll_after_a_page_or_look_change(
         assert hours(window).verticalScrollBar().value() == 0, how
 
 
+def test_month_does_not_repeat_the_next_line_above_its_status_strip(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    window.findChild(QAbstractButton, "viewMonth").click()
+    wait_until(qapp, lambda: not window.session.busy)
+    assert not window.focus_panel.now_next.isVisible()
+    assert window.status_next.full_text().startswith("Next:")
+
+
 def test_after_plan_the_week_scrolls_to_the_first_homework_it_placed(
     qapp: QApplication, window: NativeWindow
 ) -> None:
