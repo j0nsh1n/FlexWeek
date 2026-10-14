@@ -250,6 +250,6 @@ def test_one_thing_empty_day_caption_is_a_sentence(qapp: QApplication) -> None:
         3,
         minute_of("13:40"),
         options,
-        tokens_for("one", options["colour"], palette),
+        tokens_for("one", options["look"], palette),
     )
     assert OneThingView()._bar_caption(scene) == "Today, 06:00 to 22:00. Nothing planned."

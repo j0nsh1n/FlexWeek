@@ -994,11 +994,11 @@ def apply_feel(root: QWidget, context: Context, *, nested: bool = True) -> None:
 
 def context_for(layout: dict, look: dict, palette: dict, base_sheet: str) -> Context:
     feel = feel_for(layout.get("main") if isinstance(layout, dict) else None)
-    colour = options_for(layout, feel.layout).get("colour", MATCH) if feel.key != "plain" else MATCH
+    token = options_for(layout, feel.layout).get("look", "your") if feel.key != "plain" else "your"
     if feel.key == "plain":
         tokens = tokens_for("classic", MATCH, palette)
     else:
-        tokens = tokens_for(feel.layout, colour, palette)
+        tokens = tokens_for(feel.layout, token, palette)
     return Context(feel, look, palette, tokens, base_sheet)
 
 

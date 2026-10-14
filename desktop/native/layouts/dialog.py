@@ -23,9 +23,9 @@ from PySide6.QtWidgets import (
 
 from desktop.native.layouts.base import empty
 from desktop.native.layouts.registry import (
+    DESIGN_LOOKS,
     LAYOUTS,
     LEVELS,
-    MATCH,
     layouts_for,
     options_for,
 )
@@ -51,7 +51,6 @@ DESIGN_LINE = (
 )
 # A design in colours of its own wears them on its page only, so it says what keeps the student's,
 # under the colours it is about.
-COLOUR_NOTE = "Only the design's page takes these colours. The rest of FlexWeek keeps your Look and Accent."
 # The width setup's design cards are drawn at, so a picture drawn for one is ready for the other.
 PICTURE_WIDTH = 206
 EXPERIMENTAL_TAG = "Experimental"
@@ -144,11 +143,11 @@ class DesignPicker(Choices):
             return False
         index = self._waiting.pop(0)
         layout_id = str(self._data[index])
-        colourways = LAYOUTS[layout_id].colourways
-        colour = colourways[0][0] if colourways else None
+        looks = DESIGN_LOOKS[layout_id]
+        look = looks[0][0] if looks else "your"
         card = self.cards[index]
         width = card.picture.width()
-        card.set_picture(Previews().get(layout_id, colour, self._pack, None, width))
+        card.set_picture(Previews().get(layout_id, look, self._pack, None, width))
         self._drawn[index] = width
         return True
 
@@ -198,7 +197,6 @@ class LayoutSection(QFrame):
         self.slot = slot
         self.setObjectName("settingsCard")
         self._options = {spec.id: options_for(choice, spec.id) for spec in layouts_for(role)}
-        self._colour_note: QLabel | None = None
         body = QVBoxLayout(self)
         body.setContentsMargins(16, 16, 16, 16)
         body.setSpacing(8)
@@ -252,6 +250,11 @@ class LayoutSection(QFrame):
         """Every option of the design picked now, defaults included."""
         return dict(self._options[self.chosen()])
 
+    def use_own_look(self) -> None:
+        """The general look picker supplies this design's own look when it changes."""
+        self._options[self.chosen()]["look"] = "your"
+        self._rebuild(False)
+
     def options(self) -> dict[str, dict[str, str]]:
         """Only what the student changed. Writing a design's defaults down would freeze them, and a
         default that later improves would never reach anyone who had opened this dialog."""
@@ -278,9 +281,10 @@ class LayoutSection(QFrame):
             self.more.setChecked(any(values[option.key] != option.default for option in detail))
             self.more.blockSignals(False)
         self.more.setVisible(bool(detail))
-        self.reset.setVisible(bool(spec.options))
+        self.reset.setVisible(
+            spec.id != "classic" or values != options_for(None, spec.id)
+        )
         empty(self._form)
-        self._colour_note = None
         for level, heading in LEVELS:
             rows = [option for option in spec.options if option.level == level]
             if not rows or (level == "detail" and not self.more.isChecked()):
@@ -291,7 +295,7 @@ class LayoutSection(QFrame):
             for option in rows:
                 name = f"layout{self.slot.title()}-{option.key}"
                 box: QComboBox | Segmented
-                if option.key == "colour" or len(option.choices) > SEGMENTED_MOST:
+                if option.key == "look" or len(option.choices) > SEGMENTED_MOST:
                     box = QComboBox()
                     box.setObjectName(name)
                 else:
@@ -308,14 +312,3 @@ class LayoutSection(QFrame):
                 )
                 box.currentIndexChanged.connect(lambda _index: self.changed.emit())
                 self._form.addRow(option.label, box)
-                if option.key == "colour":
-                    self._colour_note = QLabel(COLOUR_NOTE)
-                    self._colour_note.setObjectName(f"layout{self.slot.title()}ColourNote")
-                    self._colour_note.setWordWrap(True)
-                    self._form.addRow("", self._colour_note)
-                    box.currentIndexChanged.connect(self._sync_colour_note)
-        self._sync_colour_note()
-
-    def _sync_colour_note(self, *_index: object) -> None:
-        if self._colour_note is not None:
-            self._form.setRowVisible(self._colour_note, self._options[self.chosen()].get("colour") != MATCH)

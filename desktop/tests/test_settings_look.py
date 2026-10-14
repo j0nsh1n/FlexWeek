@@ -7,6 +7,9 @@ and the cards ran on under the footer with nothing to end them.
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import pytest
 
 pytest.importorskip("PySide6")
@@ -269,6 +272,37 @@ def test_high_contrast_says_it_keeps_its_own_yellow(qapp: QApplication, window: 
     for _ in range(5):
         qapp.processEvents()
     assert note.isVisibleTo(page)
+    page.close_page()
+
+
+def test_picking_a_look_applies_to_the_design_canvas_before_settings_closes(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:  # noqa: F811
+    """The active look colours the canvas on the same Settings change as the app chrome."""
+    page = open_settings(qapp, window, (1920, 1080))
+    main = page.layout_sections[0]
+    main.pick.setCurrentIndex(main.pick.findData("bento"))
+    chosen_look = page.findChild(QWidget, "layoutMain-look")
+    assert chosen_look is not None
+    chosen_look.setCurrentIndex(chosen_look.findData("preset:bento-indigo"))
+    QTest.qWait(500)
+    qapp.processEvents()
+    frame_dir = os.environ.get("FLEXWEEK_FIX_E_APPLY_FRAMES")
+    if frame_dir:
+        folder = Path(frame_dir)
+        folder.mkdir(parents=True, exist_ok=True)
+        window._views["bento"].grab().save(str(folder / "frame-000-before.png"))
+    chosen_look.setCurrentIndex(chosen_look.findData(look_menu_token("preset", "high-contrast")))
+    for frame in range(1, 11):
+        QTest.qWait(40)
+        qapp.processEvents()
+        if frame_dir:
+            window._views["bento"].grab().save(str(Path(frame_dir) / f"frame-{frame:03d}.png"))
+
+    palette = resolved_palette("system", False, {"preset": "high-contrast", "knobs": {}})
+    assert window._scene_for("bento").tokens["bg"] == palette["window"]
+    assert window._scene_for("bento").tokens["accent"] == palette["accent"]
     page.close_page()
 
 

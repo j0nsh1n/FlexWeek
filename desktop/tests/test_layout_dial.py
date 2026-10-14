@@ -28,10 +28,10 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication, QFrame, QLabel, QPushButton, QScrollArea, QWidget
 
-    from desktop.native.layouts.base import Scene
+    from desktop.native.layouts.base import Scene, family
     from desktop.native.layouts.dial import DayDialView, DialFace
-    from desktop.native.layouts.registry import LAYOUTS, options_for, tokens_for
-    from desktop.native.look import ACCENTS, category_paint, contrast, resolved_palette
+    from desktop.native.layouts.registry import DESIGN_LOOKS, options_for, tokens_for
+    from desktop.native.look import ACCENTS, category_paint, contrast, design_look, resolved_palette
     from desktop.native.motion import apply_ui_effects, duration
     from desktop.native.tokens import type_pt
     from desktop.native.weekmodel import build_week, clock_label, minute_of, set_clock_24h
@@ -55,13 +55,20 @@ def shown(
     homework: dict | None = None,
     **chosen: str,
 ) -> DayDialView:
+    if "colour" in chosen:
+        legacy = {"midnight": "preset:dial-midnight", "daylight": "pack:light-frost", "match": "your"}
+        chosen["look"] = legacy.get(chosen.pop("colour"), "your")
     options = {**options_for(None, "dial"), **chosen}
     palette = palette or resolved_palette("light-frost", False, None, "default")
+    if options["look"] != "your":
+        palette, _look = design_look(
+            options["look"], "system", palette.get("axis") == "dark", None, palette["accent"]
+        )
     week = build_week(WEEK, BLOCKS if blocks is None else blocks, homework or HOMEWORK, TRACE)
     view = DayDialView()
     view.resize(1300, 720)
     view.show_week(
-        Scene(week, today, minute_of(clock), options, tokens_for("dial", options["colour"], palette))
+        Scene(week, today, minute_of(clock), options, tokens_for("dial", options["look"], palette))
     )
     view.show()
     qapp.processEvents()
@@ -147,7 +154,7 @@ def on_ring(dial: DialFace, minute: float, reach: float | None = None) -> QPoint
 
 
 def paint(tokens: dict[str, str], category: str) -> tuple[str, str]:
-    return category_paint(category, {"family": "light", "panel": tokens["surface"]})
+    return category_paint(category, {"family": family(tokens), "panel": tokens["surface"]})
 
 
 def test_between_blocks_the_left_card_follows_the_clock(qapp: QApplication) -> None:
@@ -425,12 +432,11 @@ def test_night_is_the_navy_colourway_saved_as_midnight(qapp: QApplication) -> No
     def corner(view: DayDialView) -> str:
         return view.grab().toImage().pixelColor(3, 3).name()
 
-    assert [(value, name) for value, name, _ in LAYOUTS["dial"].colourways] == [
-        ("midnight", "Night"),
-        ("daylight", "Daylight"),
-    ]
-    assert corner(shown(qapp, "19:00", colour="midnight")) == "#0b0f1d"
-    assert corner(shown(qapp, "19:00", colour="daylight")) == "#f4f6fb"
+    assert DESIGN_LOOKS["dial"][0] == ("preset:dial-midnight", "Night")
+    assert corner(shown(qapp, "19:00", colour="midnight")) == resolved_palette(
+        "system", False, {"preset": "dial-midnight", "knobs": {}}
+    )["window"]
+    assert corner(shown(qapp, "19:00", colour="daylight")) == "#f7f8fa"
     assert (
         corner(shown(qapp, "19:00", colour="match"))
         == resolved_palette("light-frost", False, None, "default")["window"]
@@ -466,7 +472,7 @@ def test_the_week_strip_survives_large_text(qapp: QApplication) -> None:
             3,
             minute_of("13:40"),
             options,
-            tokens_for("dial", options["colour"], palette),
+            tokens_for("dial", options["look"], palette),
             1.25,
         )
     )

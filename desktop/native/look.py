@@ -143,6 +143,13 @@ LOOK_PRESET_LABELS = {
     "high-contrast": "High contrast",
     "paper": "Paper",
     "pastel": "Pastel",
+    "bento-indigo": "Indigo",
+    "retro-teal": "Teal desktop",
+    "flight-deck": "Flight deck",
+    "clay-lavender": "Clay",
+    "one-poster": "Poster",
+    "dial-midnight": "Midnight",
+    "timeline-paper": "Ruled paper",
 }
 PACK_LABELS = {
     "system": "System",
@@ -224,7 +231,13 @@ ACCENT_COLORS = {
     "sand": {"dark": ("#e4a88e", DARK_INK), "light": ("#805441", LIGHT_INK)},
 }
 # Looks whose accent no swatch replaces: High contrast's yellow is part of its contrast.
-OWN_ACCENT = ("high-contrast",)
+OWN_ACCENT = ("high-contrast", "bento-indigo", "retro-teal", "flight-deck", "timeline-paper")
+DESIGN_PALETTE_PRESETS = frozenset(
+    {
+        "bento-indigo", "retro-teal", "flight-deck", "clay-lavender", "one-poster", "dial-midnight",
+        "timeline-paper",
+    }
+)
 
 
 def readable_ink(background: str) -> str:
@@ -341,6 +354,42 @@ PALETTES = {
 # A preset brings its own colours, the same on any pack. `fill` moves the category family's pale fills
 # (decision 9) for a look that draws them paler or bolder.
 PRESET_PALETTES = {
+    "bento-indigo": _palette(
+        "light", window="#f7f8fa", panel="#ffffff", card_2="#f1f3f6", field="#ffffff", grid="#ffffff",
+        text="#1e1b4b", muted="#4b4a75", hairline="#e4e7ec", hairline_strong="#d0d5dd",
+        accent="#4f46e5", accent_ink="#ffffff", error="#991b1b", block_edge="#8a93a3",
+    ),
+    "retro-teal": _palette(
+        "light", window="#008080", panel="#c0c0c0", card_2="#d4d0c8", field="#ffffff", grid="#ffffff",
+        text="#000000", muted="#333333", hairline="#808080", hairline_strong="#404040",
+        accent="#000080", accent_ink="#ffffff", error="#800000", block_edge="#404040",
+        bg_ink="#ffffff", bg_muted="#ffffff", title="#000080", title_end="#0a5ca8", title_ink="#ffffff",
+    ),
+    "flight-deck": _palette(
+        "dark", window="#0b0f14", panel="#121821", card_2="#17202b", field="#0b0f14", grid="#0b0f14",
+        text="#e6edf5", muted="#8d9aab", hairline="#2c3846", hairline_strong="#3c4b5c",
+        accent="#7fa8ff", accent_ink="#0b1224", error="#ff8a7a", block_edge="#75879b",
+    ),
+    "clay-lavender": _palette(
+        "light", window="#efe9fa", panel="#f9f6ff", card_2="#f4effc", field="#f9f6ff", grid="#f9f6ff",
+        text="#221c36", muted="#595272", hairline="#e2daf2", hairline_strong="#cec2e2",
+        accent="#8b5cf6", accent_ink="#ffffff", error="#b3261e", block_edge="#8a93a3",
+    ),
+    "one-poster": _palette(
+        "dark", window="#000000", panel="#141414", card_2="#1f1f1f", field="#000000", grid="#000000",
+        text="#ffffff", muted="#a3a3a3", hairline="#3d3d3d", hairline_strong="#646464",
+        accent="#7f1d1d", accent_ink="#ffffff", error="#ff4d6d", block_edge="#a3a3a3",
+    ),
+    "dial-midnight": _palette(
+        "dark", window="#0b0f1d", panel="#141a2e", card_2="#1b2340", field="#0b0f1d", grid="#0b0f1d",
+        text="#e7eaf6", muted="#9ea6c4", hairline="#343c5e", hairline_strong="#4a5377",
+        accent="#818cf8", accent_ink="#0b1020", error="#ff8a7a", block_edge="#818cf8",
+    ),
+    "timeline-paper": _palette(
+        "light", window="#fdfbf7", panel="#fffdf9", card_2="#f6f1e8", field="#fffdf9", grid="#fffdf9",
+        text="#1a1a1a", muted="#5c5750", hairline="#cfc7b9", hairline_strong="#b9b09f",
+        accent="#3d6fc4", accent_ink="#ffffff", error="#c42b1c", block_edge="#8a877f",
+    ),
     # Developer Mono on GitHub-dark surfaces; no glow, no phosphor green.
     "terminal": _palette(
         "dark",
@@ -533,7 +582,7 @@ def parse_look_menu_token(token: object) -> tuple[str, str] | None:
     kind, name = token.split(":", 1)
     if kind == "pack" and name in PACKS:
         return kind, name
-    if kind == "preset" and name in LOOK_PRESETS and name != "default":
+    if kind == "preset" and (name in LOOK_PRESETS or name in DESIGN_PALETTE_PRESETS) and name != "default":
         return kind, name
     return None
 
@@ -818,16 +867,34 @@ def _preset_palette(preset: str) -> dict | None:
     return PRESET_PALETTES.get(preset)
 
 
-def resolved_palette(pack: object, system_dark: bool, look: dict | None, accent: object = "default") -> dict:
+def resolved_palette(
+    pack: object,
+    system_dark: bool,
+    look: dict | None,
+    accent: object = "default",
+    *,
+    palette_preset: str | None = None,
+) -> dict:
     """The colours on screen: the preset's palette or the pack's, then a custom look's colours, then the
     accent, then the surface knob.
 
     The accent is one colour everywhere, but a page may need its darker shade (or on a dark page its
     lighter one) for accent words to read at 4.5 to 1; its lightness moves the least it takes, and its
     hue stays. No built-in look needs it; a custom page might."""
-    choice = sanitize_look(look)
+    raw_choice = look if isinstance(look, dict) else {}
+    raw_preset = raw_choice.get("preset")
+    if palette_preset is None and raw_preset in DESIGN_PALETTE_PRESETS:
+        palette_preset = str(raw_preset)
+        choice = sanitize_look(
+            {
+                "preset": "default",
+                "knobs": raw_choice.get("knobs") or {},
+            }
+        )
+    else:
+        choice = sanitize_look(look)
     custom = choice.get("custom")
-    preset = choice["preset"]
+    preset = palette_preset or choice["preset"]
     if custom is not None:
         pack, preset = LOOK_BASES[custom["base"]]
     base = _preset_palette(preset) or PALETTES[resolved_pack_theme(pack, system_dark)]
@@ -848,6 +915,11 @@ def resolved_palette(pack: object, system_dark: bool, look: dict | None, accent:
     if readable != palette["accent"] and not own:
         palette["accent"] = readable
         palette["accent_ink"] = readable_ink(readable)
+    palette.setdefault("block_locked", mix(palette["text"], palette["panel"], 0.08))
+    palette.setdefault("block_locked_ink", readable_ink(palette["block_locked"]))
+    palette.setdefault("block_flex", mix(palette["accent"], palette["panel"], 0.20))
+    palette.setdefault("block_flex_ink", readable_ink(palette["block_flex"]))
+    palette.setdefault("block_edge", palette["muted"])
     tint = mix(palette["accent"], palette["window"], 0.10)
     palette["accent_text"] = fit_lightness(
         palette["accent"], (palette["window"], palette["panel"], palette["grid"], tint), AA_TEXT + 0.1,
@@ -859,6 +931,33 @@ def resolved_palette(pack: object, system_dark: bool, look: dict | None, accent:
     if custom is not None and custom.get("now_line") == "text":
         palette["now"] = palette["text"]
     return palette
+
+
+def design_look(
+    token: object, pack: object, system_dark: bool, look: dict | None, accent: object = "default"
+) -> tuple[dict, dict]:
+    """Resolve a design's curated look with the same palette and text scale used by its preview."""
+    choice = sanitize_look(look)
+    selected_pack, selected_look = pack, choice
+    if token != "your":
+        parsed = parse_look_menu_token(token)
+        if parsed is not None:
+            kind, name = parsed
+            moved = choice.get("knobs", {})
+            if kind == "pack":
+                selected_pack = name
+                selected_look = sanitize_look({"preset": "default", "knobs": moved})
+            elif name in DESIGN_PALETTE_PRESETS:
+                selected_look = sanitize_look({"preset": "default", "knobs": moved})
+            else:
+                selected_look = sanitize_look({"preset": name, "knobs": moved})
+    palette_preset = (
+        parsed[1] if token != "your" and parsed is not None and parsed[1] in DESIGN_PALETTE_PRESETS else None
+    )
+    palette = resolved_palette(
+        selected_pack, system_dark, selected_look, accent, palette_preset=palette_preset
+    )
+    return palette, selected_look
 
 
 def category_paint(category: str | None, palette: dict) -> tuple[str | None, str | None]:

@@ -190,7 +190,7 @@ def test_every_page_is_kept_when_the_student_leaves_it(qapp: QApplication, serve
     written(qapp, window)
     stored = json.loads(look_file().read_text())
     assert stored["layout"]["main"] == "bento", "the look belongs to this computer"
-    assert stored["layout"]["options"]["bento"]["colour"] == "indigo"
+    assert stored["layout"]["options"]["bento"]["look"] == "preset:bento-indigo"
     assert window.session.preferences["theme_pack"] == "light-frost"
     assert window.session.preferences["setup"]["step"] == WEEK
 
@@ -674,14 +674,14 @@ def test_choose_my_own_look_goes_through_look_and_colours(qapp: QApplication) ->
     setup.look_cards["timeline"].chosen.emit()
     setup.next.click()
     assert setup.step == COLOURS
-    setup.colours.buttons()[1].click()
+    setup.colours.buttons()[3].click()
     setup.text_size.buttons()[2].click()
     setup.next.click()
     assert setup.step == WEEK
     step, answer = kept[-1]
     assert step == COLOURS and isinstance(answer, dict)
     assert answer["layout"]["main"] == "timeline"
-    assert answer["layout"]["options"]["timeline"]["colour"] == "night"
+    assert answer["layout"]["options"]["timeline"]["look"] == "pack:dark-frost"
     assert answer["look"]["knobs"]["text"] == "large"
     setup.back.click()
     assert setup.step == COLOURS, "Back from the week returns to the look the student built"

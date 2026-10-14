@@ -75,6 +75,7 @@ from desktop.native.fields import (
 from desktop.native.fonts import numeral, weighted
 from desktop.native.hours.geometry import drag_step
 from desktop.native.layouts.registry import (
+    DESIGN_LOOKS,
     EXPERIMENTAL,
     LAYOUTS,
     LayoutSpec,
@@ -85,9 +86,7 @@ from desktop.native.layouts.registry import (
 from desktop.native.look import (
     KNOB_VALUE_LABELS,
     LOOK_KNOBS,
-    PACKS,
     effective_look,
-    look_menu_items,
     readable_focus_edge,
     resolved_palette,
     sanitize_look,
@@ -226,7 +225,7 @@ STYLES = (
         "Plain calendar",
         "Your week as a timetable grid",
         "classic",
-        None,
+        "pack:light-frost",
         "light-frost",
     ),
     Style(
@@ -234,7 +233,7 @@ STYLES = (
         "Dashboard",
         "Next up and due soon, as tiles",
         "bento",
-        "indigo",
+        "preset:bento-indigo",
         "light-frost",
     ),
     Style(
@@ -242,7 +241,7 @@ STYLES = (
         "Night owl",
         "Dark colours, compact spacing",
         "timeline",
-        "night",
+        "pack:dark-frost",
         "dark-frost",
         {"density": "compact"},
         {"density": "compact"},
@@ -252,7 +251,7 @@ STYLES = (
         "Retro",
         "A 90s desktop, with large text",
         "retro",
-        "teal",
+        "preset:retro-teal",
         "light-frost",
         {"text": "large"},
     ),
@@ -279,7 +278,7 @@ def style_layout(style: Style, layout: dict) -> dict:
     if style.colour is not None or style.options:
         chosen = dict(options.get(style.main, {}))
         if style.colour is not None:
-            chosen["colour"] = style.colour
+            chosen["look"] = style.colour
         chosen.update(style.options)
         options[style.main] = chosen
     return sanitize_layout({"main": style.main, "day": sanitize_layout(layout)["day"], "options": options})
@@ -1732,12 +1731,12 @@ class SetupPage(QWidget):
         for style in STYLES:
             card = self.style_cards[style.key]
             card.set_picture(
-                self._previews.get(style.main, style.colour, style.pack, style_look(style), STYLE_PICTURE)
+        self._previews.get(style.main, style.colour, style.pack, style_look(style), STYLE_PICTURE)
             )
         self._pending_pictures = []
         for spec in layouts_for("plan"):
-            colour = spec.colourways[0][0] if spec.colourways else None
-            self._pending_pictures.append((self.look_cards[spec.id], spec.id, colour, self._pack, LOOK_THUMB))
+            look = DESIGN_LOOKS[spec.id][0][0]
+            self._pending_pictures.append((self.look_cards[spec.id], spec.id, look, self._pack, LOOK_THUMB))
         self._warm.start()
 
     def _draw_next_picture(self) -> None:
@@ -2149,22 +2148,12 @@ class SetupPage(QWidget):
     def _colour_choices(self) -> tuple[tuple[tuple[str, str], ...], tuple[tuple[str, str], ...]]:
         """The colours on offer, standard then experimental."""
         main = self._layout["main"]
-        spec = LAYOUTS[main]
-        if not spec.colourways:
-            standard, experimental = look_menu_items()
-            return (
-                tuple((name, label) for name, label, kind in standard if kind == "pack"),
-                tuple((name, label) for name, label, kind in experimental if kind == "pack"),
-            )
-        return tuple((value, label) for value, label, _tokens in spec.colourways), ()
+        return (*DESIGN_LOOKS[main], ("your", "Your look")), ()
 
     def _fill_colours(self) -> None:
         main = self._layout["main"]
         self.colours.set_choices(*self._colour_choices())
-        if LAYOUTS[main].colourways:
-            self.colours.set_value(options_for(self._layout, main).get("colour"))
-        else:
-            self.colours.set_value(self._pack)
+        self.colours.set_value(options_for(self._layout, main).get("look"))
         knobs = effective_look(self._look)
         self.text_size.set_value(knobs["text"])
         self.spacing.set_value(knobs["density"])
@@ -2177,12 +2166,10 @@ class SetupPage(QWidget):
         main = self._layout["main"]
         colour = self.colours.value()
         options = deepcopy(self._layout["options"])
-        if LAYOUTS[main].colourways and colour:
-            options[main] = {**options.get(main, {}), "colour": colour}
-            if main == "timeline":
-                options[main]["density"] = self.spacing.value() or "comfortable"
-        elif colour in PACKS:
-            self._pack = colour
+        if colour:
+            options[main] = {**options.get(main, {}), "look": colour}
+        if main == "timeline":
+            options.setdefault(main, {})["density"] = self.spacing.value() or "comfortable"
         knobs = dict(sanitize_look(self._look)["knobs"])
         for knob, chips in (
             ("text", self.text_size),
@@ -2199,7 +2186,7 @@ class SetupPage(QWidget):
 
     def _draw_colour_preview(self, fade: bool) -> None:
         main = self._layout["main"]
-        colour = options_for(self._layout, main).get("colour") if LAYOUTS[main].colourways else None
+        colour = options_for(self._layout, main).get("look")
         picture = hold_picture(self.colour_preview, self.motion) if fade else None
         self.colour_preview.setPixmap(
             rounded_picture(self._previews.get(main, colour, self._pack, self._look, COLOUR_THUMB), 8)
@@ -2463,13 +2450,8 @@ class SetupPage(QWidget):
         state = self._state
         main = state.layout["main"]
         spec = LAYOUTS[main]
-        if spec.colourways:
-            colour = options_for(state.layout, main).get("colour")
-            colour_name = next(
-                (label for value, label, _ in spec.colourways if value == colour), "your colours"
-            )
-        else:
-            colour_name = PACK_IN.get(state.pack, "your colours")
+        selected = options_for(state.layout, main).get("look")
+        colour_name = next((label for value, label in DESIGN_LOOKS[main] if value == selected), "Your look")
         text = effective_look(state.look)["text"]
         look = f"{spec.label} in {colour_name}"
         if text != "normal":

@@ -66,7 +66,7 @@ if importlib.util.find_spec("PySide6") is not None:
         LOOK_PRESETS,
         PACKS,
         contrast,
-        luminance,
+        design_look,
         resolved_palette,
     )
     from desktop.native.motion import apply_ui_effects, duration
@@ -82,6 +82,8 @@ def qapp() -> Iterator[QApplication]:
 
 
 def palette_of(look: str = "light") -> dict:
+    if look.startswith("pack:") or look.startswith("preset:"):
+        return design_look(look, "system", False, None)[0]
     return {
         "light": resolved_palette("light-frost", False, None, "default"),
         "dark": resolved_palette("dark-frost", True, None, "default"),
@@ -99,14 +101,25 @@ def scene(
     look: str = "light",
     **chosen: str,
 ) -> Scene:
+    if "colour" in chosen:
+        legacy = {
+            "teal": "preset:retro-teal", "plum": "preset:pastel", "slate": "pack:dark-frost",
+            "match": "your",
+        }
+        chosen["look"] = legacy.get(chosen.pop("colour"), "your")
     options = {**options_for(None, "retro"), **chosen}
     week = build_week(WEEK, blocks or BLOCKS, HOMEWORK, TRACE)
+    page_palette = palette_of(look)
+    if options["look"] != "your":
+        page_palette, _active = design_look(
+            options["look"], "system", page_palette.get("axis") == "dark", None, page_palette["accent"]
+        )
     return Scene(
         week,
         3,
         minute_of(clock),
         options,
-        tokens_for("retro", options["colour"], palette_of(look)),
+        tokens_for("retro", options["look"], page_palette),
         scale=scale,
         surface=surface,
         iso_day=iso_day,
@@ -703,18 +716,22 @@ def test_option_colours_repaint_the_desktop_and_the_title_bars(qapp: QApplicatio
         return corner, bar.grab().toImage().pixelColor(2, 2).name()
 
     assert seen(shown(qapp, colour="teal")) == ("#008080", "#000080")
-    assert seen(shown(qapp, colour="plum")) == ("#5b2a6e", "#4b0082")
+    dark_view = shown(qapp, colour="slate")
+    desk, title = seen(dark_view)
+    dark_page = dark_view.scene.tokens
+    assert desk == dark_page["bg"]
+    assert contrast(scheme(dark_page).title_ink, title) >= AA_TEXT
 
 
 def test_match_my_look_puts_the_accent_on_the_desktop_and_the_title_bars() -> None:
     light = palette_of("light")
     colours = scheme(tokens_for("retro", MATCH, light))
-    assert colours.desk == colours.title_end == light["accent"]
-    assert luminance(colours.title) < luminance(light["accent"]), "the gradient starts darker, as navy does"
+    assert colours.desk == light["window"]
+    assert colours.title == colours.title_end == light["accent"]
     assert (colours.face, colours.field, colours.family) == ("#c0c0c0", "#ffffff", "light")
     dark = palette_of("dark")
     colours = scheme(tokens_for("retro", MATCH, dark))
-    assert luminance(dark["window"]) < luminance(colours.desk) < luminance(dark["accent"])
+    assert colours.desk == dark["window"]
     assert colours.face == "#c0c0c0", "inside the windows it is period silver whatever the look"
 
 
@@ -728,11 +745,12 @@ def test_high_contrast_is_windows_98s_high_contrast_black() -> None:
 
 
 def test_the_teal_desktop_is_windows_98s_own() -> None:
-    colours = scheme(tokens_for("retro", "teal", palette_of("light")))
+    teal, _look = design_look("preset:retro-teal", "system", False, None)
+    colours = scheme(tokens_for("retro", "preset:retro-teal", teal))
     assert (colours.desk, colours.title, colours.title_end, colours.title_ink) == (
         "#008080",
         "#000080",
-        "#1084d0",
+        "#0a5ca8",
         "#ffffff",
     )
 
@@ -760,7 +778,7 @@ def test_every_word_on_retros_colours_reads_in_every_look() -> None:
 def test_a_week_block_says_its_start_alone_and_day_its_length_too() -> None:
     drawn = Drawn("school", "School", "class", False, Span(3, 480, 870), 0, 1)
     assert Started(**vars(drawn)).times == "08:00"
-    colours = scheme(tokens_for("retro", "teal", palette_of("light")))
+    colours = scheme(tokens_for("retro", "preset:retro-teal", palette_of("light")))
     assert RetroPainter(colours).measures["show_lengths"] is False
     assert RetroPainter(colours, wide=True).measures["show_lengths"] is True
 
@@ -777,7 +795,7 @@ def test_a_block_with_no_room_for_three_letters_of_its_name_is_its_colour_alone(
     """ "Robotics club" in a column too narrow for "Robotics" says "Rob…"; with no room for even
     "Rob" it is its colour alone, as on every design."""
     load_fonts()
-    colours = scheme(tokens_for("retro", "teal", palette_of("light")))
+    colours = scheme(tokens_for("retro", "preset:retro-teal", palette_of("light")))
     drawn = Drawn("club", "Robotics club", "extra", False, Span(0, 915, 990), 0, 1)
 
     def painted(width: int) -> int:
@@ -797,7 +815,7 @@ def test_a_block_with_no_room_for_three_letters_of_its_name_is_its_colour_alone(
 def test_a_block_that_shares_its_time_is_drawn_like_one_that_does_not(qapp: QApplication) -> None:
     """Two blocks side by side show they share their time by sitting side by side, as on every
     design: no dot at the corner of each."""
-    colours = scheme(tokens_for("retro", "teal", palette_of("light")))
+    colours = scheme(tokens_for("retro", "preset:retro-teal", palette_of("light")))
 
     def painted(columns: int) -> QImage:
         drawn = Drawn("soccer", "Soccer practice", "extra", False, Span(1, 16 * 60, 17 * 60 + 30), 0, columns)
@@ -822,7 +840,7 @@ def test_a_week_block_at_the_smallest_window_names_itself_and_says_when_it_start
 
     monkeypatch.setattr(canvas_module, "QPainter", Said)
     load_fonts()
-    colours = scheme(tokens_for("retro", "teal", palette_of("light")))
+    colours = scheme(tokens_for("retro", "preset:retro-teal", palette_of("light")))
     drawn = Drawn("school", "School", "class", False, Span(0, 8 * 60, 14 * 60 + 30), 0, 1)
     page = QRectF(0, 0, 200, 300)
     image = QImage(200, 300, QImage.Format.Format_RGB32)

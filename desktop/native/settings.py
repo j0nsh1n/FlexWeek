@@ -1028,7 +1028,7 @@ class SettingsPage(QWidget):
         # Text size, then Colours: it is what most students change, and below every design card it was
         # not found (Grok Bot's 0.17.0 audit, X1 and A11).
         appearance = _section_page(
-            "Look", (text_card, self.colours_card, main_section, day_section, everywhere_card)
+            "Look", (main_section, day_section, text_card, self.colours_card, everywhere_card)
         )
         planning_card, planning_form = _card("How homework gets a time")
         self.planning_style = QButtonGroup(planning_card)
@@ -1324,13 +1324,12 @@ class SettingsPage(QWidget):
             self.save_state.setText(NO_SOUND)
 
     def _show_what_applies(self) -> None:
-        """Only the settings that change the chosen views. Surface, Corners and Blocks stayed on screen
-        for every design while only Today's app read them, so a student changed them in Bento and saw
-        nothing happen. Look and Accent stay: they dress the top bar and every window in any design."""
+        """Only the settings that change the chosen views. Surface is part of every design's active
+        palette; Corners and Blocks still belong to Today's app. The look and accent apply everywhere."""
         main = next(section for section in self.layout_sections if section.slot == "main")
         todays_app = main.chosen() == "classic"
         for knob in TODAYS_APP_KNOBS:
-            self._fine_form.setRowVisible(self.knobs[knob], todays_app)
+            self._fine_form.setRowVisible(self.knobs[knob], todays_app or knob == "surface")
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
@@ -1698,6 +1697,8 @@ class SettingsPage(QWidget):
             saved = self._saved_look(self.look.currentData())
             if saved is not None:
                 self._look = wear(before, saved)
+                for section in self.layout_sections:
+                    section.use_own_look()
                 self._show_look_settings()
             return
         kind, name = parsed
@@ -1707,6 +1708,8 @@ class SettingsPage(QWidget):
         else:
             preset = name
         self._look = sanitize_look({"preset": preset, "knobs": before["knobs"]})
+        for section in self.layout_sections:
+            section.use_own_look()
         self._show_look_settings()
 
     def _built_in_look(self) -> dict:

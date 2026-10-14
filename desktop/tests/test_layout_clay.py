@@ -32,7 +32,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.layouts.base import Scene
     from desktop.native.layouts.clay import Card, ClayChip, ClayDeckView, ClayPainter, Fade, slots
     from desktop.native.layouts.registry import options_for, tokens_for
-    from desktop.native.look import resolved_palette
+    from desktop.native.look import design_look
     from desktop.native.weekmodel import build_week, clock_label, minute_of
 
 
@@ -61,13 +61,13 @@ def shown(
     **chosen: str,
 ) -> ClayDeckView:
     options = {**options_for(None, "clay"), **chosen}
-    palette = resolved_palette(pack, False, None, "default")
+    palette, _look = design_look(options["look"], pack, False, None)
     week = build_week(WEEK, BLOCKS if blocks is None else blocks, HOMEWORK, TRACE)
     view = ClayDeckView()
     view.resize(1280, 764)
     view.show_week(Scene(
         week, 3, minute_of("13:40"), options,
-        tokens_for("clay", options["colour"], palette),
+        tokens_for("clay", options["look"], palette),
         surface=tab, iso_day=week.date_of(day).isoformat(),
     ))
     view.show()
@@ -890,7 +890,8 @@ def test_a_block_that_shares_its_time_is_drawn_like_one_that_does_not(qapp: QApp
     """Two blocks side by side show they share their time by sitting side by side: the dot at the
     corner of each said nothing a student could read, and covered the end of the name."""
     options = options_for(None, "clay")
-    tokens = tokens_for("clay", options["colour"], resolved_palette("light-frost", False, None, "default"))
+    palette, _look = design_look(options["look"], "light-frost", False, None)
+    tokens = tokens_for("clay", options["look"], palette)
 
     def painted(columns: int) -> QImage:
         drawn = Drawn("soccer", "Soccer practice", "extra", False, Span(1, 16 * 60, 17 * 60 + 30), 0, columns)

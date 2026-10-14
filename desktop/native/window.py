@@ -109,15 +109,15 @@ from desktop.native.hours.zoom import ZOOM_KEYS, HoursScroll, sanitize_zoom
 from desktop.native.kept import KeptSession
 from desktop.native.layouts.base import NARROW_WIDTH, LayoutView, Scene
 from desktop.native.layouts.empty import EmptyWeek, start_here_week
-from desktop.native.layouts.registry import MATCH, options_for, sanitize_layout, tokens_for
+from desktop.native.layouts.registry import options_for, sanitize_layout, tokens_for
 from desktop.native.layouts.views import VIEW_CLASSES
 from desktop.native.look import (
     MENU_EDGE,
+    design_look,
     effective_look,
     look_measures,
     look_motion,
     pack_stylesheet,
-    palette_from_tokens,
     resolved_palette,
     sanitize_look,
     text_scale,
@@ -573,7 +573,6 @@ class NativeWindow(QMainWindow):
         self._motion = "normal"
         # What the window was last dressed in, so a change that leaves the look alone skips restyling.
         self._dressed: tuple = ()
-        self._page_sheet = ""
         self._travel_picture: QLabel | None = None
         self._travel_direction = 0
         # What the planner last showed (_planner_now), so a change of view, My day or design is seen.
@@ -1962,7 +1961,7 @@ class NativeWindow(QMainWindow):
         clock = clock_parts(self.session.now_ms())
         options = options_for(self._layout, layout_id)
         pack, system_dark, accent = self._look_inputs()
-        palette = resolved_palette(pack, system_dark, self._look, accent)
+        palette, applied_look = design_look(options["look"], pack, system_dark, self._worn_look(), accent)
         session = self.session
         surface = "week"
         if not self._day_mode and layout_id in VIEW_CLASSES and session.planner_view in {"day", "month"}:
@@ -1979,8 +1978,8 @@ class NativeWindow(QMainWindow):
             today=clock["day"] if monday_of(clock["iso"]) == session.week_start else None,
             minute=clock["minute"],
             options=options,
-            tokens=tokens_for(layout_id, options["colour"], palette),
-            scale=text_scale(self._look),
+            tokens=tokens_for(layout_id, options["look"], palette),
+            scale=text_scale(applied_look),
             surface=surface,
             month=session.month_data,
             iso_day=session.selected_day,
@@ -5309,35 +5308,22 @@ class NativeWindow(QMainWindow):
         except OSError:
             self.session._say("Could not save the look for this device.")
 
-    def _page_palette(self, palette: dict) -> dict | None:
-        """The colours of the design on screen when it wears a colourway of its own, for its page
-        only; None when the page wears the look, as Today's app and a design in Match my look do."""
-        layout_id = self._layout["day"] if self._day_mode else self._layout["main"]
-        if layout_id not in VIEW_CLASSES:
-            return None
-        colour = options_for(self._layout, layout_id)["colour"]
-        if colour == MATCH:
-            return None
-        return palette_from_tokens(tokens_for(layout_id, colour, palette), palette)
-
     def _apply_appearance(self) -> None:
-        """Dress the window in the student's look. The top bar, the frame, dialogs and Today's app
-        always wear the look and its accent; a design's colourway colours only the design's own page
-        (decision 3 of 0.17). When the design dressed the chrome, three accents were on screen before
-        a student had placed any homework."""
+        """Dress the app chrome and current design from the design's selected look."""
         pack, system_dark, accent = self._look_inputs()
         look = self._worn_look()
+        if not self._wears_carried_look():
+            layout_id = self._layout["day"] if self._day_mode else self._layout["main"]
+            token = options_for(self._layout, layout_id)["look"]
+        else:
+            token = "your"
         # Blocks and month cells are painted per item, which a stylesheet cannot reach.
-        palette = resolved_palette(pack, system_dark, look, accent)
+        palette, look = design_look(token, pack, system_dark, look, accent)
         art = control_art(palette)
         sheet = pack_stylesheet(pack, system_dark, look, accent, palette, art)
         ctx = context_for(self._layout, look, palette, sheet)
         heroes = ("settingsTitle", "sheetTitle", "setupTitle", "authBrand")
         extra = extra_stylesheet(sheet, ctx.feel, palette, ctx.tokens, look, heroes)
-        page = self._page_palette(palette)
-        page_sheet = ""
-        if page is not None:
-            page_sheet = pack_stylesheet(pack, system_dark, look, accent, page, control_art(page))
         chips = bool((self.session.preferences or {}).get("accent_chips"))
         chosen_motion = (self.session.preferences or {}).get("motion")
         self._motion = motion_level(chosen_motion, look_motion(look))
@@ -5387,10 +5373,6 @@ class NativeWindow(QMainWindow):
             self._maybe_prepare_block_spare()
             fit_buttons(self)
             self._keep_bar_whole()
-        if page_sheet != self._page_sheet:
-            # The planner holds the design's page and nothing of the chrome.
-            self._page_sheet = page_sheet
-            self.planner.setStyleSheet(page_sheet)
         self._sync_add_button()
         self._refresh_layout()
 

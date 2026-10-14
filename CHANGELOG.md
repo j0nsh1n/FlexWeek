@@ -14,6 +14,9 @@ All notable changes to FlexWeek are documented here. Format follows
 - Android Today actions share the available row width, and the missing-computer sync line uses shorter wording.
 - Month chips keep their time whole and elide long titles. Timeline's fold pager clears Thursday's heading.
 
+### Changed
+- Each main and day design now offers its own curated looks. The selected look's colours carry across the app, design canvas and My day while the design keeps its own structure and typography; legacy design colours migrate to matching looks.
+
 ## [1.0.0] - 2026-10-15
 
 ### Added

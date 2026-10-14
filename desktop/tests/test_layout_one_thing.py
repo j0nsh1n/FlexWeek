@@ -28,7 +28,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.layouts.base import Scene, rules
     from desktop.native.layouts.one_thing import DayBar, OneThingView, label_minutes
     from desktop.native.layouts.registry import options_for, tokens_for
-    from desktop.native.look import resolved_palette
+    from desktop.native.look import design_look, resolved_palette
     from desktop.native.motion import apply_ui_effects, duration
     from desktop.native.ring import ARC_MS, CountdownRing
     from desktop.native.weekmodel import build_week, clock_label, minute_of, set_clock_24h
@@ -44,10 +44,13 @@ def qapp() -> Iterator[QApplication]:
 
 
 def scene(clock: str, today: int | None = THURSDAY, accent: str = "default", **chosen: str) -> Scene:
+    if "colour" in chosen:
+        legacy = {"black": "preset:one-poster", "paper": "preset:paper", "match": "your"}
+        chosen["look"] = legacy.get(chosen.pop("colour"), "your")
     options = {**options_for(None, "one"), **chosen}
-    palette = resolved_palette("light-frost", False, None, accent)
+    palette, _look = design_look(options["look"], "light-frost", False, None, accent)
     week = build_week(WEEK, BLOCKS, HOMEWORK, TRACE)
-    return Scene(week, today, minute_of(clock), options, tokens_for("one", options["colour"], palette))
+    return Scene(week, today, minute_of(clock), options, tokens_for("one", options["look"], palette))
 
 
 def shown(
@@ -296,19 +299,22 @@ def test_the_bars_tick_for_now_shows_on_the_thing_it_is_in(qapp: QApplication) -
     assert bar.grab().toImage().pixelColor(now.toPoint()).name() == bar.painter.c("tick").name()
 
 
-def test_option_colours_repaint_the_screen(qapp: QApplication) -> None:
+def test_curated_looks_repaint_the_screen(qapp: QApplication) -> None:
     def corner(view: OneThingView) -> str:
         return view.grab().toImage().pixelColor(4, 4).name()
 
-    assert corner(shown(qapp, "19:00", colour="black")) == "#000000"
-    assert corner(shown(qapp, "19:00", colour="paper")) == "#f7f1e3"
+    assert corner(shown(qapp, "19:00", colour="black")) == resolved_palette(
+        "light-frost", False, {"preset": "one-poster", "knobs": {}}
+    )["window"]
+    assert corner(shown(qapp, "19:00", colour="paper")) == "#f7f0e1"
     look = resolved_palette("light-frost", False, None, "default")
     assert corner(shown(qapp, "19:00", colour="match")) == look["window"]
 
 
 def test_poster_counts_down_in_the_students_accent_not_0_16s_orange(qapp: QApplication) -> None:
     for accent in ("default", "sea"):
-        worn = tokens_for("one", "black", resolved_palette("light-frost", False, None, accent))["accent"]
+        palette, _look = design_look("preset:one-poster", "light-frost", False, None, accent)
+        worn = tokens_for("one", "preset:one-poster", palette)["accent"]
         view = shown(qapp, "19:00", colour="black", accent=accent)
         picture = view.findChild(CountdownRing).grab().toImage()
         inked = {
@@ -320,12 +326,13 @@ def test_poster_counts_down_in_the_students_accent_not_0_16s_orange(qapp: QAppli
 
 def test_both_labels_of_a_shared_rule_get_its_colour(qapp: QApplication) -> None:
     view = shown(qapp, "19:00", colour="paper")
+    muted = view.scene.tokens["bg_muted"]
     for name in ("oneEvening", "oneWaiting"):
         picture = view.findChild(QLabel, name).grab().toImage()
         inked = {
             picture.pixelColor(x, y).name() for x in range(picture.width()) for y in range(picture.height())
         }
-        assert "#57534e" in inked, name
+        assert muted in inked, name
         assert "#1c1917" not in inked, name
 
 
@@ -509,7 +516,7 @@ def test_the_day_bar_names_its_hours_the_time_now_and_what_it_is(qapp: QApplicat
             THURSDAY,
             minute_of("13:40"),
             options,
-            tokens_for("one", options["colour"], palette),
+            tokens_for("one", options["look"], palette),
         )
     )
     nothing.show()

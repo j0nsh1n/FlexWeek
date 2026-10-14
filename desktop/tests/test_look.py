@@ -262,9 +262,7 @@ def test_the_look_menu_offers_four_looks_then_the_experimental_ones() -> None:
         "Pastel",
     ]
     offered = [(kind, name) for name, _label, kind in standard + experimental]
-    assert sorted(offered) == sorted(
-        [("pack", name) for name in PACKS] + [("preset", name) for name in LOOK_PRESETS if name != "default"]
-    )
+    assert sorted(offered) == sorted(list(STANDARD_LOOKS) + list(EXPERIMENTAL_LOOKS))
     assert look_menu_value("nocturne", {"preset": "default", "knobs": {}}) == look_menu_token(
         "pack", "nocturne"
     )

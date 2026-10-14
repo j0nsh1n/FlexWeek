@@ -84,7 +84,7 @@ def shown(
             THURSDAY,
             minute_of(clock),
             options,
-            tokens_for(layout, options["colour"], palette),
+            tokens_for(layout, options["look"], palette),
             scale=1.2 if large else 1.0,
         )
     )
@@ -270,7 +270,7 @@ def test_another_week_notice_stays_on_one_line(qapp: QApplication) -> None:
     week = build_week(WEEK, DEMO_BLOCKS, HOMEWORK, TRACE)
     view.resize(1024, 640)
     view.show_week(
-        Scene(week, None, minute_of("15:40"), options, tokens_for("one", options["colour"], palette))
+        Scene(week, None, minute_of("15:40"), options, tokens_for("one", options["look"], palette))
     )
     view.show()
     qapp.processEvents()
@@ -283,7 +283,7 @@ def test_another_week_notice_stays_on_one_line(qapp: QApplication) -> None:
     palette = resolved_palette("light-frost", False, None, "default")
     dial.resize(1024, 640)
     dial.show_week(
-        Scene(week, None, minute_of("15:40"), options, tokens_for("dial", options["colour"], palette))
+        Scene(week, None, minute_of("15:40"), options, tokens_for("dial", options["look"], palette))
     )
     dial.show()
     qapp.processEvents()
@@ -310,7 +310,7 @@ def test_another_week_says_then_not_later_today(qapp: QApplication) -> None:
     palette = resolved_palette("light-frost", False, None, "default")
     week = build_week(WEEK, DEMO_BLOCKS, DEMO_HOMEWORK)
     view.resize(1024, 640)
-    scene = Scene(week, None, minute_of("15:40"), options, tokens_for("one", options["colour"], palette))
+    scene = Scene(week, None, minute_of("15:40"), options, tokens_for("one", options["look"], palette))
     view.show_week(scene)
     view.show()
     qapp.processEvents()

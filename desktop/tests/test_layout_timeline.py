@@ -61,6 +61,7 @@ if importlib.util.find_spec("PySide6") is not None:
         PACKS,
         block_time_colour,
         category_paint,
+        design_look,
         mix_oklab,
         resolved_palette,
     )
@@ -88,8 +89,15 @@ def scene_of(
     today: int = THURSDAY,
     **chosen: str,
 ) -> Scene:
+    if "colour" in chosen:
+        legacy = {"match": "your", "paper": "preset:timeline-paper", "night": "pack:dark-frost"}
+        chosen["look"] = legacy.get(chosen.pop("colour"), "your")
     options = {**options_for(None, "timeline"), **chosen}
     palette = palette or resolved_palette("light-frost", False, None, "default")
+    if options["look"] != "your":
+        palette, _look = design_look(
+            options["look"], "system", palette.get("axis") == "dark", None, palette["accent"]
+        )
     week = build_week(
         WEEK, BLOCKS if blocks is None else blocks, HOMEWORK if homework is None else homework, TRACE
     )
@@ -98,7 +106,7 @@ def scene_of(
         today,
         minute_of(clock),
         options,
-        tokens_for("timeline", options["colour"], palette),
+        tokens_for("timeline", options["look"], palette),
         surface=tab,
         iso_day=week.date_of(today).isoformat(),
     )
@@ -1038,24 +1046,23 @@ def test_option_compact_gives_the_hours_more_of_the_page(qapp: QApplication) -> 
     assert tight.height() > roomy.height()
 
 
-def test_ruled_paper_and_night_repaint_the_page_and_keep_flexweeks_blue(qapp: QApplication) -> None:
+def test_ruled_paper_and_night_repaint_the_page_and_use_their_accent(qapp: QApplication) -> None:
     def corner(view: TimelineView) -> str:
         return view.grab().toImage().pixelColor(5, 5).name()
 
     assert corner(shown(qapp, colour="paper")) == "#fdfbf7"
-    assert corner(shown(qapp, colour="night")) == "#14161c"
-    gold = resolved_palette("light-frost", False, None, "gold")
-    assert tokens_for("timeline", "paper", gold)["accent"] == "#3d6fc4"
-    assert tokens_for("timeline", "night", gold)["accent"] == "#7fa8ff"
+    assert corner(shown(qapp, colour="night")) == "#111315"
+    paper, _look = design_look("preset:timeline-paper", "light-frost", False, None, "gold")
+    night, _look = design_look("pack:dark-frost", "light-frost", False, None, "gold")
+    assert tokens_for("timeline", "preset:timeline-paper", paper)["accent"] == paper["accent"]
+    assert tokens_for("timeline", "pack:dark-frost", night)["accent"] == night["accent"]
 
 
-def test_its_own_colourways_set_the_names_and_figures_in_newsreader(qapp: QApplication) -> None:
-    """The catalogue's Classic Elegant pairing. In Match my look they take the look's heading face,
-    which the window's stylesheet gives them (look.HEADING_NAMES)."""
+def test_a_design_look_keeps_timelines_heading_face(qapp: QApplication) -> None:
+    """A palette changes Timeline's colours without changing the design's type."""
 
     def faces(view: TimelineView) -> set[str]:
         found = [*view.findChildren(QLabel, "timelineDayName"), *view.findChildren(QLabel, "timelineStat")]
         return {item.font().family() for item in found}
 
-    assert faces(shown(qapp, colour="paper")) == {"Newsreader"}
-    assert "Newsreader" not in faces(shown(qapp))
+    assert faces(shown(qapp, colour="paper")) == faces(shown(qapp, colour="match"))

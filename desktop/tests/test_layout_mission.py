@@ -50,8 +50,8 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.hours.zoom import HoursScroll
     from desktop.native.layouts.base import Scene
     from desktop.native.layouts.mission import WEEK_SCALE, Bar, MissionCanvas, MissionView
-    from desktop.native.layouts.registry import LAYOUTS, options_for, tokens_for
-    from desktop.native.look import ACCENTS, PACKS, category_paint, resolved_palette
+    from desktop.native.layouts.registry import DESIGN_LOOKS, options_for, tokens_for
+    from desktop.native.look import ACCENTS, PACKS, category_paint, design_look, resolved_palette
     from desktop.native.weekmodel import build_week, minute_of
     from desktop.native.widgets import FittedLabel
 
@@ -77,8 +77,15 @@ def shown(
     **chosen: str,
 ) -> MissionView:
     """Mission on the test week, Thursday 13:40 unless told otherwise."""
+    if "colour" in chosen:
+        legacy = {
+            "deck": "preset:flight-deck", "cyan": "preset:terminal", "amber": "preset:poster",
+            "green": "preset:pastel", "match": "your",
+        }
+        chosen["look"] = legacy.get(chosen.pop("colour"), "your")
     options = {**options_for(None, "mission"), **chosen}
     palette = resolved_palette("light-frost", False, None, "default")
+    palette, _look = design_look(options["look"], "light-frost", False, None)
     view = MissionView(hand=hand)
     view.resize(*size)
     week = build_week(WEEK, blocks or BLOCKS, homework or HOMEWORK, TRACE)
@@ -88,7 +95,7 @@ def shown(
             today,
             minute_of(minute),
             options,
-            tokens_for("mission", options["colour"], palette),
+            tokens_for("mission", options["look"], palette),
             scale=scale,
             surface=surface,
             iso_day=iso_day,
@@ -372,9 +379,9 @@ def test_a_block_keeps_its_bar_until_it_would_be_narrower_than_eight_pixels(qapp
     view = shown(qapp, blocks=[*BLOCKS, block("quiz", "locked", [4], "10:00", 45)])
     hours = view.findChild(MissionCanvas, "missionHours")
     image = hours.grab().toImage()
-    surface = view.scene.tokens["surface"]
-    meals_fill, meals_mark = category_paint("meals", {"family": "light", "panel": surface})
-    class_fill, _ = category_paint("class", {"family": "light", "panel": surface})
+    palette, _ = design_look(view.scene.options["look"], "light-frost", False, None)
+    meals_fill, meals_mark = category_paint("meals", palette)
+    class_fill, _ = category_paint("class", palette)
     dinner = next(rect for item, rect in hours.drawn(hours.track_for(3)) if item.block_id == "dinner")
     assert dinner.width() >= 8
     middle = dinner.center().toPoint()
@@ -394,8 +401,8 @@ def test_a_block_narrower_than_eight_pixels_is_a_tick(qapp: QApplication) -> Non
         scroll.zoom_by(-1)
     rect = next(r for item, r in hours.drawn(hours.track_for(3)) if item.block_id == "bell")
     assert rect.width() < 8
-    surface = view.scene.tokens["surface"]
-    _, mark = category_paint("extra", {"family": "light", "panel": surface})
+    palette, _ = design_look(view.scene.options["look"], "light-frost", False, None)
+    _, mark = category_paint("extra", palette)
     middle = rect.center().toPoint()
     assert hours.grab().toImage().pixelColor(middle).name() == mark
 
@@ -652,11 +659,14 @@ def test_a_name_that_cannot_fit_is_written_beside_its_block_where_the_lane_is_fr
     view = shown(qapp, blocks=[*BLOCKS, piano])
     hours = view.findChild(MissionCanvas, "missionHours")
     image = hours.grab().toImage()
+    text_is_dark = QColor(view.scene.tokens["text"]).lightness() < 128
 
     def ink_before(block_id: str) -> int:
         rect = next(rect for item, rect in hours.drawn(hours.track_for(2)) if item.block_id == block_id)
         return sum(
-            QColor(image.pixel(x, y)).lightness() < 110
+                QColor(image.pixel(x, y)).lightness() < 110
+                if text_is_dark
+                else QColor(image.pixel(x, y)).lightness() > 145
             for x in range(max(round(rect.left()) - 110, 0), round(rect.left()) - 4)
             for y in range(round(rect.top()) + 6, round(rect.top()) + 24)
         )
@@ -843,7 +853,7 @@ def test_parked_day_scroll_dies_with_its_host(qapp: QApplication) -> None:
     palette = resolved_palette("light-frost", False, None, "default")
     week = build_week(WEEK, BLOCKS, HOMEWORK, TRACE)
     scene = Scene(week, 3, minute_of("13:40"), options,
-                  tokens_for("mission", options["colour"], palette))
+                  tokens_for("mission", options["look"], palette))
     host = QWidget()
     view = MissionView(host)
     QVBoxLayout(host).addWidget(view)
@@ -860,17 +870,18 @@ def test_parked_day_scroll_dies_with_its_host(qapp: QApplication) -> None:
     assert not shiboken6.isValid(parked)
 
 
-def test_colour_option_repaints_the_console(qapp: QApplication) -> None:
-    colours = [shown(qapp, colour=name).grab().toImage().pixelColor(3, 3).name()
-               for name in ("deck", "cyan", "amber", "green")]
-    assert colours == ["#0b0f14", "#070b12", "#0d0a04", "#040b06"]
+def test_curated_looks_repaint_the_console(qapp: QApplication) -> None:
+    for token, _label in DESIGN_LOOKS["mission"]:
+        palette, _look = design_look(token, "light-frost", False, None)
+        assert shown(qapp, look=token).grab().toImage().pixelColor(3, 3).name() == palette["window"]
 
 
 def test_flight_deck_is_the_mock_ups_signature_in_flexweeks_blue_whatever_the_look() -> None:
     """A design's own colourway stays the same whichever look and accent the student wears."""
-    assert LAYOUTS["mission"].colourways[0][:2] == ("deck", "Flight deck")
+    assert DESIGN_LOOKS["mission"][0] == ("preset:flight-deck", "Flight deck")
     for pack, dark, accent in itertools.product(PACKS, (False, True), ACCENTS):
-        tokens = tokens_for("mission", "deck", resolved_palette(pack, dark, None, accent))
+        palette, _look = design_look("preset:flight-deck", pack, dark, None, accent)
+        tokens = tokens_for("mission", "preset:flight-deck", palette)
         assert (tokens["bg"], tokens["surface"], tokens["accent"]) == ("#0b0f14", "#121821", "#7fa8ff")
 
 
