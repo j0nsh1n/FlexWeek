@@ -48,6 +48,7 @@ from desktop.native.look import (
     look_overrides,
     pack_axis,
     pack_stylesheet,
+    palette_from_tokens,
     parse_look_menu_token,
     preset_knobs,
     readable_edge,
@@ -507,6 +508,26 @@ def test_every_design_palette_preset_keeps_its_text_readable() -> None:
         assert dist(_lab(palette["accent"]), _lab(palette["error"])) >= 25, (preset, accent)
 
 
+def test_a_design_page_falls_back_to_readable_ink_when_its_own_ink_is_too_light() -> None:
+    tokens = {
+        "line": "#dddddd",
+        "bg": "#ffffff",
+        "bg_ink": "#eeeeee",
+        "bg_muted": "#777777",
+        "surface": "#ffffff",
+        "text": "#000000",
+        "muted": "#444444",
+        "accent": "#0055aa",
+        "accent_ink": "#ffffff",
+        "danger": "#aa0000",
+    }
+    page = palette_from_tokens(tokens, {"window": "#ffffff", "text": "#000000"})
+    assert (page["window"], page["text"], page["muted"]) == (
+        tokens["surface"], tokens["text"], tokens["muted"]
+    )
+    assert contrast(page["text"], page["window"]) >= AA_TEXT
+
+
 def test_the_now_line_and_the_selection_ring_show_at_3_to_1_and_keep_the_accent() -> None:
     """They are lines, not text: the bar for a graphic is 3 to 1, not 4.5. In every look the shade is
     at least 3 to 1 on every category's fill and on the grid, and is the accent or only as far from
@@ -570,6 +591,10 @@ def test_a_students_accent_wins_over_the_presets_own() -> None:
     chosen = resolved_palette("slate", False, look_of("terminal"), "sky")
     # Terminal is a dark look whatever the pack underneath, so it takes the dark-axis sky and its ink.
     assert (chosen["accent"], chosen["accent_ink"]) == ("#38bdf8", "#0b1224")
+    clay = resolved_palette(
+        "slate", False, look_of("default"), "sky", palette_preset="clay-lavender"
+    )
+    assert (clay["accent"], clay["accent_ink"]) == ("#0369a1", "#ffffff")
 
 
 def test_flat_surface_has_no_raised_panels_and_layered_does() -> None:

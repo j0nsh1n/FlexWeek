@@ -198,8 +198,8 @@
  {
   "file": "desktop/native/look.py",
   "name": "a swatch replaces High contrast's yellow",
-  "old": "OWN_ACCENT = (\"high-contrast\",)",
-  "new": "OWN_ACCENT = ()",
+  "old": "OWN_ACCENT = (\"high-contrast\", \"bento-indigo\", \"retro-teal\", \"flight-deck\", \"timeline-paper\")\n",
+  "new": "OWN_ACCENT = (\"bento-indigo\", \"retro-teal\", \"flight-deck\", \"timeline-paper\")\n",
   "test": "desktop/tests/test_look.py::test_an_accent_always_changes_the_accent"
  },
  {

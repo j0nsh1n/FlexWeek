@@ -706,6 +706,7 @@ def test_a_sheet_fades_its_card_and_shadow_as_one_and_keeps_the_shadow(qapp: QAp
     face = sheet.card.parentWidget()
     assert face is not sheet and face.graphicsEffect() is not None, "the card and its shadow fade together"
     shade = window.findChild(QWidget, "sheetShade")
+    assert 0.0 <= shade.dim_progress < 1.0, "the dim does not jump to full strength at once"
     assert shade.fading, "the dimming comes in with it"
     QTest.qWait(duration(EASE_MS) + 150)
     assert face.graphicsEffect() is None and not shade.fading

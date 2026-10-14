@@ -135,6 +135,4 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
-- 2026-10-14, lane `fix-a` in detached worktree `~/.worktrees/fw100-fix-a`, based on release commit `2f4411fe`. Implemented the unfinished-homework session rule, clock-skew count on Devices, pairing sheet copy/layout, and Android pairing/sync copy and Today button sizing. Verification and commit details are in `~/.flexweek-ui-harness/scratch/1.0.0/gate/report-fix-fix-a.md`.
-- 2026-10-14, lane `fix-d2` in detached worktree `~/.worktrees/fw100-fix-d2`, based on `63863b68`. Implemented Sunday-first Month rows and My day dial order, with Monday-to-Sunday wording in Settings and setup. Report: `~/.flexweek-ui-harness/scratch/1.0.0/gate/report-fix-fix-d2.md`.
-- Next: review the lane commit and report, then continue the 1.0.0 release gate.
+- 2026-10-14, fix-e in `/home/jonathans/.worktrees/fw100-fix-e`, based on release head `44e5d727`. Items 9 and 10 are implemented; item 11 is in progress. Details and verification are in `~/.flexweek-ui-harness/scratch/1.0.0/gate/report-fix-e.md`.

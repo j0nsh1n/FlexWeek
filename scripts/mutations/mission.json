@@ -98,10 +98,10 @@
   "test": "cargo:flexweek-engine:desk_weekmodel:test_focus_is_what_the_timer_credited_to_this_weeks_homework_and_blocks"
  },
  {
-  "file": "desktop/native/layouts/colourways.py",
+  "file": "desktop/native/look.py",
   "name": "Flight deck wears the student's accent",
-  "old": "            accent=\"#7fa8ff\",\n            accent_ink=\"#0b1224\",\n            line=\"#2c3846\",\n",
-  "new": "            line=\"#2c3846\",\n",
+  "old": "OWN_ACCENT = (\"high-contrast\", \"bento-indigo\", \"retro-teal\", \"flight-deck\", \"timeline-paper\")\n",
+  "new": "OWN_ACCENT = (\"high-contrast\", \"bento-indigo\", \"retro-teal\", \"timeline-paper\")\n",
   "test": "desktop/tests/test_layout_mission.py::test_flight_deck_is_the_mock_ups_signature_in_flexweeks_blue_whatever_the_look"
  },
  {
