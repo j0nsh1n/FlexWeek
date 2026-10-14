@@ -217,18 +217,34 @@ def test_a_button_in_an_open_sheet_measures_again_when_the_text_size_changes(qap
         free(dialog)
 
 
-def test_the_running_late_answers_go_under_preview_when_the_row_has_no_room(qapp, window) -> None:
-    """The sheet keeps its width on the scale; its row wraps instead of squeezing a button."""
+def test_the_running_late_buttons_are_never_squeezed_before_or_after_preview(qapp, window) -> None:
+    """The sheet keeps its width on the scale, and no button in its one row is squeezed. Preview and
+    Accept late start take turns in that row (1.0.0), so both states are measured."""
     dress(qapp, window, "classic", "terminal", "large")
     dialog = LateDialog(window, "Starting from 14:15 today (Wednesday).")
     dialog.show()
     qapp.processEvents()
     try:
+        cancel = next(button for button in dialog.findChildren(QPushButton) if button.text() == "Cancel")
         preview = dialog.findChild(QPushButton, "latePreview")
-        assert dialog.accept_button.width() >= dialog.accept_button.sizeHint().width()
-        assert dialog.accept_button.mapTo(dialog, dialog.accept_button.rect().topLeft()).y() > preview.mapTo(
-            dialog, preview.rect().topLeft()
-        ).y(), "the answers sit under Preview"
+        dialog.show_trace({"moves": [], "unplaced": []}, {})
+        before = [preview, cancel]
+        for stage, shown in (("before preview", None), ("after preview", dialog.accept_button)):
+            if shown is None:
+                dialog.accept_button.setVisible(False)
+                preview.setVisible(True)
+                row = before
+            else:
+                preview.setVisible(False)
+                shown.setVisible(True)
+                row = [shown, cancel]
+            qapp.processEvents()
+            for button in row:
+                assert button.isVisible(), f"{stage}: {button.text()!r} hidden"
+                assert button.width() >= button.sizeHint().width(), f"{stage}: {button.text()!r} squeezed"
+            first, second = (button.geometry() for button in row)
+            assert not first.intersects(second), f"{stage}: buttons overlap"
+            assert second.right() <= dialog.width(), f"{stage}: {row[1].text()!r} runs off the sheet"
     finally:
         dialog.hide()
         free(dialog)
