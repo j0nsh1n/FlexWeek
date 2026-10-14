@@ -272,6 +272,23 @@ def test_todays_app_keeps_its_scroll_after_a_page_or_look_change(
         assert hours(window).verticalScrollBar().value() == 0, how
 
 
+@pytest.mark.parametrize("design", DESIGNS)
+def test_day_reached_from_week_opens_at_now(
+    qapp: QApplication, window: NativeWindow, design: str
+) -> None:
+    window.session.selected_day = HELD.date().isoformat()
+    window._layout = sanitize_layout({"main": design, "day": "one"})
+    window._apply_appearance()
+    window._on_week()
+    window.findChild(QAbstractButton, "viewWeek").click()
+    wait_until(qapp, lambda: not window.session.busy)
+    window.findChild(QAbstractButton, "viewDay").click()
+    wait_until(qapp, lambda: not window.session.busy)
+    opens_at(qapp, window, NOW, "Day reached from Week")
+    first, last = span_shown(hours(window))
+    assert first <= 18 * 60 <= last, "Day opened at now but left the next block out of view"
+
+
 def test_month_does_not_repeat_the_next_line_above_its_status_strip(
     qapp: QApplication, window: NativeWindow
 ) -> None:
