@@ -85,3 +85,22 @@ def test_the_preview_week_puts_soccer_in_sports() -> None:
     _monday, blocks, _homework = sample_week()
     soccer = next(block for block in blocks if block["id"] == "soccer")
     assert soccer["category"] == "exercise"
+
+
+def test_todays_app_preview_wears_the_looks_colours_over_its_day_names(qapp: QApplication) -> None:
+    """Setup's picture of Today's app in High contrast had a pale row of day names over a black week;
+    the window itself draws that row black. The picture's top band is the look's own dark page."""
+    from collections import Counter
+
+    from PySide6.QtGui import QColor
+
+    from desktop.native.previews import render
+
+    picture = render("classic", "preset:high-contrast", "light-frost", None, 800).toImage()
+    band = Counter(
+        picture.pixelColor(x, y).name()
+        for x in range(0, picture.width(), 4)
+        for y in range(2, max(3, picture.height() * 6 // 100))
+    )
+    colour, _count = band.most_common(1)[0]
+    assert QColor(colour).lightnessF() < 0.15, f"the day names sit on {colour}"

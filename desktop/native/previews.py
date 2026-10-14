@@ -19,7 +19,7 @@ from desktop.native.hours.hand import Hand, Verdict
 from desktop.native.layouts.base import Scene
 from desktop.native.layouts.registry import options_for, tokens_for
 from desktop.native.layouts.views import VIEW_CLASSES
-from desktop.native.look import design_look, effective_look, text_scale
+from desktop.native.look import design_look, effective_look, pack_stylesheet, text_scale
 from desktop.native.weekmodel import build_week
 
 # Drawn at a laptop's window size and scaled down, so each design lays out as it does in use. The
@@ -131,6 +131,9 @@ def render(
         # judges anything.
         host = QWidget()
         widget = ClassicWeek(Hand(lambda block_id, from_day, span: Verdict(False, ""), host))
+        # The day names and other widgets take their colours from the window's sheet, which a picture
+        # drawn on its own lacks: High contrast's preview had a pale row of names over a black week.
+        widget.setStyleSheet(pack_stylesheet(pack, dark, applied_look, palette=palette))
         widget.set_look(applied_look, palette)
         widget.set_week(build_week(monday, blocks, homework, None), SAMPLE_DAY, SAMPLE_MINUTE)
     _settle(widget, size)
