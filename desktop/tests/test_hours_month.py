@@ -423,6 +423,8 @@ def test_a_month_with_no_window_is_freed_without_the_garbage_collector(qapp: QAp
     import weakref
 
     gc.collect()
+    # The run keeps the collector off (conftest); put back whatever was set, never switch it on.
+    was_on = gc.isenabled()
     gc.disable()
     try:
         grid = MonthGrid()
@@ -430,7 +432,8 @@ def test_a_month_with_no_window_is_freed_without_the_garbage_collector(qapp: QAp
         del grid
         assert gone() is None
     finally:
-        gc.enable()
+        if was_on:
+            gc.enable()
 
 
 def first_row_shown(grid: MonthGrid) -> int:

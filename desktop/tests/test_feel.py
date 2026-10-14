@@ -467,6 +467,8 @@ def test_collecting_a_retro_page_raises_nothing(
     host, ctx = _host(qapp, "retro")
     freed: list[bool] = []
     gc.collect()
+    # The run keeps the collector off (conftest); put back whatever was set, never switch it on.
+    was_on = gc.isenabled()
     # Collector off while the page is built, so what it breaks up later is in the order it was made.
     gc.disable()
     try:
@@ -488,7 +490,8 @@ def test_collecting_a_retro_page_raises_nothing(
         gc.collect()
         qapp.processEvents()
     finally:
-        gc.enable()
+        if was_on:
+            gc.enable()
     free(host)
     assert freed == [True]
     assert errors == []

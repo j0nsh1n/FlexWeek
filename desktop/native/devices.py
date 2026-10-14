@@ -174,6 +174,11 @@ class _Answer(QObject):
     ready = Signal(object, object)
 
 
+# Sync calls still running, each with its answer, held on the window's thread (see run_off_ui).
+_IN_FLIGHT: set[tuple[_Answer, threading.Thread]] = set()
+RELEASE_RETRY_MS = 20
+
+
 def run_off_ui(
     owner: QObject, work: Callable[[], Any], done: Callable[[Any, Exception | None], None]
 ) -> None:
@@ -193,8 +198,6 @@ def run_off_ui(
         if live_owner is not None and live_done is not None and isValid(live_owner):
             live_done(result, problem)
 
-    answer.ready.connect(deliver, Qt.ConnectionType.QueuedConnection)
-
     def run() -> None:
         try:
             result, problem = work(), None
@@ -204,7 +207,29 @@ def run_off_ui(
         with suppress(RuntimeError):
             answer.ready.emit(result, problem)
 
-    threading.Thread(target=run, name="flexweek-sync-call", daemon=True).start()
+    worker = threading.Thread(target=run, name="flexweek-sync-call", daemon=True)
+    pending = (answer, worker)
+    # The worker lets go of `answer` as it ends. Were that the last hold, a Qt object would be freed on
+    # the worker's thread while the window's thread used it, and the app crashed (1.0.0 gate). This
+    # thread holds it until the worker has ended and lets go of it here.
+    _IN_FLIGHT.add(pending)
+
+    def release() -> None:
+        if worker.is_alive():
+            QTimer.singleShot(RELEASE_RETRY_MS, release)
+            return
+        _IN_FLIGHT.discard(pending)
+        if isValid(answer):
+            answer.deleteLater()
+
+    def deliver_then_release(result: Any, problem: Exception | None) -> None:
+        try:
+            deliver(result, problem)
+        finally:
+            release()
+
+    answer.ready.connect(deliver_then_release, Qt.ConnectionType.QueuedConnection)
+    worker.start()
 
 
 class SyncDot(QWidget):
