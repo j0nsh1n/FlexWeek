@@ -21,7 +21,7 @@ def test_option_is_checked_against_the_designs_own_options():
         ("bento", "size=big", "hero: week, today"),
         ("bento", "hero=tomorrow", "week, today"),
         ("bento", "hero", "not key=value"),
-        ("classic", "hero=today", "options: none"),
+        ("classic", "hero=today", "options: look:"),
         (None, "hero=today", "needs --design"),
     ],
 )
