@@ -3030,6 +3030,11 @@ class SheetShade(QWidget):
     def capture(self, host: QWidget) -> None:
         """Keep one pre-shade frame so fading the dim never exposes an empty parent repaint."""
         self._captured = True
+        if not host.isVisible():
+            # Nothing of it is on screen to hold still, and grabbing a window never shown lays it out
+            # and makes it, which left a sheet opened on a hidden window at the wrong size.
+            self._set_surface()
+            return
         still = host.grab()
         self._still = None if still.isNull() else still
         self._still_size = host.size() if self._still is not None else None
