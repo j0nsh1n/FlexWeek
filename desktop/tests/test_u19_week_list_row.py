@@ -210,3 +210,19 @@ def test_u19_the_focus_driven_resize_is_gone() -> None:
     from desktop.native import window as module
 
     assert not hasattr(module, "WEEK_LIST_OPEN") and not hasattr(module, "WEEK_LIST_FOLDED")
+
+
+def test_u19_week_list_elides_a_long_row_at_the_viewport_edge(qapp, window) -> None:
+    with_school(qapp, window)
+    title = "A very long Thursday block title that must elide at the right edge"
+    window.session.add_block(
+        {"id": "long-title", "title": title, "kind": "locked", "category": "extra",
+         "start": "11:00", "duration_min": 30, "days": [3]}
+    )
+    settled(qapp, window)
+    key(window, Qt.Key.Key_L, CTRL_SHIFT)
+    assert window.week_access_list.isVisible()
+    assert window.week_access_list.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    assert not window.week_access_list.horizontalScrollBar().isVisible()
+    assert any(title in window.week_access_list.item(row).text()
+               for row in range(window.week_access_list.count()))

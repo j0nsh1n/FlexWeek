@@ -509,7 +509,7 @@ class MissionPainter(BlockPainter):
         after = min([max(box.left(), ends[1]) for box in row if box.right() > ends[1] + 0.5] + [last])
         before = max([min(box.right(), ends[0]) for box in row if box.left() < ends[0] - 0.5] + [first])
         top = rect.top() + 2
-        room = rect.bottom() + sm.lineSpacing() - top
+        room = max(0.0, rect.bottom() - top - 1)
         start = clock_label(drawn.span.start)
         for with_time in (True, False):
             for right in (True, False):

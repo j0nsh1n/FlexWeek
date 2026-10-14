@@ -22,7 +22,15 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     import shiboken6
     from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, Qt
-    from PySide6.QtGui import QColor, QHelpEvent, QMouseEvent, QPainter, QTextDocumentFragment
+    from PySide6.QtGui import (
+        QColor,
+        QFontMetricsF,
+        QHelpEvent,
+        QImage,
+        QMouseEvent,
+        QPainter,
+        QTextDocumentFragment,
+    )
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import (
         QApplication,
@@ -525,6 +533,38 @@ def test_a_name_written_beside_a_block_stays_inside_what_shows(
     view.findChild(MissionCanvas, "missionHours").repaint()
     assert len(seen) == 1, "the name is written once, beside its tick"
     assert seen[0].right() <= edge, "and not past the right edge of the lanes"
+
+
+def test_a_short_block_name_uses_at_most_two_lines_inside_its_row(
+    qapp: QApplication,
+) -> None:
+    title = "Chemistry homework"
+    short = block("short", "locked", [3], "08:00", 60, title=title, category="extra")
+    view = shown(qapp, blocks=[short])
+    canvas = view.findChild(MissionCanvas, "missionHours")
+    track = canvas.track_for(3)
+    drawn = next(drawn for drawn, _rect in canvas.drawn(track) if drawn.block_id == "short")
+    painter = canvas.painter
+    title_font, _small_font = painter.fonts(view.font())
+    title_metrics = QFontMetricsF(title_font)
+    lane_height = round(2 * title_metrics.lineSpacing() + 2)
+    lane = QRectF(0, 0, 200, lane_height)
+    rect = QRectF(70, 0, 30, lane_height)
+    # In the 90 px gap, each word fits but the name needs two lines. The previous allowance let the
+    # second line cross the lane's bottom edge.
+    assert max(title_metrics.horizontalAdvance(word) for word in title.split()) < 90
+    assert title_metrics.horizontalAdvance(title) > 90
+    painter.taken = {3: (0, 200, [rect])}
+    image = QImage(200, lane_height, QImage.Format.Format_ARGB32)
+    qpaint = QPainter(image)
+    qpaint.setFont(view.font())
+    written = painter._beside(qpaint, rect, drawn, lane)
+    qpaint.end()
+    assert not written or all(lane.contains(box) for box in written), (
+        "the name and its time stay within the lane edge",
+        lane.getRect(),
+        [box.getRect() for box in written],
+    )
 
 
 def test_the_now_pill_covers_no_hour_label_at_any_zoom(
