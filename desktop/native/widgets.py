@@ -3715,7 +3715,7 @@ class BlockDialog(Dialog):
         title_label = self._form.labelForField(self.title)
         if title_label is not None:
             title_label.setVisible(False)
-        for extra in (self.more_details, self._details, self.missed, self.error, self._series_note):
+        for extra in (self.more_details, self._details, self.missed, self._series_note):
             self._form.setRowVisible(extra, False)
         self._form.setRowVisible(self.scope_choice, False)
         self.back_button.setVisible(step > 0)
