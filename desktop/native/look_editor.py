@@ -1058,11 +1058,13 @@ class LookEditor(QWidget):
         head.addStretch(1)
         said = _label("", "lookOut")
         said.setProperty("out", out)
-        said.setVisible(bool(out))
         if out:
             self._outs.append(said)
         head.addWidget(said)
         fields.addLayout(head)
+        # Only ever hidden here: showing it before the editor has a parent made it a window of its own.
+        if not out:
+            said.hide()
         fields.addWidget(control)
         return said
 
