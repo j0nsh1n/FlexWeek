@@ -72,6 +72,17 @@ def test_student_session_never_shows_a_detached_child_as_a_window(
     guard = TopLevelShowGuard(window)
     qapp.installEventFilter(guard)
     try:
+        # The filter must see a window being shown. What the session itself shows depends on what
+        # earlier tests in this process left cached (design pictures are drawn once), so it is proved
+        # here with a dialog of its own, which is an allowed kind.
+        probe = QDialog()
+        probe.setObjectName("guardProbe")
+        probe.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
+        probe.show()
+        qapp.processEvents()
+        probe.hide()
+        probe.deleteLater()
+        assert any("#guardProbe " in line for line in guard.shown), "the app-wide filter saw no Show"
         window.username.setText(USERNAME)
         window.password.setText(PASSWORD)
         window.findChild(QPushButton, "createAccount").click()
@@ -161,7 +172,8 @@ def test_student_session_never_shows_a_detached_child_as_a_window(
         window._close_settings()
         settled(qapp, window)
 
-        assert guard.shown, "the app-wide filter saw no top-level Show events"
         assert guard.unexpected == [], "Unexpected top-level Show events:\n" + "\n".join(guard.unexpected)
     finally:
         qapp.removeEventFilter(guard)
+        guard.main = None
+        guard.deleteLater()

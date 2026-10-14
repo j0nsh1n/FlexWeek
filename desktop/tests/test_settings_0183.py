@@ -7,6 +7,7 @@ look's accent, a grid's last card ends within 16 px of its row, a column of cont
 
 from __future__ import annotations
 
+import time
 from collections.abc import Iterator
 
 import pytest
@@ -62,6 +63,17 @@ def show_section(qapp: QApplication, page: SettingsPage, row: int) -> QWidget:
         picker.warm()
     qapp.processEvents()
     return page.stack.widget(row).widget()
+
+
+def steady(qapp: QApplication, widget: QWidget, tries: int = 25) -> None:
+    last = widget.grab().toImage()
+    for _ in range(tries):
+        qapp.processEvents()
+        time.sleep(0.02)
+        now = widget.grab().toImage()
+        if now == last:
+            return
+        last = now
 
 
 def palette_of(window: NativeWindow) -> dict:
@@ -156,6 +168,9 @@ def test_mid_scroll_the_row_above_the_footer_is_the_fade(
         for value in range(0, bar.maximum(), 10):
             bar.setValue(value)
             qapp.processEvents()
+            # Under load the page can still be settling (a refit, a picture) between the two grabs this
+            # compares: wait until it draws the same twice running.
+            steady(qapp, page)
             raw = area.viewport().grab().toImage()
             under = sum(not near(seen(raw, x, at - 1, page_colour), page_colour) for x in range(raw.width()))
             dark = [
