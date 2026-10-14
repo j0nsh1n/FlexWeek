@@ -40,6 +40,7 @@ try:
 
     import backend
     from desktop.native.calendar import sunday_due
+    from desktop.native.collector import WindowThreadCollector
     from desktop.native.devices import SyncHost
     from desktop.native.fonts import load_fonts
     from desktop.native.kept import KeptSession
@@ -251,6 +252,7 @@ def main(argv: list[str] | None = None) -> int:
     arguments, database_arg = parse_database(list(argv if argv is not None else sys.argv))
     report = smoke_report_path(arguments)
     app = QApplication(arguments)
+    collector = WindowThreadCollector(app)  # noqa: F841 - the app keeps it as a child
     app.setApplicationName("FlexWeek")
     app.setDesktopFileName(DESKTOP_FILE_NAME)
     load_fonts()

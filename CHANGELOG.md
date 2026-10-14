@@ -45,6 +45,7 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ### Fixed
 - Next takes no room when nothing is left for now or later today. The strip says "Nothing more today". Next keeps the keyboard as minutes pass, and the strip shortens a long title.
+- The app no longer crashes now and then while drawing a week (most often in Mission control): tidying up memory now happens only on the window's own thread, never on the built-in server's.
 - A block always shows its time range before its name. When a block is too short for its whole name, the name is cut first; the time is never cut part-way. A block too narrow for its range shows its start time alone. Keyboard focus shows the dropped title.
 - Category icons stay inside their block, and Sunday's homework total stays whole at 810 px at Large text, including with the Agenda rail.
 - Empty-week card height follows its text at Large text, not a fixed 200 px.
