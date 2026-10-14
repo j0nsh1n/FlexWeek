@@ -72,7 +72,7 @@ from desktop.native.weekmodel import (
     minute_of,
     time_format,
 )
-from desktop.native.widgets import FlowLayout, overlay_scroll_bars
+from desktop.native.widgets import FittedLabel, FlowLayout, overlay_scroll_bars
 
 RAIL_PX = 260
 WAITING_HEAD = "No time yet · drag onto a day"
@@ -82,6 +82,8 @@ SHOW_MONTH = "Show the month"
 # 8 at the sides: the window's own 9-pixel margin puts the rail's words 17 from its edge, where the
 # mock-up has them at 16, and a focus row or a chip has the room to say "Chem lab report" whole.
 PAD = SPACING[1]
+# The least a row's title shrinks to before it ends in "…"; the rest of the row keeps its own room.
+TITLE_FLOOR = 48
 # The gaps that keep a homework title from the book before it and the length or day after it. They are
 # small so that a title as long as "Math worksheet" is not cut on a row with room for it.
 BOOK_GAP = 6
@@ -491,6 +493,8 @@ class NextCard(QWidget):
             words.setContentsMargins(0, 0, 0, 0)
             name = QLabel(item.title)
             name.setObjectName("railNextRowTitle")
+            # Wrapped, a long name takes a second line beside Start focus instead of widening the rail.
+            name.setWordWrap(True)
             when = QLabel(f"{clock_label(item.start)} · {length_label(item.minutes)}")
             when.setObjectName("railNextRowWhen")
             words.addWidget(name)
@@ -965,6 +969,8 @@ class Rail(QFrame):
             entry = self.due_list.takeAt(0)
             widget = entry.widget()
             if widget is not None:
+                # Out of the list it would still be drawn, over the new rows, until the event loop deletes it.
+                widget.hide()
                 widget.deleteLater()
         start = date.fromisoformat(week.week_start)
         end = start + timedelta(days=6)
@@ -981,7 +987,9 @@ class Rail(QFrame):
             row.setObjectName("railDueRow")
             row_box = QHBoxLayout(row)
             row_box.setContentsMargins(0, 2, 0, 2)
-            name = QLabel(title)
+            # A plain label asks for its whole title, and one long title widened every row past the rail.
+            name = FittedLabel(minimum=TITLE_FLOOR)
+            name.set_full_text(title)
             name.setObjectName("railDueTitle")
             when = QLabel(weekday)
             when.setObjectName("railDueWhen")
