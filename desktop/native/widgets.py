@@ -2903,22 +2903,81 @@ def _give_focus_back(widget: QWidget) -> None:
 
 
 class SheetShade(QWidget):
-    """The window under a sheet, dimmed, so the sheet reads as the one thing to answer. It only paints:
-    the sheet is modal, so the window takes no clicks while it is up."""
+    """A still of the window with a dim drawn on top; the sheet is modal, so it takes no clicks."""
 
     def __init__(self, host: QWidget) -> None:
         super().__init__(host)
         self.setObjectName("sheetShade")
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self._still: QPixmap | None = None
+        self._still_size: QSize | None = None
+        self._captured = False
+        self.dim_progress = 0.0
+        self.fading = False
         # Made by the window before its sheet is built (dim_window), and not yet taken by that sheet.
         self.waiting = False
-        # Its fade has begun, so the sheet that takes it does not start the fade over.
-        self.fading = False
+
+    @property
+    def has_still(self) -> bool:
+        return self._still is not None
+
+    def capture(self, host: QWidget) -> None:
+        """Keep one pre-shade frame so fading the dim never exposes an empty parent repaint."""
+        self._captured = True
+        still = host.grab()
+        self._still = None if still.isNull() else still
+        self._still_size = host.size() if self._still is not None else None
+        self._set_surface()
+
+    def _set_surface(self) -> None:
+        has_still = self._still is not None and not self._still.isNull()
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, not has_still)
+        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, has_still)
+
+    def _drop_still(self) -> None:
+        self._still = None
+        self._still_size = None
+        self._set_surface()
+
+    def start_fade(self, level: str) -> None:
+        length = duration(EASE_MS, level)
+        if length <= 0:
+            self.dim_progress = 1.0
+            self.update()
+            return
+        if self.fading:
+            return
+        self.dim_progress = 0.0
+        self.fading = True
+        self.update()
+        clock = Clock(self)
+
+        def step(at: float) -> None:
+            self.dim_progress = OUT.valueForProgress(at / length)
+            self.update()
+
+        def finish() -> None:
+            self._motion_running = None  # type: ignore[attr-defined]
+            self.fading = False
+            self.dim_progress = 1.0
+            self.update()
+            clock.deleteLater()
+
+        clock.finished.connect(finish)
+        self._motion_running = (clock, finish)  # type: ignore[attr-defined]
+        clock.start(length, step)
 
     def paintEvent(self, _event: object) -> None:  # noqa: N802
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(0, 0, 0, round(255 * SHEET_DIM)))
+        if self.has_still:
+            painter.drawPixmap(self.rect(), self._still)
+        painter.fillRect(self.rect(), QColor(0, 0, 0, round(255 * SHEET_DIM * self.dim_progress)))
         painter.end()
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        if self._still is not None and event.size() != self._still_size:
+            self._drop_still()
+        super().resizeEvent(event)
 
 
 def dim_window(host: QWidget) -> SheetShade:
@@ -2929,12 +2988,11 @@ def dim_window(host: QWidget) -> SheetShade:
     shade = SheetShade(top)
     shade.waiting = True
     shade.setGeometry(top.rect())
+    shade.capture(top)
     shade.show()
     shade.raise_()
     level = app_level()
-    appear(shade, level)
-    # No fade was started on a window that is not on screen or at motion Off; the sheet decides then.
-    shade.fading = shade.graphicsEffect() is not None
+    shade.start_fade(level)
     _draw_first_frames(shade)
     running = getattr(shade, "_motion_running", None)
     if running is not None:
@@ -2957,14 +3015,13 @@ def drop_waiting_dim(host: QWidget) -> None:
 def _draw_first_frames(shade: SheetShade) -> None:
     """Let the event loop paint the dim's first frame before the sheet's build holds it up. Typing and
     clicks stay queued for the sheet."""
-    effect = shade.graphicsEffect()
-    if effect is None:
+    if not shade.fading:
         return
     limit = 2 * frame_interval_ms(screen_rate(shade))
     started = QElapsedTimer()
     started.start()
     flags = QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents
-    while getattr(effect, "opacity", 1.0) <= 0 and started.elapsed() < limit:
+    while shade.dim_progress <= 0 and started.elapsed() < limit:
         QApplication.processEvents(flags)
     QApplication.processEvents(flags)
 
@@ -2994,8 +3051,6 @@ class Dialog(QDialog):
         # The sheet's card and the room for its shadow, which fade in as one: the card's own effect
         # is its shadow, and a widget holds one effect.
         self._face: QWidget | None = None
-        # Widgets of the page under a sheet, held still while the sheet fades in.
-        self._frozen: list[QWidget] = []
         if self.sheet:
             self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
             self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
@@ -3082,13 +3137,11 @@ class Dialog(QDialog):
             for part in self._content():
                 appear(part, level, rise=True)
             if self._shade is not None and not self._shade.fading:
-                appear(self._shade, level)
+                self._shade.start_fade(level)
             elif self._shade is not None:
                 running = getattr(self._shade, "_motion_running", None)
                 if running is not None:
                     running[0].resume()
-            if self.sheet and duration(EASE_MS) > 0:
-                self._freeze_page()
 
     def _content(self) -> list[QWidget]:
         """What fades in and rises the first time the dialog shows (decision 31 of 0.17): a window's
@@ -3105,48 +3158,7 @@ class Dialog(QDialog):
             if not child.isWindow() and child.graphicsEffect() is None
         ]
 
-    def _freeze_page(self) -> None:
-        """The shade covers the whole window, and a frame of it would repaint everything under it.
-        Those widgets keep the picture they already have until the fade has landed. The shade and the
-        sheet still paint. The window itself is left able to paint, or the shade could not."""
-        parent = self.parentWidget()
-        if parent is None:
-            return
-        host = parent.window()
-        frozen: list[QWidget] = []
-        # Walked with children(), not findChildren(): findChildren hands the sheet itself to the
-        # window to own, and an exec()'d sheet then outlives its last reference.
-        waiting: list[QObject] = list(host.children())
-        while waiting:
-            child = waiting.pop()
-            if child is self or not isinstance(child, QWidget):
-                continue
-            waiting.extend(child.children())
-            if child is self._shade or not child.updatesEnabled():
-                continue
-            child.setUpdatesEnabled(False)
-            frozen.append(child)
-        self._frozen = frozen
-        QTimer.singleShot(0, self, self._thaw_when_settled)
-
-    def _thaw_when_settled(self) -> None:
-        if not isValid(self):
-            return
-        for widget in (self._face, self._shade, *self._content()):
-            if widget is not None and getattr(widget, "_motion_running", None) is not None:
-                QTimer.singleShot(frame_interval_ms(60), self._thaw_when_settled)
-                return
-        self._thaw()
-
-    def _thaw(self) -> None:
-        frozen = self._frozen
-        self._frozen = []
-        for child in frozen:
-            if isValid(child):
-                child.setUpdatesEnabled(True)
-
     def hideEvent(self, event: QHideEvent) -> None:  # noqa: N802
-        self._thaw()
         super().hideEvent(event)
         if self._came_from is not None:
             QTimer.singleShot(0, partial(_give_focus_back, self._came_from))
@@ -3228,6 +3240,8 @@ class Dialog(QDialog):
         if self._shade is None:
             # The one the window made before building this sheet, if it did.
             self._shade = self._waiting_shade(host) or SheetShade(host)
+            if not self._shade._captured:
+                self._shade.capture(host)
             # Gone with the sheet however it goes, even if it is freed while still on screen.
             self.destroyed.connect(self._shade.deleteLater)
             host.installEventFilter(self)

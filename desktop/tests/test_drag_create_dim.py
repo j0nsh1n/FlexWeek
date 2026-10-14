@@ -13,7 +13,7 @@ from desktop.native.hours.canvas import HoursCanvas
 from desktop.native.hours.hand import Gesture
 from desktop.native.layouts.base import LayoutView
 from desktop.native.motion import apply_ui_effects
-from desktop.native.widgets import BlockDialog, HomeworkDialog, SheetShade
+from desktop.native.widgets import SHEET_DIM, BlockDialog, Dialog, HomeworkDialog, SheetShade
 from desktop.native.window import ClassicWeek, NativeWindow
 from desktop.tests.test_drag_results import LEFT, minute, settled, wait_until
 
@@ -35,6 +35,64 @@ def cancel(dialog) -> int:
     buttons = dialog.findChild(QDialogButtonBox, "dialogButtons")
     QTest.mouseClick(buttons.button(QDialogButtonBox.StandardButton.Cancel), LEFT)
     return dialog.result()
+
+
+@pytest.mark.parametrize("entry", ["add", "drag"])
+def test_sheet_fade_keeps_the_week_visible_under_the_dim(
+    qapp: QApplication,
+    window: NativeWindow,
+    monkeypatch: pytest.MonkeyPatch,
+    entry: str,
+) -> None:
+    apply_ui_effects("normal")
+    hours = window.week_table.hours
+    block = hours.block_rect("school", 4)
+    assert block is not None
+    sample = window.mapFromGlobal(QPoint(block.right() - 8, block.center().y()))
+    before = window.grab().toImage().pixelColor(sample)
+    assert before.lightness() > 0
+    frame: dict[str, object] = {}
+
+    def run(dialog: Dialog) -> int:
+        dialog.show()
+
+        def fading() -> bool:
+            shade = next(child for child in window.children() if isinstance(child, SheetShade))
+            effect = shade.graphicsEffect()
+            progress = effect.opacity if effect is not None else getattr(shade, "dim_progress", 0.0)
+            if 0.2 < progress < 0.8:
+                frame["progress"] = progress
+                frame["pixel"] = window.grab().toImage().pixelColor(sample)
+                return True
+            return False
+
+        wait_until(qapp, fading)
+        dialog.reject()
+        return 0
+
+    if entry == "add":
+        monkeypatch.setattr(HomeworkDialog, "exec", run)
+        window._add_homework()
+    else:
+        monkeypatch.setattr(BlockDialog, "exec", run)
+        drag(qapp, hours, 3, minute("16:00"), minute("17:00"))
+        wait_until(qapp, lambda: bool(frame))
+
+    progress = frame["progress"]
+    actual = frame["pixel"]
+    dim_share = SHEET_DIM * progress
+    expected = tuple(
+        round(channel * (1 - dim_share)) for channel in (before.red(), before.green(), before.blue())
+    )
+    error = max(
+        abs(actual.red() - expected[0]),
+        abs(actual.green() - expected[1]),
+        abs(actual.blue() - expected[2]),
+    )
+    assert error <= 5, (
+        f"{entry} sheet fade lost the week under the shade: before={before.getRgb()}, "
+        f"actual={actual.getRgb()}, expected RGB={expected}, progress={progress:.2f}"
+    )
 
 
 def test_drag_create_clears_preview_without_refreshing_week_before_dim(

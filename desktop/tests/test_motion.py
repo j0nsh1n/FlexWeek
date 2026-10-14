@@ -706,9 +706,9 @@ def test_a_sheet_fades_its_card_and_shadow_as_one_and_keeps_the_shadow(qapp: QAp
     face = sheet.card.parentWidget()
     assert face is not sheet and face.graphicsEffect() is not None, "the card and its shadow fade together"
     shade = window.findChild(QWidget, "sheetShade")
-    assert shade.graphicsEffect() is not None, "the dimming comes in with it"
+    assert shade.fading, "the dimming comes in with it"
     QTest.qWait(duration(EASE_MS) + 150)
-    assert face.graphicsEffect() is None and shade.graphicsEffect() is None
+    assert face.graphicsEffect() is None and not shade.fading
     assert sheet.card.graphicsEffect() is shadow, "the fade leaves the card's shadow alone"
     sheet.close()
     window.close()
@@ -815,8 +815,7 @@ def test_a_page_change_does_not_repaint_the_live_page_every_frame(qapp: QApplica
 
 
 def test_a_sheet_does_not_repaint_the_page_under_it_every_frame(qapp: QApplication) -> None:
-    """The shade covers the window. The page under it stays as it was for the fade, instead of
-    being painted again because the shade moved."""
+    """The opaque shade holds one picture while page widgets remain live and do not repaint each frame."""
     apply_ui_effects("normal")
     window = QWidget()
     column = QVBoxLayout(window)
@@ -832,12 +831,12 @@ def test_a_sheet_does_not_repaint_the_page_under_it_every_frame(qapp: QApplicati
     sheet.card_body("Add homework").addWidget(QLabel("Homework"))
     sheet.show()
     qapp.processEvents()
-    assert all(not child.updatesEnabled() for child in children), "the page under the sheet holds still"
+    assert all(child.updatesEnabled() for child in children), "the page is not frozen under the shade"
     frames = _frames(qapp, (duration(EASE_MS, "normal") + 80) / 1000)
     assert frames >= 8, "the sheet ran for several frames"
     for child in children:
         assert child.paints <= 4, f"the page painted {child.paints} times over {frames} frames"
-    assert within(2, lambda: all(child.updatesEnabled() for child in children))
+    assert all(child.updatesEnabled() for child in children)
     sheet.close()
     window.close()
 
