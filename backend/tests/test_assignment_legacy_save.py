@@ -90,6 +90,7 @@ def test_weekday_latest_creates_the_assignment_if_missing_and_stores_a_session(c
                 "revision": 1,
                 "planned_min": 90,
                 "unplanned_min": 0,
+                "session_weeks": [WEEK],
             }
         ]
     }
