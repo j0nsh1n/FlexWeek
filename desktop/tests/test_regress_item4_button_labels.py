@@ -41,7 +41,7 @@ from desktop.native.widgets import (
 )
 from desktop.tests.window_support import free, qapp, server, settled, signed_out, window  # noqa: F401
 
-EXEMPT_PROPS = ("step", "formStep", "segment", "pill", "chip", "small")
+EXEMPT_PROPS = ("step", "segment", "pill", "chip", "small")
 # The top bar's four views are segments of one control in a track, so they are exempt like segments.
 # The week's list row is a fixed 28 px strip by U19's spec, so tabbing to it never moves the grid.
 EXEMPT_NAMES = {"sheetClose", "weekListRow", *VIEW_BUTTONS}

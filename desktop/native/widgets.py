@@ -2747,7 +2747,11 @@ def fit_buttons(root: QWidget, *, roomy: bool = False) -> None:
             item.style().polish(item)
         # Setting the icon clears the cached size hint, and asks the layout to ask again.
         item.setIcon(item.icon())
-        if item.property("formStep"):
+        name = item.objectName()
+        if name in {"solveButton", "moreButton"}:
+            item.setMinimumWidth(0)
+            continue
+        if item.property("formStep") or name in {"todayWeek", "addButton", "retrySave"}:
             item.setMinimumWidth(item.sizeHint().width())
         words = item.text().replace("&", "")
         if words.strip() and not is_roomy_exception(item):

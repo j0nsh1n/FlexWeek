@@ -3400,7 +3400,9 @@ class NativeWindow(QMainWindow):
                     break
 
     def _show_week_list_row(self, shown: bool) -> None:
-        self.status_strip.setVisible(shown)
+        self.status_strip.setVisible(
+            self.session.planner_view in {"week", "month"} and not self._day_mode
+        )
         self.week_list_row.setVisible(shown)
         if not shown:
             self._close_week_access_list(restore_focus=False)
@@ -5315,6 +5317,7 @@ class NativeWindow(QMainWindow):
             self._dress_feel(ctx, sheet, extra)
             self._maybe_prepare_block_spare()
             fit_buttons(self)
+            self._keep_bar_whole()
         if page_sheet != self._page_sheet:
             # The planner holds the design's page and nothing of the chrome.
             self._page_sheet = page_sheet
