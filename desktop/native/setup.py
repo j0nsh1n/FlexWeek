@@ -2200,7 +2200,7 @@ class SetupPage(QWidget):
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)
-        self.carousel.limit_picture_to(self.height() - 280)
+        self.carousel.limit_picture_to(self.height() - 255)
         QTimer.singleShot(0, self, lambda: self._place_marker(animate=False))
 
     # The look pages
