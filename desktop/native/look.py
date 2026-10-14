@@ -150,6 +150,7 @@ LOOK_PRESET_LABELS = {
     "one-poster": "Poster",
     "dial-midnight": "Midnight",
     "timeline-paper": "Ruled paper",
+    "one-paper": "Paper and ink",
 }
 PACK_LABELS = {
     "system": "System",
@@ -235,7 +236,7 @@ OWN_ACCENT = ("high-contrast", "bento-indigo", "retro-teal", "flight-deck", "tim
 DESIGN_PALETTE_PRESETS = frozenset(
     {
         "bento-indigo", "retro-teal", "flight-deck", "clay-lavender", "one-poster", "dial-midnight",
-        "timeline-paper",
+        "timeline-paper", "one-paper",
     }
 )
 
@@ -360,10 +361,11 @@ PRESET_PALETTES = {
         accent="#4f46e5", accent_ink="#ffffff", error="#991b1b", block_edge="#8a93a3",
     ),
     "retro-teal": _palette(
-        "light", window="#008080", panel="#c0c0c0", card_2="#d4d0c8", field="#ffffff", grid="#ffffff",
+        "light", window="#e0f3f3", panel="#c0c0c0", card_2="#d4d0c8", field="#ffffff", grid="#ffffff",
         text="#000000", muted="#333333", hairline="#808080", hairline_strong="#404040",
         accent="#000080", accent_ink="#ffffff", error="#800000", block_edge="#404040",
-        bg_ink="#ffffff", bg_muted="#ffffff", title="#000080", title_end="#0a5ca8", title_ink="#ffffff",
+        bg_ink="#000000", bg_muted="#333333", retro_desk="#008080", retro_desk_ink="#ffffff",
+        title="#000080", title_end="#1084d0", title_ink="#ffffff",
     ),
     "flight-deck": _palette(
         "dark", window="#0b0f14", panel="#121821", card_2="#17202b", field="#0b0f14", grid="#0b0f14",
@@ -389,6 +391,11 @@ PRESET_PALETTES = {
         "light", window="#fdfbf7", panel="#fffdf9", card_2="#f6f1e8", field="#fffdf9", grid="#fffdf9",
         text="#1a1a1a", muted="#5c5750", hairline="#cfc7b9", hairline_strong="#b9b09f",
         accent="#3d6fc4", accent_ink="#ffffff", error="#c42b1c", block_edge="#8a877f",
+    ),
+    "one-paper": _palette(
+        "light", window="#f7f1e3", panel="#f7f1e3", card_2="#f2ead9", field="#fffdf8", grid="#fffdf8",
+        text="#1c1917", muted="#57534e", hairline="#cfc6b2", hairline_strong="#b9b09f",
+        accent="#9a3412", accent_ink="#ffffff", error="#a3003c", block_edge="#8a877f",
     ),
     # Developer Mono on GitHub-dark surfaces; no glow, no phosphor green.
     "terminal": _palette(

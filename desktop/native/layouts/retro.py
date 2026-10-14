@@ -259,13 +259,14 @@ def scheme(tokens: dict[str, str]) -> Scheme:
         title_ink = tokens["accent_ink"]
     elif "title" in tokens and (tokens["title"] != accent or tokens["title_end"] != accent):
         greys, contrasted = STANDARD, False
-        desk, desk_ink = tokens["bg"], tokens["bg_ink"]
+        desk = tokens.get("retro_desk", tokens["bg"])
+        desk_ink = tokens.get("retro_desk_ink", tokens["bg_ink"])
         title, title_end, title_ink = tokens["title"], tokens["title_end"], tokens["title_ink"]
     else:
         greys, contrasted = STANDARD, False
-        desk = tokens["bg"]
+        desk = tokens.get("retro_desk", tokens["bg"])
         title = title_end = accent
-        desk_ink, title_ink = tokens["bg_ink"], tokens["accent_ink"]
+        desk_ink, title_ink = tokens.get("retro_desk_ink", tokens["bg_ink"]), tokens["accent_ink"]
     return Scheme(
         **greys,
         desk=desk,

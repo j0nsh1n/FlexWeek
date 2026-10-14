@@ -374,7 +374,7 @@ def test_signing_out_of_a_day_screen_does_not_leave_the_next_student_in_one(
 
 def test_the_choice_is_saved_on_this_device_beside_the_look(qapp: QApplication, window: NativeWindow) -> None:
     window._look = {"preset": "paper", "knobs": {"corners": "rounded"}}
-    window._layout = {"main": "classic", "day": "one", "options": {"one": {"look": "preset:paper"}}}
+    window._layout = {"main": "classic", "day": "one", "options": {"one": {"look": "preset:one-paper"}}}
     window._save_look()
     stored = json.loads(look_file().read_text())
     assert stored["preset"] == "paper"
@@ -382,7 +382,7 @@ def test_the_choice_is_saved_on_this_device_beside_the_look(qapp: QApplication, 
     assert stored["layout"] == {
         "main": "classic",
         "day": "one",
-        "options": {"one": {"look": "preset:paper"}},
+        "options": {"one": {"look": "preset:one-paper"}},
     }
     # Whether this computer checks for updates lives beside the look, because it is a property of
     # the computer rather than the account.
@@ -390,10 +390,10 @@ def test_the_choice_is_saved_on_this_device_beside_the_look(qapp: QApplication, 
     window._look, window._layout = {}, {}
     window._load_look()
     assert window._look == {"preset": "paper", "knobs": {"corners": "rounded"}}
-    assert window._layout["options"] == {"one": {"look": "preset:paper"}}
+    assert window._layout["options"] == {"one": {"look": "preset:one-paper"}}
     click(window, "viewMyDay")
     faded_in()
-    assert window.planner.currentWidget().grab().toImage().pixelColor(4, 4).name() == "#f7f0e1"
+    assert window.planner.currentWidget().grab().toImage().pixelColor(4, 4).name() == "#f7f1e3"
 
 
 def test_a_look_file_from_before_layouts_still_loads(qapp: QApplication, window: NativeWindow) -> None:
@@ -607,11 +607,11 @@ def test_the_dialog_stores_only_what_the_student_changed(qapp: QApplication) -> 
     dialog = prefs_layout({"main": "classic", "day": "one"})
     assert dialog.layout_choice() == {"main": "classic", "day": "one", "options": {}}
     colour = combo(dialog, "layoutDay-look")
-    colour.setCurrentIndex(colour.findData("preset:paper"))
-    assert dialog.layout_choice()["options"] == {"one": {"look": "preset:paper"}}
+    colour.setCurrentIndex(colour.findData("preset:one-paper"))
+    assert dialog.layout_choice()["options"] == {"one": {"look": "preset:one-paper"}}
     colour = combo(dialog, "layoutDay-look")
     colour.setCurrentIndex(colour.findData("your"))
-    assert dialog.layout_choice()["options"] == {"one": {"look": "your"}}
+    assert dialog.layout_choice()["options"] == {}
 
 
 def test_fine_tuning_already_in_use_is_not_hidden(qapp: QApplication) -> None:
@@ -621,17 +621,20 @@ def test_fine_tuning_already_in_use_is_not_hidden(qapp: QApplication) -> None:
 
 
 def test_trying_another_design_and_coming_back_loses_nothing(qapp: QApplication) -> None:
-    dialog = prefs_layout({"day": "one", "options": {"one": {"look": "preset:paper"}}})
+    dialog = prefs_layout({"day": "one", "options": {"one": {"look": "preset:one-paper"}}})
     pick = combo(dialog, "layoutDay")
     pick.setCurrentIndex(pick.findData("dial"))
     assert combo(dialog, "layoutDay-look").currentData() == "preset:dial-midnight"
     pick.setCurrentIndex(pick.findData("one"))
-    assert combo(dialog, "layoutDay-look").currentData() == "preset:paper"
-    assert dialog.layout_choice()["options"] == {"one": {"look": "preset:paper"}}
+    assert combo(dialog, "layoutDay-look").currentData() == "preset:one-paper"
+    assert dialog.layout_choice()["options"] == {
+        "dial": {"look": "preset:dial-midnight"},
+        "one": {"look": "preset:one-paper"},
+    }
 
 
 def test_a_design_can_be_put_back_to_its_own_settings(qapp: QApplication) -> None:
-    dialog = prefs_layout({"day": "one", "options": {"one": {"look": "preset:paper", "lead": "next"}}})
+    dialog = prefs_layout({"day": "one", "options": {"one": {"look": "preset:one-paper", "lead": "next"}}})
     dialog.findChild(QPushButton, "layoutDayReset").click()
     assert dialog.layout_choice()["options"] == {}
     assert dialog.findChild(QCheckBox, "layoutDayMore").isChecked() is False
@@ -774,7 +777,8 @@ def test_timelines_names_and_figures_take_the_looks_heading_face(
     qapp.processEvents()
     after = window.planner.currentWidget()
     names = [*after.findChildren(QLabel, "timelineDayName"), *after.findChildren(QLabel, "timelineStat")]
-    assert {item.font().family() for item in names} == before
+    assert before == {"Inter"}
+    assert {item.font().family() for item in names} == {"Newsreader"}
 
 
 def test_the_dials_list_is_one_card_in_the_real_window(qapp: QApplication, window: NativeWindow) -> None:
@@ -1102,7 +1106,7 @@ def test_fine_tune_and_reset_show_only_when_a_design_has_something_for_them(qapp
     pick.setCurrentIndex(pick.findData("timeline"))
     assert offered() == (True, True)
     pick.setCurrentIndex(pick.findData("classic"))
-    assert offered() == (False, False)
+    assert offered() == (False, True)
 
 
 def preference_puts(window: NativeWindow) -> list[dict]:
@@ -1247,10 +1251,10 @@ def test_settings_fits_its_width_in_every_layout_and_text_size(
 
 
 def chrome_colour(window: NativeWindow) -> str:
-    """What the top bar is actually painted with. A checked button blends, so this is only ever
-    compared against another rendering, never against a token."""
-    button = window.findChild(QPushButton, "signOut")
-    return button.grab().toImage().pixelColor(button.width() // 2, button.height() // 2).name()
+    """The week page's top-left pixel, which is clear of text and controls."""
+    page = window.findChild(QWidget, "weekPage")
+    assert page is not None
+    return page.grab().toImage().pixelColor(4, 4).name()
 
 
 def signature(layout_id: str) -> str:
@@ -1284,8 +1288,50 @@ def test_the_chrome_and_canvas_follow_the_same_look(
             palette, _ = design_look(colour, pack, system_dark, window._worn_look(), accent)
             assert page == tokens_for(layout_id, colour, palette)
             assert window.week_table.hours.painter.colours["window"] == palette["window"]
-            assert chrome_colour(window)
+            assert chrome_colour(window) == page["bg"]
         window.session.set_view("week")
+
+
+@pytest.mark.parametrize(
+    ("pack", "look", "dark"),
+    [("system", "high-contrast", False), ("nocturne", "default", True)],
+)
+@pytest.mark.parametrize(
+    "layout_id", ("classic", "timeline", "mission", "bento", "retro", "clay", "dial", "one")
+)
+def test_missing_design_look_keeps_the_accounts_own_palette(
+    qapp: QApplication, window: NativeWindow, pack: str, look: str, dark: bool, layout_id: str
+) -> None:
+    from desktop.native.look import resolved_palette, sanitize_look
+
+    window.session.preferences = {**(window.session.preferences or {}), "theme_pack": pack}
+    window._look = sanitize_look({"preset": look, "knobs": {}})
+    palette = resolved_palette(pack, dark, window._worn_look())
+    expected_bg = "#000000" if look == "high-contrast" else "#0a0e27"
+    assert palette["window"] == expected_bg
+    if layout_id in {"dial", "one"}:
+        window._layout = {"main": "classic", "day": layout_id, "options": {}}
+        window._day_mode = True
+    else:
+        window._layout = {"main": layout_id, "day": "dial", "options": {}}
+        window._day_mode = False
+    window._on_week()
+    click(window, "viewMyDay" if layout_id in {"dial", "one"} else "viewWeek")
+    faded_in()
+    qapp.processEvents()
+    shown = window.planner.currentWidget()
+    if layout_id == "classic":
+        assert window.week_table.hours.painter.colours["window"] == expected_bg
+    else:
+        assert shown.scene.tokens["bg"] == expected_bg, layout_id
+    canvas_widget = shown.findChild(QWidget, "missionPage") if layout_id == "mission" else shown
+    canvas = canvas_widget.grab().toImage()
+    if look == "high-contrast":
+        assert any(
+            canvas.pixelColor(x, y).name() == expected_bg
+            for y in range(canvas.height())
+            for x in range(canvas.width())
+        ), (layout_id, expected_bg)
 
 
 def test_a_day_screen_uses_its_selected_look_for_every_token(
@@ -1306,83 +1352,68 @@ def test_a_day_screen_uses_its_selected_look_for_every_token(
     assert window.planner.currentWidget().scene.tokens == tokens_for("one", colour, palette)
 
 
-def test_fix_e_capture_look_matrix(
-    qapp: QApplication, window: NativeWindow
-) -> None:  # noqa: F811
-    """Save the real 1920x1080 canvas set when the lane capture path is supplied."""
-    from desktop.native.layouts.registry import DESIGN_LOOKS
+@pytest.mark.parametrize(
+    "layout_id", ("classic", "timeline", "mission", "bento", "retro", "clay", "dial", "one")
+)
+def test_setup_design_picture_and_applied_canvas_share_look_pixels(
+    qapp: QApplication, window: NativeWindow, layout_id: str
+) -> None:
+    from desktop.native.layouts.registry import DESIGN_LOOKS, tokens_for
+    from desktop.native.look import design_look
+    from desktop.native.previews import Previews
 
-    root = os.environ.get("FLEXWEEK_FIX_E_CAPTURE")
-    if not root:
-        return
-    output = Path(root)
-    output.mkdir(parents=True, exist_ok=True)
-    window.resize(1920, 1080)
-    window.show()
+    token = DESIGN_LOOKS[layout_id][0][0]
+    palette, _ = design_look(token, "light-frost", False, None)
+    if layout_id in window.setup_page.look_cards:
+        window.setup_page._pack = "light-frost"
+        window.setup_page._fill_style()
+        wait_until(
+            qapp,
+            lambda: not window.setup_page.look_cards[layout_id].picture.pixmap().isNull(),
+        )
+        picture = window.setup_page.look_cards[layout_id].picture.pixmap()
+        assert not picture.isNull(), layout_id
+        preview = picture.toImage()
+    else:
+        preview = Previews().get(layout_id, token, "light-frost", None, 206).toImage()
+    window.session.preferences = {**(window.session.preferences or {}), "theme_pack": "light-frost"}
+    is_day_design = layout_id in {"dial", "one"}
+    window._day_mode = is_day_design
+    window._layout = {
+        "main": "classic" if is_day_design else layout_id,
+        "day": layout_id if is_day_design else "dial",
+        "options": {layout_id: {"look": token}},
+    }
+    window._apply_appearance()
+    window._on_week()
+    if is_day_design:
+        click(window, "viewMyDay")
+    else:
+        click(window, "viewWeek")
+    faded_in()
     qapp.processEvents()
-    captions = ["# Fix E captures", ""]
-    for layout_id in ("dial", "one"):
-        curated = DESIGN_LOOKS[layout_id]
-        dark = next(
-            value for value, _label in curated
-            if value.startswith("pack:dark-") or value == "preset:terminal"
-        )
-        looks = (("signature", curated[0][0]), ("high-contrast", "preset:high-contrast"), ("dark", dark))
-        for kind, token in looks:
-            window._day_mode = True
-            window._layout = sanitize_layout(
-                {
-                    **window._layout,
-                    "day": layout_id,
-                    "options": {**window._layout["options"], layout_id: {"look": token}},
-                }
-            )
-            window._apply_appearance()
-            window._on_week()
-            qapp.processEvents()
-            faded_in()
-            name = f"{layout_id}-my-day-{kind}.png"
-            assert window.grab().save(str(output / name)), name
-            captions.append(f"- `{name}` — {layout_id} My day, {kind} look (after).")
-    main_ids = ["classic", "timeline", "mission", "bento", "clay", "retro"]
-    for layout_id in main_ids:
-        curated = DESIGN_LOOKS[layout_id]
-        dark = next(
-            value for value, _label in curated
-            if value.startswith("pack:dark-") or value == "preset:terminal"
-        )
-        looks = (("signature", curated[0][0]), ("high-contrast", "preset:high-contrast"), ("dark", dark))
-        for kind, token in looks:
-            window._day_mode = False
-            window._layout = sanitize_layout(
-                {
-                    **window._layout,
-                    "main": layout_id,
-                    "options": {**window._layout["options"], layout_id: {"look": token}},
-                }
-            )
-            window.session.set_view("week")
-            window._apply_appearance()
-            window._on_week()
-            qapp.processEvents()
-            faded_in()
-            image = window.grab()
-            name = f"{layout_id}-week-{kind}.png"
-            assert image.save(str(output / name)), name
-            captions.append(f"- `{name}` — {layout_id} Week, {kind} look (after).")
-            window.session.set_view("day")
-            window._apply_appearance()
-            window._on_week()
-            qapp.processEvents()
-            faded_in()
-            name = f"{layout_id}-day-{kind}.png"
-            assert window.grab().save(str(output / name)), name
-            captions.append(f"- `{name}` — {layout_id} Day, {kind} look (after).")
-            window.session.set_view("week")
-            window._on_week()
-            qapp.processEvents()
-            faded_in()
-    (output / "captions-after.md").write_text("\n".join(captions) + "\n")
+    shown = window.planner.currentWidget()
+    if layout_id == "classic":
+        assert shown is window.week_table
+    else:
+        assert shown is window._views[layout_id]
+    painted = shown.grab().toImage()
+    tokens = tokens_for(layout_id, token, palette)
+    background_pixel = (
+        palette["panel"] if layout_id == "classic" else
+        tokens["retro_desk"] if layout_id == "retro" else
+        tokens["bg"]
+    )
+    assert any(
+        preview.pixelColor(x, y).name() == background_pixel
+        for y in range(preview.height())
+        for x in range(preview.width())
+    ), layout_id
+    assert any(
+        painted.pixelColor(x, y).name() == background_pixel
+        for y in range(painted.height())
+        for x in range(painted.width())
+    ), layout_id
 
 
 def test_no_chrome_button_spreads_across_the_window(qapp: QApplication, window: NativeWindow) -> None:

@@ -71,7 +71,7 @@ from desktop.native.layouts.base import (
     scrolling,
 )
 from desktop.native.layouts.registry import options_for
-from desktop.native.look import category_paint, look_measures, readable_ink
+from desktop.native.look import FONT_FAMILIES, category_paint, look_measures, readable_ink
 from desktop.native.tokens import (
     RADIUS_CARD,
     RADIUS_CONTROL,
@@ -1342,6 +1342,11 @@ class TimelineView(LayoutView):
         def size(role: str) -> str:
             return f"{type_pt(role, scene.scale)}pt"
 
+        serif = (
+            css(font_family=FONT_FAMILIES["serif"])
+            if scene.options.get("look") == "preset:timeline-paper"
+            else ""
+        )
         chip = round(20 * scene.scale)
         clear = css(background="transparent")
         return base_sheet(self.objectName(), tokens) + rules(
@@ -1362,7 +1367,7 @@ class TimelineView(LayoutView):
                 ),
                 'QPushButton[kind="heading"]:hover': css(background=mix_oklab(text, tokens["surface"], 0.04)),
                 'QPushButton[kind="heading"][keyfocus="true"]:focus': css(border=f"2px solid {accent}"),
-                "QLabel#timelineDayName": css(font_size=size("heading"), font_weight=WEIGHT_STRONG),
+                "QLabel#timelineDayName": css(font_size=size("heading"), font_weight=WEIGHT_STRONG) + serif,
                 "QLabel#timelineDate": css(color=muted, font_size=size("caption")),
                 "QLabel#timelineChip": css(
                     background=accent,
@@ -1379,7 +1384,7 @@ class TimelineView(LayoutView):
                 "QLabel#timelineLabel, QLabel#timelineTrayLabel": css(
                     color=muted, font_size=size("caption"), font_weight=WEIGHT_STRONG
                 ),
-                "QLabel#timelineStat": css(font_size=size("title"), font_weight=WEIGHT_STRONG),
+                "QLabel#timelineStat": css(font_size=size("title"), font_weight=WEIGHT_STRONG) + serif,
                 "QLabel#timelineStatWord, QLabel#timelineHint, QLabel#timelineShareLength": css(
                     color=muted, font_size=size("caption")
                 ),

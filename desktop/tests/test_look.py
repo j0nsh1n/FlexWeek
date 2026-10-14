@@ -21,6 +21,7 @@ from desktop.native.look import (
     AA_GRAPHIC,
     AA_TEXT,
     ACCENTS,
+    DESIGN_PALETTE_PRESETS,
     EXPERIMENTAL_LOOKS,
     FONT_FAMILIES,
     HEADING_NAMES,
@@ -261,8 +262,11 @@ def test_the_look_menu_offers_four_looks_then_the_experimental_ones() -> None:
         "Ink",
         "Pastel",
     ]
-    offered = [(kind, name) for name, _label, kind in standard + experimental]
-    assert sorted(offered) == sorted(list(STANDARD_LOOKS) + list(EXPERIMENTAL_LOOKS))
+    offered = {(kind, name) for name, _label, kind in standard + experimental}
+    expected = {("pack", name) for name in PACKS} | {
+        ("preset", name) for name in LOOK_PRESETS if name != "default"
+    }
+    assert offered == expected
     assert look_menu_value("nocturne", {"preset": "default", "knobs": {}}) == look_menu_token(
         "pack", "nocturne"
     )
@@ -492,6 +496,15 @@ def test_every_look_keeps_its_text_readable() -> None:
             ratio = contrast(palette[ink], palette[fill])
             where = f"{pack}/{'dark' if system_dark else 'light'}/{preset}/{accent}/{surface}"
             assert ratio >= AA_TEXT, f"{where}: {ink} on {fill} is {ratio:.2f} to 1"
+
+
+def test_every_design_palette_preset_keeps_its_text_readable() -> None:
+    for preset, accent in product(DESIGN_PALETTE_PRESETS, ACCENTS):
+        palette = resolved_palette("light-frost", False, None, accent, palette_preset=preset)
+        for ink, fill in TEXT_PAIRS:
+            ratio = contrast(palette[ink], palette[fill])
+            assert ratio >= AA_TEXT, f"{preset}/{accent}: {ink} on {fill} is {ratio:.2f} to 1"
+        assert dist(_lab(palette["accent"]), _lab(palette["error"])) >= 25, (preset, accent)
 
 
 def test_the_now_line_and_the_selection_ring_show_at_3_to_1_and_keep_the_accent() -> None:

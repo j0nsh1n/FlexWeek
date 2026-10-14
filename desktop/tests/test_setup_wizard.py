@@ -688,6 +688,23 @@ def test_choose_my_own_look_goes_through_look_and_colours(qapp: QApplication) ->
     setup.close()
 
 
+def test_setup_saves_the_account_pack_when_a_pack_look_is_picked(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    window = new_account(qapp, server, "setup_pack_choice")
+    setup = window.setup_page
+    setup.findChild(QPushButton, "setupOwnLook").click()
+    setup.look_cards["classic"].chosen.emit()
+    setup.next.click()
+    dark = next(button for button in setup.colours.buttons() if button.property("value") == "pack:dark-frost")
+    dark.click()
+    setup.next.click()
+    written(qapp, window)
+    assert window.session.preferences["theme_pack"] == "dark-frost"
+    assert setup._layout["options"]["classic"]["look"] == "pack:dark-frost"
+    close(qapp, window)
+
+
 def test_a_spotify_alarm_needs_a_spotify_link(qapp: QApplication) -> None:
     setup = opened(qapp)
     setup._show(REMINDERS)

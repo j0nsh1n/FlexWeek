@@ -27,7 +27,7 @@ if importlib.util.find_spec("PySide6") is not None:
 
     from desktop.native.layouts.base import Scene, rules
     from desktop.native.layouts.one_thing import DayBar, OneThingView, label_minutes
-    from desktop.native.layouts.registry import options_for, tokens_for
+    from desktop.native.layouts.registry import LEGACY_COLOURS, options_for, tokens_for
     from desktop.native.look import design_look, resolved_palette
     from desktop.native.motion import apply_ui_effects, duration
     from desktop.native.ring import ARC_MS, CountdownRing
@@ -45,8 +45,7 @@ def qapp() -> Iterator[QApplication]:
 
 def scene(clock: str, today: int | None = THURSDAY, accent: str = "default", **chosen: str) -> Scene:
     if "colour" in chosen:
-        legacy = {"black": "preset:one-poster", "paper": "preset:paper", "match": "your"}
-        chosen["look"] = legacy.get(chosen.pop("colour"), "your")
+        chosen["look"] = LEGACY_COLOURS["one"].get(chosen.pop("colour"), "your")
     options = {**options_for(None, "one"), **chosen}
     palette, _look = design_look(options["look"], "light-frost", False, None, accent)
     week = build_week(WEEK, BLOCKS, HOMEWORK, TRACE)
@@ -306,7 +305,7 @@ def test_curated_looks_repaint_the_screen(qapp: QApplication) -> None:
     assert corner(shown(qapp, "19:00", colour="black")) == resolved_palette(
         "light-frost", False, {"preset": "one-poster", "knobs": {}}
     )["window"]
-    assert corner(shown(qapp, "19:00", colour="paper")) == "#f7f0e1"
+    assert corner(shown(qapp, "19:00", colour="paper")) == "#f7f1e3"
     look = resolved_palette("light-frost", False, None, "default")
     assert corner(shown(qapp, "19:00", colour="match")) == look["window"]
 

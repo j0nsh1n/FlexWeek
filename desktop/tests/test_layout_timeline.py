@@ -45,7 +45,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.hours.geometry import Axis, Span
     from desktop.native.hours.zoom import HoursScroll
     from desktop.native.layouts.base import Scene, family
-    from desktop.native.layouts.registry import options_for, tokens_for
+    from desktop.native.layouts.registry import LEGACY_COLOURS, options_for, tokens_for
     from desktop.native.layouts.timeline import (
         Due,
         Split,
@@ -63,6 +63,7 @@ if importlib.util.find_spec("PySide6") is not None:
         category_paint,
         design_look,
         mix_oklab,
+        pack_stylesheet,
         resolved_palette,
     )
     from desktop.native.tokens import contrast
@@ -90,8 +91,7 @@ def scene_of(
     **chosen: str,
 ) -> Scene:
     if "colour" in chosen:
-        legacy = {"match": "your", "paper": "preset:timeline-paper", "night": "pack:dark-frost"}
-        chosen["look"] = legacy.get(chosen.pop("colour"), "your")
+        chosen["look"] = LEGACY_COLOURS["timeline"].get(chosen.pop("colour"), "your")
     options = {**options_for(None, "timeline"), **chosen}
     palette = palette or resolved_palette("light-frost", False, None, "default")
     if options["look"] != "your":
@@ -1065,4 +1065,14 @@ def test_a_design_look_keeps_timelines_heading_face(qapp: QApplication) -> None:
         found = [*view.findChildren(QLabel, "timelineDayName"), *view.findChildren(QLabel, "timelineStat")]
         return {item.font().family() for item in found}
 
-    assert faces(shown(qapp, colour="paper")) == faces(shown(qapp, colour="match"))
+    assert faces(shown(qapp, colour="paper")) == {"Newsreader"}
+
+
+def test_your_look_with_paper_keeps_newsreader_headings(qapp: QApplication) -> None:
+    look = {"preset": "paper", "knobs": {}}
+    palette = resolved_palette("light-frost", False, look)
+    view = shown(qapp, colour="match", palette=palette)
+    HOSTS[-1].setStyleSheet(pack_stylesheet("light-frost", False, look))
+    qapp.processEvents()
+    found = [*view.findChildren(QLabel, "timelineDayName"), *view.findChildren(QLabel, "timelineStat")]
+    assert found and {item.font().family() for item in found} == {"Newsreader"}

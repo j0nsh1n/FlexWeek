@@ -50,7 +50,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.hours.zoom import HoursScroll
     from desktop.native.layouts.base import Scene
     from desktop.native.layouts.mission import WEEK_SCALE, Bar, MissionCanvas, MissionView
-    from desktop.native.layouts.registry import DESIGN_LOOKS, options_for, tokens_for
+    from desktop.native.layouts.registry import DESIGN_LOOKS, LEGACY_COLOURS, options_for, tokens_for
     from desktop.native.look import ACCENTS, PACKS, category_paint, design_look, resolved_palette
     from desktop.native.weekmodel import build_week, minute_of
     from desktop.native.widgets import FittedLabel
@@ -78,11 +78,7 @@ def shown(
 ) -> MissionView:
     """Mission on the test week, Thursday 13:40 unless told otherwise."""
     if "colour" in chosen:
-        legacy = {
-            "deck": "preset:flight-deck", "cyan": "preset:terminal", "amber": "preset:poster",
-            "green": "preset:pastel", "match": "your",
-        }
-        chosen["look"] = legacy.get(chosen.pop("colour"), "your")
+        chosen["look"] = LEGACY_COLOURS["mission"].get(chosen.pop("colour"), "your")
     options = {**options_for(None, "mission"), **chosen}
     palette = resolved_palette("light-frost", False, None, "default")
     palette, _look = design_look(options["look"], "light-frost", False, None)
@@ -656,17 +652,15 @@ def test_a_name_that_cannot_fit_is_written_beside_its_block_where_the_lane_is_fr
     """The piano lesson's 45 minutes cannot hold its name, and Dinner is too close after it, so the
     name goes before it, over free lane. School's name fits inside, so nothing is written before it."""
     piano = block("piano", "locked", [2], "17:00", 45, title="Piano lesson", category="extra")
-    view = shown(qapp, blocks=[*BLOCKS, piano])
+    view = shown(qapp, look="pack:light-frost", blocks=[*BLOCKS, piano])
     hours = view.findChild(MissionCanvas, "missionHours")
     image = hours.grab().toImage()
-    text_is_dark = QColor(view.scene.tokens["text"]).lightness() < 128
+    assert view.scene.tokens["text"] == "#111827"
 
     def ink_before(block_id: str) -> int:
         rect = next(rect for item, rect in hours.drawn(hours.track_for(2)) if item.block_id == block_id)
         return sum(
                 QColor(image.pixel(x, y)).lightness() < 110
-                if text_is_dark
-                else QColor(image.pixel(x, y)).lightness() > 145
             for x in range(max(round(rect.left()) - 110, 0), round(rect.left()) - 4)
             for y in range(round(rect.top()) + 6, round(rect.top()) + 24)
         )
@@ -871,9 +865,18 @@ def test_parked_day_scroll_dies_with_its_host(qapp: QApplication) -> None:
 
 
 def test_curated_looks_repaint_the_console(qapp: QApplication) -> None:
-    for token, _label in DESIGN_LOOKS["mission"]:
-        palette, _look = design_look(token, "light-frost", False, None)
-        assert shown(qapp, look=token).grab().toImage().pixelColor(3, 3).name() == palette["window"]
+    expected = {
+        "preset:flight-deck": "#0b0f14",
+        "preset:high-contrast": "#000000",
+        "pack:dark-frost": "#111315",
+        "pack:light-frost": "#f7f8fa",
+    }
+    corners = []
+    for token, colour in expected.items():
+        pixel = shown(qapp, look=token).grab().toImage().pixelColor(3, 3).name()
+        assert pixel == colour, token
+        corners.append(pixel)
+    assert len(set(corners)) == 4
 
 
 def test_flight_deck_is_the_mock_ups_signature_in_flexweeks_blue_whatever_the_look() -> None:

@@ -41,7 +41,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.hours.hand import Hand, Verdict
     from desktop.native.hours.zoom import HoursScroll
     from desktop.native.layouts.base import Scene
-    from desktop.native.layouts.registry import MATCH, options_for, tokens_for
+    from desktop.native.layouts.registry import LEGACY_COLOURS, MATCH, options_for, tokens_for
     from desktop.native.layouts.retro import (
         NOT_PLACED,
         ZOOM_MS,
@@ -102,11 +102,7 @@ def scene(
     **chosen: str,
 ) -> Scene:
     if "colour" in chosen:
-        legacy = {
-            "teal": "preset:retro-teal", "plum": "preset:pastel", "slate": "pack:dark-frost",
-            "match": "your",
-        }
-        chosen["look"] = legacy.get(chosen.pop("colour"), "your")
+        chosen["look"] = LEGACY_COLOURS["retro"].get(chosen.pop("colour"), "your")
     options = {**options_for(None, "retro"), **chosen}
     week = build_week(WEEK, blocks or BLOCKS, HOMEWORK, TRACE)
     page_palette = palette_of(look)
@@ -750,7 +746,7 @@ def test_the_teal_desktop_is_windows_98s_own() -> None:
     assert (colours.desk, colours.title, colours.title_end, colours.title_ink) == (
         "#008080",
         "#000080",
-        "#0a5ca8",
+        "#1084d0",
         "#ffffff",
     )
 

@@ -82,7 +82,7 @@ DESIGN_LOOKS: dict[str, tuple[tuple[str, str], ...]] = {
         ("preset:high-contrast", "High contrast"),
         ("preset:terminal", "Terminal"),
         ("pack:dark-frost", "Dark"),
-        ("preset:poster", "Poster"),
+        ("pack:light-frost", "Light"),
     ),
     "bento": (
         ("preset:bento-indigo", "Indigo"),
@@ -115,7 +115,7 @@ DESIGN_LOOKS: dict[str, tuple[tuple[str, str], ...]] = {
     "one": (
         ("preset:one-poster", "Poster"),
         ("preset:high-contrast", "High contrast"),
-        ("preset:paper", "Paper and ink"),
+        ("preset:one-paper", "Paper and ink"),
         ("pack:dark-frost", "Dark"),
         ("pack:light-frost", "Light"),
     ),
@@ -123,9 +123,9 @@ DESIGN_LOOKS: dict[str, tuple[tuple[str, str], ...]] = {
 
 
 def _look(layout_id: str) -> Option:
-    """The design's signature first, then its curated looks and the student's own."""
+    """Offer the signature first; an unset stored choice continues to wear the student's own look."""
     choices = tuple(Choice(value, label) for value, label in DESIGN_LOOKS[layout_id])
-    return Option("look", "Look", "style", (*choices, Choice("your", "Your look")))
+    return Option("look", "Look", "style", (*choices, Choice("your", "Your look")), shipped="your")
 
 
 def _show(key: str, label: str, level: str = "detail") -> Option:
@@ -259,7 +259,7 @@ LEGACY_COLOURS = {
     "timeline": {"match": "your", "paper": "preset:timeline-paper", "night": "pack:dark-frost"},
     "mission": {
         "match": "your", "deck": "preset:flight-deck", "cyan": "preset:terminal",
-        "amber": "preset:poster", "green": "pack:dark-frost",
+        "amber": "pack:light-frost", "green": "pack:dark-frost",
     },
     "bento": {
         "match": "your", "indigo": "preset:bento-indigo", "sunset": "preset:poster",
@@ -272,7 +272,7 @@ LEGACY_COLOURS = {
         "match": "your", "pastel": "preset:clay-lavender", "mint": "preset:pastel",
         "sunset": "preset:poster", "dusk": "pack:dark-frost",
     },
-    "one": {"match": "your", "black": "preset:one-poster", "paper": "preset:paper"},
+    "one": {"match": "your", "black": "preset:one-poster", "paper": "preset:one-paper"},
     "dial": {"match": "your", "midnight": "preset:dial-midnight", "daylight": "pack:light-frost"},
 }
 
@@ -414,6 +414,8 @@ def match_tokens(palette: dict) -> dict[str, str]:
         title=palette.get("title", tokens["accent"]),
         title_end=palette.get("title_end", tokens["accent"]),
         title_ink=palette.get("title_ink", tokens["accent_ink"]),
+        retro_desk=palette.get("retro_desk", tokens["bg"]),
+        retro_desk_ink=palette.get("retro_desk_ink", tokens["bg_ink"]),
     )
     return tokens
 

@@ -13,6 +13,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - The Devices card reports changes held back because a phone clock looks wrong. Pair a phone shows the code without scan instructions, and Android pairing points to the correct desktop settings path.
 - Android Today actions share the available row width, and the missing-computer sync line uses shorter wording.
 - Month chips keep their time whole and elide long titles. Timeline's fold pager clears Thursday's heading.
+- A saved design with no look keeps the account's own look, and Setup saves Light or Dark when picked as a Today's app style.
 
 ### Changed
 - Each main and day design now offers its own curated looks. The selected look's colours carry across the app, design canvas and My day while the design keeps its own structure and typography; legacy design colours migrate to matching looks.

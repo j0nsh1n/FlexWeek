@@ -40,7 +40,14 @@ if importlib.util.find_spec("PySide6") is not None:
         free_slots,
         time_left,
     )
-    from desktop.native.layouts.registry import DESIGN_LOOKS, LAYOUTS, MATCH, options_for, tokens_for
+    from desktop.native.layouts.registry import (
+        DESIGN_LOOKS,
+        LAYOUTS,
+        LEGACY_COLOURS,
+        MATCH,
+        options_for,
+        tokens_for,
+    )
     from desktop.native.look import AA_TEXT, contrast, design_look, resolved_palette
     from desktop.native.motion import apply_ui_effects
     from desktop.native.weekmodel import build_week, minute_of
@@ -56,13 +63,7 @@ def scene(surface: str = "week", *, clock: str = "13:40", blocks: list[dict] | N
           homework: dict | None = None, iso_day: str = "2026-09-17", today: int | None = 3,
           scale: float = 1.0, **chosen: str) -> Scene:
     if "colour" in chosen:
-        legacy = {
-            "indigo": "preset:bento-indigo",
-            "match": "your",
-            "sunset": "preset:poster",
-            "mono": "preset:terminal",
-        }
-        chosen["look"] = legacy.get(chosen.pop("colour"), "your")
+        chosen["look"] = LEGACY_COLOURS["bento"].get(chosen.pop("colour"), "your")
     options = {**options_for(None, "bento"), **chosen}
     palette, _look = design_look(options["look"], "light-frost", False, None)
     week = build_week(

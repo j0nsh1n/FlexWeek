@@ -300,9 +300,39 @@ def test_picking_a_look_applies_to_the_design_canvas_before_settings_closes(
         if frame_dir:
             window._views["bento"].grab().save(str(Path(frame_dir) / f"frame-{frame:03d}.png"))
 
-    palette = resolved_palette("system", False, {"preset": "high-contrast", "knobs": {}})
-    assert window._scene_for("bento").tokens["bg"] == palette["window"]
-    assert window._scene_for("bento").tokens["accent"] == palette["accent"]
+    view = window.planner.currentWidget()
+    assert view is window._views["bento"]
+    image = view.grab().toImage()
+    assert image.pixelColor(4, 4).name() == "#000000", "the visible Bento canvas stayed in its old look"
+    page.close_page()
+
+
+def test_a_curated_canvas_look_does_not_leave_a_custom_look_marked_selected(
+    qapp: QApplication, window: NativeWindow  # noqa: F811
+) -> None:
+    from desktop.native.custom_look import save_look, start_custom, wear
+
+    page = open_settings(qapp, window)
+    page.saved_looks = save_look([], start_custom(page._pack, page._look), "My custom look")
+    page._look = wear(page._look, page.saved_looks[0])
+    page._show_look()
+    assert page.look.currentData() == "saved:My custom look"
+
+    page.layout_sections[0].pick.setCurrentIndex(page.layout_sections[0].pick.findData("bento"))
+
+    assert page.layout_sections[0].values()["look"] == "preset:bento-indigo"
+    assert page.look.currentData() is None
+    assert page.look.worn.text() == "Wearing Indigo"
+    assert page.look.findData("saved:My custom look") != page.look.currentIndex()
+    page.close_page()
+
+
+def test_general_look_choice_sets_both_layouts_to_your_look(
+    qapp: QApplication, window: NativeWindow  # noqa: F811
+) -> None:
+    page = open_settings(qapp, window)
+    page.look.setCurrentIndex(page.look.findData(look_menu_token("preset", "high-contrast")))
+    assert [section.values()["look"] for section in page.layout_sections] == ["your", "your"]
     page.close_page()
 
 

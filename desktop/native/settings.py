@@ -73,7 +73,7 @@ from desktop.native.fonts import time_font
 from desktop.native.hours.geometry import drag_step
 from desktop.native.icons import pixmap as icon_pixmap
 from desktop.native.layouts.dialog import SLOTS, LayoutSection
-from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.layouts.registry import DESIGN_LOOKS, sanitize_layout
 from desktop.native.look import (
     ACCENT_COLORS,
     ACCENTS,
@@ -624,6 +624,11 @@ class LookPicker(Choices):
         self._unsaved = name
         self._say_worn()
 
+    def show_canvas_look(self, name: str) -> None:
+        """Name a curated canvas look that is not an account-wide Look choice."""
+        self._unsaved = None
+        self.worn.setText(WEARING.format(name=name))
+
     def first_line(self) -> QWidget:
         """What the Look label sits beside: the three looks, not the middle of both lines."""
         return self.main
@@ -992,6 +997,7 @@ class SettingsPage(QWidget):
             LayoutSection(slot, role, title, blurb, chosen_layout, self._pack)
             for slot, role, title, blurb in SLOTS
         ]
+        self._show_look()
         main_section, day_section = self.layout_sections
         text_card, text_form = _card("Text")
         text_form.addRow(KNOB_LABELS["text"], self.knobs["text"])
@@ -1296,6 +1302,7 @@ class SettingsPage(QWidget):
         for section in self.layout_sections:
             section.changed.connect(self.changed.emit)
             section.changed.connect(self._show_what_applies)
+            section.changed.connect(self._show_look)
         self._show_what_applies()
         self.alarm_tone.currentIndexChanged.connect(self._follow_tone)
         self._follow_tone()
@@ -1515,6 +1522,7 @@ class SettingsPage(QWidget):
         for section in self.layout_sections:
             section.pick.setCurrentIndex(max(0, section.pick.findData(layout[section.slot])))
             section.sync(layout)
+        self._show_look()
         self.reminders.setChecked(preferences.get("reminders_enabled", True) is not False)
         self.lead.setValue(reminder_lead_min(preferences))
         tone = preferences.get("alarm_tone") or FALLBACK
@@ -1767,16 +1775,41 @@ class SettingsPage(QWidget):
         """Look as worn: one of the looks, a saved look by its name, or nothing for a look of the
         student's own that is not saved."""
         self.look.set_saved(self.saved_looks)
-        custom = self._look.get("custom")
-        unsaved = custom is not None and custom not in self.saved_looks
-        if custom is None:
-            index = max(0, self.look.findData(look_menu_value(self._pack, self._look)))
+        selected_layout_look = None
+        canvas_label = None
+        if hasattr(self, "layout_sections"):
+            main = next(section for section in self.layout_sections if section.slot == "main")
+            selected_layout_look = main.values().get("look")
+        if selected_layout_look and selected_layout_look != "your":
+            index = self.look.findData(selected_layout_look)
+            if index < 0:
+                canvas_label = next(
+                    (
+                        label
+                        for choices in DESIGN_LOOKS.values()
+                        for token, label in choices
+                        if token == selected_layout_look
+                    ),
+                    selected_layout_look,
+                )
+            custom = None
         else:
-            index = -1 if unsaved else self.look.findData(SAVED_LOOK + custom["name"])
-        self.look.show_unsaved(custom.get("name") if unsaved else None)
+            custom = self._look.get("custom")
+            if custom is None:
+                index = max(0, self.look.findData(look_menu_value(self._pack, self._look)))
+                unsaved_name = None
+            else:
+                unsaved = custom not in self.saved_looks
+                index = -1 if unsaved else self.look.findData(SAVED_LOOK + custom["name"])
+                unsaved_name = custom.get("name") if unsaved else None
+            self.look.show_unsaved(unsaved_name)
         self.look.blockSignals(True)
         self.look.setCurrentIndex(index)
         self.look.blockSignals(False)
+        if canvas_label is not None:
+            self.look.show_canvas_look(canvas_label)
+        else:
+            self.look.show_unsaved(None)
 
     def _open_customise(self) -> None:
         """The look editor over Settings (plan, "Customise", B). What it changes is worn at once, as

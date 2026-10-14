@@ -28,6 +28,7 @@ from desktop.native.layouts.registry import (
     LEVELS,
     layouts_for,
     options_for,
+    sanitize_layout,
 )
 from desktop.native.motion import OVER_MS, busy, duration
 from desktop.native.previews import Previews
@@ -196,7 +197,11 @@ class LayoutSection(QFrame):
         super().__init__()
         self.slot = slot
         self.setObjectName("settingsCard")
+        stored_options = sanitize_layout(choice)["options"]
         self._options = {spec.id: options_for(choice, spec.id) for spec in layouts_for(role)}
+        self._look_explicit = {
+            layout_id for layout_id, values in stored_options.items() if "look" in values
+        }
         body = QVBoxLayout(self)
         body.setContentsMargins(16, 16, 16, 16)
         body.setSpacing(8)
@@ -231,7 +236,7 @@ class LayoutSection(QFrame):
         reset_row.addWidget(self.reset)
         reset_row.addStretch(1)
         body.addLayout(reset_row)
-        self.pick.currentIndexChanged.connect(lambda _index: (self._rebuild(True), self.changed.emit()))
+        self.pick.currentIndexChanged.connect(self._design_changed)
         self.more.toggled.connect(lambda _on: self._rebuild(False))
         self.reset.clicked.connect(self._reset)
         self._rebuild(True)
@@ -243,7 +248,11 @@ class LayoutSection(QFrame):
         """Every design's options as kept now. Settings stays built between opens, and an option
         changed on a design's own page meanwhile, as Timeline's fold, would otherwise be written back
         as it was."""
+        stored_options = sanitize_layout(choice)["options"]
         self._options = {layout_id: options_for(choice, layout_id) for layout_id in self._options}
+        self._look_explicit = {
+            layout_id for layout_id, values in stored_options.items() if "look" in values
+        }
         self._rebuild(True)
 
     def values(self) -> dict[str, str]:
@@ -253,7 +262,22 @@ class LayoutSection(QFrame):
     def use_own_look(self) -> None:
         """The general look picker supplies this design's own look when it changes."""
         self._options[self.chosen()]["look"] = "your"
+        self._look_explicit.add(self.chosen())
         self._rebuild(False)
+
+    def _design_changed(self, _index: int) -> None:
+        layout_id = self.chosen()
+        if layout_id not in self._look_explicit:
+            self._options[layout_id]["look"] = DESIGN_LOOKS[layout_id][0][0]
+            self._look_explicit.add(layout_id)
+        self._rebuild(True)
+        self.changed.emit()
+
+    def _option_changed(self, layout_id: str, key: str, source: QComboBox | Segmented) -> None:
+        self._options[layout_id][key] = str(source.currentData())
+        if key == "look":
+            self._look_explicit.add(layout_id)
+        self.changed.emit()
 
     def options(self) -> dict[str, dict[str, str]]:
         """Only what the student changed. Writing a design's defaults down would freeze them, and a
@@ -268,6 +292,7 @@ class LayoutSection(QFrame):
 
     def _reset(self) -> None:
         self._options[self.chosen()] = options_for(None, self.chosen())
+        self._look_explicit.add(self.chosen())
         self._rebuild(True)
         self.changed.emit()
 
@@ -306,9 +331,8 @@ class LayoutSection(QFrame):
                 box.setCurrentIndex(max(box.findData(values[option.key]), 0))
                 box.blockSignals(False)
                 box.currentIndexChanged.connect(
-                    lambda _index, key=option.key, source=box, target=spec.id: self._options[
-                        target
-                    ].__setitem__(key, str(source.currentData()))
+                    lambda _index, key=option.key, source=box, target=spec.id: self._option_changed(
+                        target, key, source
+                    )
                 )
-                box.currentIndexChanged.connect(lambda _index: self.changed.emit())
                 self._form.addRow(option.label, box)

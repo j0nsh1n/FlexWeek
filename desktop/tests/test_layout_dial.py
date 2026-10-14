@@ -30,7 +30,7 @@ if importlib.util.find_spec("PySide6") is not None:
 
     from desktop.native.layouts.base import Scene, family
     from desktop.native.layouts.dial import DayDialView, DialFace
-    from desktop.native.layouts.registry import DESIGN_LOOKS, options_for, tokens_for
+    from desktop.native.layouts.registry import DESIGN_LOOKS, LEGACY_COLOURS, options_for, tokens_for
     from desktop.native.look import ACCENTS, category_paint, contrast, design_look, resolved_palette
     from desktop.native.motion import apply_ui_effects, duration
     from desktop.native.tokens import type_pt
@@ -56,8 +56,7 @@ def shown(
     **chosen: str,
 ) -> DayDialView:
     if "colour" in chosen:
-        legacy = {"midnight": "preset:dial-midnight", "daylight": "pack:light-frost", "match": "your"}
-        chosen["look"] = legacy.get(chosen.pop("colour"), "your")
+        chosen["look"] = LEGACY_COLOURS["dial"].get(chosen.pop("colour"), "your")
     options = {**options_for(None, "dial"), **chosen}
     palette = palette or resolved_palette("light-frost", False, None, "default")
     if options["look"] != "your":
@@ -433,9 +432,7 @@ def test_night_is_the_navy_colourway_saved_as_midnight(qapp: QApplication) -> No
         return view.grab().toImage().pixelColor(3, 3).name()
 
     assert DESIGN_LOOKS["dial"][0] == ("preset:dial-midnight", "Night")
-    assert corner(shown(qapp, "19:00", colour="midnight")) == resolved_palette(
-        "system", False, {"preset": "dial-midnight", "knobs": {}}
-    )["window"]
+    assert corner(shown(qapp, "19:00", colour="midnight")) == "#0b0f1d"
     assert corner(shown(qapp, "19:00", colour="daylight")) == "#f7f8fa"
     assert (
         corner(shown(qapp, "19:00", colour="match"))

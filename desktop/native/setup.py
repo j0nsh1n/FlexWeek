@@ -87,6 +87,7 @@ from desktop.native.look import (
     KNOB_VALUE_LABELS,
     LOOK_KNOBS,
     effective_look,
+    parse_look_menu_token,
     readable_focus_edge,
     resolved_palette,
     sanitize_look,
@@ -2142,7 +2143,10 @@ class SetupPage(QWidget):
     def _choose_main(self, layout_id: str) -> None:
         for key, card in self.look_cards.items():
             card.select(key == layout_id)
-        self._layout = sanitize_layout({**self._layout, "main": layout_id})
+        options = deepcopy(self._layout["options"])
+        if "look" not in options.get(layout_id, {}):
+            options[layout_id] = {**options.get(layout_id, {}), "look": DESIGN_LOOKS[layout_id][0][0]}
+        self._layout = sanitize_layout({**self._layout, "main": layout_id, "options": options})
         self._preview()
 
     def _colour_choices(self) -> tuple[tuple[tuple[str, str], ...], tuple[tuple[str, str], ...]]:
@@ -2168,6 +2172,9 @@ class SetupPage(QWidget):
         options = deepcopy(self._layout["options"])
         if colour:
             options[main] = {**options.get(main, {}), "look": colour}
+            parsed = parse_look_menu_token(colour)
+            if parsed is not None and parsed[0] == "pack":
+                self._pack = parsed[1]
         if main == "timeline":
             options.setdefault(main, {})["density"] = self.spacing.value() or "comfortable"
         knobs = dict(sanitize_look(self._look)["knobs"])
@@ -2504,9 +2511,9 @@ class SetupPage(QWidget):
 
     def _draw_done_preview(self) -> None:
         main = self._layout["main"]
-        colour = options_for(self._layout, main).get("colour") if LAYOUTS[main].colourways else None
+        look = options_for(self._layout, main).get("look")
         self.done_preview.setPixmap(
-            rounded_picture(self._previews.get(main, colour, self._pack, self._look, COLOUR_THUMB), 8)
+            rounded_picture(self._previews.get(main, look, self._pack, self._look, COLOUR_THUMB), 8)
         )
 
     def _reveal_summary(self) -> None:
