@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gc
+import os
 import threading
 
 import pytest
@@ -14,6 +15,7 @@ from desktop.native.collector import TICK_MS, WindowThreadCollector
 
 @pytest.fixture(scope="module")
 def qapp() -> QApplication:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     return QApplication.instance() or QApplication(["flexweek-collector-test"])
 
 
