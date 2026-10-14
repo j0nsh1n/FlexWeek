@@ -965,7 +965,6 @@ class Rail(QFrame):
             entry = self.due_list.takeAt(0)
             widget = entry.widget()
             if widget is not None:
-                widget.setParent(None)
                 widget.deleteLater()
         start = date.fromisoformat(week.week_start)
         end = start + timedelta(days=6)
