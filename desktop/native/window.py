@@ -1709,6 +1709,7 @@ class NativeWindow(QMainWindow):
         self._week_list_return: QWidget | None = None
         self.week_access_list = QListWidget()
         self.week_access_list.setObjectName("weekAccessList")
+        self.week_access_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.week_access_list.setAccessibleName("Week as a list")
         self.week_access_list.setAccessibleDescription(
             "Every block this week, day by day, in time order. Press Enter to open one."
@@ -5301,7 +5302,8 @@ class NativeWindow(QMainWindow):
                     child.setFont(without_ligatures(child.font()))
             elif hasattr(self, "_retro_fonts"):
                 for child, (font, own) in list(self._retro_fonts.items()):
-                    child.setFont(font if own else QFont())
+                    if isValid(child):
+                        child.setFont(font if own else QFont())
                 del self._retro_fonts
             self.setStyleSheet(sheet)
             # Fixed within a text size, so tabbing never moves the grid; a new size re-lays out anyway.
