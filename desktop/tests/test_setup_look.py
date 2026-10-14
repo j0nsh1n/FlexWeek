@@ -234,6 +234,14 @@ def test_the_style_pager_dots_share_one_box_and_only_the_current_one_is_accent(
             assert centre == QColor(palette["accent"]), key
         else:
             assert centre != QColor(palette["accent"]), key
+            # One flat fill: the centre is the colour found partway to the edge, so no radio mark sits in it.
+            image = dot.grab().toImage()
+            middle = image.pixelColor(dot.width() // 2, dot.height() // 2)
+            aside = image.pixelColor(dot.width() // 2 + dot.width() // 4, dot.height() // 2)
+            assert middle == aside, (key, middle.name(), aside.name())
+    # Clearly smaller than the look swatches under them, so the two rows never read alike.
+    swatch = next(iter(carousel.look_swatches.values()))
+    assert dots[0].width() * 2 <= swatch.width()
 
 
 def test_style_look_swatches_follow_the_design_and_change_the_preview(

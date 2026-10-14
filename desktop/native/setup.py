@@ -197,7 +197,8 @@ PACK_IN = {
     "nocturne": "Nocturne colours",
     "slate": "Slate colours",
 }
-DOT_PX, ARROW_PX = 16, 32
+# Small plain dots, so they read as pages and never as the 24 px look swatches under them.
+DOT_PX, ARROW_PX = 10, 32
 RAIL_MIN = 210
 # The margin the pages keep at the sides, and the fade over the last stretch above the footer.
 PAGE_MARGIN, FADE_PX = 32, 24
