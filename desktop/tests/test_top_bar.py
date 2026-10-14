@@ -5,6 +5,8 @@ the button states) and 12 (overlay scroll bars and the zoom pill), read off the 
 
 from __future__ import annotations
 
+from datetime import datetime
+
 import pytest
 
 pytest.importorskip("PySide6")
@@ -362,8 +364,16 @@ def test_the_hours_scroll_under_a_thin_bar_that_widens_under_the_pointer(
 
 
 def test_month_and_settings_scroll_under_the_same_bars(qapp: QApplication, window: NativeWindow) -> None:
-    window.resize(1280, 800)
+    """Decision 12: Month and Settings scroll under overlay bars. August 2026 is six weeks, and
+    520 px is short enough that those rows overflow the dates; today's month can fill a tall window
+    and `_fit` then takes back any extra minimum height, so the bar never shows."""
+    session = window.session
+    session.now_ms = lambda: int(datetime.fromisoformat("2026-08-13T15:40").timestamp() * 1000)
+    session.load_week("2026-08-10")
+    wait_until(qapp, lambda: not session.busy)
+    window.resize(1280, 520)
     shown(qapp, window, "month")
+    wait_until(qapp, lambda: session.month_data is not None and window.month_grid.scroll.height() > 0)
     month = window.month_grid.scroll
     month.widget().setMinimumHeight(month.height() * 2)
     qapp.processEvents()
