@@ -69,6 +69,8 @@ from desktop.native.fields import (
     DayPicker,
     Stepper,
     held_on_problem,
+    save_week_starts_on,
+    week_starts_on,
 )
 from desktop.native.fonts import numeral, weighted
 from desktop.native.hours.geometry import drag_step
@@ -1459,6 +1461,22 @@ class SetupPage(QWidget):
             button.installEventFilter(self._clock_ring)
         self._dress_clock_ring()
         box.addWidget(clock)
+        box.addWidget(_label("Week starts on", "setupSection"))
+        self.week_start_choice = QButtonGroup(content)
+        self.week_start_buttons: dict[str, QRadioButton] = {}
+        starts = QFrame()
+        starts.setObjectName("setupGroup")
+        starts_line = QHBoxLayout(starts)
+        starts_line.setContentsMargins(12, 10, 12, 10)
+        starts_line.setSpacing(24)
+        for value, text in (("monday", "Monday"), ("sunday", "Sunday")):
+            button = QRadioButton(text)
+            button.setObjectName(f"setupWeekStart-{value}")
+            self.week_start_choice.addButton(button)
+            self.week_start_buttons[value] = button
+            starts_line.addWidget(button)
+        starts_line.addStretch(1)
+        box.addWidget(starts)
         self.clock_choice.buttonToggled.connect(lambda _button, _on: self._follow_clock())
         self._section(box, "School")
         self.school_days = DayPicker([0, 1, 2, 3, 4], "setupDay")
@@ -1737,6 +1755,10 @@ class SetupPage(QWidget):
     def _clock_chosen(self) -> bool:
         return self.clock_buttons[True].isChecked()
 
+    def _week_start_chosen(self) -> str:
+        checked = [value for value, button in self.week_start_buttons.items() if button.isChecked()]
+        return checked[0] if checked else "monday"
+
     def _show_clock(self, twenty_four: bool) -> None:
         """Choose the clock and write every time box on the pages in it."""
         self.clock_buttons[twenty_four].setChecked(True)
@@ -1751,6 +1773,7 @@ class SetupPage(QWidget):
     def _fill_week(self) -> None:
         blocks = self._state.blocks
         self._show_clock(self._state.preferences.get("clock_24h") is True)
+        self.week_start_buttons[week_starts_on()].setChecked(True)
         school = next((block for block in blocks if block.get("id") == SETUP_SCHOOL_ID), None)
         if school is not None and school.get("start"):
             self.school_days.set_days(list(school.get("days") or []))
@@ -1942,6 +1965,8 @@ class SetupPage(QWidget):
                 self.error.setText(problem)
                 return
             answer = self._answer(step)
+            if step == WEEK:
+                save_week_starts_on(self._week_start_chosen())
         elif step in LOOK_STEPS and destination not in LOOK_STEPS:
             # A look tried and then skipped is not kept, so the app goes back to the one it had.
             self._restore_entered()

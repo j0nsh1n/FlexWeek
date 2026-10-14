@@ -6,10 +6,25 @@ it."""
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable
+from pathlib import Path
 
-from PySide6.QtCore import QDate, QDateTime, QEvent, QObject, QRect, QRectF, QSize, Qt, QTime, QTimer, Signal
+from PySide6.QtCore import (
+    QDate,
+    QDateTime,
+    QEvent,
+    QObject,
+    QRect,
+    QRectF,
+    QSize,
+    QStandardPaths,
+    Qt,
+    QTime,
+    QTimer,
+    Signal,
+)
 from PySide6.QtGui import (
     QAccessible,
     QAccessibleAnnouncementEvent,
@@ -168,15 +183,46 @@ def _toward(colour: QColor, ground: QColor, share: float) -> QColor:
     )
 
 
+WEEK_STARTS = ("monday", "sunday")
+
+
+def _week_starts_file() -> Path:
+    folder = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation))
+    return folder / "week-start.json"
+
+
+def week_starts_on() -> str:
+    """Monday, unless this computer was set to Sunday. Kept per computer, not on the account: the
+    stored weeks stay Monday-keyed, and the account's preferences are the engine's fixed list."""
+    try:
+        value = json.loads(_week_starts_file().read_text(encoding="utf-8")).get("week_starts_on")
+    except (OSError, ValueError, AttributeError):
+        return "monday"
+    return value if value in WEEK_STARTS else "monday"
+
+
+def save_week_starts_on(value: str) -> None:
+    if value not in WEEK_STARTS:
+        raise ValueError(f"week start must be one of {WEEK_STARTS}, not {value!r}")
+    path = _week_starts_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"week_starts_on": value}), encoding="utf-8")
+
+
+def first_day_of_week() -> Qt.DayOfWeek:
+    return Qt.DayOfWeek.Sunday if week_starts_on() == "sunday" else Qt.DayOfWeek.Monday
+
+
 class LookCalendar(QCalendarWidget):
-    """A month drawn in the look: Monday first, weekends in the text colour like any other day, the
-    picked day a round dot in the accent, today ringed in it, and other months' days faint. Qt's own
-    drew Saturday and Sunday red and the picked day as a square (T19 of the 0.17.0 audit)."""
+    """A month drawn in the look: Monday first (Sunday if the computer says so), weekends in the text
+    colour like any other day, the picked day a round dot in the accent, today ringed in it, and other
+    months' days faint. Qt's own drew Saturday and Sunday red and the picked day as a square (T19 of the
+    0.17.0 audit)."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("lookCalendar")
-        self.setFirstDayOfWeek(Qt.DayOfWeek.Monday)
+        self.setFirstDayOfWeek(first_day_of_week())
         self.setGridVisible(False)
         self.setVerticalHeaderFormat(QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader)
         self.setHorizontalHeaderFormat(QCalendarWidget.HorizontalHeaderFormat.SingleLetterDayNames)

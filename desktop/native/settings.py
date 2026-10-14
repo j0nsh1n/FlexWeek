@@ -59,7 +59,15 @@ from desktop.native.calendar import DAY_FULL
 from desktop.native.controller import ROUTINE_STATUS
 from desktop.native.custom_look import UNNAMED, sanitize_saved, wear
 from desktop.native.devices import DevicesPanel, SyncHost
-from desktop.native.fields import ClockField, DayPicker, Stepper, announce, held_on_problem
+from desktop.native.fields import (
+    ClockField,
+    DayPicker,
+    Stepper,
+    announce,
+    held_on_problem,
+    save_week_starts_on,
+    week_starts_on,
+)
 from desktop.native.focus import FOCUS_PHASE_LABEL, format_countdown, more_time_choices, remaining_ms
 from desktop.native.fonts import time_font
 from desktop.native.hours.geometry import drag_step
@@ -950,6 +958,12 @@ class SettingsPage(QWidget):
         )
         self.clock = Segmented((("24-hour", True), ("12-hour", False)), "prefClock")
         self.clock.setCurrentIndex(0 if preferences.get("clock_24h", False) is True else 1)
+        # Kept on this computer, not in the account's preferences (see week_starts_on).
+        self.week_start = Segmented((("Monday", "monday"), ("Sunday", "sunday")), "prefWeekStart")
+        self.week_start.setCurrentIndex(0 if week_starts_on() == "monday" else 1)
+        self.week_start.currentIndexChanged.connect(
+            lambda _at: save_week_starts_on(self.week_start.currentData())
+        )
         self.spotify = QLineEdit(preferences.get("default_spotify_url") or "")
         self.spotify.setObjectName("prefSpotify")
         self.spotify.setPlaceholderText("Paste a Spotify link")
@@ -1155,6 +1169,7 @@ class SettingsPage(QWidget):
         start_form.addRow(self.start_at_login)
         start_form.addRow("Open on", self.preferred_view)
         start_form.addRow("Clock", self.clock)
+        start_form.addRow("Week starts on", self.week_start)
         computer_card, computer_form = _card("Account, setup and updates")
         open_account = _page_button("Manage account…", "prefsAccount")
         open_account.setToolTip("Change your password, export or import, or delete the account.")
