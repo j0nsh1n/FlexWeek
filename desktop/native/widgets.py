@@ -1010,6 +1010,10 @@ def _refit_bar(button: QPushButton, event: QEvent) -> None:
     the next resize, the bar's buttons moved under the pointer a moment after the change."""
     if event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange):
         host = button.window()
+        # The window's own fit restyles More as it tries each step; refitting for that restyled it
+        # again on the next turn, for ever, whenever the bar was tight (a hung test at 95% CPU).
+        if getattr(host, "_fitting_plan_row", False):
+            return
         if hasattr(host, "_fit_plan_and_more"):
             host._fit_plan_and_more()
             host._schedule_bar_refit()
