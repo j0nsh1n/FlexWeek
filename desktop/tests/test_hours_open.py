@@ -377,6 +377,34 @@ def test_month_and_mini_month_use_today_at_a_week_boundary(
     assert window.week_title.full_text() == expected[today]
 
 
+def test_open_week_month_is_prefetched_without_waiting_for_it(
+    qapp: QApplication, window: NativeWindow, monkeypatch
+) -> None:
+    session = window.session
+    session.now_ms = lambda: int(datetime.fromisoformat("2026-10-15T15:40").timestamp() * 1000)
+    session.week_start = "2026-10-12"
+    session._month_cache.clear()
+    session._month_prefetching.clear()
+    requests = []
+    monkeypatch.setattr(session.client, "request", lambda *args: requests.append(args))
+
+    session._prefetch_open_week_month()
+
+    assert len(requests) == 1
+    assert requests[0][0:2] == ("GET", "/api/month?month=2026-10")
+    assert session.month_data is None
+    requests[0][3]({"month": "2026-10"})
+    assert session._month_cache[(str(session.account["id"]), "2026-10")]["month"] == "2026-10"
+    session.set_view("month")
+    # The month kept is on screen at once, before any answer; it is asked for again all the same,
+    # since another week may have changed, and the fresh answer replaces it.
+    assert session.month_data == {"month": "2026-10"}
+    asked_again = [args for args in requests[1:] if args[1] == "/api/month?month=2026-10"]
+    assert len(asked_again) == 1
+    asked_again[0][3]({"month": "2026-10", "days": [], "fresh": True})
+    assert session.month_data.get("fresh") is True
+
+
 def test_month_keeps_a_picked_day_and_uses_thursday_for_a_week_without_today(
     qapp: QApplication, window: NativeWindow
 ) -> None:

@@ -139,12 +139,13 @@ class MonthCell:
         return int(self.iso[8:])
 
 
-def month_cells(snapshot: dict | None, weeks: Mapping[str, WeekModel], today_iso: str) -> list[MonthCell]:
+def month_cells(
+    snapshot: dict | None, weeks: Mapping[str, WeekModel], today_iso: str, month: str | None = None
+) -> list[MonthCell]:
     """The dates of a month reply, each with its chips. `weeks` are the weeks the student has now,
     saved or not, by their Monday: a date in one of them is read from it; any other date from what
     the reply says is on it."""
-    if not snapshot:
-        return []
+    snapshot = snapshot or {"month": month, "days": []}
     deadlines: dict[str, dict] = {}
     for item in list(snapshot.get("deadlines") or []) + list(snapshot.get("overdue") or []):
         if item.get("id"):
@@ -156,7 +157,7 @@ def month_cells(snapshot: dict | None, weeks: Mapping[str, WeekModel], today_iso
             day_iso = (monday + timedelta(days=offset)).isoformat()
             open_days[day_iso] = tuple(item for item in week.occurrences if item.day == offset)
     days = {str(day["date"]): day for day in snapshot.get("days") or []}
-    month = str(snapshot.get("month") or "")
+    month = str(snapshot.get("month") or month or "")
     if not month and days:
         month = next((iso[:7] for iso, day in days.items() if day.get("in_month")), next(iter(days))[:7])
     if month:
@@ -982,12 +983,28 @@ class MonthGrid(QWidget):
             self.set_month(*self._shown)
 
     def set_month(
-        self, snapshot: dict | None, dirty: bool, today_iso: str | None = None, account: str | None = None
+        self,
+        snapshot: dict | None,
+        dirty: bool,
+        today_iso: str | None = None,
+        account: str | None = None,
+        month: str | None = None,
     ) -> None:
         """`snapshot` is None while a month is on its way. The grid then stays as the same `account`
         last had it, under "Loading month…", rather than flashing empty."""
         self._shown = (snapshot, dirty, today_iso, account)
         if snapshot is None:
+            if month is not None:
+                self._drawn_for = account
+                self.canvas.open_week = self._week.week_start if self._week is not None else None
+                weeks = dict(self._unsaved)
+                if self._week is not None and self._week.week_start:
+                    weeks[self._week.week_start] = self._week
+                self.canvas.set_cells(month_cells(None, weeks, today_iso or date.today().isoformat(), month))
+                # The dates are all there; a "Loading month…" line would take a row and give it back,
+                # and the month would grow when its chips came.
+                self._say(self.warning, "")
+                return
             if account is None or account != self._drawn_for:
                 self.canvas.set_cells([])
             self._say(self.warning, "Loading month…")
@@ -1000,7 +1017,7 @@ class MonthGrid(QWidget):
             weeks[self._week.week_start] = self._week
         self.canvas.open_week = self._week.week_start if self._week is not None else None
         today = today_iso or date.today().isoformat()
-        self.canvas.set_cells(month_cells(snapshot, weeks, today))
+        self.canvas.set_cells(month_cells(snapshot, weeks, today, month))
         self._say(self.overdue, "")
         chosen = self.canvas.selected
         if chosen is None or self.canvas.index_of(chosen) is None:

@@ -1982,6 +1982,7 @@ class NativeWindow(QMainWindow):
             scale=text_scale(applied_look),
             surface=surface,
             month=session.month_data,
+            month_key=session.selected_month,
             iso_day=session.selected_day,
             dirty=session.dirty,
             unsaved_weeks=session.unsaved_weeks(),
@@ -2572,7 +2573,7 @@ class NativeWindow(QMainWindow):
         self.month_grid.set_month(
             self.session.month_data, self.session.dirty,
             datetime.fromtimestamp(self.session.now_ms() / 1000).date().isoformat(),
-            self._account_id(),
+            self._account_id(), self.session.selected_month,
         )
         opened = (self.session.planner_view, self.session.selected_month, self.session.month_data is not None)
         if opened[0] == "month" and opened[2] and opened != self._month_revealed:

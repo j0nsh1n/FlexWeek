@@ -6,6 +6,9 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Fixed
+- Month now shows its complete date grid at a reserved final row height while monthly data loads, and the open week's month is prefetched in the background.
+
+### Fixed
 - Add homework and fixed-time crumbs keep their step names at every text size. The empty-title
   message stays visible in the sheet.
 - Left from last week is shown only when homework had a session in an earlier saved week.

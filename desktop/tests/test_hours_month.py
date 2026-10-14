@@ -27,7 +27,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from backend.month import build_month
     from desktop.native import fields
     from desktop.native.hours.hand import Hand, MoveDate, Verdict
-    from desktop.native.hours.month import MonthGrid, month_cells
+    from desktop.native.hours.month import LEAST_CHIPS, MonthGrid, month_cells
     from desktop.native.weekmodel import build_week
 
 MONDAY = "2026-09-21"
@@ -484,6 +484,35 @@ def test_a_month_revealed_before_its_first_layout_still_opens_on_the_first_row(q
     room = grid.scroll.viewport().height()
     grid.close()
     assert (shown, below >= room) == (0, True)
+
+
+def test_loading_month_has_its_final_dates_and_height_before_the_reply(qapp: QApplication) -> None:
+    """Jonathan: switching to Month, it was short with empty space, then grew when the month arrived.
+    While the reply is on its way the grid already has every date of the month, at the height the reply
+    gives a month with no more chips on a day than a row always has room for."""
+    grid = MonthGrid()
+    grid.resize(900, 700)
+    grid.set_month(None, False, "2026-10-15", "student", "2026-10")
+    grid.show()
+    qapp.processEvents()
+    first_cells = tuple(cell.iso for cell in grid.canvas.cells)
+    first_height = grid.canvas.height()
+    first_rows = tuple(grid.canvas.cell_rect(row * 7).height() for row in range(5))
+
+    snapshot = build_month("2026-10", [], [])
+    quiet = next(day for day in snapshot["days"] if day["date"] == "2026-10-15")
+    quiet["blocks"] = [
+        {"id": f"b{hour}", "title": f"Club {hour}", "start": f"{hour:02d}:00", "duration_min": 60}
+        for hour in range(8, 8 + LEAST_CHIPS)
+    ]
+    grid.set_month(snapshot, False, "2026-10-15", "student", "2026-10")
+    qapp.processEvents()
+
+    assert len(first_cells) == 35
+    assert first_cells == tuple(cell.iso for cell in grid.canvas.cells)
+    assert first_height == grid.canvas.height()
+    assert first_rows == tuple(grid.canvas.cell_rect(row * 7).height() for row in range(5))
+    grid.close()
 
 
 def test_a_weeks_row_is_as_tall_as_its_busiest_date_and_this_week_is_banded(qapp: QApplication) -> None:

@@ -36,6 +36,7 @@ class Scene:
     scale: float = 1.0
     surface: str = "week"
     month: dict | None = None
+    month_key: str | None = None
     iso_day: str = ""
     dirty: bool = False
     # Weeks other than this one that the student changed and left unsaved, by their Monday.
@@ -346,7 +347,7 @@ class LayoutView(QWidget):
         board.set_tokens(scene.tokens)
         board.set_unsaved(scene.unsaved_weeks)
         board.set_week(scene.week)
-        board.set_month(scene.month, scene.dirty, scene.today_iso or None, scene.account)
+        board.set_month(scene.month, scene.dirty, scene.today_iso or None, scene.account, scene.month_key)
         opened = ((scene.month or {}).get("month"), scene.iso_day)
         if scene.month and scene.iso_day and opened != getattr(self, "_month_revealed", None):
             # Once per month opened, and after the board has its size: after that it stays wherever

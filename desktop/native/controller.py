@@ -250,6 +250,8 @@ class NativeSession(QObject):
         self._plan_ticket: int | None = None
         self._day_ticket = 0
         self._month_ticket = 0
+        self._month_cache: dict[tuple[str, str], dict] = {}
+        self._month_prefetching: set[tuple[str, str]] = set()
         self._undo: list[dict] = []
         self._join_step = False
         # New homework to give a time once its save lands, when the student plans as they add.
@@ -385,6 +387,8 @@ class NativeSession(QObject):
         self.day_data = None
         self.selected_month = None
         self.month_data = None
+        self._month_cache.clear()
+        self._month_prefetching.clear()
         self.armed_category = None
         self.selected_block_id = None
         self.selected_occurrence_day = None
@@ -614,11 +618,18 @@ class NativeSession(QObject):
         asked = self.selected_month
         self._month_ticket += 1
         token = self._month_ticket
+        key = (str(self.account["id"]), asked)
+        cached = None if self._held() or self.parked_unsaved_week() else self._month_cache.get(key)
+        if cached is not None:
+            # Shown at once, then asked for again: another week may have changed since it was kept.
+            self.month_data = cached
+            self.week_changed.emit()
 
         def ok(data: dict) -> None:
             if token != self._month_ticket or self.planner_view != "month" or self.selected_month != asked:
                 return
             self.month_data = data
+            self._month_cache[key] = data
             self.week_changed.emit()
 
         def err(error: ApiError) -> None:
@@ -626,6 +637,27 @@ class NativeSession(QObject):
                 return
             self._say(error.message)
             self.week_changed.emit()
+
+        self.client.request("GET", f"/api/month?month={asked}", None, ok, err)
+
+    def _prefetch_open_week_month(self) -> None:
+        """Warm the month most likely to be opened without holding up the week."""
+        if self.account is None:
+            return
+        owner = str(self.account["id"])
+        asked = month_for_view(date_for_day(self.week_start, 3))
+        key = (owner, asked)
+        if key in self._month_cache or key in self._month_prefetching:
+            return
+        self._month_prefetching.add(key)
+
+        def ok(data: dict) -> None:
+            self._month_prefetching.discard(key)
+            if self.account is not None and str(self.account["id"]) == owner and data.get("month") == asked:
+                self._month_cache[key] = data
+
+        def err(_error: ApiError) -> None:
+            self._month_prefetching.discard(key)
 
         self.client.request("GET", f"/api/month?month={asked}", None, ok, err)
 
@@ -851,6 +883,7 @@ class NativeSession(QObject):
             self._fetch_preferences()
             self._fetch_restore_points()
             self._fetch_recovery_status()
+            self._prefetch_open_week_month()
 
         def failed(error: ApiError) -> None:
             if not self._alive(ticket):
