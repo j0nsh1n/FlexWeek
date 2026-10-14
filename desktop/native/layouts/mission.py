@@ -518,10 +518,22 @@ class MissionPainter(BlockPainter):
                 if not lines or (with_time and sm.horizontalAdvance(start) > free):
                     continue
                 tall = len(lines) * tm.lineSpacing() + (sm.lineSpacing() if with_time else 0)
+                inline_time = False
+                if with_time and tall > room:
+                    title_width = tm.horizontalAdvance(drawn.title)
+                    time_width = sm.horizontalAdvance(start)
+                    if len(lines) != 1 or title_width + 6 + time_width > free or tm.lineSpacing() > room:
+                        continue
+                    inline_time = True
+                    tall = tm.lineSpacing()
                 if tall > room:
                     continue
-                wide = max([tm.horizontalAdvance(line) for line in lines]
-                           + ([sm.horizontalAdvance(start)] if with_time else []))
+                wide = (
+                    tm.horizontalAdvance(lines[0]) + 6 + sm.horizontalAdvance(start)
+                    if inline_time
+                    else max([tm.horizontalAdvance(line) for line in lines]
+                             + ([sm.horizontalAdvance(start)] if with_time else []))
+                )
                 left = rect.right() + 5 if right else rect.left() - 5 - wide
                 align = Qt.AlignmentFlag.AlignLeft if right else Qt.AlignmentFlag.AlignRight
                 painter.setPen(self.c("text"))
@@ -534,7 +546,9 @@ class MissionPainter(BlockPainter):
                 if with_time:
                     painter.setPen(self.c("muted"))
                     painter.setFont(small)
-                    box = QRectF(left, top + len(lines) * tm.lineSpacing(), wide, sm.height())
+                    time_x = left + tm.horizontalAdvance(lines[0]) + 6 if inline_time else left
+                    time_y = top if inline_time else top + len(lines) * tm.lineSpacing()
+                    box = QRectF(time_x, time_y, sm.horizontalAdvance(start), sm.height())
                     painter.drawText(box, align | Qt.AlignmentFlag.AlignTop, start)
                     written.append(box)
                 taken.append(QRectF(left - 5, rect.top(), wide + 10, rect.height()))

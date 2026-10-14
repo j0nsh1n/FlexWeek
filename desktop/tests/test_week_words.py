@@ -229,7 +229,7 @@ def test_mission_timeline_and_clay_painters_at_810_keep_a_short_blocks_start_and
     from desktop.native.hours import canvas as canvas_module
     from desktop.native.layouts.clay import ClayPainter, slots
     from desktop.native.layouts.mission import MissionPainter
-    from desktop.native.layouts.registry import options_for, tokens_for
+    from desktop.native.layouts.registry import MATCH, tokens_for
     from desktop.native.layouts.timeline import TimelinePainter
     from desktop.tests.test_hours_painter import Said
 
@@ -246,17 +246,17 @@ def test_mission_timeline_and_clay_painters_at_810_keep_a_short_blocks_start_and
     clay_w = slots(810, 632, 3, 1.0, wide=False)[3].width()
     painters = {
         "mission": (
-            MissionPainter(tokens_for("mission", options_for(None, "mission")["colour"], palette)),
+            MissionPainter(tokens_for("mission", MATCH, palette)),
             QRectF(40, 40, 39, 36),
             QRectF(40, 90, 361, 36),
         ),
         "timeline": (
-            TimelinePainter(tokens_for("timeline", options_for(None, "timeline")["colour"], palette)),
+            TimelinePainter(tokens_for("timeline", MATCH, palette)),
             QRectF(40, 40, 78.5, 24),
             QRectF(40, 90, 78.5, 231),
         ),
         "clay": (
-            ClayPainter(tokens_for("clay", options_for(None, "clay")["colour"], palette), full=True),
+            ClayPainter(tokens_for("clay", MATCH, palette), full=True),
             QRectF(40, 40, clay_w, 45 * 38 / 60),
             QRectF(40, 90, clay_w, 6 * 38),
         ),
