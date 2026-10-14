@@ -831,7 +831,6 @@ _BEVEL_WATCH = {
     QEvent.Type.FocusOut,
     QEvent.Type.Resize,
     QEvent.Type.Show,
-    QEvent.Type.LayoutRequest,
     QEvent.Type.HoverEnter,
     QEvent.Type.HoverLeave,
     QEvent.Type.MouseButtonPress,
