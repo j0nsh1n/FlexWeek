@@ -1777,6 +1777,7 @@ class SettingsPage(QWidget):
         self.look.set_saved(self.saved_looks)
         selected_layout_look = None
         canvas_label = None
+        unsaved_name = None
         if hasattr(self, "layout_sections"):
             main = next(section for section in self.layout_sections if section.slot == "main")
             selected_layout_look = main.values().get("look")
@@ -1797,19 +1798,17 @@ class SettingsPage(QWidget):
             custom = self._look.get("custom")
             if custom is None:
                 index = max(0, self.look.findData(look_menu_value(self._pack, self._look)))
-                unsaved_name = None
             else:
                 unsaved = custom not in self.saved_looks
                 index = -1 if unsaved else self.look.findData(SAVED_LOOK + custom["name"])
                 unsaved_name = custom.get("name") if unsaved else None
-            self.look.show_unsaved(unsaved_name)
         self.look.blockSignals(True)
         self.look.setCurrentIndex(index)
         self.look.blockSignals(False)
         if canvas_label is not None:
             self.look.show_canvas_look(canvas_label)
         else:
-            self.look.show_unsaved(None)
+            self.look.show_unsaved(unsaved_name)
 
     def _open_customise(self) -> None:
         """The look editor over Settings (plan, "Customise", B). What it changes is worn at once, as
