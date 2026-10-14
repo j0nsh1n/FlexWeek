@@ -997,10 +997,9 @@ class MonthGrid(QWidget):
             if month is not None:
                 self._drawn_for = account
                 self.canvas.open_week = self._week.week_start if self._week is not None else None
-                weeks = dict(self._unsaved)
-                if self._week is not None and self._week.week_start:
-                    weeks[self._week.week_start] = self._week
-                self.canvas.set_cells(month_cells(None, weeks, today_iso or date.today().isoformat(), month))
+                self.canvas.set_cells(
+                    month_cells(None, self._weeks_as_kept(), today_iso or date.today().isoformat(), month)
+                )
                 # The dates are all there; a "Loading month…" line would take a row and give it back,
                 # and the month would grow when its chips came.
                 self._say(self.warning, "")
@@ -1012,9 +1011,7 @@ class MonthGrid(QWidget):
         self._drawn_for = account
         # Every week is drawn as the student has it, saved or not, so there is no "saved only" to say.
         self._say(self.warning, "")
-        weeks = dict(self._unsaved)
-        if self._week is not None and self._week.week_start:
-            weeks[self._week.week_start] = self._week
+        weeks = self._weeks_as_kept()
         self.canvas.open_week = self._week.week_start if self._week is not None else None
         today = today_iso or date.today().isoformat()
         self.canvas.set_cells(month_cells(snapshot, weeks, today, month))
@@ -1026,6 +1023,13 @@ class MonthGrid(QWidget):
             )
         if chosen:
             self.select(chosen)
+
+    def _weeks_as_kept(self) -> dict:
+        """The weeks the student has now, by their Monday: those left unsaved and the open one."""
+        weeks = dict(self._unsaved)
+        if self._week is not None and self._week.week_start:
+            weeks[self._week.week_start] = self._week
+        return weeks
 
     @staticmethod
     def _say(label: QLabel, words: str) -> None:
