@@ -100,7 +100,7 @@ from desktop.native.fonts import load_fonts, without_ligatures
 from desktop.native.hours.canvas import Drawn, HoursCanvas, plan_placed
 from desktop.native.hours.classic import ClassicDay, ClassicWeek
 from desktop.native.hours.geometry import Span, drag_step, next_slot
-from desktop.native.hours.hand import Create, Hand, Move, MoveDate, Place, span_words
+from desktop.native.hours.hand import Create, Gesture, Hand, Move, MoveDate, Place, span_words
 from desktop.native.hours.hand import Verdict as HandVerdict
 from desktop.native.hours.month import MonthGrid
 from desktop.native.hours.rail import MonthCard, Rail, next_words
@@ -3648,11 +3648,13 @@ class NativeWindow(QMainWindow):
         for view in self._views.values():
             view.hold(holding)
         if not holding:
-            QTimer.singleShot(0, self, self._refresh_after_hold)
+            refresh_week = self.hand.release_kind is not Gesture.CREATE
+            QTimer.singleShot(0, self, lambda: self._refresh_after_hold(refresh_week=refresh_week))
 
-    def _refresh_after_hold(self) -> None:
+    def _refresh_after_hold(self, *, refresh_week: bool = True) -> None:
         if self.session.account is not None and not self.hand.busy:
-            self._fill_classic()
+            if refresh_week:
+                self._fill_classic()
             self._show_change()
 
     def _set_notice(self, text: str, button: str, callback) -> None:

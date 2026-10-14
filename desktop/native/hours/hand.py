@@ -207,6 +207,7 @@ class Hand(QObject):
         self._pressed_at = QPoint()
         self._last = QPoint()
         self._active = False
+        self._release_kind: Gesture | None = None
         self._home: tuple[QWidget, Track] | None = None
         self._track: tuple[QWidget, Track] | None = None
         self._edge: tuple[QScrollArea, int, int, float] | None = None
@@ -229,6 +230,10 @@ class Hand(QObject):
     @property
     def active(self) -> bool:
         return self._active
+
+    @property
+    def release_kind(self) -> Gesture | None:
+        return self._release_kind
 
     def preview_held(self) -> Held | None:
         """What is held once it is being carried, for a surface to draw it lifted."""
@@ -329,7 +334,11 @@ class Hand(QObject):
         held, active, preview, target = self._held, self._active, self.preview, self.month_target
         verdict = self.month_verdict
         tap = self._tap
-        self._end(silent=True)
+        self._release_kind = held.kind if held is not None and active else None
+        try:
+            self._end(silent=True)
+        finally:
+            self._release_kind = None
         if held is None:
             return
         if not active:
