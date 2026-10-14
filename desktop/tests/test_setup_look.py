@@ -17,7 +17,7 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QPoint, QSize, QStandardPaths
+    from PySide6.QtCore import QPoint, QSize, QStandardPaths, Qt
     from PySide6.QtGui import QColor
     from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
 
@@ -234,6 +234,75 @@ def test_the_style_pager_dots_share_one_box_and_only_the_current_one_is_accent(
             assert centre == QColor(palette["accent"]), key
         else:
             assert centre != QColor(palette["accent"]), key
+
+
+def test_style_look_swatches_follow_the_design_and_change_the_preview(
+    qapp: QApplication, dressed: tuple[SetupPage, dict]
+) -> None:
+    from desktop.native.layouts.registry import DESIGN_LOOKS
+    from desktop.native.look import design_look
+    from desktop.native.setup import STYLES
+
+    setup, _palette = dressed
+    setup._show(STYLE)
+    carousel = setup.carousel
+    swatches = list(carousel.look_swatches.values())
+    assert list(carousel.look_swatches) == [token for token, _name in DESIGN_LOOKS["classic"]]
+    assert swatches[0].isChecked()
+    assert all(button.isVisibleTo(setup) for button in swatches)
+    assert all(button.width() == 24 and button.height() == 24 for button in swatches)
+    assert all(button.focusPolicy() & Qt.FocusPolicy.TabFocus for button in swatches)
+
+    before = carousel.slides["plain"].picture.pixmap().toImage()
+    choice = next(button for button in swatches if button.property("lookToken") == "preset:high-contrast")
+    assert choice.accessibleName() == "High contrast"
+    assert choice.toolTip() == "High contrast"
+    choice.click()
+    qapp.processEvents()
+    after = carousel.slides["plain"].picture.pixmap().toImage()
+    assert choice.isChecked()
+    assert before != after
+    background = QColor(design_look("preset:high-contrast", "light-frost", False, None)[0]["window"])
+    after_background = sum(
+        after.pixelColor(x, y) == background for x in range(after.width()) for y in range(after.height())
+    )
+    before_background = sum(
+        before.pixelColor(x, y) == background for x in range(before.width()) for y in range(before.height())
+    )
+    assert after_background > before_background
+    assert setup._layout["options"]["classic"]["look"] == "preset:high-contrast"
+
+    # Another design shows its own looks with its signature picked; coming back keeps this setup's pick.
+    setup.carousel.go_to("dashboard")
+    assert setup.carousel.key() == "dashboard"
+    bento = list(setup.carousel.look_swatches.values())
+    assert bento[0].isChecked() and bento[0].property("lookToken") == DESIGN_LOOKS["bento"][0][0]
+    assert setup._layout["options"]["bento"]["look"] == DESIGN_LOOKS["bento"][0][0]
+    setup.carousel.go_to("plain")
+    assert setup.carousel.look_swatches["preset:high-contrast"].isChecked()
+    for style in STYLES:
+        setup.carousel.go_to(style.key)
+        assert list(setup.carousel.look_swatches) == [
+            token for token, _name in DESIGN_LOOKS[style.main]
+        ]
+
+
+def test_style_look_swatches_fit_at_1024_by_640_large_text(
+    qapp: QApplication, dressed: tuple[SetupPage, dict]
+) -> None:
+    setup, _palette = dressed
+    setup._look = {**setup._look, "knobs": {**setup._look.get("knobs", {}), "text": "large"}}
+    setup.set_palette(resolved_palette(setup._pack, False, setup._look))
+    setup.resize(1024, 640)
+    setup._show(STYLE)
+    qapp.processEvents()
+    row = setup.carousel.look_row
+    swatches = list(setup.carousel.look_swatches.values())
+    assert row.width() >= sum(button.width() for button in swatches)
+    assert row.height() == 24
+    assert all(button.isVisibleTo(setup) for button in swatches)
+    page = setup.pages[STYLE]
+    assert row.mapTo(page.widget(), QPoint(0, 0)).y() + row.height() <= page.viewport().height()
 
 
 def test_a_homework_row_lines_its_fields_up_on_one_left_edge(

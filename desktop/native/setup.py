@@ -27,6 +27,7 @@ from PySide6.QtGui import (
     QKeyEvent,
     QMouseEvent,
     QPainter,
+    QPaintEvent,
     QPen,
     QPixmap,
     QResizeEvent,
@@ -86,6 +87,7 @@ from desktop.native.layouts.registry import (
 from desktop.native.look import (
     KNOB_VALUE_LABELS,
     LOOK_KNOBS,
+    design_look,
     effective_look,
     parse_look_menu_token,
     readable_focus_edge,
@@ -666,6 +668,35 @@ class StyleSlide(QFrame):
         super().mouseReleaseEvent(event)
 
 
+class LookSwatch(QPushButton):
+    def __init__(self, name: str, palette: dict, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._palette = palette
+        self.setCheckable(True)
+        self.setFixedSize(24, 24)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAccessibleName(name)
+        self.setToolTip(name)
+
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        accent = QColor(self._palette["accent"])
+        ring = accent if self.isChecked() else QColor(self._palette["hairline_strong"])
+        painter.setPen(QPen(ring, 2.2 if self.isChecked() else 1.2))
+        painter.setBrush(QColor(self._palette["window"]))
+        painter.drawEllipse(QRectF(2.0, 2.0, 20.0, 20.0))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(accent)
+        painter.drawEllipse(QRectF(12.5, 12.5, 6.0, 6.0))
+        if self.hasFocus():
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(QColor(self._palette["text"]), 1.0, Qt.PenStyle.DotLine))
+            painter.drawEllipse(QRectF(0.5, 0.5, 23.0, 23.0))
+        painter.end()
+
+
 class StyleCarousel(QFrame):
     """One style's picture large in the middle, the one before and the one after peeking at the sides
     dimmed, an arrow and a dot for each below, then the name and one note. Whatever is in the middle is
@@ -675,6 +706,7 @@ class StyleCarousel(QFrame):
 
     # The key of the style that is now in the middle and chosen.
     moved = Signal(str)
+    look_picked = Signal(str)
 
     def __init__(self, styles: tuple[Style, ...], motion: Callable[[], str]) -> None:
         super().__init__()
@@ -687,6 +719,7 @@ class StyleCarousel(QFrame):
         self._index = 0
         self._chosen = False
         self._width = STYLE_PICTURE
+        self._picture_limit = STYLE_PICTURE
         box = QVBoxLayout(self)
         box.setContentsMargins(0, 0, 0, 0)
         box.setSpacing(8)
@@ -730,6 +763,16 @@ class StyleCarousel(QFrame):
         self.note.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         box.addWidget(self.name)
         box.addWidget(self.note)
+        self.look_row = QWidget()
+        self.look_row.setObjectName("setupLookSwatches")
+        self.look_row.setAccessibleName("Looks for this style")
+        self.look_line = QHBoxLayout(self.look_row)
+        self.look_line.setContentsMargins(0, 0, 0, 0)
+        self.look_line.setSpacing(8)
+        box.addWidget(self.look_row, 0, Qt.AlignmentFlag.AlignHCenter)
+        self.look_swatches: dict[str, QPushButton] = {}
+        self.look_group = QButtonGroup(self)
+        self.look_group.setExclusive(True)
         self._arrange(delta=0)
         self._refresh()
 
@@ -753,6 +796,33 @@ class StyleCarousel(QFrame):
 
     def is_chosen(self) -> bool:
         return self._chosen
+
+    def limit_picture_to(self, width: int) -> None:
+        self._picture_limit = max(STYLE_PICTURE_MIN, min(STYLE_PICTURE, width))
+        self._arrange(delta=0)
+
+    def set_looks(self, choices: tuple[tuple[str, str, dict], ...], selected: str) -> None:
+        if tuple(self.look_swatches) == tuple(token for token, _name, _palette in choices):
+            for token, swatch in self.look_swatches.items():
+                swatch.setChecked(token == selected)
+                swatch.setAccessibleDescription("Selected" if token == selected else "")
+            return
+        while self.look_line.count():
+            item = self.look_line.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                self.look_group.removeButton(widget)
+                widget.deleteLater()
+        self.look_swatches.clear()
+        for token, name, palette in choices:
+            swatch = LookSwatch(name, palette)
+            swatch.setProperty("lookToken", token)
+            swatch.setChecked(token == selected)
+            swatch.setAccessibleDescription("Selected" if token == selected else "")
+            swatch.clicked.connect(lambda _checked=False, value=token: self.look_picked.emit(value))
+            self.look_group.addButton(swatch)
+            self.look_line.addWidget(swatch)
+            self.look_swatches[token] = swatch
 
     def show_style(self, key: str, chosen: bool) -> None:
         """The middle at `key`, and whether it counts as chosen, without moving or saying so."""
@@ -793,7 +863,11 @@ class StyleCarousel(QFrame):
             return
         count = len(self._order)
         picture = max(
-            STYLE_PICTURE_MIN, min(STYLE_PICTURE, room - 2 * (PEEK_PX + CAROUSEL_GAP) - CAROUSEL_CHROME)
+            STYLE_PICTURE_MIN,
+            min(
+                self._picture_limit,
+                room - 2 * (PEEK_PX + CAROUSEL_GAP) - CAROUSEL_CHROME,
+            ),
         )
         resized = picture != self._width
         self._width = picture
@@ -1200,6 +1274,7 @@ class SetupPage(QWidget):
         self._pack, self._look, self._layout = self._state.pack, self._state.look, self._state.layout
         self._entered: tuple[str, dict, dict] = (self._pack, deepcopy(self._look), deepcopy(self._layout))
         self._style_key: str | None = None
+        self._style_looks: dict[str, str] = {}
         # Homework this run of setup made, by name, so Back and Next again edits it rather than adding
         # it twice.
         self._made: dict[str, str] = {}
@@ -1346,6 +1421,7 @@ class SetupPage(QWidget):
         box.setContentsMargins(0, 0, 0, 0)
         self.carousel = StyleCarousel(STYLES, lambda: self.motion)
         self.carousel.moved.connect(lambda key: self._choose_style(next(s for s in STYLES if s.key == key)))
+        self.carousel.look_picked.connect(self._choose_style_look)
         self.style_cards = self.carousel.slides
         box.addWidget(self.carousel)
         own = QPushButton(OWN_LOOK_LABEL)
@@ -1720,11 +1796,15 @@ class SetupPage(QWidget):
     def _style_in_use(self) -> str | None:
         if self._state.first_run:
             return DEFAULT_STYLE
-        return matching_style(self._pack, self._look, self._layout)
+        matched = matching_style(self._pack, self._look, self._layout)
+        if matched is not None:
+            return matched
+        return next((style.key for style in STYLES if style.main == self._layout["main"]), None)
 
     def _fill_style(self) -> None:
         # A new account starts on Plain calendar, chosen, so Next without a click keeps it.
         self._style_key = self._style_in_use()
+        self._seed_style_looks()
         self.carousel.show_style(self._style_key or DEFAULT_STYLE, chosen=self._style_key is not None)
         for layout_id, card in self.look_cards.items():
             card.select(layout_id == self._layout["main"])
@@ -1734,6 +1814,10 @@ class SetupPage(QWidget):
             card.set_picture(
         self._previews.get(style.main, style.colour, style.pack, style_look(style), STYLE_PICTURE)
             )
+        active = next((item for item in STYLES if item.key == self._style_key), next(
+            (item for item in STYLES if item.main == self._layout["main"]), STYLES[0]
+        ))
+        self._refresh_style_look(active)
         self._pending_pictures = []
         for spec in layouts_for("plan"):
             look = DESIGN_LOOKS[spec.id][0][0]
@@ -2011,6 +2095,7 @@ class SetupPage(QWidget):
                 self._pack = style.pack
                 self._look = style_look(style)
                 self._layout = style_layout(style, self._layout)
+                self._layout["options"][style.main]["look"] = self._refresh_style_look(style)
                 self._preview()
         if step == LOOK:
             for layout_id, card in self.look_cards.items():
@@ -2114,6 +2199,7 @@ class SetupPage(QWidget):
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)
+        self.carousel.limit_picture_to(self.height() - 280)
         QTimer.singleShot(0, self, lambda: self._place_marker(animate=False))
 
     # The look pages
@@ -2128,8 +2214,31 @@ class SetupPage(QWidget):
         if (pack, look, layout) != (self._pack, self._look, self._layout):
             self._pack, self._look, self._layout = pack, deepcopy(look), deepcopy(layout)
             self._style_key = self._style_in_use()
+            self._seed_style_looks()
             self.carousel.show_style(self._style_key or DEFAULT_STYLE, chosen=self._style_key is not None)
+            style = next((item for item in STYLES if item.key == self._style_key), STYLES[0])
+            self._refresh_style_look(style)
             self._preview()
+
+    def _seed_style_looks(self) -> None:
+        self._style_looks = {main: choices[0][0] for main, choices in DESIGN_LOOKS.items()}
+        for main, choices in DESIGN_LOOKS.items():
+            saved = options_for(self._layout, main).get("look")
+            if saved in {token for token, _name in choices}:
+                self._style_looks[main] = saved
+
+    def _refresh_style_look(self, style: Style) -> str:
+        token = self._style_looks.setdefault(style.main, DESIGN_LOOKS[style.main][0][0])
+        look = style_look(style)
+        choices = tuple(
+            (value, name, design_look(value, style.pack, False, look)[0])
+            for value, name in DESIGN_LOOKS[style.main]
+        )
+        self.carousel.set_looks(choices, token)
+        self.carousel.slides[style.key].set_picture(
+            self._previews.get(style.main, token, style.pack, look, STYLE_PICTURE)
+        )
+        return token
 
     def _choose_style(self, style: Style) -> None:
         self._own_look = False
@@ -2137,7 +2246,19 @@ class SetupPage(QWidget):
         self.carousel.show_style(style.key, chosen=True)
         self._pack = style.pack
         self._look = style_look(style)
+        token = self._refresh_style_look(style)
         self._layout = style_layout(style, self._layout)
+        self._layout["options"][style.main]["look"] = token
+        self._preview()
+
+    def _choose_style_look(self, token: str) -> None:
+        style = next((item for item in STYLES if item.key == self._style_key), None)
+        if style is None:
+            return
+        self._style_looks[style.main] = token
+        self._refresh_style_look(style)
+        self._layout = style_layout(style, self._layout)
+        self._layout["options"][style.main]["look"] = token
         self._preview()
 
     def _choose_main(self, layout_id: str) -> None:
@@ -2395,6 +2516,7 @@ class SetupPage(QWidget):
                 style_look(style),
                 style_layout(style, self._layout),
             )
+            self._layout["options"][style.main]["look"] = self._refresh_style_look(style)
         if step in LOOK_STEPS:
             return {"pack": self._pack, "look": deepcopy(self._look), "layout": deepcopy(self._layout)}
         if step == WEEK:

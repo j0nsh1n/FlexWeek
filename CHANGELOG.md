@@ -16,6 +16,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - A saved design with no look keeps the account's own look, and Setup saves Light or Dark when picked as a Today's app style.
 
 ### Changed
+- Setup's style carousel offers each design's curated looks and previews the selected one before it is applied.
 - Each main and day design now offers its own curated looks. The selected look's colours carry across the app, design canvas and My day while the design keeps its own structure and typography; legacy design colours migrate to matching looks.
 
 ## [1.0.0] - 2026-10-15

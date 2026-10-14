@@ -152,7 +152,7 @@ class Previews:
         this_week = monday_of(date.today().isoformat())
         return (
             main,
-            colour if main in VIEW_CLASSES else pack,
+            colour if colour not in (None, "your") else pack,
             effective_look(look)["text"],
             width,
             this_week,

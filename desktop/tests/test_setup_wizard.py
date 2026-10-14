@@ -261,11 +261,32 @@ def test_every_page_is_kept_when_the_student_leaves_it(qapp: QApplication, serve
     assert window._layout["main"] == "bento"
     assert window.session.preferences["setup"]["finished_at"]
     close(qapp, window)
-
     again = sign_in(qapp, server, "setup_walk")
     assert page(again) == "weekPage", "setup does not come back once it is finished"
     assert again.session.preferences["alarm_tone"] == "glass"
     close(qapp, again)
+
+
+def test_a_style_look_is_saved_and_selected_in_settings(qapp: QApplication, server: LocalServer) -> None:
+    window = new_account(qapp, server, "setup_style_look")
+    setup = window.setup_page
+    setup.carousel.look_swatches["preset:high-contrast"].click()
+    setup.next.click()
+    written(qapp, window)
+    saved = json.loads(look_file().read_text())
+    assert saved["layout"]["main"] == "classic"
+    assert saved["layout"]["options"]["classic"]["look"] == "preset:high-contrast"
+
+    while setup.step != DONE:
+        setup.skip.click()
+    assert setup.summary_text()[0] == "Today's app in High contrast"
+    setup.skip_all.click()
+    written(qapp, window)
+    window._open_settings()
+    choice = window._settings.findChild(QComboBox, "layoutMain-look")
+    assert choice is not None
+    assert choice.currentData() == "preset:high-contrast"
+    close(qapp, window)
 
 
 def test_skipping_every_page_keeps_nothing_and_setup_never_returns(
