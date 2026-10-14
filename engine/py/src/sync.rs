@@ -54,6 +54,7 @@ fn summary_dict<'py>(py: Python<'py>, summary: &SyncSummary) -> PyResult<Bound<'
     dict.set_item("received", summary.received)?;
     dict.set_item("applied", summary.applied)?;
     dict.set_item("quarantined", summary.quarantined)?;
+    dict.set_item("clock_skewed", summary.clock_skewed)?;
     dict.set_item("exchanges", summary.exchanges)?;
     Ok(dict)
 }

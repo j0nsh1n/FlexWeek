@@ -37,6 +37,7 @@ if importlib.util.find_spec("PySide6") is not None:
         DevicesPanel,
         PairDialog,
         SyncHost,
+        clock_warning_words,
         countdown_words,
         dot_colour,
         linked_phone_at_launch,
@@ -81,6 +82,12 @@ def test_the_pairing_sheet_says_its_countdown_tries_and_problems_in_plain_words(
     assert pair_problem("expired") == "That code has expired. Start a new one."
     assert pair_problem("too_many_tries") == "Too many wrong tries. Start a new code."
     assert pair_problem("waiting") == ""
+
+
+def test_clock_skewed_changes_are_reported_only_when_the_count_is_positive() -> None:
+    assert clock_warning_words(0) == ""
+    assert clock_warning_words(1) == "Your phone's clock looks wrong. 1 change was held back."
+    assert clock_warning_words(3) == "Your phone's clock looks wrong. 3 changes were held back."
 
 
 def test_the_relay_sentence_is_the_agreed_one() -> None:
@@ -187,13 +194,13 @@ def listed_phones(panel: DevicesPanel) -> list[str]:
 
 
 def pair_a_phone(qapp: QApplication, window: NativeWindow, phone: SyncService) -> DevicesPanel:
-    """Pairs `phone` the way a student does: Pair a phone on the card, then the phone reads the text."""
+    """Pairs `phone` by passing the pairing payload from the hidden test boundary."""
     panel = devices_panel(window)
     panel.pair_button.click()
     sheet = panel.dialog
     code = sheet.findChild(QLabel, "pairCode")
     wait_until(qapp, lambda: re.fullmatch(r"\d{4} \d{4}", code.text()) is not None)
-    text = sheet.findChild(QLineEdit, "pairQr").text()
+    text = sheet._qr_payload
     assert text.startswith("flexweek://pair/2?c=" + code.text().replace(" ", ""))
     phone.pair_from_qr(text, PAIR_DEADLINE_MS)
     wait_until(qapp, lambda: listed_phones(panel) == [PHONE_NAME])
@@ -236,6 +243,22 @@ def test_sync_now_with_a_linked_phone_reports_no_problem(
     wait_until(qapp, lambda: desk.sync_dot.toolTip() == DOT_WORDS["synced"])
     assert panel.findChild(QLabel, "devicesProblem").text() == ""
     assert UNREACHABLE_WORDS not in {label.text() for label in panel.findChildren(QLabel)}
+
+
+def test_the_devices_card_shows_and_clears_the_clock_warning(qapp: QApplication) -> None:
+    panel = DevicesPanel(None, lambda: 1)
+    warning = panel.findChild(QLabel, "clockWarning")
+    assert warning is not None and warning.isHidden()
+
+    panel._synced(
+        [("phone-a", {"clock_skewed": 1}, None), ("phone-b", {"clock_skewed": 2}, None)],
+        None,
+    )
+    assert warning.text() == "Your phone's clock looks wrong. 3 changes were held back."
+    assert not warning.isHidden()
+
+    panel._synced([("phone-a", {"clock_skewed": 0}, None)], None)
+    assert warning.isHidden()
 
 
 class GenerationProxy:
@@ -382,6 +405,11 @@ def test_pressing_pair_starts_the_service_once_and_opens_the_pairing_sheet(
     assert host.service is not None
     code = panel.dialog.findChild(QLabel, "pairCode")
     wait_until(qapp, lambda: re.fullmatch(r"\d{4} \d{4}", code.text()) is not None)
+    labels = [label.text() for label in panel.dialog.findChildren(QLabel)]
+    assert not any("scan the code" in text.lower() for text in labels)
+    assert panel.dialog.findChild(QLineEdit, "pairQr") is None
+    assert code.font().pointSize() >= 24
+    assert panel.dialog.status.text().startswith("Code works for ")
     panel.dialog.reject()
 
 

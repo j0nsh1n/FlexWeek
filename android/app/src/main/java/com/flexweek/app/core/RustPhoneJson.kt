@@ -90,7 +90,7 @@ internal object RustPhoneJson {
 
     fun sync(raw: String, zone: ZoneId = ZoneId.systemDefault()): String {
         if (!raw.startsWith("{")) return JSONObject().put("paired", false)
-            .put("state", "unreachable").put("line", "No computer is linked yet.").toString()
+            .put("state", "unreachable").put("line", "No computer linked. Your week is saved here.").toString()
         val root = JSONObject(raw)
         if (root.optString("state") == "unreachable" && root.optBoolean("paired") && !root.isNull("last_sync_ms")) {
             val at = Instant.ofEpochMilli(root.getLong("last_sync_ms")).atZone(zone).format(timeFormat)

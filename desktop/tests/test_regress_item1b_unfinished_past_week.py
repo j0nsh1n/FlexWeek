@@ -153,3 +153,14 @@ def test_left_over_classification_uses_the_session_clock(qapp, window) -> None:
     settled(qapp, window)
     item = next(item for item in session.unfinished() if item["id"] == "lab")
     assert item["left_over_state"] == "overdue"
+
+
+def test_the_past_week_tag_survives_editing_the_assignment(qapp, window) -> None:
+    left_in_week_one(qapp, window)
+    session = window.session
+    session.add_homework({**session.assignments["lab"], "title": "Updated lab report"})
+    session.save()
+    settled(qapp, window)
+
+    item = next(item for item in session.unfinished() if item["id"] == "lab")
+    assert item["left_over_state"] == "left_from_last_week"

@@ -934,6 +934,8 @@ class NativeSession(QObject):
             for key in ("revision", "focus_minutes", "focus_sessions"):
                 payload[key] = known.get(key) or 0
         body = Assignment.model_validate(payload).model_dump(mode="json")
+        if known is not None:
+            body["session_weeks"] = list(known.get("session_weeks") or [])
         sessions = [item for item in self.blocks if item.get("assignment_id") == body["id"]]
         # One session as long as the old estimate is the homework's only planned time, so it follows
         # the new estimate. Spread, pasted or partly planned sessions keep the lengths already chosen.
@@ -1781,6 +1783,19 @@ class NativeSession(QObject):
         def ok(data: dict) -> None:
             if not self._idle(ticket):
                 return
+            session_weeks_by_id: dict[str, set[str]] = {}
+            changed_weeks = set()
+            for week in data.get("weeks") or []:
+                week_start = week["week_start"]
+                changed_weeks.add(week_start)
+                for block in week.get("blocks") or []:
+                    assignment_id = block.get("assignment_id")
+                    if assignment_id:
+                        session_weeks_by_id.setdefault(assignment_id, set()).add(week_start)
+            for assignment_id, assignment in self.assignments.items():
+                weeks = set(assignment.get("session_weeks") or []) - changed_weeks
+                weeks.update(session_weeks_by_id.get(assignment_id, set()))
+                assignment["session_weeks"] = sorted(weeks)
             current = next(
                 (week for week in data.get("weeks") or [] if week["week_start"] == self.week_start),
                 None,
@@ -1795,6 +1810,9 @@ class NativeSession(QObject):
                 if result.get("assignment"):
                     stored = dict(result["assignment"])
                     stored["revision"] = result["revision"]
+                    stored["session_weeks"] = list(
+                        self.assignments.get(result["id"], {}).get("session_weeks") or []
+                    )
                     self.assignments[result["id"]] = stored
                 else:
                     self.assignments.pop(result["id"], None)

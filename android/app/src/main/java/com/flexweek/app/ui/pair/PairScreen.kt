@@ -24,6 +24,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
+internal const val DESKTOP_PAIR_PATH = "Settings > This computer > Devices > Pair a phone"
+
 @Composable
 fun PairScreen(
     state: PairUiState,
@@ -39,7 +41,7 @@ fun PairScreen(
     ) {
         Text("Pair with your computer", style = MaterialTheme.typography.titleLarge)
         Text(
-            "On your computer open Settings › Devices › Link a device. It shows a code.",
+            "On your computer open $DESKTOP_PAIR_PATH. It shows a code.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,

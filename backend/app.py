@@ -1223,12 +1223,20 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             rows = db.list_assignment_rows(account["id"])
             weeks = list_account_weeks(db, account["id"])
         planned_by_id = planned_minutes_by_id(weeks, week_start)
+        session_weeks_by_id: dict[str, set[str]] = {}
+        for saved_week, blocks in weeks:
+            for block in blocks:
+                assignment_id = block.get("assignment_id")
+                if assignment_id:
+                    session_weeks_by_id.setdefault(assignment_id, set()).add(saved_week)
         items = []
         for row_id, row_body, row_revision in rows:
             body = json.loads(row_body)
             if body["completed"] and not include_completed:
                 continue
-            items.append(assignment_view(body, row_revision, planned_by_id.get(row_id, 0)))
+            item = assignment_view(body, row_revision, planned_by_id.get(row_id, 0))
+            item["session_weeks"] = sorted(session_weeks_by_id.get(row_id, set()))
+            items.append(item)
         items.sort(key=lambda item: due_sort_key(item["due"], item["id"]))
         return {"assignments": items}
 

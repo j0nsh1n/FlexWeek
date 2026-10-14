@@ -366,6 +366,9 @@ pub fn apply_batch(conn: &mut Connection, batch: &Batch, now_ms: i64) -> SyncRes
         if let Some(reason) = reason {
             quarantine(&tx, id, record, reason, now_ms)?;
             report.quarantined += 1;
+            if future {
+                report.clock_skewed += 1;
+            }
             continue;
         }
         if record.entity == "account"

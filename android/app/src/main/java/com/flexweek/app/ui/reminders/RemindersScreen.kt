@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.flexweek.app.ui.components.SyncLineBar
 import com.flexweek.app.model.SyncLine
+import com.flexweek.app.ui.pair.DESKTOP_PAIR_PATH
 
 @Composable
 fun RemindersScreen(
@@ -119,7 +120,7 @@ fun RemindersScreen(
                 },
             )
             Text(
-                "Add another device from the computer, not from here: Settings › Devices › Link a device.",
+                "Add another device from the computer: $DESKTOP_PAIR_PATH.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 8.dp),

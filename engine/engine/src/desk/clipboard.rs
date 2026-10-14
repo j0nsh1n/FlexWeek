@@ -547,14 +547,17 @@ pub fn left_over_items(
             false
         } else {
             let week = json!(today_week);
-            let mut earlier = false;
-            for saved in iterate(saved_weeks)? {
-                if compare(Cmp::Lt, &saved, &week)? {
-                    earlier = true;
+            let empty_weeks = Value::Array(Vec::new());
+            let session_weeks = get(assignment, "session_weeks")?.unwrap_or(&empty_weeks);
+            let mut had_past_session = false;
+            for session_week in iterate(session_weeks)? {
+                if compare(Cmp::Lt, &session_week, &week)? && contains(saved_weeks, &session_week)?
+                {
+                    had_past_session = true;
                     break;
                 }
             }
-            earlier
+            had_past_session
         };
         if !overdue && !carried {
             continue;

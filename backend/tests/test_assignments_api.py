@@ -113,7 +113,14 @@ def test_put_revision_zero_creates_at_revision_one_and_identical_body_does_not_b
     assert stale_same.json() == assignment(revision=1)
     listed = alice.get(f"/api/assignments?week_start={WEEK_ONE}")
     assert listed.json() == {
-        "assignments": [{**assignment(revision=1), "planned_min": 0, "unplanned_min": 120}]
+        "assignments": [
+            {
+                **assignment(revision=1),
+                "planned_min": 0,
+                "unplanned_min": 120,
+                "session_weeks": [],
+            }
+        ]
     }
 
 
@@ -172,6 +179,13 @@ def test_planned_and_unplanned_minutes_count_open_sessions_in_this_week_and_late
     assert week_one["unplanned_min"] == 75
     assert week_two["planned_min"] == 45
     assert week_two["unplanned_min"] == 135
+
+
+def test_assignment_lists_weeks_with_saved_sessions(alice: TestClient) -> None:
+    assert put_assignment(alice, assignment()).status_code == 200
+    assert save_week(alice, WEEK_ONE, [session("w1", "hw-essay")], 0).status_code == 200
+    listed = alice.get(f"/api/assignments?week_start={WEEK_TWO}")
+    assert listed.json()["assignments"][0]["session_weeks"] == [WEEK_ONE]
 
 
 def test_week_put_rewrites_session_copies_and_rejects_another_accounts_assignment(

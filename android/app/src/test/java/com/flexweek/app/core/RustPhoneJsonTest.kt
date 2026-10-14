@@ -9,6 +9,11 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class RustPhoneJsonTest {
+    @Test fun missingComputerLineUsesShortCopy() {
+        val sync = JSONObject(RustPhoneJson.sync("not paired"))
+        assertEquals("No computer linked. Your week is saved here.", sync.getString("line"))
+    }
+
     @Test fun reminderBodyShowsTheStartAndLength() {
         assertEquals("6:00 PM · 30 min", RustPhoneJson.reminderBody("18:00", 30))
         assertEquals("7:00 PM · 1 h", RustPhoneJson.reminderBody("19:00", 60))

@@ -120,7 +120,7 @@ impl SyncApi for NativeSync {
         let (state, line) = if peer.is_none() {
             (
                 "unreachable",
-                "No computer is linked. Your saved week stays on this phone.".to_string(),
+                "No computer linked. Your week is saved here.".to_string(),
             )
         } else if status.as_ref().is_some_and(|status| status.syncing) {
             ("syncing", "Syncing…".into())
@@ -297,6 +297,11 @@ mod tests {
         let desktop = SyncService::start(cfg).unwrap();
         let mut native = NativeSync::new(&phone_path, "Phone", host.clone(), None);
         native.transport = transport;
+        let unpaired_status: Value = serde_json::from_str(&native.status()).unwrap();
+        assert_eq!(
+            unpaired_status["line"],
+            "No computer linked. Your week is saved here."
+        );
         let phone_service = native.service().unwrap();
         let phone = FlexWeek {
             db: Mutex::new(flexweek_store::open_connection(&phone_path).unwrap()),

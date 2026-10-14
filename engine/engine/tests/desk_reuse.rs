@@ -460,11 +460,19 @@ fn test_unfinished_lists_a_morning_deadline_before_one_with_no_time() {
 }
 
 #[test]
-fn test_left_over_classifies_deadlines_against_today_not_the_open_week() {
+fn test_left_over_requires_a_session_in_an_earlier_saved_week() {
     let overdue = with(essay(), json!({"id": "bio", "due": "2026-10-14"}));
-    let carried = with(essay(), json!({"id": "lab", "due": "2026-10-21"}));
+    let no_past_session = with(essay(), json!({"id": "lab", "due": "2026-10-21"}));
+    let past_session = with(
+        essay(),
+        json!({"id": "history", "due": "2026-10-21", "session_weeks": ["2026-10-05"]}),
+    );
+    let current_session = with(
+        essay(),
+        json!({"id": "math", "due": "2026-10-21", "session_weeks": ["2026-10-12"]}),
+    );
     let items = clipboard::left_over_items(
-        &json!({"bio": overdue, "lab": carried}),
+        &json!({"bio": overdue, "lab": no_past_session, "history": past_session, "math": current_session}),
         &json!(["2026-10-05"]),
         "2026-10-12",
         "2026-10-17T10:00",
@@ -482,7 +490,15 @@ fn test_left_over_classifies_deadlines_against_today_not_the_open_week() {
         })
         .collect();
     assert_eq!(states["bio"], "overdue");
-    assert_eq!(states["lab"], "left_from_last_week");
+    assert!(
+        !states.contains_key("lab"),
+        "an earlier saved week alone is not a past session"
+    );
+    assert_eq!(states["history"], "left_from_last_week");
+    assert!(
+        !states.contains_key("math"),
+        "a session in today's week is not from last week"
+    );
 }
 
 #[test]
@@ -556,7 +572,7 @@ fn test_left_from_last_week_subtracts_focus_and_sessions_ticked_done() {
     // Adding 30 min of focus leaves 30 min. An unticked session does not count as done.
     let carried_2h = with(
         essay(),
-        json!({"estimate_min": 120, "unplanned_min": 120, "due": "2026-10-21"}),
+        json!({"estimate_min": 120, "unplanned_min": 120, "due": "2026-10-21", "session_weeks": ["2026-10-05"]}),
     );
     let done_hour =
         json!({"id": "done", "assignment_id": "essay", "duration_min": 60, "completed": true});
@@ -595,7 +611,7 @@ fn test_block_without_duration_counts_as_zero_minutes_in_both_states() {
     );
     let carried = with(
         essay(),
-        json!({"estimate_min": 120, "unplanned_min": 120, "due": "2026-10-21"}),
+        json!({"estimate_min": 120, "unplanned_min": 120, "due": "2026-10-21", "session_weeks": ["2026-10-05"]}),
     );
     for (assignment, saved, now, state) in [
         (overdue, json!([]), "2026-10-17T10:00", "overdue"),

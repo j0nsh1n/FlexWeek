@@ -313,10 +313,10 @@ private fun NowRow(
             if (acts) {
                 Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (row.showFinishFocus) {
-                        Button(onClick = { onFinishHomework(row.id) }, modifier = Modifier.height(48.dp)) {
+                        Button(onClick = { onFinishHomework(row.id) }, modifier = Modifier.weight(1f).height(48.dp)) {
                             Text("Homework finished")
                         }
-                        Button(onClick = onStartFocus, modifier = Modifier.height(48.dp)) { Text("Start focus") }
+                        Button(onClick = onStartFocus, modifier = Modifier.weight(1f).height(48.dp)) { Text("Start focus") }
                     }
                     if (row.showRunningLate) {
                         FilledTonalButton(onClick = onRunningLate, modifier = Modifier.height(48.dp)) {

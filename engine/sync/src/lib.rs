@@ -85,6 +85,7 @@ pub struct ApplyReport {
     pub applied: usize,
     pub skipped: usize,
     pub quarantined: usize,
+    pub clock_skewed: usize,
     pub user_id: Option<i64>,
 }
 

@@ -410,6 +410,7 @@ async fn rounds(
         summary.received += batch.records.len();
         summary.applied += report.applied;
         summary.quarantined += report.quarantined;
+        summary.clock_skewed += report.clock_skewed;
         summary.exchanges += 1;
         if !push.more && !batch.more {
             return Ok(summary);

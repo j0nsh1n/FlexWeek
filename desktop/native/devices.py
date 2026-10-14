@@ -16,12 +16,12 @@ from typing import Any
 
 from flexweek_engine import SyncError, SyncService  # type: ignore[import-untyped]
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QPainter, QPalette
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPushButton, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPalette
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 from shiboken6 import isValid
 
 from desktop.native.feel import current
-from desktop.native.widgets import Dialog, caption_above, sheet_button, sheet_footer
+from desktop.native.widgets import Dialog, sheet_button, sheet_footer
 
 SYNC_SCAN_MS = 1000
 # The whole of one "Sync now" call. flexweek-sync's own default is 45 s.
@@ -138,6 +138,13 @@ def countdown_words(seconds: int) -> str:
     return f"Code works for {minutes}:{rest:02d}"
 
 
+def clock_warning_words(count: int) -> str:
+    if count <= 0:
+        return ""
+    noun, verb = ("change", "was") if count == 1 else ("changes", "were")
+    return f"Your phone's clock looks wrong. {count} {noun} {verb} held back."
+
+
 def tries_words(tries: int) -> str:
     return "1 try left" if tries == 1 else f"{tries} tries left"
 
@@ -246,7 +253,7 @@ def dot_colour(state: str, palette: QPalette) -> QColor:
 
 
 class PairDialog(Dialog):
-    """Shows a code and its QR text for a phone to pair with. Closes itself once the phone is paired."""
+    """Shows the phone's code and countdown. Closes itself once the phone is paired."""
 
     paired = Signal()
 
@@ -256,23 +263,21 @@ class PairDialog(Dialog):
         self.sync = sync
         self.user_id = user_id
         self.closed = False
+        self._qr_payload = ""
         layout = self.card_body("Pair a phone")
-        intro = QLabel("On the phone, open FlexWeek and type the numbers below, or scan the code.")
+        intro = QLabel("On the phone, open FlexWeek and type the numbers below.")
         intro.setWordWrap(True)
         layout.addWidget(intro)
         self.code = QLabel("Making a code…")
         self.code.setObjectName("pairCode")
         self.code.setAccessibleName("Pairing code")
         self.code.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        code_font = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
+        code_font.setPointSize(24)
+        code_font.setWeight(QFont.Weight.DemiBold)
+        self.code.setFont(code_font)
+        self.code.setStyleSheet("font-size: 24pt;")
         layout.addWidget(self.code)
-        self.qr_text = QLineEdit()
-        self.qr_text.setObjectName("pairQr")
-        self.qr_text.setReadOnly(True)
-        self.qr_text.setAccessibleName("Pairing text for the phone's scanner")
-        layout.addWidget(caption_above(self.qr_text.accessibleName(), self.qr_text))
-        layout.addWidget(self.qr_text)
-        self.picture = QVBoxLayout()
-        layout.addLayout(self.picture)
         self.status = QLabel("")
         self.status.setObjectName("pairStatus")
         self.status.setWordWrap(True)
@@ -296,10 +301,8 @@ class PairDialog(Dialog):
         self.again.setEnabled(False)
         self.problem.setText("")
         self.code.setText("Making a code…")
-        self.qr_text.setText("")
+        self._qr_payload = ""
         self.status.setText("")
-        while self.picture.count():
-            _discard(self.picture.takeAt(0).widget())
         run_off_ui(self, lambda: self.sync.pair_start(self.user_id), self._made)
 
     def _made(self, offer: dict | None, problem: Exception | None) -> None:
@@ -314,10 +317,7 @@ class PairDialog(Dialog):
             self.again.setEnabled(True)
             return
         self.code.setText(offer["display_code"])
-        self.qr_text.setText(offer["qr"])
-        picture = qr_picture(offer["qr"])
-        if picture is not None:
-            self.picture.addWidget(picture)
+        self._qr_payload = offer["qr"]
         self.timer.start()
         self._tick()
 
@@ -393,6 +393,11 @@ class DevicesPanel(QWidget):
         self.phones = QVBoxLayout()
         self.phones.setSpacing(6)
         column.addLayout(self.phones)
+        self.clock_warning = QLabel("")
+        self.clock_warning.setObjectName("clockWarning")
+        self.clock_warning.setWordWrap(True)
+        self.clock_warning.hide()
+        column.addWidget(self.clock_warning)
         self.problem = QLabel("")
         self.problem.setObjectName("devicesProblem")
         self.problem.setWordWrap(True)
@@ -547,15 +552,16 @@ class DevicesPanel(QWidget):
         if problem is not None:
             self.problem.setText(f"Sync failed: {problem}")
             return
+        clock_skewed = sum(
+            row[1].get("clock_skewed", 0)
+            for row in rows or []
+            if row[1] is not None and row[2] is None
+        )
+        self.clock_warning.setText(clock_warning_words(clock_skewed))
+        self.clock_warning.setVisible(clock_skewed > 0)
         failed = [row for row in rows or [] if row[2] is not None]
         self.problem.setText(UNREACHABLE_WORDS if failed else "")
         self.refresh()
-
-
-def qr_picture(payload: str) -> QWidget | None:
-    """Where the QR image is drawn. The qrcode crate is not approved yet, so the pairing sheet shows the
-    text in its field instead and this returns None."""
-    return None
 
 
 def _discard(widget: QWidget) -> None:

@@ -506,6 +506,7 @@ fn future_and_malformed_records_quarantine_without_stopping_batch() {
     });
     let report = apply_batch(&mut b, &batch, 1_000).unwrap();
     assert_eq!(report.quarantined, 3);
+    assert_eq!(report.clock_skewed, 1);
     assert_eq!(get_assignment(&b, "good"), Some(assignment("good", "Good")));
     assert_eq!(get_assignment(&b, "future"), None);
     let count: i64 = b

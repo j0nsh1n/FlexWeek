@@ -10,6 +10,7 @@
   through the relay; a same-Wi-Fi sync has not been separately reported).
   The v0.19.x features, look cards, polish and the wording sweep are in. The
   full gate is pending on the final head. v0.19.2 is the newest release.
+- 2026-10-14 lane `fix-a` implemented the saved-session carry rule, phone clock-skew sync count, pairing sheet changes, and Android phone copy/layout. Rust workspace tests, Clippy, formatting, Python lane tests, and Ruff pass; Android unit tests need an Android SDK, which is not configured here.
 - Tests that pick a day of the current week on the real clock can fail on later weekdays since item
   2: hold the clock (`grid_support.hold_clock`, `session.now_ms`). The item-3
   and hours-open suites now hold their own clocks.
@@ -132,14 +133,5 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
-- 2026-10-13, `release/1.0.0` in `~/.worktrees/flexweek-0190`, HEAD `a5f7384b`. Landed today: the
-  real engine on the phone through UniFFI (S10 follow-ups through `e243fbe9`), the five window
-  fixes (the page stays visible under a sheet's dim, the look editor's stray value-label windows,
-  due rows kept parented so Undo does not pause after a second Plan, the block-error Qt warning at
-  startup, the skipped week refresh on drag create), the clock-holding test fixes, and spec.md
-  rewritten for 1.0.0 (device sync, the n0 relay, Android, 30-day sessions). Reports and drafts:
-  `~/.flexweek-ui-harness/scratch/1.0.0/`.
-- The docs for 1.0.0 (the CHANGELOG 1.0.0 entry, `docs/release-notes-v1.0.0.md`, the README phone
-  section, `docs/android.md`, roadmap and this file) sit uncommitted in the `fw100-docs3` worktree
-  for Claude to review and commit.
-- Next: run the full gate on the final head, push `release/1.0.0` for CI, then release.
+- 2026-10-14, lane `fix-a` in detached worktree `~/.worktrees/fw100-fix-a`, based on release commit `2f4411fe`. Implemented the unfinished-homework session rule, clock-skew count on Devices, pairing sheet copy/layout, and Android pairing/sync copy and Today button sizing. Verification and commit details are in `~/.flexweek-ui-harness/scratch/1.0.0/gate/report-fix-fix-a.md`.
+- Next: review the lane commit and report, then continue the 1.0.0 release gate.

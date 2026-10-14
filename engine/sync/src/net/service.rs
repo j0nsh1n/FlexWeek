@@ -157,6 +157,8 @@ pub struct SyncSummary {
     pub applied: usize,
     /// Records this device set aside as unusable ("1 item could not be applied").
     pub quarantined: usize,
+    /// Records this device set aside because the sender's clock is more than 24 hours ahead.
+    pub clock_skewed: usize,
     pub exchanges: usize,
 }
 
