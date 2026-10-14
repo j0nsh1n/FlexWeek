@@ -99,6 +99,7 @@ from desktop.native.weekmodel import hhmm_text, length_label
 from desktop.native.widgets import (
     CARD_GAP,
     CARD_WIDTH_PAD,
+    ROUTINE_LIST_HEIGHT,
     SHEET_FORM,
     SHEET_LIST,
     CardGrid,
@@ -1798,7 +1799,7 @@ class SettingsPage(QWidget):
         return sanitize_layout(picked)
 
 
-class RestoreDialog(QDialog):
+class RestoreDialog(Dialog):
     def __init__(
         self,
         parent: QWidget | None,
@@ -1806,12 +1807,13 @@ class RestoreDialog(QDialog):
         preview: dict | None,
         storage: dict | None,
     ) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("Restore points")
+        super().__init__(parent, sheet=True)
+        self.setObjectName("restoreDialog")
         self.selected_id: str | None = None
-        layout = QVBoxLayout(self)
+        layout = self.card_body("Restore points", SHEET_LIST)
         location = QLabel((storage or {}).get("label") or "Backup location unavailable")
         location.setObjectName("storageLocation")
+        location.setWordWrap(True)
         layout.addWidget(location)
         self.label = QLineEdit()
         self.label.setObjectName("restoreLabel")
@@ -1825,6 +1827,7 @@ class RestoreDialog(QDialog):
         layout.addWidget(create)
         self.list = QListWidget()
         self.list.setObjectName("restoreList")
+        self.list.setFixedHeight(ROUTINE_LIST_HEIGHT)
         for point in points:
             item = QListWidgetItem(
                 f"{point.get('label')} · {point.get('created_at') or ''} · "
@@ -1844,7 +1847,6 @@ class RestoreDialog(QDialog):
             removed = len(weeks.get("removed") or []) + len(homework.get("removed") or [])
             self.summary.setText(f"{added} added, {changed} changed, {removed} removed.")
         layout.addWidget(self.summary)
-        actions = QHBoxLayout()
         preview_btn = QPushButton("Preview")
         preview_btn.setObjectName("restorePreview")
         preview_btn.setProperty("outlined", True)
@@ -1852,17 +1854,9 @@ class RestoreDialog(QDialog):
         restore_btn = QPushButton("Restore")
         restore_btn.setObjectName("restoreApply")
         restore_btn.clicked.connect(self._restore)
-        actions.addWidget(preview_btn)
-        actions.addWidget(restore_btn)
-        layout.addLayout(actions)
-        close = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        close.button(QDialogButtonBox.StandardButton.Close).setProperty("quiet", True)
-        close.rejected.connect(self.reject)
-        close.accepted.connect(self.reject)
-        layout.addWidget(close)
+        sheet_footer(layout, preview_btn, restore_btn, divided=True)
         self.action: str | None = None
         self.create_label = ""
-        self.selected_id: str | None = None
         preview_id = None if not preview else preview.get("id")
         if preview_id:
             for index in range(self.list.count()):

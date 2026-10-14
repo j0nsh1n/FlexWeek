@@ -202,20 +202,23 @@ def test_day_ranges_collapse_three_or_more_in_a_row() -> None:
 
 
 def test_running_late_buttons_are_filled_outlined_and_bare(qapp: QApplication) -> None:  # noqa: F811
-    """Jonathan's call: Accept late start filled, Preview outlined, Cancel bare."""
+    """Preview is filled; after preview, Accept replaces it on one row. Cancel stays bare."""
     parent, palette = styled(qapp)
     late = shown(qapp, LateDialog(parent, "School"))
     preview = late.findChild(QPushButton, "latePreview")
     cancel = next(button for button in late.findChildren(QPushButton) if button.text() == "Cancel")
-    assert preview.property("outlined") is True
+    assert not preview.property("outlined")
     assert preview.property("quiet") is not True
     assert cancel.property("quiet") is True
     assert late.accept_button.isEnabled() is False
+    assert not late.accept_button.isVisible()
     loud = filled(late, palette["accent"])
-    assert loud == []
+    assert loud == ["Preview"]
     late.show_trace({"moves": [], "unplaced": []}, {})
     qapp.processEvents()
     still(late)
+    assert not preview.isVisible()
+    assert late.accept_button.isVisible()
     loud = filled(late, palette["accent"])
     assert loud == ["Accept late start"]
     free(late)

@@ -24,7 +24,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QStandardPaths
     from PySide6.QtGui import QColor
-    from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QPushButton, QWidget
+    from PySide6.QtWidgets import QApplication, QDialog, QPushButton, QWidget
 
     from desktop.native import devices, look_editor, settings, widgets
     from desktop.native.look import pack_stylesheet, resolved_palette
@@ -174,7 +174,7 @@ def test_the_filled_button_is_the_answer(qapp: QApplication) -> None:
     for name in ("applyRoutine", "deleteRoutine", "sheetClose"):
         assert names[name].property("quiet") is True, name
     late = widgets.LateDialog(None, "School")
-    assert late.findChild(QPushButton, "latePreview").property("outlined") is True
+    assert not late.findChild(QPushButton, "latePreview").property("outlined")
     assert not late.accept_button.property("quiet")
 
 
@@ -197,7 +197,7 @@ def test_hide_preview_and_save_restore_point_are_outlined_and_close_stays_plain(
     for _ in range(3):
         qapp.processEvents()
     still(dialog)
-    close = dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Close)
+    close = dialog.findChild(QPushButton, "sheetClose")
     wanted = QColor(outline_edge(palette))
     try:
         for button in (

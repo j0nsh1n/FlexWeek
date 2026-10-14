@@ -4230,16 +4230,21 @@ class NativeWindow(QMainWindow):
             parts.append(f"{overdue} overdue")
         if carried:
             parts.append(f"{carried} left from last week")
-        box = QMessageBox(self)
-        box.setWindowTitle("Before planning")
-        box.setText(", ".join(parts))
-        plan = box.addButton("Plan into this week", QMessageBox.ButtonRole.AcceptRole)
-        did = box.addButton("Mark as finished", QMessageBox.ButtonRole.ActionRole)
-        box.addButton("Not now", QMessageBox.ButtonRole.RejectRole)
-        box.exec()
-        if box.clickedButton() is plan:
+        sheet = ConfirmSheet(
+            self,
+            "Before planning",
+            ", ".join(parts),
+            (
+                ("not", "Not now", "quiet"),
+                ("did", "Mark as finished", "outlined"),
+                ("plan", "Plan into this week", ""),
+            ),
+            default="not",
+        )
+        sheet.exec()
+        if sheet.answer == "plan":
             self.session.plan_left([item["id"] for item in items])
-        elif box.clickedButton() is did:
+        elif sheet.answer == "did":
             self.session.did_these([item["id"] for item in items])
         else:
             self.session.plan_asked_week = self.session.week_start

@@ -28,7 +28,6 @@ if importlib.util.find_spec("PySide6") is not None:
         QApplication,
         QCalendarWidget,
         QDialog,
-        QMessageBox,
         QPushButton,
         QTableView,
         QWidget,
@@ -305,9 +304,13 @@ def test_plan_sends_earliest_from_not_before_not_a_stored_session_field() -> Non
 
 def _plan_them_if_asked() -> None:
     """Solve asks 'Before planning' when homework was left over; answer it with Plan into this week."""
-    box = QApplication.activeModalWidget()
-    if isinstance(box, QMessageBox) and box.windowTitle() == "Before planning":
-        next(button for button in box.buttons() if button.text() == "Plan into this week").click()
+    from PySide6.QtWidgets import QLabel
+
+    from desktop.native.widgets import ConfirmSheet
+
+    sheet = QApplication.activeModalWidget()
+    if isinstance(sheet, ConfirmSheet) and sheet.findChild(QLabel, "sheetTitle").text() == "Before planning":
+        sheet.buttons["plan"].click()
 
 
 def _press_solve(window: NativeWindow) -> None:

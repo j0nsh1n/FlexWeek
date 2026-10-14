@@ -918,6 +918,43 @@ class FittedButton(QPushButton):
             self.setText(words)
 
 
+class StepCrumb(QPushButton):
+    """A three-step form crumb: elides from the end with … when the step bar has no room."""
+
+    def __init__(self, text: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._full = text
+        self.setAccessibleName(text)
+        self.setProperty("formStep", True)
+        self.setProperty("quiet", True)
+        self.setAutoDefault(False)
+
+    def set_full(self, text: str) -> None:
+        self._full = text
+        self.setAccessibleName(text)
+        self._fit()
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._fit()
+
+    def changeEvent(self, event: QEvent) -> None:  # noqa: N802
+        super().changeEvent(event)
+        if event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange):
+            self.updateGeometry()
+            self._fit()
+
+    def _fit(self) -> None:
+        room = max(0, self.contentsRect().width() - 12)
+        shown = (
+            self.fontMetrics().elidedText(self._full, Qt.TextElideMode.ElideRight, room)
+            if room
+            else self._full
+        )
+        if shown != self.text():
+            self.setText(shown)
+
+
 class PlanButton(FittedButton):
     """Plan my homework: the window shrinks More to its icon before this shortens. The window picks
     its words (`NativeWindow._fit_plan_and_more`), so it asks for the room the words shown take."""
@@ -3436,15 +3473,12 @@ class BlockDialog(Dialog):
             crumbs = QHBoxLayout(self.step_bar)
             crumbs.setContentsMargins(0, 0, 0, 0)
             crumbs.setSpacing(8)
-            self._crumbs: list[QPushButton] = []
+            self._crumbs: list[StepCrumb] = []
             for index, name in enumerate(("What", "When", "Category")):
                 if index:
                     crumbs.addWidget(QLabel("·"))
-                crumb = QPushButton(f"{index + 1} {name}")
+                crumb = StepCrumb(f"{index + 1} {name}")
                 crumb.setObjectName(f"blockCrumb{index}")
-                crumb.setProperty("formStep", True)
-                crumb.setProperty("quiet", True)
-                crumb.setAutoDefault(False)
                 crumb.clicked.connect(self._crumb_clicked)
                 crumbs.addWidget(crumb)
                 self._crumbs.append(crumb)
@@ -3708,13 +3742,13 @@ class BlockDialog(Dialog):
         self.step_prompt.setText(prompts[step])
         names = ("What", "When", "Category")
         days = day_range_and_words([index for index, check in enumerate(self.days) if check.isChecked()])
-        done = (self.title.text().strip(), f"{days}, {self.start.time().toString('HH:mm')}")
+        done = (self.title.text().strip(), f"{days}, {clock_text(self.start.minutes())}")
         for index, crumb in enumerate(self._crumbs):
             if index < step:
-                crumb.setText(f"✓ {done[index]}")
+                crumb.set_full(f"✓ {done[index]}")
                 crumb.setEnabled(True)
             else:
-                crumb.setText(f"{index + 1} {names[index]}")
+                crumb.set_full(f"{index + 1} {names[index]}")
                 crumb.setEnabled(False)
         what = (self.title, self.title_problem)
         when = (self._days_field, self._time_row)
@@ -3905,10 +3939,9 @@ class BlockDialog(Dialog):
                     self.end.setTime(self._minutes_clock(end))
                 finally:
                     self._following = False
-            if end_moved or (start_moved and kept < self._length):
+            if start_moved and (end_moved or kept < self._length):
                 self._moved = self._moved_sentence(end, kept)
-                if end_moved or start_moved:
-                    announce(self.end, self._moved)
+                announce(self.end, self._moved)
         self._settled_start_min = start
         self._show_length()
 
@@ -4357,15 +4390,12 @@ class HomeworkDialog(Dialog):
             crumbs = QHBoxLayout(self.step_bar)
             crumbs.setContentsMargins(0, 0, 0, 0)
             crumbs.setSpacing(8)
-            self._crumbs: list[QPushButton] = []
+            self._crumbs: list[StepCrumb] = []
             for index, name in enumerate(("What", "When", "How long")):
                 if index:
                     crumbs.addWidget(QLabel("·"))
-                crumb = QPushButton(f"{index + 1} {name}")
+                crumb = StepCrumb(f"{index + 1} {name}")
                 crumb.setObjectName(f"homeworkCrumb{index}")
-                crumb.setProperty("formStep", True)
-                crumb.setProperty("quiet", True)
-                crumb.setAutoDefault(False)
                 crumb.clicked.connect(self._crumb_clicked)
                 crumbs.addWidget(crumb)
                 self._crumbs.append(crumb)
@@ -4884,6 +4914,8 @@ class HomeworkDialog(Dialog):
         line.setText(text)
         line.setAccessibleName(text)
         line.setVisible(True)
+        if line is self.title_problem:
+            self._form.setRowVisible(self.title_problem, True)
         field.setFocus(Qt.FocusReason.OtherFocusReason)
         if isinstance(field, ClockField):
             field.lineEdit().selectAll()
@@ -5112,10 +5144,10 @@ class HomeworkDialog(Dialog):
         done = (self.title.text().strip(), f"due {self.due.date.text()}, {when}")
         for index, crumb in enumerate(self._crumbs):
             if index < step:
-                crumb.setText(f"✓ {done[index]}")
+                crumb.set_full(f"✓ {done[index]}")
                 crumb.setEnabled(True)
             else:
-                crumb.setText(f"{index + 1} {names[index]}")
+                crumb.set_full(f"{index + 1} {names[index]}")
                 crumb.setEnabled(False)
         for field in (self.title, self.stepper):
             label = self._form.labelForField(field)
@@ -6190,35 +6222,27 @@ class LateDialog(Dialog):
         layout.addWidget(self.changes)
         self.error = _error_label()
         layout.addWidget(self.error)
-        # Preview, then the answers under it on the same left edge. Side by side they needed more than
-        # the card has, so the answers wrapped under Preview but stayed at the right, off its edge.
-        buttons = QVBoxLayout()
-        buttons.setSpacing(SPACING[1])
-        preview = QPushButton("Preview")
-        preview.setObjectName("latePreview")
-        preview.setProperty("outlined", True)
-        preview.clicked.connect(self.preview_requested.emit)
-        # The answers where the platform puts them; Preview is a step before them.
-        answers = QDialogButtonBox()
-        self.accept_button = answers.addButton("Accept late start", QDialogButtonBox.ButtonRole.AcceptRole)
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(SPACING[2])
+        self.preview = QPushButton("Preview")
+        self.preview.setObjectName("latePreview")
+        self.preview.setProperty("roomy", True)
+        self.preview.clicked.connect(self.preview_requested.emit)
+        self.accept_button = QPushButton("Accept late start")
         self.accept_button.setObjectName("lateAccept")
         self.accept_button.setProperty("roomy", True)
         self.accept_button.setEnabled(False)
-        cancel = answers.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole)
+        self.accept_button.setVisible(False)
+        self.accept_button.clicked.connect(self.accept)
+        cancel = QPushButton("Cancel")
         cancel.setProperty("quiet", True)
-        answers.accepted.connect(self.accept)
-        answers.rejected.connect(self.reject)
-        first = QHBoxLayout()
-        first.setContentsMargins(0, 0, 0, 0)
-        first.addWidget(preview)
-        first.addStretch(1)
-        last = QHBoxLayout()
-        last.setContentsMargins(0, 0, 0, 0)
-        last.addWidget(answers)
-        last.addStretch(1)
-        buttons.addLayout(first)
-        buttons.addLayout(last)
-        layout.addLayout(buttons)
+        cancel.clicked.connect(self.reject)
+        row.addWidget(self.preview)
+        row.addWidget(self.accept_button)
+        row.addStretch(1)
+        row.addWidget(cancel)
+        layout.addLayout(row)
         layout.addWidget(WhyOff(self.accept_button, LATE_WAIT))
 
     def chosen_minutes(self) -> int:
@@ -6255,6 +6279,8 @@ class LateDialog(Dialog):
         announce(self.summary, summary)
         self.changes.setVisible(True)
         self._fit_rows()
+        self.preview.setVisible(False)
+        self.accept_button.setVisible(True)
         self.accept_button.setEnabled(True)
         self.minutes.setEnabled(False)
 
