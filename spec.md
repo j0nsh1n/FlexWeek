@@ -130,9 +130,38 @@ Contract for the finished app:
   `transfer_limit_bytes` (262144). It never returns a filesystem path.
 - Local-to-hosted transfer is a password-gated format-3 export and a previewed
   import of weeks, assignments, preferences and routines. Import takes a Stage 3
-  restore point of the destination weeks and assignments first. Automatic
-  bidirectional or offline sync is out of scope. Export returns 413 when the
+  restore point of the destination weeks and assignments first. Sync between
+  this computer and a paired phone is described under Device sync; the hosted
+  transfer is still a one-time import and export. Export returns 413 when the
   compact import apply envelope would exceed the 256 KiB write cap.
+- Device sync (1.0.0):
+  - A phone pairs with the desktop once. The phone app is package
+    `com.flexweek.app`. A removed phone is refused from then on.
+  - Pairing: Settings > This computer > Devices > Pair a phone shows an 8-digit
+    code in two groups of four. It lasts 5 minutes, three wrong tries end it,
+    and a code works once. The phone types it; the 1.0.0 phone app has no
+    camera scanner.
+  - Transport: the two devices talk over iroh. The desktop tries the same
+    Wi-Fi first and otherwise uses the public relay run by n0. The Devices card
+    says so: "When your computer is not on the same Wi-Fi, FlexWeek uses a
+    public relay run by n0. It sees that two devices are talking, not what they
+    send."
+  - The sync service starts only once a phone is paired, or when Pair a phone
+    is pressed. With no phone paired, FlexWeek opens no network endpoint and
+    contacts no relay. The desktop must be open for any sync.
+  - What syncs: homework, fixed times and blocks for each week, the standing
+    week, routines, reminders, alarms, timer settings and availability, the
+    account's username and password hash, and used recovery codes. Each change
+    carries a timestamp and the newest one wins, per record.
+  - What stays on each device: the look, the theme, the text size, the 12- or
+    24-hour clock, the default Spotify link and the look file.
+  - Clock guard: a change stamped more than 24 hours ahead of this computer's
+    clock is set aside and reported as "your phone's clock looks wrong".
+  - Known limitation: running Plan on two devices before they have synced can
+    give the same homework two placements.
+  - Verified on 2026-10-13 with a real Android phone: pairing and two-way sync
+    over the relay on mobile data. Same-Wi-Fi sync between two real devices is
+    not separately verified.
 - Day and Week show the whole day, 00:00 to 24:00. Hours scroll, and the
   student can zoom: Ctrl and the wheel, Ctrl with =, - and 0, or two buttons
   beside the hours. Each surface's level is remembered per device in the look
@@ -292,7 +321,7 @@ put when the card switches, and the page wears this computer's own look (the
 System pack, light or dark with the computer), not the last account's. The card
 offers "Keep me
 signed in on this computer", on by default. A kept session opens the week at
-the next launch until the server ends it (seven days after sign-in) or the
+the next launch until the server ends it (30 days after its last use) or the
 student logs out.
 A new account must acknowledge its eight recovery codes, shown in Inter with
 figures of one width, with Copy and Save…, then goes to first-run setup, one page at a time: a
@@ -639,7 +668,16 @@ nothing loops.
   and takes every slot it touches.
   Overlap uses half-open ranges `[start, end)`. One `overlaps()` helper. There
   is no duplicate date math.
-- External APIs/services: none. No OAuth, no calendar sync, no LLM at runtime.
+- External APIs/services: the public relay run by n0 (iroh), used only after a
+  phone is paired and only when it cannot be reached on the same Wi-Fi. It sees
+  that two devices are talking, not what they send. No OAuth, no calendar sync,
+  no LLM at runtime.
+- Android: the phone app, package `com.flexweek.app`, minimum Android 8.0
+  (minSdk 26), target and compile SDK 36, for arm64-v8a and x86_64. Release
+  builds show today's agenda, reminders, pairing and settings; adding homework,
+  Plan, Running late and the week are in debug builds only
+  (`BuildConfig.V2_ENABLED`). The APK is built and signed on the maintainer's
+  machine with a keystore kept outside the repo; CI does not build it.
 - Deployment: the desktop client is the product; there is no web client. The
   Windows and Linux builds are PySide6 Qt widgets that run the FastAPI backend
   in-process on a loopback port, so they need no separate server and no Python
@@ -668,7 +706,8 @@ nothing loops.
   derived key; comparison is constant-time. The engine's store computes it
   with the `scrypt` crate; hashes made by Python/OpenSSL before 0.18.0 verify
   unchanged.
-- Opaque random sessions expire in seven days; only SHA-256 token hashes are
+- Opaque random sessions expire 7 days after their last use, or 30 days when
+  Keep me signed in was ticked; only SHA-256 token hashes are
   stored. Cookies are HttpOnly, SameSite=Strict, Secure on HTTPS deployments.
   Sign-out revokes the current session. Expired sessions are rejected on reads
   and cleaned when new sessions are created.
@@ -676,6 +715,15 @@ nothing loops.
   that user can read, in the app's data folder. It is kept once a new account's
   recovery codes are acknowledged, replaced when the password changes, and
   removed by Log out, account deletion, or the server ending the session.
+- Device sync keeps a private key on this computer, in a file with mode 0600
+  in `sync/` beside the database; a file readable by others is refused. Its
+  public part is the device's identity. Traffic between paired devices is
+  end-to-end encrypted, so the relay sees that two devices are talking, not
+  what they send. The pairing endpoint's id is published while a code is
+  shown, so someone who copies it could guess the code offline; each guess
+  costs one scrypt run (N=32768, r=8, p=32: about a second on a desktop CPU),
+  which leaves about 300 guesses in a code's 5 minutes out of 100 million
+  codes.
 - Writes use custom-header/origin CSRF checks; endpoints derive ownership from
   the session. Queries are parameterized. No credentials or schedule payloads
   are logged; validation responses omit submitted input.
@@ -768,6 +816,10 @@ The commands it runs, each of which must exit 0:
 - The engine in `engine/` (Rust approved for it on 2026-09-30) has its own
   checks, run from `engine/`, each of which must exit 0: `cargo fmt --check`,
   `cargo clippy --workspace -- -D warnings` and `cargo test --workspace`.
+  The workspace includes the sync crate (`engine/sync`) and the Android
+  bindings (`engine/ffi`).
+- Android (approved for 1.0.0): from `android/`, `./gradlew testDebugUnitTest`
+  must exit 0. It needs the JDK and Android SDK on the machine.
   The Python suites need the module built into the checkout's `.venv` first,
   and again after the engine changes:
   `.venv/bin/maturin develop --release --manifest-path engine/py/Cargo.toml --features audit`
