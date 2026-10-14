@@ -1892,6 +1892,7 @@ class NativeSession(QObject):
             self._join_step = False
             self.pending_save = None
             self._save_status = None
+            self._month_cache.clear()
             spread_next, self._spread_after_save = self._spread_after_save, None
             if spread_next is not None:
                 QTimer.singleShot(0, lambda: self.preview_spread(*spread_next, then=self.confirm_spread))
