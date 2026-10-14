@@ -15,7 +15,7 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QPoint, Qt, QTimer
-from PySide6.QtGui import QColor, QImage
+from PySide6.QtGui import QColor
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
     QApplication,
@@ -456,27 +456,25 @@ def test_the_repeat_scope_is_a_choice_of_two_under_the_days_only_for_a_repeating
 
 
 @pytest.mark.parametrize("pack", ["light-frost", "dark-frost"])
-def test_a_primary_that_cannot_be_pressed_yet_is_pale_and_its_words_read_at_7_to_1(
+def test_a_visible_disabled_primary_is_pale_and_its_words_read_at_7_to_1(
     qapp: QApplication,  # noqa: F811
     pack: str,
 ) -> None:
-    """Running late's Accept was a grey slab until Preview, and looked broken; then its words were the
-    accent's ink at 40 % on the 40 % fill, and could not be read (T6 of the 0.17.0 audit, #91 of 0.18.1:
-    1.82 to 1). Now its words are the text colour on a pale tint of it."""
+    """A visible disabled primary uses text-colour words on a pale tint.
+
+    Running late hides Accept until Preview.
+    """
     parent, palette = styled(qapp, pack)
-    late = shown(qapp, LateDialog(parent, "School"))
-    button = late.accept_button
-
-    def picture() -> QImage:
-        return late.grab().toImage()
-
-    def fill() -> QColor:
-        return picture().pixelColor(button.mapTo(late, QPoint(button.width() // 2, 4)))
-
-    assert near(fill(), QColor(mix(palette["text"], palette["panel"], 0.12)))
-    ground = fill().name()
-    image = picture()
-    corner = button.mapTo(late, QPoint(0, 0))
+    dialog = QDialog(parent)
+    button = QPushButton("Continue", dialog)
+    button.setFixedSize(160, 40)
+    button.setEnabled(False)
+    button.move(24, 24)
+    shown(qapp, dialog)
+    image = dialog.grab().toImage()
+    corner = button.mapTo(dialog, QPoint(0, 0))
+    ground = image.pixelColor(corner.x() + button.width() // 2, corner.y() + 4).name()
+    assert near(QColor(ground), QColor(mix(palette["text"], palette["panel"], 0.12)))
     words = max(
         (
             image.pixelColor(corner.x() + x, corner.y() + y).name()
@@ -486,10 +484,7 @@ def test_a_primary_that_cannot_be_pressed_yet_is_pale_and_its_words_read_at_7_to
         key=lambda colour: contrast(colour, ground),
     )
     assert contrast(words, ground) >= 7.0, f"{words} on {ground}"
-    late.show_trace({"moves": [], "unplaced": []}, {})
-    qapp.processEvents()
-    assert near(fill(), QColor(palette["accent"]))
-    free(late)
+    free(dialog)
     free(parent)
 
 
