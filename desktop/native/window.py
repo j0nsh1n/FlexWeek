@@ -20,6 +20,7 @@ from PySide6.QtGui import (
     QContextMenuEvent,
     QDesktopServices,
     QFont,
+    QFontMetrics,
     QGuiApplication,
     QIcon,
     QKeyEvent,
@@ -276,6 +277,16 @@ WEEK_LIST_ROW_NAME = "Week as a list · Ctrl+Shift+L"
 WEEK_LIST_PANEL_WIDTH = 360
 STATUS_STRIP_PX = 28
 NOTHING_MORE_TODAY = "Nothing more today"
+
+
+class LeftChip(QFrame):
+    """The overdue card. It says when its width changes, so the window can move its buttons."""
+
+    resized = Signal()
+
+    def resizeEvent(self, event: object) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self.resized.emit()
 
 
 class ClickyTitle(FittedLabel):
@@ -1639,26 +1650,43 @@ class NativeWindow(QMainWindow):
         column.addWidget(self.unfinished_panel)
         # Item 1b: after Plan, homework whose time was in an earlier week and never ticked done. Plan
         # never moves it on its own; the student says which.
-        self.left_chip = QFrame()
+        self.left_chip = LeftChip()
         self.left_chip.setObjectName("leftChip")
-        chip_row = QHBoxLayout(self.left_chip)
+        chip_column = QVBoxLayout(self.left_chip)
+        # The words and their buttons share one line while the card is wide enough for both whole. When
+        # it is not, the buttons move to the row under the words (see _fit_left_chip).
+        self._chip_line = QHBoxLayout()
+        chip_column.addLayout(self._chip_line)
+        self._chip_below = QWidget()
+        self._chip_below.setObjectName("leftChipBelow")
+        # The window's sheet paints a plain widget's background; the row belongs to the card's white.
+        self._chip_below.setStyleSheet("QWidget#leftChipBelow { background: transparent; }")
+        self._chip_below_row = QHBoxLayout(self._chip_below)
+        # Under the words, not under the icon.
+        self._chip_below_row.setContentsMargins(16 + self._chip_line.spacing(), 0, 0, 0)
+        self._chip_below_row.addStretch(1)
+        chip_column.addWidget(self._chip_below)
+        self._chip_below.hide()
+        self._chip_wrapped = False
         self.left_chip_icon = QLabel()
         self.left_chip_icon.setObjectName("leftChipIcon")
         self.left_chip_icon.setFixedSize(16, 16)
-        chip_row.addWidget(self.left_chip_icon)
+        self._chip_line.addWidget(self.left_chip_icon)
         self.left_chip_text = QLabel()
         self.left_chip_text.setObjectName("leftChipText")
-        chip_row.addWidget(self.left_chip_text, 1)
+        self.left_chip_text.setWordWrap(True)
+        self._chip_line.addWidget(self.left_chip_text, 1)
         plan_them = QPushButton("Plan into this week")
         plan_them.setObjectName("leftPlan")
         plan_them.setProperty("tonal", True)
         plan_them.clicked.connect(self._plan_left)
-        chip_row.addWidget(plan_them)
+        self._chip_line.addWidget(plan_them)
         did_these = QPushButton("Mark as finished")
         did_these.setObjectName("leftDone")
         did_these.setProperty("outlined", True)
         did_these.clicked.connect(self._did_left)
-        chip_row.addWidget(did_these)
+        self._chip_line.addWidget(did_these)
+        self.left_chip.resized.connect(self._fit_left_chip)
         self.left_chip.hide()
         column.addWidget(self.left_chip)
         self.plan_review = PlanReview()
@@ -4185,6 +4213,35 @@ class NativeWindow(QMainWindow):
             items, datetime.fromtimestamp(self.session.now_ms() / 1000), {item["id"] for item in items}
         )
 
+    def _fit_left_chip(self) -> None:
+        """Both buttons beside the words when the card is wide enough for the words and both whole;
+        otherwise under them. A button is never squeezed to fit its line."""
+        plan_them = self.left_chip.findChild(QPushButton, "leftPlan")
+        did_these = self.left_chip.findChild(QPushButton, "leftDone")
+        margins = self.left_chip.layout().contentsMargins()
+        gap = self._chip_line.spacing()
+        words = QFontMetrics(self.left_chip_text.font()).horizontalAdvance(self.left_chip_text.text())
+        widths = (
+            self.left_chip_icon.width(),
+            words,
+            plan_them.sizeHint().width(),
+            did_these.sizeHint().width(),
+        )
+        beside = margins.left() + margins.right() + sum(widths) + 3 * gap
+        wrapped = self.left_chip.width() < beside
+        if wrapped == self._chip_wrapped:
+            return
+        self._chip_wrapped = wrapped
+        below = self._chip_below_row
+        source, target = (self._chip_line, below) if wrapped else (below, self._chip_line)
+        for button in (plan_them, did_these):
+            source.removeWidget(button)
+            if target is below:
+                target.insertWidget(target.count() - 1, button)
+            else:
+                target.addWidget(button)
+        self._chip_below.setVisible(wrapped)
+
     def _sync_left_chip(self) -> None:
         """Offer overdue and carried homework from the same list used by Plan and More."""
         left = self._unfinished_items()
@@ -4202,6 +4259,7 @@ class NativeWindow(QMainWindow):
             icons.pixmap("history", self.palette().color(QPalette.ColorRole.Mid).name(), 16)
         )
         self.left_chip.setVisible(bool(left) and not self.unfinished_panel.isVisible())
+        self._fit_left_chip()
         if words and words != getattr(self, "_left_chip_words", ""):
             announce(self.left_chip_text, words)
         self._left_chip_words = words
