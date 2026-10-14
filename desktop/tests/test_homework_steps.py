@@ -62,7 +62,8 @@ def test_next_then_crumbs_and_when_then_how_long(qapp: QApplication) -> None:  #
     dialog._save.click()
     QApplication.processEvents()
     assert dialog.step_prompt.text() == "When is it due?"
-    assert crumbs(dialog) == ["✓ History essay", "2 When", "3 How long"]
+    assert crumbs(dialog) == ["✓ What", "2 When", "3 How long"]
+    assert dialog.findChild(QPushButton, "homeworkCrumb0").toolTip() == "History essay"
     assert dialog.due.isVisibleTo(dialog)
     assert dialog.when.isVisibleTo(dialog)
     assert not dialog.title.isVisibleTo(dialog)
@@ -72,7 +73,8 @@ def test_next_then_crumbs_and_when_then_how_long(qapp: QApplication) -> None:  #
     dialog._save.click()
     QApplication.processEvents()
     assert dialog.step_prompt.text() == "How long will it take?"
-    assert crumbs(dialog) == ["✓ History essay", "✓ due Tue 15 Sep, FlexWeek picks", "3 How long"]
+    assert crumbs(dialog) == ["✓ What", "✓ When", "3 How long"]
+    assert dialog.findChild(QPushButton, "homeworkCrumb1").toolTip() == "due Tue 15 Sep, FlexWeek picks"
     assert dialog.stepper.isVisibleTo(dialog)
     assert dialog._save.text() == "Save"
     assert not dialog.due.isVisibleTo(dialog)
@@ -88,7 +90,8 @@ def test_do_it_at_crumb_says_do_it_at(qapp: QApplication) -> None:  # noqa: F811
     dialog.when.setCurrentIndex(1)
     dialog._save.click()
     QApplication.processEvents()
-    assert crumbs(dialog)[1] == "✓ due Tue 15 Sep, pinned"
+    assert crumbs(dialog)[1] == "✓ When"
+    assert dialog.findChild(QPushButton, "homeworkCrumb1").toolTip() == "due Tue 15 Sep, pinned"
     free(dialog)
     free(parent)
 

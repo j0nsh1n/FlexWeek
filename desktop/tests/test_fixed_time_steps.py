@@ -76,7 +76,8 @@ def test_next_shows_when_then_category(qapp: QApplication, host: QWidget) -> Non
     dialog._save.click()
     QApplication.processEvents()
     assert dialog.step_prompt.text() == "When is it?"
-    assert crumbs(dialog)[0] == "✓ Club"
+    assert crumbs(dialog)[0] == "✓ What"
+    assert dialog.findChild(QPushButton, "blockCrumb0").toolTip() == "Club"
     assert dialog.day_picker.isVisibleTo(dialog)
     assert dialog.start.isVisibleTo(dialog)
     assert dialog.end.isVisibleTo(dialog)
@@ -87,7 +88,8 @@ def test_next_shows_when_then_category(qapp: QApplication, host: QWidget) -> Non
     dialog._save.click()
     QApplication.processEvents()
     assert dialog.step_prompt.text() == "What category is it?"
-    assert crumbs(dialog) == ["✓ Club", crumbs(dialog)[1], "3 Category"]
+    assert crumbs(dialog) == ["✓ What", "✓ When", "3 Category"]
+    assert dialog.findChild(QPushButton, "blockCrumb1").toolTip() == "Thu, 17:00"
     assert not dialog.duration_line.isVisibleTo(dialog)
     assert dialog.category.isVisibleTo(dialog)
     assert dialog._save.text() == "Save"
