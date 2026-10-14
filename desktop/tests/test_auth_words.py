@@ -278,3 +278,15 @@ def test_the_recovery_page_comes_back_with_its_look_when_new_codes_are_made(
     assert recovering.recovery_list.font().family() == "JetBrains Mono"
     recovering.recovery_copy.click()
     assert QApplication.clipboard().text().splitlines() == codes(recovering)
+
+
+def test_a_wrong_sign_in_and_an_ended_session_keep_their_own_words() -> None:
+    """The server answers both with 401: a wrong password says so, and an expired session says it
+    ended (moved from backend/tests/test_engine_session_lifetime.py, which runs without PySide6)."""
+    from backend.app import SESSION_ENDED
+    from desktop.native.client import SESSION_ENDED as CLIENT_ENDED
+    from desktop.native.client import SIGN_IN_WRONG, _error
+
+    assert _error(401, "Incorrect username or password").message == SIGN_IN_WRONG
+    assert _error(401, SESSION_ENDED).message == CLIENT_ENDED
+    assert CLIENT_ENDED == "Your session ended. Sign in again."

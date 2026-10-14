@@ -146,9 +146,5 @@ def test_login_401_keeps_its_own_words(tmp_path: Path, monkeypatch: pytest.Monke
         )
         assert wrong.status_code == 401
         assert wrong.json()["detail"] == "Incorrect username or password"
-        from desktop.native.client import SESSION_ENDED as CLIENT_ENDED
-        from desktop.native.client import SIGN_IN_WRONG, _error
-
-        assert _error(401, "Incorrect username or password").message == SIGN_IN_WRONG
-        assert _error(401, SESSION_ENDED).message == CLIENT_ENDED
-        assert CLIENT_ENDED == "Your session ended. Sign in again."
+        # How the desktop words these two 401s is checked in desktop/tests/test_auth_words.py: this
+        # suite runs where PySide6 is not installed.
