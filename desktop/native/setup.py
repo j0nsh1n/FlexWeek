@@ -1642,16 +1642,15 @@ class SetupPage(QWidget):
     def _build_done(self) -> QWidget:
         content = QWidget()
         content.setObjectName("setupRow")
-        line = QHBoxLayout(content)
-        line.setContentsMargins(0, 0, 0, 0)
-        line.setSpacing(24)
+        page = QVBoxLayout(content)
+        page.setContentsMargins(0, 0, 0, 0)
+        page.setSpacing(16)
         self.summary = QGridLayout()
         self.summary.setContentsMargins(0, 0, 0, 0)
         self.summary.setHorizontalSpacing(18)
         self.summary.setVerticalSpacing(12)
         self.summary.setColumnStretch(1, 1)
-        line.addLayout(self.summary, 1)
-        # The week as it will look, drawn the way the look editor draws its picture of the week.
+        # Above the words, so the summary keeps its width. Drawn as the look editor draws its picture.
         frame = QFrame()
         frame.setObjectName("setupGroup")
         framed = QVBoxLayout(frame)
@@ -1661,7 +1660,8 @@ class SetupPage(QWidget):
         self.done_preview.setFixedSize(COLOUR_THUMB, round(COLOUR_THUMB * 0.625))
         self.done_preview.setAccessibleName("Preview of your week")
         framed.addWidget(self.done_preview)
-        line.addWidget(frame, 0, Qt.AlignmentFlag.AlignTop)
+        page.addWidget(frame, 0, Qt.AlignmentFlag.AlignLeft)
+        page.addLayout(self.summary)
         self.summary_rows: list[tuple[QLabel, QLabel, QPushButton]] = []
         for row, (name, steps) in enumerate(RAIL[:-1]):
             heading = _label(name, "setupSummaryName", wrap=False)
