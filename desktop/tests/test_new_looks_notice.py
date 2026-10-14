@@ -224,4 +224,3 @@ def test_an_account_with_any_saved_design_look_does_not_get_the_notice(
 
     assert window.toast.text() != NOTICE
     assert str(window.session.account["id"]) not in window._new_look_notice_seen
-

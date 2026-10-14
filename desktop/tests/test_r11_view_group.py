@@ -129,5 +129,3 @@ def _check_equal_padding(qapp, window, design, preset) -> None:
         for button in views(window)
     ]
     assert len(set(gaps)) == 1, f"{design}/{preset}: padding gaps differ: {gaps}"
-
-

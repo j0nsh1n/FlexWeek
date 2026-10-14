@@ -1,0 +1,2 @@
+# Gradle's generated Windows launcher keeps its CRLF lines; the whitespace check would flag each one.
+android/gradlew.bat -whitespace
