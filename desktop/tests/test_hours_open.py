@@ -22,7 +22,7 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QAbstractAnimation, QPoint, QPointF, QStandardPaths
+    from PySide6.QtCore import QAbstractAnimation, QEvent, QPoint, QPointF, QStandardPaths
     from PySide6.QtWidgets import QAbstractButton, QApplication, QPushButton, QScrollBar
 
     from desktop.native import motion
@@ -296,6 +296,26 @@ def test_month_does_not_repeat_the_next_line_above_its_status_strip(
     wait_until(qapp, lambda: not window.session.busy)
     assert not window.focus_panel.now_next.isVisible()
     assert window.status_next.full_text().startswith("Next:")
+
+
+def test_leaving_retro_after_unfinished_rows_rebuild_never_touches_deleted_widgets(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    session = window.session
+    session.add_homework(
+        {"id": "retro-work", "title": "Retro homework", "due": "2026-10-16T23:59",
+         "estimate_min": 60, "revision": 0}
+    )
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    window._show_unfinished()
+    window._layout = sanitize_layout({"main": "retro", "day": "one"})
+    window._apply_appearance()
+    window._on_week()
+    window._fill_unfinished(window._panel_items())
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    window._layout = sanitize_layout({"main": "classic", "day": "one"})
+    window._apply_appearance()
 
 
 def test_after_plan_the_week_scrolls_to_the_first_homework_it_placed(
