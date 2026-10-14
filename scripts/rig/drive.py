@@ -676,8 +676,13 @@ def child_main(args: argparse.Namespace) -> int:
                 yield from self.click(field.mapToGlobal(field.rect().center()))
                 yield from self.key("ctrl+a")
                 yield from self.type(title)
-            yield from self.key("Return")
-            yield ("wait", 300)
+            # Add asks its questions a step at a time (1.0.0): Return goes on to the next, and on the
+            # last one it saves. A student presses it until the sheet closes.
+            for _step in range(4):
+                yield from self.key("Return")
+                yield ("wait", 300)
+                if QApplication.activeModalWidget() is not dialog:
+                    break
 
     rig = Rig()
 
@@ -812,16 +817,13 @@ def child_main(args: argparse.Namespace) -> int:
             f"math is {got['days']} {got.get('start')}",
         )
 
-    def week_folded_waiting(r: Rig) -> Step:
-        """At 800 px the rail is folded: open Not placed yet in place, then drag homework on."""
+    def week_narrow_waiting(r: Rig) -> Step:
+        """At 800 px the Agenda rail stays as it is (1.0.0's rail does not fold): homework under No
+        time yet still drags onto a day."""
         yield from r.tab("week")
         window.resize(800, 820)
         yield ("wait", 400)
-        chip = window.findChild(QPushButton, "railWaitingChip")
-        expect(chip is not None and chip.isVisible(), "the folded Not placed yet chip is missing")
-        yield from r.click(chip.mapToGlobal(chip.rect().center()))
-        row = window.findChild(QWidget, "railWaitingRow")
-        expect(row is not None and row.isVisible(), "the waiting homework row did not open")
+        expect(window.rail.isVisible() and not window.rail.folded, "the Agenda rail folded or hid")
         # Friday: the clock is Thursday 15:40, and a drop on a day already past is refused.
         yield from r.reveal(4, 15 * 60, 18 * 60)
         yield from r.drag(r.chip(ids["math"]), r.at(4, 16 * 60))
@@ -842,7 +844,7 @@ def child_main(args: argparse.Namespace) -> int:
         yield from r.settled()
         got = block(ids["poster"])
         expect(not got.get("start"), f"poster was placed at {got['days']} {got.get('start')}")
-        expect("after it is due" in said, f"said {said!r}")
+        expect("after it's due" in said, f"said {said!r}")
 
     def week_open_day(r: Rig) -> Step:
         yield from r.tab("week")
@@ -912,7 +914,7 @@ def child_main(args: argparse.Namespace) -> int:
         yield from r.settled()
         got = block(ids["poster"])
         expect(not got.get("start"), f"poster was placed at {got['days']} {got.get('start')}")
-        expect("after it is due" in said, f"said {said!r}")
+        expect("after it's due" in said, f"said {said!r}")
 
     def day_escape(r: Rig) -> Step:
         yield from day_tab(r)
@@ -1538,7 +1540,7 @@ def child_main(args: argparse.Namespace) -> int:
             (got["days"], got.get("start")) == ([4], "17:00"),
             f"poster is {got['days']} {got.get('start')}, not Friday 17:00",
         )
-        expect("after it is due" in said, f"said {said!r}")
+        expect("after it's due" in said, f"said {said!r}")
 
     def month_save_refused(r: Rig) -> Step:
         """The server turns the essay's move away as a conflict. The message says it was not saved,
@@ -1619,7 +1621,7 @@ def child_main(args: argparse.Namespace) -> int:
         said = session.message
         yield from r.settled()
         unchanged(revision)
-        expect("after it is due" in said, f"said {said!r}")
+        expect("after it's due" in said, f"said {said!r}")
 
     def myday_open(r: Rig) -> Step:
         yield from myday_tab(r)
@@ -1691,7 +1693,7 @@ def child_main(args: argparse.Namespace) -> int:
         Scenario("week-create", "week", week_create),
         Scenario("week-series-one-day", "week", week_series),
         Scenario("week-beside", "week", week_beside),
-        Scenario("week-folded-waiting", "week", week_folded_waiting, only=("classic",)),
+        Scenario("week-narrow-waiting", "week", week_narrow_waiting, only=("classic",)),
         Scenario("week-past-due", "week", week_past_due),
         Scenario("week-open-day", "week", week_open_day),
         Scenario("week-reach", "week", week_reach),
