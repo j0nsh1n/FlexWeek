@@ -1170,6 +1170,7 @@ class SettingsPage(QWidget):
         start_form.addRow("Open on", self.preferred_view)
         start_form.addRow("Clock", self.clock)
         start_form.addRow("Week starts on", self.week_start)
+        start_form.addRow(_note("The Week view always runs Monday to Sunday.", "prefWeekStartNote"))
         computer_card, computer_form = _card("Account, setup and updates")
         open_account = _page_button("Manage account…", "prefsAccount")
         open_account.setToolTip("Change your password, export or import, or delete the account.")

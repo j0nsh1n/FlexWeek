@@ -13,6 +13,7 @@ from PySide6.QtGui import QGuiApplication, QPalette, QPixmap
 from PySide6.QtWidgets import QWidget
 
 from desktop.native.calendar import monday_of
+from desktop.native.fields import week_starts_on
 from desktop.native.hours.classic import ClassicWeek
 from desktop.native.hours.hand import Hand, Verdict
 from desktop.native.layouts.base import Scene
@@ -155,6 +156,7 @@ class Previews:
             effective_look(look)["text"],
             width,
             this_week,
+            week_starts_on(),
             system_dark(),
         )
 

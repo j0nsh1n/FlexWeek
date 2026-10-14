@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
 )
 
 from desktop.native.calendar import DAY_FULL, DAYS, day_long
+from desktop.native.fields import week_starts_on
 from desktop.native.fonts import at_scale, time_font
 from desktop.native.hours.canvas import fit_lines
 from desktop.native.hours.geometry import DialTrack, Span
@@ -1129,7 +1130,9 @@ class DayDialView(LayoutView):
         strip = QHBoxLayout(card)
         strip.setContentsMargins(px(SPACING[3]), px(SPACING[1]), px(SPACING[3]), px(SPACING[1]))
         strip.setSpacing(px(SPACING[1]))
-        for index, name in enumerate(DAYS):
+        order = (6, 0, 1, 2, 3, 4, 5) if week_starts_on() == "sunday" else tuple(range(7))
+        for index in order:
+            name = DAYS[index]
             cell = QVBoxLayout()
             cell.setSpacing(px(SPACING[0]))
             mini = DialFace(index, True)

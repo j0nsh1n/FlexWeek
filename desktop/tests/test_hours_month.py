@@ -9,6 +9,7 @@ from __future__ import annotations
 import importlib.util
 import os
 from collections.abc import Iterator
+from datetime import date
 
 import pytest
 
@@ -24,6 +25,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtWidgets import QApplication, QWidget
 
     from backend.month import build_month
+    from desktop.native import fields
     from desktop.native.hours.hand import Hand, MoveDate, Verdict
     from desktop.native.hours.month import MonthGrid, month_cells
     from desktop.native.weekmodel import build_week
@@ -126,6 +128,38 @@ def test_a_date_lists_what_is_due_then_its_blocks_at_their_times() -> None:
     assert [chip.words for chip in cells["2026-09-28"].chips] == ["07:00 Run", "18:00 Piano"]
     assert [chip.words for chip in cells["2026-09-29"].chips] == ["Due 09:00 French oral"]
     assert [chip.carried for chip in cells["2026-09-29"].chips] == [False], "a deadline is not carried"
+
+
+@pytest.mark.parametrize(
+    ("month", "first", "last"),
+    (("2026-11", "2026-11-01", "2026-12-05"), ("2026-10", "2026-09-27", "2026-10-31")),
+)
+def test_sunday_month_rows_start_on_sunday_and_end_on_saturday(
+    monkeypatch: pytest.MonkeyPatch, tmp_path, month: str, first: str, last: str
+) -> None:
+    path = tmp_path / "week-start.json"
+    path.write_text('{"week_starts_on":"sunday"}', encoding="utf-8")
+    monkeypatch.setattr(fields, "_week_starts_file", lambda: path)
+
+    cells = month_cells(build_month(month, [], []), {}, "")
+
+    assert cells[0].iso == first
+    assert cells[-1].iso == last
+    assert len(cells) % 7 == 0
+    assert [date.fromisoformat(cell.iso).weekday() for cell in cells[::7]] == [6] * (len(cells) // 7)
+    assert [date.fromisoformat(cell.iso).weekday() for cell in cells[6::7]] == [5] * (len(cells) // 7)
+
+
+def test_monday_month_rows_keep_the_existing_monday_to_sunday_dates(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    path = tmp_path / "week-start.json"
+    path.write_text('{"week_starts_on":"monday"}', encoding="utf-8")
+    monkeypatch.setattr(fields, "_week_starts_file", lambda: path)
+    cells = month_cells(september(), {}, "")
+
+    assert cells[0].iso == "2026-08-31"
+    assert cells[-1].iso == "2026-10-04"
 
 
 def test_a_week_left_unsaved_is_drawn_as_the_student_has_it() -> None:

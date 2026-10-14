@@ -11,6 +11,7 @@
   The v0.19.x features, look cards, polish and the wording sweep are in. The
   full gate is pending on the final head. v0.19.2 is the newest release.
 - 2026-10-14 lane `fix-a` implemented the saved-session carry rule, phone clock-skew sync count, pairing sheet changes, and Android phone copy/layout. Rust workspace tests, Clippy, formatting, Python lane tests, and Ruff pass; Android unit tests need an Android SDK, which is not configured here.
+- 2026-10-14 lane `fix-d2` makes Month and the Day dial strip follow the per-computer week-start setting while stored weeks and Week view remain Monday-based. `test_week_start.py` and `test_hours_month.py` pass through `fwtest`; Ruff passes on changed files. Before/after screenshots are in `~/.flexweek-ui-harness/scratch/1.0.0/shots-fix/fix-d2/`.
 - Tests that pick a day of the current week on the real clock can fail on later weekdays since item
   2: hold the clock (`grid_support.hold_clock`, `session.now_ms`). The item-3
   and hours-open suites now hold their own clocks.
@@ -134,4 +135,5 @@ values make a retried write return the first result.
 
 ## Session Handoff
 - 2026-10-14, lane `fix-a` in detached worktree `~/.worktrees/fw100-fix-a`, based on release commit `2f4411fe`. Implemented the unfinished-homework session rule, clock-skew count on Devices, pairing sheet copy/layout, and Android pairing/sync copy and Today button sizing. Verification and commit details are in `~/.flexweek-ui-harness/scratch/1.0.0/gate/report-fix-fix-a.md`.
+- 2026-10-14, lane `fix-d2` in detached worktree `~/.worktrees/fw100-fix-d2`, based on `63863b68`. Implemented Sunday-first Month rows and My day dial order, with Monday-to-Sunday wording in Settings and setup. Report: `~/.flexweek-ui-harness/scratch/1.0.0/gate/report-fix-fix-d2.md`.
 - Next: review the lane commit and report, then continue the 1.0.0 release gate.
