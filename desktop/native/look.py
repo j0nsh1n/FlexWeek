@@ -2125,15 +2125,24 @@ def overlay_rules(palette: dict, knobs: dict, pad: int, card_radius: int) -> str
     flat = knobs["depth"] == "none"
     toast_edge = "none" if flat else f"1px solid {toast['edge']}"
     box_edge = "none" if flat else f"1px solid {palette['hairline']}"
+    action_text = max(("#000000", "#ffffff"), key=lambda colour: contrast(colour, toast["action"]))
     return (
         f"QFrame#toast {{ background: {toast['background']}; color: {toast['text']}; "
         f"border: {toast_edge}; border-radius: {sheet_radius}px; padding: 10px 16px; }}"
         f"QLabel#toastText {{ color: {toast['text']}; }}"
-        # The toast's one button reads as part of its sentence.
+        # Ordinary toast actions read as part of the sentence; this optional action is filled.
         f"QPushButton#toastButton {{ background: transparent; color: {toast['action']}; border: none; "
         f"font-weight: {WEIGHT_STRONG}; padding: 4px 8px; min-height: 0; "
         f"border-radius: {RADIUS_CONTROL}px; }}"
+        f"QPushButton#toastButton[filled=\"true\"] {{ background: {toast['action']}; color: {action_text}; }}"
         f"QPushButton#toastButton:hover {{ "
+        f"background: {mix_oklab(toast['text'], toast['background'], 0.12)}; }}"
+        f"QPushButton#toastButton[filled=\"true\"]:hover {{ "
+        f"background: {mix_oklab(toast['action'], toast['background'], 0.12)}; }}"
+        f"QPushButton#toastSecondaryButton, QPushButton#toastCloseButton {{ "
+        f"background: transparent; color: {toast['text']}; border: none; padding: 4px 8px; "
+        f"min-height: 0; border-radius: {RADIUS_CONTROL}px; }}"
+        f"QPushButton#toastSecondaryButton:hover, QPushButton#toastCloseButton:hover {{ "
         f"background: {mix_oklab(toast['text'], toast['background'], 0.12)}; }}"
         # The focus screen: the look's page, a muted phase over the ring and the homework under it.
         f"QLabel#focusScreenPhase {{ color: {palette['muted']}; font-size: {type_pt('heading', text)}pt; "

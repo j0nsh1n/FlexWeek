@@ -5,6 +5,9 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- Existing accounts with finished setup and no saved design looks see a one-time notice on this computer. Choose a look opens Settings > Look; Not now or Close dismisses it.
+
 ### Fixed
 - Month now shows its complete date grid at a reserved final row height while monthly data loads, and the open week's month is prefetched in the background.
 

@@ -1186,13 +1186,14 @@ class ToastProgress(QWidget):
 
 
 class Toast(QWidget):
-    """One notice at a time, bottom right of the page it was said on, with at most one button.
+    """One notice at a time, bottom right of the page it was said on, with optional actions.
 
     Dark with light words, the 16 corners of a sheet and the small shadow (decision 20 of 0.17). The
     toast itself is the part that moves and fades; the painted card inside it carries the shadow, as a
     widget holds one effect. The toast and its words let the pointer through to what is under them.
-    The button is laid over the card as the window's own child, since Qt passes a widget's clicks on
-    only with its children's. `over` is the page area it sits in; while that is hidden, the window.
+    The buttons are laid over the card as the window's own children, since Qt passes a widget's
+    clicks on only with its children's. `over` is the page area it sits in; while that is hidden,
+    the window.
     """
 
     def __init__(self, parent: QWidget, over: QWidget) -> None:
@@ -1222,7 +1223,19 @@ class Toast(QWidget):
         self.button.setObjectName("toastButton")
         self.button.hide()
         self.button.clicked.connect(self._pressed)
+        self.secondary_button = QPushButton(parent)
+        self.secondary_button.setObjectName("toastSecondaryButton")
+        self.secondary_button.hide()
+        self.secondary_button.clicked.connect(self._secondary_pressed)
+        self.close_button = QPushButton("×", parent)
+        self.close_button.setObjectName("toastCloseButton")
+        self.close_button.setAccessibleName("Close notice")
+        self.close_button.hide()
+        self.close_button.clicked.connect(self._close_pressed)
         self._callback: Callable[[], None] | None = None
+        self._secondary_callback: Callable[[], None] | None = None
+        self._close_callback: Callable[[], None] | None = None
+        self._dismiss_callback: Callable[[], None] | None = None
         self._action_colour = "#a1bbe4"
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
@@ -1246,6 +1259,8 @@ class Toast(QWidget):
         self._pointer_tick.timeout.connect(self._poll_state)
         # The card lets the pointer through, so the window's events say whether it is over the card.
         self.button.installEventFilter(self)
+        self.secondary_button.installEventFilter(self)
+        self.close_button.installEventFilter(self)
         host = self.parentWidget()
         if host is not None:
             host.installEventFilter(self)
@@ -1271,7 +1286,18 @@ class Toast(QWidget):
     def text(self) -> str:
         return self.label.text()
 
-    def show_message(self, text: str, button: str = "", callback: Callable[[], None] | None = None) -> None:
+    def show_message(
+        self,
+        text: str,
+        button: str = "",
+        callback: Callable[[], None] | None = None,
+        *,
+        secondary_button: str = "",
+        secondary_callback: Callable[[], None] | None = None,
+        close_callback: Callable[[], None] | None = None,
+        dismiss_callback: Callable[[], None] | None = None,
+        filled: bool = False,
+    ) -> None:
         self.label.setText(text)
         self.setAccessibleName(text)
         self.setAccessibleDescription(text)
@@ -1281,9 +1307,28 @@ class Toast(QWidget):
         self._dress_button()
         self._fit_button(button == "Undo")
         self._callback = callback if button else None
+        self.secondary_button.setText(secondary_button)
+        self._secondary_callback = secondary_callback if secondary_button else None
+        self._close_callback = close_callback
+        self._dismiss_callback = dismiss_callback
+        self.button.setProperty("filled", filled)
+        self.secondary_button.setAccessibleName(secondary_button)
         self.button.setAccessibleName("Undo" if button == "Undo" else button)
-        size = self._button_size() if button else QSize(0, 0)
-        self._slot.changeSize(size.width(), size.height(), QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.button.style().unpolish(self.button)
+        self.button.style().polish(self.button)
+        sizes = [
+            self._button_size() if button else QSize(0, 0),
+            self.secondary_button.sizeHint() if secondary_button else QSize(0, 0),
+            self.close_button.sizeHint() if close_callback is not None else QSize(0, 0),
+        ]
+        visible_sizes = [size for size in sizes if size.width()]
+        gap = TOAST_GAP if len(visible_sizes) > 1 else 0
+        self._slot.changeSize(
+            sum(size.width() for size in visible_sizes) + gap * (len(visible_sizes) - 1),
+            max((size.height() for size in visible_sizes), default=0),
+            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Fixed,
+        )
         self.card.layout().invalidate()
         # The last notice's rise ends where it was going, and its fade-out ends it, so this one
         # comes in on its own.
@@ -1300,7 +1345,12 @@ class Toast(QWidget):
         self.reposition()
         self.raise_()
         self.button.setVisible(bool(button))
+        self.secondary_button.setVisible(bool(secondary_button))
+        self.close_button.setVisible(close_callback is not None)
+        self._place_button()
         self.button.raise_()
+        self.secondary_button.raise_()
+        self.close_button.raise_()
         # Something laid over the whole window, such as Ctrl+K, stays over a notice said under it:
         # raised above it, the notice stayed bright over the dimmed window.
         host = self.parentWidget()
@@ -1313,11 +1363,14 @@ class Toast(QWidget):
             # The button is the window's own child, so it rises beside the card rather than with it.
             appear(self, self.motion, rise=True)
             appear(self.button, self.motion, rise=True)
+            appear(self.secondary_button, self.motion, rise=True)
+            appear(self.close_button, self.motion, rise=True)
         announce(self, text)
-        if button:
+        if button or secondary_button or close_callback is not None:
             self._set_tab_order()
         # One with something to press stays long enough to reach for it.
-        self._limit = ACTION_TOAST_MS if button else TOAST_MS
+        has_action = bool(button or secondary_button or close_callback is not None)
+        self._limit = ACTION_TOAST_MS if has_action else TOAST_MS
         self._paused = False
         self._keys = self.button.hasFocus()
         self._pointer = False
@@ -1328,7 +1381,7 @@ class Toast(QWidget):
         self._progress.set_colour(self._action_colour)
         self.sync_progress()
         self._pointer = self._cursor_over()
-        self._pointer_tick.start() if button else self._pointer_tick.stop()
+        self._pointer_tick.start() if has_action else self._pointer_tick.stop()
         self._sync_pause()
 
     def _dress_button(self) -> None:
@@ -1381,6 +1434,8 @@ class Toast(QWidget):
             self._pointer_tick.stop()
             self._paused = False
             self.button.hide()
+            self.secondary_button.hide()
+            self.close_button.hide()
             self._progress.hide()
 
     def _fit_button(self, counts: bool) -> None:
@@ -1403,13 +1458,19 @@ class Toast(QWidget):
 
     def _place_button(self) -> None:
         inside = self.card.contentsRect().translated(self.card.pos())
-        size = self._button_size()
-        self.button.setGeometry(
-            self.x() + inside.right() + 1 - size.width(),
-            self.y() + inside.top() + (inside.height() - size.height()) // 2,
-            size.width(),
-            size.height(),
-        )
+        right = self.x() + inside.right() + 1
+        center_y = self.y() + inside.top() + inside.height() // 2
+        for button in (self.close_button, self.secondary_button, self.button):
+            if button.isHidden():
+                continue
+            size = self._button_size() if button is self.button else button.sizeHint()
+            button.setGeometry(
+                right - size.width(),
+                center_y - size.height() // 2,
+                size.width(),
+                size.height(),
+            )
+            right -= size.width() + TOAST_GAP
 
     def bump(self) -> None:
         """The same notice again: its time starts over, and the card fades once when animations are on."""
@@ -1503,7 +1564,9 @@ class Toast(QWidget):
         return host is None or not host.isVisible() or host.isMinimized() or not host.isActiveWindow()
 
     def _poll_state(self) -> None:
-        if self.isHidden() or self.button.isHidden():
+        if self.isHidden() or all(
+            button.isHidden() for button in (self.button, self.secondary_button, self.close_button)
+        ):
             return
         pointer = self._cursor_over() if self.isVisible() else False
         if pointer != self._pointer:
@@ -1529,10 +1592,15 @@ class Toast(QWidget):
         if canvas is None:
             return
         QWidget.setTabOrder(canvas, self.button)
+        QWidget.setTabOrder(self.button, self.secondary_button)
+        QWidget.setTabOrder(self.secondary_button, self.close_button)
 
     def _over_point(self, pos: QPoint) -> bool:
         on_card = self.card.rect().contains(self.card.mapFromGlobal(pos))
-        on_button = self.button.isVisible() and self.button.rect().contains(self.button.mapFromGlobal(pos))
+        on_button = any(
+            button.isVisible() and button.rect().contains(button.mapFromGlobal(pos))
+            for button in (self.button, self.secondary_button, self.close_button)
+        )
         return on_card or on_button
 
     def _global_point(self, event: QEvent) -> QPoint | None:
@@ -1543,16 +1611,17 @@ class Toast(QWidget):
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
         kind = event.type()
-        if watched is self.button and kind == QEvent.Type.FocusIn:
+        buttons = (self.button, self.secondary_button, self.close_button)
+        if watched in buttons and kind == QEvent.Type.FocusIn:
             self._keys = True
             self._sync_pause()
-        elif watched is self.button and kind == QEvent.Type.FocusOut:
+        elif watched in buttons and kind == QEvent.Type.FocusOut:
             self._keys = False
             self._sync_pause()
-        elif watched is self.button and kind == QEvent.Type.Enter:
+        elif watched in buttons and kind == QEvent.Type.Enter:
             self._pointer = True
             self._sync_pause()
-        elif watched is self.button and kind == QEvent.Type.Leave:
+        elif watched in buttons and kind == QEvent.Type.Leave:
             point = self._global_point(event)
             self._pointer = self._over_point(point) if point is not None else False
             self._sync_pause()
@@ -1594,9 +1663,26 @@ class Toast(QWidget):
         if callback is not None:
             callback()
 
+    def _secondary_pressed(self) -> None:
+        callback = self._secondary_callback
+        self.hide()
+        if callback is not None:
+            callback()
+
+    def _close_pressed(self) -> None:
+        callback = self._close_callback
+        self.hide()
+        if callback is not None:
+            callback()
+
     def _go(self) -> None:
         vanish(self, self.motion)
         vanish(self.button, self.motion)
+        vanish(self.secondary_button, self.motion)
+        vanish(self.close_button, self.motion)
+        callback, self._dismiss_callback = self._dismiss_callback, None
+        if callback is not None:
+            callback()
 
 
 class FlowLayout(QLayout):

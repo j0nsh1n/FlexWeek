@@ -593,6 +593,9 @@ class NativeWindow(QMainWindow):
         self._zoom: dict[str, int] = {}
         # The student's own looks, kept by name (custom_look.py); Settings will list them.
         self._saved_looks: list[dict] = []
+        self._new_look_notice_seen: set[str] = set()
+        self._new_look_notice_exempt: set[str] = set()
+        self._has_saved_design_look = False
         self._shown: tuple | None = None
         self._hours_week: tuple | None = None
         self._update_asked = False
@@ -2429,6 +2432,9 @@ class NativeWindow(QMainWindow):
         stamp = datetime.now().strftime("%Y-%m-%dT%H:%M")
         progress = {"version": SETUP_VERSION, "step": self.setup_page.step, "finished_at": stamp}
         self._setup_prefs["setup"] = progress
+        if self.session.new_account and self.session.account is not None:
+            self._new_look_notice_exempt.add(str(self.session.account["id"]))
+            self._save_look()
         if self.session.preferences is not None:
             self.session.preferences = {**self.session.preferences, **self._setup_prefs}
         self._setup_active = False
@@ -2712,7 +2718,53 @@ class NativeWindow(QMainWindow):
         if getattr(self, "_redo_focus_pending", False):
             self._redo_focus_pending = False
             QTimer.singleShot(0, self, self._focus_after_redo)
+        self._maybe_show_new_look_notice()
         self._finish_turn(turn)
+
+    def _maybe_show_new_look_notice(self) -> None:
+        session = self.session
+        account = session.account
+        if (
+            account is None
+            or session.new_account
+            or self._has_saved_design_look
+            or self._setup_active
+            or self._stack.currentWidget() is not self.findChild(QWidget, "weekPage")
+        ):
+            return
+        progress = (session.preferences or {}).get("setup")
+        if not isinstance(progress, dict) or not progress.get("finished_at"):
+            return
+        account_id = str(account["id"])
+        if account_id in self._new_look_notice_seen or account_id in self._new_look_notice_exempt:
+            return
+        if self.toast.isVisible() and self.toast.text() == "New in 1.0.0: each design has its own looks.":
+            return
+
+        def dismiss() -> None:
+            self._dismiss_new_look_notice(account_id)
+
+        self._notice_step = None
+        self.toast.show_message(
+            "New in 1.0.0: each design has its own looks.",
+            "Choose a look",
+            lambda: self._choose_look_from_notice(account_id),
+            secondary_button="Not now",
+            secondary_callback=dismiss,
+            close_callback=dismiss,
+            dismiss_callback=dismiss,
+            filled=True,
+        )
+
+    def _dismiss_new_look_notice(self, account_id: str) -> None:
+        if account_id in self._new_look_notice_seen:
+            return
+        self._new_look_notice_seen.add(account_id)
+        self._save_look()
+
+    def _choose_look_from_notice(self, account_id: str) -> None:
+        self._dismiss_new_look_notice(account_id)
+        self._open_settings_at(0)
 
     def _retake_slide(self) -> None:
         self._week_page.layout().activate()
@@ -5275,6 +5327,9 @@ class NativeWindow(QMainWindow):
     def _load_look(self) -> None:
         import json
 
+        self._new_look_notice_seen = set()
+        self._new_look_notice_exempt = set()
+        self._has_saved_design_look = False
         path = self._look_path()
         if not path.is_file():
             return
@@ -5283,12 +5338,30 @@ class NativeWindow(QMainWindow):
         except OSError, ValueError:
             stored = None
         self._look = sanitize_look(stored)
-        self._layout = sanitize_layout(stored.get("layout") if isinstance(stored, dict) else None)
+        raw_layout = stored.get("layout") if isinstance(stored, dict) else None
+        self._has_saved_design_look = self._layout_has_saved_look(raw_layout)
+        self._layout = sanitize_layout(raw_layout)
         self._updates = sanitize_updates(stored.get("updates") if isinstance(stored, dict) else None)
         self._zoom = sanitize_zoom(stored.get("zoom") if isinstance(stored, dict) else None)
         self._saved_looks = sanitize_saved(stored.get("saved_looks") if isinstance(stored, dict) else None)
         rail = stored.get("rail") if isinstance(stored, dict) else None
         self.rail.set_month_shown(not (isinstance(rail, dict) and rail.get("month") is False))
+        seen = stored.get("new_look_notice_seen") if isinstance(stored, dict) else None
+        if isinstance(seen, list):
+            self._new_look_notice_seen = {item for item in seen if isinstance(item, str) and item}
+        exempt = stored.get("new_look_notice_exempt") if isinstance(stored, dict) else None
+        if isinstance(exempt, list):
+            self._new_look_notice_exempt = {item for item in exempt if isinstance(item, str) and item}
+
+    @staticmethod
+    def _layout_has_saved_look(layout: object) -> bool:
+        if not isinstance(layout, dict):
+            return False
+        options = layout.get("options")
+        return isinstance(options, dict) and any(
+            isinstance(values, dict) and isinstance(values.get("look"), str) and bool(values["look"])
+            for values in options.values()
+        )
 
     def _save_look(self) -> None:
         import json
@@ -5304,8 +5377,11 @@ class NativeWindow(QMainWindow):
                 "zoom": self._zoom,
                 "saved_looks": self._saved_looks,
                 "rail": {"month": self.rail.month_shown},
+                "new_look_notice_seen": sorted(self._new_look_notice_seen),
+                "new_look_notice_exempt": sorted(self._new_look_notice_exempt),
             }
             path.write_text(json.dumps(body) + "\n")
+            self._has_saved_design_look = self._layout_has_saved_look(body["layout"])
         except OSError:
             self.session._say("Could not save the look for this device.")
 

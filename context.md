@@ -1,6 +1,7 @@
 # context.md — FlexWeek
 
 ## Current State
+- 2026-10-14: fix-e implements per-design curated looks with shared palette tokens across app chrome, design canvases, Week, Day and My day. Missing per-design selections keep the account look, including High contrast; Setup persists a selected pack, and Settings names curated canvas looks. Existing accounts without a saved design look receive a one-time, device-local notice; new accounts completing setup on this computer are exempt. Review regressions, restored colour-safety coverage and the notice behavior are recorded in the fix-e lane report.
 - 2026-10-13: 1.0.0 is prepared on `release/1.0.0` (worktree
   `~/.worktrees/flexweek-0190`, HEAD `a5f7384b`): the Android phone app
   (`android/`, Kotlin and Compose, package `com.flexweek.app`, minSdk 26) runs
