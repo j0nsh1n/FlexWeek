@@ -325,7 +325,8 @@ def test_a_month_that_arrives_after_landing_shows_live(
     wait_until(qapp, lambda: slide_in_progress(window) is not None)
     settle_everything(qapp, window)
     board = month_board(window)
-    assert board is not None and board.isVisible() and board.warning.isVisible(), "still loading"
+    assert board is not None and board.isVisible() and board.canvas.cells, "the full grid is already drawn"
+    assert not board.warning.isVisible(), "loading does not change the grid's height"
     month_arrives(window, data)
     qapp.processEvents()
     wait_until(qapp, lambda: not board.warning.isVisible())

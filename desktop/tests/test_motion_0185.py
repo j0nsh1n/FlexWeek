@@ -6,6 +6,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 from collections.abc import Iterator
+from datetime import date, timedelta
 
 import pytest
 
@@ -55,8 +56,15 @@ def test_week_to_month_to_the_next_month_never_shows_an_empty_grid(
     # The next month is on its way: the session has dropped the old one and asked for the new.
     window.next_nav.click()
     assert window.session.month_data is None, "the next month has not arrived yet"
-    assert month_days(window) == first, "the last month stays drawn while it loads"
-    assert window.month_grid.warning.text() == "Loading month…"
+    month = window.session.selected_month
+    first_day = date.fromisoformat(month + "-01")
+    last_day = (first_day + timedelta(days=31)).replace(day=1) - timedelta(days=1)
+    start = first_day - timedelta(days=first_day.weekday())
+    end = last_day + timedelta(days=6 - last_day.weekday())
+    expected = [(start + timedelta(days=index)).isoformat() for index in range((end - start).days + 1)]
+    assert month_days(window) == expected
+    assert month_days(window) != first, "the next month's dates are drawn while its data loads"
+    assert window.month_grid.warning.text() == ""
     wait_until(qapp, lambda: window.session.month_data is not None)
     assert month_days(window) and month_days(window) != first
     assert window.month_grid.warning.text() == ""
