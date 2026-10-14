@@ -120,6 +120,8 @@ WINDOWS_SYSTEM_DLLS = frozenset(
         "cfgmgr32.dll",
         "comctl32.dll",
         "comdlg32.dll",
+        # The COM runtime, in System32 since Windows 8; the engine's network stack (iroh) links it.
+        "combase.dll",
         "crypt32.dll",
         "d3d9.dll",
         "d3d11.dll",

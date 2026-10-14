@@ -101,6 +101,9 @@ def test_windows_qt_and_pydantic_use_system_dlls() -> None:
         "PySide6/qt-plugins/platforms/qwindows.dll": ["USER32.dll", "uiautomationcore.dll"],
         "PySide6/qt-plugins/platforms/qdirect2d.dll": ["uiautomationcore.dll"],
         "pydantic_core/_pydantic_core.pyd": ["KERNEL32.dll", "bcryptprimitives.dll"],
+        # 1.0.0's engine syncs through iroh, which links the COM runtime (the v1.0.0 Windows build
+        # stopped on it).
+        "flexweek_engine/flexweek_engine.pyd": ["combase.dll", "ws2_32.dll", "iphlpapi.dll"],
     }
     assert windows_problems(binaries, set()) == []
 
