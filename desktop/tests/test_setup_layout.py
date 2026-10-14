@@ -196,7 +196,7 @@ def test_the_summary_says_things_one_way(qapp: QApplication) -> None:
         setup._state.pack = "system"
         setup._show(DONE)
         text = setup.summary_text()
-        assert text[0] == "Today's app in your system's colours"
+        assert text[0] == "Today's app in Your look"
         assert all(";" not in line for line in text), text
         assert " · " in text[1] and "Soccer" in text[1], text[1]
 

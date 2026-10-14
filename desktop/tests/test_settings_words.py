@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from desktop.native.layouts.dialog import DesignPicker
 from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.look import look_menu_token
 from desktop.native.settings import BUTTON_WIDTH, FINE_TUNE_LOOK, SettingsPage
@@ -141,12 +142,12 @@ def test_this_build_says_1_0_0_and_is_offered_only_a_newer_release(
     dialog.close_page()
 
 
-def test_appearance_opens_on_colours_then_the_designs_and_ends_with_animations(
+def test_appearance_keeps_text_size_and_colours_before_the_designs_and_ends_with_animations(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
 ) -> None:
-    """Grok Bot's 0.17.0 audit (X1, A11): Colours sat under every design card and its fine-tuning
-    under Every screen. Colours now comes first, with its fine-tuning in it."""
+    """Grok Bot's 0.17.0 audit (X1, A11): text size and Colours come before design cards, and fine-tuning
+    stays with Colours."""
     dialog = prefs(window, {"main": "timeline", "day": "one", "options": {}})
     appearance = page(dialog, 0)
     assert appearance.findChildren(QGroupBox) == [], "no box inside the page's box"
@@ -154,7 +155,7 @@ def test_appearance_opens_on_colours_then_the_designs_and_ends_with_animations(
         (label for label in appearance.findChildren(QLabel) if label.isVisibleTo(dialog) and label.text()),
         key=lambda label: top(label, appearance),
     )
-    # Text size is its own card above Colours (0.18.5, item 5), so it leads the page.
+    # Text size is its own card before the design pickers, so it remains in view without scrolling.
     assert [label.text() for label in shown[:5]] == [
         "Look", "Text", "Text size", "Your text size stays the same when you change looks.", "Colours",
     ]
@@ -168,7 +169,7 @@ def test_appearance_opens_on_colours_then_the_designs_and_ends_with_animations(
         dialog.look,
         dialog.fine_tune,
         appearance.findChild(QWidget, "layoutMain"),
-        appearance.findChild(QComboBox, "layoutMain-colour"),
+        appearance.findChild(DesignPicker, "layoutMain"),
         appearance.findChild(QWidget, "layoutDay"),
         dialog.motion,
     ]
@@ -176,17 +177,9 @@ def test_appearance_opens_on_colours_then_the_designs_and_ends_with_animations(
     assert tops == sorted(tops), tops
     # What the note says, where it applies: under the colours it is about, once a design wears
     # colours of its own rather than the student's look.
-    colour = appearance.findChild(QComboBox, "layoutMain-colour")
-    note = appearance.findChild(QLabel, "layoutMainColourNote")
-    assert colour.currentData() == "match"
-    assert not note.isVisibleTo(dialog)
-    colour.setCurrentIndex(colour.findData("paper"))
-    qapp.processEvents()
-    assert note.text() == (
-        "Only the design's page takes these colours. The rest of FlexWeek keeps your Look and Accent."
-    )
-    assert note.isVisibleTo(dialog)
-    assert 0 < top(note, appearance) - top(colour, appearance) < 3 * colour.height()
+    main = appearance.findChild(DesignPicker, "layoutMain")
+    assert main is not None and main.cards
+    assert main.accessibleName() == "Main view"
     dialog.close_page()
 
 
@@ -196,13 +189,13 @@ def test_the_style_rows_sit_on_the_page_not_in_a_grey_table(
 ) -> None:
     dialog = prefs(window, {"main": "timeline", "day": "one", "options": {}})
     appearance = page(dialog, 0)
-    colour = appearance.findChild(QComboBox, "layoutMain-colour")
+    main = appearance.findChild(DesignPicker, "layoutMain")
     heading = appearance.findChild(QLabel, "layoutMainHeading")
     picture = appearance.grab().toImage()
     edge = heading.mapTo(appearance, QPoint(0, 0)).x() - 6
-    beside_colour = picture.pixelColor(edge, top(colour, appearance) + colour.height() // 2)
+    beside_designs = picture.pixelColor(edge, top(main, appearance) + main.height() // 2)
     beside_heading = picture.pixelColor(edge, top(heading, appearance) + heading.height() // 2)
-    assert beside_colour == beside_heading, "the style rows are painted on a band of their own"
+    assert beside_designs == beside_heading, "the design cards are painted on the page, not a grey band"
     dialog.close_page()
 
 

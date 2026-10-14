@@ -1034,7 +1034,7 @@ class SettingsPage(QWidget):
         # Text size, then Colours: it is what most students change, and below every design card it was
         # not found (Grok Bot's 0.17.0 audit, X1 and A11).
         appearance = _section_page(
-            "Look", (main_section, day_section, text_card, self.colours_card, everywhere_card)
+            "Look", (text_card, self.colours_card, main_section, day_section, everywhere_card)
         )
         planning_card, planning_form = _card("How homework gets a time")
         self.planning_style = QButtonGroup(planning_card)
