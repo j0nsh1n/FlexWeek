@@ -9,7 +9,15 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QPushButton, QWidget
+from PySide6.QtWidgets import (
+    QAbstractButton,
+    QApplication,
+    QDialog,
+    QDialogButtonBox,
+    QLabel,
+    QPushButton,
+    QWidget,
+)
 
 from desktop.native.widgets import SchoolHoursDialog
 from desktop.native.window import NativeWindow
@@ -27,7 +35,7 @@ from desktop.tests.window_support import window as signed_in  # noqa: F401
 @pytest.fixture()
 def window(qapp: QApplication, signed_in: NativeWindow) -> Iterator[NativeWindow]:
     """Setup skipped, so there is no School yet."""
-    signed_in.findChild(QPushButton, "viewWeek").click()
+    signed_in.findChild(QAbstractButton, "viewWeek").click()
     settled(qapp, signed_in)
     yield signed_in
 

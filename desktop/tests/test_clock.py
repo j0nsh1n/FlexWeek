@@ -73,7 +73,8 @@ def test_running_late_rows_on_the_12_hour_clock(qapp: QApplication, twelve: None
     dialog.show_trace(
         {"moves": [{"block_id": "essay", "from_start": "16:00", "to_start": "17:30"}]}, {"essay": "Essay"}
     )
-    assert dialog.changes.item(0).text() == "Essay: from 4:00 PM to 5:30 PM"
+    # Q14a / `_unbroken_time`: AM/PM stays on the time (U+00A0), not a wrapping space.
+    assert dialog.changes.item(0).text() == "Essay: from 4:00\u00a0PM to 5:30\u00a0PM"
 
 
 def test_setup_summaries_and_its_time_box(qapp: QApplication, twelve: None) -> None:  # noqa: F811

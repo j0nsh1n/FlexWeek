@@ -12,13 +12,13 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
 from PySide6.QtGui import QContextMenuEvent, QMouseEvent
-from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton, QWidget
+from PySide6.QtWidgets import QAbstractButton, QApplication, QDialog, QLabel, QPushButton, QWidget
 from shiboken6 import isValid
 
 from desktop.native import icons
 from desktop.native import window as window_module
 from desktop.native.calendar import monday_of, sunday_due
+from desktop.native.hours.rail import RAIL_PX
 from desktop.native.layouts.base import NARROW_WIDTH
 from desktop.native.layouts.empty import EMPTY_COPY_LAST, EMPTY_USE_ROUTINE
 from desktop.native.look import sanitize_look
@@ -36,7 +36,8 @@ from desktop.tests.window_support import (  # noqa: F401
 )
 from desktop.tests.window_support import window as signed_in  # noqa: F401
 
-PAST_REFUSAL = "That's in the past."
+# A drop on an earlier day than today: that day is over (1.0.0 decision on the past-time sentence).
+DAY_OVER = "That time has passed. The day is over, so choose another day."
 
 
 def send_mouse(widget, kind, at: QPoint, held: bool) -> None:
@@ -61,13 +62,16 @@ def window(qapp: QApplication, signed_in: NativeWindow) -> Iterator[NativeWindow
     session.place_session(block["id"], 2, 17 * 60)
     session.save()
     settled(qapp, signed_in)
-    signed_in.findChild(QPushButton, "viewWeek").click()
+    signed_in.findChild(QAbstractButton, "viewWeek").click()
     settled(qapp, signed_in)
     yield signed_in
 
 
 def essay_on_past_day(window: NativeWindow) -> None:
     """Clock on Thursday; essay sits Wednesday so dragging it to Monday is in the past."""
+    from desktop.native.weekmodel import set_clock_24h
+
+    set_clock_24h(False)
     session = window.session
     thursday = datetime.fromisoformat(session.week_start) + timedelta(days=3, hours=12)
     session.now_ms = lambda: int(thursday.timestamp() * 1000)
@@ -81,10 +85,10 @@ def test_a_drop_on_a_past_day_is_refused_and_says_why(
     essay_on_past_day(window)
     essay = next(b for b in window.session.blocks if b.get("assignment_id") == "math")
     before = [dict(b) for b in window.session.blocks]
-    # Wednesday → Monday: a different day already past. Synthetic moves never leave the origin
-    # column (Hand asks widgetAt), so the judge is the drop rule the window uses on release.
+    # Wednesday → Monday: a different day already past, so it is over. Synthetic moves never leave
+    # the origin column (Hand asks widgetAt), so the judge is the drop rule the window uses on release.
     verdict = window._judge_span(essay["id"], 2, 0, 17 * 60, 17 * 60 + 45)
-    assert (verdict.ok, verdict.words) == (False, PAST_REFUSAL)
+    assert (verdict.ok, verdict.words) == (False, DAY_OVER)
     window._move_block(essay["id"], 2, 0, 17 * 60, 17 * 60 + 45)
     assert window.session.blocks == before
     assert essay["days"] == [2]
@@ -198,7 +202,8 @@ def test_unfinished_collapses_to_the_more_count_after_the_first_showing(
     assert panel.isVisible()
     panel.findChild(QPushButton, "unfinishedDismiss").click()
     qapp.processEvents()
-    assert not panel.isVisible() and more.accessibleName() == "More, 1 homework still needs time"
+    assert not panel.isVisible() and more.accessibleName() == "More"
+    assert signed_in.solve_button.accessibleName() == "Plan my homework, 1 homework still needs time"
     reopen.click()
     qapp.processEvents()
     assert panel.isVisible()
@@ -267,12 +272,11 @@ def test_the_folded_rail_shows_a_waiting_chip_not_a_bare_line(
     for _ in range(5):
         qapp.processEvents()
     rail = window.rail
-    assert rail.folded
-    chip = rail.findChild(QPushButton, "railWaitingChip")
-    assert chip is not None and chip.isVisible()
-    words = chip.findChild(QLabel, "railWaitingWords")
-    assert words is not None and "Not placed yet" in words.text()
-    assert "Not placed yet:" not in rail.line.text()
+    assert not rail.folded
+    assert rail.width() == RAIL_PX
+    assert rail.waiting_label.text() == "No time yet · drag onto a day"
+    shown = [chip for chip in rail.chips() if chip.isVisible()]
+    assert [chip.accessibleName() for chip in shown] == ["Poster · 30 min"]
 
 
 def test_plan_keeps_its_words_then_more_then_drops_my(
@@ -441,7 +445,7 @@ def _fold_week(
     window.resize(width, height)
     for _ in range(5):
         qapp.processEvents()
-    assert window.rail.folded
+    assert not window.rail.folded
 
 
 def _chevron(chip: QPushButton, name: str, rail) -> None:
@@ -459,49 +463,22 @@ def test_the_folded_waiting_chip_opens_a_row_under_the_line(
     _add_waiting_poster(qapp, window)
     _fold_week(qapp, window, NARROW_WIDTH - 1)
     rail = window.rail
-    chip = rail.findChild(QPushButton, "railWaitingChip")
-    row = rail.findChild(QWidget, "railWaitingRow")
-    assert chip is not None and chip.isVisible()
-    assert row is not None and not row.isVisible()
-    assert window.findChild(QWidget, "railWaitingPopup") is None
-    _chevron(chip, "chevron-down", rail)
-    before = (window.width(), window.height())
-    QTest.mouseClick(chip, Qt.MouseButton.LeftButton)
-    qapp.processEvents()
-    assert (window.width(), window.height()) == before
-    assert row.isVisible()
-    assert window.findChild(QWidget, "railWaitingPopup") is None
-    _chevron(chip, "chevron-up", rail)
+    assert rail.waiting_label.text() == "No time yet · drag onto a day"
     waiting = next(
         widget
         for widget in rail.chips()
         if widget.property("block_id") and widget.property("tray") and widget.isVisible()
     )
-    assert waiting.parent() is row
-    assert waiting.mapTo(rail, waiting.rect().topLeft()).y() >= chip.mapTo(rail, chip.rect().bottomLeft()).y()
-    # Something to take hold of: the rig found both chips on the row 0 pixels wide.
+    assert waiting.shown_title() == "Poster"
+    assert waiting.accessibleName() == "Poster · 30 min"
+    # Something to take hold of: the rig once found the not-placed chips 0 pixels wide at this width.
     assert waiting.width() >= waiting.sizeHint().width(), (waiting.width(), waiting.sizeHint().width())
-    assert waiting.shown_title() == "Poster", "a chip on the folded row has room for its whole title"
-    words = chip.findChild(QLabel, "railWaitingWords")
-    chevron = chip.findChild(QLabel, "railWaitingChevron")
-    said = words.mapTo(chip, words.rect().topLeft()).x() + words.fontMetrics().horizontalAdvance(words.text())
-    assert said <= chevron.mapTo(chip, chevron.rect().topLeft()).x(), (words.text(), "runs under the chevron")
-    QTest.mouseClick(chip, Qt.MouseButton.LeftButton)
-    qapp.processEvents()
-    assert not row.isVisible()
-    _chevron(chip, "chevron-down", rail)
-    QTest.mouseClick(chip, Qt.MouseButton.LeftButton)
-    qapp.processEvents()
-    assert row.isVisible()
+    assert rail.width() == RAIL_PX
     window.resize(1280, 860)
     for _ in range(5):
         qapp.processEvents()
-    assert not rail.folded
+    assert not rail.folded and rail.width() == RAIL_PX
     _fold_week(qapp, window, NARROW_WIDTH - 1)
-    assert not row.isVisible()
-    _chevron(chip, "chevron-down", rail)
-    QTest.mouseClick(chip, Qt.MouseButton.LeftButton)
-    qapp.processEvents()
     caught: list[BaseException] = []
     previous_hook = sys.excepthook
     previous_unraisable = sys.unraisablehook
@@ -546,15 +523,9 @@ def test_the_folded_waiting_chip_keeps_not_placed_yet_at_800(
         window._apply_appearance()
         window._sync_chrome()
         _fold_week(qapp, window, 800)
-        chip = window.rail.findChild(QPushButton, "railWaitingChip")
-        words = chip.findChild(QLabel, "railWaitingWords")
-        count = len(window.rail.chips())
-        assert words.text() in {f"Not placed yet · {count}", "Not placed yet"}, (size, words.text())
-        assert words.fontMetrics().horizontalAdvance(words.text()) <= words.width() + 2, (
-            size,
-            words.text(),
-            words.width(),
-        )
+        assert window.rail.waiting_label.text() == "No time yet · drag onto a day"
+        shown = [chip for chip in window.rail.chips() if chip.isVisible()]
+        assert [chip.accessibleName() for chip in shown] == ["Poster · 30 min"]
 
 
 def test_a_drag_from_the_folded_waiting_row_starts(
@@ -564,11 +535,6 @@ def test_a_drag_from_the_folded_waiting_row_starts(
     waiting = _add_waiting_poster(qapp, window)
     window.move(0, 0)
     _fold_week(qapp, window, 800, 720)
-    window.rail.waiting_chip.click()
-    qapp.processEvents()
-    row = window.findChild(QWidget, "railWaitingRow")
-    assert row is not None and row.isVisible()
-    assert window.findChild(QWidget, "railWaitingPopup") is None
     chip = next(
         widget
         for widget in window.findChildren(QPushButton)
@@ -593,7 +559,6 @@ def test_a_drag_from_the_folded_waiting_row_starts(
             break
     qapp.processEvents()
     assert window.hand.active
-    assert row.isVisible()
     window.hand.cancel()
 
 
@@ -631,3 +596,22 @@ def test_a_click_on_the_grid_beside_the_empty_week_card_opens_the_free_time_menu
     local = hours.mapFromGlobal(at)
     QApplication.sendEvent(hours, QContextMenuEvent(QContextMenuEvent.Reason.Mouse, local, at))
     assert menus["rows"] and any("Add fixed time" in row for row in menus["rows"][0])
+
+
+def test_a_block_that_is_gone_takes_its_outline_with_it(qapp: QApplication, signed_in: NativeWindow) -> None:  # noqa: F811
+    session = signed_in.session
+    session.add_block({"id": "gym", "title": "Gym", "kind": "locked", "category": "extra",
+                       "start": "16:00", "duration_min": 60, "days": [0]})
+    session.select_block("gym", None)
+    session.blocks = [block for block in session.blocks if block["id"] != "gym"]
+    session._touch("running late")
+    assert session.selected_block_id is None
+
+
+def test_plan_takes_the_outline_off_the_block_it_was_on(qapp: QApplication, signed_in: NativeWindow) -> None:  # noqa: F811
+    session = signed_in.session
+    session.add_block({"id": "school", "title": "School", "kind": "locked", "category": "class",
+                       "start": "08:30", "duration_min": 405, "days": [0, 1, 2, 3, 4]})
+    session.select_block("school", None)
+    session.solve()
+    assert session.selected_block_id is None

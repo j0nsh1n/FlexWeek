@@ -28,6 +28,9 @@ os.environ["FONTCONFIG_FILE"] = str(Path(__file__).with_name("fontconfig.conf"))
 # Regression Tester's suites (0.18.4 and 0.19.0) hold strict xfails for items not fixed yet, which the
 # gate counts as skipped. They run on their own with FLEXWEEK_REGRESS=1 until every item passes.
 collect_ignore = [] if os.environ.get("FLEXWEEK_REGRESS") else ["regress184", "regress190"]
+# As in the app (desktop/native/collector.py), the collector never runs by itself, so it cannot run
+# on the local server's thread mid-test; the fixture below collects on this thread after each test.
+gc.disable()
 if os.environ.get("PYTEST_XDIST_WORKER"):
     os.environ.setdefault("XDG_CACHE_HOME", str(Path.home() / ".cache"))
     os.environ["HOME"] = tempfile.mkdtemp(prefix=f"flexweek-{os.environ['PYTEST_XDIST_WORKER']}-")

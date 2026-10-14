@@ -50,6 +50,7 @@ from desktop.native.widgets import (
 )
 from desktop.native.window import NativeWindow
 from desktop.tests.test_dialogs_look import WEEK, near, shown, soccer, styled
+from desktop.tests.test_homework_form import essay, go_when
 from desktop.tests.test_look_editor import open_editor
 from desktop.tests.window_support import (  # noqa: F401
     free,
@@ -75,16 +76,17 @@ def settle_layout(qapp: QApplication) -> None:  # noqa: F811
 def test_add_homework_grows_to_90_percent_of_the_window_before_it_scrolls(
     qapp: QApplication,  # noqa: F811
 ) -> None:
-    """#34: ticking "At a set time" put a second scroll bar inside the sheet and cut Finished and More
-    details. A sheet is as tall as its content up to 90 % of its window, and only past that scrolls."""
+    """#34: a sheet is as tall as its content up to 90 % of its window. Add homework is three
+    questions, so Due by is on When; that step still fits without an inner scroll bar."""
     parent, _palette = styled(qapp)
     dialog = shown(qapp, HomeworkDialog(parent, today=WEEK))
     area = dialog.findChild(QScrollArea, "homeworkScroll")
+    go_when(dialog)
     dialog.findChild(QCheckBox, "homeworkDueTimed").setChecked(True)
     settle_layout(qapp)
     assert area.verticalScrollBar().maximum() == 0, "nothing to scroll while the content fits"
     viewport = area.viewport().rect()
-    for name in ("homeworkCompleted", "homeworkMoreDetails"):
+    for name in ("homeworkDue", "homeworkWhen"):
         field = dialog.findChild(QWidget, name)
         spot = field.mapTo(area.viewport(), QPoint(0, 0))
         assert viewport.contains(spot) and viewport.contains(spot + QPoint(0, field.height() - 1)), name
@@ -96,8 +98,9 @@ def test_add_homework_grows_to_90_percent_of_the_window_before_it_scrolls(
 def test_add_homework_with_its_details_open_is_90_percent_of_the_window_and_then_scrolls(
     qapp: QApplication,  # noqa: F811
 ) -> None:
+    """The tall sheet is Edit with details and Due by: Add no longer puts those on one page."""
     parent, _palette = styled(qapp)
-    dialog = shown(qapp, HomeworkDialog(parent, today=WEEK))
+    dialog = shown(qapp, HomeworkDialog(parent, essay(), WEEK))
     dialog.findChild(QCheckBox, "homeworkDueTimed").setChecked(True)
     dialog.more_details.setChecked(True)
     settle_layout(qapp)
@@ -211,22 +214,22 @@ def week_anchor(window: NativeWindow) -> QWidget:  # noqa: F811
 
 
 def test_availability_is_a_sheet_that_esc_closes(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
-    escape_closes(qapp, window, window._open_availability, "Availability", week_anchor(window))
+    escape_closes(qapp, window, window._open_availability, "Study hours", week_anchor(window))
 
 
-def test_plan_unfinished_homework_is_a_sheet_that_esc_closes(
+def test_plan_homework_is_a_sheet_that_esc_closes(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
 ) -> None:
     def launch() -> None:
         window._show_preview(
-            "Plan unfinished homework",
+            "Plan homework",
             "History essay keeps its original deadline and progress.",
             PREVIEW_ROWS,
-            label="unfinished homework",
+            label="homework",
         )
 
-    escape_closes(qapp, window, launch, "Plan unfinished homework", week_anchor(window))
+    escape_closes(qapp, window, launch, "Plan homework", week_anchor(window))
 
 
 def test_manage_account_is_a_sheet_that_esc_closes(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
@@ -293,10 +296,10 @@ def test_the_leave_sheet_has_a_filled_save_an_outlined_red_discard_and_quiet_can
     sheet = shown(qapp, leave_sheet(parent, "Evening", True))
     save, discard = sheet.buttons["save"], sheet.buttons["discard"]
     assert [button.text() for button in sheet.buttons.values()] == [
-        "Cancel",
-        "Discard changes",
-        "Save",
         "Keep without saving",
+        "Cancel",
+        "Save",
+        "Discard changes",
     ]
     assert save.isDefault() and not save.property("outlined") and not save.property("quiet")
     assert discard.property("outlined") and discard.property("danger")
@@ -464,6 +467,35 @@ def test_a_confirmation_is_a_sheet_whose_default_is_cancel_and_whose_answer_is_r
         QTest.keyClick(sheet, Qt.Key.Key_Escape)
         assert sheet.answer is None and sheet.result() == QDialog.DialogCode.Rejected
         free(sheet)
+
+
+def test_return_on_sign_out_presses_the_focused_button(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
+    """N12: Return activates the focused answer, not always Cancel."""
+    sheet = ConfirmSheet(
+        window,
+        "Sign out",
+        "Your week is saved on this computer, under this account. Sign in again to see it.",
+        (("stay", "Cancel", "outlined"), ("yes", "Sign out", "")),
+        default="stay",
+    )
+    shown(qapp, sheet)
+    yes = sheet.buttons["yes"]
+    yes.setFocus()
+    QTest.keyClick(sheet, Qt.Key.Key_Return)
+    assert sheet.answer == "yes"
+    free(sheet)
+    again = ConfirmSheet(
+        window,
+        "Sign out",
+        "Sure?",
+        (("stay", "Cancel", "outlined"), ("yes", "Sign out", "")),
+        default="stay",
+    )
+    shown(qapp, again)
+    again.question.setFocus()
+    QTest.keyClick(again, Qt.Key.Key_Return)
+    assert again.answer == "stay"
+    free(again)
 
 
 def test_confirm_answers_true_only_for_the_yes_button(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811

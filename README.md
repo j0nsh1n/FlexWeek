@@ -52,6 +52,10 @@ find FlexWeek -name '*.so*' -exec ldd {} + 2>/dev/null | grep 'not found' | sort
 
 On Debian or Ubuntu without a full desktop, such as a container or a minimal install, `sudo apt install libegl1 libgl1 libdbus-1-3` adds the ones FlexWeek's own test machines lacked.
 
+## Phone app
+
+FlexWeek also runs on an Android phone (Android 8.0 or newer). Pair it with your computer in Settings > This computer > Devices: the computer shows an 8-digit code, you type it on the phone, and the code works once and lasts 5 minutes. The phone runs the same engine as your computer and syncs your real homework both ways. When your computer isn't on the same Wi-Fi, FlexWeek uses a public relay run by n0. It sees that two devices are talking, not what they send. With no phone linked, the computer opens no network connection and contacts no relay. How to build the app is in [docs/android.md](docs/android.md).
+
 ## Screenshots
 
 | First-week setup | Dark theme |

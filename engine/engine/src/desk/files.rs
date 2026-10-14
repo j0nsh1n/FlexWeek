@@ -19,6 +19,11 @@ use crate::time::is_week_start;
 pub const EXPORT_FORMAT: &str = "flexweek-week";
 pub const DAY_FORMAT: &str = "flexweek-day";
 pub const EXPORT_VERSION: i64 = 2;
+/// For a week or day file that cannot be read, or is not one. Said in the words a student can act on.
+pub const NOT_WEEK_OR_DAY: &str = "Nothing imported: this isn't a FlexWeek week or day file, or it's damaged. Export it again from FlexWeek.";
+/// For an account backup chosen where a week or day file goes.
+pub const BACKUP_HERE: &str =
+    "That's a backup file. Import it from Settings > This computer > Manage account.";
 
 /// The block as `exportable_block` hands it to the model: a link to homework the file does not
 /// carry is dropped first.
@@ -140,17 +145,18 @@ pub fn import_head(empty: bool, readable: bool, data: Option<&Value>) -> EngineR
         return Ok(refused("Empty file."));
     }
     let Some(data) = data.filter(|_| readable) else {
-        return Ok(refused("Not valid JSON. Plain-text import is export-only."));
+        return Ok(refused(NOT_WEEK_OR_DAY));
     };
     if !matches!(data, Value::Object(_)) || crate::stored::nonfinite(data).is_some() {
-        return Ok(refused("Invalid FlexWeek export."));
+        return Ok(refused(NOT_WEEK_OR_DAY));
     }
     let format = get(data, "format")?.unwrap_or(&Value::Null);
     let known = format
         .as_str()
         .filter(|name| *name == EXPORT_FORMAT || *name == DAY_FORMAT);
     let Some(format) = known else {
-        return Ok(refused("Unrecognized export format."));
+        let backup = get(data, "username")?.is_some();
+        return Ok(refused(if backup { BACKUP_HERE } else { NOT_WEEK_OR_DAY }));
     };
     let version = get(data, "version")?.unwrap_or(&Value::Null);
     let number = match version {
@@ -187,7 +193,7 @@ pub fn import_head(empty: bool, readable: bool, data: Option<&Value>) -> EngineR
         match &week_start {
             Value::String(text) => {
                 if !is_week_start(text) {
-                    return Ok(refused("Export week_start must be a Monday."));
+                    return Ok(refused(NOT_WEEK_OR_DAY));
                 }
             }
             other => {
@@ -258,9 +264,7 @@ pub fn import_tail(head: &Value, blocks: &[Value], assignments: &[Value]) -> Eng
         if let Some(parent) = get(block, "pomodoro_parent_id")? {
             hashable(parent, "set element")?;
             if seen.iter().any(|held| eq(held, parent)) {
-                return Ok(refused(
-                    "Export includes a task together with the focus chunks split from it. Nothing was imported.",
-                ));
+                return Ok(refused(NOT_WEEK_OR_DAY));
             }
         }
     }
@@ -286,7 +290,7 @@ pub fn import_tail(head: &Value, blocks: &[Value], assignments: &[Value]) -> Eng
                 && !homework_ids.iter().any(|held| eq(held, linked))
             {
                 return Ok(refused(format!(
-                    "Block {} points at homework the file does not include. Nothing was imported.",
+                    "Block {} points at homework the file doesn't include. Nothing was imported.",
                     index + 1
                 )));
             }
@@ -706,7 +710,7 @@ mod tests {
         for format in [json!([]), json!({}), json!(5), Value::Null] {
             let data = json!({"format": format, "version": 2, "blocks": [], "assignments": []});
             let head = import_head(false, true, Some(&data)).expect("a refusal, not an error");
-            assert_eq!(head["error"], "Unrecognized export format.");
+            assert_eq!(head["error"], NOT_WEEK_OR_DAY);
         }
     }
 

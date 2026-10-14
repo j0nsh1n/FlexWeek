@@ -2,7 +2,8 @@
 
 The token is the opaque one the server set as a cookie. Anyone who can read this file can already read
 the database it opens, so on a student's own computer it adds no reach. The choice exists for a shared
-computer, and Log out removes the file. The server still ends the session seven days after sign-in.
+computer, and Log out removes the file. The server ends a session after seven days, or thirty if
+Keep me signed in was ticked, and renews that length on each use.
 
 Beside it sits a second small file: the text size and whether High contrast was on in the last look
 worn, so the screens shown before sign-in read as the student left them. Log out keeps it; it holds

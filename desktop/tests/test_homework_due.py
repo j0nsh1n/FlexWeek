@@ -10,10 +10,11 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QDate, QTime
-from PySide6.QtWidgets import QApplication, QCheckBox, QLabel, QWidget
+from PySide6.QtCore import QDate, Qt, QTime
+from PySide6.QtWidgets import QApplication, QCheckBox, QLabel, QToolButton, QWidget
 
 from desktop.native.widgets import HomeworkDialog
+from desktop.tests.test_homework_form import go_when
 from desktop.tests.window_support import free, qapp  # noqa: F401
 
 TODAY = "2026-09-14"
@@ -52,6 +53,7 @@ def test_the_time_choice_is_called_due_by_and_says_what_it_does(qapp: QApplicati
     dialog = HomeworkDialog(parent, today=TODAY)
     dialog.show()
     qapp.processEvents()
+    go_when(dialog)
     switch = dialog.due.timed
     assert isinstance(switch, QCheckBox) and switch.text() == "Due by"
     assert "At a set time" not in [box.text() for box in dialog.findChildren(QCheckBox)]
@@ -69,9 +71,10 @@ def test_a_day_that_has_passed_is_refused_beside_the_date(qapp: QApplication) ->
     parent = clocked()
     dialog = HomeworkDialog(parent, today=TODAY)
     dialog.title.setText("History essay")
+    go_when(dialog)
     dialog.due.date.setDate(QDate(2026, 9, 13))
     assert not saved(dialog)
-    assert dialog.due.problem.text() == "That time has already passed."
+    assert dialog.due.problem.text() == "That due time has passed. Choose a later one."
     assert dialog.due.problem.isVisible()
     assert dialog.due.problem.objectName() == "validationError", "the sheet's error colour"
     assert not dialog.error.isVisible(), "beside the field, not in the form's last line"
@@ -88,10 +91,11 @@ def test_a_time_earlier_today_is_refused_and_a_later_one_is_not(qapp: QApplicati
     parent = clocked()
     dialog = HomeworkDialog(parent, today=TODAY, due=TODAY)
     dialog.title.setText("History essay")
+    go_when(dialog)
     dialog.due.timed.setChecked(True)
     dialog.due.time.setTime(QTime(14, 0))
     assert not saved(dialog), "14:00 is an hour ago at 15:00"
-    assert dialog.due.problem.text() == "That time has already passed."
+    assert dialog.due.problem.text() == "That due time has passed. Choose a later one."
     dialog.due.time.setTime(QTime(15, 30))
     assert saved(dialog)
     assert dialog.assignment()["due"] == "2026-09-14T15:30"
@@ -103,6 +107,7 @@ def test_a_day_with_no_time_is_due_at_the_end_of_it_so_today_is_fine(qapp: QAppl
     parent = clocked()
     dialog = HomeworkDialog(parent, today=TODAY, due=TODAY)
     dialog.title.setText("History essay")
+    go_when(dialog)
     assert dialog.due.value() == TODAY
     assert saved(dialog)
     free(dialog)
@@ -132,7 +137,7 @@ def test_a_new_deadline_on_old_homework_is_checked_too(qapp: QApplication) -> No
     dialog = HomeworkDialog(parent, homework("2026-09-20"), TODAY)
     dialog.due.date.setDate(QDate(2026, 9, 12))
     assert not saved(dialog)
-    assert dialog.due.problem.text() == "That time has already passed."
+    assert dialog.due.problem.text() == "That due time has passed. Choose a later one."
     free(dialog)
     free(parent)
 
@@ -142,3 +147,25 @@ def test_the_problem_line_is_named_for_screen_readers(qapp: QApplication) -> Non
     labels = [label for label in dialog.findChildren(QLabel) if label.accessibleName() == "Due date problem"]
     assert len(labels) == 1
     free(dialog)
+
+
+def test_due_date_is_one_tab_stop(qapp: QApplication) -> None:  # noqa: F811
+    parent = clocked()
+    dialog = HomeworkDialog(parent, homework("2026-09-25"), TODAY)
+    dialog.show()
+    qapp.processEvents()
+    dialog.title.setFocus()
+    dialog.focusNextChild()
+    date = dialog.due.date
+    focused = dialog.focusWidget()
+    assert focused is date or focused is date.lineEdit()
+    date.setFocus()
+    date.focusNextPrevChild(True)
+    focused = dialog.focusWidget()
+    assert focused is not date and focused is not date.lineEdit()
+    date.calendarWidget()
+    tools = date.calendarWidget().findChildren(QToolButton)
+    assert tools
+    assert all(button.focusPolicy() == Qt.FocusPolicy.NoFocus for button in tools)
+    free(dialog)
+    free(parent)

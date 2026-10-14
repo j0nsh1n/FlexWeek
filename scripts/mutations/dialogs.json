@@ -60,7 +60,7 @@
   "file": "desktop/native/look.py",
   "old": "        f\"QDialog QPushButton:disabled {{ background: {main_off_colours(palette)[0]}; \"\n",
   "new": "        f\"QDialog QPushButton:disabled {{ background: {palette['hairline_strong']}; \"\n",
-  "test": "desktop/tests/test_dialogs_look.py::test_a_primary_that_cannot_be_pressed_yet_is_pale_and_its_words_read_at_7_to_1"
+  "test": "desktop/tests/test_dialogs_look.py::test_a_visible_disabled_primary_is_pale_and_its_words_read_at_7_to_1"
  },
  {
   "name": "a list's ticks drawn by Qt",

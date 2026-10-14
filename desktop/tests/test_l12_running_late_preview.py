@@ -14,7 +14,7 @@ from desktop.native.weekmodel import set_clock_24h
 from desktop.native.widgets import LateDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.logic_support import qapp, server, settled, signed_in, wait_until  # noqa: F401
-from desktop.tests.test_drag_results import window  # noqa: F401
+from desktop.tests.test_drag_results import session_of, window  # noqa: F401
 
 
 def _dialog() -> LateDialog:
@@ -44,13 +44,13 @@ def _dialog() -> LateDialog:
 def test_running_late_preview_shows_day_and_both_full_ranges(qapp: QApplication) -> None:  # noqa: F811
     dialog = _dialog()
     item = dialog.changes.item(0)
-    assert item.text() == "Late test: Mon 4:45–5:45 PM → Mon 5:15–6:15 PM"
+    assert item.text() == "Late test: Mon 4:45–5:45\u00a0PM → Mon 5:15–6:15\u00a0PM"
     assert item.data(Qt.ItemDataRole.AccessibleTextRole) == (
-        "Late test, moves from Monday 4:45 to 5:45 PM to Monday 5:15 to 6:15 PM"
+        "Late test, moves from Monday 4:45 to 5:45\u00a0PM to Monday 5:15 to 6:15\u00a0PM"
     )
     assert dialog.summary.text() == "1 task moves"
     dialog.show_trace({"moves": [], "placed": [], "unplaced": [{"id": "lost", "title": "Lost"}]}, {})
-    assert dialog.summary.text() == "1 task no longer fits"
+    assert dialog.summary.text() == "Nothing needs to move."
     set_clock_24h(True)
     dialog.close()
 
@@ -107,7 +107,7 @@ def test_running_late_preview_uses_singular_plural_and_omits_zero_counts(qapp: Q
         },
         {"late-test": "Late test", "other": "Other"},
     )
-    assert dialog.summary.text() == "2 tasks move · 1 task no longer fits"
+    assert dialog.summary.text() == "2 tasks move"
     dialog.show_trace(
         {
             "moves": [
@@ -168,9 +168,9 @@ def test_running_late_preview_draws_each_change_once_with_its_title(qapp: QAppli
         assert row.text().startswith(title)
         assert title in label.text()
         assert title in row.data(Qt.ItemDataRole.AccessibleTextRole)
-    assert rows[1].text() == "Science poster, placed Fri 3:30 PM"
-    assert rows[1].data(Qt.ItemDataRole.AccessibleTextRole) == "Science poster, placed Friday 3:30 PM"
-    assert rows[0].text() == "History essay: Thu 7–8 PM → Thu 7:30–8:30 PM"
+    assert rows[1].text() == "Science poster, placed Fri 3:30\u00a0PM"
+    assert rows[1].data(Qt.ItemDataRole.AccessibleTextRole) == "Science poster, placed Friday 3:30\u00a0PM"
+    assert rows[0].text() == "History essay: Thu 7–8\u00a0PM → Thu 7:30–8:30\u00a0PM"
     set_clock_24h(True)
     dialog.close()
 
@@ -224,6 +224,12 @@ def test_running_late_summary_is_status_not_an_error(
     session = window.session
     thursday = datetime.fromisoformat(session.week_start) + timedelta(days=3, hours=15, minutes=40)
     session.now_ms = lambda: int(thursday.timestamp() * 1000)
+    # Running late moves what already has a time and never places homework that waits, so the
+    # Math worksheet is given Thursday 4 PM first.
+    math = session_of(window, "math")
+    session.add_block({**math, "start": "16:00", "days": [3]})
+    session.save()
+    settled(qapp, session)
     seen: dict = {}
 
     def run(dialog: LateDialog) -> int:
@@ -314,3 +320,11 @@ def test_running_late_buttons_share_one_left_edge(qapp: QApplication) -> None:  
     accept = dialog.accept_button.mapTo(dialog, dialog.accept_button.rect().topLeft()).x()
     assert accept == left
     dialog.close()
+
+
+def test_only_a_times_own_am_pm_is_kept_with_it() -> None:
+    from desktop.native.widgets import _unbroken_time
+
+    assert _unbroken_time("PM club AMERICAN: Mon 4:45–5:45 PM → Tue 7 AM") == (
+        "PM club AMERICAN: Mon 4:45–5:45 PM → Tue 7 AM"
+    )

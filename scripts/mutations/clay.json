@@ -133,11 +133,11 @@
   "test": "desktop/tests/test_zoom_keys.py::test_ctrl_and_equals_minus_and_zero_zoom_the_hours_showing_wherever_the_keyboard_is"
  },
  {
-  "file": "desktop/native/layouts/colourways.py",
-  "name": "Clay names an accent of its own",
-  "old": "            muted=\"#595272\",\n            line=\"#e2daf2\",\n",
-  "new": "            muted=\"#595272\",\n            accent=\"#3a2f4d\",\n            accent_ink=\"#ffffff\",\n            line=\"#e2daf2\",\n",
-  "test": "desktop/tests/test_layouts_registry.py::test_a_colourway_in_the_students_accent_reads_in_every_one[clay-pastel]"
+  "file": "desktop/native/look.py",
+  "name": "a student's accent replaces Clay's preset accent",
+  "old": "OWN_ACCENT = (\"high-contrast\", \"bento-indigo\", \"retro-teal\", \"flight-deck\", \"timeline-paper\")\n",
+  "new": "OWN_ACCENT = (\"high-contrast\", \"bento-indigo\", \"retro-teal\", \"flight-deck\", \"timeline-paper\", \"clay-lavender\")\n",
+  "test": "desktop/tests/test_look.py::test_a_students_accent_wins_over_the_presets_own"
  },
  {
   "file": "desktop/native/layouts/clay.py",

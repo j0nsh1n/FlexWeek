@@ -1,10 +1,11 @@
-"""Draw FlexWeek's icon: a rounded square in the default accent with three week blocks in white.
+"""Make FlexWeek's icon files from its original logo, desktop/assets/logo.png (256 px, the green
+dumbbell on a phone).
 
     QT_QPA_PLATFORM=offscreen .venv/bin/python scripts/brand.py
 
-Writes desktop/assets/logo.png (512 px) and desktop/assets/logo.ico (256, 128, 64, 48, 32 and 16 px)
-for the Windows build. Each size is drawn at that size rather than scaled down from the largest, so
-the blocks stay sharp at 16 px. Run it again after the default accent changes.
+Writes desktop/assets/logo.ico (256, 128, 64, 48, 32 and 16 px) for the Windows build, and the Android
+launcher icon at each density under android/app/src/main/res/mipmap-*/ic_launcher.png. Run it again
+after logo.png changes. 1.0.0 brought the original logo back in place of the blue one 0.16 drew.
 """
 
 from __future__ import annotations
@@ -17,41 +18,23 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
 
-from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QRectF, Qt  # noqa: E402
-from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter  # noqa: E402
-
-from desktop.native.look import PALETTES  # noqa: E402
+from PySide6.QtCore import QBuffer, QByteArray, QIODevice, Qt  # noqa: E402
+from PySide6.QtGui import QGuiApplication, QImage  # noqa: E402
 
 ASSETS = ROOT / "desktop" / "assets"
-PNG_SIZE = 512
+LOGO = ASSETS / "logo.png"
 ICO_SIZES = (256, 128, 64, 48, 32, 16)
-# The accent every default light look draws in.
-BLUE = PALETTES["slate"]["accent"]
-# Each block as (left, top, width) in a 1-by-1 square, all the same height: three rows of a day with
-# work of different lengths starting at different times.
-BLOCKS = ((0.22, 0.25, 0.56), (0.22, 0.44, 0.34), (0.38, 0.63, 0.40))
-BLOCK_HEIGHT = 0.13
-CORNER = 0.22
+# Android's launcher icon at each screen density, 48 dp.
+ANDROID_RES = ROOT / "android" / "app" / "src" / "main" / "res"
+LAUNCHER_SIZES = {"mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192}
 
 
-def draw(size: int) -> QImage:
-    image = QImage(size, size, QImage.Format.Format_ARGB32)
-    image.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(image)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(QColor(BLUE))
-    painter.drawRoundedRect(QRectF(0, 0, size, size), size * CORNER, size * CORNER)
-    painter.setBrush(QColor("#ffffff"))
-    height = size * BLOCK_HEIGHT
-    for left, top, width in BLOCKS:
-        # Whole pixels at small sizes, so an edge is white or blue rather than a grey smear.
-        rect = QRectF(round(size * left), round(size * top), round(size * width), max(2, round(height)))
-        painter.drawRoundedRect(rect, rect.height() * 0.3, rect.height() * 0.3)
-    painter.end()
-    return image
+def scaled(logo: QImage, size: int) -> QImage:
+    if logo.width() == size:
+        return logo
+    keep = Qt.AspectRatioMode.KeepAspectRatio
+    return logo.scaled(size, size, keep, Qt.TransformationMode.SmoothTransformation)
 
 
 def png_bytes(image: QImage) -> bytes:
@@ -91,12 +74,18 @@ def ico_bytes(images: list[QImage]) -> bytes:
 
 def main() -> int:
     application = QGuiApplication.instance() or QGuiApplication(sys.argv[:1])
-    ASSETS.mkdir(parents=True, exist_ok=True)
-    if not draw(PNG_SIZE).save(str(ASSETS / "logo.png"), "PNG"):
-        print("Could not write logo.png", file=sys.stderr)
+    logo = QImage(str(LOGO)).convertToFormat(QImage.Format.Format_ARGB32)
+    if logo.isNull():
+        print(f"Could not read {LOGO}", file=sys.stderr)
         return 1
-    (ASSETS / "logo.ico").write_bytes(ico_bytes([draw(size) for size in ICO_SIZES]))
-    print(f"Wrote {ASSETS / 'logo.png'} and {ASSETS / 'logo.ico'} in {BLUE}.")
+    (ASSETS / "logo.ico").write_bytes(ico_bytes([scaled(logo, size) for size in ICO_SIZES]))
+    for density, size in LAUNCHER_SIZES.items():
+        folder = ANDROID_RES / f"mipmap-{density}"
+        folder.mkdir(parents=True, exist_ok=True)
+        if not scaled(logo, size).save(str(folder / "ic_launcher.png"), "PNG"):
+            print(f"Could not write {folder / 'ic_launcher.png'}", file=sys.stderr)
+            return 1
+    print(f"Wrote {ASSETS / 'logo.ico'} and the Android launcher icons from {LOGO}.")
     del application
     return 0
 

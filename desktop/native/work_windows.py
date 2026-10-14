@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from desktop.native.fields import DayPicker
 from desktop.native.weekmodel import end_after_start_words, hhmm_text
+from desktop.native.widgets import caption_above
 
 START_TIMES = tuple(f"{minute // 60:02d}:{minute % 60:02d}" for minute in range(0, 1440, 15))
 END_TIMES = tuple(f"{minute // 60:02d}:{minute % 60:02d}" for minute in range(15, 1441, 15))
@@ -27,6 +28,15 @@ PRESETS = (
     ("Weekend mornings", [5, 6], "10:00", "12:00"),
 )
 PRESETS_NOTE = "Each adds a row of hours you can change."
+
+
+def _captioned(words: str, field: QWidget) -> QVBoxLayout:
+    """A caption above `field`, the same grammar as a sheet."""
+    column = QVBoxLayout()
+    column.setSpacing(4)
+    column.addWidget(caption_above(words, field))
+    column.addWidget(field)
+    return column
 
 
 class _WorkWindowRow(QFrame):
@@ -42,17 +52,13 @@ class _WorkWindowRow(QFrame):
         self.setObjectName("workWindowRow")
         self.setFrameShape(QFrame.Shape.StyledPanel)
         layout = QVBoxLayout(self)
-        days_line = QHBoxLayout()
-        days_line.addWidget(QLabel("Days"))
         # Pills, as setup's school and activity days are (X7 of the 0.17.0 audit).
         self.day_picker = DayPicker(window["days"], "workWindowDay")
         self.days = self.day_picker.buttons
         for check in self.days:
             check.toggled.connect(lambda checked, field=check: self._day_toggled(field, checked))
-        days_line.addWidget(self.day_picker, 1)
-        layout.addLayout(days_line)
+        layout.addLayout(_captioned("Days", self.day_picker))
 
-        fields = QHBoxLayout()
         self.start = QComboBox()
         self.start.setObjectName("workWindowStart")
         self.start.setAccessibleName("Work window start")
@@ -60,8 +66,6 @@ class _WorkWindowRow(QFrame):
             self.start.addItem(hhmm_text(value), value)
         self.start.setCurrentIndex(max(0, self.start.findData(window["start"])))
         self.start.currentIndexChanged.connect(on_change)
-        fields.addWidget(QLabel("From"))
-        fields.addWidget(self.start)
 
         self.end = QComboBox()
         self.end.setObjectName("workWindowEnd")
@@ -70,17 +74,6 @@ class _WorkWindowRow(QFrame):
             self.end.addItem(hhmm_text(value), value)
         self.end.setCurrentIndex(max(0, self.end.findData(window["end"])))
         self.end.currentIndexChanged.connect(on_change)
-        end_field = QVBoxLayout()
-        end_choice = QHBoxLayout()
-        end_choice.addWidget(QLabel("to"))
-        end_choice.addWidget(self.end)
-        end_field.addLayout(end_choice)
-        self.end_error = QLabel()
-        self.end_error.setObjectName("validationError")
-        self.end_error.setTextFormat(Qt.TextFormat.PlainText)
-        self.end_error.setAccessibleName("Problem with the end time")
-        end_field.addWidget(self.end_error)
-        fields.addLayout(end_field)
 
         self.subject = QComboBox()
         self.subject.setObjectName("workWindowSubject")
@@ -91,15 +84,25 @@ class _WorkWindowRow(QFrame):
         self.subject.lineEdit().setMaxLength(40)
         self.set_subjects(subjects)
         self.subject.setEditText(window.get("subject") or "")
-        fields.addWidget(self.subject, 1)
 
+        fields = QHBoxLayout()
+        fields.addLayout(_captioned("From", self.start))
+        fields.addLayout(_captioned("To", self.end))
+        fields.addLayout(_captioned("Subject", self.subject), 1)
         remove = QPushButton("Remove")
         remove.setObjectName("workWindowRemove")
         remove.setProperty("quiet", True)
         remove.setAccessibleName("Remove work window")
         remove.clicked.connect(on_remove)
-        fields.addWidget(remove)
+        fields.addWidget(remove, 0, Qt.AlignmentFlag.AlignBottom)
         layout.addLayout(fields)
+        # The end-time problem spans the row, not the To box alone.
+        self.end_error = QLabel()
+        self.end_error.setObjectName("validationError")
+        self.end_error.setTextFormat(Qt.TextFormat.PlainText)
+        self.end_error.setWordWrap(True)
+        self.end_error.setAccessibleName("Problem with the end time")
+        layout.addWidget(self.end_error)
 
     def _day_toggled(self, field: QPushButton, checked: bool) -> None:
         if not checked and not any(day.isChecked() for day in self.days):

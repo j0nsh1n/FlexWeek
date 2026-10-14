@@ -6,6 +6,7 @@ Expected words come from the audit's suggestions (03-wording-audit.md), not from
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -45,7 +46,7 @@ def test_the_import_preview_counts_what_changes_in_words(qapp: QApplication) -> 
     dialog = TransferPreviewDialog(None, PREVIEW)
     assert dialog.windowTitle() == "Import backup file?"
     assert texts(dialog) == [
-        "From joo2's backup: 1 week added, 2 weeks replaced, 3 homework added. "
+        "From joo2's backup: adds 1 week and replaces 2 of your weeks. 3 homework change. "
         "Your settings will be replaced.",
         "FlexWeek saves a restore point first, so you can go back.",
     ]
@@ -113,7 +114,10 @@ def test_undo_of_new_homework_says_adding_and_of_a_changed_one_says_editing(
     ("planning", "conflict", "pending", "said"),
     [
         (True, False, False, "Planning… one moment."),
-        (False, True, True, "This week changed in another window. Reload it from More, then plan again."),
+        (
+            False, True, True,
+            "This week changed in another window. Choose More > Reload this week, then try again.",
+        ),
         (False, False, True, "Saving your last change… Plan will work in a moment."),
     ],
 )
@@ -140,7 +144,7 @@ def test_the_greyed_tip_names_the_same_three_causes(
     session = window.session
     session.conflict = True
     assert window._more_tip("solveButton", False) == (
-        "This week changed in another window. Reload it from More first."
+        "This week changed in another window. Choose More > Reload this week, then try again."
     )
     session.conflict = False
     monkeypatch.setattr(type(session), "planning", property(lambda _self: True))
@@ -167,8 +171,11 @@ def test_the_two_no_room_reasons_say_who_is_in_the_way_and_what_to_do() -> None:
 
 def test_the_type_reason_names_the_order_instead_of_priority() -> None:
     reason = sentence("PRIORITY_PREEMPT")
+    assert reason == (
+        "Tests and other homework that's planned first used the free time before it's due. "
+        "Move one of them, shorten this, or choose a time yourself."
+    )
     assert "priority" not in reason.lower()
-    assert "tests, then quizzes, then everyday homework, then reading" in reason
 
 
 def test_the_homework_form_asks_for_a_type_not_a_priority(qapp: QApplication) -> None:
@@ -214,8 +221,12 @@ def test_a_file_for_another_week_says_nothing_was_imported_and_where_to_go(
     qapp: QApplication, server: LocalServer
 ) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
-    other = {**session.week_file(), "week_start": "2026-10-12"}
-    other_label = week_label("2026-10-12", session.today_iso())
+    # The test holds its own clock, so "another week" is the week after the open one on any day.
+    monday = datetime.fromisoformat(session.week_start) + timedelta(hours=10)
+    session.now_ms = lambda: int(monday.timestamp() * 1000)
+    other_start = (monday + timedelta(days=7)).date().isoformat()
+    other = {**session.week_file(), "week_start": other_start}
+    other_label = week_label(other_start, session.today_iso())
     assert session.import_week_file(json.dumps(other)) is False
     assert session.message == (
         f"Nothing imported: this file is for {other_label}. Go to that week, then import again."
@@ -265,9 +276,12 @@ def test_a_file_that_will_not_open_says_how_to_choose_one(
     monkeypatch.setattr(AccountDialog, "exec", lambda dialog: _choose(dialog, action))
     monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *_args: (str(missing), ""))
     window._open_account()
-    assert window.session.message == (
-        "Couldn't open that file. Choose a FlexWeek backup file (it ends in .json)."
-    )
+    # Import week or day names week and day files; the backup import keeps its own wording.
+    expected = {
+        "import": "Couldn't open that file. Choose a FlexWeek backup file (it ends in .json).",
+        "import-week": "Couldn't open that file. Choose a FlexWeek week or day file (it ends in .json).",
+    }[action]
+    assert window.session.message == expected
 
 
 def test_a_file_that_will_not_be_written_says_to_choose_another_folder(

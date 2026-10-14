@@ -1,9 +1,10 @@
 """Month, as Daily Scheduler draws it, and one thing more: a block can be carried to another date.
 
 Daily Scheduler's month is one painted grid. Each date shows its day number and its events as chips
-that start with their time ("09:00 History essay"); what does not fit becomes "+N more"; a click
-anywhere on a date opens that day. FlexWeek draws the same, in weeks that start on Monday, with the
-homework due that day as "Due" chips first.
+that start with their time; what does not fit becomes "and N more". A click selects the date and
+fills the date pane; Open Day opens that day. FlexWeek draws the same, in weeks that start on Monday,
+with the homework due that day as "Due" chips first. Overdue lives on the window's status strip, not
+under the grid.
 
 A chip with a time can also be carried: it is picked up by the one `Hand` as a date move, the hand
 asks the window whether the block can go on the date under the pointer, and the date shows the
@@ -27,38 +28,59 @@ from PySide6.QtGui import (
     QContextMenuEvent,
     QFont,
     QFontMetrics,
+    QKeyEvent,
     QMouseEvent,
     QPainter,
     QPaintEvent,
     QPen,
 )
-from PySide6.QtWidgets import QFrame, QLabel, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
+from shiboken6 import isValid
 
 from backend.models import due_is_timed
 from desktop.native.calendar import DAYS
+from desktop.native.fields import week_starts_on
 from desktop.native.fonts import caption, weighted
 from desktop.native.hours.geometry import Span
 from desktop.native.hours.hand import Gesture, Hand, Held, Verdict
 from desktop.native.look import category_paint, luminance, resolved_palette
-from desktop.native.tokens import WEIGHT_STRONG
-from desktop.native.weekmodel import WeekModel, clock_label, hhmm_text
-from desktop.native.widgets import overlay_scroll_bars
+from desktop.native.tokens import WEIGHT_STRONG, mix, text_knob
+from desktop.native.weekmodel import HOMEWORK as SESSION_CATEGORY
+from desktop.native.weekmodel import WeekModel, clock_label, hhmm_text, length_label
+from desktop.native.widgets import OverlayBar, Switch, overlay_scroll_bars
 
 # The row of day names, kept above the dates while they scroll.
 HEADER = 26
 # The fewest chips a date always has room for; past them the month scrolls rather than squeezing.
 LEAST_CHIPS = 2
-# A week's row grows with its busiest date up to this many chips; past them it says "+N more"
-# (decision 17 of 0.17: rows sized to their chips, not six even rows).
-MOST_CHIPS = 6
+# A week's row grows with its busiest date up to this many chips; the pane holds the rest.
+MOST_CHIPS = 3
 # While panels above it take the view, a row shrinks to its number and this many chips (#28).
 TIGHT_CHIPS = 1
 # This week's band: this much of the text colour over its dates, as the week washes today.
 BAND = 0.04
-# A month opened on a week late in it still shows at least this many weeks.
-LEAST_AHEAD = 2
-# Layout passes to wait for the canvas's new height before scrolling to the opening week anyway.
+# Layout passes to wait for the canvas's new height before scrolling to the first row.
 REVEAL_TRIES = 3
+# Date pane: rail-shaped card beside the grid, a drawer under this width (same as layouts.base).
+PANE_PX = 300
+PANE_NARROW = 1150
+LOAD_CAP = 180
+LOAD_WORDS = "Show study time per date"
+CLOSE_PANE = "Close"
+OPEN_DAY = "Open Day"
+HOMEWORK = frozenset({"homework", "assignments"})
+
+
+def more_label(count: int) -> str:
+    return f"and {count} more"
 
 
 @dataclass(frozen=True)
@@ -76,6 +98,7 @@ class MonthChip:
     done: bool = False
     # Due on a date already gone and not finished.
     late: bool = False
+    history: str = ""
 
     @property
     def carried(self) -> bool:
@@ -84,14 +107,20 @@ class MonthChip:
 
     @property
     def flag(self) -> str:
-        """What a deadline chip leads with, drawn bold: "Due" and its time if it has one."""
+        """The state word shown before a deadline or a carried block."""
+        if self.history:
+            return self.history
         if not self.due:
             return ""
+        if self.late:
+            return "Overdue"
         return f"Due {hhmm_text(self.due_time)}" if self.due_time else "Due"
 
     @property
     def words(self) -> str:
-        if self.due:
+        if self.due or self.history:
+            if self.history and not self.due:
+                return f"{self.flag} {clock_label(self.start or 0)} {self.title}"
             return f"{self.flag} {self.title}"
         return f"{clock_label(self.start or 0)} {self.title}"
 
@@ -102,18 +131,21 @@ class MonthCell:
     in_month: bool
     today: bool
     chips: tuple[MonthChip, ...]
+    planned_min: int = 0
+    completed_min: int = 0
 
     @property
     def day_number(self) -> int:
         return int(self.iso[8:])
 
 
-def month_cells(snapshot: dict | None, weeks: Mapping[str, WeekModel], today_iso: str) -> list[MonthCell]:
+def month_cells(
+    snapshot: dict | None, weeks: Mapping[str, WeekModel], today_iso: str, month: str | None = None
+) -> list[MonthCell]:
     """The dates of a month reply, each with its chips. `weeks` are the weeks the student has now,
     saved or not, by their Monday: a date in one of them is read from it; any other date from what
     the reply says is on it."""
-    if not snapshot:
-        return []
+    snapshot = snapshot or {"month": month, "days": []}
     deadlines: dict[str, dict] = {}
     for item in list(snapshot.get("deadlines") or []) + list(snapshot.get("overdue") or []):
         if item.get("id"):
@@ -124,8 +156,30 @@ def month_cells(snapshot: dict | None, weeks: Mapping[str, WeekModel], today_iso
         for offset in range(7):
             day_iso = (monday + timedelta(days=offset)).isoformat()
             open_days[day_iso] = tuple(item for item in week.occurrences if item.day == offset)
+    days = {str(day["date"]): day for day in snapshot.get("days") or []}
+    month = str(snapshot.get("month") or month or "")
+    if not month and days:
+        month = next((iso[:7] for iso, day in days.items() if day.get("in_month")), next(iter(days))[:7])
+    if month:
+        first = date.fromisoformat(month + "-01")
+        next_month = date(first.year + (first.month == 12), 1 if first.month == 12 else first.month + 1, 1)
+        last = next_month - timedelta(days=1)
+        sunday = week_starts_on() == "sunday"
+        start_offset = (first.weekday() + (1 if sunday else 0)) % 7
+        last_column = (last.weekday() + (1 if sunday else 0)) % 7
+        end_offset = (6 - last_column) % 7
+        display_start = first - timedelta(days=start_offset)
+        display_end = last + timedelta(days=end_offset)
+        ordered_days = []
+        current = display_start
+        while current <= display_end:
+            iso = current.isoformat()
+            ordered_days.append(days.get(iso, {"date": iso, "in_month": current.month == first.month}))
+            current += timedelta(days=1)
+    else:
+        ordered_days = list(days.values())
     cells = []
-    for day in snapshot.get("days") or []:
+    for day in ordered_days:
         iso = str(day["date"])
         chips: list[MonthChip] = []
         for aid in day.get("due_ids") or []:
@@ -154,6 +208,7 @@ def month_cells(snapshot: dict | None, weeks: Mapping[str, WeekModel], today_iso
                         start=item.start,
                         minutes=item.end - item.start,
                         done=item.done,
+                        history=item.history,
                     )
                 )
         else:
@@ -165,15 +220,29 @@ def month_cells(snapshot: dict | None, weeks: Mapping[str, WeekModel], today_iso
                     MonthChip(
                         f"block:{item['id']}",
                         str(item.get("title") or "Untitled"),
-                        str(item.get("category") or ""),
+                        # A homework session is saved with no category unless the student picked one.
+                        str(item.get("category") or (SESSION_CATEGORY if item.get("assignment_id") else "")),
                         block_id=str(item["id"]),
                         start=int(start[:2]) * 60 + int(start[3:]),
                         minutes=int(item.get("duration_min") or 0),
                         done=bool(item.get("completed")),
+                        history=str(item.get("history") or ""),
                     )
                 )
         blocks.sort(key=lambda chip: (chip.start or 0, chip.title))
-        cells.append(MonthCell(iso, bool(day.get("in_month")), iso == today_iso, tuple(chips + blocks)))
+        sessions = [block for block in blocks if block.category in HOMEWORK]
+        planned = sum(block.minutes for block in sessions)
+        completed = sum(block.minutes for block in sessions if block.done)
+        cells.append(
+            MonthCell(
+                iso,
+                bool(day.get("in_month")),
+                iso == today_iso,
+                tuple(chips + blocks),
+                planned,
+                completed,
+            )
+        )
     return cells
 
 
@@ -220,6 +289,27 @@ class MonthPainter:
             painter.setPen(self.c("text") if cell.in_month else self.c("muted"))
         painter.drawText(spot, Qt.AlignmentFlag.AlignCenter, str(cell.day_number))
 
+    def load_bar(self, painter: QPainter, box: QRectF, cell: MonthCell, under: float) -> None:
+        if cell.planned_min <= 0 and cell.completed_min <= 0:
+            return
+        track = QRectF(box.left() + 5, box.top() + under - 5, max(box.width() - 10, 1), 3)
+        tint = QColor(mix(self.colours["accent"], self.colours["panel"], 0.35))
+        planned = min(cell.planned_min / LOAD_CAP, 1.0) * track.width()
+        done = min(cell.completed_min / LOAD_CAP, 1.0) * track.width()
+        painter.fillRect(QRectF(track.left(), track.top(), planned, track.height()), tint)
+        painter.fillRect(QRectF(track.left(), track.top(), done, track.height()), self.c("accent"))
+
+    def chip_title(self, chip: MonthChip, width: float, font: QFont) -> str:
+        metrics = QFontMetrics(font)
+        if chip.due:
+            fixed = chip.flag
+        elif chip.history:
+            fixed = f"{chip.flag} {clock_label(chip.start or 0)}"
+        else:
+            fixed = clock_label(chip.start or 0)
+        room = max(0, round(width - metrics.horizontalAdvance(fixed + " ")))
+        return metrics.elidedText(chip.title, Qt.TextElideMode.ElideRight, room)
+
     def chip(self, painter: QPainter, box: QRectF, chip: MonthChip, faded: bool, held: bool) -> None:
         """A block in its category's fill, as the week draws it, or a deadline as a quiet chip led by
         a bold "Due". A column of red boxes was the most alarming thing in the app for its most
@@ -231,7 +321,7 @@ class MonthPainter:
         else:
             fill = QColor(category_fill)
         ink = self.c("text")
-        flag = self.c("error") if chip.late else self.c("text")
+        flag = self.c("text")
         if faded or chip.done or held:
             # Only the fill says "done"; dimmed words were too faint to read (#93).
             fill.setAlpha(fill.alpha() // 2)
@@ -239,26 +329,42 @@ class MonthPainter:
         painter.setBrush(fill)
         painter.drawRoundedRect(box, 4, 4)
         room = box.adjusted(5, 0, -3, 0)
-        align = Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
-        words = chip.words
-        if chip.due:
-            plain = painter.font()
-            bold = weighted(plain, WEIGHT_STRONG)
-            painter.setFont(bold)
-            painter.setPen(flag)
-            elide = QFontMetrics(bold).elidedText
-            painter.drawText(room, align, elide(chip.flag, Qt.TextElideMode.ElideRight, int(room.width())))
-            room.setLeft(room.left() + QFontMetrics(bold).horizontalAdvance(chip.flag + " "))
-            painter.setFont(plain)
-            words = chip.title
+        plain = painter.font()
+        metrics = QFontMetrics(plain)
+        tall = box.height() >= metrics.lineSpacing() * 2 + 2
+        flagged = chip.due or bool(chip.history)
+        bold = weighted(plain, WEIGHT_STRONG) if flagged else plain
+        fixed = chip.flag if flagged else ""
+        time = "" if chip.due else clock_label(chip.start or 0)
+        painter.setFont(bold)
+        painter.setPen(flag)
+        x = room.left()
+        if fixed:
+            painter.drawText(QRectF(x, room.top(), room.width(), metrics.height()),
+                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, fixed)
+            x += QFontMetrics(bold).horizontalAdvance(fixed + " ")
+        painter.setFont(plain)
+        if time:
+            painter.setPen(self.c("muted") if flagged else ink)
+            time_width = metrics.horizontalAdvance(time + " ")
+            painter.drawText(QRectF(x, room.top(), time_width, metrics.height()),
+                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, time)
+            x += time_width
         painter.setPen(ink)
-        if room.width() > 0:
-            elide = QFontMetrics(painter.font()).elidedText
-            painter.drawText(room, align, elide(words, Qt.TextElideMode.ElideRight, int(room.width())))
+        if tall:
+            title_room = QRectF(room.left(), room.top() + metrics.lineSpacing(), room.width(),
+                                max(0, room.height() - metrics.lineSpacing()))
+            painter.drawText(title_room, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop |
+                             Qt.TextFlag.TextWordWrap, chip.title)
+        else:
+            title = self.chip_title(chip, room.width(), plain)
+            if title:
+                painter.drawText(QRectF(x, room.top(), max(0, room.right() - x), metrics.height()),
+                                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, title)
 
     def more(self, painter: QPainter, box: QRectF, count: int) -> None:
         painter.setPen(self.c("muted"))
-        painter.drawText(box.adjusted(8, 0, 0, 0), Qt.AlignmentFlag.AlignVCenter, f"+{count} more")
+        painter.drawText(box.adjusted(8, 0, 0, 0), Qt.AlignmentFlag.AlignVCenter, more_label(count))
 
     def target(self, painter: QPainter, box: QRectF, verdict: Verdict | None) -> None:
         refused = verdict is not None and not verdict.ok
@@ -276,6 +382,9 @@ class MonthCanvas(QWidget):
 
     takes_dates = True
     date_opened = Signal(str)
+    # Arrow keys move the selected date; Enter or Space opens it.
+    date_moved = Signal(str)
+    date_entered = Signal(str)
 
     def __init__(self, hand: Hand, painter: MonthPainter, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -295,6 +404,9 @@ class MonthCanvas(QWidget):
         self._heights: list[float] = []
         # Set while the plan or Unfinished panel is open: the rows then shrink to fit rather than scroll.
         self._tight = False
+        self.selected: str | None = None
+        self._show_load = False
+        self._bar_inset = 0
         hand.preview_changed.connect(self.update)
 
     def set_cells(self, cells: list[MonthCell]) -> None:
@@ -303,7 +415,8 @@ class MonthCanvas(QWidget):
         self.cells = cells
         self._fit()
         self.setAccessibleDescription(
-            "Click a date to open it. Drag a block with a time to another date to move it there."
+            "Click a date to see it. Open Day opens that day. "
+            "Drag a block with a time to another date to move it there."
         )
         self.update()
 
@@ -322,15 +435,18 @@ class MonthCanvas(QWidget):
             self._tight = tight
             self._fit()
 
+    def set_show_load(self, on: bool) -> None:
+        self._show_load = on
+        self.update()
+
     def lead_with(self, row: int) -> None:
         """Open on this row: the weeks from it to the month's end fill the view."""
         self._lead = max(0, min(row, self.rows() - 1))
         self._fit()
 
     def _fit(self) -> None:
-        """Each week's row as tall as its busiest date's chips, from two to six. Room over is shared
-        by the weeks from the one the month opened on, which fill the view; the ones before it are
-        above, a scroll away."""
+        """Each week's row as tall as its busiest date's chips, from two to three. Room over is shared
+        from the first row, so the month opens with that row fully visible."""
         heights = [self.base_row(row) for row in range(self.rows())]
         if self._tight and sum(heights) > self._room:
             squeezed = self._squeezed(heights)
@@ -339,7 +455,7 @@ class MonthCanvas(QWidget):
                 self.setMinimumHeight(math.ceil(sum(squeezed)))
                 self.update()
                 return
-        start = min(self._lead, max(len(heights) - LEAST_AHEAD, 0))
+        start = 0
         spare = self._room - sum(heights[start:])
         if spare > 0 and heights:
             share = spare / (len(heights) - start)
@@ -359,7 +475,7 @@ class MonthCanvas(QWidget):
 
     def base_row(self, row: int) -> float:
         """A week's row at its own size: its busiest date's chips, from LEAST_CHIPS to MOST_CHIPS,
-        and a line for "+N more"."""
+        and a line for "and N more"."""
         busiest = max((len(cell.chips) for cell in self.cells[row * 7 : row * 7 + 7]), default=0)
         chips = min(max(busiest, LEAST_CHIPS), MOST_CHIPS)
         return round(self.number_height() + chips * self.pitch() + self.pitch() + 4)
@@ -383,8 +499,11 @@ class MonthCanvas(QWidget):
     def _small(self) -> QFont:
         return caption(self.font())
 
+    def _chip_lines(self) -> int:
+        return 2 if text_knob(self.font().pointSizeF()) == "large" else 1
+
     def chip_height(self) -> float:
-        return QFontMetrics(self._small()).height() + 2
+        return QFontMetrics(self._small()).height() * self._chip_lines() + 2
 
     def pitch(self) -> float:
         return self.chip_height() + 3
@@ -402,7 +521,7 @@ class MonthCanvas(QWidget):
 
     def cell_rect(self, index: int) -> QRectF:
         row, column = divmod(index, 7)
-        wide = self.width() / 7
+        wide = max(self.width() - self._bar_inset, 1) / 7
         tops = self._row_tops()
         return QRectF(column * wide, tops[row], wide, tops[row + 1] - tops[row])
 
@@ -421,8 +540,9 @@ class MonthCanvas(QWidget):
         """The chips a date shows, each with its box, and how many more did not fit."""
         box = self.cell_rect(index)
         chips = self.cells[index].chips
-        fits = self._slots(index)
-        if len(chips) > fits and fits != 1:
+        room = self._slots(index)
+        fits = min(room, MOST_CHIPS)
+        if len(chips) > fits and fits != 1 and fits == room:
             fits = max(0, fits - 1)
         shown = [
             (
@@ -444,11 +564,11 @@ class MonthCanvas(QWidget):
         return max(0, int(room // self.pitch()))
 
     def _more_beside_number(self, index: int) -> bool:
-        """With room for one chip line, the chip keeps it and "+N more" goes by the date's number."""
+        """With room for one chip line, the chip keeps it and "and N more" goes by the date's number."""
         return self._slots(index) == 1
 
     def more_box(self, index: int, shown: int) -> QRectF:
-        """Where "+N more" is written: under the chips, or by the number when there is one line."""
+        """Where "and N more" is written: under the chips, or by the number when there is one line."""
         box = self.cell_rect(index)
         if self._more_beside_number(index):
             side = max(22.0, QFontMetrics(self.font()).height() + 4)
@@ -485,6 +605,8 @@ class MonthCanvas(QWidget):
             self.painter.cell(painter, box, cell, at // 7 in bands)
             painter.setFont(self.font())
             self.painter.day_number(painter, box, cell)
+            if self._show_load:
+                self.painter.load_bar(painter, box, cell, self.number_height())
             painter.setFont(self._small())
             shown, more = self.chip_boxes(at)
             for chip, chip_box in shown:
@@ -494,6 +616,8 @@ class MonthCanvas(QWidget):
                 self.painter.more(painter, self.more_box(at, len(shown)), more)
             if target == cell.iso:
                 self.painter.target(painter, box, self.hand.month_verdict)
+            elif cell.iso == self.selected:
+                self.painter.target(painter, box, Verdict(True, ""))
         painter.end()
 
     # Pointer
@@ -525,6 +649,22 @@ class MonthCanvas(QWidget):
             )
             return
         self._pressed = self.date_at(point)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+        steps = {Qt.Key.Key_Left: -1, Qt.Key.Key_Right: 1, Qt.Key.Key_Up: -7, Qt.Key.Key_Down: 7}
+        at = self.index_of(self.selected) if self.selected else None
+        key = event.key()
+        if key in steps and self.cells and not event.modifiers():
+            target = 0 if at is None else min(max(at + steps[key], 0), len(self.cells) - 1)
+            self.date_moved.emit(self.cells[target].iso)
+            event.accept()
+            return
+        opens = key in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space)
+        if opens and self.selected and at is not None:
+            self.date_entered.emit(self.selected)
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:  # noqa: N802
         """A right-click on a block of the open week asks for its menu. A deadline has none."""
@@ -604,7 +744,7 @@ class MonthCanvas(QWidget):
 
 
 class MonthNames(QWidget):
-    """Monday to Sunday over the dates, in the canvas's own colours, kept in place as they scroll."""
+    """The selected first day through the rest of the week, in the canvas's own colours."""
 
     def __init__(self, canvas: MonthCanvas, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -616,9 +756,11 @@ class MonthNames(QWidget):
         painter.fillRect(self.rect(), self.canvas.painter.c("window"))
         font = weighted(self.canvas._small(), WEIGHT_STRONG)
         painter.setFont(font)
-        wide = self.width() / 7
-        for column in range(7):
-            self.canvas.painter.header(painter, QRectF(column * wide, 0, wide, self.height()), DAYS[column])
+        wide = max(self.width() - self.canvas._bar_inset, 1) / 7
+        sunday = week_starts_on() == "sunday"
+        names = (DAYS[-1], *DAYS[:-1]) if sunday else DAYS
+        for column, name in enumerate(names):
+            self.canvas.painter.header(painter, QRectF(column * wide, 0, wide, self.height()), name)
         painter.end()
 
 
@@ -635,6 +777,15 @@ class MonthScroll(QScrollArea):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setWidget(canvas)
         self.setViewportMargins(0, HEADER, 0, 0)
+        self.verticalScrollBar().rangeChanged.connect(self._gutter)
+
+    def _gutter(self, *_: object) -> None:
+        extra = OverlayBar.WIDE + OverlayBar.EDGE if self.verticalScrollBar().maximum() > 0 else 0
+        canvas = self.widget()
+        if isinstance(canvas, MonthCanvas) and canvas._bar_inset != extra:
+            canvas._bar_inset = extra
+            canvas.update()
+        self._place()
 
     def _place(self) -> None:
         port = self.viewport().geometry()
@@ -642,20 +793,103 @@ class MonthScroll(QScrollArea):
 
     def resizeEvent(self, event: object) -> None:  # noqa: N802
         super().resizeEvent(event)
-        self._place()
+        self._gutter()
 
     def viewportEvent(self, event: QEvent) -> bool:  # noqa: N802
         if event.type() == QEvent.Type.Resize:
-            self._place()
+            self._gutter()
             canvas = self.widget()
             if isinstance(canvas, MonthCanvas):
                 canvas.set_room(self.viewport().height())
         return super().viewportEvent(event)
 
 
+class DatePane(QFrame):
+    """The selected date: due work first, then blocks, a load switch, and Open Day."""
+
+    open_day = Signal()
+    load_toggled = Signal(bool)
+    close_requested = Signal()
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("monthDatePane")
+        self.setFixedWidth(PANE_PX)
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        layout = QVBoxLayout(self)
+        top = QHBoxLayout()
+        self.heading = QLabel()
+        self.heading.setObjectName("monthPaneHeading")
+        self.heading.setWordWrap(True)
+        top.addWidget(self.heading, 1)
+        # Only a drawer closes; beside the grid the pane is always there.
+        self.close_button = QPushButton(CLOSE_PANE)
+        self.close_button.setObjectName("monthPaneClose")
+        self.close_button.clicked.connect(self.close_requested.emit)
+        self.close_button.hide()
+        top.addWidget(self.close_button, 0, Qt.AlignmentFlag.AlignTop)
+        layout.addLayout(top)
+        self.load_switch = Switch(LOAD_WORDS)
+        self.load_switch.setObjectName("monthLoadSwitch")
+        self.load_switch.toggled.connect(self.load_toggled.emit)
+        layout.addWidget(self.load_switch)
+        self.rows = QVBoxLayout()
+        layout.addLayout(self.rows)
+        layout.addStretch(1)
+        self.summary = QLabel()
+        self.summary.setObjectName("monthPaneSummary")
+        self.summary.setWordWrap(True)
+        layout.addWidget(self.summary)
+        self.open = QPushButton(OPEN_DAY)
+        self.open.setObjectName("monthOpenDay")
+        self.open.clicked.connect(self.open_day.emit)
+        layout.addWidget(self.open)
+
+    def set_drawer(self, drawer: bool) -> None:
+        self.close_button.setVisible(drawer)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+        if event.key() == Qt.Key.Key_Escape and self.close_button.isVisible():
+            self.close_requested.emit()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def fill(self, cell: MonthCell | None) -> None:
+        if not isValid(self):
+            return
+        while self.rows.count():
+            item = self.rows.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        if cell is None:
+            self.heading.setText("")
+            self.summary.setText("")
+            return
+        day = date.fromisoformat(cell.iso)
+        self.heading.setText(f"{day.strftime('%A')} {day.day} {day.strftime('%B')}")
+        for chip in cell.chips:
+            line = QLabel(_pane_line(chip))
+            line.setWordWrap(True)
+            self.rows.addWidget(line)
+        planned = length_label(cell.planned_min) if cell.planned_min else "0"
+        done = length_label(cell.completed_min) if cell.completed_min else "0"
+        self.summary.setText(f"{planned} homework planned · {done} completed")
+
+
+def _pane_line(chip: MonthChip) -> str:
+    if chip.due or chip.history:
+        return chip.words
+    when = clock_label(chip.start or 0)
+    length = f" · {length_label(chip.minutes)}" if chip.minutes else ""
+    mark = "✓ " if chip.category in HOMEWORK and chip.done else ""
+    return f"{mark}{when} {chip.title}{length}"
+
+
 class MonthGrid(QWidget):
-    """A month: a note while changes are still saving, the dates, and what is overdue. The window's
-    heading already names the month, so the grid does not say it again."""
+    """A month: a note while changes are still saving, the dates, and the date pane. The window's
+    heading already names the month, so the grid does not say it again. Overdue lives on the strip."""
 
     day_activated = Signal(str)
 
@@ -673,18 +907,36 @@ class MonthGrid(QWidget):
         )
         self._palette = resolved_palette("system", False, None)
         self.canvas = MonthCanvas(self.hand, MonthPainter(self._palette))
-        self.canvas.date_opened.connect(self.day_activated.emit)
+        self.canvas.date_opened.connect(self._date_chosen)
+        self.canvas.date_moved.connect(self._date_moved)
+        self.canvas.date_entered.connect(self._date_entered)
         self.scroll = MonthScroll(self.canvas)
-        layout.addWidget(self.scroll, 1)
+        self.body = QWidget()
+        split = QHBoxLayout(self.body)
+        split.setContentsMargins(0, 0, 0, 0)
+        split.setSpacing(8)
+        split.addWidget(self.scroll, 1)
+        self.pane = DatePane()
+        self.pane.open_day.connect(self._open_day)
+        self.pane.load_toggled.connect(self.canvas.set_show_load)
+        self.pane.close_requested.connect(self.close_drawer)
+        # Under PANE_NARROW the pane is a drawer over the grid, closed until a date is chosen.
+        self._drawer_open = False
+        split.addWidget(self.pane)
+        self._split = split
+        layout.addWidget(self.body, 1)
         self.overdue = QLabel()
         self.overdue.setObjectName("monthOverdue")
-        self.overdue.setWordWrap(True)
-        layout.addWidget(self.overdue)
+        self.overdue.hide()
         self._week: WeekModel | None = None
         self._unsaved: Mapping[str, WeekModel] = {}
         self._shown: tuple[dict | None, bool, str | None, str | None] | None = None
         # Whose month is drawn, so a month on its way never shows another student's grid.
         self._drawn_for: str | None = None
+
+    def showEvent(self, event: object) -> None:  # noqa: N802
+        super().showEvent(event)
+        self._place_pane()
 
     def set_tight(self, tight: bool) -> None:
         """Panels above the month are open: its rows shrink to fit the view rather than scroll."""
@@ -731,28 +983,53 @@ class MonthGrid(QWidget):
             self.set_month(*self._shown)
 
     def set_month(
-        self, snapshot: dict | None, dirty: bool, today_iso: str | None = None, account: str | None = None
+        self,
+        snapshot: dict | None,
+        dirty: bool,
+        today_iso: str | None = None,
+        account: str | None = None,
+        month: str | None = None,
     ) -> None:
         """`snapshot` is None while a month is on its way. The grid then stays as the same `account`
         last had it, under "Loading month…", rather than flashing empty."""
         self._shown = (snapshot, dirty, today_iso, account)
         if snapshot is None:
+            if month is not None:
+                self._drawn_for = account
+                self.canvas.open_week = self._week.week_start if self._week is not None else None
+                self.canvas.set_cells(
+                    month_cells(None, self._weeks_as_kept(), today_iso or date.today().isoformat(), month)
+                )
+                # The dates are all there; a "Loading month…" line would take a row and give it back,
+                # and the month would grow when its chips came.
+                self._say(self.warning, "")
+                return
             if account is None or account != self._drawn_for:
                 self.canvas.set_cells([])
             self._say(self.warning, "Loading month…")
-            self._say(self.overdue, "")
             return
         self._drawn_for = account
         # Every week is drawn as the student has it, saved or not, so there is no "saved only" to say.
         self._say(self.warning, "")
+        weeks = self._weeks_as_kept()
+        self.canvas.open_week = self._week.week_start if self._week is not None else None
+        today = today_iso or date.today().isoformat()
+        self.canvas.set_cells(month_cells(snapshot, weeks, today, month))
+        self._say(self.overdue, "")
+        chosen = self.canvas.selected
+        if chosen is None or self.canvas.index_of(chosen) is None:
+            chosen = today if self.canvas.index_of(today) is not None else next(
+                (cell.iso for cell in self.canvas.cells if cell.in_month), None
+            )
+        if chosen:
+            self.select(chosen)
+
+    def _weeks_as_kept(self) -> dict:
+        """The weeks the student has now, by their Monday: those left unsaved and the open one."""
         weeks = dict(self._unsaved)
         if self._week is not None and self._week.week_start:
             weeks[self._week.week_start] = self._week
-        self.canvas.open_week = self._week.week_start if self._week is not None else None
-        self.canvas.set_cells(month_cells(snapshot, weeks, today_iso or date.today().isoformat()))
-        overdue = snapshot.get("overdue") or []
-        titles = ", ".join(str(item.get("title") or item.get("id", "")) for item in overdue[:8])
-        self._say(self.overdue, "Overdue: " + titles if overdue else "")
+        return weeks
 
     @staticmethod
     def _say(label: QLabel, words: str) -> None:
@@ -760,22 +1037,88 @@ class MonthGrid(QWidget):
         label.setText(words)
         label.setVisible(bool(words))
 
+    def select(self, iso: str) -> None:
+        if not isValid(self):
+            return
+        self.canvas.selected = iso
+        cell = next((item for item in self.canvas.cells if item.iso == iso), None)
+        self.pane.fill(cell)
+        self.canvas.update()
+
+    def drawer(self) -> bool:
+        return self.width() < PANE_NARROW
+
+    def _date_chosen(self, iso: str) -> None:
+        self.select(iso)
+        if self.drawer():
+            self._drawer_open = True
+            self._place_pane()
+
+    def _date_moved(self, iso: str) -> None:
+        self.select(iso)
+        self.canvas.reveal(iso)
+
+    def _date_entered(self, iso: str) -> None:
+        if self.drawer() and not self._drawer_open:
+            self._date_chosen(iso)
+            self.pane.open.setFocus(Qt.FocusReason.OtherFocusReason)
+        else:
+            self.select(iso)
+            self._open_day()
+
+    def close_drawer(self) -> None:
+        if not self._drawer_open:
+            return
+        self._drawer_open = False
+        self._place_pane()
+        self.canvas.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _open_day(self) -> None:
+        if self.canvas.selected:
+            self.day_activated.emit(self.canvas.selected)
+
+    def resizeEvent(self, event: object) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._place_pane()
+
+    def _place_pane(self) -> None:
+        drawer = self.drawer()
+        self.pane.setFixedWidth(PANE_PX)
+        self.pane.set_drawer(drawer)
+        if drawer:
+            if self._split.indexOf(self.pane) >= 0:
+                self._split.removeWidget(self.pane)
+                self.pane.setParent(self)
+            top = 0 if self.warning.isHidden() else self.warning.sizeHint().height()
+            self.pane.setGeometry(max(0, self.width() - PANE_PX), top, PANE_PX, max(0, self.height() - top))
+            # Closed, all seven days are on screen; open, it covers the right of the grid until closed.
+            self.pane.setVisible(self._drawer_open)
+            if self._drawer_open:
+                self.pane.raise_()
+        else:
+            self._drawer_open = False
+            if self._split.indexOf(self.pane) < 0:
+                self._split.addWidget(self.pane)
+            self.pane.show()
+
     def reveal(self, iso_day: str) -> None:
-        """Open the month with the week the student is in as its first row."""
-        at = self.canvas.index_of(iso_day)
-        if at is not None:
-            self._scroll_to(at // 7, REVEAL_TRIES)
+        """Open the month with its first row fully visible; this week stays banded."""
+        if not isValid(self):
+            return
+        if self.canvas.index_of(iso_day) is not None:
+            self.select(iso_day)
+            self._scroll_to(0, REVEAL_TRIES)
 
     def _scroll_to(self, row: int, tries: int) -> None:
         canvas = self.canvas
         if not self.scroll.viewport().isVisible() and tries > 0:
-            # A month just switched to has no height of its own until its first layout pass, and
-            # rows sized to fill the wrong height put another week on top.
+            # A month just switched to has no height of its own until its first layout pass.
             QTimer.singleShot(0, self, lambda: self._scroll_to(row, tries - 1))
             return
         canvas.set_room(self.scroll.viewport().height())
-        canvas.lead_with(row)
-        self.scroll.verticalScrollBar().setValue(round(canvas.cell_rect(row * 7).top()))
+        canvas.lead_with(0)
+        self.scroll.verticalScrollBar().setValue(0)
+        self.scroll._gutter()
 
     def month_surfaces(self) -> list[MonthCanvas]:
         return [self.canvas] if self.canvas.isVisible() else []

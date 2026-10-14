@@ -9,6 +9,7 @@ from __future__ import annotations
 import importlib.util
 import os
 from collections.abc import Iterator
+from datetime import date
 
 import pytest
 
@@ -24,8 +25,9 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtWidgets import QApplication, QWidget
 
     from backend.month import build_month
+    from desktop.native import fields
     from desktop.native.hours.hand import Hand, MoveDate, Verdict
-    from desktop.native.hours.month import MonthGrid, month_cells
+    from desktop.native.hours.month import LEAST_CHIPS, MonthGrid, month_cells
     from desktop.native.weekmodel import build_week
 
 MONDAY = "2026-09-21"
@@ -72,7 +74,7 @@ class Stage:
 
     def __init__(self, qapp: QApplication, judge=None) -> None:
         self.window = QWidget()
-        self.window.setGeometry(0, 0, 760, 720)
+        self.window.setGeometry(0, 0, 1280, 720)
         self.said: list[object] = []
         self.hand = Hand(lambda block_id, from_day, span: Verdict(True, ""), self.window)
         self.hand.date_judge = judge
@@ -126,6 +128,38 @@ def test_a_date_lists_what_is_due_then_its_blocks_at_their_times() -> None:
     assert [chip.words for chip in cells["2026-09-28"].chips] == ["07:00 Run", "18:00 Piano"]
     assert [chip.words for chip in cells["2026-09-29"].chips] == ["Due 09:00 French oral"]
     assert [chip.carried for chip in cells["2026-09-29"].chips] == [False], "a deadline is not carried"
+
+
+@pytest.mark.parametrize(
+    ("month", "first", "last"),
+    (("2026-11", "2026-11-01", "2026-12-05"), ("2026-10", "2026-09-27", "2026-10-31")),
+)
+def test_sunday_month_rows_start_on_sunday_and_end_on_saturday(
+    monkeypatch: pytest.MonkeyPatch, tmp_path, month: str, first: str, last: str
+) -> None:
+    path = tmp_path / "week-start.json"
+    path.write_text('{"week_starts_on":"sunday"}', encoding="utf-8")
+    monkeypatch.setattr(fields, "_week_starts_file", lambda: path)
+
+    cells = month_cells(build_month(month, [], []), {}, "")
+
+    assert cells[0].iso == first
+    assert cells[-1].iso == last
+    assert len(cells) % 7 == 0
+    assert [date.fromisoformat(cell.iso).weekday() for cell in cells[::7]] == [6] * (len(cells) // 7)
+    assert [date.fromisoformat(cell.iso).weekday() for cell in cells[6::7]] == [5] * (len(cells) // 7)
+
+
+def test_monday_month_rows_keep_the_existing_monday_to_sunday_dates(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    path = tmp_path / "week-start.json"
+    path.write_text('{"week_starts_on":"monday"}', encoding="utf-8")
+    monkeypatch.setattr(fields, "_week_starts_file", lambda: path)
+    cells = month_cells(september(), {}, "")
+
+    assert cells[0].iso == "2026-08-31"
+    assert cells[-1].iso == "2026-10-04"
 
 
 def test_a_week_left_unsaved_is_drawn_as_the_student_has_it() -> None:
@@ -210,7 +244,9 @@ def test_a_chip_let_go_on_its_own_date_moves_nothing_and_a_clicked_one_opens_it(
     stage.send(QEvent.Type.MouseButtonPress, at, True)
     stage.send(QEvent.Type.MouseButtonRelease, at, False)
     assert stage.said == []
-    assert stage.opened == ["2026-09-22"], "a chip clicked, not carried, opens its date as the date does"
+    assert stage.opened == []
+    assert stage.grid.canvas.selected == "2026-09-22"
+    assert stage.grid.pane.heading.text() == "Tuesday 22 September"
 
 
 def test_a_deadline_is_not_carried(qapp: QApplication) -> None:
@@ -265,11 +301,10 @@ def painted_colours(qapp: QApplication, draw, palette: dict | None = None) -> se
     return {image.pixelColor(x, y).name() for x in range(image.width()) for y in range(image.height())}
 
 
-def test_a_deadline_is_a_quiet_chip_led_by_due_and_red_only_once_its_date_has_gone(
+def test_a_deadline_says_overdue_in_words_without_using_the_error_colour(
     qapp: QApplication,
 ) -> None:
-    """A column of red boxes down a Sunday was the most alarming thing in the app for its most
-    ordinary fact. A deadline is a neutral chip led by a bold "Due", and red is kept for past due."""
+    """A deadline is a neutral chip led by "Due" or "Overdue"; red is kept for errors."""
     from PySide6.QtCore import QRectF
 
     from desktop.native.calendar import CATEGORIES
@@ -279,7 +314,8 @@ def test_a_deadline_is_a_quiet_chip_led_by_due_and_red_only_once_its_date_has_go
     cells = {cell.iso: cell for cell in month_cells(september(), {}, "2026-09-28")}
     gone, coming = cells["2026-09-27"].chips[0], cells["2026-09-29"].chips[0]
     assert (gone.late, coming.late) == (True, False)
-    assert (gone.flag, coming.flag) == ("Due", "Due 09:00")
+    assert (gone.flag, coming.flag) == ("Overdue", "Due 09:00")
+    assert "Overdue" in gone.words
 
     box = QRectF(0, 0, 240, 40)
 
@@ -288,8 +324,18 @@ def test_a_deadline_is_a_quiet_chip_led_by_due_and_red_only_once_its_date_has_go
 
     for shown in (gone, coming):
         assert CATEGORIES["assignments"]["mark"] not in chip(shown), "outlined in homework's colour"
-    assert palette["error"] in chip(gone)
+    assert palette["error"] not in chip(gone)
     assert palette["error"] not in chip(coming)
+
+
+def test_a_month_block_names_its_carried_history() -> None:
+    from desktop.native.hours.month import MonthChip
+
+    chip = MonthChip(
+        "block:bio", "Bio reading", "assignments", block_id="bio", start=14 * 60 + 30,
+        history="Left from last week",
+    )
+    assert chip.words == "Left from last week 14:30 Bio reading"
 
 
 def test_a_block_on_month_is_its_category_as_the_week_fills_it(qapp: QApplication) -> None:
@@ -377,6 +423,8 @@ def test_a_month_with_no_window_is_freed_without_the_garbage_collector(qapp: QAp
     import weakref
 
     gc.collect()
+    # The run keeps the collector off (conftest); put back whatever was set, never switch it on.
+    was_on = gc.isenabled()
     gc.disable()
     try:
         grid = MonthGrid()
@@ -384,7 +432,8 @@ def test_a_month_with_no_window_is_freed_without_the_garbage_collector(qapp: QAp
         del grid
         assert gone() is None
     finally:
-        gc.enable()
+        if was_on:
+            gc.enable()
 
 
 def first_row_shown(grid: MonthGrid) -> int:
@@ -393,17 +442,13 @@ def first_row_shown(grid: MonthGrid) -> int:
     return next(row for row in range(canvas.rows()) if round(canvas.cell_rect(row * 7).top()) == value)
 
 
-def test_month_opens_with_the_students_week_as_its_first_row(qapp: QApplication) -> None:
-    """A whole month fits a laptop's screen, so it opened with the weeks already gone on top. It opens
-    on the student's week now, the weeks after it filling the view and the ones before a scroll away;
-    a week late in the month still shows the week after it."""
+def test_month_opens_on_its_first_row_with_this_week_banded(qapp: QApplication) -> None:
+    """The first row of the month is fully visible; this week is banded wherever it sits."""
     from PySide6.QtTest import QTest
-
-    from desktop.native.hours.month import LEAST_AHEAD
 
     grid = MonthGrid()
     grid.resize(900, 700)
-    grid.set_month(september(), False)
+    grid.set_month(september(), False, "2026-09-16")
     grid.show()
     qapp.processEvents()
     room = grid.scroll.viewport().height()
@@ -413,22 +458,19 @@ def test_month_opens_with_the_students_week_as_its_first_row(qapp: QApplication)
     for iso in ("2026-09-03", "2026-09-24", "2026-09-30"):
         grid.reveal(iso)
         QTest.qWait(50)
-        row = canvas.index_of(iso) // 7
         top = first_row_shown(grid)
-        below = canvas.height() - round(canvas.cell_rect(top * 7).top())
-        shown.append((iso, top, below >= room, canvas.rows() - top >= LEAST_AHEAD, top == row))
+        below = canvas.height() - round(canvas.cell_rect(0).top())
+        shown.append((iso, top, below >= room, canvas.selected == iso))
     grid.close()
     assert shown == [
-        ("2026-09-03", 0, True, True, True),
-        ("2026-09-24", 3, True, True, True),
-        # The month's last row: the week before it stays above, so two weeks show.
-        ("2026-09-30", 3, True, True, False),
+        ("2026-09-03", 0, True, True),
+        ("2026-09-24", 0, True, True),
+        ("2026-09-30", 0, True, True),
     ]
 
 
-def test_a_month_revealed_before_its_first_layout_still_opens_on_the_week(qapp: QApplication) -> None:
-    """The window asks as the month is switched to, before it has a height of its own. Rows sized to
-    that height put another week on top once the month was laid out."""
+def test_a_month_revealed_before_its_first_layout_still_opens_on_the_first_row(qapp: QApplication) -> None:
+    """The window asks as the month is switched to, before it has a height of its own."""
     from PySide6.QtTest import QTest
 
     grid = MonthGrid()
@@ -441,13 +483,41 @@ def test_a_month_revealed_before_its_first_layout_still_opens_on_the_week(qapp: 
     below = grid.canvas.height() - grid.scroll.verticalScrollBar().value()
     room = grid.scroll.viewport().height()
     grid.close()
-    assert (shown, below >= room) == (3, True)
+    assert (shown, below >= room) == (0, True)
+
+
+def test_loading_month_has_its_final_dates_and_height_before_the_reply(qapp: QApplication) -> None:
+    """Jonathan: switching to Month, it was short with empty space, then grew when the month arrived.
+    While the reply is on its way the grid already has every date of the month, at the height the reply
+    gives a month with no more chips on a day than a row always has room for."""
+    grid = MonthGrid()
+    grid.resize(900, 700)
+    grid.set_month(None, False, "2026-10-15", "student", "2026-10")
+    grid.show()
+    qapp.processEvents()
+    first_cells = tuple(cell.iso for cell in grid.canvas.cells)
+    first_height = grid.canvas.height()
+    first_rows = tuple(grid.canvas.cell_rect(row * 7).height() for row in range(5))
+
+    snapshot = build_month("2026-10", [], [])
+    quiet = next(day for day in snapshot["days"] if day["date"] == "2026-10-15")
+    quiet["blocks"] = [
+        {"id": f"b{hour}", "title": f"Club {hour}", "start": f"{hour:02d}:00", "duration_min": 60}
+        for hour in range(8, 8 + LEAST_CHIPS)
+    ]
+    grid.set_month(snapshot, False, "2026-10-15", "student", "2026-10")
+    qapp.processEvents()
+
+    assert len(first_cells) == 35
+    assert first_cells == tuple(cell.iso for cell in grid.canvas.cells)
+    assert first_height == grid.canvas.height()
+    assert first_rows == tuple(grid.canvas.cell_rect(row * 7).height() for row in range(5))
+    grid.close()
 
 
 def test_a_weeks_row_is_as_tall_as_its_busiest_date_and_this_week_is_banded(qapp: QApplication) -> None:
-    """Decision 17 of 0.17: not six even rows with empty space in the quiet weeks. A week's row grows
-    with its busiest date, up to six chips, and the week with today is banded in a little of the text
-    colour, not the accent."""
+    """A week's row grows with its busiest date, up to three chips, and the week with today is banded
+    in a little of the text colour, not the accent."""
     from PySide6.QtGui import QColor
 
     from desktop.native.hours.month import MOST_CHIPS

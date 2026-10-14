@@ -94,9 +94,13 @@ def credit_target(state: dict, assignment: dict | None, block: dict | None, work
     return None if raw is None else json.loads(raw)
 
 
-def focus_candidates(blocks: list[dict], assignments: dict, trace: dict | None) -> list[dict]:
+def focus_candidates(
+    blocks: list[dict], assignments: dict, trace: dict | None, week_start: str, now: str
+) -> list[dict]:
     return json.loads(
-        flexweek_engine.focus_candidates(json.dumps(blocks), json.dumps(assignments), json.dumps(trace))
+        flexweek_engine.focus_candidates(
+            json.dumps(blocks), json.dumps(assignments), json.dumps(trace), week_start, now
+        )
     )
 
 

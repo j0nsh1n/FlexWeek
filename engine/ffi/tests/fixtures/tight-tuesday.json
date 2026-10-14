@@ -1,0 +1,91 @@
+{
+  "name": "tight-tuesday",
+  "week_start": "2026-10-05",
+  "now": "2026-10-05T16:00:00",
+  "assignments": {
+    "lab": {
+      "id": "lab",
+      "title": "Lab report",
+      "due": "2026-10-06T18:00",
+      "estimate_min": 180,
+      "priority": 2,
+      "energy": "high",
+      "focus_minutes": 0,
+      "completed": false,
+      "unplanned_min": 180,
+      "spread": "one"
+    }
+  },
+  "blocks": [
+    {
+      "id": "school",
+      "title": "School",
+      "kind": "locked",
+      "days": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "start": "08:00",
+      "duration_min": 390,
+      "category": "class"
+    },
+    {
+      "id": "soccer",
+      "title": "Soccer",
+      "kind": "locked",
+      "days": [
+        0,
+        1
+      ],
+      "start": "16:00",
+      "duration_min": 120,
+      "category": "exercise"
+    },
+    {
+      "id": "lab-session",
+      "title": "Lab report",
+      "kind": "flexible",
+      "days": [
+        0,
+        1
+      ],
+      "duration_min": 180,
+      "assignment_id": "lab",
+      "priority": 2,
+      "energy": "high",
+      "category": "assignments"
+    }
+  ],
+  "earlier_weeks": [],
+  "work_windows": [],
+  "expected": {
+    "placed": [
+      {
+        "id": "lab-session",
+        "assignment_id": "lab",
+        "start": "18:00",
+        "days": [
+          0
+        ],
+        "duration_min": 180
+      }
+    ],
+    "not_placed": [],
+    "shares": [],
+    "explanations": [
+      {
+        "block_id": "lab-session",
+        "reason": "ENERGY_MISMATCH",
+        "message": "Planned outside its preferred time of day."
+      },
+      {
+        "block_id": "lab-session",
+        "reason": null,
+        "message": "Finishes 21 h before it is due."
+      }
+    ]
+  }
+}

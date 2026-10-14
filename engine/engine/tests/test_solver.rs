@@ -465,7 +465,7 @@ fn test_moves_record_unplaced_reasons() {
         item.block_id == "quiz"
             && item.reason.as_deref() == Some("DEADLINE_MISS")
             && item.message
-                == "There is not enough time left before it is due, even with nothing else planned."
+                == "There isn't enough time left before it's due, even with nothing else planned."
     }));
 }
 
@@ -695,7 +695,7 @@ fn test_a_deadline_that_has_already_passed_says_so() {
     assert_eq!(ids(&trace.unplaced), ["hw"]);
     let (reason, message) = unplaced_reason(&trace, "hw");
     assert_eq!(reason, "DEADLINE_PASSED");
-    assert_eq!(message, "That time has already passed.");
+    assert_eq!(message, "That due time has passed. Choose a later one.");
     assert!(
         trace
             .failed_constraints

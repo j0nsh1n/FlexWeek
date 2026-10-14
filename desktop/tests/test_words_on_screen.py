@@ -47,7 +47,7 @@ def test_running_late_says_where_each_block_goes_in_words(qapp: QApplication) ->
     assert rows == [
         "History essay: from 16:00 to 17:30",
         "Maths: placed at 18:00",
-        "Club: moves off 19:00 and is not placed",
+        "Club: moves off 19:00 and isn't placed",
     ]
 
 
@@ -68,7 +68,7 @@ def test_the_tray_is_not_placed_yet_everywhere(
     settled(qapp, window)
     window._on_week()
     qapp.processEvents()
-    assert window.findChild(QLabel, "classicWaitingLabel").text() == "Not placed yet"
+    assert window.findChild(QLabel, "classicWaitingLabel").text() == "No time yet · drag onto a day"
     trays = (("timeline", "timelineTrayLabel"), ("clay", "clayTrayLabel"))
     for main, name in trays:
         window._layout = sanitize_layout({"main": main, "day": "one"})
@@ -97,12 +97,16 @@ def test_the_strip_under_next_says_what_it_is(
     session.add_block({**essay, "start": "19:00", "days": [0], "pinned": True})
     session.save()
     settled(qapp, window)
+    monday = datetime.fromisoformat(session.week_start) + timedelta(hours=18)
+    session.now_ms = lambda: int(monday.timestamp() * 1000)
+    session.week_changed.emit()
+    settled(qapp, window)
     panel = window.rail
-    assert panel.tasks.isVisibleTo(window)
-    label = panel.findChild(QLabel, "focusTasksLabel")
-    assert label.text() == "Start a focus timer"
-    assert label.isVisibleTo(window)
-    assert panel.tasks.toolTip() == "Double-click homework to start a focus timer for it."
+    assert not panel.tasks.isVisibleTo(window)
+    assert not panel.focus.isVisible()
+    assert panel.next.start_focus.isVisible()
+    assert panel.next.start_focus.text() == "Start focus"
+    assert panel.next.title.text() == "History essay"
 
 
 def test_cancelling_running_late_takes_its_preview_off_the_screen(
@@ -115,6 +119,12 @@ def test_cancelling_running_late_takes_its_preview_off_the_screen(
     session.now_ms = lambda: int(thursday.timestamp() * 1000)
     session.add_homework({"id": "essay", "title": "History essay", "estimate_min": 60, "revision": 0,
                           "due": (thursday.date() + timedelta(days=2)).isoformat() + "T23:59"})
+    session.save()
+    settled(qapp, window)
+    # Q1: Running late moves only blocks that already have a time. Re-seed so the essay
+    # is on Thursday at 16:00; keep asserting the summary is a status with "1 task moves".
+    essay = next(block for block in session.blocks if block.get("assignment_id") == "essay")
+    session.add_block({**essay, "start": "16:00", "days": [3]})
     session.save()
     settled(qapp, window)
 

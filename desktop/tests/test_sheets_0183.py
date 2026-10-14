@@ -16,6 +16,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QPoint
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QAbstractButton,
     QApplication,
     QComboBox,
     QLabel,
@@ -58,9 +59,9 @@ WAITING = {"id": "w", "title": "Essay", "duration_min": 45, "days": [1, 2]}
 
 def test_plan_sentence_and_the_panel_share_one_placed_wording() -> None:
     """#43: the toast and the panel both say Placed, in the toast's sentence."""
-    assert plan_sentence(2, 1) == "Placed 2 homework blocks. 1 still needs a time."
+    assert plan_sentence(2, 1) == "Placed 2 homework blocks. 1 with no time yet."
     assert plan_sentence(1, 0) == "Placed 1 homework block."
-    assert plan_sentence(0, 1) == "Nothing placed. 1 still needs a time."
+    assert plan_sentence(0, 1) == "Nothing placed. 1 with no time yet."
 
 
 def test_got_it_is_tinted_and_the_panel_uses_the_toast_sentence(qapp: QApplication) -> None:  # noqa: F811
@@ -153,9 +154,14 @@ def test_add_fixed_time_is_titled_that_and_guesses_category_from_the_start(
     added = shown(qapp, BlockDialog(parent, day=3, start="10:00"))
     assert added.windowTitle() == "Add fixed time"
     assert added.findChild(QLabel, "sheetTitle").text() == "Add fixed time"
+    from desktop.tests.test_fixed_time_steps import go_length, go_when
+
+    go_when(added)
     assert added.findChild(QLabel, "blockRepeatNote").text() == "Pick more days to repeat it."
+    go_length(added)
     duration = next(label for label in added.findChildren(QLabel) if label.text() == "Duration")
-    assert duration.isVisibleTo(added)
+    assert not duration.isVisibleTo(added), "the Category step asks only for Category"
+    assert added.category.isVisibleTo(added)
     assert added.category.currentData() == "class"
     added.start.setTime(added.start.time().addSecs(8 * 3600))
     qapp.processEvents()
@@ -168,12 +174,13 @@ def test_add_fixed_time_is_titled_that_and_guesses_category_from_the_start(
     assert added.findChild(QLineEdit, "blockSpotify") is None or not added.findChild(
         QLineEdit, "blockSpotify"
     ).isVisibleTo(added)
-    added.more_details.setChecked(True)
-    qapp.processEvents()
-    assert added.spotify.isVisibleTo(added)
+    assert not added.more_details.isVisibleTo(added), "Add fixed time has no More details on the three steps"
     free(added)
     edited = shown(qapp, BlockDialog(parent, soccer(), occurrence_day=3))
-    assert edited.windowTitle() == "Edit event"
+    assert edited.windowTitle() == "Edit fixed time"
+    edited.more_details.setChecked(True)
+    qapp.processEvents()
+    assert edited.spotify.isVisibleTo(edited)
     free(edited)
     free(parent)
 
@@ -195,20 +202,23 @@ def test_day_ranges_collapse_three_or_more_in_a_row() -> None:
 
 
 def test_running_late_buttons_are_filled_outlined_and_bare(qapp: QApplication) -> None:  # noqa: F811
-    """Jonathan's call: Accept late start filled, Preview outlined, Cancel bare."""
+    """Preview is filled; after preview, Accept replaces it on one row. Cancel stays bare."""
     parent, palette = styled(qapp)
     late = shown(qapp, LateDialog(parent, "School"))
     preview = late.findChild(QPushButton, "latePreview")
     cancel = next(button for button in late.findChildren(QPushButton) if button.text() == "Cancel")
-    assert preview.property("outlined") is True
+    assert not preview.property("outlined")
     assert preview.property("quiet") is not True
     assert cancel.property("quiet") is True
     assert late.accept_button.isEnabled() is False
+    assert not late.accept_button.isVisible()
     loud = filled(late, palette["accent"])
-    assert loud == []
+    assert loud == ["Preview"]
     late.show_trace({"moves": [], "unplaced": []}, {})
     qapp.processEvents()
     still(late)
+    assert not preview.isVisible()
+    assert late.accept_button.isVisible()
     loud = filled(late, palette["accent"])
     assert loud == ["Accept late start"]
     free(late)
@@ -220,7 +230,7 @@ def test_running_late_is_greyed_on_another_week_with_the_reason(
     window: NativeWindow,  # noqa: F811
 ) -> None:
     """#53: greyed while viewing next week, instead of refusing after the click."""
-    window.findChild(QPushButton, "viewWeek").click()
+    window.findChild(QAbstractButton, "viewWeek").click()
     settled(qapp, window)
     late = window.findChild(QPushButton, "runningLate")
     assert late.isEnabled()

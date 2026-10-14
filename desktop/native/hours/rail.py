@@ -11,6 +11,7 @@ behind "Not placed yet" and opens on a wrapping row under that line.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -53,7 +54,7 @@ from PySide6.QtWidgets import (
 from shiboken6 import isValid
 
 from desktop.native import icons
-from desktop.native.calendar import DAYS, month_title
+from desktop.native.calendar import DAYS, day_short, month_title
 from desktop.native.fonts import at_scale, time_font, weighted
 from desktop.native.hours.chips import TrayChip
 from desktop.native.hours.hand import Hand
@@ -71,15 +72,18 @@ from desktop.native.weekmodel import (
     minute_of,
     time_format,
 )
-from desktop.native.widgets import FlowLayout, overlay_scroll_bars
+from desktop.native.widgets import FittedLabel, FlowLayout, overlay_scroll_bars
 
-RAIL_PX = 280
+RAIL_PX = 260
+WAITING_HEAD = "No time yet · drag onto a day"
 LETTERS = ("M", "T", "W", "T", "F", "S", "S")
 HIDE_MONTH = "Hide the month"
 SHOW_MONTH = "Show the month"
 # 8 at the sides: the window's own 9-pixel margin puts the rail's words 17 from its edge, where the
 # mock-up has them at 16, and a focus row or a chip has the room to say "Chem lab report" whole.
 PAD = SPACING[1]
+# The least a row's title shrinks to before it ends in "…"; the rest of the row keeps its own room.
+TITLE_FLOOR = 48
 # The gaps that keep a homework title from the book before it and the length or day after it. They are
 # small so that a title as long as "Math worksheet" is not cut on a row with room for it.
 BOOK_GAP = 6
@@ -344,7 +348,7 @@ class MonthCard(QWidget):
         self.title.setText(month_title(month))
         self.dates.setAccessibleName(f"Month, {month_title(month)}")
         self.dates.setAccessibleDescription(
-            f"Shows the week beginning {self.dates.week_start}." if self.dates.week_start else ""
+            f"Shows the week of {day_short(self.dates.week_start)}." if self.dates.week_start else ""
         )
         self.dates.updateGeometry()
         self.dates.update()
@@ -385,7 +389,9 @@ class EdgeCard(QFrame):
 
 
 class NextCard(QWidget):
-    """What is on now or next, when, and what follows it."""
+    """What is on now or next, in start order, with Start focus on homework."""
+
+    focus_requested = Signal(str, object)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -399,8 +405,11 @@ class NextCard(QWidget):
         self.head.addWidget(self.label, 1)
         box.addLayout(self.head)
         self.card = EdgeCard("railNextCard")
-        inside = QVBoxLayout(self.card)
-        inside.setContentsMargins(3 + SPACING[2], 2, 0, 2)
+        card_row = QHBoxLayout(self.card)
+        card_row.setContentsMargins(3 + SPACING[2], 2, SPACING[1], 2)
+        card_row.setSpacing(SPACING[1])
+        inside = QVBoxLayout()
+        inside.setContentsMargins(0, 0, 0, 0)
         inside.setSpacing(2)
         self.title = QLabel()
         self.title.setObjectName("railNextTitle")
@@ -414,21 +423,93 @@ class NextCard(QWidget):
         self.then.setWordWrap(True)
         for widget in (self.title, self.when, self.then):
             inside.addWidget(widget)
+        card_row.addLayout(inside, 1)
+        self.start_focus = QPushButton("Start focus")
+        self.start_focus.setObjectName("railNextFocus")
+        self.start_focus.setFixedHeight(30)
+        self.start_focus.hide()
+        card_row.addWidget(self.start_focus, 0, Qt.AlignmentFlag.AlignVCenter)
         box.addWidget(self.card)
+        self.rest = QWidget()
+        self.rest.setObjectName("railNextRest")
+        self.rest_box = QVBoxLayout(self.rest)
+        self.rest_box.setContentsMargins(0, 0, 0, 0)
+        self.rest_box.setSpacing(SPACING[0])
+        box.addWidget(self.rest)
         self.shown: tuple[str, str, str, str] = ("", "", "", "")
+        # What the rows under the card say. The clock calls show_next every minute; rows rebuilt then
+        # would take the keyboard off a row's Start focus.
+        self._rest_shown: tuple = ()
+        self._first_id = ""
+        self._first_day: object = None
+        self.start_focus.clicked.connect(
+            lambda: self.focus_requested.emit(self._first_id, self._first_day)
+        )
 
     def show_next(self, week: WeekModel | None, today: int | None, minute: int | None) -> bool:
         """Whether there is anything to say: nothing now or later today, or not this week, says nothing."""
         said = next_words(week, today, minute)
+        known = week is not None and today is not None and minute is not None
+        queue = week.day_queue(today, minute).queue if known else ()
+        first = queue[0] if queue else None
         if said != self.shown:
             self.shown = said
             heading, title, when, then = said
-            self.label.setText(heading)
+            self.label.setText(heading or "Next")
             self.title.setText(title)
             self.when.setText(when)
             self.then.setText(then)
             self.then.setVisible(bool(then))
+        self._first_id = first.block_id if first is not None else ""
+        self._first_day = first.day if first is not None else None
+        self.start_focus.setVisible(bool(first is not None and first.work))
+        focus_name = f"Start focus on {first.title}" if first is not None else "Start focus"
+        self.start_focus.setAccessibleName(focus_name)
+        self.card.setVisible(bool(said[1]))
+        rest = queue[1:]
+        rest_shown = (
+            time_format(),
+            tuple((row.block_id, row.day, row.title, row.start, row.minutes, row.work) for row in rest),
+        )
+        if rest_shown != self._rest_shown:
+            self._rest_shown = rest_shown
+            self._fill_rest(rest)
+        self.rest.setVisible(self.rest_box.count() > 0)
         return bool(said[1])
+
+    def _fill_rest(self, items: Sequence[Occurrence]) -> None:
+        while self.rest_box.count():
+            entry = self.rest_box.takeAt(0)
+            widget = entry.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+        for item in items:
+            row = QWidget()
+            row.setObjectName("railNextRow")
+            row_box = QHBoxLayout(row)
+            row_box.setContentsMargins(SPACING[1], 2, SPACING[1], 2)
+            words = QVBoxLayout()
+            words.setContentsMargins(0, 0, 0, 0)
+            name = QLabel(item.title)
+            name.setObjectName("railNextRowTitle")
+            # Wrapped, a long name takes a second line beside Start focus instead of widening the rail.
+            name.setWordWrap(True)
+            when = QLabel(f"{clock_label(item.start)} · {length_label(item.minutes)}")
+            when.setObjectName("railNextRowWhen")
+            words.addWidget(name)
+            words.addWidget(when)
+            row_box.addLayout(words, 1)
+            if item.work:
+                start = QPushButton("Start focus")
+                start.setObjectName("railNextRowFocus")
+                start.setAccessibleName(f"Start focus on {item.title}")
+                start.setFixedHeight(30)
+                start.clicked.connect(
+                    lambda _=False, key=item.block_id, day=item.day: self.focus_requested.emit(key, day)
+                )
+                row_box.addWidget(start)
+            self.rest_box.addWidget(row)
 
 
 def next_words(week: WeekModel | None, today: int | None, minute: int | None) -> tuple[str, str, str, str]:
@@ -467,6 +548,12 @@ class RailChip(TrayChip):
         super().__init__(hand, waiting, parent)
         self.setProperty("railChip", True)
         self.length = length_label(waiting.minutes)
+        due = waiting.due
+        if due:
+            day = date.fromisoformat(str(due)[:10])
+            self.subline = f"{self.length} · due {DAYS[day.weekday()]} {day.day}"
+        else:
+            self.subline = self.length
         self.colours = Colours()
         self.look: dict | None = None
         self.setText(waiting.title)
@@ -482,9 +569,7 @@ class RailChip(TrayChip):
         return _scaled(self.font(), "body", self.look), time_font(_scaled(self.font(), "caption", self.look))
 
     def _title_room(self) -> float:
-        body, small = self._fonts()
-        length = QFontMetricsF(small).horizontalAdvance(self.length)
-        return max(0.0, self.width() - CHIP_TITLE_LEFT - TITLE_GAP - length - SPACING[1])
+        return max(0.0, self.width() - CHIP_TITLE_LEFT - SPACING[1])
 
     def title_lines(self) -> list[str]:
         body, _small = self._fonts()
@@ -495,8 +580,8 @@ class RailChip(TrayChip):
         body_metrics = QFontMetricsF(body)
         room = max(self._title_room(), body_metrics.averageCharWidth())
         lines = rail_title_lines(self._title, body_metrics, room)
-        tall = body_metrics.lineSpacing() * len(lines) + 10
-        tall = max(tall, QFontMetricsF(small).height() + 10)
+        tall = body_metrics.lineSpacing() * len(lines) + QFontMetricsF(small).lineSpacing() + 10
+        tall = max(tall, QFontMetricsF(small).height() * 2 + 10)
         # The room the paint gives the whole title: up to it, the gap, the length and the edge after.
         title = body_metrics.horizontalAdvance(self._title)
         length = QFontMetricsF(small).horizontalAdvance(self.length)
@@ -532,21 +617,16 @@ class RailChip(TrayChip):
             QPointF(at, (box.height() - 16) / 2), icons.pixmap("book-open", colours.homework, 16, ratio)
         )
         at += 16 + BOOK_GAP
-        length_room = QFontMetricsF(small).horizontalAdvance(self.length)
         painter.setFont(small)
         painter.setPen(QColor(colours.muted))
         right = box.right() - SPACING[1]
-        painter.drawText(
-            QRectF(right - length_room - 1, 0, length_room + 1, box.height()),
-            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
-            self.length,
-        )
+        title_room = max(0.0, right - at)
         painter.setFont(body)
         painter.setPen(QColor(colours.text))
-        title_room = max(0.0, right - length_room - TITLE_GAP - at)
         lines = rail_title_lines(self._title, QFontMetricsF(body), title_room)
         line_height = QFontMetricsF(body).lineSpacing()
-        block = line_height * len(lines)
+        sub_height = QFontMetricsF(small).lineSpacing()
+        block = line_height * len(lines) + sub_height
         top = (box.height() - block) / 2
         for row, line in enumerate(lines):
             painter.drawText(
@@ -554,6 +634,13 @@ class RailChip(TrayChip):
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                 line,
             )
+        painter.setFont(small)
+        painter.setPen(QColor(colours.muted))
+        painter.drawText(
+            QRectF(at, top + line_height * len(lines), title_room, sub_height),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            self.subline,
+        )
         painter.end()
 
     def enterEvent(self, event: QEvent) -> None:  # noqa: N802
@@ -717,6 +804,7 @@ class Rail(QFrame):
         self.show_month = icon_button("railMonthShow", "chevron-down", SHOW_MONTH)
         self.show_month.clicked.connect(lambda: self.set_month_shown(True, said=True))
         self.next = NextCard()
+        self.next.focus_requested.connect(self.focus_requested)
         self.sections.addWidget(self.next)
         self.waiting = QWidget()
         self.waiting.setObjectName("railWaiting")
@@ -724,7 +812,7 @@ class Rail(QFrame):
         waiting_box.setContentsMargins(0, 0, 0, 0)
         waiting_box.setSpacing(SPACING[0])
         self.waiting_head = QHBoxLayout()
-        self.waiting_label = label("Not placed yet", "classicWaitingLabel")
+        self.waiting_label = label(WAITING_HEAD, "classicWaitingLabel")
         self.waiting_head.addWidget(self.waiting_label, 1)
         self.waiting_count = QLabel()
         self.waiting_count.setObjectName("railWaitingCount")
@@ -744,6 +832,18 @@ class Rail(QFrame):
         self.none_waiting.setObjectName("weekNoneWaiting")
         waiting_box.addWidget(self.none_waiting)
         self.sections.addWidget(self.waiting)
+        self.due_week = QWidget()
+        self.due_week.setObjectName("railDue")
+        due_box = QVBoxLayout(self.due_week)
+        due_box.setContentsMargins(0, 0, 0, 0)
+        due_box.setSpacing(SPACING[0])
+        self.due_label = label("Due this week", "railDueLabel")
+        due_box.addWidget(self.due_label)
+        self.due_list = QVBoxLayout()
+        self.due_list.setContentsMargins(0, 0, 0, 0)
+        self.due_list.setSpacing(2)
+        due_box.addLayout(self.due_list)
+        self.sections.addWidget(self.due_week)
         self.focus = QWidget()
         self.focus.setObjectName("railFocus")
         focus_box = QVBoxLayout(self.focus)
@@ -852,6 +952,7 @@ class Rail(QFrame):
         assignments: dict,
         time_needed: list[dict] | None = None,
         one_go_unplaced: set[str] | None = None,
+        left_over: list[dict] | None = None,
     ) -> None:
         self._week, self._today, self._minute = week, today, minute
         due = frozenset(
@@ -864,6 +965,39 @@ class Rail(QFrame):
         self.month.show_week(week.week_start, now, due)
         amounts = {item["assignment_id"]: item["minutes"] for item in time_needed or []}
         self.set_waiting(week.waiting, amounts)
+        while self.due_list.count():
+            entry = self.due_list.takeAt(0)
+            widget = entry.widget()
+            if widget is not None:
+                # Out of the list it would still be drawn, over the new rows, until the event loop deletes it.
+                widget.hide()
+                widget.deleteLater()
+        start = date.fromisoformat(week.week_start)
+        end = start + timedelta(days=6)
+        due_rows: list[tuple[date, str, str]] = []
+        for item in (assignments or {}).values():
+            if item.get("completed") or not item.get("due"):
+                continue
+            day = date.fromisoformat(str(item["due"])[:10])
+            if start <= day <= end:
+                due_rows.append((day, str(item.get("title") or ""), DAYS[day.weekday()]))
+        due_rows.sort(key=lambda row: (row[0], row[1]))
+        for _day, title, weekday in due_rows:
+            row = QWidget()
+            row.setObjectName("railDueRow")
+            row_box = QHBoxLayout(row)
+            row_box.setContentsMargins(0, 2, 0, 2)
+            # A plain label asks for its whole title, and one long title widened every row past the rail.
+            name = FittedLabel(minimum=TITLE_FLOOR)
+            name.set_full_text(title)
+            name.setObjectName("railDueTitle")
+            when = QLabel(weekday)
+            when.setObjectName("railDueWhen")
+            row_box.addWidget(name, 1)
+            row_box.addWidget(when)
+            row.setAccessibleName(f"{title} · {weekday}")
+            self.due_list.addWidget(row)
+        self.due_week.setVisible(bool(due_rows))
         while self.one_go_box.count():
             entry = self.one_go_box.takeAt(0)
             if entry.widget() is not None:
@@ -898,14 +1032,19 @@ class Rail(QFrame):
         count = len(time_needed or [])
         self._time_needed_count = count
         if count:
-            lines = [
-                f"{item['title']} · {length_label(item['minutes'])} left"
-                for item in time_needed or []
-            ]
-            self.none_waiting.setText("\n".join(lines))
-            self.waiting_count.setText(str(count))
+            words = "\n".join(
+                f"{item['title']} · {length_label(item['minutes'])} left" for item in time_needed or []
+            )
         else:
-            self.none_waiting.setText("Everything has a time.")
+            words = "Everything has a time."
+        self.none_waiting.setText(words)
+        self.none_waiting.setAccessibleName(words)
+        previous = getattr(self, "_history_words", None)
+        if words != previous and (previous is not None or left_over or time_needed):
+            from desktop.native.fields import announce
+
+            announce(self.none_waiting, words)
+        self._history_words = words
         self.waiting_count.setText(str(self._time_needed_count) if self._time_needed_count else "")
         self._show()
 
@@ -1014,6 +1153,8 @@ class Rail(QFrame):
             # there 0 pixels wide with nothing to drag. There each asks for its whole title.
             across = QSizePolicy.Policy.Preferred if folded else QSizePolicy.Policy.Ignored
             chip.setSizePolicy(across, QSizePolicy.Policy.Fixed)
+            if not folded:
+                chip.setMaximumWidth(max(80, RAIL_PX - 2 * PAD))
             (flow if folded else tray).addWidget(chip)
             chip.show()
         self.waiting_row.setVisible(folded and self._waiting_open and bool(self._chips))
@@ -1055,18 +1196,13 @@ class Rail(QFrame):
         wide = not self.folded
         has_next = self.next.show_next(self._week, self._today, self._minute)
         self.next.card.set_edge(self._next_edge())
+        # Nothing now or next today: the card takes no room (the strip says "Nothing more today").
         self.next.setVisible(wide and has_next)
-        self.month.setVisible(wide and self.month_shown)
-        listed = self.tasks.count() > 0
-        self.focus.setVisible(wide and listed)
+        self.month.setVisible(False)
+        self.focus.setVisible(False)
         self.none_waiting.setVisible(not self._chips)
         self.waiting_count.setVisible(bool(self.waiting_count.text()))
-        # With the month folded, the way back sits on the first header the rail shows.
-        for head in (self.next.head, self.waiting_head, self.focus_head):
-            head.removeWidget(self.show_month)
-        first = self.next.head if has_next else self.waiting_head
-        first.addWidget(self.show_month)
-        self.show_month.setVisible(wide and not self.month_shown)
+        self.show_month.setVisible(False)
         said = []
         if has_next:
             heading, title, when, _then = self.next.shown

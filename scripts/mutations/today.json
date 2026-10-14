@@ -114,14 +114,14 @@
  {
   "file": "desktop/native/widgets.py",
   "name": "the block editor is titled as a student says it",
-  "old": "self.card_body(\"Edit event\" if existing else \"Add fixed time\")",
+  "old": "self.card_body(\"Edit fixed time\" if existing else \"Add fixed time\")",
   "new": "self.card_body(\"Edit fixed commitment\" if existing else \"Add fixed commitment\")",
   "test": "desktop/tests/test_block_editor_words.py::test_the_editor_is_titled_as_a_student_says_it"
  },
  {
   "file": "desktop/native/widgets.py",
   "name": "deleting a block asks first",
-  "old": "elif not confirm(self, f\"Delete {name}?\", question, \"Delete\"):",
+  "old": "elif not confirm(self, \"Delete fixed time\", question, \"Delete\"):",
   "new": "elif False:",
   "test": "desktop/tests/test_block_editor_words.py::test_delete_asks_first_and_does_nothing_when_refused"
  },
@@ -200,7 +200,7 @@
   "name": "Settings opens on Main view with one sentence on designs",
   "old": "lines = (DESIGN_LINE, blurb) if slot == \"main\" else (blurb,)",
   "new": "lines = (blurb,)",
-  "test": "desktop/tests/test_settings_words.py::test_appearance_opens_on_colours_then_the_designs_and_ends_with_animations"
+  "test": "desktop/tests/test_settings_words.py::test_appearance_puts_the_design_before_the_colours_that_fine_tune_it"
  },
  {
   "file": "desktop/native/settings.py",
@@ -242,7 +242,7 @@
   "name": "a design's page colours keep text readable",
   "old": "if contrast(tokens[\"bg_ink\"], tokens[\"surface\"]) >= AA_TEXT:",
   "new": "if True:",
-  "test": "desktop/tests/test_layouts_registry.py::test_every_design_dresses_its_page_in_colours_its_text_reads_on"
+  "test": "desktop/tests/test_look.py::test_a_design_page_falls_back_to_readable_ink_when_its_own_ink_is_too_light"
  },
  {
   "file": "desktop/native/hours/chips.py",
@@ -296,9 +296,9 @@
  {
   "file": "desktop/native/hours/rail.py",
   "name": "an empty Next card still takes its room",
-  "old": "        self.next.setVisible(wide and has_next)\n",
-  "new": "        self.next.setVisible(wide)\n",
-  "test": "desktop/tests/test_now_next.py::test_the_next_and_now_countdowns_move_with_the_minute_without_a_focus_timer"
+  "old": "        self.card.setVisible(bool(said[1]))\n",
+  "new": "        self.card.setVisible(True)\n",
+  "test": "desktop/tests/test_mutation_guards_100.py::test_a_next_card_with_nothing_to_say_hides_its_card"
  },
  {
   "file": "desktop/native/controller.py",
@@ -408,16 +408,16 @@
  {
   "file": "desktop/native/window.py",
   "name": "the rail never folds",
-  "old": "        narrow = self.width() < NARROW_WIDTH\n        if narrow != self.rail.folded:\n",
-  "new": "        narrow = False\n        if narrow != self.rail.folded:\n",
-  "test": "desktop/tests/test_week_side.py::test_a_narrow_window_folds_the_rail_into_one_line_and_blocks_keep_their_times"
+  "old": "        self.rail.setVisible(shown)\n",
+  "new": "        self.rail.setVisible(shown)\n        self.rail.set_folded(self.width() < NARROW_WIDTH)\n",
+  "test": "desktop/tests/test_week_behaviour.py::test_the_folded_rail_shows_a_waiting_chip_not_a_bare_line"
  },
  {
   "file": "desktop/native/hours/canvas.py",
   "name": "a narrow block keeps its times and cuts its name",
-  "old": "    if drawn.short:\n",
-  "new": "    if False:\n",
-  "test": "desktop/tests/test_week_side.py::test_a_short_block_word_gives_its_name_the_room_its_times_took"
+  "old": "    times = drawn.times if shown[0] else \"\"\n    length = drawn.length if shown[1] else flags\n",
+  "new": "    times = \"\"\n    length = drawn.length if shown[1] else flags\n",
+  "test": "desktop/tests/test_week_side.py::test_a_short_block_keeps_its_whole_time_and_cuts_its_name_first"
  },
  {
   "file": "desktop/native/controller.py",
@@ -443,23 +443,23 @@
  {
   "file": "desktop/native/window.py",
   "name": "the chrome dressed by the design again",
-  "old": "            self.planner.setStyleSheet(page_sheet)\n",
-  "new": "            self.setStyleSheet(page_sheet or self._dressed[0])\n",
-  "test": "desktop/tests/test_layouts_window.py::test_the_chrome_follows_the_look_whatever_design_is_on_screen"
+  "old": "        sheet = pack_stylesheet(pack, system_dark, look, accent, palette, art)\n",
+  "new": "        sheet = pack_stylesheet(pack, system_dark, look, accent)\n",
+  "test": "desktop/tests/test_layouts_window.py::test_the_chrome_and_canvas_follow_the_same_look"
  },
  {
   "file": "desktop/native/window.py",
   "name": "a design's page in the look's colours",
-  "old": "        if colour == MATCH:\n            return None\n",
-  "new": "        if True:\n            return None\n",
-  "test": "desktop/tests/test_layouts_window.py::test_the_knobs_settings_hides_for_a_design_change_nothing_in_it[bento]"
+  "old": "        palette, applied_look = design_look(options[\"look\"], pack, system_dark, self._worn_look(), accent)\n",
+  "new": "        palette, applied_look = design_look(\"your\", pack, system_dark, self._worn_look(), accent)\n",
+  "test": "desktop/tests/test_layouts_window.py::test_setup_design_picture_and_applied_canvas_share_look_pixels"
  },
  {
   "file": "desktop/native/layouts/registry.py",
-  "name": "a design's own colourway first again",
-  "old": "(Choice(MATCH, \"Match my look\"), *named)",
-  "new": "(*named, Choice(MATCH, \"Match my look\"))",
-  "test": "desktop/tests/test_layouts_registry.py::test_every_design_follows_the_students_look_until_one_of_its_own_colourways_is_picked"
+  "name": "a missing per-design look falls back to the signature instead of 'your'",
+  "old": "    return Option(\"look\", \"Look\", \"style\", (*choices, Choice(\"your\", \"Your look\")), shipped=\"your\")\n",
+  "new": "    return Option(\"look\", \"Look\", \"style\", (*choices, Choice(\"your\", \"Your look\")))\n",
+  "test": "desktop/tests/test_layouts_registry.py::test_missing_design_looks_keep_the_account_look_for_every_design"
  },
  {
   "file": "desktop/native/hours/chips.py",

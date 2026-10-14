@@ -149,7 +149,16 @@ fn the_upgrade_runs_once_so_a_standing_week_emptied_later_stays_empty() {
     initialize(&path, NEXT_WEEK).unwrap();
     {
         let conn = open_connection(&path).unwrap();
-        set_standing(&conn, user_id, NEXT_WEEK, "[]").unwrap();
+        set_standing(
+            &conn,
+            user_id,
+            NEXT_WEEK,
+            &text(&json!([
+                {"id": "school", "stop": true},
+                {"id": "activity-1", "stop": true}
+            ])),
+        )
+        .unwrap();
         conn.execute_batch("COMMIT").unwrap();
     }
     initialize(&path, NEXT_WEEK).unwrap();
@@ -193,7 +202,10 @@ fn a_change_reaches_this_week_on_and_leaves_earlier_weeks_as_they_were() {
 
     // An unsaved week before the change keeps the old School and Soccer.
     assert_eq!(seen(&conn, user_id, SETUP_WEEK), vec![school(), soccer()]);
-    assert_eq!(seen(&conn, user_id, NEXT_WEEK), vec![later.clone()]);
+    assert_eq!(
+        seen(&conn, user_id, NEXT_WEEK),
+        vec![later.clone(), soccer()]
+    );
     // The saved later week: new times, Wednesday still missed, Friday no longer a school day.
     let (after, revision) = week_row(&conn, user_id, WEEK_AFTER);
     let mut expected = later;
@@ -218,7 +230,13 @@ fn every_week_removes_a_block_from_saved_later_weeks_too() {
         WEEK_AFTER,
         &json!([school(), soccer(), gym()]),
     );
-    set_standing(&conn, user_id, NEXT_WEEK, &text(&json!([school()]))).unwrap();
+    set_standing(
+        &conn,
+        user_id,
+        NEXT_WEEK,
+        &text(&json!([{"id": "activity-1", "stop": true}])),
+    )
+    .unwrap();
     assert_eq!(
         ids(&seen(&conn, user_id, WEEK_AFTER)),
         vec!["school", "gym"]
@@ -233,17 +251,15 @@ fn every_week_removes_a_block_from_saved_later_weeks_too() {
 fn a_change_for_an_earlier_week_replaces_a_later_change() {
     let (conn, user_id) = fresh_account("standing-replace");
     set_standing(&conn, user_id, SETUP_WEEK, &text(&json!([school()]))).unwrap();
-    set_standing(
-        &conn,
-        user_id,
-        WEEK_AFTER,
-        &text(&json!([school(), soccer()])),
-    )
-    .unwrap();
-    set_standing(&conn, user_id, NEXT_WEEK, &text(&json!([school()]))).unwrap();
+    let mut later = school();
+    later["start"] = json!("09:00");
+    set_standing(&conn, user_id, WEEK_AFTER, &text(&json!([later]))).unwrap();
+    let mut earlier = school();
+    earlier["start"] = json!("08:00");
+    set_standing(&conn, user_id, NEXT_WEEK, &text(&json!([earlier.clone()]))).unwrap();
     assert_eq!(
         standing_blocks(&conn, user_id, "2026-11-30").unwrap(),
-        vec![school()]
+        vec![earlier]
     );
 }
 
@@ -257,7 +273,13 @@ fn rows_carry_over_to_another_account_and_go_with_the_account() {
         &text(&json!([school(), soccer()])),
     )
     .unwrap();
-    set_standing(&conn, user_id, WEEK_AFTER, &text(&json!([school()]))).unwrap();
+    set_standing(
+        &conn,
+        user_id,
+        WEEK_AFTER,
+        &text(&json!([{"id": "activity-1", "stop": true}])),
+    )
+    .unwrap();
     let rows = standing_rows(&conn, user_id).unwrap();
     conn.execute(
         "INSERT INTO users(username, password_hash) VALUES ('bea', 'x')",
@@ -290,7 +312,13 @@ fn a_restore_point_holds_the_standing_rows_it_was_made_with() {
         &text(&json!([school(), soccer()])),
     )
     .unwrap();
-    set_standing(&conn, user_id, WEEK_AFTER, &text(&json!([school()]))).unwrap();
+    set_standing(
+        &conn,
+        user_id,
+        WEEK_AFTER,
+        &text(&json!([{"id": "activity-1", "stop": true}])),
+    )
+    .unwrap();
     let rows: Value = serde_json::from_str(&standing_rows(&conn, user_id).unwrap()).unwrap();
     create_restore_point(&conn, user_id, "abc", "Before", "2026-10-10T09:00", &[], 10).unwrap();
     set_standing(&conn, user_id, NEXT_WEEK, &text(&json!([gym()]))).unwrap();

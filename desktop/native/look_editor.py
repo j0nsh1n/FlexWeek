@@ -108,7 +108,7 @@ from desktop.native.widgets import (
 
 TITLE = "Look editor"
 START_FROM = "Start from"
-START_NOTE = "Pick a look to start your own from. What you have not saved is left behind."
+START_NOTE = "Choose a look to start from. Changes you haven't saved will be lost."
 START_YOURS = "Your look"
 START_TILE = 112
 NAME = "Name"
@@ -426,17 +426,18 @@ def _icon_button(icon: str | None, name: str, tip: str) -> QPushButton:
 
 
 def leave_sheet(parent: QWidget, name: str, saved: bool) -> ConfirmSheet:
-    """The one question on the way out of the editor with changes not saved: Save is the filled answer,
-    Discard is outlined in red, Cancel and Keep are quiet."""
+    """The one question on the way out of the editor with changes not saved: Discard sits on the left,
+    away from Save; the right side is Keep without saving, Cancel, then Save. Save is the filled
+    answer, Esc is Cancel and stays in the editor."""
     return ConfirmSheet(
         parent,
         LEAVE_TITLE,
         (LEAVE_SAVED if saved else LEAVE_NEW).format(name=name),
-        (("stay", CANCEL, "quiet"), ("discard", DISCARD, "outlined danger"), ("save", SAVE, "")),
+        (("keep", KEEP, "quiet"), ("stay", CANCEL, "quiet"), ("save", SAVE, "")),
         default="save",
         note=LEAVE_NOTE,
         width=LEAVE_WIDTH,
-        left=("keep", KEEP, "quiet"),
+        left=("discard", DISCARD, "outlined danger"),
     )
 
 
@@ -491,14 +492,19 @@ class ColourSheet(Dialog):
             grid.addWidget(dot, index // PICKER_PER_ROW, index % PICKER_PER_ROW)
         box.addLayout(grid)
         line = QHBoxLayout()
-        line.addWidget(_label("Code", "fieldLabel"))
         self.code = QLineEdit()
         self.code.setObjectName("colourCode")
         self.code.setMaxLength(7)
         self.code.setFixedWidth(120)
         self.code.setAccessibleName("Colour code")
         self.code.textEdited.connect(self._typed)
-        line.addWidget(self.code)
+        code_column = QVBoxLayout()
+        code_column.setSpacing(SPACING[0])
+        code_label = _label("Code", "fieldLabel")
+        code_label.setBuddy(self.code)
+        code_column.addWidget(code_label)
+        code_column.addWidget(self.code)
+        line.addLayout(code_column)
         self.chip = QFrame()
         self.chip.setObjectName("colourChip")
         self.chip.setFixedSize(28, 28)
@@ -762,7 +768,7 @@ class CategoryRow(QWidget):
         measures = look_measures(look)
         radius = measures["radius"]
         self.colour.show_colour(self._fill, chrome["hairline_strong"], radius)
-        drawn = block_paint(look, palette, fill, CATEGORIES[self.key]["kind"], mark)
+        drawn = block_paint(look, palette, fill, CATEGORIES[self.key]["kind"], mark, category=self.key)
         if drawn["mode"] == "outline":
             paint = f"background: {drawn['fill']}; border: 2px solid {drawn['outline']};"
         elif drawn["mode"] == "edge":
@@ -1052,11 +1058,13 @@ class LookEditor(QWidget):
         head.addStretch(1)
         said = _label("", "lookOut")
         said.setProperty("out", out)
-        said.setVisible(bool(out))
         if out:
             self._outs.append(said)
         head.addWidget(said)
         fields.addLayout(head)
+        # Only ever hidden here: showing it before the editor has a parent made it a window of its own.
+        if not out:
+            said.hide()
         fields.addWidget(control)
         return said
 

@@ -39,13 +39,13 @@
   "name": "a short block cuts its title inside a word",
   "old": "        return kept + \"\u2026\"\n",
   "new": "        return metrics.elidedText(text, Qt.TextElideMode.ElideRight, width)\n",
-  "test": "desktop/tests/test_hours_painter.py::test_a_short_block_at_large_text_keeps_its_title_first_and_whole_words"
+  "test": "desktop/tests/test_hours_painter.py::test_a_short_block_at_large_text_keeps_its_time_range_whole"
  },
  {
   "file": "desktop/native/hours/canvas.py",
   "name": "a cut title put after its time",
-  "old": "    for way in time_ways:\n        found = way(True)\n        if found is not None and kept(found) >= 2:\n",
-  "new": "    for way in name_ways:\n        found = way(True)\n        if found is not None and kept(found) >= 2:\n",
+  "old": "    for way in time_ways:\n        found = way(True)\n        if found is not None:\n            return found\n    time_line = _fit_times_line(times, clock_label(drawn.span.start), sm, width) if times else None\n",
+  "new": "    for way in name_ways:\n        found = way(True)\n        if found is not None:\n            return found\n    time_line = None\n",
   "test": "desktop/tests/test_week_words.py::test_a_short_block_says_its_name_then_its_start"
  },
  {
@@ -65,7 +65,7 @@
  {
   "file": "desktop/native/window.py",
   "name": "a running timer above the hours, not in the rail",
-  "old": "        in_rail = shown and not narrow\n",
+  "old": "        in_rail = shown\n",
   "new": "        in_rail = False\n",
   "test": "desktop/tests/test_week_side.py::test_a_running_timer_is_the_rails_first_card"
  },

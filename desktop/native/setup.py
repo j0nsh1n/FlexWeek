@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from uuid import uuid4
 
-from PySide6.QtCore import QRect, QRectF, QSize, Qt, QTime, QTimer, Signal
+from PySide6.QtCore import QEvent, QObject, QRect, QRectF, QSize, Qt, QTime, QTimer, Signal
 from PySide6.QtGui import (
     QAccessible,
     QAccessibleAnnouncementEvent,
@@ -27,6 +27,7 @@ from PySide6.QtGui import (
     QKeyEvent,
     QMouseEvent,
     QPainter,
+    QPaintEvent,
     QPen,
     QPixmap,
     QResizeEvent,
@@ -34,6 +35,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
+    QApplication,
     QButtonGroup,
     QCheckBox,
     QComboBox,
@@ -68,10 +70,13 @@ from desktop.native.fields import (
     DayPicker,
     Stepper,
     held_on_problem,
+    save_week_starts_on,
+    week_starts_on,
 )
 from desktop.native.fonts import numeral, weighted
 from desktop.native.hours.geometry import drag_step
 from desktop.native.layouts.registry import (
+    DESIGN_LOOKS,
     EXPERIMENTAL,
     LAYOUTS,
     LayoutSpec,
@@ -82,9 +87,10 @@ from desktop.native.layouts.registry import (
 from desktop.native.look import (
     KNOB_VALUE_LABELS,
     LOOK_KNOBS,
-    PACKS,
+    design_look,
     effective_look,
-    look_menu_items,
+    parse_look_menu_token,
+    readable_focus_edge,
     resolved_palette,
     sanitize_look,
 )
@@ -152,7 +158,7 @@ NOTES = {
     STYLE: "Each sets the view, the colours and the text size together. Change any of it later in Settings.",
     LOOK: "Each one shows the same week its own way.",
     COLOURS: "The picture follows what you pick.",
-    WEEK: "Fixed times the planner works around. Skip anything you don't have.",
+    WEEK: "FlexWeek works around fixed times. Skip anything you don't have.",
     HOMEWORK: "You can change this any time in Settings, under Planning.",
     REMINDERS: (
         "Pick the sound for reminders, alarms and the end of a focus session. A Spotify song plays for"
@@ -191,7 +197,8 @@ PACK_IN = {
     "nocturne": "Nocturne colours",
     "slate": "Slate colours",
 }
-DOT_PX, ARROW_PX = 16, 32
+# Small plain dots, so they read as pages and never as the 24 px look swatches under them.
+DOT_PX, ARROW_PX = 10, 32
 RAIL_MIN = 210
 # The margin the pages keep at the sides, and the fade over the last stretch above the footer.
 PAGE_MARGIN, FADE_PX = 32, 24
@@ -222,7 +229,7 @@ STYLES = (
         "Plain calendar",
         "Your week as a timetable grid",
         "classic",
-        None,
+        "pack:light-frost",
         "light-frost",
     ),
     Style(
@@ -230,7 +237,7 @@ STYLES = (
         "Dashboard",
         "Next up and due soon, as tiles",
         "bento",
-        "indigo",
+        "preset:bento-indigo",
         "light-frost",
     ),
     Style(
@@ -238,7 +245,7 @@ STYLES = (
         "Night owl",
         "Dark colours, compact spacing",
         "timeline",
-        "night",
+        "pack:dark-frost",
         "dark-frost",
         {"density": "compact"},
         {"density": "compact"},
@@ -248,7 +255,7 @@ STYLES = (
         "Retro",
         "A 90s desktop, with large text",
         "retro",
-        "teal",
+        "preset:retro-teal",
         "light-frost",
         {"text": "large"},
     ),
@@ -275,7 +282,7 @@ def style_layout(style: Style, layout: dict) -> dict:
     if style.colour is not None or style.options:
         chosen = dict(options.get(style.main, {}))
         if style.colour is not None:
-            chosen["colour"] = style.colour
+            chosen["look"] = style.colour
         chosen.update(style.options)
         options[style.main] = chosen
     return sanitize_layout({"main": style.main, "day": sanitize_layout(layout)["day"], "options": options})
@@ -365,6 +372,53 @@ def step_badge(number: int, state: str, palette: dict, family: str, ratio: float
 def _rail_row(step: int) -> int:
     """The side list's row that holds `step`."""
     return next(index for index, (_name, steps) in enumerate(RAIL) if step in steps)
+
+
+class _RadioEnds(QObject):
+    """Home and End in a radio group go to its first and last button, as the arrow keys go to the next
+    and the one before. Qt gives a group only the arrows."""
+
+    def __init__(self, buttons: list[QRadioButton], parent: QObject) -> None:
+        super().__init__(parent)
+        self._buttons = buttons
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if event.type() == QEvent.Type.KeyPress and watched in self._buttons:
+            ends = {Qt.Key.Key_Home: self._buttons[0], Qt.Key.Key_End: self._buttons[-1]}
+            if event.key() in ends and not event.modifiers():
+                ends[event.key()].click()
+                ends[event.key()].setFocus(Qt.FocusReason.OtherFocusReason)
+                return True
+        return super().eventFilter(watched, event)
+
+
+class _ClockRing(QObject):
+    """A 2 px ring on the focused clock radio, in a colour that reads 3 to 1 on the group."""
+
+    def __init__(self, buttons: list[QRadioButton], parent: QObject) -> None:
+        super().__init__(parent)
+        self._buttons = buttons
+        self._edge = QColor("#000000")
+
+    def set_edge(self, colour: str) -> None:
+        self._edge = QColor(colour)
+        for button in self._buttons:
+            button.update()
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if event.type() == QEvent.Type.Paint and watched in self._buttons:
+            watched.removeEventFilter(self)
+            QApplication.sendEvent(watched, event)
+            watched.installEventFilter(self)
+            if watched.hasFocus():
+                painter = QPainter(watched)
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                painter.setPen(QPen(self._edge, 2))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawRoundedRect(QRectF(watched.rect()).adjusted(1, 1, -1, -1), 6, 6)
+                painter.end()
+            return True
+        return super().eventFilter(watched, event)
 
 
 def _repolish(widget: QWidget) -> None:
@@ -615,6 +669,35 @@ class StyleSlide(QFrame):
         super().mouseReleaseEvent(event)
 
 
+class LookSwatch(QPushButton):
+    def __init__(self, name: str, palette: dict, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._palette = palette
+        self.setCheckable(True)
+        self.setFixedSize(24, 24)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAccessibleName(name)
+        self.setToolTip(name)
+
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        accent = QColor(self._palette["accent"])
+        ring = accent if self.isChecked() else QColor(self._palette["hairline_strong"])
+        painter.setPen(QPen(ring, 2.2 if self.isChecked() else 1.2))
+        painter.setBrush(QColor(self._palette["window"]))
+        painter.drawEllipse(QRectF(2.0, 2.0, 20.0, 20.0))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(accent)
+        painter.drawEllipse(QRectF(12.5, 12.5, 6.0, 6.0))
+        if self.hasFocus():
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(QColor(self._palette["text"]), 1.0, Qt.PenStyle.DotLine))
+            painter.drawEllipse(QRectF(0.5, 0.5, 23.0, 23.0))
+        painter.end()
+
+
 class StyleCarousel(QFrame):
     """One style's picture large in the middle, the one before and the one after peeking at the sides
     dimmed, an arrow and a dot for each below, then the name and one note. Whatever is in the middle is
@@ -624,6 +707,7 @@ class StyleCarousel(QFrame):
 
     # The key of the style that is now in the middle and chosen.
     moved = Signal(str)
+    look_picked = Signal(str)
 
     def __init__(self, styles: tuple[Style, ...], motion: Callable[[], str]) -> None:
         super().__init__()
@@ -636,6 +720,7 @@ class StyleCarousel(QFrame):
         self._index = 0
         self._chosen = False
         self._width = STYLE_PICTURE
+        self._picture_limit = STYLE_PICTURE
         box = QVBoxLayout(self)
         box.setContentsMargins(0, 0, 0, 0)
         box.setSpacing(8)
@@ -650,19 +735,23 @@ class StyleCarousel(QFrame):
             self.slides[style.key] = slide
         self.previous = self._arrow("chevron-left", "Previous style", -1)
         self.following = self._arrow("chevron-right", "Next style", 1)
-        self.dots: dict[str, QPushButton] = {}
+        self.dots: dict[str, QRadioButton] = {}
+        self.dot_group = QButtonGroup(self)
+        self.dot_group.setExclusive(True)
         line = QHBoxLayout()
         line.setSpacing(10)
         line.addStretch(1)
         line.addWidget(self.previous)
-        for style in self._order:
-            dot = QPushButton()
+        for number, style in enumerate(self._order, start=1):
+            dot = QRadioButton()
             dot.setObjectName("setupDot")
             dot.setFixedSize(DOT_PX, DOT_PX)
             dot.setIconSize(QSize(DOT_PX - 4, DOT_PX - 4))
-            dot.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            dot.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
             dot.setCursor(Qt.CursorShape.PointingHandCursor)
-            dot.setAccessibleName(f"Show {style.name}")
+            dot.setAccessibleName(f"Show {style.name}, {number} of {len(self._order)}")
+            dot.setAccessibleDescription(f"{number} of {len(self._order)}")
+            self.dot_group.addButton(dot)
             dot.clicked.connect(lambda _checked=False, key=style.key: self.go_to(key))
             self.dots[style.key] = dot
             line.addWidget(dot)
@@ -675,6 +764,16 @@ class StyleCarousel(QFrame):
         self.note.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         box.addWidget(self.name)
         box.addWidget(self.note)
+        self.look_row = QWidget()
+        self.look_row.setObjectName("setupLookSwatches")
+        self.look_row.setAccessibleName("Looks for this style")
+        self.look_line = QHBoxLayout(self.look_row)
+        self.look_line.setContentsMargins(0, 0, 0, 0)
+        self.look_line.setSpacing(8)
+        box.addWidget(self.look_row, 0, Qt.AlignmentFlag.AlignHCenter)
+        self.look_swatches: dict[str, QPushButton] = {}
+        self.look_group = QButtonGroup(self)
+        self.look_group.setExclusive(True)
         self._arrange(delta=0)
         self._refresh()
 
@@ -698,6 +797,33 @@ class StyleCarousel(QFrame):
 
     def is_chosen(self) -> bool:
         return self._chosen
+
+    def limit_picture_to(self, width: int) -> None:
+        self._picture_limit = max(STYLE_PICTURE_MIN, min(STYLE_PICTURE, width))
+        self._arrange(delta=0)
+
+    def set_looks(self, choices: tuple[tuple[str, str, dict], ...], selected: str) -> None:
+        if tuple(self.look_swatches) == tuple(token for token, _name, _palette in choices):
+            for token, swatch in self.look_swatches.items():
+                swatch.setChecked(token == selected)
+                swatch.setAccessibleDescription("Selected" if token == selected else "")
+            return
+        while self.look_line.count():
+            item = self.look_line.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                self.look_group.removeButton(widget)
+                widget.deleteLater()
+        self.look_swatches.clear()
+        for token, name, palette in choices:
+            swatch = LookSwatch(name, palette)
+            swatch.setProperty("lookToken", token)
+            swatch.setChecked(token == selected)
+            swatch.setAccessibleDescription("Selected" if token == selected else "")
+            swatch.clicked.connect(lambda _checked=False, value=token: self.look_picked.emit(value))
+            self.look_group.addButton(swatch)
+            self.look_line.addWidget(swatch)
+            self.look_swatches[token] = swatch
 
     def show_style(self, key: str, chosen: bool) -> None:
         """The middle at `key`, and whether it counts as chosen, without moving or saying so."""
@@ -738,7 +864,11 @@ class StyleCarousel(QFrame):
             return
         count = len(self._order)
         picture = max(
-            STYLE_PICTURE_MIN, min(STYLE_PICTURE, room - 2 * (PEEK_PX + CAROUSEL_GAP) - CAROUSEL_CHROME)
+            STYLE_PICTURE_MIN,
+            min(
+                self._picture_limit,
+                room - 2 * (PEEK_PX + CAROUSEL_GAP) - CAROUSEL_CHROME,
+            ),
         )
         resized = picture != self._width
         self._width = picture
@@ -794,6 +924,7 @@ class StyleCarousel(QFrame):
             dot = self.dots[style.key]
             dot.setProperty("current", here)
             dot.setProperty("chosen", here and self._chosen)
+            dot.setChecked(here)
             icons.tint(dot, "check" if here and self._chosen else None)
             _repolish(dot)
         self.name.setText(current.name)
@@ -805,6 +936,10 @@ class StyleCarousel(QFrame):
         arrows = {Qt.Key.Key_Left: -1, Qt.Key.Key_Right: 1}
         if event.key() in arrows and not event.modifiers():
             self.step(arrows[event.key()])
+            return
+        ends = {Qt.Key.Key_Home: self._order[0], Qt.Key.Key_End: self._order[-1]}
+        if event.key() in ends and not event.modifiers():
+            self.go_to(ends[event.key()].key)
             return
         super().keyPressEvent(event)
 
@@ -1000,11 +1135,10 @@ class ActivityRow(QFrame):
         self.category = QComboBox()
         self.category.setObjectName("setupActivityCategory")
         self.category.setAccessibleName("Sports or Activity")
-        # Qt reads a combo by its current text; a buddy label gives screen readers its name. Hidden,
-        # since the row shows no field name.
-        category_label = QLabel("Sports or Activity", self)
+        name_label = _label("Name", "fieldLabel", wrap=False)
+        name_label.setBuddy(self.name)
+        category_label = _label("Sports or Activity", "fieldLabel", wrap=False)
         category_label.setBuddy(self.category)
-        category_label.hide()
         self.category.addItem("Activity", "extra")
         self.category.addItem("Sports", "exercise")
         self.category.setCurrentIndex(max(0, self.category.findData(category)))
@@ -1013,10 +1147,18 @@ class ActivityRow(QFrame):
         self.name.textChanged.connect(self._guess_category)
         if guess and title:
             self._guess_category(title)
+        named = QVBoxLayout()
+        named.setSpacing(4)
+        named.addWidget(name_label)
+        named.addWidget(self.name)
+        chosen = QVBoxLayout()
+        chosen.setSpacing(4)
+        chosen.addWidget(category_label)
+        chosen.addWidget(self.category)
         top = QHBoxLayout()
-        top.addWidget(self.name, 1)
-        top.addWidget(self.category)
-        top.addWidget(remove)
+        top.addLayout(named, 1)
+        top.addLayout(chosen)
+        top.addWidget(remove, 0, Qt.AlignmentFlag.AlignBottom)
         box.addLayout(top)
         # The days and times as School's line has them, under the name, so the two columns of times
         # stand at one x down the page.
@@ -1060,7 +1202,7 @@ class HomeworkRow(QFrame):
         self.setObjectName("setupGroup")
         grid = QGridLayout(self)
         grid.setContentsMargins(12, 10, 12, 10)
-        grid.setHorizontalSpacing(10)
+        grid.setHorizontalSpacing(16)
         grid.setVerticalSpacing(8)
         self.name = QLineEdit()
         self.name.setObjectName("setupHomeworkName")
@@ -1078,28 +1220,27 @@ class HomeworkRow(QFrame):
         remove = _outlined("Remove")
         remove.setAccessibleName("Remove this homework")
         remove.clicked.connect(lambda: self.removed.emit(self))
-        name_label = _label("Name", "setupFieldLabel", wrap=False)
+        name_label = _label("Name", "fieldLabel", wrap=False)
         name_label.setBuddy(self.name)
-        grid.addWidget(name_label, 0, 0)
-        grid.addWidget(self.name, 0, 1, 1, 3)
-        grid.addWidget(remove, 0, 4)
-        # On the line of the box, not the middle of the box and the lengths under it.
-        takes_label = _label("Takes", "setupFieldLabel", wrap=False)
+        # Takes and Due start in the columns the name field starts from, so every left edge lines up.
+        grid.addWidget(name_label, 0, 0, 1, 3)
+        grid.addWidget(self.name, 1, 0, 1, 3)
+        grid.addWidget(remove, 1, 3, Qt.AlignmentFlag.AlignBottom)
+        takes_label = _label("Takes", "fieldLabel", wrap=False)
         takes_label.setBuddy(self.minutes)
-        takes = Level(takes_label, self.minutes)
-        grid.addWidget(takes, 1, 0, Qt.AlignmentFlag.AlignTop)
         stepper = Stepper(self.minutes, QUICK_LENGTHS)
-        grid.addWidget(stepper, 1, 1)
-        due_label = _label("Due", "setupFieldLabel", wrap=False)
+        grid.addWidget(takes_label, 2, 0)
+        grid.addWidget(stepper, 3, 0, Qt.AlignmentFlag.AlignTop)
+        due_label = _label("Due", "fieldLabel", wrap=False)
         due_label.setBuddy(self.due)
-        grid.addWidget(due_label, 1, 2)
-        grid.addWidget(self.due, 1, 3, 1, 2)
-        grid.setColumnStretch(3, 1)
+        grid.addWidget(due_label, 2, 1)
+        grid.addWidget(self.due, 3, 1, 1, 2, Qt.AlignmentFlag.AlignTop)
+        grid.setColumnStretch(2, 1)
         # Tab order follows the screen: name, remove, then the length, the due date.
         self.stops = [
             self.name,
             remove,
-            *_focus_stops(takes),
+            *_focus_stops(self.minutes),
             *_focus_stops(stepper),
             *_focus_stops(self.due),
         ]
@@ -1134,6 +1275,7 @@ class SetupPage(QWidget):
         self._pack, self._look, self._layout = self._state.pack, self._state.look, self._state.layout
         self._entered: tuple[str, dict, dict] = (self._pack, deepcopy(self._look), deepcopy(self._layout))
         self._style_key: str | None = None
+        self._style_looks: dict[str, str] = {}
         # Homework this run of setup made, by name, so Back and Next again edits it rather than adding
         # it twice.
         self._made: dict[str, str] = {}
@@ -1280,6 +1422,7 @@ class SetupPage(QWidget):
         box.setContentsMargins(0, 0, 0, 0)
         self.carousel = StyleCarousel(STYLES, lambda: self.motion)
         self.carousel.moved.connect(lambda key: self._choose_style(next(s for s in STYLES if s.key == key)))
+        self.carousel.look_picked.connect(self._choose_style_look)
         self.style_cards = self.carousel.slides
         box.addWidget(self.carousel)
         own = QPushButton(OWN_LOOK_LABEL)
@@ -1346,7 +1489,7 @@ class SetupPage(QWidget):
         self.fine.setVisible(False)
         fine.toggled.connect(self.fine.setVisible)
         left.addWidget(self.fine)
-        left.addWidget(_label("Day screen, for when you are doing the plan", "setupSection"))
+        left.addWidget(_label("Day screen, for when you're doing the plan", "setupSection"))
         self.day_screen = Chips(
             _design_chips(layouts_for("day", False)), "Day screen", _design_chips(layouts_for("day", True))
         )
@@ -1387,7 +1530,31 @@ class SetupPage(QWidget):
             self.clock_buttons[twenty_four] = button
             clock_line.addWidget(button)
         clock_line.addStretch(1)
+        radios = list(self.clock_buttons.values())
+        clock_ends = _RadioEnds(radios, clock)
+        self._clock_ring = _ClockRing(radios, clock)
+        for button in radios:
+            button.installEventFilter(clock_ends)
+            button.installEventFilter(self._clock_ring)
+        self._dress_clock_ring()
         box.addWidget(clock)
+        box.addWidget(_label("Week starts on", "setupSection"))
+        self.week_start_choice = QButtonGroup(content)
+        self.week_start_buttons: dict[str, QRadioButton] = {}
+        starts = QFrame()
+        starts.setObjectName("setupGroup")
+        starts_line = QHBoxLayout(starts)
+        starts_line.setContentsMargins(12, 10, 12, 10)
+        starts_line.setSpacing(24)
+        for value, text in (("monday", "Monday"), ("sunday", "Sunday")):
+            button = QRadioButton(text)
+            button.setObjectName(f"setupWeekStart-{value}")
+            self.week_start_choice.addButton(button)
+            self.week_start_buttons[value] = button
+            starts_line.addWidget(button)
+        starts_line.addStretch(1)
+        box.addWidget(starts)
+        box.addWidget(_label("The Week view always runs Monday to Sunday.", "setupWeekStartHint"))
         self.clock_choice.buttonToggled.connect(lambda _button, _on: self._follow_clock())
         self._section(box, "School")
         self.school_days = DayPicker([0, 1, 2, 3, 4], "setupDay")
@@ -1420,14 +1587,13 @@ class SetupPage(QWidget):
         fill_cutoff(self.cutoff, None)
         bedtime = QFrame()
         bedtime.setObjectName("setupGroup")
-        bedtime_line = QHBoxLayout(bedtime)
+        bedtime_line = QVBoxLayout(bedtime)
         bedtime_line.setContentsMargins(12, 10, 12, 10)
-        bedtime_line.setSpacing(8)
-        cutoff_label = _label("No homework after", "setupFieldLabel", wrap=False)
+        bedtime_line.setSpacing(4)
+        cutoff_label = _label("No homework after", "fieldLabel", wrap=False)
         cutoff_label.setBuddy(self.cutoff)
         bedtime_line.addWidget(cutoff_label)
-        bedtime_line.addWidget(self.cutoff)
-        bedtime_line.addStretch(1)
+        bedtime_line.addWidget(self.cutoff, 0, Qt.AlignmentFlag.AlignLeft)
         box.addWidget(bedtime)
         return content
 
@@ -1554,11 +1720,26 @@ class SetupPage(QWidget):
     def _build_done(self) -> QWidget:
         content = QWidget()
         content.setObjectName("setupRow")
-        self.summary = QGridLayout(content)
+        page = QVBoxLayout(content)
+        page.setContentsMargins(0, 0, 0, 0)
+        page.setSpacing(16)
+        self.summary = QGridLayout()
         self.summary.setContentsMargins(0, 0, 0, 0)
         self.summary.setHorizontalSpacing(18)
         self.summary.setVerticalSpacing(12)
         self.summary.setColumnStretch(1, 1)
+        # Above the words, so the summary keeps its width. Drawn as the look editor draws its picture.
+        frame = QFrame()
+        frame.setObjectName("setupGroup")
+        framed = QVBoxLayout(frame)
+        framed.setContentsMargins(8, 8, 8, 8)
+        self.done_preview = QLabel()
+        self.done_preview.setObjectName("setupPreview")
+        self.done_preview.setFixedSize(COLOUR_THUMB, round(COLOUR_THUMB * 0.625))
+        self.done_preview.setAccessibleName("Preview of your week")
+        framed.addWidget(self.done_preview)
+        page.addWidget(frame, 0, Qt.AlignmentFlag.AlignLeft)
+        page.addLayout(self.summary)
         self.summary_rows: list[tuple[QLabel, QLabel, QPushButton]] = []
         for row, (name, steps) in enumerate(RAIL[:-1]):
             heading = _label(name, "setupSummaryName", wrap=False)
@@ -1577,6 +1758,14 @@ class SetupPage(QWidget):
     @property
     def step(self) -> int:
         return self._step
+
+    def wear_look(self, look: dict) -> None:
+        """Keep the style page, wear this look's preset and text size. The rig's play uses this so
+        Setup does not stay on the style default after the window look is set."""
+        chosen = sanitize_look(look)
+        knobs = {**self._look.get("knobs", {}), **chosen["knobs"]}
+        self._look = sanitize_look({"preset": chosen["preset"], "knobs": knobs})
+        self._state.look = deepcopy(self._look)
 
     def open(self, state: SetupState, step: int = STYLE) -> None:
         """Fill every page from what is in place now and show `step`, without animating."""
@@ -1608,11 +1797,15 @@ class SetupPage(QWidget):
     def _style_in_use(self) -> str | None:
         if self._state.first_run:
             return DEFAULT_STYLE
-        return matching_style(self._pack, self._look, self._layout)
+        matched = matching_style(self._pack, self._look, self._layout)
+        if matched is not None:
+            return matched
+        return next((style.key for style in STYLES if style.main == self._layout["main"]), None)
 
     def _fill_style(self) -> None:
         # A new account starts on Plain calendar, chosen, so Next without a click keeps it.
         self._style_key = self._style_in_use()
+        self._seed_style_looks()
         self.carousel.show_style(self._style_key or DEFAULT_STYLE, chosen=self._style_key is not None)
         for layout_id, card in self.look_cards.items():
             card.select(layout_id == self._layout["main"])
@@ -1620,12 +1813,16 @@ class SetupPage(QWidget):
         for style in STYLES:
             card = self.style_cards[style.key]
             card.set_picture(
-                self._previews.get(style.main, style.colour, style.pack, style_look(style), STYLE_PICTURE)
+        self._previews.get(style.main, style.colour, style.pack, style_look(style), STYLE_PICTURE)
             )
+        active = next((item for item in STYLES if item.key == self._style_key), next(
+            (item for item in STYLES if item.main == self._layout["main"]), STYLES[0]
+        ))
+        self._refresh_style_look(active)
         self._pending_pictures = []
         for spec in layouts_for("plan"):
-            colour = spec.colourways[0][0] if spec.colourways else None
-            self._pending_pictures.append((self.look_cards[spec.id], spec.id, colour, self._pack, LOOK_THUMB))
+            look = DESIGN_LOOKS[spec.id][0][0]
+            self._pending_pictures.append((self.look_cards[spec.id], spec.id, look, self._pack, LOOK_THUMB))
         self._warm.start()
 
     def _draw_next_picture(self) -> None:
@@ -1644,6 +1841,10 @@ class SetupPage(QWidget):
     def _clock_chosen(self) -> bool:
         return self.clock_buttons[True].isChecked()
 
+    def _week_start_chosen(self) -> str:
+        checked = [value for value, button in self.week_start_buttons.items() if button.isChecked()]
+        return checked[0] if checked else "monday"
+
     def _show_clock(self, twenty_four: bool) -> None:
         """Choose the clock and write every time box on the pages in it."""
         self.clock_buttons[twenty_four].setChecked(True)
@@ -1658,6 +1859,7 @@ class SetupPage(QWidget):
     def _fill_week(self) -> None:
         blocks = self._state.blocks
         self._show_clock(self._state.preferences.get("clock_24h") is True)
+        self.week_start_buttons[week_starts_on()].setChecked(True)
         school = next((block for block in blocks if block.get("id") == SETUP_SCHOOL_ID), None)
         if school is not None and school.get("start"):
             self.school_days.set_days(list(school.get("days") or []))
@@ -1849,6 +2051,8 @@ class SetupPage(QWidget):
                 self.error.setText(problem)
                 return
             answer = self._answer(step)
+            if step == WEEK:
+                save_week_starts_on(self._week_start_chosen())
         elif step in LOOK_STEPS and destination not in LOOK_STEPS:
             # A look tried and then skipped is not kept, so the app goes back to the one it had.
             self._restore_entered()
@@ -1892,6 +2096,7 @@ class SetupPage(QWidget):
                 self._pack = style.pack
                 self._look = style_look(style)
                 self._layout = style_layout(style, self._layout)
+                self._layout["options"][style.main]["look"] = self._refresh_style_look(style)
                 self._preview()
         if step == LOOK:
             for layout_id, card in self.look_cards.items():
@@ -1968,7 +2173,11 @@ class SetupPage(QWidget):
         self._palette = palette
         for play in self.play_buttons:
             play.setIcon(icons.icon("circle-play", palette["accent"]))
+        self._dress_clock_ring()
         self._sync_chrome()
+
+    def _dress_clock_ring(self) -> None:
+        self._clock_ring.set_edge(readable_focus_edge(self._palette))
 
     def _place_marker(self, animate: bool) -> None:
         current = next(
@@ -1991,6 +2200,7 @@ class SetupPage(QWidget):
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)
+        self.carousel.limit_picture_to(self.height() - 255)
         QTimer.singleShot(0, self, lambda: self._place_marker(animate=False))
 
     # The look pages
@@ -2005,8 +2215,31 @@ class SetupPage(QWidget):
         if (pack, look, layout) != (self._pack, self._look, self._layout):
             self._pack, self._look, self._layout = pack, deepcopy(look), deepcopy(layout)
             self._style_key = self._style_in_use()
+            self._seed_style_looks()
             self.carousel.show_style(self._style_key or DEFAULT_STYLE, chosen=self._style_key is not None)
+            style = next((item for item in STYLES if item.key == self._style_key), STYLES[0])
+            self._refresh_style_look(style)
             self._preview()
+
+    def _seed_style_looks(self) -> None:
+        self._style_looks = {main: choices[0][0] for main, choices in DESIGN_LOOKS.items()}
+        for main, choices in DESIGN_LOOKS.items():
+            saved = options_for(self._layout, main).get("look")
+            if saved in {token for token, _name in choices}:
+                self._style_looks[main] = saved
+
+    def _refresh_style_look(self, style: Style) -> str:
+        token = self._style_looks.setdefault(style.main, DESIGN_LOOKS[style.main][0][0])
+        look = style_look(style)
+        choices = tuple(
+            (value, name, design_look(value, style.pack, False, look)[0])
+            for value, name in DESIGN_LOOKS[style.main]
+        )
+        self.carousel.set_looks(choices, token)
+        self.carousel.slides[style.key].set_picture(
+            self._previews.get(style.main, token, style.pack, look, STYLE_PICTURE)
+        )
+        return token
 
     def _choose_style(self, style: Style) -> None:
         self._own_look = False
@@ -2014,34 +2247,39 @@ class SetupPage(QWidget):
         self.carousel.show_style(style.key, chosen=True)
         self._pack = style.pack
         self._look = style_look(style)
+        token = self._refresh_style_look(style)
         self._layout = style_layout(style, self._layout)
+        self._layout["options"][style.main]["look"] = token
+        self._preview()
+
+    def _choose_style_look(self, token: str) -> None:
+        style = next((item for item in STYLES if item.key == self._style_key), None)
+        if style is None:
+            return
+        self._style_looks[style.main] = token
+        self._refresh_style_look(style)
+        self._layout = style_layout(style, self._layout)
+        self._layout["options"][style.main]["look"] = token
         self._preview()
 
     def _choose_main(self, layout_id: str) -> None:
         for key, card in self.look_cards.items():
             card.select(key == layout_id)
-        self._layout = sanitize_layout({**self._layout, "main": layout_id})
+        options = deepcopy(self._layout["options"])
+        if "look" not in options.get(layout_id, {}):
+            options[layout_id] = {**options.get(layout_id, {}), "look": DESIGN_LOOKS[layout_id][0][0]}
+        self._layout = sanitize_layout({**self._layout, "main": layout_id, "options": options})
         self._preview()
 
     def _colour_choices(self) -> tuple[tuple[tuple[str, str], ...], tuple[tuple[str, str], ...]]:
         """The colours on offer, standard then experimental."""
         main = self._layout["main"]
-        spec = LAYOUTS[main]
-        if not spec.colourways:
-            standard, experimental = look_menu_items()
-            return (
-                tuple((name, label) for name, label, kind in standard if kind == "pack"),
-                tuple((name, label) for name, label, kind in experimental if kind == "pack"),
-            )
-        return tuple((value, label) for value, label, _tokens in spec.colourways), ()
+        return (*DESIGN_LOOKS[main], ("your", "Your look")), ()
 
     def _fill_colours(self) -> None:
         main = self._layout["main"]
         self.colours.set_choices(*self._colour_choices())
-        if LAYOUTS[main].colourways:
-            self.colours.set_value(options_for(self._layout, main).get("colour"))
-        else:
-            self.colours.set_value(self._pack)
+        self.colours.set_value(options_for(self._layout, main).get("look"))
         knobs = effective_look(self._look)
         self.text_size.set_value(knobs["text"])
         self.spacing.set_value(knobs["density"])
@@ -2054,12 +2292,13 @@ class SetupPage(QWidget):
         main = self._layout["main"]
         colour = self.colours.value()
         options = deepcopy(self._layout["options"])
-        if LAYOUTS[main].colourways and colour:
-            options[main] = {**options.get(main, {}), "colour": colour}
-            if main == "timeline":
-                options[main]["density"] = self.spacing.value() or "comfortable"
-        elif colour in PACKS:
-            self._pack = colour
+        if colour:
+            options[main] = {**options.get(main, {}), "look": colour}
+            parsed = parse_look_menu_token(colour)
+            if parsed is not None and parsed[0] == "pack":
+                self._pack = parsed[1]
+        if main == "timeline":
+            options.setdefault(main, {})["density"] = self.spacing.value() or "comfortable"
         knobs = dict(sanitize_look(self._look)["knobs"])
         for knob, chips in (
             ("text", self.text_size),
@@ -2076,7 +2315,7 @@ class SetupPage(QWidget):
 
     def _draw_colour_preview(self, fade: bool) -> None:
         main = self._layout["main"]
-        colour = options_for(self._layout, main).get("colour") if LAYOUTS[main].colourways else None
+        colour = options_for(self._layout, main).get("look")
         picture = hold_picture(self.colour_preview, self.motion) if fade else None
         self.colour_preview.setPixmap(
             rounded_picture(self._previews.get(main, colour, self._pack, self._look, COLOUR_THUMB), 8)
@@ -2278,6 +2517,7 @@ class SetupPage(QWidget):
                 style_look(style),
                 style_layout(style, self._layout),
             )
+            self._layout["options"][style.main]["look"] = self._refresh_style_look(style)
         if step in LOOK_STEPS:
             return {"pack": self._pack, "look": deepcopy(self._look), "layout": deepcopy(self._layout)}
         if step == WEEK:
@@ -2334,16 +2574,14 @@ class SetupPage(QWidget):
     # Done
 
     def _fill_summary(self) -> None:
+        # The clock is one setting for the whole app, so the summary sets it from this page's own
+        # choice rather than whatever was last written to it.
+        set_clock_24h(self._clock_chosen())
         state = self._state
         main = state.layout["main"]
         spec = LAYOUTS[main]
-        if spec.colourways:
-            colour = options_for(state.layout, main).get("colour")
-            colour_name = next(
-                (label for value, label, _ in spec.colourways if value == colour), "your colours"
-            )
-        else:
-            colour_name = PACK_IN.get(state.pack, "your colours")
+        selected = options_for(state.layout, main).get("look")
+        colour_name = next((label for value, label in DESIGN_LOOKS[main] if value == selected), "Your look")
         text = effective_look(state.look)["text"]
         look = f"{spec.label} in {colour_name}"
         if text != "normal":
@@ -2392,6 +2630,14 @@ class SetupPage(QWidget):
         )
         for (_heading, value, _change), text_value in zip(self.summary_rows, values, strict=True):
             value.setText(text_value)
+        self._draw_done_preview()
+
+    def _draw_done_preview(self) -> None:
+        main = self._layout["main"]
+        look = options_for(self._layout, main).get("look")
+        self.done_preview.setPixmap(
+            rounded_picture(self._previews.get(main, look, self._pack, self._look, COLOUR_THUMB), 8)
+        )
 
     def _reveal_summary(self) -> None:
         # One line after another, so the eye reads down the list rather than taking it in as a block.

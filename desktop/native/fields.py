@@ -6,10 +6,25 @@ it."""
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable
+from pathlib import Path
 
-from PySide6.QtCore import QDate, QDateTime, QEvent, QObject, QRect, QRectF, QSize, Qt, QTime, QTimer, Signal
+from PySide6.QtCore import (
+    QDate,
+    QDateTime,
+    QEvent,
+    QObject,
+    QRect,
+    QRectF,
+    QSize,
+    QStandardPaths,
+    Qt,
+    QTime,
+    QTimer,
+    Signal,
+)
 from PySide6.QtGui import (
     QAccessible,
     QAccessibleAnnouncementEvent,
@@ -28,6 +43,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QAbstractSpinBox,
     QBoxLayout,
+    QButtonGroup,
     QCalendarWidget,
     QDateEdit,
     QDateTimeEdit,
@@ -167,15 +183,46 @@ def _toward(colour: QColor, ground: QColor, share: float) -> QColor:
     )
 
 
+WEEK_STARTS = ("monday", "sunday")
+
+
+def _week_starts_file() -> Path:
+    folder = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation))
+    return folder / "week-start.json"
+
+
+def week_starts_on() -> str:
+    """Monday, unless this computer was set to Sunday. Kept per computer, not on the account: the
+    stored weeks stay Monday-keyed, and the account's preferences are the engine's fixed list."""
+    try:
+        value = json.loads(_week_starts_file().read_text(encoding="utf-8")).get("week_starts_on")
+    except (OSError, ValueError, AttributeError):
+        return "monday"
+    return value if value in WEEK_STARTS else "monday"
+
+
+def save_week_starts_on(value: str) -> None:
+    if value not in WEEK_STARTS:
+        raise ValueError(f"week start must be one of {WEEK_STARTS}, not {value!r}")
+    path = _week_starts_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"week_starts_on": value}), encoding="utf-8")
+
+
+def first_day_of_week() -> Qt.DayOfWeek:
+    return Qt.DayOfWeek.Sunday if week_starts_on() == "sunday" else Qt.DayOfWeek.Monday
+
+
 class LookCalendar(QCalendarWidget):
-    """A month drawn in the look: Monday first, weekends in the text colour like any other day, the
-    picked day a round dot in the accent, today ringed in it, and other months' days faint. Qt's own
-    drew Saturday and Sunday red and the picked day as a square (T19 of the 0.17.0 audit)."""
+    """A month drawn in the look: Monday first (Sunday if the computer says so), weekends in the text
+    colour like any other day, the picked day a round dot in the accent, today ringed in it, and other
+    months' days faint. Qt's own drew Saturday and Sunday red and the picked day as a square (T19 of the
+    0.17.0 audit)."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("lookCalendar")
-        self.setFirstDayOfWeek(Qt.DayOfWeek.Monday)
+        self.setFirstDayOfWeek(first_day_of_week())
         self.setGridVisible(False)
         self.setVerticalHeaderFormat(QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader)
         self.setHorizontalHeaderFormat(QCalendarWidget.HorizontalHeaderFormat.SingleLetterDayNames)
@@ -317,6 +364,8 @@ class DateField(QDateEdit):
         popup.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         popup.layout().setContentsMargins(POPUP_PAD, POPUP_PAD, POPUP_PAD, POPUP_PAD)
         popup.installEventFilter(PopupCard(self))
+        for button in QDateEdit.calendarWidget(self).findChildren(QToolButton):
+            button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         for watcher in self._popup_filters:
             popup.installEventFilter(watcher)
 
@@ -340,6 +389,10 @@ class DateField(QDateEdit):
             # Typing in the year gives a year; typing a day or a month leaves it to the field.
             self._typed = self.currentSection() != QDateTimeEdit.Section.YearSection
         super().keyPressEvent(event)
+
+    def focusNextPrevChild(self, next: bool) -> bool:  # noqa: A002
+        # One box, not one section per stop.
+        return QWidget.focusNextPrevChild(self, next)
 
     def _next_matching_date(self) -> None:
         """A date typed with no year is the next one that day and month come round, not one already
@@ -385,9 +438,12 @@ def announce(widget: QWidget, words: str, *, assertive: bool = False) -> None:
 
 
 class ProblemLine(QFrame):
-    """A short problem written under a field, with a warning icon, in a frame of its own."""
+    """A short problem under a field: as wide as that field, with no frame. A field that shares its
+    row (Start beside End) gets the line as wide as the whole row."""
 
     GAP = 4
+    # Used only to pick a comfortable height for the size hint. The line drawn is the field's width,
+    # or the row's, never a fixed box.
     MAX_WIDTH = 360
 
     def __init__(self, field: QWidget) -> None:
@@ -396,10 +452,12 @@ class ProblemLine(QFrame):
         self.overlay = True
         # The row this line sits under when the field shares its row with others.
         self._row_width: Callable[[], int] | None = None
+        self._row_widget: QWidget | None = None
+        self.setFrameShape(QFrame.Shape.NoFrame)
         self.setProperty("problem", False)
         self.setObjectName("clockError")
         row = QGridLayout(self)
-        row.setContentsMargins(8, 4, 8, 4)
+        row.setContentsMargins(0, self.GAP, 0, 0)
         row.setSpacing(6)
         row.setColumnStretch(1, 1)
         self.icon = QLabel()
@@ -418,12 +476,35 @@ class ProblemLine(QFrame):
         self._take: Callable[[], None] | None = None
         self.action.clicked.connect(self._act)
         self.hide()
+        field.installEventFilter(self)
         field.destroyed.connect(self.deleteLater)
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        # A field sized after the line (one width per kind) keeps the line as wide as the field.
+        if watched is self.field and event.type() == QEvent.Type.Resize and not self.overlay:
+            self._match_width()
+        return False
+
+    def _match_width(self) -> None:
+        """A field's line is exactly that field wide. A row's line is the layout's, as wide as the row."""
+        if self._row_widget is not None:
+            return
+        width = self.field.width()
+        if width > 0 and self.width() != width:
+            self.setFixedWidth(width)
 
     def attach(self, layout, index: int) -> None:
         """Reserve a row under fields whose forms have a layout. A field that shares its row with
-        others (Start beside End, the "from" and "to" boxes) gets the line as a row of its own under
-        that whole row, so the other fields stay where they were and the row never stretches."""
+        others (Start beside End) gets the line under that whole row, so the other fields stay where
+        they were and the line is as wide as the row."""
+        # A caption column inside a side-by-side row is itself a vertical box. The line belongs under
+        # the row, not under this one column, or it would be only as wide as End.
+        shared = self._shared_row()
+        if shared is not None:
+            if not self._attach_under_widget(shared):
+                return
+            self.overlay = False
+            return
         if isinstance(layout, QFormLayout):
             row, _role = layout.getWidgetPosition(self.field)
             if row < 0:
@@ -447,6 +528,7 @@ class ProblemLine(QFrame):
         above = [w for w in grid.parentWidget().children() if isinstance(w, QWidget) and w is not self]
         gaps = grid.horizontalSpacing() * (len(above) - 1)
         self._row_width = lambda: gaps + sum(widget.sizeHint().width() for widget in above)
+        self._row_widget = grid.parentWidget()
         grid.addWidget(self, grid.rowCount(), 0, 1, grid.columnCount())
         # A line as narrow as a pair of time boxes keeps its button under the words, not beside them.
         inside = self.layout()
@@ -454,14 +536,70 @@ class ProblemLine(QFrame):
         inside.addWidget(self.action, 1, 1, 1, 2, Qt.AlignmentFlag.AlignLeft)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
+    def _form_holding(self, widget: QWidget) -> QFormLayout | None:
+        """The form `widget` was added to, including one nested in the page's column."""
+        host = widget.parentWidget()
+        if host is None:
+            return None
+        layout = host.layout()
+        if isinstance(layout, QFormLayout):
+            return layout
+        if isinstance(layout, QBoxLayout):
+            for index in range(layout.count()):
+                child = layout.itemAt(index).layout()
+                if isinstance(child, QFormLayout) and child.indexOf(widget) >= 0:
+                    return child
+        return None
+
+    def _shared_row(self) -> QWidget | None:
+        """The horizontal row whose caption columns this field sits in, when there is more than one."""
+        column = self.field.parentWidget()
+        if column is None:
+            return None
+        row = column.parentWidget()
+        if row is None:
+            return None
+        row_layout = row.layout()
+        column_layout = column.layout()
+        if (
+            not isinstance(row_layout, QBoxLayout)
+            or not isinstance(column_layout, QBoxLayout)
+            or row_layout.direction() == QBoxLayout.Direction.TopToBottom
+            or column_layout.direction() != QBoxLayout.Direction.TopToBottom
+        ):
+            return None
+        columns = 0
+        for at in range(row_layout.count()):
+            item = row_layout.itemAt(at)
+            if item is None:
+                continue
+            if item.layout() is not None:
+                columns += 1
+                continue
+            child = item.widget()
+            nested = child.layout() if child is not None else None
+            if isinstance(nested, QBoxLayout) and nested.direction() == QBoxLayout.Direction.TopToBottom:
+                columns += 1
+        if columns < 2:
+            return None
+        return row
+
     def _attach_under_row(self, layout: QBoxLayout) -> bool:
         row = layout.parentWidget()
-        above = row.parentWidget().layout() if row is not None and row.parentWidget() is not None else None
-        if isinstance(above, QFormLayout):
-            at, _role = above.getWidgetPosition(row)
+        if row is None:
+            return False
+        return self._attach_under_widget(row)
+
+    def _attach_under_widget(self, row: QWidget) -> bool:
+        if row.parentWidget() is None:
+            return False
+        above = row.parentWidget().layout()
+        form = above if isinstance(above, QFormLayout) else self._form_holding(row)
+        if form is not None:
+            at, _role = form.getWidgetPosition(row)
             if at < 0:
                 return False
-            above.insertRow(at + 1, self)
+            form.insertRow(at + 1, self)
         elif isinstance(above, QBoxLayout) and above.direction() == QBoxLayout.Direction.TopToBottom:
             at = above.indexOf(row)
             if at < 0:
@@ -469,12 +607,14 @@ class ProblemLine(QFrame):
             above.insertWidget(at + 1, self)
         else:
             return False
-        self._row_width = lambda: row.sizeHint().width()
+        self._row_widget = row
+        self._row_width = lambda: row.width() or row.sizeHint().width()
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         return True
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
+        self._match_width()
         self._tell_host()
 
     def hideEvent(self, event) -> None:  # noqa: N802
@@ -550,7 +690,13 @@ class ProblemLine(QFrame):
         if self.parentWidget() is not holder:
             self.setParent(holder)
         at = field.mapTo(holder, field.rect().topLeft())
-        width = max(120, min(self.MAX_WIDTH, holder.width() - at.x() - 8))
+        # As wide as the field. A row's line is laid out with the row instead, and never drawn here.
+        width = field.width()
+        room = holder.width() - at.x()
+        if width <= 0:
+            width = max(120, min(self.MAX_WIDTH, room)) if room > 0 else 120
+        elif room > 0:
+            width = min(width, room)
         self.ensurePolished()
         words = self.text.palette().color(QPalette.ColorRole.WindowText).name()
         self.icon.setPixmap(icons.pixmap("triangle-alert", words, 16))
@@ -935,6 +1081,8 @@ class Stepper(QWidget):
         line.addStretch(1)
         column.addLayout(line)
         self.chips: list[QPushButton] = []
+        self._chip_group = QButtonGroup(self)
+        self._chip_group.setExclusive(False)
         if quick:
             chips = QHBoxLayout()
             chips.setContentsMargins(0, 0, 0, 0)
@@ -949,6 +1097,8 @@ class Stepper(QWidget):
                 chip.setAccessibleName(f"{minutes} minutes")
                 chip.setCursor(Qt.CursorShape.PointingHandCursor)
                 chip.clicked.connect(self._pick)
+                chip.installEventFilter(self)
+                self._chip_group.addButton(chip, len(self.chips))
                 chips.addWidget(chip)
                 self.chips.append(chip)
             chips.addStretch(1)
@@ -991,8 +1141,36 @@ class Stepper(QWidget):
         for chip in self.chips:
             chip.setChecked(chip.property("minutes") == self.box.value())
             chip.setEnabled(live)
+        self._chip_tab_stops()
+
+    def _chip_tab_stops(self) -> None:
+        if not self.chips:
+            return
+        checked = next((at for at, chip in enumerate(self.chips) if chip.isChecked()), 0)
+        for at, chip in enumerate(self.chips):
+            chip.setFocusPolicy(
+                Qt.FocusPolicy.ClickFocus
+                | (Qt.FocusPolicy.TabFocus if at == checked else Qt.FocusPolicy.NoFocus)
+            )
+            chip.setAccessibleDescription(f"{at + 1} of {len(self.chips)}")
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if watched in self.chips and event.type() == QEvent.Type.KeyPress:
+            current = self.chips.index(watched)
+            key = event.key()
+            target = None
+            if key in (Qt.Key.Key_Left, Qt.Key.Key_Up):
+                target = (current - 1) % len(self.chips)
+            elif key in (Qt.Key.Key_Right, Qt.Key.Key_Down):
+                target = (current + 1) % len(self.chips)
+            elif key == Qt.Key.Key_Home:
+                target = 0
+            elif key == Qt.Key.Key_End:
+                target = len(self.chips) - 1
+            if target is not None:
+                self.chips[target].click()
+                self.chips[target].setFocus(Qt.FocusReason.TabFocusReason)
+                return True
         if watched is self.box and event.type() == QEvent.Type.EnabledChange:
             self._follow()
         return False

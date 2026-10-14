@@ -251,6 +251,9 @@ class MissionPainter(BlockPainter):
     block where the lane is free, then its first word, then its colour alone. The hours are named
     every other hour over the first lane, and the time now is a pill there, a faint line down every
     lane and a strong one down today's."""
+    # Writes its own words, not yet with room for tag pills (N11); see BlockPainter.draws_pills.
+    draws_pills = False
+
 
     def __init__(self, tokens: dict[str, str], *, day: bool = False) -> None:
         soft = mix_oklab(tokens["line"], tokens["surface"], 0.5)
@@ -506,7 +509,7 @@ class MissionPainter(BlockPainter):
         after = min([max(box.left(), ends[1]) for box in row if box.right() > ends[1] + 0.5] + [last])
         before = max([min(box.right(), ends[0]) for box in row if box.left() < ends[0] - 0.5] + [first])
         top = rect.top() + 2
-        room = rect.bottom() + sm.lineSpacing() - top
+        room = max(0.0, rect.bottom() - top - 1)
         start = clock_label(drawn.span.start)
         for with_time in (True, False):
             for right in (True, False):
@@ -515,10 +518,22 @@ class MissionPainter(BlockPainter):
                 if not lines or (with_time and sm.horizontalAdvance(start) > free):
                     continue
                 tall = len(lines) * tm.lineSpacing() + (sm.lineSpacing() if with_time else 0)
+                inline_time = False
+                if with_time and tall > room:
+                    title_width = tm.horizontalAdvance(drawn.title)
+                    time_width = sm.horizontalAdvance(start)
+                    if len(lines) != 1 or title_width + 6 + time_width > free or tm.lineSpacing() > room:
+                        continue
+                    inline_time = True
+                    tall = tm.lineSpacing()
                 if tall > room:
                     continue
-                wide = max([tm.horizontalAdvance(line) for line in lines]
-                           + ([sm.horizontalAdvance(start)] if with_time else []))
+                wide = (
+                    tm.horizontalAdvance(lines[0]) + 6 + sm.horizontalAdvance(start)
+                    if inline_time
+                    else max([tm.horizontalAdvance(line) for line in lines]
+                             + ([sm.horizontalAdvance(start)] if with_time else []))
+                )
                 left = rect.right() + 5 if right else rect.left() - 5 - wide
                 align = Qt.AlignmentFlag.AlignLeft if right else Qt.AlignmentFlag.AlignRight
                 painter.setPen(self.c("text"))
@@ -531,7 +546,9 @@ class MissionPainter(BlockPainter):
                 if with_time:
                     painter.setPen(self.c("muted"))
                     painter.setFont(small)
-                    box = QRectF(left, top + len(lines) * tm.lineSpacing(), wide, sm.height())
+                    time_x = left + tm.horizontalAdvance(lines[0]) + 6 if inline_time else left
+                    time_y = top if inline_time else top + len(lines) * tm.lineSpacing()
+                    box = QRectF(time_x, time_y, sm.horizontalAdvance(start), sm.height())
                     painter.drawText(box, align | Qt.AlignmentFlag.AlignTop, start)
                     written.append(box)
                 taken.append(QRectF(left - 5, rect.top(), wide + 10, rect.height()))
@@ -1139,7 +1156,7 @@ class MissionView(LayoutView):
         dues = {(item.due or "")[:10] for item in todo}
         foot = "The bar is how much of each is placed in the week."
         if len(todo) == 1:
-            foot = "The bar is how much of it is placed in the week."
+            foot = "The bar is how much of it's placed in the week."
         elif len(dues) == 1 and "" not in dues:
             foot = f"All {len(todo)} are due {_due_day(todo[0].due)}. {foot}"
         box.addSpacing(px(12))
@@ -1275,7 +1292,7 @@ class MissionView(LayoutView):
         if not coming:
             heading, title, _line = week.leftover_parts(today)
             waits = week.leftover_kind(today) == "needs_time"
-            words = f"{title} is not placed yet." if waits else f"{heading}."
+            words = f"{title} isn't placed yet." if waits else f"{heading}."
             rows.append(Wrapped(words, "missionHint"))
         foot = ""
         after = today + 1
@@ -1340,7 +1357,7 @@ class MissionView(LayoutView):
             for item in items
         ]
         if not items:
-            rows.append(Wrapped("Nothing planned.", "missionHint"))
+            rows.append(Wrapped("Nothing planned", "missionHint"))
         total = sum(item.minutes for item in items)
         aside = f"{plural(len(items), 'thing')}, {self._figure(length_label(total))} in all"
         return self._list_card(scene, "missionDayList", DAY_FULL[day], aside, rows)

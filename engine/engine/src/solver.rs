@@ -17,7 +17,7 @@ const TIGHT_SLACK_MIN: i64 = 3 * 60;
 const DANGER_SLACK_MIN: i64 = 60;
 
 const CLUSTER_COPY: &str = "Several tasks are short on time. Shorten a session, pick another day, \
-    or free some protected hours. Work that cannot fit stays unplaced.";
+    or free some protected hours. Work that can't fit stays unplaced.";
 const LATE_COPY: &str = "Moved after you ran late so the rest of the day still fits.";
 
 fn energy_window(energy: &str) -> (i64, i64) {
@@ -45,6 +45,7 @@ pub struct TimeBlock {
     pub completed_day: Option<i64>,
     pub missed_days: Vec<i64>,
     pub pinned: bool,
+    pub prefer_earliest: bool,
     /// Fields the planner does not read. Copied through so a round trip keeps them.
     pub rest: Map<String, Value>,
 }
@@ -67,6 +68,7 @@ impl Default for TimeBlock {
             completed_day: None,
             missed_days: vec![],
             pinned: false,
+            prefer_earliest: false,
             rest: Map::new(),
         }
     }
@@ -147,10 +149,10 @@ fn amount(minutes: i64) -> String {
 
 fn slack_sentence(slack_min: i64, status: &str) -> String {
     if slack_min == 0 {
-        return "Finishes right when it is due.".into();
+        return "Finishes right when it's due.".into();
     }
     let only = if status == "danger" { "only " } else { "" };
-    format!("Finishes {only}{} before it is due.", amount(slack_min))
+    format!("Finishes {only}{} before it's due.", amount(slack_min))
 }
 
 // --- `backend/availability.py`, the one copy in `plan` ---
@@ -323,6 +325,11 @@ fn order_values(
     values: &[(i64, i64)],
     windows: &[Value],
 ) -> EngineResult<Vec<(i64, i64)>> {
+    if block.prefer_earliest {
+        let mut ordered = values.to_vec();
+        ordered.sort();
+        return Ok(ordered);
+    }
     let (low, high) = energy_window(&block.energy);
     let mut keyed: Vec<(i64, i64, i64, i64, i64)> = Vec::with_capacity(values.len());
     for &(day, slot) in values {
@@ -1066,6 +1073,7 @@ const BLOCK_FIELDS: &[&str] = &[
     "completed_day",
     "missed_days",
     "pinned",
+    "prefer_earliest",
 ];
 
 pub fn block_from_value(value: &Value) -> EngineResult<TimeBlock> {
@@ -1109,6 +1117,10 @@ pub fn block_from_value(value: &Value) -> EngineResult<TimeBlock> {
         completed_day: obj.get("completed_day").and_then(Value::as_i64),
         missed_days: i64_list(obj.get("missed_days")),
         pinned: obj.get("pinned").and_then(Value::as_bool).unwrap_or(false),
+        prefer_earliest: obj
+            .get("prefer_earliest")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
         rest,
     })
 }
@@ -1149,6 +1161,9 @@ pub fn block_to_value(block: &TimeBlock) -> Value {
     }
     if block.pinned {
         map.insert("pinned".into(), Value::Bool(true));
+    }
+    if block.prefer_earliest {
+        map.insert("prefer_earliest".into(), Value::Bool(true));
     }
     Value::Object(map)
 }
@@ -1332,6 +1347,31 @@ mod tests {
         let start = hhmm_to_minutes(hw_placed.start.as_ref().unwrap()).unwrap();
         assert!((6 * 60..8 * 60).contains(&start));
         assert_eq!(hw_placed.start.as_deref(), Some("06:00"));
+    }
+
+    #[test]
+    fn overdue_homework_takes_the_first_free_slot_after_now() {
+        let class = locked("class", "Class", "10:00", 60, &[5]);
+        let mut homework = flex("bio", "Bio reading", 60, &[5], "medium");
+        homework.prefer_earliest = true;
+        let windows = vec![WorkWindow {
+            days: vec![5],
+            start: "10:00".into(),
+            end: "14:00".into(),
+            subject: None,
+        }];
+        let trace = solve(
+            &[class, homework],
+            None,
+            Some(&windows),
+            None,
+            Some((5, 10 * 60)),
+            SOLVE_BUDGET_MS,
+            &noop_elapsed(),
+        )
+        .unwrap();
+        let placed = trace.placed.iter().find(|block| block.id == "bio").unwrap();
+        assert_eq!(placed.start.as_deref(), Some("11:00"));
     }
 
     #[test]

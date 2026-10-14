@@ -11,6 +11,7 @@ from __future__ import annotations
 import importlib.util
 import os
 from collections.abc import Callable, Iterator
+from unittest.mock import Mock
 
 import pytest
 
@@ -23,9 +24,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QStandardPaths
     from PySide6.QtGui import QColor
-    from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QPushButton, QWidget
+    from PySide6.QtWidgets import QApplication, QDialog, QPushButton, QWidget
 
-    from desktop.native import look_editor, settings, widgets
+    from desktop.native import devices, look_editor, settings, widgets
     from desktop.native.look import pack_stylesheet, resolved_palette
     from desktop.native.widgets import control_art
     from desktop.tests.test_ui_dialogs import _dialog_classes, school
@@ -51,6 +52,9 @@ def makers() -> dict[type, list[Callable[[QWidget], QDialog]]]:
         "checked": True,
     }
     windows = {"work_windows": [{"days": [0, 1], "start": "16:00", "end": "18:00"}]}
+    sync = Mock(spec=devices.SyncService)
+    sync.pair_start.return_value = None
+    sync.pair_status.return_value = {"state": "idle", "expires_at_ms": 0, "tries_left": 0}
     return {
         widgets.BlockDialog: [
             lambda host: widgets.BlockDialog(host, school(), occurrence_day=1),
@@ -91,6 +95,8 @@ def makers() -> dict[type, list[Callable[[QWidget], QDialog]]]:
         ],
         look_editor.ColourSheet: [lambda host: look_editor.ColourSheet(host, "#3d6fc4")],
         look_editor.StartSheet: [lambda host: look_editor.StartSheet(host, "base:light", [])],
+        devices.PairDialog: [lambda host: devices.PairDialog(host, sync, 1)],
+        devices.RemoveDialog: [lambda host: devices.RemoveDialog(host, "Pixel")],
         settings.RestoreDialog: [
             lambda host: settings.RestoreDialog(host, [RESTORE_POINT], None, None)
         ],
@@ -168,7 +174,7 @@ def test_the_filled_button_is_the_answer(qapp: QApplication) -> None:
     for name in ("applyRoutine", "deleteRoutine", "sheetClose"):
         assert names[name].property("quiet") is True, name
     late = widgets.LateDialog(None, "School")
-    assert late.findChild(QPushButton, "latePreview").property("outlined") is True
+    assert not late.findChild(QPushButton, "latePreview").property("outlined")
     assert not late.accept_button.property("quiet")
 
 
@@ -191,7 +197,7 @@ def test_hide_preview_and_save_restore_point_are_outlined_and_close_stays_plain(
     for _ in range(3):
         qapp.processEvents()
     still(dialog)
-    close = dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Close)
+    close = dialog.findChild(QPushButton, "sheetClose")
     wanted = QColor(outline_edge(palette))
     try:
         for button in (

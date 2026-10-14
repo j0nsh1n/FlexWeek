@@ -109,7 +109,7 @@ def test_a_change_reaches_the_open_week_on_and_keeps_missed_days_still_school_da
     stand(alice, SETUP_WEEK, [SCHOOL, SOCCER])
     save(alice, WEEK_AFTER, [{**SCHOOL, "missed_days": [2, 4]}, SOCCER, GYM])
     later = {**SCHOOL, "start": "09:00", "duration_min": 360, "days": [0, 1, 2, 3]}
-    answer = stand(alice, NEXT_WEEK, [later, SOCCER])
+    answer = stand(alice, NEXT_WEEK, [later])
     assert answer["standing_changed_weeks"] == [WEEK_AFTER]
     assert times(week(alice, SETUP_WEEK)["blocks"])["school"][:2] == ("08:30", 405)
     assert times(week(alice, NEXT_WEEK)["blocks"])["school"][:2] == ("09:00", 360)
@@ -117,6 +117,15 @@ def test_a_change_reaches_the_open_week_on_and_keeps_missed_days_still_school_da
     assert times(after["blocks"])["school"] == ("09:00", 360, [0, 1, 2, 3], [2])
     assert "gym" in times(after["blocks"])
     assert after["revision"] == 2
+
+
+def test_a_standing_update_changes_only_the_blocks_it_names(alice: TestClient) -> None:
+    stand(alice, SETUP_WEEK, [SCHOOL, SOCCER])
+    later = {**SCHOOL, "start": "09:00", "duration_min": 360}
+    stand(alice, NEXT_WEEK, [later])
+    assert times(week(alice, WEEK_AFTER)["blocks"]) == times([later, SOCCER])
+    stand(alice, NEXT_WEEK, [{"id": "activity-1", "stop": True}])
+    assert times(week(alice, WEEK_AFTER)["blocks"]) == times([later])
 
 
 def test_only_setups_locked_blocks_with_a_start_can_stand(alice: TestClient) -> None:
@@ -145,7 +154,7 @@ def test_the_open_weeks_save_and_the_standing_week_land_together(alice: TestClie
 
 def test_an_export_carries_the_standing_week_to_another_account(database: Path, alice: TestClient) -> None:
     stand(alice, SETUP_WEEK, [SCHOOL, SOCCER])
-    stand(alice, WEEK_AFTER, [SCHOOL])
+    stand(alice, WEEK_AFTER, [{"id": "activity-1", "stop": True}])
     snapshot = alice.post("/api/account-export", json={"password": PASSWORD}, headers=WRITE).json()
     assert len(snapshot["standing"]) == 3
     alice.post("/api/auth/logout", headers=WRITE)
@@ -225,7 +234,7 @@ def test_a_restore_point_brings_back_the_standing_week_it_was_made_with(alice: T
     stand(alice, SETUP_WEEK, [SCHOOL, SOCCER])
     before = standing_of(alice)
     point = restore_point(alice, "Before new hours")
-    stand(alice, NEXT_WEEK, [NEW_HOURS])
+    stand(alice, NEXT_WEEK, [NEW_HOURS, {"id": "activity-1", "stop": True}])
     assert set(times(week(alice, WEEK_AFTER)["blocks"])) == {"school"}
     changed = standing_of(alice)
     recovery = restore(alice, point)["recovery_id"]
@@ -248,7 +257,7 @@ def test_a_restore_point_from_before_the_standing_week_leaves_the_current_one(
         snapshot = json.loads(body)
         snapshot.pop("standing", None)
         db.execute("UPDATE restore_points SET body = ? WHERE id = ?", (json.dumps(snapshot), point))
-    stand(alice, NEXT_WEEK, [NEW_HOURS])
+    stand(alice, NEXT_WEEK, [NEW_HOURS, {"id": "activity-1", "stop": True}])
     changed = standing_of(alice)
     restore(alice, point)
     assert standing_of(alice) == changed

@@ -23,7 +23,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QStandardPaths, Qt
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QPushButton
+    from PySide6.QtWidgets import QAbstractButton, QApplication, QPushButton
 
     from desktop.native.hours.zoom import HoursScroll
     from desktop.native.layouts.registry import sanitize_layout
@@ -109,12 +109,12 @@ def window(qapp: QApplication, tmp_path: Path) -> Iterator[NativeWindow]:
         look_file().unlink(missing_ok=True)
 
 
-def show(qapp: QApplication, window: NativeWindow, design: str, tab: str) -> QPushButton:
+def show(qapp: QApplication, window: NativeWindow, design: str, tab: str) -> QAbstractButton:
     """Put `design` on screen at `tab`, by a click on the tab's button, which keeps the keyboard."""
     window._layout = sanitize_layout({"main": design, "day": "one"})
     window._apply_appearance()
     window._on_week()
-    button = window.findChild(QPushButton, f"view{tab.title()}")
+    button = window.findChild(QAbstractButton, f"view{tab.title()}")
     button.setFocus()
     button.click()
     wait_until(qapp, lambda: not window.session.busy)

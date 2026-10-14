@@ -47,8 +47,8 @@ from desktop.native.feel import (
     title_bar_contrast_ok,
 )
 from desktop.native.layouts import retro
-from desktop.native.layouts.registry import MATCH, sanitize_layout, tokens_for
-from desktop.native.look import pack_stylesheet, resolved_palette, sanitize_look
+from desktop.native.layouts.registry import MATCH, options_for, sanitize_layout, tokens_for
+from desktop.native.look import design_look, pack_stylesheet, resolved_palette, sanitize_look
 from desktop.native.motion import apply_ui_effects
 from desktop.native.settings import SettingsPage
 from desktop.native.setup import STYLE as SETUP_STEP
@@ -338,8 +338,8 @@ def test_large_text_does_not_cut_titles(qapp: QApplication) -> None:  # noqa: F8
                 plain_scroll = found
             else:
                 assert plain_scroll is not None
-                # Retro's frame already made the Add homework sheet scroll at Large text.
-                allowed = {"homeworkScroll"} if style_key == "retro" else set()
+                # Retro's frame and Setup's style-look picker can each make a page scroll at Large text.
+                allowed = {"homeworkScroll", "setupScroll"} if style_key == "retro" else set()
                 for surface, names in found.items():
                     extra_names = names - plain_scroll[surface] - allowed
                     assert extra_names == set(), (style_key, width, surface, extra_names)
@@ -467,6 +467,8 @@ def test_collecting_a_retro_page_raises_nothing(
     host, ctx = _host(qapp, "retro")
     freed: list[bool] = []
     gc.collect()
+    # The run keeps the collector off (conftest); put back whatever was set, never switch it on.
+    was_on = gc.isenabled()
     # Collector off while the page is built, so what it breaks up later is in the order it was made.
     gc.disable()
     try:
@@ -488,7 +490,8 @@ def test_collecting_a_retro_page_raises_nothing(
         gc.collect()
         qapp.processEvents()
     finally:
-        gc.enable()
+        if was_on:
+            gc.enable()
     free(host)
     assert freed == [True]
     assert errors == []
@@ -548,30 +551,36 @@ def test_every_retro_widget_is_owned_by_the_page_it_dresses(qapp: QApplication) 
 
 
 def test_week_page_chrome_is_unchanged_by_j13(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
+    window._layout = sanitize_layout({"main": "classic", "day": "dial"})
+    window._apply_appearance()
+    still(window)
+    week = window.findChild(QWidget, "weekPage")
+    assert week is not None
+    title = window.week_title.font()
+    original_week_title = (title.family(), title.pointSizeF(), title.weight())
+    rail = window.rail.font()
+    original_rail_font = (rail.family(), rail.pointSizeF(), rail.weight())
     for main in ("classic", "timeline", "bento", "retro"):
         window._layout = sanitize_layout({"main": main, "day": "dial"})
         window._apply_appearance()
         still(window)
-        pack, system_dark, accent = window._look_inputs()
-        palette = resolved_palette(pack, system_dark, window._look, accent)
-        base = pack_stylesheet(pack, system_dark, window._look, accent, palette, control_art(palette))
-        assert window.styleSheet() == base
-        page = window._page_palette(palette)
-        page_sheet = ""
-        if page is not None:
-            page_sheet = pack_stylesheet(pack, system_dark, window._look, accent, page, control_art(page))
-        assert window.planner.styleSheet() == page_sheet
-        week = window.findChild(QWidget, "weekPage")
-        assert week is not None
+        title_font = window.week_title.font()
+        rail_font = window.rail.font()
+        assert (title_font.family(), title_font.pointSizeF(), title_font.weight()) == original_week_title
+        assert (rail_font.family(), rail_font.pointSizeF(), rail_font.weight()) == original_rail_font
         assert week.findChild(QWidget, "win98Frame") is None
         assert window.rail.findChild(QWidget, "win98Frame") is None
-        feel = feel_for(main)
-        extra = extra_stylesheet(
-            base, feel, palette, tokens_for(feel.layout, MATCH, palette), window._look
+        # The design's own dressing (Retro's bevels, a design's fonts) stays off the window's chrome.
+        pack, system_dark, accent = window._look_inputs()
+        palette, look = design_look(
+            options_for(window._layout, main)["look"], pack, system_dark, window._worn_look(), accent
         )
+        base = pack_stylesheet(pack, system_dark, look, accent, palette, control_art(palette))
+        feel = feel_for(main)
+        extra = extra_stylesheet(base, feel, palette, tokens_for(feel.layout, "your", palette), look)
         if extra:
-            assert extra not in window.styleSheet()
-            assert extra not in window.planner.styleSheet()
+            assert extra not in window.styleSheet(), main
+            assert extra not in window.planner.styleSheet(), main
 
 
 def test_sign_in_wears_the_last_design_this_computer_used(
@@ -626,13 +635,19 @@ def test_retro_bevel_pane_is_idle_when_nothing_moves(qapp: QApplication) -> None
     counter = _PaintCount(page)
     page.installEventFilter(counter)
     pane.installEventFilter(counter)
-    qapp.processEvents()
+    # A second to settle first: the page's overlay scroll bar shows and fades as it appears (16 paints
+    # once the Look page grew a scroll bar in 1.0.0), which is movement, not a pane that never rests.
+    until = time.monotonic() + 1.0
+    while time.monotonic() < until:
+        qapp.processEvents()
+        time.sleep(0.02)
     counter.count = 0
     until = time.monotonic() + 1.0
     while time.monotonic() < until:
         qapp.processEvents()
         time.sleep(0.02)
-    assert counter.count <= 12, counter.count
+    # At rest nothing is painted again; a timer or a layout loop repainting the bevels would be.
+    assert counter.count <= 2, counter.count
     done = page.findChild(QPushButton, "settingsDone")
     assert done is not None
     done.setAttribute(Qt.WidgetAttribute.WA_Hover, True)

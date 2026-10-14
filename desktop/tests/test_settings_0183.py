@@ -7,6 +7,7 @@ look's accent, a grid's last card ends within 16 px of its row, a column of cont
 
 from __future__ import annotations
 
+import time
 from collections.abc import Iterator
 
 import pytest
@@ -51,10 +52,28 @@ def open_settings(qapp: QApplication, window: NativeWindow, size: tuple[int, int
 
 
 def show_section(qapp: QApplication, page: SettingsPage, row: int) -> QWidget:
+    from desktop.native.layouts.dialog import DesignPicker
+
     page.nav.setCurrentRow(row)
     for _ in range(12):
         qapp.processEvents()
+    # The design cards draw their pictures one a turn after the page shows (on Look since 1.0.0 they
+    # lead the page): a page compared with itself a moment later must have them all drawn first.
+    for picker in page.findChildren(DesignPicker):
+        picker.warm()
+    qapp.processEvents()
     return page.stack.widget(row).widget()
+
+
+def steady(qapp: QApplication, widget: QWidget, tries: int = 25) -> None:
+    last = widget.grab().toImage()
+    for _ in range(tries):
+        qapp.processEvents()
+        time.sleep(0.02)
+        now = widget.grab().toImage()
+        if now == last:
+            return
+        last = now
 
 
 def palette_of(window: NativeWindow) -> dict:
@@ -85,7 +104,15 @@ def seen(image: QImage, x: int, y: int, behind: str) -> QColor:
 
 
 def tile(page: SettingsPage, name: str) -> ChoiceCard:
-    return next(card for card in page.look.more.cards if card.accessibleName() == name)
+    # N14: the worn card's accessible name is "<name>, selected".
+    for card in page.look.more.cards:
+        look = getattr(card, "_look_name", None)
+        if look == name:
+            return card
+        shown = card.accessibleName()
+        if shown == name or shown == f"{name}, selected":
+            return card
+    raise LookupError(name)
 
 
 def where(widget: QWidget, within: QWidget) -> QPoint:
@@ -141,6 +168,9 @@ def test_mid_scroll_the_row_above_the_footer_is_the_fade(
         for value in range(0, bar.maximum(), 10):
             bar.setValue(value)
             qapp.processEvents()
+            # Under load the page can still be settling (a refit, a picture) between the two grabs this
+            # compares: wait until it draws the same twice running.
+            steady(qapp, page)
             raw = area.viewport().grab().toImage()
             under = sum(not near(seen(raw, x, at - 1, page_colour), page_colour) for x in range(raw.width()))
             dark = [
@@ -195,6 +225,8 @@ def test_the_chosen_look_card_is_ringed_and_says_wearing_inside_the_card(
     worn = tile(page, "Nocturne")
     ring = worn.grab().toImage()
     assert near(ring.pixelColor(worn.width() // 2, 1), accent)
+    # N14: worn card "<Name>, selected"; the note inside the card still says Wearing.
+    assert worn.accessibleName() == "Nocturne, selected"
     inside = [label.text() for label in worn.findChildren(QLabel) if label.isVisibleTo(worn)]
     assert "Wearing" in inside
     for other in page.look.more.cards:

@@ -134,9 +134,33 @@ fn test_week_export_carries_referenced_homework_and_drops_unknown_links() {
 #[test]
 fn test_parse_rejects_newer_versions_and_plain_text() {
     assert_eq!(error_of(""), "Empty file.");
-    assert!(error_of("not json").contains("JSON"));
+    assert_eq!(
+        error_of("not json"),
+        "Nothing imported: this isn't a FlexWeek week or day file, or it's damaged. Export it again from FlexWeek."
+    );
     let newer = json!({"format": "flexweek-week", "version": 99, "blocks": []}).to_string();
-    assert!(error_of(&newer).contains("newer FlexWeek"));
+    assert_eq!(
+        error_of(&newer),
+        "Export came from a newer FlexWeek (version 99)."
+    );
+}
+
+#[test]
+fn test_an_account_backup_chosen_as_a_week_file_is_told_where_it_belongs() {
+    let backup = json!({"format": 3, "username": "joo", "preferences": {}}).to_string();
+    assert_eq!(
+        error_of(&backup),
+        "That's a backup file. Import it from Settings > This computer > Manage account."
+    );
+}
+
+#[test]
+fn test_a_damaged_week_file_is_refused_in_plain_words() {
+    let no_monday = json!({"format": "flexweek-week", "version": 2, "week_start": "2026-10-06", "blocks": [], "assignments": []}).to_string();
+    assert_eq!(
+        error_of(&no_monday),
+        "Nothing imported: this isn't a FlexWeek week or day file, or it's damaged. Export it again from FlexWeek."
+    );
 }
 
 #[test]
@@ -288,7 +312,7 @@ fn test_parse_rejects_oversize_dangling_and_pomodoro_pairs() {
         "assignments": [],
     })
     .to_string();
-    assert!(error_of(&dangling).contains("does not include"));
+    assert!(error_of(&dangling).contains("doesn't include"));
     let repeated = json!({
         "format": "flexweek-week",
         "version": 2,
@@ -310,7 +334,10 @@ fn test_parse_rejects_oversize_dangling_and_pomodoro_pairs() {
         "assignments": [],
     })
     .to_string();
-    assert!(error_of(&paired).contains("focus chunks"));
+    assert_eq!(
+        error_of(&paired),
+        "Nothing imported: this isn't a FlexWeek week or day file, or it's damaged. Export it again from FlexWeek."
+    );
 }
 
 #[test]

@@ -106,9 +106,15 @@ def test_high_contrast_suggests_large_text_instead_of_forcing_it(qapp, window) -
     wear(qapp, page, "High contrast")
     assert shown(page, "text") == "normal", "High contrast switched text size by itself"
     chip = [
-        label for label in page.findChildren(QLabel) if label.isVisible() and "Suggests Large" in label.text()
+        label
+        for label in page.findChildren(QLabel)
+        if label.isVisible() and label.text() == "High contrast is easiest to read with Large text."
     ]
-    use = [b for b in page.findChildren(QPushButton) if b.isVisible() and b.text().replace("&", "") == "Use"]
+    use = [
+        button
+        for button in page.findChildren(QPushButton)
+        if button.isVisible() and button.text().replace("&", "") == "Use Large text"
+    ]
     assert chip and use
 
 
@@ -126,7 +132,7 @@ def test_the_suggestion_goes_once_large_is_chosen_and_never_shows_on_other_looks
     assert not page.text_suggest.isVisibleTo(page)
     wear(qapp, page, "High contrast")
     assert page.text_suggest.isVisibleTo(page)
-    use = [b for b in page.findChildren(QPushButton) if b.text() == "Use"][0]
+    use = [b for b in page.findChildren(QPushButton) if b.text() == "Use Large text"][0]
     use.click()
     qapp.processEvents()
     assert shown(page, "text") == "large"

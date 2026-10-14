@@ -22,13 +22,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QPointF, Qt
-    from PySide6.QtGui import QKeyEvent
-    from PySide6.QtWidgets import QApplication, QLabel, QPushButton
+    from PySide6.QtGui import QFontMetricsF, QKeyEvent
+    from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QScrollArea
 
     from desktop.native.layouts.base import Scene, rules
-    from desktop.native.layouts.one_thing import RING_ROOMY, DayBar, OneThingView, label_minutes
-    from desktop.native.layouts.registry import options_for, tokens_for
-    from desktop.native.look import resolved_palette
+    from desktop.native.layouts.one_thing import DayBar, OneThingView, label_minutes
+    from desktop.native.layouts.registry import LEGACY_COLOURS, options_for, tokens_for
+    from desktop.native.look import design_look, resolved_palette
     from desktop.native.motion import apply_ui_effects, duration
     from desktop.native.ring import ARC_MS, CountdownRing
     from desktop.native.weekmodel import build_week, clock_label, minute_of, set_clock_24h
@@ -44,10 +44,12 @@ def qapp() -> Iterator[QApplication]:
 
 
 def scene(clock: str, today: int | None = THURSDAY, accent: str = "default", **chosen: str) -> Scene:
+    if "colour" in chosen:
+        chosen["look"] = LEGACY_COLOURS["one"].get(chosen.pop("colour"), "your")
     options = {**options_for(None, "one"), **chosen}
-    palette = resolved_palette("light-frost", False, None, accent)
+    palette, _look = design_look(options["look"], "light-frost", False, None, accent)
     week = build_week(WEEK, BLOCKS, HOMEWORK, TRACE)
-    return Scene(week, today, minute_of(clock), options, tokens_for("one", options["colour"], palette))
+    return Scene(week, today, minute_of(clock), options, tokens_for("one", options["look"], palette))
 
 
 def shown(
@@ -66,7 +68,9 @@ def shown(
 
 
 def says(view: OneThingView) -> tuple[str, str, str]:
-    return tuple(view.findChild(QLabel, name).text() for name in ("oneLabel", "oneTitle", "oneLine"))
+    # The title breaks onto a second line when the demo's smaller ring needs it; the words are what count.
+    label, title, line = (view.findChild(QLabel, name).text() for name in ("oneLabel", "oneTitle", "oneLine"))
+    return label, " ".join(title.split()), line
 
 
 def counts(view: OneThingView) -> tuple[str, float]:
@@ -91,7 +95,12 @@ def then(view: OneThingView) -> list[str]:
 
 
 def buttons(view: OneThingView) -> list[str]:
-    return [button.objectName() for button in view.findChildren(QPushButton)]
+    # The day letters under the bar are buttons too; they are checked by their own tests.
+    return [
+        button.objectName()
+        for button in view.findChildren(QPushButton)
+        if not button.objectName().startswith("oneDay")
+    ]
 
 
 def press(view: OneThingView, key: Qt.Key) -> None:
@@ -102,8 +111,8 @@ def test_during_school_it_counts_down_what_is_left_of_it(qapp: QApplication) -> 
     view = shown(qapp, "13:40")
     assert says(view) == ("Now", "School", "08:00–14:30")
     assert counts(view) == ("50", round(50 / 60, 3))
-    assert view.findChild(QLabel, "oneDate").text() == "Now 13:40"
-    assert view.findChild(QLabel, "oneLeft").text() == "4 things left today"
+    # The demo's screen A has no date or count line; the Then list heads itself "Later today".
+    assert view.findChild(QLabel, "oneThenLabel").text() == "Later today"
     assert then(view) == ["18:00 Dinner 30 min", "18:45 Essay-1 1 h", "20:00 Chem-1 1 h 30 min"]
 
 
@@ -189,15 +198,20 @@ def test_between_blocks_it_says_what_is_next_and_when(qapp: QApplication) -> Non
     assert says(shown(qapp, "15:00")) == ("Up next", "Dinner", "18:00–18:30")
 
 
+def full_title(view: OneThingView) -> str:
+    """The ring shortens a long title with an ellipsis; the whole words are its accessible name."""
+    return view.findChild(QLabel, "oneTitle").accessibleName()
+
+
 def test_when_the_day_is_over_it_says_what_tomorrow_starts_with(qapp: QApplication) -> None:
     view = shown(qapp, "22:30")
-    assert says(view) == (
-        "Nothing else scheduled today",
-        "Nothing else scheduled today",
-        "Tomorrow starts with School at 08:00",
-    )
-    # Said once: the heading would only repeat the title inside the ring.
-    assert view.findChild(QLabel, "oneLabel").isVisibleTo(view) is False
+    assert says(view)[0] == "Nothing left today"
+    assert full_title(view) == "Nothing else scheduled today"
+    line = view.findChild(QLabel, "oneLine")
+    assert line.text() == ""
+    assert line.accessibleName() == "Tomorrow starts with School at 08:00"
+    assert line.toolTip() == "Tomorrow starts with School at 08:00"
+    assert view.findChild(QLabel, "oneLabel").isVisibleTo(view) is True
     assert counts(view) == ("", 0.0)
     assert then(view) == []
     assert buttons(view) == ["oneBack"]
@@ -205,7 +219,7 @@ def test_when_the_day_is_over_it_says_what_tomorrow_starts_with(qapp: QApplicati
 
 def test_in_another_week_it_does_not_pretend_to_know_today(qapp: QApplication) -> None:
     view = shown(qapp, "13:40", today=None)
-    assert says(view)[:2] == ("Not this week", "Day screens show today")
+    assert says(view) == ("Not this week", "Day screens show today", "")
     assert buttons(view) == ["oneBack"]
 
 
@@ -284,11 +298,13 @@ def test_the_bars_tick_for_now_shows_on_the_thing_it_is_in(qapp: QApplication) -
     assert bar.grab().toImage().pixelColor(now.toPoint()).name() == bar.painter.c("tick").name()
 
 
-def test_option_colours_repaint_the_screen(qapp: QApplication) -> None:
+def test_curated_looks_repaint_the_screen(qapp: QApplication) -> None:
     def corner(view: OneThingView) -> str:
         return view.grab().toImage().pixelColor(4, 4).name()
 
-    assert corner(shown(qapp, "19:00", colour="black")) == "#000000"
+    assert corner(shown(qapp, "19:00", colour="black")) == resolved_palette(
+        "light-frost", False, {"preset": "one-poster", "knobs": {}}
+    )["window"]
     assert corner(shown(qapp, "19:00", colour="paper")) == "#f7f1e3"
     look = resolved_palette("light-frost", False, None, "default")
     assert corner(shown(qapp, "19:00", colour="match")) == look["window"]
@@ -296,7 +312,8 @@ def test_option_colours_repaint_the_screen(qapp: QApplication) -> None:
 
 def test_poster_counts_down_in_the_students_accent_not_0_16s_orange(qapp: QApplication) -> None:
     for accent in ("default", "sea"):
-        worn = tokens_for("one", "black", resolved_palette("light-frost", False, None, accent))["accent"]
+        palette, _look = design_look("preset:one-poster", "light-frost", False, None, accent)
+        worn = tokens_for("one", "preset:one-poster", palette)["accent"]
         view = shown(qapp, "19:00", colour="black", accent=accent)
         picture = view.findChild(CountdownRing).grab().toImage()
         inked = {
@@ -307,13 +324,14 @@ def test_poster_counts_down_in_the_students_accent_not_0_16s_orange(qapp: QAppli
 
 
 def test_both_labels_of_a_shared_rule_get_its_colour(qapp: QApplication) -> None:
-    view = shown(qapp, "13:40", colour="paper")
-    for name in ("oneDate", "oneLeft"):
+    view = shown(qapp, "19:00", colour="paper")
+    muted = view.scene.tokens["bg_muted"]
+    for name in ("oneEvening", "oneWaiting"):
         picture = view.findChild(QLabel, name).grab().toImage()
         inked = {
             picture.pixelColor(x, y).name() for x in range(picture.width()) for y in range(picture.height())
         }
-        assert "#57534e" in inked, name
+        assert muted in inked, name
         assert "#1c1917" not in inked, name
 
 
@@ -379,15 +397,75 @@ def test_in_a_short_window_then_gives_way_before_the_ring_gets_small(qapp: QAppl
     roomy = shown(qapp, "13:40")
     assert len(then(roomy)) == 3
     short = shown(qapp, "13:40", size=(1366, 560))
-    assert then(short) == []
-    assert short.findChild(CountdownRing).width() >= RING_ROOMY
+    assert then(short) == then(roomy)
+    assert short.findChild(CountdownRing).width() == 320
+
+
+@pytest.mark.parametrize("width,height", [(1024, 640), (1280, 800), (1440, 900)])
+@pytest.mark.parametrize("large", [False, True])
+@pytest.mark.parametrize("line_case", ["timed", "empty", "tomorrow"])
+def test_ring_text_fits_inside_at_demo_sizes(
+    qapp: QApplication, width: int, height: int, large: bool, line_case: str
+) -> None:
+    minute = {"timed": "13:40", "empty": "13:40", "tomorrow": "22:30"}[line_case]
+    base = scene(minute)
+    view = OneThingView()
+    view.resize(width, height)
+    week = build_week(WEEK, [], {}, TRACE) if line_case == "empty" else base.week
+    view.show_week(
+        Scene(week, base.today, base.minute, base.options, base.tokens, scale=1.2 if large else 1.0)
+    )
+    view.show()
+    qapp.processEvents()
+    ring = ring_of(view)
+    ring_text_width = ring.inside().width()
+    for name in ("oneTitle", "oneLine"):
+        text = view.findChild(QLabel, name)
+        metrics = QFontMetricsF(text.font())
+        widest = max((metrics.horizontalAdvance(line) for line in text.text().splitlines()), default=0)
+        assert widest <= ring_text_width, (name, text.text(), widest, ring_text_width)
+        if name == "oneLine":
+            expected = {
+                "timed": "08:00–14:30",
+                "empty": "No homework added",
+                "tomorrow": "Tomorrow starts with School at 08:00",
+            }[line_case]
+            assert text.accessibleName() == expected
+            if text.text() == "":
+                assert text.toolTip() == expected
+
+    number, unit = ring._fonts()
+    widest_number = QFontMetricsF(number).horizontalAdvance(ring.number())
+    if unit.pointSizeF() > 0:
+        widest_number += QFontMetricsF(unit).horizontalAdvance(f" {ring._unit}")
+    assert widest_number <= 2 * ring._inner()
+
+
+@pytest.mark.parametrize("width,height", [(1024, 640), (1280, 800), (1440, 900)])
+@pytest.mark.parametrize("large", [False, True])
+def test_ring_top_aligns_with_then_at_demo_sizes(
+    qapp: QApplication, width: int, height: int, large: bool
+) -> None:
+    base = scene("13:40")
+    view = OneThingView()
+    view.resize(width, height)
+    view.show_week(
+        Scene(base.week, base.today, base.minute, base.options, base.tokens, scale=1.2 if large else 1.0)
+    )
+    view.show()
+    qapp.processEvents()
+    ring = ring_of(view)
+    scroll = view.findChild(QScrollArea, "oneThenScroll")
+    assert ring.mapTo(view, ring.rect().topLeft()).y() == scroll.mapTo(view, scroll.rect().topLeft()).y()
 
 
 def test_with_no_countdown_the_ring_is_quiet_and_says_how_long_is_free(qapp: QApplication) -> None:
     """#25: the empty state drew a full minute ring with 0 / 15 / 30 / 45 and twelve ticks though nothing
     counts down, and said "Nothing else scheduled today" twice. At 21:40 nothing is left before 22:00."""
     view = shown(qapp, "21:40")
-    assert says(view) == ("Free until 22:00", "Nothing else scheduled today", "20 min free")
+    assert says(view)[0] == "Nothing left today"
+    assert full_title(view) == "Nothing else scheduled today"
+    assert says(view)[2] == "20 min free"
     assert ring_of(view).scale() == (0, ()), "no minute scale when no countdown runs"
     assert counts(view)[0] == ""
     # With a countdown running the scale is there.
@@ -414,7 +492,9 @@ def test_the_quiet_rings_surroundings_are_bare_where_the_scale_would_be(qapp: QA
 
 def test_the_empty_state_keeps_its_old_words_once_the_evening_is_over(qapp: QApplication) -> None:
     view = shown(qapp, "22:30")
-    assert says(view)[2] == "Tomorrow starts with School at 08:00"
+    line = view.findChild(QLabel, "oneLine")
+    assert line.text() == ""
+    assert line.accessibleName() == "Tomorrow starts with School at 08:00"
     assert ring_of(view).scale() == (0, ())
 
 
@@ -435,7 +515,7 @@ def test_the_day_bar_names_its_hours_the_time_now_and_what_it_is(qapp: QApplicat
             THURSDAY,
             minute_of("13:40"),
             options,
-            tokens_for("one", options["colour"], palette),
+            tokens_for("one", options["look"], palette),
         )
     )
     nothing.show()

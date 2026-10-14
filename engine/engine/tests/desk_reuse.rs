@@ -460,6 +460,208 @@ fn test_unfinished_lists_a_morning_deadline_before_one_with_no_time() {
 }
 
 #[test]
+fn test_left_over_requires_a_session_in_an_earlier_saved_week() {
+    let overdue = with(essay(), json!({"id": "bio", "due": "2026-10-14"}));
+    let no_past_session = with(essay(), json!({"id": "lab", "due": "2026-10-21"}));
+    let past_session = with(
+        essay(),
+        json!({"id": "history", "due": "2026-10-21", "session_weeks": ["2026-10-05"]}),
+    );
+    let current_session = with(
+        essay(),
+        json!({"id": "math", "due": "2026-10-21", "session_weeks": ["2026-10-12"]}),
+    );
+    let items = clipboard::left_over_items(
+        &json!({"bio": overdue, "lab": no_past_session, "history": past_session, "math": current_session}),
+        &json!(["2026-10-05"]),
+        "2026-10-12",
+        "2026-10-17T10:00",
+        &json!([{"id": "bio-session", "assignment_id": "bio", "duration_min": 60}]),
+        &json!([]),
+    )
+    .expect("left-over items");
+    let states: std::collections::BTreeMap<_, _> = items
+        .iter()
+        .map(|item| {
+            (
+                item["id"].as_str().unwrap(),
+                item["left_over_state"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(states["bio"], "overdue");
+    assert!(
+        !states.contains_key("lab"),
+        "an earlier saved week alone is not a past session"
+    );
+    assert_eq!(states["history"], "left_from_last_week");
+    assert!(
+        !states.contains_key("math"),
+        "a session in today's week is not from last week"
+    );
+}
+
+#[test]
+fn test_overdue_minutes_add_allocated_and_unallocated_work() {
+    let assignment = with(
+        essay(),
+        json!({"estimate_min": 120, "unplanned_min": 60, "due": "2026-10-16"}),
+    );
+    let placed = json!({"id": "session", "assignment_id": "essay", "duration_min": 60, "start": "15:00", "days": [2]});
+    for (blocks, committed) in [
+        (json!([placed.clone()]), json!([])),
+        (
+            json!([placed.clone()]),
+            json!([{"assignment_id": "essay", "duration_min": 60}]),
+        ),
+        (
+            json!([placed.clone(), {"id": "rest", "assignment_id": "essay", "duration_min": 60.0}]),
+            json!([{"assignment_id": "essay", "duration_min": 60}]),
+        ),
+    ] {
+        let items = clipboard::left_over_items(
+            &json!({"essay": assignment}),
+            &json!([]),
+            "2026-10-12",
+            "2026-10-17T10:00",
+            &blocks,
+            &committed,
+        )
+        .unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["remaining_min"], 120);
+    }
+}
+
+#[test]
+fn test_overdue_left_subtracts_focus_and_sessions_ticked_done() {
+    let essay_2h = with(
+        essay(),
+        json!({"estimate_min": 120, "unplanned_min": 120, "due": "2026-10-16"}),
+    );
+    let done_hour =
+        json!({"id": "done", "assignment_id": "essay", "duration_min": 60, "completed": true});
+    let open_hour =
+        json!({"id": "open", "assignment_id": "essay", "duration_min": 60, "completed": false});
+    // 2 h essay, 1 h session ticked done: 1 h left. Adding 30 min of focus leaves 30 min.
+    // An unticked session does not count as done.
+    for (focus, blocks, expected) in [
+        (0, json!([done_hour.clone()]), 60),
+        (30, json!([done_hour.clone()]), 30),
+        (0, json!([open_hour]), 120),
+    ] {
+        let assignment = with(essay_2h.clone(), json!({"focus_minutes": focus}));
+        let items = clipboard::left_over_items(
+            &json!({"essay": assignment}),
+            &json!([]),
+            "2026-10-12",
+            "2026-10-17T10:00",
+            &blocks,
+            &json!([]),
+        )
+        .unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["left_over_state"], "overdue");
+        assert_eq!(items[0]["remaining_min"], expected);
+    }
+}
+
+#[test]
+fn test_left_from_last_week_subtracts_focus_and_sessions_ticked_done() {
+    // Same rule as overdue: a carried 2 h essay with a 1 h session ticked done has 1 h left.
+    // Adding 30 min of focus leaves 30 min. An unticked session does not count as done.
+    let carried_2h = with(
+        essay(),
+        json!({"estimate_min": 120, "unplanned_min": 120, "due": "2026-10-21", "session_weeks": ["2026-10-05"]}),
+    );
+    let done_hour =
+        json!({"id": "done", "assignment_id": "essay", "duration_min": 60, "completed": true});
+    let open_hour =
+        json!({"id": "open", "assignment_id": "essay", "duration_min": 60, "completed": false});
+    for (focus, blocks, expected) in [
+        (0, json!([done_hour.clone()]), 60),
+        (30, json!([done_hour.clone()]), 30),
+        (0, json!([open_hour]), 120),
+    ] {
+        let assignment = with(carried_2h.clone(), json!({"focus_minutes": focus}));
+        let items = clipboard::left_over_items(
+            &json!({"essay": assignment}),
+            &json!(["2026-10-05"]),
+            "2026-10-12",
+            "2026-10-12T10:00",
+            &blocks,
+            &json!([]),
+        )
+        .unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["left_over_state"], "left_from_last_week");
+        assert_eq!(items[0]["remaining_min"], expected);
+    }
+}
+
+#[test]
+fn test_block_without_duration_counts_as_zero_minutes_in_both_states() {
+    // A completed block with no length counts as 0 minutes, so the 2 h essay keeps all 2 h.
+    // An unticked block with no length is not read at all in either state.
+    let untimed_done = json!({"id": "done", "assignment_id": "essay", "completed": true});
+    let untimed_open = json!({"id": "open", "assignment_id": "essay", "completed": false});
+    let overdue = with(
+        essay(),
+        json!({"estimate_min": 120, "unplanned_min": 120, "due": "2026-10-16"}),
+    );
+    let carried = with(
+        essay(),
+        json!({"estimate_min": 120, "unplanned_min": 120, "due": "2026-10-21", "session_weeks": ["2026-10-05"]}),
+    );
+    for (assignment, saved, now, state) in [
+        (overdue, json!([]), "2026-10-17T10:00", "overdue"),
+        (
+            carried,
+            json!(["2026-10-05"]),
+            "2026-10-12T10:00",
+            "left_from_last_week",
+        ),
+    ] {
+        for blocks in [json!([untimed_done.clone()]), json!([untimed_open.clone()])] {
+            let items = clipboard::left_over_items(
+                &json!({"essay": assignment}),
+                &saved,
+                "2026-10-12",
+                now,
+                &blocks,
+                &json!([]),
+            )
+            .expect("a block with no length must not be an error");
+            assert_eq!(items.len(), 1);
+            assert_eq!(items[0]["left_over_state"], state);
+            assert_eq!(items[0]["remaining_min"], 120);
+        }
+    }
+}
+
+#[test]
+fn test_after_deadline_exception_preserves_only_the_named_session() {
+    let blocks = json!([
+        {"id": "bio-session", "assignment_id": "bio", "kind": "flexible", "duration_min": 60, "days": [5], "start": "11:00", "title": "Bio"},
+        {"id": "math-session", "assignment_id": "math", "kind": "flexible", "duration_min": 60, "days": [5], "start": "12:00", "title": "Math"}
+    ]);
+    let assignments = json!({"bio": {"due": "2026-10-16"}, "math": {"due": "2026-10-16"}});
+    let (kept, lost) = planning::settle_placements_after_deadline(
+        &blocks,
+        &assignments,
+        "2026-10-12",
+        &json!([]),
+        true,
+        &json!(["bio-session"]),
+    )
+    .unwrap();
+    assert_eq!(kept[0]["start"], "11:00");
+    assert_eq!(kept[1]["start"], Value::Null);
+    assert_eq!(lost.len(), 1);
+    assert_eq!(lost[0]["block_id"], "math-session");
+}
+
+#[test]
 fn test_days_through_due_matches_the_web_planner() {
     assert_eq!(
         due_day_of(&json!("2026-09-11T08:10"), "2026-09-07").expect("a day"),
@@ -518,11 +720,13 @@ fn test_running_late_occupies_from_a_snapped_start_until_the_day_end() {
     );
     assert_eq!(
         running_late_refusal("2026-09-14", today, true, false, 0),
-        Some("Your last change is still saving. Try again in a moment.")
+        Some("Saving your last change… Running late will work in a moment.")
     );
     assert_eq!(
         running_late_refusal("2026-09-14", today, false, true, 0),
-        Some("This week was changed somewhere else. Reload it first.")
+        Some(
+            "This week changed in another window. Choose More > Reload this week, then try again."
+        )
     );
 }
 
@@ -708,7 +912,7 @@ fn test_a_deadline_moved_earlier_takes_the_time_away_and_says_why() {
     let messages: Vec<&str> = lost.iter().map(message_of).collect();
     assert_eq!(
         messages,
-        ["English essay no longer fits Monday at 15:45: that is after it is due."]
+        ["English essay no longer fits Monday at 15:45: that's after it's due."]
     );
     assert_eq!(times(&settled)["s-eng"], at(&[0], None));
     assert_eq!(times(&settled)["s-math"], at(&[0], Some("15:15")));

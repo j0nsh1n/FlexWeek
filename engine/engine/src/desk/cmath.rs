@@ -40,6 +40,29 @@ mod platform {
     }
 }
 
+#[cfg(target_os = "android")]
+mod platform {
+    use std::ffi::{CStr, c_char, c_int, c_void};
+
+    pub const LIBRARY: &CStr = c"libm.so";
+    const RTLD_NOW: c_int = 2;
+
+    unsafe extern "C" {
+        fn dlopen(filename: *const c_char, flags: c_int) -> *mut c_void;
+        fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+    }
+
+    pub fn open() -> *mut c_void {
+        // SAFETY: a NUL-terminated name; loading libm runs no code of ours.
+        unsafe { dlopen(LIBRARY.as_ptr(), RTLD_NOW) }
+    }
+
+    pub fn symbol(library: *mut c_void, name: &CStr) -> *mut c_void {
+        // SAFETY: `library` came from `dlopen` and is never closed.
+        unsafe { dlsym(library, name.as_ptr()) }
+    }
+}
+
 // CPython on Windows links the Universal CRT dynamically, which lives in ucrtbase.dll.
 #[cfg(windows)]
 mod platform {
@@ -64,7 +87,7 @@ mod platform {
     }
 }
 
-#[cfg(not(any(target_os = "linux", windows)))]
+#[cfg(not(any(target_os = "linux", target_os = "android", windows)))]
 compile_error!("name the C maths library CPython uses on this platform in desk/cmath.rs");
 
 fn functions() -> &'static Functions {

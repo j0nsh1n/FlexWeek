@@ -70,7 +70,7 @@ from desktop.native.layouts.base import (
     rules,
     scrolling,
 )
-from desktop.native.layouts.registry import MATCH, options_for
+from desktop.native.layouts.registry import options_for
 from desktop.native.look import FONT_FAMILIES, category_paint, look_measures, readable_ink
 from desktop.native.tokens import (
     RADIUS_CARD,
@@ -682,7 +682,10 @@ class Heads(QFrame):
         handle, split = self.handle, self.canvas.split
         if handle is not None and split is not None and not handle.carrying():
             across = fold_at(split[0], self.canvas.fold_span()) - self.canvas.gutter
-            handle.move(round(across - handle.width() / 2), round((self.height() - handle.height()) / 2))
+            handle.move(
+                round(across - handle.width() / 2 - 12 * handle.scale),
+                round((self.height() - handle.height()) / 2),
+            )
             # Over the day names, which are made again when the days shown change.
             handle.raise_()
 
@@ -1339,9 +1342,11 @@ class TimelineView(LayoutView):
         def size(role: str) -> str:
             return f"{type_pt(role, scene.scale)}pt"
 
-        # The design's own colourways are its catalogue's pairing, Newsreader over Inter; in Match my
-        # look its headings take the look's heading face (look.HEADING_NAMES).
-        serif = css(font_family=FONT_FAMILIES["serif"]) if scene.options.get("colour", MATCH) != MATCH else ""
+        serif = (
+            css(font_family=FONT_FAMILIES["serif"])
+            if scene.options.get("look") == "preset:timeline-paper"
+            else ""
+        )
         chip = round(20 * scene.scale)
         clear = css(background="transparent")
         return base_sheet(self.objectName(), tokens) + rules(

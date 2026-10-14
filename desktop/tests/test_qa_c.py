@@ -167,6 +167,10 @@ def test_focus_rows_hold_wrapped_titles_when_the_list_first_appears(qapp, window
 
     rail.set_tasks(LONG_FOCUS_TASKS, 0)
     qapp.processEvents()
+    # Agenda pick A: the mini month and the old focus list are not in the rail.
+    assert not rail.focus.isVisible()
+    rail.focus.setVisible(True)
+    qapp.processEvents()
 
     tasks = rail.tasks
     assert tasks.isVisible()
@@ -185,6 +189,10 @@ def test_focus_rows_are_measured_again_when_the_list_width_or_font_changes(
     show_wide_rail(qapp, window)
     rail = window.rail
     rail.set_tasks([{"id": "one", "day": 2, "start": "19:00", "title": "Chem lab"}], 0)
+    qapp.processEvents()
+    # Agenda pick A: the old focus list is not in the rail; show it to re-measure rows.
+    assert not rail.focus.isVisible()
+    rail.focus.setVisible(True)
     qapp.processEvents()
     tasks = rail.tasks
     index = tasks.indexFromItem(tasks.item(0))

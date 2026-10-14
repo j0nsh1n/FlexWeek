@@ -1,6 +1,4 @@
-"""A homework block's edge says who chose its time (finding 32 of the 0.17.2 audit): dashed when
-FlexWeek planned it and the next plan may move it, solid when the student placed it and no plan will.
-Read off the pixels of the shared block painter, so every design that draws its hours through it has it."""
+"""Homework state tags and edges use the shared painter across designs and looks."""
 
 from __future__ import annotations
 
@@ -32,7 +30,15 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.layouts.registry import LAYOUTS, MATCH, tokens_for
     from desktop.native.layouts.retro import RetroPainter, scheme
     from desktop.native.layouts.timeline import TimelinePainter
-    from desktop.native.look import category_paint, resolved_palette
+    from desktop.native.look import (
+        EXPERIMENTAL_LOOKS,
+        STANDARD_LOOKS,
+        block_paint,
+        category_paint,
+        class_outline,
+        contrast,
+        resolved_palette,
+    )
     from desktop.native.weekmodel import Occurrence
 
 RECT = QRectF(20, 20, 140, 100)
@@ -84,24 +90,99 @@ def mark_colour() -> str:
 
 
 @pytest.mark.parametrize("look", LOOKS.values(), ids=LOOKS.keys())
-def test_homework_flexweek_planned_has_a_dashed_edge(qapp: QApplication, look: dict | None) -> None:  # noqa: F811
+def test_homework_flexweek_planned_has_no_dashed_red_edge(qapp: QApplication, look: dict | None) -> None:  # noqa: F811
     mark = mark_colour()
     edge = top_edge(block(), look)
-    assert 0.25 < share(edge, mark) < 0.9, "dashes of the category's mark"
-    assert runs(edge, mark) >= 6, "with gaps between them"
+    assert runs(edge, mark) == 0, "the overdue state replaces the old dashed edge"
 
 
 @pytest.mark.parametrize("look", LOOKS.values(), ids=LOOKS.keys())
 def test_homework_the_student_placed_has_a_solid_edge(qapp: QApplication, look: dict | None) -> None:  # noqa: F811
-    mark = mark_colour()
+    fill, _mark = category_paint(CATEGORY, PALETTE)
+    outline = class_outline(PALETTE, fill)
     edge = top_edge(block(pinned=True), look)
-    assert share(edge, mark) > 0.97 and runs(edge, mark) == 0
+    assert share(edge, outline) > 0.97 and runs(edge, outline) == 0
+
+
+@pytest.mark.parametrize(("kind", "name"), STANDARD_LOOKS + EXPERIMENTAL_LOOKS)
+def test_homework_outline_is_not_error_red_in_every_look(
+    qapp: QApplication, kind: str, name: str  # noqa: F811
+) -> None:
+    """U5: an outlined homework block's edge is the class colour at 3:1 on the card, never error red."""
+    if kind == "pack":
+        palette = resolved_palette(name, name in {"dark-frost", "nocturne"}, None)
+        look = {"preset": "default", "knobs": {"blocks": "outline"}}
+    else:
+        look = {"preset": name, "knobs": {"blocks": "outline"}}
+        palette = resolved_palette("system", False, look)
+    fill, mark = category_paint(CATEGORY, palette)
+    outline = class_outline(palette, fill)
+    assert outline.lower() not in {palette["error"].lower(), "#831a1d"}
+    assert contrast(outline, palette["grid"]) >= 3.0
+    assert block_paint(look, palette, fill, "flexible", mark, category=CATEGORY)["outline"] == outline
+    image = QImage(200, 140, QImage.Format.Format_ARGB32)
+    image.fill(QColor(palette["grid"]))
+    painter = QPainter(image)
+    BlockPainter(palette, look).body(painter, RECT, block())
+    painter.end()
+    y = int(RECT.top()) + 1
+    edge = [image.pixelColor(x, y) for x in range(int(RECT.left()) + 16, int(RECT.right()) - 16)]
+    assert share(edge, outline) > 0.5, name
+    assert share(edge, palette["error"]) < 0.05, name
 
 
 def test_homework_being_carried_has_no_gaps_in_its_edge(qapp: QApplication) -> None:  # noqa: F811
     """The ring that marks the carried block is solid, as the edge it will have once dropped."""
     edge = top_edge(block(held=True), None)
     assert len({pixel.name() for pixel in edge}) == 1
+
+
+def test_a_30_minute_block_at_large_text_draws_no_pill_outside_itself(qapp: QApplication) -> None:  # noqa: F811
+    """N11: a half-hour block at Large has no room for a pill above its words, so the paint loop does not
+    draw one (see BlockPainter.pills_fit). A pill drawn anyway must still stay inside its block."""
+    look = {"preset": "default", "knobs": {"text": "large"}}
+    painter = BlockPainter(PALETTE, look)
+    for state in ("Overdue", "Left from last week"):
+        span = Span(3, 17 * 60, 17 * 60 + 30)
+        drawn = Drawn("essay", "History essay", CATEGORY, True, span, 0, 1, history=state)
+        block = QRectF(0, 0, 128, 30 * 48 / 60 - 3)
+        assert not painter.pills_fit(QFont("Inter", 14), block, drawn, QRectF(0, 0, 128, 200)), state
+        image = QImage(100, 70, QImage.Format.Format_ARGB32)
+        image.fill(QColor("white"))
+        paint = QPainter(image)
+        paint.setFont(QFont("Inter", 14))
+        painter.history_tag(paint, QRectF(15, 15, 70, 38), drawn)
+        paint.end()
+        assert all(
+            image.pixelColor(x, y) == QColor("white")
+            for x in range(100)
+            for y in range(70)
+            if x < 15 or x >= 85 or y < 15 or y >= 53
+        ), state
+
+
+def _contrast(first: QColor, second: QColor) -> float:
+    def luminance(colour: QColor) -> float:
+        values = [colour.redF(), colour.greenF(), colour.blueF()]
+        linear = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4 for value in values]
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+    high, low = sorted((luminance(first), luminance(second)), reverse=True)
+    return (high + 0.05) / (low + 0.05)
+
+
+@pytest.mark.parametrize("kind,name", STANDARD_LOOKS + EXPERIMENTAL_LOOKS)
+def test_history_tag_text_has_accessible_contrast_in_every_look(
+    qapp: QApplication, kind: str, name: str
+) -> None:
+    if kind == "pack":
+        look = None
+        palette = resolved_palette(name, name in {"dark-frost", "nocturne"}, look)
+    else:
+        look = {"preset": name, "knobs": {}}
+        palette = resolved_palette("light-frost", False, look)
+    fill, ink, _outline, _edge = BlockPainter(palette, look).fills(block(history="Overdue"))
+    assert _contrast(fill, ink) >= 4.5, name
 
 
 @pytest.mark.parametrize("drawn", [block(work=False), block(done=True), block(pinned=True, done=True)])
@@ -179,3 +260,66 @@ def test_each_design_paints_homework_in_its_own_colours(
     finally:
         paint.end()
     assert "block_edge" in painter.colours
+
+
+def test_hour_rules_sit_on_one_pixel_row_at_125_percent_scale(qapp: QApplication) -> None:  # noqa: F811
+    """U17: a 1 px pen on fractional y draws two pale rows; snap rules to half pixels."""
+    from PySide6.QtGui import QImage, QPainter
+
+    from desktop.native.hours.geometry import FIRST, LAST, LinearTrack
+
+    track = LinearTrack(0, QRectF(0, 0, 200, 400), first=FIRST, last=LAST)
+    image = QImage(200, 400, QImage.Format.Format_ARGB32)
+    image.fill(QColor("white"))
+    paint = QPainter(image)
+    paint.scale(1.25, 1.25)
+    paint.setFont(QFont("Inter", 12))
+    ClassicPainter(PALETTE).track(paint, track, False)
+    paint.end()
+    minute = FIRST + 60
+    y = int((track.area.top() + track.offset(minute)) * 1.25)
+    rows = []
+    for offset in (-1, 0, 1):
+        row = y + offset
+        if 0 <= row < image.height():
+            rows.append(
+                sum(
+                    1
+                    for x in range(20, 180)
+                    if (c := image.pixelColor(x, row)).red() < 250 or c.green() < 250 or c.blue() < 250
+                )
+            )
+    assert rows[1] > max(rows[0], rows[2], 1), rows
+    assert rows[1] >= 2 * max(rows[0], rows[2]), rows
+
+
+def test_a_track_edge_is_one_inked_row_or_column_at_100_percent(qapp: QApplication) -> None:  # noqa: F811
+    """U17: an across track (mission, one_thing) is closed by a horizontal rule on its top row, a down
+    track by a vertical rule on its left column, each one pixel wide and inked end to end."""
+    from PySide6.QtGui import QImage, QPainter
+
+    from desktop.native.hours.geometry import FIRST, LAST, Axis, LinearTrack
+
+    painter_obj = ClassicPainter(PALETTE)
+    white = QColor("white")
+    across = LinearTrack(0, QRectF(10, 10, 200, 60), axis=Axis.ACROSS, first=FIRST, last=LAST)
+    image = QImage(240, 100, QImage.Format.Format_ARGB32)
+    image.fill(white)
+    paint = QPainter(image)
+    try:
+        painter_obj.track(paint, across, False)
+    finally:
+        paint.end()
+    top_row = [image.pixelColor(x, 10) for x in range(20, 200)]
+    assert all(c != white for c in top_row), "across track has no horizontal top edge"
+
+    down = LinearTrack(0, QRectF(10, 10, 60, 200), axis=Axis.DOWN, first=FIRST, last=LAST)
+    image = QImage(100, 240, QImage.Format.Format_ARGB32)
+    image.fill(white)
+    paint = QPainter(image)
+    try:
+        painter_obj.track(paint, down, False)
+    finally:
+        paint.end()
+    left_column = [image.pixelColor(10, y) for y in range(20, 200)]
+    assert all(c != white for c in left_column), "down track has no vertical left edge"

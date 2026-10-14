@@ -79,12 +79,33 @@ def opened(parent: QWidget, assignment: dict | None = None) -> HomeworkDialog:
     return dialog
 
 
+def go_when(dialog: HomeworkDialog) -> None:
+    """Add homework's second question. The demo hides Due until What has a title."""
+    if dialog._add_step is None or dialog._add_step >= 1:
+        return
+    if not dialog.title.text().strip():
+        dialog.title.setText("History essay")
+    dialog._save.click()
+    QApplication.processEvents()
+
+
+def go_length(dialog: HomeworkDialog) -> None:
+    """Add homework's third question. Estimated time is not on the first page."""
+    go_when(dialog)
+    if dialog._add_step is None or dialog._add_step >= 2:
+        return
+    dialog._save.click()
+    QApplication.processEvents()
+
+
 # Defaults
 
 
 def test_new_homework_is_due_tomorrow_even_at_22_41(qapp: QApplication) -> None:  # noqa: F811
     parent = host()
     dialog = opened(parent)
+    assert not dialog.due.isVisibleTo(dialog)
+    go_when(dialog)
     assert dialog.due.value() == "2026-09-15"
     free(dialog)
     free(parent)
@@ -101,6 +122,7 @@ def test_a_due_given_by_the_caller_is_kept(qapp: QApplication) -> None:  # noqa:
 def test_the_due_time_starts_at_the_end_of_the_school_day(qapp: QApplication) -> None:  # noqa: F811
     parent = host(SCHOOL)
     dialog = opened(parent)
+    go_when(dialog)
     dialog.due.timed.setChecked(True)
     assert dialog.due.time.time() == QTime(14, 30), "08:00 plus 390 minutes"
     free(dialog)
@@ -110,6 +132,7 @@ def test_the_due_time_starts_at_the_end_of_the_school_day(qapp: QApplication) ->
 def test_with_no_school_saved_the_due_time_starts_at_15_00(qapp: QApplication) -> None:  # noqa: F811
     parent = host()
     dialog = opened(parent)
+    go_when(dialog)
     dialog.due.timed.setChecked(True)
     assert dialog.due.time.time() == QTime(15, 0)
     free(dialog)
@@ -138,6 +161,7 @@ def test_the_title_hint_is_the_example_setup_gives(qapp: QApplication) -> None: 
 def test_the_multiple_of_15_hint_shows_only_for_a_value_that_is_wrong(qapp: QApplication) -> None:  # noqa: F811
     parent = host()
     dialog = opened(parent)
+    go_length(dialog)
     hint = dialog.estimate_hint
     assert not hint.isVisible(), "60 is fine: nothing to say"
     dialog.estimate.setValue(50)
@@ -165,6 +189,7 @@ def wrapped_lines(label: QLabel, width: int) -> list[str]:
 def test_the_hint_never_leaves_a_word_alone_on_a_line(qapp: QApplication) -> None:  # noqa: F811
     parent = styled_host(qapp)
     dialog = opened(parent)
+    go_length(dialog)
     dialog.estimate.setValue(50)
     dialog.estimate.editingFinished.emit()
     hint = dialog.estimate_hint
@@ -179,6 +204,7 @@ def test_an_off_grid_length_cannot_be_saved(qapp: QApplication) -> None:  # noqa
     parent = host()
     dialog = opened(parent)
     dialog.title.setText("Essay")
+    go_length(dialog)
     dialog.estimate.setValue(50)
     dialog.accept()
     assert dialog.result() != dialog.DialogCode.Accepted
@@ -193,6 +219,7 @@ def test_an_off_grid_length_cannot_be_saved(qapp: QApplication) -> None:  # noqa
 def test_the_year_shows_only_when_it_is_not_this_year(qapp: QApplication) -> None:  # noqa: F811
     parent = host()
     dialog = opened(parent)
+    go_when(dialog)
     assert dialog.due.date.text() == "Tue 15 Sep"
     dialog.due.date.setDate(QDate(2027, 1, 8))
     assert dialog.due.date.text() == "Fri 8 Jan 2027"
@@ -205,6 +232,7 @@ def test_the_year_shows_only_when_it_is_not_this_year(qapp: QApplication) -> Non
 def test_the_due_by_switch_sits_a_pixel_further_from_the_date_than_a_form_gap(qapp: QApplication) -> None:  # noqa: F811
     parent = styled_host(qapp)
     dialog = opened(parent)
+    go_when(dialog)
     date_bottom = dialog.due.date.mapTo(dialog.due, QPoint(0, dialog.due.date.height())).y()
     switch_top = dialog.due.timed.mapTo(dialog.due, QPoint(0, 0)).y()
     assert switch_top - date_bottom == STACKED_GAP + 1
@@ -223,7 +251,7 @@ def test_edit_says_where_the_homework_is_placed(qapp: QApplication) -> None:  # 
     parent = host(session(4, "15:30"))
     dialog = opened(parent, essay())
     line = placed_line(dialog)
-    assert line.isVisible() and line.text() == "Placed Fri 15:30"
+    assert line.isVisible() and line.text() == "Planned Fri 18 · due Fri 25"
     free(dialog)
     free(parent)
 
@@ -233,9 +261,36 @@ def test_edit_counts_every_time_it_is_placed(qapp: QApplication) -> None:  # noq
         session(5, "10:00"), session(4, "15:30"), session(2, None), session(1, "09:00", completed=True)
     )
     dialog = opened(parent, essay())
-    assert placed_line(dialog).text() == "Placed Fri 15:30 and Sat 10:00 · 2 times"
+    assert placed_line(dialog).text() == "Planned Fri 18 and Sat 19 · due Fri 25 · 2 times"
     free(dialog)
     free(parent)
+
+
+def test_placed_line_matches_the_audit_day_and_due_numbers(qapp: QApplication) -> None:  # noqa: F811
+    parent = QWidget()
+    parent.session = SimpleNamespace(  # type: ignore[attr-defined]
+        now_ms=lambda: int(datetime(2026, 10, 12, 12, 0).timestamp() * 1000),
+        blocks=[session(4, "15:30"), session(5, "10:00")],
+        week_start="2026-10-12",
+    )
+    dialog = HomeworkDialog(parent, essay(due="2026-10-21"), "2026-10-12")
+    dialog.show()
+    QApplication.processEvents()
+    assert placed_line(dialog).text() == "Planned Fri 16 and Sat 17 · due Wed 21 · 2 times"
+    free(dialog)
+    free(parent)
+    one = QWidget()
+    one.session = SimpleNamespace(  # type: ignore[attr-defined]
+        now_ms=lambda: int(datetime(2026, 10, 12, 12, 0).timestamp() * 1000),
+        blocks=[session(4, "15:30")],
+        week_start="2026-10-12",
+    )
+    single = HomeworkDialog(one, essay(due="2026-10-21"), "2026-10-12")
+    single.show()
+    QApplication.processEvents()
+    assert placed_line(single).text() == "Planned Fri 16 · due Wed 21"
+    free(single)
+    free(one)
 
 
 def test_nothing_is_said_when_it_is_not_placed_or_new(qapp: QApplication) -> None:  # noqa: F811
@@ -256,7 +311,7 @@ def test_nothing_is_said_when_it_is_not_placed_or_new(qapp: QApplication) -> Non
 
 def test_the_toggle_names_what_it_will_do(qapp: QApplication) -> None:  # noqa: F811
     parent = host()
-    dialog = opened(parent)
+    dialog = opened(parent, essay())
     toggle = dialog.more_details
     assert toggle.text() == "More details"
     toggle.click()
@@ -269,7 +324,7 @@ def test_the_toggle_names_what_it_will_do(qapp: QApplication) -> None:  # noqa: 
 
 def test_notes_has_a_label(qapp: QApplication) -> None:  # noqa: F811
     parent = host()
-    dialog = opened(parent)
+    dialog = opened(parent, essay())
     dialog.more_details.click()
     found = dialog._details.findChildren(QLabel)
     labels = [label.text() for label in found if label.objectName() == "fieldLabel"]
@@ -280,7 +335,7 @@ def test_notes_has_a_label(qapp: QApplication) -> None:  # noqa: F811
 
 def test_empty_lists_say_so_in_one_grey_line_and_give_way_to_entries(qapp: QApplication) -> None:  # noqa: F811
     parent = host()
-    dialog = opened(parent)
+    dialog = opened(parent, essay())
     dialog.more_details.click()
     none_links, none_steps = dialog.no_links, dialog.no_steps
     assert none_links.text() == "No links yet" and none_steps.text() == "No steps yet"
@@ -319,7 +374,7 @@ def test_homework_with_entries_opens_with_the_lists_not_the_grey_lines(qapp: QAp
 def test_the_content_keeps_16_px_from_the_scroll_bar(qapp: QApplication) -> None:  # noqa: F811
     use_app_style(qapp)
     parent = styled_host(qapp)
-    dialog = opened(parent)
+    dialog = opened(parent, essay())
     dialog.more_details.click()
     scroll = dialog._scroll
     scroll.setFixedHeight(160)

@@ -21,7 +21,7 @@ def test_option_is_checked_against_the_designs_own_options():
         ("bento", "size=big", "hero: week, today"),
         ("bento", "hero=tomorrow", "week, today"),
         ("bento", "hero", "not key=value"),
-        ("classic", "hero=today", "options: none"),
+        ("classic", "hero=today", "options: look:"),
         (None, "hero=today", "needs --design"),
     ],
 )
@@ -188,3 +188,78 @@ def test_a_finished_run_where_every_scenario_passed_still_says_passed():
     assert code == 0
     assert line == "1/1 passed."
     assert payload == results
+
+
+
+def test_the_rig_forgets_the_look_an_earlier_run_left_behind():
+    from pathlib import Path
+
+    from PySide6.QtCore import QStandardPaths
+
+    QStandardPaths.setTestModeEnabled(True)
+    root = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation))
+    root.mkdir(parents=True, exist_ok=True)
+    left = root / "flexweek-look.json"
+    left.write_text('{"preset": "terminal", "knobs": {"text": "large"}}')
+    assert drive.clean_look_file() == left
+    assert not left.exists()
+    # Nothing left behind is not a mistake.
+    assert drive.clean_look_file() == left
+    assert not left.exists()
+
+
+def test_the_rig_forgets_the_carried_look_an_earlier_run_left_behind():
+    from PySide6.QtCore import QStandardPaths
+
+    from desktop.native.kept import KeptSession
+
+    QStandardPaths.setTestModeEnabled(True)
+    kept = KeptSession(drive.kept_session_path())
+    kept.carry_look("acct-1", "large", True)
+    assert kept.look.exists()
+    assert kept.carried_look() == ("large", True)
+    drive.clean_look_file()
+    assert not kept.look.exists()
+    assert kept.carried_look() is None
+    drive.clean_look_file()
+    assert not kept.look.exists()
+
+
+def test_undo_countdown_reads_the_held_clock():
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication, QWidget
+
+    from desktop.native.widgets import ACTION_TOAST_MS, Toast
+
+    app = QApplication.instance() or QApplication(["flexweek-undo-clock-test"])
+    held = {"now": 10_000_000}
+    host = QWidget()
+    host.resize(400, 200)
+    toast = Toast(host, host)
+    toast.motion = "off"
+    toast.clock_ms = lambda: held["now"]
+    toast._window_unavailable = lambda: False
+    host.show()
+    toast.show_message("Moved History essay to Fri 18:00.", "Undo", lambda: None)
+    app.processEvents()
+    toast._paused = False
+    toast._pointer = False
+    toast._keys = False
+    start = (ACTION_TOAST_MS + 999) // 1000
+    assert toast.isVisible()
+    assert toast.button.isVisible()
+    assert toast.button.text() == f"Undo · {start} s"
+    assert toast._left_ms() == ACTION_TOAST_MS
+    held["now"] += 5_000
+    assert toast._left_ms() == ACTION_TOAST_MS - 5_000
+    toast.sync_progress()
+    assert toast.button.text() == f"Undo · {start - 5} s"
+    held["now"] += ACTION_TOAST_MS
+    assert toast._left_ms() == 0
+    toast.sync_progress()
+    assert toast.isHidden() or not toast.button.isVisible()
+    host.removeEventFilter(toast)
+    toast.hide()
+    host.hide()

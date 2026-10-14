@@ -5,22 +5,27 @@ from __future__ import annotations
 import contextlib
 import json
 import time
+import weakref
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QSize, QStandardPaths, Qt, QTimer, QUrl
+from flexweek_engine import SyncService  # type: ignore[import-untyped]
+from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QSize, QStandardPaths, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import (
     QAction,
     QCloseEvent,
     QContextMenuEvent,
     QDesktopServices,
+    QFont,
+    QFontMetrics,
     QGuiApplication,
     QIcon,
     QKeyEvent,
     QKeySequence,
+    QMouseEvent,
     QPalette,
     QPixmap,
     QResizeEvent,
@@ -28,6 +33,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtNetwork import QLocalServer
 from PySide6.QtWidgets import (
+    QAbstractButton,
     QAbstractSpinBox,
     QApplication,
     QCheckBox,
@@ -45,6 +51,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QRadioButton,
     QStackedWidget,
     QSystemTrayIcon,
     QVBoxLayout,
@@ -67,46 +74,50 @@ from desktop.native.calendar import (
 )
 from desktop.native.client import (
     PASSWORD_LENGTH_HINT,
+    SESSION_ENDED,
     SIGN_IN_AGAIN,
     SIGN_IN_WHY,
     SIGN_IN_WHY_LINK,
     SIGN_IN_WRONG,
+    TOO_MANY_TRIES,
+    TYPE_RECOVERY_CODE,
     USERNAME_ERROR,
     USERNAME_HINT,
+    short_password_needed,
     sign_in_problem,
     sign_up_problem,
 )
 from desktop.native.command_bar import Command, CommandBar
 from desktop.native.controller import ROUTINE_STATUS, NativeSession, _late_summary
 from desktop.native.custom_look import sanitize_saved
+from desktop.native.devices import SyncDot, SyncHost, live_phones, run_off_ui, sync_state
 from desktop.native.elevation import lift
 from desktop.native.feel import Context, apply_feel, context_for, current, extra_stylesheet, set_current
 from desktop.native.fields import ProblemLine, announce
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
 from desktop.native.focus import focus_now, phase_duration_ms
 from desktop.native.focus_screen import QUICK_TITLE, FocusScreen
-from desktop.native.fonts import load_fonts
-from desktop.native.hours.canvas import Drawn, HoursCanvas
+from desktop.native.fonts import load_fonts, without_ligatures
+from desktop.native.hours.canvas import Drawn, HoursCanvas, plan_placed
 from desktop.native.hours.classic import ClassicDay, ClassicWeek
 from desktop.native.hours.geometry import Span, drag_step, next_slot
-from desktop.native.hours.hand import Create, Hand, Move, MoveDate, Place, span_words
+from desktop.native.hours.hand import Create, Gesture, Hand, Move, MoveDate, Place, span_words
 from desktop.native.hours.hand import Verdict as HandVerdict
 from desktop.native.hours.month import MonthGrid
-from desktop.native.hours.rail import Rail
+from desktop.native.hours.rail import MonthCard, Rail, next_words
 from desktop.native.hours.zoom import ZOOM_KEYS, HoursScroll, sanitize_zoom
 from desktop.native.kept import KeptSession
 from desktop.native.layouts.base import NARROW_WIDTH, LayoutView, Scene
 from desktop.native.layouts.empty import EmptyWeek, start_here_week
-from desktop.native.layouts.registry import MATCH, options_for, sanitize_layout, tokens_for
+from desktop.native.layouts.registry import options_for, sanitize_layout, tokens_for
 from desktop.native.layouts.views import VIEW_CLASSES
 from desktop.native.look import (
     MENU_EDGE,
-    WEEK_LIST_ROW_HEIGHT,
+    design_look,
     effective_look,
     look_measures,
     look_motion,
     pack_stylesheet,
-    palette_from_tokens,
     resolved_palette,
     sanitize_look,
     text_scale,
@@ -168,6 +179,7 @@ from desktop.native.weekmodel import (
     clock_text,
     dated_words,
     hhmm_text,
+    homework_time_sentence,
     moved_words,
     set_clock_24h,
 )
@@ -197,6 +209,7 @@ from desktop.native.widgets import (
     UnfinishedPanel,
     WhyOff,
     add_heading,
+    caption_above,
     confirm,
     control_art,
     dim_window,
@@ -262,14 +275,43 @@ VIEW_ORDER = ("day", "week", "month")
 # it is the way in, and the list floats at this width (the whole planner on a narrow window).
 WEEK_LIST_ROW_NAME = "Week as a list · Ctrl+Shift+L"
 WEEK_LIST_PANEL_WIDTH = 360
+STATUS_STRIP_PX = 28
+NOTHING_MORE_TODAY = "Nothing more today"
+
+
+class LeftChip(QFrame):
+    """The overdue card. It says when its width changes, so the window can move its buttons."""
+
+    resized = Signal()
+
+    def resizeEvent(self, event: object) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self.resized.emit()
+
+
+class ClickyTitle(FittedLabel):
+    """The week range in the bar: a click opens the mini month, which is not on the rail."""
+
+    clicked = Signal()
+
+    def __init__(self, parent: QWidget | None = None, minimum: int = 96) -> None:
+        super().__init__(parent, minimum)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+            event.accept()
+            return
+        super().mousePressEvent(event)
 PLAN_LABEL = "Plan my homework"
 SUGGEST_LABEL = "Suggest times"
 PLAN_TIP = (
-    "Find a time for homework that has none, around your fixed times and before it is due. Homework "
+    "Find a time for homework that has none, around your fixed times and before it's due. Homework "
     "that already has a time keeps it."
 )
 SUGGEST_TIP = "Give homework without a time a suggested time. Drag any of them somewhere else if you like."
-NOTHING_UNFINISHED = "Nothing is unfinished: no homework from earlier weeks still needs time."
+NOTHING_UNFINISHED = "None left"
 QUICK_FOCUS_TIP = (
     "Open the focus timer, ready to start {minutes} minutes without picking homework. "
     "Change its length in Settings > Focus."
@@ -307,14 +349,14 @@ MORE_TIPS = {
     "addHomework": (
         "Add an assignment with its due date and how long it will take. FlexWeek finds time for it."
     ),
-    "schoolHours": "Set the days and times you are at school, so nothing is planned then.",
+    "schoolHours": "Set the days and times you're at school, so nothing is planned then.",
     "addFixed": (
         "Add something that happens at a set time, like practice or a lesson. Homework is planned around it."
     ),
     "runningLate": (
         "Behind today? Say how late you are, and FlexWeek moves the rest of today's homework later."
     ),
-    "unfinishedOpen": "Homework from earlier weeks that still needs time. Plan it into this week.",
+    "unfinishedOpen": "Overdue and earlier-week homework that still needs time. Plan it into this week.",
     "routinesButton": "Save this week's fixed times as a routine, or add a saved routine to a week.",
     "openSpotify": "Open the selected block's Spotify link in Spotify.",
     "replanAll": REPLAN_TIP,
@@ -329,7 +371,7 @@ MORE_TIPS = {
         "Save a copy of this week, or go back to an earlier one. FlexWeek keeps a restore point "
         "before big changes."
     ),
-    "reloadWeek": "Load this week again as it is saved. Use it if something looks out of date.",
+    "reloadWeek": "Load this week again as it's saved. Use it if something looks out of date.",
     "helpButton": "What each screen is for, and the keyboard shortcuts.",
     "aboutButton": "The version, and where your plans are saved.",
     "signOut": "Sign out on this computer. Your plans stay saved in your account.",
@@ -344,13 +386,15 @@ GREYED_TIPS = {
 }
 # Said without the system's own words, which a student cannot act on.
 READ_FAILED = "Couldn't open that file. Choose a FlexWeek backup file (it ends in .json)."
+READ_WEEK_FAILED = "Couldn't open that file. Choose a FlexWeek week or day file (it ends in .json)."
 WRITE_FAILED = "Couldn't save there. Choose another folder, like Documents."
+ACCOUNT_SAVED = "Saved your backup file to {path}. Keep it private: it has all your weeks and homework."
 REPLACE_WEEK_QUESTION = (
     "Replace everything in {week} with this file? Other weeks aren't changed. You can undo this."
 )
 WAIT_TIP = "Saving your last change… this will work in a moment."
 PLANNING_TIP = "Planning… one moment."
-CONFLICT_TIP = "This week changed in another window. Reload it from More first."
+CONFLICT_TIP = "This week changed in another window. Choose More > Reload this week, then try again."
 SIGN_OUT_QUESTION = "Your week is saved on {where}, under this account. Sign in again to see it."
 RECOVERY_KEEP = "Keep this file somewhere private. Anyone who has it can reset your password."
 RECOVERY_CHOOSE = "Choose where to save"
@@ -380,7 +424,7 @@ CREATE_HEADING = "Create your account"
 CREATE_NOTE = (
     "FlexWeek fits homework around school and sports. "
     "Your week is saved on this computer, under this account. "
-    "Export a backup file now and then, in Settings."
+    "Export a backup file now and then (Settings > This computer > Manage account)."
 )
 RESET_HEADING = "Reset your password"
 RESET_NOTE = (
@@ -494,6 +538,7 @@ class NativeWindow(QMainWindow):
         icon: QIcon | None = None,
         parent: QWidget | None = None,
         kept: KeptSession | None = None,
+        sync: SyncHost | None = None,
     ) -> None:
         super().__init__(parent)
         application = QApplication.instance()
@@ -506,6 +551,19 @@ class NativeWindow(QMainWindow):
         self.session = NativeSession(origin, self, kept)
         self._instance_server: QLocalServer | None = None
         self.setWindowTitle("FlexWeek")
+        # This computer's sync host, and the running service once it has started (None until then). The
+        # generation is the one the week was last loaded at; a change in it means a linked phone's edits
+        # arrived. The phone list is read off this thread, so it lags the service by up to a second.
+        self._sync_host = sync
+        self._sync = sync.service if sync is not None else None
+        self._sync_generation = self._sync.generation() if self._sync is not None else None
+        self._phones: list[dict] = []
+        self._phones_user: int | None = None
+        self._phones_reading = False
+        if sync is not None:
+            # The window owns its host, so Qt, not the garbage collector, frees it with the window.
+            sync.setParent(self)
+            sync.started.connect(self._sync_started)
         if icon is not None:
             self.setWindowIcon(icon)
         self.resize(*WINDOW_SIZE)
@@ -515,7 +573,6 @@ class NativeWindow(QMainWindow):
         self._motion = "normal"
         # What the window was last dressed in, so a change that leaves the look alone skips restyling.
         self._dressed: tuple = ()
-        self._page_sheet = ""
         self._travel_picture: QLabel | None = None
         self._travel_direction = 0
         # What the planner last showed (_planner_now), so a change of view, My day or design is seen.
@@ -536,6 +593,9 @@ class NativeWindow(QMainWindow):
         self._zoom: dict[str, int] = {}
         # The student's own looks, kept by name (custom_look.py); Settings will list them.
         self._saved_looks: list[dict] = []
+        self._new_look_notice_seen: set[str] = set()
+        self._new_look_notice_exempt: set[str] = set()
+        self._has_saved_design_look = False
         self._shown: tuple | None = None
         self._hours_week: tuple | None = None
         self._update_asked = False
@@ -656,6 +716,12 @@ class NativeWindow(QMainWindow):
         self._layout_tick.timeout.connect(self._refresh_layout)
         self._layout_tick.timeout.connect(self._count_down)
         self._layout_tick.start()
+        self._deadline_tick = QTimer(self)
+        self._deadline_tick.setSingleShot(True)
+        self._deadline_tick.timeout.connect(self._deadline_changed)
+        app = QApplication.instance()
+        if app is not None:
+            app.applicationStateChanged.connect(self._application_state_changed)
         self._apply_appearance()
         if QSystemTrayIcon.isSystemTrayAvailable() and not self._icon.isNull():
             self._install_tray()
@@ -707,13 +773,15 @@ class NativeWindow(QMainWindow):
 
     def _auth_problem_field(self, message: str) -> QLineEdit | None:
         words = message.lower()
-        if message == SIGN_IN_AGAIN:
+        if message in {SIGN_IN_AGAIN, SESSION_ENDED}:
             return None
+        if message == TOO_MANY_TRIES:
+            return self.recovery_code if self._entry_mode == RESET else self.password
         if message == USERNAME_ERROR:
             return self.username
         if message.startswith("Wrong username or password"):
             return self.password
-        if "recovery code" in words or "each code" in words or "too many tries" in words:
+        if "recovery code" in words or "each code" in words:
             return self.recovery_code
         if "username" in words:
             return self.username
@@ -736,6 +804,52 @@ class NativeWindow(QMainWindow):
         if hasattr(self, "username_hint"):
             self.username_hint.setVisible(self._entry_mode == CREATE)
             self.password_hint.setVisible(self._entry_mode == CREATE)
+        self._release_auth_top()
+
+    def _auth_stage(self) -> QWidget | None:
+        page = self._stack.currentWidget()
+        if page is not None and page.objectName() == "authPage" and self._auth_holder is not None:
+            return page
+        return None
+
+    def _hold_auth_top(self, before: int) -> None:
+        """Keep the card's top at `before` (its page y before the problem). Extra top margin grows the
+        card downward; a pass that went too far is pulled back to the same pixel."""
+        page = self._auth_stage()
+        card = self._auth_card
+        if page is None or card is None or not card.isVisible():
+            return
+        for _ in range(4):
+            widget = card
+            while widget is not None:
+                layout = widget.layout()
+                if layout is not None:
+                    layout.activate()
+                if widget is page:
+                    break
+                widget = widget.parentWidget()
+            delta = before - card.mapTo(page, QPoint(0, 0)).y()
+            if delta == 0:
+                return
+            margins = page.layout().contentsMargins()
+            if getattr(self, "_auth_top_base", None) is None:
+                self._auth_top_base = margins.top()
+            new_top = margins.top() + delta
+            if new_top == margins.top():
+                return
+            page.layout().setContentsMargins(margins.left(), new_top, margins.right(), margins.bottom())
+
+    def _release_auth_top(self) -> None:
+        """Give the page back the top margin it had before a problem line held the card."""
+        self._auth_hold_token = None
+        page = self._auth_stage()
+        base = getattr(self, "_auth_top_base", None)
+        if page is None or base is None:
+            return
+        margins = page.layout().contentsMargins()
+        if margins.top() != base:
+            page.layout().setContentsMargins(margins.left(), base, margins.right(), margins.bottom())
+        self._auth_top_base = None
 
     def _show_auth_problem(self, field: QLineEdit, message: str, *, focus: bool) -> None:
         line = {
@@ -744,15 +858,38 @@ class NativeWindow(QMainWindow):
             self.recovery_code: self.recovery_code_problem,
             self.new_recovery_password: self.recovery_password_problem,
         }[field]
+        page = self._auth_stage()
+        card = self._auth_card
+        before = (
+            card.mapTo(page, QPoint(0, 0)).y()
+            if page is not None and card is not None and card.isVisible()
+            else None
+        )
         field.setAccessibleDescription(message)
         field.setProperty("invalid", True)
         field.style().unpolish(field)
         field.style().polish(field)
         line.say(message)
+        # The hint leaves before the hold is measured: hiding it afterwards moved the card a pixel.
         if field is self.username:
             self.username_hint.hide()
         elif field is self.password:
             self.password_hint.hide()
+        if before is not None:
+            self._hold_auth_top(before)
+            # A layout posted by showing the line can still move the card after this returns.
+            token = object()
+            self._auth_hold_token = token
+
+            def again(tries: int = 3, token: object = token, before: int = before) -> None:
+                if getattr(self, "_auth_hold_token", None) is not token:
+                    return
+                self._hold_auth_top(before)
+                if tries > 1:
+                    # Tied to the window: a retry that lands after the window is gone is dropped.
+                    QTimer.singleShot(0, self, lambda: again(tries - 1))
+
+            QTimer.singleShot(0, self, again)
         if focus:
             field.setFocus(Qt.FocusReason.OtherFocusReason)
             field.selectAll()
@@ -834,7 +971,16 @@ class NativeWindow(QMainWindow):
         note = {SIGN_IN: "", CREATE: CREATE_NOTE, RESET: RESET_NOTE}[mode]
         self.auth_note.setText(note)
         self.auth_note.setVisible(bool(note))
+        # The holder pins every page to the tallest card. Create's larger text needs smaller gaps too,
+        # or its height makes even Reset grow beyond a 768 px screen.
+        gap = SPACING[1] if mode == RESET else SPACING[3]
+        if mode == CREATE and text_scale(self._worn_look()) > 1:
+            gap = SPACING[2]
+        self._auth_card.layout().setSpacing(gap)
         self.password.setVisible(mode != RESET)
+        self.password_caption.setVisible(mode != RESET)
+        self.recovery_code_caption.setVisible(mode == RESET)
+        self.recovery_password_caption.setVisible(mode == RESET)
         self.password_hint.setVisible(mode == CREATE)
         self.username_hint.setVisible(mode == CREATE)
         self.sign_in_button.setVisible(mode == SIGN_IN)
@@ -1000,10 +1146,10 @@ class NativeWindow(QMainWindow):
         self.username = QLineEdit()
         self.username.setObjectName("username")
         self.username.setMaxLength(32)
-        self.username.setPlaceholderText("Username")
         self.username.setAccessibleName("Username")
         username_box = QVBoxLayout()
         username_box.setSpacing(SPACING[0])
+        username_box.addWidget(caption_above("Username", self.username))
         username_box.addWidget(self.username)
         self.username_problem = ProblemLine(self.username)
         self.username_problem.setObjectName("usernameProblem")
@@ -1016,11 +1162,13 @@ class NativeWindow(QMainWindow):
         self.password = PasswordField()
         self.password.setObjectName("password")
         self.password.setMaxLength(128)
-        self.password.setPlaceholderText("Password")
         self.password.setAccessibleName("Password")
         self.password_reveal = self.password.reveal
         password_box = QVBoxLayout()
+        password_box.setContentsMargins(0, 0, 0, 0)
         password_box.setSpacing(SPACING[0])
+        self.password_caption = caption_above("Password", self.password)
+        password_box.addWidget(self.password_caption)
         password_box.addWidget(self.password)
         self.password_problem = ProblemLine(self.password)
         self.password_problem.setObjectName("passwordProblem")
@@ -1056,23 +1204,36 @@ class NativeWindow(QMainWindow):
         layout.addLayout(password_box)
         self.recovery_code = QLineEdit()
         self.recovery_code.setObjectName("recoveryCode")
-        self.recovery_code.setPlaceholderText("Recovery code")
         self.recovery_code.setAccessibleName("Recovery code")
         self.recovery_code.returnPressed.connect(self._submit_auth)
         self.recovery_code_problem = ProblemLine(self.recovery_code)
         self.recovery_code_problem.setObjectName("recoveryCodeProblem")
-        layout.addWidget(self.recovery_code)
-        self.recovery_code_problem.attach(layout, layout.indexOf(self.recovery_code) + 1)
+        # Caption and field stand together, 4 px apart, as the other fields do.
+        code_box = QVBoxLayout()
+        code_box.setContentsMargins(0, 0, 0, 0)
+        code_box.setSpacing(SPACING[0])
+        self.recovery_code_caption = caption_above("Recovery code", self.recovery_code)
+        code_box.addWidget(self.recovery_code_caption)
+        code_box.addWidget(self.recovery_code)
+        self.recovery_code_problem.attach(code_box, code_box.indexOf(self.recovery_code) + 1)
         self.new_recovery_password = PasswordField()
         self.new_recovery_password.setObjectName("recoverPassword")
         self.new_recovery_password.setMaxLength(128)
-        self.new_recovery_password.setPlaceholderText("New password")
         self.new_recovery_password.setAccessibleName("New password")
         self.new_recovery_password.returnPressed.connect(self._submit_auth)
         self.recovery_password_problem = ProblemLine(self.new_recovery_password)
         self.recovery_password_problem.setObjectName("recoveryPasswordProblem")
-        layout.addWidget(self.new_recovery_password)
-        self.recovery_password_problem.attach(layout, layout.indexOf(self.new_recovery_password) + 1)
+        password_new_box = QVBoxLayout()
+        password_new_box.setContentsMargins(0, 0, 0, 0)
+        password_new_box.setSpacing(SPACING[0])
+        self.recovery_password_caption = caption_above("New password", self.new_recovery_password)
+        password_new_box.addWidget(self.recovery_password_caption)
+        password_new_box.addWidget(self.new_recovery_password)
+        self.recovery_password_problem.attach(
+            password_new_box, password_new_box.indexOf(self.new_recovery_password) + 1
+        )
+        layout.addLayout(code_box)
+        layout.addLayout(password_new_box)
         # On by default: most students plan on their own laptop, and signing in was the first thing
         # FlexWeek asked at every launch. Log out forgets it, for a shared computer.
         self.keep_signed_in = QCheckBox("Keep me signed in on this computer")
@@ -1126,7 +1287,7 @@ class NativeWindow(QMainWindow):
         heading.setWordWrap(True)
         layout.addWidget(heading)
         note = QLabel(
-            "They are the only way to reset your password. FlexWeek cannot email you. "
+            "They are the only way to reset your password. FlexWeek can't email you. "
             "Copy them somewhere you will still have if this computer is gone."
         )
         note.setWordWrap(True)
@@ -1206,9 +1367,18 @@ class NativeWindow(QMainWindow):
         where.addSpacing(SPACING[1])
         # Thirteen buttons of equal weight and no title at all was the clutter: nothing told the eye
         # where to land.
-        self.week_title = FittedLabel()
+        self.week_title = ClickyTitle()
         self.week_title.setObjectName("weekTitle")
+        self.week_title.clicked.connect(self._toggle_week_month)
         where.addWidget(self.week_title)
+        self.week_title_mark = QPushButton()
+        self.week_title_mark.setObjectName("weekTitleMark")
+        self.week_title_mark.setProperty("quiet", True)
+        self.week_title_mark.setIconSize(QSize(BAR_ICON_PX, BAR_ICON_PX))
+        icons.tint(self.week_title_mark, "chevron-down")
+        self.week_title_mark.setAccessibleName("Pick a week")
+        self.week_title_mark.clicked.connect(self._toggle_week_month)
+        where.addWidget(self.week_title_mark)
         # One control, not four loose buttons: switching view is one decision.
         segments = SegmentTrack()
         segments.setObjectName("segments")
@@ -1217,7 +1387,7 @@ class NativeWindow(QMainWindow):
         segment_row.setSpacing(2)
         for view, label, tip in (
             ("day", "Day", "One day as a list"),
-            ("week", "Week", "The week you are planning"),
+            ("week", "Week", "The week you're planning"),
             ("month", "Month", "The month as a calendar"),
         ):
             button = Segment(label)
@@ -1298,22 +1468,22 @@ class NativeWindow(QMainWindow):
         undo.clicked.connect(self.session.undo)
         redo = QPushButton("Redo")
         redo.setObjectName("redoButton")
-        redo.clicked.connect(self.session.redo)
+        redo.clicked.connect(self._redo_with_focus)
         solve = PlanButton(PLAN_LABEL, PLAN_SHORT)
         solve.setObjectName("solveButton")
         # Second only to Add: accent words on a tint, not a third outlined button beside Today and More.
         solve.setProperty("secondary", True)
-        solve.clicked.connect(self.session.solve)
+        solve.clicked.connect(self._plan_with_left_over)
         replan = QPushButton("Replan all my homework")
         replan.setObjectName("replanAll")
-        replan.clicked.connect(lambda: self.session.solve(everything=True))
+        replan.clicked.connect(lambda: self._plan_with_left_over(everything=True))
         save = QPushButton("Save this week now")
         save.setObjectName("saveButton")
         save.clicked.connect(self.session.save)
         retry = QPushButton("Retry save")
         retry.setObjectName("retrySave")
         retry.clicked.connect(self.session.retry_save)
-        reload_week = QPushButton("Reload this week as it is saved")
+        reload_week = QPushButton("Reload this week")
         reload_week.setObjectName("reloadWeek")
         reload_week.clicked.connect(self.session.reload)
         copy_block = QPushButton("Copy")
@@ -1337,7 +1507,7 @@ class NativeWindow(QMainWindow):
         late = QPushButton("Running late")
         late.setObjectName("runningLate")
         late.clicked.connect(self._open_late)
-        availability = QPushButton("Availability")
+        availability = QPushButton("Study hours")
         availability.setObjectName("availabilityButton")
         availability.clicked.connect(self._open_availability)
         settings = QPushButton("Settings")
@@ -1476,31 +1646,53 @@ class NativeWindow(QMainWindow):
         # Opened by the student, from More: a change to the week refreshes it, never folds it.
         self._unfinished_opened = False
         self.unfinished_panel.plan_requested.connect(self._plan_unfinished)
+        self.unfinished_panel.focus_requested.connect(lambda item_id: self._start_focus(item_id, None))
         self.unfinished_panel.delete_requested.connect(self._delete_homework)
         self.unfinished_panel.collapsed.connect(self._collapse_unfinished)
         column.addWidget(self.unfinished_panel)
         # Item 1b: after Plan, homework whose time was in an earlier week and never ticked done. Plan
         # never moves it on its own; the student says which.
-        self.left_chip = QFrame()
+        self.left_chip = LeftChip()
         self.left_chip.setObjectName("leftChip")
-        chip_row = QHBoxLayout(self.left_chip)
+        chip_column = QVBoxLayout(self.left_chip)
+        # The words and their buttons share one line while the card is wide enough for both whole. When
+        # it is not, the buttons move to the row under the words (see _fit_left_chip).
+        self._chip_line = QHBoxLayout()
+        chip_column.addLayout(self._chip_line)
+        self._chip_below = QWidget()
+        self._chip_below.setObjectName("leftChipBelow")
+        # The window's sheet paints a plain widget's background; the row belongs to the card's white.
+        self._chip_below.setStyleSheet("QWidget#leftChipBelow { background: transparent; }")
+        self._chip_below_row = QHBoxLayout(self._chip_below)
+        # Under the words, not under the icon.
+        self._chip_below_row.setContentsMargins(16 + self._chip_line.spacing(), 0, 0, 0)
+        self._chip_below_row.addStretch(1)
+        chip_column.addWidget(self._chip_below)
+        self._chip_below.hide()
+        self._chip_wrapped = False
+        self.left_chip_icon = QLabel()
+        self.left_chip_icon.setObjectName("leftChipIcon")
+        self.left_chip_icon.setFixedSize(16, 16)
+        self._chip_line.addWidget(self.left_chip_icon)
         self.left_chip_text = QLabel()
         self.left_chip_text.setObjectName("leftChipText")
-        chip_row.addWidget(self.left_chip_text, 1)
-        plan_them = QPushButton("Plan them")
+        self.left_chip_text.setWordWrap(True)
+        self._chip_line.addWidget(self.left_chip_text, 1)
+        plan_them = QPushButton("Plan into this week")
         plan_them.setObjectName("leftPlan")
         plan_them.setProperty("tonal", True)
         plan_them.clicked.connect(self._plan_left)
-        chip_row.addWidget(plan_them)
-        did_these = QPushButton("I did these")
+        self._chip_line.addWidget(plan_them)
+        did_these = QPushButton("Mark as finished")
         did_these.setObjectName("leftDone")
         did_these.setProperty("outlined", True)
         did_these.clicked.connect(self._did_left)
-        chip_row.addWidget(did_these)
+        self._chip_line.addWidget(did_these)
+        self.left_chip.resized.connect(self._fit_left_chip)
         self.left_chip.hide()
         column.addWidget(self.left_chip)
         self.plan_review = PlanReview()
-        self.plan_review.replan_requested.connect(lambda: self.session.solve(everything=True))
+        self.plan_review.replan_requested.connect(lambda: self._plan_with_left_over(everything=True))
         self.plan_review.allow_split_requested.connect(self.session.allow_splitting)
         self.alert_strip = AlertStrip()
         self.alert_strip.handled.connect(self._reminder_handled)
@@ -1509,12 +1701,35 @@ class NativeWindow(QMainWindow):
         self.planner.setObjectName("plannerStack")
         # A row of fixed height is the Tab stop: the list opens over the grid from it, so Tab never
         # moves the week.
+        self.status_strip = QWidget()
+        self.status_strip.setObjectName("weekStatusStrip")
+        self.status_strip.setFixedHeight(STATUS_STRIP_PX)
+        self.status_strip.setAccessibleName("Status")
+        strip = QHBoxLayout(self.status_strip)
+        strip.setContentsMargins(16, 0, 16, 0)
+        strip.setSpacing(24)
+        # Shortens with an ellipsis rather than push the overdue count and Week as a list off the edge.
+        self.status_next = FittedLabel()
+        self.status_next.setObjectName("weekStatusNext")
+        self.status_next.set_full_text(NOTHING_MORE_TODAY)
+        strip.addWidget(self.status_next, 1)
+        self.sync_dot = SyncDot()
+        strip.addWidget(self.sync_dot)
+        self._sync_timer = QTimer(self)
+        self._sync_timer.setInterval(1000)
+        self._sync_timer.timeout.connect(self._sync_tick)
+        if self._sync is not None:
+            self._sync_timer.start()
+        self.status_overdue = QLabel()
+        self.status_overdue.setObjectName("weekStatusOverdue")
+        strip.addWidget(self.status_overdue)
         self.week_list_row = QPushButton(WEEK_LIST_ROW_NAME)
         self.week_list_row.setObjectName("weekListRow")
         self.week_list_row.setProperty("quiet", True)
         self.week_list_row.setAccessibleName(WEEK_LIST_ROW_NAME)
         self.week_list_row.clicked.connect(self._toggle_week_access_list)
         self.week_list_row.installEventFilter(self)
+        strip.addWidget(self.week_list_row)
         self.week_list_panel = QFrame(page)
         self.week_list_panel.setObjectName("weekListPanel")
         self.week_list_panel.hide()
@@ -1524,8 +1739,11 @@ class NativeWindow(QMainWindow):
         self._week_list_return: QWidget | None = None
         self.week_access_list = QListWidget()
         self.week_access_list.setObjectName("weekAccessList")
-        self.week_access_list.setAccessibleName("This week's blocks")
-        self.week_access_list.setAccessibleDescription("A list of each day and its blocks in time order.")
+        self.week_access_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.week_access_list.setAccessibleName("Week as a list")
+        self.week_access_list.setAccessibleDescription(
+            "Every block this week, day by day, in time order. Press Enter to open one."
+        )
         panel_layout.addWidget(self.week_access_list)
         self.week_access_list.itemActivated.connect(self._week_access_activate)
         self.week_access_list.installEventFilter(self)
@@ -1551,6 +1769,15 @@ class NativeWindow(QMainWindow):
         self.rail.date_chosen.connect(self._go_to_date)
         self.rail.allow_split_requested.connect(self.session.allow_splitting)
         self.rail.month_shown_changed.connect(self._keep_rail)
+        self.month_pop = QWidget(self, Qt.WindowType.Popup)
+        self.month_pop.setObjectName("weekMonthPopover")
+        self.month_pop.hide()
+        pop_box = QVBoxLayout(self.month_pop)
+        pop_box.setContentsMargins(8, 8, 8, 8)
+        self.month_pick = MonthCard()
+        self.month_pick.fold.hide()
+        self.month_pick.date_chosen.connect(self._pick_week_date)
+        pop_box.addWidget(self.month_pick)
         body.addWidget(self.rail)
         body.addLayout(column, 1)
         self.day_view = ClassicDay(self.hand)
@@ -1574,7 +1801,7 @@ class NativeWindow(QMainWindow):
             widget.installEventFilter(self)
         # The calendar is the point of this page, so it takes whatever height the rest does not need,
         # down to the window's foot. Notices float over it rather than taking a row.
-        column.addWidget(self.week_list_row)
+        column.addWidget(self.status_strip)
         column.addWidget(self.planner, 1)
         self.planner.installEventFilter(self)
         layout.addLayout(body, 1)
@@ -1663,7 +1890,7 @@ class NativeWindow(QMainWindow):
             view.add_requested.connect(
                 lambda category: self._add_from_chip(category) if category else self._add_homework()
             )
-            view.plan_requested.connect(self.session.solve)
+            view.plan_requested.connect(self._plan_with_left_over)
             view.block_activated.connect(self._edit_block)
             view.finished_requested.connect(self._finish_homework)
             view.focus_requested.connect(self._start_focus)
@@ -1737,12 +1964,14 @@ class NativeWindow(QMainWindow):
         clock = clock_parts(self.session.now_ms())
         options = options_for(self._layout, layout_id)
         pack, system_dark, accent = self._look_inputs()
-        palette = resolved_palette(pack, system_dark, self._look, accent)
+        palette, applied_look = design_look(options["look"], pack, system_dark, self._worn_look(), accent)
         session = self.session
         surface = "week"
         if not self._day_mode and layout_id in VIEW_CLASSES and session.planner_view in {"day", "month"}:
             surface = session.planner_view
-        week = build_week(session.week_start, session.blocks, session.assignments, session.trace)
+        week = self._week_with_history(
+            build_week(session.week_start, session.blocks, session.assignments, session.trace)
+        )
         running = session.focus_elapsed_min()
         if running:
             # A running session counts as it goes; the homework is credited only when it ends.
@@ -1752,16 +1981,32 @@ class NativeWindow(QMainWindow):
             today=clock["day"] if monday_of(clock["iso"]) == session.week_start else None,
             minute=clock["minute"],
             options=options,
-            tokens=tokens_for(layout_id, options["colour"], palette),
-            scale=text_scale(self._look),
+            tokens=tokens_for(layout_id, options["look"], palette),
+            scale=text_scale(applied_look),
             surface=surface,
             month=session.month_data,
+            month_key=session.selected_month,
             iso_day=session.selected_day,
             dirty=session.dirty,
             unsaved_weeks=session.unsaved_weeks(),
             focus=focus_now(session.focus),
             today_iso=clock["iso"],
             account=self._account_id(),
+        )
+
+    def _week_with_history(self, week):
+        states = {
+            item["id"]: "Overdue" if item.get("left_over_state") == "overdue" else "Left from last week"
+            for item in self.session.unfinished()
+        }
+        return replace(
+            week,
+            occurrences=tuple(
+                replace(item, history=states.get(item.assignment_id, "")) for item in week.occurrences
+            ),
+            homework_sentence=homework_time_sentence(
+                self.session.unfinished(), self.session.homework_time_needed()
+            ),
         )
 
     def _refresh_layout(self) -> None:
@@ -1784,6 +2029,44 @@ class NativeWindow(QMainWindow):
         is running to redraw it."""
         self._show_next()
 
+    def _schedule_deadline_tick(self) -> None:
+        self._deadline_tick.stop()
+        if self.session.account is None:
+            return
+        moment = datetime.fromtimestamp(self.session.now_ms() / 1000)
+        deadlines = []
+        for item in self.session.assignments.values():
+            raw = item.get("due")
+            if not isinstance(raw, str) or not raw:
+                continue
+            try:
+                due = datetime.fromisoformat(raw)
+                if len(raw) == 10:
+                    due = due.replace(hour=23, minute=59)
+            except ValueError:
+                continue
+            if due > moment:
+                deadlines.append(due)
+        if deadlines:
+            delay = round((min(deadlines) - moment).total_seconds() * 1000)
+            self._deadline_tick.start(min(max(delay, 1), 2_147_483_647))
+
+    def _deadline_changed(self) -> None:
+        if self.session.account is None:
+            return
+        self._fill_classic()
+        self._refresh_layout()
+        if self.unfinished_panel.isVisible():
+            self._fill_unfinished(self._panel_items())
+        self._sync_left_chip()
+        self._show_next()
+        self.rail.set_tasks(self.session.focus_tasks(), self._clock_in_week()[0])
+        self._schedule_deadline_tick()
+
+    def _application_state_changed(self, state: Qt.ApplicationState) -> None:
+        if state == Qt.ApplicationState.ApplicationActive:
+            self._deadline_changed()
+
     def _rail_shown(self) -> bool:
         """Whether Today's app's rail is beside the planner: on its Day and Week."""
         return self.planner.currentWidget() in (self.week_table, self.day_view)
@@ -1793,7 +2076,8 @@ class NativeWindow(QMainWindow):
         words = self.session.now_next_text()
         today, minute = self._clock_in_week()
         self.rail.set_clock(today, minute)
-        self.focus_panel.show_now_next("" if self._rail_shown() else words)
+        month = self.session.planner_view == "month" and not self._day_mode
+        self.focus_panel.show_now_next("" if self._rail_shown() or month else words)
 
     def _sync_chrome(self) -> None:
         """Planning chips and the clipboard line step aside for a design of its own. Plan my
@@ -1822,6 +2106,9 @@ class NativeWindow(QMainWindow):
         # Quick focus is in the action row whenever there is one, so the panel's own copy would be
         # the same button twice; it belongs to the panel only where no action row is shown.
         self.focus_panel.quick.setVisible(own and self._day_mode)
+        needed = self.session.homework_time_needed()
+        self.more_button.set_count(0)
+        self.solve_button.set_count(len(needed))
 
     def _set_clock(self) -> bool:
         """Whether the clock changed. Only a change redraws the week, so this is safe to call from
@@ -1888,6 +2175,12 @@ class NativeWindow(QMainWindow):
             title.setText(date_words)
             plan.setText(plan_words)
             more.setText(more_words)
+            # More as its icon alone takes an icon button's sides, not a word button's 20 pixels each.
+            icon_only = not more_words
+            if more.property("iconOnly") != icon_only:
+                more.setProperty("iconOnly", icon_only)
+                more.style().unpolish(more)
+                more.style().polish(more)
             for widget in (title, plan, more):
                 widget.updateGeometry()
             # Each group keeps its own size until told; the bar's invalidate does not reach them.
@@ -2139,6 +2432,9 @@ class NativeWindow(QMainWindow):
         stamp = datetime.now().strftime("%Y-%m-%dT%H:%M")
         progress = {"version": SETUP_VERSION, "step": self.setup_page.step, "finished_at": stamp}
         self._setup_prefs["setup"] = progress
+        if self.session.new_account and self.session.account is not None:
+            self._new_look_notice_exempt.add(str(self.session.account["id"]))
+            self._save_look()
         if self.session.preferences is not None:
             self.session.preferences = {**self.session.preferences, **self._setup_prefs}
         self._setup_active = False
@@ -2259,7 +2555,9 @@ class NativeWindow(QMainWindow):
             self.toast.hide()
         if self.unfinished_panel.isVisible():
             # A row deleted, planned or finished leaves the list, and an Undo brings it back.
-            self._fill_unfinished(self._counted_items())
+            # Overdue and carried homework stay listed when the week changes; they are not the
+            # "still needs a time" count.
+            self._fill_unfinished(self._panel_items())
         self._sync_left_chip()
         if self.session.dirty:
             # Every change reaches here, so this is where the clock on "stopped changing" restarts.
@@ -2281,7 +2579,7 @@ class NativeWindow(QMainWindow):
         self.month_grid.set_month(
             self.session.month_data, self.session.dirty,
             datetime.fromtimestamp(self.session.now_ms() / 1000).date().isoformat(),
-            self._account_id(),
+            self._account_id(), self.session.selected_month,
         )
         opened = (self.session.planner_view, self.session.selected_month, self.session.month_data is not None)
         if opened[0] == "month" and opened[2] and opened != self._month_revealed:
@@ -2301,9 +2599,10 @@ class NativeWindow(QMainWindow):
             switch_page(self.planner, shown, self._motion)
         else:
             self.planner.setCurrentWidget(shown)
+        self._show_next()
         self._release_travel()
         for name in ("viewDay", "viewWeek", "viewMonth", "viewMyDay"):
-            button = self.findChild(QPushButton, name)
+            button = self.findChild(QRadioButton, name)
             if button is not None:
                 button.setChecked(name == ("viewMyDay" if self._day_mode else f"view{view.title()}"))
         month = view == "month"
@@ -2372,13 +2671,16 @@ class NativeWindow(QMainWindow):
         needed = self.session.homework_time_needed()
         unfinished = self.findChild(QPushButton, "unfinishedOpen")
         if unfinished is not None:
-            unfinished.setEnabled(bool(needed))
-        self.more_button.set_count(len(needed))
+            unfinished.setEnabled(bool(self._panel_items()))
+        self.more_button.set_count(0)
+        self.solve_button.set_count(len(needed))
+        self._sync_status_strip()
         prompt = self._unfinished_items(self.session.consume_unfinished())
         if prompt:
             self._fill_unfinished(prompt)
+            self._unfinished_opened = True
         elif self._unfinished_opened and not self.unfinished_panel.isHidden():
-            self._fill_unfinished(self._counted_items())
+            self._fill_unfinished(self._panel_items())
         else:
             self._unfinished_opened = False
             self.unfinished_panel.hide()
@@ -2405,11 +2707,64 @@ class NativeWindow(QMainWindow):
         self._sync_running_late()
         self._sync_chrome()
         self._apply_appearance()
+        self._schedule_deadline_tick()
         # A month that arrives while it is still sliding in: its picture is taken again once the
         # month has scrolled to its first row, which is a turn of the event loop after this.
         if sliding_in(self.planner):
             QTimer.singleShot(0, self, self._retake_slide)
+        if getattr(self, "_plan_focus_pending", False):
+            self._plan_focus_pending = False
+            QTimer.singleShot(0, self, self._focus_after_plan)
+        if getattr(self, "_redo_focus_pending", False):
+            self._redo_focus_pending = False
+            QTimer.singleShot(0, self, self._focus_after_redo)
+        self._maybe_show_new_look_notice()
         self._finish_turn(turn)
+
+    def _maybe_show_new_look_notice(self) -> None:
+        session = self.session
+        account = session.account
+        if (
+            account is None
+            or session.new_account
+            or self._has_saved_design_look
+            or self._setup_active
+            or self._stack.currentWidget() is not self.findChild(QWidget, "weekPage")
+        ):
+            return
+        progress = (session.preferences or {}).get("setup")
+        if not isinstance(progress, dict) or not progress.get("finished_at"):
+            return
+        account_id = str(account["id"])
+        if account_id in self._new_look_notice_seen or account_id in self._new_look_notice_exempt:
+            return
+        if self.toast.isVisible() and self.toast.text() == "New in 1.0.0: each design has its own looks.":
+            return
+
+        def dismiss() -> None:
+            self._dismiss_new_look_notice(account_id)
+
+        self._notice_step = None
+        self.toast.show_message(
+            "New in 1.0.0: each design has its own looks.",
+            "Choose a look",
+            lambda: self._choose_look_from_notice(account_id),
+            secondary_button="Not now",
+            secondary_callback=dismiss,
+            close_callback=dismiss,
+            dismiss_callback=dismiss,
+            filled=True,
+        )
+
+    def _dismiss_new_look_notice(self, account_id: str) -> None:
+        if account_id in self._new_look_notice_seen:
+            return
+        self._new_look_notice_seen.add(account_id)
+        self._save_look()
+
+    def _choose_look_from_notice(self, account_id: str) -> None:
+        self._dismiss_new_look_notice(account_id)
+        self._open_settings_at(0)
 
     def _retake_slide(self) -> None:
         self._week_page.layout().activate()
@@ -2492,14 +2847,14 @@ class NativeWindow(QMainWindow):
         if unfinished is not None:
             # Worked out as the menu opens: the busy flag turns every action back on when a save
             # ends, and left to that "Unfinished" was pressable with nothing to show.
-            unfinished.setEnabled(not self.session.busy and bool(needed))
+            unfinished.setEnabled(not self.session.busy and bool(self._panel_items()))
         for action, button in self._more_pairs:
             action.setEnabled(button.isEnabled())
             tip = self._more_tip(button.objectName(), button.isEnabled())
             # Greyed with nothing to show, Unfinished says so on its row, not only in a tooltip (T23).
             said = f"\t{NONE_UNFINISHED}" if tip == NOTHING_UNFINISHED else ""
-            if button.objectName() == "unfinishedOpen" and count:
-                said = f"\t{count} left"
+            if button.objectName() == "unfinishedOpen":
+                said = f"\t{count} left" if count else f"\t{NONE_UNFINISHED}"
             action.setText(button.text() + said)
             action.setToolTip(tip)
         if self._spotify_action is not None:
@@ -2526,7 +2881,7 @@ class NativeWindow(QMainWindow):
         if busy:
             self._leave_greyed_button()
         for name in BUSY_BUTTONS:
-            button = self.findChild(QPushButton, name)
+            button = self.findChild(QAbstractButton, name)
             if button is not None and button.property("busyGuard") is None:
                 button.setProperty("busyGuard", True)
                 button.installEventFilter(self._busy_guard)
@@ -2565,7 +2920,7 @@ class NativeWindow(QMainWindow):
         """A button greyed with the keyboard on it hands the keyboard to the next one along, such as the
         previous-week arrow; it goes to the week instead."""
         focus = QApplication.focusWidget()
-        if isinstance(focus, QPushButton) and focus.objectName() in BUSY_BUTTONS:
+        if isinstance(focus, QAbstractButton) and focus.objectName() in BUSY_BUTTONS:
             self._focus_week()
 
     def _grey_while_busy(self) -> None:
@@ -2573,7 +2928,7 @@ class NativeWindow(QMainWindow):
         if busy:
             self._leave_greyed_button()
         for name in BUSY_BUTTONS:
-            button = self.findChild(QPushButton, name)
+            button = self.findChild(QAbstractButton, name)
             if button is not None:
                 button.setEnabled(not busy)
         self._sync_running_late()
@@ -2952,7 +3307,7 @@ class NativeWindow(QMainWindow):
     def _delete_block(
         self, block: dict, scope: str, day: int | None, every_week: bool | None = None
     ) -> None:
-        title = block.get("title") or "the event"
+        title = block.get("title") or "this fixed time"
         whole = scope != "occurrence" or len(block.get("days") or []) <= 1
         if every_week is None and whole and is_setup_block(block):
             # School and Setup's activities are in every week, so taking one out asks which.
@@ -3001,8 +3356,12 @@ class NativeWindow(QMainWindow):
         made = dialog.block()
         if made is not None:
             self.session.add_block(made)
-            self.session.stand_open_week()
+            self.session.stand_open_week([made])
             self.session.save()
+            start = hhmm_text(made["start"])
+            end = hhmm_text(minutes_to_hhmm(hhmm_to_minutes(made["start"]) + made["duration_min"]))
+            # Later weeks change with no Undo, so the toast offers none.
+            self._set_notice(f"School now {start}–{end} every week", "", None)
         elif school is not None:
             self._delete_block(school, "series", None, every_week=True)
 
@@ -3049,8 +3408,10 @@ class NativeWindow(QMainWindow):
         """Today's app's Day and Week from the open week. Held while the pointer holds something."""
         if self.hand.busy:
             return
-        week = build_week(
-            self.session.week_start, self.session.blocks, self.session.assignments, self.session.trace
+        week = self._week_with_history(
+            build_week(
+                self.session.week_start, self.session.blocks, self.session.assignments, self.session.trace
+            )
         )
         today, minute = self._clock_in_week()
         self._sync_week_access_list(week)
@@ -3073,9 +3434,11 @@ class NativeWindow(QMainWindow):
             self.session.assignments,
             self.session.homework_time_needed(),
             one_go_unplaced,
+            self.session.unfinished(),
         )
         self.month_grid.set_unsaved(self.session.unsaved_weeks())
         self.month_grid.set_week(week)
+        self._sync_status_strip()
 
     def _sync_week_access_list(self, week) -> None:
         selected = self.week_access_list.currentItem()
@@ -3084,7 +3447,7 @@ class NativeWindow(QMainWindow):
         for day in range(7):
             items = sorted(week.on_day(day), key=lambda item: (item.start, item.end, item.title))
             if not items:
-                words = f"{DAY_FULL[day]}: nothing planned"
+                words = f"{DAY_FULL[day]}: Nothing planned"
                 row = QListWidgetItem(words)
                 self.week_access_list.addItem(row)
                 continue
@@ -3100,12 +3463,13 @@ class NativeWindow(QMainWindow):
                     done=occurrence.done,
                     missed=occurrence.missed,
                     pinned=occurrence.pinned,
+                    history=occurrence.history,
+                    history_due=occurrence.due,
+                    placed_by_plan=plan_placed(occurrence),
                 )
                 detail = drawn.detail
                 if not occurrence.work:
                     detail += " · Fixed time"
-                elif occurrence.due and occurrence.due < self.session.week_start and not occurrence.done:
-                    detail += " · Unfinished from last week"
                 words = f"{DAY_FULL[day]}: {occurrence.title}, {detail}"
                 row = QListWidgetItem(words)
                 row.setData(Qt.ItemDataRole.UserRole, (occurrence.block_id, day))
@@ -3119,9 +3483,51 @@ class NativeWindow(QMainWindow):
                     break
 
     def _show_week_list_row(self, shown: bool) -> None:
+        self.status_strip.setVisible(
+            self.session.planner_view in {"week", "month"} and not self._day_mode
+        )
         self.week_list_row.setVisible(shown)
         if not shown:
             self._close_week_access_list(restore_focus=False)
+
+    def _sync_status_strip(self) -> None:
+        """Next or Nothing more today on the left, overdue count, Week as a list on the right."""
+        today, minute = self._clock_in_week()
+        heading, title, when, _then = next_words(self.rail._week, today, minute)
+        self.status_next.set_full_text(f"{heading}: {title} {when}" if title else NOTHING_MORE_TODAY)
+        stamp = self.session.now_ms() / 1000
+        overdue = overdue_unfinished(self.session.unfinished(), datetime.fromtimestamp(stamp))
+        words = f"{len(overdue)} overdue"
+        previous = getattr(self, "_overdue_words", None)
+        self.status_overdue.setText(words)
+        if words != previous and (previous is not None or overdue):
+            announce(self.status_overdue, words)
+        self._overdue_words = words
+
+    def _toggle_week_month(self) -> None:
+        if self.month_pop.isVisible():
+            self.month_pop.hide()
+            return
+        week = self.session.week_start
+        today, _minute = self._clock_in_week()
+        now = date.today() if today is None else date.fromisoformat(week) + timedelta(days=today)
+        due = frozenset(
+            str(item.get("due") or "")[:10]
+            for item in (self.session.assignments or {}).values()
+            if item.get("due") and not item.get("completed")
+        )
+        self.month_pick.dates.look = self._look
+        self.month_pick.dates.colours = self.rail.colours
+        self.month_pick.show_week(week, now, due)
+        at = self.week_title.mapToGlobal(QPoint(0, self.week_title.height() + 4))
+        self.month_pop.adjustSize()
+        self.month_pop.move(at)
+        self.month_pop.show()
+        self.month_pop.raise_()
+
+    def _pick_week_date(self, iso: str) -> None:
+        self.month_pop.hide()
+        self._go_to_date(iso)
 
     def _focus_week_access_list(self) -> None:
         """Open the week list over the grid with the keyboard on its first row."""
@@ -3205,19 +3611,15 @@ class NativeWindow(QMainWindow):
         self._save_look()
 
     def _place_rail(self, shown: bool) -> None:
-        """The rail beside the planner, or folded into a line above it on a narrow window; and the
-        running timer at the top of the rail while it shows."""
-        narrow = self.width() < NARROW_WIDTH
-        if narrow != self.rail.folded:
+        """The Agenda rail stays beside the planner at a fixed width. The running timer sits at its
+        top while the rail shows."""
+        if self.rail.folded:
             for home in (self._rail_row, self._column):
                 home.removeWidget(self.rail)
-            if narrow:
-                self._column.insertWidget(self._column.indexOf(self.planner), self.rail)
-            else:
-                self._rail_row.insertWidget(0, self.rail)
-            self.rail.set_folded(narrow)
+            self._rail_row.insertWidget(0, self.rail)
+            self.rail.set_folded(False)
         self.rail.setVisible(shown)
-        in_rail = shown and not narrow
+        in_rail = shown
         slot = self.rail.timer_slot
         if in_rail and slot.indexOf(self.focus_panel) < 0:
             self._column.removeWidget(self.focus_panel)
@@ -3329,11 +3731,13 @@ class NativeWindow(QMainWindow):
         for view in self._views.values():
             view.hold(holding)
         if not holding:
-            QTimer.singleShot(0, self, self._refresh_after_hold)
+            refresh_week = self.hand.release_kind is not Gesture.CREATE
+            QTimer.singleShot(0, self, lambda: self._refresh_after_hold(refresh_week=refresh_week))
 
-    def _refresh_after_hold(self) -> None:
+    def _refresh_after_hold(self, *, refresh_week: bool = True) -> None:
         if self.session.account is not None and not self.hand.busy:
-            self._fill_classic()
+            if refresh_week:
+                self._fill_classic()
             self._show_change()
 
     def _set_notice(self, text: str, button: str, callback) -> None:
@@ -3394,10 +3798,21 @@ class NativeWindow(QMainWindow):
         # The week redraws in this same turn and can take the keyboard (a Clay day header, or More
         # on Dial). Focusing on the next turn lands after that.
         self._focus_placed = self._first_placed()
-        QTimer.singleShot(0, self, self._focus_after_plan)
+        self._plan_focus_pending = True
 
     def _focus_after_plan(self) -> None:
+        self.activateWindow()
         self._focus_week(getattr(self, "_focus_placed", None))
+
+    def _focus_after_redo(self) -> None:
+        self.activateWindow()
+        self._focus_week()
+
+    def _redo_with_focus(self) -> None:
+        self._redo_focus_pending = True
+        self.session.redo()
+        if self.session._traveling != "redo":
+            self._redo_focus_pending = False
 
     def _on_plan_conflicts(self, lost: list) -> None:
         if not lost:
@@ -3499,7 +3914,9 @@ class NativeWindow(QMainWindow):
             if waiting:
                 self._choose_time(assignment["id"])
                 return
-        self.session._say("All your homework already has a time.")
+        self.session._say(
+            homework_time_sentence(self.session.unfinished(), self.session.homework_time_needed())
+        )
 
     def _choose_time(self, assignment_id: str) -> None:
         """A time for this homework's first session that needs one, picked rather than dragged."""
@@ -3635,7 +4052,7 @@ class NativeWindow(QMainWindow):
                 self._delete_block(block, "occurrence" if one_day else "series", on)
                 return
             name = (block.get("title") or "this event") + (f" on {DAY_FULL[on]}" if one_day else "")
-            if confirm(self, "Delete event", f"Delete {name}? You can undo this.", "Delete"):
+            if confirm(self, "Delete fixed time", f"Delete {name}? You can undo this.", "Delete"):
                 self._delete_block(block, "occurrence" if one_day else "series", on)
             return
         if not block.get("start"):
@@ -3840,38 +4257,111 @@ class NativeWindow(QMainWindow):
         ]
 
     def _unfinished_items(self, items: list[dict] | None = None) -> list[dict]:
-        """Unfinished homework: late, or left in an earlier week whether or not it is due yet (1b).
-        Asked with the session's own clock, so the app and its tests agree."""
-        found = self.session.unfinished() if items is None else items
-        now = datetime.fromtimestamp(self.session.now_ms() / 1000)
-        keep = {item["id"] for item in overdue_unfinished(found, now)}
-        keep |= {item["id"] for item in self.session.left_unfinished()}
-        return [item for item in found if item["id"] in keep]
+        """The engine classifies overdue and earlier-week homework against the held session clock."""
+        return self.session.unfinished() if items is None else items
 
     def _fill_unfinished(self, items: list[dict]) -> None:
         self.unfinished_panel.set_items(
             items, datetime.fromtimestamp(self.session.now_ms() / 1000), {item["id"] for item in items}
         )
 
+    def _fit_left_chip(self) -> None:
+        """Both buttons beside the words when the card is wide enough for the words and both whole;
+        otherwise under them. A button is never squeezed to fit its line."""
+        plan_them = self.left_chip.findChild(QPushButton, "leftPlan")
+        did_these = self.left_chip.findChild(QPushButton, "leftDone")
+        margins = self.left_chip.layout().contentsMargins()
+        gap = self._chip_line.spacing()
+        words = QFontMetrics(self.left_chip_text.font()).horizontalAdvance(self.left_chip_text.text())
+        widths = (
+            self.left_chip_icon.width(),
+            words,
+            plan_them.sizeHint().width(),
+            did_these.sizeHint().width(),
+        )
+        beside = margins.left() + margins.right() + sum(widths) + 3 * gap
+        wrapped = self.left_chip.width() < beside
+        if wrapped == self._chip_wrapped:
+            return
+        self._chip_wrapped = wrapped
+        below = self._chip_below_row
+        source, target = (self._chip_line, below) if wrapped else (below, self._chip_line)
+        for button in (plan_them, did_these):
+            source.removeWidget(button)
+            if target is below:
+                target.insertWidget(target.count() - 1, button)
+            else:
+                target.addWidget(button)
+        self._chip_below.setVisible(wrapped)
+
     def _sync_left_chip(self) -> None:
-        """Shown once Plan was asked for in this week, while homework from an earlier week waits."""
-        asked = self.session.plan_asked_week == self.session.week_start
-        left = self.session.left_unfinished() if asked else []
-        words = f"{len(left)} unfinished from last week"
+        """Offer overdue and carried homework from the same list used by Plan and More."""
+        left = self._unfinished_items()
+        overdue = sum(item.get("left_over_state") == "overdue" for item in left)
+        carried = len(left) - overdue
+        parts = []
+        if overdue:
+            parts.append(f"{overdue} overdue")
+        if carried:
+            parts.append(f"{carried} left from last week")
+        words = " · ".join(parts)
         self.left_chip_text.setText(words)
         self.left_chip.setAccessibleName(words)
-        self.left_chip.setVisible(bool(left))
+        self.left_chip_icon.setPixmap(
+            icons.pixmap("history", self.palette().color(QPalette.ColorRole.Mid).name(), 16)
+        )
+        self.left_chip.setVisible(bool(left) and not self.unfinished_panel.isVisible())
+        self._fit_left_chip()
+        if words and words != getattr(self, "_left_chip_words", ""):
+            announce(self.left_chip_text, words)
+        self._left_chip_words = words
 
     def _plan_left(self) -> None:
-        self.session.plan_left([item["id"] for item in self.session.left_unfinished()])
+        items = self._unfinished_items()
+        self.session.plan_left([item["id"] for item in items])
 
     def _did_left(self) -> None:
-        left = self.session.left_unfinished()
+        left = self._unfinished_items()
         if not left:
             return
         self.session.did_these([item["id"] for item in left])
         words = left[0]["title"] if len(left) == 1 else f"{len(left)} homework"
         self._set_notice(f"Marked {words} finished.", "Undo", self._undo_from_notice)
+
+    def _plan_with_left_over(self, everything: bool = False) -> None:
+        items = self._unfinished_items()
+        if not items:
+            if everything:
+                self.session.solve(everything=True)
+            else:
+                self.session.solve()
+            return
+        overdue = sum(item.get("left_over_state") == "overdue" for item in items)
+        carried = len(items) - overdue
+        parts = []
+        if overdue:
+            parts.append(f"{overdue} overdue")
+        if carried:
+            parts.append(f"{carried} left from last week")
+        sheet = ConfirmSheet(
+            self,
+            "Before planning",
+            ", ".join(parts),
+            (
+                ("not", "Not now", "quiet"),
+                ("did", "Mark as finished", "outlined"),
+                ("plan", "Plan into this week", ""),
+            ),
+            default="not",
+        )
+        sheet.exec()
+        if sheet.answer == "plan":
+            self.session.plan_left([item["id"] for item in items])
+        elif sheet.answer == "did":
+            self.session.did_these([item["id"] for item in items])
+        else:
+            self.session.plan_asked_week = self.session.week_start
+            self._sync_left_chip()
 
     def _copy_last_week_fixed(self) -> None:
         def offer(rows: list[dict] | None) -> None:
@@ -3879,7 +4369,7 @@ class NativeWindow(QMainWindow):
                 return
             self._show_preview(
                 "Copy last week's fixed times",
-                "Uncheck anything you do not want before saving.",
+                "Uncheck anything you don't want before saving.",
                 rows,
                 label="last week's fixed times",
                 existing=self.session.blocks,
@@ -3887,21 +4377,31 @@ class NativeWindow(QMainWindow):
 
         self.session.copy_last_week_fixed_rows(offer)
 
+    def _panel_items(self) -> list[dict]:
+        """Overdue and carried homework, then homework that still needs a time and is not already listed."""
+        left = self._unfinished_items()
+        seen = {item["id"] for item in left}
+        return left + [item for item in self._counted_items() if item["id"] not in seen]
+
     def _show_unfinished(self) -> None:
-        items = self._counted_items()
+        items = self._panel_items()
         if not items:
             self.session._say(NOTHING_UNFINISHED)
         self._fill_unfinished(items)
         self._unfinished_opened = bool(items)
+        self._sync_left_chip()
 
     def _plan_unfinished(self, assignment_id: str) -> None:
+        if assignment_id in self.session._overdue_assignment_ids():
+            self.session.plan_left([assignment_id])
+            return
         item = self.session.assignments.get(assignment_id)
         rows = self.session.plan_unfinished(assignment_id)
         self._show_preview(
-            "Plan unfinished homework",
+            "Plan homework",
             (item["title"] + " keeps its original deadline and progress.") if item else "",
             rows,
-            label="unfinished homework",
+            label="homework",
             attempt_key=(
                 f"unfinished|{self.session.account['id']}|{self.session.week_start}|"
                 f"{assignment_id}|{self.session.remaining_for(assignment_id)}"
@@ -3996,7 +4496,7 @@ class NativeWindow(QMainWindow):
         preview's "3 tasks move" through the same signal; the dialog shows that count itself, as status."""
         preview = self.session.late_preview or {}
         trace = preview.get("trace") or {}
-        summary = _late_summary(len(trace.get("moves") or []), len(trace.get("unplaced") or []))
+        summary = _late_summary(len(trace.get("moves") or []))
         if text == "Replanning…" or (preview and text == summary):
             text = ""
         dialog.error.setText(text)
@@ -4067,12 +4567,11 @@ class NativeWindow(QMainWindow):
         if not self.username.text().strip():
             return "Type your username."
         if not self.recovery_code.text().strip():
-            return "Enter a recovery code."
+            return TYPE_RECOVERY_CODE
         if not password:
             return "Choose a password with at least 12 characters."
         if len(password) < 12:
-            remaining = 12 - len(password)
-            return f"Add {remaining} more characters. Passwords need at least 12."
+            return short_password_needed(12 - len(password))
         return ""
 
     def _start_focus(self, block_id: str, day: object) -> None:
@@ -4153,7 +4652,7 @@ class NativeWindow(QMainWindow):
             Command("addFixed", "Add fixed time", MORE_TIPS["addFixed"], "Add", "clock"),
             Command("schoolHours", "School hours", MORE_TIPS["schoolHours"], "Add", "school"),
             Command("day", "Day", "One day as a list", "Go to", "list", "D"),
-            Command("week", "Week", "The week you are planning", "Go to", "calendar-days", "W"),
+            Command("week", "Week", "The week you're planning", "Go to", "calendar-days", "W"),
             Command("month", "Month", "The month as a calendar", "Go to", "calendar", "M"),
             Command("myDay", "My day", "Watch today", "Go to", "sun", "T"),
             Command("focus", "Focus screen", "The focus timer on its own, large.", "Go to", "timer", "F"),
@@ -4461,9 +4960,72 @@ class NativeWindow(QMainWindow):
             self.session.reminder_limits,
             self._layout,
             saved_looks=self._saved_looks,
+            sync=self._sync_host,
         )
         page.account_id = account["id"]
+        page.devices.refresh()
         return page
+
+    def _sync_started(self, service: SyncService) -> None:
+        self._sync = service
+        self._sync_generation = service.generation()
+        self._sync_timer.start()
+        self._show_sync_dot()
+
+    def _sync_tick(self) -> None:
+        """Once a second: the sync status dot, and the week reloaded when a linked phone's edits arrive."""
+        service = self._sync
+        if service is None:
+            return
+        account = self.session.account
+        if account is not None and not self._phones_reading:
+            # The phone list is a database read; it runs off this thread and lands in _phones_read.
+            self._phones_reading = True
+            user_id = account["id"]
+            run_off_ui(
+                self,
+                lambda: live_phones(service, user_id),
+                lambda rows, _problem: self._phones_read(user_id, rows),
+            )
+        generation = service.generation()
+        if generation != self._sync_generation and self._sync_arrived(service):
+            self._sync_generation = generation
+        self._show_sync_dot()
+
+    def _phones_read(self, user_id: int, rows: list[dict] | None) -> None:
+        self._phones_reading = False
+        self._phones = rows or []
+        self._phones_user = user_id
+        self._show_sync_dot()
+
+    def _linked_phones(self) -> list[dict]:
+        account = self.session.account
+        if account is None or self._phones_user != account["id"]:
+            return []
+        return self._phones
+
+    def _show_sync_dot(self) -> None:
+        if self._sync is None:
+            return
+        self.sync_dot.show_state(sync_state(self._sync.status(), bool(self._linked_phones())))
+
+    def _sync_arrived(self, service: SyncService) -> bool:
+        """Loads the week again after a phone's edits land. With unsaved edits here, it marks the week
+        as changed instead, so the existing Reload and Keep mine choice is offered. False while a
+        request is in flight; the next tick asks again."""
+        session = self.session
+        if session.account is None:
+            return True
+        if session.busy:
+            return False
+        if session.dirty or session.dirty_assignments or session.pending_save is not None:
+            session.conflict = True
+            session.week_changed.emit()
+            return True
+        names = [row["name"] for row in self._linked_phones()]
+        who = names[0] if len(names) == 1 else "a linked phone"
+        session.load_week(session.week_start, discard=True, said=f"Updated from {who}.")
+        return True
 
     def _attach_settings_page(self, page: SettingsPage) -> None:
         if self._settings is not None:
@@ -4621,7 +5183,7 @@ class NativeWindow(QMainWindow):
         """The setting used to be stored on the account and obeyed by nothing. It is applied to this
         machine, since starting at login is a property of the machine rather than of the account."""
         if autostart.sync(wanted) is None and wanted:
-            self.session._say("This machine does not support starting at login.")
+            self.session._say("This machine doesn't support starting at login.")
 
     def _open_restore(self) -> None:
         dialog = RestoreDialog(
@@ -4714,7 +5276,7 @@ class NativeWindow(QMainWindow):
             try:
                 raw = Path(path).read_text()
             except (OSError, UnicodeDecodeError):
-                self.session._say(READ_FAILED)
+                self.session._say(READ_WEEK_FAILED)
                 return
             parsed = parse_import_payload(raw)
             if parsed.get("error"):
@@ -4740,18 +5302,23 @@ class NativeWindow(QMainWindow):
 
     def _write_account_file(self, snapshot: dict) -> None:
         name = "flexweek-account-" + snapshot.get("username", "account") + ".json"
-        self._write_json(name, snapshot)
+        path = self._write_json(name, snapshot)
+        if path:
+            self.session._say(ACCOUNT_SAVED.format(path=path))
 
-    def _write_json(self, name: str, payload: dict) -> None:
+    def _write_json(self, name: str, payload: dict) -> str:
+        """Writes the file the student picks and returns its path, or "" when nothing was written."""
         import json
 
         path, _ = QFileDialog.getSaveFileName(self, "Save FlexWeek file", name, "JSON (*.json)")
         if not path:
-            return
+            return ""
         try:
             Path(path).write_text(json.dumps(payload, indent=2) + "\n")
         except OSError:
             self.session._say(WRITE_FAILED)
+            return ""
+        return path
 
     def _look_path(self) -> Path:
         root = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation))
@@ -4760,6 +5327,9 @@ class NativeWindow(QMainWindow):
     def _load_look(self) -> None:
         import json
 
+        self._new_look_notice_seen = set()
+        self._new_look_notice_exempt = set()
+        self._has_saved_design_look = False
         path = self._look_path()
         if not path.is_file():
             return
@@ -4768,12 +5338,30 @@ class NativeWindow(QMainWindow):
         except OSError, ValueError:
             stored = None
         self._look = sanitize_look(stored)
-        self._layout = sanitize_layout(stored.get("layout") if isinstance(stored, dict) else None)
+        raw_layout = stored.get("layout") if isinstance(stored, dict) else None
+        self._has_saved_design_look = self._layout_has_saved_look(raw_layout)
+        self._layout = sanitize_layout(raw_layout)
         self._updates = sanitize_updates(stored.get("updates") if isinstance(stored, dict) else None)
         self._zoom = sanitize_zoom(stored.get("zoom") if isinstance(stored, dict) else None)
         self._saved_looks = sanitize_saved(stored.get("saved_looks") if isinstance(stored, dict) else None)
         rail = stored.get("rail") if isinstance(stored, dict) else None
         self.rail.set_month_shown(not (isinstance(rail, dict) and rail.get("month") is False))
+        seen = stored.get("new_look_notice_seen") if isinstance(stored, dict) else None
+        if isinstance(seen, list):
+            self._new_look_notice_seen = {item for item in seen if isinstance(item, str) and item}
+        exempt = stored.get("new_look_notice_exempt") if isinstance(stored, dict) else None
+        if isinstance(exempt, list):
+            self._new_look_notice_exempt = {item for item in exempt if isinstance(item, str) and item}
+
+    @staticmethod
+    def _layout_has_saved_look(layout: object) -> bool:
+        if not isinstance(layout, dict):
+            return False
+        options = layout.get("options")
+        return isinstance(options, dict) and any(
+            isinstance(values, dict) and isinstance(values.get("look"), str) and bool(values["look"])
+            for values in options.values()
+        )
 
     def _save_look(self) -> None:
         import json
@@ -4789,40 +5377,30 @@ class NativeWindow(QMainWindow):
                 "zoom": self._zoom,
                 "saved_looks": self._saved_looks,
                 "rail": {"month": self.rail.month_shown},
+                "new_look_notice_seen": sorted(self._new_look_notice_seen),
+                "new_look_notice_exempt": sorted(self._new_look_notice_exempt),
             }
             path.write_text(json.dumps(body) + "\n")
+            self._has_saved_design_look = self._layout_has_saved_look(body["layout"])
         except OSError:
             self.session._say("Could not save the look for this device.")
 
-    def _page_palette(self, palette: dict) -> dict | None:
-        """The colours of the design on screen when it wears a colourway of its own, for its page
-        only; None when the page wears the look, as Today's app and a design in Match my look do."""
-        layout_id = self._layout["day"] if self._day_mode else self._layout["main"]
-        if layout_id not in VIEW_CLASSES:
-            return None
-        colour = options_for(self._layout, layout_id)["colour"]
-        if colour == MATCH:
-            return None
-        return palette_from_tokens(tokens_for(layout_id, colour, palette), palette)
-
     def _apply_appearance(self) -> None:
-        """Dress the window in the student's look. The top bar, the frame, dialogs and Today's app
-        always wear the look and its accent; a design's colourway colours only the design's own page
-        (decision 3 of 0.17). When the design dressed the chrome, three accents were on screen before
-        a student had placed any homework."""
+        """Dress the app chrome and current design from the design's selected look."""
         pack, system_dark, accent = self._look_inputs()
         look = self._worn_look()
+        if not self._wears_carried_look():
+            layout_id = self._layout["day"] if self._day_mode else self._layout["main"]
+            token = options_for(self._layout, layout_id)["look"]
+        else:
+            token = "your"
         # Blocks and month cells are painted per item, which a stylesheet cannot reach.
-        palette = resolved_palette(pack, system_dark, look, accent)
+        palette, look = design_look(token, pack, system_dark, look, accent)
         art = control_art(palette)
         sheet = pack_stylesheet(pack, system_dark, look, accent, palette, art)
         ctx = context_for(self._layout, look, palette, sheet)
         heroes = ("settingsTitle", "sheetTitle", "setupTitle", "authBrand")
         extra = extra_stylesheet(sheet, ctx.feel, palette, ctx.tokens, look, heroes)
-        page = self._page_palette(palette)
-        page_sheet = ""
-        if page is not None:
-            page_sheet = pack_stylesheet(pack, system_dark, look, accent, page, control_art(page))
         chips = bool((self.session.preferences or {}).get("accent_chips"))
         chosen_motion = (self.session.preferences or {}).get("motion")
         self._motion = motion_level(chosen_motion, look_motion(look))
@@ -4834,9 +5412,26 @@ class NativeWindow(QMainWindow):
         set_current(ctx)
         if dressed != self._dressed:
             self._dressed = dressed
+            # Retro sets its words letter by letter (fonts.without_ligatures). Only the features change, so
+            # a time keeps its even figures and a strong word its weight; each sweep also reaches widgets made
+            # since the last, and leaving Retro gives every widget back the font it had, or its parent's.
+            if ctx.feel.key == "retro":
+                if not hasattr(self, "_retro_fonts"):
+                    self._retro_fonts = weakref.WeakKeyDictionary()
+                for child in (self, *self.findChildren(QWidget)):
+                    if child not in self._retro_fonts:
+                        own = child.testAttribute(Qt.WidgetAttribute.WA_SetFont)
+                        self._retro_fonts[child] = (QFont(child.font()), own)
+                    child.setFont(without_ligatures(child.font()))
+            elif hasattr(self, "_retro_fonts"):
+                for child, (font, own) in list(self._retro_fonts.items()):
+                    if isValid(child):
+                        child.setFont(font if own else QFont())
+                del self._retro_fonts
             self.setStyleSheet(sheet)
             # Fixed within a text size, so tabbing never moves the grid; a new size re-lays out anyway.
-            self.week_list_row.setFixedHeight(WEEK_LIST_ROW_HEIGHT[effective_look(look)["text"]])
+            self.status_strip.setFixedHeight(STATUS_STRIP_PX)
+            self.week_list_row.setFixedHeight(STATUS_STRIP_PX)
             self._keep_bar_whole()
             apply_ui_effects(self._motion)
             self.toast.motion = self._motion
@@ -4846,6 +5441,7 @@ class NativeWindow(QMainWindow):
             self.day_view.set_look(look, palette)
             self.rail.set_look(look, palette)
             self.more_button.set_palette(palette)
+            self.solve_button.set_palette(palette)
             self.month_grid.set_palette(palette)
             self.add_menu.set_palette(palette, chips)
             self._dress_entry(palette, look)
@@ -4853,10 +5449,7 @@ class NativeWindow(QMainWindow):
             self._dress_feel(ctx, sheet, extra)
             self._maybe_prepare_block_spare()
             fit_buttons(self)
-        if page_sheet != self._page_sheet:
-            # The planner holds the design's page and nothing of the chrome.
-            self._page_sheet = page_sheet
-            self.planner.setStyleSheet(page_sheet)
+            self._keep_bar_whole()
         self._sync_add_button()
         self._refresh_layout()
 
@@ -4973,7 +5566,10 @@ class NativeWindow(QMainWindow):
 
         def give_up() -> None:
             stop()
-            session._say("Not saved, so FlexWeek is still open. Your changes are still here.")
+            session._say(
+                "Couldn't save, so FlexWeek stayed open. Your changes are still on screen. "
+                "Choose Retry save, then close FlexWeek again."
+            )
             self.restore_window()
 
         def poll() -> None:
@@ -5080,7 +5676,7 @@ class NativeWindow(QMainWindow):
         """Esc in the hours: the keyboard goes up to the button for the view shown, which does nothing
         when pressed by mistake."""
         name = {"day": "viewDay", "month": "viewMonth"}.get(self.session.planner_view, "viewWeek")
-        button = self.findChild(QPushButton, name)
+        button = self.findChild(QRadioButton, name)
         if button is not None:
             button.setFocus(Qt.FocusReason.ShortcutFocusReason)
 
@@ -5149,13 +5745,13 @@ class NativeWindow(QMainWindow):
                 return
             if key == Qt.Key.Key_Z:
                 if mods & Qt.KeyboardModifier.ShiftModifier:
-                    self._told(self.session.redo)
+                    self._told(self._redo_with_focus)
                 else:
                     self._told(self.session.undo)
                 event.accept()
                 return
             if key == Qt.Key.Key_Y:
-                self._told(self.session.redo)
+                self._told(self._redo_with_focus)
                 event.accept()
                 return
             if key == Qt.Key.Key_C:
@@ -5215,22 +5811,30 @@ class NativeWindow(QMainWindow):
         super().keyPressEvent(event)
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        planner = getattr(self, "planner", None)
+        week_list_panel = getattr(self, "week_list_panel", None)
+        week_list_row = getattr(self, "week_list_row", None)
+        week_access_list = getattr(self, "week_access_list", None)
         if (
-            watched is self.planner
+            planner is not None
+            and watched is planner
             and event.type() == QEvent.Type.Resize
-            and self.week_list_panel.isVisible()
+            and week_list_panel is not None
+            and week_list_panel.isVisible()
         ):
             self._layout_week_list()
         # A push button answers Space only; Enter opens the list as well.
         if (
-            watched is self.week_list_row
+            week_list_row is not None
+            and watched is week_list_row
             and event.type() == QEvent.Type.KeyPress
             and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
             and not event.modifiers()
         ):
-            self.week_list_row.click()
+            week_list_row.click()
             return True
-        if watched is self.week_access_list and event.type() == QEvent.Type.KeyPress:
+        typed = event.type() == QEvent.Type.KeyPress
+        if week_access_list is not None and watched is week_access_list and typed:
             key = event.key()
             if key == Qt.Key.Key_Escape and not event.modifiers():
                 self._close_week_access_list()
@@ -5247,15 +5851,20 @@ class NativeWindow(QMainWindow):
                     )
                     self._block_menu(block_id, day, point)
                 return True
-        if event.type() == QEvent.Type.Resize and watched in (self.week_table, self.day_view):
+        if event.type() == QEvent.Type.Resize and watched in (
+            getattr(self, "week_table", None),
+            getattr(self, "day_view", None),
+        ):
             self._center_empty_card()
         if event.type() in (QEvent.Type.Show, QEvent.Type.Hide) and watched in (
-            self.plan_review,
-            self.unfinished_panel,
+            getattr(self, "plan_review", None),
+            getattr(self, "unfinished_panel", None),
         ):
             self.month_grid.set_tight(
                 any(panel.isVisibleTo(self._week_page) for panel in (self.plan_review, self.unfinished_panel))
             )
+            if watched is self.unfinished_panel:
+                self._sync_left_chip()
         if event.type() != QEvent.Type.KeyPress:
             return super().eventFilter(watched, event)
         if isinstance(watched, EDITABLE):

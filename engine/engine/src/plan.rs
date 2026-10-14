@@ -29,16 +29,19 @@ pub const REASON_COPY: &[(&str, &str)] = &[
     ),
     (
         "DEADLINE_MISS",
-        "There is not enough time left before it is due, even with nothing else planned.",
+        "There isn't enough time left before it's due, even with nothing else planned.",
     ),
-    ("DEADLINE_PASSED", "That time has already passed."),
+    (
+        "DEADLINE_PASSED",
+        "That due time has passed. Choose a later one.",
+    ),
     (
         "NO_SLOT_LEFT",
         "Your other homework is using every free gap before it's due. Move or shorten one, or choose a time yourself.",
     ),
     (
         "PRIORITY_PREEMPT",
-        "Homework planned ahead of it (tests, then quizzes, then everyday homework, then reading) used the free time before it's due.",
+        "Tests and other homework that's planned first used the free time before it's due. Move one of them, shorten this, or choose a time yourself.",
     ),
     (
         "ENERGY_MISMATCH",
@@ -46,11 +49,11 @@ pub const REASON_COPY: &[(&str, &str)] = &[
     ),
     (
         "SLEEP_GUARD",
-        "It does not fit in the day on the days left for it.",
+        "It doesn't fit in the day on the days left for it.",
     ),
     (
         "WORK_WINDOW_MISS",
-        "That does not fit in the times you set aside for work.",
+        "That doesn't fit in the times you set aside for work.",
     ),
     (
         "NO_STUDY_TIME_TODAY",
@@ -84,10 +87,10 @@ fn amount(minutes: i64) -> String {
 
 pub fn slack_sentence(slack_min: i64, status: &str) -> String {
     if slack_min == 0 {
-        return "Finishes right when it is due.".to_string();
+        return "Finishes right when it's due.".to_string();
     }
     let only = if status == "danger" { "only " } else { "" };
-    format!("Finishes {only}{} before it is due.", amount(slack_min))
+    format!("Finishes {only}{} before it's due.", amount(slack_min))
 }
 
 // --- comfort.py ---
@@ -137,11 +140,11 @@ pub fn reminder_limits() -> BTreeMap<&'static str, &'static str> {
         ),
         (
             "spotify",
-            "A Spotify link is best-effort. FlexWeek plays a built-in sound if the track does not play.",
+            "A Spotify link is best-effort. FlexWeek plays a built-in sound if the track doesn't play.",
         ),
         (
             "duplicate",
-            "The same block start fires at most one reminder until it is handled or the day changes.",
+            "The same block start fires at most one reminder until it's handled or the day changes.",
         ),
     ])
 }
@@ -834,7 +837,7 @@ fn sum(total: i64, more: i64) -> EngineResult<i64> {
 // --- availability.py ---
 
 pub const LATE_COPY: &str = "Moved after you ran late so the rest of the day still fits.";
-pub const CLUSTER_COPY: &str = "Several tasks are short on time. Shorten a session, pick another day, or free some protected hours. Work that cannot fit stays unplaced.";
+pub const CLUSTER_COPY: &str = "Several tasks are short on time. Shorten a session, pick another day, or free some protected hours. Work that can't fit stays unplaced.";
 
 pub fn default_work_windows() -> Vec<Value> {
     vec![json!({
@@ -1835,15 +1838,12 @@ mod tests {
 
     #[test]
     fn explain_copy_matches_python() {
-        assert_eq!(slack_sentence(0, "ok"), "Finishes right when it is due.");
+        assert_eq!(slack_sentence(0, "ok"), "Finishes right when it's due.");
         assert_eq!(
             slack_sentence(29, "danger"),
-            "Finishes only 29 min before it is due."
+            "Finishes only 29 min before it's due."
         );
-        assert_eq!(
-            slack_sentence(45, "ok"),
-            "Finishes 45 min before it is due."
-        );
+        assert_eq!(slack_sentence(45, "ok"), "Finishes 45 min before it's due.");
         assert_eq!(
             sentence("NO_SLOT_LEFT").unwrap(),
             "Your other homework is using every free gap before it's due. Move or shorten one, or choose a time yourself."

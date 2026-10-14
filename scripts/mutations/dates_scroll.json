@@ -30,8 +30,8 @@
  {
   "name": "Month ignores the injected clock",
   "file": "desktop/native/hours/month.py",
-  "old": "month_cells(snapshot, weeks, today_iso or date.today().isoformat())",
-  "new": "month_cells(snapshot, weeks, date.today().isoformat())",
+  "old": "        today = today_iso or date.today().isoformat()\n",
+  "new": "        today = date.today().isoformat()\n",
   "test": "desktop/tests/test_hours_open.py::test_month_and_mini_month_use_today_at_a_week_boundary"
  },
  {

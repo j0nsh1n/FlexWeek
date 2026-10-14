@@ -20,14 +20,16 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from shiboken6 import isValid
 
 from desktop.native.layouts.base import empty
 from desktop.native.layouts.registry import (
+    DESIGN_LOOKS,
     LAYOUTS,
     LEVELS,
-    MATCH,
     layouts_for,
     options_for,
+    sanitize_layout,
 )
 from desktop.native.motion import OVER_MS, busy, duration
 from desktop.native.previews import Previews
@@ -51,7 +53,6 @@ DESIGN_LINE = (
 )
 # A design in colours of its own wears them on its page only, so it says what keeps the student's,
 # under the colours it is about.
-COLOUR_NOTE = "Only the design's page takes these colours. The rest of FlexWeek keeps your Look and Accent."
 # The width setup's design cards are drawn at, so a picture drawn for one is ready for the other.
 PICTURE_WIDTH = 206
 EXPERIMENTAL_TAG = "Experimental"
@@ -118,7 +119,7 @@ class DesignPicker(Choices):
         # first waits until the page has slid in at the slowest level: each picture takes over
         # 100 ms, and drawn from the start they left Settings' first slide three frames.
         self._waiting = list(range(len(self.cards)))
-        QTimer.singleShot(duration(OVER_MS, "extra") + PICTURES_AFTER_SLIDE_MS, self._draw_next)
+        QTimer.singleShot(duration(OVER_MS, "extra") + PICTURES_AFTER_SLIDE_MS, self, self._draw_next)
 
     def _width_changed(self, card: ChoiceCard, width: int) -> None:
         index = int(card.property("index"))
@@ -137,18 +138,23 @@ class DesignPicker(Choices):
         if self._scheduled or not self._waiting:
             return
         self._scheduled = True
-        QTimer.singleShot(1, self._draw_next)
+        # Tied to this picker, so a picture still waiting when it closes is never drawn on a freed card.
+        QTimer.singleShot(1, self, self._draw_next)
 
     def _draw_one(self) -> bool:
         if not self._waiting:
             return False
         index = self._waiting.pop(0)
         layout_id = str(self._data[index])
-        colourways = LAYOUTS[layout_id].colourways
-        colour = colourways[0][0] if colourways else None
+        looks = DESIGN_LOOKS[layout_id]
+        look = looks[0][0] if looks else "your"
         card = self.cards[index]
         width = card.picture.width()
-        card.set_picture(Previews().get(layout_id, colour, self._pack, None, width))
+        picture = Previews().get(layout_id, look, self._pack, None, width)
+        # Drawing a picture lets the event loop run, and Settings may have closed meanwhile.
+        if not isValid(card) or not isValid(card.picture):
+            return False
+        card.set_picture(picture)
         self._drawn[index] = width
         return True
 
@@ -160,7 +166,7 @@ class DesignPicker(Choices):
             if self.isVisible():
                 self._picture_waits += 1
             self._scheduled = True
-            QTimer.singleShot(PICTURE_WAIT_MS, self._draw_next)
+            QTimer.singleShot(PICTURE_WAIT_MS, self, self._draw_next)
             return
         self._picture_waits = 0
         if not self._draw_one():
@@ -197,8 +203,11 @@ class LayoutSection(QFrame):
         super().__init__()
         self.slot = slot
         self.setObjectName("settingsCard")
+        stored_options = sanitize_layout(choice)["options"]
         self._options = {spec.id: options_for(choice, spec.id) for spec in layouts_for(role)}
-        self._colour_note: QLabel | None = None
+        self._look_explicit = {
+            layout_id for layout_id, values in stored_options.items() if "look" in values
+        }
         body = QVBoxLayout(self)
         body.setContentsMargins(16, 16, 16, 16)
         body.setSpacing(8)
@@ -233,7 +242,7 @@ class LayoutSection(QFrame):
         reset_row.addWidget(self.reset)
         reset_row.addStretch(1)
         body.addLayout(reset_row)
-        self.pick.currentIndexChanged.connect(lambda _index: (self._rebuild(True), self.changed.emit()))
+        self.pick.currentIndexChanged.connect(self._design_changed)
         self.more.toggled.connect(lambda _on: self._rebuild(False))
         self.reset.clicked.connect(self._reset)
         self._rebuild(True)
@@ -245,12 +254,36 @@ class LayoutSection(QFrame):
         """Every design's options as kept now. Settings stays built between opens, and an option
         changed on a design's own page meanwhile, as Timeline's fold, would otherwise be written back
         as it was."""
+        stored_options = sanitize_layout(choice)["options"]
         self._options = {layout_id: options_for(choice, layout_id) for layout_id in self._options}
+        self._look_explicit = {
+            layout_id for layout_id, values in stored_options.items() if "look" in values
+        }
         self._rebuild(True)
 
     def values(self) -> dict[str, str]:
         """Every option of the design picked now, defaults included."""
         return dict(self._options[self.chosen()])
+
+    def use_own_look(self) -> None:
+        """The general look picker supplies this design's own look when it changes."""
+        self._options[self.chosen()]["look"] = "your"
+        self._look_explicit.add(self.chosen())
+        self._rebuild(False)
+
+    def _design_changed(self, _index: int) -> None:
+        layout_id = self.chosen()
+        if layout_id not in self._look_explicit:
+            self._options[layout_id]["look"] = DESIGN_LOOKS[layout_id][0][0]
+            self._look_explicit.add(layout_id)
+        self._rebuild(True)
+        self.changed.emit()
+
+    def _option_changed(self, layout_id: str, key: str, source: QComboBox | Segmented) -> None:
+        self._options[layout_id][key] = str(source.currentData())
+        if key == "look":
+            self._look_explicit.add(layout_id)
+        self.changed.emit()
 
     def options(self) -> dict[str, dict[str, str]]:
         """Only what the student changed. Writing a design's defaults down would freeze them, and a
@@ -265,6 +298,7 @@ class LayoutSection(QFrame):
 
     def _reset(self) -> None:
         self._options[self.chosen()] = options_for(None, self.chosen())
+        self._look_explicit.add(self.chosen())
         self._rebuild(True)
         self.changed.emit()
 
@@ -278,9 +312,10 @@ class LayoutSection(QFrame):
             self.more.setChecked(any(values[option.key] != option.default for option in detail))
             self.more.blockSignals(False)
         self.more.setVisible(bool(detail))
-        self.reset.setVisible(bool(spec.options))
+        self.reset.setVisible(
+            spec.id != "classic" or values != options_for(None, spec.id)
+        )
         empty(self._form)
-        self._colour_note = None
         for level, heading in LEVELS:
             rows = [option for option in spec.options if option.level == level]
             if not rows or (level == "detail" and not self.more.isChecked()):
@@ -291,7 +326,7 @@ class LayoutSection(QFrame):
             for option in rows:
                 name = f"layout{self.slot.title()}-{option.key}"
                 box: QComboBox | Segmented
-                if option.key == "colour" or len(option.choices) > SEGMENTED_MOST:
+                if option.key == "look" or len(option.choices) > SEGMENTED_MOST:
                     box = QComboBox()
                     box.setObjectName(name)
                 else:
@@ -302,20 +337,8 @@ class LayoutSection(QFrame):
                 box.setCurrentIndex(max(box.findData(values[option.key]), 0))
                 box.blockSignals(False)
                 box.currentIndexChanged.connect(
-                    lambda _index, key=option.key, source=box, target=spec.id: self._options[
-                        target
-                    ].__setitem__(key, str(source.currentData()))
+                    lambda _index, key=option.key, source=box, target=spec.id: self._option_changed(
+                        target, key, source
+                    )
                 )
-                box.currentIndexChanged.connect(lambda _index: self.changed.emit())
                 self._form.addRow(option.label, box)
-                if option.key == "colour":
-                    self._colour_note = QLabel(COLOUR_NOTE)
-                    self._colour_note.setObjectName(f"layout{self.slot.title()}ColourNote")
-                    self._colour_note.setWordWrap(True)
-                    self._form.addRow("", self._colour_note)
-                    box.currentIndexChanged.connect(self._sync_colour_note)
-        self._sync_colour_note()
-
-    def _sync_colour_note(self, *_index: object) -> None:
-        if self._colour_note is not None:
-            self._form.setRowVisible(self._colour_note, self._options[self.chosen()].get("colour") != MATCH)

@@ -11,7 +11,7 @@ use flexweek_engine::solver::{SOLVE_BUDGET_MS, SolveTrace, TimeBlock, WorkWindow
 use flexweek_engine::time::hhmm_to_minutes;
 use serde_json::json;
 
-const CLUSTER_MESSAGE: &str = "Several tasks are short on time. Shorten a session, pick another day, or free some protected hours. Work that cannot fit stays unplaced.";
+const CLUSTER_MESSAGE: &str = "Several tasks are short on time. Shorten a session, pick another day, or free some protected hours. Work that can't fit stays unplaced.";
 const LATE_MESSAGE: &str = "Moved after you ran late so the rest of the day still fits.";
 
 /// The planner with one Study hours list and nothing else.

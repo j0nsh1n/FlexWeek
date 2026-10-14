@@ -113,7 +113,7 @@ def test_the_planner_leaves_work_unplaced_rather_than_using_the_night() -> None:
     assert "WORK_WINDOW_MISS" in trace.failed_constraints
     assert any(
         item.reason == "WORK_WINDOW_MISS"
-        and item.message == "That does not fit in the times you set aside for work."
+        and item.message == "That doesn't fit in the times you set aside for work."
         for item in trace.explanations
     )
 
@@ -164,7 +164,7 @@ def test_a_session_too_long_for_the_day_is_sleep_guard() -> None:
     assert "SLEEP_GUARD" in trace.failed_constraints
     assert any(
         item.reason == "SLEEP_GUARD"
-        and item.message == "It does not fit in the day on the days left for it."
+        and item.message == "It doesn't fit in the day on the days left for it."
         for item in trace.explanations
     )
 

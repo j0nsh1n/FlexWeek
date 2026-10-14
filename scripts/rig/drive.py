@@ -90,6 +90,29 @@ def play_looks() -> tuple[str, ...]:
     return (*(name for name in LOOK_PRESETS if name != "default"), *PACKS)
 
 
+def kept_session_path() -> Path:
+    """Where this rig run's kept session (and its carried look) live under Qt test-mode AppData."""
+    from PySide6.QtCore import QStandardPaths
+
+    root = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation))
+    return root / "signed-in" / "flexweek.json"
+
+
+def clean_look_file() -> Path:
+    """The look an earlier run left behind (its zoom and text size) is gone before this one starts, so a
+    play sees only the look it asks for. Also deletes the carried look next to the kept session
+    (`flexweek.look.json`). Call after QStandardPaths' test mode is on."""
+    from PySide6.QtCore import QStandardPaths
+
+    from desktop.native.kept import KeptSession
+
+    root = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
+    look_path = Path(root) / "flexweek-look.json"
+    look_path.unlink(missing_ok=True)
+    KeptSession(kept_session_path()).look.unlink(missing_ok=True)
+    return look_path
+
+
 def check_play(args: argparse.Namespace) -> None:
     """Refuse a play that cannot run, with every mistake named, before a session is started for it."""
     if not args.play:
@@ -242,9 +265,18 @@ def report_run(
 def child_main(args: argparse.Namespace) -> int:
     from PySide6.QtCore import QObject, QPoint, QPointF, QRect, QSize, QStandardPaths, Qt, QTimer
     from PySide6.QtGui import QColor, QCursor, QPainter, QPen
-    from PySide6.QtWidgets import QApplication, QDialog, QLabel, QLineEdit, QPushButton, QWidget
+    from PySide6.QtWidgets import (
+        QAbstractButton,
+        QApplication,
+        QDialog,
+        QLabel,
+        QLineEdit,
+        QPushButton,
+        QWidget,
+    )
 
     QStandardPaths.setTestModeEnabled(True)
+    clean_look_file()
     app = QApplication(["flexweek-rig"])
     python_errors: list[str] = []
 
@@ -260,6 +292,7 @@ def child_main(args: argparse.Namespace) -> int:
     from desktop.native.hours.geometry import FIRST, Axis
     from desktop.native.hours.hand import surface_at
     from desktop.native.hours.zoom import HoursScroll
+    from desktop.native.kept import KeptSession
     from desktop.native.layouts.registry import options_for, sanitize_layout
     from desktop.native.look import sanitize_look
     from desktop.native.window import NativeWindow
@@ -269,7 +302,7 @@ def child_main(args: argparse.Namespace) -> int:
     out = Path(args.out)
     server = LocalServer(Path(tempfile.mkdtemp()) / "rig.db")
     server.start()
-    window = NativeWindow(server.origin)
+    window = NativeWindow(server.origin, kept=KeptSession(kept_session_path()))
     window.resize(1280, 820)
     window.move(0, 0)
     window.show()
@@ -286,6 +319,7 @@ def child_main(args: argparse.Namespace) -> int:
     session = window.session
     thursday = datetime.fromisoformat(session.week_start) + timedelta(days=3, hours=15, minutes=40)
     session.now_ms = lambda: int(thursday.timestamp() * 1000)
+    window.toast.clock_ms = session.now_ms
     seed_rig_week(app, session)
     seed = [dict(block) for block in session.blocks]
     # What a scenario may change on the window itself, put back before the next one.
@@ -456,7 +490,7 @@ def child_main(args: argparse.Namespace) -> int:
         # Where things are
 
         def tab(self, name: str) -> Step:
-            button = window.findChild(QPushButton, f"view{name.title()}")
+            button = window.findChild(QAbstractButton, f"view{name.title()}")
             yield from self.click(button.mapToGlobal(button.rect().center()))
             yield ("wait", 150)
             # A fixed wait was short on a slow CI runner: the week was not drawn yet when the next step
@@ -642,8 +676,13 @@ def child_main(args: argparse.Namespace) -> int:
                 yield from self.click(field.mapToGlobal(field.rect().center()))
                 yield from self.key("ctrl+a")
                 yield from self.type(title)
-            yield from self.key("Return")
-            yield ("wait", 300)
+            # Add asks its questions a step at a time (1.0.0): Return goes on to the next, and on the
+            # last one it saves. A student presses it until the sheet closes.
+            for _step in range(4):
+                yield from self.key("Return")
+                yield ("wait", 300)
+                if QApplication.activeModalWidget() is not dialog:
+                    break
 
     rig = Rig()
 
@@ -778,16 +817,13 @@ def child_main(args: argparse.Namespace) -> int:
             f"math is {got['days']} {got.get('start')}",
         )
 
-    def week_folded_waiting(r: Rig) -> Step:
-        """At 800 px the rail is folded: open Not placed yet in place, then drag homework on."""
+    def week_narrow_waiting(r: Rig) -> Step:
+        """At 800 px the Agenda rail stays as it is (1.0.0's rail does not fold): homework under No
+        time yet still drags onto a day."""
         yield from r.tab("week")
         window.resize(800, 820)
         yield ("wait", 400)
-        chip = window.findChild(QPushButton, "railWaitingChip")
-        expect(chip is not None and chip.isVisible(), "the folded Not placed yet chip is missing")
-        yield from r.click(chip.mapToGlobal(chip.rect().center()))
-        row = window.findChild(QWidget, "railWaitingRow")
-        expect(row is not None and row.isVisible(), "the waiting homework row did not open")
+        expect(window.rail.isVisible() and not window.rail.folded, "the Agenda rail folded or hid")
         # Friday: the clock is Thursday 15:40, and a drop on a day already past is refused.
         yield from r.reveal(4, 15 * 60, 18 * 60)
         yield from r.drag(r.chip(ids["math"]), r.at(4, 16 * 60))
@@ -808,7 +844,7 @@ def child_main(args: argparse.Namespace) -> int:
         yield from r.settled()
         got = block(ids["poster"])
         expect(not got.get("start"), f"poster was placed at {got['days']} {got.get('start')}")
-        expect("after it is due" in said, f"said {said!r}")
+        expect("after it's due" in said, f"said {said!r}")
 
     def week_open_day(r: Rig) -> Step:
         yield from r.tab("week")
@@ -878,7 +914,7 @@ def child_main(args: argparse.Namespace) -> int:
         yield from r.settled()
         got = block(ids["poster"])
         expect(not got.get("start"), f"poster was placed at {got['days']} {got.get('start')}")
-        expect("after it is due" in said, f"said {said!r}")
+        expect("after it's due" in said, f"said {said!r}")
 
     def day_escape(r: Rig) -> Step:
         yield from day_tab(r)
@@ -1101,7 +1137,7 @@ def child_main(args: argparse.Namespace) -> int:
         # The window manager's resize and the larger text can land after that wait, and the bar then
         # moves: a click on Week found from where it had been landed beside Day. Wait until the
         # window is the new size and the bar has kept still for 300 ms.
-        week = window.findChild(QPushButton, "viewWeek")
+        week = window.findChild(QAbstractButton, "viewWeek")
         seen: dict = {"at": None, "since": 0.0}
 
         def still() -> bool:
@@ -1504,7 +1540,7 @@ def child_main(args: argparse.Namespace) -> int:
             (got["days"], got.get("start")) == ([4], "17:00"),
             f"poster is {got['days']} {got.get('start')}, not Friday 17:00",
         )
-        expect("after it is due" in said, f"said {said!r}")
+        expect("after it's due" in said, f"said {said!r}")
 
     def month_save_refused(r: Rig) -> Step:
         """The server turns the essay's move away as a conflict. The message says it was not saved,
@@ -1556,7 +1592,7 @@ def child_main(args: argparse.Namespace) -> int:
         # Measured once the top bar has settled: measured straight after a save, it was still laid
         # out a button to the left, and the click landed on Month.
         yield ("wait", 300)
-        button = window.findChild(QPushButton, "viewMyDay")
+        button = window.findChild(QAbstractButton, "viewMyDay")
         yield from r.click(button.mapToGlobal(button.rect().center()))
         yield ("wait", 500)
         shown = window.planner.currentWidget()
@@ -1585,7 +1621,7 @@ def child_main(args: argparse.Namespace) -> int:
         said = session.message
         yield from r.settled()
         unchanged(revision)
-        expect("after it is due" in said, f"said {said!r}")
+        expect("after it's due" in said, f"said {said!r}")
 
     def myday_open(r: Rig) -> Step:
         yield from myday_tab(r)
@@ -1657,7 +1693,7 @@ def child_main(args: argparse.Namespace) -> int:
         Scenario("week-create", "week", week_create),
         Scenario("week-series-one-day", "week", week_series),
         Scenario("week-beside", "week", week_beside),
-        Scenario("week-folded-waiting", "week", week_folded_waiting, only=("classic",)),
+        Scenario("week-narrow-waiting", "week", week_narrow_waiting, only=("classic",)),
         Scenario("week-past-due", "week", week_past_due),
         Scenario("week-open-day", "week", week_open_day),
         Scenario("week-reach", "week", week_reach),

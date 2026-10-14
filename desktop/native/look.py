@@ -41,6 +41,7 @@ from desktop.native.tokens import (
     SPACING,
     TEXT_SCALE,
     TYPE_PT,
+    WEIGHT_NUMBER,
     WEIGHT_REGULAR,
     WEIGHT_STRONG,
     _channels,
@@ -143,6 +144,14 @@ LOOK_PRESET_LABELS = {
     "high-contrast": "High contrast",
     "paper": "Paper",
     "pastel": "Pastel",
+    "bento-indigo": "Indigo",
+    "retro-teal": "Teal desktop",
+    "flight-deck": "Flight deck",
+    "clay-lavender": "Clay",
+    "one-poster": "Poster",
+    "dial-midnight": "Midnight",
+    "timeline-paper": "Ruled paper",
+    "one-paper": "Paper and ink",
 }
 PACK_LABELS = {
     "system": "System",
@@ -224,7 +233,13 @@ ACCENT_COLORS = {
     "sand": {"dark": ("#e4a88e", DARK_INK), "light": ("#805441", LIGHT_INK)},
 }
 # Looks whose accent no swatch replaces: High contrast's yellow is part of its contrast.
-OWN_ACCENT = ("high-contrast",)
+OWN_ACCENT = ("high-contrast", "bento-indigo", "retro-teal", "flight-deck", "timeline-paper")
+DESIGN_PALETTE_PRESETS = frozenset(
+    {
+        "bento-indigo", "retro-teal", "flight-deck", "clay-lavender", "one-poster", "dial-midnight",
+        "timeline-paper", "one-paper",
+    }
+)
 
 
 def readable_ink(background: str) -> str:
@@ -341,6 +356,48 @@ PALETTES = {
 # A preset brings its own colours, the same on any pack. `fill` moves the category family's pale fills
 # (decision 9) for a look that draws them paler or bolder.
 PRESET_PALETTES = {
+    "bento-indigo": _palette(
+        "light", window="#f7f8fa", panel="#ffffff", card_2="#f1f3f6", field="#ffffff", grid="#ffffff",
+        text="#1e1b4b", muted="#4b4a75", hairline="#e4e7ec", hairline_strong="#d0d5dd",
+        accent="#4f46e5", accent_ink="#ffffff", error="#991b1b", block_edge="#8a93a3",
+    ),
+    "retro-teal": _palette(
+        "light", window="#e0f3f3", panel="#c0c0c0", card_2="#d4d0c8", field="#ffffff", grid="#ffffff",
+        text="#000000", muted="#333333", hairline="#808080", hairline_strong="#404040",
+        accent="#000080", accent_ink="#ffffff", error="#800000", block_edge="#404040",
+        bg_ink="#000000", bg_muted="#333333", retro_desk="#008080", retro_desk_ink="#ffffff",
+        title="#000080", title_end="#1084d0", title_ink="#ffffff",
+    ),
+    "flight-deck": _palette(
+        "dark", window="#0b0f14", panel="#121821", card_2="#17202b", field="#0b0f14", grid="#0b0f14",
+        text="#e6edf5", muted="#8d9aab", hairline="#2c3846", hairline_strong="#3c4b5c",
+        accent="#7fa8ff", accent_ink="#0b1224", error="#ff8a7a", block_edge="#75879b",
+    ),
+    "clay-lavender": _palette(
+        "light", window="#efe9fa", panel="#f9f6ff", card_2="#f4effc", field="#f9f6ff", grid="#f9f6ff",
+        text="#221c36", muted="#595272", hairline="#e2daf2", hairline_strong="#cec2e2",
+        accent="#8b5cf6", accent_ink="#ffffff", error="#b3261e", block_edge="#8a93a3",
+    ),
+    "one-poster": _palette(
+        "dark", window="#000000", panel="#141414", card_2="#1f1f1f", field="#000000", grid="#000000",
+        text="#ffffff", muted="#a3a3a3", hairline="#3d3d3d", hairline_strong="#646464",
+        accent="#7f1d1d", accent_ink="#ffffff", error="#ff4d6d", block_edge="#a3a3a3",
+    ),
+    "dial-midnight": _palette(
+        "dark", window="#0b0f1d", panel="#141a2e", card_2="#1b2340", field="#0b0f1d", grid="#0b0f1d",
+        text="#e7eaf6", muted="#9ea6c4", hairline="#343c5e", hairline_strong="#4a5377",
+        accent="#818cf8", accent_ink="#0b1020", error="#ff8a7a", block_edge="#818cf8",
+    ),
+    "timeline-paper": _palette(
+        "light", window="#fdfbf7", panel="#fffdf9", card_2="#f6f1e8", field="#fffdf9", grid="#fffdf9",
+        text="#1a1a1a", muted="#5c5750", hairline="#cfc7b9", hairline_strong="#b9b09f",
+        accent="#3d6fc4", accent_ink="#ffffff", error="#c42b1c", block_edge="#8a877f",
+    ),
+    "one-paper": _palette(
+        "light", window="#f7f1e3", panel="#f7f1e3", card_2="#f2ead9", field="#fffdf8", grid="#fffdf8",
+        text="#1c1917", muted="#57534e", hairline="#cfc6b2", hairline_strong="#b9b09f",
+        accent="#9a3412", accent_ink="#ffffff", error="#a3003c", block_edge="#8a877f",
+    ),
     # Developer Mono on GitHub-dark surfaces; no glow, no phosphor green.
     "terminal": _palette(
         "dark",
@@ -533,7 +590,7 @@ def parse_look_menu_token(token: object) -> tuple[str, str] | None:
     kind, name = token.split(":", 1)
     if kind == "pack" and name in PACKS:
         return kind, name
-    if kind == "preset" and name in LOOK_PRESETS and name != "default":
+    if kind == "preset" and (name in LOOK_PRESETS or name in DESIGN_PALETTE_PRESETS) and name != "default":
         return kind, name
     return None
 
@@ -818,16 +875,34 @@ def _preset_palette(preset: str) -> dict | None:
     return PRESET_PALETTES.get(preset)
 
 
-def resolved_palette(pack: object, system_dark: bool, look: dict | None, accent: object = "default") -> dict:
+def resolved_palette(
+    pack: object,
+    system_dark: bool,
+    look: dict | None,
+    accent: object = "default",
+    *,
+    palette_preset: str | None = None,
+) -> dict:
     """The colours on screen: the preset's palette or the pack's, then a custom look's colours, then the
     accent, then the surface knob.
 
     The accent is one colour everywhere, but a page may need its darker shade (or on a dark page its
     lighter one) for accent words to read at 4.5 to 1; its lightness moves the least it takes, and its
     hue stays. No built-in look needs it; a custom page might."""
-    choice = sanitize_look(look)
+    raw_choice = look if isinstance(look, dict) else {}
+    raw_preset = raw_choice.get("preset")
+    if palette_preset is None and raw_preset in DESIGN_PALETTE_PRESETS:
+        palette_preset = str(raw_preset)
+        choice = sanitize_look(
+            {
+                "preset": "default",
+                "knobs": raw_choice.get("knobs") or {},
+            }
+        )
+    else:
+        choice = sanitize_look(look)
     custom = choice.get("custom")
-    preset = choice["preset"]
+    preset = palette_preset or choice["preset"]
     if custom is not None:
         pack, preset = LOOK_BASES[custom["base"]]
     base = _preset_palette(preset) or PALETTES[resolved_pack_theme(pack, system_dark)]
@@ -848,9 +923,14 @@ def resolved_palette(pack: object, system_dark: bool, look: dict | None, accent:
     if readable != palette["accent"] and not own:
         palette["accent"] = readable
         palette["accent_ink"] = readable_ink(readable)
+    palette.setdefault("block_locked", mix(palette["text"], palette["panel"], 0.08))
+    palette.setdefault("block_locked_ink", readable_ink(palette["block_locked"]))
+    palette.setdefault("block_flex", mix(palette["accent"], palette["panel"], 0.20))
+    palette.setdefault("block_flex_ink", readable_ink(palette["block_flex"]))
+    palette.setdefault("block_edge", palette["muted"])
     tint = mix(palette["accent"], palette["window"], 0.10)
     palette["accent_text"] = fit_lightness(
-        palette["accent"], (palette["window"], palette["panel"], palette["grid"], tint), AA_TEXT,
+        palette["accent"], (palette["window"], palette["panel"], palette["grid"], tint), AA_TEXT + 0.1,
     )
     fills = tuple(category_paint(key, palette)[0] for key in CATEGORIES)
     # A line, not text, so it keeps as much of the accent as 3 to 1 allows.
@@ -859,6 +939,33 @@ def resolved_palette(pack: object, system_dark: bool, look: dict | None, accent:
     if custom is not None and custom.get("now_line") == "text":
         palette["now"] = palette["text"]
     return palette
+
+
+def design_look(
+    token: object, pack: object, system_dark: bool, look: dict | None, accent: object = "default"
+) -> tuple[dict, dict]:
+    """Resolve a design's curated look with the same palette and text scale used by its preview."""
+    choice = sanitize_look(look)
+    selected_pack, selected_look = pack, choice
+    if token != "your":
+        parsed = parse_look_menu_token(token)
+        if parsed is not None:
+            kind, name = parsed
+            moved = choice.get("knobs", {})
+            if kind == "pack":
+                selected_pack = name
+                selected_look = sanitize_look({"preset": "default", "knobs": moved})
+            elif name in DESIGN_PALETTE_PRESETS:
+                selected_look = sanitize_look({"preset": "default", "knobs": moved})
+            else:
+                selected_look = sanitize_look({"preset": name, "knobs": moved})
+    palette_preset = (
+        parsed[1] if token != "your" and parsed is not None and parsed[1] in DESIGN_PALETTE_PRESETS else None
+    )
+    palette = resolved_palette(
+        selected_pack, system_dark, selected_look, accent, palette_preset=palette_preset
+    )
+    return palette, selected_look
 
 
 def category_paint(category: str | None, palette: dict) -> tuple[str | None, str | None]:
@@ -916,18 +1023,28 @@ def _sunk(tone: str, panel: str) -> str:
     return mix_oklab(tone, panel, SINK)
 
 
+def class_outline(palette: dict, class_colour: str) -> str:
+    """A block outline in its class colour, moved only as far as 3:1 on the card takes. Homework's
+    dark red mark is for errors only, so an outline starts from the fill, not from #831a1d."""
+    card = palette.get("grid") or palette.get("panel") or palette["window"]
+    grounds = (card, palette["panel"]) if palette.get("panel") else (card,)
+    return fit_lightness(class_colour, grounds, AA_GRAPHIC)
+
+
 def block_paint(
     look: dict | None,
     palette: dict,
     category_color: str | None,
     kind: str = "locked",
     mark: str | None = None,
+    category: str | None = None,
 ) -> dict:
     """How one calendar block is drawn: its fill, its ink, and where the category colour goes.
 
     `category_color` is the fill and `mark` the strong colour of the same category, both as
     `category_paint` gives them for the look. A pale outline vanishes on a light pack, so an outline
-    or an edge is drawn with the mark. Edge is Filled with the mark down the block's left side.
+    or an edge is drawn with the mark. Homework's outline uses the class colour at 3:1 on the card,
+    never the error red. Edge is Filled with the mark down the block's left side.
     """
     flexible = kind == "flexible"
     neutral = palette["block_flex" if flexible else "block_locked"]
@@ -936,7 +1053,16 @@ def block_paint(
     selected = sanitize_look(look)
     mode = effective_look(selected)["blocks"]
     if mode == "outline":
-        return {"mode": mode, "fill": palette["grid"], "ink": palette["text"], "outline": mark, "edge": None}
+        outline = mark
+        if category in ("assignments", "homework") and category_color:
+            outline = class_outline(palette, category_color)
+        return {
+            "mode": mode,
+            "fill": palette["grid"],
+            "ink": palette["text"],
+            "outline": outline,
+            "edge": None,
+        }
     edge = mark if mode == "edge" else None
     if category_color:
         text = palette["text"]
@@ -950,10 +1076,10 @@ def block_paint(
 
 def block_time_colour(ink: str, fill: str) -> str:
     """A block's times and length: its ink laid `MUTED_INK` over its fill, quieter than the title, or
-    as much more of the ink as it takes to read at 4.5 to 1 on the fill."""
+    as much more of the ink as it takes to read at 4.6 to 1 on the fill."""
     for step in range(round(MUTED_INK * 100), 101, 2):
         muted = mix(ink, fill, step / 100)
-        if contrast(muted, fill) >= AA_TEXT:
+        if contrast(muted, fill) >= AA_TEXT + 0.1:
             return muted
     return ink
 
@@ -1063,7 +1189,7 @@ def control_rules(palette: dict, radius: int, text: float | str, art: dict[str, 
         # A stepped number: − and + joined to its box, on the page's colour (5.2 A of 0.17.2).
         'QAbstractSpinBox[stepped="true"] { border-radius: 0; }'
         f'QPushButton[step="true"] {{ background: {palette["window"]}; color: {palette["muted"]}; '
-        f'border: 1px solid {palette["hairline_strong"]}; padding: 0; min-width: 34px; max-width: 34px; '
+        f'border: 1px solid {readable_edge(palette)}; padding: 0; min-width: 34px; max-width: 34px; '
         "min-height: 0; }"
         f'QPushButton[step="true"]:hover {{ background: {palette["hairline"]}; color: {palette["text"]}; }}'
         f'QPushButton[step="true"]:disabled {{ background: {palette["window"]}; '
@@ -1127,11 +1253,10 @@ def control_rules(palette: dict, radius: int, text: float | str, art: dict[str, 
         "padding: 2px; }"
         f"QLineEdit:focus, QComboBox:focus, QAbstractSpinBox:focus, QPlainTextEdit:focus {{ "
         f"border: 2px solid {readable_focus_edge(palette)}; }}"
-        # The line under a field that says what is wrong. Keyed on the property, not the object name: the
-        # sign-in lines are renamed, and the generic QFrame rule took their edge.
-        f"QFrame[problem=\"true\"] {{ background: {palette['panel']}; "
-        f"border: 1px solid {palette['error']}; "
-        f"border-radius: {radius}px; }}"
+        # The line under a field that says what is wrong. No box: the generic QFrame rule would draw an
+        # edge, and the sign-in lines are renamed, so the property is what clears it. Keyed on the
+        # property, not the object name.
+        f"QFrame[problem=\"true\"] {{ background: transparent; border: 0; padding: 0; }}"
         f"QLabel#clockErrorText {{ color: {palette['error']}; }}"
         # A switch is a check box whose box is a pill with a knob, drawn whole by `control_art`.
         'QCheckBox[switch="true"] { spacing: 10px; }'
@@ -1227,7 +1352,7 @@ def _rgba(colour: str, alpha: float) -> str:
 
 # The week-list row above the grid (U19) is this tall at each text size, in every look and design. It
 # is fixed within a size so tabbing never moves the grid; Large text needs 4 px more for its words.
-WEEK_LIST_ROW_HEIGHT = {"small": 28, "normal": 28, "large": 32}
+WEEK_LIST_ROW_HEIGHT = {"small": 28, "normal": 28, "large": 28}
 DISABLED = 0.4
 CONFLICT_FILL, CONFLICT_TEXT = "#fff4d6", "#6b4a00"
 # A roomy button: 8 pixels above and below its words, 20 at the sides, and at least 36 pixels tall in all,
@@ -1335,7 +1460,7 @@ def setup_rules(palette: dict, radius: int, text: float | str, pad: int, depth: 
         f"QPushButton#setupRailItem[done=\"true\"] {{ color: {palette['text']}; }}"
         f"QPushButton#setupRailItem[current=\"true\"] {{ color: {palette['text']}; {strong} }}"
         f"QPushButton#setupRailItem:disabled {{ background: transparent; "
-        f"color: {mix(palette['muted'], palette['panel'], 0.55)}; }}"
+        f"color: {rail_future_ink(palette)}; }}"
         f"QFrame#setupRailMarker {{ background: {palette['accent']}; border: none; padding: 0; "
         f"border-radius: 1px; }}"
         f"QLabel#setupTitle {{ font-size: {type_pt('title', text)}pt; {strong} }}"
@@ -1367,14 +1492,15 @@ def setup_rules(palette: dict, radius: int, text: float | str, pad: int, depth: 
         f"QPushButton#setupArrow {{ background: {palette['field']}; color: {palette['text']}; {edges} "
         f"border-radius: 16px; padding: 0; min-height: 0; min-width: 0; }}"
         f"QPushButton#setupArrow:hover {{ background: {mix(palette['accent'], palette['field'], 0.14)}; }}"
-        f"QPushButton#setupDot {{ background: {palette['hairline_strong']}; border: none; "
-        f"border-radius: 8px; padding: 0; min-height: 0; min-width: 0; color: {palette['accent_ink']}; }}"
-        f"QPushButton#setupDot:hover "
+        # Every dot has the same box and edge, so only the fill tells the current one apart.
+        f"QRadioButton#setupDot {{ background: {palette['hairline_strong']}; border: none; "
+        f"border-radius: 5px; padding: 0; margin: 0; color: {palette['accent_ink']}; }}"
+        # Hidden in full: a bare "width: 0" left the style's own radio mark drawn in every dot.
+        f"QRadioButton#setupDot::indicator {{ width: 0px; height: 0px; image: none; border: none; "
+        f"background: transparent; }}"
+        f"QRadioButton#setupDot:hover "
         f"{{ background: {mix(palette['accent'], palette['hairline_strong'], 0.5)}; }}"
-        f"QPushButton#setupDot[current=\"true\"] {{ background: {palette['field']}; "
-        f"border: 2px solid {palette['accent']}; }}"
-        f"QPushButton#setupDot[chosen=\"true\"] {{ background: {palette['accent']}; "
-        f"border: 2px solid {palette['accent']}; }}"
+        f"QRadioButton#setupDot[current=\"true\"] {{ background: {palette['accent']}; }}"
         f"QFrame#setupGroup {{ background: {palette['panel']}; border-radius: {card_radius}px; {edges} }}"
         f"{pills} {{ background: {palette['field']}; color: {palette['text']}; "
         f"border: 1px solid {readable_edge(palette)}; "
@@ -1421,7 +1547,6 @@ def auth_rules(palette: dict, knobs: dict, radius: int, card_radius: int) -> str
     inset = SPACING[5] if knobs["density"] == "comfortable" else SPACING[4]
     title = f"font-size: {type_pt('title', text)}pt; font-weight: {WEIGHT_STRONG};"
     sheet = RADIUS_SHEET if card_radius else 0
-    ring = mix(palette["accent"], palette["field"], 0.4)
     # Only a look that draws soft hairlines: a flat look draws none, and a bold one its own heavy ones.
     field_rules = (
         f"QWidget#authCard QLineEdit {{ border: 1px solid {readable_edge(palette)}; }}"
@@ -1459,7 +1584,7 @@ def auth_rules(palette: dict, knobs: dict, radius: int, card_radius: int) -> str
         f"QToolButton#passwordReveal {{ background: transparent; border: none; padding: 0; "
         f"border-radius: {radius}px; }}"
         f"QToolButton#passwordReveal:hover {{ background: {palette['hairline']}; }}"
-        f"QToolButton#passwordReveal:focus {{ border: 2px solid {ring}; }}"
+        f"QToolButton#passwordReveal:focus {{ border: 2px solid {readable_focus_edge(palette)}; }}"
         # Creating an account is the way in for most students on a first run, so it is the link that
         # carries weight and Forgot password sits quieter under it.
         f"{links} {{ background: transparent; color: {accent_words(palette)}; border: none; "
@@ -1502,6 +1627,12 @@ def accent_words(palette: dict) -> str:
     Readability offers its fix; words in it are drawn darker until then (0.17.2)."""
     grounds = (palette["window"], palette["panel"], palette.get("grid", palette["panel"]))
     return fit_lightness(palette["accent"], grounds, AA_TEXT)
+
+
+def rail_future_ink(palette: dict) -> str:
+    """The text of a Setup step not reached yet: the quietest mix of the text into the rail that still
+    reads at 4.5 to 1 on the rail and on the page."""
+    return _derived_muted(palette["text"], palette["panel"], palette["window"])
 
 
 def readable_edge(palette: dict) -> str:
@@ -1663,12 +1794,10 @@ def button_rules(
         f'QPushButton[quiet="true"]:pressed {{ background: {_veil(text, 0.10)}; }}',
         f'QPushButton[quiet="true"]:disabled {{ background: transparent; color: {mix(text, page, 0.4)}; }}',
         f'QPushButton[keyfocus="true"]:focus {{ border-color: {ring}; }}',
-        # U19's list row is a fixed strip: vertical padding or the 2 to 6 px edges leave its words less
-        # height than the font needs and clip them. A 1 px edge and no padding give them all but 2 px, and
-        # the min-height is named (not 0) because a stylesheet min-height of 0 also drops the widget's
-        # own fixed height. It names the colour not at all, so the focus ring still shows.
-        f"QPushButton#weekListRow {{ padding: 0 {pad * 2}px; border-width: 1px; "
-        f"min-height: {WEEK_LIST_ROW_HEIGHT['large' if large else 'normal'] - 2}px; }}",
+        # U19's list row is a fixed 28 px strip. No vertical padding and no edge, so the words get
+        # the full height. A stylesheet min-height of 0 also drops the widget's own fixed height.
+        f"QPushButton#weekListRow {{ padding: 0 {pad * 2}px; border-width: 0; "
+        f"min-height: {WEEK_LIST_ROW_HEIGHT['large' if large else 'normal']}px; }}",
     ]
     return "".join(rules)
 
@@ -1720,7 +1849,7 @@ def top_bar_rules(
     text, muted, page = palette["text"], palette["muted"], palette["window"]
     contrast_look = palette.get("family") == "contrast"
     ring = palette["accent"] if contrast_look else mix(palette["accent"], page, 0.4)
-    ring_names = ", ".join(f'QPushButton#{name}[keyfocus="true"]:focus' for name in RING_BUTTONS)
+    ring_names = ", ".join(f'QAbstractButton#{name}[keyfocus="true"]:focus' for name in RING_BUTTONS)
     track = page if contrast_look else mix(text, page, 0.06)
     dark = palette.get("axis") == "dark"
     chosen = palette["accent"] if contrast_look else palette["hairline_strong"] if dark else palette["panel"]
@@ -1735,7 +1864,7 @@ def top_bar_rules(
     quiet_ink = text if contrast_look else muted
 
     def views(state: str = "") -> str:
-        return ", ".join(f"QPushButton#{name}{state}" for name in VIEW_BUTTONS)
+        return ", ".join(f"QRadioButton#{name}{state}" for name in VIEW_BUTTONS)
 
     menu = (
         # The chevron's room is added to the width by Qt; the padding only keeps it off the word.
@@ -1746,13 +1875,19 @@ def top_bar_rules(
         else ""
     )
     return (
-        f"QFrame#segments {{ background: transparent; border: none; border-radius: 0; padding: 3px; "
+        # No margin: every QGroupBox keeps a title band above it (look.py), and the untitled track would
+        # draw its views that far down, below the rest of the bar.
+        f"QGroupBox#segments {{ background: transparent; border: none; border-radius: 0; padding: 3px; "
+        "margin: 0px; "
         f"alternate-background-color: {track}; selection-background-color: {chosen}; color: {outline}; "
         f"qproperty-shade: {shade}; qproperty-ring: {selected_ring}; }}"
         f"{views()} {{ background: transparent; color: {quiet_ink}; font-weight: {WEIGHT_REGULAR}; "
         # Inside a track 3 pixels in from the bar's other controls: a view's own padding is that much
         # less, or the track squeezed it and cut the tails off "Day" and "My day".
-        f"border: 2px solid transparent; padding: {max(pad - 7, 0)}px {pad}px; min-height: 0; }}"
+        f"border: 2px solid transparent; padding: {max(pad - 7, 0)}px {pad}px; min-height: 24px; "
+        # A radio's indicator is not drawn. `spacing` is the gap Qt still reserves beside it.
+        f"spacing: 0px; }}"
+        f"{views('::indicator')} {{ width: 0; height: 0; border: none; margin: 0; padding: 0; }}"
         f"{views(':hover')} {{ background: transparent; color: {text}; }}"
         f"{views(':checked')} {{ background: transparent; color: {chosen_words}; "
         f"font-weight: {WEIGHT_STRONG}; }}"
@@ -1764,9 +1899,15 @@ def top_bar_rules(
         # their words. The icon buttons take the same height so the row stays level.
         f"{BAR_BUTTONS} {{ padding-top: {ROOMY_PAD}px; padding-bottom: {ROOMY_PAD}px; "
         f"min-height: {roomy_height(large)}px; }}"
+        # The week title's chevron is one glyph: a word button's 20-pixel sides put Plan on a second row
+        # at Large text.
+        f"QPushButton#weekTitleMark {{ padding-left: {SPACING[0]}px; padding-right: {SPACING[0]}px; "
+        "min-width: 0px; }"
         "QPushButton#prevWeek, QPushButton#nextWeek, QPushButton#settingsGear { "
         f"padding-left: {max(pad - 2, 2)}px; padding-right: {max(pad - 2, 2)}px; }}"
         f"{BAR_WORDS} {{ padding-left: {ROOMY_SIDE}px; padding-right: {ROOMY_SIDE}px; }}"
+        f'QPushButton#moreButton[iconOnly="true"] {{ padding-left: {max(pad - 2, 2)}px; '
+        f"padding-right: {max(pad - 2, 2)}px; }}"
         "QPushButton#addButton { border-top-right-radius: 0; border-bottom-right-radius: 0; }"
         f"QPushButton#addArrow {{ padding: {ROOMY_PAD}px {pad // 2 + 2}px; border-top-left-radius: 0; "
         f"border-bottom-left-radius: 0; border-left-width: 1px; border-left-color: {divider}; }}"
@@ -1819,6 +1960,7 @@ def pack_stylesheet(
     return (
         f"QMainWindow, QDialog, QWidget {{ background: {palette['window']}; color: {palette['text']}; "
         f"font-family: {family}; font-size: {pt['body']}; }}"
+        f"QLabel#pairCode {{ font-size: {pt['display']}; font-weight: {WEIGHT_NUMBER}; }}"
         f"QFrame, QGroupBox, QTableWidget, QListWidget {{ background: {palette['panel']}; "
         f"color: {palette['text']}; padding: {card}px; border-radius: {card_radius}px; {edges} }}"
         # Lists, tables and scroll areas are frames too, but their padding is room around rows.
@@ -1985,15 +2127,24 @@ def overlay_rules(palette: dict, knobs: dict, pad: int, card_radius: int) -> str
     flat = knobs["depth"] == "none"
     toast_edge = "none" if flat else f"1px solid {toast['edge']}"
     box_edge = "none" if flat else f"1px solid {palette['hairline']}"
+    action_text = max(("#000000", "#ffffff"), key=lambda colour: contrast(colour, toast["action"]))
     return (
         f"QFrame#toast {{ background: {toast['background']}; color: {toast['text']}; "
         f"border: {toast_edge}; border-radius: {sheet_radius}px; padding: 10px 16px; }}"
         f"QLabel#toastText {{ color: {toast['text']}; }}"
-        # The toast's one button reads as part of its sentence.
+        # Ordinary toast actions read as part of the sentence; this optional action is filled.
         f"QPushButton#toastButton {{ background: transparent; color: {toast['action']}; border: none; "
         f"font-weight: {WEIGHT_STRONG}; padding: 4px 8px; min-height: 0; "
         f"border-radius: {RADIUS_CONTROL}px; }}"
+        f"QPushButton#toastButton[filled=\"true\"] {{ background: {toast['action']}; color: {action_text}; }}"
         f"QPushButton#toastButton:hover {{ "
+        f"background: {mix_oklab(toast['text'], toast['background'], 0.12)}; }}"
+        f"QPushButton#toastButton[filled=\"true\"]:hover {{ "
+        f"background: {mix_oklab(toast['action'], toast['background'], 0.12)}; }}"
+        f"QPushButton#toastSecondaryButton, QPushButton#toastCloseButton {{ "
+        f"background: transparent; color: {toast['text']}; border: none; padding: 4px 8px; "
+        f"min-height: 0; border-radius: {RADIUS_CONTROL}px; }}"
+        f"QPushButton#toastSecondaryButton:hover, QPushButton#toastCloseButton:hover {{ "
         f"background: {mix_oklab(toast['text'], toast['background'], 0.12)}; }}"
         # The focus screen: the look's page, a muted phase over the ring and the homework under it.
         f"QLabel#focusScreenPhase {{ color: {palette['muted']}; font-size: {type_pt('heading', text)}pt; "

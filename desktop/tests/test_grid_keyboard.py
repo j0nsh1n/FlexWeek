@@ -10,7 +10,7 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QApplication, QDialog, QPushButton
+from PySide6.QtWidgets import QAbstractButton, QApplication, QDialog
 
 from desktop.native.hours.canvas import HoursCanvas
 from desktop.native.widgets import BlockDialog
@@ -197,7 +197,7 @@ def test_escape_leaves_the_grid_for_the_top_bar(qapp: QApplication, window: Nati
     tab_to_grid(window)
     key(window, Qt.Key.Key_Escape)
     focus = window.focusWidget()
-    assert focus is window.findChild(QPushButton, "viewWeek")
+    assert focus is window.findChild(QAbstractButton, "viewWeek")
 
 
 def ring_pixels(hours: HoursCanvas) -> tuple[QColor, QColor]:

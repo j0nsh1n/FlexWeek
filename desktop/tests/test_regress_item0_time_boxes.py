@@ -95,13 +95,16 @@ def enter(field: ClockField, how: str) -> None:
     """Get the keyboard into the box the way a student does."""
     if how == "tab-in":
         # A real Tab from the widget before the box in the focus chain.
+        # The chain is a ring: a dialog that was never shown has no visible widget in it, so stop
+        # after one lap instead of walking it forever.
         before = field.previousInFocusChain()
-        while before is not None and not (
-            before.isVisible() and before.isEnabled() and before.focusPolicy() & Qt.FocusPolicy.TabFocus
-            and before is not field.lineEdit()
-        ):
+        for _lap in range(len(QApplication.allWidgets()) + 2):
+            if before.isVisible() and before.isEnabled() and before.focusPolicy() & Qt.FocusPolicy.TabFocus \
+                    and before is not field.lineEdit():
+                break
             before = before.previousInFocusChain()
-        assert before is not None
+        else:
+            raise AssertionError("no visible, tab-focusable widget before the box: is its dialog shown?")
         before.setFocus(Qt.FocusReason.OtherFocusReason)
         QApplication.processEvents()
         press(field, Qt.Key.Key_Tab)
@@ -224,6 +227,9 @@ def school_hours_end(qapp, host):
 def _block_editor(qapp, host, end: bool) -> Box:
     dialog = _up(qapp, BlockDialog(host, day=3, start="16:00", duration_min=60))
     dialog.title.setText("Club")
+    from desktop.tests.test_fixed_time_steps import go_when
+
+    go_when(dialog)
     if end:
         dialog.start.setTime(QTime(14, 0))
 
@@ -247,6 +253,9 @@ def homework_due_time(qapp, host):
     dialog = HomeworkDialog(host, today="2026-10-05", category="assignments", due="2026-10-07",
                             now=datetime(2026, 10, 5, 7, 0))
     dialog.title.setText("Essay")
+    from desktop.tests.test_homework_form import go_when
+
+    go_when(dialog)
     dialog.due.timed.setChecked(True)
     dialog.due.time.setTime(QTime(9, 0))
     _up(qapp, dialog)
@@ -262,6 +271,9 @@ def do_it_at_time(qapp, host):
     dialog = HomeworkDialog(host, today="2026-10-05", category="assignments", due="2026-10-11",
                             now=datetime(2026, 10, 5, 7, 0))
     dialog.title.setText("Essay")
+    from desktop.tests.test_homework_form import go_when
+
+    go_when(dialog)
     dialog.when.setCurrentIndex(1)  # Do it at
     _up(qapp, dialog)
 

@@ -13,7 +13,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtWidgets import QApplication, QPushButton
+    from PySide6.QtWidgets import QAbstractButton, QApplication, QPushButton
 
     from desktop.native.layouts.registry import sanitize_layout
     from desktop.native.look import sanitize_look
@@ -76,7 +76,7 @@ def test_narrow_week_blocks_still_include_their_times(
     window._look = sanitize_look({"preset": "default"})
     window._apply_appearance()
     window._on_week()
-    window.findChild(QPushButton, "viewWeek").click()
+    window.findChild(QAbstractButton, "viewWeek").click()
     written: list[str] = []
     original = canvas._paint_layout
 
@@ -281,7 +281,7 @@ def test_the_now_line_runs_under_a_blocks_words_without_a_gap(
 
 
 def test_day_names_its_date_once(qapp: QApplication, window: NativeWindow) -> None:
-    window.findChild(QPushButton, "viewDay").click()
+    window.findChild(QAbstractButton, "viewDay").click()
     wait_until(qapp, lambda: not window.session.busy)
     assert window.day_view.agenda.heading.text() == "Agenda"
     assert window.day_view.name.text() == "Hours"
@@ -324,7 +324,7 @@ def test_my_day_actions_leave_room_after_their_icons(qapp: QApplication, window:
     session.place_session(block["id"], 3, 19 * 60)
     session.save()
     wait_until(qapp, lambda: not session.busy and not session.dirty)
-    window.findChild(QPushButton, "viewMyDay").click()
+    window.findChild(QAbstractButton, "viewMyDay").click()
     for _ in range(4):
         qapp.processEvents()
     late = window.findChild(QPushButton, "dialLate")
@@ -347,7 +347,7 @@ def test_day_agenda_times_fit_in_twelve_hour_format(
 
     window._look = sanitize_look({"knobs": {"text": "large" if large else "normal"}})
     window._apply_appearance()
-    window.findChild(QPushButton, "viewDay").click()
+    window.findChild(QAbstractButton, "viewDay").click()
     window.resize(810, 800)
     wait_until(qapp, lambda: not window.session.busy)
     set_clock_24h(False)

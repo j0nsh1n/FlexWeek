@@ -287,7 +287,7 @@ def test_a_fixed_activity_the_editor_cannot_save_is_explained_in_the_apps_words(
     assert said == {
         "title": "Give it a title.",
         "days": "Tick at least one day.",
-        "spotify": "That is not a Spotify share link. Paste one that starts with https://open.spotify.com, "
+        "spotify": "That's not a Spotify share link. Paste one that starts with https://open.spotify.com, "
         "or leave it empty.",
     }
 
@@ -415,6 +415,9 @@ def test_new_homework_is_due_on_a_day_and_a_time_only_when_asked(qapp: QApplicat
     dialog.show()
     qapp.processEvents()
     assert dialog.due.value() == "2026-09-15", "tomorrow, whatever the hour"
+    from desktop.tests.test_homework_form import go_when
+
+    go_when(dialog)
     assert not dialog.due.time.isVisible(), "no time box until the student says it is due at one"
     dialog.due.timed.setChecked(True)
     assert dialog.due.time.isVisible()
@@ -478,10 +481,11 @@ def test_every_dialog_is_freed_once_it_has_closed_and_is_let_go(qapp: QApplicati
     was deleted directly", then a bus error."""
     import gc
     import weakref
+    from unittest.mock import Mock
 
     from PySide6.QtCore import QTimer
 
-    from desktop.native import look_editor, settings, widgets
+    from desktop.native import devices, look_editor, settings, widgets
 
     homework = {"id": "essay", "title": "Essay", "due": "2026-09-27T23:59", "estimate_min": 60, "revision": 0}
     pasted = {
@@ -490,7 +494,11 @@ def test_every_dialog_is_freed_once_it_has_closed_and_is_let_go(qapp: QApplicati
         "fixed": True,
         "checked": True,
     }
+    sync = Mock(spec=devices.SyncService)
+    sync.pair_start.return_value = None
     made = {
+        devices.PairDialog: [lambda host: devices.PairDialog(host, sync, 1)],
+        devices.RemoveDialog: [lambda host: devices.RemoveDialog(host, "Pixel")],
         widgets.Dialog: [lambda host: widgets.Dialog(host)],
         widgets.ConfirmSheet: [
             lambda host: widgets.ConfirmSheet(

@@ -3,11 +3,11 @@ to More.
 
 The spec's guard: homework due Wednesday of week 2 with its only session on Friday of week 1, never
 ticked; open week 2 (clock: Monday 07:00 of week 2): More shows 1 unfinished; Plan leaves the session
-where it is and shows the "1 unfinished from last week" chip; "Plan them" places it in week 2 before
-Wednesday; in a second run "I did these" marks it done, More shows 0 and Plan then places nothing new.
+where it is and shows the "1 left from last week" chip; "Plan into this week" places it in week 2 before
+Wednesday; in a second run "Mark as finished" marks it done, More shows 0 and Plan then places nothing new.
 
-The chip and its two buttons are found by their words (UI Designer's: "... unfinished from last
-week", "Plan them", "I did these"), design-agnostic.
+The chip and its buttons follow the 1.0.0 decision: "1 left from last week" is hidden while the
+"Overdue and left from last week" panel is open, so the tests hide that panel before finding the chip.
 """
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
@@ -33,6 +33,8 @@ from desktop.tests.grid_support import (  # noqa: F401
 )
 
 FRIDAY, WEDNESDAY = 4, 2
+PLAN_IT = "Plan into this week"
+FINISHED = "Mark as finished"
 
 
 def left_in_week_one(qapp, window) -> tuple[str, str]:
@@ -83,6 +85,13 @@ def plan(qapp, window) -> None:
     settled(qapp, window)
 
 
+def hide_the_panel(qapp, window) -> None:
+    hide = window.findChild(QPushButton, "unfinishedDismiss")
+    if hide is not None and hide.isVisible():
+        hide.click()
+        settled(qapp, window)
+
+
 def test_more_counts_the_session_left_in_last_week(qapp, window) -> None:
     left_in_week_one(qapp, window)
     enabled, words = more_unfinished_row(window)
@@ -99,18 +108,18 @@ def test_plan_never_moves_last_weeks_session_on_its_own(qapp, window) -> None:
 def test_plan_shows_the_unfinished_from_last_week_chip(qapp, window) -> None:
     left_in_week_one(qapp, window)
     plan(qapp, window)
-    chip = [
-        label.text() for label in window.findChildren(QLabel)
-        if label.isVisible() and "unfinished from last week" in label.text()
-    ]
-    assert chip and visible_button(window, "Plan them") and visible_button(window, "I did these")
+    hide_the_panel(qapp, window)
+    chip = [label.text() for label in window.findChildren(QLabel) if label.isVisible()]
+    assert "1 left from last week" in chip, chip
+    assert visible_button(window, PLAN_IT) and visible_button(window, FINISHED)
 
 
 def test_plan_them_places_it_in_week_two_before_wednesday(qapp, window) -> None:
     left_in_week_one(qapp, window)
     plan(qapp, window)
-    button = visible_button(window, "Plan them")
-    assert button is not None, "no Plan them"
+    hide_the_panel(qapp, window)
+    button = visible_button(window, PLAN_IT)
+    assert button is not None, f"no {PLAN_IT}"
     button.click()
     settled(qapp, window)
     placed = [b for b in lab_sessions(window) if b.get("start")]
@@ -120,8 +129,9 @@ def test_plan_them_places_it_in_week_two_before_wednesday(qapp, window) -> None:
 def test_i_did_these_marks_it_done_more_shows_none_and_plan_places_nothing(qapp, window) -> None:
     left_in_week_one(qapp, window)
     plan(qapp, window)
-    button = visible_button(window, "I did these")
-    assert button is not None, "no I did these"
+    hide_the_panel(qapp, window)
+    button = visible_button(window, FINISHED)
+    assert button is not None, f"no {FINISHED}"
     button.click()
     settled(qapp, window)
     enabled, words = more_unfinished_row(window)
@@ -130,22 +140,27 @@ def test_i_did_these_marks_it_done_more_shows_none_and_plan_places_nothing(qapp,
     assert [b for b in lab_sessions(window) if b.get("start")] == []
 
 
-def test_overdue_unfinished_is_asked_with_the_session_clock(qapp, window, monkeypatch) -> None:
-    """Every call the window makes to overdue_unfinished passes the session's own time."""
-    import desktop.native.window as window_module
-
-    left_in_week_one(qapp, window)
-    real = window_module.overdue_unfinished
-    asked: list = []
-
-    def spy(items, now=None):
-        asked.append(now)
-        return real(items, now)
-
-    monkeypatch.setattr(window_module, "overdue_unfinished", spy)
+def test_left_over_classification_uses_the_session_clock(qapp, window) -> None:
+    """Changing the held clock moves the same session from carried to overdue."""
+    _week1, week2 = left_in_week_one(qapp, window)
+    session = window.session
+    item = next(item for item in session.unfinished() if item["id"] == "lab")
+    assert item["left_over_state"] == "left_from_last_week"
+    after_due = datetime.fromisoformat(week2) + timedelta(days=WEDNESDAY + 1, minutes=1)
+    session.now_ms = lambda: int(after_due.timestamp() * 1000)
     window._sync_more_menu()
-    window.session.week_changed.emit()
-    qapp.processEvents()
-    session_now = datetime.fromtimestamp(window.session.now_ms() / 1000)
-    assert asked, "the window never asked"
-    assert all(now is not None and abs((now - session_now).total_seconds()) < 60 for now in asked), asked
+    session.week_changed.emit()
+    settled(qapp, window)
+    item = next(item for item in session.unfinished() if item["id"] == "lab")
+    assert item["left_over_state"] == "overdue"
+
+
+def test_the_past_week_tag_survives_editing_the_assignment(qapp, window) -> None:
+    left_in_week_one(qapp, window)
+    session = window.session
+    session.add_homework({**session.assignments["lab"], "title": "Updated lab report"})
+    session.save()
+    settled(qapp, window)
+
+    item = next(item for item in session.unfinished() if item["id"] == "lab")
+    assert item["left_over_state"] == "left_from_last_week"

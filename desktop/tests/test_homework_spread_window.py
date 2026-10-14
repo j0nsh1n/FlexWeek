@@ -44,7 +44,7 @@ def test_a_new_homework_is_saved_and_spread_over_the_days_to_its_due(
         dialog.estimate.setValue(180)
         dialog.due.date.setDate(QDate.fromString(due, "yyyy-MM-dd"))
         dialog.spread_choice.setCurrentIndex(1)
-        assert dialog.spread_line.text().startswith("3 × 60 min on different days before it is due")
+        assert dialog.spread_line.text().startswith("3 × 60 min on different days before it's due")
         dialog.accept()
         return dialog.result()
 

@@ -137,6 +137,9 @@ FADE = 80
 # With less room than a card in front this wide and both neighbours whole, the one in front takes the
 # row, keeping this much at its sides for the arrows.
 LEAST = 340
+# The row asks for no more height than this, so the card shrinks to the room the window leaves and its
+# hours scroll. Asking for more made the page scroll under the planning strip at 1024 x 640 Large text.
+ROW_LEAST = 240
 SLIVER = 40
 # A neighbour narrows to the room beside the card in front, but not below this; with less room it waits
 # past the row's edge with the days further off.
@@ -335,6 +338,9 @@ class ClayPainter(BlockPainter):
     """Hours on a clay card: a faint rule at each hour, blocks as soft clay in the category family with
     the category's bar just inside their start edge, and the time now as an accent line from a dot,
     its time on a pill. The card in front says each block's times and length; a neighbour its times."""
+    # Writes its own words, not yet with room for tag pills (N11); see BlockPainter.draws_pills.
+    draws_pills = False
+
 
     # The pill sits left of the hours, where their labels are: an hour label under it is left out.
     now_in_gutter = True
@@ -1769,7 +1775,7 @@ class Row(QWidget):
         return page.viewport().rect().adjusted(-2, -2, 2, 2).contains(canvas.mapTo(page.viewport(), local))
 
     def minimumSizeHint(self) -> QSize:  # noqa: N802
-        return QSize(0, round(340 * self.scale))
+        return QSize(0, round(ROW_LEAST * self.scale))
 
     def sizeHint(self) -> QSize:  # noqa: N802
         # The dish's chips wrap, so the page is laid out at its preferred height: the row asks for its

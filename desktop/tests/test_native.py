@@ -533,13 +533,28 @@ def test_picking_a_type_opens_add_with_that_category(qapp: QApplication, server:
 
     def fill_and_save() -> None:
         dialog = window.findChild(QDialog, "blockDialog")
-        if dialog is None:
+        # Made before it is shown: accepted then, it would open afterwards and wait for ever.
+        if dialog is None or not dialog.isVisible():
             return
         title = dialog.findChild(QLineEdit, "blockTitle")
         title.setText("Soccer practice")
+        timer.stop()
         dialog.accept()
 
-    QTimer.singleShot(0, fill_and_save)
+    # The top bar once refitted itself on every turn while Add opened (10,000 times a second): a
+    # restyle in its own fit asked for the next fit. A handful of fits is what opening Add takes.
+    fits = [0]
+    fit = window._fit_plan_and_more
+
+    def counted(*args) -> None:
+        fits[0] += 1
+        fit(*args)
+
+    window._fit_plan_and_more = counted
+    timer = QTimer(window)
+    timer.setInterval(20)
+    timer.timeout.connect(fill_and_save)
+    timer.start()
     # The chip strip became the Add menu; picking a type there still opens Add for that type.
     window.add_menu.findChild(QAction, "addMenu-exercise").trigger()
     wait_until(qapp, lambda: any(block["title"] == "Soccer practice" for block in window.session.blocks))
@@ -547,6 +562,7 @@ def test_picking_a_type_opens_add_with_that_category(qapp: QApplication, server:
     assert block["kind"] == "locked"
     assert block["category"] == "exercise"
     wait_until(qapp, lambda: not window.session.busy)
+    assert fits[0] < 100, fits[0]
 
 
 def test_undo_then_redo_restores_a_saved_fixed_time(qapp: QApplication, server: LocalServer) -> None:
@@ -718,6 +734,9 @@ def test_unfinished_homework_keeps_the_same_assignment(qapp: QApplication, serve
     session.load_week(current)
     wait_until(qapp, lambda: session.week_start == current and not session.busy)
     wait_until(qapp, lambda: previous in session.saved_weeks)
+    # Left from last week is judged against today, so the clock is in the week being viewed.
+    monday = datetime.fromisoformat(current) + timedelta(hours=7)
+    session.now_ms = lambda: int(monday.timestamp() * 1000)
     items = session.unfinished()
     assert items[0]["id"] == "lab"
     rows = session.plan_unfinished("lab")
@@ -928,7 +947,7 @@ def test_spread_keeps_assignment_identity_across_sessions(qapp: QApplication, se
     assert all(row["block"]["assignment_id"] == "project" for row in session.spread_preview["rows"])
     # Time, not a count of sessions, and the deadline as a student says it.
     assert session.spread_preview["summary"] == (
-        f"3 h ready to add before {due_label(due, session.week_start)}."
+        f"Project: 3 h ready to add before {due_label(due, session.week_start)}."
     )
     assert session.confirm_spread()
     wait_until(qapp, lambda: not session.busy)
@@ -1315,6 +1334,7 @@ def test_session_expiry_forgets_the_focus_timer(qapp: QApplication, server: Loca
     session.start_quick_focus()
     assert account_id in session.focus_store
     session._on_expired()
+    assert session.message == "Your session ended. Sign in again."
     assert session.account is None
     assert account_id not in session.focus_store
     assert session.focus is None
@@ -1325,7 +1345,8 @@ def test_unsaved_changes_block_account_import(qapp: QApplication, server: LocalS
     session.add_block(soccer())
     session.preview_account_import({"format": 3})
     assert session.transfer_preview is None
-    assert "unsaved" in session.message
+    # T-W12's sentence for a change not saved yet, with import in place of export.
+    assert session.message == "Save your last change first (More > Retry save), then import."
 
 
 def test_moving_into_a_break_says_so_with_the_break_tone(qapp: QApplication, server: LocalServer) -> None:

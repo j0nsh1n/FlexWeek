@@ -25,9 +25,9 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtWidgets import QApplication, QPushButton
 
     from desktop.native.layouts.base import LayoutView, Scene
-    from desktop.native.layouts.registry import LAYOUTS, tokens_for
+    from desktop.native.layouts.registry import DESIGN_LOOKS, LAYOUTS, tokens_for
     from desktop.native.layouts.views import VIEW_CLASSES
-    from desktop.native.look import resolved_palette
+    from desktop.native.look import design_look
     from desktop.native.weekmodel import build_week, minute_of
 
     MAIN_VIEWS = [layout_id for layout_id in VIEW_CLASSES if LAYOUTS[layout_id].role == "plan"]
@@ -55,11 +55,11 @@ def qapp() -> Iterator[QApplication]:
 
 
 def shown(layout_id: str, options: dict[str, str], today: int | None = 3) -> LayoutView:
-    palette = resolved_palette("light-frost", False, None, "default")
     week = build_week(WEEK, WAITING, HOMEWORK, TRACE)
     view = VIEW_CLASSES[layout_id]()
     view.resize(1366, 700)
-    tokens = tokens_for(layout_id, options["colour"], palette)
+    page_palette, _look = design_look(options["look"], "light-frost", False, None)
+    tokens = tokens_for(layout_id, options["look"], page_palette)
     view.show_week(Scene(week, today, minute_of("13:40"), options, tokens))
     return view
 
@@ -98,9 +98,9 @@ def test_a_main_views_buttons_ask_for_the_right_thing(qapp: QApplication, layout
 
 @pytest.mark.parametrize("layout_id", MAIN_VIEWS)
 def test_a_main_view_survives_an_empty_week_and_another_week(qapp: QApplication, layout_id: str) -> None:
-    palette = resolved_palette("light-frost", False, None, "default")
     options = every_choice(layout_id)[0]
-    tokens = tokens_for(layout_id, options["colour"], palette)
+    page_palette, _look = design_look(options["look"], "light-frost", False, None)
+    tokens = tokens_for(layout_id, options["look"], page_palette)
     for today in (3, None):
         view = VIEW_CLASSES[layout_id]()
         view.show_week(Scene(build_week(WEEK, [], {}, None), today, minute_of("13:40"), options, tokens))
@@ -117,17 +117,17 @@ def test_a_designs_blocks_take_the_family_and_their_words_read_on_them(qapp, lay
     from desktop.native.hours.geometry import Span
     from desktop.native.layouts.clay import ClayPainter
     from desktop.native.layouts.mission import MissionPainter
-    from desktop.native.layouts.registry import MATCH
-    from desktop.native.look import contrast
+    from desktop.native.look import contrast, design_look
 
     painter_for = {"clay": ClayPainter, "mission": MissionPainter}[layout_id]
-    colourways = [MATCH, *(value for value, _, _ in LAYOUTS[layout_id].colourways)]
+    looks = [*(value for value, _ in DESIGN_LOOKS[layout_id]), "your"]
     unreadable = []
-    for (pack, dark), colour in itertools.product((("light-frost", False), ("dark-frost", True)), colourways):
-        painter = painter_for(tokens_for(layout_id, colour, resolved_palette(pack, dark, None)))
+    for (pack, dark), look_token in itertools.product((("light-frost", False), ("dark-frost", True)), looks):
+        palette, _look = design_look(look_token, pack, dark, None)
+        painter = painter_for(tokens_for(layout_id, look_token, palette))
         for category in CATEGORIES:
             drawn = Drawn(category, "Block", category, category == "assignments", Span(0, 600, 660), 0, 1)
             fill, ink, _outline, _edge = painter.fills(drawn)
             if contrast(ink.name(), fill.name()) < 4.5:
-                unreadable.append((pack, colour, category, round(contrast(ink.name(), fill.name()), 2)))
+                unreadable.append((pack, look_token, category, round(contrast(ink.name(), fill.name()), 2)))
     assert unreadable == []

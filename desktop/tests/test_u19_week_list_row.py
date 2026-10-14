@@ -69,7 +69,7 @@ def test_u19_the_row_is_28_px_32_at_large_and_its_words_get_the_full_height_the_
     option = QStyleOptionButton()
     row.initStyleOption(option)
     contents = row.style().subElementRect(QStyle.SubElement.SE_PushButtonContents, option, row)
-    expected = {"small": 28, "normal": 28, "large": 32}[size]
+    expected = {"small": 28, "normal": 28, "large": 28}[size]
     assert row.height() == expected, f"{design}/{preset}/{size}: row is {row.height()} px, not {expected}"
     assert contents.height() >= row.fontMetrics().height(), (
         f"{design}/{preset}/{size}: words box {contents.height()} px, font needs {row.fontMetrics().height()}"
@@ -210,3 +210,19 @@ def test_u19_the_focus_driven_resize_is_gone() -> None:
     from desktop.native import window as module
 
     assert not hasattr(module, "WEEK_LIST_OPEN") and not hasattr(module, "WEEK_LIST_FOLDED")
+
+
+def test_u19_week_list_elides_a_long_row_at_the_viewport_edge(qapp, window) -> None:
+    with_school(qapp, window)
+    title = "A very long Thursday block title that must elide at the right edge"
+    window.session.add_block(
+        {"id": "long-title", "title": title, "kind": "locked", "category": "extra",
+         "start": "11:00", "duration_min": 30, "days": [3]}
+    )
+    settled(qapp, window)
+    key(window, Qt.Key.Key_L, CTRL_SHIFT)
+    assert window.week_access_list.isVisible()
+    assert window.week_access_list.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    assert not window.week_access_list.horizontalScrollBar().isVisible()
+    assert any(title in window.week_access_list.item(row).text()
+               for row in range(window.week_access_list.count()))

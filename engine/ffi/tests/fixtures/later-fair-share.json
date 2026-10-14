@@ -1,0 +1,81 @@
+{
+  "name": "later-fair-share",
+  "week_start": "2026-10-05",
+  "now": "2026-10-10T10:00:00",
+  "assignments": {
+    "poster": {
+      "id": "poster",
+      "title": "Science poster",
+      "due": "2026-10-21T21:00",
+      "estimate_min": 180,
+      "priority": 3,
+      "energy": "medium",
+      "focus_minutes": 0,
+      "completed": false,
+      "unplanned_min": 180,
+      "spread": "spread"
+    }
+  },
+  "blocks": [
+    {
+      "id": "school",
+      "title": "School",
+      "kind": "locked",
+      "days": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "start": "08:00",
+      "duration_min": 390,
+      "category": "class"
+    },
+    {
+      "id": "poster-session",
+      "title": "Science poster",
+      "kind": "flexible",
+      "days": [
+        5,
+        6
+      ],
+      "duration_min": 180,
+      "assignment_id": "poster",
+      "priority": 3,
+      "energy": "medium",
+      "category": "assignments"
+    }
+  ],
+  "earlier_weeks": [],
+  "work_windows": [],
+  "expected": {
+    "placed": [
+      {
+        "id": "poster-session",
+        "assignment_id": "poster",
+        "start": "12:00",
+        "days": [
+          5
+        ],
+        "duration_min": 30
+      }
+    ],
+    "not_placed": [],
+    "shares": [
+      {
+        "assignment_id": "poster",
+        "title": "Science poster",
+        "this_week_min": 30,
+        "left_min": 150
+      }
+    ],
+    "explanations": [
+      {
+        "block_id": "poster-session",
+        "reason": null,
+        "message": "Finishes 272 h 30 min before it is due."
+      }
+    ]
+  }
+}

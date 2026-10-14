@@ -10,23 +10,51 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QPoint, Qt, qInstallMessageHandler
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QLabel, QWidget
+from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
 
 from desktop.native.layouts.dialog import DesignPicker
 from desktop.native.look_preview import look_choice, look_preview
 from desktop.native.settings import SettingsPage
 from desktop.native.widgets import ChoiceCard, FieldLabel, card_columns
 from desktop.native.window import NativeWindow
+from desktop.tests.logic_support import PASSWORD, past_setup
 from desktop.tests.test_settings_words import page, prefs
-from desktop.tests.window_support import qapp, server, signed_out, window  # noqa: F401
+from desktop.tests.window_support import USERNAME, qapp, server, signed_out, wait_until, window  # noqa: F401
 
 MORE = ["High contrast", "Nocturne", "Slate", "Poster", "Terminal", "Paper", "Ink", "Pastel"]
 
 
 def tile(dialog: SettingsPage, name: str) -> ChoiceCard:
-    return next(card for card in dialog.look.more.cards if card.accessibleName() == name)
+    # N14: the worn card's accessible name is "<name>, selected".
+    for card in dialog.look.more.cards:
+        look = getattr(card, "_look_name", None)
+        if look == name:
+            return card
+        shown = card.accessibleName()
+        if shown == name or shown == f"{name}, selected":
+            return card
+    raise LookupError(name)
+
+
+def test_first_signed_in_window_does_not_warn_about_an_invalid_form_widget(
+    qapp, server, signed_out  # noqa: F811
+) -> None:
+    messages: list[str] = []
+
+    previous = qInstallMessageHandler(lambda _kind, _context, message: messages.append(message))
+    try:
+        signed_out.username.setText(USERNAME)
+        signed_out.password.setText(PASSWORD)
+        signed_out.findChild(QPushButton, "createAccount").click()
+        wait_until(qapp, lambda: signed_out._stack.currentWidget().objectName() == "recoveryPage")
+        signed_out.recovery_ack.setChecked(True)
+        signed_out.recovery_continue.click()
+        past_setup(qapp, signed_out)
+    finally:
+        qInstallMessageHandler(previous)
+    assert "QFormLayout::setRowVisible: Invalid widget" not in messages
 
 
 def test_more_looks_is_a_grid_of_named_pictures(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
@@ -85,11 +113,14 @@ def test_one_click_wears_a_look_and_marks_it_and_says_so(qapp: QApplication, win
     assert dialog.look.worn.isHidden(), "Light is worn: the segment shows it"
     tile(dialog, "Nocturne").chosen.emit()
     assert dialog.look.currentData() == "pack:nocturne"
-    assert tile(dialog, "Nocturne").is_selected()
+    worn = tile(dialog, "Nocturne")
+    assert worn.is_selected()
+    # N14: worn card "<Name>, selected"
+    assert worn.accessibleName() == "Nocturne, selected"
     assert [card.is_selected() for card in dialog.look.more.cards].count(True) == 1
     assert dialog.look.main.currentIndex() == -1, "Light, Dark and System show none"
     assert dialog.look.worn.isHidden(), "the card says it, inside itself, not a line under the grid"
-    assert tile(dialog, "Nocturne").note.text() == "Wearing"
+    assert worn.note.text() == "Wearing"
     dialog.look.main.buttons()[0].click()
     assert not any(card.is_selected() for card in dialog.look.more.cards)
     assert dialog.look.worn.isHidden()

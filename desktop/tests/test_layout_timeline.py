@@ -45,7 +45,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.hours.geometry import Axis, Span
     from desktop.native.hours.zoom import HoursScroll
     from desktop.native.layouts.base import Scene, family
-    from desktop.native.layouts.registry import options_for, tokens_for
+    from desktop.native.layouts.registry import LEGACY_COLOURS, options_for, tokens_for
     from desktop.native.layouts.timeline import (
         Due,
         Split,
@@ -61,7 +61,9 @@ if importlib.util.find_spec("PySide6") is not None:
         PACKS,
         block_time_colour,
         category_paint,
+        design_look,
         mix_oklab,
+        pack_stylesheet,
         resolved_palette,
     )
     from desktop.native.tokens import contrast
@@ -88,8 +90,14 @@ def scene_of(
     today: int = THURSDAY,
     **chosen: str,
 ) -> Scene:
+    if "colour" in chosen:
+        chosen["look"] = LEGACY_COLOURS["timeline"].get(chosen.pop("colour"), "your")
     options = {**options_for(None, "timeline"), **chosen}
     palette = palette or resolved_palette("light-frost", False, None, "default")
+    if options["look"] != "your":
+        palette, _look = design_look(
+            options["look"], "system", palette.get("axis") == "dark", None, palette["accent"]
+        )
     week = build_week(
         WEEK, BLOCKS if blocks is None else blocks, HOMEWORK if homework is None else homework, TRACE
     )
@@ -98,7 +106,7 @@ def scene_of(
         today,
         minute_of(clock),
         options,
-        tokens_for("timeline", options["colour"], palette),
+        tokens_for("timeline", options["look"], palette),
         surface=tab,
         iso_day=week.date_of(today).isoformat(),
     )
@@ -795,7 +803,20 @@ def test_the_folds_handle_sits_on_the_fold_in_the_row_of_day_names_and_counts_ea
     assert handle.toolTip() == "Drag to move days between the pages"
     assert handle.parentWidget() is heads, "in the row of day names, not on the hours"
     assert handle.geometry().top() >= 0 and handle.geometry().bottom() < heads.height()
-    assert abs(centre_of(handle).x() - fold_x(view)) <= 1, "on the fold"
+    assert abs(centre_of(handle).x() - fold_x(view)) <= 13, "beside the fold"
+    thursday = heads.findChild(QWidget, "timelineWeekDay3")
+    assert thursday is not None
+    title = thursday.findChild(QLabel, "timelineDayName")
+    assert title is not None
+    title_box = QRectF(title.mapTo(heads, QPoint(0, 0)), title.size())
+    assert handle.geometry().right() + 8 < title_box.left(), "the pager clears Thursday's heading"
+    thursday = heads.findChild(QPushButton, "timelineWeekDay3")
+    assert thursday is not None
+    text_left = (thursday.width() - thursday.fontMetrics().horizontalAdvance(thursday.text())) // 2
+    text_box = thursday.geometry().adjusted(text_left, 0, 0, 0)
+    text_box.setWidth(thursday.fontMetrics().horizontalAdvance(thursday.text()))
+    handle_in_heads = handle.geometry()
+    assert not handle_in_heads.intersects(text_box), "the fold pager does not cover Thursday's heading"
     assert pages(view) == ((0, 1, 2), (3, 4, 5, 6))
     assert view.findChildren(QWidget, "timelineFold") == [handle]
     day = shown(qapp, "day")
@@ -826,7 +847,7 @@ def test_a_drag_moves_the_fold_to_the_day_edge_nearest_the_pointer(
     assert pages(view) == (tuple(range(left)), tuple(range(left, 7)))
     assert kept == ([] if left == 3 else [("fold", str(left))])
     assert handle_of(view).text() == f"‹ {left} | {7 - left} ›"
-    assert abs(centre_of(handle_of(view)).x() - fold_x(view)) <= 1, "back on the fold once let go"
+    assert abs(centre_of(handle_of(view)).x() - fold_x(view)) <= 13, "the pager stays beside the fold"
     areas = [track.area.width() for track in canvas(view).tracks]
     for page in pages(view):
         widths = [areas[at] for at in page]
@@ -1025,24 +1046,33 @@ def test_option_compact_gives_the_hours_more_of_the_page(qapp: QApplication) -> 
     assert tight.height() > roomy.height()
 
 
-def test_ruled_paper_and_night_repaint_the_page_and_keep_flexweeks_blue(qapp: QApplication) -> None:
+def test_ruled_paper_and_night_repaint_the_page_and_use_their_accent(qapp: QApplication) -> None:
     def corner(view: TimelineView) -> str:
         return view.grab().toImage().pixelColor(5, 5).name()
 
     assert corner(shown(qapp, colour="paper")) == "#fdfbf7"
-    assert corner(shown(qapp, colour="night")) == "#14161c"
-    gold = resolved_palette("light-frost", False, None, "gold")
-    assert tokens_for("timeline", "paper", gold)["accent"] == "#3d6fc4"
-    assert tokens_for("timeline", "night", gold)["accent"] == "#7fa8ff"
+    assert corner(shown(qapp, colour="night")) == "#111315"
+    paper, _look = design_look("preset:timeline-paper", "light-frost", False, None, "gold")
+    night, _look = design_look("pack:dark-frost", "light-frost", False, None, "gold")
+    assert tokens_for("timeline", "preset:timeline-paper", paper)["accent"] == paper["accent"]
+    assert tokens_for("timeline", "pack:dark-frost", night)["accent"] == night["accent"]
 
 
-def test_its_own_colourways_set_the_names_and_figures_in_newsreader(qapp: QApplication) -> None:
-    """The catalogue's Classic Elegant pairing. In Match my look they take the look's heading face,
-    which the window's stylesheet gives them (look.HEADING_NAMES)."""
+def test_a_design_look_keeps_timelines_heading_face(qapp: QApplication) -> None:
+    """A palette changes Timeline's colours without changing the design's type."""
 
     def faces(view: TimelineView) -> set[str]:
         found = [*view.findChildren(QLabel, "timelineDayName"), *view.findChildren(QLabel, "timelineStat")]
         return {item.font().family() for item in found}
 
     assert faces(shown(qapp, colour="paper")) == {"Newsreader"}
-    assert "Newsreader" not in faces(shown(qapp))
+
+
+def test_your_look_with_paper_keeps_newsreader_headings(qapp: QApplication) -> None:
+    look = {"preset": "paper", "knobs": {}}
+    palette = resolved_palette("light-frost", False, look)
+    view = shown(qapp, colour="match", palette=palette)
+    HOSTS[-1].setStyleSheet(pack_stylesheet("light-frost", False, look))
+    qapp.processEvents()
+    found = [*view.findChildren(QLabel, "timelineDayName"), *view.findChildren(QLabel, "timelineStat")]
+    assert found and {item.font().family() for item in found} == {"Newsreader"}

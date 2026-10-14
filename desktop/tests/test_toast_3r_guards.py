@@ -116,6 +116,10 @@ def test_undo_countdown_keeps_its_accessible_name_and_decreases(qapp, window, mo
     window.session.preferences = {**(window.session.preferences or {}), "motion": motion}
     window._apply_appearance()
     planned(qapp, window)
+    # The toast pauses its countdown while the window is not the active one; adding homework
+    # takes focus away, so the window is made active again before the countdown is read.
+    window.activateWindow()
+    wait_until(qapp, window.isActiveWindow)
     initial = re.fullmatch(r"Undo · (\d+) s", window.toast.button.text())
     assert initial
     assert window.toast.button.accessibleName() == "Undo"

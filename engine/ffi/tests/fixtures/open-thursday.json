@@ -1,0 +1,76 @@
+{
+  "name": "open-thursday",
+  "week_start": "2026-10-05",
+  "now": "2026-10-05T16:00:00",
+  "assignments": {
+    "essay": {
+      "id": "essay",
+      "title": "History essay",
+      "due": "2026-10-08T21:00",
+      "estimate_min": 60,
+      "priority": 3,
+      "energy": "medium",
+      "focus_minutes": 0,
+      "completed": false,
+      "unplanned_min": 60,
+      "spread": "one"
+    }
+  },
+  "blocks": [
+    {
+      "id": "school",
+      "title": "School",
+      "kind": "locked",
+      "days": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "start": "08:00",
+      "duration_min": 390,
+      "category": "class"
+    },
+    {
+      "id": "essay-session",
+      "title": "History essay",
+      "kind": "flexible",
+      "days": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "duration_min": 60,
+      "assignment_id": "essay",
+      "priority": 3,
+      "energy": "medium",
+      "category": "assignments"
+    }
+  ],
+  "earlier_weeks": [],
+  "work_windows": [],
+  "expected": {
+    "placed": [
+      {
+        "id": "essay-session",
+        "assignment_id": "essay",
+        "start": "16:00",
+        "days": [
+          0
+        ],
+        "duration_min": 60
+      }
+    ],
+    "not_placed": [],
+    "shares": [],
+    "explanations": [
+      {
+        "block_id": "essay-session",
+        "reason": null,
+        "message": "Finishes 76 h before it is due."
+      }
+    ]
+  }
+}

@@ -2,7 +2,7 @@
 
 use serde_json::{Map, Value, json};
 
-use crate::desk::planning::{available_homework_minutes, occurrence_days};
+use crate::desk::planning::{available_homework_minutes, floor_slot, occurrence_days};
 use crate::desk::pyops::{
     Cmp, PyDict, compare, contains, eq, get, hashable, in_set, iterate, or_default, order, py_dict,
     sub,
@@ -493,4 +493,92 @@ pub fn unfinished_items(
         return Err(error);
     }
     Ok(keyed.into_iter().map(|(_, item)| item).collect())
+}
+
+fn done_session_minutes(blocks: &Value, assignment_id: &Value) -> EngineResult<i64> {
+    let mut total = 0;
+    for block in iterate(blocks)? {
+        if eq(
+            get(&block, "assignment_id")?.unwrap_or(null()),
+            assignment_id,
+        ) && truthy(get(&block, "completed")?)
+        {
+            // A block with no length counts as nothing, the same as a block with a zero length.
+            total += whole(&or_default(get(&block, "duration_min")?, json!(0)))?;
+        }
+    }
+    Ok(total)
+}
+
+pub fn left_over_items(
+    assignments: &Value,
+    saved_weeks: &Value,
+    today_week: &str,
+    now: &str,
+    blocks: &Value,
+    _committed_blocks: &Value,
+) -> EngineResult<Vec<Value>> {
+    let (today, minute) = crate::model::parse_due(now)?;
+    let moment = (today, minute);
+    let Value::Object(table) = assignments else {
+        return Err(attribute_error(assignments, "values"));
+    };
+    let mut items = Vec::new();
+    for assignment in table.values() {
+        if truthy(get(assignment, "completed")?) {
+            continue;
+        }
+        let due = get(assignment, "due")?.and_then(Value::as_str);
+        let overdue = due
+            .map(crate::model::parse_due)
+            .transpose()?
+            .is_some_and(|deadline| deadline <= moment);
+        // Placed unfinished minutes are still left to do, so only sessions ticked done come off.
+        // `unplanned_min` from the server can hide them, so both states use the homework itself:
+        // estimate minus focus minutes minus done sessions.
+        let estimate = whole(&or_default(get(assignment, "estimate_min")?, json!(0)))?;
+        let focus = whole(&or_default(get(assignment, "focus_minutes")?, json!(0)))?;
+        let done = done_session_minutes(blocks, subscript(assignment, "id")?)?;
+        let remaining = floor_slot((estimate - focus - done).max(0));
+        if remaining < SLOT_MIN {
+            continue;
+        }
+        let carried = if overdue {
+            false
+        } else {
+            let week = json!(today_week);
+            let empty_weeks = Value::Array(Vec::new());
+            let session_weeks = get(assignment, "session_weeks")?.unwrap_or(&empty_weeks);
+            let mut had_past_session = false;
+            for session_week in iterate(session_weeks)? {
+                if compare(Cmp::Lt, &session_week, &week)? && contains(saved_weeks, &session_week)?
+                {
+                    had_past_session = true;
+                    break;
+                }
+            }
+            had_past_session
+        };
+        if !overdue && !carried {
+            continue;
+        }
+        let Value::Object(fields) = assignment else {
+            return Err(type_error(format!(
+                "'{}' object is not a mapping",
+                type_name(assignment)
+            )));
+        };
+        let mut item = fields.clone();
+        item.insert("remaining_min".into(), json!(remaining));
+        item.insert(
+            "left_over_state".into(),
+            json!(if overdue {
+                "overdue"
+            } else {
+                "left_from_last_week"
+            }),
+        );
+        items.push(Value::Object(item));
+    }
+    Ok(items)
 }

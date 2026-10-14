@@ -89,7 +89,7 @@ def test_the_card_has_one_heading_and_create_account_hides_forgot_password(
     assert window.auth_note.text() == (
         "FlexWeek fits homework around school and sports. "
         "Your week is saved on this computer, under this account. "
-        "Export a backup file now and then, in Settings."
+        "Export a backup file now and then (Settings > This computer > Manage account)."
     )
     assert not shown(window, "forgotPassword"), "a new account has no password to forget"
     window.auth_switch.click()
@@ -301,8 +301,9 @@ def test_a_field_problem_is_the_only_error_for_its_field(signed_out: NativeWindo
     assert not window.auth_status.isVisibleTo(window)
 
 
-def test_a_field_problem_has_a_one_pixel_edge_in_the_error_colour(signed_out: NativeWindow) -> None:  # noqa: F811
-    """S1: the edge rule wins over the generic QFrame rule, so the line is drawn with the error edge."""
+def test_a_field_problem_has_no_edge_in_the_error_colour(signed_out: NativeWindow) -> None:  # noqa: F811
+    """forms.html `.problem`: the words are the error colour and there is no box around them, so the top
+    row of the line holds no error-coloured edge."""
     window = signed_out
     window.show()
     QApplication.processEvents()
@@ -312,5 +313,5 @@ def test_a_field_problem_has_a_one_pixel_edge_in_the_error_colour(signed_out: Na
     error = QColor(resolved_palette(pack, dark, window._look, accent)["error"])
     line = window.password_problem
     image = line.grab().toImage()
-    edge = image.pixelColor(image.width() // 2, 0)
-    assert edge.name() == error.name(), f"top edge is {edge.name()}, not the error colour {error.name()}"
+    edges = [image.pixelColor(x, 0).name() for x in range(image.width())]
+    assert error.name() not in edges, "the problem line is drawn with a box"

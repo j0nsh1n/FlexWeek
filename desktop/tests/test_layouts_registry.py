@@ -1,388 +1,203 @@
-"""The registry is what the layout dialog is built from and what the file on disk is checked against,
-so it is tested as data: the roles, the three levels, what survives a bad file, and the contrast of
-every colourway including the one that follows the student's own look.
-"""
+"""The design registry keeps each design's curated looks and sanitizes stored choices."""
 
 from __future__ import annotations
 
 import itertools
+import math
 
 import pytest
 
 from desktop.native.layouts import registry as layouts_registry
 from desktop.native.layouts.registry import (
+    DESIGN_LOOKS,
     LAYOUTS,
+    LEGACY_COLOURS,
     LEVELS,
-    MATCH,
     contrast_failures,
     layouts_for,
     options_for,
     sanitize_layout,
     tokens_for,
 )
-from desktop.native.look import (
-    AA_TEXT,
-    ACCENT_COLORS,
-    ACCENTS,
-    LOOK_PRESETS,
-    PACKS,
-    contrast,
-    palette_from_tokens,
-    resolved_palette,
-)
-from desktop.native.tokens import oklch_of
-from desktop.tests.test_look import TEXT_PAIRS, _lab
-
-DESIGNS = [spec.id for spec in LAYOUTS.values() if spec.options]
+from desktop.native.look import AA_TEXT, ACCENTS, PACKS, contrast, design_look, resolved_palette
+from desktop.tests.test_look import _lab
 
 
 def test_the_two_roles_hold_the_designs_the_owner_picked() -> None:
-    assert [spec.id for spec in layouts_for("plan")] == [
-        "classic",
-        "timeline",
-        "mission",
-        "bento",
-        "retro",
-        "clay",
+    assert [spec.id for spec in LAYOUTS.values() if spec.role == "plan"] == [
+        "classic", "timeline", "mission", "bento", "retro", "clay"
     ]
-    assert [spec.id for spec in layouts_for("day")] == ["dial", "one"]
+    assert [spec.id for spec in LAYOUTS.values() if spec.role == "day"] == ["dial", "one"]
 
 
-def test_two_main_views_and_one_day_screen_are_standard_and_the_rest_experimental() -> None:
-    """Decision 3 of 0.16: one polished default and Timeline beside it; the rest stay, offered after."""
-    assert [spec.id for spec in layouts_for("plan", experimental=False)] == ["classic", "timeline"]
-    experimental = [spec.id for spec in layouts_for("plan", experimental=True)]
-    assert experimental == ["mission", "bento", "retro", "clay"]
-    assert [spec.id for spec in layouts_for("day", experimental=False)] == ["dial"]
-    assert [spec.id for spec in layouts_for("day", experimental=True)] == ["one"]
-    for spec in LAYOUTS.values():
-        slot = "main" if spec.role == "plan" else "day"
-        assert sanitize_layout({slot: spec.id})[slot] == spec.id, "a saved experimental choice still loads"
+def test_every_design_offers_its_signature_high_contrast_dark_and_your_look() -> None:
+    for layout_id, curated in DESIGN_LOOKS.items():
+        option = next(option for option in LAYOUTS[layout_id].options if option.key == "look")
+        assert option.values == tuple(value for value, _label in curated) + ("your",)
+        assert curated[0][0] not in {"preset:high-contrast", "pack:dark-frost"}, layout_id
+        assert ("preset:high-contrast", "High contrast") in curated, layout_id
+        assert any(
+            value.startswith("pack:dark-") or value == "preset:terminal" for value, _ in curated
+        ), layout_id
+        assert len(curated) >= 4
 
 
-def test_every_option_sits_at_a_level_the_dialog_draws() -> None:
-    """Fine-tune is only for a design with something to fine-tune: since 0.17 both of Bento's heroes
-    draw every tile, so it only styles. An option at a level the dialog does not draw is never shown."""
+def test_options_are_known_and_defaults_are_shipped() -> None:
     drawn = {level for level, _ in LEVELS}
     for spec in LAYOUTS.values():
-        assert {option.level for option in spec.options} <= drawn, spec.id
-
-
-def test_every_design_follows_the_students_look_until_one_of_its_own_colourways_is_picked() -> None:
-    """Decision 3 of 0.17: a design's default is Match my look, and its signature colourways stay
-    as choices. A colourway saved before then still loads as saved."""
-    for layout_id in DESIGNS:
-        spec = LAYOUTS[layout_id]
-        colour = spec.options[0]
-        assert colour.key == "colour" and colour.level == "style", layout_id
-        assert colour.default == MATCH, layout_id
-        assert colour.values == (MATCH, *[value for value, _, _ in spec.colourways]), layout_id
-        signature = spec.colourways[0][0]
-        saved = sanitize_layout({"options": {layout_id: {"colour": signature}}})
-        assert options_for(saved, layout_id)["colour"] == signature, layout_id
-
-
-def test_option_keys_and_choices_are_unambiguous() -> None:
-    for spec in LAYOUTS.values():
-        keys = [option.key for option in spec.options]
-        assert len(keys) == len(set(keys)), spec.id
+        assert {option.level for option in spec.options} <= drawn
+        assert len({option.key for option in spec.options}) == len(spec.options)
         for option in spec.options:
-            assert len(option.values) == len(set(option.values)) >= 2, (spec.id, option.key)
+            assert option.default in option.values
+    assert options_for(None, "classic")["look"] == "your"
+    assert options_for(None, "dial")["look"] == "your"
 
 
-def test_a_missing_or_broken_file_gives_the_shipped_choice() -> None:
+def test_missing_design_looks_keep_the_account_look_for_every_design() -> None:
+    choice = sanitize_layout({"main": "bento", "day": "one", "options": {}})
+    assert choice["options"] == {}
+    assert all(options_for(choice, layout_id)["look"] == "your" for layout_id in LAYOUTS)
+
+
+def test_layout_sanitizer_drops_unknown_values_keys_and_non_dict_options() -> None:
+    clean = sanitize_layout(
+        {
+            "main": "bento",
+            "day": "dial",
+            "options": {
+                "bento": {"look": "preset:nope", "corners": "triangular", "strange": "value"},
+                "timeline": "not a dict",
+                "ghost": {"look": "your"},
+            },
+        }
+    )
+    assert clean == {"main": "bento", "day": "dial", "options": {}}
+
+
+def test_layout_sanitizer_keeps_a_valid_main_day_pair() -> None:
+    assert sanitize_layout({"main": "bento", "day": "dial"}) == {
+        "main": "bento", "day": "dial", "options": {}
+    }
+
+
+def test_fold_bounds_options_merge_and_standard_layouts() -> None:
+    assert [spec.id for spec in layouts_for("plan", experimental=False)] == ["classic", "timeline"]
+    assert {spec.id for spec in layouts_for("plan", experimental=True)} == {
+        "mission", "bento", "retro", "clay"
+    }
+    assert [spec.id for spec in layouts_for("day", experimental=False)] == ["dial"]
+    assert [spec.id for spec in layouts_for("day", experimental=True)] == ["one"]
+    assert options_for({"options": {"one": {"look": "preset:one-paper", "lead": "next"}}}, "one") == {
+        "look": "preset:one-paper", "lead": "next", "actions": "show", "daybar": "show"
+    }
+    for value in ("0", "7", "x", 3, None):
+        assert "timeline" not in sanitize_layout({"options": {"timeline": {"fold": value}}})["options"]
+        assert options_for({"options": {"timeline": {"fold": value}}}, "timeline")["fold"] == "3"
+    assert options_for({"options": {"timeline": {"fold": "6"}}}, "timeline")["fold"] == "6"
+
+
+def test_bad_layouts_fall_back_and_wrong_roles_do_not_load() -> None:
     shipped = {"main": "classic", "day": "dial", "options": {}}
     for raw in (None, "bento", [], {"main": 7, "day": None, "options": "x"}):
         assert sanitize_layout(raw) == shipped
+    assert sanitize_layout({"main": "one", "day": "bento"}) == shipped
 
 
-def test_a_day_screen_cannot_be_the_main_view_nor_the_other_way_round() -> None:
-    assert sanitize_layout({"main": "one", "day": "bento"}) == {
-        "main": "classic",
-        "day": "dial",
-        "options": {},
+def test_old_colour_choices_migrate_to_the_corresponding_shared_look() -> None:
+    migrated = sanitize_layout(
+        {
+            "main": "bento",
+            "day": "one",
+            "options": {"bento": {"colour": "indigo"}, "one": {"colour": "black"}},
+        }
+    )
+    assert migrated["options"] == {
+        "bento": {"look": "preset:bento-indigo"},
+        "one": {"look": "preset:one-poster"},
     }
-    assert sanitize_layout({"main": "bento", "day": "dial"}) == {
-        "main": "bento",
-        "day": "dial",
-        "options": {},
-    }
+    assert sanitize_layout({"options": {"clay": {"colour": "unknown"}}})["options"]["clay"]["look"] == "your"
 
 
-def test_only_known_options_with_known_values_survive() -> None:
-    raw = {
-        "main": "bento",
-        "options": {
-            "bento": {"colour": "sunset", "corners": "triangular", "wallpaper": "cats"},
-            "one": {"actions": "hide"},
-            "heatmap": {"colour": "red"},
-            "clay": "tilted",
-        },
-    }
-    assert sanitize_layout(raw)["options"] == {"bento": {"colour": "sunset"}, "one": {"actions": "hide"}}
+def test_every_legacy_colour_maps_to_a_selectable_look() -> None:
+    for layout_id, colours in LEGACY_COLOURS.items():
+        offered = {token for token, _label in DESIGN_LOOKS[layout_id]} | {"your"}
+        assert set(colours.values()) <= offered, layout_id
+        for old, token in colours.items():
+            migrated = sanitize_layout({"options": {layout_id: {"colour": old}}})
+            assert migrated["options"][layout_id]["look"] == token, (layout_id, old)
 
 
-def test_options_are_the_students_choice_over_the_designs_defaults() -> None:
-    choice = {"options": {"one": {"actions": "hide", "colour": "paper"}}}
-    assert options_for(choice, "one") == {
-        "colour": "paper",
-        "lead": "now",
-        "actions": "hide",
-        "daybar": "show",
-    }
-    assert options_for(None, "dial") == {"colour": MATCH, "list": "show", "week": "show"}
-    assert options_for(choice, "classic") == {}
-
-
-def test_timelines_fold_is_saved_as_one_to_six_days_on_the_left_page_three_as_shipped() -> None:
-    """J8: the fold is one of Timeline's options, so it is kept with the look and reset with the
-    design. 1 | 6 and 6 | 1 are the ends; anything else on disk is the shipped 3 | 4."""
-    assert options_for(None, "timeline")["fold"] == "3"
-    for left in ("1", "2", "3", "4", "5", "6"):
-        saved = sanitize_layout({"main": "timeline", "options": {"timeline": {"fold": left}}})
-        assert options_for(saved, "timeline")["fold"] == left
-    for broken in ("0", "7", "x", 3, None):
-        assert options_for({"options": {"timeline": {"fold": broken}}}, "timeline")["fold"] == "3"
-
-
-@pytest.mark.parametrize("layout_id", DESIGNS)
-def test_every_shipped_colourway_is_readable(layout_id: str) -> None:
-    palette = resolved_palette("light-frost", False, None, "default")
-    for value, _, _ in LAYOUTS[layout_id].colourways:
-        assert contrast_failures(tokens_for(layout_id, value, palette)) == [], (layout_id, value)
-
-
-def test_every_design_dresses_its_page_in_colours_its_text_reads_on() -> None:
-    """A design in its own colours dresses its whole page: its panels, buttons, fields and scroll
-    bars (the chrome keeps the look). Retro's dark desktops put their white page text on its grey
-    windows and fields, 1.82 to 1. A design's colours are fixed, and the look lends them only its
-    block colours, so a light and a dark look are enough."""
-    light, dark = resolved_palette("light-frost", False, None), resolved_palette("nocturne", True, None)
-    dressed = [
-        (f"{layout_id} {value}", palette_from_tokens(tokens_for(layout_id, value, base), base))
-        for layout_id in DESIGNS
-        for value, _, _ in LAYOUTS[layout_id].colourways
-        for base in (light, dark)
-    ]
-    failures = {
-        (name, ink, paper, round(contrast(page[ink], page[paper]), 2))
-        for name, page in dressed
-        for ink, paper in TEXT_PAIRS
-        if contrast(page[ink], page[paper]) < AA_TEXT
-    }
-    assert sorted(failures) == []
-
-
-def test_match_my_look_is_readable_in_every_look_the_app_has() -> None:
+def test_all_curated_design_looks_pass_the_shared_colour_safety_sweep() -> None:
     failures = []
-    combos = list(itertools.product(PACKS, (False, True), LOOK_PRESETS, ACCENT_COLORS, ("layered", "flat")))
-    for pack, dark, preset, accent, surface in combos:
-        look = {"preset": preset, "knobs": {"surface": surface}}
-        tokens = tokens_for("bento", MATCH, resolved_palette(pack, dark, look, accent))
-        failures += [(pack, dark, preset, accent, surface, item) for item in contrast_failures(tokens)]
-    assert len(combos) == 5 * 2 * 7 * len(ACCENT_COLORS) * 2
+    close_accents = []
+    for layout_id, curated in DESIGN_LOOKS.items():
+        looks = (*curated, ("your", "Your look"))
+        for (token, _label), (pack, dark, accent, surface) in itertools.product(
+            looks,
+            itertools.product(PACKS, (False, True), ACCENTS, ("layered", "flat")),
+        ):
+            worn = {"preset": "default", "knobs": {"surface": surface}}
+            palette, _ = design_look(token, pack, dark, worn, accent)
+            tokens = tokens_for(layout_id, token, palette)
+            where = f"{layout_id}/{token}/{pack}/{dark}/{accent}/{surface}"
+            failures.extend((where, failure) for failure in contrast_failures(tokens))
+            if contrast(tokens["fill"], tokens["surface"]) < 1.8:
+                failures.append((where, "load bar below 1.8:1 against its tile"))
+            for ground in ("bg", "surface"):
+                ratio = contrast(tokens["accent"], tokens[ground])
+                if ratio < AA_TEXT:
+                    failures.append((where, f"accent on {ground}: {ratio:.2f}"))
+            gap = math.dist(_lab(tokens["accent"]), _lab(tokens["danger"]))
+            if gap < 25:
+                close_accents.append((where, round(gap, 1)))
     assert failures == []
+    assert close_accents == []
 
 
-def test_a_design_can_ask_for_a_colour_its_colourway_does_not_name() -> None:
-    palette = resolved_palette("light-frost", False, None, "default")
-    tokens = tokens_for("one", "black", palette)
-    # Poster names no accent, so it wears the student's own in place of 0.16's orange: the same hue,
-    # lightened until it reads on the black page.
-    assert tokens["bg"] == "#000000" and tokens["cta"] == tokens["accent"]
-    assert oklch_of(tokens["accent"])[2] == pytest.approx(oklch_of(palette["accent"])[2], abs=2)
-    assert oklch_of(tokens["accent"])[0] > oklch_of(palette["accent"])[0]
-    assert contrast(tokens["cta_ink"], tokens["cta"]) >= 4.5
-    # Derived from the colourway itself. Borrowed from the student's light look it was white on pale.
-    for key in ("card_a", "card_b", "card_c", "card_d"):
-        assert contrast(tokens["text"], tokens[key]) >= 4.5
-        assert contrast(tokens["muted"], tokens[key]) >= 4.5
-        assert contrast(tokens[key], tokens["bg"]) >= 1.01
+def test_every_design_offers_a_light_look() -> None:
+    missing = []
+    for layout_id, curated in DESIGN_LOOKS.items():
+        light = []
+        for token, _label in curated:
+            palette, _ = design_look(token, "light-frost", False, None)
+            if palette["axis"] == "light":
+                light.append(token)
+        if not light:
+            missing.append(layout_id)
+    assert missing == []
 
 
-def test_an_unknown_colourway_falls_back_to_the_students_look() -> None:
-    palette = resolved_palette("nocturne", True, None, "default")
-    assert tokens_for("clay", "no-such-colours", palette) == tokens_for("clay", MATCH, palette)
-    assert tokens_for("clay", MATCH, palette)["bg"] == palette["window"]
-
-
-def test_the_audit_names_each_unreadable_pair() -> None:
-    palette = resolved_palette("light-frost", False, None, "default")
-    good = tokens_for("bento", "indigo", palette)
+def test_contrast_audit_reports_the_pair_that_fails() -> None:
+    palette = resolved_palette("light-frost", False, None)
+    good = tokens_for("bento", "your", palette)
     assert contrast_failures(good) == []
     assert contrast_failures({**good, "muted": good["surface"]})[0] == "muted 1.00"
     assert contrast_failures({**good, "cta_ink": good["cta"]}) == ["cta_ink 1.00"]
-    assert contrast_failures({**good, "bg_muted": good["bg"]}) == ["bg_muted 1.00"]
-    assert contrast_failures({**good, "card_b": good["text"]}) == [
-        "text on card_b 1.00",
-        "muted on card_b 1.93",
-    ]
-    assert contrast_failures({**good, "card_c": good["bg"]}) == ["card_c on bg 1.00"]
 
 
-def test_a_bar_that_carries_no_text_is_free_to_be_seen() -> None:
-    """Bento's load bars used a card tint, which is held down by the text that sits on a card.
-    Measured across every look that left them at 1.27 to 1 against their tile in the median and
-    1.01 at worst, so Terminal's came out dark brown on black. A bar has no text on it."""
-    worst = 99.0
-    for pack, dark, preset, accent, surface in itertools.product(
-        PACKS, (False, True), LOOK_PRESETS, ACCENT_COLORS, ("layered", "flat")
-    ):
-        look = {"preset": preset, "knobs": {"surface": surface}}
-        tokens = tokens_for("bento", MATCH, resolved_palette(pack, dark, look, accent))
-        worst = min(worst, contrast(tokens["fill"], tokens["surface"]))
-    assert worst >= 1.8, f"a load bar sank to {worst:.2f} against its tile"
+def test_tokens_for_cache_reuses_a_palette_and_misses_a_changed_palette(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    layouts_registry._tokens_for_cache.clear()
+    calls = 0
+    real = layouts_registry.match_tokens
+
+    def counted(palette: dict) -> dict:
+        nonlocal calls
+        calls += 1
+        return real(palette)
+
+    monkeypatch.setattr(layouts_registry, "match_tokens", counted)
+    light = resolved_palette("light-frost", False, None)
+    first = tokens_for("bento", "your", light)
+    assert tokens_for("timeline", "preset:timeline-paper", light) == first
+    assert calls == 1
+    dark = resolved_palette("dark-frost", True, None)
+    assert tokens_for("bento", "your", dark) != first
+    assert calls == 2
+    layouts_registry._tokens_for_cache.clear()
 
 
-def test_the_audit_holds_a_fill_to_its_own_floor() -> None:
-    palette = resolved_palette("light-frost", False, None, "default")
-    good = tokens_for("bento", "indigo", palette)
-    assert contrast_failures(good) == []
-    assert contrast_failures({**good, "fill": good["surface"]}) == ["fill on surface 1.00"]
-
-
-def relative_luminance(colour: str) -> float:
-    raw = colour.lstrip("#")
-    red, green, blue = (int(raw[index : index + 2], 16) for index in (0, 2, 4))
-    return (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255
-
-
-def test_every_design_offers_a_dark_colourway() -> None:
-    """A student who works at night should not have to give up the design they picked. Bento and
-    Clay shipped with three colourways each and every one of them light."""
-    for layout_id, spec in LAYOUTS.items():
-        if not spec.colourways:
-            continue  # Today's app wears the pack, which has dark packs of its own.
-        darks = [
-            label for _value, label, tokens in spec.colourways if relative_luminance(tokens["bg"]) < 0.35
-        ]
-        assert darks, f"{layout_id} has no dark colourway"
-
-
-def test_every_design_offers_a_light_colourway_too() -> None:
-    """The same argument the other way: every one of Mission control's colourways is dark."""
-    missing = [
-        layout_id
-        for layout_id, spec in LAYOUTS.items()
-        if spec.colourways
-        and not [
-            label for _value, label, tokens in spec.colourways if relative_luminance(tokens["bg"]) >= 0.35
-        ]
-    ]
-    assert missing == ["mission"], (
-        "Mission control is the known exception and reaches light through Match my look; "
-        f"these now have no light colourway either: {missing}"
-    )
-
-
-def test_a_dark_colourway_is_readable_like_any_other() -> None:
-    palette = resolved_palette("light-frost", False, None)
-    for layout_id, spec in LAYOUTS.items():
-        for value, _label, tokens in spec.colourways:
-            if relative_luminance(tokens["bg"]) < 0.35:
-                assert contrast_failures(tokens_for(layout_id, value, palette)) == [], (layout_id, value)
-
-
-@pytest.mark.parametrize(
-    ("layout_id", "colour"), [("one", "black"), ("dial", "midnight"), ("clay", "pastel")]
-)
-def test_a_colourway_in_the_students_accent_reads_in_every_one(layout_id: str, colour: str) -> None:
-    """One thing's Poster and Day dial's Night take the student's accent onto their dark pages, and
-    Clay deck's Clay onto its lavender one, so each is held to the rules in every accent of every pack,
-    light and dark, not only in the one the other tests use, and a refusal never wears it."""
-    import math
-
-    named = next(tokens for value, _, tokens in LAYOUTS[layout_id].colourways if value == colour)
-    assert "accent" not in named
-    failures, close = [], {}
-    for pack, dark, accent in itertools.product(PACKS, (False, True), ACCENTS):
-        tokens = tokens_for(layout_id, colour, resolved_palette(pack, dark, None, accent))
-        failures += [(pack, dark, accent, item) for item in contrast_failures(tokens)]
-        for ground in ("bg", "surface"):
-            if (ratio := contrast(tokens["accent"], tokens[ground])) < AA_TEXT:
-                failures.append((pack, dark, accent, f"accent on {ground} {ratio:.2f}"))
-        if (gap := math.dist(_lab(tokens["accent"]), _lab(tokens["danger"]))) < 25:
-            close[(pack, dark, accent)] = round(gap, 1)
-    assert failures == []
-    assert close == {}
-
-
-def test_a_dark_looks_accent_already_reads_on_night_and_is_worn_as_it_is() -> None:
-    palette = resolved_palette("nocturne", True, None, "default")
-    tokens = tokens_for("dial", "midnight", palette)
-    assert (tokens["accent"], tokens["accent_ink"]) == (palette["accent"], palette["accent_ink"])
-
-
-def test_tokens_for_tints_once_per_distinct_input_and_skips_repeats(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Repeats of the same design, colour and palette must not call _tint again.
-
-    complete() tints cards a-d once per tokens_for, so the first call may invoke _tint
-    several times. One call per distinct _tint input; none extra on repeats. A changed
-    colour or palette must miss the cache.
-    """
-    cache = getattr(layouts_registry, "_tokens_for_cache", None)
-    if cache is not None:
-        cache.clear()
-
-    tint_calls: list[tuple] = []
-    real_tint = layouts_registry._tint
-
-    def counting_tint(*args: object, **kwargs: object) -> str:
-        tint_calls.append((args, tuple(sorted(kwargs.items()))))
-        return real_tint(*args, **kwargs)
-
-    monkeypatch.setattr(layouts_registry, "_tint", counting_tint)
-
-    layout_id, colour = "bento", MATCH
-    palette = resolved_palette("light-frost", False, None, "default")
-    first = tokens_for(layout_id, colour, palette)
-    after_first = len(tint_calls)
-    # complete() tints four cards; MATCH then overwrites them, but the four calls still happen.
-    assert after_first >= 4
-    assert len(tint_calls) == len(set(tint_calls))
-
-    for _ in range(9):
-        assert tokens_for(layout_id, colour, palette) == first
-    assert len(tint_calls) == after_first
-
-    mutated = tokens_for(layout_id, colour, palette)
-    mutated["bg"] = "#000000"
-    assert tokens_for(layout_id, colour, palette)["bg"] == first["bg"]
-
-    other_colour = tokens_for(layout_id, "indigo", palette)
-    assert other_colour != first
-    after_colour = len(tint_calls)
-    assert after_colour > after_first
-    assert len(tint_calls) == len(set(tint_calls))
-
-    other_palette = resolved_palette("nocturne", True, None, "default")
-    other_look = tokens_for(layout_id, colour, other_palette)
-    assert other_look != first
-    assert len(tint_calls) > after_colour
-    assert len(tint_calls) == len(set(tint_calls))
-
-
-def test_a_refusal_never_wears_the_accent() -> None:
-    """A held block is outlined and labelled in the accent where it can go and in the danger colour
-    where it cannot. One thing's black scheme had both at #fb923c, so a refusal looked allowed and
-    only its words differed. The gap is in CIE Lab, as the accent and category audit in test_look
-    measures it; two dark reds on Poster sat 15 apart and read as one."""
-    import math
-
-    reached = {
-        f"{layout_id}/{value}": tokens_for(layout_id, value, resolved_palette("light-frost", False, None))
-        for layout_id, spec in LAYOUTS.items()
-        for value, _, _ in spec.colourways
-    }
-    for pack, dark, preset, accent, surface in itertools.product(
-        PACKS, (False, True), LOOK_PRESETS, ACCENTS, ("layered", "flat")
-    ):
-        look = {"preset": preset, "knobs": {"surface": surface}}
-        where = f"match {pack}/{'dark' if dark else 'light'}/{preset}/{accent}"
-        reached[where] = tokens_for("bento", MATCH, resolved_palette(pack, dark, look, accent))
-    close = {
-        where: round(gap, 1)
-        for where, tokens in reached.items()
-        if (gap := math.dist(_lab(tokens["accent"]), _lab(tokens["danger"]))) < 25
-    }
-    assert close == {}
+def test_legacy_look_alias_falls_back_to_the_accounts_look_when_unknown() -> None:
+    palette = resolved_palette("nocturne", True, None)
+    assert design_look("preset:unknown", "nocturne", True, None)[0]["window"] == palette["window"]

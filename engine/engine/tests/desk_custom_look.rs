@@ -199,8 +199,8 @@ fn test_an_import_says_plainly_what_was_wrong() {
     let huge = format!("{{{}}}", " ".repeat(70000));
     let cases = [
         ("not json at all", "could not be read"),
-        ("[1, 2]", "not a FlexWeek look"),
-        (r#"{"base": "paper"}"#, "not a FlexWeek look"),
+        ("[1, 2]", "isn't a FlexWeek look"),
+        (r#"{"base": "paper"}"#, "isn't a FlexWeek look"),
         (
             r#"{"kind": "FlexWeek look", "base": "paper"}"#,
             "no version",
@@ -211,7 +211,7 @@ fn test_an_import_says_plainly_what_was_wrong() {
         ),
         (
             r#"{"kind": "FlexWeek look", "version": 1, "base": "neon"}"#,
-            "does not have: 'neon'",
+            "doesn't have: 'neon'",
         ),
         (huge.as_str(), "too large"),
     ];

@@ -11,9 +11,16 @@ use crate::desk::pyops::{
     order,
 };
 use crate::desk::pyval::{subscript, type_error};
+use crate::desk::weekmodel::clock_text;
 use crate::error::{EngineError, EngineResult};
 use crate::stored::{attribute_error, py_int, py_str, text, truthy, type_name};
-use crate::time::{DAY_END_MIN, DAY_START_MIN, hhmm_to_minutes, minutes_to_hhmm};
+use crate::time::{DAY_END_MIN, DAY_START_MIN, SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm};
+
+/// The next quarter hour at or after `now_min`, or None when rounding up reaches midnight.
+fn next_choose_slot(now_min: i64) -> Option<i64> {
+    let slot = (-(-now_min).div_euclid(SLOT_MIN)) * SLOT_MIN;
+    (slot < DAY_END_MIN).then_some(slot)
+}
 
 type Fresh<'a> = &'a mut dyn FnMut() -> String;
 
@@ -761,7 +768,7 @@ pub fn span_problem(
 ) -> EngineResult<Option<&'static str>> {
     if start_min < DAY_START_MIN || end_min > DAY_END_MIN {
         return Ok(Some(
-            "That is outside the hours FlexWeek plans in, so it stayed where it was.",
+            "That's outside the hours FlexWeek plans in, so it stayed where it was.",
         ));
     }
     if !due.is_null() {
@@ -775,9 +782,7 @@ pub fn span_problem(
             }
         };
         if later {
-            return Ok(Some(
-                "That ends after it is due, so it stayed where it was.",
-            ));
+            return Ok(Some("That ends after it's due, so it stayed where it was."));
         }
     }
     Ok(None)
@@ -791,7 +796,7 @@ pub fn past_problem(
     start_min: i64,
     now_iso: &str,
     now_min: i64,
-) -> EngineResult<Option<&'static str>> {
+) -> EngineResult<Option<String>> {
     let Ok(monday) = from_iso(week_start) else {
         return Ok(None);
     };
@@ -802,7 +807,20 @@ pub fn past_problem(
         return Ok(None);
     };
     if target < now || (target == now && start_min < now_min) {
-        return Ok(Some("That's in the past."));
+        // An earlier day is over whatever the clock says; only today can offer a later time.
+        let slot = if target < now {
+            None
+        } else {
+            next_choose_slot(now_min)
+        };
+        let message = match slot {
+            Some(slot) => format!(
+                "That time has passed. Choose {} or later today, or another day.",
+                clock_text(slot)
+            ),
+            None => "That time has passed. The day is over, so choose another day.".to_string(),
+        };
+        return Ok(Some(message));
     }
     Ok(None)
 }
@@ -899,14 +917,19 @@ mod tests {
         let week = "2026-10-05";
         let thursday = "2026-10-08";
         let at = 15 * 60 + 10;
+        let refused = "That time has passed. Choose 15:15 or later today, or another day.";
         assert_eq!(
-            past_problem(week, 1, 16 * 60, thursday, at).unwrap(),
-            Some("That's in the past."),
-            "Tuesday of this week"
+            past_problem(week, 1, 16 * 60, thursday, at)
+                .unwrap()
+                .as_deref(),
+            Some("That time has passed. The day is over, so choose another day."),
+            "Tuesday of this week is over, so it offers no time later today"
         );
         assert_eq!(
-            past_problem(week, 3, 15 * 60, thursday, at).unwrap(),
-            Some("That's in the past."),
+            past_problem(week, 3, 15 * 60, thursday, at)
+                .unwrap()
+                .as_deref(),
+            Some(refused),
             "earlier today"
         );
         assert_eq!(
@@ -920,9 +943,11 @@ mod tests {
             "later today"
         );
         assert_eq!(
-            past_problem("2026-09-28", 4, 18 * 60, thursday, at).unwrap(),
-            Some("That's in the past."),
-            "last week"
+            past_problem("2026-09-28", 4, 18 * 60, thursday, at)
+                .unwrap()
+                .as_deref(),
+            Some("That time has passed. The day is over, so choose another day."),
+            "last week is over"
         );
         assert_eq!(
             past_problem("2026-10-12", 0, 8 * 60, thursday, at).unwrap(),

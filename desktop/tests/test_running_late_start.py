@@ -92,3 +92,19 @@ def test_running_late_names_the_block_already_in_progress(
     monkeypatch.setattr(LateDialog, "exec", inspect)
     window._open_late()
     assert contexts == ["Late test, 4:45 PM, moves 30 min later"]
+
+
+def test_running_late_leaves_homework_that_waits_for_a_time_out_of_the_replan(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    session = window.session
+    timed = {
+        "id": "essay-1", "title": "Essay", "kind": "flexible", "category": "work",
+        "assignment_id": "essay", "start": "16:00", "duration_min": 60, "days": [0],
+    }
+    waiting = {**timed, "id": "essay-2", "start": None}
+    fixed = {"id": "gym", "title": "Gym", "kind": "locked", "category": "extra", "start": "18:00",
+             "duration_min": 60, "days": [0]}
+    session.blocks = [timed, waiting, fixed]
+    assert [block["id"] for block in session._late_blocks()] == ["essay-1", "gym"]

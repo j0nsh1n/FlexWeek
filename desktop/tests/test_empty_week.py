@@ -11,7 +11,7 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QDate, QStandardPaths, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton
+from PySide6.QtWidgets import QAbstractButton, QApplication, QDialog, QLabel, QPushButton
 
 from desktop.native.calendar import sunday_due
 from desktop.native.layouts.empty import EMPTY_BUTTON, EMPTY_HEADING, EMPTY_LINE
@@ -37,7 +37,7 @@ def window(qapp: QApplication, signed_in: NativeWindow) -> Iterator[NativeWindow
     """A new account just past setup, with no school block: Today's app, on Week."""
     signed_in.resize(1280, 860)
     signed_in._layout = {"main": "classic", "day": "one", "options": {}}
-    signed_in.findChild(QPushButton, "viewWeek").click()
+    signed_in.findChild(QAbstractButton, "viewWeek").click()
     settled(qapp, signed_in)
     yield signed_in
     look_file().unlink(missing_ok=True)
@@ -60,12 +60,12 @@ def test_a_new_accounts_week_offers_one_button_instead_of_empty_hours(
     assert [button.text() for button in buttons] == [EMPTY_BUTTON]
     # The top bar stays: where you are, the views, Plan and More.
     for name in ("weekTitle", "viewWeek", "solveButton", "moreButton"):
-        assert window.findChild(QLabel if name == "weekTitle" else QPushButton, name).isVisible(), name
+        assert window.findChild(QLabel if name == "weekTitle" else QAbstractButton, name).isVisible(), name
 
-    window.findChild(QPushButton, "viewDay").click()
+    window.findChild(QAbstractButton, "viewDay").click()
     settled(qapp, window)
     assert shown(window) is window.empty_week, "Today's app's Day of an empty week says the same"
-    window.findChild(QPushButton, "viewMonth").click()
+    window.findChild(QAbstractButton, "viewMonth").click()
     settled(qapp, window)
     assert shown(window) is window.month_grid, "Month is a calendar, empty or not"
 
@@ -141,3 +141,30 @@ def test_a_design_of_its_own_draws_its_own_empty_week(
     window._on_week()
     assert shown(window) is not window.empty_week
     assert shown(window).layout_id == "bento"
+
+
+def test_a_blank_week_cards_height_follows_its_wrapped_line_at_large_high_contrast(
+    qapp: QApplication,  # noqa: F811
+) -> None:
+    """A34: the empty-week card is tall enough for Large text in High contrast, not a fixed 200 px."""
+    from desktop.native.layouts.empty import BLANK_LINE, EmptyWeek
+    from desktop.native.look import pack_stylesheet
+
+    card = EmptyWeek()
+    card.set_blank(True)
+    card.set_over_hours(True)
+    worn = {"preset": "high-contrast", "knobs": {"text": "large"}}
+    card.setStyleSheet(pack_stylesheet("system", False, worn))
+    card.heading.setWordWrap(True)
+    card.line.setWordWrap(True)
+    card.show()
+    card.adjustSize()
+    # The copy-last row is what the old fixed 200 px floor was for; the card must be shown to take
+    # that branch.
+    assert card.copy_last.isVisible()
+    # The layout needs more than the old 200 px floor at Large High contrast (about 229 px).
+    hint = card.sizeHint()
+    assert hint.height() >= card.layout().totalMinimumSize().height()
+    assert hint.height() >= card.heading.sizeHint().height() + card.line.sizeHint().height() + 80
+    assert BLANK_LINE in card.line.text()
+    card.close()

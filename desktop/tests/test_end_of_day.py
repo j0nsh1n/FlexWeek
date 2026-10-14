@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QApplication, QWidget
 
 from desktop.native.fields import ClockField
 from desktop.native.setup import QuarterTime
-from desktop.native.weekmodel import length_label, set_clock_24h
+from desktop.native.weekmodel import clock_text, length_label, set_clock_24h
 from desktop.native.widgets import AvailabilityDialog, BlockDialog, SchoolHoursDialog
 from desktop.tests.test_clock_field import line_of, select_with_ctrl_a, shown
 from desktop.tests.test_setup_wizard import WEEK, opened
@@ -32,6 +32,9 @@ def test_the_block_editor_takes_an_end_at_midnight(
     set_clock_24h(twenty_four)
     dialog = BlockDialog(host, day=3, start="22:00", duration_min=60)
     dialog.title.setText("Late club")
+    from desktop.tests.test_fixed_time_steps import go_when
+
+    go_when(dialog)
     type_over(dialog.end, way)
     assert dialog.duration_line.text() == length_label(120)
     assert dialog.duration_line.property("problem") is False
@@ -65,6 +68,9 @@ def test_an_event_that_ends_at_midnight_opens_and_saves_as_it_was(
 def test_the_block_editor_still_refuses_an_end_before_its_start(qapp: QApplication, host: QWidget) -> None:
     dialog = BlockDialog(host, day=3, start="22:00", duration_min=60)
     dialog.title.setText("Club")
+    from desktop.tests.test_fixed_time_steps import go_when
+
+    go_when(dialog)
     type_over(dialog.end, "21:00")
     dialog.accept()
     assert dialog.result() != dialog.DialogCode.Accepted
@@ -173,6 +179,28 @@ def test_an_end_box_reads_midnight_as_the_end_of_the_day(
             assert field.minutes() == 24 * 60, way
             assert line_of(field).text() == drawn, way
         free(field)
+
+
+def test_a_block_that_hits_midnight_says_how_long_it_became(
+    qapp: QApplication, host: QWidget  # noqa: F811
+) -> None:
+    from desktop.tests.test_regress_item0_time_boxes import enter, press, type_text
+
+    set_clock_24h(False)
+    dialog = BlockDialog(host, day=3, start="23:00", duration_min=60)
+    dialog.show()
+    dialog.title.setText("Late")
+    from desktop.tests.test_fixed_time_steps import go_when
+
+    go_when(dialog)
+    enter(dialog.start, "tab-in")
+    type_text(dialog.start, "11:30 PM")
+    press(dialog.start, Qt.Key.Key_Tab)
+    end_words = clock_text(24 * 60)
+    wanted = f"End moved to the end of the day ({end_words}). It's now 30 min, not 1 h."
+    assert dialog.duration_line.text() == wanted
+    assert dialog._moved == wanted
+    dialog.close()
 
 
 def test_a_start_box_keeps_00_00_as_midnight_and_refuses_24_00(

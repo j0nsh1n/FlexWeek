@@ -75,6 +75,38 @@ def test_the_focus_timer_line_is_in_the_serif_looks_face_not_mono() -> None:
     assert "Mono" in focus_time(sheet({"preset": "light"}))
 
 
+def test_a_one_hour_homework_block_keeps_its_book_icon_inside_the_block(qapp) -> None:
+    """U18: Paper at Normal and Large keeps the 16 px icon unclipped with room beside the title."""
+    from PySide6.QtCore import QRectF
+    from PySide6.QtGui import QFont, QImage, QPainter
+
+    from desktop.native.hours.canvas import INNER_PAD, BlockPainter, Drawn
+    from desktop.native.hours.geometry import Span
+
+    for text in ("normal", "large"):
+        look = {"preset": "paper", "knobs": {"text": text}}
+        palette = resolved_palette("system", False, look)
+        painter_obj = BlockPainter(palette, look)
+        span = Span(2, 14 * 60, 15 * 60)
+        drawn = Drawn("essay", "History essay", "assignments", True, span, 0, 1)
+        rect = QRectF(0, 0, 120, 52)
+        image = QImage(int(rect.width()), int(rect.height()), QImage.Format.Format_ARGB32)
+        image.fill(palette["window"])
+        paint = QPainter(image)
+        paint.setFont(QFont("Inter", 13))
+        boxes = painter_obj.words(paint, rect, drawn, painter_obj.c("text"), rect)
+        paint.end()
+        assert boxes
+        left = min(box.left() for box in boxes)
+        top = min(box.top() for box in boxes)
+        right = max(box.right() for box in boxes)
+        bottom = max(box.bottom() for box in boxes)
+        assert left >= rect.left() + INNER_PAD - 0.5, text
+        assert top >= rect.top() + INNER_PAD - 0.5, text
+        assert right <= rect.right() - INNER_PAD + 0.5, text
+        assert bottom <= rect.bottom() - INNER_PAD + 0.5, text
+
+
 def test_the_settings_focus_timer_keeps_one_width_for_every_figure(qapp) -> None:
     from PySide6.QtGui import QFont
 

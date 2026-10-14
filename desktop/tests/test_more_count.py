@@ -20,6 +20,7 @@ from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.look import contrast, count_pill, resolved_palette
 from desktop.native.weekmodel import length_label
 from desktop.native.window import NativeWindow
+from desktop.tests.test_1br_left_over_guards import overdue_this_week
 from desktop.tests.window_support import (  # noqa: F401
     qapp,
     server,
@@ -93,7 +94,8 @@ def test_badge_more_row_panel_and_rail_show_the_same_items_and_minutes(
     minutes = {item["title"]: item["minutes"] for item in needed}
     assert minutes == {"History essay": 120, "Math worksheet": 60, "Chem lab": 90}
     lines = sorted(f"{title} · {length_label(amount)} left" for title, amount in minutes.items())
-    assert window.more_button.accessibleName() == "More, 3 homework still need time"
+    assert window.more_button.accessibleName() == "More"
+    assert window.solve_button.accessibleName() == "Plan my homework, 3 homework still need time"
     enabled, row = more_row(window)
     assert enabled and row == "Unfinished\t3 left"
     assert window.rail.waiting_count.text() == "3"
@@ -101,7 +103,17 @@ def test_badge_more_row_panel_and_rail_show_the_same_items_and_minutes(
     window.findChild(QPushButton, "unfinishedOpen").click()
     qapp.processEvents()
     assert window.unfinished_panel.isVisibleTo(window)
-    assert sorted(panel_rows(window)) == lines
+    essay_due = date.today() - timedelta(days=3)
+    due_words = f"due {essay_due.strftime('%a')} {essay_due.day} {essay_due.strftime('%b')}"
+    panel_lines = sorted(
+        (
+            f"{title} · {length_label(amount)} left · {due_words} · Overdue"
+            if title == "History essay"
+            else f"{title} · {length_label(amount)} left"
+        )
+        for title, amount in minutes.items()
+    )
+    assert sorted(panel_rows(window)) == panel_lines
     assert window.unfinished_panel.findChild(QPushButton, "planUnfinished-essay") is not None
 
 
@@ -115,7 +127,8 @@ def test_work_due_this_week_with_a_chip_is_counted(
     window._on_week()
     assert [item["assignment_id"] for item in window.session.homework_time_needed()] == ["math"]
     assert window.rail.waiting_count.text() == "1"
-    assert window.more_button.accessibleName() == "More, 1 homework still needs time"
+    assert window.more_button.accessibleName() == "More"
+    assert window.solve_button.accessibleName() == "Plan my homework, 1 homework still needs time"
     assert more_row(window) == (True, "Unfinished\t1 left")
 
 
@@ -151,19 +164,22 @@ def test_the_count_goes_up_and_down_and_nothing_moves(
 
     before = geometry()
     assert window.more_button.accessibleName() == "More"
+    assert window.solve_button.accessibleName() == "Plan my homework"
     add(window, "history", "History", 120, due_in(window, 9))
     window.session.save()
     settled(qapp, window)
     window._on_week()
     qapp.processEvents()
-    assert window.more_button.accessibleName() == "More, 1 homework still needs time"
+    assert window.more_button.accessibleName() == "More"
+    assert window.solve_button.accessibleName() == "Plan my homework, 1 homework still needs time"
     assert geometry() == before
     add(window, "bio", "Bio", 60, due_in(window, 5))
     window.session.save()
     settled(qapp, window)
     window._on_week()
     qapp.processEvents()
-    assert window.more_button.accessibleName() == "More, 2 homework still need time"
+    assert window.more_button.accessibleName() == "More"
+    assert window.solve_button.accessibleName() == "Plan my homework, 2 homework still need time"
     assert geometry() == before
     for key in ("history", "bio"):
         settled(qapp, window)
@@ -173,6 +189,7 @@ def test_the_count_goes_up_and_down_and_nothing_moves(
     qapp.processEvents()
     assert window.session.homework_time_needed() == []
     assert window.more_button.accessibleName() == "More"
+    assert window.solve_button.accessibleName() == "Plan my homework"
     assert geometry() == before
     assert more_row(window) == (False, "Unfinished\tNone left")
 
@@ -221,6 +238,25 @@ def test_a_greyed_unfinished_opens_nothing(
     assert more_row(window) == (False, "Unfinished\tNone left")
     window._show_unfinished()
     assert not window.unfinished_panel.isVisibleTo(window)
+
+
+def test_more_counts_only_panel_rows_that_need_a_time(qapp, window) -> None:  # noqa: F811
+    overdue_this_week(qapp, window)
+    add(window, "art", "Art", 30, due_in(window, 6))
+    window.session.save()
+    settled(qapp, window)
+    assert more_row(window) == (True, "Unfinished\t1 left")
+    window._show_unfinished()
+    settled(qapp, window)
+    assert window.unfinished_panel.list.count() == 2
+    assert {item["assignment_id"] for item in window.session.homework_time_needed()} == {"art"}
+    buttons = [
+        window.unfinished_panel.list.itemWidget(window.unfinished_panel.list.item(index)).findChild(
+            QPushButton, "focusUnfinished-bio"
+        )
+        for index in range(window.unfinished_panel.list.count())
+    ]
+    assert any(button is not None for button in buttons)
 
 
 @pytest.mark.parametrize(

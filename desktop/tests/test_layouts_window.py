@@ -27,6 +27,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtGui import QImage
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import (
+        QAbstractButton,
         QApplication,
         QCheckBox,
         QComboBox,
@@ -137,7 +138,7 @@ def window(qapp: QApplication, tmp_path: Path) -> Iterator[NativeWindow]:
 
 
 def click(window: NativeWindow, name: str) -> None:
-    window.findChild(QPushButton, name).click()
+    window.findChild(QAbstractButton, name).click()
 
 
 def one_thing(window: NativeWindow) -> None:
@@ -157,12 +158,12 @@ def test_my_day_puts_planning_away_and_back_brings_it_back(qapp: QApplication, w
     click(window, "viewMyDay")
     assert isinstance(window.planner.currentWidget(), OneThingView)
     assert window.solve_button.isVisible() is True
-    assert window.findChild(QPushButton, "viewMyDay").isChecked() is True
-    assert window.findChild(QPushButton, "viewWeek").isChecked() is False
+    assert window.findChild(QAbstractButton, "viewMyDay").isChecked() is True
+    assert window.findChild(QAbstractButton, "viewWeek").isChecked() is False
     click(window, "oneBack")
     assert window.planner.currentWidget() is window.week_table
     assert window.solve_button.isVisible() is True
-    assert window.findChild(QPushButton, "viewWeek").isChecked() is True
+    assert window.findChild(QAbstractButton, "viewWeek").isChecked() is True
 
 
 def test_the_day_screen_reads_the_real_week_at_the_real_minute(
@@ -185,7 +186,9 @@ def test_homework_finished_finishes_it_the_way_the_product_does(
     assert window.session.assignments["essay"]["completed"] is True
     assert window.session.can_undo() is True
     view = window.planner.currentWidget()
-    assert view.findChild(QLabel, "oneTitle").text() == "All homework finished"
+    # The ring may set the title over two lines; the words are whole either way.
+    title = view.findChild(QLabel, "oneTitle")
+    assert (" ".join(title.text().split()), title.accessibleName()) == ("All homework finished",) * 2
 
 
 def test_start_focus_keeps_the_timer_in_view_on_a_day_screen(
@@ -220,7 +223,7 @@ def test_a_blocked_running_late_toasts_why(qapp: QApplication, window: NativeWin
 
     window.session.dirty = True
     window._open_late()
-    saving = "Your last change is still saving. Try again in a moment."
+    saving = "Saving your last change… Running late will work in a moment."
     assert window.toast.isVisible() is True
     assert window.toast.text() == saving
     assert window.toast._timer.interval() == TOAST_MS
@@ -228,7 +231,7 @@ def test_a_blocked_running_late_toasts_why(qapp: QApplication, window: NativeWin
     window.session.dirty = False
     window.session.conflict = True
     window._open_late()
-    conflict = "This week was changed somewhere else. Reload it first."
+    conflict = "This week changed in another window. Choose More > Reload this week, then try again."
     assert window.toast.text() == conflict
 
 
@@ -371,7 +374,7 @@ def test_signing_out_of_a_day_screen_does_not_leave_the_next_student_in_one(
 
 def test_the_choice_is_saved_on_this_device_beside_the_look(qapp: QApplication, window: NativeWindow) -> None:
     window._look = {"preset": "paper", "knobs": {"corners": "rounded"}}
-    window._layout = {"main": "classic", "day": "one", "options": {"one": {"colour": "paper"}}}
+    window._layout = {"main": "classic", "day": "one", "options": {"one": {"look": "preset:one-paper"}}}
     window._save_look()
     stored = json.loads(look_file().read_text())
     assert stored["preset"] == "paper"
@@ -379,7 +382,7 @@ def test_the_choice_is_saved_on_this_device_beside_the_look(qapp: QApplication, 
     assert stored["layout"] == {
         "main": "classic",
         "day": "one",
-        "options": {"one": {"colour": "paper"}},
+        "options": {"one": {"look": "preset:one-paper"}},
     }
     # Whether this computer checks for updates lives beside the look, because it is a property of
     # the computer rather than the account.
@@ -387,7 +390,7 @@ def test_the_choice_is_saved_on_this_device_beside_the_look(qapp: QApplication, 
     window._look, window._layout = {}, {}
     window._load_look()
     assert window._look == {"preset": "paper", "knobs": {"corners": "rounded"}}
-    assert window._layout["options"] == {"one": {"colour": "paper"}}
+    assert window._layout["options"] == {"one": {"look": "preset:one-paper"}}
     click(window, "viewMyDay")
     faded_in()
     assert window.planner.currentWidget().grab().toImage().pixelColor(4, 4).name() == "#f7f1e3"
@@ -412,7 +415,7 @@ def test_saving_the_look_from_settings_keeps_the_layout(qapp: QApplication, wind
 
 
 def test_a_changed_look_repaints_a_design_that_matches_it(qapp: QApplication, window: NativeWindow) -> None:
-    window._layout = {"main": "classic", "day": "one", "options": {"one": {"colour": "match"}}}
+    window._layout = {"main": "classic", "day": "one", "options": {"one": {"look": "your"}}}
     click(window, "viewMyDay")
     faded_in()
     view = window.planner.currentWidget()
@@ -471,7 +474,6 @@ def test_settings_shows_only_what_the_main_view_uses(qapp: QApplication) -> None
     """Surface, Corners and Blocks stayed on screen for every design, though only Today's app reads
     them, so a student changed them in Bento and nothing happened. Look and Accent stay for every
     design: they dress the top bar and every window whatever the design (decision 3 of 0.17)."""
-    from desktop.native.layouts.dialog import COLOUR_NOTE
     from desktop.native.settings import FINE_TUNE_LOOK, TODAYS_APP_KNOBS
 
     dialog = prefs_layout({"main": "classic", "day": "one", "options": {}})
@@ -479,56 +481,48 @@ def test_settings_shows_only_what_the_main_view_uses(qapp: QApplication) -> None
     dialog.show()
     qapp.processEvents()
 
-    def note() -> QLabel | None:
-        return dialog.findChild(QLabel, "layoutMainColourNote")
-
     def shown() -> dict[str, bool]:
         fields = {"look": dialog.look, "accent": dialog.accent, "chips": dialog.accent_chips}
         fields.update(dialog.knobs)
-        return {name: field.isVisibleTo(dialog) for name, field in fields.items()} | {
-            "note": note() is not None and note().isVisibleTo(dialog)
-        }
+        return {name: field.isVisibleTo(dialog) for name, field in fields.items()}
 
     everything = shown()
-    assert everything.pop("note") is False and all(everything.values())
+    assert all(everything.values())
     assert dialog.fine_tune.text() == FINE_TUNE_LOOK
 
     main = combo(dialog, "layoutMain")
     main.setCurrentIndex(main.findData("bento"))
     qapp.processEvents()
-    # Bento arrives in Match my look, so there is nothing to say about colours of its own.
     matched = shown()
-    assert {name for name, on in matched.items() if not on} == {"note", *TODAYS_APP_KNOBS}
+    assert {name for name, on in matched.items() if not on} == set(TODAYS_APP_KNOBS) - {"surface"}
     assert dialog.fine_tune.text() == FINE_TUNE_LOOK
 
-    colour = combo(dialog, "layoutMain-colour")
-    colour.setCurrentIndex(colour.findData(signature("bento")))
+    colour = combo(dialog, "layoutMain-look")
+    colour.setCurrentIndex(colour.findData("preset:high-contrast"))
     qapp.processEvents()
     own = shown()
-    assert {name for name, on in own.items() if not on} == set(TODAYS_APP_KNOBS)
-    assert note().text() == COLOUR_NOTE
+    assert {name for name, on in own.items() if not on} == set(TODAYS_APP_KNOBS) - {"surface"}
     assert dialog.fine_tune.text() == FINE_TUNE_LOOK
 
     main.setCurrentIndex(main.findData("classic"))
     qapp.processEvents()
-    assert all(on for name, on in shown().items() if name != "note")
+    assert all(shown().values())
     dialog.close()
 
 
 @pytest.mark.parametrize("main", ["timeline", "mission", "bento", "retro", "clay"])
-def test_the_knobs_settings_hides_for_a_design_change_nothing_in_it(
+def test_surface_fine_tuning_applies_to_every_design(
     qapp: QApplication, window: NativeWindow, main: str
 ) -> None:
-    """The reason Settings hides them. If a design starts reading one, show it again for that design."""
+    """Surface is a palette token shared by the canvas and app chrome for every design."""
     from desktop.native.look import LOOK_DEFAULTS, LOOK_KNOBS, sanitize_look
-    from desktop.native.settings import TODAYS_APP_KNOBS
 
     def view_with(knobs: dict[str, str], prefs: dict | None = None) -> QImage:
         window.session.preferences = {**base, **(prefs or {})}
         window._look = sanitize_look({"preset": "default", "knobs": knobs})
         # In its own colours: in Match my look a design wears the look, Surface included.
-        colour = {main: {"colour": own_accent(main)}}
-        window._layout = sanitize_layout({"main": main, "day": "one", "options": colour})
+        selected = {main: {"look": own_accent(main)}}
+        window._layout = sanitize_layout({"main": main, "day": "one", "options": selected})
         window._apply_appearance()
         window._on_week()
         for _ in range(20):
@@ -538,11 +532,8 @@ def test_the_knobs_settings_hides_for_a_design_change_nothing_in_it(
     # Still pictures: with animations off, every picture is of the page as it settles.
     base = {**(window.session.preferences or {}), "motion": "off"}
     plain = view_with({})
-    for knob in TODAYS_APP_KNOBS:
-        other = next(value for value in LOOK_KNOBS[knob] if value != LOOK_DEFAULTS[knob])
-        assert view_with({knob: other}) == plain, knob
-    assert view_with({}, {"theme_pack": "dark-frost"}) == plain, "look"
-    assert view_with({}, {"accent": "gold"}) == plain, "accent"
+    other = next(value for value in LOOK_KNOBS["surface"] if value != LOOK_DEFAULTS["surface"])
+    assert view_with({"surface": other}) != plain
 
 
 def test_a_custom_look_dresses_the_window_and_is_kept_with_the_saved_looks(
@@ -567,6 +558,9 @@ def test_a_custom_look_dresses_the_window_and_is_kept_with_the_saved_looks(
     }
     window._look = wear(sanitize_look(None), custom)
     window._saved_looks = save_look([], custom, "Night study")
+    window._layout = sanitize_layout(
+        {**window._layout, "options": {**window._layout["options"], "classic": {"look": "your"}}}
+    )
     window._apply_appearance()
     window._on_week()
     settled(qapp, window)
@@ -598,25 +592,25 @@ def test_the_dialog_shows_style_first_and_fine_tune_on_request(qapp: QApplicatio
     ]
     pick = combo(dialog, "layoutDay")
     pick.setCurrentIndex(pick.findData("one"))
-    assert rows(dialog, "Day") == ["layoutDay-colour"]
+    assert rows(dialog, "Day") == ["layoutDay-look"]
     dialog.findChild(QCheckBox, "layoutDayMore").setChecked(True)
     assert rows(dialog, "Day") == [
         "layoutDay-actions",
-        "layoutDay-colour",
         "layoutDay-daybar",
         "layoutDay-lead",
+        "layoutDay-look",
     ]
-    assert rows(dialog, "Main") == []
+    assert rows(dialog, "Main") == ["layoutMain-look"]
 
 
 def test_the_dialog_stores_only_what_the_student_changed(qapp: QApplication) -> None:
     dialog = prefs_layout({"main": "classic", "day": "one"})
     assert dialog.layout_choice() == {"main": "classic", "day": "one", "options": {}}
-    colour = combo(dialog, "layoutDay-colour")
-    colour.setCurrentIndex(colour.findData("paper"))
-    assert dialog.layout_choice()["options"] == {"one": {"colour": "paper"}}
-    colour = combo(dialog, "layoutDay-colour")
-    colour.setCurrentIndex(colour.findData("match"))
+    colour = combo(dialog, "layoutDay-look")
+    colour.setCurrentIndex(colour.findData("preset:one-paper"))
+    assert dialog.layout_choice()["options"] == {"one": {"look": "preset:one-paper"}}
+    colour = combo(dialog, "layoutDay-look")
+    colour.setCurrentIndex(colour.findData("your"))
     assert dialog.layout_choice()["options"] == {}
 
 
@@ -627,17 +621,20 @@ def test_fine_tuning_already_in_use_is_not_hidden(qapp: QApplication) -> None:
 
 
 def test_trying_another_design_and_coming_back_loses_nothing(qapp: QApplication) -> None:
-    dialog = prefs_layout({"day": "one", "options": {"one": {"colour": "paper"}}})
+    dialog = prefs_layout({"day": "one", "options": {"one": {"look": "preset:one-paper"}}})
     pick = combo(dialog, "layoutDay")
     pick.setCurrentIndex(pick.findData("dial"))
-    assert combo(dialog, "layoutDay-colour").currentData() == "match"
+    assert combo(dialog, "layoutDay-look").currentData() == "preset:dial-midnight"
     pick.setCurrentIndex(pick.findData("one"))
-    assert combo(dialog, "layoutDay-colour").currentData() == "paper"
-    assert dialog.layout_choice()["options"] == {"one": {"colour": "paper"}}
+    assert combo(dialog, "layoutDay-look").currentData() == "preset:one-paper"
+    assert dialog.layout_choice()["options"] == {
+        "dial": {"look": "preset:dial-midnight"},
+        "one": {"look": "preset:one-paper"},
+    }
 
 
 def test_a_design_can_be_put_back_to_its_own_settings(qapp: QApplication) -> None:
-    dialog = prefs_layout({"day": "one", "options": {"one": {"colour": "paper", "lead": "next"}}})
+    dialog = prefs_layout({"day": "one", "options": {"one": {"look": "preset:one-paper", "lead": "next"}}})
     dialog.findChild(QPushButton, "layoutDayReset").click()
     assert dialog.layout_choice()["options"] == {}
     assert dialog.findChild(QCheckBox, "layoutDayMore").isChecked() is False
@@ -655,7 +652,8 @@ def test_my_day_opens_whichever_day_screen_was_picked(qapp: QApplication, window
     click(window, "viewMyDay")
     view = window.planner.currentWidget()
     assert type(view).__name__ == "DayDialView"
-    assert view.findChild(QLabel, "dialTitle").text() == "History essay"
+    # The demo's day dial has no card title: the essay is named in its list row.
+    assert "History essay" in [name.text() for name in view.findChildren(QLabel, "dialRowName")]
     click(window, "dialBack")
     assert window.planner.currentWidget() is window.week_table
 
@@ -762,17 +760,25 @@ def test_timelines_fold_is_kept_with_the_look_restored_on_open_and_reset_with_th
 def test_timelines_names_and_figures_take_the_looks_heading_face(
     qapp: QApplication, window: NativeWindow
 ) -> None:
-    """In Match my look, as the mock-up draws them: Paper's serif headings are Newsreader."""
+    """Changing a design look changes its colors without replacing its own type."""
     from desktop.native.look import sanitize_look
 
-    window._look = sanitize_look({"preset": "paper"})
     window._layout = {"main": "timeline", "day": "one", "options": {}}
     window._apply_appearance()
     window._on_week()
     qapp.processEvents()
     view = window.planner.currentWidget()
     found = [*view.findChildren(QLabel, "timelineDayName"), *view.findChildren(QLabel, "timelineStat")]
-    assert found and {item.font().family() for item in found} == {"Newsreader"}
+    before = {item.font().family() for item in found}
+    assert found
+    window._look = sanitize_look({"preset": "paper"})
+    window._apply_appearance()
+    window._on_week()
+    qapp.processEvents()
+    after = window.planner.currentWidget()
+    names = [*after.findChildren(QLabel, "timelineDayName"), *after.findChildren(QLabel, "timelineStat")]
+    assert before == {"Inter"}
+    assert {item.font().family() for item in names} == {"Newsreader"}
 
 
 def test_the_dials_list_is_one_card_in_the_real_window(qapp: QApplication, window: NativeWindow) -> None:
@@ -782,7 +788,7 @@ def test_the_dials_list_is_one_card_in_the_real_window(qapp: QApplication, windo
     click(window, "viewMyDay")
     faded_in()
     view = window.planner.currentWidget()
-    closing = view.findChild(QWidget, "dialNone")
+    closing = view.findChild(QWidget, "dialList")
     # Right of its words, where only the background is drawn.
     spot = closing.mapTo(view, QPoint(closing.width() - 8, closing.height() // 2))
     assert view.grab().toImage().pixelColor(spot).name() == view.scene.tokens["surface"]
@@ -902,7 +908,7 @@ def test_plan_and_more_stay_on_the_bar_in_every_layout(qapp: QApplication, windo
     wanted = {
         "Running late",
         "Routines",
-        "Reload this week as it is saved",
+        "Reload this week",
         "Undo",
         "Redo",
         "Undo, copy and save",
@@ -1043,6 +1049,27 @@ def test_every_layout_fits_a_laptop_at_large_text_once_signed_in(
     assert window._auth_holder.minimumHeight() > window._auth_card.sizeHint().height()
 
 
+def test_my_day_lets_a_tall_window_shrink_to_a_laptop_at_large_text(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """My day's ring is fixed at the size the window's height last gave it. Counted in the window's own
+    minimum, a window dragged tall could not come back to 768 px in one go: each resize left it 50 px
+    taller than asked, and the check above passed or failed by how tall the window happened to be."""
+    from desktop.native.look import sanitize_look
+
+    knobs = {**window._look.get("knobs", {}), "text": "large"}
+    window._look = sanitize_look({**window._look, "knobs": knobs})
+    window._apply_appearance()
+    window._day_mode = True
+    window._layout = {"main": "classic", "day": "one", "options": {}}
+    window._on_week()
+    window.resize(1100, 1000)
+    qapp.processEvents()
+    window.resize(1100, 700)
+    qapp.processEvents()
+    assert window.height() == 700
+
+
 def test_the_dialog_fits_a_laptop_with_every_level_open(qapp: QApplication) -> None:
     busiest = {
         "main": "timeline",
@@ -1079,7 +1106,7 @@ def test_fine_tune_and_reset_show_only_when_a_design_has_something_for_them(qapp
     pick.setCurrentIndex(pick.findData("timeline"))
     assert offered() == (True, True)
     pick.setCurrentIndex(pick.findData("classic"))
-    assert offered() == (False, False)
+    assert offered() == (False, True)
 
 
 def preference_puts(window: NativeWindow) -> list[dict]:
@@ -1224,75 +1251,169 @@ def test_settings_fits_its_width_in_every_layout_and_text_size(
 
 
 def chrome_colour(window: NativeWindow) -> str:
-    """What the top bar is actually painted with. A checked button blends, so this is only ever
-    compared against another rendering, never against a token."""
-    button = window.findChild(QPushButton, "signOut")
-    return button.grab().toImage().pixelColor(button.width() // 2, button.height() // 2).name()
+    """The week page's top-left pixel, which is clear of text and controls."""
+    page = window.findChild(QWidget, "weekPage")
+    assert page is not None
+    return page.grab().toImage().pixelColor(4, 4).name()
 
 
 def signature(layout_id: str) -> str:
-    """A design's own first colourway, which a student has to pick now that Match my look is first."""
-    return LAYOUTS[layout_id].colourways[0][0]
+    """The first curated look is each design's signature."""
+    from desktop.native.layouts.registry import DESIGN_LOOKS
+
+    return DESIGN_LOOKS[layout_id][0][0]
 
 
 def own_accent(layout_id: str) -> str:
-    """A design's first colourway with an accent of its own. One that wears the student's accent, as
-    Clay's does, changes with it."""
-    return next(value for value, _, tokens in LAYOUTS[layout_id].colourways if "accent" in tokens)
+    return signature(layout_id)
 
 
-def test_the_chrome_follows_the_look_whatever_design_is_on_screen(
+def test_the_chrome_and_canvas_follow_the_same_look(
     qapp: QApplication, window: NativeWindow
 ) -> None:
-    """Decision 3 of 0.17: the top bar and the frame wear the look and its accent in every design and
-    every view, and a design's colourway colours only its own page. When the design dressed the
-    chrome, a student saw three accents before placing any homework."""
+    """The active design look supplies the app chrome and every canvas view."""
     from desktop.native.layouts.registry import tokens_for
-    from desktop.native.look import resolved_palette
+    from desktop.native.look import design_look
 
-    window._layout = {"main": "classic", "day": "one", "options": {}}
-    window._on_week()
-    qapp.processEvents()
-    look_pixels = chrome_colour(window)
     pack, system_dark, accent = window._look_inputs()
-    plain = resolved_palette(pack, system_dark, window._look, accent)
 
-    for layout_id in ("bento", "mission", "clay"):
-        colour = own_accent(layout_id)
-        window._layout = {"main": layout_id, "day": "one", "options": {layout_id: {"colour": colour}}}
-        window._on_week()
+    for layout_id in ("classic", "timeline", "mission", "bento", "retro", "clay"):
+        colour = signature(layout_id)
+        window._layout = {"main": layout_id, "day": "one", "options": {layout_id: {"look": colour}}}
         for view in ("week", "day", "month"):
             window.session.set_view(view)
+            window._apply_appearance()
             qapp.processEvents()
-            page = window.planner.currentWidget().scene.tokens
-            assert page["accent"] == tokens_for(layout_id, colour, plain)["accent"] != plain["accent"]
-            assert chrome_colour(window) == look_pixels, (layout_id, view)
+            page = window._scene_for(layout_id).tokens
+            palette, _ = design_look(colour, pack, system_dark, window._worn_look(), accent)
+            assert page == tokens_for(layout_id, colour, palette)
+            assert window.week_table.hours.painter.colours["window"] == palette["window"]
+            assert chrome_colour(window) == page["bg"]
         window.session.set_view("week")
 
-    window._layout = {"main": "classic", "day": "one", "options": {}}
+
+@pytest.mark.parametrize(
+    ("pack", "look", "dark"),
+    [("system", "high-contrast", False), ("nocturne", "default", True)],
+)
+@pytest.mark.parametrize(
+    "layout_id", ("classic", "timeline", "mission", "bento", "retro", "clay", "dial", "one")
+)
+def test_missing_design_look_keeps_the_accounts_own_palette(
+    qapp: QApplication, window: NativeWindow, pack: str, look: str, dark: bool, layout_id: str
+) -> None:
+    from desktop.native.look import resolved_palette, sanitize_look
+
+    window.session.preferences = {**(window.session.preferences or {}), "theme_pack": pack}
+    window._look = sanitize_look({"preset": look, "knobs": {}})
+    palette = resolved_palette(pack, dark, window._worn_look())
+    expected_bg = "#000000" if look == "high-contrast" else "#0a0e27"
+    assert palette["window"] == expected_bg
+    if layout_id in {"dial", "one"}:
+        window._layout = {"main": "classic", "day": layout_id, "options": {}}
+        window._day_mode = True
+    else:
+        window._layout = {"main": layout_id, "day": "dial", "options": {}}
+        window._day_mode = False
     window._on_week()
+    click(window, "viewMyDay" if layout_id in {"dial", "one"} else "viewWeek")
+    faded_in()
     qapp.processEvents()
-    assert chrome_colour(window) == look_pixels
+    shown = window.planner.currentWidget()
+    if layout_id == "classic":
+        assert window.week_table.hours.painter.colours["window"] == expected_bg
+    else:
+        assert shown.scene.tokens["bg"] == expected_bg, layout_id
+    canvas_widget = shown.findChild(QWidget, "missionPage") if layout_id == "mission" else shown
+    canvas = canvas_widget.grab().toImage()
+    if look == "high-contrast":
+        assert any(
+            canvas.pixelColor(x, y).name() == expected_bg
+            for y in range(canvas.height())
+            for x in range(canvas.width())
+        ), (layout_id, expected_bg)
 
 
-def test_a_day_screen_colours_its_own_page_and_leaves_the_chrome_to_the_look(
+def test_a_day_screen_uses_its_selected_look_for_every_token(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     from desktop.native.layouts.registry import tokens_for
-    from desktop.native.look import resolved_palette
+    from desktop.native.look import design_look
 
     window._layout = {"main": "classic", "day": "one", "options": {}}
     window._on_week()
     qapp.processEvents()
-    look_pixels = chrome_colour(window)
     pack, system_dark, accent = window._look_inputs()
-    plain = resolved_palette(pack, system_dark, window._look, accent)
+    palette, _ = design_look(signature("one"), pack, system_dark, window._worn_look(), accent)
     colour = signature("one")
-    window._layout = {"main": "classic", "day": "one", "options": {"one": {"colour": colour}}}
+    window._layout = {"main": "classic", "day": "one", "options": {"one": {"look": colour}}}
     click(window, "viewMyDay")
     qapp.processEvents()
-    assert window.planner.currentWidget().scene.tokens["bg"] == tokens_for("one", colour, plain)["bg"]
-    assert chrome_colour(window) == look_pixels
+    assert window.planner.currentWidget().scene.tokens == tokens_for("one", colour, palette)
+
+
+@pytest.mark.parametrize(
+    "layout_id", ("classic", "timeline", "mission", "bento", "retro", "clay", "dial", "one")
+)
+def test_setup_design_picture_and_applied_canvas_share_look_pixels(
+    qapp: QApplication, window: NativeWindow, layout_id: str
+) -> None:
+    from desktop.native.layouts.registry import DESIGN_LOOKS, tokens_for
+    from desktop.native.look import design_look
+    from desktop.native.previews import Previews
+
+    token = DESIGN_LOOKS[layout_id][0][0]
+    palette, _ = design_look(token, "light-frost", False, None)
+    if layout_id in window.setup_page.look_cards:
+        window.setup_page._pack = "light-frost"
+        window.setup_page._fill_style()
+        wait_until(
+            qapp,
+            lambda: not window.setup_page.look_cards[layout_id].picture.pixmap().isNull(),
+        )
+        picture = window.setup_page.look_cards[layout_id].picture.pixmap()
+        assert not picture.isNull(), layout_id
+        preview = picture.toImage()
+    else:
+        preview = Previews().get(layout_id, token, "light-frost", None, 206).toImage()
+    window.session.preferences = {**(window.session.preferences or {}), "theme_pack": "light-frost"}
+    is_day_design = layout_id in {"dial", "one"}
+    window._day_mode = is_day_design
+    window._layout = {
+        "main": "classic" if is_day_design else layout_id,
+        "day": layout_id if is_day_design else "dial",
+        "options": {layout_id: {"look": token}},
+    }
+    window._apply_appearance()
+    window._on_week()
+    if is_day_design:
+        click(window, "viewMyDay")
+    else:
+        click(window, "viewWeek")
+    faded_in()
+    qapp.processEvents()
+    shown = window.planner.currentWidget()
+    if layout_id == "classic":
+        assert shown is window.week_table
+    else:
+        assert shown is window._views[layout_id]
+    painted = shown.grab().toImage()
+    tokens = tokens_for(layout_id, token, palette)
+    background_pixel = (
+        palette["panel"] if layout_id == "classic" else
+        tokens["retro_desk"] if layout_id == "retro" else
+        tokens["bg"]
+    )
+    assert any(
+        preview.pixelColor(x, y).name() == background_pixel
+        for y in range(preview.height())
+        for x in range(preview.width())
+    ), layout_id
+    assert any(
+        painted.pixelColor(x, y).name() == background_pixel
+        for y in range(painted.height())
+        for x in range(painted.width())
+    ), layout_id
 
 
 def test_no_chrome_button_spreads_across_the_window(qapp: QApplication, window: NativeWindow) -> None:
@@ -1364,10 +1485,7 @@ def test_every_dialog_fits_a_laptop_screen(qapp: QApplication, window: NativeWin
     # screen, which is why a screen-sized bound caught nothing; 700 square is the real rule.
     wrong = {name: size for name, size in sizes.items() if size[0] > 700 or size[1] > 768 or size[0] < 320}
     assert wrong == {}
-    short = {
-        name: size for name, size in sizes.items() if name == "Add homework" and size[1] < 400
-    }
-    assert short == {}
+    # Add homework What is title only (forms.html pick C). 400 px was the one-page sheet.
 
 
 def test_the_focus_timer_reads_as_one_status_line(qapp: QApplication, window: NativeWindow) -> None:
@@ -1426,9 +1544,7 @@ def test_a_real_solve_explains_itself_once(qapp: QApplication, window: NativeWin
 
 
 def test_the_plan_bar_counts_what_the_toast_counts(qapp: QApplication, window: NativeWindow) -> None:
-    """Decision 18 of 0.17. The bar counted every block the solver's trace calls placed, School and
-    homework already placed included, and said 2 placed under a toast that said 0. Both now say the
-    homework this plan gave a time and the homework it could not."""
+    """The bar counts the unplaced homework, while the toast names time still needed."""
     session = window.session
     session.add_block({"id": "school", "title": "School", "kind": "locked", "category": "class",
                        "start": "08:00", "duration_min": 390, "days": [0, 1, 2, 3, 4]})
@@ -1445,7 +1561,10 @@ def test_the_plan_bar_counts_what_the_toast_counts(qapp: QApplication, window: N
     qapp.processEvents()
     assert len(session.trace.get("placed") or []) > 1, "the trace also lists School"
     placed, waiting = session.plan_counts
-    assert window.toast.text().startswith(plan_sentence(placed, waiting))
+    assert waiting == 1
+    # T-W15 (decisions.md): the toast counts homework placed by this Plan and the homework with no time yet.
+    # The essay was given 18:45 when it was added, so this Plan places nothing new.
+    assert window.toast.text() == "Nothing placed. 1 with no time yet."
     assert window.plan_review.isVisible()
     assert window.plan_review.heading.text() == plan_sentence(placed, waiting)
 
@@ -1506,7 +1625,8 @@ def test_the_plan_notice_counts_homework_blocks(qapp: QApplication, window: Nati
     window.session.solve(everything=True)
     wait_until(qapp, lambda: not window.session.busy)
     qapp.processEvents()
-    assert window.toast.text().startswith("Placed ")
+    # Plan's toast counts the blocks it placed (decisions.md); "Everything has a time." is the sidebar's.
+    assert window.toast.text() == "Placed 1 homework block."
     assert " of " not in window.toast.text()
 
 
@@ -1521,7 +1641,7 @@ def test_the_week_toolbar_keeps_only_what_is_reached_for(qapp: QApplication, win
     page = window._stack.currentWidget()
     shown = [
         button.objectName()
-        for button in page.findChildren(QPushButton)
+        for button in page.findChildren(QAbstractButton)
         # The calendar's own controls, such as zooming its hours or paging the rail's month, belong to
         # it, not to the toolbar.
         if button.isVisible()
@@ -1534,6 +1654,7 @@ def test_the_week_toolbar_keeps_only_what_is_reached_for(qapp: QApplication, win
         "prevWeek",
         "nextWeek",
         "todayWeek",
+        "weekTitleMark",
         "viewDay",
         "viewWeek",
         "viewMonth",
@@ -2112,9 +2233,20 @@ def test_settings_and_homework_open_tall_enough_to_read(
     homework.show()
     qapp.processEvents()
     _squeeze(qapp, homework)
-    assert homework.height() >= 400, (pack, size, homework.width(), homework.height())
-    for field in (homework.title, homework.due, homework.estimate):
-        assert _dialog_shows(homework, field)
+    assert _dialog_shows(homework, homework.title)
+    assert homework.title.isVisibleTo(homework)
+    assert not homework.due.isVisibleTo(homework)
+    assert not homework.estimate.isVisibleTo(homework)
+    from desktop.tests.test_homework_form import go_length, go_when
+
+    go_when(homework)
+    _squeeze(qapp, homework)
+    assert homework.due.isVisibleTo(homework)
+    assert _dialog_shows(homework, homework.due)
+    go_length(homework)
+    _squeeze(qapp, homework)
+    assert homework.estimate.isVisibleTo(homework)
+    assert _dialog_shows(homework, homework.estimate)
     buttons = homework.findChild(QDialogButtonBox, "dialogButtons")
     assert buttons is not None and _dialog_shows(homework, buttons)
     homework.close()
@@ -2231,7 +2363,8 @@ def visible_copy(root: QWidget) -> str:
         if not child.isVisible():
             continue
         if isinstance(child, (QLabel, QPushButton)):
-            text = child.text().strip()
+            # One label's words, even where the label breaks them over two lines (One thing's ring title).
+            text = " ".join(child.text().split())
             if text:
                 bits.append(text)
     return "\n".join(bits)
@@ -2272,7 +2405,12 @@ def test_unplaced_homework_due_today_is_named_on_every_screen(
     window._on_week()
     qapp.processEvents()
     said = visible_copy(window).lower()
-    assert "math worksheet" in said, said
+    if layout_id == "dial":
+        # The demo's not-placed strip on the day dial gives the count only; the names are not listed.
+        assert "1 homework not placed yet" in said, said
+        assert "math worksheet" not in said, said
+    else:
+        assert "math worksheet" in said, said
     for phrase in FREE_TODAY:
         assert phrase not in said, f"{layout_id} still says {phrase!r} in:\n{said}"
 
@@ -2978,6 +3116,10 @@ def test_a_change_to_the_week_does_not_restyle_the_window_when_the_look_is_the_s
     """Every change to the week re-dressed the whole window, about 26 ms a time, for nothing."""
     dressed: list[str] = []
     original = window.setStyleSheet
+    window._layout = sanitize_layout(
+        {**window._layout, "options": {**window._layout["options"], "classic": {"look": "your"}}}
+    )
+    window._apply_appearance()
     monkeypatch.setattr(window, "setStyleSheet", lambda sheet: (dressed.append(sheet), original(sheet)))
     window._on_week()
     window._on_week()
@@ -3050,21 +3192,22 @@ def test_mission_counts_focus_minutes_while_a_session_runs(qapp: QApplication, w
 def test_month_fits_a_1024_by_640_window_with_the_unfinished_card_open(
     qapp: QApplication, window: NativeWindow
 ) -> None:
-    """#28: with the panel above it open, Month's last row was half cut and a scroll bar showed."""
+    """Month fits at 1024x640 with overdue homework in the open Unfinished panel."""
+    from desktop.tests.test_1br_left_over_guards import overdue_this_week
+
     window.resize(1024, 640)
     window.show()
     click(window, "viewMonth")
     settled(qapp, window)
     wait_until(qapp, lambda: window.month_grid.canvas.rows() > 1)
-    window.unfinished_panel.set_items(
-        [{"id": "old", "title": "Old", "remaining_min": 60, "due": "2020-01-01T10:00"}]
-    )
+    overdue_this_week(qapp, window)
     wait_until(qapp, lambda: window.unfinished_panel.isVisible())
     for _ in range(5):
         qapp.processEvents()
     grid = window.month_grid
     canvas, view = grid.canvas, grid.scroll.viewport().height()
     assert window.unfinished_panel.isVisible()
+    assert not window.left_chip.isVisibleTo(window)
     assert grid.scroll.verticalScrollBar().maximum() == 0, "no scroll bar"
     last = canvas.cell_rect((canvas.rows() - 1) * 7)
     assert last.bottom() <= view, f"the last row ends at {last.bottom():.0f} in a view of {view}"

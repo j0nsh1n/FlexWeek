@@ -93,7 +93,6 @@ from desktop.native.layouts.base import (
     base_sheet,
     css,
     empty,
-    family,
     free_stretches,
     homework_planned,
     label,
@@ -101,8 +100,8 @@ from desktop.native.layouts.base import (
     scrolling,
     short_length,
 )
-from desktop.native.layouts.colourways import RETRO
-from desktop.native.look import AA_TEXT, category_paint, look_measures, type_sizes
+from desktop.native.layouts.registry import tokens_for
+from desktop.native.look import AA_TEXT, category_paint, look_measures, resolved_palette, type_sizes
 from desktop.native.motion import Clock, app_level, appear, between, duration, moves
 from desktop.native.tokens import (
     WEIGHT_REGULAR,
@@ -240,11 +239,7 @@ def high_contrast(tokens: dict[str, str]) -> bool:
 
 def scheme(tokens: dict[str, str]) -> Scheme:
     accent = tokens["accent"]
-    if "title" in tokens:
-        greys, contrasted = STANDARD, False
-        desk, desk_ink = tokens["bg"], tokens["bg_ink"]
-        title, title_end, title_ink = tokens["title"], tokens["title_end"], tokens["title_ink"]
-    elif high_contrast(tokens):
+    if high_contrast(tokens):
         contrasted = True
         page, text = tokens["bg"], tokens["text"]
         greys = {
@@ -262,13 +257,16 @@ def scheme(tokens: dict[str, str]) -> Scheme:
         desk, desk_ink = page, text
         title = title_end = accent
         title_ink = tokens["accent_ink"]
+    elif "title" in tokens and (tokens["title"] != accent or tokens["title_end"] != accent):
+        greys, contrasted = STANDARD, False
+        desk = tokens.get("retro_desk", tokens["bg"])
+        desk_ink = tokens.get("retro_desk_ink", tokens["bg_ink"])
+        title, title_end, title_ink = tokens["title"], tokens["title_end"], tokens["title_ink"]
     else:
         greys, contrasted = STANDARD, False
-        dark = family(tokens) == "dark"
-        desk = mix_oklab(accent, tokens["bg"], 0.42) if dark else accent
-        title = mix_oklab(accent, "#000000", 0.82 if dark else 0.72)
-        title_end = mix_oklab(accent, "#ffffff", 0.72) if dark else accent
-        desk_ink, title_ink = ink_on(desk), ink_on(title, title_end)
+        desk = tokens.get("retro_desk", tokens["bg"])
+        title = title_end = accent
+        desk_ink, title_ink = tokens.get("retro_desk_ink", tokens["bg_ink"]), tokens["accent_ink"]
     return Scheme(
         **greys,
         desk=desk,
@@ -498,7 +496,7 @@ def planned_words(items: tuple[Occurrence, ...], ahead: int | None) -> str:
     """ "2 h 30 min planned, 3 still to come.", homework only, or without what is to come on another day."""
     minutes = homework_planned(items)
     if not minutes:
-        return "Nothing planned."
+        return "Nothing planned"
     words = f"{unbroken(length_label(minutes))} planned"
     return f"{words}, {ahead} still to come." if ahead is not None else f"{words}."
 
@@ -520,6 +518,9 @@ class RetroPainter(BlockPainter):
     """Week.exe's hours: the white field with grey rules, blocks in the category family with a
     three-pixel edge and a one-pixel bevel, and now as a line in the title bar's colour, dotted across
     the other days, with its time on a Windows 98 tooltip in the gutter."""
+    # Writes its own words, not yet with room for tag pills (N11); see BlockPainter.draws_pills.
+    draws_pills = False
+
 
     now_in_gutter = True
     trims_narrow = True
@@ -1459,7 +1460,7 @@ class RetroView(LayoutView):
         super().__init__(parent, hand=hand)
         # The design's own faces, there even for a picture of it drawn without the window.
         load_fonts()
-        self._scheme = scheme(RETRO[0][2])
+        self._scheme = scheme(tokens_for("retro", "your", resolved_palette("light-frost", False, None)))
         self._open: dict[str, bool] = {}
         self._opened_for = ""
         # Back to front: the last one open is the window in front, whose taskbar button is pressed in.
@@ -1794,9 +1795,12 @@ class RetroView(LayoutView):
         middle = Cell(ahead or "", "retroStatusNow", colours)
         waiting = len(scene.week.waiting)
         right = Cell(
-            (f"{waiting} homework {NOT_PLACED}", f"{waiting} {NOT_PLACED}")
-            if waiting
-            else "Everything has a time",
+            scene.week.homework_sentence
+            or (
+                (f"{waiting} homework {NOT_PLACED}", f"{waiting} {NOT_PLACED}")
+                if waiting
+                else "Everything has a time"
+            ),
             "retroStatusWaiting",
             colours,
         )
@@ -2043,7 +2047,13 @@ class RetroView(LayoutView):
             hint = f"{count} {NOT_PLACED}: drag {them} onto Week.exe, or use Plan my homework."
             lines.addWidget(self._note(hint, "retroNotesHint", wrap=True))
         else:
-            lines.addWidget(self._note("Everything has a time.", "retroNotesNoWaiting", wrap=True))
+            lines.addWidget(
+                self._note(
+                    scene.week.homework_sentence or "Everything has a time.",
+                    "retroNotesNoWaiting",
+                    wrap=True,
+                )
+            )
         lines.addStretch(1)
         area.setWidget(text)
         inside.addWidget(area)

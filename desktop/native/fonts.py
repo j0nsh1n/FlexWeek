@@ -54,6 +54,16 @@ def time_font(base: QFont) -> QFont:
     return made
 
 
+def without_ligatures(base: QFont) -> QFont:
+    """`base` with its ligatures and contextual alternates off. Pixelify Sans joins "fi" into one glyph
+    that reads as "A", so "Add fixed time" showed as "Add Axed time" in Retro. Stylesheets cannot set
+    font features, so this is set on the font the window hands its children."""
+    made = QFont(base)
+    for tag in ("liga", "calt"):
+        made.setFeature(QFont.Tag(tag), 0)
+    return made
+
+
 def weighted(base: QFont, weight: int) -> QFont:
     """`base` at one of the type scale's weights (tokens.WEIGHT_*)."""
     made = QFont(base)
@@ -83,4 +93,11 @@ def caption(base: QFont) -> QFont:
     made = QFont(base)
     knob = text_knob(base.pointSizeF())
     made.setPointSizeF(type_pt("caption", knob) if knob else max(base.pointSizeF() * 0.86, 7))
+    return made
+
+
+def shrink(base: QFont, step: float = 0.5, floor: float = 7.0) -> QFont:
+    """One step smaller, not below `floor`. Painted tags shrink until they fit a block."""
+    made = QFont(base)
+    made.setPointSizeF(max(floor, made.pointSizeF() - step))
     return made

@@ -22,7 +22,14 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QEvent, QPoint, QPointF, QStandardPaths, Qt
     from PySide6.QtGui import QAction, QMouseEvent
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QDialogButtonBox, QLabel, QPushButton, QWidget
+    from PySide6.QtWidgets import (
+        QAbstractButton,
+        QApplication,
+        QDialogButtonBox,
+        QLabel,
+        QPushButton,
+        QWidget,
+    )
 
     from desktop.native.calendar import sunday_due
     from desktop.native.hours.canvas import HoursCanvas
@@ -106,7 +113,7 @@ def window(qapp: QApplication, tmp_path: Path) -> Iterator[NativeWindow]:
         session.add_block({**essay, "start": "19:00", "days": [3], "pinned": True})
         session.save()
         settled(qapp, made)
-        made.findChild(QPushButton, "viewWeek").click()
+        made.findChild(QAbstractButton, "viewWeek").click()
         settled(qapp, made)
         yield made
     finally:
@@ -174,7 +181,12 @@ def answer_editors(monkeypatch: pytest.MonkeyPatch, *titles: str | None) -> list
         else:
             dialog.title.selectAll()
             QTest.keyClicks(dialog.title, title)
-            QTest.mouseClick(buttons.button(QDialogButtonBox.StandardButton.Save), LEFT)
+            save = buttons.button(QDialogButtonBox.StandardButton.Save)
+            # Add is What / When / Category; Save on What is Next. Edit stays one page.
+            while getattr(dialog, "_add_step", None) is not None and dialog._add_step < 2:
+                QTest.mouseClick(save, LEFT)
+                QApplication.processEvents()
+            QTest.mouseClick(save, LEFT)
         return dialog.result()
 
     monkeypatch.setattr(BlockDialog, "exec", run)
@@ -354,7 +366,7 @@ def test_a_chip_carried_on_month_says_what_it_did(qapp: QApplication, window: Na
     # Inside the offscreen screen, 800 pixels square, where the hand can find the date under a point.
     window.move(0, 0)
     window.resize(760, 720)
-    QTest.mouseClick(window.findChild(QPushButton, "viewMonth"), LEFT)
+    QTest.mouseClick(window.findChild(QAbstractButton, "viewMonth"), LEFT)
     settled(qapp, window)
     canvas = window.month_grid.canvas
     thursday = date.fromisoformat(window.session.week_start) + timedelta(days=3)
@@ -555,7 +567,7 @@ def test_a_view_switch_keeps_the_toast_and_its_undo(qapp: QApplication, window: 
     qapp.processEvents()
     assert window.toast.isVisible()
     for name in ("viewMonth", "viewDay", "viewWeek", "viewMyDay", "viewWeek"):
-        QTest.mouseClick(window.findChild(QPushButton, name), LEFT)
+        QTest.mouseClick(window.findChild(QAbstractButton, name), LEFT)
         settled(qapp, window)
         assert window.toast.isVisible() and window.toast.button.isVisible(), name
 

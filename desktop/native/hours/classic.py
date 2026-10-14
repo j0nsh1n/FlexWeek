@@ -182,6 +182,7 @@ class DayName(QLabel):
         )
         self.setAccessibleName(words)
         self.setToolTip(f"Open {DAY_FULL[self._day]}")
+        self.setMinimumWidth(self.homework_min_width())
         self.update()
 
     def _fonts(self) -> tuple[QFont, QFont, QFont]:
@@ -191,19 +192,55 @@ class DayName(QLabel):
         small = time_font(_scaled(self.font(), "caption", self.look))
         return body, strong, small
 
+    def _twoline(self) -> bool:
+        knobs = (self.look or {}).get("knobs") or {}
+        return knobs.get("text") == "large"
+
     def _top(self) -> float:
         _body, strong, _small = self._fonts()
-        return max(26.0, QFontMetricsF(strong).height() + 6)
+        line = QFontMetricsF(strong).height() + 6
+        if self._twoline():
+            return max(26.0, line) * 2
+        return max(26.0, line)
 
     def sizeHint(self) -> QSize:  # noqa: N802
         _body, strong, small = self._fonts()
-        wide = QFontMetricsF(strong).horizontalAdvance(f"{self.name} 00") + 2 * SPACING[2] + 12
+        name_wide = QFontMetricsF(strong).horizontalAdvance(f"{self.name} 00") + 2 * SPACING[2] + 12
+        if self.homework:
+            book = round(QFontMetricsF(small).ascent())
+            homework_wide = (
+                SPACING[2] + book + SPACING[0] + QFontMetricsF(small).horizontalAdvance(self.homework_words())
+            )
+            wide = max(name_wide, homework_wide + SPACING[1])
+        else:
+            wide = name_wide
         return QSize(round(wide), round(self._top() + QFontMetricsF(small).height() + 2 * SPACING[1]))
 
+    def homework_min_width(self) -> int:
+        """The least width that still holds the day's homework total whole, without the book."""
+        if not self.homework:
+            return 0
+        _body, _strong, small = self._fonts()
+        words = self.homework_words()
+        return int(SPACING[0] + QFontMetricsF(small).horizontalAdvance(words) + SPACING[1] + 1)
+
     def minimumSizeHint(self) -> QSize:  # noqa: N802
-        return QSize(0, self.sizeHint().height())
+        return QSize(self.homework_min_width(), self.sizeHint().height())
+
+    def homework_text_rect(self) -> QRectF:
+        """The rectangle of the un-elided homework total, as paintEvent places it."""
+        _body, _strong, small = self._fonts()
+        line = QFontMetricsF(small).height()
+        size = round(QFontMetricsF(small).ascent())
+        y = (self.height() - self._top() - line) / 2
+        below = y + self._top()
+        words = self.homework_words()
+        wide = QFontMetricsF(small).horizontalAdvance(words)
+        return QRectF(self._homework_left(size), below, wide, line)
 
     def _homework_left(self, icon: int) -> float:
+        if self.width() < 110:
+            return SPACING[0]
         return SPACING[2] + icon + SPACING[0]
 
     def _homework_room(self, icon: int) -> float:
@@ -227,13 +264,16 @@ class DayName(QLabel):
         ink = colours.text if self.heading else colours.accent_text if today else colours.muted
         painter.setPen(QColor(ink))
         name_width = QFontMetricsF(name_font).horizontalAdvance(self.name)
-        painter.drawText(QRectF(x, y, name_width + 1, top), Qt.AlignmentFlag.AlignVCenter, self.name)
-        x += name_width + SPACING[0]
+        name_h = top / 2 if self._twoline() else top
+        painter.drawText(QRectF(x, y, name_width + 1, name_h), Qt.AlignmentFlag.AlignVCenter, self.name)
+        date_x = x if self._twoline() else x + name_width + SPACING[0]
+        date_y = y + name_h if self._twoline() else y
+        date_h = name_h if self._twoline() else top
         if self.date:
             painter.setFont(strong)
             date_width = QFontMetricsF(strong).horizontalAdvance(self.date)
             if today:
-                chip = QRectF(x, y + (top - 26) / 2 + 1, max(28.0, date_width + 10), 24)
+                chip = QRectF(date_x, date_y + (date_h - 26) / 2 + 1, max(28.0, date_width + 10), 24)
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.setBrush(QColor(colours.accent))
                 painter.drawRoundedRect(chip, 12, 12)
@@ -241,21 +281,31 @@ class DayName(QLabel):
                 painter.drawText(chip, Qt.AlignmentFlag.AlignCenter, self.date)
             else:
                 painter.setPen(QColor(colours.text))
-                painter.drawText(QRectF(x, y, date_width + 1, top), Qt.AlignmentFlag.AlignVCenter, self.date)
+                painter.drawText(
+                    QRectF(date_x, date_y, date_width + 1, date_h),
+                    Qt.AlignmentFlag.AlignVCenter,
+                    self.date,
+                )
         if self.homework:
             line = QFontMetricsF(small).height()
             size = round(QFontMetricsF(small).ascent())
             below = y + top
-            painter.drawPixmap(
-                QPointF(SPACING[2], below + (line - size) / 2),
-                icons.pixmap("book-open", colours.homework, size, self.devicePixelRatioF()),
-            )
+            if self.width() >= 110:
+                painter.drawPixmap(
+                    QPointF(SPACING[2], below + (line - size) / 2),
+                    icons.pixmap("book-open", colours.homework, size, self.devicePixelRatioF()),
+                )
             painter.setFont(small)
             painter.setPen(QColor(colours.muted))
+            room = self._homework_room(size)
+            words = self.homework_words()
+            metrics = QFontMetricsF(small)
+            if metrics.horizontalAdvance(words) > room:
+                words = metrics.elidedText(words, Qt.TextElideMode.ElideRight, int(room))
             painter.drawText(
-                QRectF(self._homework_left(size), below, self._homework_room(size), line),
+                QRectF(self._homework_left(size), below, room, line),
                 Qt.AlignmentFlag.AlignVCenter,
-                self.homework_words(),
+                words,
             )
         painter.end()
 
@@ -322,8 +372,27 @@ class ClassicWeek(QFrame):
         box.setSpacing(0)
         box.addWidget(self.scroll, 1)
 
+    def _fit_header_totals(self, widths: list[float], total: float) -> list[float]:
+        """Widen a day whose homework total would be cut, taking the extra from days that have slack."""
+        mins = [float(label.homework_min_width()) for label in self._name_labels]
+        short = [max(0.0, mins[i] - widths[i]) for i in range(len(widths))]
+        need = sum(short)
+        if need <= 0:
+            return widths
+        slack = [max(0.0, widths[i] - mins[i]) for i in range(len(widths))]
+        pool = sum(slack)
+        if pool <= 0:
+            return widths
+        scale = min(1.0, pool / need)
+        out = [
+            widths[i] + short[i] * scale - (slack[i] / pool * need * scale)
+            for i in range(len(widths))
+        ]
+        out[-1] += total - sum(out)
+        return out
+
     def _seven_columns(self, area: QRectF) -> list[LinearTrack]:
-        widths = column_widths(area.width(), self._empty)
+        widths = self._fit_header_totals(column_widths(area.width(), self._empty), area.width())
         left = area.left()
         tracks = []
         for day, width in enumerate(widths):
@@ -408,7 +477,7 @@ class DaySummary(QWidget):
     def text(self) -> str:
         """The summary in words, a line each, as a screen reader hears it."""
         if not self.shares:
-            return "Nothing planned."
+            return "Nothing planned"
         return "\n".join(f"{share.name}: {length_label(share.minutes)}" for share in self.shares)
 
     def set_shares(self, shares: list[Share]) -> None:

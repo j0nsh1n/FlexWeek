@@ -1,6 +1,7 @@
 //! Standing-week rows: one per standing block and the week it starts standing from. A row with no
 //! body stops that block from its week on, so weeks before a change keep what stood then.
 
+use flexweek_engine::desk::grid::is_setup_block;
 use flexweek_engine::snapshot::canonical;
 use flexweek_engine::standing::{derive_standing, restand, standing_body, with_standing};
 use rusqlite::{Connection, params};
@@ -94,34 +95,45 @@ pub fn set_standing(
     from_week: &str,
     blocks: &str,
 ) -> StoreResult<Vec<String>> {
-    let blocks: Vec<Value> = parse_list(blocks)?.iter().map(standing_body).collect();
-    defer_write(
-        conn,
-        "DELETE FROM standing_blocks WHERE user_id = ?1 AND from_week >= ?2",
-        params![user_id, from_week],
-    )?;
-    let new_ids: Vec<&str> = blocks.iter().filter_map(|b| b["id"].as_str()).collect();
     let before = standing_blocks(conn, user_id, from_week)?;
-    for block in &before {
-        if let Some(id) = block["id"].as_str()
-            && !new_ids.contains(&id)
-        {
-            insert_row(conn, user_id, id, from_week, 0, None)?;
-        }
-    }
-    // A block that stands as it did, in the same place, gets no row: a change is only what it changed.
-    for (position, block) in blocks.iter().enumerate() {
-        if before.get(position) == Some(block) {
+    let mut changes = Vec::new();
+    let mut next_position = before.len();
+    for change in parse_list(blocks)? {
+        let id = change["id"].as_str().unwrap_or_default().to_string();
+        let standing = before
+            .iter()
+            .position(|block| block["id"].as_str() == Some(&id));
+        let body = (change["stop"] != json!(true)).then(|| standing_body(&change));
+        // A stop for a block that does not stand has nothing to stop, and one that stands as sent
+        // changes nothing: a change is only what it changed.
+        let unchanged = match (&body, standing) {
+            (Some(body), Some(at)) => before[at] == *body,
+            (None, None) => true,
+            _ => false,
+        };
+        if unchanged {
             continue;
         }
-        let id = block["id"].as_str().unwrap_or_default();
+        let position = standing.unwrap_or_else(|| {
+            next_position += 1;
+            next_position - 1
+        });
+        changes.push((id, body, position));
+    }
+    for (id, body, position) in &changes {
+        defer_write(
+            conn,
+            "DELETE FROM standing_blocks WHERE user_id = ?1 AND id = ?2 AND from_week >= ?3",
+            params![user_id, id, from_week],
+        )?;
+        let encoded = body.as_ref().map(canonical);
         insert_row(
             conn,
             user_id,
             id,
             from_week,
-            position as i64,
-            Some(&canonical(block)),
+            *position as i64,
+            encoded.as_deref(),
         )?;
     }
     let mut stmt = conn.prepare(
@@ -136,7 +148,27 @@ pub fn set_standing(
     let mut changed = Vec::new();
     for (week_start, text) in later {
         let stored = parse_list(&text)?;
-        let updated = restand(&stored, &blocks)?;
+        let mut updated = Vec::with_capacity(stored.len());
+        for block in &stored {
+            let id = block["id"].as_str();
+            let change = changes
+                .iter()
+                .find(|(changed_id, _, _)| Some(changed_id.as_str()) == id);
+            let Some((_, body, _)) = change else {
+                updated.push(block.clone());
+                continue;
+            };
+            if !is_setup_block(block)? {
+                updated.push(block.clone());
+                continue;
+            }
+            if let Some(body) = body {
+                updated.extend(restand(
+                    std::slice::from_ref(block),
+                    std::slice::from_ref(body),
+                )?);
+            }
+        }
         if updated != stored {
             defer_write(
                 conn,

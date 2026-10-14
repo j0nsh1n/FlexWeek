@@ -353,7 +353,7 @@ def test_login_is_throttled_per_username(client: TestClient) -> None:
 
     blocked = login(client, "carol")
     assert blocked.status_code == 429
-    assert "Too many attempts" in blocked.json()["detail"]
+    assert blocked.json()["detail"] == "Too many tries. Wait 5 minutes, then try again."
     assert blocked.headers["retry-after"] == "300"
 
     assert register(client, "dave").status_code == 201

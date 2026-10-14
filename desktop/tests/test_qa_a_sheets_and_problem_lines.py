@@ -20,6 +20,7 @@ from desktop.native.weekmodel import set_clock_24h
 from desktop.native.widgets import BlockDialog, ConfirmSheet
 from desktop.tests.test_dialogs_look import shown, styled
 from desktop.tests.test_regress_item0_time_boxes import _up, enter, press, state, type_text
+from desktop.tests.test_ui_dialogs import school
 from desktop.tests.window_support import free, qapp  # noqa: F401
 
 SKIP_QUESTION = (
@@ -302,7 +303,8 @@ def test_the_problem_line_goes_when_the_problem_is_fixed(qapp: QApplication) -> 
 def test_the_block_editor_start_problem_takes_a_row_between_start_and_duration(qapp: QApplication) -> None:
     set_clock_24h(False)
     window, _palette = styled(qapp)
-    dialog = BlockDialog(window, day=1, start="16:00", duration_min=60)
+    # Add is stepped (What / When / Category); Edit stays one page with Start beside End.
+    dialog = BlockDialog(window, school(), occurrence_day=1)
     shown(qapp, dialog)
     try:
         start, end = dialog.start, dialog.end

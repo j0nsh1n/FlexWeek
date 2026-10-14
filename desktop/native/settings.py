@@ -8,7 +8,7 @@ from copy import deepcopy
 from pathlib import Path
 from uuid import uuid4
 
-from PySide6.QtCore import QEvent, QMargins, QObject, QSize, Qt, QTime, QTimer, QUrl, Signal
+from PySide6.QtCore import QEvent, QMargins, QObject, QRectF, QSize, Qt, QTime, QTimer, QUrl, Signal
 from PySide6.QtGui import (
     QColor,
     QDesktopServices,
@@ -19,11 +19,13 @@ from PySide6.QtGui import (
     QPainter,
     QPaintEvent,
     QPalette,
+    QPen,
     QPixmap,
     QShowEvent,
 )
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QBoxLayout,
     QButtonGroup,
     QComboBox,
@@ -56,13 +58,22 @@ from desktop.native import autostart
 from desktop.native.calendar import DAY_FULL
 from desktop.native.controller import ROUTINE_STATUS
 from desktop.native.custom_look import UNNAMED, sanitize_saved, wear
-from desktop.native.fields import ClockField, DayPicker, Stepper, held_on_problem
+from desktop.native.devices import DevicesPanel, SyncHost
+from desktop.native.fields import (
+    ClockField,
+    DayPicker,
+    Stepper,
+    announce,
+    held_on_problem,
+    save_week_starts_on,
+    week_starts_on,
+)
 from desktop.native.focus import FOCUS_PHASE_LABEL, format_countdown, more_time_choices, remaining_ms
 from desktop.native.fonts import time_font
 from desktop.native.hours.geometry import drag_step
 from desktop.native.icons import pixmap as icon_pixmap
 from desktop.native.layouts.dialog import SLOTS, LayoutSection
-from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.layouts.registry import DESIGN_LOOKS, sanitize_layout
 from desktop.native.look import (
     ACCENT_COLORS,
     ACCENTS,
@@ -78,6 +89,7 @@ from desktop.native.look import (
     look_motion,
     look_overrides,
     parse_look_menu_token,
+    readable_focus_edge,
     resolved_palette,
     sanitize_look,
     text_scale,
@@ -95,6 +107,7 @@ from desktop.native.weekmodel import hhmm_text, length_label
 from desktop.native.widgets import (
     CARD_GAP,
     CARD_WIDTH_PAD,
+    ROUTINE_LIST_HEIGHT,
     SHEET_FORM,
     SHEET_LIST,
     CardGrid,
@@ -110,6 +123,7 @@ from desktop.native.widgets import (
     Swatches,
     Switch,
     bare,
+    caption_above,
     even_fields,
     even_labels,
     fit_buttons,
@@ -145,7 +159,11 @@ MORE_LOOKS = "More looks"
 # card a little more (ChoiceCard).
 LOOK_TILE = 150
 ACCENT_LABELS = {"default": "Blue"}
-TEXT_KEPT_NOTE = "Kept for every look."
+TEXT_KEPT_NOTE = "Your text size stays the same when you change looks."
+STUDY_HOURS_LINE = "Choose when FlexWeek may plan homework, including hours kept for one class."
+TEXT_SUGGEST = "High contrast is easiest to read with Large text."
+USE_LARGE_TEXT = "Use Large text"
+USE_LARGE_ANNOUNCED = "Text size is now Large."
 OWN_ACCENT_NOTE = "High contrast keeps its own yellow, whatever accent is picked."
 # A look of the student's own sets the accent and every knob (look.py's resolved_palette and
 # effective_look), so while one is worn they show its values and say where they change instead.
@@ -216,15 +234,15 @@ ABOUT_LOGO_PX = 56
 # How far the words fade out at a scroll edge with more past it.
 FADE_PX = 24
 HELP_SCREENS = (
-    ("Day", "One day hour by hour, with homework that is not placed yet beside it, ready to drag in."),
+    ("Day", "One day hour by hour, with homework that isn't placed yet beside it, ready to drag in."),
     ("Week", "Monday to Sunday: drag a block to move it, or drag across empty time to add one."),
     ("Month", "Each date's blocks and the homework due that day; click a date to open it in Day."),
     ("My day", "What is on now and what comes next, to follow once your plan is made."),
 )
 HELP_PLANNING = (
     "Add homework with its due date and length. Press Plan my homework and FlexWeek finds free time for "
-    "it in your study hours, around your fixed times, before it is due. Homework that already has a time "
-    "keeps it. Replan all starts fresh but keeps homework you placed yourself. Anything that does not "
+    "it in your study hours, around your fixed times, before it's due. Homework that already has a time "
+    "keeps it. Replan all starts fresh but keeps pinned homework. Anything that doesn't "
     "fit stays under Not placed yet, and Details says why. From the keyboard, press Ctrl+K and type Plan."
 )
 # Each key in brackets is drawn as a keycap; the words between are drawn plain.
@@ -236,6 +254,7 @@ HELP_KEYS = (
     ("[F1]", "Help"),
     ("[Ctrl]+[N]", "Add homework"),
     ("[Ctrl]+[K]", "Command bar"),
+    ("[Ctrl]+[Shift]+[L]", "Week as a list"),
     ("[Ctrl]+[Z]", "Undo"),
     ("[Ctrl]+[Y] or [Ctrl]+[Shift]+[Z]", "Redo"),
     ("[Ctrl]+[C] then [Ctrl]+[V]", "Copy the selected block, then paste it into the selected day"),
@@ -349,18 +368,107 @@ def _section_page(title: str, cards: tuple[QWidget, ...]) -> QWidget:
     return page
 
 
+BADGE_PX = 24
+
+
 class LookCard(ChoiceCard):
     """A look's card. The one worn is ringed and says so inside the card. Every card keeps that line
     (a space when it is not worn), so wearing another look moves nothing on the page."""
 
+    # ChoiceCard's own __init__ calls select() before this class's __init__ can name the card.
+    _look_name = ""
+
     def __init__(self, name: str, width: int) -> None:
         super().__init__(name, "", width)
+        self._look_name = name
         self.note.setVisible(True)
+        # The worn card's check badge. A child of its own, outside the layout and raised, because the card's
+        # picture is a child too and would paint over anything the card drew itself.
+        self.badge = QLabel(self)
+        self.badge.setObjectName("lookCardBadge")
+        self.badge.setFixedSize(BADGE_PX, BADGE_PX)
+        self.badge.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.select(False)
+
+    def set_marks(self, fill: str, ink: str) -> None:
+        ratio = self.devicePixelRatioF()
+        drawn = QPixmap(round(BADGE_PX * ratio), round(BADGE_PX * ratio))
+        drawn.setDevicePixelRatio(ratio)
+        drawn.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(drawn)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(fill))
+        painter.drawEllipse(QRectF(0, 0, BADGE_PX, BADGE_PX))
+        inset = (BADGE_PX - 16) // 2
+        painter.drawPixmap(inset, inset, icon_pixmap("check", ink, 16, ratio))
+        painter.end()
+        self.badge.setPixmap(drawn)
+
+    def resizeEvent(self, event: QEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self.badge.move(self.width() - BADGE_PX - 12, 10)
+        self.badge.raise_()
 
     def select(self, on: bool) -> None:
         super().select(on)
+        if hasattr(self, "badge"):
+            self.badge.setVisible(on)
+            self.badge.raise_()
         self.note.setText(WORN if on else " ")
-        self.setAccessibleDescription(WORN if on else "")
+        self.setAccessibleName(f"{self._look_name}, selected" if on else self._look_name)
+
+    def set_position(self, position: int, total: int) -> None:
+        self.setAccessibleDescription(f"{position} of {total}")
+
+    def focusInEvent(self, event: QEvent) -> None:  # noqa: N802
+        super().focusInEvent(event)
+        self.setProperty(
+            "keyboardFocus",
+            event.reason()
+            in (
+                Qt.FocusReason.TabFocusReason,
+                Qt.FocusReason.BacktabFocusReason,
+                Qt.FocusReason.ShortcutFocusReason,
+                Qt.FocusReason.OtherFocusReason,
+            ),
+        )
+        self.parentWidget().update()
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+        grid = self.parentWidget()
+        if event.key() in (
+            Qt.Key.Key_Left,
+            Qt.Key.Key_Right,
+            Qt.Key.Key_Up,
+            Qt.Key.Key_Down,
+            Qt.Key.Key_Home,
+            Qt.Key.Key_End,
+        ):
+            positions = [grid._grid.getItemPosition(index)[:2] for index in range(len(grid.cards))]
+            current = grid.cards.index(self)
+            row, column = positions[current]
+            if event.key() == Qt.Key.Key_Home:
+                target = 0
+            elif event.key() == Qt.Key.Key_End:
+                target = len(grid.cards) - 1
+            else:
+                dr, dc = {
+                    Qt.Key.Key_Left: (0, -1),
+                    Qt.Key.Key_Right: (0, 1),
+                    Qt.Key.Key_Up: (-1, 0),
+                    Qt.Key.Key_Down: (1, 0),
+                }[event.key()]
+                candidates = [
+                    (abs(r - (row + dr)) + abs(c - (column + dc)), i)
+                    for i, (r, c) in enumerate(positions)
+                    if (dr and r == row + dr) or (dc and c == column + dc)
+                ]
+                target = min(candidates)[1] if candidates else current
+            grid.cards[target].setFocus(Qt.FocusReason.OtherFocusReason)
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
 
 class LookGrid(CardGrid):
@@ -371,6 +479,39 @@ class LookGrid(CardGrid):
     def __init__(self, card_width: int, gap: int, draw: Callable[[ChoiceCard, int], None]) -> None:
         super().__init__(card_width, gap)
         self._draw = draw
+        self._ring = QColor("transparent")
+        self._badge: tuple[str, str] | None = None
+
+    def set_marks(self, ring: str, badge_fill: str, badge_ink: str) -> None:
+        self._ring = QColor(ring)
+        self._badge = (badge_fill, badge_ink)
+        for card in self.cards:
+            if isinstance(card, LookCard):
+                card.set_marks(badge_fill, badge_ink)
+        self.update()
+
+    def set_cards(self, cards: list[ChoiceCard]) -> None:
+        super().set_cards(cards)
+        for position, card in enumerate(self.cards, 1):
+            if isinstance(card, LookCard):
+                card.set_position(position, len(self.cards))
+                # Cards rebuilt after the page was dressed (a look saved or deleted) take its badge colours.
+                if self._badge is not None:
+                    card.set_marks(*self._badge)
+
+    def paintEvent(self, event: object) -> None:  # noqa: N802
+        super().paintEvent(event)
+        card = next((item for item in self.cards if item.hasFocus()), None)
+        if card is None or not bool(card.property("keyboardFocus")):
+            return
+        corner = card.mapTo(self, card.rect().topLeft())
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(self._ring, 2))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(
+            QRectF(corner.x() - 4, corner.y() - 4, card.width() + 8, card.height() + 8), 8, 8
+        )
 
     def _place(self, room: int) -> None:
         super()._place(room)
@@ -482,6 +623,11 @@ class LookPicker(Choices):
         under the pictures."""
         self._unsaved = name
         self._say_worn()
+
+    def show_canvas_look(self, name: str) -> None:
+        """Name a curated canvas look that is not an account-wide Look choice."""
+        self._unsaved = None
+        self.worn.setText(WEARING.format(name=name))
 
     def first_line(self) -> QWidget:
         """What the Look label sits beside: the three looks, not the middle of both lines."""
@@ -682,6 +828,7 @@ class SettingsPage(QWidget):
         reminder_limits: dict,
         week_layout: dict | None = None,
         saved_looks: list[dict] | None = None,
+        sync: SyncHost | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("settingsPage")
@@ -816,6 +963,12 @@ class SettingsPage(QWidget):
         )
         self.clock = Segmented((("24-hour", True), ("12-hour", False)), "prefClock")
         self.clock.setCurrentIndex(0 if preferences.get("clock_24h", False) is True else 1)
+        # Kept on this computer, not in the account's preferences (see week_starts_on).
+        self.week_start = Segmented((("Monday", "monday"), ("Sunday", "sunday")), "prefWeekStart")
+        self.week_start.setCurrentIndex(0 if week_starts_on() == "monday" else 1)
+        self.week_start.currentIndexChanged.connect(
+            lambda _at: save_week_starts_on(self.week_start.currentData())
+        )
         self.spotify = QLineEdit(preferences.get("default_spotify_url") or "")
         self.spotify.setObjectName("prefSpotify")
         self.spotify.setPlaceholderText("Paste a Spotify link")
@@ -844,6 +997,7 @@ class SettingsPage(QWidget):
             LayoutSection(slot, role, title, blurb, chosen_layout, self._pack)
             for slot, role, title, blurb in SLOTS
         ]
+        self._show_look()
         main_section, day_section = self.layout_sections
         text_card, text_form = _card("Text")
         text_form.addRow(KNOB_LABELS["text"], self.knobs["text"])
@@ -852,10 +1006,11 @@ class SettingsPage(QWidget):
         self.text_suggest.setObjectName("prefTextSuggest")
         suggest_row = QHBoxLayout(self.text_suggest)
         suggest_row.setContentsMargins(0, 0, 0, 0)
-        suggest_row.addWidget(QLabel("Suggests Large text"))
-        use_large = _page_button("Use", "prefTextSuggestUse")
+        suggest_row.addWidget(QLabel(TEXT_SUGGEST))
+        use_large = _page_button(USE_LARGE_TEXT, "prefTextSuggestUse")
         text_box = self.knobs["text"]
         use_large.clicked.connect(lambda: text_box.setCurrentIndex(text_box.findData("large")))
+        use_large.clicked.connect(lambda: announce(use_large, USE_LARGE_ANNOUNCED))
         suggest_row.addWidget(use_large)
         suggest_row.addStretch(1)
         text_form.addRow(self.text_suggest)
@@ -876,10 +1031,11 @@ class SettingsPage(QWidget):
         self.changed.connect(self._fit_look_cards)
         everywhere_card, everywhere = _card("Every screen")
         everywhere.addRow("Animations", self.motion)
-        # Text size, then Colours: it is what most students change, and below every design card it was
-        # not found (Grok Bot's 0.17.0 audit, X1 and A11).
+        # The design and its looks before Colours, which fine-tunes them (Jonathan, 1.0.0). Text size is
+        # one short row ahead of both, so it is in view without scrolling: below every design card it
+        # was not found (Grok Bot's 0.17.0 audit, X1 and A11).
         appearance = _section_page(
-            "Look", (text_card, self.colours_card, main_section, day_section, everywhere_card)
+            "Look", (text_card, main_section, self.colours_card, day_section, everywhere_card)
         )
         planning_card, planning_form = _card("How homework gets a time")
         self.planning_style = QButtonGroup(planning_card)
@@ -898,9 +1054,9 @@ class SettingsPage(QWidget):
             hint.setContentsMargins(26, 0, 0, 4)
             planning_form.addRow(hint)
         where_card, where_form = _card(
-            "Study hours", "Preferred study hours, including ones kept for one subject, are in Availability."
+            "Study hours", STUDY_HOURS_LINE
         )
-        open_availability = _page_button("Availability…", "prefsAvailability")
+        open_availability = _page_button("Study hours", "prefsAvailability")
         open_availability.clicked.connect(self.availability_requested.emit)
         where_form.addRow(open_availability)
         drag_card, drag_form = _card("Dragging", DRAG_STEP_QUESTION)
@@ -1020,6 +1176,8 @@ class SettingsPage(QWidget):
         start_form.addRow(self.start_at_login)
         start_form.addRow("Open on", self.preferred_view)
         start_form.addRow("Clock", self.clock)
+        start_form.addRow("Week starts on", self.week_start)
+        start_form.addRow(_note("The Week view always runs Monday to Sunday.", "prefWeekStartNote"))
         computer_card, computer_form = _card("Account, setup and updates")
         open_account = _page_button("Manage account…", "prefsAccount")
         open_account.setToolTip("Change your password, export or import, or delete the account.")
@@ -1038,7 +1196,10 @@ class SettingsPage(QWidget):
         update_col.addWidget(check_updates)
         computer_form.addRow("Updates", update_col)
         self.computer_buttons = (open_account, run_setup, check_updates)
-        computer = _section_page("This computer", (start_card, computer_card))
+        devices_card, devices_form = _card("Devices")
+        self.devices = DevicesPanel(sync, lambda: self.account_id or None)
+        devices_form.addRow(self.devices)
+        computer = _section_page("This computer", (start_card, computer_card, devices_card))
         # Their values start at one x, so each one's labels share a column.
         self._aligned = (focus, alerts, computer)
         rail = QWidget()
@@ -1097,6 +1258,7 @@ class SettingsPage(QWidget):
         stage_grid.addWidget(self.stack, 0, 0)
         stage_grid.addWidget(footer, 0, 0, Qt.AlignmentFlag.AlignBottom)
         self.footer_fade = FooterFade(stage, self.stack, footer)
+        QApplication.instance().focusChanged.connect(self._follow_focus)
         footer.raise_()
         self._clear_footer()
         # Settings, and over them the look editor while it is open.
@@ -1141,6 +1303,7 @@ class SettingsPage(QWidget):
         for section in self.layout_sections:
             section.changed.connect(self.changed.emit)
             section.changed.connect(self._show_what_applies)
+            section.changed.connect(self._show_look)
         self._show_what_applies()
         self.alarm_tone.currentIndexChanged.connect(self._follow_tone)
         self._follow_tone()
@@ -1169,13 +1332,12 @@ class SettingsPage(QWidget):
             self.save_state.setText(NO_SOUND)
 
     def _show_what_applies(self) -> None:
-        """Only the settings that change the chosen views. Surface, Corners and Blocks stayed on screen
-        for every design while only Today's app read them, so a student changed them in Bento and saw
-        nothing happen. Look and Accent stay: they dress the top bar and every window in any design."""
+        """Only the settings that change the chosen views. Surface is part of every design's active
+        palette; Corners and Blocks still belong to Today's app. The look and accent apply everywhere."""
         main = next(section for section in self.layout_sections if section.slot == "main")
         todays_app = main.chosen() == "classic"
         for knob in TODAYS_APP_KNOBS:
-            self._fine_form.setRowVisible(self.knobs[knob], todays_app)
+            self._fine_form.setRowVisible(self.knobs[knob], todays_app or knob == "surface")
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
@@ -1221,6 +1383,9 @@ class SettingsPage(QWidget):
             + PREFS_NAV_PAD
         )
         ring = palette["accent"]
+        focus_ring = readable_focus_edge(palette)
+        for grid in (self.look.more, self.look.yours):
+            grid.set_marks(focus_ring, palette["accent"], palette["accent_ink"])
         self.alarm_list.setStyleSheet(
             f"QListWidget#alarmList {{ border: 2px solid transparent; border-radius: 8px; padding: 2px; }}"
             f"QListWidget#alarmList:focus {{ border-color: {ring}; }}"
@@ -1283,6 +1448,15 @@ class SettingsPage(QWidget):
         if watched is self.footer and event.type() == QEvent.Type.Resize:
             self._clear_footer()
         return super().eventFilter(watched, event)
+
+    def _follow_focus(self, _was: QWidget | None, now: QWidget | None) -> None:
+        """Scrolls the section so the control that has the focus sits above the footer, not under it. The
+        footer covers the bottom of the page, so Tab could otherwise reach a switch the student cannot see."""
+        if now is None or not self.isVisible() or not self.stack.isAncestorOf(now):
+            return
+        area = self.stack.currentWidget()
+        if isinstance(area, QScrollArea):
+            area.ensureWidgetVisible(now, 0, self.footer.height())
 
     def _clear_footer(self) -> None:
         """Every section padded below its last card by the footer's height, so the end of a section
@@ -1349,6 +1523,7 @@ class SettingsPage(QWidget):
         for section in self.layout_sections:
             section.pick.setCurrentIndex(max(0, section.pick.findData(layout[section.slot])))
             section.sync(layout)
+        self._show_look()
         self.reminders.setChecked(preferences.get("reminders_enabled", True) is not False)
         self.lead.setValue(reminder_lead_min(preferences))
         tone = preferences.get("alarm_tone") or FALLBACK
@@ -1531,6 +1706,8 @@ class SettingsPage(QWidget):
             saved = self._saved_look(self.look.currentData())
             if saved is not None:
                 self._look = wear(before, saved)
+                for section in self.layout_sections:
+                    section.use_own_look()
                 self._show_look_settings()
             return
         kind, name = parsed
@@ -1540,6 +1717,8 @@ class SettingsPage(QWidget):
         else:
             preset = name
         self._look = sanitize_look({"preset": preset, "knobs": before["knobs"]})
+        for section in self.layout_sections:
+            section.use_own_look()
         self._show_look_settings()
 
     def _built_in_look(self) -> dict:
@@ -1597,16 +1776,40 @@ class SettingsPage(QWidget):
         """Look as worn: one of the looks, a saved look by its name, or nothing for a look of the
         student's own that is not saved."""
         self.look.set_saved(self.saved_looks)
-        custom = self._look.get("custom")
-        unsaved = custom is not None and custom not in self.saved_looks
-        if custom is None:
-            index = max(0, self.look.findData(look_menu_value(self._pack, self._look)))
+        selected_layout_look = None
+        canvas_label = None
+        unsaved_name = None
+        if hasattr(self, "layout_sections"):
+            main = next(section for section in self.layout_sections if section.slot == "main")
+            selected_layout_look = main.values().get("look")
+        if selected_layout_look and selected_layout_look != "your":
+            index = self.look.findData(selected_layout_look)
+            if index < 0:
+                canvas_label = next(
+                    (
+                        label
+                        for choices in DESIGN_LOOKS.values()
+                        for token, label in choices
+                        if token == selected_layout_look
+                    ),
+                    selected_layout_look,
+                )
+            custom = None
         else:
-            index = -1 if unsaved else self.look.findData(SAVED_LOOK + custom["name"])
-        self.look.show_unsaved(custom.get("name") if unsaved else None)
+            custom = self._look.get("custom")
+            if custom is None:
+                index = max(0, self.look.findData(look_menu_value(self._pack, self._look)))
+            else:
+                unsaved = custom not in self.saved_looks
+                index = -1 if unsaved else self.look.findData(SAVED_LOOK + custom["name"])
+                unsaved_name = custom.get("name") if unsaved else None
         self.look.blockSignals(True)
         self.look.setCurrentIndex(index)
         self.look.blockSignals(False)
+        if canvas_label is not None:
+            self.look.show_canvas_look(canvas_label)
+        else:
+            self.look.show_unsaved(unsaved_name)
 
     def _open_customise(self) -> None:
         """The look editor over Settings (plan, "Customise", B). What it changes is worn at once, as
@@ -1648,7 +1851,7 @@ class SettingsPage(QWidget):
         return sanitize_layout(picked)
 
 
-class RestoreDialog(QDialog):
+class RestoreDialog(Dialog):
     def __init__(
         self,
         parent: QWidget | None,
@@ -1656,16 +1859,18 @@ class RestoreDialog(QDialog):
         preview: dict | None,
         storage: dict | None,
     ) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("Restore points")
+        super().__init__(parent, sheet=True)
+        self.setObjectName("restoreDialog")
         self.selected_id: str | None = None
-        layout = QVBoxLayout(self)
+        layout = self.card_body("Restore points", SHEET_LIST)
         location = QLabel((storage or {}).get("label") or "Backup location unavailable")
         location.setObjectName("storageLocation")
+        location.setWordWrap(True)
         layout.addWidget(location)
         self.label = QLineEdit()
         self.label.setObjectName("restoreLabel")
-        self.label.setPlaceholderText("Restore point name")
+        self.label.setAccessibleName("Restore point name")
+        layout.addWidget(caption_above("Restore point name", self.label))
         layout.addWidget(self.label)
         create = QPushButton("Save restore point")
         create.setProperty("outlined", True)
@@ -1674,6 +1879,7 @@ class RestoreDialog(QDialog):
         layout.addWidget(create)
         self.list = QListWidget()
         self.list.setObjectName("restoreList")
+        self.list.setFixedHeight(ROUTINE_LIST_HEIGHT)
         for point in points:
             item = QListWidgetItem(
                 f"{point.get('label')} · {point.get('created_at') or ''} · "
@@ -1693,7 +1899,6 @@ class RestoreDialog(QDialog):
             removed = len(weeks.get("removed") or []) + len(homework.get("removed") or [])
             self.summary.setText(f"{added} added, {changed} changed, {removed} removed.")
         layout.addWidget(self.summary)
-        actions = QHBoxLayout()
         preview_btn = QPushButton("Preview")
         preview_btn.setObjectName("restorePreview")
         preview_btn.setProperty("outlined", True)
@@ -1701,17 +1906,9 @@ class RestoreDialog(QDialog):
         restore_btn = QPushButton("Restore")
         restore_btn.setObjectName("restoreApply")
         restore_btn.clicked.connect(self._restore)
-        actions.addWidget(preview_btn)
-        actions.addWidget(restore_btn)
-        layout.addLayout(actions)
-        close = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        close.button(QDialogButtonBox.StandardButton.Close).setProperty("quiet", True)
-        close.rejected.connect(self.reject)
-        close.accepted.connect(self.reject)
-        layout.addWidget(close)
+        sheet_footer(layout, preview_btn, restore_btn, divided=True)
         self.action: str | None = None
         self.create_label = ""
-        self.selected_id: str | None = None
         preview_id = None if not preview else preview.get("id")
         if preview_id:
             for index in range(self.list.count()):
@@ -1899,22 +2096,40 @@ class AlarmRingDialog(QDialog):
         self.playing.show()
 
 
+def _joined(parts: list[str]) -> str:
+    """"a", "a and b", "a, b, and c"."""
+    if len(parts) < 3:
+        return " and ".join(parts)
+    return ", ".join(parts[:-1]) + ", and " + parts[-1]
+
+
+def _gone_from_backup(count: int, noun: str) -> str:
+    return f"{count} of your {noun} that {'isn' if count == 1 else 'aren'}'t in the backup"
+
+
 def transfer_summary(preview: dict) -> str:
-    """What importing a backup file will do, in sentences: how many weeks, homework and routines it adds,
-    replaces or removes, and whether the settings change."""
+    """What importing a backup file will do, in sentences: the weeks it adds, replaces and deletes (the
+    deleted ones are the account's own, named as such), the homework and routines that change, and
+    whether the settings change."""
     changes = preview.get("changes") or {}
-    said = []
-    for key, one, many, changed in (
-        ("weeks", "week", "weeks", "replaced"),
-        ("assignments", "homework", "homework", "changed"),
-        ("routines", "routine", "routines", "changed"),
-    ):
+    weeks = changes.get("weeks") or {}
+    added, replaced, deleted = (len(weeks.get(kind) or []) for kind in ("added", "changed", "removed"))
+    parts = []
+    if added:
+        parts.append(f"adds {added} {'week' if added == 1 else 'weeks'}")
+    if replaced:
+        parts.append(f"replaces {replaced} of your weeks")
+    if deleted:
+        parts.append("deletes " + _gone_from_backup(deleted, "weeks"))
+    lines = [_joined(parts) + "."] if parts else []
+    for key, one, many in (("assignments", "homework", "homework"), ("routines", "routine", "routines")):
         part = changes.get(key) or {}
-        for kind, word in (("added", "added"), ("changed", changed), ("removed", "removed")):
-            count = len(part.get(kind) or [])
-            if count:
-                said.append(f"{count} {one if count == 1 else many} {word}")
-    lines = [", ".join(said) + "."] if said else []
+        differ = len(part.get("added") or []) + len(part.get("changed") or [])
+        gone = len(part.get("removed") or [])
+        if differ:
+            lines.append(f"{differ} {one if differ == 1 else many} {'changes' if differ == 1 else 'change'}.")
+        if gone:
+            lines.append("It also deletes " + _gone_from_backup(gone, many) + ".")
     if changes.get("preferences_changed"):
         lines.append("Your settings will be replaced.")
     if not lines:

@@ -40,8 +40,15 @@ if importlib.util.find_spec("PySide6") is not None:
         free_slots,
         time_left,
     )
-    from desktop.native.layouts.registry import LAYOUTS, MATCH, options_for, tokens_for
-    from desktop.native.look import AA_TEXT, contrast, resolved_palette
+    from desktop.native.layouts.registry import (
+        DESIGN_LOOKS,
+        LAYOUTS,
+        LEGACY_COLOURS,
+        MATCH,
+        options_for,
+        tokens_for,
+    )
+    from desktop.native.look import AA_TEXT, contrast, design_look, resolved_palette
     from desktop.native.motion import apply_ui_effects
     from desktop.native.weekmodel import build_week, minute_of
 
@@ -55,15 +62,17 @@ def qapp() -> Iterator[QApplication]:
 def scene(surface: str = "week", *, clock: str = "13:40", blocks: list[dict] | None = None,
           homework: dict | None = None, iso_day: str = "2026-09-17", today: int | None = 3,
           scale: float = 1.0, **chosen: str) -> Scene:
+    if "colour" in chosen:
+        chosen["look"] = LEGACY_COLOURS["bento"].get(chosen.pop("colour"), "your")
     options = {**options_for(None, "bento"), **chosen}
-    palette = resolved_palette("light-frost", False, None, "default")
+    palette, _look = design_look(options["look"], "light-frost", False, None)
     week = build_week(
         WEEK, BLOCKS if blocks is None else blocks,
         HOMEWORK if homework is None else homework, TRACE,
     )
     return Scene(
         week, today, minute_of(clock), options,
-        tokens_for("bento", options["colour"], palette), scale=scale, surface=surface,
+        tokens_for("bento", options["look"], palette), scale=scale, surface=surface,
         month={"month": "2026-09", "days": []} if surface == "month" else None,
         iso_day=iso_day,
     )
@@ -106,13 +115,15 @@ def test_a_bento_saved_before_the_hero_still_opens_as_it_was(qapp: QApplication)
     """0.16 saved Supporting tiles too; that option went, and what else was saved is kept."""
     saved = {"main": "bento", "options": {"bento": {"colour": "sunset", "corners": "square",
                                                     "tiles": "essentials"}}}
-    assert options_for(saved, "bento") == {"colour": "sunset", "hero": "week", "corners": "square"}
+    assert options_for(saved, "bento") == {
+        "look": "preset:poster", "hero": "week", "corners": "square"
+    }
     view = BentoView()
     view.resize(1150, 768)
-    palette = resolved_palette("light-frost", False, None, "default")
     options = options_for(saved, "bento")
     week = build_week(WEEK, BLOCKS, HOMEWORK, TRACE)
-    view.show_week(Scene(week, 3, minute_of("13:40"), options, tokens_for("bento", "sunset", palette)))
+    applied, _ = design_look(options["look"], "light-frost", False, None)
+    view.show_week(Scene(week, 3, minute_of("13:40"), options, tokens_for("bento", options["look"], applied)))
     view.show()
     qapp.processEvents()
     assert hours(view, "bentoWeekHours").isVisible()
@@ -290,7 +301,9 @@ def test_free_time_runs_from_the_first_block_to_ten_and_from_now_on_today() -> N
 def test_a_half_hour_block_says_its_name_at_the_level_the_hours_open_at(
     qapp: QApplication, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Dinner is half an hour. In the body size the week's 44 pixels an hour left it no line."""
+    """Dinner is half an hour. T-W35: a block always shows its range; the title is what
+    gets cut. In the body size the week's 44 pixels an hour leave no room for the name,
+    so the week paints 18:00–18:30 (name in tooltip)."""
     written: list[str] = []
     real = canvas_module._paint_layout
 
@@ -302,7 +315,7 @@ def test_a_half_hour_block_says_its_name_at_the_level_the_hours_open_at(
     for surface, name in (("week", "bentoWeekHours"), ("day", "bentoDayHours")):
         written.clear()
         hours(shown(qapp, surface), name).grab()
-        assert any(line.startswith("Dinner") for line in written), (surface, written)
+        assert "18:00–18:30" in written, (surface, written)
 
 
 def test_the_week_keeps_school_s_time_where_its_times_do_not_fit(
@@ -376,8 +389,8 @@ def test_a_day_tile_says_its_first_item_its_load_its_homework_and_what_is_due(qa
     # Monday: School, the finished Math worksheet and Dinner. Friday: the essay is due. Sunday: the
     # poster is due and only Dinner is planned.
     assert said(0) == "Monday 14, first School at 08:00, 45 min planned, 1 homework"
-    assert said(4) == "Friday 18, first School at 08:00, nothing planned, 1 due"
-    assert said(6) == "Sunday 20, first Dinner at 18:00, nothing planned, 1 due"
+    assert said(4) == "Friday 18, first School at 08:00, Nothing planned, 1 due"
+    assert said(6) == "Sunday 20, first Dinner at 18:00, Nothing planned, 1 due"
 
 
 def test_a_pointed_at_day_lifts_and_does_not_rise_with_animations_off_or_reduced(qapp: QApplication) -> None:
@@ -407,21 +420,23 @@ def test_a_pointed_at_day_lifts_and_does_not_rise_with_animations_off_or_reduced
 
 def test_every_bento_colourway_paints_the_hero_in_words_that_read() -> None:
     palette = resolved_palette("light-frost", False, None, "default")
-    for value, _, _ in LAYOUTS["bento"].colourways:
+    for value, _label in DESIGN_LOOKS["bento"]:
         tokens = tokens_for("bento", value, palette)
         for ink in ("hero_ink", "hero_muted"):
             assert contrast(tokens[ink], tokens["hero"]) >= AA_TEXT, (value, ink)
-    assert "hero" not in tokens_for("bento", MATCH, palette)
+    matched = tokens_for("bento", MATCH, palette)
+    assert matched["hero"] == matched["accent"]
+    assert matched["hero_ink"] == matched["accent_ink"]
 
 
-def test_indigo_paints_the_hero_alone_and_match_my_look_keeps_it_a_card(qapp: QApplication) -> None:
+def test_the_active_look_supplies_the_hero_colour(qapp: QApplication) -> None:
     for colour in ("indigo", MATCH):
         view = shown(qapp, colour=colour)
         hero = view.findChild(QWidget, "bentoHero")
         tokens = view.scene.tokens
         picture = view.grab().toImage()
         inside = picture.pixelColor(hero.mapTo(view, QPoint(hero.width() // 2, 4))).name()
-        assert inside == (tokens["hero"] if colour == "indigo" else tokens["surface"]), colour
+        assert inside == tokens["hero"], colour
         load = view.findChild(QWidget, "bentoLoad")
         assert picture.pixelColor(load.mapTo(view, QPoint(load.width() // 2, 4))).name() == tokens["surface"]
 
@@ -473,7 +488,7 @@ def test_a_week_block_at_the_smallest_window_names_itself_and_says_when_it_start
     monkeypatch.setattr(canvas_module, "QPainter", Said)
     load_fonts()
     palette = resolved_palette("light-frost", False, None, "default")
-    painter = BentoPainter(tokens_for("bento", options_for(None, "bento")["colour"], palette))
+    painter = BentoPainter(tokens_for("bento", options_for(None, "bento")["look"], palette))
     drawn = Drawn("school", "School", "class", False, Span(0, 8 * 60, 14 * 60 + 30), 0, 1)
     page = QRectF(0, 0, 200, 300)
     image = QImage(200, 300, QImage.Format.Format_ARGB32)

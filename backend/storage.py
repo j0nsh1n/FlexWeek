@@ -12,6 +12,7 @@ import flexweek_engine  # type: ignore[import-untyped]
 from backend.weeks import current_week_start as current_week_start
 
 SESSION_SECONDS = flexweek_engine.SESSION_SECONDS
+SESSION_SECONDS_KEEP = flexweek_engine.SESSION_SECONDS_KEEP
 # Each account's preferences row records the last of these one-time changes it has had, so a change
 # reaches every account once and a choice made after it is never undone by it.
 # 1: reminders on (0.15). Setup never asked, so they were off for everyone who had not turned them on.
@@ -173,7 +174,9 @@ class Connection(Protocol):
         self, token_hash: str, user_id: int, expires: int, now: int, /
     ) -> None: ...
 
-    def open_session(self, token: str, user_id: int, now: int, /) -> None: ...
+    def open_session(self, token: str, user_id: int, now: int, keep: bool = False, /) -> None: ...
+
+    def session_expired(self, token_hash: str, now: int, /) -> bool: ...
 
     def begin_immediate(self, /) -> None: ...
 
@@ -253,11 +256,16 @@ def delete_account(db: Connection, user_id: int) -> None:
     db.delete_account(user_id)
 
 
-def create_session(db: Connection, user_id: int) -> str:
+def create_session(db: Connection, user_id: int, keep: bool = False) -> str:
     token = secrets.token_urlsafe(32)
     now = int(time.time())
-    db.open_session(token, user_id, now)
+    db.open_session(token, user_id, now, keep)
     return token
+
+
+def cookie_age(keep: bool) -> int:
+    ages = {False: SESSION_SECONDS, True: SESSION_SECONDS_KEEP}
+    return ages[keep]
 
 
 def throttle(path: Path, address: str, username: str) -> bool:

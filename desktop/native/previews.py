@@ -13,12 +13,13 @@ from PySide6.QtGui import QGuiApplication, QPalette, QPixmap
 from PySide6.QtWidgets import QWidget
 
 from desktop.native.calendar import monday_of
+from desktop.native.fields import week_starts_on
 from desktop.native.hours.classic import ClassicWeek
 from desktop.native.hours.hand import Hand, Verdict
 from desktop.native.layouts.base import Scene
 from desktop.native.layouts.registry import options_for, tokens_for
 from desktop.native.layouts.views import VIEW_CLASSES
-from desktop.native.look import effective_look, resolved_palette, text_scale
+from desktop.native.look import design_look, effective_look, pack_stylesheet, text_scale
 from desktop.native.weekmodel import build_week
 
 # Drawn at a laptop's window size and scaled down, so each design lays out as it does in use. The
@@ -105,22 +106,22 @@ def render(
 ) -> QPixmap:
     """A picture of `main` in `colour` (or, for Today's app, in `pack`), `width` pixels wide."""
     dark = system_dark()
-    palette = resolved_palette(pack, dark, look)
+    palette, applied_look = design_look(colour or "your", pack, dark, look)
     monday, blocks, homework = sample_week()
     host: QWidget | None = None
     if main in VIEW_CLASSES:
         view = VIEW_CLASSES[main]()
         # Render in the picture's width, so showing it does not rebuild a narrow first layout.
         view.resize(size)
-        options = {**options_for(None, main), **({"colour": colour} if colour else {})}
+        options = {**options_for(None, main), **({"look": colour} if colour else {})}
         view.show_week(
             Scene(
                 week=build_week(monday, blocks, homework, None),
                 today=SAMPLE_DAY,
                 minute=SAMPLE_MINUTE,
                 options=options,
-                tokens=tokens_for(main, options["colour"], palette),
-                scale=text_scale(look),
+                tokens=tokens_for(main, options["look"], palette),
+                scale=text_scale(applied_look),
                 iso_day=(date.fromisoformat(monday) + timedelta(days=SAMPLE_DAY)).isoformat(),
             )
         )
@@ -130,7 +131,10 @@ def render(
         # judges anything.
         host = QWidget()
         widget = ClassicWeek(Hand(lambda block_id, from_day, span: Verdict(False, ""), host))
-        widget.set_look(look, palette)
+        # The day names and other widgets take their colours from the window's sheet, which a picture
+        # drawn on its own lacks: High contrast's preview had a pale row of names over a black week.
+        widget.setStyleSheet(pack_stylesheet(pack, dark, applied_look, palette=palette))
+        widget.set_look(applied_look, palette)
         widget.set_week(build_week(monday, blocks, homework, None), SAMPLE_DAY, SAMPLE_MINUTE)
     _settle(widget, size)
     picture = widget.grab()
@@ -151,10 +155,11 @@ class Previews:
         this_week = monday_of(date.today().isoformat())
         return (
             main,
-            colour if main in VIEW_CLASSES else pack,
+            colour if colour not in (None, "your") else pack,
             effective_look(look)["text"],
             width,
             this_week,
+            week_starts_on(),
             system_dark(),
         )
 

@@ -5,6 +5,99 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-14
+
+### Added
+- Each design has its own looks: pick the design first, then one of its looks, in setup's style step (round swatches under each style) and in Settings > Look. Every design's list has High contrast and a dark look, and the look's colours reach the whole app, the design's page, Day and My day. A design with no look saved keeps the account's own look.
+- Existing accounts see a one-time notice, "New in 1.0.0: each design has its own looks.", with Choose a look and Not now.
+- The week can start on Sunday: asked in setup and in Settings, it changes Month, the date pickers and the My day strip on this computer. The Week view stays Monday to Sunday.
+- "You're set" at the end of setup shows a picture of your week.
+- The Devices card says when a phone's clock looks wrong and how many changes were held back.
+- The Android app is signed for release and offered as a download.
+- Android phone app (Android 8.0 or newer): today's agenda, reminders, pairing, and background sync. The phone runs the same engine as your computer and syncs your real homework both ways. Add homework, Plan, Running late and the week colour bars are in debug builds only.
+- Settings > This computer > Devices: link a phone with an 8-digit code (shown as two groups of four), see each linked phone and when it last synced, remove a phone, and press Sync now. The code lasts 5 minutes, three wrong tries end it, and a code works once. The phone types the code; there is no camera scan in this build. A status dot in the bottom strip shows that a linked phone is there. The card says "When your computer isn't on the same Wi-Fi, FlexWeek uses a public relay run by n0. It sees that two devices are talking, not what they send."
+- Blocks can show small tags: Overdue, Left from last week, and Placed by Plan on unfinished homework that Plan placed. A tag only appears when it fits beside the time; otherwise the words show when the pointer rests on the block, or when the keyboard is on it.
+- Closing a form you have changed, with Esc, Cancel or the close button, asks "Discard what you typed?" Keep editing keeps you on the same step with your words.
+
+### Changed
+- Settings > Look: Text size, then the main design and its looks, then Colours to fine-tune them, then the day screen and Every screen.
+- Pair a phone shows only the 8-digit code, large, and its countdown. The phone names the desktop path Settings > This computer > Devices > Pair a phone.
+- Plan's "Before planning" question and Restore points open as sheets like the rest; Running late shows Preview first, then Accept in its place.
+- Finished steps in Add homework and Add fixed time read "✓ What" and "✓ When", with the answer in the tooltip.
+- Setup's page dots are small plain dots, and the first-homework page has more room between its fields.
+- Account cards say "Add 1 more character" at 11 letters, hint "3 to 32 letters, numbers or underscores." and "At least 12 characters.", Manage account "Wrong password. Try again.", Reset "Type a recovery code.", and the try limit "Too many tries. Wait 5 minutes, then try again."
+- "Too many tries. Wait 5 minutes, then try again." is shown under Password on Sign in and Create account, and under the recovery code on Reset, matching the server.
+- Keep me signed in lasts 30 days; unticked lasts 7. Using FlexWeek renews that length. An expired session says "Your session ended. Sign in again."
+- Month opens on its first row with this week banded. Clicking a date fills the date pane; Open Day opens that day. A cell shows at most three chips and "and N more". A chip keeps its time whole and shortens its title to fit one line. Sunday stays clear of the scroll bar. Month uses the same 28 px status strip as Week for the overdue count, not a second line under the grid. The date pane has "Show study time per date" and becomes a drawer under 1150 px.
+- The overdue and left-from-last-week chip hides while Unfinished is open, then returns when Unfinished closes.
+- Add homework asks What, When, How long. Add fixed time asks What, When, and What category is it? Answers show as clickable crumbs. Enter goes to the next question. Edit homework and Edit event stay one page. The two When choices stack so the form keeps its gap.
+- Sheets, row forms and account cards share one form look: a caption above each field, a problem line as wide as that field or row, and buttons that keep their words and stack when the row is too narrow. Sign in, Create account and Reset password show one problem at a time, send the keyboard to that field, and keep the card's heading still.
+- Create account and Reset password fit a 768 px screen at Large text while keeping their captions and full-size words.
+- Week planning uses one bar. Plan shows how many homework items still need a time. Click the week title to open a mini month.
+- A 28 px strip under the bar says what is next (or Nothing more today), how many items are overdue, and Week as a list · Ctrl+Shift+L. The list row stays 28 px at Large text.
+- The left rail is a fixed Agenda: Next, with Start focus on homework; No time yet chips to drag onto a day; and Due this week. The mini month is not a block in the rail.
+- At Large text, each day header puts the date under the day name.
+- More > Unfinished keeps the words Unfinished with N left for homework that still needs a time. Each leftover row shows its due date and whether it is overdue or left from last week. When homework is overdue but already has a time, that row stays pressable and reads None left, so you can start focus. The overdue count sits in the strip, not on More.
+- Day, Week, Month and My day are one group of choices, so Tab reaches the group once and the arrow keys move between them.
+- The desktop starts its sync service only after a phone is linked or Pair a phone is pressed. With no phone, FlexWeek opens no network connection and contacts no relay.
+- Study hours is the one name for the availability card, its button, the sheet title and the More list.
+- When you add homework you choose who sets the time: "FlexWeek picks the time" or "Pin to a time". Undoing an unpin names the homework.
+- In Settings > Look, the look you are wearing shows a check badge and "Wearing". Cards move with the arrow keys, Home and End. The card you reach by keyboard gets a clear ring. A screen reader hears the name, selected, and its place, like "High contrast, selected, 3 of 10".
+- My day: One thing shows a ring, Later today, a Then list and day letters. Day dial is a list beside its ring. The not-placed strip shows the count only.
+- Empty days and empty weeks say "Nothing planned" (capital N, no full stop). FlexWeek's own sentences use contractions (it's, isn't, doesn't, can't).
+- On the leave-the-look-editor sheet, Discard sits on the far left, away from Save. Save is the default. Esc stays in the editor.
+- The look editor warns that changes you haven't saved will be lost.
+- High contrast says "High contrast is easiest to read with Large text." Its button says "Use Large text" and announces when the text size changes.
+- Before importing a backup, FlexWeek says whose weeks it adds, replaces or deletes, and any homework that isn't in the backup and will be deleted.
+- Edit homework says when the homework is planned and when it is due, like "Planned Fri 16 · due Wed 21".
+- Plan's share details say what is saved for next week. After planning, the message says how many items have no time yet. When Plan explains why homework was placed first, the reason says what to do next.
+- A past time is refused with the next quarter hour ("4:00 PM or later"), or "That time has passed. The day is over, so choose another day." on an earlier day.
+- The original green dumbbell logo is back, in place of the blue square that 0.16 drew. The Android app shows it as its launcher icon instead of Android's stock robot.
+
+### Fixed
+- "Left from last week" is shown only for homework that had a session in an earlier saved week, not for every homework once an older week exists.
+- Month opens at its full size with every date while its data loads, instead of growing a moment later; the open week's month is fetched ahead.
+- The Agenda rail keeps Start focus and the weekdays whole; long titles end in "…". Month shows Next once, and its chips stay on one line.
+- The top bar no longer refits itself on every turn when it is tight, which held a CPU while a sheet opened.
+- A device sync no longer leaves a Qt object behind for good, and memory is only tidied on the window's thread.
+- Leaving Retro after the Unfinished list was rebuilt no longer raises an error; Mission keeps a short block's start time; Timeline's page arrows clear Thursday's heading.
+- Clay fits a 1024 by 640 window at Large text, and the overdue card's buttons move under its words rather than being cut.
+- The empty-title problem shows under its field; a sheet opened on a hidden window comes out at its own size.
+- Next takes no room when nothing is left for now or later today. The strip says "Nothing more today". Next keeps the keyboard as minutes pass, and the strip shortens a long title.
+- The app no longer crashes now and then while drawing a week (most often in Mission control): tidying up memory now happens only on the window's own thread, never on the built-in server's.
+- A block always shows its time range before its name. When a block is too short for its whole name, the name is cut first; the time is never cut part-way. A block too narrow for its range shows its start time alone. Keyboard focus shows the dropped title.
+- Category icons stay inside their block, and Sunday's homework total stays whole at 810 px at Large text, including with the Agenda rail.
+- Empty-week card height follows its text at Large text, not a fixed 200 px.
+- Hour lines are drawn as one crisp line at 125% display scale, not two pale lines.
+- Plan keeps one row at Large text. Day, Week, Month and My day sit level with the rest of the top bar. The top bar no longer cuts "My day" at the narrowest window width.
+- The status strip with Next and the overdue count shows on Month again; only the Week as a list row stays Week-only.
+- Today and Add are no longer cut off on the top bar at narrow widths and at Large text.
+- My day no longer keeps a tall window from shrinking back to a laptop screen at Large text.
+- Month fits 1024 x 640 with the Unfinished card open.
+- The Devices card's status lines wrap, so Settings no longer scrolls sideways.
+- AM and PM stay with the time they belong to, including in the Running late preview. A homework title that contains AM or PM (like "PM club") keeps its normal spacing.
+- Pressing Tab leaves the due-date field as one step. The quick homework-length choices work as one set of radio choices.
+- The three-step form's step tabs fit their words.
+- In sheets, each answer keeps the width its words need, and a problem about the start time shows under the Start and End pair, not on top of it.
+- When Save flags a time in the past, the whole time is highlighted, not just the hour.
+- The message that spreads homework over several days names the homework first. If the time you need is next week, Choose a time says to close it and pick a day there.
+- In Settings, pressing Tab brings each control fully into view above the fixed footer. Setup's clock choices show a clear ring on keyboard focus, and Home and End pick 12-hour or 24-hour. Setup's style dots work as one radio choice and say their place. A Setup step you haven't reached yet is easy to read.
+- In the Retro look, letters no longer join together (as in "fi"); other looks are unchanged.
+- The show-password eye button's focus ring is clearly visible in every look. The look preview's step buttons have borders that read clearly. The Poster look preview uses the week's rule colour.
+- Homework outlines use the class colour, never error red. Plan's label and block time lines stay easy to read in every look.
+- Waiting chips stay inside the Agenda rail after a look change.
+- Running late moves blocks that already have a time and never places waiting homework.
+- Overdue and left-from-last-week minutes are estimate minus focus minus sessions ticked done, never below 0. A block with no duration counts as 0 minutes.
+- Plan puts overdue homework into the earliest free slot. Overdue homework that already has a time is not counted as still needing a time. Start focus on overdue homework credits it.
+- If quitting cannot save, the message says what to do next. A week or day file that will not import says what it is and where to go. "Still saving" and "changed in another window" say what to press.
+- "Every week" changes only the block it names.
+- A block stretched to midnight says how long it became.
+- The week list has one name, Week as a list, and its shortcut is in Help. The mini month names its week in the app's date order.
+- Leftover buttons read "Plan into this week" and "Mark as finished".
+- The page no longer blanks while a sheet's dim fades in; the page stays visible underneath.
+- The look editor no longer flashes stray windows while it opens.
+- The Undo message no longer pauses after a second Plan.
+
 ## [0.19.2] - 2026-10-11
 
 ### Fixed

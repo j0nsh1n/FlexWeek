@@ -51,8 +51,8 @@
   {
     "name": "the sign-in card rounded as a card, not a sheet",
     "file": "desktop/native/look.py",
-    "old": "    sheet = RADIUS_SHEET if card_radius else 0\n    ring = mix(palette[\"accent\"], palette[\"field\"], 0.4)\n",
-    "new": "    sheet = card_radius\n    ring = mix(palette[\"accent\"], palette[\"field\"], 0.4)\n",
+    "old": "    title = f\"font-size: {type_pt('title', text)}pt; font-weight: {WEIGHT_STRONG};\"\n    sheet = RADIUS_SHEET if card_radius else 0\n",
+    "new": "    title = f\"font-size: {type_pt('title', text)}pt; font-weight: {WEIGHT_STRONG};\"\n    sheet = card_radius\n",
     "test": "desktop/tests/test_sign_in_card.py::test_the_card_is_a_sheet_lifted_with_the_large_shadow_where_the_look_has_shadows"
   },
   {

@@ -26,7 +26,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QPoint, QStandardPaths, Qt
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
+    from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QPushButton, QWidget
 
     from desktop.native.calendar import sunday_due
     from desktop.native.hours.geometry import Span
@@ -39,7 +39,8 @@ if importlib.util.find_spec("PySide6") is not None:
 
 PASSWORD = "a-long-test-password"
 LAYOUTS = Path(__file__).resolve().parents[1] / "native" / "layouts"
-REFUSED = "That ends after it is due, so it stayed where it was."
+# T-W25: contractions in the app's own words ("it's due").
+REFUSED = "That ends after it's due, so it stayed where it was."
 THURSDAY = 3
 
 
@@ -134,7 +135,7 @@ def due_thursday_at_eight(qapp: QApplication, window: NativeWindow) -> None:
 def my_day(qapp: QApplication, window: NativeWindow, screen: str) -> tuple[LayoutView, QWidget]:
     """Open My day on `screen` from the top bar, and find the one surface it moves blocks on."""
     window._layout = sanitize_layout({"main": "classic", "day": screen})
-    window.findChild(QPushButton, "viewMyDay").click()
+    window.findChild(QAbstractButton, "viewMyDay").click()
     for _ in range(10):
         qapp.processEvents()
     view = window.planner.currentWidget()
@@ -281,7 +282,7 @@ def test_homework_due_today_with_no_time_is_given_one_by_carrying_its_title_onto
     view, bar = my_day(qapp, window, "one")
     said = reported(window)
     title = view.findChild(QLabel, "oneTitle")
-    assert title.text() == "Math worksheet"
+    assert title.text().replace("\n", " ") == "Math worksheet"
     start = title.mapToGlobal(title.rect().center())
     end = bar.point_for(THURSDAY, 21 * 60)
     carry(qapp, title, [start + (end - start) * step / 8 for step in range(9)])

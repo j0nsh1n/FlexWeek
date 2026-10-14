@@ -30,6 +30,9 @@ def editor(qapp):
     def open_editor(start: str = "16:00", minutes: int = 60) -> BlockDialog:
         dialog = _up(qapp, BlockDialog(host, day=3, start=start, duration_min=minutes))
         dialog.title.setText("Club")
+        from desktop.tests.test_fixed_time_steps import go_when
+
+        go_when(dialog)
         made.append(dialog)
         return dialog
 
@@ -93,7 +96,9 @@ def test_the_duration_line_says_end_moved(editor) -> None:
     enter(dialog.start, "tab-in")
     type_text(dialog.start, "16:30")
     press(dialog.start, Qt.Key.Key_Tab)
-    assert "End moved to 17:30" in dialog.duration_line.text()
+    from desktop.native.weekmodel import clock_text
+
+    assert dialog.duration_line.text() == f"End moved to {clock_text(17 * 60 + 30)} to keep it 1 h."
 
 
 @pytest.mark.parametrize("where", ["setup-school", "setup-activity", "school-hours"])
@@ -152,4 +157,4 @@ def test_end_moved_is_announced_once_politely(editor, monkeypatch) -> None:
     monkeypatch.setattr("desktop.native.widgets.announce", record)
     dialog = editor()
     dialog.start.setTime(QTime(16, 30))
-    assert said == [("End moved to 17:30", False)]
+    assert said == [("End moved to 17:30 to keep it 1 h.", False)]

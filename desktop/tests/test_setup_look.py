@@ -17,22 +17,25 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QPoint, QSize, QStandardPaths
+    from PySide6.QtCore import QPoint, QSize, QStandardPaths, Qt
     from PySide6.QtGui import QColor
-    from PySide6.QtWidgets import QApplication, QPushButton, QWidget
+    from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
 
     from desktop.native.calendar import monday_of
     from desktop.native.layouts.registry import sanitize_layout
     from desktop.native.look import pack_stylesheet, resolved_palette
     from desktop.native.setup import (
         BADGE_PX,
+        COLOUR_THUMB,
         CURRENT,
         DONE,
         FINISHED,
+        FIRST,
         HOMEWORK,
         PENDING,
         REMINDERS,
         SETUP_COLUMN,
+        SETUP_SCHOOL_ID,
         SKIPPED,
         STYLE,
         WEEK,
@@ -40,6 +43,7 @@ if importlib.util.find_spec("PySide6") is not None:
         SetupState,
         step_badge,
     )
+    from desktop.native.weekmodel import set_clock_24h
     from desktop.native.widgets import control_art
 
 STEPS = (STYLE, WEEK, HOMEWORK, REMINDERS, DONE)
@@ -208,3 +212,204 @@ def test_play_is_an_icon_in_the_looks_accent(dressed: tuple[SetupPage, dict]) ->
         assert inked, play.accessibleName()
         far = [seen.name() for seen in inked if apart(seen, accent) > 3]
         assert far == [], play.accessibleName()
+
+
+def test_the_style_pager_dots_share_one_box_and_only_the_current_one_is_accent(
+    qapp: QApplication, dressed: tuple[SetupPage, dict]
+) -> None:
+    """Jonathan saw one big blue dot and small grey marks; every dot is one size, centred on the arrows,
+    and the current one alone is filled in the accent."""
+    setup, palette = dressed
+    setup._show(STYLE)
+    qapp.processEvents()
+    carousel = setup.carousel
+    dots = list(carousel.dots.values())
+    assert len({(dot.width(), dot.height()) for dot in dots}) == 1
+    centre_y = {dot.geometry().center().y() for dot in dots} | {carousel.previous.geometry().center().y()}
+    assert max(centre_y) - min(centre_y) <= 1
+    current = carousel.key()
+    for key, dot in carousel.dots.items():
+        centre = dot.grab().toImage().pixelColor(dot.width() // 2, dot.height() // 2)
+        if key == current:
+            assert centre == QColor(palette["accent"]), key
+        else:
+            assert centre != QColor(palette["accent"]), key
+            # One flat fill: the centre is the colour found partway to the edge, so no radio mark sits in it.
+            image = dot.grab().toImage()
+            middle = image.pixelColor(dot.width() // 2, dot.height() // 2)
+            aside = image.pixelColor(dot.width() // 2 + dot.width() // 4, dot.height() // 2)
+            assert middle == aside, (key, middle.name(), aside.name())
+    # Clearly smaller than the look swatches under them, so the two rows never read alike.
+    swatch = next(iter(carousel.look_swatches.values()))
+    assert dots[0].width() * 2 <= swatch.width()
+
+
+def test_style_look_swatches_follow_the_design_and_change_the_preview(
+    qapp: QApplication, dressed: tuple[SetupPage, dict]
+) -> None:
+    from desktop.native.layouts.registry import DESIGN_LOOKS
+    from desktop.native.look import design_look
+    from desktop.native.setup import STYLES
+
+    setup, _palette = dressed
+    setup._show(STYLE)
+    carousel = setup.carousel
+    swatches = list(carousel.look_swatches.values())
+    assert list(carousel.look_swatches) == [token for token, _name in DESIGN_LOOKS["classic"]]
+    assert swatches[0].isChecked()
+    assert all(button.isVisibleTo(setup) for button in swatches)
+    assert all(button.width() == 24 and button.height() == 24 for button in swatches)
+    assert all(button.focusPolicy() & Qt.FocusPolicy.TabFocus for button in swatches)
+
+    before = carousel.slides["plain"].picture.pixmap().toImage()
+    choice = next(button for button in swatches if button.property("lookToken") == "preset:high-contrast")
+    assert choice.accessibleName() == "High contrast"
+    assert choice.toolTip() == "High contrast"
+    choice.click()
+    qapp.processEvents()
+    after = carousel.slides["plain"].picture.pixmap().toImage()
+    assert choice.isChecked()
+    assert before != after
+    background = QColor(design_look("preset:high-contrast", "light-frost", False, None)[0]["window"])
+    after_background = sum(
+        after.pixelColor(x, y) == background for x in range(after.width()) for y in range(after.height())
+    )
+    before_background = sum(
+        before.pixelColor(x, y) == background for x in range(before.width()) for y in range(before.height())
+    )
+    assert after_background > before_background
+    assert setup._layout["options"]["classic"]["look"] == "preset:high-contrast"
+
+    # Another design shows its own looks with its signature picked; coming back keeps this setup's pick.
+    setup.carousel.go_to("dashboard")
+    assert setup.carousel.key() == "dashboard"
+    bento = list(setup.carousel.look_swatches.values())
+    assert bento[0].isChecked() and bento[0].property("lookToken") == DESIGN_LOOKS["bento"][0][0]
+    assert setup._layout["options"]["bento"]["look"] == DESIGN_LOOKS["bento"][0][0]
+    setup.carousel.go_to("plain")
+    assert setup.carousel.look_swatches["preset:high-contrast"].isChecked()
+    for style in STYLES:
+        setup.carousel.go_to(style.key)
+        assert list(setup.carousel.look_swatches) == [
+            token for token, _name in DESIGN_LOOKS[style.main]
+        ]
+
+
+def test_style_look_swatches_fit_at_1024_by_640_large_text(
+    qapp: QApplication, dressed: tuple[SetupPage, dict]
+) -> None:
+    setup, _palette = dressed
+    setup._look = {**setup._look, "knobs": {**setup._look.get("knobs", {}), "text": "large"}}
+    setup.set_palette(resolved_palette(setup._pack, False, setup._look))
+    setup.resize(1024, 640)
+    setup._show(STYLE)
+    qapp.processEvents()
+    row = setup.carousel.look_row
+    swatches = list(setup.carousel.look_swatches.values())
+    assert row.width() >= sum(button.width() for button in swatches)
+    assert row.height() == 24
+    assert all(button.isVisibleTo(setup) for button in swatches)
+    page = setup.pages[STYLE]
+    assert row.mapTo(page.widget(), QPoint(0, 0)).y() + row.height() <= page.viewport().height()
+
+
+def test_a_homework_row_lines_its_fields_up_on_one_left_edge(
+    qapp: QApplication, dressed: tuple[SetupPage, dict]
+) -> None:
+    """The Takes stepper and its length chips sat 10 pixels right of the Name field, because an empty
+    grid column pushed them in. Name, Takes and the chips share one left edge, Due sits level with
+    Takes, and Remove sits level with the name field."""
+    setup, _palette = dressed
+    setup._show(FIRST)
+    setup._fill_first()
+    qapp.processEvents()
+    row = setup.homework_rows[0]
+    stepper = row.minutes.parentWidget()
+    takes = next(label for label in row.findChildren(QLabel) if label.text() == "Takes")
+    due = next(label for label in row.findChildren(QLabel) if label.text() == "Due")
+    remove = next(button for button in row.findChildren(QPushButton) if button.text() == "Remove")
+    assert row.name.geometry().left() == takes.geometry().left() == stepper.geometry().left()
+    assert stepper.chips[0].mapTo(row, QPoint(0, 0)).x() == stepper.geometry().left()
+    assert due.geometry().top() == takes.geometry().top()
+    assert due.geometry().left() - stepper.geometry().right() >= 16
+    assert remove.geometry().bottom() == row.name.geometry().bottom()
+
+
+def test_you_are_set_writes_times_on_the_accounts_12_hour_clock(
+    qapp: QApplication, dressed: tuple[SetupPage, dict]
+) -> None:
+    """Jonathan's 12-hour account saw 08:00 and 23:00 on You're set. The summary must use the clock
+    the account chose: 8:00 AM and 11:00 PM here."""
+    setup, _palette = dressed
+    school = {
+        "id": SETUP_SCHOOL_ID,
+        "title": "School",
+        "start": "08:00",
+        "duration_min": 390,
+        "days": [1, 2, 3, 4, 5],
+    }
+    state = SetupState(
+        "light-frost",
+        {"preset": "default", "knobs": {}},
+        sanitize_layout(None),
+        {"clock_24h": False, "day_cutoff": "23:00"},
+        [school],
+        monday_of("2026-09-23"),
+    )
+    setup.open(state, DONE)
+    qapp.processEvents()
+    summary = " | ".join(setup.summary_text())
+    assert "8:00 AM" in summary and "11:00 PM" in summary, summary
+    assert "08:00" not in summary and "23:00" not in summary, summary
+
+
+def test_you_are_set_ignores_a_stale_24_hour_clock_left_by_another_page(
+    qapp: QApplication, dressed: tuple[SetupPage, dict]
+) -> None:
+    """The clock is shared by the whole app. A 24-hour clock left behind must not reach the summary
+    of a 12-hour account."""
+    setup, _palette = dressed
+    school = {
+        "id": SETUP_SCHOOL_ID,
+        "title": "School",
+        "start": "08:00",
+        "duration_min": 390,
+        "days": [1, 2, 3, 4, 5],
+    }
+    state = SetupState(
+        "light-frost",
+        {"preset": "default", "knobs": {}},
+        sanitize_layout(None),
+        {"clock_24h": False, "day_cutoff": "23:00"},
+        [school],
+        monday_of("2026-09-23"),
+    )
+    setup.open(state, WEEK)
+    set_clock_24h(True)
+    setup._show(DONE)
+    qapp.processEvents()
+    assert "8:00 AM" in setup.summary_text()[1]
+    assert "11:00 PM" in setup.summary_text()[1]
+
+
+def test_you_are_set_shows_a_picture_of_the_week_beside_the_summary(
+    qapp: QApplication, dressed: tuple[SetupPage, dict]
+) -> None:
+    """Jonathan asked for a small live picture of the week with the chosen style, look and text size,
+    next to the words. Its frame is the colour page's preview size, and it holds a picture."""
+    setup, _palette = dressed
+    setup.open(
+        SetupState(
+            "light-frost",
+            {"preset": "default", "knobs": {}},
+            sanitize_layout(None),
+            {"clock_24h": False},
+            [],
+            monday_of("2026-09-23"),
+        ),
+        DONE,
+    )
+    qapp.processEvents()
+    assert setup.done_preview.width() == COLOUR_THUMB
+    assert not setup.done_preview.pixmap().isNull()
+    assert setup.done_preview.isVisibleTo(setup)

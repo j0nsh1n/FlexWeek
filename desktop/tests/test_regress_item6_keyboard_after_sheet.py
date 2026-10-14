@@ -88,7 +88,8 @@ def name_and_save(sheet: QDialog) -> None:
     title.title.setFocus()
     for char in "Club":
         QTest.keyClick(sheet.windowHandle(), char)
-    QTest.keyClick(sheet.windowHandle(), Qt.Key.Key_Return)
+    for _ in range(3):
+        QTest.keyClick(sheet.windowHandle(), Qt.Key.Key_Return)
 
 
 def test_6_1_after_a_click_and_esc_shift_f10_asks_about_the_clicked_slot(qapp, window, menus) -> None:

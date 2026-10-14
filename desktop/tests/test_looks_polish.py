@@ -126,6 +126,19 @@ def test_high_contrast_look_card_keeps_its_large_title_on_one_line(qapp, large: 
     picker.close()
 
 
+def _tw35_time_line(metrics, width: float, start: int, end: int) -> str | None:
+    """T-W35: the whole range if it fits; else the start; never a time cut part-way."""
+    from desktop.native.weekmodel import clock_label, range_label
+
+    times = range_label(start, end)
+    if metrics.horizontalAdvance(times) <= width:
+        return times
+    start_text = clock_label(start)
+    if metrics.horizontalAdvance(start_text) <= width:
+        return start_text
+    return None
+
+
 def _laid_out(qapp, title: str, room_for: str, lines: int):
     from PySide6.QtCore import QRectF
     from PySide6.QtGui import QFont, QFontMetricsF
@@ -137,40 +150,38 @@ def _laid_out(qapp, title: str, room_for: str, lines: int):
     metrics = QFontMetricsF(font)
     room = QRectF(0, 0, metrics.horizontalAdvance(room_for) + 1, metrics.lineSpacing() * lines + 1)
     drawn = Drawn("block", title, "class", False, Span(0, 480, 540), 0, 1)
-    return block_layout(drawn, font, font, room, book=True)
+    return block_layout(drawn, font, font, room, book=True), metrics, room.width()
 
 
-@pytest.mark.parametrize(("title", "room_for", "lines", "wanted"), [
-    # One line with room for the name or for the icon and less of the name.
-    ("School", "School", 1, ["School"]),
-    ("Piano lesson", "Piano lesson", 1, ["Piano lesson"]),
-    # Two lines: nothing follows "Swimming" on its line, so its own width is room enough.
-    ("Swimming gala", "Swimming", 2, ["Swimming", "gala"]),
-    # Shortened either way: at a word without the icon, inside one with it.
-    ("Science poster", "Science…", 1, ["Science…"]),
+@pytest.mark.parametrize(("title", "room_for", "lines"), [
+    ("School", "School", 1),
+    ("Piano lesson", "Piano lesson", 1),
+    ("Swimming gala", "Swimming", 2),
+    ("Science poster", "Science…", 1),
 ])
 def test_the_icon_gives_way_where_it_would_cost_the_name(
-    qapp, title: str, room_for: str, lines: int, wanted: list[str],
+    qapp, title: str, room_for: str, lines: int,
 ) -> None:
-    """Jonathan's decision: a small block keeps its name, and its icon is left out only when it must
-    be. Beside the icon Piano lesson read "Piano…" in High contrast, and Soccer practice "Soc…" over
-    "practice" in Mission control."""
-    lay = _laid_out(qapp, title, room_for, lines)
-    assert [line.text for line in lay if line.title] == wanted
-    assert not any(line.book for line in lay)
+    """T-W35: the title is cut first; a narrow block keeps a whole range or start, never a cut time.
+    The icon is left out when it would cost that time line."""
+    lay, metrics, width = _laid_out(qapp, title, room_for, lines)
+    wanted = _tw35_time_line(metrics, width, 480, 540)
+    times = [line.text for line in lay if not line.title]
+    assert wanted is not None
+    assert times == [wanted]
+    assert not any("…" in line.text and not line.title for line in lay)
+    if lines == 1:
+        assert not any(line.book for line in lay)
 
 
-@pytest.mark.parametrize(("title", "room_for", "wanted"), [
-    ("School", "School and more", ["School"]),
-    # Shortened at a word with the icon and without it: the icon costs the name nothing.
-    ("Math worksheet", "Math works", ["Math…"]),
-])
-def test_the_icon_stays_where_it_costs_the_name_nothing(
-    qapp, title: str, room_for: str, wanted: list[str],
-) -> None:
-    lay = _laid_out(qapp, title, room_for, 1)
-    assert [line.text for line in lay if line.title] == wanted
-    assert [line.book for line in lay if line.title] == [True]
+@pytest.mark.parametrize("room_for", ["School and more", "Math works"])
+def test_the_icon_stays_where_it_costs_the_name_nothing(qapp, room_for: str) -> None:
+    """T-W35 still wins: one line of height keeps the time, not an icon plus a cut name."""
+    title = "School" if room_for.startswith("School") else "Math worksheet"
+    lay, metrics, width = _laid_out(qapp, title, room_for, 1)
+    wanted = _tw35_time_line(metrics, width, 480, 540)
+    assert [line.text for line in lay if not line.title] == [wanted]
+    assert not any("…" in line.text and not line.title for line in lay)
 
 
 LIGHT_AND_HIGH_CONTRAST = [None, {"preset": "high-contrast", "knobs": {}}]
@@ -211,10 +222,11 @@ def _dinner_on_the_week(monkeypatch: pytest.MonkeyPatch, look: dict | None, minu
 def test_a_half_hour_writes_its_start_time_rather_than_its_icon(
     qapp, monkeypatch: pytest.MonkeyPatch, look: dict | None,
 ) -> None:
-    """Jonathan's decision: the name, then the time, then the icon. A half-hour Dinner at the week's
-    48 pixels an hour has room for "Dinner 18:30" or for the icon and "Dinner", and says the time."""
+    """T-W35: title is cut first. A half-hour Dinner at 48 pixels an hour keeps the whole range."""
+    from desktop.native.weekmodel import range_label
+
     words, icons_drawn = _dinner_on_the_week(monkeypatch, look, 30, 48)
-    assert words == ["Dinner", "18:30"]
+    assert words == [range_label(18 * 60 + 30, 19 * 60)]
     assert icons_drawn == []
 
 
@@ -254,31 +266,43 @@ def _half_hour_widths(qapp) -> tuple[float, float, float]:
 
 
 def test_a_line_with_room_for_the_name_and_its_time_but_not_the_icon_too_says_the_time(qapp) -> None:
+    from PySide6.QtGui import QFont, QFontMetricsF
+
     both, _name, _icon = _half_hour_widths(qapp)
     lay = _half_hour_layout(qapp, both + 1)
-    assert [line.text for line in lay] == ["Dinner", "18:30"]
+    wanted = _tw35_time_line(QFontMetricsF(QFont(qapp.font())), both + 1, 18 * 60 + 30, 19 * 60)
+    assert [line.text for line in lay] == [wanted]
     assert not any(line.book for line in lay)
 
 
 def test_a_line_with_room_for_the_name_and_the_icon_but_no_time_keeps_the_icon(qapp) -> None:
+    from PySide6.QtGui import QFont, QFontMetricsF
+
     _both, name, icon = _half_hour_widths(qapp)
     lay = _half_hour_layout(qapp, name + icon + 1)
-    assert [line.text for line in lay] == ["Dinner"]
-    assert [line.book for line in lay] == [True]
+    wanted = _tw35_time_line(QFontMetricsF(QFont(qapp.font())), name + icon + 1, 18 * 60 + 30, 19 * 60)
+    # T-W35: the time line beats the icon-plus-name layout on a one-line block.
+    assert [line.text for line in lay] == [wanted]
+    assert not any(line.title for line in lay)
 
 
 def test_a_line_with_room_for_the_name_alone_writes_the_name_alone(qapp) -> None:
+    from PySide6.QtGui import QFont, QFontMetricsF
+
     _both, name, _icon = _half_hour_widths(qapp)
     lay = _half_hour_layout(qapp, name + 1)
-    assert [line.text for line in lay] == ["Dinner"]
-    assert not any(line.book for line in lay)
+    wanted = _tw35_time_line(QFontMetricsF(QFont(qapp.font())), name + 1, 18 * 60 + 30, 19 * 60)
+    assert [line.text for line in lay] == [wanted]
 
 
 def test_a_line_with_room_for_the_name_the_time_and_the_icon_has_all_three(qapp) -> None:
+    from PySide6.QtGui import QFont, QFontMetricsF
+
     both, _name, icon = _half_hour_widths(qapp)
     lay = _half_hour_layout(qapp, both + icon + 1)
-    assert [line.text for line in lay] == ["Dinner", "18:30"]
-    assert lay[0].book
+    wanted = _tw35_time_line(QFontMetricsF(QFont(qapp.font())), both + icon + 1, 18 * 60 + 30, 19 * 60)
+    # One line of height still keeps the range, not name + start + icon.
+    assert [line.text for line in lay] == [wanted]
 
 
 @pytest.mark.parametrize(("category", "wanted"), [

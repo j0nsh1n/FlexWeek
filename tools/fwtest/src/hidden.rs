@@ -440,19 +440,53 @@ fn is_decimal(text: &str) -> bool {
     !text.is_empty() && text.bytes().all(|byte| byte.is_ascii_digit())
 }
 
-fn filtered_env<I, K, V>(vars: I) -> Env
+fn run_user_dir() -> PathBuf {
+    PathBuf::from(format!("/run/user/{}", unsafe { nix::libc::getuid() }))
+}
+
+fn path_is_dir(path: &Path) -> bool {
+    fs::metadata(path).is_ok_and(|meta| meta.is_dir())
+}
+
+fn ensure_dir_0700(path: &Path) {
+    let _ = fs::create_dir_all(path);
+    let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o700));
+}
+
+fn xdg_runtime_dir(current: Option<&str>, run_user: &Path, fallback: &Path) -> String {
+    if let Some(value) = current
+        && path_is_dir(Path::new(value))
+    {
+        return value.to_string();
+    }
+    if path_is_dir(run_user) {
+        return run_user.to_string_lossy().into_owned();
+    }
+    ensure_dir_0700(fallback);
+    fallback.to_string_lossy().into_owned()
+}
+
+fn filtered_env<I, K, V>(vars: I, run_user: &Path, fallback: &Path) -> Env
 where
     I: IntoIterator<Item = (K, V)>,
     K: AsRef<str>,
     V: AsRef<str>,
 {
-    vars.into_iter()
+    let mut env: Env = vars
+        .into_iter()
         .filter(|(key, _)| {
             let key = key.as_ref();
             key != "QT_IM_MODULE" && key != "XMODIFIERS"
         })
         .map(|(key, value)| (key.as_ref().to_string(), value.as_ref().to_string()))
-        .collect()
+        .collect();
+    let chosen = xdg_runtime_dir(
+        env.get("XDG_RUNTIME_DIR").map(String::as_str),
+        run_user,
+        fallback,
+    );
+    env.insert("XDG_RUNTIME_DIR".to_string(), chosen);
+    env
 }
 
 fn which(name: &str) -> bool {
@@ -763,7 +797,8 @@ impl Host for RealHost {
     }
 
     fn base_env(&self) -> Env {
-        filtered_env(std::env::vars())
+        let fallback = PathBuf::from(self.state_dir());
+        filtered_env(std::env::vars(), &run_user_dir(), &fallback)
     }
 
     fn socket_name(&self) -> String {
@@ -1844,7 +1879,7 @@ mod tests {
             socket: "flexweek-rig-test".to_string(),
             runs_key: "test".to_string(),
         });
-        let env = filtered_env(std::env::vars());
+        let env = filtered_env(std::env::vars(), &run_user_dir(), &root);
         let (pid, address) = host.start_bus(&env).unwrap();
         struct Kill(i32);
         impl Drop for Kill {
@@ -1950,14 +1985,100 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    fn xdg_mode(path: &Path) -> u32 {
+        fs::metadata(path).unwrap().permissions().mode() & 0o777
+    }
+
+    #[test]
+    fn filtered_env_uses_run_user_when_xdg_runtime_dir_is_unset() {
+        let run_user = temp_dir();
+        let fallback = temp_dir().join("session");
+        let env = filtered_env([("PATH", "/usr/bin")], &run_user, &fallback);
+        assert_eq!(
+            env.get("XDG_RUNTIME_DIR").map(String::as_str),
+            Some(run_user.to_str().unwrap())
+        );
+        assert!(run_user.is_dir());
+        let _ = fs::remove_dir_all(&run_user);
+        let _ = fs::remove_dir_all(fallback.parent().unwrap());
+    }
+
+    #[test]
+    fn filtered_env_uses_session_state_dir_when_run_user_is_not_a_directory() {
+        let run_user = temp_dir().join("not-a-dir");
+        File::create(&run_user).unwrap();
+        let fallback = temp_dir().join("session");
+        let env = filtered_env([("PATH", "/usr/bin")], &run_user, &fallback);
+        assert_eq!(
+            env.get("XDG_RUNTIME_DIR").map(String::as_str),
+            Some(fallback.to_str().unwrap())
+        );
+        assert!(fallback.is_dir());
+        assert_eq!(xdg_mode(&fallback), 0o700);
+        let _ = fs::remove_dir_all(run_user.parent().unwrap());
+        let _ = fs::remove_dir_all(fallback.parent().unwrap());
+    }
+
+    #[test]
+    fn filtered_env_keeps_an_existing_directory() {
+        let kept = temp_dir();
+        let run_user = temp_dir();
+        let fallback = temp_dir().join("session");
+        let env = filtered_env(
+            [
+                ("PATH", "/usr/bin"),
+                ("XDG_RUNTIME_DIR", kept.to_str().unwrap()),
+            ],
+            &run_user,
+            &fallback,
+        );
+        assert_eq!(
+            env.get("XDG_RUNTIME_DIR").map(String::as_str),
+            Some(kept.to_str().unwrap())
+        );
+        assert!(!fallback.exists());
+        let _ = fs::remove_dir_all(&kept);
+        let _ = fs::remove_dir_all(&run_user);
+        let _ = fs::remove_dir_all(fallback.parent().unwrap());
+    }
+
+    #[test]
+    fn filtered_env_replaces_a_value_that_is_not_a_directory() {
+        let bogus = temp_dir().join("file");
+        File::create(&bogus).unwrap();
+        let run_user = temp_dir();
+        let fallback = temp_dir().join("session");
+        let env = filtered_env(
+            [
+                ("PATH", "/usr/bin"),
+                ("XDG_RUNTIME_DIR", bogus.to_str().unwrap()),
+            ],
+            &run_user,
+            &fallback,
+        );
+        assert_eq!(
+            env.get("XDG_RUNTIME_DIR").map(String::as_str),
+            Some(run_user.to_str().unwrap())
+        );
+        let _ = fs::remove_dir_all(bogus.parent().unwrap());
+        let _ = fs::remove_dir_all(&run_user);
+        let _ = fs::remove_dir_all(fallback.parent().unwrap());
+    }
+
     #[test]
     fn filtered_env_drops_input_method_variables() {
-        let env = filtered_env([
-            ("HOME", "/home/test"),
-            ("QT_IM_MODULE", "ibus"),
-            ("XMODIFIERS", "@im=ibus"),
-            ("DBUS_SESSION_BUS_ADDRESS", "unix:path=/tmp/caller"),
-        ]);
+        let run_user = temp_dir();
+        let fallback = temp_dir().join("session");
+        let env = filtered_env(
+            [
+                ("HOME", "/home/test"),
+                ("QT_IM_MODULE", "ibus"),
+                ("XMODIFIERS", "@im=ibus"),
+                ("DBUS_SESSION_BUS_ADDRESS", "unix:path=/tmp/caller"),
+            ],
+            &run_user,
+            &fallback,
+        );
         assert_eq!(env.get("HOME").map(String::as_str), Some("/home/test"));
         assert_eq!(
             env.get("DBUS_SESSION_BUS_ADDRESS").map(String::as_str),
@@ -1965,6 +2086,8 @@ mod tests {
         );
         assert!(!env.contains_key("QT_IM_MODULE"));
         assert!(!env.contains_key("XMODIFIERS"));
+        let _ = fs::remove_dir_all(&run_user);
+        let _ = fs::remove_dir_all(fallback.parent().unwrap());
     }
 
     #[test]

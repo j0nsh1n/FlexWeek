@@ -22,11 +22,11 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QAbstractAnimation, QPoint, QPointF, QStandardPaths
-    from PySide6.QtWidgets import QApplication, QPushButton, QScrollBar
+    from PySide6.QtCore import QAbstractAnimation, QEvent, QPoint, QPointF, QStandardPaths
+    from PySide6.QtWidgets import QAbstractButton, QApplication, QPushButton, QScrollBar
 
     from desktop.native import motion
-    from desktop.native.calendar import monday_of, sunday_due
+    from desktop.native.calendar import sunday_due
     from desktop.native.hours.geometry import Axis
     from desktop.native.hours.zoom import HoursScroll
     from desktop.native.layouts.registry import sanitize_layout
@@ -37,6 +37,10 @@ if importlib.util.find_spec("PySide6") is not None:
 PASSWORD = "a-long-test-password"
 DESIGNS = ("classic", "timeline", "mission", "bento", "retro", "clay")
 NOW = 15 * 60 + 40
+# Thursday 15:40 of the week beginning 2026-10-12. date.today() made Today and Month follow the
+# machine's calendar, so a six-week month or a Sunday could change what Mission paints.
+HELD = datetime.fromisoformat("2026-10-15T15:40")
+HELD_MONDAY = "2026-10-12"
 
 
 @pytest.fixture(scope="module")
@@ -62,17 +66,15 @@ def look_file() -> Path:
 
 @pytest.fixture()
 def window(qapp: QApplication, tmp_path: Path) -> Iterator[NativeWindow]:
-    """Signed in with the clock held at Thursday 15:40 from before the week is first shown: school
-    on weekdays from 08:00, dinner every day at 18:00, and nothing next week."""
+    """Signed in with the clock held at Thursday 15:40 on 2026-10-15 from before the week is first
+    shown: school on weekdays from 08:00, dinner every day at 18:00, and nothing next week."""
     # A look saved by an earlier test on this worker would choose another day screen (One thing has no
     # Running late), and the window reads it at start.
     look_file().unlink(missing_ok=True)
     server = LocalServer(tmp_path / "flexweek.db")
     server.start()
     made = NativeWindow(server.origin)
-    thursday = datetime.fromisoformat(monday_of(date.today().isoformat())) + timedelta(days=3)
-    held = thursday + timedelta(minutes=NOW)
-    made.session.now_ms = lambda: int(held.timestamp() * 1000)
+    made.session.now_ms = lambda: int(HELD.timestamp() * 1000)
     made.resize(1280, 860)
     made.show()
     try:
@@ -179,7 +181,7 @@ def test_todays_app_opens_an_empty_next_week_at_eight_once_there_is_homework(
     window._apply_appearance()
     window._on_week()
     for name in ("viewWeek", "nextWeek"):
-        window.findChild(QPushButton, name).click()
+        window.findChild(QAbstractButton, name).click()
         wait_until(qapp, lambda: not session.busy)
     assert window.planner.currentWidget() is not window.empty_week
     opens_at(qapp, window, 8 * 60, "classic next Week, empty")
@@ -192,7 +194,7 @@ def test_every_design_opens_at_now_or_the_first_block_and_again_on_another_day_o
     thursday = (date.fromisoformat(session.week_start) + timedelta(days=3)).isoformat()
 
     def press(name: str) -> None:
-        window.findChild(QPushButton, name).click()
+        window.findChild(QAbstractButton, name).click()
         wait_until(qapp, lambda: not session.busy)
 
     for design in DESIGNS:
@@ -237,7 +239,7 @@ def test_todays_app_keeps_its_scroll_after_a_page_or_look_change(
     window._on_week()
 
     def press(name: str) -> None:
-        window.findChild(QPushButton, name).click()
+        window.findChild(QAbstractButton, name).click()
         wait_until(qapp, lambda: not session.busy)
 
     def away() -> None:
@@ -270,6 +272,52 @@ def test_todays_app_keeps_its_scroll_after_a_page_or_look_change(
         assert hours(window).verticalScrollBar().value() == 0, how
 
 
+@pytest.mark.parametrize("design", DESIGNS)
+def test_day_reached_from_week_opens_at_now(
+    qapp: QApplication, window: NativeWindow, design: str
+) -> None:
+    window.session.selected_day = HELD.date().isoformat()
+    window._layout = sanitize_layout({"main": design, "day": "one"})
+    window._apply_appearance()
+    window._on_week()
+    window.findChild(QAbstractButton, "viewWeek").click()
+    wait_until(qapp, lambda: not window.session.busy)
+    window.findChild(QAbstractButton, "viewDay").click()
+    wait_until(qapp, lambda: not window.session.busy)
+    opens_at(qapp, window, NOW, "Day reached from Week")
+    first, last = span_shown(hours(window))
+    assert first <= 18 * 60 <= last, "Day opened at now but left the next block out of view"
+
+
+def test_month_does_not_repeat_the_next_line_above_its_status_strip(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    window.findChild(QAbstractButton, "viewMonth").click()
+    wait_until(qapp, lambda: not window.session.busy)
+    assert not window.focus_panel.now_next.isVisible()
+    assert window.status_next.full_text().startswith("Next:")
+
+
+def test_leaving_retro_after_unfinished_rows_rebuild_never_touches_deleted_widgets(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    session = window.session
+    session.add_homework(
+        {"id": "retro-work", "title": "Retro homework", "due": "2026-10-16T23:59",
+         "estimate_min": 60, "revision": 0}
+    )
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    window._show_unfinished()
+    window._layout = sanitize_layout({"main": "retro", "day": "one"})
+    window._apply_appearance()
+    window._on_week()
+    window._fill_unfinished(window._panel_items())
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    window._layout = sanitize_layout({"main": "classic", "day": "one"})
+    window._apply_appearance()
+
+
 def test_after_plan_the_week_scrolls_to_the_first_homework_it_placed(
     qapp: QApplication, window: NativeWindow
 ) -> None:
@@ -279,7 +327,7 @@ def test_after_plan_the_week_scrolls_to_the_first_homework_it_placed(
     window._layout = sanitize_layout({"main": "classic", "day": "one"})
     window._apply_appearance()
     window._on_week()
-    window.findChild(QPushButton, "viewWeek").click()
+    window.findChild(QAbstractButton, "viewWeek").click()
     wait_until(qapp, lambda: not session.busy)
     session.add_homework(
         {"id": "essay", "title": "History essay", "due": sunday_due(session.week_start), "estimate_min": 60,
@@ -313,20 +361,48 @@ def test_month_and_mini_month_use_today_at_a_week_boundary(
     wait_until(qapp, lambda: not session.busy)
     window._on_week()
     assert window.rail.month.title.text() == ("September 2026" if month.endswith("09") else "October 2026")
-    window.findChild(QPushButton, "viewMonth").click()
+    window.findChild(QAbstractButton, "viewMonth").click()
     wait_until(qapp, lambda: session.month_data is not None)
     assert session.selected_month == month
     assert [cell.iso for cell in window.month_grid.canvas.cells if cell.today] == [today]
-    window.findChild(QPushButton, "viewDay").click()
+    window.findChild(QAbstractButton, "viewDay").click()
     wait_until(qapp, lambda: not session.busy)
     assert session.selected_day == today
-    window.findChild(QPushButton, "viewWeek").click()
+    window.findChild(QAbstractButton, "viewWeek").click()
     wait_until(qapp, lambda: not session.busy)
-    window.findChild(QPushButton, "viewMyDay").click()
+    window.findChild(QAbstractButton, "viewMyDay").click()
     qapp.processEvents()
     expected = {"2026-09-29": "Tuesday 29 September", "2026-10-01": "Thursday 1 October",
                 "2026-10-04": "Sunday 4 October"}
     assert window.week_title.full_text() == expected[today]
+
+
+def test_open_week_month_is_prefetched_without_waiting_for_it(
+    qapp: QApplication, window: NativeWindow, monkeypatch
+) -> None:
+    session = window.session
+    session.now_ms = lambda: int(datetime.fromisoformat("2026-10-15T15:40").timestamp() * 1000)
+    session.week_start = "2026-10-12"
+    session._month_cache.clear()
+    session._month_prefetching.clear()
+    requests = []
+    monkeypatch.setattr(session.client, "request", lambda *args: requests.append(args))
+
+    session._prefetch_open_week_month()
+
+    assert len(requests) == 1
+    assert requests[0][0:2] == ("GET", "/api/month?month=2026-10")
+    assert session.month_data is None
+    requests[0][3]({"month": "2026-10"})
+    assert session._month_cache[(str(session.account["id"]), "2026-10")]["month"] == "2026-10"
+    session.set_view("month")
+    # The month kept is on screen at once, before any answer; it is asked for again all the same,
+    # since another week may have changed, and the fresh answer replaces it.
+    assert session.month_data == {"month": "2026-10"}
+    asked_again = [args for args in requests[1:] if args[1] == "/api/month?month=2026-10"]
+    assert len(asked_again) == 1
+    asked_again[0][3]({"month": "2026-10", "days": [], "fresh": True})
+    assert session.month_data.get("fresh") is True
 
 
 def test_month_keeps_a_picked_day_and_uses_thursday_for_a_week_without_today(
@@ -361,7 +437,7 @@ def test_each_design_keeps_day_and_week_scroll_until_today_is_pressed(
     window._on_week()
 
     def press(name: str) -> None:
-        window.findChild(QPushButton, name).click()
+        window.findChild(QAbstractButton, name).click()
         wait_until(qapp, lambda: not session.busy)
         for _ in range(4):
             qapp.processEvents()
@@ -428,7 +504,7 @@ def test_today_opens_this_week_at_now_and_leaves_the_week_it_was_pressed_from_wh
     window._on_week()
 
     def press(name: str) -> None:
-        window.findChild(QPushButton, name).click()
+        window.findChild(QAbstractButton, name).click()
         wait_until(qapp, lambda: not session.busy)
         for _ in range(4):
             qapp.processEvents()
@@ -451,7 +527,7 @@ def test_today_opens_this_week_at_now_and_leaves_the_week_it_was_pressed_from_wh
     left = bar().value()
     assert abs(left - opened) == 40, f"{design}: next week's hours have no room to scroll"
     press("todayWeek")
-    assert session.week_start == monday_of(date.today().isoformat())
+    assert session.week_start == HELD_MONDAY
     opens_at(qapp, window, NOW, f"{design} Today from next week")
     press("nextWeek")
     assert bar().value() == left, f"{design}: Today lost where next week was scrolled to"
@@ -469,7 +545,7 @@ def test_each_design_keeps_the_week_where_it_was_through_a_new_text_size(
     window._layout = sanitize_layout({"main": design, "day": "one"})
     window._apply_appearance()
     window._on_week()
-    window.findChild(QPushButton, "viewWeek").click()
+    window.findChild(QAbstractButton, "viewWeek").click()
     wait_until(qapp, lambda: not session.busy)
     for _ in range(4):
         qapp.processEvents()

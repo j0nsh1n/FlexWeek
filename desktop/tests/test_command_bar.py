@@ -15,7 +15,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QPoint, QStandardPaths, Qt
 from PySide6.QtGui import QColor
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog, QPushButton, QWidget
+from PySide6.QtWidgets import QAbstractButton, QApplication, QDialog, QPushButton, QWidget
 
 from desktop.native.calendar import sunday_due
 from desktop.native.command_bar import (
@@ -92,7 +92,7 @@ def window(qapp: QApplication, tmp_path: Path) -> Iterator[NativeWindow]:
             session.add_homework({"id": key, "title": title, "due": due, "estimate_min": 60, "revision": 0})
         session.save()
         settled(qapp, made)
-        made.findChild(QPushButton, "viewWeek").click()
+        made.findChild(QAbstractButton, "viewWeek").click()
         settled(qapp, made)
         made.week_table.hours.setFocus()
         yield made
@@ -290,7 +290,8 @@ def test_choose_a_time_with_nothing_waiting_says_so(
     assert bar.shown_words() == ["Choose a time…"]
     QTest.keyClick(bar.input, Qt.Key.Key_Return)
     qapp.processEvents()
-    assert window.toast.text() == "All your homework already has a time."
+    # Decision: sidebar / leftover copy is "Everything has a time." when every item has a time.
+    assert window.toast.text() == "Everything has a time."
 
 
 def test_plan_says_suggest_times_for_a_student_who_plans_by_hand(

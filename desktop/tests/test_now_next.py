@@ -21,7 +21,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QStandardPaths
-    from PySide6.QtWidgets import QApplication, QPushButton
+    from PySide6.QtWidgets import QAbstractButton, QApplication, QPushButton
 
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
@@ -79,7 +79,7 @@ def window(qapp: QApplication, tmp_path: Path) -> Iterator[tuple[NativeWindow, l
         )
         session.save()
         wait_until(qapp, lambda: not session.busy and not session.dirty)
-        made.findChild(QPushButton, "viewWeek").click()
+        made.findChild(QAbstractButton, "viewWeek").click()
         # The refreshes a save starts redraw the week when they land; none may be left to land
         # during the test and redraw the line for it.
         wait_until(qapp, lambda: not session.busy and not any(session.client._replies.values()))

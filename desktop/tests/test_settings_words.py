@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from desktop.native.layouts.dialog import DesignPicker
 from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.look import look_menu_token
 from desktop.native.settings import BUTTON_WIDTH, FINE_TUNE_LOOK, SettingsPage
@@ -121,31 +122,33 @@ def test_every_field_in_a_forms_column_starts_at_the_same_left_edge(
     dialog.close_page()
 
 
-def test_this_build_says_0_19_2_and_is_not_offered_0_19_1(
+def test_this_build_says_1_0_0_and_is_offered_only_a_newer_release(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
 ) -> None:
-    assert VERSION == "0.19.2"
+    assert VERSION == "1.0.0"
     release = {
-        "tag_name": "v0.19.1",
+        "tag_name": "v0.19.2",
         "assets": [
             {"name": name, "browser_download_url": f"https://example.invalid/{name}"}
             for name in (WINDOWS_SETUP, WINDOWS_SETUP + ".sha256")
         ],
     }
     assert available(release, "windows") is None
-    assert available({**release, "tag_name": "v0.19.3"}, "windows")["version"] == "0.19.3"
+    assert available({**release, "tag_name": "v1.0.0"}, "windows") is None
+    assert available({**release, "tag_name": "v1.0.1"}, "windows")["version"] == "1.0.1"
     dialog = prefs(window)
-    assert dialog.findChild(QLabel, "prefsVersion").text() == "FlexWeek 0.19.2"
+    assert dialog.findChild(QLabel, "prefsVersion").text() == "FlexWeek 1.0.0"
     dialog.close_page()
 
 
-def test_appearance_opens_on_colours_then_the_designs_and_ends_with_animations(
+def test_appearance_puts_the_design_before_the_colours_that_fine_tune_it(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
 ) -> None:
-    """Grok Bot's 0.17.0 audit (X1, A11): Colours sat under every design card and its fine-tuning
-    under Every screen. Colours now comes first, with its fine-tuning in it."""
+    """Jonathan, 1.0.0: the design and its looks come first, then Colours, which fine-tunes them. Text
+    size stays one short row at the top, in view without scrolling (Grok Bot's 0.17.0 audit, X1, A11);
+    the day screen and Animations follow."""
     dialog = prefs(window, {"main": "timeline", "day": "one", "options": {}})
     appearance = page(dialog, 0)
     assert appearance.findChildren(QGroupBox) == [], "no box inside the page's box"
@@ -153,9 +156,8 @@ def test_appearance_opens_on_colours_then_the_designs_and_ends_with_animations(
         (label for label in appearance.findChildren(QLabel) if label.isVisibleTo(dialog) and label.text()),
         key=lambda label: top(label, appearance),
     )
-    # Text size is its own card above Colours (0.18.5, item 5), so it leads the page.
-    assert [label.text() for label in shown[:5]] == [
-        "Look", "Text", "Text size", "Kept for every look.", "Colours",
+    assert [label.text() for label in shown[:4]] == [
+        "Look", "Text", "Text size", "Your text size stays the same when you change looks.",
     ]
     assert not any("has its own colours" in label.text() for label in shown)
     notes = [label.text() for label in appearance.findChildren(QLabel, "settingsCardNote")]
@@ -164,28 +166,18 @@ def test_appearance_opens_on_colours_then_the_designs_and_ends_with_animations(
     )
     assert notes.count(design_line) == 1, "Main view says once what a design is"
     order = [
+        appearance.findChild(QWidget, "layoutMain"),
+        appearance.findChild(DesignPicker, "layoutMain"),
         dialog.look,
         dialog.fine_tune,
-        appearance.findChild(QWidget, "layoutMain"),
-        appearance.findChild(QComboBox, "layoutMain-colour"),
         appearance.findChild(QWidget, "layoutDay"),
         dialog.motion,
     ]
     tops = [top(widget, appearance) for widget in order]
     assert tops == sorted(tops), tops
-    # What the note says, where it applies: under the colours it is about, once a design wears
-    # colours of its own rather than the student's look.
-    colour = appearance.findChild(QComboBox, "layoutMain-colour")
-    note = appearance.findChild(QLabel, "layoutMainColourNote")
-    assert colour.currentData() == "match"
-    assert not note.isVisibleTo(dialog)
-    colour.setCurrentIndex(colour.findData("paper"))
-    qapp.processEvents()
-    assert note.text() == (
-        "Only the design's page takes these colours. The rest of FlexWeek keeps your Look and Accent."
-    )
-    assert note.isVisibleTo(dialog)
-    assert 0 < top(note, appearance) - top(colour, appearance) < 3 * colour.height()
+    main = appearance.findChild(DesignPicker, "layoutMain")
+    assert main is not None and main.cards
+    assert main.accessibleName() == "Main view"
     dialog.close_page()
 
 
@@ -195,13 +187,13 @@ def test_the_style_rows_sit_on_the_page_not_in_a_grey_table(
 ) -> None:
     dialog = prefs(window, {"main": "timeline", "day": "one", "options": {}})
     appearance = page(dialog, 0)
-    colour = appearance.findChild(QComboBox, "layoutMain-colour")
+    main = appearance.findChild(DesignPicker, "layoutMain")
     heading = appearance.findChild(QLabel, "layoutMainHeading")
     picture = appearance.grab().toImage()
     edge = heading.mapTo(appearance, QPoint(0, 0)).x() - 6
-    beside_colour = picture.pixelColor(edge, top(colour, appearance) + colour.height() // 2)
+    beside_designs = picture.pixelColor(edge, top(main, appearance) + main.height() // 2)
     beside_heading = picture.pixelColor(edge, top(heading, appearance) + heading.height() // 2)
-    assert beside_colour == beside_heading, "the style rows are painted on a band of their own"
+    assert beside_designs == beside_heading, "the design cards are painted on the page, not a grey band"
     dialog.close_page()
 
 
@@ -216,6 +208,20 @@ def test_focus_says_what_the_long_break_counts(
     dialog.close_page()
 
 
+def test_the_study_hours_card_and_its_button_use_one_name(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    """T-W21: the card said "Study hours" but sent the student to "Availability…"; the More item and the
+    sheet's title said it too."""
+    dialog = prefs(window)
+    card = page(dialog, 1)
+    lines = [label.text() for label in card.findChildren(QLabel)]
+    assert "Choose when FlexWeek may plan homework, including hours kept for one class." in lines
+    assert dialog.findChild(QPushButton, "prefsAvailability").text() == "Study hours"
+    assert window.findChild(QPushButton, "availabilityButton").text() == "Study hours"
+
+
 def test_account_has_its_own_row_and_availability_is_under_planning(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
@@ -226,7 +232,7 @@ def test_account_has_its_own_row_and_availability_is_under_planning(
     assert account.text() == "Manage account…"
     assert label_for(account) == "Account"
     assert page(dialog, 4).isAncestorOf(account)
-    assert availability.text() == "Availability…"
+    assert availability.text() == "Study hours"
     assert page(dialog, 1).isAncestorOf(availability), "Availability is about when to plan"
     asked: list[str] = []
     # The window's own answer is a dialog that waits for a click; only the request is under test.
@@ -308,8 +314,9 @@ def test_every_heading_on_appearance_stands_out_from_the_rows_under_it(
         ),
         key=lambda label: top(label, appearance),
     )
+    # Text size is one short row ahead of the design, so it is in view without scrolling.
     assert [label.text() for label in headings] == [
-        "Text", "Colours", "Main view", "Day screen", "Every screen",
+        "Text", "Main view", "Colours", "Day screen", "Every screen",
     ]
     plain = appearance.findChild(QLabel, "settingsCardNote")
     for heading in headings:

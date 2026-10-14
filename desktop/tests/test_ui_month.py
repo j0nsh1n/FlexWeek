@@ -25,7 +25,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtWidgets import QApplication
 
     from backend.month import build_month
-    from desktop.native.hours.month import LEAST_CHIPS, MonthGrid
+    from desktop.native.hours.month import MonthGrid, more_label
 
 
 @pytest.fixture(scope="module")
@@ -52,6 +52,10 @@ def test_a_six_week_month_shows_its_last_week(qapp: QApplication) -> None:
     grid.day_activated.connect(opened.append)
     where = grid.canvas.cell_rect(35).center().toPoint()
     QTest.mouseClick(grid.canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, where)
+    assert opened == []
+    assert grid.canvas.selected == "2026-08-31"
+    assert grid.pane.heading.text() == "Monday 31 August"
+    grid.pane.open.click()
     assert opened == ["2026-08-31"]
 
 
@@ -67,8 +71,7 @@ def test_a_four_week_month_leaves_no_rows_from_the_month_before(qapp: QApplicati
 
 
 def test_a_busy_date_shows_its_chips_and_says_how_many_more_there_are(qapp: QApplication) -> None:
-    """A date always has room for two chips, as the month scrolls rather than squeezing them; past
-    what fits, it says "+N more", and the date itself, clicked, shows them all on Day."""
+    """A date shows at most three chips; the rest are "and N more" and live in the date pane."""
     snapshot = build_month("2026-08", [], [])
     busy = snapshot["days"][15]
     busy.update(due_ids=["essay"])
@@ -80,15 +83,34 @@ def test_a_busy_date_shows_its_chips_and_says_how_many_more_there_are(qapp: QApp
     grid = MonthGrid()
     # About the space the month gets inside the default 1280 x 800 window.
     grid.resize(1240, 420)
-    grid.set_month(snapshot, False)
+    grid.set_month(snapshot, False, "2026-08-01")
     grid.show()
     qapp.processEvents()
     canvas = grid.canvas
     shown, more = canvas.chip_boxes(15)
     words = [chip.words for chip, _box in shown]
-    assert len(shown) >= LEAST_CHIPS
+    assert len(shown) == 3
     assert words[:2] == ["Due History essay", "08:00 Club 8"]
-    assert more == 7 - len(shown)
+    assert more == 4
+    assert more_label(more) == "and 4 more"
     assert canvas.cell_rect(15).contains(shown[-1][1]), (
         "the last chip that is shown is wholly inside its date"
     )
+
+
+def test_month_chip_keeps_its_time_and_elides_its_title_on_a_one_line_row(qapp: QApplication) -> None:
+    snapshot = build_month("2026-08", [], [])
+    snapshot["days"][0]["blocks"] = [
+        {"id": "timed", "title": "An assignment name that is too long", "start": "08:00",
+         "duration_min": 30}
+    ]
+    grid = MonthGrid()
+    grid.resize(900, 700)
+    grid.set_month(snapshot, False, "2026-08-01")
+    grid.show()
+    qapp.processEvents()
+    chip, _box = grid.canvas.chip_boxes(0)[0][0]
+    shown = grid.canvas.painter.chip_title(chip, 92, grid.canvas._small())
+    assert chip.start == 8 * 60
+    assert shown.endswith("…")
+    assert len(shown) < len(chip.title)

@@ -45,6 +45,12 @@ def control(qapp, window, where, name: str, made: list) -> Segmented:
         dialog.show()
         assert QTest.qWaitForWindowExposed(dialog)
         dialog.activateWindow()
+        from desktop.tests.test_homework_form import go_length, go_when
+
+        if name == "homeworkWhen":
+            go_when(dialog)
+        elif name == "homeworkSpread":
+            go_length(dialog)
         made.append(dialog)
         root = dialog
     else:

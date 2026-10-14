@@ -289,11 +289,7 @@ fn calendar_past_problem(
     now_iso: &str,
     now_min: i64,
 ) -> PyResult<Option<String>> {
-    guard(|| {
-        let found = grid::past_problem(week_start, day, start_min, now_iso, now_min)
-            .map_err(crate::raise)?;
-        Ok(found.map(str::to_string))
-    })
+    guard(|| grid::past_problem(week_start, day, start_min, now_iso, now_min).map_err(crate::raise))
 }
 
 #[pyfunction]
@@ -446,10 +442,17 @@ fn focus_credit(
 }
 
 #[pyfunction]
-fn focus_candidates(blocks: &str, assignments: &str, trace: &str) -> PyResult<String> {
+fn focus_candidates(
+    blocks: &str,
+    assignments: &str,
+    trace: &str,
+    week_start: &str,
+    now: &str,
+) -> PyResult<String> {
     let (blocks, assignments, trace) = (parse(blocks)?, parse(assignments)?, parse(trace)?);
     guard(|| {
-        let found = focus::focus_candidates(&blocks, &assignments, &trace).map_err(crate::raise)?;
+        let found = focus::focus_candidates(&blocks, &assignments, &trace, week_start, now)
+            .map_err(crate::raise)?;
         Ok(array(found))
     })
 }
@@ -964,6 +967,29 @@ fn reuse_unfinished(
     })
 }
 
+#[pyfunction]
+fn reuse_left_over(
+    assignments: &str,
+    saved_weeks: &str,
+    today_week: &str,
+    now: &str,
+    blocks: &str,
+    committed: &str,
+) -> PyResult<String> {
+    let (assignments, saved, blocks, committed) = (
+        parse(assignments)?,
+        parse(saved_weeks)?,
+        parse(blocks)?,
+        parse(committed)?,
+    );
+    guard(|| {
+        let items =
+            clipboard::left_over_items(&assignments, &saved, today_week, now, &blocks, &committed)
+                .map_err(crate::raise)?;
+        Ok(dump(&Value::Array(items)))
+    })
+}
+
 /// `session` is the caller's own, read here for its week, day and month, and asked for `now_ms()`
 /// only when My Day needs the local date; `moment_at` is `datetime.fromtimestamp`. A Python error
 /// from either is raised as it came.
@@ -1060,19 +1086,28 @@ fn reuse_solve_request(
 /// Takes the time away from planned homework whose slot no longer works. `keep` is read as the
 /// Python wrapper wrote it: a set or frozenset as the list of its members, anything else as it is.
 #[pyfunction]
+#[pyo3(signature = (blocks, assignments, week_start, keep, after_deadline=None))]
 fn reuse_settle_placements(
     blocks: &str,
     assignments: &str,
     week_start: &str,
     keep: &Bound<'_, PyAny>,
+    after_deadline: Option<&str>,
 ) -> PyResult<(String, String)> {
     let (blocks, assignments) = (parse(blocks)?, parse(assignments)?);
     let (keep, keep_is_set) = crate::desk::members_of(keep)?;
     let keep = parse(&keep)?;
+    let after_deadline = parse(after_deadline.unwrap_or("[]"))?;
     guard(|| {
-        let (kept, lost) =
-            planning::settle_placements(&blocks, &assignments, week_start, &keep, keep_is_set)
-                .map_err(crate::raise)?;
+        let (kept, lost) = planning::settle_placements_after_deadline(
+            &blocks,
+            &assignments,
+            week_start,
+            &keep,
+            keep_is_set,
+            &after_deadline,
+        )
+        .map_err(crate::raise)?;
         Ok((dump(&kept), array(lost)))
     })
 }
@@ -1454,6 +1489,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         reuse_routine_template,
         reuse_routine_rows,
         reuse_unfinished,
+        reuse_left_over,
         reuse_planner_title,
         reuse_solve_request,
         reuse_settle_placements,

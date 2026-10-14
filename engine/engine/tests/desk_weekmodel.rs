@@ -201,19 +201,19 @@ fn trace() -> Value {
         "explanations": [
             {
                 "block_id": "chem-1",
-                "message": "Finishes only 2 h 29 min before it is due.",
+                "message": "Finishes only 2 h 29 min before it's due.",
                 "slack_min": 149,
                 "slack_status": "danger",
             },
             {
                 "block_id": "essay-1",
-                "message": "Finishes 25 h 15 min before it is due.",
+                "message": "Finishes 25 h 15 min before it's due.",
                 "slack_min": 1515,
                 "slack_status": "tight",
             },
             {
                 "block_id": "poster-1",
-                "message": "There is not enough time left before it is due, even with nothing else planned.",
+                "message": "There isn't enough time left before it's due, even with nothing else planned.",
                 "reason": "DEADLINE_MISS",
             },
         ],
@@ -333,7 +333,7 @@ fn test_work_with_no_time_waits_with_the_solvers_reason() {
         [(
             "Poster-1",
             120,
-            "There is not enough time left before it is due, even with nothing else planned."
+            "There isn't enough time left before it's due, even with nothing else planned."
         )]
     );
 }
@@ -483,7 +483,7 @@ fn test_load_counts_homework_minutes_only() {
 fn test_planned_line_uses_length_label() {
     assert_eq!(planned_line(60, 0), "1 h planned · 0 done");
     assert_eq!(planned_line(90, 45), "1 h 30 min planned · 45 min done");
-    assert_eq!(planned_line(0, 0), "Nothing planned yet");
+    assert_eq!(planned_line(0, 0), "Nothing planned");
 }
 
 #[test]

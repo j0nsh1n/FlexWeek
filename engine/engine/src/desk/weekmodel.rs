@@ -171,7 +171,7 @@ pub fn length_label(minutes: i64) -> String {
 
 pub fn planned_line(planned_min: i64, done_min: i64) -> String {
     if planned_min <= 0 {
-        return "Nothing planned yet".to_string();
+        return "Nothing planned".to_string();
     }
     let done = if done_min <= 0 {
         "0 done".to_string()

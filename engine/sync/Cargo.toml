@@ -1,0 +1,29 @@
+[package]
+name = "flexweek-sync"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+autotests = false
+
+[[test]]
+name = "merge"
+path = "tests/merge.rs"
+
+[[test]]
+name = "pair_cost"
+path = "tests/pair_cost.rs"
+
+[dependencies]
+flexweek-engine = { path = "../engine" }
+rusqlite = { version = "0.37.0", features = ["bundled"] }
+serde_json = { version = "1.0.145", features = ["float_roundtrip", "arbitrary_precision", "preserve_order"] }
+sha2 = "0.10.9"
+hex = "0.4.3"
+iroh = "=1.3.0"
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "macros"] }
+scrypt = "0.11.0"
+hmac = "0.12.1"
+
+[dev-dependencies]
+flexweek-store = { path = "../store" }

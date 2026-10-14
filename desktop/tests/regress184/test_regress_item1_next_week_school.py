@@ -25,10 +25,10 @@ from desktop.tests.logic_support import qapp, server, settled, signed_in, wait_u
 KNOWN = "known failure (item 1): Setup's blocks live only in the week Setup ran in"
 KNOWN_1A = (
     "known failure (item 1a): with only Setup blocks last week the student is told "
-    "'There is nothing to copy from last week yet.', not 'Your Setup times are already in this week'"
+    "'There's nothing to copy from last week yet.', not 'Your Setup times are already in this week'"
 )
 SETUP_HERE = "Your Setup times are already in this week"
-NOTHING = "There is nothing to copy from last week yet."
+NOTHING = "There's nothing to copy from last week yet."
 
 SCHOOL = {
     "id": "school",

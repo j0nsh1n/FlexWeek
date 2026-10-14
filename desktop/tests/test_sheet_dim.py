@@ -12,8 +12,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QEvent, QPoint, Qt, QTimer
-from PySide6.QtGui import QImage, QRegion
+from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QWidget
 
@@ -46,17 +45,8 @@ def drained(qapp: QApplication) -> None:  # noqa: F811
     qapp.processEvents()
 
 
-def painted(shade: SheetShade) -> tuple[int, int, int, int]:
-    """What the dim paints by itself, on nothing, as red, green, blue and alpha. (grab() would put it
-    on an opaque backdrop and always read 255.)"""
-    image = QImage(shade.size(), QImage.Format.Format_ARGB32_Premultiplied)
-    image.fill(Qt.GlobalColor.transparent)
-    shade.render(image, QPoint(), QRegion(), QWidget.RenderFlag.DrawChildren)
-    return image.pixelColor(5, 5).getRgb()
-
-
-def painted_alpha(shade: SheetShade) -> int:
-    return painted(shade)[3]
+def dim_alpha(shade: SheetShade) -> int:
+    return round(255 * SHEET_DIM * shade.dim_progress)
 
 
 def watch_the_build(
@@ -68,12 +58,13 @@ def watch_the_build(
     class Recorded(HomeworkDialog):
         def __init__(self, *args: object, **kwargs: object) -> None:
             on_screen = [shade for shade in shades(window) if shade.isVisible()]
-            effect = on_screen[0].graphicsEffect() if on_screen else None
             seen.append(
                 {
                     "dims": len(on_screen),
                     "covers": bool(on_screen) and on_screen[0].geometry() == window.rect(),
-                    "opacity": getattr(effect, "opacity", None),
+                    "opacity": None,
+                    "progress": on_screen[0].dim_progress if on_screen else 0.0,
+                    "fading": on_screen[0].fading if on_screen else False,
                 }
             )
             super().__init__(*args, **kwargs)
@@ -92,7 +83,7 @@ def test_the_dim_is_up_and_already_fading_before_the_sheet_is_built(
     assert len(seen) == 1
     assert seen[0]["dims"] == 1, "one dim is shown when the constructor starts"
     assert seen[0]["covers"], "and it covers the whole window"
-    assert seen[0]["opacity"] is not None and seen[0]["opacity"] > 0, (
+    assert seen[0]["fading"] and seen[0]["progress"] > 0, (
         "a frame of the fade has already been drawn, not only started"
     )
 
@@ -108,11 +99,11 @@ def test_the_sheet_adopts_the_dim_and_it_never_starts_over(
     def run(dialog: HomeworkDialog) -> int:
         made.append(dialog)
         (dim,) = shades(window)
-        before.append(dim.graphicsEffect().opacity)
+        before.append(dim.dim_progress)
         dialog.show()
         (only,) = shades(window)
         assert only is dim, "the sheet uses the dim it was given, not a second one"
-        after.append(only.graphicsEffect().opacity)
+        after.append(only.dim_progress)
         wait_until(qapp, lambda: not busy())
         return 0
 
@@ -134,17 +125,17 @@ def test_the_dim_ends_at_the_same_black_it_always_did(
         dialog.show()
         wait_until(qapp, lambda: not busy())
         (dim,) = shades(window)
-        landed["effect"] = dim.graphicsEffect()
-        landed["alpha"] = painted_alpha(dim)
-        landed["colour"] = painted(dim)[:3]
+        landed["fading"] = dim.fading
+        landed["progress"] = dim.dim_progress
+        landed["has_still"] = dim.has_still
         landed["covers"] = dim.geometry() == window.rect()
         return 0
 
     monkeypatch.setattr(HomeworkDialog, "exec", run)
     window._add_homework()
-    assert landed["effect"] is None, "the fade has finished"
-    assert landed["alpha"] == DIM_ALPHA
-    assert landed["colour"] == (0, 0, 0)
+    assert landed["fading"] is False, "the fade has finished"
+    assert landed["progress"] == 1.0
+    assert landed["has_still"] is True
     assert landed["covers"]
 
 
@@ -160,12 +151,41 @@ def test_the_dim_is_the_same_in_every_design(qapp: QApplication, style_key: str)
     sheet.card_body("A sheet")
     sheet.show()
     wait_until(qapp, lambda: not busy())
-    assert painted_alpha(dim) == DIM_ALPHA
-    assert painted(dim)[:3] == (0, 0, 0)
+    assert not dim.fading
+    assert dim_alpha(dim) == DIM_ALPHA
+    assert dim.has_still
     assert dim.geometry() == host.rect()
     sheet.close()
     free(sheet)
     free(host)
+
+
+def test_resizing_the_window_replaces_the_still_with_a_live_dim(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch  # noqa: F811
+) -> None:
+    apply_ui_effects("normal")
+    seen: list[tuple[bool, bool, bool]] = []
+
+    def run(dialog: HomeworkDialog) -> int:
+        dialog.show()
+        qapp.processEvents()
+        (dim,) = shades(window)
+        assert dim.has_still
+        window.resize(1360, 900)
+        qapp.processEvents()
+        seen.append(
+            (
+                dim.has_still,
+                dim.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground),
+                dim.geometry() == window.rect(),
+            )
+        )
+        dialog.reject()
+        return 0
+
+    monkeypatch.setattr(HomeworkDialog, "exec", run)
+    window._add_homework()
+    assert seen == [(False, True, True)]
 
 
 def test_closing_the_sheet_takes_the_dim_with_it(
@@ -223,18 +243,18 @@ def test_with_animations_off_the_dim_is_there_at_once(
     assert duration(EASE_MS) == 0
     seen: list[dict] = []
     watch_the_build(monkeypatch, window, seen)
-    states: list[tuple[object, int]] = []
+    states: list[tuple[bool, int]] = []
 
     def run(dialog: HomeworkDialog) -> int:
         (dim,) = shades(window)
-        states.append((dim.graphicsEffect(), painted_alpha(dim)))
+        states.append((dim.fading, dim_alpha(dim)))
         assert not busy(), "nothing is moving"
         return 0
 
     monkeypatch.setattr(HomeworkDialog, "exec", run)
     window._add_homework()
     assert seen[0]["dims"] == 1 and seen[0]["opacity"] is None, "no fade: the dim is plain and whole"
-    assert states == [(None, DIM_ALPHA)]
+    assert states == [(False, DIM_ALPHA)]
 
 
 def test_a_sheet_that_fails_to_build_leaves_no_dim(
@@ -552,7 +572,7 @@ def test_a_slow_build_does_not_make_the_dim_jump_ahead(
     class Slow(HomeworkDialog):
         def __init__(self, *args: object, **kwargs: object) -> None:
             (dim,) = shades(window)
-            seen.append({"at_build": dim.graphicsEffect().opacity})
+            seen.append({"at_build": dim.dim_progress})
             super().__init__(*args, **kwargs)
             # Longer than the whole fade: a clock left running would be at the end by now.
             time.sleep(duration(EASE_MS) / 1000 + 0.05)
@@ -567,8 +587,7 @@ def test_a_slow_build_does_not_make_the_dim_jump_ahead(
         for _ in range(3):
             qapp.processEvents()
         (dim,) = shades(window)
-        effect = dim.graphicsEffect()
-        seen.append({"at_show": None if effect is None else effect.opacity})
+        seen.append({"at_show": dim.dim_progress, "fading": dim.fading})
         wait_until(qapp, lambda: not busy())
         return 0
 
@@ -576,7 +595,7 @@ def test_a_slow_build_does_not_make_the_dim_jump_ahead(
     monkeypatch.setattr(Slow, "exec", run)
     window._add_homework()
     assert seen[0]["at_build"] > 0
-    assert seen[1]["at_show"] is not None, "the fade is still going when the sheet shows"
+    assert seen[1]["fading"], "the fade is still going when the sheet shows"
     assert seen[1]["at_show"] == pytest.approx(seen[0]["at_build"], abs=0.05), (
         "the dim held still while it waited, and goes on from there"
     )

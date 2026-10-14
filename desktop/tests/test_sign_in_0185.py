@@ -15,6 +15,7 @@ from PySide6.QtCore import QPoint, QSize
 from PySide6.QtGui import QColor, QGuiApplication, QPalette
 from PySide6.QtWidgets import QApplication, QFrame, QLabel, QToolButton, QWidget
 
+from desktop.native.client import TOO_MANY_TRIES
 from desktop.native.look import resolved_palette, sanitize_look
 from desktop.native.tokens import contrast
 from desktop.native.window import NativeWindow
@@ -137,7 +138,8 @@ def test_a_hint_sits_4_px_under_its_own_field_and_16_px_before_the_next(signed_o
         return top(widget) + widget.height()
 
     assert top(window.username_hint) - bottom(window.username) == 4
-    assert top(window.password) - bottom(window.username_hint) == 16
+    # The Password caption now sits above its field, so the 16 px gap runs to the caption.
+    assert top(window.password_caption) - bottom(window.username_hint) == 16
     assert top(window.password_hint) - bottom(window.password) == 4
     assert top(window.keep_signed_in) - bottom(window.password_hint) == 16
 
@@ -152,6 +154,22 @@ def test_a_wrong_sign_in_is_still_said_right_under_the_password_box(signed_out) 
         window.password.mapTo(held, QPoint(0, 0)).y() + window.password.height()
     )
     assert gap == 4
+
+
+def test_too_many_tries_is_shown_under_its_field(qapp, signed_out) -> None:
+    window = signed_out
+    go(window, "sign in")
+    window.session._say(TOO_MANY_TRIES)
+    pump()
+    assert window.password_problem.text.text() == TOO_MANY_TRIES
+    assert window.password_problem.isVisibleTo(window)
+    assert window.password.hasFocus()
+    assert window.auth_status.text() == ""
+    go(window, "reset")
+    window.session._say(TOO_MANY_TRIES)
+    pump()
+    assert window.recovery_code_problem.text.text() == TOO_MANY_TRIES
+    assert window.recovery_code.hasFocus()
 
 
 # The eye.

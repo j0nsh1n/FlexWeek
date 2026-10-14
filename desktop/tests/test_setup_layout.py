@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -35,7 +36,8 @@ if importlib.util.find_spec("PySide6") is not None:
         SetupPage,
         SetupState,
     )
-    from desktop.native.widgets import control_art
+    from desktop.native.tokens import contrast
+    from desktop.native.widgets import Segmented, control_art
 
 SIZES = ((1280, 800), (1100, 720))
 STEPS = tuple(range(8))
@@ -150,15 +152,37 @@ def test_remove_and_skip_are_outlined_buttons(qapp: QApplication) -> None:
             assert edge_differs(button), button.text()
 
 
-def test_takes_is_on_the_line_of_its_box(qapp: QApplication) -> None:
+def test_takes_and_due_labels_share_a_baseline(qapp: QApplication) -> None:
     with dressed(qapp) as (setup, _palette):
         setup._show(FIRST)
         qapp.processEvents()
         row = setup.homework_rows[0]
         label = next(child for child in row.findChildren(QLabel) if child.text() == "Takes")
-        label_mid = label.mapTo(setup, QPoint(0, label.height() // 2)).y()
-        box_mid = row.minutes.mapTo(setup, QPoint(0, row.minutes.height() // 2)).y()
-        assert abs(label_mid - box_mid) <= 2, (label_mid, box_mid)
+        due_label = next(child for child in row.findChildren(QLabel) if child.text() == "Due")
+        takes_baseline = label.mapTo(setup, QPoint(0, label.fontMetrics().ascent())).y()
+        due_baseline = due_label.mapTo(setup, QPoint(0, due_label.fontMetrics().ascent())).y()
+        assert takes_baseline == due_baseline, (takes_baseline, due_baseline)
+
+
+def test_the_week_note_has_a_subject(qapp: QApplication) -> None:
+    with dressed(qapp) as (setup, _palette):
+        note = setup.pages[WEEK].findChild(QLabel, "setupNote")
+        assert note.text() == "FlexWeek works around fixed times. Skip anything you don't have."
+
+
+def test_do_it_at_segments_are_inset_from_their_track(qapp: QApplication) -> None:
+    with dressed(qapp) as (setup, _palette):
+        when = Segmented((("Let FlexWeek pick a time", "plan"), ("Do it at", "fixed")), "homeworkWhen")
+        when.setParent(setup)
+        when.adjustSize()
+        when.show()
+        qapp.processEvents()
+        assert len(when.buttons()) == 2
+        for button in when.buttons():
+            assert button.geometry().left() - when.rect().left() >= 2
+            assert button.geometry().top() - when.rect().top() >= 2
+            assert when.rect().right() - button.geometry().right() >= 2
+            assert when.rect().bottom() - button.geometry().bottom() >= 2
 
 
 def test_the_summary_says_things_one_way(qapp: QApplication) -> None:
@@ -172,7 +196,7 @@ def test_the_summary_says_things_one_way(qapp: QApplication) -> None:
         setup._state.pack = "system"
         setup._show(DONE)
         text = setup.summary_text()
-        assert text[0] == "Today's app in your system's colours"
+        assert text[0] == "Today's app in Your look"
         assert all(";" not in line for line in text), text
         assert " · " in text[1] and "Soccer" in text[1], text[1]
 
@@ -213,11 +237,20 @@ def test_the_page_fades_into_the_footer(qapp: QApplication) -> None:
         for _ in range(5):
             setup._add_activity()
         qapp.processEvents()
-        setup.pages[WEEK].verticalScrollBar().setValue(0)
+        bar = setup.pages[WEEK].verticalScrollBar()
+        bar.setValue(0)
         qapp.processEvents()
-        picture = setup.grab().toImage()
         top = under_footer(setup)
-        x = setup.activities[0].mapTo(setup, QPoint(40, 0)).x()
+        # A card has to reach from above the fade to below it. Since the shared form grammar puts labels
+        # above fields an activity card is taller and the first one ends right at the fade, so the page is
+        # scrolled to bring the second card's top 40 px above the fade.
+        row = setup.activities[1]
+        bar.setValue(bar.value() + row.mapTo(setup, QPoint(0, 0)).y() - (top - 40))
+        qapp.processEvents()
+        card_top, card_bottom = (row.mapTo(setup, QPoint(0, y)).y() for y in (0, row.height()))
+        assert card_top <= top - 4 and card_bottom > top + FADE_PX, "the card spans the fade"
+        picture = setup.grab().toImage()
+        x = row.mapTo(setup, QPoint(40, 0)).x()
         ground, card = QColor(palette["window"]), QColor(palette["panel"])
         assert ground != card
         above = picture.pixelColor(x, top - 4)
@@ -226,3 +259,41 @@ def test_the_page_fades_into_the_footer(qapp: QApplication) -> None:
         assert above == card, "above the fade the card is as it is"
         assert high not in (card, ground) and low not in (card, ground), (high, low)
         assert abs(low.red() - ground.red()) < abs(high.red() - ground.red()) < abs(card.red() - ground.red())
+
+
+@pytest.mark.parametrize("pack", ["light-frost", "dark-frost", "nocturne", "slate"])
+@pytest.mark.parametrize(
+    "preset", ["default", "high-contrast", "paper", "ink", "poster", "terminal", "pastel"]
+)
+def test_a_future_step_on_the_rail_reads_at_4_5_to_1(qapp: QApplication, pack: str, preset: str) -> None:
+    """N8-U23: a step you cannot reach yet is drawn in the rail's disabled colour. It was a 2.3 to 1 grey
+    on the white rail in Light, below what text needs."""
+    look = sanitize_look({"preset": preset, "knobs": {}})
+    palette = resolved_palette(pack, False, look)
+    sheet = pack_stylesheet(pack, False, look, "default", palette, control_art(palette))
+    rule = re.search(r"QPushButton#setupRailItem:disabled \{[^}]*color: (#[0-9a-fA-F]{6});", sheet)
+    assert rule is not None
+    assert contrast(rule.group(1), palette["panel"]) >= 4.5, (rule.group(1), palette["panel"])
+
+
+def test_the_add_row_clears_the_footer_fade_on_a_short_window(qapp: QApplication) -> None:
+    """N8-U23: "+ Add a sport, club or job" sat under the footer's fade at 810 px tall, so it looked
+    dimmed and could not be read; the page must scroll it above the fade."""
+    with dressed(qapp, (1100, 810)) as (setup, _palette):
+        setup._show(WEEK)
+        for _ in range(3):
+            setup._add_activity()
+        page = setup.pages[WEEK]
+        bar = page.verticalScrollBar()
+        # The page learns its new height a little after each change, so wait for it to settle first.
+        for _ in range(6):
+            time.sleep(0.05)
+            qapp.processEvents()
+        assert bar.maximum() > 0, "the page does not run past the window, so this proves nothing"
+        bar.setValue(bar.maximum())
+        for _ in range(6):
+            time.sleep(0.05)
+            qapp.processEvents()
+        button = setup.add_activity
+        bottom = button.mapTo(setup, QPoint(0, button.height())).y()
+        assert bottom <= under_footer(setup), (bottom, under_footer(setup))

@@ -11,7 +11,7 @@ import pytest
 
 from desktop.native.custom_look import apply_fix, readability
 from desktop.native.look import pack_stylesheet, resolved_palette
-from desktop.native.look_editor import fix_all, problem_rows
+from desktop.native.look_editor import START_NOTE, fix_all, problem_rows
 from desktop.native.tokens import contrast, oklch_of
 from desktop.tests.window_support import qapp, server, signed_out, window  # noqa: F401
 
@@ -166,3 +166,46 @@ def test_reset_all_export_and_import_are_outlined_like_save_as_new(qapp, window)
 
 def _rgb(colour: str) -> tuple[int, int, int]:
     return int(colour[1:3], 16), int(colour[3:5], 16), int(colour[5:7], 16)
+
+
+def test_the_start_note_says_unsaved_changes_will_be_lost() -> None:
+    """T-W23: "What you have not saved is left behind" did not say lost, and "Pick" is a retired word."""
+    assert START_NOTE == "Choose a look to start from. Changes you haven't saved will be lost."
+
+
+def test_discard_is_not_next_to_save_on_the_leave_sheet(qapp) -> None:
+    """U3: Discard sits on the left; the right side is Keep without saving, Cancel, Save."""
+    from PySide6.QtWidgets import QWidget
+
+    from desktop.native.look_editor import leave_sheet
+
+    parent = QWidget()
+    sheet = leave_sheet(parent, "Evening", True)
+    visual = ([sheet._left] if sheet._left is not None else []) + list(sheet._answers)
+    texts = [button.text() for button in visual]
+    assert texts == ["Discard changes", "Keep without saving", "Cancel", "Save"]
+    assert abs(texts.index("Discard changes") - texts.index("Save")) > 1
+    assert sheet.buttons["save"].isDefault()
+    assert sheet.buttons["discard"].property("outlined") and sheet.buttons["discard"].property("danger")
+    assert sheet.buttons["keep"].property("quiet") and sheet.buttons["stay"].property("quiet")
+    sheet.close()
+    parent.deleteLater()
+
+
+def test_escape_on_the_leave_sheet_stays_in_the_look_editor(qapp, window) -> None:
+    """U3: Esc on Leave the look editor is Cancel, so the editor stays open."""
+    from PySide6.QtCore import Qt, QTimer
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QApplication
+
+    from desktop.tests.test_look_editor import open_editor, pump, type_colour
+
+    page, editor = open_editor(qapp, window)
+    type_colour(qapp, editor, "page", "#1e2430")
+    QTimer.singleShot(200, lambda: QTest.keyClick(QApplication.activeModalWidget(), Qt.Key.Key_Escape))
+    assert editor.ask_leave() is None
+    assert page.editor is editor
+    QTimer.singleShot(200, lambda: QApplication.activeModalWidget().buttons["discard"].click())
+    editor.back.click()
+    pump(qapp)
+    assert page.editor is None

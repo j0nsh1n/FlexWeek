@@ -1,13 +1,12 @@
 """Regression for QA's 1b-R (fix-specs-0190.md, reopens 1b): overdue and left-from-last-week work is
 tagged, counted once and never silent; Plan offers the choice; the panel follows today, not the viewed
-week; the word "Unfinished" goes.
+week; More's row keeps the demo's Unfinished count when homework still needs a time.
 
 Window level with a held clock (`session.now_ms`). Scenario "overdue" is Assistant Local's: Bio reading
 placed Wednesday 3:15 PM of the open week, due Friday, not ticked, clock Saturday 10:00. Scenario "left"
 is our 0.18.4 item 1b one (a Lab report session left in last week, due next Wednesday).
 Not covered: rule 7's look of the tag (no tag exists yet to measure) and rule 6's timer at the deadline
 (Fri 23:59 -> Sat 00:01 without a refresh), which needs the fix's timer to drive.
-Known failures are xfail(strict=True).
 """
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
@@ -21,8 +20,9 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QTimer
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QLabel, QPushButton
+from PySide6.QtWidgets import QApplication, QPushButton
 
+from desktop.native.weekmodel import length_label, range_label
 from desktop.tests.grid_support import (  # noqa: F401
     qapp,
     server,
@@ -38,13 +38,6 @@ from desktop.tests.regress184.test_regress_item1b_unfinished_past_week import (
 )
 
 WEDNESDAY, FRIDAY, SATURDAY = 2, 4, 5
-KNOWN_TAG = "known failure (1b-R.1/A25): the week list row and the block say nothing about overdue"
-KNOWN_SIDE = "known failure (1b-R.6/T-W36): the sidebar says 'Everything has a time.' with 1 overdue"
-KNOWN_MORE = "known failure (1b-R.3/.6): More reads 'Unfinished · None left' with 1 overdue this week"
-KNOWN_FOCUS = "known failure (1b-R.6): focus_candidates takes no clock; it offers the past overdue session"
-KNOWN_CHOICE = "known failure (1b-R.5): Plan with overdue work runs at once, no Plan them / I did these"
-KNOWN_TODAY = "known failure (1b-R.9): the left-over panel follows the viewed week and hides on Today"
-KNOWN_WORD = "known failure (1b-R glossary): More still says 'Unfinished'"
 
 
 def overdue_this_week(qapp, window) -> str:
@@ -65,40 +58,41 @@ def overdue_this_week(qapp, window) -> str:
     return block["id"]
 
 
-def shown_texts(window) -> list[str]:
-    return [w.text() for w in window.findChildren(QLabel) if w.isVisible() and w.text()]
-
-
-@pytest.mark.xfail(strict=True, reason=KNOWN_TAG)
 def test_1br_the_overdue_session_says_overdue_in_the_week_list(qapp, window) -> None:
     overdue_this_week(qapp, window)
     listing = window.week_access_list
-    rows = [listing.item(i).text() for i in range(listing.count()) if "Bio" in listing.item(i).text()]
-    assert rows and all("overdue" in row.lower() for row in rows), rows
+    rows = [
+        listing.item(i).text()
+        for i in range(listing.count())
+        if listing.item(i).text().startswith("Wednesday: Bio reading, ")
+    ]
+    due = date.fromisoformat(window.session.assignments["bio"]["due"][:10])
+    due_words = f"Overdue, was due {due.strftime('%a')} {due.day} {due.strftime('%b')}"
+    times = range_label(15 * 60 + 15, 16 * 60 + 15)
+    expected = f"Wednesday: Bio reading, {times} · {length_label(60)} · {due_words} · Pinned"
+    assert rows == [expected]
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_SIDE)
-def test_1br_the_sidebar_counts_the_overdue_session(qapp, window) -> None:
+def test_1br_the_status_strip_counts_the_overdue_session(qapp, window) -> None:
+    # 1.0.0 planning screen (pick A): the overdue count moved from the sidebar to the status strip.
     overdue_this_week(qapp, window)
-    texts = shown_texts(window)
-    assert "Everything has a time." not in texts and any("1 overdue" in t for t in texts), texts
+    assert window.status_overdue.text() == "1 overdue"
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_MORE)
-def test_1br_more_counts_the_overdue_session(qapp, window) -> None:
+def test_1br_more_keeps_unfinished_open_when_the_overdue_session_already_has_a_time(qapp, window) -> None:
+    # More counts homework that still needs a time (Jonathan, 2026-10-12): none here, so "None left";
+    # the row stays enabled because the Unfinished panel holds the overdue row and its Start focus.
     overdue_this_week(qapp, window)
-    _enabled, words = more_unfinished_row(window)
-    assert "Overdue" in words and "1" in words, words
+    enabled, words = more_unfinished_row(window)
+    assert (enabled, words) == (True, "Unfinished\tNone left")
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_WORD)
-def test_1br_more_says_left_from_last_week_not_unfinished(qapp, window) -> None:
+def test_1br_more_row_says_unfinished_with_the_count_left(qapp, window) -> None:
     left_in_week_one(qapp, window)
-    _enabled, words = more_unfinished_row(window)
-    assert "Unfinished" not in words and "Left from last week" in words, words
+    enabled, words = more_unfinished_row(window)
+    assert (enabled, words) == (True, "Unfinished\t1 left")
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_FOCUS)
 def test_1br_the_focus_timer_does_not_offer_the_past_overdue_session(qapp, window) -> None:
     session_id = overdue_this_week(qapp, window)
     offered = window.session.focus_tasks()
@@ -106,7 +100,6 @@ def test_1br_the_focus_timer_does_not_offer_the_past_overdue_session(qapp, windo
     assert session_id not in ids, offered
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_CHOICE)
 def test_1br_plan_with_overdue_work_asks_first(qapp, window) -> None:
     overdue_this_week(qapp, window)
     asked: list[str] = []
@@ -114,7 +107,7 @@ def test_1br_plan_with_overdue_work_asks_first(qapp, window) -> None:
     def look() -> None:
         sheet = QApplication.activeModalWidget()
         if sheet is not None:
-            asked.append(" ".join(b.text() for b in sheet.findChildren(QPushButton)))
+            asked.append([b.text() for b in sheet.findChildren(QPushButton)])
             sheet.reject()
 
     QTimer.singleShot(300, look)
@@ -122,7 +115,8 @@ def test_1br_plan_with_overdue_work_asks_first(qapp, window) -> None:
     for _ in range(12):
         QTest.qWait(50)
     settled(qapp, window)
-    assert asked and "Plan them" in asked[0] and "I did these" in asked[0], asked
+    # T-W5 (1.0.0 wording audit) renamed the box's buttons from "Plan them" / "I did these".
+    assert asked and asked[0] == ["Plan into this week", "Mark as finished", "Not now"], asked
 
 
 def test_1br_guard_plan_never_moves_the_overdue_session(qapp, window) -> None:
@@ -134,7 +128,6 @@ def test_1br_guard_plan_never_moves_the_overdue_session(qapp, window) -> None:
     assert (bio.get("days"), bio.get("start")) == ([WEDNESDAY], "15:15")
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_TODAY)
 def test_1br_the_overdue_panel_still_shows_after_viewing_next_week_and_pressing_today(qapp, window) -> None:
     overdue_this_week(qapp, window)
     session = window.session

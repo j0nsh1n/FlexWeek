@@ -51,10 +51,12 @@ pub fn running_late_refusal(
         return Some("Open this week before using Running late.");
     }
     if conflict {
-        return Some("This week was changed somewhere else. Reload it first.");
+        return Some(
+            "This week changed in another window. Choose More > Reload this week, then try again.",
+        );
     }
     if dirty {
-        return Some("Your last change is still saving. Try again in a moment.");
+        return Some("Saving your last change… Running late will work in a moment.");
     }
     if block_count >= MAX_WEEK_BLOCKS {
         return Some("This week already has 100 blocks. Remove one before recording a late start.");

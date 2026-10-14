@@ -18,7 +18,7 @@ pytestmark = pytest.mark.skipif(
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QRect, Qt
     from PySide6.QtGui import QImage
-    from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
+    from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QWidget
 
     import desktop.native.motion as motion
     import desktop.native.window as window_module
@@ -117,7 +117,7 @@ def in_design(qapp: QApplication, window: NativeWindow, design: str, level: str 
 
 
 def press(qapp: QApplication, window: NativeWindow, name: str, until: Callable[[], bool]) -> None:
-    window.findChild(QPushButton, name).click()
+    window.findChild(QAbstractButton, name).click()
     wait_until(qapp, until)
     settle_everything(qapp, window)
 
@@ -291,7 +291,7 @@ def test_a_month_that_arrives_mid_slide_shows_on_the_moving_picture(
     data = month_from_the_engine(qapp, window)
     # The engine has not answered yet when the slide starts, as on a real machine.
     monkeypatch.setattr(window.session, "_fetch_month", lambda: None)
-    window.findChild(QPushButton, "viewMonth").click()
+    window.findChild(QAbstractButton, "viewMonth").click()
     wait_until(qapp, lambda: slide_in_progress(window) is not None)
     moving = slide_in_progress(window)
     assert moving is not None and window.session.month_data is None
@@ -321,11 +321,12 @@ def test_a_month_that_arrives_after_landing_shows_live(
     raised: list[object] = []
     monkeypatch.setattr(sys, "excepthook", lambda kind, error, trace: raised.append(error))
     monkeypatch.setattr(window.session, "_fetch_month", lambda: None)
-    window.findChild(QPushButton, "viewMonth").click()
+    window.findChild(QAbstractButton, "viewMonth").click()
     wait_until(qapp, lambda: slide_in_progress(window) is not None)
     settle_everything(qapp, window)
     board = month_board(window)
-    assert board is not None and board.isVisible() and board.warning.isVisible(), "still loading"
+    assert board is not None and board.isVisible() and board.canvas.cells, "the full grid is already drawn"
+    assert not board.warning.isVisible(), "loading does not change the grid's height"
     month_arrives(window, data)
     qapp.processEvents()
     wait_until(qapp, lambda: not board.warning.isVisible())

@@ -279,6 +279,43 @@ def test_a_recovery_error_does_not_follow_back_to_sign_in(
     assert not returning.recovery_code_problem.isVisibleTo(returning)
 
 
+def test_account_messages_use_the_audit_sentences(
+    qapp: QApplication,  # noqa: F811
+    returning: NativeWindow,
+) -> None:
+    from desktop.native.client import (
+        PASSWORD_LENGTH_HINT,
+        TOO_MANY_TRIES,
+        USERNAME_HINT,
+        WRONG_PASSWORD,
+        _error,
+        sign_up_problem,
+    )
+
+    assert sign_up_problem("abc", "a" * 11) == "Add 1 more character. Passwords need at least 12."
+    assert sign_up_problem("abc", "a" * 10) == "Add 2 more characters. Passwords need at least 12."
+    returning.findChild(QPushButton, "authSwitch").click()
+    qapp.processEvents()
+    assert returning.username_hint.text() == USERNAME_HINT
+    assert returning.password_hint.text() == PASSWORD_LENGTH_HINT
+    assert USERNAME_HINT == "3 to 32 letters, numbers or underscores."
+    assert PASSWORD_LENGTH_HINT == "At least 12 characters."
+    assert _error(429).message == TOO_MANY_TRIES
+    assert TOO_MANY_TRIES == "Too many tries. Wait 5 minutes, then try again."
+    assert _error(401, "Incorrect password").message == WRONG_PASSWORD
+    assert WRONG_PASSWORD == "Wrong password. Try again."
+    returning.findChild(QPushButton, "authSwitch").click()
+    qapp.processEvents()
+    returning.findChild(QPushButton, "forgotPassword").click()
+    qapp.processEvents()
+    returning.username.setText(USERNAME)
+    returning.recovery_code.clear()
+    returning.new_recovery_password.setText(PASSWORD)
+    returning.findChild(QPushButton, "recoverAccount").click()
+    qapp.processEvents()
+    assert returning.recovery_code_problem.text.text() == "Type a recovery code."
+
+
 def test_manage_account_password_boxes_have_the_eye_sign_in_has(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
@@ -298,3 +335,31 @@ def test_manage_account_password_boxes_have_the_eye_sign_in_has(
         eye.click()
         assert field.echoMode() == QLineEdit.EchoMode.Password
     dialog.close()
+
+
+def test_a_backup_file_says_where_it_was_saved(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+    tmp_path,
+    monkeypatch,
+) -> None:
+    target = tmp_path / "flexweek-account-joo.json"
+    picked = (str(target), "")
+    monkeypatch.setattr(window_module.QFileDialog, "getSaveFileName", lambda *args, **kwargs: picked)
+    window._write_account_file({"username": "joo"})
+    assert target.is_file()
+    assert window.session.message == (
+        f"Saved your backup file to {target}. Keep it private: it has all your weeks and homework."
+    )
+
+
+def test_export_and_import_refusals_say_to_save_first_with_retry(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    session = window.session
+    session.dirty = True
+    session.export_account("unused", lambda data: None)
+    assert session.message == "Save your last change first (More > Retry save), then export."
+    session.preview_account_import({"username": "joo"})
+    assert session.message == "Save your last change first (More > Retry save), then import."

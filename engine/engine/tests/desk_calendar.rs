@@ -5,8 +5,8 @@ mod common;
 use common::desk::{fresh_ids, object};
 use flexweek_engine::desk::calendar::{days_through, is_series_checked};
 use flexweek_engine::desk::grid::{
-    apply_block_edit, apply_block_times, create_click_range, due_day_of, due_soon_for, span_clash,
-    span_problem, split_occurrence, sunday_due,
+    apply_block_edit, apply_block_times, create_click_range, due_day_of, due_soon_for,
+    past_problem, span_clash, span_problem, split_occurrence, sunday_due,
 };
 use flexweek_engine::desk::planning::due_point;
 use serde_json::{Value, json};
@@ -208,11 +208,11 @@ fn test_a_time_on_another_block_is_allowed_and_named_but_not_outside_the_day_or_
     assert_eq!(problem(1, h(22, 30), h(23, 30), None), None);
     assert_eq!(
         problem(1, h(23, 30), h(24, 30), None),
-        Some("That is outside the hours FlexWeek plans in, so it stayed where it was.")
+        Some("That's outside the hours FlexWeek plans in, so it stayed where it was.")
     );
     assert_eq!(
         problem(3, h(19, 0), h(20, 0), Some((3, h(19, 30)))),
-        Some("That ends after it is due, so it stayed where it was.")
+        Some("That ends after it's due, so it stayed where it was.")
     );
     assert_eq!(problem(3, h(18, 0), h(19, 30), Some((3, h(19, 30)))), None);
 }
@@ -230,7 +230,7 @@ fn test_due_point_and_span_problem_cover_date_only_and_timed_dues() {
         due_day_of(&json!("2026-09-15"), week).expect("a day"),
         Some(1)
     );
-    let after_due = Some("That ends after it is due, so it stayed where it was.");
+    let after_due = Some("That ends after it's due, so it stayed where it was.");
     assert_eq!(problem(1, 23 * 60, 23 * 60 + 45, date_only), None);
     assert_eq!(problem(1, 23 * 60, 23 * 60 + 45, legacy), None);
     assert_eq!(problem(1, 9 * 60, 9 * 60 + 15, timed), after_due);
@@ -245,4 +245,78 @@ fn test_due_point_and_span_problem_cover_date_only_and_timed_dues() {
         .map(|item| item["id"].as_str().expect("id"))
         .collect();
     assert_eq!(ids, ["morning", "allday"]);
+}
+
+#[test]
+fn test_a_past_start_names_the_next_quarter_hour_today() {
+    let week = "2026-10-05";
+    let thursday = "2026-10-08";
+    let at = 15 * 60 + 10;
+    assert_eq!(
+        past_problem(week, 3, 15 * 60, thursday, at)
+            .expect("a verdict")
+            .as_deref(),
+        Some("That time has passed. Choose 15:15 or later today, or another day.")
+    );
+}
+
+#[test]
+fn test_a_past_start_rounds_the_clock_up_to_the_next_quarter_hour() {
+    let week = "2026-10-05";
+    let thursday = "2026-10-08";
+    let refused_at = |now: i64, start: i64| {
+        past_problem(week, 3, start, thursday, now)
+            .expect("a verdict")
+            .expect("a refusal")
+    };
+    assert_eq!(
+        refused_at(15 * 60 + 7, 15 * 60),
+        "That time has passed. Choose 15:15 or later today, or another day."
+    );
+    assert_eq!(
+        refused_at(15 * 60 + 15, 15 * 60 + 10),
+        "That time has passed. Choose 15:15 or later today, or another day.",
+        "a clock already on the quarter hour is not rounded past it"
+    );
+    assert_eq!(
+        past_problem(week, 3, 15 * 60 + 15, thursday, 15 * 60 + 15).unwrap(),
+        None,
+        "15:15 itself is not past"
+    );
+    assert_eq!(
+        refused_at(5 * 60 + 10, 5 * 60),
+        "That time has passed. Choose 05:15 or later today, or another day.",
+        "no 6:00 floor: early morning gets the early quarter hour"
+    );
+}
+
+#[test]
+fn test_a_start_on_an_earlier_day_says_that_day_is_over() {
+    let week = "2026-10-05";
+    let thursday = "2026-10-08";
+    assert_eq!(
+        past_problem(week, 1, 18 * 60, thursday, 9 * 60)
+            .expect("a verdict")
+            .as_deref(),
+        Some("That time has passed. The day is over, so choose another day."),
+        "Tuesday at 18:00 seen on Thursday morning offers no time 'later today'"
+    );
+}
+
+#[test]
+fn test_a_past_start_after_11_45_pm_says_the_day_is_over() {
+    let week = "2026-10-05";
+    let thursday = "2026-10-08";
+    assert_eq!(
+        past_problem(week, 3, 23 * 60 + 30, thursday, 23 * 60 + 50)
+            .expect("a verdict")
+            .as_deref(),
+        Some("That time has passed. The day is over, so choose another day.")
+    );
+    assert_eq!(
+        past_problem(week, 3, 23 * 60 + 30, thursday, 23 * 60 + 45)
+            .expect("a verdict")
+            .as_deref(),
+        Some("That time has passed. Choose 23:45 or later today, or another day.")
+    );
 }

@@ -76,6 +76,9 @@ def test_the_block_editor_keeps_the_typed_times(qapp: QApplication, host: QWidge
     set_clock_24h(twenty_four)
     dialog = BlockDialog(host, day=3, start="16:00", duration_min=60)
     dialog.title.setText("Club")
+    from desktop.tests.test_fixed_time_steps import go_when
+
+    go_when(dialog)
     type_over(dialog.start, "5:15 pm")
     type_over(dialog.end, "1900")
     dialog.accept()
@@ -90,6 +93,9 @@ def test_add_homework_keeps_the_typed_due_time(qapp: QApplication, host: QWidget
         host, today="2026-09-24", category="assignments", due="2026-09-24", now=datetime(2026, 9, 24, 10, 0)
     )
     dialog.title.setText("Essay")
+    from desktop.tests.test_homework_form import go_when
+
+    go_when(dialog)
     dialog.due.timed.setChecked(True)
     type_over(dialog.due.time, "3:15 pm")
     dialog.accept()

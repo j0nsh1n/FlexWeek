@@ -626,6 +626,13 @@ impl PyConn {
         })
     }
 
+    fn session_expired(&self, py: Python<'_>, token_hash: &str, now: i64) -> PyResult<bool> {
+        let token_hash = token_hash.to_string();
+        self.store(py, move |conn| {
+            flexweek_store::session_expired(conn, &token_hash, now)
+        })
+    }
+
     fn insert_user(&self, py: Python<'_>, username: &str, password_hash: &str) -> PyResult<i64> {
         let username = username.to_string();
         let password_hash = password_hash.to_string();
@@ -798,10 +805,18 @@ impl PyConn {
         })
     }
 
-    fn open_session(&self, py: Python<'_>, token: &str, user_id: i64, now: i64) -> PyResult<()> {
+    #[pyo3(signature = (token, user_id, now, keep=false))]
+    fn open_session(
+        &self,
+        py: Python<'_>,
+        token: &str,
+        user_id: i64,
+        now: i64,
+        keep: bool,
+    ) -> PyResult<()> {
         let token = token.to_string();
         self.store(py, move |conn| {
-            flexweek_store::open_session(conn, &token, user_id, now)
+            flexweek_store::open_session(conn, &token, user_id, now, keep)
         })
     }
 }

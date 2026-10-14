@@ -24,9 +24,12 @@ from PySide6.QtNetwork import (
 REQUEST_TIMEOUT_MS = 30_000
 SESSION_COOKIE = b"flexweek_session"
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
-PASSWORD_LENGTH_HINT = "Password: use 12–128 characters."
-USERNAME_HINT = "Username: 3–32 letters, numbers or underscores."
+PASSWORD_LENGTH_HINT = "At least 12 characters."
+USERNAME_HINT = "3 to 32 letters, numbers or underscores."
 USERNAME_ERROR = "Use 3 to 32 letters, numbers or underscores, with no spaces."
+WRONG_PASSWORD = "Wrong password. Try again."
+TYPE_RECOVERY_CODE = "Type a recovery code."
+TOO_MANY_TRIES = "Too many tries. Wait 5 minutes, then try again."
 # Sign-in and sign-up say which thing is wrong wherever FlexWeek can tell. The server answers a wrong
 # password and an unknown username alike on purpose; the sign-in card's link says why.
 SIGN_IN_WRONG = "Wrong username or password. Try again, or choose Forgot password."
@@ -40,11 +43,12 @@ SIGN_IN_BAD_USERNAME = (
 SIGN_IN_SHORT_PASSWORD = "That isn't your password. FlexWeek passwords have at least 12 characters."
 SIGN_UP_NO_USERNAME = "Choose a username."
 SIGN_UP_NO_PASSWORD = "Choose a password with at least 12 characters."
-SIGN_UP_SHORT_PASSWORD = "Add {n} more characters. Passwords need at least 12."
+SIGN_UP_SHORT_PASSWORD = "Add {n} more {unit}. Passwords need at least 12."
 SIGN_UP_LONG_PASSWORD = "Use 128 characters or fewer."
 USERNAME_TAKEN = "That username is taken. Try another."
 # Said when a session ends; about no one field, though its words name two.
 SIGN_IN_AGAIN = "Please sign in again, or check your username and password."
+SESSION_ENDED = "Your session ended. Sign in again."
 logger = logging.getLogger(__name__)
 
 
@@ -118,13 +122,15 @@ def _username_error(detail: object) -> str | None:
 
 def _error(status: int, detail: object = None) -> ApiError:
     if status == 401 and detail == "Incorrect password":
-        return ApiError(status, "Incorrect password. Try again.")
+        return ApiError(status, WRONG_PASSWORD)
     if status == 401 and detail == "Incorrect username or password":
         return ApiError(status, SIGN_IN_WRONG)
     if status == 409 and detail == "Username unavailable":
         return ApiError(status, USERNAME_TAKEN)
     if status == 401 and detail == "Incorrect username or recovery code":
         return ApiError(status, "Wrong username or recovery code. Each code works once; try another one.")
+    if status == 401 and detail == SESSION_ENDED:
+        return ApiError(status, SESSION_ENDED)
     if status == 422:
         named = _password_error(detail) or _username_error(detail)
         if named:
@@ -137,7 +143,7 @@ def _error(status: int, detail: object = None) -> ApiError:
         409: "The saved data changed or that name is already in use. Reload and try again.",
         413: "This request is too large. Reduce its size and try again.",
         422: "Check the required fields, dates, times and lengths, then try again.",
-        429: "Too many attempts. Wait five minutes before trying again.",
+        429: TOO_MANY_TRIES,
         503: "Storage is unavailable. Keep your changes and try again shortly.",
     }
     return ApiError(status, messages.get(status, "FlexWeek could not complete this request. Try again."))
@@ -170,8 +176,13 @@ def sign_up_problem(name: str, password: str) -> str:
     if len(password) > 128:
         return SIGN_UP_LONG_PASSWORD
     if len(password) < 12:
-        return SIGN_UP_SHORT_PASSWORD.format(n=12 - len(password))
+        return short_password_needed(12 - len(password))
     return ""
+
+
+def short_password_needed(n: int) -> str:
+    unit = "character" if n == 1 else "characters"
+    return SIGN_UP_SHORT_PASSWORD.format(n=n, unit=unit)
 
 
 def auth_error(error: ApiError, *, creating: bool) -> ApiError:
@@ -310,7 +321,7 @@ class NativeClient(QObject):
                 if epoch != self.epoch:
                     return
                 status = reply.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute) or 0
-                body = bytes(reply.readAll())
+                body = bytes(reply.readAll().data())
                 result: object = None
                 if len(body) <= MAX_RESPONSE_BYTES:
                     with contextlib.suppress(ValueError, UnicodeDecodeError):

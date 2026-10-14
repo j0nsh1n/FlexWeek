@@ -434,8 +434,14 @@ def test_wearing_a_more_looks_card_leaves_light_dark_system_reachable_by_tab(qap
     dialog.show()
     light, dark, system = dialog.look.main.buttons()
     assert dialog.look.main.currentIndex() == -1
+    # The Tab stop a student is on just before the row: hidden widgets take no Tab (since 1.0.0 the
+    # design's hidden More and Reset sit just before it in the chain).
     before = light.previousInFocusChain()
-    while before.focusPolicy() & Qt.FocusPolicy.TabFocus == 0 or before in (light, dark, system):
+    while (
+        before.focusPolicy() & Qt.FocusPolicy.TabFocus == 0
+        or before in (light, dark, system)
+        or not before.isVisibleTo(dialog)
+    ):
         before = before.previousInFocusChain()
     before.setFocus(Qt.FocusReason.TabFocusReason)
     # The window is not the active one under test, so focus is read from the window, not the application.

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["engine", "store", "py"]
+members = ["engine", "store", "py", "sync", "ffi", "uniffi-bindgen"]
 
 [workspace.package]
 edition = "2024"
@@ -12,3 +12,7 @@ publish = false
 # unoptimised engine came within reach of it on a loaded four-core machine; opt-level 2 did not.
 [profile.dev.package.flexweek-engine]
 opt-level = 2
+
+# Production pairing costs about a second optimised; an unoptimised test exceeds its deadline.
+[profile.test.package.scrypt]
+opt-level = 3

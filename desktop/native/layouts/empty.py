@@ -85,9 +85,8 @@ class EmptyWeek(QWidget):
             self.adjustSize()
 
     def sizeHint(self) -> QSize:  # noqa: N802
-        if self.copy_last.isVisible():
-            return QSize(max(280, super().sizeHint().width()), 200)
-        return super().sizeHint()
+        hint = super().sizeHint()
+        return QSize(max(280, hint.width()), hint.height())
 
     def set_blank(self, blank: bool) -> None:
         """A brand-new account, or a later empty week that already has homework somewhere."""

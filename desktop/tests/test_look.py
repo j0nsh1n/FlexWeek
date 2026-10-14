@@ -13,7 +13,7 @@ from itertools import product
 from math import dist
 
 import pytest
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QColor, QImage
 
 import desktop.native.look as look_module
 from desktop.native.calendar import CATEGORIES
@@ -21,6 +21,8 @@ from desktop.native.look import (
     AA_GRAPHIC,
     AA_TEXT,
     ACCENTS,
+    DESIGN_PALETTE_PRESETS,
+    EXPERIMENTAL_LOOKS,
     FONT_FAMILIES,
     HEADING_NAMES,
     KNOB_LABELS,
@@ -29,10 +31,12 @@ from desktop.native.look import (
     LOOK_KNOBS,
     LOOK_PRESETS,
     PACKS,
+    STANDARD_LOOKS,
     auth_rules,
     block_paint,
     block_time_colour,
     category_paint,
+    class_outline,
     contrast,
     control_rules,
     effective_look,
@@ -44,6 +48,7 @@ from desktop.native.look import (
     look_overrides,
     pack_axis,
     pack_stylesheet,
+    palette_from_tokens,
     parse_look_menu_token,
     preset_knobs,
     readable_edge,
@@ -56,7 +61,8 @@ from desktop.native.look import (
     setup_rules,
     switch_track_edge,
 )
-from desktop.native.tokens import SINK, TEXT_SCALE, mix_oklab, oklab, oklch_of
+from desktop.native.look_preview import look_preview
+from desktop.native.tokens import SINK, TEXT_SCALE, mix, mix_oklab, oklab, oklch_of
 from desktop.native.widgets import control_art
 from desktop.tests.window_support import qapp  # noqa: F401
 
@@ -85,6 +91,8 @@ def test_control_edges_have_three_to_one_contrast(preset: str, system_dark: bool
         10,
     )
     assert f"QWidget#authCard QLineEdit:focus {{ border: 2px solid {focus}; }}" in auth
+    assert f"QToolButton#passwordReveal:focus {{ border: 2px solid {focus}; }}" in auth
+    assert contrast(focus, palette["field"]) >= AA_GRAPHIC
     if preset != "high-contrast":
         assert min(contrast(focus, ground) for ground in grounds) > min(
             contrast(border, ground) for ground in grounds
@@ -100,7 +108,12 @@ def test_control_edges_have_three_to_one_contrast(preset: str, system_dark: bool
         "switch_off_off": "off-disabled",
         "switch_on_off": "on-disabled",
     }
-    assert f"border: 2px solid {focus}" in control_rules(palette, 6, "normal", switch_art)
+    controls = control_rules(palette, 6, "normal", switch_art)
+    assert (
+        f'QPushButton[step="true"] {{ background: {palette["window"]}; color: {palette["muted"]}; '
+        f'border: 1px solid {border}; padding: 0; min-width: 34px; max-width: 34px; min-height: 0; }}'
+    ) in controls
+    assert f"border: 2px solid {focus}" in controls
     switch_grounds = (palette["field"], palette["panel"], palette["window"])
     assert min(contrast(switch_edge, ground) for ground in switch_grounds) >= 3
 
@@ -250,10 +263,11 @@ def test_the_look_menu_offers_four_looks_then_the_experimental_ones() -> None:
         "Ink",
         "Pastel",
     ]
-    offered = [(kind, name) for name, _label, kind in standard + experimental]
-    assert sorted(offered) == sorted(
-        [("pack", name) for name in PACKS] + [("preset", name) for name in LOOK_PRESETS if name != "default"]
-    )
+    offered = {(kind, name) for name, _label, kind in standard + experimental}
+    expected = {("pack", name) for name in PACKS} | {
+        ("preset", name) for name in LOOK_PRESETS if name != "default"
+    }
+    assert offered == expected
     assert look_menu_value("nocturne", {"preset": "default", "knobs": {}}) == look_menu_token(
         "pack", "nocturne"
     )
@@ -485,6 +499,35 @@ def test_every_look_keeps_its_text_readable() -> None:
             assert ratio >= AA_TEXT, f"{where}: {ink} on {fill} is {ratio:.2f} to 1"
 
 
+def test_every_design_palette_preset_keeps_its_text_readable() -> None:
+    for preset, accent in product(DESIGN_PALETTE_PRESETS, ACCENTS):
+        palette = resolved_palette("light-frost", False, None, accent, palette_preset=preset)
+        for ink, fill in TEXT_PAIRS:
+            ratio = contrast(palette[ink], palette[fill])
+            assert ratio >= AA_TEXT, f"{preset}/{accent}: {ink} on {fill} is {ratio:.2f} to 1"
+        assert dist(_lab(palette["accent"]), _lab(palette["error"])) >= 25, (preset, accent)
+
+
+def test_a_design_page_falls_back_to_readable_ink_when_its_own_ink_is_too_light() -> None:
+    tokens = {
+        "line": "#dddddd",
+        "bg": "#ffffff",
+        "bg_ink": "#eeeeee",
+        "bg_muted": "#777777",
+        "surface": "#ffffff",
+        "text": "#000000",
+        "muted": "#444444",
+        "accent": "#0055aa",
+        "accent_ink": "#ffffff",
+        "danger": "#aa0000",
+    }
+    page = palette_from_tokens(tokens, {"window": "#ffffff", "text": "#000000"})
+    assert (page["window"], page["text"], page["muted"]) == (
+        tokens["surface"], tokens["text"], tokens["muted"]
+    )
+    assert contrast(page["text"], page["window"]) >= AA_TEXT
+
+
 def test_the_now_line_and_the_selection_ring_show_at_3_to_1_and_keep_the_accent() -> None:
     """They are lines, not text: the bar for a graphic is 3 to 1, not 4.5. In every look the shade is
     at least 3 to 1 on every category's fill and on the grid, and is the accent or only as far from
@@ -548,6 +591,10 @@ def test_a_students_accent_wins_over_the_presets_own() -> None:
     chosen = resolved_palette("slate", False, look_of("terminal"), "sky")
     # Terminal is a dark look whatever the pack underneath, so it takes the dark-axis sky and its ink.
     assert (chosen["accent"], chosen["accent_ink"]) == ("#38bdf8", "#0b1224")
+    clay = resolved_palette(
+        "slate", False, look_of("default"), "sky", palette_preset="clay-lavender"
+    )
+    assert (clay["accent"], clay["accent_ink"]) == ("#0369a1", "#ffffff")
 
 
 def test_flat_surface_has_no_raised_panels_and_layered_does() -> None:
@@ -597,12 +644,82 @@ def test_a_block_shows_its_category_colour_in_the_place_the_knob_names() -> None
     assert block_paint(look_of("default", blocks="edge"), palette, pale, "locked", strong)["edge"] == strong
 
 
+@pytest.mark.parametrize(("kind", "name"), STANDARD_LOOKS + EXPERIMENTAL_LOOKS)
+def test_homework_outline_is_class_colour_not_error_red(kind: str, name: str) -> None:
+    """U5: homework's outline is the class colour at 3:1 on the card, never the error red."""
+    if kind == "pack":
+        palette = resolved_palette(name, name in {"dark-frost", "nocturne"}, None)
+        look = look_of("default", blocks="outline")
+    else:
+        look = look_of(name, blocks="outline")
+        palette = resolved_palette("system", False, look)
+    fill, mark = category_paint("assignments", palette)
+    paint = block_paint(look, palette, fill, "flexible", mark, category="assignments")
+    outline, card = paint["outline"], paint["fill"]
+    assert outline
+    assert outline.lower() not in {palette["error"].lower(), "#831a1d"}
+    assert contrast(outline, card) >= AA_GRAPHIC
+    assert class_outline(palette, fill) == outline
+
+
+@pytest.mark.parametrize(("kind", "name"), STANDARD_LOOKS + EXPERIMENTAL_LOOKS)
+def test_plan_button_label_reads_with_margin_in_every_look(kind: str, name: str) -> None:
+    """U6: Plan's secondary label is 4.6:1 on its 10% accent tint; High contrast is on the window."""
+    if kind == "pack":
+        palette = resolved_palette(name, name in {"dark-frost", "nocturne"}, None)
+    else:
+        palette = resolved_palette("system", False, look_of(name))
+    tint = mix(palette["accent"], palette["window"], 0.10)
+    ground = palette["window"] if palette.get("family") == "contrast" else tint
+    assert contrast(palette["accent_text"], ground) >= AA_TEXT + 0.1, name
+
+
+def test_poster_preview_column_rules_match_the_week(qapp) -> None:  # noqa: F811
+    """U11: Settings > Look > Poster preview draws the week's rule colour, not hairline black."""
+    look = look_of("poster")
+    palette = resolved_palette("system", False, look)
+    week_rule = palette.get("rule") or palette["hairline"]
+    assert week_rule == mix("#111111", "#fff8e7", 0.14)
+    assert week_rule != palette["hairline"]
+    image = look_preview("system", look, 150).toImage()
+    rule_rgb = QColor(week_rule).getRgb()[:3]
+    hair_rgb = QColor(palette["hairline"]).getRgb()[:3]
+    found_rule = found_hair = 0
+    bar = round(image.height() * 0.2)
+    for y in range(bar + 8, image.height() - 8, 4):
+        for x in range(image.width()):
+            rgb = image.pixelColor(x, y).getRgb()[:3]
+            if all(abs(a - b) <= 8 for a, b in zip(rgb, rule_rgb, strict=True)):
+                found_rule += 1
+            if all(abs(a - b) <= 8 for a, b in zip(rgb, hair_rgb, strict=True)):
+                found_hair += 1
+    assert found_rule > 0
+    assert found_rule > found_hair
+
+
 def test_a_filled_block_is_readable_on_every_category_colour() -> None:
     assert len(CATEGORIES) == 8
     for name, category in CATEGORIES.items():
         color = category["color"]
         ratio = contrast(readable_ink(color), color)
         assert ratio >= AA_TEXT, f"{name} {color}: best ink is only {ratio:.2f} to 1"
+
+
+@pytest.mark.parametrize(("kind", "name"), STANDARD_LOOKS + EXPERIMENTAL_LOOKS)
+def test_block_time_line_reads_with_margin_in_every_look(kind: str, name: str) -> None:
+    """U7: a block's time line is 4.6:1 on its fill, so Terminal, Ink and Nocturne keep a margin."""
+    if kind == "pack":
+        palette = resolved_palette(name, name in {"dark-frost", "nocturne"}, None)
+        look = look_of("default")
+    else:
+        look = look_of(name)
+        palette = resolved_palette("system", False, look)
+    for category_name, category in CATEGORIES.items():
+        fill, mark = category_paint(category_name, palette)
+        drawn = block_paint(look, palette, fill, category["kind"], mark)
+        paper = drawn["fill"] or palette["window"]
+        ratio = contrast(block_time_colour(drawn["ink"], paper), paper)
+        assert ratio >= AA_TEXT + 0.1, f"{name} {category_name}: {ratio:.2f}"
 
 
 def test_a_blocks_times_read_in_every_look_and_block_style() -> None:

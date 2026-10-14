@@ -43,17 +43,17 @@ TRACE = {
         {
             "block_id": "poster",
             "reason": "DEADLINE_MISS",
-            "message": "There is not enough time left before it is due, even with nothing else planned.",
+            "message": "There isn't enough time left before it's due, even with nothing else planned.",
         },
         {
             "block_id": "chem",
-            "message": "Finishes only 29 min before it is due.",
+            "message": "Finishes only 29 min before it's due.",
             "slack_min": 29,
             "slack_status": "danger",
         },
         {
             "block_id": "essay",
-            "message": "Finishes 5 h before it is due.",
+            "message": "Finishes 5 h before it's due.",
             "slack_min": 300,
             "slack_status": "ok",
         },
@@ -71,7 +71,7 @@ def test_it_says_what_could_not_be_placed_and_why(qapp: QApplication) -> None:
     said = PlanReview().rows_for(TRACE, TITLES, WEEK)
     assert (
         "Science fair poster has no time yet."
-        " There is not enough time left before it is due, even with nothing else planned."
+        " There isn't enough time left before it's due, even with nothing else planned."
     ) in said
 
 
@@ -101,7 +101,7 @@ def test_a_move_after_running_late_says_so_not_that_a_day_was_missed(qapp: QAppl
 
 def test_it_warns_about_a_tight_deadline_but_not_a_comfortable_one(qapp: QApplication) -> None:
     said = PlanReview().rows_for(TRACE, TITLES, WEEK)
-    assert "Chem lab report: Finishes only 29 min before it is due." in said
+    assert "Chem lab report: Finishes only 29 min before it's due." in said
     assert not any(line.startswith("History essay: ") for line in said)
 
 
@@ -143,11 +143,37 @@ def test_a_share_note_names_the_days_that_received_time(qapp: QApplication) -> N
         "moves": [],
         "explanations": [],
         "shares": [
-            {"title": "History", "this_week_min": 60, "left_min": 60, "placed_days": [6]}
+            {
+                "title": "Science project",
+                "this_week_min": 60,
+                "left_min": 60,
+                "due": "2026-10-13",
+            }
         ],
     }
-    assert PlanReview().rows_for(trace, {}, WEEK) == [
-        "History: 1 h this week (Sun), 1 h left for next week"
+    assert PlanReview().rows_for(trace, {}, "2026-10-12") == [
+        "Science project (due Tue 13 Oct): 1 h planned this week. FlexWeek saves the other 1 h "
+        "for next week so this week isn't overloaded. Press Plan next week to place it."
+    ]
+
+
+def test_a_share_note_looks_up_due_from_assignments(qapp: QApplication) -> None:
+    panel = PlanReview()
+    panel._assignments = {
+        "sci": {"id": "sci", "title": "Science project", "due": "2026-10-13"}
+    }
+    trace = {
+        "placed": [],
+        "unplaced": [],
+        "moves": [],
+        "explanations": [],
+        "shares": [
+            {"title": "Science project", "assignment_id": "sci", "this_week_min": 60, "left_min": 60}
+        ],
+    }
+    assert panel.rows_for(trace, {}, "2026-10-12") == [
+        "Science project (due Tue 13 Oct): 1 h planned this week. FlexWeek saves the other 1 h "
+        "for next week so this week isn't overloaded. Press Plan next week to place it."
     ]
 
 
@@ -210,7 +236,8 @@ def test_an_unplaced_task_with_no_explanation_still_says_something(qapp: QApplic
         "explanations": [],
     }
     assert PlanReview().rows_for(bare, TITLES, WEEK) == [
-        "Science fair poster has no time yet. There was no room for it this week."
+        "Science fair poster has no time yet. There was no room for it before it's due. "
+        "Shorten it, split it, or choose a time yourself."
     ]
 
 
@@ -234,14 +261,14 @@ def test_a_block_that_never_moved_is_not_announced_as_moving(qapp: QApplication)
             {
                 "block_id": "poster",
                 "reason": "DEADLINE_MISS",
-                "message": "There is not enough time left before it is due, even with nothing else planned.",
+                "message": "There isn't enough time left before it's due, even with nothing else planned.",
             }
         ],
     }
     said = PlanReview().rows_for(trace, TITLES, WEEK)
     assert said == [
         "Science fair poster has no time yet."
-        " There is not enough time left before it is due, even with nothing else planned."
+        " There isn't enough time left before it's due, even with nothing else planned."
     ]
     assert not any("no time to no time" in line for line in said)
 

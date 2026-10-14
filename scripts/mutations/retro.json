@@ -44,15 +44,15 @@
  {
   "file": "desktop/native/layouts/retro.py",
   "name": "High contrast in Windows 98's greys",
-  "old": "    elif high_contrast(tokens):\n",
-  "new": "    elif False:\n",
+  "old": "    if high_contrast(tokens):\n",
+  "new": "    if False:\n",
   "test": "desktop/tests/test_layout_retro.py::test_high_contrast_is_windows_98s_high_contrast_black"
  },
  {
-  "file": "desktop/native/layouts/retro.py",
-  "name": "Match my look keeps the look's page for a desktop",
-  "old": "        desk = mix_oklab(accent, tokens[\"bg\"], 0.42) if dark else accent\n",
-  "new": "        desk = tokens[\"bg\"]\n",
+  "file": "desktop/native/layouts/registry.py",
+  "name": "Your look keeps the look's page for a Retro desktop",
+  "old": "            \"bg\": palette[\"window\"],\n",
+  "new": "            \"bg\": palette[\"panel\"],\n",
   "test": "desktop/tests/test_layout_retro.py::test_match_my_look_puts_the_accent_on_the_desktop_and_the_title_bars"
  },
  {

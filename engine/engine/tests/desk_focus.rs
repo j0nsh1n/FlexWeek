@@ -1,11 +1,59 @@
 //! Rust twin of `desktop/tests/test_focus.py`: focus timer math.
 
 use flexweek_engine::desk::focus::{
-    begin_state, break_phase, credit_target, focus_now, format_countdown, more_time_choices,
-    now_and_next, now_next_line, pause_state, persist_payload, phase_duration_ms, remaining_ms,
-    restore_state, set_phase,
+    begin_state, break_phase, credit_target, focus_candidates, focus_now, format_countdown,
+    more_time_choices, now_and_next, now_next_line, pause_state, persist_payload,
+    phase_duration_ms, remaining_ms, restore_state, set_phase,
 };
 use serde_json::{Value, json};
+
+#[test]
+fn test_focus_candidates_drop_elapsed_sessions_and_offer_overdue_homework() {
+    let blocks = json!([
+        {
+            "id": "bio-session",
+            "assignment_id": "bio",
+            "kind": "flexible",
+            "title": "Bio reading",
+            "days": [6],
+            "start": "15:15",
+            "duration_min": 60,
+            "completed": false
+        },
+        {
+            "id": "chem-session",
+            "assignment_id": "chem",
+            "kind": "flexible",
+            "title": "Chem lab",
+            "days": [5],
+            "start": "11:00",
+            "duration_min": 60,
+            "completed": false
+        }
+    ]);
+    let assignments = json!({
+        "bio": {"id": "bio", "title": "Bio reading", "due": "2026-10-16", "completed": false},
+        "chem": {"id": "chem", "title": "Chem lab", "due": "2026-10-23", "completed": false}
+    });
+    let candidates = focus_candidates(
+        &blocks,
+        &assignments,
+        &json!({}),
+        "2026-10-12",
+        "2026-10-17T10:00",
+    )
+    .expect("focus candidates");
+    assert_eq!(candidates.len(), 2);
+    assert!(candidates.iter().all(|item| item["id"] != "bio-session"));
+    let overdue = candidates
+        .iter()
+        .find(|item| item["id"] == "bio")
+        .expect("overdue homework row");
+    assert_eq!(overdue["title"], "Bio reading, overdue");
+    assert!(overdue["start"].is_null());
+    assert_eq!(overdue["assignment_id"], "bio");
+    assert!(overdue.get("block_id").is_none());
+}
 
 #[test]
 fn test_phase_duration_uses_account_timer_lengths() {
@@ -50,6 +98,26 @@ fn test_quick_focus_credits_nothing() {
             .expect("a verdict"),
         None
     );
+}
+
+#[test]
+fn test_assignment_only_focus_credits_and_restores_the_homework() {
+    let target = json!({"blockId": null, "assignmentId": "bio", "title": "Bio reading, overdue", "weekStart": "2026-10-12"});
+    let assignment = json!({"id": "bio", "title": "Bio reading", "completed": false, "focus_minutes": 0, "focus_sessions": 0});
+    let updated = credit_target(&target, &assignment, &Value::Null, 25)
+        .unwrap()
+        .unwrap();
+    assert_eq!(updated["focus_minutes"], 25);
+    assert_eq!(updated["focus_sessions"], 1);
+    assert_eq!(updated["completed"], false);
+    let begun = begin_state(&target, &json!({"timer_work_min": 25}), 1_000).unwrap();
+    let saved = persist_payload(&begun).unwrap().unwrap();
+    let restored = restore_state(&saved, &json!({"bio": assignment}), &json!([]), 2_000)
+        .unwrap()
+        .unwrap();
+    assert_eq!(restored["title"], "Bio reading");
+    assert_eq!(restored["assignmentId"], "bio");
+    assert_eq!(restored["blockId"], Value::Null);
 }
 
 #[test]

@@ -22,12 +22,14 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QPoint, QStandardPaths, QTime, QTimer
+    from PySide6.QtCore import QPoint, QStandardPaths, Qt, QTime, QTimer
+    from PySide6.QtGui import QColor
+    from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication, QComboBox, QDateTimeEdit, QLabel, QPushButton, QWidget
 
     from desktop.native.calendar import monday_of, sunday_due
     from desktop.native.layouts.registry import EXPERIMENTAL, sanitize_layout
-    from desktop.native.look import pack_stylesheet, sanitize_look
+    from desktop.native.look import pack_stylesheet, resolved_palette, sanitize_look
     from desktop.native.setup import (
         COLOURS,
         DONE,
@@ -44,8 +46,9 @@ if importlib.util.find_spec("PySide6") is not None:
         SetupState,
         activity_category_for,
     )
+    from desktop.native.tokens import contrast
     from desktop.native.weekmodel import clock_text
-    from desktop.native.widgets import AvailabilityDialog
+    from desktop.native.widgets import AvailabilityDialog, control_art
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
 
@@ -187,7 +190,7 @@ def test_every_page_is_kept_when_the_student_leaves_it(qapp: QApplication, serve
     written(qapp, window)
     stored = json.loads(look_file().read_text())
     assert stored["layout"]["main"] == "bento", "the look belongs to this computer"
-    assert stored["layout"]["options"]["bento"]["colour"] == "indigo"
+    assert stored["layout"]["options"]["bento"]["look"] == "preset:bento-indigo"
     assert window.session.preferences["theme_pack"] == "light-frost"
     assert window.session.preferences["setup"]["step"] == WEEK
 
@@ -258,11 +261,32 @@ def test_every_page_is_kept_when_the_student_leaves_it(qapp: QApplication, serve
     assert window._layout["main"] == "bento"
     assert window.session.preferences["setup"]["finished_at"]
     close(qapp, window)
-
     again = sign_in(qapp, server, "setup_walk")
     assert page(again) == "weekPage", "setup does not come back once it is finished"
     assert again.session.preferences["alarm_tone"] == "glass"
     close(qapp, again)
+
+
+def test_a_style_look_is_saved_and_selected_in_settings(qapp: QApplication, server: LocalServer) -> None:
+    window = new_account(qapp, server, "setup_style_look")
+    setup = window.setup_page
+    setup.carousel.look_swatches["preset:high-contrast"].click()
+    setup.next.click()
+    written(qapp, window)
+    saved = json.loads(look_file().read_text())
+    assert saved["layout"]["main"] == "classic"
+    assert saved["layout"]["options"]["classic"]["look"] == "preset:high-contrast"
+
+    while setup.step != DONE:
+        setup.skip.click()
+    assert setup.summary_text()[0] == "Today's app in High contrast"
+    setup.skip_all.click()
+    written(qapp, window)
+    window._open_settings()
+    choice = window._settings.findChild(QComboBox, "layoutMain-look")
+    assert choice is not None
+    assert choice.currentData() == "preset:high-contrast"
+    close(qapp, window)
 
 
 def test_skipping_every_page_keeps_nothing_and_setup_never_returns(
@@ -671,18 +695,35 @@ def test_choose_my_own_look_goes_through_look_and_colours(qapp: QApplication) ->
     setup.look_cards["timeline"].chosen.emit()
     setup.next.click()
     assert setup.step == COLOURS
-    setup.colours.buttons()[1].click()
+    setup.colours.buttons()[3].click()
     setup.text_size.buttons()[2].click()
     setup.next.click()
     assert setup.step == WEEK
     step, answer = kept[-1]
     assert step == COLOURS and isinstance(answer, dict)
     assert answer["layout"]["main"] == "timeline"
-    assert answer["layout"]["options"]["timeline"]["colour"] == "night"
+    assert answer["layout"]["options"]["timeline"]["look"] == "pack:dark-frost"
     assert answer["look"]["knobs"]["text"] == "large"
     setup.back.click()
     assert setup.step == COLOURS, "Back from the week returns to the look the student built"
     setup.close()
+
+
+def test_setup_saves_the_account_pack_when_a_pack_look_is_picked(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    window = new_account(qapp, server, "setup_pack_choice")
+    setup = window.setup_page
+    setup.findChild(QPushButton, "setupOwnLook").click()
+    setup.look_cards["classic"].chosen.emit()
+    setup.next.click()
+    dark = next(button for button in setup.colours.buttons() if button.property("value") == "pack:dark-frost")
+    dark.click()
+    setup.next.click()
+    written(qapp, window)
+    assert window.session.preferences["theme_pack"] == "dark-frost"
+    assert setup._layout["options"]["classic"]["look"] == "pack:dark-frost"
+    close(qapp, window)
 
 
 def test_a_spotify_alarm_needs_a_spotify_link(qapp: QApplication) -> None:
@@ -971,6 +1012,78 @@ def test_choosing_24_hour_in_setup_sticks(qapp: QApplication, server: LocalServe
     assert again.session.preferences["clock_24h"] is True
     assert clock_text(15 * 60 + 30) == "15:30"
     close(qapp, again)
+
+
+def test_home_and_end_pick_the_12_and_24_hour_clock(qapp: QApplication) -> None:
+    """N13-A30: Home and End move between the two clock radios, as the arrows do."""
+    setup = SetupPage()
+    state = SetupState("system", sanitize_look(None), sanitize_layout(None), {}, [], "")
+    setup.open(state, WEEK)
+    assert setup.clock_buttons[False].isChecked()
+    QTest.keyClick(setup.clock_buttons[False], Qt.Key.Key_End)
+    assert setup.clock_buttons[True].isChecked()
+    assert clock_text(15 * 60) == "15:00"
+    QTest.keyClick(setup.clock_buttons[True], Qt.Key.Key_Home)
+    assert setup.clock_buttons[False].isChecked()
+    assert clock_text(15 * 60) == "3:00 PM"
+    setup.deleteLater()
+
+
+CLOCK_RING_LOOKS = (
+    ("light", "light-frost", "default"),
+    ("dark", "dark-frost", "default"),
+    ("high-contrast", "light-frost", "high-contrast"),
+    ("nocturne", "nocturne", "default"),
+    ("slate", "slate", "default"),
+    ("poster", "light-frost", "poster"),
+    ("terminal", "light-frost", "terminal"),
+    ("paper", "light-frost", "paper"),
+    ("ink", "light-frost", "ink"),
+    ("pastel", "light-frost", "pastel"),
+)
+
+
+def _clock_ring_colours(qapp: QApplication, button) -> tuple[QColor, QColor]:
+    parent = button.parentWidget()
+    assert parent is not None
+    button.clearFocus()
+    qapp.processEvents()
+    rest = parent.grab().toImage()
+    button.setFocus(Qt.FocusReason.TabFocusReason)
+    qapp.processEvents()
+    focused = parent.grab().toImage()
+    top = button.mapTo(parent, QPoint(button.width() // 2, 0))
+    ring = QColor(focused.pixel(top.x(), top.y() + 1))
+    was = QColor(rest.pixel(top.x(), top.y() + 1))
+    if ring.getRgb()[:3] == was.getRgb()[:3]:
+        raise AssertionError("no ring pixels appeared on keyboard focus")
+    above = max(0, top.y() - 3)
+    outside = QColor(focused.pixel(top.x(), above))
+    return ring, outside
+
+
+@pytest.mark.parametrize("name,pack,preset", CLOCK_RING_LOOKS)
+def test_clock_radio_focus_ring_reads_three_to_one(
+    qapp: QApplication, name: str, pack: str, preset: str
+) -> None:
+    """N13-A30: the focused clock radio's ring is at least 3:1 on the pixels just outside it."""
+    look = sanitize_look({"preset": preset})
+    palette = resolved_palette(pack, False, look)
+    host = QWidget()
+    host.setStyleSheet(pack_stylesheet(pack, False, look, "default", palette, control_art(palette)))
+    setup = SetupPage(host)
+    setup.motion = "off"
+    setup.set_palette(palette)
+    setup.open(SetupState(pack, look, sanitize_layout(None), {}, [], monday_of("2026-09-23")), WEEK)
+    host.resize(900, 700)
+    setup.resize(900, 700)
+    host.show()
+    qapp.processEvents()
+    ring, outside = _clock_ring_colours(qapp, setup.clock_buttons[False])
+    assert contrast(ring.name(), outside.name()) >= 3.0, (name, ring.name(), outside.name())
+    host.close()
+    host.deleteLater()
+    qapp.processEvents()
 
 
 def test_a_clock_tried_and_skipped_on_the_page_is_put_back(qapp: QApplication) -> None:

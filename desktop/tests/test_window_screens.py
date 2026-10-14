@@ -22,7 +22,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QPoint, QStandardPaths
-    from PySide6.QtWidgets import QApplication, QPushButton, QStyle, QWidget
+    from PySide6.QtWidgets import QAbstractButton, QApplication, QPushButton, QStyle, QWidget
 
     from desktop.native.calendar import monday_of, sunday_due
     from desktop.native.layouts.registry import sanitize_layout
@@ -125,8 +125,8 @@ BAR = (
 )
 
 
-def bar_widgets(window: NativeWindow) -> list[QPushButton]:
-    found = (window.findChild(QPushButton, name) for name in BAR)
+def bar_widgets(window: NativeWindow) -> list[QAbstractButton]:
+    found = (window.findChild(QAbstractButton, name) for name in BAR)
     return [button for button in found if button is not None and button.isVisible()]
 
 
@@ -135,11 +135,20 @@ def text_size(window: NativeWindow, size: str) -> None:
     window._apply_appearance()
 
 
+def words_width(button: QAbstractButton) -> int:
+    """The width the button's current words need. A push button is asked through the base class, because
+    FittedButton and PlanButton answer with their longest words, not the ones shown now (R11's radio
+    buttons have no such override)."""
+    if isinstance(button, QPushButton):
+        return QPushButton.sizeHint(button).width()
+    return button.sizeHint().width()
+
+
 def cut_on_the_bar(window: NativeWindow) -> list[str]:
     return [
-        f"{button.text()!r} {button.width()} of {QPushButton.sizeHint(button).width()} px"
+        f"{button.text()!r} {button.width()} of {words_width(button)} px"
         for button in bar_widgets(window)
-        if button.width() < QPushButton.sizeHint(button).width()
+        if button.width() < words_width(button)
     ]
 
 
@@ -152,7 +161,7 @@ def test_the_top_bar_is_never_cut_mid_word(qapp: QApplication, window: NativeWin
     for text, widths in sizes:
         text_size(window, text)
         for view in ("week", "day", "month"):
-            window.findChild(QPushButton, f"view{view.title()}").click()
+            window.findChild(QAbstractButton, f"view{view.title()}").click()
             wait_until(qapp, lambda: not session.busy)
             whole = (planner_title(session, view), planner_title(session, view, short=True))
             for width in widths:
@@ -184,7 +193,7 @@ def test_the_top_bar_is_never_cut_mid_word(qapp: QApplication, window: NativeWin
     window._sync_chrome()
     text_size(window, "normal")
     window.resize(1150, 768)
-    window.findChild(QPushButton, "viewWeek").click()
+    window.findChild(QAbstractButton, "viewWeek").click()
     for _ in range(4):
         qapp.processEvents()
     title_foot = window.week_title.mapTo(window, QPoint(0, window.week_title.height())).y()
@@ -209,7 +218,7 @@ def test_the_bar_is_fitted_as_large_text_arrives_not_later(
     text_size(window, "large")
     for _ in range(4):
         qapp.processEvents()
-    week = window.findChild(QPushButton, "viewWeek")
+    week = window.findChild(QAbstractButton, "viewWeek")
     title_foot = window.week_title.mapTo(window, QPoint(0, window.week_title.height())).y()
     assert window.solve_button.mapTo(window, QPoint(0, 0)).y() < title_foot, week_start
     seen = (window.solve_button.text(), window.more_button.text(), week.mapTo(window, QPoint(0, 0)))
@@ -250,12 +259,45 @@ def test_at_1150_large_text_timeline_day_keeps_the_top_bar_on_one_row(
     assert cut_on_the_bar(window) == []
 
 
+@pytest.mark.parametrize("text", ["normal", "large"])
+def test_the_view_track_sits_level_with_the_rest_of_the_bar(
+    qapp: QApplication, window: NativeWindow, text: str
+) -> None:
+    """The track is a group box, and every group box keeps a title band above it: Day, Week, Month and
+    My day were drawn about 32 px below Today and the arrows. The track has no title, so none is kept."""
+    text_size(window, text)
+    window.resize(1280, 860)
+    for _ in range(4):
+        qapp.processEvents()
+    today = window.findChild(QAbstractButton, "todayWeek")
+    middle_of_today = today.mapTo(window, today.rect().center()).y()
+    for name in ("viewDay", "viewWeek", "viewMonth", "viewMyDay"):
+        view = window.findChild(QAbstractButton, name)
+        middle = view.mapTo(window, view.rect().center()).y()
+        assert abs(middle - middle_of_today) <= 2, f"{text} text, {name}"
+    text_size(window, "normal")
+
+
+@pytest.mark.parametrize("text", ["normal", "large"])
+def test_the_week_titles_chevron_is_no_wider_than_an_icon_button(
+    qapp: QApplication, window: NativeWindow, text: str
+) -> None:
+    """The chevron is one glyph: with a word button's 20-pixel sides it was 47 px wide and put Plan on
+    a second row at Large text, 1150 to 1195 px."""
+    text_size(window, text)
+    for _ in range(4):
+        qapp.processEvents()
+    arrow = window.findChild(QAbstractButton, "nextWeek")
+    assert window.week_title_mark.width() < arrow.width(), text
+    text_size(window, "normal")
+
+
 def test_retry_save_shows_only_after_a_save_fails(qapp: QApplication, window: NativeWindow) -> None:
     """A save on its way is not a failed one. Month's own fetch landing while the week saved drew
     the week with Retry save showing, and the view buttons jumped 129 pixels left under the pointer.
     A save that failed keeps Retry showing, greyed, while it is tried again."""
     session = window.session
-    month = window.findChild(QPushButton, "viewMonth")
+    month = window.findChild(QAbstractButton, "viewMonth")
     month.click()
     wait_until(qapp, lambda: session.month_data is not None and not session.busy)
     page = window._week_page.layout()
@@ -310,7 +352,7 @@ def test_the_title_keeps_sixteen_pixels_from_the_view_switcher(
     even where that shortens Plan (1157 px at Large text). At 6 px they ran together."""
     window._look = sanitize_look({"preset": preset, "knobs": {"text": text}})
     window._apply_appearance()
-    window.findChild(QPushButton, "viewWeek").click()
+    window.findChild(QAbstractButton, "viewWeek").click()
     segments = window.findChild(QWidget, "segments")
     one_row = []
     # Every width, not a few: where the bar has room to spare the gap is wide whatever the rule says.

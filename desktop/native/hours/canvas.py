@@ -15,7 +15,8 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import date
 from functools import cached_property
 
 from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, Signal
@@ -35,12 +36,12 @@ from PySide6.QtGui import (
     QResizeEvent,
     QWheelEvent,
 )
-from PySide6.QtWidgets import QScrollArea, QWidget
+from PySide6.QtWidgets import QScrollArea, QToolTip, QWidget
 
 from backend.slots import SLOT_MIN
 from desktop.native import icons
 from desktop.native.calendar import DAYS, category_icon, create_click_range
-from desktop.native.fonts import at_scale, caption, time_font, weighted
+from desktop.native.fonts import at_scale, caption, shrink, time_font, weighted
 from desktop.native.hours.geometry import (
     BETWEEN,
     Axis,
@@ -55,6 +56,7 @@ from desktop.native.look import (
     block_paint,
     block_time_colour,
     category_paint,
+    class_outline,
     look_measures,
     readable_ink,
     text_scale,
@@ -68,7 +70,8 @@ EDGE_PX = 7
 # Decision 14 of 0.17: a 3-pixel category edge, and the words kept this far inside a block.
 EDGE_WIDTH = 3
 RADIUS_BLOCK = RADIUS_CONTROL
-TEXT_LEFT, TEXT_RIGHT, TEXT_TOP = 8, 5, 3
+INNER_PAD = 4
+TEXT_LEFT, TEXT_RIGHT, TEXT_TOP = 8, INNER_PAD, INNER_PAD
 # Blocks that share a time are half a column or less, so their words keep this much less at each side.
 SHARED_TRIM = 2
 # So do blocks narrower than this, on the designs that set `trims_narrow`: a week column at the
@@ -123,6 +126,12 @@ class Drawn:
     axis: Axis = Axis.DOWN
     # Its name only, on hours too narrow for the name and its times.
     short: bool = False
+    history: str = ""
+    history_due: str | None = None
+    # Homework that Plan placed and nobody has moved since (N11).
+    placed_by_plan: bool = False
+    # Its tag pills sit above its words; the paint loop decides (see BlockPainter.pills_fit).
+    pills: bool = False
 
     @property
     def times(self) -> str:
@@ -143,6 +152,14 @@ class Drawn:
         if self.held and self.verdict is not None:
             return self.verdict.words
         words = f"{self.times} · {self.length}"
+        for tag in block_tag_words(self):
+            if tag.startswith("Overdue") and self.history_due:
+                try:
+                    due = date.fromisoformat(self.history_due[:10])
+                    tag = f"{tag}, was due {due.strftime('%a')} {due.day} {due.strftime('%b')}"
+                except ValueError:
+                    pass
+            words += f" · {tag}"
         return words + " · Pinned" if self.pinned and not self.done else words
 
 
@@ -155,6 +172,24 @@ class Started(Drawn):
         return clock_label(self.span.start)
 
 
+def plan_placed(item: Occurrence) -> bool:
+    """Homework that Plan placed and nobody has moved since. A hand move or a chosen time pins it, and
+    a finished or missed session has nothing left for Plan to place (N11)."""
+    return item.work and not item.pinned and not item.done and not item.missed
+
+
+def block_tag_words(drawn: Drawn) -> tuple[str, ...]:
+    """Pill labels on a block, in order: Overdue, Left from last week, Placed by Plan."""
+    tags: list[str] = []
+    if drawn.history == "Overdue":
+        tags.append("Overdue")
+    if drawn.history == "Left from last week":
+        tags.append("Left from last week")
+    if drawn.placed_by_plan:
+        tags.append("Placed by Plan")
+    return tuple(tags)
+
+
 class BlockPainter:
     """How hours and blocks look. This default is Daily Scheduler's: pale category fills, a strong
     edge, a rule at each hour, a now line in the accent carrying the time. Designs subclass it."""
@@ -164,6 +199,9 @@ class BlockPainter:
     now_in_gutter = False
     # Whether a block narrower than NARROW_BLOCK keeps its words closer to its sides.
     trims_narrow = False
+    # Whether tag pills may sit above a block's words. A design that writes its own words says no,
+    # until its words leave the room the pills need (N11).
+    draws_pills = True
 
     def __init__(self, colours: dict[str, str], look: dict | None = None, *, wide: bool = False) -> None:
         self.colours = colours
@@ -201,17 +239,18 @@ class BlockPainter:
         for minute in range(-(-track.first // 60) * 60, track.last + 1, 60):
             offset = track.offset(minute)
             if track.axis is Axis.DOWN:
-                painter.drawLine(
-                    QPointF(area.left(), area.top() + offset), QPointF(area.right(), area.top() + offset)
-                )
+                y = int(area.top() + offset) + 0.5
+                painter.drawLine(QPointF(area.left(), y), QPointF(area.right(), y))
             else:
-                painter.drawLine(
-                    QPointF(area.left() + offset, area.top()), QPointF(area.left() + offset, area.bottom())
-                )
+                x = int(area.left() + offset) + 0.5
+                painter.drawLine(QPointF(x, area.top()), QPointF(x, area.bottom()))
+        # The track's own edge: the left side of a down track, the top of an across track.
         if track.axis is Axis.DOWN:
-            painter.drawLine(area.topLeft(), area.bottomLeft())
+            x = int(area.left()) + 0.5
+            painter.drawLine(QPointF(x, area.top()), QPointF(x, area.bottom()))
         else:
-            painter.drawLine(area.topLeft(), area.topRight())
+            y = int(area.top()) + 0.5
+            painter.drawLine(QPointF(area.left(), y), QPointF(area.right(), y))
 
     def hour_gutter(self, base: QFont, first: int, last: int, now: int | None) -> float:
         """The room the hour labels from `first` to `last` need beside the hours, in their clock,
@@ -278,7 +317,14 @@ class BlockPainter:
     def fills(self, drawn: Drawn) -> tuple[QColor, QColor, QColor | None, QColor | None]:
         """Fill, ink, outline and edge for a block: the Blocks look knob and the category."""
         fill, mark = category_paint(drawn.category, self.colours)
-        paint = block_paint(self.look, self.colours, fill, "flexible" if drawn.work else "locked", mark)
+        paint = block_paint(
+            self.look,
+            self.colours,
+            fill,
+            "flexible" if drawn.work else "locked",
+            mark,
+            category=drawn.category,
+        )
         return (
             QColor(paint["fill"]),
             QColor(paint["ink"]),
@@ -296,6 +342,62 @@ class BlockPainter:
         self.crossing(painter, rect)
         painter.setFont(font)
         self.words(painter, rect, drawn, ink, visible, fill, edge)
+
+    def history_tag(self, painter: QPainter, rect: QRectF, drawn: Drawn) -> None:
+        """One pill per block state, stacked from the top inside the block."""
+        tags = block_tag_words(drawn)
+        if not tags:
+            return
+        pad, gap = 3.0, 3.0
+        inset = float(INNER_PAD)
+        max_width = rect.width() - 2 * inset
+        top = rect.top() + inset
+        fill, ink, _outline, _edge = self.fills(drawn)
+        for text in tags:
+            font = at_scale(painter.font(), "caption", self.scale(painter.font()), WEIGHT_STRONG)
+            warning = text == "Overdue"
+            lines = [text]
+            too_wide = QFontMetricsF(font).horizontalAdvance(text) + 2 * pad > max_width
+            if text == "Left from last week" and too_wide:
+                lines = ["Left from", "last week"]
+            while font.pointSizeF() > 7:
+                metrics = QFontMetricsF(font)
+                icon_side = max(8.0, metrics.height() - 2.0)
+                icon_room = icon_side + gap if warning else 0.0
+                width = max(metrics.horizontalAdvance(line) for line in lines) + 2 * pad + icon_room
+                height = len(lines) * metrics.height() + 2 * pad
+                if width <= max_width and top + height <= rect.bottom() - inset:
+                    break
+                font = shrink(font)
+            else:
+                continue
+            tag = QRectF(rect.left() + inset, top, width, height)
+            painter.save()
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(fill)
+            painter.drawRoundedRect(tag, 4, 4)
+            painter.setFont(font)
+            painter.setPen(ink)
+            left = tag.left() + pad
+            if warning:
+                painter.drawPixmap(
+                    QPointF(left, tag.top() + pad + 1),
+                    icons.pixmap("triangle-alert", ink.name(), round(icon_side)),
+                )
+                left += icon_room
+            for index, line in enumerate(lines):
+                painter.drawText(
+                    QRectF(
+                        left,
+                        tag.top() + pad + index * metrics.height(),
+                        metrics.horizontalAdvance(line) + 1,
+                        metrics.height(),
+                    ),
+                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                    line,
+                )
+            painter.restore()
+            top += height + gap
 
     def crossing(self, painter: QPainter, rect: QRectF, around: list[QRectF] | None = None) -> None:
         """The time now drawn again inside `rect`, over what a block has painted there, when the
@@ -326,15 +428,15 @@ class BlockPainter:
         shape = QPainterPath()
         shape.addRoundedRect(rect, RADIUS_BLOCK, RADIUS_BLOCK)
         painter.fillPath(shape, fill)
-        # Homework FlexWeek planned has a dashed edge, since the next plan may move it. One the student
-        # placed, or is holding to place, has a solid one, since no plan will.
         homework = drawn.work and not drawn.done
-        if outline is not None or homework:
+        if outline is not None or homework and (drawn.pinned or drawn.held):
             if outline is None:
-                mark = category_paint(drawn.category, self.colours)[1]
-                outline = QColor(mark or self.colours["block_edge"])
-            dashed = homework and not (drawn.pinned or drawn.held)
-            painter.setPen(QPen(outline, 2, Qt.PenStyle.DashLine if dashed else Qt.PenStyle.SolidLine))
+                fill_hex, mark = category_paint(drawn.category, self.colours)
+                if homework and fill_hex:
+                    outline = QColor(class_outline(self.colours, fill_hex))
+                else:
+                    outline = QColor(mark or self.colours["block_edge"])
+            painter.setPen(QPen(outline, 2))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), RADIUS_BLOCK - 1, RADIUS_BLOCK - 1)
         if edge is not None:
@@ -379,38 +481,115 @@ class BlockPainter:
         """The most a block can say without cutting a word: its title on up to two lines, its times,
         its length; then the title and its start on one line; with no room for three letters,
         nothing, and its colour says it is there. Returns where it wrote, for the now line to stop
-        short of."""
+        short of. Under its tag pills when `drawn.pills` is set."""
         title_font, small = self.fonts(painter.font())
-        # The words are laid out in the part of the block on screen, so the edge of `visible` never
-        # falls inside a word: the name stays in sight while the start of a long block is scrolled
-        # away, and a block just coming into view says what fits, or nothing but its colour.
-        trim = SHARED_TRIM if drawn.columns > 1 or (self.trims_narrow and rect.width() < NARROW_BLOCK) else 0
-        left, right = TEXT_LEFT - trim, TEXT_RIGHT - trim
-        start = QPointF(rect.left() + left, rect.top() + TEXT_TOP)
-        room = QRectF(start, QPointF(rect.right() - right, rect.bottom() - 1))
-        room = room.intersected(visible.adjusted(TEXT_TOP, TEXT_TOP, -right, -1))
         paper = fill if fill is not None else self.c("window")
         muted = QColor(block_time_colour(ink.name(), paper.name()))
         book = self._book_colour(drawn, ink, paper, edge)
         if drawn.held:
+            room = self._room(rect, drawn, visible, pills=False)
             refused = drawn.verdict is not None and not drawn.verdict.ok
             fits = QFontMetricsF(small).horizontalAdvance(drawn.detail) <= room.width()
             words = drawn.detail if fits else ""
             lay = held_layout(drawn.title, words, title_font, small, room, book is not None)
             return _paint_layout(
-                painter, lay, title_font, small, ink, self.c("error") if refused else muted, book,
+                painter,
+                lay,
+                title_font,
+                small,
+                ink,
+                self.c("error") if refused else muted,
+                book,
                 icon_name=category_icon(drawn.category) or BOOK,
+                block=rect,
             )
+        lay = self._lay(title_font, small, rect, drawn, visible, pills=drawn.pills)
+        return _paint_layout(
+            painter,
+            lay,
+            title_font,
+            small,
+            ink,
+            muted,
+            book,
+            muted,
+            icon_name=category_icon(drawn.category) or BOOK,
+            block=rect,
+        )
+
+    def _room(self, rect: QRectF, drawn: Drawn, visible: QRectF, *, pills: bool) -> QRectF:
+        """Where a block's words may go: from its top, or under its pills when `pills` is set."""
+        # The words are laid out in the part of the block on screen, so the edge of `visible` never
+        # falls inside a word: the name stays in sight while the start of a long block is scrolled
+        # away, and a block just coming into view says what fits, or nothing but its colour.
+        trim = SHARED_TRIM if drawn.columns > 1 or (self.trims_narrow and rect.width() < NARROW_BLOCK) else 0
+        left, right = TEXT_LEFT - trim, TEXT_RIGHT - trim
+        tag_top = self._tag_stack_bottom(drawn, rect) - rect.top() if pills else 0.0
+        start = QPointF(rect.left() + left, rect.top() + max(float(TEXT_TOP), tag_top))
+        room = QRectF(start, QPointF(rect.right() - right, rect.bottom() - INNER_PAD))
+        return room.intersected(visible.adjusted(INNER_PAD, INNER_PAD, -right, -INNER_PAD))
+
+    def _lay(
+        self,
+        title_font: QFont,
+        small: QFont,
+        rect: QRectF,
+        drawn: Drawn,
+        visible: QRectF,
+        *,
+        pills: bool,
+    ) -> list[Written]:
+        """What a block says, and where, under its pills or from its top (see `words`)."""
+        room = self._room(rect, drawn, visible, pills=pills)
         # One line may take the block's whole height: at Large text a half-hour on the week is one
         # caption line exactly, and High contrast's outlined Dinner said nothing, an empty box.
         tight = QRectF(room.left(), max(rect.top(), visible.top(), room.top() - TEXT_TOP), room.width(), 0)
         tight.setBottom(min(rect.bottom(), visible.bottom()))
         shown = (self.measures["show_times"], self.measures["show_lengths"])
-        lay = block_layout(
-            drawn, title_font, small, room, tight=tight, wide=self.wide, book=book is not None, shown=shown
+        book = category_icon(drawn.category) is not None
+        return block_layout(
+            drawn, title_font, small, room, tight=tight, wide=self.wide, book=book, shown=shown
         )
-        return _paint_layout(painter, lay, title_font, small, ink, muted, book, muted,
-                             icon_name=category_icon(drawn.category) or BOOK)
+
+    def pills_fit(self, font: QFont, rect: QRectF, drawn: Drawn, visible: QRectF) -> bool:
+        """Whether a block's pills go above its words. They do only when the block has a time line to
+        keep, and the time line and the name are the same with them as without: a pill never pushes the
+        time or the name out. Otherwise the pills are dropped and their words stay in the tooltip and
+        the accessible name (N11)."""
+        if drawn.held or not self.draws_pills or not block_tag_words(drawn):
+            return False
+        title_font, small = self.fonts(font)
+        bare = self._lay(title_font, small, rect, drawn, visible, pills=False)
+        under = self._lay(title_font, small, rect, drawn, visible, pills=True)
+        # The time line is a range or a start, not the length or the flags on their own.
+        clock = {drawn.times, clock_label(drawn.span.start), short_clock(drawn.span.start)}
+        times = _time_lines(bare)
+        has_time = any(line in clock for line in times)
+        return has_time and times == _time_lines(under) and _name_lines(under) == _name_lines(bare)
+
+    def title_shown(self, font: QFont, rect: QRectF, drawn: Drawn, visible: QRectF) -> bool:
+        """Whether the block's name is written on it, as opposed to dropped for its times (T-W35)."""
+        title_font, small = self.fonts(font)
+        return any(line.title for line in self._lay(title_font, small, rect, drawn, visible, pills=False))
+
+    def _tag_stack_bottom(self, drawn: Drawn, rect: QRectF) -> float:
+        """Where the tag pills end, so words stay below them."""
+        tags = block_tag_words(drawn)
+        if not tags:
+            return rect.top() + INNER_PAD
+        pad, gap = 3.0, 3.0
+        top = rect.top() + INNER_PAD
+        font = at_scale(caption(QFont()), "caption", self.scale(QFont()), WEIGHT_STRONG)
+        for text in tags:
+            lines = [text]
+            if text == "Left from last week":
+                metrics = QFontMetricsF(font)
+                if metrics.horizontalAdvance(text) + 2 * pad > rect.width() - 2 * INNER_PAD:
+                    lines = ["Left from", "last week"]
+            metrics = QFontMetricsF(font)
+            height = len(lines) * metrics.height() + 2 * pad
+            top += height + gap
+        return top
 
     def _book_colour(self, drawn: Drawn, ink: QColor, paper: QColor, edge: QColor | None) -> QColor | None:
         """A category icon is the category's mark, moved only as far as 4.5 to 1 on its own block takes
@@ -632,6 +811,28 @@ def word_elide(text: str, metrics: QFontMetricsF, width: float) -> str:
     return metrics.elidedText(text, Qt.TextElideMode.ElideRight, width)
 
 
+def _time_lines(lay: list[Written]) -> list[str]:
+    """The lines of a block's layout that are times, lengths or flags, not its name."""
+    return [line.text for line in lay if not line.title]
+
+
+def _name_lines(lay: list[Written]) -> list[str]:
+    """The lines of a block's layout that are its name."""
+    return [line.text for line in lay if line.title]
+
+
+def _fit_times_line(times: str, start: str, metrics: QFontMetricsF, width: float) -> str | None:
+    """The range on one line in `width`. A range that does not fit whole is never cut part-way:
+    the start time stands alone, and the full range stays in the tooltip (T-W35)."""
+    if not times:
+        return None
+    if metrics.horizontalAdvance(times) <= width:
+        return times
+    if metrics.horizontalAdvance(start) <= width:
+        return start
+    return None
+
+
 def name_kept(lines: list[str], title: str) -> int:
     """How much of a block's name these lines of it keep: 3 the whole of it, 2 shortened at a word,
     1 cut inside a word ("Robot…" for "Robotics club"), 0 nothing."""
@@ -718,7 +919,8 @@ def _block_words(
     indent = _book_room(tm) if book else 0.0
     width, height = room.width(), room.height()
     tl, sl = tm.lineSpacing(), sm.lineSpacing()
-    if width < indent + tm.horizontalAdvance(drawn.title.strip()[:3]) or tight.height() + 0.5 < tl:
+    # A block too short for its name may still have room for its time line (T-W35).
+    if width < indent + tm.horizontalAdvance(drawn.title.strip()[:3]) or tight.height() + 0.5 < min(tl, sl):
         return []
     # One line starts where the usual margin puts it, or higher on a block too short for that.
     line_top = room.top() if height + 0.5 >= tl else tight.top()
@@ -729,24 +931,34 @@ def _block_words(
         return _wide_layout(drawn, tm, sm, room, line_top, indent, book)
 
     def stack(most: int, extras: tuple[str, ...], cut: bool) -> list[Written] | None:
-        if any(sm.horizontalAdvance(extra) > width for extra in extras):
-            return None
-        count = min(len(lines), most)
-        need = tl * count + sl * len(extras)
-        if count > 1 or extras:
-            if need > budget + 0.5:
+        fitted: list[str] = []
+        for extra in extras:
+            if extra == times:
+                line = _fit_times_line(extra, clock_label(drawn.span.start), sm, width)
+            elif sm.horizontalAdvance(extra) <= width:
+                line = extra
+            else:
+                line = None
+            if line is None:
                 return None
-            top = room.top() if height + 0.5 >= need else tight.top()
-        else:
-            top = line_top
+            fitted.append(line)
+        count = min(len(lines), most)
+        need = tl * count + sl * len(fitted)
+        if need > budget + 0.5:
+            return None
+        top = room.top() if height + 0.5 >= need else tight.top()
         if not cut and (not whole or len(lines) > most):
             return None
+        clamped = _clamp(lines, most, tm, width, indent)
+        # A name cut to fewer than three letters says nothing (decision 14 of 0.17).
+        if cut and clamped and clamped[0].endswith("…") and len(clamped[0][:-1]) < 3:
+            return None
         out = []
-        for at, text in enumerate(_clamp(lines, most, tm, width, indent)):
+        for at, text in enumerate(clamped):
             left = room.left() + (indent if at == 0 else 0)
             out.append(Written(text, True, QRectF(left, top, room.right() - left, tl), book=book and at == 0))
             top += tl
-        for extra in extras:
+        for extra in fitted:
             out.append(Written(extra, False, QRectF(room.left(), top, width, sl)))
             top += sl
         return out
@@ -767,31 +979,22 @@ def _block_words(
         written.append(Written(after, False, QRectF(at, line_top + _beside(tm, sm), after_width + 1, sl)))
         return written
 
-    start = short_clock(drawn.span.start) if shown[0] else ""
-    if drawn.short:
-        # Hours too narrow for the name and its times: the name whole, times left to the editor.
-        time_ways = []
-        name_ways = [lambda cut: stack(3, (), cut), lambda cut: stack(1, (), cut)]
-    else:
-        said = ((drawn.done, "Finished"), (drawn.missed, "Missed"))
-        flags = " · ".join(word for flag, word in said if flag)
-        times = drawn.times if shown[0] else ""
-        length = drawn.length if shown[1] else flags
-        # Two title lines in a full column; one when the block shares the column, so a leftover
-        # word of the title is not read as another event beside the neighbour.
-        title_lines = 1 if drawn.columns > 1 else 2
-        time_ways = [
-            lambda cut, most=title_lines: stack(most, tuple(part for part in (times, length) if part), cut),
-            lambda cut, most=title_lines: stack(most, tuple(part for part in (times,) if part), cut),
-            lambda cut: stack(1, tuple(part for part in (times,) if part), cut),
-            lambda cut, most=title_lines: stack(most, (start,) if start else (), cut),
-            lambda cut: stack(1, (start,) if start else (), cut),
-            lambda cut: one_line(start, cut) if start else None,
-        ]
-        name_ways = [
-            lambda cut, most=title_lines: stack(most, (), cut),
-            lambda cut: stack(1, (), cut),
-        ]
+    said = ((drawn.done, "Finished"), (drawn.missed, "Missed"))
+    flags = " · ".join(word for flag, word in said if flag)
+    times = drawn.times if shown[0] else ""
+    length = drawn.length if shown[1] else flags
+    # Two title lines in a full column; one when the block shares the column, so a leftover
+    # word of the title is not read as another event beside the neighbour.
+    title_lines = 1 if drawn.columns > 1 or drawn.short else 2
+    time_ways = [
+        lambda cut, most=title_lines: stack(most, tuple(part for part in (times, length) if part), cut),
+        lambda cut, most=title_lines: stack(most, tuple(part for part in (times,) if part), cut),
+        lambda cut: stack(1, tuple(part for part in (times,) if part), cut),
+    ]
+    name_ways = [
+        lambda cut, most=title_lines: stack(most, (), cut),
+        lambda cut: stack(1, (), cut),
+    ]
 
     def kept(lay: list[Written] | None) -> int:
         if not lay:
@@ -801,33 +1004,19 @@ def _block_words(
     # Uncut times, then an uncut wrapped name while two title lines fit (Swimming / gala), then a
     # start kept by shortening the title at a word. Cutting inside a word to keep the start used to
     # beat dropping the icon, so "Piano lesson" became "Pian…".
-    wrap = budget + 0.5 >= 2 * tl
-    shortened = word_elide(drawn.title, tm, width)
-    name_at_a_word = name_kept([shortened], drawn.title) >= 2
     for way in time_ways:
         found = way(False)
         if found is not None:
             return found
-    if wrap:
-        for way in name_ways:
-            found = way(False)
-            if found is not None:
-                return found
     for way in time_ways:
         found = way(True)
-        if found is not None and kept(found) >= 2:
+        if found is not None:
             return found
+    time_line = _fit_times_line(times, clock_label(drawn.span.start), sm, width) if times else None
+    if time_line and sl <= budget + 0.5:
+        return [Written(time_line, False, QRectF(room.left(), line_top, width, sl))]
     for way in name_ways:
         found = way(False)
-        if found is not None:
-            return found
-    if name_at_a_word:
-        for way in name_ways:
-            found = way(True)
-            if found is not None and kept(found) >= 2:
-                return found
-    for way in time_ways:
-        found = way(True)
         if found is not None:
             return found
     for way in name_ways:
@@ -932,7 +1121,9 @@ def _paint_layout(
     muted: QColor,
     book: QColor | None,
     pin: QColor | None = None,
-    *, icon_name: str = BOOK,
+    *,
+    icon_name: str = BOOK,
+    block: QRectF | None = None,
 ) -> list[QRectF]:
     """Writes the lines and draws their icons, and returns where: each line's words as wide as they
     are, not the room they were given, and each icon."""
@@ -951,8 +1142,12 @@ def _paint_layout(
         if line.book and book is not None:
             left = line.box.left() - _book_room(metrics)
             side = book_px(metrics)
-            # A line shorter than the icon lets it hang below, never above the block's top.
             top = line.box.top() + max(metrics.height() - side, 0) / 2
+            if block is not None:
+                left = max(block.left() + INNER_PAD, left)
+                top = max(block.top() + INNER_PAD, top)
+                if top + side > block.bottom() - INNER_PAD:
+                    top = block.bottom() - INNER_PAD - side
             painter.drawPixmap(QPointF(left, top), icons.pixmap(icon_name, book.name(), side, ratio))
             written.append(QRectF(left, top, side, side))
         if line.pin and pin is not None:
@@ -1000,7 +1195,7 @@ class HoursCanvas(QWidget):
         self.setAccessibleDescription(
             "Drag a block to move it, its top or bottom edge to resize it, or empty time to add something. "
             "Click a block, or press Enter, to open it. Right-click it for more. "
-            "Press Ctrl+Shift+L for a list of this week."
+            "Press Ctrl+Shift+L for the week as a list."
         )
         self.hand, self.painter = hand, painter
         self._lay_out = lay_out
@@ -1171,6 +1366,9 @@ class HoursCanvas(QWidget):
                     pinned=item.pinned,
                     axis=track.axis,
                     short=self.short_words,
+                    history=item.history,
+                    history_due=item.due,
+                    placed_by_plan=plan_placed(item),
                 )
             )
         if (
@@ -1280,7 +1478,11 @@ class HoursCanvas(QWidget):
                         rect = between(start, rect, self._progress)
                     elif not drawn.held and key in self._fresh:
                         painter.setOpacity(self._progress)
+                    pills = self.painter.pills_fit(painter.font(), rect, drawn, upright_visible)
+                    drawn = replace(drawn, pills=pills)
                     self.painter.block(painter, rect, drawn, upright_visible)
+                    if pills:
+                        self.painter.history_tag(painter, rect, drawn)
             if (
                 preview is not None
                 and held is not None
@@ -1488,6 +1690,7 @@ class HoursCanvas(QWidget):
         point = event.position()
         hit = self._block_at(point)
         track = self.track_at(point)
+        self.setToolTip(self._block_tip(hit) if hit is not None else "")
         if hit is not None:
             kind = self._edge_kind(hit[1], hit[2].upright(point), hit[2])
             self.setCursor(
@@ -1505,6 +1708,40 @@ class HoursCanvas(QWidget):
         if hover != self._hover:
             self._hover = hover
             self.update()
+
+    def _block_tip(self, hit: tuple[Drawn, QRectF, LinearTrack]) -> str:
+        """A block's name and its words, shown on hover when the block has no room for its name."""
+        drawn, rect, track = hit
+        visible = track.transform.inverted()[0].mapRect(self._visible())
+        if self.painter.title_shown(self.font(), rect, drawn, visible):
+            return ""
+        return f"{drawn.title} · {drawn.detail}"
+
+    def _focus_hit(self) -> tuple[Drawn, QRectF, LinearTrack] | None:
+        block = self.focus_block()
+        if block is None or self._cursor is None:
+            return None
+        track = self.track_for(*self._cursor)
+        if track is None:
+            return None
+        for drawn, rect in self.drawn(track):
+            if drawn.block_id == block[0] and not drawn.held:
+                return drawn, rect, track
+        return None
+
+    def _show_focus_tip(self) -> None:
+        """The hover tooltip also shows on keyboard focus when the block dropped its name (T-W35)."""
+        if not self.hasFocus():
+            QToolTip.hideText()
+            return
+        hit = self._focus_hit()
+        tip = self._block_tip(hit) if hit is not None else ""
+        if not tip:
+            QToolTip.hideText()
+            return
+        rect = self.focus_rect()
+        at = rect.center().toPoint() if rect is not None else QPoint(0, 0)
+        QToolTip.showText(self.mapToGlobal(at), tip, self)
 
     def _resize_cursor(self, track: LinearTrack) -> Qt.CursorShape:
         return Qt.CursorShape.SizeVerCursor if track.axis is Axis.DOWN else Qt.CursorShape.SizeHorCursor
@@ -1573,6 +1810,7 @@ class HoursCanvas(QWidget):
 
     def focusOutEvent(self, event: QFocusEvent) -> None:  # noqa: N802
         super().focusOutEvent(event)
+        QToolTip.hideText()
         self.update()
 
     # Where the keyboard is
@@ -1626,6 +1864,7 @@ class HoursCanvas(QWidget):
                 self.reveal(placed[1], placed[2], placed[2] + SLOT_MIN)
         elif ring and self._here() is not None:
             self._arrive()
+        self._show_focus_tip()
         self.update()
 
     def _taken(self, day: int, minute: int) -> bool:
@@ -1687,6 +1926,7 @@ class HoursCanvas(QWidget):
             self.hand.clear_selection()
         if not self.in_view(day, minute):
             self.reveal(day, minute, minute + SLOT_MIN)
+        self._show_focus_tip()
         self.update()
 
     def _ask_here(self) -> None:
