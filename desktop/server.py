@@ -52,6 +52,7 @@ class LocalServer:
         )
         self._server = uvicorn.Server(config)
         self._thread: threading.Thread | None = None
+        self.failure = ""
 
     def start(self, timeout: float = STARTUP_TIMEOUT_S) -> str:
         """Serve, block until the port is accepting, and return the origin."""
@@ -62,13 +63,18 @@ class LocalServer:
             if self._server.started:
                 return self.origin
             if not self._thread.is_alive():
-                raise RuntimeError("FlexWeek server thread stopped before it began serving")
+                why = f": {self.failure}" if self.failure else ""
+                raise RuntimeError(f"FlexWeek server thread stopped before it began serving{why}")
             time.sleep(0.02)
         self.stop()
         raise TimeoutError(f"FlexWeek server did not start within {timeout:g}s")
 
     def _serve(self) -> None:
-        self._server.run(sockets=[self._socket])
+        try:
+            self._server.run(sockets=[self._socket])
+        except BaseException as error:  # kept for start() to say why; the thread ends either way
+            self.failure = f"{type(error).__name__}: {error}"
+            raise
 
     @property
     def is_running(self) -> bool:

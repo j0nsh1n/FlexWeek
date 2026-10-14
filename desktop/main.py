@@ -285,6 +285,12 @@ def main(argv: list[str] | None = None) -> int:
             server = LocalServer(database)
             origin = server.start()
         except (OSError, RuntimeError, TimeoutError) as error:
+            if report is not None:
+                # A smoke run is read by CI from its report; a dialog there says nothing to anyone.
+                stage = f"local server did not start: {error}"
+                payload = {"ok": False, "stage": stage, "window_visible": False}
+                report.write_text(json.dumps(payload) + "\n")
+                return 3
             QMessageBox.critical(None, "FlexWeek", f"Could not start FlexWeek: {error}")
             return 3
         app.aboutToQuit.connect(server.stop)
