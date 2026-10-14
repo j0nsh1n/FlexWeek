@@ -26,7 +26,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtWidgets import QAbstractButton, QApplication, QPushButton, QScrollBar
 
     from desktop.native import motion
-    from desktop.native.calendar import monday_of, sunday_due
+    from desktop.native.calendar import sunday_due
     from desktop.native.hours.geometry import Axis
     from desktop.native.hours.zoom import HoursScroll
     from desktop.native.layouts.registry import sanitize_layout
@@ -37,6 +37,10 @@ if importlib.util.find_spec("PySide6") is not None:
 PASSWORD = "a-long-test-password"
 DESIGNS = ("classic", "timeline", "mission", "bento", "retro", "clay")
 NOW = 15 * 60 + 40
+# Thursday 15:40 of the week beginning 2026-10-12. date.today() made Today and Month follow the
+# machine's calendar, so a six-week month or a Sunday could change what Mission paints.
+HELD = datetime.fromisoformat("2026-10-15T15:40")
+HELD_MONDAY = "2026-10-12"
 
 
 @pytest.fixture(scope="module")
@@ -62,17 +66,15 @@ def look_file() -> Path:
 
 @pytest.fixture()
 def window(qapp: QApplication, tmp_path: Path) -> Iterator[NativeWindow]:
-    """Signed in with the clock held at Thursday 15:40 from before the week is first shown: school
-    on weekdays from 08:00, dinner every day at 18:00, and nothing next week."""
+    """Signed in with the clock held at Thursday 15:40 on 2026-10-15 from before the week is first
+    shown: school on weekdays from 08:00, dinner every day at 18:00, and nothing next week."""
     # A look saved by an earlier test on this worker would choose another day screen (One thing has no
     # Running late), and the window reads it at start.
     look_file().unlink(missing_ok=True)
     server = LocalServer(tmp_path / "flexweek.db")
     server.start()
     made = NativeWindow(server.origin)
-    thursday = datetime.fromisoformat(monday_of(date.today().isoformat())) + timedelta(days=3)
-    held = thursday + timedelta(minutes=NOW)
-    made.session.now_ms = lambda: int(held.timestamp() * 1000)
+    made.session.now_ms = lambda: int(HELD.timestamp() * 1000)
     made.resize(1280, 860)
     made.show()
     try:
@@ -451,7 +453,7 @@ def test_today_opens_this_week_at_now_and_leaves_the_week_it_was_pressed_from_wh
     left = bar().value()
     assert abs(left - opened) == 40, f"{design}: next week's hours have no room to scroll"
     press("todayWeek")
-    assert session.week_start == monday_of(date.today().isoformat())
+    assert session.week_start == HELD_MONDAY
     opens_at(qapp, window, NOW, f"{design} Today from next week")
     press("nextWeek")
     assert bar().value() == left, f"{design}: Today lost where next week was scrolled to"
