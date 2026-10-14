@@ -51,9 +51,16 @@ def open_settings(qapp: QApplication, window: NativeWindow, size: tuple[int, int
 
 
 def show_section(qapp: QApplication, page: SettingsPage, row: int) -> QWidget:
+    from desktop.native.layouts.dialog import DesignPicker
+
     page.nav.setCurrentRow(row)
     for _ in range(12):
         qapp.processEvents()
+    # The design cards draw their pictures one a turn after the page shows (on Look since 1.0.0 they
+    # lead the page): a page compared with itself a moment later must have them all drawn first.
+    for picker in page.findChildren(DesignPicker):
+        picker.warm()
+    qapp.processEvents()
     return page.stack.widget(row).widget()
 
 
