@@ -55,11 +55,16 @@ Extract, then open the file named FlexWeek. Needs a 64-bit Linux desktop (GNOME,
 
 `FlexWeek-x86_64.AppImage` is the same app in one file. If it won't start (missing FUSE), run `chmod +x FlexWeek-x86_64.AppImage && ./FlexWeek-x86_64.AppImage --appimage-extract`, which unpacks a `squashfs-root` folder, then run `./squashfs-root/AppRun`. Without FUSE, the tarball above is the reliable choice.
 
+## Download for Android
+`FlexWeek-Android-1.0.0.apk`
+
+The phone app, for Android 8.0 or newer. Open the file on your phone; if it asks, allow installing apps from your browser or files app, then install. It is not on Google Play yet. Then link it to FlexWeek on your computer: on the computer open Settings > This computer > Devices > Pair a phone, and type the 8-digit code on the phone. The phone app works with the computer app; it does not replace it.
+
 ## Chromebooks
-Not supported. FlexWeek is a Windows and Linux desktop app, and there is no web version.
+Not supported. The desktop app is for Windows and Linux, there is no web version, and the Android app has not been tried on a Chromebook.
 
 ## Checksums
-Optional. `FlexWeek-Windows-x64-Setup.exe.sha256`, `FlexWeek-Windows-x64.msi.sha256`, `FlexWeek-Linux-x86_64.tar.gz.sha256` and `FlexWeek-x86_64.AppImage.sha256` on this page. Each names only its file, so `sha256sum -c` works in the folder you downloaded to.
+Optional. `FlexWeek-Windows-x64-Setup.exe.sha256`, `FlexWeek-Windows-x64.msi.sha256`, `FlexWeek-Linux-x86_64.tar.gz.sha256`, `FlexWeek-x86_64.AppImage.sha256` and `FlexWeek-Android-1.0.0.apk.sha256` on this page. Each names only its file, so `sha256sum -c` works in the folder you downloaded to.
 
 ## First open
 The first screen is Sign in. Choose "New here? Create an account" under it. Setup then goes a page at a time: a style, your week, how homework gets a time, reminders and the alarm sound, and your first homework. You can skip any page.

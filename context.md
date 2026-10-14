@@ -135,4 +135,12 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
-- 2026-10-14, fix-e in `/home/jonathans/.worktrees/fw100-fix-e`, based on release head `44e5d727`. Items 9 and 10 are implemented; item 11 is in progress. Details and verification are in `~/.flexweek-ui-harness/scratch/1.0.0/gate/report-fix-e.md`.
+- 2026-10-14, `release/1.0.0` (worktree `~/.worktrees/flexweek-0190`). 1.0.0 is being released today: the
+  fix lanes from Fable's deep audit and Jonathan's own notes (per-design looks, week start, setup polish,
+  Month loading, rail, forms, pairing, Devices clock count) and the gate triage are merged. Reports and
+  pictures: `~/.flexweek-ui-harness/scratch/1.0.0/` (gate/, shots-fix/, review-page/).
+- The Android release key lives in `~/.config/flexweek-android/` (outside the repo). Back it up: every
+  later phone update must be signed with it.
+- Known for 1.0.1: My day and One thing at 1024x640 Large text; Clay can stop with a block cut at the
+  card edge; the window's minimum height can follow the hidden sign-in page's.
+- Next: PR into main, CI, merge, publish v1.0.0 with docs/release-notes-v1.0.0.md and the Android APK.
