@@ -19,7 +19,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QPoint, QSize, QStandardPaths
     from PySide6.QtGui import QColor
-    from PySide6.QtWidgets import QApplication, QPushButton, QWidget
+    from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
 
     from desktop.native.calendar import monday_of
     from desktop.native.layouts.registry import sanitize_layout
@@ -29,6 +29,7 @@ if importlib.util.find_spec("PySide6") is not None:
         CURRENT,
         DONE,
         FINISHED,
+        FIRST,
         HOMEWORK,
         PENDING,
         REMINDERS,
@@ -208,3 +209,47 @@ def test_play_is_an_icon_in_the_looks_accent(dressed: tuple[SetupPage, dict]) ->
         assert inked, play.accessibleName()
         far = [seen.name() for seen in inked if apart(seen, accent) > 3]
         assert far == [], play.accessibleName()
+
+
+def test_the_style_pager_dots_share_one_box_and_only_the_current_one_is_accent(
+    qapp: QApplication, dressed: tuple[SetupPage, dict]
+) -> None:
+    """Jonathan saw one big blue dot and small grey marks; every dot is one size, centred on the arrows,
+    and the current one alone is filled in the accent."""
+    setup, palette = dressed
+    setup._show(STYLE)
+    qapp.processEvents()
+    carousel = setup.carousel
+    dots = list(carousel.dots.values())
+    assert len({(dot.width(), dot.height()) for dot in dots}) == 1
+    centre_y = {dot.geometry().center().y() for dot in dots} | {carousel.previous.geometry().center().y()}
+    assert max(centre_y) - min(centre_y) <= 1
+    current = carousel.key()
+    for key, dot in carousel.dots.items():
+        centre = dot.grab().toImage().pixelColor(dot.width() // 2, dot.height() // 2)
+        if key == current:
+            assert centre == QColor(palette["accent"]), key
+        else:
+            assert centre != QColor(palette["accent"]), key
+
+
+def test_a_homework_row_lines_its_fields_up_on_one_left_edge(
+    qapp: QApplication, dressed: tuple[SetupPage, dict]
+) -> None:
+    """The Takes stepper and its length chips sat 10 pixels right of the Name field, because an empty
+    grid column pushed them in. Name, Takes and the chips share one left edge, Due sits level with
+    Takes, and Remove sits level with the name field."""
+    setup, _palette = dressed
+    setup._show(FIRST)
+    setup._fill_first()
+    qapp.processEvents()
+    row = setup.homework_rows[0]
+    stepper = row.minutes.parentWidget()
+    takes = next(label for label in row.findChildren(QLabel) if label.text() == "Takes")
+    due = next(label for label in row.findChildren(QLabel) if label.text() == "Due")
+    remove = next(button for button in row.findChildren(QPushButton) if button.text() == "Remove")
+    assert row.name.geometry().left() == takes.geometry().left() == stepper.geometry().left()
+    assert stepper.chips[0].mapTo(row, QPoint(0, 0)).x() == stepper.geometry().left()
+    assert due.geometry().top() == takes.geometry().top()
+    assert due.geometry().left() - stepper.geometry().right() >= 16
+    assert remove.geometry().bottom() == row.name.geometry().bottom()
