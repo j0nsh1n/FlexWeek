@@ -919,40 +919,19 @@ class FittedButton(QPushButton):
 
 
 class StepCrumb(QPushButton):
-    """A three-step form crumb: elides from the end with … when the step bar has no room."""
+    """A step label sized to its words, so changing the form state never cuts its name."""
 
     def __init__(self, text: str, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._full = text
+        super().__init__(text, parent)
         self.setAccessibleName(text)
         self.setProperty("formStep", True)
         self.setProperty("quiet", True)
         self.setAutoDefault(False)
 
-    def set_full(self, text: str) -> None:
-        self._full = text
+    def set_full(self, text: str, tooltip: str = "") -> None:
+        self.setText(text)
         self.setAccessibleName(text)
-        self._fit()
-
-    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
-        super().resizeEvent(event)
-        self._fit()
-
-    def changeEvent(self, event: QEvent) -> None:  # noqa: N802
-        super().changeEvent(event)
-        if event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange):
-            self.updateGeometry()
-            self._fit()
-
-    def _fit(self) -> None:
-        room = max(0, self.contentsRect().width() - 12)
-        shown = (
-            self.fontMetrics().elidedText(self._full, Qt.TextElideMode.ElideRight, room)
-            if room
-            else self._full
-        )
-        if shown != self.text():
-            self.setText(shown)
+        self.setToolTip(tooltip)
 
 
 class PlanButton(FittedButton):
@@ -3475,14 +3454,11 @@ class BlockDialog(Dialog):
             crumbs.setSpacing(8)
             self._crumbs: list[StepCrumb] = []
             for index, name in enumerate(("What", "When", "Category")):
-                if index:
-                    crumbs.addWidget(QLabel("·"))
                 crumb = StepCrumb(f"{index + 1} {name}")
                 crumb.setObjectName(f"blockCrumb{index}")
                 crumb.clicked.connect(self._crumb_clicked)
-                crumbs.addWidget(crumb)
+                crumbs.addWidget(crumb, 1)
                 self._crumbs.append(crumb)
-            crumbs.addStretch(1)
             self.step_prompt = QLabel("What is it?")
             self.step_prompt.setObjectName("blockPrompt")
             body_layout.addWidget(self.step_bar)
@@ -3745,7 +3721,7 @@ class BlockDialog(Dialog):
         done = (self.title.text().strip(), f"{days}, {clock_text(self.start.minutes())}")
         for index, crumb in enumerate(self._crumbs):
             if index < step:
-                crumb.set_full(f"✓ {done[index]}")
+                crumb.set_full(f"✓ {names[index]}", done[index])
                 crumb.setEnabled(True)
             else:
                 crumb.set_full(f"{index + 1} {names[index]}")
@@ -4392,14 +4368,11 @@ class HomeworkDialog(Dialog):
             crumbs.setSpacing(8)
             self._crumbs: list[StepCrumb] = []
             for index, name in enumerate(("What", "When", "How long")):
-                if index:
-                    crumbs.addWidget(QLabel("·"))
                 crumb = StepCrumb(f"{index + 1} {name}")
                 crumb.setObjectName(f"homeworkCrumb{index}")
                 crumb.clicked.connect(self._crumb_clicked)
-                crumbs.addWidget(crumb)
+                crumbs.addWidget(crumb, 1)
                 self._crumbs.append(crumb)
-            crumbs.addStretch(1)
             self.step_prompt = QLabel("What is it?")
             self.step_prompt.setObjectName("homeworkPrompt")
             body_layout.addWidget(self.step_bar)
@@ -4919,7 +4892,8 @@ class HomeworkDialog(Dialog):
         field.setFocus(Qt.FocusReason.OtherFocusReason)
         if isinstance(field, ClockField):
             field.lineEdit().selectAll()
-        self._scroll.ensureWidgetVisible(line)
+        self.refit()
+        QTimer.singleShot(0, self, partial(self._scroll.ensureWidgetVisible, line))
         announce(field, text, assertive=True)
 
     def _clear_title_problem(self, *_args: object) -> None:
@@ -5144,7 +5118,7 @@ class HomeworkDialog(Dialog):
         done = (self.title.text().strip(), f"due {self.due.date.text()}, {when}")
         for index, crumb in enumerate(self._crumbs):
             if index < step:
-                crumb.set_full(f"✓ {done[index]}")
+                crumb.set_full(f"✓ {names[index]}", done[index])
                 crumb.setEnabled(True)
             else:
                 crumb.set_full(f"{index + 1} {names[index]}")

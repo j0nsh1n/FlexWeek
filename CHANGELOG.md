@@ -6,6 +6,8 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Fixed
+- Add homework and fixed-time crumbs keep their step names at every text size. The empty-title
+  message stays visible in the sheet.
 - Left from last week is shown only when homework had a session in an earlier saved week.
 - Month and My day follow the computer's Sunday or Monday week-start choice; the Week view stays Monday to Sunday.
 - The Devices card reports changes held back because a phone clock looks wrong. Pair a phone shows the code without scan instructions, and Android pairing points to the correct desktop settings path.
