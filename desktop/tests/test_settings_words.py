@@ -142,12 +142,13 @@ def test_this_build_says_1_0_0_and_is_offered_only_a_newer_release(
     dialog.close_page()
 
 
-def test_appearance_keeps_text_size_and_colours_before_the_designs_and_ends_with_animations(
+def test_appearance_puts_the_design_before_the_colours_that_fine_tune_it(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
 ) -> None:
-    """Grok Bot's 0.17.0 audit (X1, A11): text size and Colours come before design cards, and fine-tuning
-    stays with Colours."""
+    """Jonathan, 1.0.0: the design and its looks come first, then Colours, which fine-tunes them. Text
+    size stays one short row at the top, in view without scrolling (Grok Bot's 0.17.0 audit, X1, A11);
+    the day screen and Animations follow."""
     dialog = prefs(window, {"main": "timeline", "day": "one", "options": {}})
     appearance = page(dialog, 0)
     assert appearance.findChildren(QGroupBox) == [], "no box inside the page's box"
@@ -155,9 +156,8 @@ def test_appearance_keeps_text_size_and_colours_before_the_designs_and_ends_with
         (label for label in appearance.findChildren(QLabel) if label.isVisibleTo(dialog) and label.text()),
         key=lambda label: top(label, appearance),
     )
-    # Text size is its own card before the design pickers, so it remains in view without scrolling.
-    assert [label.text() for label in shown[:5]] == [
-        "Look", "Text", "Text size", "Your text size stays the same when you change looks.", "Colours",
+    assert [label.text() for label in shown[:4]] == [
+        "Look", "Text", "Text size", "Your text size stays the same when you change looks.",
     ]
     assert not any("has its own colours" in label.text() for label in shown)
     notes = [label.text() for label in appearance.findChildren(QLabel, "settingsCardNote")]
@@ -166,17 +166,15 @@ def test_appearance_keeps_text_size_and_colours_before_the_designs_and_ends_with
     )
     assert notes.count(design_line) == 1, "Main view says once what a design is"
     order = [
-        dialog.look,
-        dialog.fine_tune,
         appearance.findChild(QWidget, "layoutMain"),
         appearance.findChild(DesignPicker, "layoutMain"),
+        dialog.look,
+        dialog.fine_tune,
         appearance.findChild(QWidget, "layoutDay"),
         dialog.motion,
     ]
     tops = [top(widget, appearance) for widget in order]
     assert tops == sorted(tops), tops
-    # What the note says, where it applies: under the colours it is about, once a design wears
-    # colours of its own rather than the student's look.
     main = appearance.findChild(DesignPicker, "layoutMain")
     assert main is not None and main.cards
     assert main.accessibleName() == "Main view"
@@ -316,8 +314,9 @@ def test_every_heading_on_appearance_stands_out_from_the_rows_under_it(
         ),
         key=lambda label: top(label, appearance),
     )
+    # Text size is one short row ahead of the design, so it is in view without scrolling.
     assert [label.text() for label in headings] == [
-        "Text", "Colours", "Main view", "Day screen", "Every screen",
+        "Text", "Main view", "Colours", "Day screen", "Every screen",
     ]
     plain = appearance.findChild(QLabel, "settingsCardNote")
     for heading in headings:

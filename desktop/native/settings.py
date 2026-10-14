@@ -1031,10 +1031,11 @@ class SettingsPage(QWidget):
         self.changed.connect(self._fit_look_cards)
         everywhere_card, everywhere = _card("Every screen")
         everywhere.addRow("Animations", self.motion)
-        # Text size, then Colours: it is what most students change, and below every design card it was
-        # not found (Grok Bot's 0.17.0 audit, X1 and A11).
+        # The design and its looks before Colours, which fine-tunes them (Jonathan, 1.0.0). Text size is
+        # one short row ahead of both, so it is in view without scrolling: below every design card it
+        # was not found (Grok Bot's 0.17.0 audit, X1 and A11).
         appearance = _section_page(
-            "Look", (text_card, self.colours_card, main_section, day_section, everywhere_card)
+            "Look", (text_card, main_section, self.colours_card, day_section, everywhere_card)
         )
         planning_card, planning_form = _card("How homework gets a time")
         self.planning_style = QButtonGroup(planning_card)
