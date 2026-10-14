@@ -26,6 +26,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.look import pack_stylesheet, resolved_palette
     from desktop.native.setup import (
         BADGE_PX,
+        COLOUR_THUMB,
         CURRENT,
         DONE,
         FINISHED,
@@ -34,6 +35,7 @@ if importlib.util.find_spec("PySide6") is not None:
         PENDING,
         REMINDERS,
         SETUP_COLUMN,
+        SETUP_SCHOOL_ID,
         SKIPPED,
         STYLE,
         WEEK,
@@ -41,6 +43,7 @@ if importlib.util.find_spec("PySide6") is not None:
         SetupState,
         step_badge,
     )
+    from desktop.native.weekmodel import set_clock_24h
     from desktop.native.widgets import control_art
 
 STEPS = (STYLE, WEEK, HOMEWORK, REMINDERS, DONE)
@@ -253,3 +256,83 @@ def test_a_homework_row_lines_its_fields_up_on_one_left_edge(
     assert due.geometry().top() == takes.geometry().top()
     assert due.geometry().left() - stepper.geometry().right() >= 16
     assert remove.geometry().bottom() == row.name.geometry().bottom()
+
+
+def test_you_are_set_writes_times_on_the_accounts_12_hour_clock(
+    qapp: QApplication, dressed: tuple[SetupPage, dict]
+) -> None:
+    """Jonathan's 12-hour account saw 08:00 and 23:00 on You're set. The summary must use the clock
+    the account chose: 8:00 AM and 11:00 PM here."""
+    setup, _palette = dressed
+    school = {
+        "id": SETUP_SCHOOL_ID,
+        "title": "School",
+        "start": "08:00",
+        "duration_min": 390,
+        "days": [1, 2, 3, 4, 5],
+    }
+    state = SetupState(
+        "light-frost",
+        {"preset": "default", "knobs": {}},
+        sanitize_layout(None),
+        {"clock_24h": False, "day_cutoff": "23:00"},
+        [school],
+        monday_of("2026-09-23"),
+    )
+    setup.open(state, DONE)
+    qapp.processEvents()
+    summary = " | ".join(setup.summary_text())
+    assert "8:00 AM" in summary and "11:00 PM" in summary, summary
+    assert "08:00" not in summary and "23:00" not in summary, summary
+
+
+def test_you_are_set_ignores_a_stale_24_hour_clock_left_by_another_page(
+    qapp: QApplication, dressed: tuple[SetupPage, dict]
+) -> None:
+    """The clock is shared by the whole app. A 24-hour clock left behind must not reach the summary
+    of a 12-hour account."""
+    setup, _palette = dressed
+    school = {
+        "id": SETUP_SCHOOL_ID,
+        "title": "School",
+        "start": "08:00",
+        "duration_min": 390,
+        "days": [1, 2, 3, 4, 5],
+    }
+    state = SetupState(
+        "light-frost",
+        {"preset": "default", "knobs": {}},
+        sanitize_layout(None),
+        {"clock_24h": False, "day_cutoff": "23:00"},
+        [school],
+        monday_of("2026-09-23"),
+    )
+    setup.open(state, WEEK)
+    set_clock_24h(True)
+    setup._show(DONE)
+    qapp.processEvents()
+    assert "8:00 AM" in setup.summary_text()[1]
+    assert "11:00 PM" in setup.summary_text()[1]
+
+
+def test_you_are_set_shows_a_picture_of_the_week_beside_the_summary(
+    qapp: QApplication, dressed: tuple[SetupPage, dict]
+) -> None:
+    """Jonathan asked for a small live picture of the week with the chosen style, look and text size,
+    next to the words. Its frame is the colour page's preview size, and it holds a picture."""
+    setup, _palette = dressed
+    setup.open(
+        SetupState(
+            "light-frost",
+            {"preset": "default", "knobs": {}},
+            sanitize_layout(None),
+            {"clock_24h": False},
+            [],
+            monday_of("2026-09-23"),
+        ),
+        DONE,
+    )
+    qapp.processEvents()
+    assert setup.done_preview.width() == COLOUR_THUMB
+    assert not setup.done_preview.pixmap().isNull()
+    assert setup.done_preview.isVisibleTo(setup)

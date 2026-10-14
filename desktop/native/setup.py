@@ -1624,11 +1624,26 @@ class SetupPage(QWidget):
     def _build_done(self) -> QWidget:
         content = QWidget()
         content.setObjectName("setupRow")
-        self.summary = QGridLayout(content)
+        line = QHBoxLayout(content)
+        line.setContentsMargins(0, 0, 0, 0)
+        line.setSpacing(24)
+        self.summary = QGridLayout()
         self.summary.setContentsMargins(0, 0, 0, 0)
         self.summary.setHorizontalSpacing(18)
         self.summary.setVerticalSpacing(12)
         self.summary.setColumnStretch(1, 1)
+        line.addLayout(self.summary, 1)
+        # The week as it will look, drawn the way the look editor draws its picture of the week.
+        frame = QFrame()
+        frame.setObjectName("setupGroup")
+        framed = QVBoxLayout(frame)
+        framed.setContentsMargins(8, 8, 8, 8)
+        self.done_preview = QLabel()
+        self.done_preview.setObjectName("setupPreview")
+        self.done_preview.setFixedSize(COLOUR_THUMB, round(COLOUR_THUMB * 0.625))
+        self.done_preview.setAccessibleName("Preview of your week")
+        framed.addWidget(self.done_preview)
+        line.addWidget(frame, 0, Qt.AlignmentFlag.AlignTop)
         self.summary_rows: list[tuple[QLabel, QLabel, QPushButton]] = []
         for row, (name, steps) in enumerate(RAIL[:-1]):
             heading = _label(name, "setupSummaryName", wrap=False)
@@ -2416,6 +2431,9 @@ class SetupPage(QWidget):
     # Done
 
     def _fill_summary(self) -> None:
+        # The clock is one setting for the whole app, so the summary sets it from this page's own
+        # choice rather than whatever was last written to it.
+        set_clock_24h(self._clock_chosen())
         state = self._state
         main = state.layout["main"]
         spec = LAYOUTS[main]
@@ -2474,6 +2492,14 @@ class SetupPage(QWidget):
         )
         for (_heading, value, _change), text_value in zip(self.summary_rows, values, strict=True):
             value.setText(text_value)
+        self._draw_done_preview()
+
+    def _draw_done_preview(self) -> None:
+        main = self._layout["main"]
+        colour = options_for(self._layout, main).get("colour") if LAYOUTS[main].colourways else None
+        self.done_preview.setPixmap(
+            rounded_picture(self._previews.get(main, colour, self._pack, self._look, COLOUR_THUMB), 8)
+        )
 
     def _reveal_summary(self) -> None:
         # One line after another, so the eye reads down the list rather than taking it in as a block.
