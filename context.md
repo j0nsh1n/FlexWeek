@@ -1,36 +1,18 @@
 # context.md — FlexWeek
 
 ## Current State
-- 2026-10-12: 1.0.0 lane 4 Month is on `release/1.0.0`: first row visible with this week banded, Sunday clear of the scroll bar, wrapping chips at Large text, overdue on the 28 px strip, date pane with "Show study time per date" (drawer under 1150 px). Lane 3 sheets and lane 2 bar/strip stay as they were. Edit homework stays one page.
-- 2026-10-11: v0.19.2 prepared on `release/0.19.2` (worktree `~/.worktrees/flexweek-0190`, `.venv` is
-  `venv-0192-rel`): the 0.19.1 QA handoff's Fix first items (F3, F3b, 3-R, L12, T-W1, R10, 0l-R, A28,
-  0f-R, R1, N15, S1, A27, T1, P1, U19) and the fixes from two QA testers who used the app through
-  `fwtest rig --play` (question sheets never cut their words; Running late's preview draws each
-  change once with its title; Enter submits the account cards; split homework rows show their own
-  time; due dates step past the week; the More count reads the one engine count and sits on the
-  More button, not a bar above the week; the "Week as a list" row is 28 px, 32 at Large text).
-  Regression Tester's suites live in desktop/tests/regress184, regress190 and backend/tests/regress184,
-  collected only with FLEXWEEK_REGRESS=1 (regress184 waits for its conftest). `scripts/rig/play.py`
-  gives agents a play mode (steps, shots and widget trees). R11 and 1b-R moved to 1.0.0.
-- 2026-10-10: v0.19.1 on `release/0.19.1` (same worktree and venv as 0.19.0): J19, the Add fixed time
-  sheet built ahead while idle (`_block_spare`, one account and one look, dropped on either change;
-  editing a block still builds on demand); the sign-in card holds its height only while its page
-  shows (`_pin_auth_height` on the stack's `currentChanged`), so a hidden sign-in page no longer sets
-  every window's least height; Month's tight row is exactly one chip line (#28 at 1024x640).
-- 2026-10-10: v0.19.0 released from `release/0.19.0` (worktree `~/.worktrees/flexweek-0190`, `.venv` is
-  `venv-0190`): the QA handoff's remaining Fix first items and the Codex audit of 0.18.5. School and
-  Setup's activities are a standing week in the store (`standing_blocks`, one row per Setup id and
-  the week it stands from; `/api/changes` takes `standing`; restore points and exports carry it);
-  unfinished homework from earlier weeks shows in More and after Plan; work due after Sunday gets a
-  fair share of this week (`desk/planning.rs` `fair_share`); a time already past is refused (engine
-  `past_problem`); the Undo toast stays at least 10 s and pauses under the pointer; Text size is its own
-  setting in every look; segmented choices are radio buttons for screen readers; account errors sit
-  under their fields; a folded week list for screen readers (Ctrl+Shift+L); 3:1 control edges; the
-  focus phase keeps its own work length in the engine (`workMin`). Audit findings 1, 3-11 fixed; 2
-  (revision reuse after restore/import) waits for the 1.0 sync store. Built by five lane worktrees
-  (Opus, Grok 4.7, GPT-6 Luna, Sonnet, Haiku) and an audit-fix lane, merged and checked by Claude.
+- 2026-10-13: 1.0.0 is prepared on `release/1.0.0` (worktree
+  `~/.worktrees/flexweek-0190`, HEAD `a5f7384b`): the Android phone app
+  (`android/`, Kotlin and Compose, package `com.flexweek.app`, minSdk 26) runs
+  the real engine through UniFFI, and iroh device sync (`engine/sync`) pairs
+  the desktop with an 8-digit code and syncs both ways through the n0 relay.
+  A real Android phone paired and synced both ways on 2026-10-13 (mobile data
+  through the relay; a same-Wi-Fi sync has not been separately reported).
+  The v0.19.x features, look cards, polish and the wording sweep are in. The
+  full gate is pending on the final head. v0.19.2 is the newest release.
 - Tests that pick a day of the current week on the real clock can fail on later weekdays since item
-  2: hold the clock (`grid_support.hold_clock`, `session.now_ms`).
+  2: hold the clock (`grid_support.hold_clock`, `session.now_ms`). The item-3
+  and hours-open suites now hold their own clocks.
 - Since 0.18.5: new accounts start on a 12-hour clock (the desktop conftest sets 24-hour per test
   unless a test chooses); tests fail on any error inside a Qt slot (`no_error_is_lost_inside_a_qt_slot`).
 - Probing motion: `~/.flexweek-ui-harness/scratch/0.18.4/j14/claude-r3/probe_noprof.py` (copy into
@@ -48,27 +30,28 @@
   pure), the pydantic checks, `backend/models.py`'s Spotify and due-date copies, the `CATEGORIES`
   table in `calendar.py`, `TYPE_PT` in `tokens.py`, `custom_look.readability`, all Qt drawing, and
   `scripts/rig/drive.py`.
-- Tests: 396 Rust engine tests (engine, store and bindings; clippy and fmt clean). The Python gate on
-  `release/0.18.1`: 2790 passed in 7 min 8 s (`fwtest gate --workers 4`). The differential tests and
-  the frozen Python copies are deleted; the Python tests that remain guard Python-only code and the
-  interface.
+- Tests: the Rust engine suites (engine, store, bindings and sync; clippy and fmt clean at last
+  count) and the Python gate through `fwtest gate --workers 4`. The differential tests and the
+  frozen Python copies are deleted; the Python tests that remain guard Python-only code and the
+  interface. Regression Tester's suites live in desktop/tests/regress184, regress190 and
+  backend/tests/regress184, collected only with FLEXWEEK_REGRESS=1 (regress184 waits for its
+  conftest); `scripts/rig/play.py` gives agents a play mode (steps, shots and widget trees).
+  `hypothesis` is used by no test and still awaits Jonathan's word to go.
 - Speed (`log.tsv`, pr35 review at 2e2f76a): placing the probe week 1.1 ms (0.17.2: 2.9 ms; with a
   busy second thread 1.0 ms against 8.0). Drawing a frame of the hours 10.2 ms median (0.17.2:
   9.1 ms; the limit is 16 ms).
 - Known differences from the Python originals: integers past 64 bits and JSON only Python reads
   (NaN, lone surrogates) in stored rows; an assignment estimate past 2^63 raises `OverflowError` in
   the engine where Python returned a number (seen once under hypothesis); `build_month` returns a
-  month where Python raised `TypeError` on a finished session with no start.
-- 0.18.1 plumbing done on `release/0.18.1`: the Bell teardown, the three adapter tests, the
-  `today.json` baseline and the deletion of the differential tests, `desk_ref/` and
-  `backend/tests/engine_ref/`. About 100 cases those tests pinned have no Rust test of the same case
-  (list in the scratch report); `hypothesis` is now used by no test and awaits Jonathan's word to go.
-- spec.md drift: its CI desk step says "the desk parity files and the wrapper modules' tests"; it now
-  runs the parity files plus `test_tokens.py` and `test_update.py`.
+  month where Python raised `TypeError` on a finished session with no start. About 100 cases the
+  deleted differential tests pinned have no Rust test of the same case (list in the 0.18.1 scratch
+  report).
 
 ## Repo Landmarks
 ```
 engine/engine/          pure Rust core: plan, solve, day, month, restore, desk modules; tests/ are the Rust twins
+engine/sync/            iroh device sync (`flexweek-sync`): apply, records, schema, peers, scan, and net/ (pair, protocol, session, service, qr)
+engine/ffi/             UniFFI crate (`flexweek-ffi`) the Android app loads as libflexweek_ffi.so
 engine/store/           Rust SQL helpers per table (assignments, ledger, prefs, routines, weeks, rules)
 engine/py/              PyO3 binding built as `flexweek_engine` (`pip install ./engine/py`)
 engine/clippy.toml      forbids key-reordering removes; `Cargo.toml` builds the engine at opt-level 2 in debug
@@ -89,6 +72,7 @@ desktop/native/look.py       packs, presets, palettes, the one stylesheet
 desktop/native/version.py    VERSION, kept equal to the newest CHANGELOG heading
 desktop/native/*.py          the Qt-free modules are thin wrappers over engine::desk
 desktop/{build_*,package_*}  Linux and Windows builds; packaging/ holds AppImage, Inno, WiX
+android/                the Android phone app: Kotlin + Compose, loads the ffi lib; scripts/android/ builds and signs it
 desktop/tests/          widget tests, engine desk parity tests, `--smoke-test`
 .github/workflows/      verify, codeql, release packages
 ```
@@ -148,9 +132,14 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
-- 2026-10-12, `release/1.0.0` in `~/.worktrees/flexweek-0190`. Lane 1 stays `38c04c92`. Lane 2
-  stays through `61fad7c5`. Lane 3 stays `0b8dc729` / `b1fcd367` / `9c09aada`. Lane 4 Month is
-  implemented. Reports: `lane-2-report.md`, `lane-3-report.md`, `lane-4-report.md` under
+- 2026-10-13, `release/1.0.0` in `~/.worktrees/flexweek-0190`, HEAD `a5f7384b`. Landed today: the
+  real engine on the phone through UniFFI (S10 follow-ups through `e243fbe9`), the five window
+  fixes (the page stays visible under a sheet's dim, the look editor's stray value-label windows,
+  due rows kept parented so Undo does not pause after a second Plan, the block-error Qt warning at
+  startup, the skipped week refresh on drag create), the clock-holding test fixes, and spec.md
+  rewritten for 1.0.0 (device sync, the n0 relay, Android, 30-day sessions). Reports and drafts:
   `~/.flexweek-ui-harness/scratch/1.0.0/`.
-- Next: lane 5, My day (`month.html?view=myday`, shared fix plus A and B; C is not built).
-  Do not start lane 9 until `javac -version` works.
+- The docs for 1.0.0 (the CHANGELOG 1.0.0 entry, `docs/release-notes-v1.0.0.md`, the README phone
+  section, `docs/android.md`, roadmap and this file) sit uncommitted in the `fw100-docs3` worktree
+  for Claude to review and commit.
+- Next: run the full gate on the final head, push `release/1.0.0` for CI, then release.

@@ -8,19 +8,19 @@ desktop units, the 0.10.1 and 0.11 polish, the web client's retirement, the
 first implementation slice) was removed from this file on 2026-10-02. It is in
 this file's git history, in `CHANGELOG.md`, and in `docs/cac-build-plan.md`.
 
-## Where things stand (2026-10-09)
+## Where things stand (2026-10-13)
 - v0.18.4 (smoother motion, sheets dim at the click, Clay's day change, Retro
-  Month; J14 to J17) is released as latest. v0.18.3 (2026-10-08), v0.18.2
+  Month; J14 to J17) is released. v0.18.3 (2026-10-08), v0.18.2
   (2026-10-04) and v0.18.1 (2026-10-03) came before it. v0.18.0 brought the
   Rust engine.
 - v0.18.5 (Consistency and polish), v0.19.0 (the QA handoff's Fix first
-  items and the Codex audit's findings, 2026-10-10) and v0.19.1 (J19, Retro at
-  Large text on a laptop, Month at 1024x640) are released. v0.19.2 (the
-  0.19.1 QA handoff's Fix first items plus the fixes from two QA testers who
-  used the app) is prepared on `release/0.19.2`. Next: 1.0.0 with the Android
-  companion and device sync (about Oct 22) and the list under "1.0.0".
+  items and the Codex audit's findings, 2026-10-10), v0.19.1 (J19, Retro at
+  Large text on a laptop, Month at 1024x640) and v0.19.2 (the 0.19.1 QA
+  handoff's Fix first items plus the fixes from two QA testers who used the
+  app) are released. 1.0.0 with Android and device sync is prepared on
+  `release/1.0.0`. Next: contest delivery (Phase 8).
 - Decisions left open by 0.18.1 are listed under "Open after 0.18.1".
-- 16 days to the contest submission (Phase 8).
+- 12 days to the contest submission (Phase 8).
 
 ## Phase 8 — Contest delivery (Oct 25, 2026)
 - README with account setup, both contributors and the AI-assistance disclosure.
@@ -801,7 +801,10 @@ v0.19.2 ships. Design rounds first produce a page in the demo site
   ignored with the empty seed.
 
 ## Later
-- Android, after the contest; decide phone–laptop sync first.
+- Left for after 1.0.0: a camera scan of the pairing code, a restore copy of
+  the phone-link key, the v2 phone screens (Add homework, Plan, Running late,
+  Week) in release builds, a same-Wi-Fi sync check on a real phone, and a
+  CI-built APK.
 - Simple assignment list or ICS file import. Not live Canvas, Blackboard or
   Google Classroom OAuth, and not syllabus-photo ML.
 - Stronger deadline-cluster insight on top of the slack badges, without
