@@ -41,6 +41,7 @@ from desktop.native.tokens import (
     SPACING,
     TEXT_SCALE,
     TYPE_PT,
+    WEIGHT_NUMBER,
     WEIGHT_REGULAR,
     WEIGHT_STRONG,
     _channels,
@@ -1959,6 +1960,7 @@ def pack_stylesheet(
     return (
         f"QMainWindow, QDialog, QWidget {{ background: {palette['window']}; color: {palette['text']}; "
         f"font-family: {family}; font-size: {pt['body']}; }}"
+        f"QLabel#pairCode {{ font-size: {pt['display']}; font-weight: {WEIGHT_NUMBER}; }}"
         f"QFrame, QGroupBox, QTableWidget, QListWidget {{ background: {palette['panel']}; "
         f"color: {palette['text']}; padding: {card}px; border-radius: {card_radius}px; {edges} }}"
         # Lists, tables and scroll areas are frames too, but their padding is room around rows.

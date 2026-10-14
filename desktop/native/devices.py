@@ -16,7 +16,7 @@ from typing import Any
 
 from flexweek_engine import SyncError, SyncService  # type: ignore[import-untyped]
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPalette
+from PySide6.QtGui import QColor, QPainter, QPalette
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 from shiboken6 import isValid
 
@@ -297,11 +297,6 @@ class PairDialog(Dialog):
         self.code.setObjectName("pairCode")
         self.code.setAccessibleName("Pairing code")
         self.code.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        code_font = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
-        code_font.setPointSize(24)
-        code_font.setWeight(QFont.Weight.DemiBold)
-        self.code.setFont(code_font)
-        self.code.setStyleSheet("font-size: 24pt;")
         layout.addWidget(self.code)
         self.status = QLabel("")
         self.status.setObjectName("pairStatus")
