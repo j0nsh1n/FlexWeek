@@ -682,7 +682,10 @@ class Heads(QFrame):
         handle, split = self.handle, self.canvas.split
         if handle is not None and split is not None and not handle.carrying():
             across = fold_at(split[0], self.canvas.fold_span()) - self.canvas.gutter
-            handle.move(round(across - handle.width() / 2), round((self.height() - handle.height()) / 2))
+            handle.move(
+                round(across - handle.width() / 2 - 12 * handle.scale),
+                round((self.height() - handle.height()) / 2),
+            )
             # Over the day names, which are made again when the days shown change.
             handle.raise_()
 

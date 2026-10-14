@@ -96,3 +96,21 @@ def test_a_busy_date_shows_its_chips_and_says_how_many_more_there_are(qapp: QApp
     assert canvas.cell_rect(15).contains(shown[-1][1]), (
         "the last chip that is shown is wholly inside its date"
     )
+
+
+def test_month_chip_keeps_its_time_and_elides_its_title_on_a_one_line_row(qapp: QApplication) -> None:
+    snapshot = build_month("2026-08", [], [])
+    snapshot["days"][0]["blocks"] = [
+        {"id": "timed", "title": "An assignment name that is too long", "start": "08:00",
+         "duration_min": 30}
+    ]
+    grid = MonthGrid()
+    grid.resize(900, 700)
+    grid.set_month(snapshot, False, "2026-08-01")
+    grid.show()
+    qapp.processEvents()
+    chip, _box = grid.canvas.chip_boxes(0)[0][0]
+    shown = grid.canvas.painter.chip_title(chip, 92, grid.canvas._small())
+    assert chip.start == 8 * 60
+    assert shown.endswith("…")
+    assert len(shown) < len(chip.title)

@@ -275,6 +275,17 @@ class MonthPainter:
         painter.fillRect(QRectF(track.left(), track.top(), planned, track.height()), tint)
         painter.fillRect(QRectF(track.left(), track.top(), done, track.height()), self.c("accent"))
 
+    def chip_title(self, chip: MonthChip, width: float, font: QFont) -> str:
+        metrics = QFontMetrics(font)
+        if chip.due:
+            fixed = chip.flag
+        elif chip.history:
+            fixed = f"{chip.flag} {clock_label(chip.start or 0)}"
+        else:
+            fixed = clock_label(chip.start or 0)
+        room = max(0, round(width - metrics.horizontalAdvance(fixed + " ")))
+        return metrics.elidedText(chip.title, Qt.TextElideMode.ElideRight, room)
+
     def chip(self, painter: QPainter, box: QRectF, chip: MonthChip, faded: bool, held: bool) -> None:
         """A block in its category's fill, as the week draws it, or a deadline as a quiet chip led by
         a bold "Due". A column of red boxes was the most alarming thing in the app for its most
@@ -294,20 +305,38 @@ class MonthPainter:
         painter.setBrush(fill)
         painter.drawRoundedRect(box, 4, 4)
         room = box.adjusted(5, 0, -3, 0)
-        wrap = Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextWordWrap
-        words = chip.words
-        if chip.due or chip.history:
-            plain = painter.font()
-            bold = weighted(plain, WEIGHT_STRONG)
-            painter.setFont(bold)
-            painter.setPen(flag)
-            painter.drawText(room, wrap, chip.flag)
-            room.setLeft(room.left() + QFontMetrics(bold).horizontalAdvance(chip.flag + " "))
-            painter.setFont(plain)
-            words = chip.title if chip.due else f"{clock_label(chip.start or 0)} {chip.title}"
+        plain = painter.font()
+        metrics = QFontMetrics(plain)
+        tall = box.height() >= metrics.lineSpacing() * 2 + 2
+        flagged = chip.due or bool(chip.history)
+        bold = weighted(plain, WEIGHT_STRONG) if flagged else plain
+        fixed = chip.flag if flagged else ""
+        time = "" if chip.due else clock_label(chip.start or 0)
+        painter.setFont(bold)
+        painter.setPen(flag)
+        x = room.left()
+        if fixed:
+            painter.drawText(QRectF(x, room.top(), room.width(), metrics.height()),
+                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, fixed)
+            x += QFontMetrics(bold).horizontalAdvance(fixed + " ")
+        painter.setFont(plain)
+        if time:
+            painter.setPen(self.c("muted") if flagged else ink)
+            time_width = metrics.horizontalAdvance(time + " ")
+            painter.drawText(QRectF(x, room.top(), time_width, metrics.height()),
+                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, time)
+            x += time_width
         painter.setPen(ink)
-        if room.width() > 0:
-            painter.drawText(room, wrap, words)
+        if tall:
+            title_room = QRectF(room.left(), room.top() + metrics.lineSpacing(), room.width(),
+                                max(0, room.height() - metrics.lineSpacing()))
+            painter.drawText(title_room, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop |
+                             Qt.TextFlag.TextWordWrap, chip.title)
+        else:
+            title = self.chip_title(chip, room.width(), plain)
+            if title:
+                painter.drawText(QRectF(x, room.top(), max(0, room.right() - x), metrics.height()),
+                                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, title)
 
     def more(self, painter: QPainter, box: QRectF, count: int) -> None:
         painter.setPen(self.c("muted"))

@@ -795,7 +795,20 @@ def test_the_folds_handle_sits_on_the_fold_in_the_row_of_day_names_and_counts_ea
     assert handle.toolTip() == "Drag to move days between the pages"
     assert handle.parentWidget() is heads, "in the row of day names, not on the hours"
     assert handle.geometry().top() >= 0 and handle.geometry().bottom() < heads.height()
-    assert abs(centre_of(handle).x() - fold_x(view)) <= 1, "on the fold"
+    assert abs(centre_of(handle).x() - fold_x(view)) <= 13, "beside the fold"
+    thursday = heads.findChild(QWidget, "timelineWeekDay3")
+    assert thursday is not None
+    title = thursday.findChild(QLabel, "timelineDayName")
+    assert title is not None
+    title_box = QRectF(title.mapTo(heads, QPoint(0, 0)), title.size())
+    assert handle.geometry().right() + 8 < title_box.left(), "the pager clears Thursday's heading"
+    thursday = heads.findChild(QPushButton, "timelineWeekDay3")
+    assert thursday is not None
+    text_left = (thursday.width() - thursday.fontMetrics().horizontalAdvance(thursday.text())) // 2
+    text_box = thursday.geometry().adjusted(text_left, 0, 0, 0)
+    text_box.setWidth(thursday.fontMetrics().horizontalAdvance(thursday.text()))
+    handle_in_heads = handle.geometry()
+    assert not handle_in_heads.intersects(text_box), "the fold pager does not cover Thursday's heading"
     assert pages(view) == ((0, 1, 2), (3, 4, 5, 6))
     assert view.findChildren(QWidget, "timelineFold") == [handle]
     day = shown(qapp, "day")
@@ -826,7 +839,7 @@ def test_a_drag_moves_the_fold_to_the_day_edge_nearest_the_pointer(
     assert pages(view) == (tuple(range(left)), tuple(range(left, 7)))
     assert kept == ([] if left == 3 else [("fold", str(left))])
     assert handle_of(view).text() == f"‹ {left} | {7 - left} ›"
-    assert abs(centre_of(handle_of(view)).x() - fold_x(view)) <= 1, "back on the fold once let go"
+    assert abs(centre_of(handle_of(view)).x() - fold_x(view)) <= 13, "the pager stays beside the fold"
     areas = [track.area.width() for track in canvas(view).tracks]
     for page in pages(view):
         widths = [areas[at] for at in page]

@@ -9,6 +9,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Left from last week is shown only when homework had a session in an earlier saved week.
 - The Devices card reports changes held back because a phone clock looks wrong. Pair a phone shows the code without scan instructions, and Android pairing points to the correct desktop settings path.
 - Android Today actions share the available row width, and the missing-computer sync line uses shorter wording.
+- Month chips keep their time whole and elide long titles. Timeline's fold pager clears Thursday's heading.
 
 ## [1.0.0] - 2026-10-15
 
