@@ -87,3 +87,17 @@ def test_stop_ends_the_serving_thread_and_the_port(tmp_path: Path) -> None:
     assert not running.is_running
     with pytest.raises(urllib.error.URLError):
         urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=3)
+
+
+def test_a_server_thread_that_dies_says_why(tmp_path: Path, monkeypatch) -> None:
+    """A Windows install that could not start its server said only "stopped before it began serving";
+    the error that stopped it is now in the message (and in a smoke run's report)."""
+    from desktop import server as server_module
+
+    def broken(self, sockets=None) -> None:
+        raise ImportError("DLL load failed while importing flexweek_engine")
+
+    monkeypatch.setattr(server_module.uvicorn.Server, "run", broken)
+    local = server_module.LocalServer(tmp_path / "flexweek.db")
+    with pytest.raises(RuntimeError, match="ImportError: DLL load failed while importing flexweek_engine"):
+        local.start(timeout=5)
