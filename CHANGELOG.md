@@ -5,6 +5,9 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- Phone: FlexWeek updates itself. Settings has an Updates card that checks GitHub Releases once a day (on by default, can be turned off) or when you press Check now, and shows the new version's size and the first two lines of what's new. Nothing downloads or installs until you press the button; the download is checked against its published checksum, its name, version and signing key before Android's own Install dialog opens, and "See the steps" walks through allowing installs from FlexWeek. A test build says it can't update itself and points to the release page.
+
 ### Fixed
 - Phone: the app follows the phone's dark mode; it stayed light for everyone in 1.0.0, and every screen now sits on the theme's page colour.
 - Phone: "Running late" and "Start focus" no longer show on Today where they did nothing; they come back when those features ship.
