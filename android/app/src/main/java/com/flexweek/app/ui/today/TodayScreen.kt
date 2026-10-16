@@ -44,6 +44,15 @@ import com.flexweek.app.model.TodayUiState
 import com.flexweek.app.ui.components.SyncLineBar
 import com.flexweek.app.ui.theme.categoryColor
 
+data class NowRowActions(
+    val finishHomework: Boolean,
+    val startFocus: Boolean,
+    val runningLate: Boolean,
+)
+
+fun nowRowActions(row: AgendaRow.Now, focusEnabled: Boolean, lateEnabled: Boolean): NowRowActions =
+    NowRowActions(row.showFinishFocus, row.showFinishFocus && focusEnabled, row.showRunningLate && lateEnabled)
+
 @Composable
 fun TodayScreen(
     state: TodayUiState,
@@ -55,6 +64,8 @@ fun TodayScreen(
     onFinishHomework: (String) -> Unit = onToggleHomework,
     onStartFocus: () -> Unit = {},
     onRunningLate: () -> Unit = {},
+    focusEnabled: Boolean = false,
+    lateEnabled: Boolean = false,
     v2Extras: TodayV2Extras? = null,
 ) {
     Box(Modifier.fillMaxSize()) {
@@ -93,6 +104,8 @@ fun TodayScreen(
                                 onFinishHomework,
                                 onStartFocus,
                                 onRunningLate,
+                                focusEnabled,
+                                lateEnabled,
                             )
                         AgendaRow.NothingLeft ->
                             Surface(
@@ -269,6 +282,8 @@ private fun NowRow(
     onFinishHomework: (String) -> Unit,
     onStartFocus: () -> Unit,
     onRunningLate: () -> Unit,
+    focusEnabled: Boolean,
+    lateEnabled: Boolean,
 ) {
     Row(
         modifier =
@@ -309,16 +324,19 @@ private fun NowRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            val acts = row.showFinishFocus || row.showRunningLate
+            val actions = nowRowActions(row, focusEnabled, lateEnabled)
+            val acts = actions.finishHomework || actions.startFocus || actions.runningLate
             if (acts) {
                 Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (row.showFinishFocus) {
+                    if (actions.finishHomework) {
                         Button(onClick = { onFinishHomework(row.id) }, modifier = Modifier.weight(1f).height(48.dp)) {
                             Text("Homework finished")
                         }
-                        Button(onClick = onStartFocus, modifier = Modifier.weight(1f).height(48.dp)) { Text("Start focus") }
+                        if (actions.startFocus) {
+                            Button(onClick = onStartFocus, modifier = Modifier.weight(1f).height(48.dp)) { Text("Start focus") }
+                        }
                     }
-                    if (row.showRunningLate) {
+                    if (actions.runningLate) {
                         FilledTonalButton(onClick = onRunningLate, modifier = Modifier.height(48.dp)) {
                             Text("Running late")
                         }

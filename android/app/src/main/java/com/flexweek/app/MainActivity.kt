@@ -34,6 +34,7 @@ import com.flexweek.app.ui.pair.PairScreen
 import com.flexweek.app.ui.pair.PairViewModel
 import com.flexweek.app.ui.reminders.RemindersScreen
 import com.flexweek.app.ui.reminders.RemindersViewModel
+import com.flexweek.app.ui.reminders.SharedPreferenceReminderPrefs
 import com.flexweek.app.ui.theme.FlexWeekTheme
 import com.flexweek.app.ui.today.TodayScreen
 import com.flexweek.app.ui.today.TodayV2Extras
@@ -82,7 +83,8 @@ class MainActivity : ComponentActivity() {
 
 data class ScreenshotTweaks(
     val startScreen: StartScreen = StartScreen.Auto,
-    val darkTheme: Boolean = false,
+    // null follows the phone's light or dark setting; true or false is a screenshot forcing one.
+    val darkTheme: Boolean? = null,
     val largeText: Boolean = false,
     val prePaired: Boolean = false,
     val syncState: com.flexweek.app.core.SyncState = com.flexweek.app.core.SyncState.SYNCED,
@@ -104,8 +106,13 @@ data class ScreenshotTweaks(
 
     companion object {
         fun fromIntent(intent: android.content.Intent): ScreenshotTweaks {
+            val extras = intent.extras
+            return parse(extras?.keySet()?.associateWith { extras.get(it) } ?: emptyMap())
+        }
+
+        fun parse(extras: Map<String, Any?>): ScreenshotTweaks {
             val screen =
-                when (intent.getStringExtra("screen")) {
+                when (extras["screen"] as? String) {
                     "pair" -> StartScreen.Pair
                     "today" -> StartScreen.Today
                     "reminders" -> StartScreen.Reminders
@@ -113,13 +120,13 @@ data class ScreenshotTweaks(
                     else -> StartScreen.Auto
                 }
             val sync =
-                when (intent.getStringExtra("sync")) {
+                when (extras["sync"] as? String) {
                     "busy" -> com.flexweek.app.core.SyncState.SYNCING
                     "off" -> com.flexweek.app.core.SyncState.UNREACHABLE
                     else -> com.flexweek.app.core.SyncState.SYNCED
                 }
             val sheet =
-                when (intent.getStringExtra("sheet")) {
+                when (extras["sheet"] as? String) {
                     "add" -> V2Sheet.Add
                     "plan" -> V2Sheet.Plan
                     "late" -> V2Sheet.Late
@@ -127,12 +134,12 @@ data class ScreenshotTweaks(
                 }
             return ScreenshotTweaks(
                 startScreen = screen,
-                darkTheme = intent.getBooleanExtra("darkTheme", false),
-                largeText = intent.getBooleanExtra("largeText", false),
+                darkTheme = extras["darkTheme"] as? Boolean,
+                largeText = extras["largeText"] as? Boolean ?: false,
                 prePaired =
                     when (screen) {
                         StartScreen.Today, StartScreen.Reminders, StartScreen.Week -> true
-                        else -> intent.getBooleanExtra("prePaired", false)
+                        else -> extras["prePaired"] as? Boolean ?: false
                     },
                 syncState = sync,
                 openSheet = sheet,
@@ -222,7 +229,7 @@ private fun FlexWeekRoot(
         return
     }
     val todayVm = viewModel { TodayViewModel(core) }
-    val remindersVm = viewModel { RemindersViewModel(core) }
+    val remindersVm = viewModel { RemindersViewModel(core, SharedPreferenceReminderPrefs(activity)) }
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(core, lifecycleOwner) {
         if (!demo) {
@@ -244,8 +251,8 @@ private fun FlexWeekRoot(
         }
     }
     val notifLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { _ ->
-            remindersVm.allowNotifications()
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            remindersVm.onNotificationPermissionResult(granted)
         }
     val weekVm = if (v2) viewModel { WeekViewModel(core) } else null
     val syncLine = remindersVm.state.problem?.let { SyncLine("unreachable", it) } ?: todayVm.uiState.syncLine
@@ -298,8 +305,9 @@ private fun FlexWeekRoot(
                             onFinishHomework = {
                                 todayVm.toggleHomework(it)
                             },
-                            onStartFocus = { todayVm.showMessage("Focus timer: a notification with the countdown, Pause and Finish.") },
                             onRunningLate = { if (v2) sheet = ActiveSheet.Late },
+                            focusEnabled = false,
+                            lateEnabled = v2,
                             v2Extras =
                                 if (v2) {
                                     TodayV2Extras(
@@ -335,6 +343,7 @@ private fun FlexWeekRoot(
                                     remindersVm.allowNotifications()
                                 }
                             },
+                            onDismissPermissionBanner = remindersVm::dismissPermissionBanner,
                             onLeadChange = {
                                 remindersVm.setLeadMinutes(it)
                             },

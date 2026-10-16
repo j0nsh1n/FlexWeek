@@ -1,10 +1,13 @@
 package com.flexweek.app.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -44,7 +47,7 @@ private val DarkColors =
 
 @Composable
 fun FlexWeekTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean? = null,
     largeText: Boolean = false,
     content: @Composable () -> Unit,
 ) {
@@ -52,8 +55,9 @@ fun FlexWeekTheme(
     val title = if (largeText) 24.sp else 22.sp
     val small = if (largeText) 16.sp else 14.sp
     val caption = if (largeText) 13.sp else 12.sp
+    val colors = if (darkTheme ?: isSystemInDarkTheme()) DarkColors else LightColors
     MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
+        colorScheme = colors,
         typography =
             MaterialTheme.typography.copy(
                 bodyLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = body, fontWeight = FontWeight.Normal),
@@ -61,8 +65,11 @@ fun FlexWeekTheme(
                 bodyMedium = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = small),
                 labelSmall = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = caption),
             ),
-        content = content,
-    )
+    ) {
+        // Every screen sits on the theme's page colour. A screen with no container of its own (Pair) otherwise
+        // showed the window's light default under dark-mode colours.
+        Surface(Modifier.fillMaxSize(), color = colors.background, content = content)
+    }
 }
 
 @Composable

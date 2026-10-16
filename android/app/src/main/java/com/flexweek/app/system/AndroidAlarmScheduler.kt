@@ -17,6 +17,7 @@ class AndroidAlarmScheduler(
         val pi = pendingIntent(key, "", "")
         alarmManager.cancel(pi)
         pi.cancel()
+        cancelLegacy(key)
         book.remove(key)
     }
 
@@ -42,7 +43,19 @@ class AndroidAlarmScheduler(
                 pi,
             )
         }
+        cancelLegacy(request.key)
         book.remember(request.key)
+    }
+
+    // 1.0.0 set its alarms with key.hashCode() as the request code. After an update those alarms are still
+    // pending and a new request code no longer reaches them, so they would fire beside the new ones. Each key
+    // that is scheduled or cancelled also cancels its old alarm, if one is left.
+    private fun cancelLegacy(key: String) {
+        val intent = Intent(context, ReminderReceiver::class.java)
+        val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_NO_CREATE
+        val legacy = PendingIntent.getBroadcast(context, key.hashCode(), intent, flags) ?: return
+        alarmManager.cancel(legacy)
+        legacy.cancel()
     }
 
     private fun pendingIntent(
@@ -58,7 +71,7 @@ class AndroidAlarmScheduler(
             }
         val flags =
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        return PendingIntent.getBroadcast(context, key.hashCode(), intent, flags)
+        return PendingIntent.getBroadcast(context, ReminderReceiver.reminderNotificationId(key), intent, flags)
     }
 }
 

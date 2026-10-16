@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.content.Context
 import com.flexweek.app.core.FlexWeekCore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineDispatcher
@@ -32,11 +33,31 @@ private data class ReminderSettings(
     val reachable: Boolean,
 )
 
+interface ReminderPrefs {
+    var permissionBannerDismissed: Boolean
+}
+
+class SharedPreferenceReminderPrefs(context: Context) : ReminderPrefs {
+    private val prefs = context.getSharedPreferences("flexweek_reminders", Context.MODE_PRIVATE)
+
+    override var permissionBannerDismissed: Boolean
+        get() = prefs.getBoolean("permission_banner_dismissed", false)
+        set(value) { prefs.edit().putBoolean("permission_banner_dismissed", value).apply() }
+}
+
+class InMemoryReminderPrefs : ReminderPrefs {
+    override var permissionBannerDismissed: Boolean = false
+}
+
 class RemindersViewModel(
     private val core: FlexWeekCore,
+    private val prefs: ReminderPrefs = InMemoryReminderPrefs(),
     private val workerDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
-    var state by mutableStateOf(RemindersUiState())
+    constructor(core: FlexWeekCore, workerDispatcher: CoroutineDispatcher) :
+        this(core, InMemoryReminderPrefs(), workerDispatcher)
+
+    var state by mutableStateOf(RemindersUiState(showPermissionBanner = !prefs.permissionBannerDismissed))
         private set
 
     init {
@@ -121,6 +142,15 @@ class RemindersViewModel(
 
     fun allowNotifications() {
         state = state.copy(showPermissionBanner = false)
+    }
+
+    fun dismissPermissionBanner() {
+        prefs.permissionBannerDismissed = true
+        state = state.copy(showPermissionBanner = false)
+    }
+
+    fun onNotificationPermissionResult(granted: Boolean) {
+        if (granted) allowNotifications()
     }
 
     fun syncNow() {

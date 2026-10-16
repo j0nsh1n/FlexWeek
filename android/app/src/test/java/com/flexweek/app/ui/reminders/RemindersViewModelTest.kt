@@ -41,6 +41,35 @@ class RemindersViewModelTest {
         assertFalse(vm.state.showPermissionBanner)
     }
 
+    @Test fun notNowHidesBannerForNow() {
+        val core = FakeFlexWeekCore().also { it.pairWithCode(DemoSchedule.VALID_PAIR_CODE) }
+        val vm = RemindersViewModel(core, FakeReminderPrefs())
+        assertTrue(vm.state.showPermissionBanner)
+        vm.dismissPermissionBanner()
+        assertFalse(vm.state.showPermissionBanner)
+    }
+
+    @Test fun notNowIsRememberedOnTheNextLaunch() {
+        val core = FakeFlexWeekCore().also { it.pairWithCode(DemoSchedule.VALID_PAIR_CODE) }
+        val prefs = FakeReminderPrefs()
+        RemindersViewModel(core, prefs).dismissPermissionBanner()
+        assertFalse(RemindersViewModel(core, prefs).state.showPermissionBanner)
+    }
+
+    @Test fun deniedNotificationPermissionKeepsBanner() {
+        val core = FakeFlexWeekCore().also { it.pairWithCode(DemoSchedule.VALID_PAIR_CODE) }
+        val vm = RemindersViewModel(core, FakeReminderPrefs())
+        vm.onNotificationPermissionResult(false)
+        assertTrue(vm.state.showPermissionBanner)
+    }
+
+    @Test fun grantedNotificationPermissionHidesBanner() {
+        val core = FakeFlexWeekCore().also { it.pairWithCode(DemoSchedule.VALID_PAIR_CODE) }
+        val vm = RemindersViewModel(core, FakeReminderPrefs())
+        vm.onNotificationPermissionResult(true)
+        assertFalse(vm.state.showPermissionBanner)
+    }
+
     @Test fun unpairOffersPairingWhileTheSavedAccountRemains() {
         val dispatcher = UnconfinedTestDispatcher()
         Dispatchers.setMain(dispatcher)
@@ -50,7 +79,7 @@ class RemindersViewModelTest {
                 override fun isPaired(): Boolean = true
                 override fun unlink() { unlinks += 1 }
             }
-            val vm = RemindersViewModel(core, dispatcher)
+            val vm = RemindersViewModel(core, workerDispatcher = dispatcher)
             var pairingOffered = false
             vm.unpair { pairingOffered = true }
             assertEquals(1, unlinks)
@@ -69,7 +98,7 @@ class RemindersViewModelTest {
             val core = object : FlexWeekCore by FakeFlexWeekCore() {
                 override fun unlink() { error("Could not unlink. Try again.") }
             }
-            val vm = RemindersViewModel(core, dispatcher)
+            val vm = RemindersViewModel(core, workerDispatcher = dispatcher)
             var pairingOffered = false
             vm.unpair { pairingOffered = true }
             assertFalse(pairingOffered)
@@ -111,4 +140,8 @@ class RemindersViewModelTest {
             Dispatchers.resetMain()
         }
     }
+}
+
+private class FakeReminderPrefs : ReminderPrefs {
+    override var permissionBannerDismissed: Boolean = false
 }
