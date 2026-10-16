@@ -392,7 +392,10 @@ private fun FlexWeekRoot(
                             onCheckUpdates = updateVm::checkNow,
                             onDownloadUpdate = updateVm::downloadAndInstall,
                             onUpdateDaily = updateVm::setDailyCheck,
-                            onUpdateLater = updateVm::later,
+                            onUpdateLater = {
+                                updateVm.later()
+                                showUpdateSteps = false
+                            },
                             onUpdateSteps = { showUpdateSteps = !showUpdateSteps },
                             onUpdatePermission = {
                                 activity.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:${activity.packageName}")))

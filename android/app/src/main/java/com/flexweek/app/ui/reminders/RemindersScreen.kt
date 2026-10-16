@@ -49,6 +49,24 @@ fun RemindersScreen(
     onUpdatePermission: () -> Unit = {},
     showUpdateSteps: Boolean = false,
 ) {
+    if (showUpdateSteps) {
+        Column(Modifier.fillMaxSize().padding(24.dp)) {
+            Text(
+                "Install FlexWeek ${((updateState as? UpdateState.Available)?.offer?.version).orEmpty()}",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(vertical = 12.dp),
+            )
+            Text(
+                "1. Download and check the update.\n2. Allow FlexWeek to install updates if Android asks.\n3. Android shows its own Install button.",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Row {
+                TextButton(onClick = onUpdateSteps, modifier = Modifier.height(48.dp)) { Text("Back") }
+                TextButton(onClick = onUpdateLater, modifier = Modifier.height(48.dp)) { Text("Later") }
+            }
+        }
+        return
+    }
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.padding(horizontal = 16.dp)) {
             Text("Settings", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(vertical = 8.dp))
@@ -114,12 +132,6 @@ fun RemindersScreen(
                 else -> Unit
             }
             TextButton(onClick = onCheckUpdates, enabled = updateState !is UpdateState.Checking) { Text("Check now") }
-            if (showUpdateSteps) {
-                Text("Install FlexWeek ${((updateState as? UpdateState.Available)?.offer?.version).orEmpty()}",
-                    style = MaterialTheme.typography.titleMedium)
-                Text("1. Download and check the update.\n2. Allow FlexWeek to install updates if Android asks.\n3. Android shows its own Install button.")
-                TextButton(onClick = onUpdateSteps) { Text("Back") }
-            }
             SettingRow(
                 title = "Remind me before homework",
                 subtitle = "The same lead time as your computer uses.",
