@@ -158,6 +158,35 @@ Old branches, worktrees and their build output pile up and fill the disk.
   default branch without the human's word.
 - A project may set other numbers in spec.md.
 
+## Machine Resources
+Test suites, builds, exports and emulators share the human's computer with whatever the human is
+doing. Running too many at once has frozen displays, crashed the machine and killed half-written work.
+A heavy job is any test suite or gate, a compiled build, a video or image export, an emulator, or
+anything expected to use several cores or gigabytes of memory for more than a minute.
+- Before a heavy job, check free memory and load. Do not start below the floor spec.md sets (default:
+  8 GB available). Say so instead.
+- At most two heavy jobs at once, run at low priority (`nice`), each under a hard memory and CPU cap
+  (for example `systemd-run --user -p MemoryMax=… -p CPUQuota=…`), so a runaway job is stopped instead of
+  freezing the machine. spec.md sets the caps; without them, half the memory and half the cores.
+- Every heavy job is watched while it runs: free memory, swap and load, sampled every few seconds. Below
+  a warning line, start nothing new and tell the human; below a stop line, stop that job's own process
+  group by PID and report what was stopped and why. Record each job's peak use, so the caps come from
+  measurements. spec.md names the watcher and its lines.
+- Narrow first, whole last: while working, run only the tests the change touches; the whole suite or
+  gate runs once before a push, with the project's default worker count and never more. Ask before a
+  whole-suite run while the human is at the computer.
+- What runs the same in CI (mutation runs, packaging, the full backend suite) runs in CI rather than on
+  the human's desktop.
+- Work that shares state between checkouts (test caches, hidden display sessions) goes through the
+  project's one queue. A run that hangs ends at its own timeout and never holds the queue past it.
+- A run longer than about ten minutes runs as its own service (for example `systemd-run --user`) with
+  its log in the project's scratch folder, so a harness or session restart does not kill it.
+- Use the GPU for work it can do (video encoding) instead of the CPU.
+- After a run, stop what it started and left behind (hidden display servers, message buses, emulators),
+  by PID.
+- Scratch, logs and test output go in the project's scratch folder, never in a temporary folder that
+  lives in memory or is wiped at reboot.
+
 ## Skills and Playbooks
 - These rules override any skill, plugin, or playbook, including pstack. When
   a playbook step says to push, open or merge a PR, force-push, deploy, or
@@ -233,6 +262,8 @@ How to ask:
   round rather than guessing.
 - Do not ask what you can find out yourself from the code, the docs, or a
   quick read-only command. Look it up instead.
+- UI work starts with two or three mockups that vary the layout, not just the colours; the human picks
+  (or mixes), then it is built.
 
 ## Subagents
 - A single focused edit is fine to do directly.
@@ -250,6 +281,17 @@ How to ask:
 - If the model you were told to use is not available in this harness, say so
   once and do the work directly. Never quietly substitute another model and
   describe it as the one requested.
+- One agent per worktree, always. Two agents in one checkout overwrite each other's work.
+- Every delegated lane names its model and a backup model. When the first runs low on usage, switch and
+  say so. Do not start a long lane on a model with little usage left.
+- No hidden model calls: a tool's own background model (titles, summaries, fallbacks) is set to an
+  approved model, never left to its default.
+- Workers asking a question do not wake the lead. While workers run, the lead watches their threads for
+  questions at least every 30 minutes.
+- After two failed attempts at the same problem by workers, the lead takes it over rather than briefing
+  a third attempt.
+- A worker's report is evidence, not a result: check each claim against the code before acting on it or
+  passing it to the human.
 
 ## Safety
 - NEVER commit secrets, API keys, tokens, or credentials. Use environment variables / .env (gitignored). Check `git status` output before every commit for accidental inclusions.
@@ -264,6 +306,25 @@ How to ask:
 - Watch for tests that quietly stop testing: a hardcoded "next" version, an
   assertion that everything passes, a mutation that raises instead of failing an
   assertion. Each of these looks green while checking nothing.
+- Stop processes only by PID, found by following parent processes from your own shell. Never by name or
+  pattern: a name filter has killed the human's own programs, and `pgrep -f` matches your own shell.
+- A command chain that ends in a commit uses `set -o pipefail`, or runs the tests and the commit as
+  separate steps. `tests | tail && git commit` commits on a red run.
+- Do not give helper scripts the names the project's tools watch for (spec.md lists them).
+- Test and rig runs make no sound: they run with the project's silent switch (spec.md).
+
+## Testing and Proof
+- A probe that shows a bug must also be shown able to show its absence: run it once where the bug cannot
+  exist and see it come back clean before trusting it.
+- Anything tested only against a fake or stub gets at least one test against the real thing before a
+  release.
+- A UI fix is verified on a real screen (the project's real-display rig, or the human's), not only in
+  off-screen pictures, which repaint everything and miss what a live window shows.
+- Rebuild compiled parts before testing them, and name the build tested in the log.
+- The local gate runs every check CI runs, or the push checklist names the ones it skips.
+- Keep pull requests within the review tools' limits (spec.md), and know what the repo's scanners flag.
+- Proof for the human of a UI change is a before-and-after picture (PNG), with any video path given
+  beside it.
 
 ## Reviews and Findings
 - Fix at the source, do not suppress. When a scanner or linter flags something,
@@ -277,6 +338,24 @@ How to ask:
   the keyboard. Defects you fix; judgement calls you surface.
 - Report findings you did NOT act on, with the reason. "Accurate against the
   brief but wrong for this codebase" is a legitimate reason and worth saying.
+
+## Releases
+- A release is not done until every platform's file is attached and each checksum is checked. Either
+  publish when all are in, or list the missing ones in the release notes.
+- Nothing visible in a release is a placeholder: every control does something. A release flag hides a
+  whole feature, its buttons included. Before a release, every visible control is tried once.
+- Signing keys live outside the repo, with a backup, and change only with a written migration plan:
+  a changed key forces every user to reinstall and can lose their data.
+- The human uses the build before a release; what they report becomes fixes on the running list.
+
+## Long-Running Work
+- A task longer than about an hour keeps a plan file in the project's scratch folder (plan, decisions,
+  next step), updated at every milestone, so a crash, a context reset or a new session resumes from it.
+- Never wait on something without a wakeup known to work: schedule a check and a fallback check, and
+  say in the chat what you are waiting for.
+- Long logs and tool output go to files; the chat gets a summary and the path.
+- When the human delegates product decisions, log each one in one decisions file and list them in the
+  final report.
 
 ## Definition of Done (per task)
 - Code passes lint, type checks, and tests locally (commands per spec.md's

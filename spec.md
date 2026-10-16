@@ -842,6 +842,35 @@ not pile up again.
   without his word, and worktree records made from Windows are not pruned from
   Linux.
 
+### Resources
+The numbers the Machine Resources rules in AGENTS.md use for this project.
+- Test queue: `fwtest`. Every suite, gate, mutation run and rig goes through it,
+  because they share `~/.qttest` and the hidden KWin session.
+- Workers: the gate's default of 8, never more (14 broke the animation-timing
+  tests). A whole gate peaked at about 9.4 GB of memory.
+- Caps for heavy jobs: `systemd-run --user -p MemoryMax=10G -p CPUQuota=800%`
+  for a gate, 6 GB for a video export; long gates run as their own
+  `systemd-run` unit so a harness restart does not kill them.
+- Watcher: until `fwtest` has one, check `free` and the load before a heavy job
+  and keep watching while it runs; warn below 6 GB available or when swap
+  climbs, stop the job below 3 GB.
+- Runs only in CI: CodeQL, the Windows and Linux packaging and installer checks
+  (`release-windows.yml`). The rig runs in CI too, but not in the local gate,
+  so run `fwtest rig` before pushing UI changes.
+- Scratch folder: `~/.flexweek-ui-harness/scratch`.
+- Silent switch for tests: `FLEXWEEK_SILENT=1`.
+- Names `fwtest` watches for (do not reuse for helpers): `mutate.py`,
+  `verify.py`, `drive.py`.
+- Review limits: CodeRabbit skips pull requests over 100 files and needs a
+  "@coderabbitai review" comment on this repo.
+- After an engine change, rebuild the engine in the venv the desktop tests use
+  (`maturin develop --release --manifest-path engine/py/Cargo.toml --features
+  audit`), or they test the old one.
+- The Windows git checkouts (`D:/` worktrees) touch this repo: never prune them
+  from Linux, and leave Windows' line-ending noise alone.
+- Android release key: `~/.config/flexweek-android/`, outside the repo and
+  backed up; every APK is signed with it.
+
 ## Acceptance Criteria
 - [ ] Only-locked week solves to an identity schedule with 0 moves (T1).
 - [ ] A single homework block with room to spare is placed, energy-matched where
