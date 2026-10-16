@@ -101,6 +101,12 @@ object UpdateSigner {
         packageName == "com.flexweek.app" && versionName == offeredVersion && matches(installed, downloaded)
     fun refusalMessage(debugBuild: Boolean): String = if (debugBuild) "This test build can't update itself. Install FlexWeek from the release page." else "The downloaded app is signed differently. Nothing was installed."
 }
+object UpdateWords {
+    private const val MB = 1024L * 1024
+    fun downloading(received: Long, total: Long): String =
+        if (total > 0) "Downloading ${received / MB} of ${total / MB} MB" else "Downloading, ${received / MB} MB so far"
+    fun latest(version: String): String = "FlexWeek $version is the latest version."
+}
 object UpdateNotes {
     fun head(body: String): List<String> = body.split(Regex("\\r?\\n")).map(String::trim).filter(String::isNotEmpty).take(2)
 }

@@ -27,7 +27,9 @@ import androidx.compose.ui.unit.dp
 import com.flexweek.app.ui.components.SyncLineBar
 import com.flexweek.app.model.SyncLine
 import com.flexweek.app.ui.pair.DESKTOP_PAIR_PATH
+import com.flexweek.app.BuildConfig
 import com.flexweek.app.update.UpdateState
+import com.flexweek.app.update.UpdateWords
 
 @Composable
 fun RemindersScreen(
@@ -125,11 +127,12 @@ fun RemindersScreen(
                         progress = { update.received.toFloat() / update.total.toFloat() },
                         modifier = Modifier.fillMaxWidth(),
                     ) else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                    Text("Downloading ${update.received} / ${update.total}")
+                    Text(UpdateWords.downloading(update.received, update.total))
                 }
                 is UpdateState.Verifying -> Text("Checking the downloaded file…")
                 is UpdateState.Failed -> Text(update.reason)
                 UpdateState.Checking -> Text("Checking for updates…")
+                UpdateState.UpToDate -> Text(UpdateWords.latest(BuildConfig.VERSION_NAME))
                 else -> Unit
             }
             TextButton(onClick = onCheckUpdates, enabled = updateState !is UpdateState.Checking) { Text("Check now") }
