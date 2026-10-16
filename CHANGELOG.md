@@ -5,6 +5,12 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+- Phone: the app follows the phone's dark mode; it stayed light for everyone in 1.0.0, and every screen now sits on the theme's page colour.
+- Phone: "Running late" and "Start focus" no longer show on Today where they did nothing; they come back when those features ship.
+- Phone: "Not now" on the notifications banner hides it, and it stays hidden the next time the app opens; "Allow" no longer hides the banner when permission is refused.
+- Phone: two reminders with the same title both show instead of one replacing the other, and reminders set by 1.0.0 are cleared after an update instead of firing twice.
+
 ## [1.0.0] - 2026-10-14
 
 ### Added
