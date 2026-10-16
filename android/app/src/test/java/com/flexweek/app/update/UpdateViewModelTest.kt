@@ -130,6 +130,7 @@ class UpdateViewModelTest {
     @Test fun checkNowWithoutNetworkSaysItCouldNotCheck() = main {
         val vm = viewModel(FakeSource(), FakeInstaller(), FakePrefs())
         vm.checkNow()
+        assertTrue("manual offline check was ${vm.state.value}", vm.state.value is UpdateState.Failed)
         assertTrue((vm.state.value as UpdateState.Failed).reason.contains("could not check", ignoreCase = true))
     }
 
@@ -288,6 +289,7 @@ class UpdateViewModelTest {
         val dir = files.newFolder("identity")
         val vm = viewModel(source, installer, FakePrefs(), dir)
         vm.checkNow(); vm.downloadAndInstall()
+        assertTrue("invalid APK must be refused; was ${vm.state.value}", vm.state.value is UpdateState.Failed)
         assertTrue((vm.state.value as UpdateState.Failed).reason.contains("Nothing was installed"))
         assertEquals(0, installer.installCalls)
         assertEquals(0, dir.listFiles()?.size ?: 0)
@@ -308,7 +310,7 @@ class UpdateViewModelTest {
     }
 
     @Test fun aFileLargerThanTheCapIsRefusedAndDeletedEvenIfTheSourceSaidItWorked() = main {
-        val source = FakeSource().also { it.release = "available"; it.sparseBytes = HttpUpdateSource.MAX_APK_BYTES + 1 }
+        val source = FakeSource().also { it.release = "available"; it.sparseBytes = 200L * 1024 * 1024 + 1 }
         val installer = FakeInstaller()
         val dir = files.newFolder("too-large")
         val vm = viewModel(source, installer, FakePrefs(), dir)
@@ -319,7 +321,7 @@ class UpdateViewModelTest {
     }
 
     @Test fun anOversizeTransferThatReportsFailureSaysTooLargeNotStopped() = main {
-        val source = FakeSource().also { it.release = "available"; it.sparseBytes = HttpUpdateSource.MAX_APK_BYTES + 1; it.transferOk = false }
+        val source = FakeSource().also { it.release = "available"; it.sparseBytes = 200L * 1024 * 1024 + 1; it.transferOk = false }
         val dir = files.newFolder("too-large-stopped")
         val vm = viewModel(source, FakeInstaller(), FakePrefs(), dir)
         vm.checkNow(); vm.downloadAndInstall()
@@ -348,6 +350,7 @@ class UpdateViewModelTest {
         vm.checkNow()
         val callsBeforePress = source.allCalls.toList()
         vm.downloadAndInstall()
+        assertTrue("debug refusal was ${vm.state.value}", vm.state.value is UpdateState.Failed)
         assertEquals("This test build can't update itself. Install FlexWeek from the release page.", (vm.state.value as UpdateState.Failed).reason)
         assertEquals(callsBeforePress, source.allCalls)
         assertEquals(0, source.downloadCalls)
