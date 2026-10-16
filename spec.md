@@ -670,14 +670,21 @@ nothing loops.
   is no duplicate date math.
 - External APIs/services: the public relay run by n0 (iroh), used only after a
   phone is paired and only when it cannot be reached on the same Wi-Fi. It sees
-  that two devices are talking, not what they send. No OAuth, no calendar sync,
-  no LLM at runtime.
+  that two devices are talking, not what they send. GitHub Releases
+  (`github.com/j0nsh1n/FlexWeek`): the desktop app, and the phone app from 1.1,
+  ask for the latest release at most once a day (the student can turn it off, or
+  press Check now) and download it only when the student presses the button.
+  GitHub sees the request, nothing from the student's week. No OAuth, no
+  calendar sync, no LLM at runtime.
 - Android: the phone app, package `com.flexweek.app`, minimum Android 8.0
   (minSdk 26), target and compile SDK 36, for arm64-v8a and x86_64. Release
   builds show today's agenda, reminders, pairing and settings; adding homework,
   Plan, Running late and the week are in debug builds only
   (`BuildConfig.V2_ENABLED`). The APK is built and signed on the maintainer's
-  machine with a keystore kept outside the repo; CI does not build it.
+  machine with a keystore kept outside the repo; CI does not build it. From
+  1.1 the app updates itself from GitHub Releases: it checks the download's
+  `.sha256`, its package name, version and signing key, then hands it to
+  Android's installer.
 - Deployment: the desktop client is the product; there is no web client. The
   Windows and Linux builds are PySide6 Qt widgets that run the FastAPI backend
   in-process on a loopback port, so they need no separate server and no Python
@@ -844,8 +851,9 @@ not pile up again.
 
 ### Resources
 The numbers the Machine Resources rules in AGENTS.md use for this project.
-- Test queue: `fwtest`. Every suite, gate, mutation run and rig goes through it,
-  because they share `~/.qttest` and the hidden KWin session.
+- Test queue: `fwtest`. Every desktop suite, gate, mutation run and rig goes
+  through it, because they share `~/.qttest` and the hidden KWin session. Cargo
+  and Gradle runs share neither, so they skip it but keep the caps below.
 - Workers: the gate's default of 8, never more (14 broke the animation-timing
   tests). A whole gate peaked at about 9.4 GB of memory.
 - Caps for heavy jobs: `systemd-run --user -p MemoryMax=10G -p CPUQuota=800%`
