@@ -25,7 +25,7 @@ class ReminderReceiver : BroadcastReceiver() {
         val content =
             android.app.PendingIntent.getActivity(
                 context,
-                reminderNotificationId(intent.getStringExtra(EXTRA_KEY) ?: "", title),
+                reminderNotificationId(intent.getStringExtra(EXTRA_KEY) ?: title),
                 open,
                 android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
             )
@@ -38,7 +38,7 @@ class ReminderReceiver : BroadcastReceiver() {
                 .setAutoCancel(true)
                 .setContentIntent(content)
                 .build()
-        NotificationManagerCompat.from(context).notify(reminderNotificationId(intent.getStringExtra(EXTRA_KEY) ?: "", title), notification)
+        NotificationManagerCompat.from(context).notify(reminderNotificationId(intent.getStringExtra(EXTRA_KEY) ?: title), notification)
     }
 
     companion object {
@@ -46,7 +46,7 @@ class ReminderReceiver : BroadcastReceiver() {
         const val EXTRA_TITLE = "title"
         const val EXTRA_BODY = "body"
 
-        fun reminderNotificationId(key: String, title: String? = null): Int {
+        fun reminderNotificationId(key: String): Int {
             val digest = MessageDigest.getInstance("SHA-256").digest(key.toByteArray(Charsets.UTF_8))
             return ByteBuffer.wrap(digest, 0, Int.SIZE_BYTES).int
         }

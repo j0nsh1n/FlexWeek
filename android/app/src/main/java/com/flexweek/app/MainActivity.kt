@@ -83,7 +83,8 @@ class MainActivity : ComponentActivity() {
 
 data class ScreenshotTweaks(
     val startScreen: StartScreen = StartScreen.Auto,
-    val darkTheme: Boolean? = false,
+    // null follows the phone's light or dark setting; true or false is a screenshot forcing one.
+    val darkTheme: Boolean? = null,
     val largeText: Boolean = false,
     val prePaired: Boolean = false,
     val syncState: com.flexweek.app.core.SyncState = com.flexweek.app.core.SyncState.SYNCED,
