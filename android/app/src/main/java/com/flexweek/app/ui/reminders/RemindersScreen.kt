@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -26,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.flexweek.app.ui.components.SyncLineBar
 import com.flexweek.app.model.SyncLine
 import com.flexweek.app.ui.pair.DESKTOP_PAIR_PATH
+import com.flexweek.app.update.UpdateState
 
 @Composable
 fun RemindersScreen(
@@ -37,7 +39,34 @@ fun RemindersScreen(
     onToggleExact: () -> Unit,
     onSyncNow: () -> Unit,
     onUnpair: () -> Unit,
+    updateState: UpdateState = UpdateState.Idle,
+    updateDaily: Boolean = true,
+    onCheckUpdates: () -> Unit = {},
+    onDownloadUpdate: () -> Unit = {},
+    onUpdateDaily: (Boolean) -> Unit = {},
+    onUpdateLater: () -> Unit = {},
+    onUpdateSteps: () -> Unit = {},
+    onUpdatePermission: () -> Unit = {},
+    showUpdateSteps: Boolean = false,
 ) {
+    if (showUpdateSteps) {
+        Column(Modifier.fillMaxSize().padding(24.dp)) {
+            Text(
+                "Install FlexWeek ${((updateState as? UpdateState.Available)?.offer?.version).orEmpty()}",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(vertical = 12.dp),
+            )
+            Text(
+                "1. Download and check the update.\n2. Allow FlexWeek to install updates if Android asks.\n3. Android shows its own Install button.",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Row {
+                TextButton(onClick = onUpdateSteps, modifier = Modifier.height(48.dp)) { Text("Back") }
+                TextButton(onClick = onUpdateLater, modifier = Modifier.height(48.dp)) { Text("Later") }
+            }
+        }
+        return
+    }
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.padding(horizontal = 16.dp)) {
             Text("Settings", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(vertical = 8.dp))
@@ -69,6 +98,41 @@ fun RemindersScreen(
                     }
                 }
             }
+            Text("Updates", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
+            SettingRow("Check once a day", "Look when you open the app.", trailing = {
+                Switch(checked = updateDaily, onCheckedChange = onUpdateDaily,
+                    modifier = Modifier.semantics { contentDescription = "Check once a day" })
+            })
+            when (val update = updateState) {
+                is UpdateState.Available -> {
+                    Text("FlexWeek ${update.offer.version} is ready.")
+                    if (update.offer.size != null) Text("${update.offer.size / (1024 * 1024)} MB")
+                    update.offer.notes.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                    Row {
+                        Button(onClick = onDownloadUpdate, modifier = Modifier.height(48.dp)) { Text("Download and install") }
+                        TextButton(onClick = onUpdateSteps, modifier = Modifier.height(48.dp)) { Text("See the steps") }
+                    }
+                    update.message?.let { Text(it) }
+                }
+                is UpdateState.NeedsPermission -> {
+                    Text("To install FlexWeek, allow this app to install updates.")
+                    Button(onClick = onUpdatePermission) { Text("Open the setting") }
+                    TextButton(onClick = onUpdateLater) { Text("Later") }
+                }
+                is UpdateState.Downloading -> {
+                    if (update.total > 0) LinearProgressIndicator(
+                        progress = { update.received.toFloat() / update.total.toFloat() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    Text("Downloading ${update.received} / ${update.total}")
+                }
+                is UpdateState.Verifying -> Text("Checking the downloaded file…")
+                is UpdateState.Failed -> Text(update.reason)
+                UpdateState.Checking -> Text("Checking for updates…")
+                else -> Unit
+            }
+            TextButton(onClick = onCheckUpdates, enabled = updateState !is UpdateState.Checking) { Text("Check now") }
             SettingRow(
                 title = "Remind me before homework",
                 subtitle = "The same lead time as your computer uses.",

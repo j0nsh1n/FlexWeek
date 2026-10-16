@@ -74,6 +74,207 @@ fn test_version_ordering_is_by_number_not_by_text() {
 }
 
 #[test]
+fn android_asset_names_are_versioned_and_release_assets_are_matched_exactly() {
+    use flexweek_engine::desk::update::{android_asset_name, android_available};
+    assert_eq!(
+        android_asset_name("1.1.0"),
+        Some("FlexWeek-Android-1.1.0.apk".to_string())
+    );
+    let good = release_of(
+        "v1.1.0",
+        &[
+            "FlexWeek-Android-1.1.0.apk".into(),
+            "FlexWeek-Android-1.1.0.apk.sha256".into(),
+        ],
+        json!({}),
+    );
+    assert_eq!(
+        android_available(&good, "1.0.0").unwrap().unwrap().asset,
+        "FlexWeek-Android-1.1.0.apk"
+    );
+    let wrong = release_of(
+        "v1.1.0",
+        &[
+            "FlexWeek-Android-1.0.0.apk".into(),
+            "FlexWeek-Android-1.0.0.apk.sha256".into(),
+        ],
+        json!({}),
+    );
+    assert!(android_available(&wrong, "1.0.0").unwrap().is_none());
+    assert_eq!(
+        android_asset_name("v1.2.3.4"),
+        Some("FlexWeek-Android-1.2.3.4.apk".into())
+    );
+    for malformed in ["1", "1.2.0-rc1", "1.2.x", "1.2.3.4.5"] {
+        assert_eq!(android_asset_name(malformed), None, "{malformed}");
+    }
+}
+
+#[test]
+fn android_checksum_requires_the_named_apk_and_hex_digest() {
+    use flexweek_engine::desk::update::android_expected_digest;
+    let digest = "a".repeat(64);
+    assert_eq!(
+        android_expected_digest(
+            &format!("{digest}  FlexWeek-Android-1.1.0.apk\n"),
+            "FlexWeek-Android-1.1.0.apk"
+        ),
+        Some(digest.clone())
+    );
+    assert_eq!(
+        android_expected_digest(
+            &format!("{digest}  FlexWeek-Android-1.0.0.apk"),
+            "FlexWeek-Android-1.1.0.apk"
+        ),
+        None
+    );
+    assert_eq!(
+        android_expected_digest(
+            &format!("{}g  FlexWeek-Android-1.1.0.apk", "a".repeat(63)),
+            "FlexWeek-Android-1.1.0.apk"
+        ),
+        None
+    );
+}
+
+#[test]
+fn android_release_needs_a_complete_stable_release_for_the_running_version() {
+    use flexweek_engine::desk::update::android_available;
+    let names = [
+        "FlexWeek-Android-1.1.0.apk".to_string(),
+        "FlexWeek-Android-1.1.0.apk.sha256".to_string(),
+    ];
+    assert!(
+        android_available(
+            &release_of("v1.1.0", &names, json!({"draft": true})),
+            "1.0.0"
+        )
+        .unwrap()
+        .is_none()
+    );
+    assert!(
+        android_available(
+            &release_of("v1.1.0", &names, json!({"prerelease": true})),
+            "1.0.0"
+        )
+        .unwrap()
+        .is_none()
+    );
+    assert!(
+        android_available(&release_of("v1.1.0", &names[..1], json!({})), "1.0.0")
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        android_available(&release_of("v1.1.0", &names[1..], json!({})), "1.0.0")
+            .unwrap()
+            .is_none(),
+        "a checksum with no APK beside it offers nothing"
+    );
+    assert!(
+        android_available(&release_of("v1.1.0", &names, json!({})), "1.1.0")
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        android_available(&release_of("v1.1.0", &[], json!({})), "1.0.0")
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        android_available(&release_of("v1.2.0-rc1", &names, json!({})), "1.0.0")
+            .unwrap()
+            .is_none()
+    );
+    assert!(android_available(&json!([]), "1.0.0").unwrap().is_none());
+}
+
+#[test]
+fn android_versions_with_two_to_four_parts_compare_by_number() {
+    assert_eq!(parse_version("1.2.3.4"), Some(vec![1, 2, 3, 4]));
+    assert!(!is_newer("1.1", "1.1.0"));
+    assert!(!is_newer("1.1.0", "1.1"));
+    assert!(is_newer("1.10.0", "1.9.0"));
+    assert!(!is_newer("1.9.0", "1.10.0"));
+    assert!(is_newer("v1.1.0", "1.0.0"));
+    assert!(!is_newer("v1.0.0", "1.0.0"));
+}
+
+#[test]
+fn android_checksum_lines_are_read_only_when_they_name_the_apk() {
+    use flexweek_engine::desk::update::android_expected_digest;
+    let apk = "FlexWeek-Android-1.1.0.apk";
+    let digest = "ab".repeat(32);
+    let old = "cd".repeat(32);
+    assert_eq!(
+        android_expected_digest(
+            &format!("{old}  FlexWeek-Android-1.0.0.apk\n{digest}  {apk}\n"),
+            apk
+        ),
+        Some(digest.clone()),
+        "the line for this file wins when several are listed"
+    );
+    assert_eq!(
+        android_expected_digest(&format!("{digest} *{apk}"), apk),
+        Some(digest.clone())
+    );
+    assert_eq!(
+        android_expected_digest(
+            &format!("\r\n{}  {apk}\r\n\r\n", digest.to_uppercase()),
+            apk
+        ),
+        Some(digest.clone()),
+        "capitals and Windows line endings are fine; the result is lower case"
+    );
+    assert_eq!(
+        android_expected_digest(&format!("{digest}\n"), apk),
+        None,
+        "a bare digest names no file, so the phone refuses it as the desktop does"
+    );
+    assert_eq!(
+        android_expected_digest(&format!("{}  {apk}", &digest[..63]), apk),
+        None
+    );
+}
+
+#[test]
+fn android_release_for_an_older_tag_is_not_offered() {
+    use flexweek_engine::desk::update::android_available;
+    let names = [
+        "FlexWeek-Android-0.9.0.apk".to_string(),
+        "FlexWeek-Android-0.9.0.apk.sha256".to_string(),
+    ];
+    assert!(
+        android_available(&release_of("v0.9.0", &names, json!({})), "1.0.0")
+            .unwrap()
+            .is_none()
+    );
+    let names = [
+        "FlexWeek-Android-1.1.apk".to_string(),
+        "FlexWeek-Android-1.1.apk.sha256".to_string(),
+    ];
+    assert!(
+        android_available(&release_of("v1.1", &names, json!({})), "1.1.0")
+            .unwrap()
+            .is_none(),
+        "1.1 and 1.1.0 are the same version"
+    );
+}
+
+#[test]
+fn release_page_fallback_includes_the_matching_android_checksum() {
+    use flexweek_engine::desk::update::{android_available, release_from_page};
+    let release =
+        release_from_page("https://github.com/j0nsh1n/FlexWeek/releases/tag/v1.1.0").unwrap();
+    let offer = android_available(&release, "1.0.0").unwrap().unwrap();
+    assert_eq!(offer.asset, "FlexWeek-Android-1.1.0.apk");
+    assert_eq!(
+        offer.checksum_url,
+        "https://github.com/j0nsh1n/FlexWeek/releases/download/v1.1.0/FlexWeek-Android-1.1.0.apk.sha256"
+    );
+}
+
+#[test]
 fn test_a_tag_this_build_cannot_read_is_not_an_update() {
     for value in [
         "",

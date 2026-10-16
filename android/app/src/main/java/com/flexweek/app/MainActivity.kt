@@ -51,10 +51,17 @@ import com.flexweek.app.ui.v2.WeekViewModel
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
 import com.flexweek.app.system.syncWhileForeground
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.runtime.DisposableEffect
+import com.flexweek.app.update.HttpUpdateSource
+import com.flexweek.app.update.PackageUpdateInstaller
+import com.flexweek.app.update.SharedPreferenceUpdatePrefs
+import com.flexweek.app.update.UpdateViewModel
+import com.flexweek.app.update.UpdateState
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -230,7 +237,24 @@ private fun FlexWeekRoot(
     }
     val todayVm = viewModel { TodayViewModel(core) }
     val remindersVm = viewModel { RemindersViewModel(core, SharedPreferenceReminderPrefs(activity)) }
+    val updateVm = viewModel { UpdateViewModel(BuildConfig.VERSION_NAME, HttpUpdateSource(), PackageUpdateInstaller(activity), SharedPreferenceUpdatePrefs(activity), activity.filesDir.resolve("updates")) }
+    val updateState by updateVm.state
+    DisposableEffect(updateVm) {
+        com.flexweek.app.update.UpdateInstallReceiver.onResult = updateVm::onInstallResult
+        onDispose { com.flexweek.app.update.UpdateInstallReceiver.onResult = null }
+    }
+    var showUpdateSteps by remember { mutableStateOf(false) }
     val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, updateVm) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_CREATE || event == Lifecycle.Event.ON_RESUME) {
+                updateVm.onResumed()
+                updateVm.onResumeCheck()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     LaunchedEffect(core, lifecycleOwner) {
         if (!demo) {
             syncWhileForeground(core, lifecycleOwner.lifecycle) {
@@ -363,6 +387,20 @@ private fun FlexWeekRoot(
                                     pairingRequested = true
                                 }
                             },
+                            updateState = updateState,
+                            updateDaily = updateVm.checkDaily,
+                            onCheckUpdates = updateVm::checkNow,
+                            onDownloadUpdate = updateVm::downloadAndInstall,
+                            onUpdateDaily = updateVm::setDailyCheck,
+                            onUpdateLater = {
+                                updateVm.later()
+                                showUpdateSteps = false
+                            },
+                            onUpdateSteps = { showUpdateSteps = !showUpdateSteps },
+                            onUpdatePermission = {
+                                activity.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:${activity.packageName}")))
+                            },
+                            showUpdateSteps = showUpdateSteps,
                         )
                 }
             }
