@@ -32,6 +32,7 @@ fun RemindersScreen(
     syncLine: SyncLine,
     state: RemindersUiState,
     onAllowNotifications: () -> Unit,
+    onDismissPermissionBanner: () -> Unit = {},
     onLeadChange: (Int) -> Unit,
     onToggleExact: () -> Unit,
     onSyncNow: () -> Unit,
@@ -63,7 +64,7 @@ fun RemindersScreen(
                             Button(onClick = onAllowNotifications, modifier = Modifier.height(48.dp)) {
                                 Text("Allow")
                             }
-                            TextButton(onClick = {}, modifier = Modifier.height(48.dp)) { Text("Not now") }
+                            TextButton(onClick = onDismissPermissionBanner, modifier = Modifier.height(48.dp)) { Text("Not now") }
                         }
                     }
                 }

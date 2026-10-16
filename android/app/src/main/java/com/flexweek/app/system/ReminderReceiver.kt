@@ -8,6 +8,8 @@ import androidx.core.app.NotificationManagerCompat
 import com.flexweek.app.FlexWeekApp
 import com.flexweek.app.MainActivity
 import com.flexweek.app.R
+import java.nio.ByteBuffer
+import java.security.MessageDigest
 
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -23,7 +25,7 @@ class ReminderReceiver : BroadcastReceiver() {
         val content =
             android.app.PendingIntent.getActivity(
                 context,
-                title.hashCode(),
+                reminderNotificationId(intent.getStringExtra(EXTRA_KEY) ?: "", title),
                 open,
                 android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
             )
@@ -36,12 +38,17 @@ class ReminderReceiver : BroadcastReceiver() {
                 .setAutoCancel(true)
                 .setContentIntent(content)
                 .build()
-        NotificationManagerCompat.from(context).notify(title.hashCode(), notification)
+        NotificationManagerCompat.from(context).notify(reminderNotificationId(intent.getStringExtra(EXTRA_KEY) ?: "", title), notification)
     }
 
     companion object {
         const val EXTRA_KEY = "key"
         const val EXTRA_TITLE = "title"
         const val EXTRA_BODY = "body"
+
+        fun reminderNotificationId(key: String, title: String? = null): Int {
+            val digest = MessageDigest.getInstance("SHA-256").digest(key.toByteArray(Charsets.UTF_8))
+            return ByteBuffer.wrap(digest, 0, Int.SIZE_BYTES).int
+        }
     }
 }

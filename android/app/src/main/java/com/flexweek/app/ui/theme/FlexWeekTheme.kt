@@ -44,7 +44,7 @@ private val DarkColors =
 
 @Composable
 fun FlexWeekTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean? = null,
     largeText: Boolean = false,
     content: @Composable () -> Unit,
 ) {
@@ -53,7 +53,7 @@ fun FlexWeekTheme(
     val small = if (largeText) 16.sp else 14.sp
     val caption = if (largeText) 13.sp else 12.sp
     MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
+        colorScheme = if (darkTheme ?: isSystemInDarkTheme()) DarkColors else LightColors,
         typography =
             MaterialTheme.typography.copy(
                 bodyLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = body, fontWeight = FontWeight.Normal),

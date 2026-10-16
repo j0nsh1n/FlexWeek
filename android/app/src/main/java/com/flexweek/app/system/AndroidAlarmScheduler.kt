@@ -58,7 +58,7 @@ class AndroidAlarmScheduler(
             }
         val flags =
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        return PendingIntent.getBroadcast(context, key.hashCode(), intent, flags)
+        return PendingIntent.getBroadcast(context, ReminderReceiver.reminderNotificationId(key), intent, flags)
     }
 }
 
