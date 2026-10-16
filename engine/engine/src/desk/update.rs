@@ -16,6 +16,21 @@ pub const WINDOWS_MSI: &str = "FlexWeek-Windows-x64.msi";
 pub const LINUX_TARBALL: &str = "FlexWeek-Linux-x86_64.tar.gz";
 pub const LINUX_APPIMAGE: &str = "FlexWeek-x86_64.AppImage";
 
+pub fn android_asset_name(version: &str) -> Option<String> {
+    parse_version(version)?;
+    Some(format!(
+        "FlexWeek-Android-{}.apk",
+        version.strip_prefix('v').unwrap_or(version)
+    ))
+}
+
+pub fn android_available(
+    release: &serde_json::Value,
+    current: &str,
+) -> EngineResult<Option<Update>> {
+    available(release, "android", current)
+}
+
 fn tag_pattern() -> &'static Regex {
     // Python `re.fullmatch`: the whole tag, not a version buried in `v9.9.9/../../evil`.
     static PATTERN: LazyLock<Regex> =
@@ -87,6 +102,7 @@ pub fn asset_name(kind: &str) -> Option<&'static str> {
         "windows" => Some(WINDOWS_SETUP),
         "appimage" => Some(LINUX_APPIMAGE),
         "tarball" => Some(LINUX_TARBALL),
+        "android" => None,
         _ => None,
     }
 }
@@ -122,7 +138,13 @@ pub fn available(
     let Some(assets) = get(release, "assets")?.and_then(|v| v.as_array()) else {
         return Ok(None);
     };
-    let wanted = asset_name(kind).ok_or_else(|| EngineError::key(kind))?;
+    let android_name;
+    let wanted = if kind == "android" {
+        android_name = android_asset_name(tag).ok_or_else(|| EngineError::key(kind))?;
+        android_name.as_str()
+    } else {
+        asset_name(kind).ok_or_else(|| EngineError::key(kind))?
+    };
     let mut by_name: Vec<(String, Option<serde_json::Value>)> = Vec::new();
     for item in assets {
         let serde_json::Value::Object(obj) = item else {
@@ -193,6 +215,14 @@ pub fn release_from_page(location: &str) -> Option<serde_json::Value> {
             }));
         }
     }
+    if let Some(apk) = android_asset_name(tag) {
+        for name in [apk.clone(), format!("{apk}.sha256")] {
+            assets.push(serde_json::json!({
+                "name": name,
+                "browser_download_url": format!("{RELEASE_DOWNLOAD}{tag}/{name}"),
+            }));
+        }
+    }
     Some(serde_json::json!({
         "tag_name": tag,
         "assets": assets,
@@ -217,6 +247,11 @@ pub fn expected_digest(checksum_text: &str, asset: &str) -> Option<String> {
         }
     }
     None
+}
+
+pub fn android_expected_digest(checksum_text: &str, asset: &str) -> Option<String> {
+    expected_digest(checksum_text, asset)
+        .filter(|digest| digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit()))
 }
 
 pub fn verified(payload: &[u8], digest: Option<&str>) -> bool {
