@@ -1014,19 +1014,21 @@ class Rail(QFrame):
                 f"{due_label(assignment.get('due'), week.week_start)}. Allow splitting?"
             )
             row = QWidget(self.one_go)
-            row_layout = QHBoxLayout(row)
+            # The button sits under the message: beside it, the button squeezed the wrapped message to a
+            # word per line at Large text in a 260 px rail.
+            row_layout = QVBoxLayout(row)
             row_layout.setContentsMargins(0, 0, 0, 0)
             message = QLabel(line, row)
             message.setObjectName("railOneGoMessage")
             message.setWordWrap(True)
-            row_layout.addWidget(message, 1)
+            row_layout.addWidget(message)
             action = QPushButton("Allow splitting", row)
             action.setObjectName("railAllowSplitting")
             action.setAccessibleName(line)
             action.clicked.connect(
                 lambda _=False, key=needed["assignment_id"]: self.allow_split_requested.emit(key)
             )
-            row_layout.addWidget(action)
+            row_layout.addWidget(action, 0, Qt.AlignmentFlag.AlignLeft)
             self.one_go_box.addWidget(row)
         self.one_go.setVisible(bool(self.one_go_box.count()))
         count = len(time_needed or [])

@@ -1192,6 +1192,56 @@ def child_main(args: argparse.Namespace) -> int:
         trays_whole()
         yield from quarter_grab(r)
 
+    def at_1024_by_640_large() -> Step:
+        window.resize(1024, 640)
+        window._look = sanitize_look(
+            {**window._look, "knobs": {**window._look.get("knobs", {}), "text": "large"}}
+        )
+        session.look = window._look
+        window._apply_appearance()
+        yield ("wait", 500)
+        yield (
+            "until",
+            lambda: (window.width(), window.height()) == (1024, 640),
+            5000,
+            "the window to settle at 1024 by 640",
+        )
+
+    def day_1024_large(r: Rig) -> Step:
+        yield from at_1024_by_640_large()
+        yield from day_tab(r)
+        expect(window.planner.currentWidget() is window.day_view, "Day (Classic) is shown")
+
+    def myday_1024_large(r: Rig) -> Step:
+        yield from at_1024_by_640_large()
+        yield from myday_tab(r)
+        expect(window.findChild(QAbstractButton, "viewMyDay").isVisible(), "My day is shown")
+
+    def clay_1024_large(r: Rig) -> Step:
+        yield from at_1024_by_640_large()
+        expect(window.planner.currentWidget().objectName() == "layoutClay", "Clay week is shown")
+
+    def rail_one_go_1024_large(r: Rig) -> Step:
+        due = (datetime.fromisoformat(session.week_start) + timedelta(days=1)).date().isoformat() + "T23:59"
+        session.add_homework(
+            {
+                "id": "rig-one-go",
+                "title": "Long chemistry report",
+                "due": due,
+                "estimate_min": 1440,
+                "revision": 0,
+                "spread": "one",
+            }
+        )
+        session.save()
+        yield ("until", lambda: not session.busy and not session.dirty, 10000, "homework to save")
+        yield from at_1024_by_640_large()
+        session.solve()
+        yield ("until", lambda: not session.busy, 15000, "the week to solve")
+        window._on_week()
+        message = window.rail.findChild(QLabel, "railOneGoMessage")
+        expect(message is not None, "the one-go message is shown in the rail")
+
     def reach(r: Rig) -> Step:
         """At every level the hours offer, 00:00 and 24:00 can be brought on screen."""
         scroll = r.zoom()
@@ -1688,6 +1738,10 @@ def child_main(args: argparse.Namespace) -> int:
         Scenario("day-open", "day", day_open),
         Scenario("day-drag-row", "day", day_drag_row, only=("clay",)),
         Scenario("day-small-large", "day", day_small_large),
+        Scenario("day-1024-large", "day", day_1024_large, only=("classic",)),
+        Scenario("myday-1024-large", "myday", myday_1024_large, only=("dial",)),
+        Scenario("clay-1024-large", "week", clay_1024_large, only=("clay",)),
+        Scenario("rail-one-go-1024-large", "week", rail_one_go_1024_large, only=("classic",)),
         Scenario("week-move-day", "week", week_move_day),
         Scenario("week-resize-top", "week", week_resize_top),
         Scenario("week-create", "week", week_create),

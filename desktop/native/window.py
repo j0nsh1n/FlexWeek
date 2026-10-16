@@ -48,10 +48,10 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMenu,
-    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QRadioButton,
+    QScrollArea,
     QStackedWidget,
     QSystemTrayIcon,
     QVBoxLayout,
@@ -304,6 +304,8 @@ class ClickyTitle(FittedLabel):
             event.accept()
             return
         super().mousePressEvent(event)
+# Below this window height the sign-in pages may scroll; at and above it they look as they always have.
+AUTH_SCROLLS_BELOW = 768
 PLAN_LABEL = "Plan my homework"
 SUGGEST_LABEL = "Suggest times"
 PLAN_TIP = (
@@ -962,6 +964,10 @@ class NativeWindow(QMainWindow):
         self._auth_mode_shown = mode
         self._lay_mode(mode)
         self._pin_auth_height()
+        if showing and self._auth_card is not None and self.height() < AUTH_SCROLLS_BELOW:
+            scroll = self.findChild(QScrollArea, "authScroll")
+            if scroll is not None:
+                scroll.ensureWidgetVisible(self._auth_card, 0, 0)
 
     def _lay_mode(self, mode: str) -> None:
         """What the card shows for `mode`, with nothing cleared and no height pinned, so the height of
@@ -1004,7 +1010,8 @@ class NativeWindow(QMainWindow):
         holder, card = self._auth_holder, self._auth_card
         if holder is None or card is None:
             return
-        if holder.parentWidget() is not self._stack.currentWidget():
+        page = self._stack.currentWidget()
+        if page is None or not page.isAncestorOf(holder):
             # A stack is as tall as its tallest page, so a pinned card on a hidden sign-in page kept every
             # window at least its height: at Large text Retro's was 782 px, past a 768 px laptop.
             holder.setMinimumHeight(0)
@@ -1087,7 +1094,28 @@ class NativeWindow(QMainWindow):
         """
         page = QWidget()
         page.setObjectName(name)
-        outer = QVBoxLayout(page)
+        if pinned:
+            # At 1024x640 with Large text the tallest card (Create) needs more than the window has, so the
+            # page scrolls there instead of holding the window taller than the screen.
+            page_layout = QVBoxLayout(page)
+            page_layout.setContentsMargins(0, 0, 0, 0)
+            page_layout.setSpacing(0)
+            scroll = QScrollArea(page)
+            scroll.setObjectName("authScroll")
+            scroll.setProperty("bare", True)
+            scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            scroll.setFrameShape(QFrame.Shape.NoFrame)
+            scroll.setWidgetResizable(True)
+            scroll.setAutoFillBackground(False)
+            scroll.viewport().setAutoFillBackground(False)
+            content = QWidget()
+            content.setAutoFillBackground(False)
+            content.setObjectName("authScrollContent")
+            scroll.setWidget(content)
+            page_layout.addWidget(scroll)
+            outer = QVBoxLayout(content)
+        else:
+            outer = QVBoxLayout(page)
         outer.addStretch(1)
         outer.addLayout(brand_row())
         # A pinned card's holder starts above the card by the shadow's reach, so the shadow is not cut.
@@ -2288,6 +2316,13 @@ class NativeWindow(QMainWindow):
         self.session.finish_recovery()
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        scroll = self.findChild(QScrollArea, "authScroll")
+        if scroll is not None:
+            scroll.setVerticalScrollBarPolicy(
+                Qt.ScrollBarPolicy.ScrollBarAsNeeded
+                if event.size().height() < AUTH_SCROLLS_BELOW
+                else Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+            )
         self.week_table.set_narrow(False)
         self._place_rail(self._rail_shown())
         self._fit_plan_and_more(event.size().width())
@@ -4587,12 +4622,15 @@ class NativeWindow(QMainWindow):
             self._open_focus_screen()
 
     def _confirm_replace_focus(self, current: str, incoming: str) -> None:
-        answer = QMessageBox.question(
+        sheet = ConfirmSheet(
             self,
             "Replace timer",
             f"Stop the timer for {current} and start {incoming} instead?",
+            (("keep", "Keep current timer", "quiet"), ("replace", "Replace timer", "danger")),
+            default="keep",
         )
-        if answer == QMessageBox.StandardButton.Yes and self.session.confirm_replace_focus():
+        sheet.exec()
+        if sheet.answer == "replace" and self.session.confirm_replace_focus():
             self._open_focus_screen()
 
     def _build_focus_screen(self) -> None:
@@ -5196,12 +5234,15 @@ class NativeWindow(QMainWindow):
         elif dialog.action == "preview" and dialog.selected_id:
             self.session.preview_restore_point(dialog.selected_id, lambda: self._told(self._open_restore))
         elif dialog.action == "restore" and dialog.selected_id:
-            answer = QMessageBox.question(
+            sheet = ConfirmSheet(
                 self,
                 "Restore",
                 "Restore this snapshot? FlexWeek saves a restore point first.",
+                (("not", "Not now", "quiet"), ("restore", "Restore", "danger")),
+                default="not",
             )
-            if answer == QMessageBox.StandardButton.Yes:
+            sheet.exec()
+            if sheet.answer == "restore":
                 self.session.apply_restore_point(dialog.selected_id)
 
     def _log_out(self) -> None:
