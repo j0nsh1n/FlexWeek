@@ -20,8 +20,9 @@ from desktop.native.hours.canvas import BlockPainter, Drawn, HoursCanvas
 from desktop.native.hours.geometry import Span
 from desktop.native.hours.rail import RAIL_PX
 from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.look import sanitize_look
 from desktop.native.settings import HELP_KEYS
-from desktop.native.weekmodel import length_label, range_label
+from desktop.native.weekmodel import due_label, length_label, range_label
 from desktop.native.window import WINDOW_MIN_WIDTH, NativeWindow
 from desktop.tests.window_support import (  # noqa: F401
     qapp,
@@ -448,3 +449,75 @@ def test_the_ringing_alarm_says_its_time_on_the_clock_the_student_chose(
     use_clock(qapp, window, twenty_four)
     dialog = AlarmRingDialog(window, {"name": "Guitar practice", "time": "18:45", "block": "guitar"}, "")
     assert dialog.findChild(QLabel, "alarmDetail").text() == words
+
+
+def test_rail_one_go_message_wraps_in_phrases_at_large_text(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    """The action gets its own line so the message can use the rail's width."""
+    seeded(qapp, window)
+    window._look = sanitize_look({"preset": "default", "knobs": {"text": "large"}})
+    window._apply_appearance()
+    window.rail.set_week(
+        window.rail._week,
+        window.rail._today,
+        window.rail._minute,
+        {"chemistry": {"title": "Long chemistry report", "due": sunday_due(window.session.week_start)}},
+        [{"assignment_id": "chemistry", "title": "Long chemistry report", "minutes": 2400}],
+        {"chemistry"},
+    )
+    qapp.processEvents()
+    message = window.rail.findChild(QLabel, "railOneGoMessage")
+    action = window.rail.findChild(QPushButton, "railAllowSplitting")
+    assert message is not None, "the one-go message is present"
+    assert action is not None, "the one-go action is present"
+    assert message.wordWrap(), "the one-go message wraps instead of overflowing the rail"
+    metrics = QFontMetricsF(message.font())
+    lines = round(message.heightForWidth(message.width()) / metrics.lineSpacing())
+    assert lines <= 4, f"the one-go message wraps in {lines} lines, expected at most 4"
+    assert action.mapTo(message.parentWidget(), action.rect().topLeft()).y() >= message.geometry().bottom(), (
+        "Allow splitting is below the one-go message"
+    )
+
+
+def test_rail_one_go_button_keeps_its_whole_words(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    seeded(qapp, window)
+    window.rail.set_week(
+        window.rail._week,
+        window.rail._today,
+        window.rail._minute,
+        {"chemistry": {"title": "Long chemistry report", "due": sunday_due(window.session.week_start)}},
+        [{"assignment_id": "chemistry", "title": "Long chemistry report", "minutes": 2400}],
+        {"chemistry"},
+    )
+    qapp.processEvents()
+    action = window.rail.findChild(QPushButton, "railAllowSplitting")
+    assert action is not None, "the one-go action is present"
+    assert action.width() >= action.sizeHint().width(), "Allow splitting is not clipped"
+
+
+def test_rail_one_go_line_names_the_task_and_due(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    seeded(qapp, window)
+    due = sunday_due(window.session.week_start)
+    window.rail.set_week(
+        window.rail._week,
+        window.rail._today,
+        window.rail._minute,
+        {"chemistry": {"title": "Long chemistry report", "due": due}},
+        [{"assignment_id": "chemistry", "title": "Long chemistry report", "minutes": 2400}],
+        {"chemistry"},
+    )
+    qapp.processEvents()
+    action = window.rail.findChild(QPushButton, "railAllowSplitting")
+    assert action is not None, "the one-go action is present"
+    assert action.accessibleName() == (
+        f"Long chemistry report doesn't fit in one go before {due_label(due, window.session.week_start)}. "
+        "Allow splitting?"
+    ), "the one-go action retains the task and due date"
