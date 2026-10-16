@@ -127,6 +127,7 @@ fun RemindersScreen(
                     ) else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     Text("Downloading ${update.received} / ${update.total}")
                 }
+                is UpdateState.Verifying -> Text("Checking the downloaded file…")
                 is UpdateState.Failed -> Text(update.reason)
                 UpdateState.Checking -> Text("Checking for updates…")
                 else -> Unit

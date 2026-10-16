@@ -18,10 +18,11 @@ pub const LINUX_APPIMAGE: &str = "FlexWeek-x86_64.AppImage";
 
 pub fn android_asset_name(version: &str) -> Option<String> {
     parse_version(version)?;
-    Some(format!(
-        "FlexWeek-Android-{}.apk",
-        version.strip_prefix('v').unwrap_or(version)
-    ))
+    let normalized = version.trim().strip_prefix('v').unwrap_or(version.trim());
+    if !(2..=4).contains(&normalized.split('.').count()) {
+        return None;
+    }
+    Some(format!("FlexWeek-Android-{normalized}.apk"))
 }
 
 pub fn android_available(

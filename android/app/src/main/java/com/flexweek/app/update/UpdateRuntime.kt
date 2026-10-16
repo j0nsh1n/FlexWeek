@@ -33,6 +33,7 @@ sealed interface UpdateState {
     data object UpToDate : UpdateState
     data class Available(val offer: OfferedUpdate, val message: String? = null) : UpdateState
     data class Downloading(val offer: OfferedUpdate, val received: Long, val total: Long) : UpdateState
+    data class Verifying(val offer: OfferedUpdate) : UpdateState
     data class NeedsPermission(val offer: OfferedUpdate) : UpdateState
     data class Installing(val offer: OfferedUpdate) : UpdateState
     data class Failed(val reason: String) : UpdateState
@@ -64,7 +65,7 @@ object UpdateParsing {
         val encoded = updateAndroidRelease(json, installed) ?: return null
         val data = JSONObject(encoded)
         val body = JSONObject(json).optString("body")
-        val notes = body.split(Regex("\\r?\\n")).map(String::trim).filter(String::isNotEmpty).take(2)
+        val notes = UpdateNotes.head(body)
         return OfferedUpdate(data.getString("version"), data.getString("apk_name"), data.getString("apk_url"), data.getString("checksum_url"), if (data.isNull("apk_size")) null else data.getLong("apk_size"), notes)
     }
     fun allowed(url: String): Boolean = try {
@@ -93,7 +94,12 @@ object UpdateDigest {
 }
 object UpdateSigner {
     fun matches(installed: List<ByteArray>, downloaded: List<ByteArray>): Boolean = installed.isNotEmpty() && downloaded.isNotEmpty() && installed.size == downloaded.size && installed.zip(downloaded).all { (a, b) -> a.contentEquals(b) }
-    fun refusalMessage(debugBuild: Boolean): String = if (debugBuild) "This test build can't update itself. Install FlexWeek from the release page. Debug builds must use the release page." else "The downloaded app is signed differently. Nothing was installed."
+    fun isValidUpdate(packageName: String?, versionName: String?, offeredVersion: String, installed: List<ByteArray>, downloaded: List<ByteArray>): Boolean =
+        packageName == "com.flexweek.app" && versionName == offeredVersion && matches(installed, downloaded)
+    fun refusalMessage(debugBuild: Boolean): String = if (debugBuild) "This test build can't update itself. Install FlexWeek from the release page." else "The downloaded app is signed differently. Nothing was installed."
+}
+object UpdateNotes {
+    fun head(body: String): List<String> = body.split(Regex("\\r?\\n")).map(String::trim).filter(String::isNotEmpty).take(2)
 }
 object UpdateSchedule {
     const val CHECK_EVERY_MS = 24L * 60 * 60 * 1000
@@ -116,17 +122,7 @@ class HttpUpdateSource : UpdateSource {
             val connection = connection(url)
             val total = connection.contentLengthLong.takeIf { it >= 0 } ?: -1L
             if (total > MAX_APK_BYTES) throw IllegalStateException("The download is too large.")
-            file.outputStream().use { output -> connection.inputStream.use { input ->
-                val bytes = ByteArray(32768); var received = 0L
-                while (true) {
-                    val count = input.read(bytes)
-                    if (count < 0) break
-                    received += count
-                    if (received > MAX_APK_BYTES) throw IllegalStateException("The download is too large.")
-                    output.write(bytes, 0, count)
-                    progress(received, total)
-                }
-            } }
+            connection.inputStream.use { input -> streamDownload(input, file, total, MAX_APK_BYTES, progress) }
             true
         } catch (error: IllegalStateException) {
             file.delete()
@@ -152,6 +148,24 @@ class HttpUpdateSource : UpdateSource {
         }
         throw IllegalStateException("Too many update redirects")
     }
+    internal fun streamDownload(input: InputStream, file: File, total: Long, limit: Long = MAX_APK_BYTES, progress: (Long, Long) -> Unit) {
+        try {
+            file.outputStream().use { output ->
+                val bytes = ByteArray(32768); var received = 0L
+                while (true) {
+                    val count = input.read(bytes)
+                    if (count < 0) break
+                    received += count
+                    if (received > limit) throw IllegalStateException("The download is too large.")
+                    output.write(bytes, 0, count)
+                    progress(received, total)
+                }
+            }
+        } catch (error: Exception) {
+            file.delete()
+            throw error
+        }
+    }
     companion object { const val MAX_APK_BYTES = 200L * 1024 * 1024 }
 }
 
@@ -171,7 +185,7 @@ class PackageUpdateInstaller(private val context: Context) : UpdateInstaller {
         return try {
             val info = context.packageManager.getPackageArchiveInfo(file.absolutePath, PackageManager.GET_SIGNING_CERTIFICATES) ?: return false
             info.applicationInfo?.sourceDir = file.absolutePath
-            info.packageName == context.packageName && info.versionName == version && UpdateSigner.matches(signatureBytes(info), signatureBytes(context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_SIGNING_CERTIFICATES)))
+            UpdateSigner.isValidUpdate(info.packageName, info.versionName, version, signatureBytes(context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_SIGNING_CERTIFICATES)), signatureBytes(info))
         } catch (_: Exception) { false }
     }
     @Suppress("DEPRECATION")
@@ -229,6 +243,7 @@ class UpdateViewModel(private val installedVersion: String, private val source: 
                 }
                 if (part.length() > HttpUpdateSource.MAX_APK_BYTES) { part.delete(); throw IllegalStateException("The download is too large.") }
                 state.value = UpdateState.Downloading(offer, part.length(), offer.size ?: -1)
+                state.value = UpdateState.Verifying(offer)
                 val actual = part.inputStream().use(UpdateParsing::sha256)
                 if (!UpdateDigest.matches(actual, checksum)) { part.delete(); throw IllegalStateException("The checksum did not match. The download was discarded.") }
                 apk.delete()
