@@ -166,6 +166,12 @@ fn android_release_needs_a_complete_stable_release_for_the_running_version() {
             .is_none()
     );
     assert!(
+        android_available(&release_of("v1.1.0", &names[1..], json!({})), "1.0.0")
+            .unwrap()
+            .is_none(),
+        "a checksum with no APK beside it offers nothing"
+    );
+    assert!(
         android_available(&release_of("v1.1.0", &names, json!({})), "1.1.0")
             .unwrap()
             .is_none()
