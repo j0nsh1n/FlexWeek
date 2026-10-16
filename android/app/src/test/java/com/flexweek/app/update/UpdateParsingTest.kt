@@ -25,6 +25,19 @@ class UpdateParsingTest {
         assertEquals(emptyList<String>(), UpdateNotes.head(""))
     }
 
+    // What the Rust offer JSON becomes on the phone (the JSON itself is built and tested in Rust).
+
+    @Test fun offerFromRustJsonKeepsEveryFieldAndTheFirstTwoNotesLines() {
+        val encoded = """{"version":"1.1.0","apk_name":"FlexWeek-Android-1.1.0.apk","apk_url":"https://github.com/a.apk","checksum_url":"https://github.com/a.sha256","notes":"ignored","apk_size":68123456}"""
+        val offer = UpdateParsing.fromEncoded(encoded, "Month and Day.\r\nWidgets.\nThird")
+        assertEquals(OfferedUpdate("1.1.0", "FlexWeek-Android-1.1.0.apk", "https://github.com/a.apk", "https://github.com/a.sha256", 68123456L, listOf("Month and Day.", "Widgets.")), offer)
+    }
+
+    @Test fun offerFromRustJsonWithoutASizeHasNoSize() {
+        val encoded = """{"version":"1.1.0","apk_name":"FlexWeek-Android-1.1.0.apk","apk_url":"https://github.com/a.apk","checksum_url":"https://github.com/a.sha256","notes":"","apk_size":null}"""
+        assertEquals(null, UpdateParsing.fromEncoded(encoded, "").size)
+    }
+
     // Digest comparison (Kotlin side): exact lowercase hex; the .sha256 text itself is read in Rust.
 
     @Test fun sha256OfKnownBytesIsStandard() {
@@ -120,6 +133,8 @@ class UpdateParsingTest {
         assertFalse(UpdateParsing.allowed("https://githubusercontent.com.evil.net/a"))
         assertFalse(UpdateParsing.allowed("https://evilgithubusercontent.com/a"))
         assertFalse(UpdateParsing.allowed("https://github.com@evil.test/a"))
+        assertFalse(UpdateParsing.allowed("https://objects.githubusercontent.com.evil.net/a"))
+        assertFalse(UpdateParsing.allowed("https://api.github.com.evil.net/a"))
         assertFalse(UpdateParsing.allowed("https://evil.test/a"))
     }
 

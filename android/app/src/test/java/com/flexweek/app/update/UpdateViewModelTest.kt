@@ -294,6 +294,50 @@ class UpdateViewModelTest {
         assertEquals(listOf("1.1.0"), installer.validatedVersions)
     }
 
+    @Test fun pressingDownloadWhileTheChecksumIsStillLoadingDownloadsOnce() = main {
+        val source = FakeSource().also { it.release = "available"; it.pendingChecksum = CompletableDeferred() }
+        val installer = FakeInstaller()
+        val vm = viewModel(source, installer, FakePrefs())
+        vm.checkNow()
+        vm.downloadAndInstall()
+        vm.downloadAndInstall()
+        source.pendingChecksum!!.complete(FakeSource.ABC_DIGEST)
+        assertEquals(1, source.checksumCalls)
+        assertEquals(1, source.downloadCalls)
+        assertEquals(1, installer.installCalls)
+    }
+
+    @Test fun aFileLargerThanTheCapIsRefusedAndDeletedEvenIfTheSourceSaidItWorked() = main {
+        val source = FakeSource().also { it.release = "available"; it.sparseBytes = HttpUpdateSource.MAX_APK_BYTES + 1 }
+        val installer = FakeInstaller()
+        val dir = files.newFolder("too-large")
+        val vm = viewModel(source, installer, FakePrefs(), dir)
+        vm.checkNow(); vm.downloadAndInstall()
+        assertEquals("The download is too large.", (vm.state.value as UpdateState.Failed).reason)
+        assertEquals(0, dir.listFiles()?.size ?: 0)
+        assertEquals(0, installer.installCalls)
+    }
+
+    @Test fun anOversizeTransferThatReportsFailureSaysTooLargeNotStopped() = main {
+        val source = FakeSource().also { it.release = "available"; it.sparseBytes = HttpUpdateSource.MAX_APK_BYTES + 1; it.transferOk = false }
+        val dir = files.newFolder("too-large-stopped")
+        val vm = viewModel(source, FakeInstaller(), FakePrefs(), dir)
+        vm.checkNow(); vm.downloadAndInstall()
+        assertEquals("The download is too large.", (vm.state.value as UpdateState.Failed).reason)
+        assertEquals(0, dir.listFiles()?.size ?: 0)
+    }
+
+    @Test fun aSourceThatStopsTheStreamForSizeLeavesNoPartFileBehind() = main {
+        val source = FakeSource().also { it.release = "available"; it.throwAfterWrite = IllegalStateException("The download is too large.") }
+        val installer = FakeInstaller()
+        val dir = files.newFolder("stream-stopped")
+        val vm = viewModel(source, installer, FakePrefs(), dir)
+        vm.checkNow(); vm.downloadAndInstall()
+        assertEquals("The download is too large.", (vm.state.value as UpdateState.Failed).reason)
+        assertEquals(0, dir.listFiles()?.size ?: 0)
+        assertEquals(0, installer.installCalls)
+    }
+
     // Debug build (Q14)
 
     @Test fun debugBuildRefusesWithTheExactSentenceBeforeAnyDownload() = main {
@@ -402,6 +446,9 @@ class UpdateViewModelTest {
         var progressEvents: List<Pair<Long, Long>> = emptyList()
         var onProgress: (() -> Unit)? = null
         var transferOk = true
+        var pendingChecksum: CompletableDeferred<String?>? = null
+        var sparseBytes: Long? = null
+        var throwAfterWrite: Exception? = null
         override suspend fun get(url: String): String? {
             allCalls += "get $url"
             if (url.startsWith("https://api.github.com/") && url.endsWith("/releases/latest")) {
@@ -410,12 +457,14 @@ class UpdateViewModelTest {
                 return pendingLatest?.await() ?: release
             }
             if (url.startsWith("https://github.com/") && url.endsWith("/releases/latest")) { pageCalls++; return release }
-            if (url.endsWith(".sha256")) { checksumCalls++; return digest }
+            if (url.endsWith(".sha256")) { checksumCalls++; return pendingChecksum?.await() ?: digest }
             return null
         }
         override suspend fun download(url: String, file: File, progress: (Long, Long) -> Unit): Boolean {
             allCalls += "download $url"
             downloadCalls++; targetNames += file.name; file.writeBytes("abc".toByteArray())
+            sparseBytes?.let { java.io.RandomAccessFile(file, "rw").use { raf -> raf.setLength(it) } }
+            throwAfterWrite?.let { throw it }
             (if (progressEvents.isEmpty()) listOf(3L to 3L) else progressEvents).forEach { (got, total) -> progress(got, total); onProgress?.invoke() }
             return transferOk
         }

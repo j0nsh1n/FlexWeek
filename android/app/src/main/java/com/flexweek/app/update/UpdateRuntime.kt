@@ -2,6 +2,7 @@ package com.flexweek.app.update
 
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -63,8 +64,10 @@ object RustUpdateRules : UpdateRules {
 object UpdateParsing {
     fun offered(json: String, installed: String): OfferedUpdate? {
         val encoded = updateAndroidRelease(json, installed) ?: return null
+        return fromEncoded(encoded, JSONObject(json).optString("body"))
+    }
+    fun fromEncoded(encoded: String, body: String): OfferedUpdate {
         val data = JSONObject(encoded)
-        val body = JSONObject(json).optString("body")
         val notes = UpdateNotes.head(body)
         return OfferedUpdate(data.getString("version"), data.getString("apk_name"), data.getString("apk_url"), data.getString("checksum_url"), if (data.isNull("apk_size")) null else data.getLong("apk_size"), notes)
     }
@@ -169,8 +172,8 @@ class HttpUpdateSource : UpdateSource {
     companion object { const val MAX_APK_BYTES = 200L * 1024 * 1024 }
 }
 
-class SharedPreferenceUpdatePrefs(context: Context) : UpdatePrefs {
-    private val prefs = context.getSharedPreferences("flexweek_update", Context.MODE_PRIVATE)
+class SharedPreferenceUpdatePrefs(private val prefs: SharedPreferences) : UpdatePrefs {
+    constructor(context: Context) : this(context.getSharedPreferences("flexweek_update", Context.MODE_PRIVATE))
     override var checkDaily: Boolean
         get() = prefs.getBoolean("check_daily", true)
         set(value) { prefs.edit().putBoolean("check_daily", value).apply() }
@@ -253,7 +256,10 @@ class UpdateViewModel(private val installedVersion: String, private val source: 
                 if (!installer.install(apk)) throw IllegalStateException("Android's installer could not start.")
                 state.value = UpdateState.Installing(offer)
             }
-        } catch (error: Exception) { state.value = UpdateState.Failed(error.message ?: "The update could not be installed.") } finally { busy = false } }
+        } catch (error: Exception) {
+            File(updatesDir, offer.apkName + ".part").delete()
+            state.value = UpdateState.Failed(error.message ?: "The update could not be installed.")
+        } finally { busy = false } }
     }
     fun later() { (state.value as? UpdateState.NeedsPermission)?.let { state.value = UpdateState.Available(it.offer) } }
     fun onResumed() {
