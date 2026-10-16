@@ -213,7 +213,11 @@ class UpdateViewModel(private val installedVersion: String, private val source: 
     val state = mutableStateOf<UpdateState>(UpdateState.Idle)
     val checkDaily: Boolean get() = prefs.checkDaily
     private var busy = false
-    fun start() { if (rules.due(prefs.checkDaily, prefs.lastChecked, now())) check(false) }
+    fun start() {
+        // Returning from Android's Install dialog resumes the app; a check then would drop the install's result.
+        if (state.value.let { it is UpdateState.Downloading || it is UpdateState.Verifying || it is UpdateState.NeedsPermission || it is UpdateState.Installing }) return
+        if (rules.due(prefs.checkDaily, prefs.lastChecked, now())) check(false)
+    }
     fun checkNow() = check(true)
     private fun check(loud: Boolean) {
         if (busy) return
@@ -283,10 +287,29 @@ class UpdateViewModel(private val installedVersion: String, private val source: 
     fun onResumeCheck() = start()
 }
 
+sealed interface InstallStep {
+    data object ShowAndroidsDialog : InstallStep
+    data class Finished(val installed: Boolean) : InstallStep
+}
+object UpdateInstallStatus {
+    fun step(status: Int): InstallStep =
+        if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) InstallStep.ShowAndroidsDialog
+        else InstallStep.Finished(status == PackageInstaller.STATUS_SUCCESS)
+}
+
 class UpdateInstallReceiver : android.content.BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
-        onResult?.invoke(status == PackageInstaller.STATUS_SUCCESS, intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE))
+        when (val step = UpdateInstallStatus.step(status)) {
+            InstallStep.ShowAndroidsDialog -> {
+                @Suppress("DEPRECATION")
+                val confirm = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
+                    else intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
+                if (confirm == null) onResult?.invoke(false, null)
+                else context.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+            is InstallStep.Finished -> onResult?.invoke(step.installed, intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE))
+        }
     }
     companion object {
         const val ACTION = "com.flexweek.app.UPDATE_INSTALL_RESULT"

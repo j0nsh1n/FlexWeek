@@ -131,7 +131,7 @@ class UpdateViewModelTest {
         val vm = viewModel(FakeSource(), FakeInstaller(), FakePrefs())
         vm.checkNow()
         assertTrue("manual offline check was ${vm.state.value}", vm.state.value is UpdateState.Failed)
-        assertTrue((vm.state.value as UpdateState.Failed).reason.contains("could not check", ignoreCase = true))
+        assertTrue(vm.stateAs<UpdateState.Failed>().reason.contains("could not check", ignoreCase = true))
     }
 
     @Test fun checkNowFallsBackToTheReleasePageWhenTheApiRefuses() = main {
@@ -145,7 +145,7 @@ class UpdateViewModelTest {
     @Test fun availableOfferCarriesSizeAndTwoNotesLines() = main {
         val vm = viewModel(FakeSource().also { it.release = "available" }, FakeInstaller(), FakePrefs())
         vm.checkNow()
-        val offer = (vm.state.value as UpdateState.Available).offer
+        val offer = vm.stateAs<UpdateState.Available>().offer
         assertEquals("1.1.0", offer.version)
         assertEquals(68123456L, offer.size)
         assertEquals(listOf("Month and Day", "Widgets"), offer.notes)
@@ -155,7 +155,7 @@ class UpdateViewModelTest {
         val rules = FakeRules().also { it.size = null }
         val vm = viewModel(FakeSource().also { it.release = "available" }, FakeInstaller(), FakePrefs(), rules = rules)
         vm.checkNow()
-        assertNull((vm.state.value as UpdateState.Available).offer.size)
+        assertNull(vm.stateAs<UpdateState.Available>().offer.size)
     }
 
     // Nothing runs before the button
@@ -231,7 +231,7 @@ class UpdateViewModelTest {
         val dir = files.newFolder("no-checksum")
         val vm = viewModel(source, FakeInstaller(), FakePrefs(), dir)
         vm.checkNow(); vm.downloadAndInstall()
-        assertTrue((vm.state.value as UpdateState.Failed).reason.contains("checksum", ignoreCase = true))
+        assertTrue(vm.stateAs<UpdateState.Failed>().reason.contains("checksum", ignoreCase = true))
         assertEquals(0, source.downloadCalls)
         assertEquals(0, dir.listFiles()?.size ?: 0)
     }
@@ -240,7 +240,7 @@ class UpdateViewModelTest {
         val source = FakeSource().also { it.release = "available"; it.digest = "not a digest line" }
         val vm = viewModel(source, FakeInstaller(), FakePrefs())
         vm.checkNow(); vm.downloadAndInstall()
-        assertTrue((vm.state.value as UpdateState.Failed).reason.contains("checksum", ignoreCase = true))
+        assertTrue(vm.stateAs<UpdateState.Failed>().reason.contains("checksum", ignoreCase = true))
         assertEquals(0, source.downloadCalls)
     }
 
@@ -250,7 +250,7 @@ class UpdateViewModelTest {
         val dir = files.newFolder("mismatch")
         val vm = viewModel(source, installer, FakePrefs(), dir)
         vm.checkNow(); vm.downloadAndInstall()
-        val reason = (vm.state.value as UpdateState.Failed).reason
+        val reason = vm.stateAs<UpdateState.Failed>().reason
         assertTrue(reason, reason.contains("did not match"))
         assertTrue(reason, reason.contains("discarded"))
         assertEquals(0, dir.listFiles()?.size ?: 0)
@@ -270,7 +270,7 @@ class UpdateViewModelTest {
         val dir = files.newFolder("partial")
         val vm = viewModel(source, FakeInstaller(), FakePrefs(), dir)
         vm.checkNow(); vm.downloadAndInstall()
-        assertTrue((vm.state.value as UpdateState.Failed).reason.contains("stopped"))
+        assertTrue(vm.stateAs<UpdateState.Failed>().reason.contains("stopped"))
         assertEquals(0, dir.listFiles()?.size ?: 0)
     }
 
@@ -290,7 +290,7 @@ class UpdateViewModelTest {
         val vm = viewModel(source, installer, FakePrefs(), dir)
         vm.checkNow(); vm.downloadAndInstall()
         assertTrue("invalid APK must be refused; was ${vm.state.value}", vm.state.value is UpdateState.Failed)
-        assertTrue((vm.state.value as UpdateState.Failed).reason.contains("Nothing was installed"))
+        assertTrue(vm.stateAs<UpdateState.Failed>().reason.contains("Nothing was installed"))
         assertEquals(0, installer.installCalls)
         assertEquals(0, dir.listFiles()?.size ?: 0)
         assertEquals(listOf("1.1.0"), installer.validatedVersions)
@@ -315,7 +315,7 @@ class UpdateViewModelTest {
         val dir = files.newFolder("too-large")
         val vm = viewModel(source, installer, FakePrefs(), dir)
         vm.checkNow(); vm.downloadAndInstall()
-        assertEquals("The download is too large.", (vm.state.value as UpdateState.Failed).reason)
+        assertEquals("The download is too large.", vm.stateAs<UpdateState.Failed>().reason)
         assertEquals(0, dir.listFiles()?.size ?: 0)
         assertEquals(0, installer.installCalls)
     }
@@ -325,7 +325,7 @@ class UpdateViewModelTest {
         val dir = files.newFolder("too-large-stopped")
         val vm = viewModel(source, FakeInstaller(), FakePrefs(), dir)
         vm.checkNow(); vm.downloadAndInstall()
-        assertEquals("The download is too large.", (vm.state.value as UpdateState.Failed).reason)
+        assertEquals("The download is too large.", vm.stateAs<UpdateState.Failed>().reason)
         assertEquals(0, dir.listFiles()?.size ?: 0)
     }
 
@@ -335,7 +335,7 @@ class UpdateViewModelTest {
         val dir = files.newFolder("stream-stopped")
         val vm = viewModel(source, installer, FakePrefs(), dir)
         vm.checkNow(); vm.downloadAndInstall()
-        assertEquals("The download is too large.", (vm.state.value as UpdateState.Failed).reason)
+        assertEquals("The download is too large.", vm.stateAs<UpdateState.Failed>().reason)
         assertEquals(0, dir.listFiles()?.size ?: 0)
         assertEquals(0, installer.installCalls)
     }
@@ -351,7 +351,7 @@ class UpdateViewModelTest {
         val callsBeforePress = source.allCalls.toList()
         vm.downloadAndInstall()
         assertTrue("debug refusal was ${vm.state.value}", vm.state.value is UpdateState.Failed)
-        assertEquals("This test build can't update itself. Install FlexWeek from the release page.", (vm.state.value as UpdateState.Failed).reason)
+        assertEquals("This test build can't update itself. Install FlexWeek from the release page.", vm.stateAs<UpdateState.Failed>().reason)
         assertEquals(callsBeforePress, source.allCalls)
         assertEquals(0, source.downloadCalls)
         assertEquals(0, source.checksumCalls)
@@ -409,7 +409,7 @@ class UpdateViewModelTest {
         val dir = files.newFolder("wont-start")
         val vm = viewModel(FakeSource().also { it.release = "available" }, installer, FakePrefs(), dir)
         vm.checkNow(); vm.downloadAndInstall()
-        assertTrue((vm.state.value as UpdateState.Failed).reason.contains("installer could not start"))
+        assertTrue(vm.stateAs<UpdateState.Failed>().reason.contains("installer could not start"))
         assertTrue(File(dir, "FlexWeek-Android-1.1.0.apk").exists())
     }
 
@@ -419,9 +419,23 @@ class UpdateViewModelTest {
         vm.checkNow(); vm.downloadAndInstall()
         assertTrue(vm.state.value is UpdateState.Installing)
         vm.onInstallResult(false, "cancelled")
-        val state = vm.state.value as UpdateState.Available
-        assertEquals("Not installed. Your week is as it was.", state.message)
+        val state = vm.state.value
+        assertTrue("back to the offer, was $state", state is UpdateState.Available)
+        assertEquals("Not installed. Your week is as it was.", (state as UpdateState.Available).message)
         assertEquals("1.1.0", state.offer.version)
+    }
+
+    @Test fun aDueCheckOnReturningFromAndroidsDialogKeepsTheInstallAndItsResult() = main {
+        val rules = FakeRules()
+        val vm = viewModel(FakeSource().also { it.release = "available" }, FakeInstaller(), FakePrefs(), rules = rules)
+        vm.checkNow(); vm.downloadAndInstall()
+        rules.isDue = true
+        vm.onResumeCheck()
+        assertTrue(vm.state.value is UpdateState.Installing)
+        vm.onInstallResult(false, "cancelled")
+        val state = vm.state.value
+        assertTrue("back to the offer, was $state", state is UpdateState.Available)
+        assertEquals("Not installed. Your week is as it was.", (state as UpdateState.Available).message)
     }
 
     @Test fun anInstallResultWithNothingInstallingChangesNothing() = main {
@@ -430,6 +444,13 @@ class UpdateViewModelTest {
         val before = vm.state.value
         vm.onInstallResult(false, "cancelled")
         assertEquals(before, vm.state.value)
+    }
+
+    // A wrong state fails as an assertion that names it, not as a ClassCastException.
+    private inline fun <reified T : UpdateState> UpdateViewModel.stateAs(): T {
+        val current = state.value
+        assertTrue("expected ${T::class.simpleName}, was $current", current is T)
+        return current as T
     }
 
     private fun viewModel(source: FakeSource, installer: FakeInstaller, prefs: FakePrefs, dir: File = files.root, debug: Boolean = false, rules: FakeRules = FakeRules()) =
