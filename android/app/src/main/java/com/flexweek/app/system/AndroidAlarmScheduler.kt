@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import com.flexweek.app.system.widget.WidgetRefresh
 
 class AndroidAlarmScheduler(
     private val context: Context,
@@ -137,7 +138,7 @@ fun rescheduleRemindersNow(
     val plan =
         ReminderRescheduler.plan(
             upcoming = upcoming,
-            currentlyScheduled = scheduler.scheduledKeys() - FocusRuntime.END_ALARM_KEY,
+            currentlyScheduled = scheduler.scheduledKeys() - FocusRuntime.END_ALARM_KEY - WidgetRefresh.ALARM_KEY,
             nowMs = nowMs,
             exactOptIn = settings.optBoolean("exact_reminders", false),
             canScheduleExactAlarms = canScheduleExactAlarms,
