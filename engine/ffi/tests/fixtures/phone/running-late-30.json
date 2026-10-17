@@ -1,0 +1,78 @@
+{
+  "week_start": "2026-10-05",
+  "placed": [
+    {
+      "category": "class",
+      "days": [
+        0
+      ],
+      "duration_min": 390,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:00",
+      "title": "School"
+    },
+    {
+      "category": "extra",
+      "days": [
+        0
+      ],
+      "duration_min": 60,
+      "id": "soccer",
+      "kind": "locked",
+      "start": "17:30",
+      "title": "Soccer"
+    },
+    {
+      "assignment_id": "essay",
+      "category": "assignments",
+      "days": [
+        0
+      ],
+      "duration_min": 60,
+      "id": "essay-session",
+      "kind": "flexible",
+      "start": "16:30",
+      "title": "History essay"
+    },
+    {
+      "id": "b-late-id",
+      "kind": "locked",
+      "title": "Running late",
+      "duration_min": 30,
+      "days": [
+        0
+      ],
+      "start": "16:00",
+      "priority": 1,
+      "energy": "medium",
+      "category": "downtime",
+      "completed": false,
+      "missed_days": []
+    }
+  ],
+  "not_placed": [],
+  "moves": [
+    {
+      "block_id": "essay-session",
+      "reason": "RESHUFFLE_AFTER_MISS",
+      "from_day": 0,
+      "from_start": "16:00",
+      "to_day": 0,
+      "to_start": "16:30",
+      "title": "History essay",
+      "why": "Moved after you ran late so the rest of the day still fits."
+    }
+  ],
+  "explanations": [
+    {
+      "block_id": "essay-session",
+      "message": "Moved after you ran late so the rest of the day still fits.",
+      "reason": "RESHUFFLE_AFTER_MISS",
+      "slack_min": null,
+      "slack_status": null
+    }
+  ],
+  "applied_preview": "preview-id",
+  "moved": 1
+}
