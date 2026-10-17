@@ -17,6 +17,7 @@ import java.util.concurrent.ConcurrentHashMap
 private const val UNREADABLE = "FlexWeek could not read its own answer. Nothing was changed."
 
 class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> Unit) : FlexWeekCore {
+    private val appContext = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
     private val localSettings = context.getSharedPreferences("phone-settings", Context.MODE_PRIVATE)
     private lateinit var native: FlexWeek
@@ -43,6 +44,7 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
                 else localSettings.edit().putString("focus-state", persisted.toString()).apply()
             }
         }
+        com.flexweek.app.system.FocusRuntime.update(appContext, focusState())
     }
 
     override fun engineVersion(): String = native.engineVersion()
@@ -151,12 +153,14 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
         val state = JSONObject(native.focusRestore(saved)).optJSONObject("state") ?: return@result "{\"state\":null}"
         val answer = JSONObject(native.focusPause(state.toString()))
         saveFocus(answer.getJSONObject("persist"))
+        com.flexweek.app.system.FocusRuntime.update(appContext, focusState())
         answer.toString()
     }
 
     override fun focusFinish(): String = result {
         val answer = native.focusFinish(focusState())
         localSettings.edit().remove("focus-state").apply()
+        com.flexweek.app.system.FocusRuntime.update(appContext, "null")
         answer
     }
 
@@ -170,11 +174,13 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
         return result {
             val answer = JSONObject(native.creditFocus(id, minutes.toLong(), operation))
             localSettings.edit().remove("focus-state").apply()
+            com.flexweek.app.system.FocusRuntime.update(appContext, "null")
             answer.toString()
         }
     }
 
     private fun saveFocus(value: JSONObject) {
         localSettings.edit().putString("focus-state", value.toString()).apply()
+        com.flexweek.app.system.FocusRuntime.update(appContext, value.toString())
     }
 }

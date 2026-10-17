@@ -25,6 +25,8 @@
         <receiver
             android:name=".system.ReminderReceiver"
             android:exported="false" />
+        <receiver android:name=".system.FocusActionReceiver" android:exported="false" />
+        <receiver android:name=".system.FocusEndReceiver" android:exported="false" />
         <receiver
             android:name=".system.SystemEventsReceiver"
             android:exported="true">
