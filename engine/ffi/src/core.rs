@@ -18,6 +18,7 @@ pub(crate) struct Preview {
     pub blocks: Value,
     pub earlier: Vec<Value>,
     pub revision: i64,
+    pub placed_ids: Vec<String>,
 }
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -210,6 +211,10 @@ impl FlexWeek {
 
     pub fn save_homework(&self, draft_json: String, op_id: String) -> Result<String, FfiError> {
         crate::homework::save_homework(self, &draft_json, &op_id)
+    }
+
+    pub fn recent_titles(&self) -> Result<Vec<String>, FfiError> {
+        crate::homework::recent_titles(self)
     }
 
     pub fn plan_week(&self, week_start: String, elapsed_ms: f64) -> Result<String, FfiError> {

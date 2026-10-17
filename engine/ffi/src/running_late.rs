@@ -139,6 +139,7 @@ pub(crate) fn running_late(
             blocks: Value::Array(settled.clone()),
             earlier: Vec::new(),
             revision,
+            placed_ids: Vec::new(),
         },
     );
     let moves = phone_moves(&trace_value, &settled, &assignments);

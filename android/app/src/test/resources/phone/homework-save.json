@@ -1,0 +1,15 @@
+{
+  "id": "homework-id",
+  "title": "History essay",
+  "due": "2026-10-23T23:59",
+  "estimate_min": 60,
+  "priority": 3,
+  "energy": "medium",
+  "focus_minutes": 0,
+  "focus_sessions": 0,
+  "completed": false,
+  "completed_at": null,
+  "revision": 1,
+  "planned_min": 60,
+  "unplanned_min": 0
+}

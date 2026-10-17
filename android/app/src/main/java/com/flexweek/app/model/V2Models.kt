@@ -2,10 +2,13 @@ package com.flexweek.app.model
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 data class HomeworkDraft(
     val title: String = "",
-    val due: String = "Fri 9 Oct",
+    val due: String = "",
     val whenMode: String = "pick",
     val estimateMin: Int = 60,
     val sessions: String = "one",
@@ -138,8 +141,27 @@ object V2Json {
         JSONObject()
             .put("title", draft.title)
             .put("due", draft.due)
-            .put("when", draft.whenMode)
             .put("estimate_min", draft.estimateMin)
             .put("sessions", draft.sessions)
             .toString()
+}
+
+data class DueChip(val label: String, val date: LocalDate)
+
+object DueChips {
+    fun forToday(today: LocalDate): List<DueChip> {
+        val tomorrow = today.plusDays(1)
+        val friday = today.with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.FRIDAY))
+        val monday = today.with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.MONDAY))
+        return listOf(tomorrow, friday, monday).map {
+            DueChip(if (it == tomorrow) "Tomorrow" else it.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)), it)
+        } + DueChip("Pick a day", monday)
+    }
+}
+
+object DueDate {
+    fun toDueText(choice: LocalDate, today: LocalDate): String {
+        require(!choice.isBefore(today))
+        return "${choice}T23:59"
+    }
 }

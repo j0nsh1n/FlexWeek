@@ -250,7 +250,7 @@ pub(crate) fn run_plan(
             target_set.contains(id) && block.get("start").and_then(Value::as_str).is_some()
         })
         .collect();
-    let not_placed: Vec<Value> = settled
+    let mut not_placed: Vec<Value> = settled
         .as_array()
         .cloned()
         .unwrap_or_default()
@@ -260,6 +260,19 @@ pub(crate) fn run_plan(
             target_set.contains(id) && block.get("start").and_then(Value::as_str).is_none()
         })
         .collect();
+    for block in &mut not_placed {
+        let id = block.get("id").and_then(Value::as_str).unwrap_or("");
+        if let Some(explanation) = trace_value["explanations"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|item| item["block_id"].as_str() == Some(id))
+            && let Some(reason) = explanation.get("reason").and_then(Value::as_str)
+        {
+            block["reason"] = json!(reason);
+            block["why"] = json!(flexweek_engine::plan::sentence(reason).map_err(engine_failure)?);
+        }
+    }
     let result = json!({
         "week_start": week_start,
         "placed": placed,
@@ -307,6 +320,12 @@ pub(crate) fn plan_week(
             blocks: settled,
             earlier,
             revision,
+            placed_ids: result["placed"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|block| block.get("id").and_then(Value::as_str).map(str::to_string))
+                .collect(),
         },
     );
     Ok(result.to_string())
@@ -325,8 +344,12 @@ pub(crate) fn accept_plan(week: &FlexWeek, preview_id: &str) -> Result<String, F
         .ok_or_else(|| failure("preview was not found"))?;
     let payload = json!(["accept_plan", preview_id, preview.week_start]).to_string();
     let db = db_lock(week)?;
+    let placed_ids = preview.placed_ids.clone();
     if remember(&db, user_id, preview_id, &payload)? {
-        return Ok(json!({"accepted": true, "week_start": preview.week_start}).to_string());
+        return Ok(
+            json!({"accepted": true, "week_start": preview.week_start, "placed_ids": placed_ids})
+                .to_string(),
+        );
     }
     write_week(
         &db,
@@ -350,7 +373,10 @@ pub(crate) fn accept_plan(week: &FlexWeek, preview_id: &str) -> Result<String, F
     db.execute_batch("COMMIT").map_err(failure)?;
     drop(db);
     week.host.data_changed("week".into());
-    Ok(json!({"accepted": true, "week_start": preview.week_start}).to_string())
+    Ok(
+        json!({"accepted": true, "week_start": preview.week_start, "placed_ids": placed_ids})
+            .to_string(),
+    )
 }
 
 #[cfg(test)]
@@ -435,7 +461,8 @@ mod tests {
         let result: Value =
             serde_json::from_str(&week.plan_week("2026-10-05".into(), 0.0).unwrap()).unwrap();
         let preview = result["applied_preview"].as_str().unwrap().to_string();
-        week.accept_plan(preview).unwrap();
+        let accepted: Value = serde_json::from_str(&week.accept_plan(preview).unwrap()).unwrap();
+        assert_eq!(accepted["placed_ids"], json!(["essay-session"]));
         let db = week.db.lock().unwrap();
         let raw = flexweek_store::week_blocks(&db, week.user_id.unwrap(), "2026-10-05")
             .unwrap()
@@ -449,5 +476,105 @@ mod tests {
             .unwrap();
         assert_eq!(essay["start"], "16:00");
         assert_eq!(essay["days"], json!([0]));
+    }
+
+    #[test]
+    fn plan_placed_rows_name_one_day_and_a_start() {
+        let case = load_case("open-thursday");
+        let (week, _) = open_at("plan-shape", case["now"].as_str().unwrap());
+        seed(&week, &case);
+        let result: Value = serde_json::from_str(
+            &week
+                .plan_week(case["week_start"].as_str().unwrap().into(), 0.0)
+                .unwrap(),
+        )
+        .unwrap();
+        let row = &result["placed"][0];
+        assert_eq!(row["days"], json!([0]));
+        assert_eq!(row["start"], "16:00");
+    }
+
+    #[test]
+    fn plan_not_placed_rows_carry_why() {
+        let case = load_case("tight-tuesday");
+        let (week, _) = open_at("plan-why", case["now"].as_str().unwrap());
+        seed(&week, &case);
+        let result: Value = serde_json::from_str(
+            &week
+                .plan_week(case["week_start"].as_str().unwrap().into(), 0.0)
+                .unwrap(),
+        )
+        .unwrap();
+        for row in result["not_placed"].as_array().unwrap() {
+            let reason = row["reason"].as_str().expect("reason code is present");
+            assert_eq!(row["why"], flexweek_engine::plan::sentence(reason).unwrap());
+        }
+    }
+
+    #[test]
+    fn phone_fixture_plan_matches_open_thursday_and_android_copy() {
+        let case = load_case("open-thursday");
+        let (week, _) = open_at("plan-fixture", case["now"].as_str().unwrap());
+        seed(&week, &case);
+        let mut result: Value = serde_json::from_str(
+            &week
+                .plan_week(case["week_start"].as_str().unwrap().into(), 0.0)
+                .unwrap(),
+        )
+        .unwrap();
+        result["applied_preview"] = json!("preview-id");
+        let text = format!("{}\n", serde_json::to_string_pretty(&result).unwrap());
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let fixture = root.join("tests/fixtures/phone/plan-open-thursday.json");
+        let copy = root.join("../../android/app/src/test/resources/phone/plan-open-thursday.json");
+        if std::env::var("FLEXWEEK_WRITE_PHONE_FIXTURES").as_deref() == Ok("1") {
+            for path in [&fixture, &copy] {
+                std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+                std::fs::write(path, &text).unwrap();
+            }
+        }
+        assert_eq!(std::fs::read_to_string(&fixture).unwrap(), text);
+        assert_eq!(std::fs::read_to_string(&copy).unwrap(), text);
+        assert_eq!(result["placed"][0]["start"], "16:00");
+        assert_eq!(result["placed"][0]["days"], json!([0]));
+    }
+
+    #[test]
+    fn phone_fixture_not_placed_plan_matches_android_copy() {
+        let (week, _) = open_at("plan-not-placed-fixture", "2026-10-05T08:00:00");
+        let db = week.db.lock().unwrap();
+        flexweek_store::insert_assignment(
+            &db,
+            week.user_id.unwrap(),
+            "essay",
+            r#"{"id":"essay","title":"History essay","due":"2026-10-08T21:00","estimate_min":60,"focus_minutes":0,"completed":false}"#,
+        ).unwrap();
+        drop(db);
+        save_week(
+            &week,
+            "2026-10-05",
+            &json!([
+                {"id":"school","title":"School","kind":"locked","days":[0],"start":"00:00","duration_min":1440,"category":"class"},
+                {"id":"essay-session","title":"History essay","kind":"flexible","days":[0],"duration_min":60,"assignment_id":"essay","priority":3,"energy":"medium","category":"assignments"}
+            ]),
+        );
+        let mut result: Value =
+            serde_json::from_str(&week.plan_week("2026-10-05".into(), 0.0).unwrap()).unwrap();
+        result["applied_preview"] = json!("preview-id");
+        let text = format!("{}\n", serde_json::to_string_pretty(&result).unwrap());
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let fixture = root.join("tests/fixtures/phone/plan-not-placed.json");
+        let copy = root.join("../../android/app/src/test/resources/phone/plan-not-placed.json");
+        if std::env::var("FLEXWEEK_WRITE_PHONE_FIXTURES").as_deref() == Ok("1") {
+            for path in [&fixture, &copy] {
+                std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+                std::fs::write(path, &text).unwrap();
+            }
+        }
+        assert_eq!(std::fs::read_to_string(&fixture).unwrap(), text);
+        assert_eq!(std::fs::read_to_string(&copy).unwrap(), text);
+        let row = &result["not_placed"][0];
+        assert!(row["reason"].is_string());
+        assert!(row["why"].is_string());
     }
 }

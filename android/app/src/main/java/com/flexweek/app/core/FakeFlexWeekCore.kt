@@ -382,11 +382,12 @@ class FakeFlexWeekCore : FlexWeekCore {
             )
             noTime.removeAll { it.id == chipId }
         }
-        lastPlanNewIds = planPreviewPlacedIds.toSet()
+        val placedIds = planPreviewPlacedIds.toList()
+        lastPlanNewIds = placedIds.toSet()
         planPreviewId = null
         planPreviewPlacedIds = emptyList()
         planPreviewChipIds = emptyList()
-        return jsonString { put("ok", true) }
+        return jsonString { put("ok", true); put("placed_ids", JSONArray(placedIds)) }
     }
 
     override fun runningLate(dayIndex: Int, minutes: Int, opId: String): String {

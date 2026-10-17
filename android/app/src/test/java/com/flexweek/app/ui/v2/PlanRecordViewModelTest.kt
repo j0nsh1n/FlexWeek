@@ -20,6 +20,15 @@ class PlanRecordViewModelTest {
     }
 
     @Test
+    fun acceptReturnsPlacedIds() {
+        var ids: List<String>? = null
+        val vm = PlanRecordViewModel(core, onAccepted = { ids = it }, onDismiss = {})
+        vm.accept()
+        assertNotNull(ids)
+        assertTrue(ids!!.isNotEmpty())
+    }
+
+    @Test
     fun undoDismissesWithoutAccepting() {
         var dismissed = false
         val vm = PlanRecordViewModel(core, onAccepted = {}, onDismiss = { dismissed = true })
