@@ -6,6 +6,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Phone: an "Up next" home-screen widget shows what is now or next and the two things after it, counts down to the next start, and opens Today when tapped; tick a homework on it to mark it finished.
 - Phone: a running focus session shows on the lock screen with its countdown, Pause and Finish; you hear when it ends even with the app closed, and the minutes are added once. A phone restart keeps the timer.
 - Phone: focus from Today. Start focus on a homework, watch the time in Today's card, pause or finish it; a session that runs its full length adds its minutes to the homework, and your computer sees them after the next sync.
 - Phone: the Week tab reads like a planner, one row per day with its homework and activities by name, how much homework it holds ("4 h 30 · heavy") and when you are free ("free after 2:30").
@@ -13,6 +14,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Phone: FlexWeek updates itself. Settings has an Updates card that checks GitHub Releases once a day (on by default, can be turned off) or when you press Check now, and shows the new version's size and the first two lines of what's new. Nothing downloads or installs until you press the button; the download is checked against its published checksum, its name, version and signing key before Android's own Install dialog opens, and "See the steps" walks through allowing installs from FlexWeek. A test build says it can't update itself and points to the release page.
 
 ### Fixed
+- Phone: homework on Today is drawn in the homework colour again instead of grey.
 - Phone: Add homework offers due days from today (Tomorrow, the next Friday and Monday, or pick a day), with your recent homework titles to tap; Plan says when each piece goes ("Mon 4 PM") and why something has no time yet, in the same words as your computer.
 - Phone: Running late opens on a real week. Each move names the homework, says when it moves ("4 PM → 4:30 PM") and why in plain words; if the phone cannot preview, the sheet says why instead of not opening.
 - At 1024 x 640 with Large text, Start focus in the rail's Next card sits under the name instead of cutting it and itself, and the Plan result's buttons move under its heading instead of overlapping it.
