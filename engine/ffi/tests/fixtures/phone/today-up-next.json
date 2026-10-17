@@ -1,0 +1,145 @@
+{
+  "date": "2026-10-12",
+  "week_start": "2026-10-12",
+  "day": 0,
+  "days": [
+    {
+      "day": 0,
+      "date": "2026-10-12",
+      "scheduled_count": 3,
+      "due_count": 0
+    },
+    {
+      "day": 1,
+      "date": "2026-10-13",
+      "scheduled_count": 0,
+      "due_count": 0
+    },
+    {
+      "day": 2,
+      "date": "2026-10-14",
+      "scheduled_count": 0,
+      "due_count": 1
+    },
+    {
+      "day": 3,
+      "date": "2026-10-15",
+      "scheduled_count": 0,
+      "due_count": 0
+    },
+    {
+      "day": 4,
+      "date": "2026-10-16",
+      "scheduled_count": 0,
+      "due_count": 0
+    },
+    {
+      "day": 5,
+      "date": "2026-10-17",
+      "scheduled_count": 0,
+      "due_count": 0
+    },
+    {
+      "day": 6,
+      "date": "2026-10-18",
+      "scheduled_count": 0,
+      "due_count": 0
+    }
+  ],
+  "rows": [
+    {
+      "id": "algebra",
+      "title": "Algebra set 4",
+      "category": "school",
+      "start": "14:30",
+      "end": "16:00",
+      "start_min": 870,
+      "end_min": 960,
+      "duration_min": 90,
+      "homework": false,
+      "done": false,
+      "missed": false,
+      "past": false,
+      "day": 0,
+      "assignment_id": null
+    },
+    {
+      "id": "spanish-session",
+      "title": "Spanish quiz prep",
+      "category": "homework",
+      "start": "16:00",
+      "end": "16:45",
+      "start_min": 960,
+      "end_min": 1005,
+      "duration_min": 45,
+      "homework": true,
+      "done": false,
+      "missed": false,
+      "past": false,
+      "day": 0,
+      "assignment_id": "spanish"
+    },
+    {
+      "id": "soccer",
+      "title": "Soccer practice",
+      "category": "sports",
+      "start": "17:00",
+      "end": "19:00",
+      "start_min": 1020,
+      "end_min": 1140,
+      "duration_min": 120,
+      "homework": false,
+      "done": false,
+      "missed": false,
+      "past": false,
+      "day": 0,
+      "assignment_id": null
+    }
+  ],
+  "now": {
+    "kind": "up_next",
+    "block_id": "algebra",
+    "title": "Algebra set 4",
+    "homework": false,
+    "minutes_left": 20,
+    "start": "14:30",
+    "end": "16:00",
+    "then_title": "Spanish quiz prep",
+    "then_start": "16:00"
+  },
+  "nothing_left": false,
+  "no_time_yet": [],
+  "due_homework": [
+    {
+      "id": "spanish",
+      "title": "Spanish quiz prep",
+      "due": "2026-10-14T21:00",
+      "weekday": "Wed"
+    }
+  ],
+  "due_soon": [],
+  "workload": {
+    "scheduled_min": 255,
+    "focus_min": 0,
+    "available_min": 1185,
+    "by_category": [
+      {
+        "category": "sports",
+        "scheduled_min": 120,
+        "focus_min": 0
+      },
+      {
+        "category": "school",
+        "scheduled_min": 90,
+        "focus_min": 0
+      },
+      {
+        "category": "homework",
+        "scheduled_min": 45,
+        "focus_min": 0
+      }
+    ]
+  },
+  "empty": false,
+  "sync_status": "not paired"
+}
