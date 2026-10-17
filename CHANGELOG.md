@@ -6,9 +6,11 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Phone: Week, Add homework, Plan and Running late are in the released app, not only in test builds, with Add on every tab.
 - Phone: FlexWeek updates itself. Settings has an Updates card that checks GitHub Releases once a day (on by default, can be turned off) or when you press Check now, and shows the new version's size and the first two lines of what's new. Nothing downloads or installs until you press the button; the download is checked against its published checksum, its name, version and signing key before Android's own Install dialog opens, and "See the steps" walks through allowing installs from FlexWeek. A test build says it can't update itself and points to the release page.
 
 ### Fixed
+- Phone: Running late opens on a real week. Each move names the homework, says when it moves ("4 PM → 4:30 PM") and why in plain words; if the phone cannot preview, the sheet says why instead of not opening.
 - At 1024 x 640 with Large text, Start focus in the rail's Next card sits under the name instead of cutting it and itself, and the Plan result's buttons move under its heading instead of overlapping it.
 - The rail's "doesn't fit in one go" message wraps in phrases with Allow splitting under it, instead of one word per line at Large text.
 - Sign in, Create account and Reset fit a 1024 x 640 window at Large text: the page scrolls there instead of holding the window taller than the screen. Larger windows look as before.
