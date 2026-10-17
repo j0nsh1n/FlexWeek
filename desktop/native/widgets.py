@@ -278,9 +278,6 @@ PLAN_REVIEW_MAX = 132
 OVERFULL_DAY_MIN = 3 * 60
 # How many rows of Unfinished homework show before the list scrolls: the half row says there is more.
 UNFINISHED_ROWS = 3.5
-# The least room an overdue row's words keep beside its buttons, about three words of a title. With
-# less, as at 1024x640 at Large text beside the rail (about 260 px), the buttons take their own line.
-UNFINISHED_WORDS_PX = 300
 REPEAT_NOTE = "Pick more days to repeat it."
 SCHOOL_HOURS_NOTE = "The days and times you're at school, so nothing is planned then."
 ROUTINE_LIST_HEIGHT = 96
@@ -5535,7 +5532,6 @@ class UnfinishedPanel(QWidget):
         layout.addWidget(heading)
         self.list = QListWidget()
         self.list.setObjectName("unfinishedList")
-        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         layout.addWidget(self.list)
         row = QHBoxLayout()
         dismiss = QPushButton("Hide")
@@ -5573,21 +5569,11 @@ class UnfinishedPanel(QWidget):
         self.list.clear()
         for item in items:
             row = QWidget()
-            column = QVBoxLayout(row)
-            sides = column.contentsMargins()
-            column.setContentsMargins(sides.left(), 0, sides.right(), 0)
-            row_layout = QHBoxLayout()
-            row_layout.setContentsMargins(0, 0, 0, 0)
-            column.addLayout(row_layout)
-            # The buttons' own line, used where they do not fit beside the words (1024x640 at Large text).
-            under = QWidget()
-            under_line = QHBoxLayout(under)
-            under_line.setContentsMargins(0, 0, 0, 0)
-            column.addWidget(under)
-            under.hide()
+            row_layout = QHBoxLayout(row)
+            sides = row_layout.contentsMargins()
+            row_layout.setContentsMargins(sides.left(), 0, sides.right(), 0)
             text = QLabel(f"{item['title']} · {length_label(int(item['remaining_min']))} left")
             text.setObjectName("unfinishedRow")
-            text.setWordWrap(True)
             state = item.get("left_over_state")
             due = item.get("due")
             due_words = ""
@@ -5638,9 +5624,6 @@ class UnfinishedPanel(QWidget):
                 lambda _checked=False, item_id=item["id"]: self.delete_requested.emit(item_id)
             )
             row_layout.addWidget(delete)
-            buttons = [row_layout.itemAt(at).widget() for at in range(1, row_layout.count())]
-            row.unfinished_parts = (text, row_layout, under, under_line, buttons)
-            row.unfinished_under = False
             wrapper = QListWidgetItem()
             self.list.addItem(wrapper)
             self.list.setItemWidget(wrapper, row)
@@ -5657,52 +5640,16 @@ class UnfinishedPanel(QWidget):
             row = self.list.itemWidget(wrapper)
             for part in (row, *row.findChildren(QWidget)):
                 part.ensurePolished()
-            room = self.list.viewport().width()
-            # Before the panel is on screen the list has no width of its own yet; showing it fits again.
-            if self.isVisible():
-                self._place_row_buttons(row, room)
-            if self.isVisible() and row.hasHeightForWidth():
-                height = max(row.heightForWidth(room), row.sizeHint().height())
-            else:
-                height = row.sizeHint().height()
-            wrapper.setSizeHint(QSize(row.sizeHint().width(), height))
-            rows.append(height)
+            wrapper.setSizeHint(row.sizeHint())
+            rows.append(row.sizeHint().height())
         if rows:
             # As tall as its rows, as the plan review is: one row in a box eight rows deep read as empty.
             room = round(UNFINISHED_ROWS * max(rows))
             self.list.setFixedHeight(min(sum(rows), room) + 2 * self.list.frameWidth() + 4)
 
-    def _place_row_buttons(self, row: QWidget, room: int) -> bool:
-        """The buttons beside the words while the words keep UNFINISHED_WORDS_PX to wrap in, else on
-        their own line under them: a row wider than the list was cut at its edge, the scroll bar being
-        off. Returns whether they are under."""
-        text, line, under, under_line, buttons = row.unfinished_parts
-        sides = row.layout().contentsMargins()
-        needed = UNFINISHED_WORDS_PX + sides.left() + sides.right()
-        needed += sum(button.sizeHint().width() for button in buttons) + line.spacing() * len(buttons)
-        below = needed > room
-        if below != row.unfinished_under:
-            row.unfinished_under = below
-            source, target = (line, under_line) if below else (under_line, line)
-            for button in buttons:
-                source.removeWidget(button)
-                target.addWidget(button)
-            if below:
-                under_line.addStretch(1)
-            else:
-                while under_line.count():
-                    under_line.takeAt(0)
-            under.setVisible(below)
-        return below
-
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
         self._fit_rows()
-
-    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
-        super().resizeEvent(event)
-        if event.size().width() != event.oldSize().width():
-            self._fit_rows()
 
     def changeEvent(self, event: QEvent) -> None:  # noqa: N802
         super().changeEvent(event)

@@ -237,44 +237,6 @@ def test_plan_result_returns_to_one_line_after_a_small_window(
     assert_plan_buttons_in_order(review)
 
 
-def test_unfinished_rows_wrap_without_horizontal_scrolling_at_1024_large(
-    qapp,  # noqa: F811
-    window: NativeWindow,  # noqa: F811
-) -> None:
-    # A week with something in it, so the week grid and the rail beside it are on screen as for a student:
-    # on the empty-week page the rail is hidden and the card had the window's whole width.
-    window.session.add_block(
-        {"id": "school", "title": "School", "kind": "locked", "category": "school",
-         "start": "08:00", "duration_min": 390, "days": [0, 1, 2, 3, 4]}
-    )
-    window.session.save()
-    settled(qapp, window)
-    show_large_classic(qapp, window, *SMALL_WINDOW)
-    assert window.rail.isVisible(), "the rail is beside the week, as a student sees it at 1024x640"
-    panel = window.unfinished_panel
-    panel.set_items(
-        [{"id": "bio", "title": "Biology lab report with an extended title", "remaining_min": OVERDUE_MINUTES,
-          "due": "2026-10-12T23:59", "left_over_state": "overdue", "plannable": True}]
-    )
-    for _ in range(EVENT_PASSES):
-        qapp.processEvents()
-    assert panel.isVisibleTo(window), "overdue homework is displayed"
-    assert not panel.list.horizontalScrollBar().isVisible(), "unfinished homework does not scroll sideways"
-    assert panel.list.horizontalScrollBar().maximum() == 0, "unfinished homework has no horizontal range"
-    row = panel.list.itemWidget(panel.list.item(0))
-    assert row is not None
-    assert row.findChild(QLabel, "unfinishedRow").wordWrap(), "unfinished homework words wrap"
-    assert_controls_fit_without_overlap(panel)
-    # A hidden scroll bar does not make a row fit: what is past the list's edge is simply not drawn.
-    viewport = panel.list.viewport()
-    for control in (row, *visible_controls(row)):
-        right = control.mapTo(viewport, QPoint(control.width(), 0)).x()
-        assert right <= viewport.width(), (
-            f"{control.objectName() or type(control).__name__} ends at {right}, past the list's edge at "
-            f"{viewport.width()}"
-        )
-
-
 def test_unfinished_rows_keep_buttons_on_the_text_line_at_1280_normal(
     qapp,  # noqa: F811
     window: NativeWindow,  # noqa: F811
