@@ -76,6 +76,37 @@ object WeekRows {
     fun isHeavy(minutes: Int): Boolean = minutes > HEAVY_THRESHOLD_MINUTES
 }
 
+/** A Week row's right-hand words, as picture 5 B writes them. */
+object WeekRowWords {
+    private const val MINUTES_PER_HOUR = 60
+    private const val HOURS_PER_DAY = 24
+    private const val HOURS_PER_HALF_DAY = 12
+
+    fun right(minutes: Int, heavy: Boolean, lastClassEnd: Int?): String = when {
+        minutes > 0 -> duration(minutes) + if (heavy) " · heavy" else ""
+        lastClassEnd != null -> "free after ${clock(lastClassEnd)}"
+        else -> "free"
+    }
+
+    fun duration(minutes: Int): String {
+        val hours = minutes / MINUTES_PER_HOUR
+        val rest = minutes % MINUTES_PER_HOUR
+        return when {
+            hours == 0 -> "$rest min"
+            rest == 0 -> "$hours h"
+            else -> "$hours h $rest"
+        }
+    }
+
+    /** 12-hour without AM/PM, minutes only when not zero: "2:30", "3". */
+    private fun clock(minutes: Int): String {
+        val hour24 = minutes / MINUTES_PER_HOUR % HOURS_PER_DAY
+        val minute = minutes % MINUTES_PER_HOUR
+        val hour12 = if (hour24 % HOURS_PER_HALF_DAY == 0) HOURS_PER_HALF_DAY else hour24 % HOURS_PER_HALF_DAY
+        return if (minute == 0) hour12.toString() else "$hour12:${minute.toString().padStart(2, '0')}"
+    }
+}
+
 object WeekTitle {
     private const val DAYS_IN_WEEK_SPAN = 6L
 

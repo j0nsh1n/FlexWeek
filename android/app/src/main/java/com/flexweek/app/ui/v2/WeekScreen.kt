@@ -19,14 +19,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.flexweek.app.model.WeekDayWords
+import com.flexweek.app.model.WeekRowWords
 import com.flexweek.app.model.WeekRowsState
 import com.flexweek.app.ui.components.SyncLineBar
 
 // The phone writes English everywhere, so the day names are fixed, not the device locale's.
 private val WEEK_DAY_LABELS = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-private const val MINUTES_PER_HOUR = 60
-private const val HOURS_PER_DAY = 24
-private const val HOURS_PER_HALF_DAY = 12
 
 @Composable
 fun WeekScreen(
@@ -67,29 +65,8 @@ private fun WeekDayRow(day: WeekDayWords, onOpenDay: (Int) -> Unit) {
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            val right = if (day.minutes > 0) {
-                duration(day.minutes) + if (day.heavy) " · heavy" else ""
-            } else {
-                day.lastClassEnd?.let { "free after ${shortTime(it)}" } ?: "free"
-            }
+            val right = WeekRowWords.right(day.minutes, day.heavy, day.lastClassEnd)
             Text(right, style = MaterialTheme.typography.labelSmall, color = if (day.heavy) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         }
     }
-}
-
-private fun duration(minutes: Int): String {
-    val hours = minutes / MINUTES_PER_HOUR
-    val rest = minutes % MINUTES_PER_HOUR
-    return when {
-        hours == 0 -> "$rest min"
-        rest == 0 -> "$hours h"
-        else -> "$hours h $rest"
-    }
-}
-
-private fun shortTime(minutes: Int): String {
-    val hour24 = minutes / MINUTES_PER_HOUR % HOURS_PER_DAY
-    val minute = minutes % MINUTES_PER_HOUR
-    val hour12 = if (hour24 % HOURS_PER_HALF_DAY == 0) HOURS_PER_HALF_DAY else hour24 % HOURS_PER_HALF_DAY
-    return if (minute == 0) hour12.toString() else "$hour12:${minute.toString().padStart(2, '0')}"
 }
