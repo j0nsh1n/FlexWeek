@@ -6,6 +6,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Phone: the Week tab reads like a planner, one row per day with its homework and activities by name, how much homework it holds ("4 h 30 · heavy") and when you are free ("free after 2:30").
 - Phone: Week, Add homework, Plan and Running late are in the released app, not only in test builds, with Add on every tab.
 - Phone: FlexWeek updates itself. Settings has an Updates card that checks GitHub Releases once a day (on by default, can be turned off) or when you press Check now, and shows the new version's size and the first two lines of what's new. Nothing downloads or installs until you press the button; the download is checked against its published checksum, its name, version and signing key before Android's own Install dialog opens, and "See the steps" walks through allowing installs from FlexWeek. A test build says it can't update itself and points to the release page.
 
