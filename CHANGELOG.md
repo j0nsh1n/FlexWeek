@@ -6,6 +6,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Phone: a running focus session shows on the lock screen with its countdown, Pause and Finish; you hear when it ends even with the app closed, and the minutes are added once. A phone restart keeps the timer.
 - Phone: focus from Today. Start focus on a homework, watch the time in Today's card, pause or finish it; a session that runs its full length adds its minutes to the homework, and your computer sees them after the next sync.
 - Phone: the Week tab reads like a planner, one row per day with its homework and activities by name, how much homework it holds ("4 h 30 · heavy") and when you are free ("free after 2:30").
 - Phone: Week, Add homework, Plan and Running late are in the released app, not only in test builds, with Add on every tab.
