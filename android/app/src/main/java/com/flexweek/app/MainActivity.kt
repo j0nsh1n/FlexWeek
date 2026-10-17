@@ -56,6 +56,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import com.flexweek.app.system.syncWhileForeground
+import com.flexweek.app.system.widget.WidgetRuntime
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -256,6 +257,7 @@ private fun FlexWeekRoot(
             syncWhileForeground(core, lifecycleOwner.lifecycle) {
                 todayVm.tick(java.time.LocalTime.now().let { it.hour * 60 + it.minute })
                 remindersVm.reload()
+                WidgetRuntime.refreshAsync(activity)
             }
         }
     }

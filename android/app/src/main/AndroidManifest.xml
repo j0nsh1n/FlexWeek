@@ -38,5 +38,18 @@
             </intent-filter>
         </receiver>
         <receiver android:name=".update.UpdateInstallReceiver" android:exported="false" />
+        <receiver
+            android:name=".system.widget.UpNextWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/up_next_widget_info" />
+        </receiver>
+        <receiver android:name=".system.widget.WidgetAlarmReceiver" android:exported="false" />
+        <receiver android:name=".system.widget.WidgetTickReceiver" android:exported="false" />
     </application>
 </manifest>

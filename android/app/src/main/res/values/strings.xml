@@ -3,4 +3,5 @@
     <string name="app_name">FlexWeek</string>
     <string name="channel_reminders">Homework reminders</string>
     <string name="channel_sync">Sync</string>
+    <string name="widget_name">Up next</string>
 </resources>

@@ -8,6 +8,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.flexweek.app.FlexWeekApp
 import com.flexweek.app.R
+import com.flexweek.app.system.widget.WidgetRuntime
 
 object FocusRuntime {
     const val NOTIFICATION_ID = 78124
@@ -17,6 +18,8 @@ object FocusRuntime {
 
     fun update(context: Context, saved: String) {
         val app = context.applicationContext
+        // Finishing a timer can finish its homework, which the widget shows.
+        WidgetRuntime.refreshAsync(app)
         val manager = NotificationManagerCompat.from(app)
         val plan = FocusNotificationPlan.from(saved)
         if (plan == null) {
