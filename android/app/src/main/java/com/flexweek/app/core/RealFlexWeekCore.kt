@@ -107,10 +107,14 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
         JSONObject().put("ok", false).put("error", UNREADABLE).toString()
     }
 
-    override fun saveHomework(draftJson: String, opId: String): String = result {
+    override fun saveHomework(draftJson: String, opId: String): String {
         val draft = JSONObject(draftJson)
-        val dueDate = LocalDate.parse(draft.getString("due").take(10))
-        draft.put("due", DueDate.toDueText(dueDate, LocalDate.now()))
+        val due = DueDate.toDueText(LocalDate.parse(draft.getString("due").take(10)), LocalDate.now())
+            ?: return JSONObject().put("ok", false).put("error", DueDate.PAST_DAY).toString()
+        return saved(draft.put("due", due), opId)
+    }
+
+    private fun saved(draft: JSONObject, opId: String): String = result {
         draft.put("from_date", currentDate()).put("spread", if (draft.optString("sessions") == "one") "one" else "spread")
         native.saveHomework(draft.toString(), opId)
     }

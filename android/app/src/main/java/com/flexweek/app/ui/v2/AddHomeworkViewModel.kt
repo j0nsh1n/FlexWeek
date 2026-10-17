@@ -16,7 +16,8 @@ class AddHomeworkViewModel(
     private val core: FlexWeekCore,
     private val onSaved: (String) -> Unit,
 ) : ViewModel() {
-    val recentTitles: List<String> = core.recentTitles()
+    // A nice-to-have row: if the core cannot list them, the sheet opens without it.
+    val recentTitles: List<String> = runCatching { core.recentTitles() }.getOrDefault(emptyList())
     var draft by mutableStateOf(HomeworkDraft())
         private set
 

@@ -142,7 +142,7 @@ internal object RustPhoneJson {
         for (i in 0 until waiting.length()) {
             val block = waiting.getJSONObject(i)
             lines.put(JSONObject().put("title", block.getString("title"))
-                .put("right", "No time yet").put("why", block.getString("why")))
+                .put("right", "No time yet").put("why", block.optString("why").ifBlank { null }))
         }
         return root.put("ok", true).put("preview_id", root.getString("applied_preview"))
             .put("summary", "Placed ${placed.length()} of ${placed.length() + waiting.length()}")

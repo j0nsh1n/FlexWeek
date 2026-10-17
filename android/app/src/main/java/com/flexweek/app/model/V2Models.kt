@@ -153,15 +153,17 @@ object DueChips {
         val tomorrow = today.plusDays(1)
         val friday = today.with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.FRIDAY))
         val monday = today.with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.MONDAY))
-        return listOf(tomorrow, friday, monday).map {
+        // On a Thursday tomorrow is the next Friday, on a Sunday the next Monday: one chip per day.
+        return listOf(tomorrow, friday, monday).distinct().map {
             DueChip(if (it == tomorrow) "Tomorrow" else it.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)), it)
         } + DueChip("Pick a day", monday)
     }
 }
 
 object DueDate {
-    fun toDueText(choice: LocalDate, today: LocalDate): String {
-        require(!choice.isBefore(today))
-        return "${choice}T23:59"
-    }
+    const val PAST_DAY = "That day has passed. Choose today or a later day."
+
+    /** The day's end, or null for a day already gone (a sheet left open past midnight). */
+    fun toDueText(choice: LocalDate, today: LocalDate): String? =
+        if (choice.isBefore(today)) null else "${choice}T23:59"
 }

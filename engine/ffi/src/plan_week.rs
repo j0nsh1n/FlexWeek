@@ -268,9 +268,11 @@ pub(crate) fn run_plan(
             .flatten()
             .find(|item| item["block_id"].as_str() == Some(id))
             && let Some(reason) = explanation.get("reason").and_then(Value::as_str)
+            // A code with no words (a new one, or a placed block's note) must not fail the whole plan.
+            && let Ok(why) = flexweek_engine::plan::sentence(reason)
         {
             block["reason"] = json!(reason);
-            block["why"] = json!(flexweek_engine::plan::sentence(reason).map_err(engine_failure)?);
+            block["why"] = json!(why);
         }
     }
     let result = json!({
@@ -494,18 +496,38 @@ mod tests {
         assert_eq!(row["start"], "16:00");
     }
 
+    /// Monday is all fixed (School 00:00 for 24 h) and the History essay may only go on Monday, so Plan
+    /// cannot place it.
+    fn full_monday(name: &str) -> Value {
+        let (week, _) = open_at(name, "2026-10-05T08:00:00");
+        let db = week.db.lock().unwrap();
+        flexweek_store::insert_assignment(
+            &db,
+            week.user_id.unwrap(),
+            "essay",
+            r#"{"id":"essay","title":"History essay","due":"2026-10-08T21:00","estimate_min":60,"focus_minutes":0,"completed":false}"#,
+        ).unwrap();
+        drop(db);
+        save_week(
+            &week,
+            "2026-10-05",
+            &json!([
+                {"id":"school","title":"School","kind":"locked","days":[0],"start":"00:00","duration_min":1440,"category":"class"},
+                {"id":"essay-session","title":"History essay","kind":"flexible","days":[0],"duration_min":60,"assignment_id":"essay","priority":3,"energy":"medium","category":"assignments"}
+            ]),
+        );
+        serde_json::from_str(&week.plan_week("2026-10-05".into(), 0.0).unwrap()).unwrap()
+    }
+
     #[test]
     fn plan_not_placed_rows_carry_why() {
-        let case = load_case("tight-tuesday");
-        let (week, _) = open_at("plan-why", case["now"].as_str().unwrap());
-        seed(&week, &case);
-        let result: Value = serde_json::from_str(
-            &week
-                .plan_week(case["week_start"].as_str().unwrap().into(), 0.0)
-                .unwrap(),
-        )
-        .unwrap();
-        for row in result["not_placed"].as_array().unwrap() {
+        let result = full_monday("plan-why");
+        let rows = result["not_placed"].as_array().unwrap();
+        assert!(
+            !rows.is_empty(),
+            "a full Monday leaves the essay with no time"
+        );
+        for row in rows {
             let reason = row["reason"].as_str().expect("reason code is present");
             assert_eq!(row["why"], flexweek_engine::plan::sentence(reason).unwrap());
         }
@@ -541,25 +563,7 @@ mod tests {
 
     #[test]
     fn phone_fixture_not_placed_plan_matches_android_copy() {
-        let (week, _) = open_at("plan-not-placed-fixture", "2026-10-05T08:00:00");
-        let db = week.db.lock().unwrap();
-        flexweek_store::insert_assignment(
-            &db,
-            week.user_id.unwrap(),
-            "essay",
-            r#"{"id":"essay","title":"History essay","due":"2026-10-08T21:00","estimate_min":60,"focus_minutes":0,"completed":false}"#,
-        ).unwrap();
-        drop(db);
-        save_week(
-            &week,
-            "2026-10-05",
-            &json!([
-                {"id":"school","title":"School","kind":"locked","days":[0],"start":"00:00","duration_min":1440,"category":"class"},
-                {"id":"essay-session","title":"History essay","kind":"flexible","days":[0],"duration_min":60,"assignment_id":"essay","priority":3,"energy":"medium","category":"assignments"}
-            ]),
-        );
-        let mut result: Value =
-            serde_json::from_str(&week.plan_week("2026-10-05".into(), 0.0).unwrap()).unwrap();
+        let mut result = full_monday("plan-not-placed-fixture");
         result["applied_preview"] = json!("preview-id");
         let text = format!("{}\n", serde_json::to_string_pretty(&result).unwrap());
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));

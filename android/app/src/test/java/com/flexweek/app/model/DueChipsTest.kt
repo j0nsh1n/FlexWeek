@@ -22,4 +22,12 @@ class DueChipsTest {
         assertEquals("Fri 1 Jan", chips[1].label)
         assertEquals(LocalDate.parse("2027-01-01"), chips[1].date)
     }
+
+    @Test fun noTwoChipsShareADate() {
+        // On a Thursday tomorrow is the next Friday; on a Sunday it is the next Monday.
+        for (day in listOf("2026-10-15", "2026-10-18")) {
+            val dates = DueChips.forToday(LocalDate.parse(day)).filter { it.label != "Pick a day" }.map { it.date }
+            assertEquals("chips on $day: $dates", dates.distinct(), dates)
+        }
+    }
 }
