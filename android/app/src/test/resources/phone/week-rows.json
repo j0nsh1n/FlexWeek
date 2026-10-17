@@ -1,0 +1,87 @@
+{
+  "week_start": "2026-10-19",
+  "days": [
+    {
+      "day": 0,
+      "date": "2026-10-19",
+      "names": [
+        "History essay",
+        "Bio reading"
+      ],
+      "minutes": 90,
+      "heavy": false,
+      "unplaced": [],
+      "last_class_end": 870
+    },
+    {
+      "day": 1,
+      "date": "2026-10-20",
+      "names": [
+        "Soccer"
+      ],
+      "minutes": 0,
+      "heavy": false,
+      "unplaced": [
+        "Chem lab write-up"
+      ],
+      "last_class_end": 870
+    },
+    {
+      "day": 2,
+      "date": "2026-10-21",
+      "names": [
+        "Piano"
+      ],
+      "minutes": 0,
+      "heavy": false,
+      "unplaced": [],
+      "last_class_end": 870
+    },
+    {
+      "day": 3,
+      "date": "2026-10-22",
+      "names": [
+        "School only"
+      ],
+      "minutes": 0,
+      "heavy": false,
+      "unplaced": [],
+      "last_class_end": 870
+    },
+    {
+      "day": 4,
+      "date": "2026-10-23",
+      "names": [
+        "School only"
+      ],
+      "minutes": 0,
+      "heavy": false,
+      "unplaced": [],
+      "last_class_end": 870
+    },
+    {
+      "day": 5,
+      "date": "2026-10-24",
+      "names": [
+        "Cafe shift"
+      ],
+      "minutes": 0,
+      "heavy": false,
+      "unplaced": [],
+      "last_class_end": null
+    },
+    {
+      "day": 6,
+      "date": "2026-10-25",
+      "names": [
+        "English log due"
+      ],
+      "minutes": 0,
+      "heavy": false,
+      "unplaced": [
+        "English log"
+      ],
+      "last_class_end": null
+    }
+  ]
+}

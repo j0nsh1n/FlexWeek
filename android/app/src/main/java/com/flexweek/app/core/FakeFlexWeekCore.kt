@@ -461,6 +461,29 @@ class FakeFlexWeekCore : FlexWeekCore {
         }
     }
 
+    override fun weekRows(weekStart: String): String {
+        val heavyThresholdMinutes = 180
+        val days = JSONArray()
+        for (day in 0..6) {
+            val homework = blocks.filter { it.dayIndex == day && it.homework }.sortedBy { it.startMinute }
+            val names = blocks.filter { it.dayIndex == day && it.category != "school" }
+                .sortedBy { it.startMinute }.map { it.title }.toMutableList()
+            names.addAll(noTime.filter { it.dueDayIndex == day }.map { "${it.title} due" })
+            if (names.isEmpty() && blocks.any { it.dayIndex == day && it.category == "school" }) names.add("School only")
+            days.put(jsonObject {
+                put("day", day)
+                put("date", java.time.LocalDate.parse(weekStart).plusDays(day.toLong()).toString())
+                put("names", JSONArray(names))
+                put("minutes", homework.sumOf { it.lengthMinutes })
+                put("heavy", homework.sumOf { it.lengthMinutes } > heavyThresholdMinutes)
+                put("unplaced", JSONArray(noTime.filter { it.dueDayIndex == day }.map { it.title }))
+                put("last_class_end", blocks.filter { it.dayIndex == day && it.category == "school" }
+                    .maxOfOrNull { it.startMinute + it.lengthMinutes })
+            })
+        }
+        return jsonString { put("week_start", weekStart); put("days", days) }
+    }
+
     override fun setLeadMinutes(minutes: Int) {
         leadMinutes = minutes
     }

@@ -71,4 +71,6 @@ interface FlexWeekCore {
 
     /** v2: colour bars per day, no words. */
     fun weekShape(weekStart: String): String
+
+    fun weekRows(weekStart: String): String
 }
