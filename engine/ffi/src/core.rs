@@ -237,6 +237,10 @@ impl FlexWeek {
     pub fn week_shape(&self, week_start: String) -> Result<String, FfiError> {
         crate::week_shape::week_shape(self, &week_start)
     }
+
+    pub fn week_rows(&self, week_start: String) -> Result<String, FfiError> {
+        crate::week_rows::week_rows(self, &week_start)
+    }
 }
 
 impl FlexWeek {

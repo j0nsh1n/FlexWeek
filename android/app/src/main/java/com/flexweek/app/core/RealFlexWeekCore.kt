@@ -126,4 +126,5 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
     }
     override fun acceptRunningLate(previewId: String, opId: String): String = acceptPlan(previewId, opId)
     override fun weekShape(weekStart: String): String = RustPhoneJson.week(native.weekShape(weekStart), currentDate())
+    override fun weekRows(weekStart: String): String = native.weekRows(weekStart)
 }
