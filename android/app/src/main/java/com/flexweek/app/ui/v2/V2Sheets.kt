@@ -148,7 +148,8 @@ private fun StepCrumbs(draft: HomeworkDraft, onStepJump: (Int) -> Unit) {
         }
         if (draft.step > 1) {
             TextButton(onClick = { onStepJump(1) }) {
-                Text("✓ due ${draft.due}, ${if (draft.whenMode == "pick") "FlexWeek picks" else "do it at"}")
+                val due = runCatching { DueChips.label(LocalDate.parse(draft.due), LocalDate.now()) }.getOrDefault(draft.due)
+                Text("✓ due $due, FlexWeek picks the time")
             }
             Text("·")
         }

@@ -30,4 +30,10 @@ class DueChipsTest {
             assertEquals("chips on $day: $dates", dates.distinct(), dates)
         }
     }
+
+    @Test fun aChosenDayIsSaidTheWayItsChipSaysIt() {
+        val today = LocalDate.parse("2026-10-16")
+        assertEquals("Tomorrow", DueChips.label(LocalDate.parse("2026-10-17"), today))
+        assertEquals("Fri 23 Oct", DueChips.label(LocalDate.parse("2026-10-23"), today))
+    }
 }

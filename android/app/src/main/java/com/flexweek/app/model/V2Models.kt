@@ -149,14 +149,16 @@ object V2Json {
 data class DueChip(val label: String, val date: LocalDate)
 
 object DueChips {
+    fun label(date: LocalDate, today: LocalDate): String =
+        if (date == today.plusDays(1)) "Tomorrow" else date.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH))
+
     fun forToday(today: LocalDate): List<DueChip> {
         val tomorrow = today.plusDays(1)
         val friday = today.with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.FRIDAY))
         val monday = today.with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.MONDAY))
         // On a Thursday tomorrow is the next Friday, on a Sunday the next Monday: one chip per day.
-        return listOf(tomorrow, friday, monday).distinct().map {
-            DueChip(if (it == tomorrow) "Tomorrow" else it.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)), it)
-        } + DueChip("Pick a day", monday)
+        return listOf(tomorrow, friday, monday).distinct().map { DueChip(label(it, today), it) } +
+            DueChip("Pick a day", monday)
     }
 }
 
