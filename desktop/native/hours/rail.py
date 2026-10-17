@@ -405,9 +405,9 @@ class NextCard(QWidget):
         self.head.addWidget(self.label, 1)
         box.addLayout(self.head)
         self.card = EdgeCard("railNextCard")
-        card_row = QHBoxLayout(self.card)
+        card_row = QVBoxLayout(self.card)
         card_row.setContentsMargins(3 + SPACING[2], 2, SPACING[1], 2)
-        card_row.setSpacing(SPACING[1])
+        card_row.setSpacing(SPACING[0])
         inside = QVBoxLayout()
         inside.setContentsMargins(0, 0, 0, 0)
         inside.setSpacing(2)
@@ -423,12 +423,12 @@ class NextCard(QWidget):
         self.then.setWordWrap(True)
         for widget in (self.title, self.when, self.then):
             inside.addWidget(widget)
-        card_row.addLayout(inside, 1)
+        card_row.addLayout(inside)
         self.start_focus = QPushButton("Start focus")
         self.start_focus.setObjectName("railNextFocus")
         self.start_focus.setFixedHeight(30)
         self.start_focus.hide()
-        card_row.addWidget(self.start_focus, 0, Qt.AlignmentFlag.AlignVCenter)
+        card_row.addWidget(self.start_focus, 0, Qt.AlignmentFlag.AlignLeft)
         box.addWidget(self.card)
         self.rest = QWidget()
         self.rest.setObjectName("railNextRest")
@@ -487,19 +487,19 @@ class NextCard(QWidget):
         for item in items:
             row = QWidget()
             row.setObjectName("railNextRow")
-            row_box = QHBoxLayout(row)
+            row_box = QVBoxLayout(row)
             row_box.setContentsMargins(SPACING[1], 2, SPACING[1], 2)
             words = QVBoxLayout()
             words.setContentsMargins(0, 0, 0, 0)
             name = QLabel(item.title)
             name.setObjectName("railNextRowTitle")
-            # Wrapped, a long name takes a second line beside Start focus instead of widening the rail.
+            # The action has its own line so wrapping the name never squeezes either label.
             name.setWordWrap(True)
             when = QLabel(f"{clock_label(item.start)} · {length_label(item.minutes)}")
             when.setObjectName("railNextRowWhen")
             words.addWidget(name)
             words.addWidget(when)
-            row_box.addLayout(words, 1)
+            row_box.addLayout(words)
             if item.work:
                 start = QPushButton("Start focus")
                 start.setObjectName("railNextRowFocus")
@@ -508,7 +508,7 @@ class NextCard(QWidget):
                 start.clicked.connect(
                     lambda _=False, key=item.block_id, day=item.day: self.focus_requested.emit(key, day)
                 )
-                row_box.addWidget(start)
+                row_box.addWidget(start, 0, Qt.AlignmentFlag.AlignLeft)
             self.rest_box.addWidget(row)
 
 
