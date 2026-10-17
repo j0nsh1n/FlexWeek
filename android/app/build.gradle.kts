@@ -53,11 +53,7 @@ android {
 
 
     buildTypes {
-        debug {
-            buildConfigField("boolean", "V2_ENABLED", "true")
-        }
         release {
-            buildConfigField("boolean", "V2_ENABLED", "false")
             isMinifyEnabled = false
         }
     }

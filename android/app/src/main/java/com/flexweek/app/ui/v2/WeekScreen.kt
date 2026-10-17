@@ -19,10 +19,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import com.flexweek.app.core.DemoSchedule
 import com.flexweek.app.model.WeekUiState
 import com.flexweek.app.ui.components.SyncLineBar
 import com.flexweek.app.ui.theme.categoryColor
+
+// The phone writes English everywhere, so the day names are fixed, not the device locale's.
+private val WEEK_DAY_LABELS = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
 @Composable
 fun WeekScreen(
@@ -61,7 +63,7 @@ fun WeekScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        DemoSchedule.dayLabels[day.dayIndex],
+                        WEEK_DAY_LABELS[day.dayIndex],
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -93,11 +95,5 @@ fun WeekScreen(
                 }
             }
         }
-        Text(
-            "The phone shows the week's shape, not its words: 360 dp cannot hold seven columns of text. Tap a day to read it in Today.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(16.dp),
-        )
     }
 }
