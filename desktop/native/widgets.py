@@ -5747,6 +5747,7 @@ class PlanReview(QFrame):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
         row = QHBoxLayout()
+        self._result_row = row
         row.setSpacing(8)
         self.heading = QLabel()
         self.heading.setObjectName("planReviewHeading")
@@ -5758,18 +5759,27 @@ class PlanReview(QFrame):
         self.details.toggled.connect(self._show_details)
         row.addWidget(self.details)
         row.addStretch(1)
-        replan = QPushButton("Replan all my homework")
-        replan.setObjectName("planReviewReplan")
-        replan.setToolTip(REPLAN_TIP)
-        replan.clicked.connect(self.replan_requested.emit)
-        dismiss = QPushButton("Got it")
-        dismiss.setObjectName("planReviewDismiss")
-        dismiss.setProperty("tonal", True)
-        dismiss.setToolTip("Hide this list.")
-        dismiss.clicked.connect(self._dismiss)
-        row.addWidget(replan)
-        row.addWidget(dismiss)
+        self.replan = QPushButton("Replan all my homework")
+        self.replan.setObjectName("planReviewReplan")
+        self.replan.setToolTip(REPLAN_TIP)
+        self.replan.clicked.connect(self.replan_requested.emit)
+        self.dismiss_button = QPushButton("Got it")
+        self.dismiss_button.setObjectName("planReviewDismiss")
+        self.dismiss_button.setProperty("tonal", True)
+        self.dismiss_button.setToolTip("Hide this list.")
+        self.dismiss_button.clicked.connect(self._dismiss)
+        row.addWidget(self.replan)
+        row.addWidget(self.dismiss_button)
         layout.addLayout(row)
+        # Where the heading and the buttons do not fit one line (1024x640 at Large text), the buttons move
+        # to a line of their own under it. Hidden while empty, it adds no height and no spacing.
+        self._actions = QWidget()
+        self._action_row = QHBoxLayout(self._actions)
+        self._action_row.setContentsMargins(0, 0, 0, 0)
+        self._action_row.setSpacing(row.spacing())
+        layout.addWidget(self._actions)
+        self._actions.hide()
+        self._actions_below = False
         self.list = QListWidget()
         self.list.setObjectName("planReviewList")
         self.list.setWordWrap(True)
@@ -5777,9 +5787,46 @@ class PlanReview(QFrame):
         self.list.hide()
         self.hide()
 
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._fit_result_actions()
+
+    def _fit_result_actions(self) -> None:
+        buttons = (self.details, self.replan, self.dismiss_button)
+        # The heading's one-line width, not its size hint: wrapped, its hint narrows and the row would flip.
+        heading = self.heading.fontMetrics().horizontalAdvance(self.heading.text())
+        heading += self.heading.contentsMargins().left() + self.heading.contentsMargins().right()
+        needed = heading + sum(button.sizeHint().width() for button in buttons)
+        needed += self._result_row.spacing() * len(buttons)
+        below = needed > self.width()
+        if below == self._actions_below:
+            return
+        self._actions_below = below
+        source = self._result_row if below else self._action_row
+        target = self._action_row if below else self._result_row
+        for button in buttons:
+            source.removeWidget(button)
+        while self._action_row.count():
+            self._action_row.takeAt(0)
+        # The same order either way: Details on the left, Replan and Got it on the right.
+        if below:
+            target.addWidget(self.details)
+            target.addStretch(1)
+            target.addWidget(self.replan)
+            target.addWidget(self.dismiss_button)
+        else:
+            target.insertWidget(1, self.details)
+            target.addWidget(self.replan)
+            target.addWidget(self.dismiss_button)
+        # Alone on its line, a long heading wraps rather than holding the strip wider than the window.
+        self.heading.setWordWrap(below)
+        self._actions.setVisible(below)
+        self.updateGeometry()
+
     def _show_details(self, shown: bool) -> None:
         self.list.setVisible(shown)
         self.details.setText("Hide details" if shown else "Details")
+        self._fit_result_actions()
 
     def _dismiss(self) -> None:
         self.hide()
@@ -5891,6 +5938,7 @@ class PlanReview(QFrame):
         from desktop.native.controller import plan_sentence
 
         self.heading.setText(plan_sentence(placed, waiting))
+        self._fit_result_actions()
         for line in said:
             row = QListWidgetItem(line)
             self.list.addItem(row)
