@@ -13,6 +13,9 @@ import com.flexweek.app.core.newOpId
 import com.flexweek.app.model.SnackbarState
 import com.flexweek.app.model.TodayJson
 import com.flexweek.app.model.TodayUiState
+import com.flexweek.app.model.FocusJson
+import com.flexweek.app.model.FocusUiState
+import org.json.JSONObject
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -24,6 +27,14 @@ class TodayViewModel(
 ) : ViewModel() {
     var uiState by mutableStateOf(emptyToday())
         private set
+
+    var focusState by mutableStateOf(FocusJson.parseState(core.focusState()))
+        private set
+    var replacePrompt by mutableStateOf<Pair<String, String>?>(null)
+        private set
+    var finishPrompt by mutableStateOf(false)
+        private set
+    private var replaceAssignmentId: String? = null
 
     private var nowMinute =
         if (core is FakeFlexWeekCore) DemoSchedule.DEMO_NOW_MINUTE
@@ -128,6 +139,81 @@ class TodayViewModel(
 
     fun showMessage(message: String) {
         refresh(snackbar = SnackbarState(message, null))
+    }
+
+    fun startFocus(assignmentId: String) {
+        if (core is FakeFlexWeekCore) applyStart(core.focusBegin(assignmentId), core.focusState(), assignmentId)
+        else viewModelScope.launch {
+            val answer = withContext(workerDispatcher) { core.focusBegin(assignmentId) to core.focusState() }
+            applyStart(answer.first, answer.second, assignmentId)
+        }
+    }
+
+    private fun applyStart(raw: String, saved: String, assignmentId: String) {
+        val answer = JSONObject(raw)
+        if (answer.optString("kind") == "needs_replace") {
+            replaceAssignmentId = assignmentId
+            replacePrompt = answer.getString("current") to answer.getString("incoming")
+        } else focusState = FocusJson.parseState(saved)
+    }
+
+    fun keepCurrentFocus() {
+        replacePrompt = null
+        replaceAssignmentId = null
+    }
+
+    fun replaceFocus() {
+        val incoming = replaceAssignmentId ?: return
+        replacePrompt = null
+        replaceAssignmentId = null
+        if (core is FakeFlexWeekCore) {
+            core.focusBegin(incoming, replace = true)
+            focusState = FocusJson.parseState(core.focusState())
+        } else viewModelScope.launch {
+            val saved = withContext(workerDispatcher) {
+                core.focusBegin(incoming, replace = true)
+                core.focusState()
+            }
+            focusState = FocusJson.parseState(saved)
+        }
+    }
+
+    fun pauseFocus() {
+        if (core is FakeFlexWeekCore) {
+            core.focusPause()
+            focusState = FocusJson.parseState(core.focusState())
+        } else viewModelScope.launch {
+            focusState = FocusJson.parseState(withContext(workerDispatcher) {
+                core.focusPause()
+                core.focusState()
+            })
+        }
+    }
+
+    fun completeFocus() {
+        if (core is FakeFlexWeekCore) {
+            core.focusComplete()
+            focusState = null
+        } else viewModelScope.launch {
+            withContext(workerDispatcher) { core.focusComplete() }
+            focusState = null
+        }
+    }
+
+    fun askFinishFocus() { finishPrompt = focusState != null }
+
+    fun keepGoing() { finishPrompt = false }
+
+    fun endFocus() {
+        if (core is FakeFlexWeekCore) {
+            core.focusFinish()
+            focusState = null
+            finishPrompt = false
+        } else viewModelScope.launch {
+            withContext(workerDispatcher) { core.focusFinish() }
+            focusState = null
+            finishPrompt = false
+        }
     }
 
     private fun refresh(snackbar: SnackbarState? = uiState.snackbar) {

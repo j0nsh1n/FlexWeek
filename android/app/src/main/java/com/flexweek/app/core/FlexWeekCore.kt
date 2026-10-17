@@ -73,4 +73,14 @@ interface FlexWeekCore {
     fun weekShape(weekStart: String): String
 
     fun weekRows(weekStart: String): String
+
+    fun focusBegin(assignmentId: String, replace: Boolean = false): String = "{\"kind\":\"unavailable\"}"
+
+    fun focusPause(): String = "{}"
+
+    fun focusFinish(): String = "{}"
+
+    fun focusState(): String = "null"
+
+    fun focusComplete(): String = "{}"
 }

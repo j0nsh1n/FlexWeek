@@ -72,6 +72,18 @@ class TodayViewModelTest {
     }
 
     @Test
+    fun startWithoutConfirmationDoesNotChangeTheTimer() {
+        core.pairWithCode(DemoSchedule.VALID_PAIR_CODE)
+        val vm = TodayViewModel(core)
+        vm.startFocus("essay")
+        val first = vm.focusState
+        assertEquals("essay", first?.assignmentId)
+        vm.startFocus("bio")
+        assertEquals(first, vm.focusState)
+        assertEquals("History essay" to "Bio reading", vm.replacePrompt)
+    }
+
+    @Test
     fun syncStatesSurfaceInSyncLine() {
         core.pairWithCode(DemoSchedule.VALID_PAIR_CODE)
         val vm = TodayViewModel(core)

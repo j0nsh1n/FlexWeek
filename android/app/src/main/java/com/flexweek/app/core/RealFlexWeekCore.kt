@@ -33,6 +33,16 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
 
     override fun open(dbPath: String, deviceName: String) {
         native = FlexWeek.open(dbPath, deviceName, host)
+        val saved = localSettings.getString("focus-state", "null") ?: "null"
+        if (saved != "null") {
+            if (!isPaired()) localSettings.edit().remove("focus-state").apply()
+            else {
+                val restored = JSONObject(native.focusRestore(saved))
+                val persisted = restored.opt("persist")
+                if (persisted == null || persisted == JSONObject.NULL) localSettings.edit().remove("focus-state").apply()
+                else localSettings.edit().putString("focus-state", persisted.toString()).apply()
+            }
+        }
     }
 
     override fun engineVersion(): String = native.engineVersion()
@@ -127,4 +137,43 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
     override fun acceptRunningLate(previewId: String, opId: String): String = acceptPlan(previewId, opId)
     override fun weekShape(weekStart: String): String = RustPhoneJson.week(native.weekShape(weekStart), currentDate())
     override fun weekRows(weekStart: String): String = native.weekRows(weekStart)
+
+    override fun focusState(): String = localSettings.getString("focus-state", "null") ?: "null"
+
+    override fun focusBegin(assignmentId: String, replace: Boolean): String = result {
+        val answer = JSONObject(native.focusBegin(assignmentId, focusState(), replace))
+        if (answer.optString("kind") == "started") saveFocus(answer.getJSONObject("persist"))
+        answer.toString()
+    }
+
+    override fun focusPause(): String = result {
+        val saved = focusState()
+        val state = JSONObject(native.focusRestore(saved)).optJSONObject("state") ?: return@result "{\"state\":null}"
+        val answer = JSONObject(native.focusPause(state.toString()))
+        saveFocus(answer.getJSONObject("persist"))
+        answer.toString()
+    }
+
+    override fun focusFinish(): String = result {
+        val answer = native.focusFinish(focusState())
+        localSettings.edit().remove("focus-state").apply()
+        answer
+    }
+
+    override fun focusComplete(): String {
+        val state = JSONObject(focusState())
+        if (state.isNull("assignmentId")) return "{}"
+        val id = state.getString("assignmentId")
+        val minutes = state.optInt("workMin", 30)
+        val operation = "focus-${state.optString("sessionId", "${id}-${state.optLong("endsAt")}")}"
+        return result {
+            val answer = JSONObject(native.creditFocus(id, minutes.toLong(), operation))
+            localSettings.edit().remove("focus-state").apply()
+            answer.toString()
+        }
+    }
+
+    private fun saveFocus(value: JSONObject) {
+        localSettings.edit().putString("focus-state", value.toString()).apply()
+    }
 }

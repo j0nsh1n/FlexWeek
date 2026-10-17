@@ -1,6 +1,7 @@
 mod account;
 mod agenda;
 mod core;
+mod focus;
 mod homework;
 mod plan_week;
 mod reminders;
