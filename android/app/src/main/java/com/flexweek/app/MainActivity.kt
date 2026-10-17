@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -32,6 +33,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.flexweek.app.model.SyncLine
 import com.flexweek.app.ui.pair.PairScreen
 import com.flexweek.app.ui.pair.PairViewModel
+import com.flexweek.app.ui.nav.MainTab
+import com.flexweek.app.ui.nav.MainTabs
 import com.flexweek.app.ui.reminders.RemindersScreen
 import com.flexweek.app.ui.reminders.RemindersViewModel
 import com.flexweek.app.ui.reminders.SharedPreferenceReminderPrefs
@@ -155,12 +158,6 @@ data class ScreenshotTweaks(
     }
 }
 
-private enum class MainTab {
-    Today,
-    Week,
-    Reminders,
-}
-
 private enum class ActiveSheet {
     None,
     Add,
@@ -184,7 +181,6 @@ private fun FlexWeekRoot(
     tweaks: ScreenshotTweaks,
     activity: ComponentActivity,
 ) {
-    val v2 = BuildConfig.V2_ENABLED
     val demo = core is com.flexweek.app.core.FakeFlexWeekCore
     var paired by remember { mutableStateOf(initiallyPaired || (demo && tweaks.prePaired)) }
     var pairingRequested by remember { mutableStateOf(false) }
@@ -194,8 +190,8 @@ private fun FlexWeekRoot(
     var tab by remember {
         mutableStateOf(
             when (tweaks.startScreen) {
-                ScreenshotTweaks.StartScreen.Reminders -> MainTab.Reminders
-                ScreenshotTweaks.StartScreen.Week -> if (v2) MainTab.Week else MainTab.Today
+                ScreenshotTweaks.StartScreen.Reminders -> MainTab.Settings
+                ScreenshotTweaks.StartScreen.Week -> MainTab.Week
                 else -> MainTab.Today
             },
         )
@@ -278,36 +274,29 @@ private fun FlexWeekRoot(
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             remindersVm.onNotificationPermissionResult(granted)
         }
-    val weekVm = if (v2) viewModel { WeekViewModel(core) } else null
+    val weekVm = viewModel { WeekViewModel(core) }
     val syncLine = remindersVm.state.problem?.let { SyncLine("unreachable", it) } ?: todayVm.uiState.syncLine
     val closeSheet: () -> Unit = {
         sheet = ActiveSheet.None
         todayVm.refreshAgenda()
-        weekVm?.refresh()
+        weekVm.refresh()
     }
     Scaffold(
         bottomBar = {
             NavigationBar(Modifier.height(64.dp)) {
-                NavigationBarItem(
-                    selected = tab == MainTab.Today,
-                    onClick = { tab = MainTab.Today },
-                    icon = { Text("▤") },
-                    label = { Text("Today") },
-                )
-                if (v2) {
+                MainTabs.releaseTabs.forEach { item ->
                     NavigationBarItem(
-                        selected = tab == MainTab.Week,
-                        onClick = { tab = MainTab.Week },
-                        icon = { Text("▦") },
-                        label = { Text("Week") },
+                        selected = tab == item,
+                        onClick = { tab = item },
+                        icon = { Text(item.icon) },
+                        label = { Text(item.label) },
                     )
                 }
-                NavigationBarItem(
-                    selected = tab == MainTab.Reminders,
-                    onClick = { tab = MainTab.Reminders },
-                    icon = { Text("⚙") },
-                    label = { Text("Settings") },
-                )
+            }
+        },
+        floatingActionButton = {
+            if (sheet == ActiveSheet.None && MainTabs.addAvailable(tab)) {
+                Button(onClick = { sheet = ActiveSheet.Add }, modifier = Modifier.height(56.dp)) { Text("+ Add") }
             }
         },
     ) { padding ->
@@ -329,24 +318,20 @@ private fun FlexWeekRoot(
                             onFinishHomework = {
                                 todayVm.toggleHomework(it)
                             },
-                            onRunningLate = { if (v2) sheet = ActiveSheet.Late },
+                            onRunningLate = { sheet = ActiveSheet.Late },
                             focusEnabled = false,
-                            lateEnabled = v2,
-                            v2Extras =
-                                if (v2) {
-                                    TodayV2Extras(
-                                        showFab = sheet == ActiveSheet.None,
+                            lateEnabled = true,
+                            v2Extras = TodayV2Extras(
+                                        // Add is the frame's button on every tab now.
+                                        showFab = false,
                                         onAdd = { sheet = ActiveSheet.Add },
                                         onPlan = {
                                             sheet = ActiveSheet.Plan
                                         },
-                                    )
-                                } else {
-                                    null
-                                },
+                                    ),
                         )
                     MainTab.Week ->
-                        weekVm?.let { vm ->
+                        weekVm.let { vm ->
                             WeekScreen(
                                 state = vm.state,
                                 syncLine = syncLine,
@@ -356,7 +341,7 @@ private fun FlexWeekRoot(
                                 },
                             )
                         }
-                    MainTab.Reminders ->
+                    MainTab.Settings ->
                         RemindersScreen(
                             syncLine = syncLine,
                             state = remindersVm.state,
@@ -404,7 +389,7 @@ private fun FlexWeekRoot(
                         )
                 }
             }
-            if (v2 && sheet == ActiveSheet.Add) {
+            if (sheet == ActiveSheet.Add) {
                 val addVm =
                     remember {
                         AddHomeworkViewModel(core) { message ->
@@ -426,7 +411,7 @@ private fun FlexWeekRoot(
                     onCancel = closeSheet,
                 )
             }
-            if (v2 && sheet == ActiveSheet.Plan) {
+            if (sheet == ActiveSheet.Plan) {
                 val planVm =
                     remember(sheet) {
                         PlanRecordViewModel(
@@ -448,7 +433,7 @@ private fun FlexWeekRoot(
                     }
                 }
             }
-            if (v2 && sheet == ActiveSheet.Late) {
+            if (sheet == ActiveSheet.Late) {
                 val lateVm =
                     remember {
                         RunningLateViewModel(
@@ -457,9 +442,11 @@ private fun FlexWeekRoot(
                             onDismiss = { sheet = ActiveSheet.None },
                         )
                     }
-                lateVm.preview?.let { preview ->
+                // A preview the core refused shows its reason; before, nothing opened at all.
+                if (lateVm.preview != null || lateVm.error != null) {
                     RunningLateSheet(
-                        preview = preview,
+                        preview = lateVm.preview,
+                        error = lateVm.error,
                         minutes = lateVm.minutes,
                         onMinutes = lateVm::pickMinutes,
                         onCancel = lateVm::cancel,

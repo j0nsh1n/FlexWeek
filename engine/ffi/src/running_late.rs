@@ -141,18 +141,15 @@ pub(crate) fn running_late(
             revision,
         },
     );
-    let moved = trace_value
-        .get("moves")
-        .and_then(Value::as_array)
-        .map(Vec::len)
-        .unwrap_or(0);
+    let moves = phone_moves(&trace_value, &settled, &assignments);
+    let moved = moves.len();
     Ok(json!({
         "week_start": week_start,
         "placed": settled.iter().filter(|block| {
             block.get("start").and_then(Value::as_str).is_some()
         }).cloned().collect::<Vec<_>>(),
         "not_placed": waiting,
-        "moves": trace_value.get("moves").cloned().unwrap_or(json!([])),
+        "moves": moves,
         "explanations": trace_value.get("explanations").cloned().unwrap_or(json!([])),
         "applied_preview": preview_id,
         "moved": moved,
@@ -160,11 +157,196 @@ pub(crate) fn running_late(
     .to_string())
 }
 
+/// The moves the phone lists: work with a time at both ends (a "move" with no time at one end is the
+/// solver recording that something stayed unplaced), each with its block's title and why in words.
+/// Running late files its moves under the missed-day code with an explanation of its own, so the code's
+/// sentence alone would tell a student who ran late that they had missed a day; the desktop reads the
+/// explanation first for the same reason.
+fn phone_moves(trace: &Value, blocks: &[Value], assignments: &Value) -> Vec<Value> {
+    let explanations = trace
+        .get("explanations")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let title_of = |id: &str| -> String {
+        let block = blocks
+            .iter()
+            .find(|block| block.get("id").and_then(Value::as_str) == Some(id));
+        block
+            .and_then(|block| block.get("title").and_then(Value::as_str))
+            .filter(|title| !title.is_empty())
+            .map(str::to_string)
+            .or_else(|| {
+                let assignment = block?.get("assignment_id")?.as_str()?;
+                assignments
+                    .get(assignment)?
+                    .get("title")?
+                    .as_str()
+                    .map(str::to_string)
+            })
+            .unwrap_or_else(|| "Homework".to_string())
+    };
+    trace
+        .get("moves")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|item| item.get("from_start").and_then(Value::as_str).is_some())
+        .filter(|item| item.get("to_start").and_then(Value::as_str).is_some())
+        .map(|item| {
+            let id = item.get("block_id").and_then(Value::as_str).unwrap_or("");
+            let reason = item.get("reason").and_then(Value::as_str).unwrap_or("");
+            let why = explanations
+                .iter()
+                .find(|told| {
+                    told.get("block_id").and_then(Value::as_str) == Some(id)
+                        && told.get("reason").and_then(Value::as_str) == Some(reason)
+                })
+                .and_then(|told| told.get("message").and_then(Value::as_str))
+                .filter(|message| !message.is_empty())
+                .map(str::to_string)
+                .or_else(|| flexweek_engine::plan::sentence(reason).ok())
+                .unwrap_or_default();
+            let mut shown = item.clone();
+            shown["title"] = json!(title_of(id));
+            shown["why"] = json!(why);
+            shown
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::core::tests_support::{open_at, save_week};
     use serde_json::json;
+
+    /// Monday 16:05 (the 15-minute cutoff is 16:00): School is fixed until 14:30, Soccer is fixed at
+    /// 17:30, and the Essay session sits at 16:00. Thirty minutes late puts the late block at
+    /// 16:00-16:30, so the Essay has to move.
+    fn late_monday(name: &str) -> Value {
+        let (week, _) = open_at(name, "2026-10-05T16:05:00");
+        let db = week.db.lock().unwrap();
+        flexweek_store::insert_assignment(
+            &db,
+            week.user_id.unwrap(),
+            "essay",
+            r#"{"id":"essay","title":"History essay","due":"2026-10-08T21:00","estimate_min":60,"focus_minutes":0,"completed":false}"#,
+        )
+        .unwrap();
+        drop(db);
+        save_week(
+            &week,
+            "2026-10-05",
+            &json!([
+                {"id":"school","title":"School","kind":"locked","days":[0],"start":"08:00","duration_min":390,"category":"class"},
+                {"id":"soccer","title":"Soccer","kind":"locked","days":[0],"start":"17:30","duration_min":60,"category":"extra"},
+                {"id":"essay-session","title":"History essay","kind":"flexible","days":[0],"start":"16:00","duration_min":60,"assignment_id":"essay","category":"assignments"}
+            ]),
+        );
+        serde_json::from_str(&week.running_late(0, 30, 0.0).unwrap()).unwrap()
+    }
+
+    fn moves(result: &Value) -> Vec<Value> {
+        result["moves"].as_array().cloned().unwrap_or_default()
+    }
+
+    #[test]
+    fn running_late_moves_name_the_block() {
+        let result = late_monday("late-names");
+        let moved = moves(&result);
+        let essay = moved
+            .iter()
+            .find(|item| item["block_id"] == "essay-session");
+        assert!(essay.is_some(), "the Essay session moves: {moved:?}");
+        assert_eq!(
+            essay.unwrap().get("title").and_then(Value::as_str),
+            Some("History essay"),
+            "a move names its block by the stored title"
+        );
+    }
+
+    #[test]
+    fn running_late_moves_carry_a_plain_why() {
+        let result = late_monday("late-why");
+        for item in moves(&result) {
+            let why = item.get("why").and_then(Value::as_str).unwrap_or("");
+            assert!(!why.is_empty(), "every move says why: {item}");
+            assert!(
+                !why.split_whitespace()
+                    .any(|word| word.contains('_') && word.chars().any(char::is_uppercase)),
+                "why is words, not a code: {why}"
+            );
+            assert!(
+                !why.contains("missed a day"),
+                "running late is not a missed day: {why}"
+            );
+        }
+    }
+
+    #[test]
+    fn running_late_moves_only_work_that_has_a_time_at_both_ends_and_never_a_fixed_block() {
+        let result = late_monday("late-ends");
+        for item in moves(&result) {
+            assert!(
+                item["from_start"].is_string() && item["to_start"].is_string(),
+                "{item}"
+            );
+            assert!(
+                !["school", "soccer"].contains(&item["block_id"].as_str().unwrap_or("")),
+                "{item}"
+            );
+            let start =
+                flexweek_engine::time::hhmm_to_minutes(item["to_start"].as_str().unwrap()).unwrap();
+            assert!(
+                item["to_day"] != 0 || start >= 16 * 60 + 30,
+                "moved work starts after the late block ends: {item}"
+            );
+        }
+        assert_eq!(
+            result["moved"],
+            json!(moves(&result).len()),
+            "the count is the list shown"
+        );
+    }
+
+    /// The phone's Kotlin tests parse real output, not the fake core's: this file is it. Run with
+    /// FLEXWEEK_WRITE_PHONE_FIXTURES=1 to write it after a deliberate change; otherwise the output must
+    /// equal the file, and the Android test copy must equal it byte for byte.
+    #[test]
+    fn phone_fixture_running_late_matches_the_output_and_the_android_copy() {
+        let mut result = late_monday("late-fixture");
+        // Random per run; the phone only passes it back.
+        result["applied_preview"] = json!("preview-id");
+        for block in result["placed"].as_array_mut().unwrap() {
+            if block["id"]
+                .as_str()
+                .is_some_and(|id| id.starts_with("b-late-"))
+            {
+                block["id"] = json!("b-late-id");
+            }
+        }
+        let text = format!("{}\n", serde_json::to_string_pretty(&result).unwrap());
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let fixture = root.join("tests/fixtures/phone/running-late-30.json");
+        let copy = root.join("../../android/app/src/test/resources/phone/running-late-30.json");
+        if std::env::var("FLEXWEEK_WRITE_PHONE_FIXTURES").as_deref() == Ok("1") {
+            for path in [&fixture, &copy] {
+                std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+                std::fs::write(path, &text).unwrap();
+            }
+        }
+        let saved = std::fs::read_to_string(&fixture).expect("the phone fixture exists");
+        assert_eq!(
+            saved, text,
+            "the output changed: rewrite the phone fixture and check the Kotlin tests"
+        );
+        let android = std::fs::read_to_string(&copy).expect("the Android copy exists");
+        assert_eq!(
+            android, saved,
+            "the Android copy differs from the engine fixture"
+        );
+    }
 
     #[test]
     fn running_late_moves_timed_blocks_and_leaves_waiting_homework() {

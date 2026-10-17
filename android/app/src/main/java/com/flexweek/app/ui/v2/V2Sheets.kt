@@ -173,9 +173,12 @@ fun PlanRecordSheet(
     }
 }
 
+const val NOTHING_TO_MOVE = "Nothing after this time can move. Fixed times stay."
+
 @Composable
 fun RunningLateSheet(
-    preview: RunningLatePreview,
+    preview: RunningLatePreview?,
+    error: String?,
     minutes: Int,
     onMinutes: (Int) -> Unit,
     onCancel: () -> Unit,
@@ -191,8 +194,16 @@ fun RunningLateSheet(
                         onMinutes(label.removeSuffix(" min").toInt())
                     }
                 }
-                Text("What moves and why", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
-                preview.moves.forEach { move ->
+                if (error != null) {
+                    Text(error, modifier = Modifier.padding(vertical = 8.dp))
+                }
+                if (preview != null && preview.moves.isEmpty()) {
+                    Text(NOTHING_TO_MOVE, modifier = Modifier.padding(vertical = 8.dp))
+                }
+                if (preview != null && preview.moves.isNotEmpty()) {
+                    Text("What moves and why", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
+                }
+                preview?.moves?.forEach { move ->
                     Column(Modifier.padding(vertical = 6.dp)) {
                         Text("${move.title} ${move.detail}", fontWeight = FontWeight.SemiBold)
                         Text(move.why, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -206,7 +217,7 @@ fun RunningLateSheet(
                 Row(Modifier.fillMaxWidth()) {
                     TextButton(onClick = onCancel, modifier = Modifier.height(48.dp)) { Text("Cancel") }
                     Box(Modifier.weight(1f))
-                    Button(onClick = onAccept, modifier = Modifier.height(48.dp)) { Text("Move it") }
+                    Button(onClick = onAccept, enabled = preview != null, modifier = Modifier.height(48.dp)) { Text("Move it") }
                 }
             }
         }

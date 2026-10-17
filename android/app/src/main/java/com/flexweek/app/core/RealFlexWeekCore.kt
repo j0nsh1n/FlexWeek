@@ -13,6 +13,8 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.concurrent.ConcurrentHashMap
 
+private const val UNREADABLE = "FlexWeek could not read its own answer. Nothing was changed."
+
 class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> Unit) : FlexWeekCore {
     private val main = Handler(Looper.getMainLooper())
     private val localSettings = context.getSharedPreferences("phone-settings", Context.MODE_PRIVATE)
@@ -99,6 +101,9 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
         JSONObject(call()).put("ok", true).toString()
     } catch (error: FfiException) {
         JSONObject().put("ok", false).put("error", error.message).toString()
+    } catch (error: org.json.JSONException) {
+        // An answer the phone cannot read once crashed the app as soon as Running late opened.
+        JSONObject().put("ok", false).put("error", UNREADABLE).toString()
     }
 
     override fun saveHomework(draftJson: String, opId: String): String = result {
