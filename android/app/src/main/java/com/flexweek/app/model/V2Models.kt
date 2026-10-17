@@ -2,10 +2,13 @@ package com.flexweek.app.model
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 data class HomeworkDraft(
     val title: String = "",
-    val due: String = "Fri 9 Oct",
+    val due: String = "",
     val whenMode: String = "pick",
     val estimateMin: Int = 60,
     val sessions: String = "one",
@@ -138,8 +141,31 @@ object V2Json {
         JSONObject()
             .put("title", draft.title)
             .put("due", draft.due)
-            .put("when", draft.whenMode)
             .put("estimate_min", draft.estimateMin)
             .put("sessions", draft.sessions)
             .toString()
+}
+
+data class DueChip(val label: String, val date: LocalDate)
+
+object DueChips {
+    fun label(date: LocalDate, today: LocalDate): String =
+        if (date == today.plusDays(1)) "Tomorrow" else date.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH))
+
+    fun forToday(today: LocalDate): List<DueChip> {
+        val tomorrow = today.plusDays(1)
+        val friday = today.with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.FRIDAY))
+        val monday = today.with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.MONDAY))
+        // On a Thursday tomorrow is the next Friday, on a Sunday the next Monday: one chip per day.
+        return listOf(tomorrow, friday, monday).distinct().map { DueChip(label(it, today), it) } +
+            DueChip("Pick a day", monday)
+    }
+}
+
+object DueDate {
+    const val PAST_DAY = "That day has passed. Choose today or a later day."
+
+    /** The day's end, or null for a day already gone (a sheet left open past midnight). */
+    fun toDueText(choice: LocalDate, today: LocalDate): String? =
+        if (choice.isBefore(today)) null else "${choice}T23:59"
 }

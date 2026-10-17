@@ -11,6 +11,7 @@ import org.json.JSONObject
 import java.security.SecureRandom
 import java.time.LocalDate
 import java.time.LocalDateTime
+import com.flexweek.app.model.DueDate
 import java.util.concurrent.ConcurrentHashMap
 
 private const val UNREADABLE = "FlexWeek could not read its own answer. Nothing was changed."
@@ -106,20 +107,18 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
         JSONObject().put("ok", false).put("error", UNREADABLE).toString()
     }
 
-    override fun saveHomework(draftJson: String, opId: String): String = result {
+    override fun saveHomework(draftJson: String, opId: String): String {
         val draft = JSONObject(draftJson)
-        // The existing sheet supplies a month/day label; resolve it in the current year.
-        val due = draft.getString("due")
-        if (!due.matches(Regex("\\d{4}-\\d{2}-\\d{2}T.*"))) {
-            val parsed = java.time.MonthDay.parse(due.substringAfter(' '),
-                java.time.format.DateTimeFormatter.ofPattern("d MMM", java.util.Locale.ENGLISH))
-            var date = parsed.atYear(LocalDate.now().year)
-            if (date.isBefore(LocalDate.now())) date = date.plusYears(1)
-            draft.put("due", "${date}T23:59")
-        }
+        val due = DueDate.toDueText(LocalDate.parse(draft.getString("due").take(10)), LocalDate.now())
+            ?: return JSONObject().put("ok", false).put("error", DueDate.PAST_DAY).toString()
+        return saved(draft.put("due", due), opId)
+    }
+
+    private fun saved(draft: JSONObject, opId: String): String = result {
         draft.put("from_date", currentDate()).put("spread", if (draft.optString("sessions") == "one") "one" else "spread")
         native.saveHomework(draft.toString(), opId)
     }
+    override fun recentTitles(): List<String> = native.recentTitles()
     override fun planWeek(weekStart: String): String = result { RustPhoneJson.plan(native.planWeek(weekStart, 0.0)) }
     override fun acceptPlan(previewId: String, opId: String): String = result { native.acceptPlan(previewId) }
     override fun runningLate(dayIndex: Int, minutes: Int, opId: String): String = result {

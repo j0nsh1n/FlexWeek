@@ -399,6 +399,7 @@ private fun FlexWeekRoot(
                     }
                 AddHomeworkSheet(
                     draft = addVm.draft,
+                    recentTitles = addVm.recentTitles,
                     stepProblem = addVm.stepProblem,
                     onTitleChange = addVm::onTitleChange,
                     onDuePick = addVm::onDuePick,
@@ -416,7 +417,7 @@ private fun FlexWeekRoot(
                     remember(sheet) {
                         PlanRecordViewModel(
                             core,
-                            onAccepted = closeSheet,
+                            onAccepted = { closeSheet() },
                             onDismiss = { sheet = ActiveSheet.None },
                         )
                     }

@@ -1,6 +1,7 @@
 package com.flexweek.app.ui.v2
 
 import com.flexweek.app.core.FakeFlexWeekCore
+import com.flexweek.app.core.FlexWeekCore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Test
@@ -36,5 +37,14 @@ class AddHomeworkViewModelTest {
         vm.nextOrSave()
         assertNotNull(saved)
         assertEquals(true, saved!!.contains("added"))
+    }
+
+    @Test
+    fun theSheetOpensWhenRecentTitlesCannotBeRead() {
+        val failing = object : FlexWeekCore by FakeFlexWeekCore() {
+            override fun recentTitles(): List<String> = throw IllegalStateException("the core could not answer")
+        }
+        val vm = runCatching { AddHomeworkViewModel(failing) {} }
+        assertEquals("the sheet opens without recent titles", emptyList<String>(), vm.getOrNull()?.recentTitles)
     }
 }

@@ -25,11 +25,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.flexweek.app.model.HomeworkDraft
 import com.flexweek.app.model.PlanRecordState
 import com.flexweek.app.model.RunningLatePreview
+import com.flexweek.app.model.DueChips
+import java.time.LocalDate
+import java.time.ZoneId
+import android.app.DatePickerDialog
 
 @Composable
 fun SheetScrim(onDismiss: () -> Unit, content: @Composable () -> Unit) {
@@ -49,6 +54,7 @@ fun SheetScrim(onDismiss: () -> Unit, content: @Composable () -> Unit) {
 @Composable
 fun AddHomeworkSheet(
     draft: HomeworkDraft,
+    recentTitles: List<String> = emptyList(),
     stepProblem: String?,
     onTitleChange: (String) -> Unit,
     onDuePick: (String) -> Unit,
@@ -75,17 +81,28 @@ fun AddHomeworkSheet(
                             placeholder = { Text("e.g. History essay") },
                             isError = stepProblem != null,
                         )
+                        if (recentTitles.isNotEmpty()) ChipRow(recentTitles, draft.title, onTitleChange)
                         stepProblem?.let {
                             Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp))
                         }
                     }
                     1 -> {
                         Text("When is it due?", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
-                        ChipRow(listOf("Fri 9 Oct", "Sun 11 Oct"), draft.due, onDuePick)
-                        Text("When to do it", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 12.dp))
-                        ChipRow(listOf("FlexWeek picks a time", "I'll pick on the week"), draft.whenMode, { v ->
-                            onWhenMode(if (v.startsWith("FlexWeek")) "pick" else "at")
-                        })
+                        val context = LocalContext.current
+                        val today = LocalDate.now()
+                        DueChips.forToday(today).take(3).forEach { chip ->
+                            TextButton(onClick = { onDuePick(chip.date.toString()) }) {
+                                Text(if (draft.due == chip.date.toString()) "✓ ${chip.label}" else chip.label)
+                            }
+                        }
+                        TextButton(onClick = {
+                            DatePickerDialog(context, { _, year, month, day ->
+                                onDuePick(LocalDate.of(year, month + 1, day).toString())
+                            }, today.year, today.monthValue - 1, today.dayOfMonth).apply {
+                                datePicker.minDate = today.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                            }.show()
+                        }) { Text("Pick a day") }
+                        Text("FlexWeek picks the time to do it", modifier = Modifier.padding(top = 8.dp))
                     }
                     else -> {
                         Text("How long will it take?", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
@@ -96,6 +113,11 @@ fun AddHomeworkSheet(
                         ChipRow(listOf("In one go", "Spread over days"), draft.sessions) { label ->
                             onSessions(if (label.startsWith("In")) "one" else "spread")
                         }
+                        Text(
+                            if (draft.sessions == "one") "In one go means one homework session."
+                            else "Spread over days means more than one session.",
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
                     }
                 }
                 stepProblem?.let {
@@ -126,7 +148,8 @@ private fun StepCrumbs(draft: HomeworkDraft, onStepJump: (Int) -> Unit) {
         }
         if (draft.step > 1) {
             TextButton(onClick = { onStepJump(1) }) {
-                Text("✓ due ${draft.due}, ${if (draft.whenMode == "pick") "FlexWeek picks" else "do it at"}")
+                val due = runCatching { DueChips.label(LocalDate.parse(draft.due), LocalDate.now()) }.getOrDefault(draft.due)
+                Text("✓ due $due, FlexWeek picks the time")
             }
             Text("·")
         }

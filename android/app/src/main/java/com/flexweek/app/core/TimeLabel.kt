@@ -16,4 +16,6 @@ object TimeLabel {
         fun at(day: Int?, start: String) = if (day == null) short(start) else "${DAYS[day]} ${short(start)}"
         return "${at(fromDay, fromStart)} → ${at(toDay, toStart)}"
     }
+
+    fun dayAndTime(dayIndex: Int, hhmm: String): String = "${DAYS[dayIndex]} ${short(hhmm)}"
 }

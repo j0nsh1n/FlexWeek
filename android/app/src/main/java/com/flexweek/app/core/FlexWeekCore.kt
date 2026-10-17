@@ -57,6 +57,8 @@ interface FlexWeekCore {
     /** v2 (S8): draft JSON with title, due, when, estimate_min, sessions. Returns ok or error text. */
     fun saveHomework(draftJson: String, opId: String): String
 
+    fun recentTitles(): List<String> = emptyList()
+
     /** v2: returns preview JSON (preview_id, placed, not_placed, …). */
     fun planWeek(weekStart: String): String
 
