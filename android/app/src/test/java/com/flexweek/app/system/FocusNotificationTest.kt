@@ -36,4 +36,9 @@ class FocusNotificationTest {
         assertEquals("finish action ends the timer", FocusAction.FINISH, FocusNotificationPlan.action("finish"))
         assertEquals("unknown actions are ignored", null, FocusNotificationPlan.action("other"))
     }
+
+    @Test fun theEndAlertSaysWhatWasAddedNotThatTheHomeworkIsFinished() {
+        val words = FocusNotificationPlan.endWords("""{"title":"History essay","running":true,"endsAt":1800000,"workMin":30}""")
+        assertEquals("Focus session over" to "30 min added to History essay.", words)
+    }
 }

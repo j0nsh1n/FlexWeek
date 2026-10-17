@@ -20,6 +20,14 @@ data class FocusNotificationPlan(val header: String, val title: String, val stat
                 running,
             )
         }
+        /** The end-of-session alert: what was added, never that the homework is finished. */
+        fun endWords(saved: String): Pair<String, String> {
+            val value = runCatching { JSONObject(saved) }.getOrNull()
+            val title = value?.optString("title").orEmpty().ifBlank { "your homework" }
+            val minutes = value?.optInt("workMin", 0) ?: 0
+            return "Focus session over" to if (minutes > 0) "$minutes min added to $title." else "Time is up for $title."
+        }
+
         fun action(value: String?): FocusAction? = when (value) {
             "pause", "resume" -> FocusAction.PAUSE
             "finish" -> FocusAction.FINISH

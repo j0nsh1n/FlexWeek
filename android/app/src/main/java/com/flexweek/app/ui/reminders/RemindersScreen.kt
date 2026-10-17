@@ -146,7 +146,7 @@ fun RemindersScreen(
             SettingRow(
                 title = "Exact reminders",
                 subtitle =
-                    "Android turns exact alarms off for new apps. Without it a reminder may come up to 5 minutes late.",
+                    "Android turns exact alarms off for new apps. Without it a reminder or the end of a focus session may come up to 5 minutes late.",
                 trailing = {
                     Switch(
                         checked = state.exactReminders,

@@ -62,7 +62,7 @@ object FocusRuntime {
         val scheduler = AndroidAlarmScheduler(context, alarm, AlarmBook(context))
         applyReminderPlan(scheduler, ReminderRescheduler.Plan(
             cancelKeys = emptySet(),
-            schedule = listOf(ReminderRescheduler.ScheduleRequest(END_ALARM_KEY, at, exact, "Session finished", "Homework finished")),
+            schedule = listOf(ReminderRescheduler.ScheduleRequest(END_ALARM_KEY, at, exact, "Focus session over", "")),
         ))
     }
 }

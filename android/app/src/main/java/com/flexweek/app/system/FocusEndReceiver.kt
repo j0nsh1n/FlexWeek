@@ -18,13 +18,15 @@ class FocusEndReceiver : BroadcastReceiver() {
             try {
                 val app = context.applicationContext as FlexWeekApp
                 val core = app.awaitCore() ?: return@launch
+                // Read before completing: completing clears the saved timer.
+                val (title, text) = FocusNotificationPlan.endWords(core.focusState())
                 core.focusComplete()
                 FocusRuntime.update(context, core.focusState())
                 if (NotificationManagerCompat.from(context).areNotificationsEnabled()) {
                     val notification = NotificationCompat.Builder(context, FlexWeekApp.CHANNEL_REMINDERS)
                         .setSmallIcon(R.drawable.ic_notification)
-                        .setContentTitle("Session finished")
-                        .setContentText("Homework finished")
+                        .setContentTitle(title)
+                        .setContentText(text)
                         .setAutoCancel(true)
                         .build()
                     NotificationManagerCompat.from(context).notify(FocusRuntime.NOTIFICATION_ID + 1, notification)
