@@ -279,6 +279,29 @@ mod tests {
     }
 
     #[test]
+    fn focus_action_pause_toggles_and_returns_the_new_state() {
+        let (_week, _) = open_at("focus-action-toggle", "2026-10-12T15:40:00");
+        let state = json!({"assignmentId":"history","title":"History", "phase":"work", "running":true,"endsAt":1_800_000,"remainingMs":1_800_000,"weekStart":"2026-10-12","cycles":0,"workMin":30});
+        let paused: Value =
+            serde_json::from_str(&pause_at(&state.to_string(), 600_000).unwrap()).unwrap();
+        assert_eq!(
+            paused["state"]["running"], false,
+            "pause action pauses the running state"
+        );
+        let resumed: Value =
+            serde_json::from_str(&pause_at(&paused["persist"].to_string(), 900_000).unwrap())
+                .unwrap();
+        assert_eq!(
+            resumed["state"]["running"], true,
+            "pause action resumes the paused state"
+        );
+        assert_eq!(
+            resumed["state"]["endsAt"], 2_100_000,
+            "resume action returns the new end time"
+        );
+    }
+
+    #[test]
     fn start_asks_before_replacing_a_running_timer() {
         let (week, _) = open_at("focus-replace-question", "2026-10-12T15:40:00");
         homework(&week, "bio", "Bio reading");

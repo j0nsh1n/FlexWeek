@@ -34,6 +34,12 @@ class AndroidAlarmScheduler(
                 request.triggerAtMs,
                 pi,
             )
+        } else if (request.key == FocusRuntime.END_ALARM_KEY) {
+            alarmManager.setAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                request.triggerAtMs,
+                pi,
+            )
         } else {
             val windowStart = (request.triggerAtMs - ReminderRescheduler.WINDOW_EARLY_MS).coerceAtLeast(0L)
             alarmManager.setWindow(
@@ -64,7 +70,7 @@ class AndroidAlarmScheduler(
         body: String,
     ): PendingIntent {
         val intent =
-            Intent(context, ReminderReceiver::class.java).apply {
+            Intent(context, if (key == FocusRuntime.END_ALARM_KEY) FocusEndReceiver::class.java else ReminderReceiver::class.java).apply {
                 putExtra(ReminderReceiver.EXTRA_KEY, key)
                 putExtra(ReminderReceiver.EXTRA_TITLE, title)
                 putExtra(ReminderReceiver.EXTRA_BODY, body)
@@ -131,7 +137,7 @@ fun rescheduleRemindersNow(
     val plan =
         ReminderRescheduler.plan(
             upcoming = upcoming,
-            currentlyScheduled = scheduler.scheduledKeys(),
+            currentlyScheduled = scheduler.scheduledKeys() - FocusRuntime.END_ALARM_KEY,
             nowMs = nowMs,
             exactOptIn = settings.optBoolean("exact_reminders", false),
             canScheduleExactAlarms = canScheduleExactAlarms,
