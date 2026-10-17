@@ -75,13 +75,23 @@ fun FlexWeekTheme(
 @Composable
 fun syncOkColor(): Color = if (isSystemInDarkTheme()) OkDark else OkLight
 
+/** What a block's category is drawn as. The real core says "homework"; the fake core said "hw". */
+enum class CategoryKind { School, Sports, Homework }
+
+fun categoryKind(category: String): CategoryKind? = when (category) {
+    "school" -> CategoryKind.School
+    "sports" -> CategoryKind.Sports
+    "homework", "hw" -> CategoryKind.Homework
+    else -> null
+}
+
 @Composable
 fun categoryColor(category: String): Color {
     val dark = isSystemInDarkTheme()
-    return when (category) {
-        "school" -> if (dark) AccentDark else AccentLight
-        "sports" -> if (dark) OkDark else OkLight
-        "hw" -> if (dark) ErrorDark else ErrorLight
-        else -> MaterialTheme.colorScheme.outline
+    return when (categoryKind(category)) {
+        CategoryKind.School -> if (dark) AccentDark else AccentLight
+        CategoryKind.Sports -> if (dark) OkDark else OkLight
+        CategoryKind.Homework -> if (dark) ErrorDark else ErrorLight
+        null -> MaterialTheme.colorScheme.outline
     }
 }
