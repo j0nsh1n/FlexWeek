@@ -108,6 +108,40 @@ impl FlexWeek {
         crate::agenda::today(self, &date, now_minute)
     }
 
+    pub fn focus_begin(
+        &self,
+        assignment_id: String,
+        saved: String,
+        replace: bool,
+    ) -> Result<String, FfiError> {
+        crate::focus::begin(self, &assignment_id, &saved, replace)
+    }
+
+    pub fn focus_pause(&self, state: String) -> Result<String, FfiError> {
+        crate::focus::pause(self, &state)
+    }
+
+    pub fn focus_finish(&self, state: String) -> Result<String, FfiError> {
+        crate::focus::finish(&state)
+    }
+
+    pub fn focus_restore(&self, saved: String) -> Result<String, FfiError> {
+        crate::focus::restore(self, &saved)
+    }
+
+    pub fn focus_persist(&self, state: String) -> Result<String, FfiError> {
+        crate::focus::persist(&state)
+    }
+
+    pub fn credit_focus(
+        &self,
+        assignment_id: String,
+        work_min: i64,
+        op_id: String,
+    ) -> Result<String, FfiError> {
+        crate::focus::credit(self, &assignment_id, work_min, &op_id)
+    }
+
     pub fn set_block_done(
         &self,
         week_start: String,

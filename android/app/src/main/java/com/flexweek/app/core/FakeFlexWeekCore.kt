@@ -18,6 +18,7 @@ class FakeFlexWeekCore : FlexWeekCore {
     private val noTime = DemoSchedule.defaultNoTime.toMutableList()
     private var leadMinutes = 10
     private var exactReminders = false
+    private var savedFocus: JSONObject? = null
     private val syncState = AtomicReference(SyncState.SYNCED)
     private var lastSyncLabel = "Synced 2 min ago"
     private var lastSyncAt = "3:12 PM"
@@ -513,6 +514,7 @@ class FakeFlexWeekCore : FlexWeekCore {
                     if (done) " · finished" else "",
             )
             put("homework", block.homework)
+            if (block.homework) put("assignment_id", block.id)
             put("done", done)
             put("past", past)
         }
@@ -552,6 +554,7 @@ class FakeFlexWeekCore : FlexWeekCore {
                     DemoSchedule.formatLength(block.lengthMinutes),
             )
             put("homework", block.homework)
+            if (block.homework) put("assignment_id", block.id)
             put("show_finish_focus", block.homework)
             put("show_running_late", hwLeft)
             if (next != null) {
@@ -565,6 +568,35 @@ class FakeFlexWeekCore : FlexWeekCore {
         val day = DemoSchedule.dayDates[dayIndex]
         return "2025-10-${day.toString().padStart(2, '0')}"
     }
+
+    override fun focusState(): String = savedFocus?.toString() ?: "null"
+
+    override fun focusBegin(assignmentId: String, replace: Boolean): String {
+        val current = savedFocus
+        if (current?.optBoolean("running") == true && !replace) {
+            return JSONObject().put("kind", "needs_replace").put("current", current.optString("title"))
+                .put("incoming", blocks.firstOrNull { it.id == assignmentId }?.title ?: "Homework").toString()
+        }
+        val title = blocks.firstOrNull { it.id == assignmentId }?.title ?: "Homework"
+        val endsAt = System.currentTimeMillis() + 30 * 60_000L
+        savedFocus = JSONObject().put("assignmentId", assignmentId).put("title", title).put("phase", "work")
+            .put("running", true).put("endsAt", endsAt).put("remainingMs", 30 * 60_000L).put("workMin", 30)
+            .put("sessionId", "demo-focus")
+        return JSONObject().put("kind", "started").toString()
+    }
+
+    override fun focusPause(): String {
+        val state = savedFocus ?: return "{}"
+        val running = state.optBoolean("running")
+        if (running) state.put("remainingMs", (state.optLong("endsAt") - System.currentTimeMillis()).coerceAtLeast(0))
+        else state.put("endsAt", System.currentTimeMillis() + state.optLong("remainingMs"))
+        state.put("running", !running)
+        return JSONObject().put("state", state).put("persist", state).toString()
+    }
+
+    override fun focusFinish(): String { savedFocus = null; return "{\"state\":null}" }
+
+    override fun focusComplete(): String = focusFinish()
 
     private fun reminderKey(block: DemoSchedule.Block): String {
         val start = "%02d:%02d".format(block.startMinute / 60, block.startMinute % 60)

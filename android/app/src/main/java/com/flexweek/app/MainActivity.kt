@@ -318,8 +318,18 @@ private fun FlexWeekRoot(
                             onFinishHomework = {
                                 todayVm.toggleHomework(it)
                             },
+                            onStartFocus = todayVm::startFocus,
                             onRunningLate = { sheet = ActiveSheet.Late },
-                            focusEnabled = false,
+                            focusState = todayVm.focusState,
+                            onPauseFocus = todayVm::pauseFocus,
+                            onCompleteFocus = todayVm::completeFocus,
+                            onFinishFocus = todayVm::askFinishFocus,
+                            replacePrompt = todayVm.replacePrompt,
+                            onKeepFocus = todayVm::keepCurrentFocus,
+                            onReplaceFocus = todayVm::replaceFocus,
+                            finishPrompt = if (todayVm.finishPrompt) todayVm.focusState else null,
+                            onKeepGoing = todayVm::keepGoing,
+                            onEndSession = todayVm::endFocus,
                             lateEnabled = true,
                             v2Extras = TodayV2Extras(
                                         // Add is the frame's button on every tab now.

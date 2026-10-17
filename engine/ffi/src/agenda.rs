@@ -273,7 +273,7 @@ pub(crate) fn today(week: &FlexWeek, date: &str, now_minute: i64) -> Result<Stri
     .to_string())
 }
 
-fn operation_seen(
+pub(crate) fn operation_seen(
     db: &rusqlite::Connection,
     user_id: i64,
     op_id: &str,
@@ -293,7 +293,7 @@ fn operation_seen(
     }
 }
 
-fn remember_operation(
+pub(crate) fn remember_operation(
     db: &rusqlite::Connection,
     user_id: i64,
     op_id: &str,

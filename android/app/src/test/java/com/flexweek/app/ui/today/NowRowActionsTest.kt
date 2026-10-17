@@ -9,22 +9,23 @@ class NowRowActionsTest {
     private val row = AgendaRow.Now("hw", "Homework", "now", "30 min", "today", true, null, null, true, true)
 
     @Test fun runningLateIsHiddenInReleaseBuild() {
-        assertFalse(nowRowActions(row, focusEnabled = false, lateEnabled = false).runningLate)
+        assertFalse(nowRowActions(row, lateEnabled = false).runningLate)
     }
 
     @Test fun runningLateShowsInDebugBuild() {
-        assertTrue(nowRowActions(row, focusEnabled = true, lateEnabled = true).runningLate)
+        assertTrue(nowRowActions(row, lateEnabled = true).runningLate)
     }
 
     @Test fun finishHomeworkStaysVisibleInReleaseBuild() {
-        assertTrue(nowRowActions(row, focusEnabled = false, lateEnabled = false).finishHomework)
+        assertTrue(nowRowActions(row, lateEnabled = false).finishHomework)
     }
 
-    @Test fun startFocusIsHiddenInReleaseUntilFocusShips() {
-        assertFalse(nowRowActions(row, focusEnabled = false, lateEnabled = false).startFocus)
+    @Test fun startFocusShowsOnAHomeworkRowInRelease() {
+        assertTrue("a homework Now row offers Start focus", nowRowActions(row, lateEnabled = false).startFocus)
     }
 
-    @Test fun startFocusShowsWhenFocusIsEnabled() {
-        assertTrue(nowRowActions(row, focusEnabled = true, lateEnabled = true).startFocus)
+    @Test fun startFocusIsNotOfferedOnAPlainBlock() {
+        val plain = row.copy(showFinishFocus = false)
+        assertFalse("a plain block does not offer Start focus", nowRowActions(plain, lateEnabled = false).startFocus)
     }
 }
