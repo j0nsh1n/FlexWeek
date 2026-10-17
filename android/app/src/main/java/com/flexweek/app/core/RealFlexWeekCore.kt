@@ -161,7 +161,8 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
     }
 
     override fun focusComplete(): String {
-        val state = JSONObject(focusState())
+        // No saved timer is the text "null", which JSONObject() throws on, outside result's error wrapper.
+        val state = runCatching { JSONObject(focusState()) }.getOrNull() ?: return "{}"
         if (state.isNull("assignmentId")) return "{}"
         val id = state.getString("assignmentId")
         val minutes = state.optInt("workMin", 30)
