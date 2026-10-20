@@ -83,4 +83,6 @@ interface FlexWeekCore {
     fun focusState(): String = "null"
 
     fun focusComplete(): String = "{}"
+
+    fun focusAdvance(completed: Boolean): String = "{}"
 }

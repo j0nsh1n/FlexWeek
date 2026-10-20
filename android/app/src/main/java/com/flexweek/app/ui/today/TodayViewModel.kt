@@ -190,14 +190,21 @@ class TodayViewModel(
         }
     }
 
-    fun completeFocus() {
-        if (core is FakeFlexWeekCore) {
-            core.focusComplete()
-            focusState = null
-        } else viewModelScope.launch {
-            withContext(workerDispatcher) { core.focusComplete() }
-            focusState = null
+fun skipFocus() = advanceFocus(completed = false)
+
+    fun completeFocus() = advanceFocus(completed = true)
+
+    private fun advanceFocus(completed: Boolean) {
+        if (core is FakeFlexWeekCore) applyAdvance(core.focusAdvance(completed))
+        else viewModelScope.launch {
+            applyAdvance(withContext(workerDispatcher) { core.focusAdvance(completed) })
         }
+    }
+
+    private fun applyAdvance(raw: String) {
+        val answer = JSONObject(raw)
+        focusState = if (answer.isNull("state")) null
+        else FocusJson.parseState(answer.getJSONObject("state").toString())
     }
 
     fun askFinishFocus() { finishPrompt = focusState != null }

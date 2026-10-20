@@ -598,6 +598,12 @@ class FakeFlexWeekCore : FlexWeekCore {
 
     override fun focusComplete(): String = focusFinish()
 
+    override fun focusAdvance(completed: Boolean): String {
+        if (completed) savedFocus = null
+        val state = savedFocus ?: JSONObject.NULL
+        return JSONObject().put("state", state).put("persist", state).toString()
+    }
+
     private fun reminderKey(block: DemoSchedule.Block): String {
         val start = "%02d:%02d".format(block.startMinute / 60, block.startMinute % 60)
         return listOf(DemoSchedule.WEEK_START, block.id, block.dayIndex.toString(), start).joinToString("|")
