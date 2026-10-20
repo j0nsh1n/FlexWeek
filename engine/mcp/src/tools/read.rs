@@ -65,7 +65,7 @@ impl crate::App {
     )]
     async fn whoami(&self) -> Result<String, String> {
         let result = (|| {
-            let account = session::for_call(
+            let account = session::for_read(
                 self.started_as.as_ref(),
                 &self.session_file,
                 &self.database,
@@ -87,7 +87,7 @@ impl crate::App {
     )]
     async fn get_today(&self, Parameters(args): Parameters<TodayArgs>) -> Result<String, String> {
         let result = (|| {
-            let account = session::for_call(
+            let account = session::for_read(
                 self.started_as.as_ref(),
                 &self.session_file,
                 &self.database,
@@ -110,7 +110,7 @@ impl crate::App {
     )]
     async fn get_week(&self, Parameters(args): Parameters<WeekArgs>) -> Result<String, String> {
         let result = (|| {
-            let account = session::for_call(
+            let account = session::for_read(
                 self.started_as.as_ref(),
                 &self.session_file,
                 &self.database,
@@ -130,7 +130,7 @@ impl crate::App {
     )]
     async fn get_month(&self, Parameters(args): Parameters<MonthArgs>) -> Result<String, String> {
         let result = (|| {
-            let account = session::for_call(
+            let account = session::for_read(
                 self.started_as.as_ref(),
                 &self.session_file,
                 &self.database,
@@ -152,7 +152,7 @@ impl crate::App {
         Parameters(args): Parameters<HomeworkArgs>,
     ) -> Result<String, String> {
         let result = (|| {
-            let account = session::for_call(
+            let account = session::for_read(
                 self.started_as.as_ref(),
                 &self.session_file,
                 &self.database,
@@ -174,7 +174,7 @@ impl crate::App {
     #[tool(description = "Saved routines", annotations(read_only_hint = true))]
     async fn list_routines(&self) -> Result<String, String> {
         let result = (|| {
-            let account = session::for_call(
+            let account = session::for_read(
                 self.started_as.as_ref(),
                 &self.session_file,
                 &self.database,
@@ -190,7 +190,7 @@ impl crate::App {
     #[tool(description = "Restore points", annotations(read_only_hint = true))]
     async fn list_restore_points(&self) -> Result<String, String> {
         let result = (|| {
-            let account = session::for_call(
+            let account = session::for_read(
                 self.started_as.as_ref(),
                 &self.session_file,
                 &self.database,

@@ -9,22 +9,30 @@ open a port.
 From the repository root:
 
 ```
-cargo build -p flexweek-mcp --manifest-path engine/Cargo.toml
+cargo build --release --locked -p flexweek-mcp --manifest-path engine/Cargo.toml
 ```
 
-The binary is `engine/target/debug/flexweek-mcp`.
+The binary is `engine/target/release/flexweek-mcp` (without `--release`,
+`engine/target/debug/flexweek-mcp`).
 
 ## Run
 
 With no arguments the server uses the desktop's data folder:
 
-- Linux: `~/.local/share/FlexWeek`
+- Linux: `$XDG_DATA_HOME/FlexWeek` when `XDG_DATA_HOME` is an absolute path,
+  otherwise `~/.local/share/FlexWeek` (the folder the desktop's Qt picks)
 - macOS: `~/Library/Application Support/FlexWeek`
 
 The database is `<data folder>/flexweek.db`. The session file is
 `<data folder>/signed-in/flexweek-<16 hex chars>.json`, the same name the
 desktop writes for that database. The file has to be readable by its owner
 only (mode `0600`). On Windows the program prints a refusal and exits.
+A session file without its database is treated as signed out; the server
+never creates a database.
+
+The session is checked on every call. Starting the server and the read tools
+only look at it; a write tool renews it, as the desktop does on each request,
+so an assistant that only reads does not keep the student signed in.
 
 ```
 flexweek-mcp --data-dir DIR [--database FILE] [--session-file FILE]
@@ -32,6 +40,10 @@ flexweek-mcp --data-dir DIR [--database FILE] [--session-file FILE]
 
 `--database` selects a database file. The session file name is then the hash
 of that path, unless `--session-file` names the file directly.
+
+`--read-only` lists and serves only the read tools. A call to a write tool is
+answered with a JSON-RPC error and changes nothing. Use it for an assistant
+that should see the schedule but never change it.
 
 `--now YYYY-MM-DDTHH:MM:SSZ` holds the clock at that UTC instant. It is for
 tests. Without it, today's date is the local date.

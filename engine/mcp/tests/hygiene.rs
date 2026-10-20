@@ -186,3 +186,51 @@ fn the_server_opens_no_socket() {
         );
     }
 }
+
+#[test]
+fn read_only_lists_and_serves_only_the_read_tools() {
+    // Bori starts the helper with --read-only: the assistant there may read the calendar, never
+    // change it, whatever a client asks for.
+    let (data_arg, database_arg) = signed_in("read-only");
+    let mut server = Server::spawn(&[
+        "--data-dir",
+        &data_arg,
+        "--database",
+        &database_arg,
+        "--now",
+        NOW_ISO,
+        "--read-only",
+    ]);
+    server.handshake();
+    let listed = server.request("tools/list", json!({}), 2);
+    let names = tool_names(&listed);
+    assert!(
+        !names.is_empty(),
+        "tools/list must not be empty, got {listed}"
+    );
+    assert_eq!(
+        names.iter().map(String::as_str).collect::<BTreeSet<_>>(),
+        READ_ONLY.iter().copied().collect::<BTreeSet<_>>(),
+        "--read-only lists exactly the read tools"
+    );
+    let before = std::fs::read(&database_arg).expect("database");
+    let refused = server.call(
+        "add_homework",
+        json!({
+            "operation_id": "op-read-only",
+            "title": "Essay",
+            "due": "2026-10-23T21:00",
+            "estimate_min": 90
+        }),
+        3,
+    );
+    assert!(
+        refused.get("error").is_some(),
+        "--read-only does not serve a write tool, got {refused}"
+    );
+    assert_eq!(
+        std::fs::read(&database_arg).expect("database"),
+        before,
+        "a refused write leaves the database as it was"
+    );
+}
