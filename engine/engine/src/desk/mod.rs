@@ -1,3 +1,4 @@
+pub mod blocks;
 pub mod calendar;
 pub mod clipboard;
 mod cmath;
