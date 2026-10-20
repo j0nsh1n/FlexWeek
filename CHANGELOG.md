@@ -5,6 +5,8 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-20
+
 ### Added
 - An assistant on this computer can read the signed-in schedule: today, the week, the month, homework, routines and restore points. It uses FlexWeek's session file, opens no network port, and on Windows it stops until it can check that the file stays private.
 - Phone: an "Up next" home-screen widget shows what is now or next and the two things after it, counts down to the next start, and opens Today when tapped; tick a homework on it to mark it finished.

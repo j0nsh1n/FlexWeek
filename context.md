@@ -146,7 +146,7 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
-- 2026-10-20, `release/1.1` (worktree `~/.worktrees/flexweek-0190`). Desk hand-move and the local schedule reader are merged. The phone lane (rebuild, focus phase advance, Running late slider) is merged. Nothing is pushed and there is no pull request.
+- 2026-10-20, `release/1.1` (worktree `~/.worktrees/flexweek-0190`). Desk hand-move, the local schedule reader, and the phone lane are merged. This commit cuts 1.1.0. A pull request into `main` follows. The device check is skipped.
 - 2026-10-20 desktop test slice: `0759806c` fixes recovery's opening day/week. The overdue Plan sheet's button order and redundant close button are fixed in this handoff's commit. All five named nodes pass individually; assertions and fixtures are unchanged. The full pre-release checks remain pending. Nothing pushed.
 - Still open: Settings scroll (lane 4, parked until a real compositor check), a Mac session file refused because the owner check reads /proc/self, and a schedule reader that starts signed out stays on "Please sign in".
 - Month and Day phone screens are not in this merge. `~/.worktrees/flexweek-11-probe` is a detached checkout at 5a72b3f6. Lane branches and worktrees are still in place.
