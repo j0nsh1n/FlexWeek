@@ -261,6 +261,22 @@ pub fn read_arguments(name: &str) -> Value {
             "day": 0,
             "done": true
         }),
+        "move_block" => json!({
+            "operation_id": "session-check",
+            "week_start": "2026-10-19",
+            "expected_revision": 0,
+            "block_id": "club",
+            "day": 2,
+            "start": "17:00",
+            "end": "18:00"
+        }),
+        "delete_block" => json!({
+            "operation_id": "session-check",
+            "week_start": "2026-10-19",
+            "expected_revision": 0,
+            "block_id": "club",
+            "scope": "series"
+        }),
         _ => json!({}),
     }
 }

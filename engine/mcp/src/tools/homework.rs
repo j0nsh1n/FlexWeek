@@ -90,12 +90,12 @@ struct BlockDoneArgs {
     done: bool,
 }
 
-struct Opened {
-    user_id: i64,
-    conn: Connection,
+pub(crate) struct Opened {
+    pub(crate) user_id: i64,
+    pub(crate) conn: Connection,
 }
 
-fn open(app: &crate::App) -> Result<Opened, String> {
+pub(crate) fn open(app: &crate::App) -> Result<Opened, String> {
     let account = session::for_call(
         app.started_as.as_ref(),
         &app.session_file,
@@ -109,7 +109,7 @@ fn open(app: &crate::App) -> Result<Opened, String> {
     })
 }
 
-fn minute_of(unix: i64) -> i64 {
+pub(crate) fn minute_of(unix: i64) -> i64 {
     unix.rem_euclid(86_400) / 60
 }
 
@@ -117,7 +117,7 @@ fn stamp_of(today: &str, minute: i64) -> String {
     format!("{today}T{:02}:{:02}", minute / 60, minute % 60)
 }
 
-fn clock_of(app: &crate::App) -> ApplyClock {
+pub(crate) fn clock_of(app: &crate::App) -> ApplyClock {
     ApplyClock {
         now: stamp_of(&app.today, minute_of(app.now_unix)),
         restore_token: String::new(),
@@ -128,7 +128,7 @@ fn derived_id(operation_id: &str, kind: &str) -> String {
     flexweek_store::digest(&format!("{kind}:{operation_id}"))
 }
 
-fn remembered(
+pub(crate) fn remembered(
     conn: &Connection,
     user_id: i64,
     operation_id: &str,
@@ -147,7 +147,7 @@ fn remembered(
     }
 }
 
-fn run_apply(
+pub(crate) fn run_apply(
     conn: &Connection,
     user_id: i64,
     operation_id: &str,
@@ -160,7 +160,7 @@ fn run_apply(
     write::from_apply(apply(conn, user_id, &input, clock))
 }
 
-fn parse_blocks(text: &str) -> Result<Vec<Value>, String> {
+pub(crate) fn parse_blocks(text: &str) -> Result<Vec<Value>, String> {
     match serde_json::from_str::<Value>(text) {
         Ok(Value::Array(items)) => Ok(items),
         _ => Err("stored week is not a list".into()),

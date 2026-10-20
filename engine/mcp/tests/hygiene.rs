@@ -1,6 +1,6 @@
 //! stdout is protocol only. stderr names the tool and the outcome, and nothing about the person.
 //! The server opens no socket. The tool list is the allow-list: reads stay read-only, and
-//! delete_homework is destructive.
+//! delete_homework and delete_block are destructive.
 
 mod common;
 
@@ -24,6 +24,7 @@ const READ_ONLY: &[&str] = &[
 ];
 const ALLOWED: &[&str] = &[
     "add_homework",
+    "delete_block",
     "delete_homework",
     "edit_homework",
     "get_month",
@@ -32,6 +33,7 @@ const ALLOWED: &[&str] = &[
     "list_homework",
     "list_restore_points",
     "list_routines",
+    "move_block",
     "set_block_done",
     "set_homework_done",
     "whoami",
@@ -107,11 +109,11 @@ fn tools_list_is_the_read_allow_list() {
             .get("annotations")
             .and_then(|notes| notes.get("destructiveHint"))
             .and_then(Value::as_bool);
-        if name == "delete_homework" {
+        if name == "delete_homework" || name == "delete_block" {
             assert_eq!(
                 destructive,
                 Some(true),
-                "delete_homework must be marked destructiveHint"
+                "{name} must be marked destructiveHint"
             );
         } else if !read_only {
             assert_eq!(

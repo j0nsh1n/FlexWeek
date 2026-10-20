@@ -1,9 +1,10 @@
+mod blocks;
 mod homework;
 mod read;
 mod write;
 
 pub(crate) fn router() -> rmcp::handler::server::router::tool::ToolRouter<crate::App> {
-    crate::App::read_tools() + crate::App::homework_tools()
+    crate::App::read_tools() + crate::App::homework_tools() + crate::App::block_tools()
 }
 
 #[rmcp::tool_handler(router = crate::tools::router())]
