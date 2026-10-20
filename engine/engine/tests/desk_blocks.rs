@@ -1,7 +1,7 @@
 //! `desktop/native/controller.py` `delete_block` (1538-1559) and
 //! `grid.rs` `delete_occurrence`. Setup blocks are refused (decision Q5).
 
-use flexweek_engine::desk::blocks::{BlockDeletion, SETUP_BLOCK, delete_block};
+use flexweek_engine::desk::blocks::{BlockDeletion, SETUP_BLOCK, delete_block, mark_block_done};
 use serde_json::{Map, Value, json};
 
 const WEEK: &str = "2026-10-19";
@@ -195,5 +195,88 @@ fn deleting_runs_settle() {
         Some(json!(
             "Math no longer fits Wednesday at 16:00: Essay is there now."
         ))
+    );
+}
+
+/// `agenda.rs` `set_block_done` 350-366, and
+/// `set_block_done_sets_both_completion_fields_and_is_retry_safe`.
+#[test]
+fn marking_a_block_done_sets_completed_and_completed_day() {
+    let mut blocks = vec![
+        json!({"id":"session","title":"Reading","kind":"flexible","days":[0],"start":"10:00","duration_min":30}),
+        json!({"id":"school","title":"School","kind":"locked","days":[0],"start":"08:00","duration_min":60}),
+    ];
+    let marked = mark_block_done(&mut blocks, "session", 0, true);
+    assert_eq!(
+        marked,
+        Ok(()),
+        "agenda.rs 362 sets completed on the block that was named"
+    );
+    assert_eq!(blocks[0]["completed"], json!(true));
+    assert_eq!(
+        blocks[0]["completed_day"],
+        json!(0),
+        "agenda.rs 364 records the day when it is one of the block's days"
+    );
+    assert_eq!(blocks[0]["start"], json!("10:00"));
+    let school = mark_block_done(&mut blocks, "school", 0, true);
+    assert_eq!(school, Ok(()), "a locked block can be marked done");
+    assert_eq!(blocks[1]["completed"], json!(true));
+    assert!(
+        blocks[1].get("completed_day").is_none(),
+        "agenda.rs 366 leaves completed_day off a block that is not a started flexible session, got {}",
+        blocks[1]
+    );
+}
+
+/// `agenda.rs` 359. A day the block does not have is refused and writes nothing.
+#[test]
+fn marking_done_on_a_foreign_day_is_refused() {
+    let mut blocks = vec![
+        json!({"id":"session","title":"Reading","kind":"flexible","days":[0],"start":"10:00","duration_min":30}),
+    ];
+    let refused = mark_block_done(&mut blocks, "session", 3, true);
+    assert_eq!(
+        refused,
+        Err("day is not one of the block's days".to_string()),
+        "agenda.rs 359 refuses a day the block does not have"
+    );
+    assert!(
+        blocks[0].get("completed").is_none(),
+        "a refused day does not set completed, got {}",
+        blocks[0]
+    );
+}
+
+/// `agenda.rs` 362-366. Reopening clears the finished day.
+#[test]
+fn reopening_a_block_clears_completed_day() {
+    let mut blocks = vec![json!({
+        "id": "session",
+        "kind": "flexible",
+        "days": [0],
+        "start": "10:00",
+        "completed": true,
+        "completed_day": 0
+    })];
+    let opened = mark_block_done(&mut blocks, "session", 4, false);
+    assert_eq!(opened, Ok(()), "reopening does not require the day");
+    assert_eq!(blocks[0]["completed"], json!(false));
+    assert!(
+        blocks[0].get("completed_day").is_none(),
+        "agenda.rs 366 removes completed_day when the block is not done, got {}",
+        blocks[0]
+    );
+}
+
+/// `agenda.rs` 346. An id that is not in the week is refused.
+#[test]
+fn marking_a_missing_block_is_refused() {
+    let mut blocks = vec![json!({"id":"session","kind":"flexible","days":[0],"start":"10:00"})];
+    let missing = mark_block_done(&mut blocks, "nope", 0, true);
+    assert_eq!(
+        missing,
+        Err("block was not found".to_string()),
+        "agenda.rs 346 refuses an id that is not in the week"
     );
 }

@@ -62,6 +62,43 @@ pub fn delete_block(
     })
 }
 
+/// `agenda.rs` `set_block_done`. School and activities stay a caller's guard.
+pub fn mark_block_done(
+    blocks: &mut [Value],
+    block_id: &str,
+    day: i64,
+    done: bool,
+) -> Result<(), String> {
+    let Some(block) = blocks
+        .iter_mut()
+        .find(|block| block.get("id").and_then(Value::as_str) == Some(block_id))
+    else {
+        return Err("block was not found".into());
+    };
+    let object = block
+        .as_object_mut()
+        .ok_or_else(|| "stored block is not an object".to_string())?;
+    let flexible = object.get("kind").and_then(Value::as_str) == Some("flexible");
+    let has_start = object
+        .get("start")
+        .and_then(Value::as_str)
+        .is_some_and(|start| !start.is_empty());
+    let day_ok = object
+        .get("days")
+        .and_then(Value::as_array)
+        .is_some_and(|days| days.iter().any(|value| value.as_i64() == Some(day)));
+    if done && flexible && has_start && !day_ok {
+        return Err("day is not one of the block's days".into());
+    }
+    object.insert("completed".into(), json!(done));
+    if done && flexible && has_start && day_ok {
+        object.insert("completed_day".into(), json!(day));
+    } else {
+        object.shift_remove("completed_day");
+    }
+    Ok(())
+}
+
 fn touch(
     blocks: Vec<Value>,
     assignments: &Map<String, Value>,

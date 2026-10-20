@@ -353,6 +353,104 @@ fn new_session(
     dump_session(session)
 }
 
+pub struct MarkedWeek {
+    pub week_start: String,
+    pub blocks: Vec<Value>,
+}
+
+pub struct MarkedHomework {
+    pub assignment: Value,
+    pub weeks: Vec<MarkedWeek>,
+}
+
+/// `agenda.rs` `set_homework_done`: keep `completed_at`, and follow the sessions.
+pub fn mark_homework_done(
+    assignment_id: &str,
+    assignment: &Value,
+    assignments: &Map<String, Value>,
+    weeks: &[(String, Vec<Value>)],
+    done: bool,
+    stamp: &str,
+) -> Result<MarkedHomework, String> {
+    let mut body = assignment.clone();
+    let object = body
+        .as_object_mut()
+        .ok_or_else(|| "stored homework is not an object".to_string())?;
+    let kept = object
+        .get("completed_at")
+        .and_then(Value::as_str)
+        .filter(|text| !text.is_empty())
+        .map(str::to_string);
+    object.insert("completed".into(), json!(done));
+    if done {
+        let stamp = kept.unwrap_or_else(|| stamp.to_string());
+        object.insert("completed_at".into(), json!(stamp));
+    } else {
+        object.insert("completed_at".into(), Value::Null);
+    }
+    let mut table = assignments.clone();
+    table.insert(assignment_id.to_string(), body.clone());
+    let mut changed = Vec::new();
+    for (week_start, blocks) in weeks {
+        let mut blocks = blocks.clone();
+        let mut kept_ids = Vec::new();
+        for block in &mut blocks {
+            if block.get("assignment_id").and_then(Value::as_str) != Some(assignment_id) {
+                continue;
+            }
+            let Some(fields) = block.as_object_mut() else {
+                continue;
+            };
+            if let Some(block_id) = fields.get("id").and_then(Value::as_str) {
+                kept_ids.push(Value::String(block_id.to_string()));
+            }
+            fields.insert("completed".into(), json!(done));
+            let flexible = fields.get("kind").and_then(Value::as_str) == Some("flexible");
+            let has_start = fields
+                .get("start")
+                .and_then(Value::as_str)
+                .is_some_and(|start| !start.is_empty());
+            let one_day = fields
+                .get("days")
+                .and_then(Value::as_array)
+                .is_some_and(|days| days.len() == 1);
+            if done && flexible && has_start && one_day {
+                let only = fields
+                    .get("days")
+                    .and_then(Value::as_array)
+                    .and_then(|days| days.first())
+                    .cloned()
+                    .unwrap_or(Value::Null);
+                fields.insert("completed_day".into(), only);
+            } else if !done {
+                fields.shift_remove("completed_day");
+            }
+        }
+        if kept_ids.is_empty() {
+            continue;
+        }
+        let (settled, _) = planning::settle_placements(
+            &Value::Array(blocks),
+            &Value::Object(table.clone()),
+            week_start,
+            &Value::Array(kept_ids),
+            true,
+        )
+        .map_err(|err| err.message)?;
+        let Value::Array(blocks) = settled else {
+            return Err("stored week is not a list".into());
+        };
+        changed.push(MarkedWeek {
+            week_start: week_start.clone(),
+            blocks,
+        });
+    }
+    Ok(MarkedHomework {
+        assignment: body,
+        weeks: changed,
+    })
+}
+
 fn overdue_ids(
     assignments: &Map<String, Value>,
     today: &str,

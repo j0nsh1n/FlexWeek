@@ -1,9 +1,9 @@
 //! Homework and block writes. Sessions stay in step through `desk::homework`,
-//! and the batch is `changes::apply`. `set_block_done` follows `agenda.rs`.
+//! and the batch is `changes::apply`. Done rules live in the engine.
 
-use flexweek_engine::desk::blocks::SETUP_BLOCK;
+use flexweek_engine::desk::blocks::{self, SETUP_BLOCK};
 use flexweek_engine::desk::grid::is_setup_block;
-use flexweek_engine::desk::homework::edit_homework;
+use flexweek_engine::desk::homework::{edit_homework, mark_homework_done};
 use flexweek_store::{
     ApplyClock, ApplyInput, AssignmentInput, Connection, Recall, WeekInput, apply,
     list_account_weeks, list_assignment_rows, read_week, recall_operation,
@@ -265,24 +265,6 @@ fn edit_payload(existing: &Value, args: &EditArgs) -> Result<Value, String> {
     Ok(Value::Object(map))
 }
 
-fn done_payload(existing: &Value, done: bool, stamp: &str) -> Result<Value, String> {
-    let mut map = existing
-        .as_object()
-        .cloned()
-        .ok_or_else(|| session::STORAGE_UNAVAILABLE.to_string())?;
-    let completed_at = if done {
-        match map.get("completed_at").and_then(Value::as_str) {
-            Some(kept) if !kept.is_empty() => json!(kept),
-            _ => json!(stamp),
-        }
-    } else {
-        Value::Null
-    };
-    map.insert("completed".into(), json!(done));
-    map.insert("completed_at".into(), completed_at);
-    Ok(Value::Object(map))
-}
-
 struct Edited {
     weeks: Vec<(String, Vec<Value>, i64)>,
     assignment: Value,
@@ -434,47 +416,6 @@ fn saved_block(applied: &Value) -> Result<Value, String> {
         "revision": revision,
         "reaches_phone": REACHES_PHONE,
     }))
-}
-
-fn column_revision(existing: &Value) -> i64 {
-    existing
-        .get("revision")
-        .and_then(Value::as_i64)
-        .unwrap_or(0)
-}
-
-fn mark_block(blocks: &mut [Value], block_id: &str, day: i64, done: bool) -> Result<(), String> {
-    let Some(block) = blocks
-        .iter_mut()
-        .find(|block| block.get("id").and_then(Value::as_str) == Some(block_id))
-    else {
-        return Err("block was not found".into());
-    };
-    if is_setup_block(block).map_err(|err| err.message)? {
-        return Err(SETUP_BLOCK.into());
-    }
-    let object = block
-        .as_object_mut()
-        .ok_or_else(|| "stored block is not an object".to_string())?;
-    let flexible = object.get("kind").and_then(Value::as_str) == Some("flexible");
-    let has_start = object
-        .get("start")
-        .and_then(Value::as_str)
-        .is_some_and(|start| !start.is_empty());
-    let day_ok = object
-        .get("days")
-        .and_then(Value::as_array)
-        .is_some_and(|days| days.iter().any(|value| value.as_i64() == Some(day)));
-    if done && flexible && has_start && !day_ok {
-        return Err("day is not one of the block's days".into());
-    }
-    object.insert("completed".into(), json!(done));
-    if done && flexible && has_start && day_ok {
-        object.insert("completed_day".into(), json!(day));
-    } else {
-        object.shift_remove("completed_day");
-    }
-    Ok(())
 }
 
 fn add_arguments(args: &AddArgs) -> Value {
@@ -662,28 +603,65 @@ impl crate::App {
             if let Some(saved) = remembered(&opened.conn, opened.user_id, &operation_id, &digest)? {
                 return saved_homework(&saved);
             }
-            let assignments = load_assignments(&opened.conn, opened.user_id)?;
-            let Some(existing) = assignments.get(&args.id) else {
+            let rows = list_assignment_rows(&opened.conn, opened.user_id)
+                .map_err(session::storage_sentence)?;
+            let mut assignments = Map::new();
+            let mut existing = None;
+            let mut revision = 0;
+            for (id, body, row_revision) in rows {
+                let value: Value = serde_json::from_str(&body)
+                    .map_err(|_| session::STORAGE_UNAVAILABLE.to_string())?;
+                if id == args.id {
+                    existing = Some(value.clone());
+                    revision = row_revision;
+                }
+                assignments.insert(id, value);
+            }
+            let Some(existing) = existing else {
                 return Err("homework was not found".into());
             };
-            let revision = column_revision(existing);
-            let payload = done_payload(
-                existing,
+            let stored = list_account_weeks(&opened.conn, opened.user_id)
+                .map_err(session::storage_sentence)?;
+            let mut weeks = Vec::new();
+            let mut revisions = std::collections::HashMap::<String, i64>::new();
+            for (start, raw) in stored {
+                let blocks = parse_blocks(&raw)?;
+                let Some((_, week_revision)) = read_week(&opened.conn, opened.user_id, &start)
+                    .map_err(session::storage_sentence)?
+                else {
+                    return Err("week was not found".into());
+                };
+                revisions.insert(start.clone(), week_revision);
+                weeks.push((start, blocks));
+            }
+            let marked = mark_homework_done(
+                &args.id,
+                &existing,
+                &assignments,
+                &weeks,
                 args.done,
                 &stamp_of(&self.today, minute_of(self.now_unix)),
             )?;
-            let session_id = derived_id(&args.operation_id, "session");
-            let weeks = weeks_touching(&opened.conn, opened.user_id, &args.id, &self.today)?;
-            let edited = edit_weeks(
-                weeks,
-                &assignments,
-                &payload,
-                false,
-                &session_id,
-                &self.today,
-                minute_of(self.now_unix),
-            )?;
-            let input = homework_input(edited, revision)?;
+            let input = ApplyInput {
+                weeks: marked
+                    .weeks
+                    .into_iter()
+                    .map(|week| WeekInput {
+                        revision: revisions.get(&week.week_start).copied().unwrap_or(0),
+                        week_start: week.week_start,
+                        blocks: week.blocks,
+                    })
+                    .collect(),
+                assignments: vec![AssignmentInput {
+                    id: args.id,
+                    assignment: Some(marked.assignment),
+                    revision,
+                }],
+                operation_id: None,
+                snapshot_label: None,
+                standing: None,
+                argument_digest: None,
+            };
             let applied = run_apply(
                 &opened.conn,
                 opened.user_id,
@@ -727,7 +705,13 @@ impl crate::App {
                 return Err("week was not found".into());
             };
             let mut blocks = parse_blocks(&text)?;
-            mark_block(&mut blocks, &args.block_id, args.day, args.done)?;
+            if let Some(block) = blocks.iter().find(|block| {
+                block.get("id").and_then(Value::as_str) == Some(args.block_id.as_str())
+            }) && is_setup_block(block).map_err(|err| err.message)?
+            {
+                return Err(SETUP_BLOCK.into());
+            }
+            blocks::mark_block_done(&mut blocks, &args.block_id, args.day, args.done)?;
             let input = ApplyInput {
                 weeks: vec![WeekInput {
                     week_start: args.week_start,

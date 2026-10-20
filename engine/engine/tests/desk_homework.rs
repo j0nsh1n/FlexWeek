@@ -2,7 +2,9 @@
 //! Expected blocks are the `TimeBlock` dump: null bounds stay, false flags are omitted
 //! until the finish cascade writes `completed` itself.
 
-use flexweek_engine::desk::homework::{HomeworkEdit, edit_homework};
+use flexweek_engine::desk::homework::{
+    HomeworkEdit, MarkedHomework, MarkedWeek, edit_homework, mark_homework_done,
+};
 use serde_json::{Map, Value, json};
 
 const WEEK: &str = "2026-10-19";
@@ -533,5 +535,266 @@ fn settle_drops_a_session_that_no_longer_fits() {
     assert_eq!(
         math_after.get("days").cloned().unwrap_or(Value::Null),
         json!([2])
+    );
+}
+
+fn marked_or_stop(result: Result<MarkedHomework, String>, what: &str) -> Option<MarkedHomework> {
+    match result {
+        Ok(marked) => Some(marked),
+        Err(error) => {
+            assert_eq!(error, "", "{what}, got {error}");
+            None
+        }
+    }
+}
+
+fn week_named<'a>(marked: &'a MarkedHomework, week_start: &str) -> Option<&'a MarkedWeek> {
+    marked
+        .weeks
+        .iter()
+        .find(|week| week.week_start == week_start)
+}
+
+/// `agenda.rs` `set_homework_done` 409-481 and
+/// `set_homework_done_updates_the_assignment_and_session_together`.
+#[test]
+fn marking_homework_done_keeps_the_stamp_and_follows_every_session() {
+    let assignment = json!({
+        "id": "essay",
+        "title": "Essay",
+        "due": "2026-10-14T21:00",
+        "estimate_min": 60,
+        "focus_minutes": 0,
+        "completed": false,
+        "completed_at": "2026-10-01T08:00"
+    });
+    let session = json!({
+        "id": "essay-session",
+        "assignment_id": "essay",
+        "title": "Essay",
+        "kind": "flexible",
+        "days": [0],
+        "start": "19:00",
+        "duration_min": 60
+    });
+    let club = json!({
+        "id": "club",
+        "title": "Club",
+        "kind": "locked",
+        "days": [1],
+        "start": "16:00",
+        "duration_min": 60
+    });
+    let mut assignments = Map::new();
+    assignments.insert("essay".into(), assignment.clone());
+    let result = mark_homework_done(
+        "essay",
+        &assignment,
+        &assignments,
+        &[
+            ("2026-10-12".into(), vec![session.clone()]),
+            ("2026-10-19".into(), vec![club]),
+            ("2026-10-26".into(), vec![session]),
+        ],
+        true,
+        "2026-10-21T12:00",
+    );
+    let Some(marked) = marked_or_stop(
+        result,
+        "agenda.rs 415 keeps a completed_at that is already set, and 451 updates every week that holds a session",
+    ) else {
+        return;
+    };
+    assert_eq!(marked.assignment["completed"], json!(true));
+    assert_eq!(
+        marked.assignment["completed_at"],
+        json!("2026-10-01T08:00"),
+        "agenda.rs 413 keeps the existing stamp instead of the new one"
+    );
+    assert!(
+        !marked.weeks.is_empty(),
+        "weeks that hold a session must be returned"
+    );
+    assert_eq!(
+        marked.weeks.len(),
+        2,
+        "a week with no session for this homework is left out, got {:?}",
+        marked
+            .weeks
+            .iter()
+            .map(|week| &week.week_start)
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        week_named(&marked, "2026-10-19").is_none(),
+        "agenda.rs 483 skips a week that has no session for this homework"
+    );
+    for start in ["2026-10-12", "2026-10-26"] {
+        let Some(week) = week_named(&marked, start) else {
+            assert_eq!(start, "", "{start} must be updated");
+            return;
+        };
+        assert!(
+            !week.blocks.is_empty(),
+            "{start} must still hold the session"
+        );
+        let block = &week.blocks[0];
+        assert_eq!(block["completed"], json!(true), "{start}");
+        assert_eq!(
+            block["completed_day"],
+            json!(0),
+            "agenda.rs 478 sets completed_day to the session's only day, {start}"
+        );
+        assert_eq!(block["start"], json!("19:00"), "{start}");
+    }
+}
+
+/// `agenda.rs` 415-417. An empty stamp is replaced by the one the caller gives.
+#[test]
+fn marking_homework_done_with_no_stamp_uses_the_given_one() {
+    let assignment = json!({
+        "id": "essay",
+        "title": "Essay",
+        "due": "2026-10-14T21:00",
+        "estimate_min": 60,
+        "completed": false,
+        "completed_at": ""
+    });
+    let session = json!({
+        "id": "essay-session",
+        "assignment_id": "essay",
+        "title": "Essay",
+        "kind": "flexible",
+        "days": [2],
+        "start": "16:00",
+        "duration_min": 60
+    });
+    let mut assignments = Map::new();
+    assignments.insert("essay".into(), assignment.clone());
+    let result = mark_homework_done(
+        "essay",
+        &assignment,
+        &assignments,
+        &[("2026-10-19".into(), vec![session])],
+        true,
+        "2026-10-21T12:00",
+    );
+    let Some(marked) = marked_or_stop(result, "agenda.rs 416 uses the given stamp") else {
+        return;
+    };
+    assert_eq!(marked.assignment["completed_at"], json!("2026-10-21T12:00"));
+    assert_eq!(
+        marked.weeks.len(),
+        1,
+        "the week that holds the session is returned"
+    );
+    assert_eq!(marked.weeks[0].blocks[0]["completed_day"], json!(2));
+}
+
+/// `agenda.rs` 419 and 479. Reopening clears the stamp and the finished day.
+#[test]
+fn reopening_homework_clears_the_stamp_and_completed_day() {
+    let assignment = json!({
+        "id": "essay",
+        "title": "Essay",
+        "due": "2026-10-14T21:00",
+        "estimate_min": 60,
+        "completed": true,
+        "completed_at": "2026-10-01T08:00"
+    });
+    let session = json!({
+        "id": "essay-session",
+        "assignment_id": "essay",
+        "title": "Essay",
+        "kind": "flexible",
+        "days": [0],
+        "start": "19:00",
+        "duration_min": 60,
+        "completed": true,
+        "completed_day": 0
+    });
+    let mut assignments = Map::new();
+    assignments.insert("essay".into(), assignment.clone());
+    let result = mark_homework_done(
+        "essay",
+        &assignment,
+        &assignments,
+        &[("2026-10-12".into(), vec![session])],
+        false,
+        "2026-10-21T12:00",
+    );
+    let Some(marked) = marked_or_stop(result, "agenda.rs 419 clears completed_at") else {
+        return;
+    };
+    assert_eq!(marked.assignment["completed"], json!(false));
+    assert!(
+        marked.assignment["completed_at"].is_null(),
+        "agenda.rs 419 writes null, got {}",
+        marked.assignment["completed_at"]
+    );
+    assert_eq!(marked.weeks.len(), 1);
+    assert_eq!(marked.weeks[0].blocks[0]["completed"], json!(false));
+    assert!(
+        marked.weeks[0].blocks[0].get("completed_day").is_none(),
+        "agenda.rs 480 removes completed_day when the homework is reopened"
+    );
+    assert_eq!(marked.weeks[0].blocks[0]["start"], json!("19:00"));
+}
+
+/// `agenda.rs` 471. A session on more than one day does not record completed_day.
+#[test]
+fn a_session_on_several_days_does_not_record_completed_day() {
+    let assignment = json!({
+        "id": "essay",
+        "title": "Essay",
+        "due": "2026-10-14T21:00",
+        "estimate_min": 60,
+        "completed": false
+    });
+    let session = json!({
+        "id": "essay-session",
+        "assignment_id": "essay",
+        "title": "Essay",
+        "kind": "flexible",
+        "days": [0, 2],
+        "start": "19:00",
+        "duration_min": 60
+    });
+    let mut assignments = Map::new();
+    assignments.insert("essay".into(), assignment.clone());
+    let result = mark_homework_done(
+        "essay",
+        &assignment,
+        &assignments,
+        &[("2026-10-12".into(), vec![session])],
+        true,
+        "2026-10-21T12:00",
+    );
+    let Some(marked) = marked_or_stop(result, "agenda.rs 471 requires one day") else {
+        return;
+    };
+    assert_eq!(marked.weeks[0].blocks[0]["completed"], json!(true));
+    assert!(
+        marked.weeks[0].blocks[0].get("completed_day").is_none(),
+        "a session on two days does not get completed_day, got {}",
+        marked.weeks[0].blocks[0]
+    );
+}
+
+/// `agenda.rs` 408.
+#[test]
+fn homework_that_is_not_an_object_is_refused() {
+    let result = mark_homework_done(
+        "essay",
+        &Value::Null,
+        &Map::new(),
+        &[],
+        true,
+        "2026-10-21T12:00",
+    );
+    assert_eq!(
+        result.map(|_| ()),
+        Err("stored homework is not an object".to_string()),
+        "agenda.rs 408 refuses a stored homework that is not an object"
     );
 }
