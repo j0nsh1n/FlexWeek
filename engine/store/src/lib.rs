@@ -157,6 +157,7 @@ mod prefs;
 mod routines;
 mod rules;
 mod standing;
+mod views;
 mod weeks;
 
 pub use accounts::{
@@ -190,6 +191,7 @@ pub use standing::{
     adopt_standing, replace_standing, set_standing, standing_blocks, standing_rows,
     week_with_standing,
 };
+pub use views::{day_view, homework_list, month_view, restore_point_list, routine_list, week_view};
 pub use weeks::{WeekSave, list_account_weeks, read_week, save_week, week_blocks, week_starts};
 
 /// A write joins the caller's transaction. The first one begins it, as `Connection.execute` does,
