@@ -18,6 +18,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -210,13 +211,20 @@ fun RunningLateSheet(
     SheetScrim(onCancel) {
         Surface(shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)) {
             Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
-                Text("Running late", style = MaterialTheme.typography.titleLarge)
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
-                    Text("How late?")
-                    ChipRow(listOf("15 min", "30 min", "60 min"), "$minutes min") { label ->
-                        onMinutes(label.removeSuffix(" min").toInt())
-                    }
+                if (preview != null) {
+                    Text("${preview.current.title} is running late", style = MaterialTheme.typography.titleLarge)
+                    Text("Ends at ${lateClockLabel(preview.current.end)} (+${minutes} min)", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    Text("Running late", style = MaterialTheme.typography.titleLarge)
                 }
+                Text("How late?  $minutes min", modifier = Modifier.padding(top = 8.dp))
+                Slider(
+                    value = ((minutes.coerceIn(5, 60) - 5) / 55f),
+                    onValueChange = { fraction -> onMinutes(LateSlider.minutesAt(fraction)) },
+                    valueRange = 0f..1f,
+                    steps = 10,
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 if (error != null) {
                     Text(error, modifier = Modifier.padding(vertical = 8.dp))
                 }
@@ -227,10 +235,14 @@ fun RunningLateSheet(
                     Text("What moves and why", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
                 }
                 preview?.moves?.forEach { move ->
-                    Column(Modifier.padding(vertical = 6.dp)) {
-                        Text("${move.title} ${move.detail}", fontWeight = FontWeight.SemiBold)
-                        Text(move.why, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("${move.title} ${move.detail} · ${move.durationMin} min", modifier = Modifier.padding(vertical = 6.dp))
+                    if (move.why.isNotEmpty()) {
+                        Text(move.why, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                     }
+                }
+                preview?.warning?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(vertical = 6.dp)) }
+                preview?.stays?.forEach { title ->
+                    Text("$title stays · fixed time", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 4.dp))
                 }
                 Text(
                     "Homework with no time yet is not placed by Running late. That is Plan's job.",
@@ -245,6 +257,16 @@ fun RunningLateSheet(
             }
         }
     }
+}
+
+private fun lateClockLabel(value: String): String {
+    val parts = value.split(":")
+    if (parts.size != 2) return value
+    val hour = parts[0].toIntOrNull() ?: return value
+    val minute = parts[1].toIntOrNull() ?: return value
+    val displayHour = when (hour % 12) { 0 -> 12; else -> hour % 12 }
+    val suffix = if (hour < 12) "AM" else "PM"
+    return if (minute == 0) "$displayHour $suffix" else "$displayHour:${minute.toString().padStart(2, '0')} $suffix"
 }
 
 @Composable

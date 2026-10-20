@@ -61,9 +61,31 @@
       "to_day": 0,
       "to_start": "16:30",
       "title": "History essay",
-      "why": "Moved after you ran late so the rest of the day still fits."
+      "why": "Moved after you ran late so the rest of the day still fits.",
+      "duration_min": 60,
+      "detail": "moves from 4 PM"
     }
   ],
+  "current": {
+    "title": "History essay",
+    "end": "16:30",
+    "minutes": 30
+  },
+  "stays": [
+    {
+      "category": "extra",
+      "days": [
+        0
+      ],
+      "duration_min": 60,
+      "id": "soccer",
+      "kind": "locked",
+      "start": "17:30",
+      "title": "Soccer"
+    }
+  ],
+  "warning": null,
+  "minutes": 30,
   "explanations": [
     {
       "block_id": "essay-session",

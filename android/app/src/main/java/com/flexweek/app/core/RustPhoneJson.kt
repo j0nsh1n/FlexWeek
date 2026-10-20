@@ -151,20 +151,6 @@ internal object RustPhoneJson {
 
     fun late(raw: String, minutes: Int): String {
         val root = JSONObject(raw)
-        val moves = root.getJSONArray("moves")
-        for (i in 0 until moves.length()) {
-            val move = moves.getJSONObject(i)
-            // The title and why come from the core; a missing one is an error, not a made-up default.
-            move.put(
-                "detail",
-                TimeLabel.lateDetail(
-                    move.optInt("from_day").takeIf { move.has("from_day") && !move.isNull("from_day") },
-                    move.getString("from_start"),
-                    move.optInt("to_day").takeIf { move.has("to_day") && !move.isNull("to_day") },
-                    move.getString("to_start"),
-                ),
-            )
-        }
         return root.put("ok", true).put("preview_id", root.getString("applied_preview"))
             .put("minutes", minutes).toString()
     }
