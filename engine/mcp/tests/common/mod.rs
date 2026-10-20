@@ -233,11 +233,34 @@ pub fn tool_error_text(response: &Value) -> Option<&str> {
         .and_then(Value::as_str)
 }
 
-/// Arguments every current read tool accepts, so a refusal comes from the session.
+/// Arguments every current tool accepts, so a refusal comes from the session.
 pub fn read_arguments(name: &str) -> Value {
     match name {
         "get_week" | "list_homework" => json!({"week_start": "2026-10-19"}),
         "get_month" => json!({"month": "2026-10"}),
+        "add_homework" => json!({
+            "operation_id": "session-check",
+            "title": "Essay",
+            "due": "2026-10-23T21:00",
+            "estimate_min": 90
+        }),
+        "edit_homework" | "delete_homework" => json!({
+            "operation_id": "session-check",
+            "id": "essay",
+            "expected_revision": 0
+        }),
+        "set_homework_done" => json!({
+            "operation_id": "session-check",
+            "id": "essay",
+            "done": true
+        }),
+        "set_block_done" => json!({
+            "operation_id": "session-check",
+            "week_start": "2026-10-19",
+            "block_id": "club",
+            "day": 0,
+            "done": true
+        }),
         _ => json!({}),
     }
 }

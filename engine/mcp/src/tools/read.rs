@@ -57,7 +57,7 @@ fn account_id(account: &SignedIn) -> i64 {
     account.user_id
 }
 
-#[tool_router(server_handler)]
+#[tool_router(router = read_tools, vis = "pub(crate)")]
 impl crate::App {
     #[tool(
         description = "Who is signed in on this computer",

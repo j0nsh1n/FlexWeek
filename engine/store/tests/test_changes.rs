@@ -79,6 +79,7 @@ fn empty_input() -> ApplyInput {
         operation_id: None,
         snapshot_label: None,
         standing: None,
+        argument_digest: None,
     }
 }
 

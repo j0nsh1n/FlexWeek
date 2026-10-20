@@ -2,7 +2,8 @@
 
 use flexweek_engine::snapshot::canonical;
 use flexweek_engine::validate::time_block;
-use rusqlite::{Connection, OptionalExtension, params};
+pub use rusqlite::Connection;
+use rusqlite::{OptionalExtension, params};
 use serde_json::{Map, Value, json};
 
 use crate::{
@@ -55,6 +56,10 @@ pub struct ApplyInput {
     pub operation_id: Option<String>,
     pub snapshot_label: Option<String>,
     pub standing: Option<StandingInput>,
+    /// When set, the operation row is keyed by this digest instead of the batch.
+    /// A tool passes a digest of the assistant's arguments so a retry still matches
+    /// after the write has changed the stored week.
+    pub argument_digest: Option<String>,
 }
 
 #[derive(Debug)]
@@ -112,7 +117,10 @@ fn apply_tx(
     input: &ApplyInput,
     clock: &ApplyClock,
 ) -> Result<Value, ApplyFailure> {
-    let digest = payload_digest(&batch_value(input));
+    let digest = input
+        .argument_digest
+        .clone()
+        .unwrap_or_else(|| payload_digest(&batch_value(input)));
     if let Some(operation_id) = &input.operation_id {
         match recall_operation(conn, user_id, operation_id, &digest)? {
             Recall::Hit(response) => return parse_json(&response),

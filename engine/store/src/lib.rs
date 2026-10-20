@@ -5,7 +5,7 @@ use std::path::Path;
 
 use flexweek_engine::plan;
 use flexweek_engine::snapshot::canonical;
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{OptionalExtension, params};
 use scrypt::{Params, scrypt};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -171,7 +171,8 @@ pub use assignments::{
     load_assignment_rows, save_assignment,
 };
 pub use changes::{
-    ApplyClock, ApplyFailure, ApplyInput, AssignmentInput, StandingInput, WeekInput, apply,
+    ApplyClock, ApplyFailure, ApplyInput, AssignmentInput, Connection, StandingInput, WeekInput,
+    apply,
 };
 pub use ledger::{
     Recall, capture_account, insert_restore_point, list_restore_points, prune_operations,
