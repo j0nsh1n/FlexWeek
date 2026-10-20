@@ -6,6 +6,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- An assistant on this computer can read the signed-in schedule: today, the week, the month, homework, routines and restore points. It uses FlexWeek's session file, opens no network port, and on Windows it stops until it can check that the file stays private.
 - Phone: an "Up next" home-screen widget shows what is now or next and the two things after it, counts down to the next start, and opens Today when tapped; tick a homework on it to mark it finished.
 - Phone: a running focus session shows on the lock screen with its countdown, Pause and Finish; you hear when it ends even with the app closed, and the minutes are added once. A phone restart keeps the timer.
 - Phone: focus from Today. Start focus on a homework, watch the time in Today's card, pause or finish it; a session that runs its full length adds its minutes to the homework, and your computer sees them after the next sync.
