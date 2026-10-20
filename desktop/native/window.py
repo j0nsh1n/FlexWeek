@@ -4379,11 +4379,12 @@ class NativeWindow(QMainWindow):
             "Before planning",
             ", ".join(parts),
             (
-                ("not", "Not now", "quiet"),
-                ("did", "Mark as finished", "outlined"),
                 ("plan", "Plan into this week", ""),
+                ("did", "Mark as finished", "outlined"),
+                ("not", "Not now", "quiet"),
             ),
             default="not",
+            close_button=False,
         )
         sheet.exec()
         if sheet.answer == "plan":

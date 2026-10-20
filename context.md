@@ -1,6 +1,11 @@
 # context.md — FlexWeek
 
 ## Current State
+- 2026-10-20: The five requested desktop regression nodes pass individually through `fwtest` on
+  `release/1.1`. Recovery now opens the session clock's day and week, restoring Agenda Start focus and
+  My day's Running late. The overdue Plan question has exactly Plan into this week, Mark as finished,
+  Not now. Both Clay now-pill nodes passed unchanged. Ruff across the repo, `mypy backend`, and the
+  shared confirmation default/cancel test pass. No full gate or real-display check was run.
 - 2026-10-16: 1.1 in progress on `release/1.1` (local only, nothing pushed). Merged: the phone release bugs
   (dark mode, Running late and Start focus hidden in release, Not now, reminder ids), the phone updating
   itself from GitHub Releases (rules from `engine/engine/src/desk/update.rs` through `engine/ffi`), and the
@@ -142,7 +147,8 @@ values make a retried write return the first result.
 
 ## Session Handoff
 - 2026-10-20, `release/1.1` (worktree `~/.worktrees/flexweek-0190`). Desk hand-move and the local schedule reader are merged. The phone lane (rebuild, focus phase advance, Running late slider) is merged. Nothing is pushed and there is no pull request.
-- Still open: Settings scroll (lane 4, parked until a real compositor check), five desktop tests that already failed before this merge (rail long title, two clay now-line tests, my-day action spacing, 1b-R overdue plan question), a Mac session file refused because the owner check reads /proc/self, and a schedule reader that starts signed out stays on "Please sign in".
+- 2026-10-20 desktop test slice: `0759806c` fixes recovery's opening day/week. The overdue Plan sheet's button order and redundant close button are fixed in this handoff's commit. All five named nodes pass individually; assertions and fixtures are unchanged. The full pre-release checks remain pending. Nothing pushed.
+- Still open: Settings scroll (lane 4, parked until a real compositor check), a Mac session file refused because the owner check reads /proc/self, and a schedule reader that starts signed out stays on "Please sign in".
 - Month and Day phone screens are not in this merge. `~/.worktrees/flexweek-11-probe` is a detached checkout at 5a72b3f6. Lane branches and worktrees are still in place.
 - Still waiting on Jonathan: what shrinks on My day and One thing at 1024x640 Large, and a device check of the phone updater and the lane 1 fixes.
 - The Android release key lives in `~/.config/flexweek-android/` (outside the repo). Every phone update must be signed with it.

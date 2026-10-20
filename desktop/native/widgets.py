@@ -3177,10 +3177,10 @@ class Dialog(QDialog):
         button they pressed."""
         self._came_from = widget
 
-    def card_body(self, title: str, width: int = SHEET_FORM) -> QVBoxLayout:
+    def card_body(self, title: str, width: int = SHEET_FORM, *, close_button: bool = True) -> QVBoxLayout:
         """The layout the dialog's content goes in, on its one card: the sheet itself, or the card on a
         window's page. The body is the card, not a box drawn inside it. The card is `width` wide and
-        starts with `title` and a close button, since a sheet has no window frame to carry either."""
+        starts with `title` and normally a close button, since a sheet has no window frame."""
         self.setWindowTitle(title)
         self.card_width = width
         outer = QVBoxLayout(self)
@@ -3194,18 +3194,19 @@ class Dialog(QDialog):
         head.setContentsMargins(0, 0, 0, 0)
         self.heading = QLabel(title)
         self.heading.setObjectName("sheetTitle")
-        close = QPushButton()
-        close.setObjectName("sheetClose")
-        close.setProperty("quiet", True)
-        close.setAccessibleName("Close")
-        close.setToolTip("Close (Esc)")
-        # Esc closes from the keyboard; taking focus, it would have been where typing starts.
-        close.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        close.setAutoDefault(False)
-        icons.tint(close, "x")
-        close.clicked.connect(self._close_asked)
         head.addWidget(self.heading, 1)
-        head.addWidget(close, 0, Qt.AlignmentFlag.AlignTop)
+        if close_button:
+            close = QPushButton()
+            close.setObjectName("sheetClose")
+            close.setProperty("quiet", True)
+            close.setAccessibleName("Close")
+            close.setToolTip("Close (Esc)")
+            # Esc closes from the keyboard; taking focus, it would have been where typing starts.
+            close.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            close.setAutoDefault(False)
+            icons.tint(close, "x")
+            close.clicked.connect(self._close_asked)
+            head.addWidget(close, 0, Qt.AlignmentFlag.AlignTop)
         inner.addLayout(head)
         if self.sheet:
             self._face = bare(QWidget())
@@ -3404,6 +3405,7 @@ class ConfirmSheet(Dialog):
         note: str = "",
         width: int = SHEET_FORM,
         left: tuple[str, str, str] | None = None,
+        close_button: bool = True,
     ) -> None:
         """`answers` are (key, words, kind) from the quietest to the filled one; `kind` as `sheet_button`
         takes it. `default` is the key Enter presses; none, so Enter changes nothing."""
@@ -3411,7 +3413,7 @@ class ConfirmSheet(Dialog):
         self.setObjectName("confirmSheet")
         self.answer: str | None = None
         self._default = default
-        box = self.card_body(title, width)
+        box = self.card_body(title, width, close_button=close_button)
         self.question = QLabel(question)
         self.question.setObjectName("confirmQuestion")
         self.question.setWordWrap(True)
