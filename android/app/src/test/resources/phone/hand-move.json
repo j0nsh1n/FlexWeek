@@ -1,0 +1,19 @@
+{
+  "moved": true,
+  "block_id": "algebra",
+  "block": {
+    "assignment_id": "algebra-4",
+    "category": "assignments",
+    "days": [
+      1
+    ],
+    "duration_min": 90,
+    "id": "algebra",
+    "kind": "flexible",
+    "start": "14:30",
+    "title": "Algebra set 4",
+    "work": true,
+    "pinned": true
+  },
+  "beside": null
+}

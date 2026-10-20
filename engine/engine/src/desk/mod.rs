@@ -6,6 +6,7 @@ pub mod datetext;
 pub mod files;
 pub mod focus;
 pub mod grid;
+pub mod hand_move;
 pub mod history;
 pub mod planning;
 pub mod pomodoro;

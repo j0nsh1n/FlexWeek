@@ -6,7 +6,7 @@ use crate::core::{FfiError, FlexWeek, db_lock, engine_failure, failure, require_
 const DAYS_IN_WEEK: i64 = 7;
 const HEAVY_THRESHOLD_MINUTES: i64 = 180;
 
-fn is_homework(item: &Value) -> bool {
+pub(crate) fn is_homework(item: &Value) -> bool {
     item.get("work").and_then(Value::as_bool) == Some(true)
         || item.get("assignment_id").and_then(Value::as_str).is_some()
         || item.get("category").and_then(Value::as_str) == Some("assignments")
