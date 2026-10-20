@@ -1797,6 +1797,13 @@ def child_main(args: argparse.Namespace) -> int:
             # this week, and a session in conflict saves nothing until it reloads.
             session.load_week(seed_week, discard=True)
             wait_until(app, lambda: not session.busy and session.week_start == seed_week, 20)
+        # Homework a scenario added (the one-go rail's 24-hour report) is not in the seed. Leaving
+        # it, and the plan banner and overdue list the solve opened, covers the day names and the
+        # zoom control: the next scenario's clicks land on that chrome. A same-week reload keeps
+        # both panels up, so put them away here after the extra homework is gone.
+        for extra in [key for key in session.assignments if key not in seed_dues]:
+            session.assignments.pop(extra, None)
+            session.dirty_assignments.add(extra)
         for key, due in seed_dues.items():
             if session.assignments[key]["due"] != due:
                 session.assignments[key] = {**session.assignments[key], "due": due}
@@ -1805,6 +1812,9 @@ def child_main(args: argparse.Namespace) -> int:
         session.dirty = True
         session.save()
         wait_until(app, lambda: not session.busy and not session.dirty, 20)
+        window.plan_review.hide()
+        window.unfinished_panel.hide()
+        window._unfinished_opened = False
         session.selected_day = thursday_iso
         session._say("")
         session.now_ms, session.client.request = base_now, base_request
