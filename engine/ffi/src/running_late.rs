@@ -148,7 +148,7 @@ pub(crate) fn running_late(
     let moved = moves.len();
     let current = current_late_block(&timed, clock_min, &from_start, minutes);
     let end_min =
-        flexweek_engine::time::hhmm_to_minutes(&current["end"].as_str().unwrap_or("00:00"))
+        flexweek_engine::time::hhmm_to_minutes(current["end"].as_str().unwrap_or("00:00"))
             .unwrap_or(0);
     let stays = unchanged_fixed_blocks(&timed, &settled, end_min);
     let warning = running_late_warning(&trace_value, &timed, &moves);
