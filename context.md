@@ -146,10 +146,10 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
-- 2026-10-20, `release/1.1` (worktree `~/.worktrees/flexweek-0190`). Desk hand-move, the local schedule reader, and the phone lane are merged. This commit cuts 1.1.0. A pull request into `main` follows. The device check is skipped.
-- 2026-10-20 desktop test slice: `0759806c` fixes recovery's opening day/week. The overdue Plan sheet's button order and redundant close button are fixed in this handoff's commit. All five named nodes pass individually; assertions and fixtures are unchanged. The full pre-release checks remain pending. Nothing pushed.
-- Still open: Settings scroll (lane 4, parked until a real compositor check), a Mac session file refused because the owner check reads /proc/self, and a schedule reader that starts signed out stays on "Please sign in".
-- Month and Day phone screens are not in this merge. `~/.worktrees/flexweek-11-probe` is a detached checkout at 5a72b3f6. Lane branches and worktrees are still in place.
+- 2026-10-20, `main` (local, 13 commits ahead of `origin/main`, not pushed). 1.1.0 is released (PR #52, tag `v1.1.0`). After it, MCP track B merged locally (`322ad1f0`): the assistant can add, edit, finish and delete homework, mark a block done, and move or delete a block. Validators, the one write door (`engine/store/src/changes.rs`), homework session rules, block delete and the done rules are Rust; the phone's ffi and the MCP server share the done rules. 775 engine workspace tests pass; clippy and fmt clean. The signed-out-start and Mac owner bugs are fixed (a Mac now gets a plain "not supported yet").
+- Next (Jonathan's pick: MCP first): track C, Plan / Running late / explain tools, routines, restore, then the app switching to the Rust views, write door and restore so nothing is written twice. Duplicates until then: Python validators and homework-edit rules in `backend/` and `desktop/`, and the desktop's focus phase advance (`controller.py` `advance_focus`) beside the phone's in `engine/ffi/src/focus.rs`.
+- Phone screens not built yet: full-screen focus with breaks (8 A), Month (6 B), Day (7 A), Week C with drag. Their plans are in `~/.flexweek-ui-harness/scratch/android-1.1/` (`rebuild-test-plan.md`, `wave4-test-plan.md`).
+- Still open: Settings scroll (lane 4, parked until a real compositor check).
 - Still waiting on Jonathan: what shrinks on My day and One thing at 1024x640 Large, and a device check of the phone updater and the lane 1 fixes.
 - The Android release key lives in `~/.config/flexweek-android/` (outside the repo). Every phone update must be signed with it.
 - Run plan: `~/.flexweek-ui-harness/scratch/1.1/plan.md`.
