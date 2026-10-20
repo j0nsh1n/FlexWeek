@@ -19,6 +19,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.calendar import sunday_due
     from desktop.native.controller import NativeSession
     from desktop.server import LocalServer
+    from desktop.tests.blocks_helper import put_block
     from desktop.tests.logic_support import PASSWORD, fixed, settled, signed_in, titles, week_after
 
 
@@ -182,7 +183,7 @@ def test_move_to_date_keeps_homework_pinned_on_the_new_week(qapp: QApplication, 
     session.save()
     settled(qapp, session)
     waiting = session.blocks[0]
-    assert session.hand_move(waiting["id"], -1, 0, 16 * 60, 17 * 60) is True
+    put_block(session, waiting["id"], 0, 16 * 60, 17 * 60, pinned=True)
     session.save()
     settled(qapp, session)
     monday = date_for_day(first, 0)

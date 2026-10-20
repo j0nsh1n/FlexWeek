@@ -33,6 +33,7 @@ from desktop.native.settings import HELP_KEYS
 from desktop.native.widgets import ChooseTimeDialog, HomeworkDialog
 from desktop.native.window import NativeWindow
 from desktop.server import LocalServer
+from desktop.tests.blocks_helper import put_block
 from desktop.tests.logic_support import past_setup
 
 PASSWORD = "a-long-test-password"
@@ -277,8 +278,8 @@ def test_choose_a_time_with_nothing_waiting_says_so(
         if block.get("assignment_id") and not block.get("start")
     ]
     for index, block in enumerate(waiting):
-        assert window.session.hand_move(
-            block["id"], -1, 2 + index, 16 * 60, 16 * 60 + block["duration_min"]
+        put_block(
+            window.session, block["id"], 2 + index, 16 * 60, 16 * 60 + block["duration_min"], pinned=True
         )
     window.session.save()
     settled(qapp, window)

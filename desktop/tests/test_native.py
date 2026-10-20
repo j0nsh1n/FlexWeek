@@ -374,23 +374,31 @@ def test_completing_homework_stores_a_naive_stamp(qapp: QApplication, server: Lo
     assert len(item["completed_at"]) == 16
 
 
-def test_a_repeating_block_refuses_a_one_day_drag(qapp: QApplication, server: LocalServer) -> None:
+def test_a_repeating_block_dragged_on_one_day_moves_only_that_day(
+    qapp: QApplication, server: LocalServer
+) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     session.add_block(
         {
             "id": "school",
             "title": "School",
             "kind": "locked",
-            "duration_min": 60,
+            "duration_min": 390,
             "days": [0, 1, 2],
-            "start": "10:00",
+            "start": "08:00",
+            "category": "class",
         }
     )
-    assert session.hand_move("school", 0, 0, 630, 705) is False
-    assert session.blocks[0]["start"] == "10:00"
-    assert session.blocks[0]["duration_min"] == 60
-    assert session.blocks[0]["days"] == [0, 1, 2]
-    assert "ambiguous" in session.message
+    assert session.hand_move("school", 0, 3, 9 * 60, 15 * 60) is True
+    assert len(session.blocks) == 2
+    days = {tuple(block["days"]): block for block in session.blocks}
+    series = days[(1, 2)]
+    assert series["id"] == "school" and series["start"] == "08:00"
+    copy = days[(3,)]
+    assert copy["id"] != "school"
+    assert copy["start"] == "09:00"
+    assert copy["duration_min"] == 360
+    assert copy.get("pinned") is not True
 
 
 def test_move_and_resize_update_a_one_day_block(qapp: QApplication, server: LocalServer) -> None:

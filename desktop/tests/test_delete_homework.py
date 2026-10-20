@@ -28,6 +28,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.reuse import copied_homework_block
     from desktop.native.widgets import HomeworkDialog, UnfinishedPanel
     from desktop.server import LocalServer
+    from desktop.tests.blocks_helper import put_block
     from desktop.tests.logic_support import settled, signed_in
 
 
@@ -64,7 +65,7 @@ def essay_in_two_weeks(qapp: QApplication, server: LocalServer) -> tuple[NativeS
     session.save()
     settled(qapp, session)
     waiting = next(block for block in session.blocks if block.get("assignment_id") == "essay")
-    assert session.hand_move(waiting["id"], -1, 0, 16 * 60, 16 * 60 + waiting["duration_min"]) is True
+    put_block(session, waiting["id"], 0, 16 * 60, 16 * 60 + waiting["duration_min"], pinned=True)
     session.save()
     settled(qapp, session)
     session.load_week(second)

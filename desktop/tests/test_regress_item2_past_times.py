@@ -20,6 +20,7 @@ from desktop.native.calendar import sunday_due
 from desktop.native.weekmodel import set_clock_24h
 from desktop.native.widgets import ChooseTimeDialog, HomeworkDialog
 from desktop.native.window import NativeWindow
+from desktop.tests.blocks_helper import put_block
 from desktop.tests.grid_support import (  # noqa: F401
     WEDNESDAY,
     hold_clock,
@@ -100,7 +101,8 @@ def test_dragging_a_block_to_later_today_is_allowed(qapp, window) -> None:
 
 def test_stretching_the_end_of_a_block_already_under_way_is_allowed(qapp, window) -> None:
     """Guard: a block that started at 14:00 may keep its start while its end moves (spec item 2)."""
-    block = homework(qapp, window, "14:00")
+    block = homework(qapp, window)
+    put_block(window.session, block["id"], WEDNESDAY, 14 * 60, 15 * 60, pinned=True)
     verdict = window._judge_span(block["id"], WEDNESDAY, WEDNESDAY, 14 * 60, 16 * 60)
     assert verdict.ok, verdict.words
 

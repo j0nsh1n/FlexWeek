@@ -14,9 +14,6 @@ DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 DAY_FULL = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 FIRST_MONTH = "2000-01"
 LAST_MONTH = "2099-12"
-SERIES_DRAG_MESSAGE = (
-    "{title} repeats on {count} days, so dragging it is ambiguous. Edit the occurrence or the series."
-)
 # One family (decision 9 of 0.17), worked out from each hue by `family_colours` in tokens.py and held
 # to it by test_tokens.py. In a light look `color` is the pale fill and `mark` the strong colour of
 # outlines and edges; `dark` and `contrast` are (tone, mark) for the dark looks and High contrast, which

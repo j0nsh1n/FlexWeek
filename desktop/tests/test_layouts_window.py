@@ -48,6 +48,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.settings import SettingsPage
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
+    from desktop.tests.blocks_helper import put_block
     from desktop.tests.logic_support import past_setup
 
 PASSWORD = "a-long-test-password"
@@ -2795,7 +2796,9 @@ def test_a_block_moved_on_the_week_while_a_save_is_under_way_is_not_lost(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     waiting = _waiting_math(qapp, window)
-    assert window.session.hand_move(waiting["id"], -1, 2, 16 * 60, 16 * 60 + waiting["duration_min"])
+    put_block(
+        window.session, waiting["id"], 2, 16 * 60, 16 * 60 + waiting["duration_min"], pinned=True
+    )
     window.session.save()
     settled(qapp, window)
     window.session.add_homework(
@@ -2862,7 +2865,9 @@ def test_let_flexweek_move_it_takes_the_pin_away(
     from desktop.native.widgets import HomeworkDialog
 
     waiting = _waiting_math(qapp, window)
-    assert window.session.hand_move(waiting["id"], -1, 2, 17 * 60, 17 * 60 + waiting["duration_min"])
+    put_block(
+        window.session, waiting["id"], 2, 17 * 60, 17 * 60 + waiting["duration_min"], pinned=True
+    )
     window.session.save()
     settled(qapp, window)
     monkeypatch.setattr(HomeworkDialog, "exec", lambda dialog: _press(dialog, "homeworkUnpin"))

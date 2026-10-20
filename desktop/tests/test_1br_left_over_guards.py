@@ -20,6 +20,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 
 from desktop.native.client import ApiError
 from desktop.native.weekmodel import length_label, range_label
+from desktop.tests.blocks_helper import put_block
 from desktop.tests.grid_support import (  # noqa: F401
     qapp,
     server,
@@ -42,7 +43,7 @@ def overdue_this_week(qapp, window) -> str:
     session.save()
     settled(qapp, window)
     block = next(b for b in session.blocks if b.get("assignment_id") == "bio")
-    assert session.hand_move(block["id"], -1, WEDNESDAY, 15 * 60 + 15, 16 * 60 + 15)
+    put_block(session, block["id"], WEDNESDAY, 15 * 60 + 15, 16 * 60 + 15, pinned=True)
     session.save()
     settled(qapp, window)
     saturday = datetime.fromisoformat(session.week_start) + timedelta(days=SATURDAY, hours=10)
@@ -361,7 +362,7 @@ def test_1br_plan_overdue_moves_a_future_session(qapp, window) -> None:
     session = window.session
     session.save_preferences({"work_windows": [{"days": [SATURDAY], "start": "10:00", "end": "16:00"}]})
     settled(qapp, window)
-    assert session.hand_move(session_id, -1, SATURDAY, 14 * 60, 15 * 60)
+    put_block(session, session_id, SATURDAY, 14 * 60, 15 * 60)
     session.add_block({"id": "class", "title": "Class", "kind": "locked", "days": [SATURDAY],
                        "start": "10:00", "duration_min": 60})
     session.save()
