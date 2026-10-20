@@ -1,5 +1,6 @@
 //! stdout is protocol only. stderr names the tool and the outcome, and nothing about the person.
-//! The server opens no socket. The tool list is the read allow-list.
+//! The server opens no socket. The tool list is the allow-list: reads stay read-only, and
+//! delete_homework and delete_block are destructive.
 
 mod common;
 
@@ -12,13 +13,29 @@ use flexweek_store::{initialize, insert_preferences, insert_user, open_connectio
 use serde_json::{Value, json};
 
 const TOKEN: &str = "abcdefghijklmnopqrstuvwxyz012345";
-const ALLOWED: &[&str] = &[
+const READ_ONLY: &[&str] = &[
     "get_month",
     "get_today",
     "get_week",
     "list_homework",
     "list_restore_points",
     "list_routines",
+    "whoami",
+];
+const ALLOWED: &[&str] = &[
+    "add_homework",
+    "delete_block",
+    "delete_homework",
+    "edit_homework",
+    "get_month",
+    "get_today",
+    "get_week",
+    "list_homework",
+    "list_restore_points",
+    "list_routines",
+    "move_block",
+    "set_block_done",
+    "set_homework_done",
     "whoami",
 ];
 
@@ -69,7 +86,7 @@ fn tools_list_is_the_read_allow_list() {
     assert_eq!(
         names.iter().map(String::as_str).collect::<BTreeSet<_>>(),
         ALLOWED.iter().copied().collect::<BTreeSet<_>>(),
-        "tools/list must be exactly the read tools"
+        "tools/list must be exactly the allow-list"
     );
     let empty = Vec::new();
     let tools = listed
@@ -80,13 +97,31 @@ fn tools_list_is_the_read_allow_list() {
     assert!(!tools.is_empty(), "tools/list must not be empty");
     for tool in tools {
         let name = tool.get("name").and_then(Value::as_str).unwrap_or("");
+        let read_only = READ_ONLY.contains(&name);
         assert_eq!(
             tool.get("annotations")
                 .and_then(|notes| notes.get("readOnlyHint"))
                 .and_then(Value::as_bool),
-            Some(true),
-            "{name} must be marked readOnlyHint"
+            Some(read_only),
+            "{name} readOnlyHint must be {read_only}"
         );
+        let destructive = tool
+            .get("annotations")
+            .and_then(|notes| notes.get("destructiveHint"))
+            .and_then(Value::as_bool);
+        if name == "delete_homework" || name == "delete_block" {
+            assert_eq!(
+                destructive,
+                Some(true),
+                "{name} must be marked destructiveHint"
+            );
+        } else if !read_only {
+            assert_eq!(
+                destructive,
+                Some(false),
+                "{name} must not be marked destructiveHint"
+            );
+        }
         let lower = name.to_lowercase();
         for banned in ["password", "recover", "export", "account", "pair"] {
             assert!(!lower.contains(banned), "{name} must stay off this server");

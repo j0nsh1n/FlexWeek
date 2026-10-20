@@ -7,6 +7,7 @@ mod session;
 mod tools;
 
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use rmcp::ServiceExt;
 
@@ -17,7 +18,7 @@ struct App {
     session_file: PathBuf,
     now_unix: i64,
     today: String,
-    started_as: Option<i64>,
+    started_as: Arc<Mutex<Option<i64>>>,
 }
 
 #[cfg(windows)]
@@ -59,7 +60,7 @@ async fn main() {
         session_file: launch.session_file,
         now_unix: clock.unix,
         today: clock.today,
-        started_as: signed_in.ok().map(|account| account.user_id),
+        started_as: Arc::new(Mutex::new(signed_in.ok().map(|account| account.user_id))),
     };
     let served = app.serve(rmcp::transport::stdio()).await;
     let Ok(running) = served else {

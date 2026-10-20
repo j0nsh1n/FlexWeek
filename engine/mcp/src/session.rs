@@ -6,6 +6,7 @@
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+use std::sync::Mutex;
 
 use flexweek_store::{StoreError, digest, open_connection, session_expired, session_user};
 use serde_json::Value;
@@ -15,6 +16,8 @@ pub const NOT_A_SESSION: &str = "That is not a FlexWeek session.";
 pub const SESSION_ENDED: &str = "Your session ended. Sign in again.";
 pub const READABLE_BY_OTHERS: &str = "This session file is readable by other people.";
 pub const ACCOUNT_CHANGED: &str = "Account changed. Please sign in again.";
+pub const UNSUPPORTED_COMPUTER: &str =
+    "FlexWeek's assistant can't check that a session file stays private on this computer yet.";
 pub const STORAGE_BUSY: &str = "Storage is busy. Try again in a moment.";
 pub const STORAGE_UNAVAILABLE: &str =
     "Storage unavailable. Your changes were not saved; retry shortly.";
@@ -25,18 +28,35 @@ pub struct SignedIn {
     pub expires: i64,
 }
 
-/// The account for this call: the same one as at start, still signed in.
+/// The account for this call. The first successful sign-in is kept; a different account is refused.
 pub fn for_call(
-    started_as: Option<i64>,
+    started_as: &Mutex<Option<i64>>,
     session_file: &Path,
     database: &Path,
     now: i64,
 ) -> Result<SignedIn, String> {
-    match (started_as, resolve(session_file, database, now)) {
-        (Some(expected), Ok(account)) if account.user_id == expected => Ok(account),
-        (Some(_), Ok(_)) => Err(ACCOUNT_CHANGED.into()),
-        (_, Err(reason)) => Err(reason),
-        (None, Ok(_)) => Err(PLEASE_SIGN_IN.into()),
+    let token = read_token(session_file)?;
+    let conn = open_connection(database).map_err(storage_sentence)?;
+    let live = live_user_id(&conn, &digest(&token), now)?;
+    drop(conn);
+    let switched = started_as
+        .lock()
+        .map_err(|_| STORAGE_UNAVAILABLE.to_string())?
+        .is_some_and(|expected| live.is_some_and(|found| found != expected));
+    if switched {
+        return Err(ACCOUNT_CHANGED.into());
+    }
+    let account = resolve(session_file, database, now)?;
+    let mut started = started_as
+        .lock()
+        .map_err(|_| STORAGE_UNAVAILABLE.to_string())?;
+    match *started {
+        Some(expected) if expected == account.user_id => Ok(account),
+        Some(_) => Err(ACCOUNT_CHANGED.into()),
+        None => {
+            *started = Some(account.user_id);
+            Ok(account)
+        }
     }
 }
 
@@ -72,6 +92,32 @@ pub fn resolve(session_file: &Path, database: &Path, now: i64) -> Result<SignedI
     })
 }
 
+/// The live account for this token, without the renewal `session_user` does.
+fn live_user_id(
+    conn: &flexweek_store::Connection,
+    token_hash: &str,
+    now: i64,
+) -> Result<Option<i64>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT users.id FROM sessions JOIN users ON users.id = sessions.user_id
+             WHERE token_hash = ?1 AND expires > ?2",
+        )
+        .map_err(|error| storage_sentence(StoreError::from(error)))?;
+    let mut rows = stmt
+        .query((token_hash, now))
+        .map_err(|error| storage_sentence(StoreError::from(error)))?;
+    let Some(row) = rows
+        .next()
+        .map_err(|error| storage_sentence(StoreError::from(error)))?
+    else {
+        return Ok(None);
+    };
+    row.get(0)
+        .map(Some)
+        .map_err(|error| storage_sentence(StoreError::from(error)))
+}
+
 fn read_token(path: &Path) -> Result<String, String> {
     let mut file = match File::open(path) {
         Ok(file) => file,
@@ -104,6 +150,12 @@ fn token_shape(token: &str) -> bool {
 
 #[cfg(unix)]
 fn ensure_owner_only(file: &File) -> Result<(), String> {
+    ensure_private(file, owner_uid)
+}
+
+/// `owner` is injected so a test can say the process owner cannot be found.
+#[cfg(unix)]
+fn ensure_private(file: &File, owner: impl Fn() -> Option<u32>) -> Result<(), String> {
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
     let meta = file
         .metadata()
@@ -111,20 +163,47 @@ fn ensure_owner_only(file: &File) -> Result<(), String> {
     if meta.permissions().mode() & 0o077 != 0 {
         return Err(READABLE_BY_OTHERS.into());
     }
-    if meta.uid() != owner_uid() {
+    let Some(uid) = owner() else {
+        return Err(UNSUPPORTED_COMPUTER.into());
+    };
+    if meta.uid() != uid {
         return Err(READABLE_BY_OTHERS.into());
     }
     Ok(())
 }
 
 #[cfg(unix)]
-fn owner_uid() -> u32 {
+fn owner_uid() -> Option<u32> {
     // The process owner. `libc` is not a direct dependency; `MetadataExt::uid`
     // on `/proc/self` is the same id without adding one.
     use std::os::unix::fs::MetadataExt;
-    std::fs::metadata("/proc/self")
-        .map(|meta| meta.uid())
-        .unwrap_or(u32::MAX)
+    std::fs::metadata("/proc/self").ok().map(|meta| meta.uid())
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::os::unix::fs::PermissionsExt;
+
+    use super::{UNSUPPORTED_COMPUTER, ensure_private};
+
+    #[test]
+    fn a_missing_process_owner_says_this_computer_is_not_supported_yet() {
+        let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../target/mcp-tests/owner-missing");
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        let path = dir.join("session.json");
+        std::fs::write(&path, "{}").expect("session file");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).expect("mode");
+        let file = std::fs::File::open(&path).expect("open");
+        let error = match ensure_private(&file, || None) {
+            Ok(()) => String::new(),
+            Err(error) => error,
+        };
+        assert_eq!(
+            error, UNSUPPORTED_COMPUTER,
+            "when the process owner cannot be found the refusal must say this computer is not supported yet, got {error}"
+        );
+    }
 }
 
 #[cfg(not(unix))]

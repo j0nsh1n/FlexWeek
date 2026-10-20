@@ -57,3 +57,11 @@ when FlexWeek's data folder is the default above.
 
 The read tools are `whoami`, `get_today`, `get_week`, `get_month`,
 `list_homework`, `list_routines`, and `list_restore_points`.
+
+The write tools are `add_homework`, `edit_homework`, `delete_homework`,
+`set_homework_done`, `set_block_done`, `move_block` and `delete_block`. Each takes an
+`operation_id` (8 to 80 characters): the same id with the same arguments returns the
+first answer and changes nothing, and the same id with other arguments is refused.
+Edits carry the revision they were read at; a stale one returns
+`{"error": "conflict", "current_revision": N}` and changes nothing. School and
+activities are changed in the app, not here.
