@@ -19,6 +19,8 @@ struct App {
     now_unix: i64,
     today: String,
     started_as: Arc<Mutex<Option<i64>>>,
+    /// `--read-only`: only the read tools are listed or served.
+    read_only: bool,
 }
 
 #[cfg(windows)]
@@ -49,7 +51,8 @@ async fn main() {
             std::process::exit(1);
         }
     };
-    let signed_in = session::resolve(&launch.session_file, &launch.database, clock.unix);
+    // Checked without renewing: starting the helper is not the student using FlexWeek.
+    let signed_in = session::peek(&launch.session_file, &launch.database, clock.unix);
     match &signed_in {
         Ok(_) => host::log_line(&format!("{version} session ok")),
         Err(reason) => host::log_line(&format!("{version} refused: {reason}")),
@@ -61,6 +64,7 @@ async fn main() {
         now_unix: clock.unix,
         today: clock.today,
         started_as: Arc::new(Mutex::new(signed_in.ok().map(|account| account.user_id))),
+        read_only: launch.read_only,
     };
     let served = app.serve(rmcp::transport::stdio()).await;
     let Ok(running) = served else {

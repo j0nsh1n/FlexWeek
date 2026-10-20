@@ -534,3 +534,62 @@ fn a_switched_account_is_refused_before_its_session_is_renewed() {
         "a switched account is refused before its session expiry is renewed, got {expires:?}"
     );
 }
+
+#[test]
+fn a_session_file_without_its_database_asks_to_sign_in_and_creates_nothing() {
+    // A kept session file can outlive its database (the folder was cleared, or a copy was
+    // restored). A read must say the student is not signed in here, and must never leave an
+    // empty database behind for the desktop to find.
+    let world = world("no-database");
+    sign_in(&world, "ada", ADA);
+    put_token(&world.session, ADA, 0o600);
+    std::fs::remove_file(&world.database_arg).expect("database removed");
+    let mut server = boot(&world);
+    server.handshake();
+    refuse_every(&mut server, PLEASE_SIGN_IN);
+    assert!(
+        !Path::new(&world.database_arg).exists(),
+        "a read must not create the database"
+    );
+}
+
+#[test]
+fn reads_check_the_session_without_renewing_it() {
+    // An assistant that reads the calendar all day must not keep the student signed in for ever:
+    // the kept session still ends thirty days after the desktop last renewed it.
+    const DAY: i64 = 24 * 60 * 60;
+    let world = world("no-renewal");
+    let opened = NOW_UNIX - DAY;
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let user = insert_user(&conn, "ada", "hash").expect("user");
+    insert_preferences(&conn, user, 1).expect("preferences");
+    open_session(&conn, ADA, user, opened, true).expect("session");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    drop(conn);
+    put_token(&world.session, ADA, 0o600);
+    let mut server = boot(&world);
+    server.handshake();
+    let today = server.call("get_today", json!({}), 2);
+    assert!(
+        tool_ok_text(&today).is_some(),
+        "get_today must succeed so the session check can be seen, got {today}"
+    );
+    let who = server.call("whoami", json!({}), 3);
+    let body: Value = serde_json::from_str(tool_ok_text(&who).unwrap_or("")).unwrap_or(Value::Null);
+    assert_eq!(
+        body.get("session_expires").and_then(Value::as_i64),
+        Some(opened + KEPT_FOR),
+        "whoami reports the expiry the desktop set, got {who}"
+    );
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let stored: i64 = conn
+        .query_row("SELECT expires FROM sessions", [], |row| row.get(0))
+        .expect("session row");
+    assert_eq!(
+        stored,
+        opened + KEPT_FOR,
+        "starting the server and reading must not renew the kept session"
+    );
+}

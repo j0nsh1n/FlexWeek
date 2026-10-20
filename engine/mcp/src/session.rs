@@ -1,7 +1,8 @@
 //! The kept session file, checked again on every call.
 //!
-//! A file other people can read is refused. The store's `session_user` is used
-//! as it is, so a live session is renewed the same way the desktop renews it.
+//! A file other people can read is refused. A write renews a live session through the
+//! store's `session_user`, as the desktop does on each request; starting the helper and the
+//! read tools only look, so an assistant that reads all day does not keep a session alive.
 
 use std::fs::File;
 use std::io::Read;
@@ -35,8 +36,28 @@ pub fn for_call(
     database: &Path,
     now: i64,
 ) -> Result<SignedIn, String> {
+    checked(started_as, session_file, database, now, true)
+}
+
+/// As `for_call`, for a read: the session is checked but not renewed.
+pub fn for_read(
+    started_as: &Mutex<Option<i64>>,
+    session_file: &Path,
+    database: &Path,
+    now: i64,
+) -> Result<SignedIn, String> {
+    checked(started_as, session_file, database, now, false)
+}
+
+fn checked(
+    started_as: &Mutex<Option<i64>>,
+    session_file: &Path,
+    database: &Path,
+    now: i64,
+    renew: bool,
+) -> Result<SignedIn, String> {
     let token = read_token(session_file)?;
-    let conn = open_connection(database).map_err(storage_sentence)?;
+    let conn = open_existing(database)?;
     let live = live_user_id(&conn, &digest(&token), now)?;
     drop(conn);
     let switched = started_as
@@ -46,7 +67,11 @@ pub fn for_call(
     if switched {
         return Err(ACCOUNT_CHANGED.into());
     }
-    let account = resolve(session_file, database, now)?;
+    let account = if renew {
+        resolve(session_file, database, now)?
+    } else {
+        peek(session_file, database, now)?
+    };
     let mut started = started_as
         .lock()
         .map_err(|_| STORAGE_UNAVAILABLE.to_string())?;
@@ -62,7 +87,7 @@ pub fn for_call(
 
 pub fn resolve(session_file: &Path, database: &Path, now: i64) -> Result<SignedIn, String> {
     let token = read_token(session_file)?;
-    let conn = open_connection(database).map_err(storage_sentence)?;
+    let conn = open_existing(database)?;
     let hash = digest(&token);
     let found = session_user(&conn, &hash, now).map_err(storage_sentence)?;
     let Some((user_id, username)) = found else {
@@ -85,6 +110,53 @@ pub fn resolve(session_file: &Path, database: &Path, now: i64) -> Result<SignedI
         conn.execute_batch("COMMIT")
             .map_err(|error| storage_sentence(StoreError::from(error)))?;
     }
+    Ok(SignedIn {
+        user_id,
+        username,
+        expires,
+    })
+}
+
+/// The signed-in account, checked like `resolve` but without renewing the session.
+pub fn peek(session_file: &Path, database: &Path, now: i64) -> Result<SignedIn, String> {
+    let token = read_token(session_file)?;
+    let conn = open_existing(database)?;
+    let hash = digest(&token);
+    let mut stmt = conn
+        .prepare(
+            "SELECT users.id, users.username, sessions.expires FROM sessions
+             JOIN users ON users.id = sessions.user_id
+             WHERE token_hash = ?1 AND expires > ?2",
+        )
+        .map_err(|error| storage_sentence(StoreError::from(error)))?;
+    let mut rows = stmt
+        .query((&hash, now))
+        .map_err(|error| storage_sentence(StoreError::from(error)))?;
+    let found: Option<(i64, String, i64)> = match rows
+        .next()
+        .map_err(|error| storage_sentence(StoreError::from(error)))?
+    {
+        Some(row) => Some((
+            row.get(0)
+                .map_err(|error| storage_sentence(StoreError::from(error)))?,
+            row.get(1)
+                .map_err(|error| storage_sentence(StoreError::from(error)))?,
+            row.get(2)
+                .map_err(|error| storage_sentence(StoreError::from(error)))?,
+        )),
+        None => None,
+    };
+    drop(rows);
+    drop(stmt);
+    let Some((user_id, username, expires)) = found else {
+        let expired = session_expired(&conn, &hash, now).map_err(storage_sentence)?;
+        return Err(if expired {
+            SESSION_ENDED
+        } else {
+            PLEASE_SIGN_IN
+        }
+        .into());
+    };
     Ok(SignedIn {
         user_id,
         username,
@@ -116,6 +188,15 @@ fn live_user_id(
     row.get(0)
         .map(Some)
         .map_err(|error| storage_sentence(StoreError::from(error)))
+}
+
+/// The database the session belongs to. Opening a missing one would create an empty file the
+/// desktop then finds, so a missing database means nobody is signed in here.
+fn open_existing(database: &Path) -> Result<flexweek_store::Connection, String> {
+    if !database.is_file() {
+        return Err(PLEASE_SIGN_IN.into());
+    }
+    open_connection(database).map_err(storage_sentence)
 }
 
 fn read_token(path: &Path) -> Result<String, String> {

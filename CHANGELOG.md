@@ -6,7 +6,15 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- The assistant helper has a read-only mode (`flexweek-mcp --read-only`) that offers only the read tools, for an assistant that should see the schedule but never change it.
 - An assistant on this computer can now change the signed-in schedule: add, edit, finish and delete homework, mark a block done, and move or delete a block. A retried request changes things once, a request made on an out-of-date week changes nothing, and school and activities still change only in the app. Its changes reach a paired phone like any other.
+
+### Changed
+- Reading the schedule through the assistant helper no longer extends Keep me signed in; only using FlexWeek, or a change the assistant makes, does. An assistant that only reads cannot keep you signed in for ever.
+
+### Fixed
+- The assistant helper no longer creates an empty FlexWeek database when the kept session file outlives it; it says "Please sign in" instead.
+- The assistant helper finds FlexWeek's data where the desktop keeps it when `XDG_DATA_HOME` is set.
 
 ## [1.1.0] - 2026-10-20
 
