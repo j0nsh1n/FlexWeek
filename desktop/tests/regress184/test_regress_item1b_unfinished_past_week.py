@@ -51,7 +51,7 @@ def left_in_week_one(qapp, window) -> tuple[str, str]:
     session.save()
     settled(qapp, window)
     block = next(b for b in session.blocks if b.get("assignment_id") == "lab")
-    assert session.place_session(block["id"], FRIDAY, 16 * 60)
+    assert session.hand_move(block["id"], -1, FRIDAY, 16 * 60, 17 * 60)
     session.save()
     settled(qapp, window)
     monday_7 = datetime.fromisoformat(week2) + timedelta(hours=7)

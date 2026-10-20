@@ -134,7 +134,7 @@ def window(qapp: QApplication, server: LocalServer) -> Iterator[NativeWindow]:
             session.add_homework({"id": key, "title": title, "due": due, "estimate_min": 60, "revision": 0})
         session.save()
         settled(qapp, made)
-        session.place_session(session_of(made, "essay")["id"], 3, 19 * 60)
+        session.hand_move(session_of(made, "essay")["id"], -1, 3, 19 * 60, 20 * 60)
         session.save()
         settled(qapp, made)
         yield made

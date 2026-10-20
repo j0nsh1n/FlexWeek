@@ -14,9 +14,6 @@ DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 DAY_FULL = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 FIRST_MONTH = "2000-01"
 LAST_MONTH = "2099-12"
-SERIES_DRAG_MESSAGE = (
-    "{title} repeats on {count} days, so dragging it is ambiguous. Edit the occurrence or the series."
-)
 # One family (decision 9 of 0.17), worked out from each hue by `family_colours` in tokens.py and held
 # to it by test_tokens.py. In a light look `color` is the pale fill and `mark` the strong colour of
 # outlines and edges; `dark` and `contrast` are (tone, mark) for the dark looks and High contrast, which
@@ -182,6 +179,22 @@ def apply_block_times(block: dict, start_min: int, end_min: int, day: int | None
     """The block at a new time, and on `day` when it moved to another one."""
     raw = flexweek_engine.calendar_apply_times(json.dumps(block), start_min, end_min, day)
     return None if raw is None else json.loads(raw)
+
+
+def hand_move(
+    blocks: list[dict],
+    assignments: dict[str, dict],
+    block_id: str,
+    clock: tuple[str, str, int],
+    span: tuple[int, int, int, int],
+) -> dict:
+    """A block let go by hand, through the one rule the phone shares: `clock` is (week start, local
+    date, local minute) and `span` is (day it was dragged from, day it lands on, start, end)."""
+    return json.loads(
+        flexweek_engine.calendar_hand_move(
+            json.dumps(blocks), json.dumps(assignments), block_id, clock, span
+        )
+    )
 
 
 def split_occurrence(blocks: list[dict], block_id: str, day: int) -> tuple[list[dict], str | None]:

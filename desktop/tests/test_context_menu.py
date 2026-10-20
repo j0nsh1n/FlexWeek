@@ -53,7 +53,7 @@ def window(qapp: QApplication, signed_in: NativeWindow) -> Iterator[NativeWindow
     for key, title in (("essay", "History essay"), ("math", "Math worksheet")):
         session.add_homework({"id": key, "title": title, "due": due, "estimate_min": 60, "revision": 0})
     essay = next(block for block in session.blocks if block.get("assignment_id") == "essay")
-    session.place_session(essay["id"], 2, 18 * 60)
+    session.hand_move(essay["id"], -1, 2, 18 * 60, 18 * 60 + essay["duration_min"])
     session.save()
     settled(qapp, signed_in)
     signed_in.findChild(QAbstractButton, "viewWeek").click()

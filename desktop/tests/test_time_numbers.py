@@ -321,7 +321,7 @@ def test_my_day_actions_leave_room_after_their_icons(qapp: QApplication, window:
     session.add_homework({"id": "essay", "title": "Essay", "due": sunday_due(session.week_start),
                           "estimate_min": 60, "revision": 0})
     block = next(item for item in session.blocks if item.get("assignment_id") == "essay")
-    session.place_session(block["id"], 3, 19 * 60)
+    session.hand_move(block["id"], -1, 3, 19 * 60, 19 * 60 + block["duration_min"])
     session.save()
     wait_until(qapp, lambda: not session.busy and not session.dirty)
     window.findChild(QAbstractButton, "viewMyDay").click()

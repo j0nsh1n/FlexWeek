@@ -48,7 +48,7 @@ def overdue_this_week(qapp, window) -> str:
     session.save()
     settled(qapp, window)
     block = next(b for b in session.blocks if b.get("assignment_id") == "bio")
-    assert session.place_session(block["id"], WEDNESDAY, 15 * 60 + 15)
+    assert session.hand_move(block["id"], -1, WEDNESDAY, 15 * 60 + 15, 16 * 60 + 15)
     session.save()
     settled(qapp, window)
     saturday = datetime.fromisoformat(session.week_start) + timedelta(days=SATURDAY, hours=10)
