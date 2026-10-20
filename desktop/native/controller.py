@@ -763,7 +763,8 @@ class NativeSession(QObject):
         # Kept only now. Kept at registration, quitting before this page would open the week at the
         # next launch and the recovery codes would never be shown again.
         self._keep_session()
-        self.load_week(current_week_start())
+        self.selected_day = self.today_iso()
+        self.load_week(monday_of(self.selected_day))
 
     def logout(self) -> None:
         # Forgotten first, so a sign-out that fails to reach the server still leaves nothing to resume.
