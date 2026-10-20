@@ -20,6 +20,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 
 from desktop.native.client import ApiError
 from desktop.native.weekmodel import length_label, range_label
+from desktop.tests.blocks_helper import put_block
 from desktop.tests.grid_support import (  # noqa: F401
     qapp,
     server,
@@ -42,7 +43,7 @@ def overdue_this_week(qapp, window) -> str:
     session.save()
     settled(qapp, window)
     block = next(b for b in session.blocks if b.get("assignment_id") == "bio")
-    assert session.place_session(block["id"], WEDNESDAY, 15 * 60 + 15)
+    put_block(session, block["id"], WEDNESDAY, 15 * 60 + 15, 16 * 60 + 15, pinned=True)
     session.save()
     settled(qapp, window)
     saturday = datetime.fromisoformat(session.week_start) + timedelta(days=SATURDAY, hours=10)
@@ -146,7 +147,7 @@ def test_1br_deadline_timer_refreshes_tags_sidebar_and_focus(qapp, window, monke
     session.save()
     settled(qapp, window)
     block = next(item for item in session.blocks if item.get("assignment_id") == "bio")
-    assert session.place_session(block["id"], WEDNESDAY, 15 * 60 + 15)
+    assert session.hand_move(block["id"], -1, WEDNESDAY, 15 * 60 + 15, 16 * 60 + 15)
     session.save()
     settled(qapp, window)
     announcements = []
@@ -238,7 +239,7 @@ def test_1br_next_week_does_not_call_current_week_work_carried(qapp, window) -> 
     session.save()
     settled(qapp, window)
     block = next(item for item in session.blocks if item.get("assignment_id") == "future")
-    assert session.place_session(block["id"], WEDNESDAY, 15 * 60)
+    assert session.hand_move(block["id"], -1, WEDNESDAY, 15 * 60, 15 * 60 + block["duration_min"])
     session.save()
     settled(qapp, window)
     session.load_week((monday + timedelta(days=7)).isoformat())
@@ -315,7 +316,7 @@ def test_1br_selected_overdue_plan_leaves_other_homework_alone(qapp, window) -> 
     settled(qapp, window)
     other = next(item for item in session.blocks if item.get("assignment_id") == "other")
     waiting = next(item for item in session.blocks if item.get("assignment_id") == "waiting")
-    assert session.place_session(other["id"], SATURDAY, 12 * 60)
+    assert session.hand_move(other["id"], -1, SATURDAY, 12 * 60, 13 * 60)
     session.delete_block(waiting["id"])
     session.save()
     settled(qapp, window)
@@ -344,7 +345,7 @@ def test_1br_overdue_left_minutes_are_placed_plus_unallocated(qapp, window) -> N
     block = next(item for item in session.blocks if item.get("assignment_id") == "essay")
     block["duration_min"] = 60
     session._touch()
-    assert session.place_session(block["id"], WEDNESDAY, 15 * 60)
+    assert session.hand_move(block["id"], -1, WEDNESDAY, 15 * 60, 15 * 60 + block["duration_min"])
     session.save()
     settled(qapp, window)
     saturday = datetime.fromisoformat(session.week_start) + timedelta(days=SATURDAY, hours=10)
@@ -361,7 +362,7 @@ def test_1br_plan_overdue_moves_a_future_session(qapp, window) -> None:
     session = window.session
     session.save_preferences({"work_windows": [{"days": [SATURDAY], "start": "10:00", "end": "16:00"}]})
     settled(qapp, window)
-    assert session.place_session(session_id, SATURDAY, 14 * 60)
+    put_block(session, session_id, SATURDAY, 14 * 60, 15 * 60)
     session.add_block({"id": "class", "title": "Class", "kind": "locked", "days": [SATURDAY],
                        "start": "10:00", "duration_min": 60})
     session.save()

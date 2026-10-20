@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.flexweek.app.FlexWeekApp
+import com.flexweek.app.system.widget.WidgetRuntime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -25,6 +26,7 @@ class SyncWorker(
                 val ok = JSONObject(raw).optBoolean("ok", true)
                 if (ok) {
                     ReminderScheduler.refreshAsync(applicationContext)
+                    WidgetRuntime.refreshAsync(applicationContext)
                     Result.success()
                 } else {
                     Result.retry()

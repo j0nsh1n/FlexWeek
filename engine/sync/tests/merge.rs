@@ -912,3 +912,135 @@ fn malformed_homework_due_stays_quarantined() {
         assert_eq!(reason, "malformed or unknown record");
     }
 }
+
+const HAND_WEEK: &str = "2026-10-19";
+const HAND_TUESDAY: i64 = 1;
+const HAND_START_MIN: i64 = 14 * 60 + 30;
+const HAND_END_MIN: i64 = 16 * 60;
+
+fn hand_homework() -> Value {
+    json!({
+        "id": "alg", "title": "Algebra set 4", "kind": "flexible", "days": [0],
+        "start": "14:30", "duration_min": 90, "category": "assignments",
+        "assignment_id": "algebra-4",
+    })
+}
+
+/// What the phone's hand move does to the saved week, using the engine's rule on the stored blocks.
+fn hand_move_saved(conn: &Connection, revision: i64) -> flexweek_store::WeekSave {
+    use flexweek_engine::desk::hand_move::{HandDrop, HandMove, WeekClock, hand_move};
+    let (raw, _) = flexweek_store::read_week(conn, 1, HAND_WEEK)
+        .unwrap()
+        .unwrap();
+    let blocks: Value = serde_json::from_str(&raw).unwrap();
+    let drop = HandDrop {
+        block_id: "alg",
+        from_day: 0,
+        to_day: HAND_TUESDAY,
+        start_min: HAND_START_MIN,
+        end_min: HAND_END_MIN,
+    };
+    let clock = WeekClock {
+        week_start: HAND_WEEK,
+        now_iso: HAND_WEEK,
+        now_min: 8 * 60,
+    };
+    let assignments = json!({"algebra-4": {"id": "algebra-4", "due": "2026-10-23T23:59"}});
+    let HandMove::Moved { blocks, .. } =
+        hand_move(&blocks, &drop, &clock, &assignments, &mut || {
+            "unused".into()
+        })
+        .unwrap()
+    else {
+        panic!("the move was refused");
+    };
+    let saved = flexweek_store::save_week(
+        conn,
+        1,
+        HAND_WEEK,
+        &Value::Array(blocks).to_string(),
+        revision,
+    )
+    .unwrap();
+    let _ = conn.execute_batch("COMMIT");
+    saved
+}
+
+#[test]
+fn a_block_moved_by_hand_reaches_the_other_device_pinned() {
+    let mut phone = db("phone", true);
+    let mut desktop = db("desktop", true);
+    flexweek_store::save_week(
+        &phone,
+        1,
+        HAND_WEEK,
+        &json!([hand_homework()]).to_string(),
+        0,
+    )
+    .unwrap();
+    phone.execute_batch("COMMIT").unwrap();
+    scan(&mut phone, 1, 1_000).unwrap();
+    apply_batch(&mut desktop, &batch(&phone, 0, "desktop"), 1_000).unwrap();
+    let (_, before) = flexweek_store::read_week(&desktop, 1, HAND_WEEK)
+        .unwrap()
+        .unwrap();
+
+    let saved = hand_move_saved(&phone, 1);
+    assert!(
+        matches!(saved, flexweek_store::WeekSave::Ready(_)),
+        "the move saved on the phone"
+    );
+    scan(&mut phone, 1, 2_000).unwrap();
+
+    let sent = batch(&phone, 0, "desktop");
+    let record = sent
+        .records
+        .iter()
+        .find(|record| record.entity == "block" && record.key == format!("{HAND_WEEK}/alg"));
+    assert!(
+        record.is_some(),
+        "the block record is exported: {:?}",
+        sent.records.iter().map(|r| &r.key).collect::<Vec<_>>()
+    );
+    let body = record.unwrap().body.clone().unwrap();
+    assert_eq!(body["days"], json!([HAND_TUESDAY]));
+    assert_eq!(body["start"], json!("14:30"));
+    assert_eq!(body["pinned"], json!(true));
+
+    apply_batch(&mut desktop, &sent, 2_000).unwrap();
+    let (raw, after) = flexweek_store::read_week(&desktop, 1, HAND_WEEK)
+        .unwrap()
+        .unwrap();
+    let blocks: Vec<Value> = serde_json::from_str(&raw).unwrap();
+    assert_eq!(blocks.len(), 1, "no block was added or lost: {blocks:?}");
+    assert_eq!(blocks[0], body, "the other device holds the same block");
+    assert!(after > before, "the other device saw a new revision");
+}
+
+#[test]
+fn a_hand_move_saved_on_an_old_revision_is_refused() {
+    let phone = db("phone", true);
+    flexweek_store::save_week(
+        &phone,
+        1,
+        HAND_WEEK,
+        &json!([hand_homework()]).to_string(),
+        0,
+    )
+    .unwrap();
+    phone.execute_batch("COMMIT").unwrap();
+    let saved = hand_move_saved(&phone, 0);
+    assert!(
+        matches!(saved, flexweek_store::WeekSave::Conflict),
+        "revision 0 is old once the week was saved"
+    );
+    let (raw, _) = flexweek_store::read_week(&phone, 1, HAND_WEEK)
+        .unwrap()
+        .unwrap();
+    let blocks: Vec<Value> = serde_json::from_str(&raw).unwrap();
+    assert_eq!(
+        blocks[0]["days"],
+        json!([0]),
+        "the refused move changed nothing"
+    );
+}

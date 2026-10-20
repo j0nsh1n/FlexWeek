@@ -1,6 +1,17 @@
 # context.md — FlexWeek
 
 ## Current State
+- 2026-10-20: The five requested desktop regression nodes pass individually through `fwtest` on
+  `release/1.1`. Recovery now opens the session clock's day and week, restoring Agenda Start focus and
+  My day's Running late. The overdue Plan question has exactly Plan into this week, Mark as finished,
+  Not now. Both Clay now-pill nodes passed unchanged. Ruff across the repo, `mypy backend`, and the
+  shared confirmation default/cancel test pass. No full gate or real-display check was run.
+- 2026-10-16: 1.1 in progress on `release/1.1` (local only, nothing pushed). Merged: the phone release bugs
+  (dark mode, Running late and Start focus hidden in release, Not now, reminder ids), the phone updating
+  itself from GitHub Releases (rules from `engine/engine/src/desk/update.rs` through `engine/ffi`), and the
+  desktop fixes (rail one-go message, sign-in pages scroll below 768 px, Replace timer and Restore sheets).
+  Gate VERIFIED (5384 passed); 131 Android unit tests and 461 engine and ffi tests pass. The phone updater
+  has not run on a device yet.
 - 2026-10-14: fix-e implements per-design curated looks with shared palette tokens across app chrome, design canvases, Week, Day and My day. Missing per-design selections keep the account look, including High contrast; Setup persists a selected pack, and Settings names curated canvas looks. Existing accounts without a saved design look receive a one-time, device-local notice; new accounts completing setup on this computer are exempt. Review regressions, restored colour-safety coverage and the notice behavior are recorded in the fix-e lane report.
 - 2026-10-13: 1.0.0 is prepared on `release/1.0.0` (worktree
   `~/.worktrees/flexweek-0190`, HEAD `a5f7384b`): the Android phone app
@@ -135,12 +146,10 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
-- 2026-10-14, `release/1.0.0` (worktree `~/.worktrees/flexweek-0190`). 1.0.0 is being released today: the
-  fix lanes from Fable's deep audit and Jonathan's own notes (per-design looks, week start, setup polish,
-  Month loading, rail, forms, pairing, Devices clock count) and the gate triage are merged. Reports and
-  pictures: `~/.flexweek-ui-harness/scratch/1.0.0/` (gate/, shots-fix/, review-page/).
-- The Android release key lives in `~/.config/flexweek-android/` (outside the repo). Back it up: every
-  later phone update must be signed with it.
-- Known for 1.0.1: My day and One thing at 1024x640 Large text; Clay can stop with a block cut at the
-  card edge; the window's minimum height can follow the hidden sign-in page's.
-- Next: PR into main, CI, merge, publish v1.0.0 with docs/release-notes-v1.0.0.md and the Android APK.
+- 2026-10-20, `release/1.1` (worktree `~/.worktrees/flexweek-0190`). Desk hand-move, the local schedule reader, and the phone lane are merged. This commit cuts 1.1.0. A pull request into `main` follows. The device check is skipped.
+- 2026-10-20 desktop test slice: `0759806c` fixes recovery's opening day/week. The overdue Plan sheet's button order and redundant close button are fixed in this handoff's commit. All five named nodes pass individually; assertions and fixtures are unchanged. The full pre-release checks remain pending. Nothing pushed.
+- Still open: Settings scroll (lane 4, parked until a real compositor check), a Mac session file refused because the owner check reads /proc/self, and a schedule reader that starts signed out stays on "Please sign in".
+- Month and Day phone screens are not in this merge. `~/.worktrees/flexweek-11-probe` is a detached checkout at 5a72b3f6. Lane branches and worktrees are still in place.
+- Still waiting on Jonathan: what shrinks on My day and One thing at 1024x640 Large, and a device check of the phone updater and the lane 1 fixes.
+- The Android release key lives in `~/.config/flexweek-android/` (outside the repo). Every phone update must be signed with it.
+- Run plan: `~/.flexweek-ui-harness/scratch/1.1/plan.md`.

@@ -11,6 +11,32 @@ const ESTIMATE_RULE: &str = "estimate_min must be a positive multiple of 15";
 const DUE_RULE: &str = "must be YYYY-MM-DD or YYYY-MM-DDTHH:MM with no seconds or timezone";
 const ID_RULE: &str = "String should have at most 80 characters";
 
+pub(crate) fn recent_titles(week: &FlexWeek) -> Result<Vec<String>, FfiError> {
+    let user_id = require_user(week)?;
+    let db = db_lock(week)?;
+    let mut statement = db
+        .prepare("SELECT body FROM assignments WHERE user_id = ?1 ORDER BY rowid DESC")
+        .map_err(failure)?;
+    let rows = statement
+        .query_map([user_id], |row| row.get::<_, String>(0))
+        .map_err(failure)?;
+    let mut seen = std::collections::HashSet::new();
+    let mut titles = Vec::new();
+    for stored in rows {
+        let stored = stored.map_err(failure)?;
+        let value: Value = serde_json::from_str(&stored).map_err(failure)?;
+        if let Some(title) = value.get("title").and_then(Value::as_str)
+            && seen.insert(title.to_lowercase())
+        {
+            titles.push(title.to_string());
+            if titles.len() == 5 {
+                break;
+            }
+        }
+    }
+    Ok(titles)
+}
+
 fn text_field<'a>(draft: &'a Map<String, Value>, key: &str) -> Result<Option<&'a str>, FfiError> {
     match draft.get(key) {
         None => Ok(None),
@@ -336,6 +362,7 @@ mod tests {
         .unwrap();
         assert_eq!(first["id"], "essay");
         assert_eq!(first["title"], "History essay");
+        assert_eq!(first["due"], "2026-10-15T21:00");
         let again: Value = serde_json::from_str(
             &week
                 .save_homework(draft.to_string(), "op-hw".into())
@@ -352,5 +379,47 @@ mod tests {
         assert_eq!(blocks[0]["assignment_id"], "essay");
         assert_eq!(blocks[0]["duration_min"], 60);
         assert!(blocks[0].get("start").is_none());
+    }
+
+    #[test]
+    fn recent_titles_lists_the_latest_distinct_first() {
+        let (week, _) = open_test("recent-title-order");
+        for (id, title, due) in [
+            ("one", "Essay", "2026-10-15"),
+            ("two", "Lab", "2026-10-16"),
+            ("three", "essay", "2026-10-17"),
+        ] {
+            week.save_homework(
+                json!({"id":id,"title":title,"due":format!("{due}T23:59"),"estimate_min":60})
+                    .to_string(),
+                format!("op-{due}"),
+            )
+            .unwrap();
+        }
+        assert_eq!(recent_titles(&week).unwrap(), vec!["essay", "Lab"]);
+    }
+
+    #[test]
+    fn phone_fixture_homework_save_matches_android_copy() {
+        let (week, _) = open_test("homework-fixture");
+        let mut result: Value = serde_json::from_str(&week.save_homework(
+            r#"{"id":"fixture-homework","title":"History essay","due":"2026-10-23T23:59","estimate_min":60}"#.into(),
+            "homework-fixture-op".into(),
+        ).unwrap()).unwrap();
+        result["id"] = json!("homework-id");
+        let text = format!("{}\n", serde_json::to_string_pretty(&result).unwrap());
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let fixture = root.join("tests/fixtures/phone/homework-save.json");
+        let copy = root.join("../../android/app/src/test/resources/phone/homework-save.json");
+        if std::env::var("FLEXWEEK_WRITE_PHONE_FIXTURES").as_deref() == Ok("1") {
+            for path in [&fixture, &copy] {
+                std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+                std::fs::write(path, &text).unwrap();
+            }
+        }
+        assert_eq!(std::fs::read_to_string(&fixture).unwrap(), text);
+        assert_eq!(std::fs::read_to_string(&copy).unwrap(), text);
+        assert_eq!(result["due"], "2026-10-23T23:59");
+        assert_eq!(result["title"], "History essay");
     }
 }

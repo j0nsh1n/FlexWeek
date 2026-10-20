@@ -1,0 +1,43 @@
+{
+  "week_start": "2026-10-05",
+  "placed": [],
+  "not_placed": [
+    {
+      "assignment_id": "essay",
+      "category": "assignments",
+      "days": [
+        0
+      ],
+      "duration_min": 60,
+      "energy": "medium",
+      "id": "essay-session",
+      "kind": "flexible",
+      "priority": 3,
+      "title": "History essay",
+      "reason": "NO_SLOT_LEFT",
+      "why": "Your other homework is using every free gap before it's due. Move or shorten one, or choose a time yourself."
+    }
+  ],
+  "moves": [
+    {
+      "block_id": "essay-session",
+      "reason": "NO_SLOT_LEFT",
+      "from_day": null,
+      "from_start": null,
+      "to_day": null,
+      "to_start": null
+    }
+  ],
+  "explanations": [
+    {
+      "block_id": "essay-session",
+      "message": "Your other homework is using every free gap before it's due. Move or shorten one, or choose a time yourself.",
+      "reason": "NO_SLOT_LEFT",
+      "slack_min": null,
+      "slack_status": null
+    }
+  ],
+  "shares": [],
+  "complete": false,
+  "applied_preview": "preview-id"
+}

@@ -18,6 +18,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -25,11 +26,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.flexweek.app.model.HomeworkDraft
 import com.flexweek.app.model.PlanRecordState
 import com.flexweek.app.model.RunningLatePreview
+import com.flexweek.app.model.DueChips
+import java.time.LocalDate
+import java.time.ZoneId
+import android.app.DatePickerDialog
 
 @Composable
 fun SheetScrim(onDismiss: () -> Unit, content: @Composable () -> Unit) {
@@ -49,6 +55,7 @@ fun SheetScrim(onDismiss: () -> Unit, content: @Composable () -> Unit) {
 @Composable
 fun AddHomeworkSheet(
     draft: HomeworkDraft,
+    recentTitles: List<String> = emptyList(),
     stepProblem: String?,
     onTitleChange: (String) -> Unit,
     onDuePick: (String) -> Unit,
@@ -75,17 +82,28 @@ fun AddHomeworkSheet(
                             placeholder = { Text("e.g. History essay") },
                             isError = stepProblem != null,
                         )
+                        if (recentTitles.isNotEmpty()) ChipRow(recentTitles, draft.title, onTitleChange)
                         stepProblem?.let {
                             Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp))
                         }
                     }
                     1 -> {
                         Text("When is it due?", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
-                        ChipRow(listOf("Fri 9 Oct", "Sun 11 Oct"), draft.due, onDuePick)
-                        Text("When to do it", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 12.dp))
-                        ChipRow(listOf("FlexWeek picks a time", "I'll pick on the week"), draft.whenMode, { v ->
-                            onWhenMode(if (v.startsWith("FlexWeek")) "pick" else "at")
-                        })
+                        val context = LocalContext.current
+                        val today = LocalDate.now()
+                        DueChips.forToday(today).take(3).forEach { chip ->
+                            TextButton(onClick = { onDuePick(chip.date.toString()) }) {
+                                Text(if (draft.due == chip.date.toString()) "✓ ${chip.label}" else chip.label)
+                            }
+                        }
+                        TextButton(onClick = {
+                            DatePickerDialog(context, { _, year, month, day ->
+                                onDuePick(LocalDate.of(year, month + 1, day).toString())
+                            }, today.year, today.monthValue - 1, today.dayOfMonth).apply {
+                                datePicker.minDate = today.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                            }.show()
+                        }) { Text("Pick a day") }
+                        Text("FlexWeek picks the time to do it", modifier = Modifier.padding(top = 8.dp))
                     }
                     else -> {
                         Text("How long will it take?", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
@@ -96,6 +114,11 @@ fun AddHomeworkSheet(
                         ChipRow(listOf("In one go", "Spread over days"), draft.sessions) { label ->
                             onSessions(if (label.startsWith("In")) "one" else "spread")
                         }
+                        Text(
+                            if (draft.sessions == "one") "In one go means one homework session."
+                            else "Spread over days means more than one session.",
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
                     }
                 }
                 stepProblem?.let {
@@ -126,7 +149,8 @@ private fun StepCrumbs(draft: HomeworkDraft, onStepJump: (Int) -> Unit) {
         }
         if (draft.step > 1) {
             TextButton(onClick = { onStepJump(1) }) {
-                Text("✓ due ${draft.due}, ${if (draft.whenMode == "pick") "FlexWeek picks" else "do it at"}")
+                val due = runCatching { DueChips.label(LocalDate.parse(draft.due), LocalDate.now()) }.getOrDefault(draft.due)
+                Text("✓ due $due, FlexWeek picks the time")
             }
             Text("·")
         }
@@ -173,9 +197,12 @@ fun PlanRecordSheet(
     }
 }
 
+const val NOTHING_TO_MOVE = "Nothing after this time can move. Fixed times stay."
+
 @Composable
 fun RunningLateSheet(
-    preview: RunningLatePreview,
+    preview: RunningLatePreview?,
+    error: String?,
     minutes: Int,
     onMinutes: (Int) -> Unit,
     onCancel: () -> Unit,
@@ -184,19 +211,38 @@ fun RunningLateSheet(
     SheetScrim(onCancel) {
         Surface(shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)) {
             Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
-                Text("Running late", style = MaterialTheme.typography.titleLarge)
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
-                    Text("How late?")
-                    ChipRow(listOf("15 min", "30 min", "60 min"), "$minutes min") { label ->
-                        onMinutes(label.removeSuffix(" min").toInt())
+                if (preview != null) {
+                    Text("${preview.current.title} is running late", style = MaterialTheme.typography.titleLarge)
+                    Text("Ends at ${lateClockLabel(preview.current.end)} (+${minutes} min)", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    Text("Running late", style = MaterialTheme.typography.titleLarge)
+                }
+                Text("How late?  $minutes min", modifier = Modifier.padding(top = 8.dp))
+                Slider(
+                    value = ((minutes.coerceIn(5, 60) - 5) / 55f),
+                    onValueChange = { fraction -> onMinutes(LateSlider.minutesAt(fraction)) },
+                    valueRange = 0f..1f,
+                    steps = 10,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (error != null) {
+                    Text(error, modifier = Modifier.padding(vertical = 8.dp))
+                }
+                if (preview != null && preview.moves.isEmpty()) {
+                    Text(NOTHING_TO_MOVE, modifier = Modifier.padding(vertical = 8.dp))
+                }
+                if (preview != null && preview.moves.isNotEmpty()) {
+                    Text("What moves and why", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
+                }
+                preview?.moves?.forEach { move ->
+                    Text("${move.title} ${move.detail} · ${move.durationMin} min", modifier = Modifier.padding(vertical = 6.dp))
+                    if (move.why.isNotEmpty()) {
+                        Text(move.why, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
-                Text("What moves and why", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
-                preview.moves.forEach { move ->
-                    Column(Modifier.padding(vertical = 6.dp)) {
-                        Text("${move.title} ${move.detail}", fontWeight = FontWeight.SemiBold)
-                        Text(move.why, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                preview?.warning?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(vertical = 6.dp)) }
+                preview?.stays?.forEach { title ->
+                    Text("$title stays · fixed time", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 4.dp))
                 }
                 Text(
                     "Homework with no time yet is not placed by Running late. That is Plan's job.",
@@ -206,11 +252,21 @@ fun RunningLateSheet(
                 Row(Modifier.fillMaxWidth()) {
                     TextButton(onClick = onCancel, modifier = Modifier.height(48.dp)) { Text("Cancel") }
                     Box(Modifier.weight(1f))
-                    Button(onClick = onAccept, modifier = Modifier.height(48.dp)) { Text("Move it") }
+                    Button(onClick = onAccept, enabled = preview != null, modifier = Modifier.height(48.dp)) { Text("Move it") }
                 }
             }
         }
     }
+}
+
+private fun lateClockLabel(value: String): String {
+    val parts = value.split(":")
+    if (parts.size != 2) return value
+    val hour = parts[0].toIntOrNull() ?: return value
+    val minute = parts[1].toIntOrNull() ?: return value
+    val displayHour = when (hour % 12) { 0 -> 12; else -> hour % 12 }
+    val suffix = if (hour < 12) "AM" else "PM"
+    return if (minute == 0) "$displayHour $suffix" else "$displayHour:${minute.toString().padStart(2, '0')} $suffix"
 }
 
 @Composable

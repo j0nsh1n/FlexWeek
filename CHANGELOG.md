@@ -5,6 +5,32 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-20
+
+### Added
+- An assistant on this computer can read the signed-in schedule: today, the week, the month, homework, routines and restore points. It uses FlexWeek's session file, opens no network port, and on Windows it stops until it can check that the file stays private.
+- Phone: an "Up next" home-screen widget shows what is now or next and the two things after it, counts down to the next start, and opens Today when tapped; tick a homework on it to mark it finished.
+- Phone: a running focus session shows on the lock screen with its countdown, Pause and Finish; you hear when it ends even with the app closed, and the minutes are added once. A phone restart keeps the timer.
+- Phone: focus from Today. Start focus on a homework, watch the time in Today's card, pause or finish it; a session that runs its full length adds its minutes to the homework, and your computer sees them after the next sync.
+- Phone: the Week tab reads like a planner, one row per day with its homework and activities by name, how much homework it holds ("4 h 30 · heavy") and when you are free ("free after 2:30").
+- Phone: Week, Add homework, Plan and Running late are in the released app, not only in test builds, with Add on every tab.
+- Phone: FlexWeek updates itself. Settings has an Updates card that checks GitHub Releases once a day (on by default, can be turned off) or when you press Check now, and shows the new version's size and the first two lines of what's new. Nothing downloads or installs until you press the button; the download is checked against its published checksum, its name, version and signing key before Android's own Install dialog opens, and "See the steps" walks through allowing installs from FlexWeek. A test build says it can't update itself and points to the release page.
+
+### Fixed
+- Before planning overdue homework, choose Plan into this week, Mark as finished or Not now, in that order, with no extra close button.
+- After saving your recovery codes, you land on today's week, with the Agenda and My day ready for today.
+- Dragging one day of a repeating class moves only that day. The other days stay, and a time that has already passed is refused in the same words on the computer and the phone.
+- Phone: homework on Today is drawn in the homework colour again instead of grey.
+- Phone: Add homework offers due days from today (Tomorrow, the next Friday and Monday, or pick a day), with your recent homework titles to tap; Plan says when each piece goes ("Mon 4 PM") and why something has no time yet, in the same words as your computer.
+- Phone: Running late opens on a real week. The sheet names the block ("History essay is running late"), a slider picks 5 to 60 minutes in steps of 5, and each move says where it came from ("moves from 4 PM") and why. A fixed time stays put, and a block pushed past one is named in red. If the phone cannot preview, the sheet says why instead of not opening.
+- At 1024 x 640 with Large text, Start focus in the rail's Next card sits under the name instead of cutting it and itself, and the Plan result's buttons move under its heading instead of overlapping it.
+- The rail's "doesn't fit in one go" message wraps in phrases with Allow splitting under it, instead of one word per line at Large text.
+- Sign in, Create account and Reset fit a 1024 x 640 window at Large text: the page scrolls there instead of holding the window taller than the screen. Larger windows look as before.
+- Replace timer and Restore ask in FlexWeek's own sheet, like Before planning, with the safe answer chosen by default.
+- Phone: the app follows the phone's dark mode; it stayed light for everyone in 1.0.0, and every screen now sits on the theme's page colour.
+- Phone: "Not now" on the notifications banner hides it, and it stays hidden the next time the app opens; "Allow" no longer hides the banner when permission is refused.
+- Phone: two reminders with the same title both show instead of one replacing the other, and reminders set by 1.0.0 are cleared after an update instead of firing twice.
+
 ## [1.0.0] - 2026-10-14
 
 ### Added

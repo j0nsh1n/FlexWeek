@@ -7,6 +7,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
+import java.io.File
 
 class RustPhoneJsonTest {
     @Test fun missingComputerLineUsesShortCopy() {
@@ -84,5 +85,24 @@ class RustPhoneJsonTest {
         assertEquals("school", day.bars.single().category)
         assertEquals(1f / 3f, day.bars.single().topFraction, 0.00001f)
         assertEquals(1f / 24f, day.bars.single().heightFraction, 0.00001f)
+    }
+
+    @Test fun planPlacedLineReadsDayAndTime() {
+        val raw = File("src/test/resources/phone/plan-open-thursday.json").readText()
+        val result = V2Json.parsePlanRecord(RustPhoneJson.plan(raw))
+        assertEquals("Mon 4 PM", result.lines.first().right)
+    }
+
+    @Test fun planNotPlacedLineCarriesTheRealReason() {
+        val raw = File("src/test/resources/phone/plan-not-placed.json").readText()
+        val preview = JSONObject(raw)
+        val expected = preview.getJSONArray("not_placed").getJSONObject(0).getString("why")
+        assertEquals(expected, V2Json.parsePlanRecord(RustPhoneJson.plan(raw)).lines.first { it.right == "No time yet" }.why)
+    }
+
+    @Test fun savedHomeworkFixtureKeepsTheCoreDueAndTitle() {
+        val saved = JSONObject(File("src/test/resources/phone/homework-save.json").readText())
+        assertEquals("History essay", saved.getString("title"))
+        assertEquals("2026-10-23T23:59", saved.getString("due"))
     }
 }

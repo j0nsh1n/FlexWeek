@@ -273,7 +273,7 @@ pub(crate) fn today(week: &FlexWeek, date: &str, now_minute: i64) -> Result<Stri
     .to_string())
 }
 
-fn operation_seen(
+pub(crate) fn operation_seen(
     db: &rusqlite::Connection,
     user_id: i64,
     op_id: &str,
@@ -293,7 +293,7 @@ fn operation_seen(
     }
 }
 
-fn remember_operation(
+pub(crate) fn remember_operation(
     db: &rusqlite::Connection,
     user_id: i64,
     op_id: &str,
@@ -806,5 +806,88 @@ mod tests {
         assert_eq!(blocks[0]["completed"], false);
         assert!(blocks[0].get("completed_day").is_none());
         assert_eq!(blocks[0]["start"], "19:00");
+    }
+
+    /// The widget's Monday (picture 9 A): at 14:10 Algebra set 4 (2:30 to 4 PM, fixed) is next, then
+    /// Spanish quiz prep (4 to 4:45 PM, homework) and Soccer practice (5 to 7 PM, fixed).
+    fn monday_up_next(name: &str) -> Value {
+        let (week, _path) = open_test(name);
+        let db = week.db.lock().unwrap();
+        flexweek_store::insert_assignment(
+            &db,
+            week.user_id.unwrap(),
+            "spanish",
+            r#"{"id":"spanish","title":"Spanish quiz prep","due":"2026-10-14T21:00","estimate_min":45,"focus_minutes":0,"completed":false,"category":"homework"}"#,
+        )
+        .unwrap();
+        drop(db);
+        save_week(
+            &week,
+            "2026-10-12",
+            &json!([
+                {"id":"algebra","title":"Algebra set 4","kind":"locked","days":[0],"start":"14:30","duration_min":90,"category":"school"},
+                {"id":"spanish-session","assignment_id":"spanish","title":"Spanish quiz prep","kind":"flexible","days":[0],"start":"16:00","duration_min":45,"category":"study"},
+                {"id":"soccer","title":"Soccer practice","kind":"locked","days":[0],"start":"17:00","duration_min":120,"category":"sports"}
+            ]),
+        );
+        serde_json::from_str(&week.today("2026-10-12".into(), 14 * 60 + 10).unwrap()).unwrap()
+    }
+
+    /// The phone's Kotlin tests for the home-screen widget parse real output: this file is it. Run with
+    /// FLEXWEEK_WRITE_PHONE_FIXTURES=1 to write it after a deliberate change; otherwise the output must
+    /// equal the file, and the Android test copy must equal it byte for byte.
+    #[test]
+    fn phone_fixture_today_up_next_matches_the_output_and_the_android_copy() {
+        let result = monday_up_next("up-next-fixture");
+        // The values below are typed from picture 9 A, not copied from the output.
+        assert_eq!(result["now"]["kind"], "up_next");
+        assert_eq!(result["now"]["title"], "Algebra set 4");
+        assert_eq!(result["now"]["minutes_left"], 20);
+        assert_eq!(result["now"]["start"], "14:30");
+        assert_eq!(result["now"]["end"], "16:00");
+        let rows = result["rows"].as_array().unwrap();
+        assert_eq!(rows.len(), 3, "the day has three rows: {rows:?}");
+        let expected = [
+            ("Algebra set 4", "14:30", "16:00", 90, false),
+            ("Spanish quiz prep", "16:00", "16:45", 45, true),
+            ("Soccer practice", "17:00", "19:00", 120, false),
+        ];
+        for (row, (title, start, end, minutes, homework)) in rows.iter().zip(expected) {
+            assert_eq!(row["title"], title);
+            assert_eq!(row["start"], start);
+            assert_eq!(row["end"], end);
+            assert_eq!(row["duration_min"], minutes);
+            assert_eq!(row["homework"], homework);
+            assert_eq!(row["done"], false);
+            assert_eq!(row["past"], false);
+        }
+        let text = format!("{}\n", serde_json::to_string_pretty(&result).unwrap());
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let fixture = root.join("tests/fixtures/phone/today-up-next.json");
+        let copy = root.join("../../android/app/src/test/resources/phone/today-up-next.json");
+        if std::env::var("FLEXWEEK_WRITE_PHONE_FIXTURES").as_deref() == Ok("1") {
+            for path in [&fixture, &copy] {
+                std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+                std::fs::write(path, &text).unwrap();
+            }
+        }
+        assert!(
+            fixture.exists(),
+            "the phone fixture today-up-next.json does not exist: write it with FLEXWEEK_WRITE_PHONE_FIXTURES=1"
+        );
+        let saved = std::fs::read_to_string(&fixture).unwrap();
+        assert_eq!(
+            saved, text,
+            "the output changed: rewrite the phone fixture and check the Kotlin tests"
+        );
+        assert!(
+            copy.exists(),
+            "the Android copy of today-up-next.json does not exist"
+        );
+        let android = std::fs::read_to_string(&copy).unwrap();
+        assert_eq!(
+            android, saved,
+            "the Android copy differs from the engine fixture"
+        );
     }
 }

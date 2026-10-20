@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="widget_background">#FF1A1D21</color>
+    <color name="widget_text">#FFE8EAED</color>
+    <color name="widget_muted">#FF9AA1AB</color>
+    <color name="widget_tick">#FF7FA8FF</color>
+</resources>

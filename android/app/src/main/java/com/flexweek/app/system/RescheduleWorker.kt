@@ -32,6 +32,7 @@ class RescheduleWorker(
                     true
                 },
         )
+        FocusRuntime.update(applicationContext, core.focusState())
         return Result.success()
     }
 }

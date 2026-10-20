@@ -1,0 +1,19 @@
+[package]
+name = "flexweek-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "flexweek-mcp"
+path = "src/main.rs"
+
+[dependencies]
+chrono = { version = "=0.4.45", default-features = false, features = ["clock", "std"] }
+flexweek-engine = { path = "../engine" }
+flexweek-store = { path = "../store" }
+rmcp = { version = "=3.5.1", default-features = false, features = ["server", "macros", "schemars", "transport-io"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1.0.145"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

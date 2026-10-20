@@ -1,0 +1,149 @@
+//! The kept session file, checked again on every call.
+//!
+//! A file other people can read is refused. The store's `session_user` is used
+//! as it is, so a live session is renewed the same way the desktop renews it.
+
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
+
+use flexweek_store::{StoreError, digest, open_connection, session_expired, session_user};
+use serde_json::Value;
+
+pub const PLEASE_SIGN_IN: &str = "Please sign in";
+pub const NOT_A_SESSION: &str = "That is not a FlexWeek session.";
+pub const SESSION_ENDED: &str = "Your session ended. Sign in again.";
+pub const READABLE_BY_OTHERS: &str = "This session file is readable by other people.";
+pub const ACCOUNT_CHANGED: &str = "Account changed. Please sign in again.";
+pub const STORAGE_BUSY: &str = "Storage is busy. Try again in a moment.";
+pub const STORAGE_UNAVAILABLE: &str =
+    "Storage unavailable. Your changes were not saved; retry shortly.";
+
+pub struct SignedIn {
+    pub user_id: i64,
+    pub username: String,
+    pub expires: i64,
+}
+
+/// The account for this call: the same one as at start, still signed in.
+pub fn for_call(
+    started_as: Option<i64>,
+    session_file: &Path,
+    database: &Path,
+    now: i64,
+) -> Result<SignedIn, String> {
+    match (started_as, resolve(session_file, database, now)) {
+        (Some(expected), Ok(account)) if account.user_id == expected => Ok(account),
+        (Some(_), Ok(_)) => Err(ACCOUNT_CHANGED.into()),
+        (_, Err(reason)) => Err(reason),
+        (None, Ok(_)) => Err(PLEASE_SIGN_IN.into()),
+    }
+}
+
+pub fn resolve(session_file: &Path, database: &Path, now: i64) -> Result<SignedIn, String> {
+    let token = read_token(session_file)?;
+    let conn = open_connection(database).map_err(storage_sentence)?;
+    let hash = digest(&token);
+    let found = session_user(&conn, &hash, now).map_err(storage_sentence)?;
+    let Some((user_id, username)) = found else {
+        let expired = session_expired(&conn, &hash, now).map_err(storage_sentence)?;
+        return Err(if expired {
+            SESSION_ENDED
+        } else {
+            PLEASE_SIGN_IN
+        }
+        .into());
+    };
+    let expires: i64 = conn
+        .query_row(
+            "SELECT expires FROM sessions WHERE token_hash = ?1",
+            [&hash],
+            |row| row.get(0),
+        )
+        .map_err(|error| storage_sentence(StoreError::from(error)))?;
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT")
+            .map_err(|error| storage_sentence(StoreError::from(error)))?;
+    }
+    Ok(SignedIn {
+        user_id,
+        username,
+        expires,
+    })
+}
+
+fn read_token(path: &Path) -> Result<String, String> {
+    let mut file = match File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(PLEASE_SIGN_IN.into());
+        }
+        Err(_) => return Err(STORAGE_UNAVAILABLE.into()),
+    };
+    ensure_owner_only(&file)?;
+    let mut text = String::new();
+    file.read_to_string(&mut text)
+        .map_err(|_| STORAGE_UNAVAILABLE.to_string())?;
+    let value: Value = serde_json::from_str(&text).map_err(|_| NOT_A_SESSION.to_string())?;
+    let token = value
+        .get("token")
+        .and_then(Value::as_str)
+        .ok_or_else(|| NOT_A_SESSION.to_string())?;
+    if !token_shape(token) {
+        return Err(NOT_A_SESSION.into());
+    }
+    Ok(token.to_string())
+}
+
+fn token_shape(token: &str) -> bool {
+    (20..=128).contains(&token.len())
+        && token
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
+}
+
+#[cfg(unix)]
+fn ensure_owner_only(file: &File) -> Result<(), String> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    let meta = file
+        .metadata()
+        .map_err(|_| STORAGE_UNAVAILABLE.to_string())?;
+    if meta.permissions().mode() & 0o077 != 0 {
+        return Err(READABLE_BY_OTHERS.into());
+    }
+    if meta.uid() != owner_uid() {
+        return Err(READABLE_BY_OTHERS.into());
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn owner_uid() -> u32 {
+    // The process owner. `libc` is not a direct dependency; `MetadataExt::uid`
+    // on `/proc/self` is the same id without adding one.
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata("/proc/self")
+        .map(|meta| meta.uid())
+        .unwrap_or(u32::MAX)
+}
+
+#[cfg(not(unix))]
+fn ensure_owner_only(_file: &File) -> Result<(), String> {
+    Err(crate::host::WINDOWS_REFUSAL.into())
+}
+
+pub fn storage_sentence(error: StoreError) -> String {
+    match error {
+        // SQLite's own text for SQLITE_BUSY (5) and SQLITE_LOCKED (6). The store
+        // does not re-export rusqlite, and this crate does not take it on.
+        StoreError::Sqlite(failure) => {
+            let text = failure.to_string();
+            if text == "database is locked" || text == "database table is locked" {
+                STORAGE_BUSY.into()
+            } else {
+                STORAGE_UNAVAILABLE.into()
+            }
+        }
+        _ => STORAGE_UNAVAILABLE.into(),
+    }
+}

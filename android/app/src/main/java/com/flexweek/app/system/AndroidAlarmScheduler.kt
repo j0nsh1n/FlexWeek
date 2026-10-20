@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import com.flexweek.app.system.widget.WidgetRefresh
 
 class AndroidAlarmScheduler(
     private val context: Context,
@@ -17,6 +18,7 @@ class AndroidAlarmScheduler(
         val pi = pendingIntent(key, "", "")
         alarmManager.cancel(pi)
         pi.cancel()
+        cancelLegacy(key)
         book.remove(key)
     }
 
@@ -33,6 +35,12 @@ class AndroidAlarmScheduler(
                 request.triggerAtMs,
                 pi,
             )
+        } else if (request.key == FocusRuntime.END_ALARM_KEY) {
+            alarmManager.setAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                request.triggerAtMs,
+                pi,
+            )
         } else {
             val windowStart = (request.triggerAtMs - ReminderRescheduler.WINDOW_EARLY_MS).coerceAtLeast(0L)
             alarmManager.setWindow(
@@ -42,7 +50,19 @@ class AndroidAlarmScheduler(
                 pi,
             )
         }
+        cancelLegacy(request.key)
         book.remember(request.key)
+    }
+
+    // 1.0.0 set its alarms with key.hashCode() as the request code. After an update those alarms are still
+    // pending and a new request code no longer reaches them, so they would fire beside the new ones. Each key
+    // that is scheduled or cancelled also cancels its old alarm, if one is left.
+    private fun cancelLegacy(key: String) {
+        val intent = Intent(context, ReminderReceiver::class.java)
+        val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_NO_CREATE
+        val legacy = PendingIntent.getBroadcast(context, key.hashCode(), intent, flags) ?: return
+        alarmManager.cancel(legacy)
+        legacy.cancel()
     }
 
     private fun pendingIntent(
@@ -51,14 +71,14 @@ class AndroidAlarmScheduler(
         body: String,
     ): PendingIntent {
         val intent =
-            Intent(context, ReminderReceiver::class.java).apply {
+            Intent(context, if (key == FocusRuntime.END_ALARM_KEY) FocusEndReceiver::class.java else ReminderReceiver::class.java).apply {
                 putExtra(ReminderReceiver.EXTRA_KEY, key)
                 putExtra(ReminderReceiver.EXTRA_TITLE, title)
                 putExtra(ReminderReceiver.EXTRA_BODY, body)
             }
         val flags =
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        return PendingIntent.getBroadcast(context, key.hashCode(), intent, flags)
+        return PendingIntent.getBroadcast(context, ReminderReceiver.reminderNotificationId(key), intent, flags)
     }
 }
 
@@ -118,7 +138,7 @@ fun rescheduleRemindersNow(
     val plan =
         ReminderRescheduler.plan(
             upcoming = upcoming,
-            currentlyScheduled = scheduler.scheduledKeys(),
+            currentlyScheduled = scheduler.scheduledKeys() - FocusRuntime.END_ALARM_KEY - WidgetRefresh.ALARM_KEY,
             nowMs = nowMs,
             exactOptIn = settings.optBoolean("exact_reminders", false),
             canScheduleExactAlarms = canScheduleExactAlarms,

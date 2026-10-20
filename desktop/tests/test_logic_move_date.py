@@ -19,6 +19,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.calendar import sunday_due
     from desktop.native.controller import NativeSession
     from desktop.server import LocalServer
+    from desktop.tests.blocks_helper import put_block
     from desktop.tests.logic_support import PASSWORD, fixed, settled, signed_in, titles, week_after
 
 
@@ -150,7 +151,7 @@ def test_date_problem_and_move_to_date_refuse_homework_past_due(
     session.save()
     settled(qapp, session)
     waiting = session.blocks[0]
-    assert session.place_session(waiting["id"], 2, 16 * 60) is True
+    assert session.hand_move(waiting["id"], -1, 2, 16 * 60, 17 * 60) is True
     session.save()
     settled(qapp, session)
     wednesday = date_for_day(session.week_start, 2)
@@ -182,7 +183,7 @@ def test_move_to_date_keeps_homework_pinned_on_the_new_week(qapp: QApplication, 
     session.save()
     settled(qapp, session)
     waiting = session.blocks[0]
-    assert session.place_session(waiting["id"], 0, 16 * 60) is True
+    put_block(session, waiting["id"], 0, 16 * 60, 17 * 60, pinned=True)
     session.save()
     settled(qapp, session)
     monday = date_for_day(first, 0)
@@ -417,7 +418,7 @@ def test_date_problem_judges_a_chip_when_its_week_is_not_loaded(
     session.save()
     settled(qapp, session)
     waiting = session.blocks[0]
-    assert session.place_session(waiting["id"], 2, 16 * 60) is True
+    assert session.hand_move(waiting["id"], -1, 2, 16 * 60, 17 * 60) is True
     session.save()
     settled(qapp, session)
     chip = next(block for block in session.blocks if block.get("assignment_id") == "essay")

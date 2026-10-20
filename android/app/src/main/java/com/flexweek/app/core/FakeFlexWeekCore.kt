@@ -18,6 +18,7 @@ class FakeFlexWeekCore : FlexWeekCore {
     private val noTime = DemoSchedule.defaultNoTime.toMutableList()
     private var leadMinutes = 10
     private var exactReminders = false
+    private var savedFocus: JSONObject? = null
     private val syncState = AtomicReference(SyncState.SYNCED)
     private var lastSyncLabel = "Synced 2 min ago"
     private var lastSyncAt = "3:12 PM"
@@ -382,11 +383,12 @@ class FakeFlexWeekCore : FlexWeekCore {
             )
             noTime.removeAll { it.id == chipId }
         }
-        lastPlanNewIds = planPreviewPlacedIds.toSet()
+        val placedIds = planPreviewPlacedIds.toList()
+        lastPlanNewIds = placedIds.toSet()
         planPreviewId = null
         planPreviewPlacedIds = emptyList()
         planPreviewChipIds = emptyList()
-        return jsonString { put("ok", true) }
+        return jsonString { put("ok", true); put("placed_ids", JSONArray(placedIds)) }
     }
 
     override fun runningLate(dayIndex: Int, minutes: Int, opId: String): String {
@@ -396,15 +398,9 @@ class FakeFlexWeekCore : FlexWeekCore {
         moves.put(
             jsonObject {
                 put("title", "History essay")
-                put("detail", "7–8 PM → 7:30–8:30 PM")
+                put("detail", "moves from 7 PM")
+                put("duration_min", 60)
                 put("why", "Soccer runs 30 min over, so the essay starts after it ends.")
-            },
-        )
-        moves.put(
-            jsonObject {
-                put("title", "Soccer")
-                put("detail", "stays")
-                put("why", "Fixed time. It is not moved, only finished later.")
             },
         )
         return jsonString {
@@ -412,6 +408,9 @@ class FakeFlexWeekCore : FlexWeekCore {
             put("preview_id", previewId)
             put("minutes", minutes)
             put("moves", moves)
+            put("current", jsonObject { put("title", "History essay"); put("end", "19:30") })
+            put("stays", JSONArray().put(jsonObject { put("title", "Soccer") }))
+            put("warning", "History essay is pushed past Soccer.")
         }
     }
 
@@ -460,6 +459,29 @@ class FakeFlexWeekCore : FlexWeekCore {
         }
     }
 
+    override fun weekRows(weekStart: String): String {
+        val heavyThresholdMinutes = 180
+        val days = JSONArray()
+        for (day in 0..6) {
+            val homework = blocks.filter { it.dayIndex == day && it.homework }.sortedBy { it.startMinute }
+            val names = blocks.filter { it.dayIndex == day && it.category != "school" }
+                .sortedBy { it.startMinute }.map { it.title }.toMutableList()
+            names.addAll(noTime.filter { it.dueDayIndex == day }.map { "${it.title} due" })
+            if (names.isEmpty() && blocks.any { it.dayIndex == day && it.category == "school" }) names.add("School only")
+            days.put(jsonObject {
+                put("day", day)
+                put("date", java.time.LocalDate.parse(weekStart).plusDays(day.toLong()).toString())
+                put("names", JSONArray(names))
+                put("minutes", homework.sumOf { it.lengthMinutes })
+                put("heavy", homework.sumOf { it.lengthMinutes } > heavyThresholdMinutes)
+                put("unplaced", JSONArray(noTime.filter { it.dueDayIndex == day }.map { it.title }))
+                put("last_class_end", blocks.filter { it.dayIndex == day && it.category == "school" }
+                    .maxOfOrNull { it.startMinute + it.lengthMinutes })
+            })
+        }
+        return jsonString { put("week_start", weekStart); put("days", days) }
+    }
+
     override fun setLeadMinutes(minutes: Int) {
         leadMinutes = minutes
     }
@@ -489,6 +511,7 @@ class FakeFlexWeekCore : FlexWeekCore {
                     if (done) " · finished" else "",
             )
             put("homework", block.homework)
+            if (block.homework) put("assignment_id", block.id)
             put("done", done)
             put("past", past)
         }
@@ -528,6 +551,7 @@ class FakeFlexWeekCore : FlexWeekCore {
                     DemoSchedule.formatLength(block.lengthMinutes),
             )
             put("homework", block.homework)
+            if (block.homework) put("assignment_id", block.id)
             put("show_finish_focus", block.homework)
             put("show_running_late", hwLeft)
             if (next != null) {
@@ -540,6 +564,41 @@ class FakeFlexWeekCore : FlexWeekCore {
     private fun isoForDay(dayIndex: Int): String {
         val day = DemoSchedule.dayDates[dayIndex]
         return "2025-10-${day.toString().padStart(2, '0')}"
+    }
+
+    override fun focusState(): String = savedFocus?.toString() ?: "null"
+
+    override fun focusBegin(assignmentId: String, replace: Boolean): String {
+        val current = savedFocus
+        if (current?.optBoolean("running") == true && !replace) {
+            return JSONObject().put("kind", "needs_replace").put("current", current.optString("title"))
+                .put("incoming", blocks.firstOrNull { it.id == assignmentId }?.title ?: "Homework").toString()
+        }
+        val title = blocks.firstOrNull { it.id == assignmentId }?.title ?: "Homework"
+        val endsAt = System.currentTimeMillis() + 30 * 60_000L
+        savedFocus = JSONObject().put("assignmentId", assignmentId).put("title", title).put("phase", "work")
+            .put("running", true).put("endsAt", endsAt).put("remainingMs", 30 * 60_000L).put("workMin", 30)
+            .put("sessionId", "demo-focus")
+        return JSONObject().put("kind", "started").toString()
+    }
+
+    override fun focusPause(): String {
+        val state = savedFocus ?: return "{}"
+        val running = state.optBoolean("running")
+        if (running) state.put("remainingMs", (state.optLong("endsAt") - System.currentTimeMillis()).coerceAtLeast(0))
+        else state.put("endsAt", System.currentTimeMillis() + state.optLong("remainingMs"))
+        state.put("running", !running)
+        return JSONObject().put("state", state).put("persist", state).toString()
+    }
+
+    override fun focusFinish(): String { savedFocus = null; return "{\"state\":null}" }
+
+    override fun focusComplete(): String = focusFinish()
+
+    override fun focusAdvance(completed: Boolean): String {
+        if (completed) savedFocus = null
+        val state = savedFocus ?: JSONObject.NULL
+        return JSONObject().put("state", state).put("persist", state).toString()
     }
 
     private fun reminderKey(block: DemoSchedule.Block): String {

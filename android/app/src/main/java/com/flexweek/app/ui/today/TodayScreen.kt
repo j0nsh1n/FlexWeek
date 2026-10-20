@@ -28,6 +28,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -41,8 +48,20 @@ import androidx.compose.ui.unit.dp
 import com.flexweek.app.model.AgendaRow
 import com.flexweek.app.model.DayChip
 import com.flexweek.app.model.TodayUiState
+import com.flexweek.app.model.FocusUiState
+import com.flexweek.app.model.FocusJson
+import com.flexweek.app.model.FocusSheetText
 import com.flexweek.app.ui.components.SyncLineBar
 import com.flexweek.app.ui.theme.categoryColor
+
+data class NowRowActions(
+    val finishHomework: Boolean,
+    val startFocus: Boolean,
+    val runningLate: Boolean,
+)
+
+fun nowRowActions(row: AgendaRow.Now, lateEnabled: Boolean): NowRowActions =
+    NowRowActions(row.showFinishFocus, row.showFinishFocus, row.showRunningLate && lateEnabled)
 
 @Composable
 fun TodayScreen(
@@ -53,11 +72,33 @@ fun TodayScreen(
     onUndo: () -> Unit,
     onDismissSnack: () -> Unit,
     onFinishHomework: (String) -> Unit = onToggleHomework,
-    onStartFocus: () -> Unit = {},
+    onStartFocus: (String) -> Unit = {},
     onRunningLate: () -> Unit = {},
+    focusState: FocusUiState? = null,
+    onPauseFocus: () -> Unit = {},
+    onCompleteFocus: () -> Unit = {},
+    onFinishFocus: () -> Unit = {},
+    replacePrompt: Pair<String, String>? = null,
+    onKeepFocus: () -> Unit = {},
+    onReplaceFocus: () -> Unit = {},
+    finishPrompt: FocusUiState? = null,
+    onKeepGoing: () -> Unit = {},
+    onEndSession: () -> Unit = {},
+    lateEnabled: Boolean = false,
     v2Extras: TodayV2Extras? = null,
 ) {
     Box(Modifier.fillMaxSize()) {
+        var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+        LaunchedEffect(focusState?.endsAt, focusState?.running) {
+            while (focusState?.running == true) {
+                nowMs = System.currentTimeMillis()
+                if (focusState.remaining(nowMs) == 0L) {
+                    onCompleteFocus()
+                    break
+                }
+                delay(1000)
+            }
+        }
         Column(Modifier.fillMaxSize()) {
             Column(Modifier.padding(horizontal = 16.dp)) {
                 Text(state.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(vertical = 8.dp))
@@ -70,6 +111,7 @@ fun TodayScreen(
                     .padding(horizontal = 16.dp),
             ) {
                 DayChipRow(state.days, onSelectDay)
+                focusState?.let { FocusTimerCard(it, nowMs, onPauseFocus, onFinishFocus) }
                 state.daySubtitle?.let { sub ->
                     Row(
                         Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -84,15 +126,20 @@ fun TodayScreen(
                         }
                     }
                 }
-                state.rows.forEach { row ->
+                if (focusState != null) {
+                    Text("After this", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
+                }
+                state.rows.filterNot { it is AgendaRow.Now && focusState?.assignmentId == it.assignmentId }.forEach { row ->
                     when (row) {
                         is AgendaRow.Item -> AgendaItemRow(row, onToggleHomework)
                         is AgendaRow.Now ->
                             NowRow(
                                 row,
                                 onFinishHomework,
-                                onStartFocus,
+                                { row.assignmentId?.let(onStartFocus) },
                                 onRunningLate,
+                                lateEnabled,
                             )
                         AgendaRow.NothingLeft ->
                             Surface(
@@ -135,6 +182,24 @@ fun TodayScreen(
                 onUndo,
                 onDismissSnack,
                 modifier = Modifier.align(Alignment.BottomCenter),
+            )
+        }
+        replacePrompt?.let { (current, incoming) ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = onKeepFocus,
+                title = { Text(FocusSheetText.replaceTitle) },
+                text = { Text(FocusJson.replaceText(current, incoming)) },
+                confirmButton = { TextButton(onClick = onKeepFocus) { Text(FocusSheetText.keepCurrent) } },
+                dismissButton = { TextButton(onClick = onReplaceFocus) { Text(FocusSheetText.replace) } },
+            )
+        }
+        finishPrompt?.let { focus ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = onKeepGoing,
+                title = { Text(FocusSheetText.finishTitle) },
+                text = { Text(FocusJson.finishText(((focus.workMin * 60_000L - focus.remaining(nowMs)) / 60_000L).toInt().coerceAtLeast(0), focus.title)) },
+                confirmButton = { TextButton(onClick = onKeepGoing) { Text(FocusSheetText.keepGoing) } },
+                dismissButton = { TextButton(onClick = onEndSession) { Text(FocusSheetText.endSession) } },
             )
         }
     }
@@ -269,6 +334,7 @@ private fun NowRow(
     onFinishHomework: (String) -> Unit,
     onStartFocus: () -> Unit,
     onRunningLate: () -> Unit,
+    lateEnabled: Boolean,
 ) {
     Row(
         modifier =
@@ -309,20 +375,46 @@ private fun NowRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            val acts = row.showFinishFocus || row.showRunningLate
+            val actions = nowRowActions(row, lateEnabled)
+            val acts = actions.finishHomework || actions.startFocus || actions.runningLate
             if (acts) {
                 Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (row.showFinishFocus) {
+                    if (actions.finishHomework) {
                         Button(onClick = { onFinishHomework(row.id) }, modifier = Modifier.weight(1f).height(48.dp)) {
                             Text("Homework finished")
                         }
-                        Button(onClick = onStartFocus, modifier = Modifier.weight(1f).height(48.dp)) { Text("Start focus") }
+                        if (actions.startFocus) {
+                            Button(onClick = onStartFocus, modifier = Modifier.weight(1f).height(48.dp)) { Text("Start focus") }
+                        }
                     }
-                    if (row.showRunningLate) {
+                    if (actions.runningLate) {
                         FilledTonalButton(onClick = onRunningLate, modifier = Modifier.height(48.dp)) {
                             Text("Running late")
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FocusTimerCard(state: FocusUiState, nowMs: Long, onPause: () -> Unit, onFinish: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)),
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Box(Modifier.size(72.dp).border(4.dp, MaterialTheme.colorScheme.primary, CircleShape), contentAlignment = Alignment.Center) {
+                Text(FocusJson.countdown(state.remaining(nowMs)), fontWeight = FontWeight.Bold)
+            }
+            Column(Modifier.weight(1f)) {
+                Text("FOCUS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(state.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row {
+                    TextButton(onClick = onPause) { Text(if (state.running) "Pause" else "Resume") }
+                    TextButton(onClick = onFinish) { Text("Finish") }
                 }
             }
         }

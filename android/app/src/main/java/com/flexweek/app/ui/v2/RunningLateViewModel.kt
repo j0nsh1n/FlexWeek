@@ -22,6 +22,10 @@ class RunningLateViewModel(
     var preview by mutableStateOf<RunningLatePreview?>(null)
         private set
 
+    /** The core's own words when it cannot preview, shown in the sheet instead of nothing. */
+    var error by mutableStateOf<String?>(null)
+        private set
+
     init {
         loadPreview()
     }
@@ -36,11 +40,16 @@ class RunningLateViewModel(
         val root = JSONObject(raw)
         if (root.optBoolean("ok", false)) {
             preview = V2Json.parseRunningLate(raw)
+            error = null
+        } else {
+            preview = null
+            error = root.optString("error").ifBlank { "Running late could not look at your day." }
         }
     }
 
     fun cancel() {
         preview = null
+        error = null
         onDismiss()
     }
 

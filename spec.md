@@ -642,6 +642,12 @@ nothing loops.
   - `engine/store`. SQLite: schema, start-up migrations, transactions, password
     hashing, sessions and throttling. The only code that opens the database.
   - `engine/py`. The `flexweek_engine` module that Python imports.
+  - `engine/mcp`. The `flexweek-mcp` binary (from 1.1): a Model Context
+    Protocol server over stdio, built on the Rust SDK `rmcp` (pinned
+    `=3.5.1`), that lets an assistant the student runs on this computer read
+    and change the signed-in account's schedule. It holds no rules: every tool
+    calls the engine, the store or `engine/ffi`. It opens the database file,
+    not the HTTP API, and listens on no port.
   - `backend/solver.py`. Adapter to the engine's synchronous CSP placement. No
     HTTP knowledge.
   - `backend/explain.py`. Adapter: reason code and slack status to English string.
@@ -670,14 +676,23 @@ nothing loops.
   is no duplicate date math.
 - External APIs/services: the public relay run by n0 (iroh), used only after a
   phone is paired and only when it cannot be reached on the same Wi-Fi. It sees
-  that two devices are talking, not what they send. No OAuth, no calendar sync,
-  no LLM at runtime.
+  that two devices are talking, not what they send. GitHub Releases
+  (`github.com/j0nsh1n/FlexWeek`): the desktop app, and the phone app from 1.1,
+  ask for the latest release at most once a day (the student can turn it off, or
+  press Check now) and download it only when the student presses the button.
+  GitHub sees the request, nothing from the student's week. No OAuth, no
+  calendar sync, no LLM at runtime: FlexWeek contains no language model and
+  contacts none. An assistant the student runs on their own computer may start
+  `flexweek-mcp` and call it; FlexWeek never calls the assistant.
 - Android: the phone app, package `com.flexweek.app`, minimum Android 8.0
   (minSdk 26), target and compile SDK 36, for arm64-v8a and x86_64. Release
   builds show today's agenda, reminders, pairing and settings; adding homework,
   Plan, Running late and the week are in debug builds only
   (`BuildConfig.V2_ENABLED`). The APK is built and signed on the maintainer's
-  machine with a keystore kept outside the repo; CI does not build it.
+  machine with a keystore kept outside the repo; CI does not build it. From
+  1.1 the app updates itself from GitHub Releases: it checks the download's
+  `.sha256`, its package name, version and signing key, then hands it to
+  Android's installer.
 - Deployment: the desktop client is the product; there is no web client. The
   Windows and Linux builds are PySide6 Qt widgets that run the FastAPI backend
   in-process on a loopback port, so they need no separate server and no Python
@@ -715,6 +730,14 @@ nothing loops.
   that user can read, in the app's data folder. It is kept once a new account's
   recovery codes are acknowledged, replaced when the password changes, and
   removed by Log out, account deletion, or the server ending the session.
+- The MCP server (`flexweek-mcp`) acts as the account kept signed in on this
+  computer. It reads the kept session file, refuses a file readable by anyone
+  but its owner, checks the session in the database on every call and refuses
+  an expired or ended one. It is given no password. It cannot change the
+  password, read or replace recovery codes, delete the account, export or
+  import an account, pair or remove a phone, or change preferences, and it
+  never returns a session token, a password hash or a recovery-code hash. It
+  listens on no port and logs only tool names and outcomes.
 - Device sync keeps a private key on this computer, in a file with mode 0600
   in `sync/` beside the database; a file readable by others is refused. Its
   public part is the device's identity. Traffic between paired devices is
@@ -816,8 +839,12 @@ The commands it runs, each of which must exit 0:
 - The engine in `engine/` (Rust approved for it on 2026-09-30) has its own
   checks, run from `engine/`, each of which must exit 0: `cargo fmt --check`,
   `cargo clippy --workspace -- -D warnings` and `cargo test --workspace`.
-  The workspace includes the sync crate (`engine/sync`) and the Android
-  bindings (`engine/ffi`).
+  The workspace includes the sync crate (`engine/sync`), the Android
+  bindings (`engine/ffi`) and the MCP server (`engine/mcp`, approved
+  2026-10-19). The MCP server's tests start the built `flexweek-mcp` over
+  stdio against a temporary database made by the store and check each tool,
+  the session rules, that a retried write lands once and that a write
+  reaches the sync ledger.
 - Android (approved for 1.0.0): from `android/`, `./gradlew testDebugUnitTest`
   must exit 0. It needs the JDK and Android SDK on the machine.
   The Python suites need the module built into the checkout's `.venv` first,
@@ -841,6 +868,36 @@ not pile up again.
   approves the list. A branch with work that is not in `main` is never deleted
   without his word, and worktree records made from Windows are not pruned from
   Linux.
+
+### Resources
+The numbers the Machine Resources rules in AGENTS.md use for this project.
+- Test queue: `fwtest`. Every desktop suite, gate, mutation run and rig goes
+  through it, because they share `~/.qttest` and the hidden KWin session. Cargo
+  and Gradle runs share neither, so they skip it but keep the caps below.
+- Workers: the gate's default of 8, never more (14 broke the animation-timing
+  tests). A whole gate peaked at about 9.4 GB of memory.
+- Caps for heavy jobs: `systemd-run --user -p MemoryMax=10G -p CPUQuota=800%`
+  for a gate, 6 GB for a video export; long gates run as their own
+  `systemd-run` unit so a harness restart does not kill them.
+- Watcher: until `fwtest` has one, check `free` and the load before a heavy job
+  and keep watching while it runs; warn below 6 GB available or when swap
+  climbs, stop the job below 3 GB.
+- Runs only in CI: CodeQL, the Windows and Linux packaging and installer checks
+  (`release-windows.yml`). The rig runs in CI too, but not in the local gate,
+  so run `fwtest rig` before pushing UI changes.
+- Scratch folder: `~/.flexweek-ui-harness/scratch`.
+- Silent switch for tests: `FLEXWEEK_SILENT=1`.
+- Names `fwtest` watches for (do not reuse for helpers): `mutate.py`,
+  `verify.py`, `drive.py`.
+- Review limits: CodeRabbit skips pull requests over 100 files and needs a
+  "@coderabbitai review" comment on this repo.
+- After an engine change, rebuild the engine in the venv the desktop tests use
+  (`maturin develop --release --manifest-path engine/py/Cargo.toml --features
+  audit`), or they test the old one.
+- The Windows git checkouts (`D:/` worktrees) touch this repo: never prune them
+  from Linux, and leave Windows' line-ending noise alone.
+- Android release key: `~/.config/flexweek-android/`, outside the repo and
+  backed up; every APK is signed with it.
 
 ## Acceptance Criteria
 - [ ] Only-locked week solves to an identity schedule with 0 moves (T1).

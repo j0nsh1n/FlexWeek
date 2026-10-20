@@ -134,14 +134,15 @@ internal object RustPhoneJson {
         val lines = JSONArray()
         for (i in 0 until placed.length()) {
             val block = placed.getJSONObject(i)
+            val day = block.getJSONArray("days").getInt(0)
             lines.put(JSONObject().put("title", block.getString("title"))
                 .put("detail", "${block.optString("start")} · ${block.optInt("duration_min")} min")
-                .put("right", "Placed"))
+                .put("right", TimeLabel.dayAndTime(day, block.getString("start"))))
         }
         for (i in 0 until waiting.length()) {
             val block = waiting.getJSONObject(i)
             lines.put(JSONObject().put("title", block.getString("title"))
-                .put("right", "No time yet").put("why", block.optString("reason", "No free time.")))
+                .put("right", "No time yet").put("why", block.optString("why").ifBlank { null }))
         }
         return root.put("ok", true).put("preview_id", root.getString("applied_preview"))
             .put("summary", "Placed ${placed.length()} of ${placed.length() + waiting.length()}")
@@ -150,12 +151,6 @@ internal object RustPhoneJson {
 
     fun late(raw: String, minutes: Int): String {
         val root = JSONObject(raw)
-        val moves = root.getJSONArray("moves")
-        for (i in 0 until moves.length()) {
-            val move = moves.getJSONObject(i)
-            move.put("detail", move.optString("detail", "Time moved"))
-            move.put("why", move.optString("why", "Running late"))
-        }
         return root.put("ok", true).put("preview_id", root.getString("applied_preview"))
             .put("minutes", minutes).toString()
     }

@@ -29,7 +29,7 @@ def test_a_long_title_never_pushes_the_rails_rows_past_its_edge(qapp, window) ->
     session.save()
     wait_until(qapp, lambda: not session.busy and not session.dirty)
     block = next(item["id"] for item in session.blocks if item.get("assignment_id") == "rail-work")
-    session.place_session(block, 3, 16 * 60)
+    session.hand_move(block, -1, 3, 16 * 60, 17 * 60)
     session.save()
     wait_until(qapp, lambda: not session.busy and not session.dirty)
     for _ in range(5):

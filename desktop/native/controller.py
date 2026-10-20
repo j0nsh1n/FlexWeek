@@ -12,18 +12,17 @@ from uuid import uuid4
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from backend.models import Assignment, ProtectedWindow, TimeBlock, WorkWindow, parse_due
-from backend.slots import DAY_END_MIN, DAY_START_MIN, hhmm_to_minutes, minutes_to_hhmm
+from backend.slots import hhmm_to_minutes
 from backend.weeks import current_week_start
 from desktop.native.calendar import (
     DAY_FULL,
-    SERIES_DRAG_MESSAGE,
     apply_block_edit,
-    apply_block_times,
     date_for_day,
     days_through,
     delete_occurrence,
     due_day_in_week,
     first_plannable_day,
+    hand_move,
     is_series,
     is_setup_block,
     local_stamp,
@@ -764,7 +763,8 @@ class NativeSession(QObject):
         # Kept only now. Kept at registration, quitting before this page would open the week at the
         # next launch and the recovery codes would never be shown again.
         self._keep_session()
-        self.load_week(current_week_start())
+        self.selected_day = self.today_iso()
+        self.load_week(monday_of(self.selected_day))
 
     def logout(self) -> None:
         # Forgotten first, so a sign-out that fails to reach the server still leaves nothing to resume.
@@ -1041,21 +1041,36 @@ class NativeSession(QObject):
         session.update(start=fixed_at["start"], days=[fixed_at["day"]], pinned=True)
         self.needs_time.pop(session["id"], None)
 
-    def apply_times(self, block_id: str, start_min: int, end_min: int, day: int | None = None) -> bool:
+    def judge_hand_move(self, block_id: str, from_day: int, day: int, start: int, end: int) -> dict:
+        """The hand-move rule's answer for letting `block_id` go here now, with nothing applied."""
+        clock = clock_parts(self.now_ms())
+        return hand_move(
+            self.blocks,
+            self.assignments,
+            block_id,
+            (self.week_start, clock["iso"], int(clock["minute"])),
+            (from_day, day, start, end),
+        )
+
+    def hand_move(self, block_id: str, from_day: int, day: int, start: int, end: int) -> bool:
+        """Let a block go where the student dropped or picked it, by the one rule the phone shares.
+        Homework moved this way is pinned, so no plan moves it back, and it is one Undo step."""
+        answer = self.judge_hand_move(block_id, from_day, day, start, end)
+        if not answer["moved"]:
+            self._say(answer["problem"])
+            return False
         block = next((item for item in self.blocks if item["id"] == block_id), None)
-        if block is None:
-            return False
-        if is_series(block):
-            self._say(SERIES_DRAG_MESSAGE.format(title=block["title"], count=len(block["days"])))
-            return False
-        updated = apply_block_times(block, start_min, end_min, day)
-        if updated is None:
-            return False
-        # Homework moved by hand is the student's own time, so no plan moves it again.
-        homework = updated.get("assignment_id") and updated.get("kind") == "flexible"
-        if homework and not updated.get("completed"):
-            updated["pinned"] = True
-        self.add_block(updated)
+        if block is not None and not block.get("start"):
+            label = "placing " + block["title"]
+        elif block is not None and is_series(block):
+            label = "moving " + block["title"] + " on one day"
+        elif block is not None:
+            label = "editing " + block["title"]
+        else:
+            label = None
+        self.blocks = answer["blocks"]
+        self.needs_time.pop(block_id, None)
+        self._touch(label, keep={answer["block_id"]})
         return True
 
     def set_setup_blocks(self, blocks: list[dict]) -> None:
@@ -1117,82 +1132,6 @@ class NativeSession(QObject):
         """Once the save now under way lands, spread this homework into sessions of `session_min` from
         `from_date` and add them, with no preview to answer: the editor already said what they would be."""
         self._spread_after_save = (assignment_id, session_min, from_date)
-
-    def place_session(
-        self, block_id: str, day: int, start_min: int, duration_min: int | None = None
-    ) -> bool:
-        """Give homework that needs a time the one the student chose, dragged or picked. It is pinned,
-        so no plan moves it, and it is one Undo step."""
-        block = next((item for item in self.blocks if item["id"] == block_id), None)
-        if block is None or block.get("kind") != "flexible" or block.get("completed"):
-            return False
-        placed = {**block, "start": minutes_to_hhmm(start_min), "days": [day], "pinned": True}
-        if duration_min is not None:
-            placed["duration_min"] = duration_min
-        self.blocks = [placed if item["id"] == block_id else item for item in self.blocks]
-        self.needs_time.pop(block_id, None)
-        self._touch("placing " + block["title"], keep={block_id})
-        return True
-
-    def move_occurrence(
-        self, block_id: str, from_day: int, to_day: int, start_min: int, end_min: int
-    ) -> bool:
-        """One day's copy of a block that repeats, moved on its own, as Daily Scheduler moves its
-        separate copies. The other days keep the series; this day becomes a block of its own."""
-        block = next((item for item in self.blocks if item["id"] == block_id), None)
-        if block is None or not is_series(block) or from_day not in block["days"]:
-            return False
-        if end_min <= start_min or start_min < DAY_START_MIN or end_min > DAY_END_MIN:
-            return False
-        before = {item["id"] for item in self.blocks}
-        moved = {**block, "start": minutes_to_hhmm(start_min), "duration_min": end_min - start_min}
-        blocks = apply_block_edit(self.blocks, moved, scope="occurrence", day=from_day)
-        made = next((item["id"] for item in blocks if item["id"] not in before), block_id)
-        self.blocks = [{**item, "days": [to_day]} if item["id"] == made else item for item in blocks]
-        self._touch("moving " + block["title"] + " on one day", keep={made})
-        return True
-
-    def span_drop_problem(
-        self, block_id: str, day: int, start: int, end: int, from_day: int = -1
-    ) -> str | None:
-        """Why a block cannot land here, including a start that is already past."""
-        block = next((item for item in self.blocks if item["id"] == block_id), None)
-        if block is not None and self._starts_in_the_past(block, day, start, from_day):
-            clock = clock_parts(self.now_ms())
-            return past_problem(
-                self.week_start, day, start, clock["iso"], int(clock["minute"])
-            )
-        if block is None:
-            return None
-        due = due_point(
-            (self.assignments.get(block.get("assignment_id") or "") or {}).get("due"),
-            self.week_start,
-        )
-        return span_problem(self.blocks, block_id, day, start, end, due)
-
-    def _starts_in_the_past(self, block: dict, day: int, start: int, from_day: int) -> bool:
-        """A new homework start before now, or a drop onto a different day already past. Finished
-        homework may sit in the past, and a drag that leaves the start where it was (the end moved)
-        is never refused for that. A fixed time that already sits on a day before today may still
-        change its start there: one day of School, after that day."""
-        if block.get("completed"):
-            return False
-        if from_day == day and block.get("start"):
-            try:
-                if hhmm_to_minutes(block["start"]) == start:
-                    return False
-            except ValueError:
-                pass
-        clock = clock_parts(self.now_ms())
-        if past_problem(self.week_start, day, start, clock["iso"], int(clock["minute"])) is None:
-            return False
-        if block.get("kind") == "locked" and from_day == day:
-            try:
-                on = date.fromisoformat(self.week_start) + timedelta(days=day)
-            except ValueError:
-                return True
-            return on >= date.fromisoformat(clock["iso"])
-        return True
 
     def _fixed_copy_rows(self, source: dict | None) -> list[dict] | None:
         if not source:

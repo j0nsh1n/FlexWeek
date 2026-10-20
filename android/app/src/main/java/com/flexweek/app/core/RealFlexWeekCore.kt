@@ -11,9 +11,13 @@ import org.json.JSONObject
 import java.security.SecureRandom
 import java.time.LocalDate
 import java.time.LocalDateTime
+import com.flexweek.app.model.DueDate
 import java.util.concurrent.ConcurrentHashMap
 
+private const val UNREADABLE = "FlexWeek could not read its own answer. Nothing was changed."
+
 class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> Unit) : FlexWeekCore {
+    private val appContext = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
     private val localSettings = context.getSharedPreferences("phone-settings", Context.MODE_PRIVATE)
     private lateinit var native: FlexWeek
@@ -30,6 +34,17 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
 
     override fun open(dbPath: String, deviceName: String) {
         native = FlexWeek.open(dbPath, deviceName, host)
+        val saved = localSettings.getString("focus-state", "null") ?: "null"
+        if (saved != "null") {
+            if (!isPaired()) localSettings.edit().remove("focus-state").apply()
+            else {
+                val restored = JSONObject(native.focusRestore(saved))
+                val persisted = restored.opt("persist")
+                if (persisted == null || persisted == JSONObject.NULL) localSettings.edit().remove("focus-state").apply()
+                else localSettings.edit().putString("focus-state", persisted.toString()).apply()
+            }
+        }
+        com.flexweek.app.system.FocusRuntime.update(appContext, focusState())
     }
 
     override fun engineVersion(): String = native.engineVersion()
@@ -99,22 +114,23 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
         JSONObject(call()).put("ok", true).toString()
     } catch (error: FfiException) {
         JSONObject().put("ok", false).put("error", error.message).toString()
+    } catch (error: org.json.JSONException) {
+        // An answer the phone cannot read once crashed the app as soon as Running late opened.
+        JSONObject().put("ok", false).put("error", UNREADABLE).toString()
     }
 
-    override fun saveHomework(draftJson: String, opId: String): String = result {
+    override fun saveHomework(draftJson: String, opId: String): String {
         val draft = JSONObject(draftJson)
-        // The existing sheet supplies a month/day label; resolve it in the current year.
-        val due = draft.getString("due")
-        if (!due.matches(Regex("\\d{4}-\\d{2}-\\d{2}T.*"))) {
-            val parsed = java.time.MonthDay.parse(due.substringAfter(' '),
-                java.time.format.DateTimeFormatter.ofPattern("d MMM", java.util.Locale.ENGLISH))
-            var date = parsed.atYear(LocalDate.now().year)
-            if (date.isBefore(LocalDate.now())) date = date.plusYears(1)
-            draft.put("due", "${date}T23:59")
-        }
+        val due = DueDate.toDueText(LocalDate.parse(draft.getString("due").take(10)), LocalDate.now())
+            ?: return JSONObject().put("ok", false).put("error", DueDate.PAST_DAY).toString()
+        return saved(draft.put("due", due), opId)
+    }
+
+    private fun saved(draft: JSONObject, opId: String): String = result {
         draft.put("from_date", currentDate()).put("spread", if (draft.optString("sessions") == "one") "one" else "spread")
         native.saveHomework(draft.toString(), opId)
     }
+    override fun recentTitles(): List<String> = native.recentTitles()
     override fun planWeek(weekStart: String): String = result { RustPhoneJson.plan(native.planWeek(weekStart, 0.0)) }
     override fun acceptPlan(previewId: String, opId: String): String = result { native.acceptPlan(previewId) }
     override fun runningLate(dayIndex: Int, minutes: Int, opId: String): String = result {
@@ -122,4 +138,58 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
     }
     override fun acceptRunningLate(previewId: String, opId: String): String = acceptPlan(previewId, opId)
     override fun weekShape(weekStart: String): String = RustPhoneJson.week(native.weekShape(weekStart), currentDate())
+    override fun weekRows(weekStart: String): String = native.weekRows(weekStart)
+
+    override fun focusState(): String = localSettings.getString("focus-state", "null") ?: "null"
+
+    override fun focusBegin(assignmentId: String, replace: Boolean): String = result {
+        val answer = JSONObject(native.focusBegin(assignmentId, focusState(), replace))
+        if (answer.optString("kind") == "started") saveFocus(answer.getJSONObject("persist"))
+        answer.toString()
+    }
+
+    override fun focusPause(): String = result {
+        val saved = focusState()
+        val state = JSONObject(native.focusRestore(saved)).optJSONObject("state") ?: return@result "{\"state\":null}"
+        val answer = JSONObject(native.focusPause(state.toString()))
+        saveFocus(answer.getJSONObject("persist"))
+        com.flexweek.app.system.FocusRuntime.update(appContext, focusState())
+        answer.toString()
+    }
+
+    override fun focusFinish(): String = result {
+        val answer = native.focusFinish(focusState())
+        localSettings.edit().remove("focus-state").apply()
+        com.flexweek.app.system.FocusRuntime.update(appContext, "null")
+        answer
+    }
+
+    override fun focusComplete(): String {
+        // No saved timer is the text "null", which JSONObject() throws on, outside result's error wrapper.
+        val state = runCatching { JSONObject(focusState()) }.getOrNull() ?: return "{}"
+        if (state.isNull("assignmentId")) return "{}"
+        val id = state.getString("assignmentId")
+        val minutes = state.optInt("workMin", 30)
+        val operation = "focus-${state.optString("sessionId", "${id}-${state.optLong("endsAt")}")}"
+        return result {
+            val answer = JSONObject(native.creditFocus(id, minutes.toLong(), operation))
+            localSettings.edit().remove("focus-state").apply()
+            com.flexweek.app.system.FocusRuntime.update(appContext, "null")
+            answer.toString()
+        }
+    }
+
+    override fun focusAdvance(completed: Boolean): String = result {
+        val answer = JSONObject(native.focusAdvance(focusState(), completed))
+        val persisted = answer.opt("persist")
+        if (persisted == null || persisted == JSONObject.NULL) localSettings.edit().remove("focus-state").apply()
+        else localSettings.edit().putString("focus-state", persisted.toString()).apply()
+        com.flexweek.app.system.FocusRuntime.update(appContext, focusState())
+        answer.toString()
+    }
+
+    private fun saveFocus(value: JSONObject) {
+        localSettings.edit().putString("focus-state", value.toString()).apply()
+        com.flexweek.app.system.FocusRuntime.update(appContext, value.toString())
+    }
 }

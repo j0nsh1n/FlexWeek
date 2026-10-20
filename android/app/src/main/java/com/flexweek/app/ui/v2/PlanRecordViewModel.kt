@@ -12,7 +12,7 @@ import org.json.JSONObject
 
 class PlanRecordViewModel(
     private val core: FlexWeekCore,
-    private val onAccepted: () -> Unit,
+    private val onAccepted: (List<String>) -> Unit,
     private val onDismiss: () -> Unit,
 ) : ViewModel() {
     var record by mutableStateOf<PlanRecordState?>(null)
@@ -49,6 +49,7 @@ class PlanRecordViewModel(
             return
         }
         record = null
-        onAccepted()
+        val placedIds = JSONObject(raw).optJSONArray("placed_ids")
+        onAccepted(if (placedIds == null) emptyList() else List(placedIds.length()) { placedIds.getString(it) })
     }
 }

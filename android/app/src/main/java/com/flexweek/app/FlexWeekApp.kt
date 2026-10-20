@@ -9,6 +9,7 @@ import com.flexweek.app.core.FlexWeekCoreFactory
 import com.flexweek.app.core.openForPhone
 import com.flexweek.app.system.ReminderScheduler
 import com.flexweek.app.system.SyncScheduler
+import com.flexweek.app.system.widget.WidgetRuntime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -33,6 +34,7 @@ class FlexWeekApp : Application() {
         applicationScope.launch {
             try {
                 val opened = FlexWeekCoreFactory.create(this@FlexWeekApp) { scope ->
+                    WidgetRuntime.refreshAsync(this@FlexWeekApp)
                     if (scope == "sync" || scope == "phone_settings") {
                         ReminderScheduler.refreshAsync(this@FlexWeekApp)
                     } else {
@@ -46,6 +48,7 @@ class FlexWeekApp : Application() {
                     SyncScheduler.installPeriodic(this@FlexWeekApp)
                     SyncScheduler.requestExpeditedSync(this@FlexWeekApp)
                     ReminderScheduler.refreshAsync(this@FlexWeekApp)
+                    WidgetRuntime.refreshAsync(this@FlexWeekApp)
                 }
             } catch (error: Exception) {
                 withContext(Dispatchers.Main) {

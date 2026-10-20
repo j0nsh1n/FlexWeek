@@ -57,6 +57,8 @@ interface FlexWeekCore {
     /** v2 (S8): draft JSON with title, due, when, estimate_min, sessions. Returns ok or error text. */
     fun saveHomework(draftJson: String, opId: String): String
 
+    fun recentTitles(): List<String> = emptyList()
+
     /** v2: returns preview JSON (preview_id, placed, not_placed, …). */
     fun planWeek(weekStart: String): String
 
@@ -69,4 +71,18 @@ interface FlexWeekCore {
 
     /** v2: colour bars per day, no words. */
     fun weekShape(weekStart: String): String
+
+    fun weekRows(weekStart: String): String
+
+    fun focusBegin(assignmentId: String, replace: Boolean = false): String = "{\"kind\":\"unavailable\"}"
+
+    fun focusPause(): String = "{}"
+
+    fun focusFinish(): String = "{}"
+
+    fun focusState(): String = "null"
+
+    fun focusComplete(): String = "{}"
+
+    fun focusAdvance(completed: Boolean): String = "{}"
 }

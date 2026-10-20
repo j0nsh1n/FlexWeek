@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 
 use ::flexweek_engine::desk::{
-    calendar, clipboard, custom_look, files, focus, grid, planning, reuse, update,
+    calendar, clipboard, custom_look, files, focus, grid, hand_move, planning, reuse, update,
 };
 use ::flexweek_engine::{EngineError, EngineResult};
 use pyo3::exceptions::PyTypeError;
@@ -159,6 +159,38 @@ fn calendar_relocate(
         Ok(moved.map(|(source_out, dest_out, made)| {
             (array(source_out), dest_out.map(array), dump(&made))
         }))
+    })
+}
+
+/// A block let go at a new day and time: `clock` is (week start, local date, local minute) and
+/// `span` is (day it was dragged from, day it lands on, start minute, end minute).
+#[pyfunction]
+fn calendar_hand_move(
+    py: Python<'_>,
+    blocks: &str,
+    assignments: &str,
+    block_id: &str,
+    clock: (&str, &str, i64),
+    span: (i64, i64, i64, i64),
+) -> PyResult<String> {
+    let (blocks, assignments) = (parse(blocks)?, parse(assignments)?);
+    guard(|| {
+        let drop = hand_move::HandDrop {
+            block_id,
+            from_day: span.0,
+            to_day: span.1,
+            start_min: span.2,
+            end_min: span.3,
+        };
+        let clock = hand_move::WeekClock {
+            week_start: clock.0,
+            now_iso: clock.1,
+            now_min: clock.2,
+        };
+        let answer =
+            hand_move::hand_move(&blocks, &drop, &clock, &assignments, &mut || fresh_id(py))
+                .map_err(crate::raise)?;
+        Ok(dump(&answer.to_value()))
     })
 }
 
@@ -1417,6 +1449,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         calendar_delete,
         calendar_apply_edit,
         calendar_relocate,
+        calendar_hand_move,
         calendar_first_day,
         calendar_due_day,
         calendar_days_through,

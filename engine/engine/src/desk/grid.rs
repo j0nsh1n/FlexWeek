@@ -363,6 +363,14 @@ pub fn apply_block_edit(
     Ok(result)
 }
 
+/// Homework the student moves by hand stays where they put it: linked to an assignment, flexible
+/// and not finished. Nothing else is pinned by a hand move.
+pub fn linked_homework(block: &Value) -> EngineResult<bool> {
+    Ok(truthy(get(block, "assignment_id")?)
+        && eq(get(block, "kind")?.unwrap_or(null()), &json!("flexible"))
+        && !truthy(get(block, "completed")?))
+}
+
 pub fn relocate_block(
     source: &Value,
     block_id: &Value,
@@ -387,9 +395,7 @@ pub fn relocate_block(
     }
     let for_date = |item: &Value| -> EngineResult<Value> {
         let mut out = item.clone();
-        let linked = truthy(get(&out, "assignment_id")?)
-            && eq(get(&out, "kind")?.unwrap_or(null()), &json!("flexible"))
-            && !truthy(get(&out, "completed")?);
+        let linked = linked_homework(&out)?;
         let moved = eq(get(&out, "completed_day")?.unwrap_or(null()), from_day);
         let missed = {
             let list = list_field(&out, "missed_days")?;

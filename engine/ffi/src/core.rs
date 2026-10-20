@@ -18,6 +18,7 @@ pub(crate) struct Preview {
     pub blocks: Value,
     pub earlier: Vec<Value>,
     pub revision: i64,
+    pub placed_ids: Vec<String>,
 }
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -42,6 +43,17 @@ pub trait Host: Send + Sync {
     fn local_now(&self) -> String;
     fn random_bytes(&self, count: u32) -> Vec<u8>;
     fn data_changed(&self, scope: String);
+}
+
+/// Where a block was let go: the day it was dragged from and the day, start and end (minutes of the
+/// day) it landed on.
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct HandLanding {
+    pub block_id: String,
+    pub from_day: i64,
+    pub to_day: i64,
+    pub start_min: i64,
+    pub end_min: i64,
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
@@ -105,6 +117,44 @@ impl FlexWeek {
 
     pub fn today(&self, date: String, now_minute: i64) -> Result<String, FfiError> {
         crate::agenda::today(self, &date, now_minute)
+    }
+
+    pub fn focus_begin(
+        &self,
+        assignment_id: String,
+        saved: String,
+        replace: bool,
+    ) -> Result<String, FfiError> {
+        crate::focus::begin(self, &assignment_id, &saved, replace)
+    }
+
+    pub fn focus_pause(&self, state: String) -> Result<String, FfiError> {
+        crate::focus::pause(self, &state)
+    }
+
+    pub fn focus_finish(&self, state: String) -> Result<String, FfiError> {
+        crate::focus::finish(&state)
+    }
+
+    pub fn focus_restore(&self, saved: String) -> Result<String, FfiError> {
+        crate::focus::restore(self, &saved)
+    }
+
+    pub fn focus_advance(&self, state: String, completed: bool) -> Result<String, FfiError> {
+        crate::focus::advance(self, &state, completed)
+    }
+
+    pub fn focus_persist(&self, state: String) -> Result<String, FfiError> {
+        crate::focus::persist(&state)
+    }
+
+    pub fn credit_focus(
+        &self,
+        assignment_id: String,
+        work_min: i64,
+        op_id: String,
+    ) -> Result<String, FfiError> {
+        crate::focus::credit(self, &assignment_id, work_min, &op_id)
     }
 
     pub fn set_block_done(
@@ -212,6 +262,10 @@ impl FlexWeek {
         crate::homework::save_homework(self, &draft_json, &op_id)
     }
 
+    pub fn recent_titles(&self) -> Result<Vec<String>, FfiError> {
+        crate::homework::recent_titles(self)
+    }
+
     pub fn plan_week(&self, week_start: String, elapsed_ms: f64) -> Result<String, FfiError> {
         crate::plan_week::plan_week(self, &week_start, elapsed_ms)
     }
@@ -231,6 +285,26 @@ impl FlexWeek {
 
     pub fn week_shape(&self, week_start: String) -> Result<String, FfiError> {
         crate::week_shape::week_shape(self, &week_start)
+    }
+
+    pub fn week_rows(&self, week_start: String) -> Result<String, FfiError> {
+        crate::week_rows::week_rows(self, &week_start)
+    }
+
+    /// Move a block the student let go at `landing`. Returns JSON: `moved` with the block as saved,
+    /// or not moved with the `problem` in words.
+    pub fn hand_move(
+        &self,
+        week_start: String,
+        landing: HandLanding,
+        op_id: String,
+    ) -> Result<String, FfiError> {
+        crate::hand_move::hand_move(self, &week_start, &landing, &op_id)
+    }
+
+    /// The week's timed blocks, seven days Monday to Sunday, for the three-days-at-a-time Week.
+    pub fn week_blocks(&self, week_start: String) -> Result<String, FfiError> {
+        crate::hand_move::week_blocks(self, &week_start)
     }
 }
 

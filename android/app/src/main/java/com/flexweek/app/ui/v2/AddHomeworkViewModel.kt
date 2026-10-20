@@ -7,15 +7,23 @@ import androidx.lifecycle.ViewModel
 import com.flexweek.app.core.FlexWeekCore
 import com.flexweek.app.core.newOpId
 import com.flexweek.app.model.HomeworkDraft
+import com.flexweek.app.model.DueChips
 import com.flexweek.app.model.V2Json
 import org.json.JSONObject
+import java.time.LocalDate
 
 class AddHomeworkViewModel(
     private val core: FlexWeekCore,
     private val onSaved: (String) -> Unit,
 ) : ViewModel() {
+    // A nice-to-have row: if the core cannot list them, the sheet opens without it.
+    val recentTitles: List<String> = runCatching { core.recentTitles() }.getOrDefault(emptyList())
     var draft by mutableStateOf(HomeworkDraft())
         private set
+
+    init {
+        draft = draft.copy(due = DueChips.forToday(LocalDate.now()).first().date.toString())
+    }
 
     var stepProblem: String? by mutableStateOf(null)
         private set
@@ -24,6 +32,8 @@ class AddHomeworkViewModel(
         draft = draft.copy(title = value, tried = false)
         stepProblem = null
     }
+
+    fun onRecentTitle(value: String) = onTitleChange(value)
 
     fun onDuePick(value: String) {
         draft = draft.copy(due = value)

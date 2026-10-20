@@ -219,7 +219,9 @@ def test_a_narrower_row_narrows_the_card_in_front_so_both_neighbours_stay_whole(
 
 
 @pytest.mark.parametrize("wide", [False, True])
-@pytest.mark.parametrize(("width", "scale"), [(1280, 1.0), (1150, 1.2), (1024, 1.0), (900, 1.0), (1600, 1.0)])
+@pytest.mark.parametrize(
+    ("width", "scale"), [(1280, 1.0), (1150, 1.2), (1024, 1.0), (1024, 1.2), (900, 1.0), (1600, 1.0)]
+)
 def test_every_card_is_whole_in_the_row_or_wholly_past_its_ends(width: int, scale: float, wide: bool) -> None:
     """A card cut by the window's edge read as clipped, and on Day a neighbour's homework was a pink bar
     whose name lay past the edge. A card is seen whole or not at all."""

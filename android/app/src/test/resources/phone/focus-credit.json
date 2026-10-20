@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "assignment": {
+    "id": "history",
+    "title": "History essay",
+    "due": "2026-10-20T21:00",
+    "estimate_min": 60,
+    "focus_minutes": 30,
+    "focus_sessions": 1,
+    "completed": false
+  }
+}
