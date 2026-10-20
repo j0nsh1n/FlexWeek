@@ -310,7 +310,7 @@
  {
   "file": "desktop/native/window.py",
   "name": "a drag saves with no sign",
-  "old": "            self._say_when_saved(moved_words(block, origin, day, start, end))\n",
+  "old": "        self._say_when_saved(moved_words(block, origin, day, start, end))\n",
   "new": "",
   "test": "desktop/tests/test_drag_results.py::test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo"
  },
