@@ -140,6 +140,10 @@ impl FlexWeek {
         crate::focus::restore(self, &saved)
     }
 
+    pub fn focus_advance(&self, state: String, completed: bool) -> Result<String, FfiError> {
+        crate::focus::advance(self, &state, completed)
+    }
+
     pub fn focus_persist(&self, state: String) -> Result<String, FfiError> {
         crate::focus::persist(&state)
     }

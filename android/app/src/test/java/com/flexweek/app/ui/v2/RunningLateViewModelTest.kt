@@ -15,7 +15,8 @@ class RunningLateViewModelTest {
         var accepted = false
         val vm = RunningLateViewModel(core, onAccepted = { accepted = true }, onDismiss = {})
         assertNotNull(vm.preview)
-        assertEquals(2, vm.preview!!.moves.size)
+        assertEquals(1, vm.preview!!.moves.size)
+        assertEquals(listOf("Soccer"), vm.preview!!.stays)
         vm.accept()
         assertEquals(true, accepted)
     }

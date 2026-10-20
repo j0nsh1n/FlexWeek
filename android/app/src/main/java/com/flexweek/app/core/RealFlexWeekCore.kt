@@ -179,6 +179,15 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
         }
     }
 
+    override fun focusAdvance(completed: Boolean): String = result {
+        val answer = JSONObject(native.focusAdvance(focusState(), completed))
+        val persisted = answer.opt("persist")
+        if (persisted == null || persisted == JSONObject.NULL) localSettings.edit().remove("focus-state").apply()
+        else localSettings.edit().putString("focus-state", persisted.toString()).apply()
+        com.flexweek.app.system.FocusRuntime.update(appContext, focusState())
+        answer.toString()
+    }
+
     private fun saveFocus(value: JSONObject) {
         localSettings.edit().putString("focus-state", value.toString()).apply()
         com.flexweek.app.system.FocusRuntime.update(appContext, value.toString())

@@ -398,15 +398,9 @@ class FakeFlexWeekCore : FlexWeekCore {
         moves.put(
             jsonObject {
                 put("title", "History essay")
-                put("detail", "7–8 PM → 7:30–8:30 PM")
+                put("detail", "moves from 7 PM")
+                put("duration_min", 60)
                 put("why", "Soccer runs 30 min over, so the essay starts after it ends.")
-            },
-        )
-        moves.put(
-            jsonObject {
-                put("title", "Soccer")
-                put("detail", "stays")
-                put("why", "Fixed time. It is not moved, only finished later.")
             },
         )
         return jsonString {
@@ -414,6 +408,9 @@ class FakeFlexWeekCore : FlexWeekCore {
             put("preview_id", previewId)
             put("minutes", minutes)
             put("moves", moves)
+            put("current", jsonObject { put("title", "History essay"); put("end", "19:30") })
+            put("stays", JSONArray().put(jsonObject { put("title", "Soccer") }))
+            put("warning", "History essay is pushed past Soccer.")
         }
     }
 
@@ -597,6 +594,12 @@ class FakeFlexWeekCore : FlexWeekCore {
     override fun focusFinish(): String { savedFocus = null; return "{\"state\":null}" }
 
     override fun focusComplete(): String = focusFinish()
+
+    override fun focusAdvance(completed: Boolean): String {
+        if (completed) savedFocus = null
+        val state = savedFocus ?: JSONObject.NULL
+        return JSONObject().put("state", state).put("persist", state).toString()
+    }
 
     private fun reminderKey(block: DemoSchedule.Block): String {
         val start = "%02d:%02d".format(block.startMinute / 60, block.startMinute % 60)

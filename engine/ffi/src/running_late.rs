@@ -1,12 +1,14 @@
 use chrono::{Datelike, Timelike};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::account::{availability, clock, load_open_week, work_windows};
 use crate::core::{
-    FfiError, FlexWeek, Preview, db_lock, engine_failure, failure, hex_preview, require_user,
+    db_lock, engine_failure, failure, hex_preview, require_user, FfiError, FlexWeek, Preview,
 };
 
 const BUDGET_MS: f64 = flexweek_engine::solver::SOLVE_BUDGET_MS;
+const LATE_STEP_MIN: i64 = 5;
+const LATE_MAX_MIN: i64 = 60;
 
 pub(crate) fn running_late(
     week: &FlexWeek,
@@ -15,8 +17,8 @@ pub(crate) fn running_late(
     elapsed_ms: f64,
 ) -> Result<String, FfiError> {
     let user_id = require_user(week)?;
-    if ![15, 30, 60].contains(&minutes) {
-        return Err(failure("Choose 15, 30 or 60 minutes."));
+    if !(LATE_STEP_MIN..=LATE_MAX_MIN).contains(&minutes) || minutes % LATE_STEP_MIN != 0 {
+        return Err(failure("Choose 5 to 60 minutes, in steps of 5."));
     }
     if !(0..=6).contains(&day) {
         return Err(failure("day must be 0..6"));
@@ -144,6 +146,12 @@ pub(crate) fn running_late(
     );
     let moves = phone_moves(&trace_value, &settled, &assignments);
     let moved = moves.len();
+    let current = current_late_block(&timed, clock_min, &from_start, minutes);
+    let end_min =
+        flexweek_engine::time::hhmm_to_minutes(&current["end"].as_str().unwrap_or("00:00"))
+            .unwrap_or(0);
+    let stays = unchanged_fixed_blocks(&timed, &settled, end_min);
+    let warning = running_late_warning(&trace_value, &timed, &moves);
     Ok(json!({
         "week_start": week_start,
         "placed": settled.iter().filter(|block| {
@@ -151,11 +159,166 @@ pub(crate) fn running_late(
         }).cloned().collect::<Vec<_>>(),
         "not_placed": waiting,
         "moves": moves,
+        "current": current,
+        "stays": stays,
+        "warning": warning,
+        "minutes": minutes,
         "explanations": trace_value.get("explanations").cloned().unwrap_or(json!([])),
         "applied_preview": preview_id,
         "moved": moved,
     })
     .to_string())
+}
+
+fn current_late_block(blocks: &[Value], clock_min: i64, late_start: &str, minutes: i64) -> Value {
+    let active = blocks.iter().find(|block| {
+        if block.get("kind").and_then(Value::as_str) != Some("flexible") {
+            return false;
+        }
+        let Some(start) = block.get("start").and_then(Value::as_str) else {
+            return false;
+        };
+        let Ok(start) = flexweek_engine::time::hhmm_to_minutes(start) else {
+            return false;
+        };
+        let duration = block
+            .get("duration_min")
+            .and_then(Value::as_i64)
+            .unwrap_or(0);
+        start <= clock_min && clock_min < start + duration
+    });
+    let title = active
+        .and_then(|block| block.get("title").and_then(Value::as_str))
+        .unwrap_or("Running late");
+    let start_min = flexweek_engine::time::hhmm_to_minutes(late_start).unwrap_or(clock_min);
+    let end = flexweek_engine::time::minutes_to_hhmm(start_min + minutes);
+    json!({"title": title, "end": end, "minutes": minutes})
+}
+
+fn unchanged_fixed_blocks(before: &[Value], after: &[Value], after_min: i64) -> Vec<Value> {
+    let mut stays: Vec<Value> = before
+        .iter()
+        .filter(|block| block.get("kind").and_then(Value::as_str) == Some("locked"))
+        .filter(|block| {
+            block
+                .get("start")
+                .and_then(Value::as_str)
+                .and_then(|start| flexweek_engine::time::hhmm_to_minutes(start).ok())
+                .is_some_and(|start| start >= after_min)
+        })
+        .filter(|block| {
+            let id = block.get("id").and_then(Value::as_str);
+            after.iter().any(|placed| {
+                placed.get("id").and_then(Value::as_str) == id
+                    && placed.get("start") == block.get("start")
+                    && placed.get("days") == block.get("days")
+            })
+        })
+        .cloned()
+        .collect();
+    stays.sort_by_key(|block| {
+        block
+            .get("start")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string()
+    });
+    stays
+}
+
+fn running_late_warning(trace: &Value, before: &[Value], moves: &[Value]) -> Option<String> {
+    let candidates = moves.iter().filter_map(|movement| {
+        let id = movement.get("block_id")?.as_str()?;
+        let old_start = movement.get("from_start")?.as_str()?;
+        let new_start = movement.get("to_start")?.as_str()?;
+        let day = movement.get("to_day")?.as_i64()?;
+        let old_min = flexweek_engine::time::hhmm_to_minutes(old_start).ok()?;
+        let new_min = flexweek_engine::time::hhmm_to_minutes(new_start).ok()?;
+        let work = before
+            .iter()
+            .find(|block| block.get("id").and_then(Value::as_str) == Some(id))?;
+        let work_title = work
+            .get("title")
+            .and_then(Value::as_str)
+            .unwrap_or("Homework");
+        before
+            .iter()
+            .filter(|block| block.get("kind").and_then(Value::as_str) == Some("locked"))
+            .filter(|block| {
+                block
+                    .get("days")
+                    .and_then(Value::as_array)
+                    .is_some_and(|days| days.iter().any(|d| d.as_i64() == Some(day)))
+            })
+            .filter_map(|block| {
+                let fixed_start =
+                    flexweek_engine::time::hhmm_to_minutes(block.get("start")?.as_str()?).ok()?;
+                (fixed_start > old_min && new_min > fixed_start).then(|| {
+                    (
+                        fixed_start,
+                        work_title.to_string(),
+                        block
+                            .get("title")
+                            .and_then(Value::as_str)
+                            .unwrap_or("fixed time")
+                            .to_string(),
+                    )
+                })
+            })
+            .min_by_key(|candidate| candidate.0)
+    });
+    if let Some((_, work, fixed)) = candidates.min_by_key(|candidate| candidate.0) {
+        return Some(format!("{work} is pushed past {fixed}."));
+    }
+    let unplaced = trace.get("unplaced").and_then(Value::as_array)?;
+    let moves_trace = trace.get("moves").and_then(Value::as_array)?;
+    for block in unplaced {
+        let Some(id) = block.get("id").and_then(Value::as_str) else {
+            continue;
+        };
+        let locked_overlap = moves_trace.iter().any(|movement| {
+            movement.get("block_id").and_then(Value::as_str) == Some(id)
+                && movement.get("reason").and_then(Value::as_str) == Some("LOCKED_OVERLAP")
+        });
+        if !locked_overlap {
+            continue;
+        }
+        let work_title = block
+            .get("title")
+            .and_then(Value::as_str)
+            .unwrap_or("Homework");
+        let days = block.get("days").and_then(Value::as_array);
+        let Some(old_start) = before
+            .iter()
+            .find(|b| b.get("id").and_then(Value::as_str) == Some(id))
+            .and_then(|b| b.get("start"))
+            .and_then(Value::as_str)
+            .and_then(|s| flexweek_engine::time::hhmm_to_minutes(s).ok())
+        else {
+            continue;
+        };
+        if let Some((_, fixed)) = before
+            .iter()
+            .filter(|b| b.get("kind").and_then(Value::as_str) == Some("locked"))
+            .filter(|b| match (days, b.get("days").and_then(Value::as_array)) {
+                (Some(work_days), Some(fixed_days)) => {
+                    work_days.iter().any(|day| fixed_days.contains(day))
+                }
+                _ => false,
+            })
+            .filter_map(|b| {
+                Some((
+                    flexweek_engine::time::hhmm_to_minutes(b.get("start")?.as_str()?).ok()?,
+                    b.get("title")?.as_str()?.to_string(),
+                ))
+            })
+            .filter(|(start, _)| *start > old_start)
+            .min_by_key(|(start, _)| *start)
+        {
+            return Some(format!("{work_title} is pushed past {fixed}."));
+        }
+    }
+    None
 }
 
 /// The moves the phone lists: work with a time at both ends (a "move" with no time at one end is the
@@ -211,9 +374,36 @@ fn phone_moves(trace: &Value, blocks: &[Value], assignments: &Value) -> Vec<Valu
             let mut shown = item.clone();
             shown["title"] = json!(title_of(id));
             shown["why"] = json!(why);
+            if let Some(block) = blocks
+                .iter()
+                .find(|block| block.get("id").and_then(Value::as_str) == Some(id))
+            {
+                shown["duration_min"] = block.get("duration_min").cloned().unwrap_or(json!(0));
+            }
+            if let Some(start) = item.get("from_start").and_then(Value::as_str) {
+                shown["detail"] = json!(format!("moves from {}", clock_label(start)));
+            }
             shown
         })
         .collect()
+}
+
+fn clock_label(value: &str) -> String {
+    let Ok(minutes) = flexweek_engine::time::hhmm_to_minutes(value) else {
+        return value.to_string();
+    };
+    let hour = minutes / 60;
+    let minute = minutes % 60;
+    let suffix = if hour < 12 { "AM" } else { "PM" };
+    let display_hour = match hour % 12 {
+        0 => 12,
+        value => value,
+    };
+    if minute == 0 {
+        format!("{display_hour} {suffix}")
+    } else {
+        format!("{display_hour}:{minute:02} {suffix}")
+    }
 }
 
 #[cfg(test)]
@@ -265,6 +455,61 @@ mod tests {
             Some("History essay"),
             "a move names its block by the stored title"
         );
+    }
+
+    #[test]
+    fn picked_running_late_preview_names_the_current_move_warning_and_fixed_stay() {
+        let result = picked_late_thursday("late-picked-preview");
+        assert_eq!(
+            result["current"]["title"], "Algebra set 4",
+            "current block title comes from the active timed block"
+        );
+        assert_eq!(
+            result["current"]["end"], "16:30",
+            "30 minutes extends the current block to 4:30 PM"
+        );
+        let spanish = result["moves"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|movement| movement["title"] == "Spanish quiz prep")
+            .expect("Spanish quiz prep is moved");
+        assert_eq!(spanish["from_start"], "16:00", "the move starts from 4 PM");
+        assert_eq!(
+            spanish["duration_min"], 45,
+            "the move keeps its 45-minute duration"
+        );
+        assert_eq!(
+            result["stays"][0]["title"], "Soccer practice",
+            "the fixed activity remains in the preview"
+        );
+        assert_eq!(
+            result["warning"], "Spanish quiz prep is pushed past Soccer practice.",
+            "the warning names the homework and fixed conflict"
+        );
+    }
+
+    fn picked_late_thursday(name: &str) -> Value {
+        let (week, _) = open_at(name, "2026-10-08T16:05:00");
+        let db = week.db.lock().unwrap();
+        flexweek_store::insert_assignment(
+            &db,
+            week.user_id.unwrap(),
+            "spanish",
+            r#"{"id":"spanish","title":"Spanish quiz prep","due":"2026-10-08T21:00","estimate_min":45,"focus_minutes":0,"completed":false}"#,
+        )
+        .unwrap();
+        drop(db);
+        save_week(
+            &week,
+            "2026-10-05",
+            &json!([
+                {"id":"algebra","title":"Algebra set 4","kind":"flexible","days":[3],"start":"15:00","duration_min":90,"category":"assignments"},
+                {"id":"spanish-session","title":"Spanish quiz prep","kind":"flexible","days":[3],"start":"16:00","duration_min":45,"assignment_id":"spanish","category":"assignments"},
+                {"id":"soccer","title":"Soccer practice","kind":"locked","days":[3],"start":"17:00","duration_min":60,"category":"extra"}
+            ]),
+        );
+        serde_json::from_str(&week.running_late(3, 30, 0.0).unwrap()).unwrap()
     }
 
     #[test]
@@ -385,14 +630,64 @@ mod tests {
             .filter_map(|block| block.get("id").and_then(Value::as_str))
             .collect();
         assert_eq!(waiting, vec!["lab-session"]);
-        assert!(
-            result["placed"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|block| block["id"] == "essay-session" && block.get("start").is_some())
-        );
+        assert!(result["placed"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|block| block["id"] == "essay-session" && block.get("start").is_some()));
         let preview = result["applied_preview"].as_str().unwrap();
         assert!(!preview.is_empty());
+    }
+
+    /// The slider offers every step of 5 from 5 minutes through 60; anything else is refused by
+    /// the guard before the week is read.
+    #[test]
+    fn running_late_slider_takes_5_to_60_in_steps_of_5() {
+        let (week, _) = open_at("late-slider", "2026-10-05T17:00:00");
+        let db = week.db.lock().unwrap();
+        flexweek_store::insert_assignment(
+            &db,
+            week.user_id.unwrap(),
+            "essay",
+            r#"{"id":"essay","title":"Essay","due":"2026-10-08T21:00","estimate_min":60,"focus_minutes":0,"completed":false}"#,
+        )
+        .unwrap();
+        drop(db);
+        save_week(
+            &week,
+            "2026-10-05",
+            &json!([
+                {"id":"school","title":"School","kind":"locked","days":[0],"start":"08:00","duration_min":390,"category":"class"},
+                {"id":"essay-session","title":"Essay","kind":"flexible","days":[0],"start":"16:00","duration_min":60,"assignment_id":"essay","category":"assignments"}
+            ]),
+        );
+        assert!(
+            week.running_late(0, 5, 0.0).is_ok(),
+            "5 minutes is a slider step"
+        );
+        assert!(
+            week.running_late(0, 35, 0.0).is_ok(),
+            "35 minutes is a slider step"
+        );
+        assert!(
+            week.running_late(0, 60, 0.0).is_ok(),
+            "60 minutes is a slider step"
+        );
+        assert!(
+            week.running_late(0, 0, 0.0).is_err(),
+            "0 minutes is below the slider's first step"
+        );
+        assert!(
+            week.running_late(0, 7, 0.0).is_err(),
+            "7 minutes is not a step of 5"
+        );
+        assert!(
+            week.running_late(0, 65, 0.0).is_err(),
+            "65 minutes is past the slider's last step"
+        );
+        assert!(
+            week.running_late(0, -5, 0.0).is_err(),
+            "-5 minutes is not a step of 5"
+        );
     }
 }

@@ -33,12 +33,18 @@ data class RunningLateMove(
     val title: String,
     val detail: String,
     val why: String,
+    val durationMin: Int,
 )
+
+data class RunningLateCurrent(val title: String, val end: String)
 
 data class RunningLatePreview(
     val previewId: String,
     val minutes: Int,
     val moves: List<RunningLateMove>,
+    val current: RunningLateCurrent,
+    val stays: List<String>,
+    val warning: String?,
 )
 
 data class WeekBar(
@@ -189,6 +195,7 @@ object V2Json {
                         title = m.getString("title"),
                         detail = m.getString("detail"),
                         why = m.getString("why"),
+                        durationMin = m.getInt("duration_min"),
                     ),
                 )
             }
@@ -197,6 +204,9 @@ object V2Json {
             previewId = root.getString("preview_id"),
             minutes = root.getInt("minutes"),
             moves = moves,
+            current = root.getJSONObject("current").let { RunningLateCurrent(it.getString("title"), it.getString("end")) },
+            stays = root.getJSONArray("stays").let { values -> buildList { for (i in 0 until values.length()) add(values.getJSONObject(i).getString("title")) } },
+            warning = if (root.isNull("warning")) null else root.optString("warning").takeIf { it.isNotBlank() },
         )
     }
 
