@@ -141,12 +141,9 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
-- 2026-10-16, `release/1.1` (worktree `~/.worktrees/flexweek-0190`). Run plan and lane briefs:
-  `~/.flexweek-ui-harness/scratch/1.1/plan.md`. Wave 1 lanes 1 to 3 are merged; lane 4 (the Settings scroll
-  band, reproduced on a real compositor first) is next.
-- Waiting on Jonathan: what shrinks on My day and One thing at 1024x640 Large; device checks for the phone
-  updater and the lane 1 fixes (need his phone or a fixed emulator pairing take).
-- New at 1024x640 Large (rail rig shot): the rail's Next card squeezes its title beside a cut "Start focus",
-  the Plan result strip's text and links overlap, and the overdue row cuts "Start focus".
-- The Android release key lives in `~/.config/flexweek-android/` (outside the repo); every phone update must
-  be signed with it.
+- 2026-10-20, `release/1.1` (worktree `~/.worktrees/flexweek-0190`). Desk hand-move and the local schedule reader are merged. The phone lane (rebuild, focus phase advance, Running late slider) is merged. Nothing is pushed and there is no pull request.
+- Still open: Settings scroll (lane 4, parked until a real compositor check), five desktop tests that already failed before this merge (rail long title, two clay now-line tests, my-day action spacing, 1b-R overdue plan question), a Mac session file refused because the owner check reads /proc/self, and a schedule reader that starts signed out stays on "Please sign in".
+- Month and Day phone screens are not in this merge. `~/.worktrees/flexweek-11-probe` is a detached checkout at 5a72b3f6. Lane branches and worktrees are still in place.
+- Still waiting on Jonathan: what shrinks on My day and One thing at 1024x640 Large, and a device check of the phone updater and the lane 1 fixes.
+- The Android release key lives in `~/.config/flexweek-android/` (outside the repo). Every phone update must be signed with it.
+- Run plan: `~/.flexweek-ui-harness/scratch/1.1/plan.md`.

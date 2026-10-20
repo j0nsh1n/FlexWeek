@@ -18,13 +18,12 @@ All notable changes to FlexWeek are documented here. Format follows
 - Dragging one day of a repeating class moves only that day. The other days stay, and a time that has already passed is refused in the same words on the computer and the phone.
 - Phone: homework on Today is drawn in the homework colour again instead of grey.
 - Phone: Add homework offers due days from today (Tomorrow, the next Friday and Monday, or pick a day), with your recent homework titles to tap; Plan says when each piece goes ("Mon 4 PM") and why something has no time yet, in the same words as your computer.
-- Phone: Running late opens on a real week. Each move names the homework, says when it moves ("4 PM → 4:30 PM") and why in plain words; if the phone cannot preview, the sheet says why instead of not opening.
+- Phone: Running late opens on a real week. The sheet names the block ("History essay is running late"), a slider picks 5 to 60 minutes in steps of 5, and each move says where it came from ("moves from 4 PM") and why. A fixed time stays put, and a block pushed past one is named in red. If the phone cannot preview, the sheet says why instead of not opening.
 - At 1024 x 640 with Large text, Start focus in the rail's Next card sits under the name instead of cutting it and itself, and the Plan result's buttons move under its heading instead of overlapping it.
 - The rail's "doesn't fit in one go" message wraps in phrases with Allow splitting under it, instead of one word per line at Large text.
 - Sign in, Create account and Reset fit a 1024 x 640 window at Large text: the page scrolls there instead of holding the window taller than the screen. Larger windows look as before.
 - Replace timer and Restore ask in FlexWeek's own sheet, like Before planning, with the safe answer chosen by default.
 - Phone: the app follows the phone's dark mode; it stayed light for everyone in 1.0.0, and every screen now sits on the theme's page colour.
-- Phone: "Running late" and "Start focus" no longer show on Today where they did nothing; they come back when those features ship.
 - Phone: "Not now" on the notifications banner hides it, and it stays hidden the next time the app opens; "Allow" no longer hides the banner when permission is refused.
 - Phone: two reminders with the same title both show instead of one replacing the other, and reminders set by 1.0.0 are cleared after an update instead of firing twice.
 
