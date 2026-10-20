@@ -1,0 +1,108 @@
+{
+  "week_start": "2026-10-19",
+  "days": [
+    {
+      "day": 0,
+      "date": "2026-10-19",
+      "blocks": [
+        {
+          "id": "school",
+          "title": "School",
+          "category": "class",
+          "start_min": 480,
+          "end_min": 870,
+          "homework": false,
+          "movable": false
+        },
+        {
+          "id": "algebra",
+          "title": "Algebra set 4",
+          "category": "assignments",
+          "start_min": 870,
+          "end_min": 960,
+          "homework": true,
+          "movable": true
+        }
+      ]
+    },
+    {
+      "day": 1,
+      "date": "2026-10-20",
+      "blocks": [
+        {
+          "id": "school",
+          "title": "School",
+          "category": "class",
+          "start_min": 480,
+          "end_min": 870,
+          "homework": false,
+          "movable": false
+        },
+        {
+          "id": "soccer",
+          "title": "Soccer",
+          "category": "sport",
+          "start_min": 1020,
+          "end_min": 1080,
+          "homework": false,
+          "movable": false
+        }
+      ]
+    },
+    {
+      "day": 2,
+      "date": "2026-10-21",
+      "blocks": [
+        {
+          "id": "school",
+          "title": "School",
+          "category": "class",
+          "start_min": 480,
+          "end_min": 870,
+          "homework": false,
+          "movable": false
+        }
+      ]
+    },
+    {
+      "day": 3,
+      "date": "2026-10-22",
+      "blocks": [
+        {
+          "id": "school",
+          "title": "School",
+          "category": "class",
+          "start_min": 480,
+          "end_min": 870,
+          "homework": false,
+          "movable": false
+        }
+      ]
+    },
+    {
+      "day": 4,
+      "date": "2026-10-23",
+      "blocks": [
+        {
+          "id": "school",
+          "title": "School",
+          "category": "class",
+          "start_min": 480,
+          "end_min": 870,
+          "homework": false,
+          "movable": false
+        }
+      ]
+    },
+    {
+      "day": 5,
+      "date": "2026-10-24",
+      "blocks": []
+    },
+    {
+      "day": 6,
+      "date": "2026-10-25",
+      "blocks": []
+    }
+  ]
+}

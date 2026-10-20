@@ -45,6 +45,17 @@ pub trait Host: Send + Sync {
     fn data_changed(&self, scope: String);
 }
 
+/// Where a block was let go: the day it was dragged from and the day, start and end (minutes of the
+/// day) it landed on.
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct HandLanding {
+    pub block_id: String,
+    pub from_day: i64,
+    pub to_day: i64,
+    pub start_min: i64,
+    pub end_min: i64,
+}
+
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct Reminder {
     pub id: String,
@@ -274,6 +285,22 @@ impl FlexWeek {
 
     pub fn week_rows(&self, week_start: String) -> Result<String, FfiError> {
         crate::week_rows::week_rows(self, &week_start)
+    }
+
+    /// Move a block the student let go at `landing`. Returns JSON: `moved` with the block as saved,
+    /// or not moved with the `problem` in words.
+    pub fn hand_move(
+        &self,
+        week_start: String,
+        landing: HandLanding,
+        op_id: String,
+    ) -> Result<String, FfiError> {
+        crate::hand_move::hand_move(self, &week_start, &landing, &op_id)
+    }
+
+    /// The week's timed blocks, seven days Monday to Sunday, for the three-days-at-a-time Week.
+    pub fn week_blocks(&self, week_start: String) -> Result<String, FfiError> {
+        crate::hand_move::week_blocks(self, &week_start)
     }
 }
 

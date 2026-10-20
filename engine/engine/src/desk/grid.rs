@@ -365,7 +365,7 @@ pub fn apply_block_edit(
 
 /// Homework the student moves by hand stays where they put it: linked to an assignment, flexible
 /// and not finished. Nothing else is pinned by a hand move.
-pub(crate) fn linked_homework(block: &Value) -> EngineResult<bool> {
+pub fn linked_homework(block: &Value) -> EngineResult<bool> {
     Ok(truthy(get(block, "assignment_id")?)
         && eq(get(block, "kind")?.unwrap_or(null()), &json!("flexible"))
         && !truthy(get(block, "completed")?))
