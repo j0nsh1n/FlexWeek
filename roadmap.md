@@ -32,6 +32,15 @@ this file's git history, in `CHANGELOG.md`, and in `docs/cac-build-plan.md`.
 - Complete when: submission on Oct 25 evening, 2026.
 - Status: [ ] open.
 
+## 1.1.1 — Bundle flexweek-mcp (planned 2026-10-20)
+- The AppImage carries `flexweek-mcp`, built in release mode from the same
+  commit, and starts it from the package (for example `flexweek.appimage --mcp`).
+- The release notes say how to start it; Bori points at the packaged helper
+  instead of `engine/target/release/flexweek-mcp`.
+- Complete when: a smoke test of the packaged helper answers a read-only
+  request, and CHANGELOG.md notes the MCP changes.
+- Status: [ ] open.
+
 ## Open from earlier plans
 - Student trials (first use, several assignments, an impossible workload, a
   missed session, next-week reuse, recovery from an edit) and the task-time

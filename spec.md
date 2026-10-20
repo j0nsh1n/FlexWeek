@@ -899,6 +899,21 @@ The numbers the Machine Resources rules in AGENTS.md use for this project.
 - Android release key: `~/.config/flexweek-android/`, outside the repo and
   backed up; every APK is signed with it.
 
+## Releases
+Decided by Jonathan on 2026-10-20. These add to the Releases rules in AGENTS.md.
+
+- Every release package bundles the MCP helper `flexweek-mcp`, built in release
+  mode from the same commit as the app: the AppImage now, and the Windows and
+  Android installers when they exist, where a helper applies there.
+- The helper can be started from the installed package (for example
+  `flexweek.appimage --mcp`, or a documented path inside it), and the release
+  notes or docs say how.
+- A release is not done until a smoke test confirms the packaged helper starts
+  and answers a read-only request.
+- CHANGELOG.md notes the MCP changes in each release.
+- External tools such as Bori point at the packaged helper, never at
+  `engine/target`.
+
 ## Acceptance Criteria
 - [ ] Only-locked week solves to an identity schedule with 0 moves (T1).
 - [ ] A single homework block with room to spare is placed, energy-matched where
