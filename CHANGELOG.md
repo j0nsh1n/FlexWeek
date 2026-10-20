@@ -14,6 +14,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Phone: FlexWeek updates itself. Settings has an Updates card that checks GitHub Releases once a day (on by default, can be turned off) or when you press Check now, and shows the new version's size and the first two lines of what's new. Nothing downloads or installs until you press the button; the download is checked against its published checksum, its name, version and signing key before Android's own Install dialog opens, and "See the steps" walks through allowing installs from FlexWeek. A test build says it can't update itself and points to the release page.
 
 ### Fixed
+- Dragging one day of a repeating class moves only that day. The other days stay, and a time that has already passed is refused in the same words on the computer and the phone.
 - Phone: homework on Today is drawn in the homework colour again instead of grey.
 - Phone: Add homework offers due days from today (Tomorrow, the next Friday and Monday, or pick a day), with your recent homework titles to tap; Plan says when each piece goes ("Mon 4 PM") and why something has no time yet, in the same words as your computer.
 - Phone: Running late opens on a real week. Each move names the homework, says when it moves ("4 PM → 4:30 PM") and why in plain words; if the phone cannot preview, the sheet says why instead of not opening.
