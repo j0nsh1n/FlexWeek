@@ -7,6 +7,8 @@ use crate::core::{
 };
 
 const BUDGET_MS: f64 = flexweek_engine::solver::SOLVE_BUDGET_MS;
+const LATE_STEP_MIN: i64 = 5;
+const LATE_MAX_MIN: i64 = 60;
 
 pub(crate) fn running_late(
     week: &FlexWeek,
@@ -15,8 +17,8 @@ pub(crate) fn running_late(
     elapsed_ms: f64,
 ) -> Result<String, FfiError> {
     let user_id = require_user(week)?;
-    if ![15, 30, 60].contains(&minutes) {
-        return Err(failure("Choose 15, 30 or 60 minutes."));
+    if minutes < LATE_STEP_MIN || minutes > LATE_MAX_MIN || minutes % LATE_STEP_MIN != 0 {
+        return Err(failure("Choose 5 to 60 minutes, in steps of 5."));
     }
     if !(0..=6).contains(&day) {
         return Err(failure("day must be 0..6"));
@@ -394,5 +396,42 @@ mod tests {
         );
         let preview = result["applied_preview"].as_str().unwrap();
         assert!(!preview.is_empty());
+    }
+
+    /// The slider offers every step of 5 from 5 minutes through 60; anything else is refused by
+    /// the guard before the week is read.
+    #[test]
+    fn running_late_slider_takes_5_to_60_in_steps_of_5() {
+        let (week, _) = open_at("late-slider", "2026-10-05T17:00:00");
+        let db = week.db.lock().unwrap();
+        flexweek_store::insert_assignment(
+            &db,
+            week.user_id.unwrap(),
+            "essay",
+            r#"{"id":"essay","title":"Essay","due":"2026-10-08T21:00","estimate_min":60,"focus_minutes":0,"completed":false}"#,
+        )
+        .unwrap();
+        drop(db);
+        save_week(
+            &week,
+            "2026-10-05",
+            &json!([
+                {"id":"school","title":"School","kind":"locked","days":[0],"start":"08:00","duration_min":390,"category":"class"},
+                {"id":"essay-session","title":"Essay","kind":"flexible","days":[0],"start":"16:00","duration_min":60,"assignment_id":"essay","category":"assignments"}
+            ]),
+        );
+        assert!(week.running_late(0, 5, 0.0).is_ok(), "5 minutes is a slider step");
+        assert!(week.running_late(0, 35, 0.0).is_ok(), "35 minutes is a slider step");
+        assert!(week.running_late(0, 60, 0.0).is_ok(), "60 minutes is a slider step");
+        assert!(
+            week.running_late(0, 0, 0.0).is_err(),
+            "0 minutes is below the slider's first step"
+        );
+        assert!(week.running_late(0, 7, 0.0).is_err(), "7 minutes is not a step of 5");
+        assert!(
+            week.running_late(0, 65, 0.0).is_err(),
+            "65 minutes is past the slider's last step"
+        );
+        assert!(week.running_late(0, -5, 0.0).is_err(), "-5 minutes is not a step of 5");
     }
 }
