@@ -103,10 +103,7 @@ fn next_phase(
         }
     }
     let next = if phase == "work" {
-        let cycles = prepared
-            .get("cycles")
-            .and_then(Value::as_i64)
-            .unwrap_or(0);
+        let cycles = prepared.get("cycles").and_then(Value::as_i64).unwrap_or(0);
         flexweek_engine::desk::focus::break_phase(cycles, prefs).map_err(engine_failure)?
     } else {
         "work"
@@ -127,26 +124,26 @@ pub(crate) fn advance(
         .unwrap_or("work")
         .to_string();
     let mut prepared = state.clone();
-    if phase == "work" {
-        if completed {
-            if let (Some(id), Some(minutes), Some(session)) = (
-                state.get("assignmentId").and_then(Value::as_str),
-                state.get("workMin").and_then(Value::as_i64),
-                state.get("sessionId").and_then(Value::as_str),
-            ) {
-                credit(week, id, minutes, &format!("focus-{session}"))?;
-            }
-        }
-    } else if phase == "break" || phase == "long_break" {
-        if let Value::Object(fields) = &mut prepared {
-            fields.insert(
-                "sessionId".into(),
-                json!(format!(
-                    "focus-{}",
-                    crate::account::hex_id(&week.host.random_bytes(8))
-                )),
-            );
-        }
+    if phase == "work"
+        && completed
+        && let (Some(id), Some(minutes), Some(session)) = (
+            state.get("assignmentId").and_then(Value::as_str),
+            state.get("workMin").and_then(Value::as_i64),
+            state.get("sessionId").and_then(Value::as_str),
+        )
+    {
+        credit(week, id, minutes, &format!("focus-{session}"))?;
+    }
+    if (phase == "break" || phase == "long_break")
+        && let Value::Object(fields) = &mut prepared
+    {
+        fields.insert(
+            "sessionId".into(),
+            json!(format!(
+                "focus-{}",
+                crate::account::hex_id(&week.host.random_bytes(8))
+            )),
+        );
     }
     let ended = phase == "work"
         && completed
@@ -759,8 +756,7 @@ mod tests {
         let phases = ["break", "long_break"];
         assert!(!phases.is_empty(), "both break phases are checked");
         for phase in phases {
-            let state =
-                json!({"phase":phase,"cycles":1,"running":true,"endsAt":900_000,"remainingMs":600_000,"workMin":30});
+            let state = json!({"phase":phase,"cycles":1,"running":true,"endsAt":900_000,"remainingMs":600_000,"workMin":30});
             let result = next_phase(&state, false, &json!({}), 0).unwrap();
             assert_eq!(
                 result["phase"], "work",
@@ -778,8 +774,7 @@ mod tests {
         let (week, _) = open_at("focus-advance-skip", "2026-10-12T15:40:00");
         homework(&week, "history", "History essay");
         let state = json!({"assignmentId":"history","title":"History essay","sessionId":"focus-phase-one","phase":"work","cycles":0,"running":true,"endsAt":1_800_000,"remainingMs":600_000,"weekStart":"2026-10-12","workMin":30}).to_string();
-        let result: Value =
-            serde_json::from_str(&advance(&week, &state, false).unwrap()).unwrap();
+        let result: Value = serde_json::from_str(&advance(&week, &state, false).unwrap()).unwrap();
         assert_eq!(
             result["state"]["phase"], "break",
             "skipping an unfinished work phase starts a break"
@@ -816,8 +811,10 @@ mod tests {
         let phases = ["break", "long_break"];
         assert!(!phases.is_empty(), "both break phases are checked");
         for phase in phases {
-            let (week, _) =
-                open_at(&format!("focus-advance-break-{phase}"), "2026-10-12T15:40:00");
+            let (week, _) = open_at(
+                &format!("focus-advance-break-{phase}"),
+                "2026-10-12T15:40:00",
+            );
             homework(&week, "history", "History essay");
             let state = json!({"assignmentId":"history","title":"History essay","sessionId":"focus-phase-one","phase":phase,"cycles":1,"running":true,"endsAt":900_000,"remainingMs":0,"weekStart":"2026-10-12","workMin":30}).to_string();
             let result: Value =

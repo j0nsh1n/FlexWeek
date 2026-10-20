@@ -17,7 +17,7 @@ pub(crate) fn running_late(
     elapsed_ms: f64,
 ) -> Result<String, FfiError> {
     let user_id = require_user(week)?;
-    if minutes < LATE_STEP_MIN || minutes > LATE_MAX_MIN || minutes % LATE_STEP_MIN != 0 {
+    if !(LATE_STEP_MIN..=LATE_MAX_MIN).contains(&minutes) || minutes % LATE_STEP_MIN != 0 {
         return Err(failure("Choose 5 to 60 minutes, in steps of 5."));
     }
     if !(0..=6).contains(&day) {
@@ -420,18 +420,33 @@ mod tests {
                 {"id":"essay-session","title":"Essay","kind":"flexible","days":[0],"start":"16:00","duration_min":60,"assignment_id":"essay","category":"assignments"}
             ]),
         );
-        assert!(week.running_late(0, 5, 0.0).is_ok(), "5 minutes is a slider step");
-        assert!(week.running_late(0, 35, 0.0).is_ok(), "35 minutes is a slider step");
-        assert!(week.running_late(0, 60, 0.0).is_ok(), "60 minutes is a slider step");
+        assert!(
+            week.running_late(0, 5, 0.0).is_ok(),
+            "5 minutes is a slider step"
+        );
+        assert!(
+            week.running_late(0, 35, 0.0).is_ok(),
+            "35 minutes is a slider step"
+        );
+        assert!(
+            week.running_late(0, 60, 0.0).is_ok(),
+            "60 minutes is a slider step"
+        );
         assert!(
             week.running_late(0, 0, 0.0).is_err(),
             "0 minutes is below the slider's first step"
         );
-        assert!(week.running_late(0, 7, 0.0).is_err(), "7 minutes is not a step of 5");
+        assert!(
+            week.running_late(0, 7, 0.0).is_err(),
+            "7 minutes is not a step of 5"
+        );
         assert!(
             week.running_late(0, 65, 0.0).is_err(),
             "65 minutes is past the slider's last step"
         );
-        assert!(week.running_late(0, -5, 0.0).is_err(), "-5 minutes is not a step of 5");
+        assert!(
+            week.running_late(0, -5, 0.0).is_err(),
+            "-5 minutes is not a step of 5"
+        );
     }
 }
