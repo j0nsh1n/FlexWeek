@@ -5,6 +5,9 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- An assistant on this computer can now change the signed-in schedule: add, edit, finish and delete homework, mark a block done, and move or delete a block. A retried request changes things once, a request made on an out-of-date week changes nothing, and school and activities still change only in the app. Its changes reach a paired phone like any other.
+
 ## [1.1.0] - 2026-10-20
 
 ### Added
