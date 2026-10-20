@@ -161,13 +161,81 @@ fn waiting_homework_is_placed_where_it_is_let_go_and_pinned() {
 }
 
 #[test]
-fn finished_homework_is_refused() {
+fn finished_homework_with_a_time_still_moves_and_is_not_pinned() {
+    // The desktop's apply_times moves a finished block and only leaves out the pin.
     let done = with(homework(), json!({"completed": true}));
+    let block = landed(
+        moved(
+            &[done],
+            &drop_of("alg", MONDAY, TUESDAY, AFTERNOON, AFTERNOON + HOMEWORK_MIN),
+        ),
+        "alg",
+    );
+    assert_eq!(block["days"], json!([TUESDAY]), "the finished block moved");
+    assert_ne!(
+        block["pinned"],
+        json!(true),
+        "finished homework is not pinned"
+    );
+}
+
+#[test]
+fn finished_homework_that_has_no_time_is_not_placed() {
+    // The desktop's place_session refuses finished homework.
+    let waiting_done = json!({
+        "id": "alg", "title": "Algebra set 4", "kind": "flexible", "days": [0, 1, 2, 3, 4],
+        "duration_min": HOMEWORK_MIN, "category": "assignments", "assignment_id": "algebra-4",
+        "completed": true,
+    });
     let words = refusal(moved(
-        &[done],
-        &drop_of("alg", MONDAY, TUESDAY, AFTERNOON, AFTERNOON + HOMEWORK_MIN),
+        &[waiting_done],
+        &drop_of("alg", -1, THURSDAY, AFTERNOON, AFTERNOON + HOMEWORK_MIN),
     ));
     assert_eq!(words, "That's finished, so it stayed where it was.");
+}
+
+fn school_on(day: i64) -> Value {
+    json!({
+        "id": "school", "title": "School", "kind": "locked", "days": [day],
+        "start": "08:00", "duration_min": 390, "category": "school",
+    })
+}
+
+#[test]
+fn a_fixed_time_on_a_day_already_over_may_change_its_start_there() {
+    // Wednesday noon: Monday's School may still be corrected to 08:30 on Monday.
+    let block = landed(
+        move_at(
+            &[school_on(MONDAY)],
+            &drop_of("school", MONDAY, MONDAY, 8 * 60 + 30, 15 * 60),
+            "2026-10-21",
+            12 * 60,
+            &assignments(),
+        ),
+        "school",
+    );
+    assert_eq!(
+        block["start"],
+        json!("08:30"),
+        "Monday's School took the new start"
+    );
+}
+
+#[test]
+fn a_fixed_time_today_may_not_start_before_now() {
+    // Wednesday noon: today's School cannot be moved to start at 08:30, which has passed.
+    let wednesday = 2;
+    let words = refusal(move_at(
+        &[school_on(wednesday)],
+        &drop_of("school", wednesday, wednesday, 8 * 60 + 30, 15 * 60),
+        "2026-10-21",
+        12 * 60,
+        &assignments(),
+    ));
+    assert_eq!(
+        words,
+        "That time has passed. Choose 12:00 or later today, or another day."
+    );
 }
 
 #[test]

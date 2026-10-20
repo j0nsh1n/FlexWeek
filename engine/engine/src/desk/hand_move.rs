@@ -108,7 +108,7 @@ fn past_words(
             return Ok(Some(words));
         };
         let on = crate::stored::add_days(monday, drop.to_day)?;
-        return Ok((on < from_iso(clock.now_iso)?).then_some(words));
+        return Ok((on >= from_iso(clock.now_iso)?).then_some(words));
     }
     Ok(Some(words))
 }
@@ -142,9 +142,6 @@ pub fn hand_move(
     if !(0..DAYS_IN_WEEK).contains(&drop.to_day) {
         return refused(NO_SUCH_DAY);
     }
-    if truthy(get(block, "completed")?) {
-        return refused(FINISHED);
-    }
     if drop.end_min <= drop.start_min {
         return refused(END_BEFORE_START);
     }
@@ -176,6 +173,9 @@ pub fn hand_move(
     if !truthy(get(block, "start")?) {
         if get(block, "kind")?.and_then(Value::as_str) != Some("flexible") {
             return refused(NO_TIME_TO_MOVE);
+        }
+        if truthy(get(block, "completed")?) {
+            return refused(FINISHED);
         }
         let mut placed = block.clone();
         if let Value::Object(fields) = &mut placed {
