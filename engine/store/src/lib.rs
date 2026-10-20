@@ -152,6 +152,7 @@ pub type StoreResult<T> = Result<T, StoreError>;
 
 mod accounts;
 mod assignments;
+mod changes;
 mod ledger;
 mod prefs;
 mod routines;
@@ -168,6 +169,9 @@ pub use assignments::{
     AssignmentDelete, AssignmentSave, assignment_bodies, assignment_body, assignment_exists,
     count_assignments, delete_assignment, insert_assignment, list_assignment_rows,
     load_assignment_rows, save_assignment,
+};
+pub use changes::{
+    ApplyClock, ApplyFailure, ApplyInput, AssignmentInput, StandingInput, WeekInput, apply,
 };
 pub use ledger::{
     Recall, capture_account, insert_restore_point, list_restore_points, prune_operations,
