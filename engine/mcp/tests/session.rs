@@ -454,3 +454,34 @@ fn a_changed_account_is_refused() {
         "the refusal must not name the other account"
     );
 }
+
+#[test]
+fn a_server_started_signed_out_takes_the_first_account_that_signs_in() {
+    let world = world("late-sign-in");
+    sign_in(&world, "ada", ADA);
+    sign_in(&world, "bea", BEA);
+    let mut server = boot(&world);
+    server.handshake();
+    let before = server.call("whoami", json!({}), 2);
+    assert_eq!(
+        tool_error_text(&before),
+        Some(PLEASE_SIGN_IN),
+        "a server with no session file still says please sign in, got {before}"
+    );
+    put_token(&world.session, ADA, 0o600);
+    let after = server.call("whoami", json!({}), 3);
+    let body: Value =
+        serde_json::from_str(tool_ok_text(&after).unwrap_or("")).unwrap_or(Value::Null);
+    assert_eq!(
+        body.get("username").and_then(Value::as_str),
+        Some("ada"),
+        "the first account that signs in is accepted, got {after}"
+    );
+    put_token(&world.session, BEA, 0o600);
+    let switched = server.call("whoami", json!({}), 4);
+    assert_eq!(
+        tool_error_text(&switched),
+        Some(ACCOUNT_CHANGED),
+        "a later switch to a different account is refused, got {switched}"
+    );
+}
