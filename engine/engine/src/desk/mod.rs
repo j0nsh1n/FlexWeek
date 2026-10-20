@@ -8,6 +8,7 @@ pub mod focus;
 pub mod grid;
 pub mod hand_move;
 pub mod history;
+pub mod homework;
 pub mod planning;
 pub mod pomodoro;
 pub(crate) mod pydate;
