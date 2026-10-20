@@ -642,6 +642,12 @@ nothing loops.
   - `engine/store`. SQLite: schema, start-up migrations, transactions, password
     hashing, sessions and throttling. The only code that opens the database.
   - `engine/py`. The `flexweek_engine` module that Python imports.
+  - `engine/mcp`. The `flexweek-mcp` binary (from 1.1): a Model Context
+    Protocol server over stdio, built on the Rust SDK `rmcp` (pinned
+    `=3.5.1`), that lets an assistant the student runs on this computer read
+    and change the signed-in account's schedule. It holds no rules: every tool
+    calls the engine, the store or `engine/ffi`. It opens the database file,
+    not the HTTP API, and listens on no port.
   - `backend/solver.py`. Adapter to the engine's synchronous CSP placement. No
     HTTP knowledge.
   - `backend/explain.py`. Adapter: reason code and slack status to English string.
@@ -675,7 +681,9 @@ nothing loops.
   ask for the latest release at most once a day (the student can turn it off, or
   press Check now) and download it only when the student presses the button.
   GitHub sees the request, nothing from the student's week. No OAuth, no
-  calendar sync, no LLM at runtime.
+  calendar sync, no LLM at runtime: FlexWeek contains no language model and
+  contacts none. An assistant the student runs on their own computer may start
+  `flexweek-mcp` and call it; FlexWeek never calls the assistant.
 - Android: the phone app, package `com.flexweek.app`, minimum Android 8.0
   (minSdk 26), target and compile SDK 36, for arm64-v8a and x86_64. Release
   builds show today's agenda, reminders, pairing and settings; adding homework,
@@ -722,6 +730,14 @@ nothing loops.
   that user can read, in the app's data folder. It is kept once a new account's
   recovery codes are acknowledged, replaced when the password changes, and
   removed by Log out, account deletion, or the server ending the session.
+- The MCP server (`flexweek-mcp`) acts as the account kept signed in on this
+  computer. It reads the kept session file, refuses a file readable by anyone
+  but its owner, checks the session in the database on every call and refuses
+  an expired or ended one. It is given no password. It cannot change the
+  password, read or replace recovery codes, delete the account, export or
+  import an account, pair or remove a phone, or change preferences, and it
+  never returns a session token, a password hash or a recovery-code hash. It
+  listens on no port and logs only tool names and outcomes.
 - Device sync keeps a private key on this computer, in a file with mode 0600
   in `sync/` beside the database; a file readable by others is refused. Its
   public part is the device's identity. Traffic between paired devices is
@@ -823,8 +839,12 @@ The commands it runs, each of which must exit 0:
 - The engine in `engine/` (Rust approved for it on 2026-09-30) has its own
   checks, run from `engine/`, each of which must exit 0: `cargo fmt --check`,
   `cargo clippy --workspace -- -D warnings` and `cargo test --workspace`.
-  The workspace includes the sync crate (`engine/sync`) and the Android
-  bindings (`engine/ffi`).
+  The workspace includes the sync crate (`engine/sync`), the Android
+  bindings (`engine/ffi`) and the MCP server (`engine/mcp`, approved
+  2026-10-19). The MCP server's tests start the built `flexweek-mcp` over
+  stdio against a temporary database made by the store and check each tool,
+  the session rules, that a retried write lands once and that a write
+  reaches the sync ledger.
 - Android (approved for 1.0.0): from `android/`, `./gradlew testDebugUnitTest`
   must exit 0. It needs the JDK and Android SDK on the machine.
   The Python suites need the module built into the checkout's `.venv` first,
