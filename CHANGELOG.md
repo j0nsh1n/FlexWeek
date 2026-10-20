@@ -3,9 +3,10 @@
 All notable changes to FlexWeek are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [1.1.1] - 2026-10-20
 
 ### Added
+- The Linux download and its AppImage carry the assistant helper, so an assistant starts it from the installed package with `FlexWeek --mcp --read-only`; Windows does not ship the helper.
 - The assistant helper has a read-only mode (`flexweek-mcp --read-only`) that offers only the read tools, for an assistant that should see the schedule but never change it.
 - An assistant on this computer can now change the signed-in schedule: add, edit, finish and delete homework, mark a block done, and move or delete a block. A retried request changes things once, a request made on an out-of-date week changes nothing, and school and activities still change only in the app. Its changes reach a paired phone like any other.
 
