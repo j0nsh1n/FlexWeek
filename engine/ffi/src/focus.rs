@@ -88,6 +88,33 @@ pub(crate) fn finish(raw: &str) -> Result<String, crate::core::FfiError> {
     Ok(json!({"state":Value::Null,"focus_now":flexweek_engine::desk::focus::focus_now(&finished).map_err(engine_failure)?}).to_string())
 }
 
+fn next_phase(
+    state: &Value,
+    completed: bool,
+    prefs: &Value,
+    now_ms: i64,
+) -> Result<Value, crate::core::FfiError> {
+    let phase = state.get("phase").and_then(Value::as_str).unwrap_or("work");
+    let mut prepared = state.clone();
+    if phase == "work" && completed {
+        let cycles = state.get("cycles").and_then(Value::as_i64).unwrap_or(0) + 1;
+        if let Value::Object(fields) = &mut prepared {
+            fields.insert("cycles".into(), json!(cycles));
+        }
+    }
+    let next = if phase == "work" {
+        let cycles = prepared
+            .get("cycles")
+            .and_then(Value::as_i64)
+            .unwrap_or(0);
+        flexweek_engine::desk::focus::break_phase(cycles, prefs).map_err(engine_failure)?
+    } else {
+        "work"
+    };
+    flexweek_engine::desk::focus::set_phase(&prepared, &json!(next), prefs, now_ms)
+        .map_err(engine_failure)
+}
+
 pub(crate) fn persist(raw: &str) -> Result<String, crate::core::FfiError> {
     let state = decode(raw)?;
     Ok(persist_value(&state)?.to_string())
@@ -636,5 +663,68 @@ mod tests {
             saved["focus_sessions"], 1,
             "retrying a focus credit does not add a session twice"
         );
+    }
+
+    #[test]
+    fn next_phase_after_an_unfinished_work_phase_takes_a_short_break() {
+        let state = json!({"phase":"work","cycles":0,"running":true,"endsAt":1_800_000,"remainingMs":600_000,"workMin":30,"assignmentId":"history","title":"History essay"});
+        let result = next_phase(&state, false, &json!({}), 0).unwrap();
+        assert_eq!(
+            result["phase"], "break",
+            "an unfinished work phase is followed by a break"
+        );
+        assert_eq!(
+            result["endsAt"], 900_000,
+            "a break with default settings ends after 15 minutes"
+        );
+        assert_eq!(
+            result["workMin"], 30,
+            "advancing the phase keeps the saved work length"
+        );
+        assert_eq!(
+            result["title"], "History essay",
+            "advancing the phase keeps the homework title"
+        );
+        assert_eq!(
+            result["cycles"], 0,
+            "an unfinished work phase does not advance the cycle count"
+        );
+    }
+
+    #[test]
+    fn next_phase_after_a_completed_work_phase_counts_the_cycle() {
+        let state = json!({"phase":"work","cycles":3,"running":true,"endsAt":1_800_000,"remainingMs":1_800_000,"workMin":30});
+        let result = next_phase(&state, true, &json!({}), 0).unwrap();
+        assert_eq!(
+            result["phase"], "long_break",
+            "the fourth completed cycle earns a long break"
+        );
+        assert_eq!(
+            result["cycles"], 4,
+            "a completed work phase advances the cycle count"
+        );
+        assert_eq!(
+            result["endsAt"], 1_800_000,
+            "a long break with default settings ends after 30 minutes"
+        );
+    }
+
+    #[test]
+    fn next_phase_after_either_break_returns_to_work() {
+        let phases = ["break", "long_break"];
+        assert!(!phases.is_empty(), "both break phases are checked");
+        for phase in phases {
+            let state =
+                json!({"phase":phase,"cycles":1,"running":true,"endsAt":900_000,"remainingMs":600_000,"workMin":30});
+            let result = next_phase(&state, false, &json!({}), 0).unwrap();
+            assert_eq!(
+                result["phase"], "work",
+                "a finished {phase} phase returns to work"
+            );
+            assert_eq!(
+                result["endsAt"], 1_800_000,
+                "a work phase with default settings ends after 30 minutes"
+            );
+        }
     }
 }
