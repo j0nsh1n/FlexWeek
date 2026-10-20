@@ -485,3 +485,52 @@ fn a_server_started_signed_out_takes_the_first_account_that_signs_in() {
         "a later switch to a different account is refused, got {switched}"
     );
 }
+
+#[test]
+fn a_switched_account_is_refused_before_its_session_is_renewed() {
+    let world = world("switch-expiry");
+    sign_in(&world, "ada", ADA);
+    sign_in(&world, "bea", BEA);
+    put_token(&world.session, BEA, 0o600);
+    let mut server = boot(&world);
+    server.handshake();
+    let first = server.call("whoami", json!({}), 2);
+    let first_body: Value =
+        serde_json::from_str(tool_ok_text(&first).unwrap_or("")).unwrap_or(Value::Null);
+    assert_eq!(
+        first_body.get("username").and_then(Value::as_str),
+        Some("bea"),
+        "the call starts as the account that was signed in, got {first}"
+    );
+    let sentinel = NOW_UNIX + 60;
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    conn.execute(
+        "UPDATE sessions SET expires = ?1 WHERE token_hash = ?2",
+        (sentinel, digest(ADA)),
+    )
+    .expect("sentinel expiry");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    drop(conn);
+    put_token(&world.session, ADA, 0o600);
+    let switched = server.call("whoami", json!({}), 3);
+    assert_eq!(
+        tool_error_text(&switched),
+        Some(ACCOUNT_CHANGED),
+        "a different account than at start is refused, got {switched}"
+    );
+    let expires: Option<i64> = open_connection(Path::new(&world.database_arg))
+        .expect("open")
+        .query_row(
+            "SELECT expires FROM sessions WHERE token_hash = ?1",
+            [digest(ADA)],
+            |row| row.get(0),
+        )
+        .ok();
+    assert_eq!(
+        expires,
+        Some(sentinel),
+        "a switched account is refused before its session expiry is renewed, got {expires:?}"
+    );
+}

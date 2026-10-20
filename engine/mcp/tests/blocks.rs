@@ -509,3 +509,73 @@ fn move_and_delete_refuse_school_and_activities() {
         "refused school and activity edits write nothing"
     );
 }
+
+#[test]
+fn delete_block_of_a_missing_id_keeps_its_answer() {
+    let world = signed_in("delete-missing");
+    seed_week(&world, json!([club(&[2], "16:00")]));
+    let mut server = boot(&world);
+    server.handshake();
+    let args = json!({
+        "operation_id": "op-miss-ghost",
+        "week_start": "2026-10-19",
+        "expected_revision": 4,
+        "block_id": "ghost",
+        "scope": "series"
+    });
+    let first = server.call("delete_block", args.clone(), 2);
+    assert_eq!(
+        is_error(&first),
+        Some(false),
+        "an id that is not in the week is refused without an error, got {first}"
+    );
+    let first_body = body_of(&first);
+    assert_eq!(
+        first_body.get("revision"),
+        Some(&json!(4)),
+        "a missing id leaves the stored revision, got {first_body}"
+    );
+    let (before, revision) =
+        week_row(&world.database_arg, world.user, "2026-10-19").unwrap_or((Value::Null, -1));
+    assert_eq!(revision, 4, "the week was not saved again");
+    assert!(
+        !find_block(&before, "club").is_null(),
+        "the block that was there stays, got {before}"
+    );
+    let planted = json!([
+        club(&[2], "16:00"),
+        {
+            "id": "ghost",
+            "title": "Ghost",
+            "kind": "locked",
+            "duration_min": 30,
+            "days": [2],
+            "start": "18:00",
+            "priority": 3,
+            "energy": "medium"
+        }
+    ]);
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    conn.execute(
+        "UPDATE weeks SET blocks = ?1 WHERE user_id = ?2 AND week_start = '2026-10-19'",
+        (planted.to_string(), world.user),
+    )
+    .expect("plant");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    drop(conn);
+    let again = server.call("delete_block", args, 3);
+    assert_eq!(
+        body_of(&again),
+        first_body,
+        "a retry with the same operation id gives the same answer, got {again}"
+    );
+    let (after, revision) =
+        week_row(&world.database_arg, world.user, "2026-10-19").unwrap_or((Value::Null, -1));
+    assert_eq!(revision, 4, "the retry does not save the week");
+    assert!(
+        !find_block(&after, "ghost").is_null(),
+        "the retry does not delete the block that appeared later, got {after}"
+    );
+}

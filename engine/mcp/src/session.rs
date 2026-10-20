@@ -35,6 +35,17 @@ pub fn for_call(
     database: &Path,
     now: i64,
 ) -> Result<SignedIn, String> {
+    let token = read_token(session_file)?;
+    let conn = open_connection(database).map_err(storage_sentence)?;
+    let live = live_user_id(&conn, &digest(&token), now)?;
+    drop(conn);
+    let switched = started_as
+        .lock()
+        .map_err(|_| STORAGE_UNAVAILABLE.to_string())?
+        .is_some_and(|expected| live.is_some_and(|found| found != expected));
+    if switched {
+        return Err(ACCOUNT_CHANGED.into());
+    }
     let account = resolve(session_file, database, now)?;
     let mut started = started_as
         .lock()
@@ -79,6 +90,32 @@ pub fn resolve(session_file: &Path, database: &Path, now: i64) -> Result<SignedI
         username,
         expires,
     })
+}
+
+/// The live account for this token, without the renewal `session_user` does.
+fn live_user_id(
+    conn: &flexweek_store::Connection,
+    token_hash: &str,
+    now: i64,
+) -> Result<Option<i64>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT users.id FROM sessions JOIN users ON users.id = sessions.user_id
+             WHERE token_hash = ?1 AND expires > ?2",
+        )
+        .map_err(|error| storage_sentence(StoreError::from(error)))?;
+    let mut rows = stmt
+        .query((token_hash, now))
+        .map_err(|error| storage_sentence(StoreError::from(error)))?;
+    let Some(row) = rows
+        .next()
+        .map_err(|error| storage_sentence(StoreError::from(error)))?
+    else {
+        return Ok(None);
+    };
+    row.get(0)
+        .map(Some)
+        .map_err(|error| storage_sentence(StoreError::from(error)))
 }
 
 fn read_token(path: &Path) -> Result<String, String> {

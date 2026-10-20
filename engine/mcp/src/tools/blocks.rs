@@ -246,6 +246,27 @@ fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> 
         homework::minute_of(app.now_unix),
     )?;
     if deletion.label.is_none() {
+        let answer = json!({
+            "weeks": [{
+                "week_start": args.week_start,
+                "revision": revision,
+            }],
+            "assignments": [],
+        });
+        flexweek_store::remember_operation(
+            &opened.conn,
+            opened.user_id,
+            &operation_id,
+            &digest,
+            &flexweek_engine::snapshot::canonical(&answer),
+            // `changes.rs` keeps 100 operations. That constant is private.
+            100,
+        )
+        .map_err(session::storage_sentence)?;
+        opened
+            .conn
+            .execute_batch("COMMIT")
+            .map_err(|error| session::storage_sentence(flexweek_store::StoreError::from(error)))?;
         return Ok(json!({
             "ok": true,
             "result": {"week_start": args.week_start, "revision": revision},
