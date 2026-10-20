@@ -1,9 +1,9 @@
 use chrono::{Datelike, Timelike};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::account::{availability, clock, load_open_week, work_windows};
 use crate::core::{
-    db_lock, engine_failure, failure, hex_preview, require_user, FfiError, FlexWeek, Preview,
+    FfiError, FlexWeek, Preview, db_lock, engine_failure, failure, hex_preview, require_user,
 };
 
 const BUDGET_MS: f64 = flexweek_engine::solver::SOLVE_BUDGET_MS;
@@ -630,11 +630,13 @@ mod tests {
             .filter_map(|block| block.get("id").and_then(Value::as_str))
             .collect();
         assert_eq!(waiting, vec!["lab-session"]);
-        assert!(result["placed"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|block| block["id"] == "essay-session" && block.get("start").is_some()));
+        assert!(
+            result["placed"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|block| block["id"] == "essay-session" && block.get("start").is_some())
+        );
         let preview = result["applied_preview"].as_str().unwrap();
         assert!(!preview.is_empty());
     }
