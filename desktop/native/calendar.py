@@ -184,6 +184,22 @@ def apply_block_times(block: dict, start_min: int, end_min: int, day: int | None
     return None if raw is None else json.loads(raw)
 
 
+def hand_move(
+    blocks: list[dict],
+    assignments: dict[str, dict],
+    block_id: str,
+    clock: tuple[str, str, int],
+    span: tuple[int, int, int, int],
+) -> dict:
+    """A block let go by hand, through the one rule the phone shares: `clock` is (week start, local
+    date, local minute) and `span` is (day it was dragged from, day it lands on, start, end)."""
+    return json.loads(
+        flexweek_engine.calendar_hand_move(
+            json.dumps(blocks), json.dumps(assignments), block_id, clock, span
+        )
+    )
+
+
 def split_occurrence(blocks: list[dict], block_id: str, day: int) -> tuple[list[dict], str | None]:
     updated, new_id = flexweek_engine.calendar_split(
         json.dumps(blocks), json.dumps(block_id), json.dumps(day)

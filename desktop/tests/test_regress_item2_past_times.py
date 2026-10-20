@@ -50,7 +50,7 @@ def homework(qapp, window: NativeWindow, start: str | None = None, day: int = WE
     block = next(b for b in session.blocks if b.get("assignment_id") == "essay")
     if start is not None:
         h, m = map(int, start.split(":"))
-        assert session.place_session(block["id"], day, h * 60 + m)
+        assert session.hand_move(block["id"], -1, day, h * 60 + m, h * 60 + m + 60)
         session.save()
         settled(qapp, window)
     hold_clock(window, WEDNESDAY, NOW)

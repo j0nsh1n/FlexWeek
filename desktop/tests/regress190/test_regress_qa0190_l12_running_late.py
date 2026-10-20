@@ -31,7 +31,7 @@ def late(qapp, server, name: str, minutes: int, pinned: bool = False) -> tuple[d
     session.now_ms = lambda: int(monday_5pm.timestamp() * 1000)
     homework(qapp, session, [("late", 60, 3)])
     block = next(b for b in session.blocks if b.get("assignment_id") == "late")
-    assert session.place_session(block["id"], 0, 16 * 60 + 45)
+    assert session.hand_move(block["id"], -1, 0, 16 * 60 + 45, 17 * 60 + 45)
     # As Plan would have left it: placed, not pinned by hand (a pinned block is never moved).
     if not pinned:
         session.blocks = [{**b, "pinned": False} if b["id"] == block["id"] else b for b in session.blocks]

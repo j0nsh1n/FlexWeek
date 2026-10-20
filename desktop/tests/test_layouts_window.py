@@ -2518,7 +2518,7 @@ def test_homework_moved_by_hand_to_another_day_is_saved_pinned(
 ) -> None:
     """The server accepts the pin, and it survives a reload."""
     work = next(block for block in window.session.blocks if block.get("assignment_id") == "essay")
-    assert window.session.apply_times(work["id"], 19 * 60, 20 * 60, 4)
+    assert window.session.hand_move(work["id"], 3, 4, 19 * 60, 20 * 60)
     window.session.save()
     settled(qapp, window)
     window.session.load_week(window.session.week_start, discard=True)
@@ -2795,7 +2795,7 @@ def test_a_block_moved_on_the_week_while_a_save_is_under_way_is_not_lost(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     waiting = _waiting_math(qapp, window)
-    assert window.session.place_session(waiting["id"], 2, 16 * 60)
+    assert window.session.hand_move(waiting["id"], -1, 2, 16 * 60, 16 * 60 + waiting["duration_min"])
     window.session.save()
     settled(qapp, window)
     window.session.add_homework(
@@ -2862,7 +2862,7 @@ def test_let_flexweek_move_it_takes_the_pin_away(
     from desktop.native.widgets import HomeworkDialog
 
     waiting = _waiting_math(qapp, window)
-    assert window.session.place_session(waiting["id"], 2, 17 * 60)
+    assert window.session.hand_move(waiting["id"], -1, 2, 17 * 60, 17 * 60 + waiting["duration_min"])
     window.session.save()
     settled(qapp, window)
     monkeypatch.setattr(HomeworkDialog, "exec", lambda dialog: _press(dialog, "homeworkUnpin"))

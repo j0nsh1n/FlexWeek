@@ -86,7 +86,7 @@ def overdue_card_at_1024_by_640_large(qapp: QApplication, window: NativeWindow, 
     session.save()
     wait_until(qapp, lambda: not session.busy and not session.dirty)
     block = next(b for b in session.blocks if b.get("assignment_id") == "bio")
-    assert session.place_session(block["id"], 2, 15 * 60 + 15)
+    assert session.hand_move(block["id"], -1, 2, 15 * 60 + 15, 15 * 60 + 15 + block["duration_min"])
     session.save()
     wait_until(qapp, lambda: not session.busy and not session.dirty)
     saturday = datetime.fromisoformat(session.week_start) + timedelta(days=5, hours=10)

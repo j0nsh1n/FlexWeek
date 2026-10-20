@@ -69,7 +69,6 @@ from desktop.native.calendar import (
     is_series,
     is_setup_block,
     monday_of,
-    span_clash,
     sunday_due,
 )
 from desktop.native.client import (
@@ -3983,7 +3982,7 @@ class NativeWindow(QMainWindow):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         day, start = dialog.choice()
-        if self.session.place_session(block["id"], day, start, duration_min=dialog.length_min()):
+        if self.session.hand_move(block["id"], -1, day, start, start + dialog.length_min()):
             self.session.save()
 
     def _judge_span(self, block_id: str, from_day: int, day: int, start: int, end: int) -> HandVerdict:
@@ -3993,16 +3992,18 @@ class NativeWindow(QMainWindow):
         block = next((item for item in self.session.blocks if item["id"] == block_id), None)
         if block is None:
             return HandVerdict(False, "")
-        problem = self.session.span_drop_problem(block_id, day, start, end, from_day)
-        if problem is not None:
-            return HandVerdict(False, problem)
-        clash = span_clash(self.session.blocks, block_id, day, start, end)
-        return HandVerdict(True, span_words(Span(day, start, end)) + (f" · beside {clash}" if clash else ""))
+        answer = self.session.judge_hand_move(block_id, from_day, day, start, end)
+        if not answer["moved"]:
+            return HandVerdict(False, answer["problem"])
+        words = span_words(Span(day, start, end)) + (
+            f" · beside {answer['beside']}" if answer["beside"] else ""
+        )
+        return HandVerdict(True, words)
 
     def _move_block(self, block_id: str, from_day: int, day: int, start: int, end: int) -> None:
         """A block let go at a time, on the calendar or in a design. Homework that needed a time gets
         this one; a block that repeats moves only the day it was dragged from; anything else moves.
-        Whatever moves by hand is pinned, so no plan moves it back."""
+        Homework moved by hand is pinned, so no plan moves it back."""
         if self.session.busy:
             self._move_waiting = (block_id, from_day, day, start, end)
             return
@@ -4015,15 +4016,10 @@ class NativeWindow(QMainWindow):
                 self.session._say(verdict.words)
             return
         origin = from_day if from_day in block["days"] else day
-        if not block.get("start"):
-            changed = self.session.place_session(block_id, day, start)
-        elif is_series(block):
-            changed = self.session.move_occurrence(block_id, origin, day, start, end)
-        else:
-            changed = self.session.apply_times(block_id, start, end, day)
-        if changed:
-            self.session.save()
-            self._say_when_saved(moved_words(block, origin, day, start, end))
+        if not self.session.hand_move(block_id, from_day, day, start, end):
+            return
+        self.session.save()
+        self._say_when_saved(moved_words(block, origin, day, start, end))
 
     def _edit_block(self, block_id: str) -> None:
         if QApplication.activeModalWidget() is not None:

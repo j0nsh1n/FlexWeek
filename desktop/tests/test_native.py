@@ -386,7 +386,7 @@ def test_a_repeating_block_refuses_a_one_day_drag(qapp: QApplication, server: Lo
             "start": "10:00",
         }
     )
-    assert session.apply_times("school", 630, 705) is False
+    assert session.hand_move("school", 0, 0, 630, 705) is False
     assert session.blocks[0]["start"] == "10:00"
     assert session.blocks[0]["duration_min"] == 60
     assert session.blocks[0]["days"] == [0, 1, 2]
@@ -396,7 +396,7 @@ def test_a_repeating_block_refuses_a_one_day_drag(qapp: QApplication, server: Lo
 def test_move_and_resize_update_a_one_day_block(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     session.add_block(soccer())
-    assert session.apply_times("soccer", 630, 705) is True
+    assert session.hand_move("soccer", 0, 0, 630, 705) is True
     assert session.blocks[0]["start"] == "10:30"
     assert session.blocks[0]["duration_min"] == 75
     session.save()

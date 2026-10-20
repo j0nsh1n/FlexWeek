@@ -59,7 +59,7 @@ def window(qapp: QApplication, signed_in: NativeWindow) -> Iterator[NativeWindow
         {"id": "math", "title": "Math worksheet", "due": due, "estimate_min": 45, "revision": 0}
     )
     block = next(b for b in session.blocks if b.get("assignment_id") == "math")
-    session.place_session(block["id"], 2, 17 * 60)
+    session.hand_move(block["id"], -1, 2, 17 * 60, 17 * 60 + block["duration_min"])
     session.save()
     settled(qapp, signed_in)
     signed_in.findChild(QAbstractButton, "viewWeek").click()

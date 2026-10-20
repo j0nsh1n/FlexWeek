@@ -277,7 +277,9 @@ def test_choose_a_time_with_nothing_waiting_says_so(
         if block.get("assignment_id") and not block.get("start")
     ]
     for index, block in enumerate(waiting):
-        assert window.session.place_session(block["id"], 2 + index, 16 * 60)
+        assert window.session.hand_move(
+            block["id"], -1, 2 + index, 16 * 60, 16 * 60 + block["duration_min"]
+        )
     window.session.save()
     settled(qapp, window)
     def must_not_open(self: ChooseTimeDialog) -> int:

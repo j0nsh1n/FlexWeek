@@ -488,7 +488,7 @@ def test_month_draws_a_week_left_unsaved_as_the_student_has_it(
     essay = session_of(window, "essay")
     first = date.fromisoformat(session.week_start)
     thursday = (first + timedelta(days=3)).isoformat()
-    assert session.apply_times(essay["id"], 20 * 60 + 15, 21 * 60 + 15, 3) is True
+    assert session.hand_move(essay["id"], 3, 3, 20 * 60 + 15, 21 * 60 + 15) is True
     session.load_week((first + timedelta(days=7)).isoformat())
     wait_until(qapp, lambda: not session.busy and session.week_start != first.isoformat())
     assert not session.dirty, "the week now open has no changes; the one left behind has"

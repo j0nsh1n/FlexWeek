@@ -64,7 +64,7 @@ def essay_in_two_weeks(qapp: QApplication, server: LocalServer) -> tuple[NativeS
     session.save()
     settled(qapp, session)
     waiting = next(block for block in session.blocks if block.get("assignment_id") == "essay")
-    assert session.place_session(waiting["id"], 0, 16 * 60) is True
+    assert session.hand_move(waiting["id"], -1, 0, 16 * 60, 16 * 60 + waiting["duration_min"]) is True
     session.save()
     settled(qapp, session)
     session.load_week(second)
