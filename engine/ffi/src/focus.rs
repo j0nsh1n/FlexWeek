@@ -115,6 +115,51 @@ fn next_phase(
         .map_err(engine_failure)
 }
 
+pub(crate) fn advance(
+    week: &FlexWeek,
+    raw_state: &str,
+    completed: bool,
+) -> Result<String, crate::core::FfiError> {
+    let state = decode(raw_state)?;
+    let phase = state
+        .get("phase")
+        .and_then(Value::as_str)
+        .unwrap_or("work")
+        .to_string();
+    let mut prepared = state.clone();
+    if phase == "work" {
+        if completed {
+            if let (Some(id), Some(minutes), Some(session)) = (
+                state.get("assignmentId").and_then(Value::as_str),
+                state.get("workMin").and_then(Value::as_i64),
+                state.get("sessionId").and_then(Value::as_str),
+            ) {
+                credit(week, id, minutes, &format!("focus-{session}"))?;
+            }
+        }
+    } else if phase == "break" || phase == "long_break" {
+        if let Value::Object(fields) = &mut prepared {
+            fields.insert(
+                "sessionId".into(),
+                json!(format!(
+                    "focus-{}",
+                    crate::account::hex_id(&week.host.random_bytes(8))
+                )),
+            );
+        }
+    }
+    let ended = phase == "work"
+        && completed
+        && state
+            .get("assignmentId")
+            .and_then(Value::as_str)
+            .is_some_and(|id| !id.is_empty());
+    let prefs: Value = serde_json::from_str(&week.settings_for_phone()?).map_err(failure)?;
+    let next = next_phase(&prepared, completed, &prefs, week.host.now_unix_ms())?;
+    let result = if ended { Value::Null } else { next };
+    Ok(json!({"state":result, "persist":if result.is_null(){Value::Null}else{persist_value(&result)?}}).to_string())
+}
+
 pub(crate) fn persist(raw: &str) -> Result<String, crate::core::FfiError> {
     let state = decode(raw)?;
     Ok(persist_value(&state)?.to_string())
@@ -726,5 +771,116 @@ mod tests {
                 "a work phase with default settings ends after 30 minutes"
             );
         }
+    }
+
+    #[test]
+    fn advance_of_a_skipped_work_phase_starts_a_break_without_credit() {
+        let (week, _) = open_at("focus-advance-skip", "2026-10-12T15:40:00");
+        homework(&week, "history", "History essay");
+        let state = json!({"assignmentId":"history","title":"History essay","sessionId":"focus-phase-one","phase":"work","cycles":0,"running":true,"endsAt":1_800_000,"remainingMs":600_000,"weekStart":"2026-10-12","workMin":30}).to_string();
+        let result: Value =
+            serde_json::from_str(&advance(&week, &state, false).unwrap()).unwrap();
+        assert_eq!(
+            result["state"]["phase"], "break",
+            "skipping an unfinished work phase starts a break"
+        );
+        assert_eq!(
+            result["state"]["remainingMs"], 900_000,
+            "the break after a skipped work phase runs 15 minutes"
+        );
+        assert_eq!(
+            result["state"]["cycles"], 0,
+            "skipping a work phase does not count the cycle"
+        );
+        assert!(
+            !result["persist"].is_null(),
+            "the break after a skipped work phase is persisted"
+        );
+        let db = week.db.lock().unwrap();
+        let rows = flexweek_store::list_assignment_rows(&db, week.user_id.unwrap()).unwrap();
+        let history: Value =
+            serde_json::from_str(&rows.iter().find(|(id, _, _)| id == "history").unwrap().1)
+                .unwrap();
+        assert_eq!(
+            history["focus_minutes"], 0,
+            "skipping a work phase does not credit its homework"
+        );
+        assert_eq!(
+            history["focus_sessions"], 0,
+            "skipping a work phase adds no session"
+        );
+    }
+
+    #[test]
+    fn advance_of_a_completed_break_returns_to_work_without_credit() {
+        let phases = ["break", "long_break"];
+        assert!(!phases.is_empty(), "both break phases are checked");
+        for phase in phases {
+            let (week, _) =
+                open_at(&format!("focus-advance-break-{phase}"), "2026-10-12T15:40:00");
+            homework(&week, "history", "History essay");
+            let state = json!({"assignmentId":"history","title":"History essay","sessionId":"focus-phase-one","phase":phase,"cycles":1,"running":true,"endsAt":900_000,"remainingMs":0,"weekStart":"2026-10-12","workMin":30}).to_string();
+            let result: Value =
+                serde_json::from_str(&advance(&week, &state, true).unwrap()).unwrap();
+            assert_eq!(
+                result["state"]["phase"], "work",
+                "a finished {phase} phase starts the next work phase"
+            );
+            assert_eq!(
+                result["state"]["remainingMs"], 1_800_000,
+                "the work phase after a {phase} runs 30 minutes"
+            );
+            assert_eq!(
+                result["state"]["cycles"], 1,
+                "a {phase} does not count the cycle"
+            );
+            assert_ne!(
+                result["state"]["sessionId"], "focus-phase-one",
+                "the work phase after a {phase} gets a fresh session id for its credit"
+            );
+            let db = week.db.lock().unwrap();
+            let rows = flexweek_store::list_assignment_rows(&db, week.user_id.unwrap()).unwrap();
+            let history: Value =
+                serde_json::from_str(&rows.iter().find(|(id, _, _)| id == "history").unwrap().1)
+                    .unwrap();
+            assert_eq!(
+                history["focus_minutes"], 0,
+                "advancing from a {phase} does not credit homework"
+            );
+        }
+    }
+
+    #[test]
+    fn advance_of_a_completed_work_phase_credits_its_saved_work_once() {
+        let (week, _) = open_at("focus-advance-credit", "2026-10-12T15:40:00");
+        homework(&week, "history", "History essay");
+        let state = json!({"assignmentId":"history","title":"History essay","sessionId":"focus-phase-one","phase":"work","cycles":0,"running":true,"endsAt":1_800_000,"remainingMs":0,"weekStart":"2026-10-12","workMin":25}).to_string();
+        let first: Value = serde_json::from_str(&advance(&week, &state, true).unwrap()).unwrap();
+        assert!(
+            first["state"].is_null(),
+            "a completed work phase with homework ends the phone focus state"
+        );
+        assert!(
+            first["persist"].is_null(),
+            "an ended phone focus state saves nothing"
+        );
+        let again: Value = serde_json::from_str(&advance(&week, &state, true).unwrap()).unwrap();
+        assert!(
+            again["state"].is_null(),
+            "resubmitting the same completed state stays ended"
+        );
+        let db = week.db.lock().unwrap();
+        let rows = flexweek_store::list_assignment_rows(&db, week.user_id.unwrap()).unwrap();
+        let history: Value =
+            serde_json::from_str(&rows.iter().find(|(id, _, _)| id == "history").unwrap().1)
+                .unwrap();
+        assert_eq!(
+            history["focus_minutes"], 25,
+            "a completed work phase credits its saved work length"
+        );
+        assert_eq!(
+            history["focus_sessions"], 1,
+            "resubmitting the same completed state credits one session"
+        );
     }
 }
