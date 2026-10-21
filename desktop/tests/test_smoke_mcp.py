@@ -138,7 +138,9 @@ def test_a_helper_that_answers_right_passes(tmp_path: Path) -> None:
     }
 
 
-def test_failing_helper_stderr_reaches_smoke_stderr(tmp_path: Path, capfd: pytest.CaptureFixture[str]) -> None:
+def test_failing_helper_stderr_reaches_smoke_stderr(
+    tmp_path: Path, capfd: pytest.CaptureFixture[str]
+) -> None:
     helper = fake_helper(tmp_path, "stderr-nonzero")
     with pytest.raises(SmokeFailure):
         smoke(helper, timeout=10.0)
