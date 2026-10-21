@@ -18,6 +18,7 @@ struct App {
     session_file: PathBuf,
     now_unix: i64,
     today: String,
+    minute: i64,
     started_as: Arc<Mutex<Option<i64>>>,
     /// `--read-only`: only the read tools are listed or served.
     read_only: bool,
@@ -63,6 +64,7 @@ async fn main() {
         session_file: launch.session_file,
         now_unix: clock.unix,
         today: clock.today,
+        minute: clock.minute,
         started_as: Arc::new(Mutex::new(signed_in.ok().map(|account| account.user_id))),
         read_only: launch.read_only,
     };

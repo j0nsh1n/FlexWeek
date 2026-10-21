@@ -56,14 +56,41 @@ fn signed_in(name: &str) -> World {
 }
 
 fn boot(world: &World) -> Server {
+    boot_at(world, NOW_ISO)
+}
+
+fn boot_at(world: &World, now: &str) -> Server {
     Server::spawn(&[
         "--data-dir",
         &world.data_arg,
         "--database",
         &world.database_arg,
         "--now",
-        NOW_ISO,
+        now,
     ])
+}
+
+#[test]
+fn move_block_uses_offset_clock_minute_for_past_check() {
+    let world = signed_in("move-offset-past");
+    seed_week(&world, json!([club(&[2], "16:00")]));
+    let mut server = boot_at(&world, "2026-10-21T08:00:00+09:00");
+    server.handshake();
+    let response = server.call(
+        "move_block",
+        json!({
+            "operation_id": "op-offset-past",
+            "week_start": "2026-10-19",
+            "expected_revision": 4,
+            "block_id": "club",
+            "day": 2,
+            "start": "07:00",
+            "end": "08:00"
+        }),
+        2,
+    );
+    let error = tool_error_text(&response).unwrap_or_default();
+    assert!(error.contains("That time has passed"), "got {response}");
 }
 
 fn is_error(response: &Value) -> Option<bool> {

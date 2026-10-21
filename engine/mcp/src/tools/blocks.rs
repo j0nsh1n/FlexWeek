@@ -185,7 +185,7 @@ fn perform_move(app: &crate::App, args: &MoveArgs) -> Result<Value, String> {
     let clock = WeekClock {
         week_start: &args.week_start,
         now_iso: &app.today,
-        now_min: homework::minute_of(app.now_unix),
+        now_min: app.minute,
     };
     let blocks = match hand_move(
         &Value::Array(blocks),
@@ -243,7 +243,7 @@ fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> 
         &args.scope,
         args.day,
         &app.today,
-        homework::minute_of(app.now_unix),
+        app.minute,
     )?;
     if deletion.label.is_none() {
         let answer = json!({

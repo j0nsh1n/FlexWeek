@@ -1,12 +1,11 @@
 //! Where this computer keeps FlexWeek, and the clock a test can hold still.
 //!
-//! `--now` is UTC (`YYYY-MM-DDTHH:MM:SSZ`). The desktop's own clock is local;
-//! the flag exists so a test names one instant.
+//! `--now` holds a timestamp; an explicit offset keeps its own wall date and minute.
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use chrono::{DateTime, Datelike, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Datelike, NaiveDateTime, TimeZone, Timelike, Utc};
 
 #[cfg_attr(not(windows), allow(dead_code))]
 pub const WINDOWS_REFUSAL: &str =
@@ -23,6 +22,7 @@ pub struct Launch {
 pub struct Clock {
     pub unix: i64,
     pub today: String,
+    pub minute: i64,
 }
 
 pub fn parse(args: impl Iterator<Item = String>) -> Result<Launch, String> {
@@ -101,25 +101,54 @@ pub fn clock(now_flag: Option<&str>) -> Result<Clock, String> {
             local.month(),
             local.day()
         );
-        return Ok(Clock { unix, today });
+        return Ok(Clock {
+            unix,
+            today,
+            minute: i64::from(local.hour()) * 60 + i64::from(local.minute()),
+        });
     };
-    let stamp = if let Ok(parsed) = DateTime::parse_from_rfc3339(text) {
-        parsed.with_timezone(&Utc)
+    let (unix, today, minute) = if let Ok(parsed) = DateTime::parse_from_rfc3339(text) {
+        (
+            parsed.timestamp(),
+            format!(
+                "{:04}-{:02}-{:02}",
+                parsed.year(),
+                parsed.month(),
+                parsed.day()
+            ),
+            i64::from(parsed.hour()) * 60 + i64::from(parsed.minute()),
+        )
     } else if let Ok(naive) = NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M:%SZ") {
-        Utc.from_utc_datetime(&naive)
+        let stamp = Utc.from_utc_datetime(&naive);
+        (
+            stamp.timestamp(),
+            format!(
+                "{:04}-{:02}-{:02}",
+                stamp.year(),
+                stamp.month(),
+                stamp.day()
+            ),
+            i64::from(stamp.hour()) * 60 + i64::from(stamp.minute()),
+        )
     } else if let Ok(naive) = NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M:%S") {
-        Utc.from_utc_datetime(&naive)
+        let stamp = Utc.from_utc_datetime(&naive);
+        (
+            stamp.timestamp(),
+            format!(
+                "{:04}-{:02}-{:02}",
+                stamp.year(),
+                stamp.month(),
+                stamp.day()
+            ),
+            i64::from(stamp.hour()) * 60 + i64::from(stamp.minute()),
+        )
     } else {
-        return Err("--now must be YYYY-MM-DDTHH:MM:SSZ".into());
+        return Err("--now must be an RFC 3339 timestamp".into());
     };
     Ok(Clock {
-        unix: stamp.timestamp(),
-        today: format!(
-            "{:04}-{:02}-{:02}",
-            stamp.year(),
-            stamp.month(),
-            stamp.day()
-        ),
+        unix,
+        today,
+        minute,
     })
 }
 
@@ -207,5 +236,13 @@ mod tests {
             PathBuf::from("/home/student/.local/share/FlexWeek"),
             "the default when XDG_DATA_HOME is unset"
         );
+    }
+
+    #[test]
+    fn held_offset_clock_keeps_its_wall_date_and_minute() {
+        let clock = super::clock(Some("2026-10-21T20:00:00-05:00")).expect("clock");
+        assert_eq!(clock.today, "2026-10-21");
+        assert_eq!(clock.minute, 1200);
+        assert_eq!(clock.unix, 1792630800);
     }
 }

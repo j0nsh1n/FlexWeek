@@ -45,8 +45,10 @@ of that path, unless `--session-file` names the file directly.
 answered with a JSON-RPC error and changes nothing. Use it for an assistant
 that should see the schedule but never change it.
 
-`--now YYYY-MM-DDTHH:MM:SSZ` holds the clock at that UTC instant. It is for
-tests. Without it, today's date is the local date.
+`--now` holds the clock at a UTC (`...Z`) or RFC 3339 offset timestamp, for
+tests. An offset timestamp uses its own date and minute (for example,
+`--now 2026-10-21T08:00:00+09:00`). Without it, the date and minute use the
+computer's local clock.
 
 stdout is newline-delimited JSON-RPC. The start line and one line per call
 go to stderr. Those lines do not include the token, the username, a title,

@@ -16,6 +16,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ### Fixed
 - The assistant helper no longer creates an empty FlexWeek database when the kept session file outlives it; it says "Please sign in" instead.
 - The assistant helper finds FlexWeek's data where the desktop keeps it when `XDG_DATA_HOME` is set.
+- Assistant schedule writes use the same local date and time, including on computers outside UTC.
 
 ## [1.1.0] - 2026-10-20
 

@@ -109,17 +109,13 @@ pub(crate) fn open(app: &crate::App) -> Result<Opened, String> {
     })
 }
 
-pub(crate) fn minute_of(unix: i64) -> i64 {
-    unix.rem_euclid(86_400) / 60
-}
-
 fn stamp_of(today: &str, minute: i64) -> String {
     format!("{today}T{:02}:{:02}", minute / 60, minute % 60)
 }
 
 pub(crate) fn clock_of(app: &crate::App) -> ApplyClock {
     ApplyClock {
-        now: stamp_of(&app.today, minute_of(app.now_unix)),
+        now: stamp_of(&app.today, app.minute),
         restore_token: String::new(),
     }
 }
@@ -475,7 +471,7 @@ impl crate::App {
                 args.spread.unwrap_or(false),
                 &session_id,
                 &self.today,
-                minute_of(self.now_unix),
+                self.minute,
             )?;
             let input = homework_input(edited, 0)?;
             let applied = run_apply(
@@ -521,7 +517,7 @@ impl crate::App {
                 args.spread.unwrap_or(false),
                 &session_id,
                 &self.today,
-                minute_of(self.now_unix),
+                self.minute,
             )?;
             let input = homework_input(edited, args.expected_revision)?;
             let applied = run_apply(
@@ -640,7 +636,7 @@ impl crate::App {
                 &assignments,
                 &weeks,
                 args.done,
-                &stamp_of(&self.today, minute_of(self.now_unix)),
+                &stamp_of(&self.today, self.minute),
             )?;
             let input = ApplyInput {
                 weeks: marked
