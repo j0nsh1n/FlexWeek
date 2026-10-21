@@ -86,7 +86,7 @@ def replies(launcher: Path, home: Path, data_dir: Path, timeout: float) -> dict[
         [str(launcher), "--mcp", "--read-only", "--data-dir", str(data_dir)],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=None,
         env=env,
     )
     if child.stdin is None or child.stdout is None:

@@ -89,7 +89,9 @@ for line in sys.stdin:
             reply(identifier, {{"content": None, "isError": True}})
         else:
             reply(identifier, sign_in())
-if BEHAVIOR == "nonzero":
+if BEHAVIOR in ("nonzero", "stderr-nonzero"):
+    if BEHAVIOR == "stderr-nonzero":
+        print("helper exploded", file=sys.stderr, flush=True)
     sys.exit(7)
 '''
 
@@ -134,6 +136,13 @@ def test_a_helper_that_answers_right_passes(tmp_path: Path) -> None:
             "result": {"content": [{"type": "text", "text": "Please sign in"}], "isError": True},
         },
     }
+
+
+def test_failing_helper_stderr_reaches_smoke_stderr(tmp_path: Path, capfd: pytest.CaptureFixture[str]) -> None:
+    helper = fake_helper(tmp_path, "stderr-nonzero")
+    with pytest.raises(SmokeFailure):
+        smoke(helper, timeout=10.0)
+    assert "helper exploded" in capfd.readouterr().err
 
 
 def test_a_helper_that_echoes_another_protocol_is_named(tmp_path: Path) -> None:
