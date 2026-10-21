@@ -1,7 +1,7 @@
 //! `post_changes` (`backend/app.py`). The batch commits in one `BEGIN IMMEDIATE` or not at all.
 
 use flexweek_engine::snapshot::canonical;
-use flexweek_engine::validate::time_block;
+use flexweek_engine::validate::{time_block, week_request};
 pub use rusqlite::Connection;
 use rusqlite::{OptionalExtension, params};
 use serde_json::{Map, Value, json};
@@ -248,6 +248,17 @@ fn apply_weeks(
 }
 
 fn apply_week(conn: &Connection, user_id: i64, week: &WeekInput) -> Result<WeekOut, ApplyFailure> {
+    let mut ids = std::collections::HashSet::new();
+    // Legacy adoption has a different duplicate-id error; keep the validator's sentence.
+    if week.blocks.iter().any(|block| {
+        block
+            .get("id")
+            .and_then(Value::as_str)
+            .is_some_and(|id| !ids.insert(id))
+    }) {
+        week_request(&serde_json::json!({"blocks": week.blocks}))
+            .map_err(|message| refuse(&message))?;
+    }
     let adopted = match adopt_legacy_deadlines(
         conn,
         user_id,
@@ -275,6 +286,7 @@ fn apply_week(conn: &Connection, user_id: i64, week: &WeekInput) -> Result<WeekO
         let parsed = time_block(&block).map_err(|message| refuse(&message))?;
         dumped.push(parsed.to_value());
     }
+    week_request(&serde_json::json!({"blocks": dumped})).map_err(|message| refuse(&message))?;
     let encoded = canonical(&Value::Array(dumped.clone()));
     let revision = match save_week(conn, user_id, &week.week_start, &encoded, week.revision)? {
         WeekSave::Ready(revision) => revision,

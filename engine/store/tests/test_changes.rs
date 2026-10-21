@@ -68,6 +68,44 @@ fn math_block() -> Value {
     })
 }
 
+#[test]
+fn invalid_week_rules_refuse_the_week_without_advancing_its_revision() {
+    let (conn, user_id) = account("invalid-week-rules");
+    conn.execute(
+        "INSERT INTO weeks(user_id, week_start, blocks, revision) VALUES (?1, ?2, '[]', 7)",
+        params![user_id, WEEK],
+    )
+    .unwrap();
+    let mut input = empty_input();
+    input.weeks.push(WeekInput {
+        week_start: WEEK.into(),
+        blocks: vec![
+            json!({"id":"same", "title":"A", "kind":"flexible", "duration_min":30, "days":[0]}),
+            json!({"id":"same", "title":"B", "kind":"locked", "duration_min":30, "days":[0]}),
+        ],
+        revision: 0,
+    });
+    let result = apply_shown(&conn, user_id, &input);
+    assert_eq!(result, Err("block ids must be unique".into()));
+    assert_eq!(
+        week_revision(&conn, user_id, WEEK),
+        7,
+        "refused week is not saved"
+    );
+
+    input.weeks[0].blocks =
+        vec![json!({"id":"locked", "title":"A", "kind":"locked", "duration_min":30, "days":[0]})];
+    assert_eq!(
+        apply_shown(&conn, user_id, &input),
+        Err("locked blocks need a start".into())
+    );
+    assert_eq!(
+        week_revision(&conn, user_id, WEEK),
+        7,
+        "invalid locked block is not saved"
+    );
+}
+
 fn school_block() -> Value {
     parsed(SCHOOL)
 }
