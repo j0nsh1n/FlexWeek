@@ -56,6 +56,17 @@ trap 'echo "Build staging retained at $STAGING" >&2' ERR
     --jobs="${FLEXWEEK_BUILD_JOBS:-4}"
 
 BUNDLE="$STAGING/main.dist"
+
+# The assistant helper ships beside the app, built in release mode from this same
+# checkout, so "FlexWeek --mcp" works from the package. It sits here so
+# finish_linux_bundle.sh's glibc and library check covers it too. The Linux
+# release job already installs the Rust toolchain to build the engine module.
+cargo build --release --locked --manifest-path "$ROOT/engine/Cargo.toml" -p flexweek-mcp
+HELPER="$ROOT/engine/target/release/flexweek-mcp"
+[[ -x "$HELPER" ]] || { echo "cargo produced no flexweek-mcp at $HELPER" >&2; exit 1; }
+cp "$HELPER" "$BUNDLE/flexweek-mcp"
+chmod +x "$BUNDLE/flexweek-mcp"
+
 "$ROOT/desktop/finish_linux_bundle.sh" "$BUNDLE"
 
 mkdir -p "$(dirname "$OUT")"

@@ -860,6 +860,7 @@ dependencies = [
  "chrono",
  "flexweek-engine",
  "flexweek-store",
+ "flexweek-sync",
  "rmcp",
  "serde",
  "serde_json",

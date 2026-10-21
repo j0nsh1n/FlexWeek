@@ -100,7 +100,13 @@ def test_the_week_title_opens_the_mini_month(
     qapp.processEvents()
     assert window.month_pop.isVisible()
     week = date.fromisoformat(window.session.week_start)
+    shown = [day.isoformat() for day in window.month_pick.dates.dates()]
+    # The month shown is the one holding this week; two weeks on can fall past its last row
+    # (the week of 19 Oct 2026 is one), so the test then goes two weeks back instead.
     later = week + timedelta(days=14)
+    if later.isoformat() not in shown:
+        later = week - timedelta(days=14)
+    assert later.isoformat() in shown, "a week two weeks away is on the month shown"
     QTest.mouseClick(
         window.month_pick.dates,
         Qt.MouseButton.LeftButton,

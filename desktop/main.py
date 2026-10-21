@@ -11,6 +11,7 @@ from __future__ import annotations
 import ctypes
 import hashlib
 import json
+import os
 import secrets
 import shutil
 import sys
@@ -31,6 +32,31 @@ def report_missing_part(error: ImportError) -> None:
         mb_iconerror = 0x10
         ctypes.windll.user32.MessageBoxW(None, message, "FlexWeek", mb_iconerror)
 
+
+MCP_FLAG = "--mcp"
+
+
+def run_mcp_helper() -> None:
+    # --mcp starts the assistant helper instead of the window, so it is handled
+    # before the Qt imports: the helper speaks on stdin and stdout and needs
+    # neither a display nor the window's libraries. The helper is the sibling of
+    # this program in the Linux package; Windows does not ship it. Only a
+    # first-argument --mcp dispatches, the way the package launchers treat it,
+    # and the arguments after it go to the helper unchanged.
+    helper = Path(sys.argv[0]).resolve().with_name("flexweek-mcp")
+    if not helper.is_file():
+        print(
+            f"FlexWeek {MCP_FLAG}: the assistant helper is not next to {sys.argv[0]}."
+            " It ships with the Linux download; Windows does not include it.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    args = [str(helper), *sys.argv[2:]]
+    os.execv(helper, args)
+
+
+if len(sys.argv) > 1 and sys.argv[1] == MCP_FLAG:
+    run_mcp_helper()
 
 try:
     from PySide6.QtCore import QStandardPaths, QTimer

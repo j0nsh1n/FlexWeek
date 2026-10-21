@@ -1,7 +1,8 @@
 use std::convert::Infallible;
 
 use chrono::Datelike;
-use flexweek_engine::desk::planning::settle_placements;
+use flexweek_engine::desk::blocks::mark_block_done;
+use flexweek_engine::desk::homework::mark_homework_done;
 use flexweek_engine::desk::weekmodel::build_week;
 use flexweek_engine::desk::weekview::Week;
 use flexweek_engine::{plan, time};
@@ -340,31 +341,7 @@ pub(crate) fn set_block_done(
     let items = blocks
         .as_array_mut()
         .ok_or_else(|| failure("stored week is not a list"))?;
-    let block = items
-        .iter_mut()
-        .find(|block| block.get("id").and_then(Value::as_str) == Some(block_id))
-        .ok_or_else(|| failure("block was not found"))?;
-    let object = block
-        .as_object_mut()
-        .ok_or_else(|| failure("stored block is not an object"))?;
-    let flexible = object.get("kind").and_then(Value::as_str) == Some("flexible");
-    let has_start = object
-        .get("start")
-        .and_then(Value::as_str)
-        .is_some_and(|start| !start.is_empty());
-    let day_ok = object
-        .get("days")
-        .and_then(Value::as_array)
-        .is_some_and(|days| days.iter().any(|value| value.as_i64() == Some(day)));
-    if done && flexible && has_start && !day_ok {
-        return Err(failure("day is not one of the block's days"));
-    }
-    object.insert("completed".into(), json!(done));
-    if done && flexible && has_start && day_ok {
-        object.insert("completed_day".into(), json!(day));
-    } else {
-        object.shift_remove("completed_day");
-    }
+    mark_block_done(items, block_id, day, done).map_err(failure)?;
     match flexweek_store::save_week(&db, user_id, week_start, &blocks.to_string(), revision)
         .map_err(failure)?
     {
@@ -396,31 +373,50 @@ pub(crate) fn set_homework_done(
     if operation_seen(&db, user_id, op_id, &payload)? {
         return Ok(());
     }
-    let assignment = flexweek_store::list_assignment_rows(&db, user_id)
-        .map_err(failure)?
-        .into_iter()
-        .find(|(assignment_id, _, _)| assignment_id == id)
-        .ok_or_else(|| failure("homework was not found"))?;
-    let (_, body, revision) = assignment;
-    let mut body: Value = serde_json::from_str(&body).map_err(failure)?;
-    let object = body
-        .as_object_mut()
-        .ok_or_else(|| failure("stored homework is not an object"))?;
-    let kept = object
-        .get("completed_at")
-        .and_then(Value::as_str)
-        .filter(|text| !text.is_empty())
-        .map(str::to_string);
-    object.insert("completed".into(), json!(done));
-    if done {
-        let stamp = kept.unwrap_or(local_stamp(&*week.host)?);
-        object.insert("completed_at".into(), json!(stamp));
-    } else {
-        object.insert("completed_at".into(), Value::Null);
+    let rows = flexweek_store::list_assignment_rows(&db, user_id).map_err(failure)?;
+    let mut stored = None;
+    let mut revision = 0;
+    let mut assignment_map = Map::new();
+    for (assignment_id, body, row_revision) in &rows {
+        let parsed: Value = serde_json::from_str(body).map_err(failure)?;
+        if assignment_id == id {
+            stored = Some(parsed.clone());
+            revision = *row_revision;
+        }
+        assignment_map.insert(assignment_id.clone(), parsed);
     }
-    let encoded = body.to_string();
-    match flexweek_store::save_assignment(&db, user_id, id, &encoded, revision, i64::MAX)
-        .map_err(failure)?
+    let assignment = stored.ok_or_else(|| failure("homework was not found"))?;
+    let needs_stamp = done
+        && assignment.is_object()
+        && assignment
+            .get("completed_at")
+            .and_then(Value::as_str)
+            .filter(|text| !text.is_empty())
+            .is_none();
+    let stamp = if needs_stamp {
+        local_stamp(&*week.host)?
+    } else {
+        String::new()
+    };
+    let mut weeks = Vec::new();
+    for (week_start, raw) in flexweek_store::list_account_weeks(&db, user_id).map_err(failure)? {
+        let parsed: Value = serde_json::from_str(&raw).map_err(failure)?;
+        let Value::Array(blocks) = parsed else {
+            return Err(failure("stored week is not a list"));
+        };
+        weeks.push((week_start, blocks));
+    }
+    let marked = mark_homework_done(id, &assignment, &assignment_map, &weeks, done, &stamp)
+        .map_err(failure)?;
+    match flexweek_store::save_assignment(
+        &db,
+        user_id,
+        id,
+        &marked.assignment.to_string(),
+        revision,
+        i64::MAX,
+    )
+    .map_err(failure)?
     {
         flexweek_store::AssignmentSave::Ready(_) => {}
         flexweek_store::AssignmentSave::Conflict => {
@@ -432,73 +428,18 @@ pub(crate) fn set_homework_done(
             return Err(failure("assignment limit reached"));
         }
     }
-    let assignment_rows = flexweek_store::list_assignment_rows(&db, user_id).map_err(failure)?;
-    let mut assignment_map = Map::new();
-    for (assignment_id, stored, _) in &assignment_rows {
-        let parsed: Value = serde_json::from_str(stored).map_err(failure)?;
-        assignment_map.insert(assignment_id.clone(), parsed);
-    }
-    for (week_start, raw) in flexweek_store::list_account_weeks(&db, user_id).map_err(failure)? {
-        let (_, week_revision) = flexweek_store::read_week(&db, user_id, &week_start)
+    for marked_week in marked.weeks {
+        let (_, week_revision) = flexweek_store::read_week(&db, user_id, &marked_week.week_start)
             .map_err(failure)?
-            .ok_or_else(|| failure("week was not found"))?;
-        let mut blocks: Value = serde_json::from_str(&raw).map_err(failure)?;
-        let Some(blocks_array) = blocks.as_array_mut() else {
-            rollback(&db);
-            return Err(failure("stored week is not a list"));
-        };
-        let mut kept_ids = Vec::new();
-        for block in blocks_array.iter_mut() {
-            if block.get("assignment_id").and_then(Value::as_str) != Some(id) {
-                continue;
-            }
-            let Some(fields) = block.as_object_mut() else {
-                continue;
-            };
-            if let Some(block_id) = fields.get("id").and_then(Value::as_str) {
-                kept_ids.push(Value::String(block_id.to_string()));
-            }
-            fields.insert("completed".into(), json!(done));
-            let flexible = fields.get("kind").and_then(Value::as_str) == Some("flexible");
-            let has_start = fields
-                .get("start")
-                .and_then(Value::as_str)
-                .is_some_and(|start| !start.is_empty());
-            let one_day = fields
-                .get("days")
-                .and_then(Value::as_array)
-                .is_some_and(|days| days.len() == 1);
-            if done && flexible && has_start && one_day {
-                let only = fields
-                    .get("days")
-                    .and_then(Value::as_array)
-                    .and_then(|days| days.first())
-                    .cloned()
-                    .unwrap_or(Value::Null);
-                fields.insert("completed_day".into(), only);
-            } else if !done {
-                fields.shift_remove("completed_day");
-            }
-        }
-        if kept_ids.is_empty() {
-            continue;
-        }
-        let (settled, _) = settle_placements(
-            &blocks,
-            &Value::Object(assignment_map.clone()),
-            &week_start,
-            &Value::Array(kept_ids),
-            true,
-        )
-        .map_err(|error| {
-            rollback(&db);
-            engine_failure(error)
-        })?;
+            .ok_or_else(|| {
+                rollback(&db);
+                failure("week was not found")
+            })?;
         match flexweek_store::save_week(
             &db,
             user_id,
-            &week_start,
-            &settled.to_string(),
+            &marked_week.week_start,
+            &Value::Array(marked_week.blocks).to_string(),
             week_revision,
         )
         .map_err(failure)?

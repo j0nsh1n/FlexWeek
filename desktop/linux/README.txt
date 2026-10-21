@@ -29,6 +29,22 @@ it is afterwards. To remove the menu entry, type:
     ./install-menu-entry.sh --uninstall
 
 
+Using an assistant with your week (optional)
+--------------------------------------------
+An assistant program on this computer (such as a command-line helper) can
+read your week through this download. Open a terminal in this folder and run
+it with the assistant, for example:
+
+    ./FlexWeek --mcp --read-only
+
+With --read-only it can look at your schedule but never change anything.
+Without --read-only it can also change homework and blocks, the way you do in
+FlexWeek itself. The helper uses the FlexWeek account kept signed in on this
+computer. It opens no connection to the internet.
+
+This download carries the helper. The Windows download does not include it.
+
+
 Closing FlexWeek
 ----------------
 Closing the window keeps FlexWeek running in the system tray, so reminders and

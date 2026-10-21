@@ -290,6 +290,14 @@ jobs:
           xvfb-run -a -s "-screen 0 1280x800x24" dist/stage/FlexWeek/FlexWeek --smoke-test dist/packaged-smoke.json
           python -c 'import json,sys; r=json.load(open("dist/packaged-smoke.json")); print(r); sys.exit(0 if r.get("ok") and r.get("stage") == "week shown after setup Solve" else 1)'
 
+      - name: Smoke the packaged helper in the archive
+        # The download must carry the assistant helper and answer a read-only
+        # request from it: the extracted launcher's --mcp dispatch, the seven
+        # read tools and the sign-in refusal. A release is not done without it
+        # (spec.md, Releases).
+        run: |
+          python desktop/smoke_mcp.py dist/stage/FlexWeek/FlexWeek --timeout 60
+
       - name: Smoke-test the setup Solve
         env:
           QT_QPA_PLATFORM: offscreen
@@ -313,6 +321,13 @@ jobs:
           size=$(stat -c%s dist/release/FlexWeek-x86_64.AppImage)
           echo "AppImage $size bytes"
           test "$size" -gt 1000000
+
+      - name: Smoke the packaged helper in the AppImage
+        # The AppImage dispatches --mcp before its library checks; the smoke
+        # sets APPIMAGE_EXTRACT_AND_RUN so it starts without FUSE. It must
+        # answer the same read-only exchange the archive's helper does.
+        run: |
+          python desktop/smoke_mcp.py dist/release/FlexWeek-x86_64.AppImage --timeout 60
 
       - name: Check the checksum files
         # Each .sha256 names only its file, so `sha256sum -c` works in whatever

@@ -29,11 +29,16 @@ TOP="$WORK/FlexWeek"
 mkdir -p "$TOP"
 
 # The compiled payload moves into app/ untouched; everything at the top level
-# is a file a human reads, clicks or copies.
+# is a file a human reads, clicks or copies. The assistant helper rides inside
+# app/, reached through the launcher's --mcp dispatch.
 cp -a "$BUNDLE" "$TOP/app"
 cat > "$TOP/FlexWeek" << 'EOF'
 #!/bin/sh
 HERE="$(cd "$(dirname "$0")" && pwd)"
+if [ "${1:-}" = "--mcp" ]; then
+    shift
+    exec "$HERE/app/flexweek-mcp" "$@"
+fi
 exec "$HERE/app/FlexWeek" "$@"
 EOF
 cp "$ROOT/desktop/linux/flexweek.desktop" "$ROOT/desktop/linux/install-menu-entry.sh" "$TOP/"
@@ -44,6 +49,7 @@ chmod +x "$TOP/FlexWeek" "$TOP/install-menu-entry.sh" "$TOP/app/FlexWeek"
 
 # The launcher must reach the payload it promises to start.
 [[ -x "$TOP/app/FlexWeek" ]] || { echo "Staged app/FlexWeek is missing or not executable" >&2; exit 1; }
+[[ -x "$TOP/app/flexweek-mcp" ]] || { echo "Staged app/flexweek-mcp is missing or not executable; build_linux.sh puts it in the bundle" >&2; exit 1; }
 sh -n "$TOP/FlexWeek"
 
 tar -C "$WORK" --owner=0 --group=0 --numeric-owner -czf "$OUTPUT/$NAME" FlexWeek

@@ -14,6 +14,7 @@ pub mod solver;
 pub mod standing;
 pub mod stored;
 pub mod time;
+pub mod validate;
 pub mod wide_snap;
 
 pub use error::{EngineError, EngineResult, ErrorKind};

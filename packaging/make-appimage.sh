@@ -82,6 +82,14 @@ have_library() {
   return 1
 }
 
+# The MCP helper is stdio only and needs no graphics, so it starts before the
+# libEGL check. shift drops --mcp; the helper keeps the rest of the arguments,
+# and exec keeps stdin and stdout.
+if [ "${1:-}" = "--mcp" ]; then
+  shift
+  exec "$HERE/usr/lib/FlexWeek/flexweek-mcp" "$@"
+fi
+
 if ! have_library libEGL.so.1; then
   echo 'FlexWeek cannot start: the system library libEGL.so.1 is not installed.' >&2
   echo 'Install it with "sudo apt install libegl1" (Ubuntu, Mint, Debian) or "sudo dnf install libglvnd-egl" (Fedora), then open FlexWeek again.' >&2

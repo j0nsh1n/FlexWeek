@@ -214,7 +214,13 @@ def test_the_month_folds_away_from_its_header_and_stays_folded_after_a_restart(
     assert sunday_due(window.session.week_start)[:10] in month.dates.due, "a dot on the day homework is due"
     top = rail.next.mapTo(rail, QPoint(0, 0)).y()
     assert top < 40, f"Next starts {top} px down the rail"
+    shown = [day.isoformat() for day in month.dates.dates()]
+    # The month shown is the one holding this week; two weeks on can fall past its last row
+    # (the week of 19 Oct 2026 is one), so the test then goes two weeks back instead.
     later = week + timedelta(days=14)
+    if later.isoformat() not in shown:
+        later = week - timedelta(days=14)
+    assert later.isoformat() in shown, "a week two weeks away is on the month shown"
     QTest.mouseClick(
         month.dates, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier,
         month.dates.date_point(later.isoformat()).toPoint(),

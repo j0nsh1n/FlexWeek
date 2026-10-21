@@ -57,7 +57,7 @@ fn account_id(account: &SignedIn) -> i64 {
     account.user_id
 }
 
-#[tool_router(server_handler)]
+#[tool_router(router = read_tools, vis = "pub(crate)")]
 impl crate::App {
     #[tool(
         description = "Who is signed in on this computer",
@@ -65,8 +65,8 @@ impl crate::App {
     )]
     async fn whoami(&self) -> Result<String, String> {
         let result = (|| {
-            let account = session::for_call(
-                self.started_as,
+            let account = session::for_read(
+                self.started_as.as_ref(),
                 &self.session_file,
                 &self.database,
                 self.now_unix,
@@ -87,8 +87,8 @@ impl crate::App {
     )]
     async fn get_today(&self, Parameters(args): Parameters<TodayArgs>) -> Result<String, String> {
         let result = (|| {
-            let account = session::for_call(
-                self.started_as,
+            let account = session::for_read(
+                self.started_as.as_ref(),
                 &self.session_file,
                 &self.database,
                 self.now_unix,
@@ -110,8 +110,8 @@ impl crate::App {
     )]
     async fn get_week(&self, Parameters(args): Parameters<WeekArgs>) -> Result<String, String> {
         let result = (|| {
-            let account = session::for_call(
-                self.started_as,
+            let account = session::for_read(
+                self.started_as.as_ref(),
                 &self.session_file,
                 &self.database,
                 self.now_unix,
@@ -130,8 +130,8 @@ impl crate::App {
     )]
     async fn get_month(&self, Parameters(args): Parameters<MonthArgs>) -> Result<String, String> {
         let result = (|| {
-            let account = session::for_call(
-                self.started_as,
+            let account = session::for_read(
+                self.started_as.as_ref(),
                 &self.session_file,
                 &self.database,
                 self.now_unix,
@@ -152,8 +152,8 @@ impl crate::App {
         Parameters(args): Parameters<HomeworkArgs>,
     ) -> Result<String, String> {
         let result = (|| {
-            let account = session::for_call(
-                self.started_as,
+            let account = session::for_read(
+                self.started_as.as_ref(),
                 &self.session_file,
                 &self.database,
                 self.now_unix,
@@ -174,8 +174,8 @@ impl crate::App {
     #[tool(description = "Saved routines", annotations(read_only_hint = true))]
     async fn list_routines(&self) -> Result<String, String> {
         let result = (|| {
-            let account = session::for_call(
-                self.started_as,
+            let account = session::for_read(
+                self.started_as.as_ref(),
                 &self.session_file,
                 &self.database,
                 self.now_unix,
@@ -190,8 +190,8 @@ impl crate::App {
     #[tool(description = "Restore points", annotations(read_only_hint = true))]
     async fn list_restore_points(&self) -> Result<String, String> {
         let result = (|| {
-            let account = session::for_call(
-                self.started_as,
+            let account = session::for_read(
+                self.started_as.as_ref(),
                 &self.session_file,
                 &self.database,
                 self.now_unix,
