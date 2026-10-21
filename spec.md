@@ -902,9 +902,10 @@ The numbers the Machine Resources rules in AGENTS.md use for this project.
 ## Releases
 Decided by Jonathan on 2026-10-20. These add to the Releases rules in AGENTS.md.
 
-- Every release package bundles the MCP helper `flexweek-mcp`, built in release
-  mode from the same commit as the app: the AppImage now, and the Windows and
-  Android installers when they exist, where a helper applies there.
+- Every Linux release package (the tar.gz and the AppImage) bundles the MCP
+  helper `flexweek-mcp`, built in release mode from the same commit as the app.
+  The Windows installers and the Android app do not carry it yet; they will
+  when a helper applies there.
 - The helper can be started from the installed package (for example
   `flexweek.appimage --mcp`, or a documented path inside it), and the release
   notes or docs say how.
