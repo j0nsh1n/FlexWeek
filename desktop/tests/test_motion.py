@@ -145,17 +145,19 @@ def test_normal_runs_the_plans_numbers_and_the_other_levels_scale_them() -> None
     assert [moves(level) for level in MOTION_LEVELS] == [True, True, False, False]
 
 
-def test_more_is_clearly_longer_than_normal_with_the_standard_ease_at_about_450_ms() -> None:
-    """0.18.5 #96: Normal and More used to look much alike (a Normal switch about 0.3 s, More about
-    0.23 s in Jonathan's check). The roadmap asks for about 0.45 s for More's standard ease against
-    Normal's 0.18 s, and every other length scales with it, so no part of More is only a little
-    longer than Normal's."""
-    assert duration(EASE_MS, "normal") == 180
-    assert duration(EASE_MS, "extra") == 450
+def test_more_is_clearly_longer_than_normal_with_the_standard_ease_at_550_ms() -> None:
+    """Planning eases for 220 ms. More is the existing 2.5 times that, 550 ms. Reduce keeps 220 ms
+    and travels nowhere. Off is immediate. Page changes and Settings keep their own lengths."""
+    assert duration(EASE_MS, "normal") == 220
+    assert duration(EASE_MS, "extra") == 550
+    assert duration(EASE_MS, "reduce") == 220
+    assert duration(EASE_MS, "off") == 0
+    assert duration(EASE_MS + 60, "normal") == 280
+    assert (distance(SLIDE_PX, "reduce"), distance(RISE_PX, "reduce")) == (0, 0)
+    page = (PAGE_OUT_MS, PAGE_IN_MS, PAGE_IN_AFTER_MS, OVER_MS, SEGMENT_MS)
+    assert [duration(ms, "normal") for ms in page] == [120, 160, 30, 200, 160]
     for ms in (PAGE_OUT_MS, PAGE_IN_MS, PAGE_IN_AFTER_MS, OVER_MS, SEGMENT_MS, EASE_MS):
         assert duration(ms, "extra") >= 2 * duration(ms, "normal"), ms
-    # Reduce keeps Normal's lengths, so More is clearly longer than it too; Off is at once.
-    assert duration(EASE_MS, "reduce") == 180 and duration(EASE_MS, "off") == 0
     assert distance(SLIDE_PX, "extra") > distance(SLIDE_PX, "normal")
 
 
@@ -250,7 +252,8 @@ def test_a_notice_rises_into_place_and_leaves_no_effect_behind(
     assert effect is not None and effect.offset == QPoint(0, 8), "it starts 8 pixels low"
     assert (notice.x(), notice.y()) == (40, 60), "painted low: the notice itself is already in place"
     manual_time.advance(duration(EASE_MS, "normal") // 2)
-    # Half the 180 ms on the out-cubic ease: 1 - (1 - 1/2)^3 = 7/8 of the way, so 1/8 of the 8 pixels left.
+    # Half of the 220 ms planning ease on the out-cubic curve: 1 - (1 - 1/2)^3 = 7/8 of the way,
+    # so 1/8 of the 8 pixels is left.
     assert effect.opacity == pytest.approx(0.875) and effect.offset == QPoint(0, 1)
     manual_time.advance(duration(EASE_MS, "normal") // 2)
     assert (notice.x(), notice.y()) == (40, 60)
@@ -492,8 +495,9 @@ def test_a_glide_ends_on_its_target(qapp: QApplication, manual_time: ManualTime)
     qapp.processEvents()
     glide(marker, QRect(10, 120, 3, 24), "normal")
     manual_time.advance(40)
-    # 40 of the 240 ms on the out-cubic ease is 1 - (5/6)^3 = 0.4213 of the way: 10 + 110 * 0.4213.
-    assert marker.geometry() == QRect(10, 56, 3, 22), "it moves there rather than jumping"
+    # 40 of the 280 ms shared glide (the 220 ms planning ease plus 60) on the out-cubic curve:
+    # 1 - (6/7)^3 of the way. Qt rounds each edge half away from zero: y 50.73 -> 51, height 21.48 -> 21.
+    assert marker.geometry() == QRect(10, 51, 3, 21), "it moves there rather than jumping"
     glide(marker, QRect(10, 200, 3, 24), "normal")
     manual_time.advance(duration(EASE_MS + 60, "normal"))
     assert marker.geometry() == QRect(10, 200, 3, 24)
@@ -583,8 +587,8 @@ def test_after_a_plan_blocks_slide_to_their_places_and_new_ones_fade_in(
     final = hours.settled_picture(LATER)
     hours.canvas.set_week(LATER)
     manual_time.advance(40)
-    # 40 of the 180 ms on the out-cubic ease: 1 - (1 - 2/9)^3.
-    assert hours.canvas._progress == pytest.approx(1 - (7 / 9) ** 3)
+    # 40 of the 220 ms planning ease on the out-cubic curve: 1 - (1 - 2/11)^3.
+    assert hours.canvas._progress == pytest.approx(1 - (9 / 11) ** 3)
     assert hours.picture() != final, "partway there, not already there"
     manual_time.advance(duration(EASE_MS) - 40)
     assert hours.picture() == final
@@ -681,7 +685,8 @@ def test_a_dialog_fades_and_rises_through_its_content_once(
     effect = words.graphicsEffect()
     assert effect is not None and effect.offset == QPoint(0, RISE_PX)
     manual_time.advance(40)
-    assert effect.opacity == pytest.approx(1 - (7 / 9) ** 3)
+    # 40 of the 220 ms planning ease on the out-cubic curve: 1 - (1 - 2/11)^3.
+    assert effect.opacity == pytest.approx(1 - (9 / 11) ** 3)
     assert dialog.windowOpacity() == 1.0
     manual_time.advance(duration(EASE_MS) - 40)
     assert words.graphicsEffect() is None
