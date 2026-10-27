@@ -13,7 +13,7 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ### Fixed
 - Settings no longer draws a blurred strip above its footer while scrolling.
-- At 1024 x 640 with Large text, the expanded Unfinished list moves action buttons under long words instead of clipping them off the right edge.
+- At 1024 x 640 with Large text, Unfinished moves action buttons under long words and scrolls its rows when space is short, keeping Hide visible.
 - A background calendar refresh keeps the keyboard's place when you return to FlexWeek.
 
 ## [1.1.1] - 2026-10-20

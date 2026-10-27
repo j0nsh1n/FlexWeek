@@ -17,7 +17,7 @@ stay in place.
 - The phone sync indicator is in the top bar beside More and Settings.
 - Settings no longer blurs its content into a strip above Done.
 - At 1024 x 640 with Large text, long Unfinished rows put their buttons
-  below the words so the actions remain readable.
+  below the words. The list scrolls when space is short, keeping Hide visible.
 - Calendar refreshes keep your keyboard position while another window is active.
 
 The Linux downloads still include the assistant helper. Start it with

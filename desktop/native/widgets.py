@@ -5730,7 +5730,9 @@ class UnfinishedPanel(QWidget):
         if rows:
             # As tall as its rows, as the plan review is: one row in a box eight rows deep read as empty.
             room = round(UNFINISHED_ROWS * max(rows))
-            self.list.setFixedHeight(min(sum(rows), room) + 2 * self.list.frameWidth() + 4)
+            edge = 2 * self.list.frameWidth() + 4
+            self.list.setMinimumHeight(max(rows) + edge)
+            self.list.setMaximumHeight(min(sum(rows), room) + edge)
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)

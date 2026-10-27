@@ -170,6 +170,32 @@ def test_1br_unfinished_row_buttons_stay_whole_at_1024_by_640_large(qapp, window
     assert panel.list.horizontalScrollBar().maximum() == 0
 
 
+def test_1br_several_wrapped_unfinished_rows_leave_room_for_hide_at_640(qapp, window) -> None:
+    overdue_this_week(qapp, window)
+    session = window.session
+    for key, title in (("chemistry", "Long chemistry report"), ("history", "Long history essay")):
+        session.add_homework(
+            {
+                "id": key,
+                "title": title,
+                "due": session.assignments["bio"]["due"],
+                "estimate_min": 1440,
+                "revision": 0,
+                "spread": "one",
+            }
+        )
+    session.save()
+    settled(qapp, window)
+    open_unfinished_at(qapp, window, *SMALL_WINDOW, "large")
+    assert (window.width(), window.height()) == SMALL_WINDOW
+    panel = window.unfinished_panel
+    assert panel.list.count() == 3
+    dismiss = panel.findChild(QPushButton, "unfinishedDismiss")
+    placed = QRect(dismiss.mapTo(window, QPoint(0, 0)), dismiss.size())
+    assert window.rect().contains(placed)
+    assert panel.list.verticalScrollBar().maximum() > 0
+
+
 def test_1br_unfinished_row_buttons_share_the_text_line_at_1280_normal(qapp, window) -> None:
     overdue_this_week(qapp, window)
     open_unfinished_at(qapp, window, *NORMAL_WINDOW, "normal")

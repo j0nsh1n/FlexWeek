@@ -4,7 +4,7 @@
 - 2026-10-26: Preparing 1.2.0 on `fix/visual-artifacts-20261026`. Jonathan selected Quiet split
   plus the Settings and Unfinished fixes, with the earlier renovation kept separate. Desktop and
   Android report 1.2.0; Android versionCode is 4. Release notes are `docs/release-notes-v1.2.0.md`.
-  Nothing has been pushed, tagged, or published for 1.2.0.
+  PR #54 is open with the reviewed source; no 1.2.0 tag or release exists yet.
 - Quiet split removes the repeated status row, moves Week as a list into More, keeps Ctrl+Shift+L
   and focus return, quiets Plan, and separates the rail with type and spacing. Light, Dark at
   1024x640 Large, and High contrast each passed all 15 real-KWin pointer and shortcut steps.
@@ -21,6 +21,10 @@
   passed on `007ba1ff`, with 47 focused tests. Windows/Linux CI packages remain pending.
   Its overdue announcement finding remains unverified with a screen reader: the event targets
   the hidden Unfinished control. No release blocker was found.
+- PR #54's Classic Week rig exposed a fixed-height Unfinished list forcing Large text above
+  640 px. The list now keeps one whole row visible and scrolls when height is short. The exact
+  1024x640 real-KWin scenario and 26 related tests pass. Restoring fixed height makes the new
+  regression fail at 1024x776. Final gate and Classic Week rig are being rerun before the push.
 - `feat/refined-look-renovation` remains separate at `4f1b9f97`, with its previously recorded
   772 focused tests and ten-look captures under `scratch/theme-renovation-2026-10-26/`.
   Its uncommitted spec/changelog drafts were preserved as patches under the integrated scratch
@@ -148,9 +152,11 @@ values make a retried write return the first result.
   release. Target: `j0nsh1n/FlexWeek`, PR into `main`, tag `v1.2.0`. The rebuilt runner's full gate
   passed 5422 tests plus lint, types, mutation anchors and whitespace. Rust fmt, clippy and tests
   pass; Android is built and signed. Grok 4.6 independently reviewed `007ba1ff`: PASS, 47 tests.
-  Next: PR and CI,
-  CI packaging, verify all ten assets/checksums and packaged Linux MCP, then publish. No remote
-  mutation yet. The earlier renovation remains separate.
+  PR #54 is open. Its fixed-height Unfinished failure is corrected: 26 related tests, sizing
+  checks and all 19 real-KWin Classic Week scenarios pass; the new regression catches the old
+  fixed height. Next: final gate and independent recheck of this correction, update PR #54,
+  finish CI and packaging, verify all ten assets/checksums and packaged Linux MCP, then publish.
+  No 1.2.0 tag or release exists yet. The earlier renovation remains separate.
 - 2026-10-21, `main` fff4d064: **1.1.1 released** (PR #53, tag `v1.1.1`, Latest; all ten assets attached, every checksum verified). Linux packages carry `flexweek-mcp` (`--mcp` from the AppImage, the tar.gz launcher and the app); the release workflow smokes both, and the published AppImage and tar.gz were smoked again locally. spec.md's Releases section now names the Linux packages; Windows and Android do not carry the helper. Next: Bori moves to `<package> --mcp --read-only` (Bori agent, `.handoff/bori-calendar-mcp.md` section 12); release cleanup awaiting Jonathan's approval of the list; MCP track C (plan, running late, routines, restore) and the phone screens remain.
 - Next (Jonathan's pick: MCP first): track C, Plan / Running late / explain tools, routines, restore, then the app switching to the Rust views, write door and restore so nothing is written twice. Duplicates until then: Python validators and homework-edit rules in `backend/` and `desktop/`, and the desktop's focus phase advance (`controller.py` `advance_focus`) beside the phone's in `engine/ffi/src/focus.rs`.
 - Phone screens not built yet: full-screen focus with breaks (8 A), Month (6 B), Day (7 A), Week C with drag. Their plans are in `~/.flexweek-ui-harness/scratch/android-1.1/` (`rebuild-test-plan.md`, `wave4-test-plan.md`).
