@@ -177,12 +177,15 @@ def test_add_is_one_pill_split_by_a_line_of_its_ink(qapp: QApplication, window: 
     assert near(picture.pixelColor(arrow.left() + 2, middle), palette["accent"])
 
 
+@pytest.mark.parametrize("pack", ["light-frost", "dark-frost"])
 def test_plan_is_second_to_add_and_more_is_in_the_text_colour(
-    qapp: QApplication, window: NativeWindow
+    qapp: QApplication, window: NativeWindow, pack: str
 ) -> None:
     """Add is the only filled bar action. Plan is accent words with no fill; More is the text colour."""
-    palette = dress(qapp, window)
+    palette = dress(qapp, window, pack)
     window.resize(1280, 800)
+    # The count pill also uses accent ink; it must not satisfy the text check.
+    window.solve_button.set_count(0)
     qapp.processEvents()
     picture = window.grab().toImage()
     plan = box(window, window.solve_button)
@@ -190,6 +193,12 @@ def test_plan_is_second_to_add_and_more_is_in_the_text_colour(
     assert window.solve_button.property("secondary") is not True
     assert near(picture.pixelColor(plan.left() + 4, plan.center().y()), palette["window"])
     assert window.solve_button.palette().buttonText().color().name() == palette["accent_text"]
+    painted_ink = sum(
+        near(picture.pixelColor(x, y), palette["accent_text"])
+        for x in range(plan.left() + 8, plan.right() - 7)
+        for y in range(plan.top() + 8, plan.bottom() - 7)
+    )
+    assert painted_ink >= 10, "Plan's painted words use accent text"
     more = bar(window, "moreButton")
     assert more.palette().buttonText().color().name() == palette["text"]
     spot = box(window, more)

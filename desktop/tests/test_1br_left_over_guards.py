@@ -240,7 +240,8 @@ def test_1br_overdue_chip_hides_with_unfinished_and_returns_when_hidden(qapp, wi
     assert window.left_chip.isVisibleTo(window)
 
 
-def test_1br_deadline_timer_refreshes_tags_sidebar_and_focus(qapp, window, monkeypatch) -> None:
+@pytest.mark.parametrize("page", ["week", "settings"])
+def test_1br_deadline_timer_refreshes_tags_sidebar_and_focus(qapp, window, monkeypatch, page) -> None:
     session = window.session
     monday = date.fromisoformat(session.week_start)
     friday = monday + timedelta(days=FRIDAY)
@@ -252,6 +253,9 @@ def test_1br_deadline_timer_refreshes_tags_sidebar_and_focus(qapp, window, monke
     assert session.hand_move(block["id"], -1, WEDNESDAY, 15 * 60 + 15, 16 * 60 + 15)
     session.save()
     settled(qapp, window)
+    if page == "settings":
+        window._open_settings()
+        settled(qapp, window)
     announcements = []
     monkeypatch.setattr(
         "desktop.native.window.announce",
@@ -279,12 +283,13 @@ def test_1br_deadline_timer_refreshes_tags_sidebar_and_focus(qapp, window, monke
     overdue_words = "1 overdue"
     assert window.rail.none_waiting.text() == leftover_words
     assert any(item["title"] == "Bio reading, overdue" for item in session.focus_tasks())
-    unfinished = window.findChild(QPushButton, "unfinishedOpen")
-    said = [item for item in announcements if item[0] is unfinished]
-    assert said == [(unfinished, overdue_words, False)]
+    target = window if page == "settings" else window.more_button
+    assert target.isVisible()
+    said = [item for item in announcements if item[0] is target]
+    assert said == [(target, overdue_words, False)]
     window._deadline_changed()
     settled(qapp, window)
-    assert [item for item in announcements if item[0] is unfinished] == said
+    assert [item for item in announcements if item[0] is target] == said
 
 
 def test_1br_the_overdue_focus_row_starts_from_the_homework(qapp, window) -> None:
