@@ -6,6 +6,15 @@
   https://github.com/j0nsh1n/FlexWeek/releases/tag/v1.2.0 has all ten assets; five checksum pairs
   and all ten public asset digests match the downloaded files. Desktop and Android report 1.2.0;
   Android versionCode is 4. Release notes are `docs/release-notes-v1.2.0.md`.
+- Local follow-ups on the reused task branch route overdue announcements through visible More
+  or the window while Settings is open. Plan tests inspect painted accent text in Light/Dark,
+  excluding the count pill. Both regressions have mutation proof; 49 related tests pass.
+  The capped full gate passes 5425 tests, lint, types, mutation anchors and whitespace
+  (558.12s, service peak 4 GiB). Approved Grok 4.6 review is pending; nothing new has been pushed.
+  Native AT-SPI delivery remains unverified: the isolated registry failed to start. Jonathan
+  accepted Qt accessibility-tree/KWin proof and this reported gap.
+  The four approved clean, merged worktrees and local branches were removed after usage checks,
+  totaling 117 MiB of listed files. All other checkouts, including Windows records, were kept.
 - Quiet split removes the repeated status row, moves Week as a list into More, keeps Ctrl+Shift+L
   and focus return, quiets Plan, and separates the rail with type and spacing. Light, Dark at
   1024x640 Large, and High contrast each passed all 15 real-KWin pointer and shortcut steps.
@@ -23,8 +32,8 @@
   in run `40469595259`, attempt 2. The first Windows Rust setup failed; a fresh-runner retry
   resolved it without source changes. Both downloaded Linux MCP launchers pass with fresh
   HOME/data, and the downloaded Android APK's certificate matches 1.1.1.
-  Its overdue announcement finding remains unverified with a screen reader: the event targets
-  the hidden Unfinished control. No release blocker was found.
+  Its overdue announcement finding affected the hidden Unfinished control in published 1.2.0;
+  the local follow-up corrects the target. Screen-reader delivery is still unverified.
 - PR #54's Classic Week rig exposed a fixed-height Unfinished list forcing Large text above
   640 px. The list now keeps one whole row visible and scrolls when height is short. The exact
   1024x640 real-KWin scenario and 26 related tests pass. Restoring fixed height makes the new
@@ -33,8 +42,8 @@
   and caught the fixed-height mutation before restoring its clean checkout.
 - Requested post-release Grok 4.6 follow-up passed on `3cab7f65`: 64 Retro/Setup tests in
   64.71s, scoped Ruff and diff checks pass. The empty Retro fixture explained the old failure;
-  no remaining snapshot defect was found. Plan's colour test checks the palette rather than
-  stylesheet-painted text, leaving a non-blocking coverage gap. The review checkout is clean.
+  no remaining snapshot defect was found. Its Plan paint-coverage finding is addressed by the
+  local follow-up. The review checkout is clean.
 - `feat/refined-look-renovation` remains separate at `4f1b9f97`, with its previously recorded
   772 focused tests and ten-look captures under `scratch/theme-renovation-2026-10-26/`.
   Its uncommitted spec/changelog drafts were preserved as patches under the integrated scratch
@@ -156,6 +165,14 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
+- 2026-10-27: Local overdue-accessibility and Plan paint-test follow-ups are in progress on
+  `fix/visual-artifacts-20261026`, reused with Jonathan's approval. Test-first commit `6ecf2123`
+  records both intentionally failing page-specific announcement cases. The fix passes all four
+  focused cases and 49 related tests; both mutation regressions are caught. Four specifically
+  approved old checkouts/local branches were removed; other work was preserved. The full gate
+  passes 5425 tests plus lint/types/mutation anchors. Next: approved independent Grok 4.6/T3
+  review of the committed fix. Native AT-SPI proof
+  is unavailable in the isolated session and accepted as a reported gap. No push/PR/release requested.
 - 2026-10-27: **1.2.0 released**, PR #54 / `main` `a71e4d91`, tag `v1.2.0`, Latest.
   Quiet split, Settings footer, Unfinished wrapping/scrolling and calendar focus fixes shipped.
   Final gate: 5423 tests, lint, types, mutation anchors and whitespace pass. Rust checks pass.

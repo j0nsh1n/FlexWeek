@@ -3,6 +3,11 @@
 All notable changes to FlexWeek are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+- Overdue count announcements use the visible More control, with a window fallback while Settings is open.
+
 ## [1.2.0] - 2026-10-26
 
 ### Changed

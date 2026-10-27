@@ -43,6 +43,20 @@
  },
  {
   "file": "desktop/native/look.py",
+  "name": "Plan stylesheet paints ordinary text despite its accent palette",
+  "old": "    plan_ink = palette.get(\"accent_text\", palette[\"accent\"])\n",
+  "new": "    plan_ink = palette[\"text\"]\n",
+  "test": "desktop/tests/test_top_bar.py::test_plan_is_second_to_add_and_more_is_in_the_text_colour"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "overdue announces from the hidden retired control",
+  "old": "            target = self.more_button if self.more_button.isVisible() else self\n",
+  "new": "            target = self.findChild(QPushButton, \"unfinishedOpen\") or self.more_button\n",
+  "test": "desktop/tests/test_1br_left_over_guards.py::test_1br_deadline_timer_refreshes_tags_sidebar_and_focus"
+ },
+ {
+  "file": "desktop/native/look.py",
   "name": "no hover on a filled button",
   "old": "            f\"{selector}:hover {{ background: {mix(text, solid, 0.06)}; }}\",\n",
   "new": "",

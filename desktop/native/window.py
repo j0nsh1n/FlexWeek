@@ -3518,13 +3518,13 @@ class NativeWindow(QMainWindow):
             self._close_week_access_list(restore_focus=False)
 
     def _announce_overdue(self) -> None:
-        """Screen readers hear the overdue count through Unfinished, which is how students open it."""
+        """Keep count announcements on the active page's accessibility tree."""
         stamp = self.session.now_ms() / 1000
         overdue = overdue_unfinished(self.session.unfinished(), datetime.fromtimestamp(stamp))
         words = f"{len(overdue)} overdue"
         previous = getattr(self, "_overdue_words", None)
         if words != previous and (previous is not None or overdue):
-            target = self.findChild(QPushButton, "unfinishedOpen") or self.more_button
+            target = self.more_button if self.more_button.isVisible() else self
             announce(target, words)
         self._overdue_words = words
 
