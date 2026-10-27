@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
 
 from desktop.native.hours.rail import RAIL_PX
 from desktop.native.look import sanitize_look
+from desktop.native.tokens import SPACING
 from desktop.native.window import NativeWindow
 from desktop.tests.test_1br_left_over_guards import overdue_this_week
 from desktop.tests.test_more_count import more_row
@@ -87,6 +88,26 @@ def test_the_agenda_rail_lists_next_no_time_yet_and_due_this_week(
         ("History essay", "Sun"),
         ("Math worksheet", "Sun"),
     ]
+
+
+def test_the_agenda_rail_has_no_count_pill_and_headings_in_ink(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    seeded(qapp, window)
+    sheet = window.styleSheet()
+    waiting = sheet.split("QLabel#railWaitingCount {")[1].split("}")[0]
+    assert "background:" not in waiting
+    assert "border-radius" not in waiting
+    assert "padding:" not in waiting
+    assert window.rail.waiting_count.text() == "1"
+    assert window.rail.waiting_count.isVisible()
+    labels = sheet.split('QLabel[railLabel="true"] {')[1].split("}")[0]
+    assert "color: " in labels
+    assert window.rail.next.label.property("railLabel") is True
+    assert window.rail.waiting_label.property("railLabel") is True
+    assert window.rail.due_label.property("railLabel") is True
+    assert window.rail.sections.spacing() == SPACING[4]
 
 
 def test_the_week_title_opens_the_mini_month(

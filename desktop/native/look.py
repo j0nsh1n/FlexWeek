@@ -2186,8 +2186,8 @@ def planner_rules(
     palette: dict, text: float | str, pad: int, radius: int, card_radius: int, edges: str
 ) -> str:
     """Today's app around its hours: the plan bar, the rail, Day's agenda (decisions 13 to 18 of 0.17).
-    Sizes from the type scale; section labels in the muted colour, never the accent, which read as
-    links."""
+    Sizes from the type scale. Rail sections read as ink and space, not nested cards; headings are the
+    page's ink at caption size, secondary words muted, never the accent, which read as links."""
     caption, body, heading = (f"{type_pt(role, text)}pt" for role in ("caption", "body", "heading"))
     link = (
         f"background: transparent; color: {accent_words(palette)}; border: none; "
@@ -2205,15 +2205,16 @@ def planner_rules(
     return (
         # The rail sits on the page; Day and Week on a sheet in the card colour, its corner rounded.
         f"QFrame#rail, QScrollArea#railScroll, QWidget#railBody, QWidget#railStrip, QWidget#railMonth, "
-        f"QWidget#railNext, QWidget#railWaiting, QWidget#railFocus, QFrame#railNextCard {{ {bare} }}"
+        f"QWidget#railNext, QWidget#railWaiting, QWidget#railDue, QWidget#railFocus, "
+        f"QWidget#railNextRest, QWidget#railNextRow, QWidget#railOneGo, QWidget#railNextCard {{ {bare} }}"
         f'QFrame#rail[folded="true"] {{ padding: {pad // 2}px {pad}px; }}'
         f"QListWidget#focusTasks {{ {bare} }}"
         f"QLabel[railMonthTitle=\"true\"], QLabel#railNextTitle {{ font-size: {body}; "
         f"font-weight: {WEIGHT_STRONG}; }}"
-        f"QLabel#railNextWhen, QLabel#railNextThen, QLabel#classicAgendaSub, QLabel#weekNoneWaiting {{ "
+        f"QLabel#railNextWhen, QLabel#railNextThen, QLabel#railNextRowWhen, QLabel#railDueWhen, "
+        f"QLabel#classicAgendaSub, QLabel#weekNoneWaiting {{ "
         f"color: {palette['muted']}; font-size: {caption}; }}"
-        f"QLabel#railWaitingCount {{ background: {mix(palette['text'], palette['window'], 0.07)}; "
-        f"color: {palette['muted']}; border-radius: 9px; padding: 1px 6px; font-size: {caption}; "
+        f"QLabel#railWaitingCount {{ color: {palette['muted']}; font-size: {caption}; "
         f"font-weight: {WEIGHT_STRONG}; }}"
         f'QPushButton[railIcon="true"] {{ background: transparent; border: none; padding: 0; '
         f"min-height: 0; border-radius: {radius}px; }}"
@@ -2238,7 +2239,7 @@ def planner_rules(
         f"QPushButton#planReviewDetails:hover, QPushButton#planReviewReplan:hover {{ "
         f"text-decoration: underline; }}"
         f"QListWidget#planReviewList {{ border: none; padding: 0; font-size: {caption}; }}"
-        f"QLabel[railLabel=\"true\"] {{ color: {palette['muted']}; font-size: {caption}; "
+        f"QLabel[railLabel=\"true\"] {{ color: {palette['text']}; font-size: {caption}; "
         f"font-weight: {WEIGHT_STRONG}; }}"
         f"QLabel[railHeading=\"true\"] {{ font-size: {heading}; font-weight: {WEIGHT_STRONG}; }}"
     )

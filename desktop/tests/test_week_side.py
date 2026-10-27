@@ -283,6 +283,9 @@ def test_high_contrast_cuts_no_chip_and_scrolls_the_focus_list_neither_way(
     assert not rail.scroll.horizontalScrollBar().isVisible()
     starts = [button for button in rail.next.findChildren(QPushButton) if button.text() == "Start focus"]
     assert starts
+    waiting = window.styleSheet().split("QLabel#railWaitingCount {")[1].split("}")[0]
+    assert "background:" not in waiting
+    assert "border-radius" not in waiting
 
 
 def test_a_narrow_window_folds_the_rail_into_one_line_and_blocks_keep_their_times(
