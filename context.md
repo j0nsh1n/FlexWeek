@@ -31,6 +31,10 @@
   regression fail at 1024x776. The final gate and all 19 Classic Week scenarios pass;
   Grok 4.6 independently passed the correction on `096dedcd`, reran four targeted tests,
   and caught the fixed-height mutation before restoring its clean checkout.
+- Requested post-release Grok 4.6 follow-up passed on `3cab7f65`: 64 Retro/Setup tests in
+  64.71s, scoped Ruff and diff checks pass. The empty Retro fixture explained the old failure;
+  no remaining snapshot defect was found. Plan's colour test checks the palette rather than
+  stylesheet-painted text, leaving a non-blocking coverage gap. The review checkout is clean.
 - `feat/refined-look-renovation` remains separate at `4f1b9f97`, with its previously recorded
   772 focused tests and ten-look captures under `scratch/theme-renovation-2026-10-26/`.
   Its uncommitted spec/changelog drafts were preserved as patches under the integrated scratch
@@ -162,6 +166,8 @@ values make a retried write return the first result.
   The publication-triggered redundant build `40476977696` was cancelled; the release schedule
   was deleted. Final handoff is local on `fix/visual-artifacts-20261026`; release source is on main.
   Earlier renovation and other checkouts remain separate; storage cleanup remains deferred.
+  The requested read-only Retro/integration/test-clock/release follow-up also passed, with
+  64 targeted tests; its temporary checkout was retained and no release change resulted.
 - 2026-10-21, `main` fff4d064: **1.1.1 released** (PR #53, tag `v1.1.1`, Latest; all ten assets attached, every checksum verified). Linux packages carry `flexweek-mcp` (`--mcp` from the AppImage, the tar.gz launcher and the app); the release workflow smokes both, and the published AppImage and tar.gz were smoked again locally. spec.md's Releases section now names the Linux packages; Windows and Android do not carry the helper. Next: Bori moves to `<package> --mcp --read-only` (Bori agent, `.handoff/bori-calendar-mcp.md` section 12); release cleanup awaiting Jonathan's approval of the list; MCP track C (plan, running late, routines, restore) and the phone screens remain.
 - Next (Jonathan's pick: MCP first): track C, Plan / Running late / explain tools, routines, restore, then the app switching to the Rust views, write door and restore so nothing is written twice. Duplicates until then: Python validators and homework-edit rules in `backend/` and `desktop/`, and the desktop's focus phase advance (`controller.py` `advance_focus`) beside the phone's in `engine/ffi/src/focus.rs`.
 - Phone screens not built yet: full-screen focus with breaks (8 A), Month (6 B), Day (7 A), Week C with drag. Their plans are in `~/.flexweek-ui-harness/scratch/android-1.1/` (`rebuild-test-plan.md`, `wave4-test-plan.md`).
