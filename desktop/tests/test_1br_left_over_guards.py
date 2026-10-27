@@ -14,11 +14,14 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QPoint, QRect, QTimer
+from PySide6.QtGui import QFontMetrics
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QLabel, QPushButton
+from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
 
 from desktop.native.client import ApiError
+from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.look import sanitize_look
 from desktop.native.weekmodel import length_label, range_label
 from desktop.tests.blocks_helper import put_block
 from desktop.tests.grid_support import (  # noqa: F401
@@ -33,6 +36,10 @@ from desktop.tests.grid_support import (  # noqa: F401
 from desktop.tests.regress184.test_regress_item1b_unfinished_past_week import left_in_week_one
 
 WEDNESDAY, FRIDAY, SATURDAY = 2, 4, 5
+SMALL_WINDOW = (1024, 640)
+NORMAL_WINDOW = (1280, 800)
+LINE_CENTER_TOLERANCE = 4
+EVENT_PASSES = 20
 
 
 def overdue_this_week(qapp, window) -> str:
@@ -51,6 +58,31 @@ def overdue_this_week(qapp, window) -> str:
     session.week_changed.emit()
     settled(qapp, window)
     return block["id"]
+
+
+def open_unfinished_at(qapp, window, width: int, height: int, text: str) -> None:
+    """Classic week, the unfinished list open, at this window size and text size."""
+    window._look = sanitize_look({"preset": "default", "knobs": {"text": text}})
+    window.session.look = window._look
+    window._carry_look()
+    window._layout = sanitize_layout({"main": "classic", "day": "one", "options": {}})
+    window._apply_appearance()
+    window._on_week()
+    window.resize(width, height)
+    window.show()
+    window._show_unfinished()
+    settled(qapp, window)
+    for _ in range(EVENT_PASSES):
+        qapp.processEvents()
+
+
+def unfinished_row_buttons(window):
+    row = window.unfinished_panel.list.itemWidget(window.unfinished_panel.list.item(0))
+    return row, [
+        button
+        for button in row.findChildren(QPushButton)
+        if button.objectName().split("-")[0] in {"focusUnfinished", "planUnfinished", "deleteUnfinished"}
+    ]
 
 
 def test_1br_chip_and_planning_box_say_plan_into_this_week_and_mark_as_finished(qapp, window) -> None:
@@ -106,6 +138,50 @@ def test_1br_more_badge_opens_the_shared_left_over_rows(qapp, window) -> None:
     focus = row.findChild(QPushButton, "focusUnfinished-lab")
     assert focus is not None and focus.text() == "Start focus"
     assert focus.accessibleName() == "Start focus on Lab report"
+
+
+def test_1br_unfinished_row_buttons_stay_whole_at_1024_by_640_large(qapp, window) -> None:
+    """Mutation that turns this red: _fit_row returns before it moves the buttons under the words.
+    Find a time and Delete then sit past the panel's right edge at 1024 x 640 Large text."""
+    overdue_this_week(qapp, window)
+    open_unfinished_at(qapp, window, *SMALL_WINDOW, "large")
+    panel = window.unfinished_panel
+    assert panel.isVisibleTo(window)
+    row, buttons = unfinished_row_buttons(window)
+    assert buttons, "the unfinished row has its action buttons"
+    panel_rect = QRect(panel.mapTo(window, QPoint(0, 0)), panel.size())
+    list_rect = QRect(panel.list.viewport().mapTo(window, QPoint(0, 0)), panel.list.viewport().size())
+    for button in buttons:
+        assert button.isVisibleTo(panel), button.text()
+        assert button.width() >= button.sizeHint().width(), (button.text(), button.width())
+        placed = QRect(button.mapTo(window, QPoint(0, 0)), button.size())
+        assert panel_rect.contains(placed), (button.text(), placed, panel_rect)
+        assert list_rect.contains(placed), (button.text(), placed, list_rect)
+        assert row.rect().contains(QRect(button.mapTo(row, QPoint(0, 0)), button.size())), button.text()
+    text = row.findChild(QLabel, "unfinishedRow")
+    assert text is not None
+    words = QFontMetrics(text.font()).horizontalAdvance(text.text())
+    assert text.width() >= words or (
+        text.wordWrap() and text.height() >= text.heightForWidth(text.width())
+    ), (text.text(), text.width(), words)
+    words_bottom = text.mapTo(row, text.rect().bottomLeft()).y()
+    for button in buttons:
+        assert button.mapTo(row, button.rect().topLeft()).y() >= words_bottom, button.text()
+    assert panel.list.horizontalScrollBar().maximum() == 0
+
+
+def test_1br_unfinished_row_buttons_share_the_text_line_at_1280_normal(qapp, window) -> None:
+    overdue_this_week(qapp, window)
+    open_unfinished_at(qapp, window, *NORMAL_WINDOW, "normal")
+    row, buttons = unfinished_row_buttons(window)
+    text = row.findChild(QLabel, "unfinishedRow")
+    below = row.findChild(QWidget, "unfinishedRowBelow")
+    assert text is not None and buttons
+    for button in buttons:
+        assert abs(button.geometry().center().y() - text.geometry().center().y()) <= LINE_CENTER_TOLERANCE, (
+            button.text()
+        )
+    assert below is None or not below.isVisible()
 
 
 def test_1br_overdue_chip_hides_with_unfinished_and_returns_when_hidden(qapp, window) -> None:
