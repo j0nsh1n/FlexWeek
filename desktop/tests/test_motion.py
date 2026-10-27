@@ -583,6 +583,7 @@ LATER = [occurrence("essay", 3, 15 * 60, 16 * 60), occurrence("club", 5, 12 * 60
 def test_after_a_plan_blocks_slide_to_their_places_and_new_ones_fade_in(
     qapp: QApplication, manual_time: ManualTime  # noqa: F811
 ) -> None:
+    apply_ui_effects("normal")
     hours = Hours(qapp)
     final = hours.settled_picture(LATER)
     hours.canvas.set_week(LATER)
