@@ -1,4 +1,4 @@
-"""Settings in 0.18.3 (batch B, mockup 8): a fade above the footer, the Appearance page's chosen marks
+"""Settings in 0.18.3 (batch B, mockup 8): the footer closing the page, the Appearance page's chosen marks
 and stretched grids, and one control width per column (#66, #67, #68).
 
 Expected values come from the brief and the mockup, not from what the page printed: the ring is the
@@ -20,7 +20,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
 
 from desktop.native import motion
 from desktop.native.layouts.registry import LAYOUTS
-from desktop.native.look import resolved_palette
+from desktop.native.look import look_menu_token, resolved_palette, sanitize_look
 from desktop.native.settings import FADE_PX, SettingsPage
 from desktop.native.widgets import CardGrid, ChoiceCard
 from desktop.native.window import NativeWindow
@@ -41,7 +41,14 @@ def still() -> Iterator[None]:
     motion.apply_ui_effects(was)
 
 
-def open_settings(qapp: QApplication, window: NativeWindow, size: tuple[int, int]) -> SettingsPage:
+def open_settings(
+    qapp: QApplication, window: NativeWindow, size: tuple[int, int], text: str = "normal"
+) -> SettingsPage:
+    if text != "normal":
+        window._look = sanitize_look(
+            {**window._look, "knobs": {**window._look.get("knobs", {}), "text": text}}
+        )
+        window._apply_appearance()
     window.resize(*size)
     window._open_settings()
     page = window._settings
@@ -119,7 +126,52 @@ def where(widget: QWidget, within: QWidget) -> QPoint:
     return widget.mapTo(within, QPoint(0, 0))
 
 
-# --- #66: the fade above the footer and the padding under the last card ---------------------------
+def colours_close(found: QColor, other: QColor, slack: int = 6) -> bool:
+    return all(
+        abs(a - b) <= slack
+        for a, b in (
+            (found.red(), other.red()),
+            (found.green(), other.green()),
+            (found.blue(), other.blue()),
+        )
+    )
+
+
+def scroll_content_behind_footer(
+    qapp: QApplication,
+    page: SettingsPage,
+    area: QWidget,
+    footer: QWidget,
+    page_colour: str,
+    *,
+    need_dark: bool,
+) -> tuple[QImage, QImage, QPoint, int, list[int]]:
+    """A scroll position with content under the footer's top edge. Appearance can require a dark
+    look preview there, which is where the old 24 px ramp painted a band."""
+    bar = area.verticalScrollBar()
+    edge = where(footer, page).y()
+    origin = where(area.viewport(), page)
+    at = edge - origin.y()
+    half = FADE_PX // 2
+    for value in range(0, bar.maximum(), 10):
+        bar.setValue(value)
+        qapp.processEvents()
+        steady(qapp, page)
+        raw = area.viewport().grab().toImage()
+        if not (0 <= at - 1 < raw.height() and 0 <= at - half < raw.height()):
+            continue
+        under = sum(not near(seen(raw, x, at - 1, page_colour), page_colour) for x in range(raw.width()))
+        dark = [
+            x
+            for x in range(raw.width() - 24)
+            if sum(seen(raw, x, at - half, page_colour).getRgb()[:3]) < 300
+        ]
+        if under > 100 and (dark or not need_dark):
+            return raw, page.grab().toImage(), origin, at, dark
+    raise AssertionError("section never had content behind the footer")
+
+
+# --- #66: the footer closing the page and the padding under the last card -------------------------
 
 
 @pytest.mark.parametrize("size", [(1024, 700), (1280, 800)])
@@ -143,69 +195,100 @@ def test_every_section_ends_clear_of_the_footer(
     page.close_page()
 
 
-@pytest.mark.parametrize("size", [(1024, 700), (1280, 800)])
-def test_mid_scroll_the_row_above_the_footer_is_the_fade(
-    qapp: QApplication, window: NativeWindow, size: tuple[int, int]
+@pytest.mark.parametrize("size,text", [((1024, 640), "large"), ((1280, 800), "normal")])
+def test_mid_scroll_a_dark_preview_is_not_a_band_above_the_footer(
+    qapp: QApplication, window: NativeWindow, size: tuple[int, int], text: str
 ) -> None:
-    page = open_settings(qapp, window, size)
+    """The 24 px ramp mixed cream into dark look previews and read as a blur strip above Done."""
+    page = open_settings(qapp, window, size, text=text)
     page_colour = palette_of(window)["window"]
     footer = page.findChild(QWidget, "settingsFooter")
-    edge = where(footer, page).y()
-    # Only the stage: the section list beside it is a panel of its own colour.
-    across = range(where(footer, page).x(), where(footer, page).x() + footer.width())
     checked = 0
+    dark_checked = 0
     for row in range(5):
         show_section(qapp, page, row)
         area = page.stack.widget(row)
-        bar = area.verticalScrollBar()
-        if bar.maximum() <= 0:
+        if area.verticalScrollBar().maximum() <= 0:
             continue
-        half = FADE_PX // 2
-        origin = where(area.viewport(), page)
-        at = edge - origin.y()
-        # A scroll position with content behind the footer's top edge, so a hard cut would show it; on
-        # Appearance, one with a dark look's picture behind the middle of the ramp as well.
-        for value in range(0, bar.maximum(), 10):
-            bar.setValue(value)
-            qapp.processEvents()
-            # Under load the page can still be settling (a refit, a picture) between the two grabs this
-            # compares: wait until it draws the same twice running.
-            steady(qapp, page)
-            raw = area.viewport().grab().toImage()
-            under = sum(not near(seen(raw, x, at - 1, page_colour), page_colour) for x in range(raw.width()))
-            dark = [
-                x
-                for x in range(raw.width() - 24)
-                if sum(seen(raw, x, at - half, page_colour).getRgb()[:3]) < 300
-            ]
-            if under > 100 and (dark or row != APPEARANCE):
-                break
-        else:
-            raise AssertionError(f"section {row} never had content behind the footer")
-        shown = page.grab().toImage()
-        assert all(near(shown.pixelColor(x, edge - 1), page_colour) for x in across), row
-        # The ramp begins FADE_PX up and leaves what is above it as it was. The right edge is left out:
-        # the scroll bar is drawn over the page there, not on the viewport.
+        raw, shown, origin, at, dark = scroll_content_behind_footer(
+            qapp, page, area, footer, page_colour, need_dark=row == APPEARANCE
+        )
         sides = range(0, raw.width() - 24, 7)
         high = at - FADE_PX - 16
         assert all(
             shown.pixelColor(origin.x() + x, origin.y() + high) == seen(raw, x, high, page_colour)
             for x in sides
         ), row
-        # Half way up, a dark picture is part faded: the picture and the page colour mixed in that ratio.
-        mix = (half + 0.5) / (FADE_PX - 1)
+        half = FADE_PX // 2
         back = QColor(page_colour)
+        mix = (half + 0.5) / (FADE_PX - 1)
         for x in dark:
             was = seen(raw, x, at - half, page_colour)
             got = shown.pixelColor(origin.x() + x, origin.y() + at - half)
-            for have, before, after in (
-                (got.red(), was.red(), back.red()),
-                (got.green(), was.green(), back.green()),
-                (got.blue(), was.blue(), back.blue()),
-            ):
-                assert abs(have - (before * (1 - mix) + after * mix)) <= 6, (row, x, got.name(), was.name())
+            assert colours_close(got, was), (row, x, got.name(), was.name())
+            mixed = QColor(
+                round(was.red() * (1 - mix) + back.red() * mix),
+                round(was.green() * (1 - mix) + back.green() * mix),
+                round(was.blue() * (1 - mix) + back.blue() * mix),
+            )
+            assert not colours_close(got, mixed, slack=12), (row, x, got.name(), mixed.name())
+        if dark:
+            dark_checked += 1
         checked += 1
-    assert checked >= 2
+    assert checked >= 2 and dark_checked >= 1
+    page.close_page()
+
+
+def test_the_footer_keeps_its_margins_and_closes_the_page_opaque(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    page = open_settings(qapp, window, (1024, 640), text="large")
+    footer = page.findChild(QWidget, "settingsFooter")
+    margins = footer.layout().contentsMargins()
+    assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (32, 12, 32, 16)
+    palette = palette_of(window)
+    picture = footer.grab().toImage()
+    assert picture.pixelColor(footer.width() // 2, 0).name() == palette["hairline"]
+    pad = picture.pixelColor(footer.width() - 8, max(8, footer.height() // 2))
+    assert near(pad, palette["window"])
+    done = page.findChild(QPushButton, "settingsDone")
+    assert done is not None and done.isVisibleTo(page)
+    page.close_page()
+
+
+LOOKS_ABOVE_FOOTER = (
+    ("pack", "light-frost"),
+    ("pack", "dark-frost"),
+    ("preset", "high-contrast"),
+    ("preset", "paper"),
+    ("pack", "nocturne"),
+)
+
+
+def test_no_fade_band_in_light_dark_high_contrast_paper_or_nocturne(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    page = open_settings(qapp, window, (1024, 640), text="large")
+    footer = page.findChild(QWidget, "settingsFooter")
+    for kind, name in LOOKS_ABOVE_FOOTER:
+        page.look.setCurrentIndex(page.look.findData(look_menu_token(kind, name)))
+        for _ in range(8):
+            qapp.processEvents()
+        show_section(qapp, page, APPEARANCE)
+        palette = page.shown_palette()
+        page_colour = palette["window"]
+        area = page.stack.widget(APPEARANCE)
+        assert area.verticalScrollBar().maximum() > 0, name
+        raw, shown, origin, at, _dark = scroll_content_behind_footer(
+            qapp, page, area, footer, page_colour, need_dark=False
+        )
+        half = FADE_PX // 2
+        for x in range(0, raw.width() - 24, 11):
+            was = seen(raw, x, at - half, page_colour)
+            got = shown.pixelColor(origin.x() + x, origin.y() + at - half)
+            assert colours_close(got, was, slack=8), (name, x, got.name(), was.name())
+        pad = footer.grab().toImage().pixelColor(footer.width() - 8, max(8, footer.height() // 2))
+        assert near(pad, page_colour, slack=4), (name, pad.name(), page_colour)
     page.close_page()
 
 
