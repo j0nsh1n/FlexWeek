@@ -367,8 +367,8 @@ class MonthCard(QWidget):
         self._say()
 
 
-class EdgeCard(QFrame):
-    """A card with a 3-pixel edge down its left side in a category's mark, as the week's blocks have."""
+class EdgeCard(QWidget):
+    """A 3-pixel edge down the left side in a category's mark, as the week's blocks have."""
 
     def __init__(self, name: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)

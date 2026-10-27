@@ -1,4 +1,4 @@
-"""1.0.0 planning screen: shared bar, 28 px status strip, Agenda rail pick A."""
+"""1.0.0 planning screen: shared bar, Agenda rail pick A, quiet Week chrome."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
 
 from desktop.native.hours.rail import RAIL_PX
 from desktop.native.look import sanitize_look
+from desktop.native.tokens import SPACING
 from desktop.native.window import NativeWindow
 from desktop.tests.test_1br_left_over_guards import overdue_this_week
 from desktop.tests.test_more_count import more_row
@@ -28,17 +29,32 @@ from desktop.tests.window_support import (  # noqa: F401
 )
 
 
-def test_the_status_strip_is_28_px_with_next_list_link_and_overdue_count(
+def week_list_action(native: NativeWindow):
+    native._sync_more_menu()
+    for action, button in native._more_pairs:
+        if button.objectName() == "weekListRow":
+            return action
+    raise AssertionError("More has no Week as a list")
+
+
+def test_the_week_has_no_status_strip_and_week_as_a_list_lives_in_more(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
 ) -> None:
     seeded(qapp, window)
-    strip = window.status_strip
-    assert strip.isVisible() and strip.height() == 28
-    assert window.status_next.text() == "Next: Soccer practice 4:00 PM · in 20 min"
-    assert window.week_list_row.text() == "Week as a list · Ctrl+Shift+L"
-    assert window.week_list_row.accessibleName() == "Week as a list · Ctrl+Shift+L"
-    assert window.status_overdue.text() == "0 overdue"
+    assert window.findChild(QWidget, "weekStatusStrip") is None
+    assert window.findChild(QLabel, "weekStatusNext") is None
+    assert window.findChild(QLabel, "weekStatusOverdue") is None
+    assert not window.week_list_row.isVisibleTo(window)
+    action = week_list_action(window)
+    assert action.text() == "Week as a list"
+    assert action.isEnabled()
+    card = window.rail.next
+    assert (card.label.text(), card.title.text(), card.when.text()) == (
+        "Next",
+        "Soccer practice",
+        "4:00 PM · in 20 min",
+    )
 
 
 def test_plan_carries_the_not_placed_count_and_more_does_not(
@@ -89,6 +105,26 @@ def test_the_agenda_rail_lists_next_no_time_yet_and_due_this_week(
     ]
 
 
+def test_the_agenda_rail_has_no_count_pill_and_headings_in_ink(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    seeded(qapp, window)
+    sheet = window.styleSheet()
+    waiting = sheet.split("QLabel#railWaitingCount {")[1].split("}")[0]
+    assert "background:" not in waiting
+    assert "border-radius" not in waiting
+    assert "padding:" not in waiting
+    assert window.rail.waiting_count.text() == "1"
+    assert window.rail.waiting_count.isVisible()
+    labels = sheet.split('QLabel[railLabel="true"] {')[1].split("}")[0]
+    assert "color: " in labels
+    assert window.rail.next.label.property("railLabel") is True
+    assert window.rail.waiting_label.property("railLabel") is True
+    assert window.rail.due_label.property("railLabel") is True
+    assert window.rail.sections.spacing() == SPACING[4]
+
+
 def test_the_week_title_opens_the_mini_month(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
@@ -130,18 +166,17 @@ def test_large_text_puts_the_date_under_the_day_name(
         qapp.processEvents()
     assert label._twoline() is True
     assert label.sizeHint().height() > before
-    assert window.status_strip.height() == 28
-    assert window.week_list_row.height() == 28
+    assert window.findChild(QWidget, "weekStatusStrip") is None
+    assert week_list_action(window).isEnabled()
 
 
-def test_the_strip_names_overdue_homework_that_already_has_a_time(
+def test_overdue_homework_that_already_has_a_time_stays_in_unfinished(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
 ) -> None:
     overdue_this_week(qapp, window)
     window._on_week()
     qapp.processEvents()
-    assert window.status_overdue.text() == "1 overdue"
     assert window.rail.none_waiting.text() == "Everything has a time."
     assert window.more_button.accessibleName() == "More"
     assert window.solve_button.accessibleName() == "Plan my homework"
@@ -173,24 +208,45 @@ def test_the_next_rows_keep_the_keyboard_as_the_minutes_pass(
     assert button.hasFocus()
 
 
-def test_a_long_next_title_shortens_in_the_strip_instead_of_pushing_it_off_the_window(
+def test_ctrl_shift_l_opens_the_week_list_and_esc_returns_focus(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
 ) -> None:
     seeded(qapp, window)
-    soccer = next(block for block in window.session.blocks if block["id"] == "soccer")
-    title = "Soccer practice with the whole regional development squad and their parents"
-    window.session.add_block({**soccer, "title": title})
-    window.session.save()
-    settled(qapp, window)
-    window.resize(800, 860)
-    for _ in range(5):
+    gear = window.settings_gear
+    window.activateWindow()
+    gear.setFocus(Qt.FocusReason.OtherFocusReason)
+    qapp.processEvents()
+    QTest.keyClick(
+        window.windowHandle(),
+        Qt.Key.Key_L,
+        Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier,
+    )
+    for _ in range(3):
         qapp.processEvents()
-    full = f"Next: {title} 4:00 PM · in 20 min"
-    assert window.status_next.accessibleName() == full
-    assert window.status_next.text() != full and window.status_next.text().endswith("…")
-    strip = window.status_strip
-    link = window.week_list_row
-    assert link.isVisible()
-    assert link.mapTo(strip, link.rect().topRight()).x() < strip.width()
-    assert link.width() >= link.sizeHint().width()
+    assert window.week_list_panel.isVisible()
+    assert QApplication.focusWidget() is window.week_access_list
+    assert window.week_access_list.currentRow() == 0
+    QTest.keyClick(window.windowHandle(), Qt.Key.Key_Escape)
+    for _ in range(3):
+        qapp.processEvents()
+    assert not window.week_list_panel.isVisible()
+    assert QApplication.focusWidget() is gear
+
+
+def test_more_week_as_a_list_opens_the_list_over_the_grid(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    seeded(qapp, window)
+    before = window.planner.mapTo(window, window.planner.rect().topLeft()).y()
+    week_list_action(window).trigger()
+    for _ in range(3):
+        qapp.processEvents()
+    assert window.week_list_panel.isVisible()
+    assert window.week_access_list.isVisibleTo(window)
+    assert window.planner.mapTo(window, window.planner.rect().topLeft()).y() == before
+    week_list_action(window).trigger()
+    for _ in range(3):
+        qapp.processEvents()
+    assert not window.week_list_panel.isVisible()

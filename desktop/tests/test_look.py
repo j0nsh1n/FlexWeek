@@ -858,3 +858,26 @@ def test_a_tray_chip_is_edged_in_homeworks_colour_not_in_red() -> None:
         tray = pack_stylesheet(pack, dark, look).split('QPushButton[tray="true"] {')[1].split("}")[0]
         assert f"border-left: 4px solid {mark};" in tray, pack
         assert palette["error"] not in tray and "#ef4444" not in tray, pack
+
+
+def test_the_agenda_rail_uses_type_and_space_not_pills() -> None:
+    """Quiet split A: rail sections are ink and caption, not a count pill or nested cards."""
+    cases = (
+        ("light-frost", False, look_of("default")),
+        ("dark-frost", True, look_of("default")),
+        ("light-frost", False, look_of("high-contrast")),
+    )
+    for pack, dark, look in cases:
+        palette = resolved_palette(pack, dark, look)
+        sheet = pack_stylesheet(pack, dark, look)
+        waiting = sheet.split("QLabel#railWaitingCount {")[1].split("}")[0]
+        assert "background:" not in waiting, pack
+        assert "border-radius" not in waiting, pack
+        assert "padding:" not in waiting, pack
+        assert f"color: {palette['muted']};" in waiting, pack
+        labels = sheet.split('QLabel[railLabel="true"] {')[1].split("}")[0]
+        assert f"color: {palette['text']};" in labels, pack
+        assert f"color: {palette['muted']};" not in labels, pack
+        bare = sheet.split("QFrame#rail,")[1].split("QListWidget#focusTasks")[0]
+        assert "QWidget#railNextCard" in bare and "QWidget#railDue" in bare, pack
+        assert "QLabel#railDueWhen" in sheet and "QLabel#railNextRowWhen" in sheet, pack

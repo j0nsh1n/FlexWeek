@@ -36,9 +36,9 @@
  },
  {
   "file": "desktop/native/window.py",
-  "name": "Plan my homework plain again",
-  "old": "        solve.setProperty(\"secondary\", True)\n",
-  "new": "        solve.setProperty(\"quiet\", True)\n",
+  "name": "Plan loses its accent text",
+  "old": "        words = palette.get(\"accent_text\", palette[\"accent\"])\n",
+  "new": "        words = palette[\"text\"]\n",
   "test": "desktop/tests/test_top_bar.py::test_plan_is_second_to_add_and_more_is_in_the_text_colour"
  },
  {

@@ -5534,6 +5534,7 @@ class UnfinishedPanel(QWidget):
         layout.addWidget(heading)
         self.list = QListWidget()
         self.list.setObjectName("unfinishedList")
+        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         layout.addWidget(self.list)
         row = QHBoxLayout()
         dismiss = QPushButton("Hide")
@@ -5571,9 +5572,12 @@ class UnfinishedPanel(QWidget):
         self.list.clear()
         for item in items:
             row = QWidget()
-            row_layout = QHBoxLayout(row)
-            sides = row_layout.contentsMargins()
-            row_layout.setContentsMargins(sides.left(), 0, sides.right(), 0)
+            column = QVBoxLayout(row)
+            sides = column.contentsMargins()
+            column.setContentsMargins(sides.left(), 0, sides.right(), 0)
+            column.setSpacing(0)
+            line = QHBoxLayout()
+            line.setContentsMargins(0, 0, 0, 0)
             text = QLabel(f"{item['title']} · {length_label(int(item['remaining_min']))} left")
             text.setObjectName("unfinishedRow")
             state = item.get("left_over_state")
@@ -5596,7 +5600,7 @@ class UnfinishedPanel(QWidget):
             row_words = f"{label_text}{due_words} · {state_words}" if state_words else label_text
             row.setAccessibleName(row_words)
             text.setText(row_words)
-            row_layout.addWidget(text, 1)
+            line.addWidget(text, 1)
             if state in {"overdue", "left_from_last_week"}:
                 focus = QPushButton("Start focus")
                 focus.setObjectName(f"focusUnfinished-{item['id']}")
@@ -5605,7 +5609,7 @@ class UnfinishedPanel(QWidget):
                 focus.clicked.connect(
                     lambda _checked=False, item_id=item["id"]: self.focus_requested.emit(item_id)
                 )
-                row_layout.addWidget(focus)
+                line.addWidget(focus)
             if item.get("plannable", True):
                 button = QPushButton("Find a time")
                 button.setObjectName(f"planUnfinished-{item['id']}")
@@ -5616,7 +5620,7 @@ class UnfinishedPanel(QWidget):
                 button.clicked.connect(
                     lambda _checked=False, item_id=item["id"]: self.plan_requested.emit(item_id)
                 )
-                row_layout.addWidget(button)
+                line.addWidget(button)
             delete = QPushButton("Delete")
             delete.setObjectName(f"deleteUnfinished-{item['id']}")
             delete.setProperty("outlined", True)
@@ -5625,29 +5629,110 @@ class UnfinishedPanel(QWidget):
             delete.clicked.connect(
                 lambda _checked=False, item_id=item["id"]: self.delete_requested.emit(item_id)
             )
-            row_layout.addWidget(delete)
+            line.addWidget(delete)
+            # Where the words and the buttons do not fit one line (1024x640 at Large text), the
+            # buttons move under the words. Hidden while empty, it adds no height.
+            below = QWidget()
+            below.setObjectName("unfinishedRowBelow")
+            below_row = QHBoxLayout(below)
+            below_row.setContentsMargins(0, 0, 0, 0)
+            below_row.setSpacing(line.spacing())
+            below_row.addStretch(1)
+            below.hide()
+            column.addLayout(line)
+            column.addWidget(below)
             wrapper = QListWidgetItem()
             self.list.addItem(wrapper)
             self.list.setItemWidget(wrapper, row)
         self._fit_rows()
         self.setVisible(bool(items))
 
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._fit_rows()
+
+    def _row_buttons(self, row: QWidget) -> list[QPushButton]:
+        rank = {"focusUnfinished": 0, "planUnfinished": 1, "deleteUnfinished": 2}
+        found = [
+            button
+            for button in row.findChildren(QPushButton)
+            if button.objectName().split("-")[0] in rank
+        ]
+        return sorted(found, key=lambda button: rank[button.objectName().split("-")[0]])
+
+    def _fit_row(self, row: QWidget, width: int) -> None:
+        """Both the words and every button whole on one line when the row is wide enough; otherwise
+        the buttons move under the words. A button is never squeezed to fit its line."""
+        text = row.findChild(QLabel, "unfinishedRow")
+        below = row.findChild(QWidget, "unfinishedRowBelow")
+        buttons = self._row_buttons(row)
+        if text is None or below is None or not buttons or width <= 0:
+            return
+        line = row.layout().itemAt(0).layout()
+        below_row = below.layout()
+        margins = row.layout().contentsMargins()
+        gap = line.spacing()
+        words = QFontMetrics(text.font()).horizontalAdvance(text.text())
+        needed = margins.left() + margins.right() + words
+        needed += sum(button.sizeHint().width() for button in buttons)
+        needed += gap * len(buttons)
+        wrapped = width < needed
+        if wrapped == below.isVisible():
+            return
+        source = line if wrapped else below_row
+        for button in buttons:
+            source.removeWidget(button)
+        if wrapped:
+            for button in buttons:
+                below_row.insertWidget(below_row.count() - 1, button)
+        else:
+            for button in buttons:
+                line.addWidget(button)
+        below.setVisible(wrapped)
+        text.setWordWrap(wrapped)
+        row.layout().setSpacing(4 if wrapped else 0)
+
+    def _row_height(self, row: QWidget) -> int:
+        text = row.findChild(QLabel, "unfinishedRow")
+        below = row.findChild(QWidget, "unfinishedRowBelow")
+        buttons = self._row_buttons(row)
+        button_h = max((button.sizeHint().height() for button in buttons), default=0)
+        text_h = 0 if text is None else max(text.sizeHint().height(), text.fontMetrics().height())
+        margins = row.layout().contentsMargins()
+        height = margins.top() + margins.bottom()
+        if below is not None and below.isVisible():
+            return height + text_h + row.layout().spacing() + button_h
+        return height + max(text_h, button_h)
+
     def _fit_rows(self) -> None:
         """Each row as tall as its buttons are once the look has styled them, and the list as tall as
         its rows up to about three and a half, so a fourth shows it scrolls (#79). The rows were measured
         before the look reached their buttons, so every button was cut top and bottom."""
+        width = self.list.viewport().width()
+        if width <= 0:
+            pad = self.layout().contentsMargins()
+            width = max(self.width() - pad.left() - pad.right() - 2 * self.list.frameWidth(), 0)
         rows = []
         for index in range(self.list.count()):
             wrapper = self.list.item(index)
             row = self.list.itemWidget(wrapper)
             for part in (row, *row.findChildren(QWidget)):
                 part.ensurePolished()
-            wrapper.setSizeHint(row.sizeHint())
-            rows.append(row.sizeHint().height())
+            for button in self._row_buttons(row):
+                button.setMinimumSize(button.sizeHint())
+            self._fit_row(row, width)
+            if width > 0:
+                row.setMaximumWidth(width)
+            row.layout().activate()
+            height = self._row_height(row)
+            wrapper.setSizeHint(QSize(max(width, 1), height))
+            rows.append(height)
         if rows:
             # As tall as its rows, as the plan review is: one row in a box eight rows deep read as empty.
             room = round(UNFINISHED_ROWS * max(rows))
-            self.list.setFixedHeight(min(sum(rows), room) + 2 * self.list.frameWidth() + 4)
+            edge = 2 * self.list.frameWidth() + 4
+            self.list.setMinimumHeight(max(rows) + edge)
+            self.list.setMaximumHeight(min(sum(rows), room) + edge)
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)

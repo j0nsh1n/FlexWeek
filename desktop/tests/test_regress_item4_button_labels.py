@@ -43,8 +43,7 @@ from desktop.tests.window_support import free, qapp, server, settled, signed_out
 
 EXEMPT_PROPS = ("step", "segment", "pill", "chip", "small")
 # The top bar's four views are segments of one control in a track, so they are exempt like segments.
-# The week's list row is a fixed 28 px strip by U19's spec, so tabbing to it never moves the grid.
-EXEMPT_NAMES = {"sheetClose", "weekListRow", *VIEW_BUTTONS}
+EXEMPT_NAMES = {"sheetClose", *VIEW_BUTTONS}
 SIZES = ("small", "normal", "large")
 
 # The no-clip check: every design x every look x Small/Normal/Large. The roomy rule: every design on the

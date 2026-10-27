@@ -1,12 +1,4 @@
-"""Regression for item 0k in every main design (fix-specs.md batch 12: "Every main design that shows a week
-has the list", before the grid in Tab order, Ctrl+Shift+L, Enter opens a block) and QA's U19
-(fix-specs-0190.md: the list must not make the week jump; a fixed 28 px "Week as a list · Ctrl+Shift+L"
-row; Esc returns to the grid).
-
-Note: 0.19.0's own test_0k_the_week_list_takes_no_room_until_the_keyboard_reaches_it asserts the
-focus-driven resize that U19 removes; it will need changing with the U19 fix.
-Known failures are xfail(strict=True).
-"""
+"""The week list remains reachable in every design without moving the grid."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
@@ -26,9 +18,6 @@ DESIGNS = ("classic", "retro", "clay", "bento", "mission", "timeline")
 SCHOOL = {"id": "school", "title": "School", "kind": "locked", "category": "class", "start": "08:30",
           "duration_min": 405, "days": [0, 1, 2, 3, 4]}
 CTRL_SHIFT = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier
-KNOWN_JUMP = "known failure (U19): the list grows 132 px on FocusIn and folds on FocusOut, moving the grid"
-KNOWN_ROW = "known failure (U19.1): there is no fixed 'Week as a list · Ctrl+Shift+L' row above the grid"
-KNOWN_ESC = "known failure (U19.2): Esc in the week list does not return the keyboard to the grid"
 
 
 def in_design(qapp, window, design: str) -> QWidget:
@@ -54,7 +43,9 @@ def key(window, k, mods=Qt.KeyboardModifier.NoModifier) -> None:
 def test_0k_every_main_design_has_the_week_list_before_its_hours(qapp, window, design) -> None:
     hours = in_design(qapp, window, design)
     listing = window.week_access_list
-    assert window.week_list_row.isVisibleTo(window), f"{design}: no way into the week list"
+    window._sync_more_menu()
+    action = next(action for action, button in window._more_pairs if button is window.week_list_row)
+    assert action.isEnabled() and action.text() == "Week as a list", f"{design}: no way into the week list"
     key(window, Qt.Key.Key_L, CTRL_SHIFT)
     assert listing.isVisibleTo(window), f"{design}: no week list"
     assert any("School" in listing.item(i).text() for i in range(listing.count()))
@@ -103,13 +94,13 @@ def test_u19_tabbing_through_the_week_page_twice_never_moves_the_hours(qapp, win
     assert len(tops) == 1, f"the hours sat at y = {sorted(tops)}"
 
 
-def test_u19_a_fixed_28_px_week_as_a_list_row_is_a_tab_stop(qapp, window) -> None:
+def test_u19_more_is_a_tab_stop_with_a_week_list_entry(qapp, window) -> None:
     in_design(qapp, window, "classic")
-    rows = [w for w in window.findChildren(QWidget)
-            if w.isVisible() and "week as a list" in w.accessibleName().lower()
-            and "ctrl+shift+l" in w.accessibleName().lower()]
-    assert rows, "no 'Week as a list · Ctrl+Shift+L' row"
-    assert rows[0].height() == 28 and rows[0].focusPolicy() & Qt.FocusPolicy.TabFocus
+    assert window.more_button.isVisible()
+    assert window.more_button.focusPolicy() & Qt.FocusPolicy.TabFocus
+    window._sync_more_menu()
+    action = next(action for action, button in window._more_pairs if button is window.week_list_row)
+    assert action.isEnabled() and "Ctrl+Shift+L" in action.toolTip()
 
 
 def test_u19_esc_in_the_list_returns_to_the_grid(qapp, window) -> None:

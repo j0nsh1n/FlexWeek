@@ -1665,7 +1665,6 @@ def test_the_week_toolbar_keeps_only_what_is_reached_for(qapp: QApplication, win
         "solveButton",
         "moreButton",
         "settingsGear",
-        "weekListRow",
     ]
 
     menu = window.findChild(QPushButton, "moreButton").menu()
@@ -1673,7 +1672,16 @@ def test_the_week_toolbar_keeps_only_what_is_reached_for(qapp: QApplication, win
     sections = more_sections(window)
     items = more_actions(window)
     assert sections == ["Planning", "Edit", "Help and info", "Account"]
-    wanted = {"Undo", "Redo", "Duplicate", "Running late", "Routines", "Undo, copy and save", "Sign out"}
+    wanted = {
+        "Undo",
+        "Redo",
+        "Duplicate",
+        "Running late",
+        "Routines",
+        "Week as a list",
+        "Undo, copy and save",
+        "Sign out",
+    }
     assert wanted <= set(items)
     assert "Settings" not in items
     assert "Account" not in items

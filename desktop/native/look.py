@@ -1350,9 +1350,6 @@ def _rgba(colour: str, alpha: float) -> str:
     return f"rgba({red}, {green}, {blue}, {round(alpha * 255)})"
 
 
-# The week-list row above the grid (U19) is this tall at each text size, in every look and design. It
-# is fixed within a size so tabbing never moves the grid; Large text needs 4 px more for its words.
-WEEK_LIST_ROW_HEIGHT = {"small": 28, "normal": 28, "large": 28}
 DISABLED = 0.4
 CONFLICT_FILL, CONFLICT_TEXT = "#fff4d6", "#6b4a00"
 # A roomy button: 8 pixels above and below its words, 20 at the sides, and at least 36 pixels tall in all,
@@ -1794,10 +1791,6 @@ def button_rules(
         f'QPushButton[quiet="true"]:pressed {{ background: {_veil(text, 0.10)}; }}',
         f'QPushButton[quiet="true"]:disabled {{ background: transparent; color: {mix(text, page, 0.4)}; }}',
         f'QPushButton[keyfocus="true"]:focus {{ border-color: {ring}; }}',
-        # U19's list row is a fixed 28 px strip. No vertical padding and no edge, so the words get
-        # the full height. A stylesheet min-height of 0 also drops the widget's own fixed height.
-        f"QPushButton#weekListRow {{ padding: 0 {pad * 2}px; border-width: 0; "
-        f"min-height: {WEEK_LIST_ROW_HEIGHT['large' if large else 'normal']}px; }}",
     ]
     return "".join(rules)
 
@@ -1862,6 +1855,7 @@ def top_bar_rules(
     more = art.get("more") if art else None
     pill_edge = palette["hairline_strong"] if contrast_look else palette["hairline"]
     quiet_ink = text if contrast_look else muted
+    plan_ink = palette.get("accent_text", palette["accent"])
 
     def views(state: str = "") -> str:
         return ", ".join(f"QRadioButton#{name}{state}" for name in VIEW_BUTTONS)
@@ -1906,6 +1900,13 @@ def top_bar_rules(
         "QPushButton#prevWeek, QPushButton#nextWeek, QPushButton#settingsGear { "
         f"padding-left: {max(pad - 2, 2)}px; padding-right: {max(pad - 2, 2)}px; }}"
         f"{BAR_WORDS} {{ padding-left: {ROOMY_SIDE}px; padding-right: {ROOMY_SIDE}px; }}"
+        f"QPushButton#solveButton {{ background: transparent; color: {plan_ink}; "
+        f"font-weight: {WEIGHT_STRONG}; border: 2px solid transparent; "
+        f"padding: {ROOMY_PAD}px {ROOMY_SIDE}px; min-height: {roomy_height(large)}px; }}"
+        f"QPushButton#solveButton:hover {{ background: {mix(text, page, 0.06)}; }}"
+        f"QPushButton#solveButton:pressed {{ background: {mix(text, page, 0.10)}; }}"
+        f"QPushButton#solveButton:disabled {{ background: transparent; "
+        f"color: {mix(plan_ink, page, 0.4)}; }}"
         f'QPushButton#moreButton[iconOnly="true"] {{ padding-left: {max(pad - 2, 2)}px; '
         f"padding-right: {max(pad - 2, 2)}px; }}"
         "QPushButton#addButton { border-top-right-radius: 0; border-bottom-right-radius: 0; }"
@@ -2186,8 +2187,8 @@ def planner_rules(
     palette: dict, text: float | str, pad: int, radius: int, card_radius: int, edges: str
 ) -> str:
     """Today's app around its hours: the plan bar, the rail, Day's agenda (decisions 13 to 18 of 0.17).
-    Sizes from the type scale; section labels in the muted colour, never the accent, which read as
-    links."""
+    Sizes from the type scale. Rail sections read as ink and space, not nested cards; headings are the
+    page's ink at caption size, secondary words muted, never the accent, which read as links."""
     caption, body, heading = (f"{type_pt(role, text)}pt" for role in ("caption", "body", "heading"))
     link = (
         f"background: transparent; color: {accent_words(palette)}; border: none; "
@@ -2205,15 +2206,16 @@ def planner_rules(
     return (
         # The rail sits on the page; Day and Week on a sheet in the card colour, its corner rounded.
         f"QFrame#rail, QScrollArea#railScroll, QWidget#railBody, QWidget#railStrip, QWidget#railMonth, "
-        f"QWidget#railNext, QWidget#railWaiting, QWidget#railFocus, QFrame#railNextCard {{ {bare} }}"
+        f"QWidget#railNext, QWidget#railWaiting, QWidget#railDue, QWidget#railFocus, "
+        f"QWidget#railNextRest, QWidget#railNextRow, QWidget#railOneGo, QWidget#railNextCard {{ {bare} }}"
         f'QFrame#rail[folded="true"] {{ padding: {pad // 2}px {pad}px; }}'
         f"QListWidget#focusTasks {{ {bare} }}"
         f"QLabel[railMonthTitle=\"true\"], QLabel#railNextTitle {{ font-size: {body}; "
         f"font-weight: {WEIGHT_STRONG}; }}"
-        f"QLabel#railNextWhen, QLabel#railNextThen, QLabel#classicAgendaSub, QLabel#weekNoneWaiting {{ "
+        f"QLabel#railNextWhen, QLabel#railNextThen, QLabel#railNextRowWhen, QLabel#railDueWhen, "
+        f"QLabel#classicAgendaSub, QLabel#weekNoneWaiting {{ "
         f"color: {palette['muted']}; font-size: {caption}; }}"
-        f"QLabel#railWaitingCount {{ background: {mix(palette['text'], palette['window'], 0.07)}; "
-        f"color: {palette['muted']}; border-radius: 9px; padding: 1px 6px; font-size: {caption}; "
+        f"QLabel#railWaitingCount {{ color: {palette['muted']}; font-size: {caption}; "
         f"font-weight: {WEIGHT_STRONG}; }}"
         f'QPushButton[railIcon="true"] {{ background: transparent; border: none; padding: 0; '
         f"min-height: 0; border-radius: {radius}px; }}"
@@ -2238,7 +2240,7 @@ def planner_rules(
         f"QPushButton#planReviewDetails:hover, QPushButton#planReviewReplan:hover {{ "
         f"text-decoration: underline; }}"
         f"QListWidget#planReviewList {{ border: none; padding: 0; font-size: {caption}; }}"
-        f"QLabel[railLabel=\"true\"] {{ color: {palette['muted']}; font-size: {caption}; "
+        f"QLabel[railLabel=\"true\"] {{ color: {palette['text']}; font-size: {caption}; "
         f"font-weight: {WEIGHT_STRONG}; }}"
         f"QLabel[railHeading=\"true\"] {{ font-size: {heading}; font-weight: {WEIGHT_STRONG}; }}"
     )

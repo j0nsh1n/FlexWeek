@@ -30,6 +30,7 @@ from desktop.native import settings
 from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.look import sanitize_look
 from desktop.native.tokens import type_pt
+from desktop.native.version import VERSION
 from desktop.native.widgets import SHEET_LIST, FitScroll
 from desktop.native.window import NativeWindow
 from desktop.tests.window_support import (  # noqa: F401
@@ -55,6 +56,7 @@ ADDING = {
     "School hours…": "Set the days and times you're at school, so nothing is planned then.",
 }
 TOOLTIPS = {
+    "Week as a list": "Every block this week, day by day, in time order. Ctrl+Shift+L",
     "Running late": (
         "Behind today? Say how late you are, and FlexWeek moves the rest of today's homework later."
     ),
@@ -358,7 +360,7 @@ def test_about_gives_the_version_what_flexweek_is_and_opens_the_folder_its_data_
     said = [label.text() for label in dialog.findChildren(QLabel) if label.text()]
     assert said == [
         "About FlexWeek",
-        "FlexWeek 1.1.1",
+        f"FlexWeek {VERSION}",
         "FlexWeek plans your homework around school, sports and everything else in your week.",
         "Your week is saved on this computer, under this account.",
     ]

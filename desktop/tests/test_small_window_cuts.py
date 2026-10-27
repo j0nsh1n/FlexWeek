@@ -11,6 +11,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QPoint, QRect
 from PySide6.QtWidgets import QLabel, QPushButton, QWidget
 
+from desktop.native.hours.rail import RAIL_PX
 from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.look import sanitize_look
 from desktop.native.window import NativeWindow
@@ -129,6 +130,20 @@ def test_rail_next_rows_put_start_focus_below_the_words_at_1024_large(
         label.mapTo(window.rail.next.card, QPoint(0, label.height())).y()
         for label in window.rail.next.card.findChildren(QLabel)
     ), "Next card Start focus sits below its words"
+    rail = window.rail
+    assert rail.width() == RAIL_PX
+    for widget in (
+        rail.waiting_label,
+        rail.waiting_count,
+        rail.due_label,
+        *rail.findChildren(QLabel, "railDueWhen"),
+        *rail.findChildren(QLabel, "railDueTitle"),
+        *rail.next.findChildren(QPushButton),
+    ):
+        if widget is None or not widget.isVisible():
+            continue
+        right = widget.mapTo(rail, widget.rect().topRight()).x()
+        assert right <= rail.width(), f"{widget.objectName()} {widget.text()!r} runs to {right}"
 
 
 def test_plan_result_wraps_buttons_below_heading_at_1024_large(

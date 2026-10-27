@@ -419,8 +419,9 @@ test. Decided 2026-10-04: 0.18.2 ships batch A alone; batch B moves to 0.18.3.
   week 17/17, timeline day 14/14, mission week 17/17, bento week 17/17, clay day 14/14, retro
   week 17/17 (after the rig's Large-text step waited for the bar to settle).
 - Left: Jonathan's look at #98's sliding plan panel; then the PR and the release on his word.
-  `test_ui_dialogs.py::test_work_windows_can_be_added_edited_and_removed_in_settings` fails when
-  its file runs alone (622 px against 640), on main too.
+  Rechecked 2026-10-26: the former Settings work-window width failure is stale. The Availability
+  redesign on 2026-10-07 removed that editor and its named test; current Study hours coverage belongs
+  to the replacement sheet.
 
 #### Batch B (moved to 0.18.3 on 2026-10-04; after mockup round 2)
 Mockup round 2: Setup's Style page and page layout; Add and Edit homework with

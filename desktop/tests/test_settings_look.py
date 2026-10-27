@@ -275,6 +275,24 @@ def test_high_contrast_says_it_keeps_its_own_yellow(qapp: QApplication, window: 
     page.close_page()
 
 
+def test_high_contrast_footer_stays_black_with_its_yellow(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
+    page = open_settings(qapp, window, (1024, 640))
+    page.look.setCurrentIndex(page.look.findData(look_menu_token("preset", "high-contrast")))
+    for _ in range(8):
+        qapp.processEvents()
+    palette = page.shown_palette()
+    assert palette["window"] == "#000000"
+    assert palette["accent"] == "#ffd400"
+    footer = page.findChild(QWidget, "settingsFooter")
+    picture = footer.grab().toImage()
+    assert picture.pixelColor(footer.width() // 2, 0).name() == palette["hairline"]
+    pad = picture.pixelColor(footer.width() - 8, max(8, footer.height() // 2))
+    assert pad.name() == "#000000"
+    done = page.findChild(QPushButton, "settingsDone")
+    assert done is not None and done.isVisibleTo(page)
+    page.close_page()
+
+
 def test_picking_a_look_applies_to_the_design_canvas_before_settings_closes(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811

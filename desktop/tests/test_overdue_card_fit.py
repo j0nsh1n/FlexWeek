@@ -27,6 +27,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.look import sanitize_look
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
+    from desktop.tests.blocks_helper import put_block
     from desktop.tests.logic_support import past_setup
 
 PASSWORD = "a-long-test-password"
@@ -86,7 +87,8 @@ def overdue_card_at_1024_by_640_large(qapp: QApplication, window: NativeWindow, 
     session.save()
     wait_until(qapp, lambda: not session.busy and not session.dirty)
     block = next(b for b in session.blocks if b.get("assignment_id") == "bio")
-    assert session.hand_move(block["id"], -1, 2, 15 * 60 + 15, 15 * 60 + 15 + block["duration_min"])
+    # Plant, do not hand-move: the shared rule refuses a Wednesday start once that day is over.
+    put_block(session, block["id"], 2, 15 * 60 + 15, 16 * 60 + 15, pinned=True)
     session.save()
     wait_until(qapp, lambda: not session.busy and not session.dirty)
     saturday = datetime.fromisoformat(session.week_start) + timedelta(days=5, hours=10)

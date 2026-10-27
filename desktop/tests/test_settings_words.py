@@ -122,11 +122,12 @@ def test_every_field_in_a_forms_column_starts_at_the_same_left_edge(
     dialog.close_page()
 
 
-def test_this_build_says_1_1_1_and_is_offered_only_a_newer_release(
+def test_this_build_says_its_version_and_is_offered_only_a_newer_release(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
 ) -> None:
-    assert VERSION == "1.1.1"
+    major, minor, patch = (int(part) for part in VERSION.split("."))
+    newer = f"{major}.{minor}.{patch + 1}"
     release = {
         "tag_name": "v0.19.2",
         "assets": [
@@ -138,9 +139,10 @@ def test_this_build_says_1_1_1_and_is_offered_only_a_newer_release(
     assert available({**release, "tag_name": "v1.0.0"}, "windows") is None
     assert available({**release, "tag_name": "v1.1.0"}, "windows") is None
     assert available({**release, "tag_name": "v1.1.1"}, "windows") is None
-    assert available({**release, "tag_name": "v1.1.2"}, "windows")["version"] == "1.1.2"
+    assert available({**release, "tag_name": f"v{VERSION}"}, "windows") is None
+    assert available({**release, "tag_name": f"v{newer}"}, "windows")["version"] == newer
     dialog = prefs(window)
-    assert dialog.findChild(QLabel, "prefsVersion").text() == "FlexWeek 1.1.1"
+    assert dialog.findChild(QLabel, "prefsVersion").text() == f"FlexWeek {VERSION}"
     dialog.close_page()
 
 
