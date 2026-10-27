@@ -8,6 +8,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ### Changed
 - Simplified the planner with a quieter Plan button, rail sections separated by type and spacing, and more calendar space after removing the repeated status row.
 - Moved Week as a list to More while preserving Ctrl+Shift+L and keyboard focus return.
+- Moved the phone sync indicator into the top bar beside More and Settings.
 - Linux downloads continue to include the MCP assistant helper; its tools are unchanged in this release.
 
 ### Fixed

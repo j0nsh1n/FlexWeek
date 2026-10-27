@@ -14,6 +14,7 @@ stay in place.
   Overdue homework remains under More > Unfinished.
 - Week as a list is under More. Ctrl+Shift+L opens it, and Escape returns
   focus to the control you were using without moving the calendar.
+- The phone sync indicator is in the top bar beside More and Settings.
 - Settings no longer blurs its content into a strip above Done.
 - At 1024 x 640 with Large text, long Unfinished rows put their buttons
   below the words so the actions remain readable.

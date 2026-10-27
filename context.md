@@ -17,8 +17,10 @@
   whitespace checks (581.08s, service peak 4.1 GiB). The Plan mutation catches loss of accent text. Harness and engine
   fmt, clippy and tests pass. Cartographer's launcher cannot import the traceworks module.
 - Android unit tests and the release build pass. The signed 1.2.0 APK retains 1.1.1's certificate.
-  Release artifacts and verification logs are in integrated scratch. Independent review and
-  Windows/Linux CI packages remain pending.
+  Release artifacts and verification logs are in integrated scratch. Independent Grok 4.6 review
+  passed on `007ba1ff`, with 47 focused tests. Windows/Linux CI packages remain pending.
+  Its overdue announcement finding remains unverified with a screen reader: the event targets
+  the hidden Unfinished control. No release blocker was found.
 - `feat/refined-look-renovation` remains separate at `4f1b9f97`, with its previously recorded
   772 focused tests and ten-look captures under `scratch/theme-renovation-2026-10-26/`.
   Its uncommitted spec/changelog drafts were preserved as patches under the integrated scratch
@@ -145,7 +147,8 @@ values make a retried write return the first result.
   fixed background calendar focus loss. Jonathan authorized choosing recommended steps through
   release. Target: `j0nsh1n/FlexWeek`, PR into `main`, tag `v1.2.0`. The rebuilt runner's full gate
   passed 5422 tests plus lint, types, mutation anchors and whitespace. Rust fmt, clippy and tests
-  pass; Android is built and signed. Next: commit, independent Grok review,
+  pass; Android is built and signed. Grok 4.6 independently reviewed `007ba1ff`: PASS, 47 tests.
+  Next: PR and CI,
   CI packaging, verify all ten assets/checksums and packaged Linux MCP, then publish. No remote
   mutation yet. The earlier renovation remains separate.
 - 2026-10-21, `main` fff4d064: **1.1.1 released** (PR #53, tag `v1.1.1`, Latest; all ten assets attached, every checksum verified). Linux packages carry `flexweek-mcp` (`--mcp` from the AppImage, the tar.gz launcher and the app); the release workflow smokes both, and the published AppImage and tar.gz were smoked again locally. spec.md's Releases section now names the Linux packages; Windows and Android do not carry the helper. Next: Bori moves to `<package> --mcp --read-only` (Bori agent, `.handoff/bori-calendar-mcp.md` section 12); release cleanup awaiting Jonathan's approval of the list; MCP track C (plan, running late, routines, restore) and the phone screens remain.
