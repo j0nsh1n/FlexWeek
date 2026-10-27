@@ -13,8 +13,8 @@
   fixture now has a visible deadline; ten slide tests pass and the repaint mutation is caught.
   Bento's background-refresh focus loss reproduced before preserving the window's remembered
   focus; 20 related tests and both real-KWin focus checks pass after the fix.
-- The rebuilt fwtest runner's final gate passed: 5422 tests, Ruff, mypy, mutation anchors and
-  whitespace checks (581.08s, service peak 4.1 GiB). The Plan mutation catches loss of accent text. Harness and engine
+- The rebuilt fwtest runner's final gate passed: 5423 tests, Ruff, mypy, mutation anchors and
+  whitespace checks (547.98s, service peak 4.2 GiB). The Plan mutation catches loss of accent text. Harness and engine
   fmt, clippy and tests pass. Cartographer's launcher cannot import the traceworks module.
 - Android unit tests and the release build pass. The signed 1.2.0 APK retains 1.1.1's certificate.
   Release artifacts and verification logs are in integrated scratch. Independent Grok 4.6 review
@@ -24,7 +24,9 @@
 - PR #54's Classic Week rig exposed a fixed-height Unfinished list forcing Large text above
   640 px. The list now keeps one whole row visible and scrolls when height is short. The exact
   1024x640 real-KWin scenario and 26 related tests pass. Restoring fixed height makes the new
-  regression fail at 1024x776. Final gate and Classic Week rig are being rerun before the push.
+  regression fail at 1024x776. The final gate and all 19 Classic Week scenarios pass;
+  Grok 4.6 independently passed the correction on `096dedcd`, reran four targeted tests,
+  and caught the fixed-height mutation before restoring its clean checkout.
 - `feat/refined-look-renovation` remains separate at `4f1b9f97`, with its previously recorded
   772 focused tests and ten-look captures under `scratch/theme-renovation-2026-10-26/`.
   Its uncommitted spec/changelog drafts were preserved as patches under the integrated scratch
@@ -154,7 +156,8 @@ values make a retried write return the first result.
   pass; Android is built and signed. Grok 4.6 independently reviewed `007ba1ff`: PASS, 47 tests.
   PR #54 is open. Its fixed-height Unfinished failure is corrected: 26 related tests, sizing
   checks and all 19 real-KWin Classic Week scenarios pass; the new regression catches the old
-  fixed height. Next: final gate and independent recheck of this correction, update PR #54,
+  fixed height. Grok 4.6 passed `096dedcd` with four targeted tests and its own mutation proof.
+  Next: update PR #54,
   finish CI and packaging, verify all ten assets/checksums and packaged Linux MCP, then publish.
   No 1.2.0 tag or release exists yet. The earlier renovation remains separate.
 - 2026-10-21, `main` fff4d064: **1.1.1 released** (PR #53, tag `v1.1.1`, Latest; all ten assets attached, every checksum verified). Linux packages carry `flexweek-mcp` (`--mcp` from the AppImage, the tar.gz launcher and the app); the release workflow smokes both, and the published AppImage and tar.gz were smoked again locally. spec.md's Releases section now names the Linux packages; Windows and Android do not carry the helper. Next: Bori moves to `<package> --mcp --read-only` (Bori agent, `.handoff/bori-calendar-mcp.md` section 12); release cleanup awaiting Jonathan's approval of the list; MCP track C (plan, running late, routines, restore) and the phone screens remain.
