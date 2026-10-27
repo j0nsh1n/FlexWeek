@@ -10,7 +10,8 @@
   or the window while Settings is open. Plan tests inspect painted accent text in Light/Dark,
   excluding the count pill. Both regressions have mutation proof; 49 related tests pass.
   The capped full gate passes 5425 tests, lint, types, mutation anchors and whitespace
-  (558.12s, service peak 4 GiB). Approved Grok 4.6 review is pending; nothing new has been pushed.
+  (558.12s, service peak 4 GiB). Grok 4.6 independently passed `5ebe583d`, rerunning all 49
+  related tests in 64.27s with scoped Ruff and whitespace checks. Nothing new has been pushed.
   Native AT-SPI delivery remains unverified: the isolated registry failed to start. Jonathan
   accepted Qt accessibility-tree/KWin proof and this reported gap.
   The four approved clean, merged worktrees and local branches were removed after usage checks,
@@ -23,7 +24,7 @@
   fixture now has a visible deadline; ten slide tests pass and the repaint mutation is caught.
   Bento's background-refresh focus loss reproduced before preserving the window's remembered
   focus; 20 related tests and both real-KWin focus checks pass after the fix.
-- The rebuilt fwtest runner's final gate passed: 5423 tests, Ruff, mypy, mutation anchors and
+- The 1.2.0 release's rebuilt-fwtest gate passed: 5423 tests, Ruff, mypy, mutation anchors and
   whitespace checks (547.98s, service peak 4.2 GiB). The Plan mutation catches loss of accent text. Harness and engine
   fmt, clippy and tests pass. Cartographer's launcher cannot import the traceworks module.
 - Android unit tests and the release build pass. The signed 1.2.0 APK retains 1.1.1's certificate.
@@ -165,14 +166,15 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
-- 2026-10-27: Local overdue-accessibility and Plan paint-test follow-ups are in progress on
+- 2026-10-27: Local overdue-accessibility and Plan paint-test follow-ups are complete on
   `fix/visual-artifacts-20261026`, reused with Jonathan's approval. Test-first commit `6ecf2123`
   records both intentionally failing page-specific announcement cases. The fix passes all four
   focused cases and 49 related tests; both mutation regressions are caught. Four specifically
   approved old checkouts/local branches were removed; other work was preserved. The full gate
-  passes 5425 tests plus lint/types/mutation anchors. Next: approved independent Grok 4.6/T3
-  review of the committed fix. Native AT-SPI proof
-  is unavailable in the isolated session and accepted as a reported gap. No push/PR/release requested.
+  passes 5425 tests plus lint/types/mutation anchors. Grok 4.6 passed `5ebe583d` and independently
+  reran the 49 related tests. The clean review checkout `t3-0cbd52a3` is retained. Native AT-SPI
+  proof is unavailable in the isolated session and accepted as a reported gap. The local fix is
+  committed; published 1.2.0 is unchanged. No push/PR/release requested.
 - 2026-10-27: **1.2.0 released**, PR #54 / `main` `a71e4d91`, tag `v1.2.0`, Latest.
   Quiet split, Settings footer, Unfinished wrapping/scrolling and calendar focus fixes shipped.
   Final gate: 5423 tests, lint, types, mutation anchors and whitespace pass. Rust checks pass.
