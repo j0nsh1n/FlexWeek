@@ -1,38 +1,32 @@
 # context.md — FlexWeek
 
 ## Current State
-- 2026-10-20: The five requested desktop regression nodes pass individually through `fwtest` on
-  `release/1.1`. Recovery now opens the session clock's day and week, restoring Agenda Start focus and
-  My day's Running late. The overdue Plan question has exactly Plan into this week, Mark as finished,
-  Not now. Both Clay now-pill nodes passed unchanged. Ruff across the repo, `mypy backend`, and the
-  shared confirmation default/cancel test pass. No full gate or real-display check was run.
-- 2026-10-16: 1.1 in progress on `release/1.1` (local only, nothing pushed). Merged: the phone release bugs
-  (dark mode, Running late and Start focus hidden in release, Not now, reminder ids), the phone updating
-  itself from GitHub Releases (rules from `engine/engine/src/desk/update.rs` through `engine/ffi`), and the
-  desktop fixes (rail one-go message, sign-in pages scroll below 768 px, Replace timer and Restore sheets).
-  Gate VERIFIED (5384 passed); 131 Android unit tests and 461 engine and ffi tests pass. The phone updater
-  has not run on a device yet.
-- 2026-10-14: fix-e implements per-design curated looks with shared palette tokens across app chrome, design canvases, Week, Day and My day. Missing per-design selections keep the account look, including High contrast; Setup persists a selected pack, and Settings names curated canvas looks. Existing accounts without a saved design look receive a one-time, device-local notice; new accounts completing setup on this computer are exempt. Review regressions, restored colour-safety coverage and the notice behavior are recorded in the fix-e lane report.
-- 2026-10-13: 1.0.0 is prepared on `release/1.0.0` (worktree
-  `~/.worktrees/flexweek-0190`, HEAD `a5f7384b`): the Android phone app
-  (`android/`, Kotlin and Compose, package `com.flexweek.app`, minSdk 26) runs
-  the real engine through UniFFI, and iroh device sync (`engine/sync`) pairs
-  the desktop with an 8-digit code and syncs both ways through the n0 relay.
-  A real Android phone paired and synced both ways on 2026-10-13 (mobile data
-  through the relay; a same-Wi-Fi sync has not been separately reported).
-  The v0.19.x features, look cards, polish and the wording sweep are in. The
-  full gate is pending on the final head. v0.19.2 is the newest release.
-- 2026-10-14 lane `fix-a` implemented the saved-session carry rule, phone clock-skew sync count, pairing sheet changes, and Android phone copy/layout. Rust workspace tests, Clippy, formatting, Python lane tests, and Ruff pass; Android unit tests need an Android SDK, which is not configured here.
-- 2026-10-14 lane `fix-d2` makes Month and the Day dial strip follow the per-computer week-start setting while stored weeks and Week view remain Monday-based. `test_week_start.py` and `test_hours_month.py` pass through `fwtest`; Ruff passes on changed files. Before/after screenshots are in `~/.flexweek-ui-harness/scratch/1.0.0/shots-fix/fix-d2/`.
-- Tests that pick a day of the current week on the real clock can fail on later weekdays since item
-  2: hold the clock (`grid_support.hold_clock`, `session.now_ms`). The item-3
-  and hours-open suites now hold their own clocks.
+- 2026-10-26: Preparing 1.2.0 on `fix/visual-artifacts-20261026`. Jonathan selected Quiet split
+  plus the Settings and Unfinished fixes, with the earlier renovation kept separate. Desktop and
+  Android report 1.2.0; Android versionCode is 4. Release notes are `docs/release-notes-v1.2.0.md`.
+  Nothing has been pushed, tagged, or published for 1.2.0.
+- Quiet split removes the repeated status row, moves Week as a list into More, keeps Ctrl+Shift+L
+  and focus return, quiets Plan, and separates the rail with type and spacing. Light, Dark at
+  1024x640 Large, and High contrast each passed all 15 real-KWin pointer and shortcut steps.
+  Logs and captures: `~/.flexweek-ui-harness/scratch/quiet-split-ui/integrated/`.
+- Setup's mismatched test clock now holds Monday 09:00; no planner change. Retro's late-month
+  fixture now has a visible deadline; ten slide tests pass and the repaint mutation is caught.
+  Bento's background-refresh focus loss reproduced before preserving the window's remembered
+  focus; 20 related tests and both real-KWin focus checks pass after the fix.
+- The rebuilt fwtest runner's final gate passed: 5422 tests, Ruff, mypy, mutation anchors and
+  whitespace checks (581.08s, service peak 4.1 GiB). The Plan mutation catches loss of accent text. Harness and engine
+  fmt, clippy and tests pass. Cartographer's launcher cannot import the traceworks module.
+- Android unit tests and the release build pass. The signed 1.2.0 APK retains 1.1.1's certificate.
+  Release artifacts and verification logs are in integrated scratch. Independent review and
+  Windows/Linux CI packages remain pending.
+- `feat/refined-look-renovation` remains separate at `4f1b9f97`, with its previously recorded
+  772 focused tests and ten-look captures under `scratch/theme-renovation-2026-10-26/`.
+  Its uncommitted spec/changelog drafts were preserved as patches under the integrated scratch
+  folder before removing those changes from the 1.2.0 documents.
+- Latest published release is 1.1.1. The source trial was launched earlier from this task branch;
+  its log is `~/.flexweek-ui-harness/scratch/manual-trial-20261026/desktop.log`.
 - Since 0.18.5: new accounts start on a 12-hour clock (the desktop conftest sets 24-hour per test
   unless a test chooses); tests fail on any error inside a Qt slot (`no_error_is_lost_inside_a_qt_slot`).
-- Probing motion: `~/.flexweek-ui-harness/scratch/0.18.4/j14/claude-r3/probe_noprof.py` (copy into
-  `desktop/tests/` as `test_zz_*.py`, run through fwtest with `-s`; `PROBE_DRAIN=1` waits for
-  Settings' design previews, which otherwise land in the timed window; `PROBE_NOPROF=1` for real
-  times). On-screen frames: `scratch/0.18.4/j15/clay_frames.py`.
 - Rust (`engine/`, contract `docs/engine/contract.md`, wrappers `docs/engine/adapters.md`): the
   planner and solver, slots, weeks, day, month, explain, restore, recovery codes, the store's SQL
   helpers and database connection, and the desktop's Qt-free logic (`desk`: calendar, custom looks
@@ -45,7 +39,7 @@
   table in `calendar.py`, `TYPE_PT` in `tokens.py`, `custom_look.readability`, all Qt drawing, and
   `scripts/rig/drive.py`.
 - Tests: the Rust engine suites (engine, store, bindings and sync; clippy and fmt clean at last
-  count) and the Python gate through `fwtest gate --workers 4`. The differential tests and the
+  count) and the Python gate through `fwtest gate`. The differential tests and the
   frozen Python copies are deleted; the Python tests that remain guard Python-only code and the
   interface. Regression Tester's suites live in desktop/tests/regress184, regress190 and
   backend/tests/regress184, collected only with FLEXWEEK_REGRESS=1 (regress184 waits for its
@@ -146,13 +140,17 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
+- 2026-10-26, Quiet split / 1.2.0: Grok 4.6 built the chrome and rail; Codex reviewed the source,
+  integrated the chrome, migrated accessibility/menu tests, corrected two test fixtures, and
+  fixed background calendar focus loss. Jonathan authorized choosing recommended steps through
+  release. Target: `j0nsh1n/FlexWeek`, PR into `main`, tag `v1.2.0`. The rebuilt runner's full gate
+  passed 5422 tests plus lint, types, mutation anchors and whitespace. Rust fmt, clippy and tests
+  pass; Android is built and signed. Next: commit, independent Grok review,
+  CI packaging, verify all ten assets/checksums and packaged Linux MCP, then publish. No remote
+  mutation yet. The earlier renovation remains separate.
 - 2026-10-21, `main` fff4d064: **1.1.1 released** (PR #53, tag `v1.1.1`, Latest; all ten assets attached, every checksum verified). Linux packages carry `flexweek-mcp` (`--mcp` from the AppImage, the tar.gz launcher and the app); the release workflow smokes both, and the published AppImage and tar.gz were smoked again locally. spec.md's Releases section now names the Linux packages; Windows and Android do not carry the helper. Next: Bori moves to `<package> --mcp --read-only` (Bori agent, `.handoff/bori-calendar-mcp.md` section 12); release cleanup awaiting Jonathan's approval of the list; MCP track C (plan, running late, routines, restore) and the phone screens remain.
-- 2026-10-20, `release/1.1.1` (worktree `~/.worktrees/flexweek-111`, head f6660624 + this note; local, not pushed). 1.1.1 bundles `flexweek-mcp` in the Linux packages per spec.md's Releases section: `build_linux.sh` builds it (`--locked`, same checkout) into the bundle; the AppImage's AppRun, the tar.gz launcher and `desktop/main.py` hand `--mcp ...` to it before Qt or the libEGL check; `desktop/smoke_mcp.py` (read tools + "Please sign in" over an empty folder) runs in the release workflow on both packages. Version 1.1.1 (desktop and phone), CHANGELOG, `docs/release-notes-v1.1.1.md`. Verified locally with stand-in bundles and the real helper; the real tar.gz and AppImage are built and smoked only in CI. Not done yet: the push/tag/release (needs Jonathan), and moving Bori to `<AppImage> --mcp --read-only` afterwards.
-- 2026-10-20, `main` (local, 13 commits ahead of `origin/main`, not pushed). 1.1.0 is released (PR #52, tag `v1.1.0`). After it, MCP track B merged locally (`322ad1f0`): the assistant can add, edit, finish and delete homework, mark a block done, and move or delete a block. Validators, the one write door (`engine/store/src/changes.rs`), homework session rules, block delete and the done rules are Rust; the phone's ffi and the MCP server share the done rules. 775 engine workspace tests pass; clippy and fmt clean. The signed-out-start and Mac owner bugs are fixed (a Mac now gets a plain "not supported yet").
-- 2026-10-20, later: Bori (Joo's desktop assistant, `~/Projects/personal/desktop-buddy`) reads today's calendar through `flexweek-mcp --read-only` (`main` 49909adc): read-only tool list, reads never renew the kept session, a missing database is "Please sign in" (never created), `XDG_DATA_HOME` handled as Qt does. Live `get_today` passed from both sides (FlexWeek's probe and Bori's own Policy-gated `calendar_today`). Bori runs the build output `engine/target/release/flexweek-mcp` in place, so rebuilding or `cargo clean` changes what Bori runs. Contract and mismatches: `.handoff/bori-calendar-mcp.md` (local, gitignored).
 - Next (Jonathan's pick: MCP first): track C, Plan / Running late / explain tools, routines, restore, then the app switching to the Rust views, write door and restore so nothing is written twice. Duplicates until then: Python validators and homework-edit rules in `backend/` and `desktop/`, and the desktop's focus phase advance (`controller.py` `advance_focus`) beside the phone's in `engine/ffi/src/focus.rs`.
 - Phone screens not built yet: full-screen focus with breaks (8 A), Month (6 B), Day (7 A), Week C with drag. Their plans are in `~/.flexweek-ui-harness/scratch/android-1.1/` (`rebuild-test-plan.md`, `wave4-test-plan.md`).
-- Still open: Settings scroll (lane 4, parked until a real compositor check).
 - Still waiting on Jonathan: what shrinks on My day and One thing at 1024x640 Large, and a device check of the phone updater and the lane 1 fixes.
 - The Android release key lives in `~/.config/flexweek-android/` (outside the repo). Every phone update must be signed with it.
 - Run plan: `~/.flexweek-ui-harness/scratch/1.1/plan.md`.

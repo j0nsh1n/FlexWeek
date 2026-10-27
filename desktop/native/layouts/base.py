@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 
 from PySide6.QtCore import QPoint, Qt, QTimer, Signal
 from PySide6.QtGui import QResizeEvent
-from PySide6.QtWidgets import QApplication, QFrame, QLabel, QLayout, QPushButton, QScrollArea, QWidget
+from PySide6.QtWidgets import QFrame, QLabel, QLayout, QPushButton, QScrollArea, QWidget
 from shiboken6 import isValid
 
 from desktop.native.calendar import CATEGORIES
@@ -237,7 +237,7 @@ class LayoutView(QWidget):
             return
         week_changed = self._scene is None or scene.week != self._scene.week
         self._scene = scene
-        held = QApplication.focusWidget()
+        held = self.window().focusWidget()
         name = held.objectName() if held is not None and held is not self and self.isAncestorOf(held) else ""
         self._was_cramped = self.cramped
         if scene.surface == "month":

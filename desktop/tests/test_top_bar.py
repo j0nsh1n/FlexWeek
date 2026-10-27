@@ -180,21 +180,49 @@ def test_add_is_one_pill_split_by_a_line_of_its_ink(qapp: QApplication, window: 
 def test_plan_is_second_to_add_and_more_is_in_the_text_colour(
     qapp: QApplication, window: NativeWindow
 ) -> None:
-    """Plan my homework had a border like Today and More, so all three looked equal; More was muted and
-    read as disabled."""
+    """Add is the only filled bar action. Plan is accent words with no fill; More is the text colour."""
     palette = dress(qapp, window)
     window.resize(1280, 800)
     qapp.processEvents()
     picture = window.grab().toImage()
     plan = box(window, window.solve_button)
-    assert near(
-        picture.pixelColor(plan.left() + 4, plan.center().y()), mix(palette["accent"], palette["window"], 0.1)
-    )
+    assert window.solve_button.property("quiet") is True
+    assert window.solve_button.property("secondary") is not True
+    assert near(picture.pixelColor(plan.left() + 4, plan.center().y()), palette["window"])
     assert window.solve_button.palette().buttonText().color().name() == palette["accent_text"]
     more = bar(window, "moreButton")
     assert more.palette().buttonText().color().name() == palette["text"]
     spot = box(window, more)
     assert near(picture.pixelColor(spot.left() + 3, spot.center().y()), palette["window"])
+
+
+def test_the_week_has_no_status_strip_under_the_bar(qapp: QApplication, window: NativeWindow) -> None:
+    window.resize(1280, 800)
+    shown(qapp, window, "week")
+    assert window.findChild(QWidget, "weekStatusStrip") is None
+    assert window.findChild(QLabel, "weekStatusNext") is None
+    assert window.findChild(QLabel, "weekStatusOverdue") is None
+    bar_bottom = box(window, window.solve_button).bottom()
+    planner_top = box(window, window.planner).top()
+    assert 0 <= planner_top - bar_bottom < 32
+
+
+def test_the_bar_keeps_its_controls_whole_at_1280_normal_and_1024_large(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    for width, height, size in ((1280, 800, "normal"), (1024, 640, "large")):
+        window._look = sanitize_look({"preset": "default", "knobs": {"text": size}})
+        window._apply_appearance()
+        window.resize(width, height)
+        for _ in range(5):
+            qapp.processEvents()
+        assert window.findChild(QWidget, "weekStatusStrip") is None, size
+        for name in ("addButton", "addArrow", "solveButton", "moreButton", "settingsGear"):
+            button = bar(window, name)
+            assert button.isVisible(), (size, name)
+            assert button.width() >= button.minimumSizeHint().width(), (size, name, button.width())
+            assert button.height() >= button.minimumSizeHint().height(), (size, name, button.height())
+            assert button.mapTo(window, QPoint(button.width(), 0)).x() <= window.width(), (size, name)
 
 
 def states_host(

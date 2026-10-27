@@ -3,6 +3,18 @@
 All notable changes to FlexWeek are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.2.0] - 2026-10-26
+
+### Changed
+- Simplified the planner with a quieter Plan button, rail sections separated by type and spacing, and more calendar space after removing the repeated status row.
+- Moved Week as a list to More while preserving Ctrl+Shift+L and keyboard focus return.
+- Linux downloads continue to include the MCP assistant helper; its tools are unchanged in this release.
+
+### Fixed
+- Settings no longer draws a blurred strip above its footer while scrolling.
+- At 1024 x 640 with Large text, the expanded Unfinished list moves action buttons under long words instead of clipping them off the right edge.
+- A background calendar refresh keeps the keyboard's place when you return to FlexWeek.
+
 ## [1.1.1] - 2026-10-20
 
 ### Added

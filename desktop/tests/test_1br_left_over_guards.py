@@ -252,13 +252,13 @@ def test_1br_deadline_timer_refreshes_tags_sidebar_and_focus(qapp, window, monke
     leftover_words = "Everything has a time."
     overdue_words = "1 overdue"
     assert window.rail.none_waiting.text() == leftover_words
-    assert window.status_overdue.text() == overdue_words
     assert any(item["title"] == "Bio reading, overdue" for item in session.focus_tasks())
-    said = [item for item in announcements if item[0] is window.status_overdue]
-    assert said == [(window.status_overdue, overdue_words, False)]
+    unfinished = window.findChild(QPushButton, "unfinishedOpen")
+    said = [item for item in announcements if item[0] is unfinished]
+    assert said == [(unfinished, overdue_words, False)]
     window._deadline_changed()
     settled(qapp, window)
-    assert [item for item in announcements if item[0] is window.status_overdue] == said
+    assert [item for item in announcements if item[0] is unfinished] == said
 
 
 def test_1br_the_overdue_focus_row_starts_from_the_homework(qapp, window) -> None:

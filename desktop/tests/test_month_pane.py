@@ -1,4 +1,4 @@
-"""Month's date pane, first-row open, Sunday gutter, Large-text chips, and the shared overdue strip."""
+"""Month's date pane, first-row open, Sunday gutter, Large-text chips, and overdue through Unfinished."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QRect, Qt
     from PySide6.QtGui import QFont, QFontMetrics
     from PySide6.QtTest import QSignalSpy, QTest
-    from PySide6.QtWidgets import QAbstractButton, QApplication
+    from PySide6.QtWidgets import QAbstractButton, QApplication, QWidget
 
     from backend.month import build_month
     from desktop.native.hours.month import PANE_PX, MonthGrid, month_cells
@@ -209,13 +209,19 @@ def test_a_chip_at_large_text_keeps_its_time_and_whole_words(qapp_grid: QApplica
     grid.close()
 
 
-def test_month_keeps_overdue_on_the_status_strip(qapp: QApplication, window: NativeWindow) -> None:
+def test_month_keeps_overdue_in_unfinished_not_on_a_status_strip(
+    qapp: QApplication, window: NativeWindow
+) -> None:
     window.resize(1280, 800)
     month = window.findChild(QAbstractButton, "viewMonth")
     month.click()
     wait_until(qapp, lambda: window.session.planner_view == "month")
     settled(qapp, window)
-    assert window.status_strip.isVisible()
-    assert window.status_overdue.text().endswith(" overdue")
+    assert window.findChild(QWidget, "weekStatusStrip") is None
     assert window.month_grid.overdue.isHidden()
     assert window.month_grid.overdue.text() == ""
+    window._sync_more_menu()
+    unfinished = next(
+        action for action, button in window._more_pairs if button.objectName() == "unfinishedOpen"
+    )
+    assert unfinished.text().startswith("Unfinished")

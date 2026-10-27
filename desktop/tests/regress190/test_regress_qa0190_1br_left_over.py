@@ -20,7 +20,7 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QTimer
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication, QPushButton, QWidget
 
 from desktop.native.weekmodel import length_label, range_label
 from desktop.tests.grid_support import (  # noqa: F401
@@ -73,10 +73,12 @@ def test_1br_the_overdue_session_says_overdue_in_the_week_list(qapp, window) -> 
     assert rows == [expected]
 
 
-def test_1br_the_status_strip_counts_the_overdue_session(qapp, window) -> None:
-    # 1.0.0 planning screen (pick A): the overdue count moved from the sidebar to the status strip.
+def test_1br_unfinished_stays_open_for_the_overdue_session(qapp, window) -> None:
+    # Quiet split (pick A): overdue lives in Unfinished, not on a status strip.
     overdue_this_week(qapp, window)
-    assert window.status_overdue.text() == "1 overdue"
+    assert window.findChild(QWidget, "weekStatusStrip") is None
+    enabled, words = more_unfinished_row(window)
+    assert (enabled, words) == (True, "Unfinished\tNone left")
 
 
 def test_1br_more_keeps_unfinished_open_when_the_overdue_session_already_has_a_time(qapp, window) -> None:

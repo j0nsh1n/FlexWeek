@@ -236,9 +236,9 @@ def test_every_page_is_kept_when_the_student_leaves_it(qapp: QApplication, serve
         "glass",
     )
 
-    # Wednesday morning, so there is time to plan it whatever day the test runs.
-    wednesday = datetime.fromisoformat(window.session.week_start) + timedelta(days=2, hours=9)
-    window.session.now_ms = lambda: int(wednesday.timestamp() * 1000)
+    # The real next-school-day default is always after this week's Monday.
+    monday = datetime.fromisoformat(window.session.week_start) + timedelta(hours=9)
+    window.session.now_ms = lambda: int(monday.timestamp() * 1000)
     setup.homework_rows[0].name.setText("History essay")
     setup.homework_rows[0].minutes.setValue(90)
     setup.next.click()

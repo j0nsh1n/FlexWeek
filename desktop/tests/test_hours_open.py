@@ -23,7 +23,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QAbstractAnimation, QEvent, QPoint, QPointF, QStandardPaths
-    from PySide6.QtWidgets import QAbstractButton, QApplication, QPushButton, QScrollBar
+    from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QPushButton, QScrollBar, QWidget
 
     from desktop.native import motion
     from desktop.native.calendar import sunday_due
@@ -289,13 +289,14 @@ def test_day_reached_from_week_opens_at_now(
     assert first <= 18 * 60 <= last, "Day opened at now but left the next block out of view"
 
 
-def test_month_does_not_repeat_the_next_line_above_its_status_strip(
+def test_month_does_not_repeat_the_next_line_above_the_calendar(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     window.findChild(QAbstractButton, "viewMonth").click()
     wait_until(qapp, lambda: not window.session.busy)
     assert not window.focus_panel.now_next.isVisible()
-    assert window.status_next.full_text().startswith("Next:")
+    assert window.findChild(QWidget, "weekStatusStrip") is None
+    assert window.findChild(QLabel, "weekStatusNext") is None
 
 
 def test_leaving_retro_after_unfinished_rows_rebuild_never_touches_deleted_widgets(

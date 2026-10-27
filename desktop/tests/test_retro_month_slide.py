@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 from collections.abc import Callable, Iterator
+from copy import deepcopy
 from dataclasses import dataclass, field
 
 import pytest
@@ -288,7 +289,11 @@ def test_a_month_that_arrives_mid_slide_shows_on_the_moving_picture(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     in_design(qapp, window, "retro")
-    data = month_from_the_engine(qapp, window)
+    data = deepcopy(month_from_the_engine(qapp, window))
+    # An empty reply can look exactly like the loading grid. A deadline makes the arrival visible.
+    day = next(day for day in data["days"] if day["in_month"])
+    day["due_ids"] = ["slide-essay"]
+    data["deadlines"] = [{"id": "slide-essay", "title": "Essay due", "due": day["date"]}]
     # The engine has not answered yet when the slide starts, as on a real machine.
     monkeypatch.setattr(window.session, "_fetch_month", lambda: None)
     window.findChild(QAbstractButton, "viewMonth").click()

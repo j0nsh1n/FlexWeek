@@ -13,7 +13,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QPoint, QRectF, Qt
 from PySide6.QtGui import QFont, QFontMetricsF
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QPushButton
+from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QPushButton, QWidget
 
 from desktop.native.calendar import DAY_FULL, sunday_due
 from desktop.native.hours.canvas import BlockPainter, Drawn, HoursCanvas
@@ -95,9 +95,7 @@ def test_the_rail_holds_next_not_placed_yet_and_the_focus_list_left_of_the_week(
     assert (card.label.text(), card.title.text(), card.when.text(), card.then.text()) == (
         "Next", "Soccer practice", "4:00 PM · in 20 min", "Then Dinner at 6:30 PM"
     )
-    assert window.status_strip.height() == 28
-    assert window.status_next.text() == "Next: Soccer practice 4:00 PM · in 20 min"
-    assert window.status_overdue.text() == "0 overdue"
+    assert window.findChild(QWidget, "weekStatusStrip") is None
     # In time order with the time at the right, today's said as Today.
     assert rail.task_rows() == [("History essay", "Today 7:00 PM")]
     assert [chip.accessibleName() for chip in chips(window)] == ["Math worksheet · 1 h"]
@@ -108,10 +106,8 @@ def test_the_rail_holds_next_not_placed_yet_and_the_focus_list_left_of_the_week(
     use_clock(qapp, window, False)
     assert not window.focus_panel.isVisible()
     bar_bottom = window.solve_button.mapTo(window, QPoint(0, window.solve_button.height())).y()
-    strip = window.status_strip
-    assert strip.mapTo(window, QPoint(0, 0)).y() - bar_bottom < 32
-    strip_bottom = strip.mapTo(window, QPoint(0, strip.height())).y()
-    assert window.planner.mapTo(window, QPoint(0, 0)).y() - strip_bottom < 32
+    planner_top = window.planner.mapTo(window, QPoint(0, 0)).y()
+    assert 0 <= planner_top - bar_bottom < 32, "the calendar sits under the bar with no status strip"
     # Day keeps the rail, and says what is next there instead of in a band above its hours.
     window.findChild(QAbstractButton, "viewDay").click()
     wait_until(qapp, lambda: window.planner.currentWidget() is window.day_view)
@@ -162,6 +158,9 @@ def test_the_week_list_has_one_name_and_its_shortcut_is_in_help(
     assert listed.accessibleDescription() == (
         "Every block this week, day by day, in time order. Press Enter to open one."
     )
+    window._sync_more_menu()
+    names = [action.text() for action, button in window._more_pairs if button.objectName() == "weekListRow"]
+    assert names == ["Week as a list"]
     hint = "Press Ctrl+Shift+L for the week as a list."
     (week_view,) = [canvas for canvas in window.findChildren(HoursCanvas) if canvas.isVisible()]
     assert week_view.accessibleDescription().endswith(hint)

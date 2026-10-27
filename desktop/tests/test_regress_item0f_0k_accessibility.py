@@ -339,14 +339,11 @@ def test_0k_week_shortcut_and_mini_month_have_accessible_names(qapp, window) -> 
 
 
 def test_0k_the_week_list_takes_no_room_until_the_keyboard_reaches_it(qapp, window) -> None:
-    # The list is for keyboard and screen-reader use: the week keeps its room until then, and
-    # afterwards (U19): a fixed row is the way in and the grid never moves.
     # An empty week shows its card instead of the grid, so the grid needs a block to take the keyboard.
     window.session.add_block({"id": "school", "title": "School", "kind": "locked", "category": "class",
                               "start": "08:30", "duration_min": 405, "days": [0, 1, 2, 3, 4]})
     settled(qapp, window)
-    row = window.week_list_row
-    assert row.isVisible() and row.height() == 28
+    assert window.more_button.isVisible()
     assert not window.week_list_panel.isVisible()
     grid_top = window.planner.mapTo(window, QPoint(0, 0)).y()
     window.week_table.hours.setFocus(Qt.FocusReason.OtherFocusReason)
@@ -360,4 +357,4 @@ def test_0k_the_week_list_takes_no_room_until_the_keyboard_reaches_it(qapp, wind
     settled(qapp, window)
     assert QApplication.focusWidget() is window.week_table.hours
     assert not window.week_list_panel.isVisible()
-    assert row.height() == 28 and window.planner.mapTo(window, QPoint(0, 0)).y() == grid_top
+    assert window.planner.mapTo(window, QPoint(0, 0)).y() == grid_top

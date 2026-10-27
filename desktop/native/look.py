@@ -1350,9 +1350,6 @@ def _rgba(colour: str, alpha: float) -> str:
     return f"rgba({red}, {green}, {blue}, {round(alpha * 255)})"
 
 
-# The week-list row above the grid (U19) is this tall at each text size, in every look and design. It
-# is fixed within a size so tabbing never moves the grid; Large text needs 4 px more for its words.
-WEEK_LIST_ROW_HEIGHT = {"small": 28, "normal": 28, "large": 28}
 DISABLED = 0.4
 CONFLICT_FILL, CONFLICT_TEXT = "#fff4d6", "#6b4a00"
 # A roomy button: 8 pixels above and below its words, 20 at the sides, and at least 36 pixels tall in all,
@@ -1794,10 +1791,6 @@ def button_rules(
         f'QPushButton[quiet="true"]:pressed {{ background: {_veil(text, 0.10)}; }}',
         f'QPushButton[quiet="true"]:disabled {{ background: transparent; color: {mix(text, page, 0.4)}; }}',
         f'QPushButton[keyfocus="true"]:focus {{ border-color: {ring}; }}',
-        # U19's list row is a fixed 28 px strip. No vertical padding and no edge, so the words get
-        # the full height. A stylesheet min-height of 0 also drops the widget's own fixed height.
-        f"QPushButton#weekListRow {{ padding: 0 {pad * 2}px; border-width: 0; "
-        f"min-height: {WEEK_LIST_ROW_HEIGHT['large' if large else 'normal']}px; }}",
     ]
     return "".join(rules)
 
@@ -1862,6 +1855,7 @@ def top_bar_rules(
     more = art.get("more") if art else None
     pill_edge = palette["hairline_strong"] if contrast_look else palette["hairline"]
     quiet_ink = text if contrast_look else muted
+    plan_ink = palette.get("accent_text", palette["accent"])
 
     def views(state: str = "") -> str:
         return ", ".join(f"QRadioButton#{name}{state}" for name in VIEW_BUTTONS)
@@ -1906,6 +1900,13 @@ def top_bar_rules(
         "QPushButton#prevWeek, QPushButton#nextWeek, QPushButton#settingsGear { "
         f"padding-left: {max(pad - 2, 2)}px; padding-right: {max(pad - 2, 2)}px; }}"
         f"{BAR_WORDS} {{ padding-left: {ROOMY_SIDE}px; padding-right: {ROOMY_SIDE}px; }}"
+        f"QPushButton#solveButton {{ background: transparent; color: {plan_ink}; "
+        f"font-weight: {WEIGHT_STRONG}; border: 2px solid transparent; "
+        f"padding: {ROOMY_PAD}px {ROOMY_SIDE}px; min-height: {roomy_height(large)}px; }}"
+        f"QPushButton#solveButton:hover {{ background: {mix(text, page, 0.06)}; }}"
+        f"QPushButton#solveButton:pressed {{ background: {mix(text, page, 0.10)}; }}"
+        f"QPushButton#solveButton:disabled {{ background: transparent; "
+        f"color: {mix(plan_ink, page, 0.4)}; }}"
         f'QPushButton#moreButton[iconOnly="true"] {{ padding-left: {max(pad - 2, 2)}px; '
         f"padding-right: {max(pad - 2, 2)}px; }}"
         "QPushButton#addButton { border-top-right-radius: 0; border-bottom-right-radius: 0; }"

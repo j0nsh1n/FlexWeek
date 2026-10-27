@@ -7,6 +7,7 @@ for each day, and a press on a side card brings that card to the front before it
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta
 
 import pytest
@@ -38,6 +39,7 @@ from desktop.tests.test_regress_item6_keyboard_after_sheet import (
     escape,
     name_and_save,
 )
+from desktop.tests.window_support import host, wait_until  # noqa: F401
 
 DESIGNS = ("timeline", "mission", "bento", "retro")
 
@@ -89,6 +91,27 @@ def test_a_saved_new_block_gets_the_keyboard(qapp, window, design) -> None:
     shown = window.planner.currentWidget().hours_surfaces()
     spot = [s.focus_block() for s in shown if s.hasFocus()]
     assert spot == [(club["id"], THURSDAY)], spot
+
+
+def test_a_background_refresh_keeps_bentos_keyboard_spot_when_the_app_returns(qapp, window, host) -> None:
+    hours = in_design(qapp, window, "bento")
+    host.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+    host.show()
+    host.activateWindow()
+    host.setFocus()
+    wait_until(qapp, host.hasFocus)
+    assert window.focusWidget() is hours
+
+    view = window.planner.currentWidget()
+    scene = view.scene
+    assert scene is not None
+    view.show_week(replace(scene, minute=scene.minute + 1))
+    assert host.hasFocus(), "a background refresh took the keyboard from another window"
+
+    window.activateWindow()
+    wait_until(qapp, window.isActiveWindow)
+    spot = [surface.focus_block() for surface in view.hours_surfaces() if surface.hasFocus()]
+    assert spot == [("school", MONDAY)], spot
 
 
 @pytest.mark.parametrize("design", DESIGNS)
