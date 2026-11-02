@@ -1547,7 +1547,7 @@ def auth_rules(palette: dict, knobs: dict, radius: int, card_radius: int) -> str
     # Only a look that draws soft hairlines: a flat look draws none, and a bold one its own heavy ones.
     field_rules = (
         f"QWidget#authCard QLineEdit {{ border: 1px solid {readable_edge(palette)}; }}"
-        f"QWidget#authCard QLineEdit:focus {{ border: 2px solid {readable_focus_edge(palette)}; }}"
+        f"QWidget#authCard QLineEdit:focus {{ border: 2px solid {palette['accent']}; }}"
         if knobs["depth"] == "soft"
         else ""
     )
@@ -1622,8 +1622,14 @@ def accent_words(palette: dict) -> str:
     """The accent as words: itself where it reads at 4.5 to 1 on the page, the cards and the calendar, else
     its lightness moved as far as that takes. A typed accent stays as typed for fills and lines, and
     Readability offers its fix; words in it are drawn darker until then (0.17.2)."""
-    grounds = (palette["window"], palette["panel"], palette.get("grid", palette["panel"]))
-    return fit_lightness(palette["accent"], grounds, AA_TEXT)
+    accent = palette["accent"]
+    page = (palette["window"], palette["panel"])
+    grounds = (*page, palette.get("grid", palette["panel"]))
+    if min(contrast(accent, ground) for ground in grounds) >= AA_TEXT:
+        return accent
+    if min(contrast(accent, ground) for ground in page) >= AA_TEXT:
+        return accent
+    return fit_lightness(accent, grounds, AA_TEXT)
 
 
 def rail_future_ink(palette: dict) -> str:
@@ -1649,9 +1655,12 @@ def readable_edge(palette: dict) -> str:
 def readable_focus_edge(palette: dict) -> str:
     """An accent edge that reads on the field and card, and stands out from the resting edge."""
     grounds = (palette["field"], palette["panel"])
+    accent = palette["accent"]
     resting = readable_edge(palette)
     target = max(AA_GRAPHIC, *(contrast(resting, ground) + 0.2 for ground in grounds))
-    return fit_lightness(palette["accent"], grounds, target)
+    if min(contrast(accent, ground) for ground in grounds) >= target:
+        return accent
+    return fit_lightness(accent, grounds, target)
 
 
 def switch_track_edge(palette: dict) -> str:
