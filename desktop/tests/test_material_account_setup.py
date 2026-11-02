@@ -575,6 +575,39 @@ def test_a_bad_load_falls_back_to_the_widgets_sign_in(
     wait_until(qapp, lambda: page(window) == "recoveryPage")
 
 
+def test_graphics_fallback_during_material_setup_keeps_the_widgets_step(
+    qapp: QApplication, launches: Launches
+) -> None:
+    """A scene-graph failure mid-setup must finish from the Widgets page, not the abandoned bridge."""
+    window = launches.launch()
+    bridge = account(window)
+    create(qapp, window, "fallback_setup_student")
+    through_recovery(qapp, window)
+    assert bridge.phase == "setup"
+    assert bridge.setupStep == STYLE
+    assert page(window) == "materialPage"
+    bridge._surface_pick = "widgets"
+
+    window._give_up_material(show_week=False)
+    wait_until(qapp, lambda: page(window) == "setupPage")
+    assert window._material_gave_up is True
+    assert window.setup_page.step == STYLE
+    assert bridge.phase == "app"
+
+    window.setup_page.next.click()
+    wait_until(qapp, lambda: window.setup_page.step == WEEK)
+    widgets_step = window.setup_page.step
+    window.setup_page.skip_all.click()
+    wait_until(qapp, lambda: bool((window.session.preferences or {}).get("setup", {}).get("finished_at")))
+    settle(qapp, window)
+
+    progress = window.session.preferences["setup"]
+    assert progress["step"] == widgets_step
+    assert window._surface == "material"
+    assert json.loads(look_file().read_text())["surface"] == "material"
+    assert bridge._surface_pick == "widgets"
+
+
 def test_setup_focus_and_tab_ownership_stays_on_visible_material_controls(
     qapp: QApplication, launches: Launches
 ) -> None:

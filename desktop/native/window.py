@@ -1228,6 +1228,8 @@ class NativeWindow(QMainWindow):
             step = STYLE if bridge is None else bridge.setup_step
             self.setup_page.open(state, step)
             self._show_page("setupPage")
+            if bridge is not None:
+                bridge.show_app()
         # Stay on Settings when that is what is open and Material never appeared. A graphics
         # failure while Material is up, or a load that was meant to replace the week, shows the week.
         elif show_week and (current is None or current.objectName() != "settingsPage"):
@@ -2689,7 +2691,13 @@ class NativeWindow(QMainWindow):
     def _finish_setup(self) -> None:
         stamp = datetime.now().strftime("%Y-%m-%dT%H:%M")
         bridge = self._account_bridge()
-        on_material = bridge is not None and bridge.phase == "setup"
+        current = self._stack.currentWidget()
+        widgets_owns = self._material_gave_up or (
+            current is not None and current.objectName() == "setupPage"
+        )
+        on_material = (
+            not widgets_owns and bridge is not None and bridge.phase == "setup"
+        )
         step = bridge.setup_step if on_material else self.setup_page.step
         progress = {"version": SETUP_VERSION, "step": step, "finished_at": stamp}
         if on_material:

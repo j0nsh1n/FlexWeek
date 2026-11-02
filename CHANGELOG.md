@@ -13,6 +13,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed
+- If Material setup cannot open, finishing from the Widgets pages keeps the Widgets step and does not apply the abandoned Material style.
 - Opening another window in the same session no longer crashes while menus take their shadow.
 - Overdue count announcements use the visible More control, with a window fallback while Settings is open.
 - Material keeps an unsent Settings change across a swap back, shows a visible fallback when it cannot open, and does not retry that version at start-up until the student chooses Material again or the app version changes. Its clock keeps moving, More lists only actions that work on Material, and Add homework works from the keyboard.
