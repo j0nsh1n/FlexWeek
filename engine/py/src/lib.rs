@@ -14,6 +14,7 @@ use pyo3::types::{PyDate, PyDict, PyModule};
 mod db;
 mod desk;
 mod desk_rest;
+mod material;
 mod more;
 mod rest;
 mod sync;
@@ -345,6 +346,7 @@ fn flexweek_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     );
     #[cfg(feature = "audit")]
     crate::export!(m, panic_probe, int_text, int_chars);
+    material::add(m)?;
     more::add(m)?;
     rest::add(m)?;
     db::add(m)?;

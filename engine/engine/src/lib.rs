@@ -6,6 +6,7 @@
 pub mod casefold;
 pub mod desk;
 pub mod error;
+pub mod material;
 pub mod model;
 pub mod plan;
 pub mod pyprint;

@@ -6,6 +6,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- A seed colour can build a Material scheme: six palette styles, light or dark, and a contrast from low to high. Dynamic color uses the desktop's accent when the platform supplies one.
 - Material 3 is a style choice beside the existing ones. Choosing it opens a Material window on the real week, and choosing a Widgets style swaps back, with no restart. Today's app stays the default. The Material window has Day, Week, Month, My day, and Settings, and the week's homework list sits on the right.
 - Settings → Look shows a live preview of the main view and the day screen as you change a style, its options, or the look, including the accent, with Fit and Actual size as in My Look.
 - Planner settings are stored and used: weekends homework-free, a 15- or 30-minute buffer, urgent deadlines first, splitting a task longer than an hour, and showing weekends. The study cutoff stays the existing day cutoff. Defaults leave an existing week where it is.
