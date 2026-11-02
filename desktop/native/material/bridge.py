@@ -90,7 +90,7 @@ class MaterialBridge(QObject):
         self._theme = theme_object(self._colours, self._density, False, False)
         self._week = WeekBridge(window, self)
         self._day = DayBridge(self)
-        self._month = MonthBridge(self)
+        self._month = MonthBridge(window, self)
         self._myday = MyDayBridge(self)
         self._settings_bridge = SettingsBridge(self)
 
@@ -122,6 +122,7 @@ class MaterialBridge(QObject):
         """Read the session again. Does not consume a Widgets prompt."""
         self._publish_theme()
         self._week.reload(self._mode)
+        self._month.reload()
         self.blocksChanged.emit()
         self.homeworkChanged.emit()
         self.changed.emit()
@@ -346,5 +347,12 @@ class MaterialBridge(QObject):
     def showPage(self, name: str) -> None:
         if name not in SCREENS or name == self._screen:
             return
+        session = self._window.session
+        if name == "month":
+            self._month.activate()
+        elif getattr(session, "planner_view", None) == "month" and name in {"day", "week"}:
+            # The rail's Day and Week leave the month through the session. Open Day
+            # has already set the day, so this branch does not run for it.
+            session.set_view(name)
         self._screen = name
         self.changed.emit()
