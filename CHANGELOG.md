@@ -18,6 +18,10 @@ All notable changes to FlexWeek are documented here. Format follows
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed
+- Saving a second Material homework edit while the first save is still going no longer throws the second edit away. Save stays off and the draft stays until that save finishes. A fixed-time save or delete, and ticking homework finished on Day, wait the same way.
+- Tab stays on the Focus screen and its End dialog, not on the Add button or the rail underneath.
+- Number keys, Z, F and P do not change the page while a Settings look prompt is open. Digits still type in the prompt's field.
+- My day still shows today's work after you browse another week or a month date.
 - If Material setup cannot open, finishing from the Widgets pages keeps the Widgets step and does not apply the abandoned Material style.
 - Material Find a time for homework that is not overdue shows the same preview Widgets uses. Nothing is saved until Accept; Cancel leaves the week unchanged.
 - Material Routines and discard prompts use the same words as the Widgets sheets.
