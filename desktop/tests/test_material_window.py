@@ -862,6 +862,116 @@ def test_the_material_week_comes_from_the_session(
         window._use_widgets_styles()
 
 
+def _accept_sign_out() -> None:
+    """Press Sign out on the sheet that is about to open. Esc and Cancel leave the account signed in."""
+
+    def press() -> None:
+        sheet = QApplication.activeModalWidget()
+        if sheet is not None and hasattr(sheet, "buttons"):
+            sheet.buttons["yes"].click()
+
+    QTimer.singleShot(200, press)
+
+
+def test_sign_out_keeps_an_unsent_settings_change_on_both_surfaces(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """A refused preference save is still the lead after Sign out is confirmed.
+
+    Material's More and the Widgets button both reach the same sign-out. Signing out
+    used to drop the draft and leave the saved lead at 5.
+    """
+    window._surface = "widgets"
+    window._material_gave_up = False
+    window._on_week()
+    window._open_settings()
+    page = window._settings
+    assert page is not None
+    lead = page.findChild(QSpinBox, "prefLead")
+    assert lead.value() == 5
+    assert lead.value() == reminder_lead_min(window.session.preferences)
+    offered: list[object] = []
+    logged_out: list[int] = []
+
+    def refuse(wanted: dict, _done: object) -> bool:
+        offered.append(wanted.get("reminder_lead_min"))
+        return False
+
+    original_save = window.session.save_preferences
+    original_logout = window.session.logout
+
+    def watch_logout() -> None:
+        logged_out.append(reminder_lead_min(window.session.preferences))
+        original_logout()
+
+    window.session.save_preferences = refuse
+    window.session.logout = watch_logout
+    try:
+        lead.setValue(17)
+        for timer in page.findChildren(QTimer):
+            timer.stop()
+        root = _show_material(qapp, window)
+        assert window._settings_unsent() is True
+        window._material_page.bridge.openMore()
+        _pump(qapp)
+        popup = QApplication.activePopupWidget()
+        assert popup is not None
+        sign_out = _action(popup, "Sign out")
+        assert sign_out is not None
+        _accept_sign_out()
+        sign_out.trigger()
+        QTest.qWait(700)
+        assert logged_out == []
+        assert window.session.account is not None
+        assert reminder_lead_min(window.session.preferences) == 5
+        assert lead.value() == 17
+        assert 17 in offered
+        assert window.session.message == (
+            "Couldn't save, so FlexWeek stayed open. Your changes are still on screen. "
+            "Choose Retry save, then sign out again."
+        )
+        assert root.objectName() == "materialShell"
+
+        offered.clear()
+        window._use_widgets_styles()
+        _pump(qapp)
+        assert window._stack.currentWidget().objectName() == "weekPage"
+        assert window._settings_unsent() is True
+        _accept_sign_out()
+        window.findChild(QPushButton, "signOut").click()
+        QTest.qWait(700)
+        assert logged_out == []
+        assert window.session.account is not None
+        assert reminder_lead_min(window.session.preferences) == 5
+        assert lead.value() == 17
+        assert 17 in offered
+        assert "sign out again." in window.session.message
+    finally:
+        leaving = window._leaving
+        if leaving is not None:
+            leaving.stop()
+            leaving.deleteLater()
+            window._leaving = None
+        window.session.logout = original_logout
+        window.session.save_preferences = original_save
+        if window.session.account is not None and page.findChild(QSpinBox, "prefLead") is not None:
+            lead.setValue(reminder_lead_min(window.session.preferences))
+            for timer in page.findChildren(QTimer):
+                timer.stop()
+        current = QApplication.activePopupWidget()
+        if current is not None:
+            current.close()
+        sheet = QApplication.activeModalWidget()
+        if isinstance(sheet, QDialog):
+            sheet.reject()
+        if window._stack.currentWidget() is page:
+            window._close_settings()
+        window._surface = "widgets"
+        window._material_gave_up = False
+        if window.session.account is not None:
+            window._on_week()
+
+
 def test_setup_writes_material_beside_the_layout(window: NativeWindow) -> None:
     window._surface = "material"
     window._material_failed = ""
