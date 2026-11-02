@@ -302,9 +302,35 @@ def visual_items(root: object) -> list:
     return found
 
 
+def qml_visible_rect(item: object, root: object, host_width: float, host_height: float):
+    """The part of `item` that the host and every clipping ancestor leave on screen, in root pixels.
+
+    A Flickable keeps `isVisible()` true for a row it has scrolled away. An empty intersection is
+    not something a play can see or click. The walk includes every clip between the item and the
+    root, and stops there.
+    """
+    from PySide6.QtCore import QPointF, QRectF
+
+    origin = item.mapToItem(root, QPointF(0, 0))  # type: ignore[attr-defined]
+    visible = QRectF(origin.x(), origin.y(), item.width(), item.height())  # type: ignore[attr-defined]
+    visible = visible.intersected(QRectF(0, 0, host_width, host_height))
+    parent = item.parentItem()  # type: ignore[attr-defined]
+    while parent is not None:
+        if parent.clip():
+            corner = parent.mapToItem(root, QPointF(0, 0))
+            bounds = QRectF(corner.x(), corner.y(), parent.width(), parent.height())
+            visible = visible.intersected(bounds)
+        if parent is root:
+            break
+        parent = parent.parentItem()
+    if visible.width() < 1 or visible.height() < 1:
+        return None
+    return visible
+
+
 def qml_click_targets(widgets: object, kind: str, wanted: str) -> list:
     """Global points on visible QML items, so a play can click one by objectName or by its words."""
-    from PySide6.QtCore import QPoint, QPointF
+    from PySide6.QtCore import QPoint
     from PySide6.QtQuickWidgets import QQuickWidget
 
     found = []
@@ -316,7 +342,10 @@ def qml_click_targets(widgets: object, kind: str, wanted: str) -> list:
             continue
         host = widget.window()
         for item in visual_items(root):
-            if not item.isVisible() or item.width() < 1 or item.height() < 1:
+            if not item.isVisible():
+                continue
+            visible = qml_visible_rect(item, root, widget.width(), widget.height())
+            if visible is None:
                 continue
             name = str(item.objectName() or "")
             text = item.property("text")
@@ -327,8 +356,9 @@ def qml_click_targets(widgets: object, kind: str, wanted: str) -> list:
                 score = max(matches_words(wanted, shown), matches_words(wanted, name))
             if not score:
                 continue
-            # Through the widget. A QQuickItem's own mapToGlobal is not the screen point.
-            centre = item.mapToItem(root, QPointF(item.width() / 2, item.height() / 2))
+            # The center of what is actually on screen, through the widget. A QQuickItem's own
+            # mapToGlobal is not the screen point.
+            centre = visible.center()
             spot = widget.mapToGlobal(QPoint(int(centre.x()), int(centre.y())))
             label = f'qml {name or "item"} "{shown[:40]}"' if shown else f"qml {name or 'item'}"
             found.append((score, spot, label, host))
@@ -336,8 +366,8 @@ def qml_click_targets(widgets: object, kind: str, wanted: str) -> list:
 
 
 def qml_tree_entries(quick: object, window: object, depth: int) -> list[dict]:
-    """QML rows for a play's tree, in window pixels."""
-    from PySide6.QtCore import QPoint, QPointF
+    """QML rows for a play's tree, in window pixels. A fully clipped item is left out."""
+    from PySide6.QtCore import QPoint
 
     root = quick.rootObject()  # type: ignore[attr-defined]
     if root is None:
@@ -346,9 +376,11 @@ def qml_tree_entries(quick: object, window: object, depth: int) -> list[dict]:
     for item in visual_items(root):
         if not item.isVisible():
             continue
-        corner = item.mapToItem(root, QPointF(0, 0))
+        visible = qml_visible_rect(item, root, quick.width(), quick.height())  # type: ignore[attr-defined]
+        if visible is None:
+            continue
         in_window = quick.mapTo(  # type: ignore[attr-defined]
-            window, QPoint(int(corner.x()), int(corner.y()))
+            window, QPoint(int(visible.x()), int(visible.y()))
         )
         text = item.property("text")
         rows.append(
@@ -361,8 +393,8 @@ def qml_tree_entries(quick: object, window: object, depth: int) -> list[dict]:
                 "geometry": [
                     in_window.x(),
                     in_window.y(),
-                    int(item.width()),
-                    int(item.height()),
+                    int(visible.width()),
+                    int(visible.height()),
                 ],
                 "enabled": True,
                 "hasFocus": bool(item.hasFocus()) if hasattr(item, "hasFocus") else False,
