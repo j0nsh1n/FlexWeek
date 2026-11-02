@@ -282,7 +282,12 @@ Item {
                     anchors.fill: parent
                     currentIndex: bridge.pageIndex
 
-                    DayView { Layout.fillWidth: true; Layout.fillHeight: true; bridge: root.bridge }
+                    DayView {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        bridge: root.bridge
+                        phone: root.phone
+                    }
                     WeekView {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -294,7 +299,12 @@ Item {
                         highContrast: root.highContrast
                     }
                     MonthView { Layout.fillWidth: true; Layout.fillHeight: true; bridge: root.bridge }
-                    MyDayView { Layout.fillWidth: true; Layout.fillHeight: true; bridge: root.bridge }
+                    MyDayView {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        bridge: root.bridge
+                        phone: root.phone
+                    }
                     SettingsView { Layout.fillWidth: true; Layout.fillHeight: true; bridge: root.bridge }
                 }
 
@@ -403,6 +413,7 @@ Item {
                 visible: bridge.snackText !== ""
                 z: 3
                 message: bridge.snackText
+                onActionClicked: bridge.undo()
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: root.phone ? 96 : 24

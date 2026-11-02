@@ -89,10 +89,16 @@ class MaterialBridge(QObject):
         self._colours = scheme(DEFAULT_PRESET, "light", DEFAULT_CONTRAST)
         self._theme = theme_object(self._colours, self._density, False, False)
         self._week = WeekBridge(window, self)
-        self._day = DayBridge(self)
+        self._day = DayBridge(window, self)
         self._month = MonthBridge(self)
-        self._myday = MyDayBridge(self)
+        self._myday = MyDayBridge(window, self)
         self._settings_bridge = SettingsBridge(self)
+        self._following = False
+        # Save finishes on this signal. The day lists and the Undo button read it then,
+        # rather than waiting for the 20s clock tick.
+        changed = getattr(self._window.session, "week_changed", None)
+        if changed is not None and hasattr(changed, "connect"):
+            changed.connect(self._follow_week)
 
     def set_appearance(self, mode: str, _worn_contrast: str) -> None:
         """Apply the saved Material look. `mode` is the worn light or dark axis.
@@ -122,9 +128,21 @@ class MaterialBridge(QObject):
         """Read the session again. Does not consume a Widgets prompt."""
         self._publish_theme()
         self._week.reload(self._mode)
+        self._day.reload(self._mode)
+        self._myday.reload(self._mode)
         self.blocksChanged.emit()
         self.homeworkChanged.emit()
         self.changed.emit()
+
+    @Slot()
+    def _follow_week(self) -> None:
+        if self._following:
+            return
+        self._following = True
+        try:
+            self.refresh()
+        finally:
+            self._following = False
 
     def _publish_theme(self) -> None:
         self._reduce_motion = self._motion_reduced()
@@ -314,9 +332,17 @@ class MaterialBridge(QObject):
     def nowMinute(self) -> int:
         return self._week.nowMinute
 
+    def note(self, text: str) -> None:
+        """One snackbar line. Day uses it after a homework check."""
+        self._snack = text
+        self.changed.emit()
+
     @Slot()
     def undo(self) -> None:
+        if self._snack:
+            self._snack = ""
         self._window.session.undo()
+        self.refresh()
 
     @Slot()
     def redo(self) -> None:
