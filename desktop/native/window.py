@@ -63,6 +63,7 @@ from shiboken6 import isValid
 
 from backend.slots import DAY_END_MIN, SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm
 from desktop.native import autostart, icons
+from desktop.native.ambient import FocusAudio
 from desktop.native.calendar import (
     CATEGORIES,
     DAY_FULL,
@@ -167,7 +168,6 @@ from desktop.native.settings import (
     UpdateDialog,
 )
 from desktop.native.setup import REMINDERS, SETUP_VERSION, STYLE, SetupPage, SetupState
-from desktop.native.ambient import FocusAudio
 from desktop.native.sound import Bell
 from desktop.native.spotify import LISTENING, STARTING, SpotifyPlayer, open_in_app
 from desktop.native.tokens import SHADOW_LARGE, SHADOW_SMALL, SPACING

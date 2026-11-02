@@ -372,7 +372,12 @@ def check_windows(root: Path) -> list[str]:
         if path.suffix.lower() in {".dll", ".exe", ".pyd"}
     }
     bundled = {path.name.lower() for path in root.rglob("*")}
-    return windows_problems(binaries, bundled) + asset_problems(ASSETS, root) + material_problems(root) + sound_problems(root)
+    return (
+        windows_problems(binaries, bundled)
+        + asset_problems(ASSETS, root)
+        + material_problems(root)
+        + sound_problems(root)
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

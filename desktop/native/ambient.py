@@ -406,7 +406,9 @@ class FocusAudio(QObject):
     """Follows the session's focus timer: plays while it works, holds still on a pause or a break, and
     stops when the session ends or is left."""
 
-    def __init__(self, session: Any, parent: QObject | None = None, player: AmbientPlayer | None = None) -> None:
+    def __init__(
+        self, session: Any, parent: QObject | None = None, player: AmbientPlayer | None = None
+    ) -> None:
         super().__init__(parent)
         self._session = session
         self.player = player or AmbientPlayer(self)

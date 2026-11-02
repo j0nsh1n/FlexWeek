@@ -3649,11 +3649,17 @@ class NativeSession(QObject):
         if state.get("blockId") and state.get("weekStart") == self.week_start:
             block = next((item for item in self.blocks if item["id"] == state["blockId"]), None)
         day = state.get("day")
-        if block is not None and not block.get("completed") and block.get("kind") == "flexible":
-            if state.get("start") and isinstance(day, int) and day in (block.get("days") or []):
-                block["start"] = state["start"]
-                block["completed"] = True
-                block["completed_day"] = day
+        if (
+            block is not None
+            and not block.get("completed")
+            and block.get("kind") == "flexible"
+            and state.get("start")
+            and isinstance(day, int)
+            and day in (block.get("days") or [])
+        ):
+            block["start"] = state["start"]
+            block["completed"] = True
+            block["completed_day"] = day
         assignment_id = state.get("assignmentId") or (block or {}).get("assignment_id")
         assignment = self.assignments.get(assignment_id) if assignment_id else None
         if assignment is None or assignment.get("completed"):
