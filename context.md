@@ -1,6 +1,17 @@
 # context.md — FlexWeek
 
 ## Current State
+- 2026-11-02: Material desktop overhaul lanes are integrated locally on
+  `fix/visual-artifacts-20261026`, reviewed through `fdf0ed1c`. The wide Codex review's
+  five blockers and subsequent modal-pointer and sheet-focus findings have fixes with
+  independent Grok 4.7 verification. Sheet Tab/Backtab full cycles and picker Escape
+  passed on hidden KWin. Canonical SQL weekend preferences and local focus extras remain.
+  Menu/card shadows now flatten and re-lift the same effect; combined historical-path
+  tests pass, but the timing-dependent process abort itself was not reproduced.
+  This is focused verification, not a full-gate pass. Graphics fallback remains
+  offscreen-only; packaging, audible checks, Android redesign and final visual review
+  remain pending. Nothing from the overhaul has been pushed or released.
+  Evidence: `~/.flexweek-ui-harness/scratch/material-week-review-grok/`.
 - 2026-10-27: **1.2.0 released as Latest**, PR #54 merged into `main` at
   `a71e4d91f09873b5c6ef1daeafac2f7d0319d433`, tag `v1.2.0`.
   https://github.com/j0nsh1n/FlexWeek/releases/tag/v1.2.0 has all ten assets; five checksum pairs
@@ -166,6 +177,11 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
+- Material integration: focused independent reviews complete through `fdf0ed1c`.
+  Next is one capped `fwtest gate` after Jonathan approves the whole-suite run
+  (AGENTS.md:175–177); use 10 GiB / 800% CPU, nice 19, default eight workers and
+  resource watcher. Do not substitute earlier release gates or lane tests for it.
+  Preserve every lane checkout. No push, PR, release, or further cleanup authorized.
 - 2026-10-27: Local overdue-accessibility and Plan paint-test follow-ups are complete on
   `fix/visual-artifacts-20261026`, reused with Jonathan's approval. Test-first commit `6ecf2123`
   records both intentionally failing page-specific announcement cases. The fix passes all four
