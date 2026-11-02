@@ -9,6 +9,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Material 3 is a style choice beside the existing ones. Choosing it opens a Material window on the real week, and choosing a Widgets style swaps back, with no restart. Today's app stays the default. The Material window has Day, Week, Month, My day, and Settings, and the week's homework list sits on the right.
 
 ### Changed
+- Material Day and My day show leftover counts, the free-time Now card, Up next and Done, and a homework check with Undo.
 - Spotify for blocks is one link in Settings. Add and edit no longer ask for a link on a block or on homework. Open Spotify link and Focus set to Spotify use that link. A block starts with it only when the alarm sound is Spotify. A link already saved on a block stays in your data.
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
