@@ -522,9 +522,9 @@ def test_export_then_import_gives_back_the_same_look(qapp: QApplication, window:
         )
         assert state["dirty"] is True
         panel.importText("{not json")
-        assert panel.property("state")["importError"] == "That file is not a FlexWeek material look."
+        assert panel.property("state")["importError"] == "That file isn't a FlexWeek material look."
         panel.importText(json.dumps({"kind": "something else", "version": 1}))
-        assert panel.property("state")["importError"] == "That file is not a FlexWeek material look."
+        assert panel.property("state")["importError"] == "That file isn't a FlexWeek material look."
     finally:
         _reset(window)
 

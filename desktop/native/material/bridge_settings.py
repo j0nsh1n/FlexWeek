@@ -238,7 +238,10 @@ class SettingsBridge(QObject):
         self._publish()
 
     def _on_session(self) -> None:
-        self._publish()
+        try:
+            self._publish()
+        except (OSError, KeyError, ValueError):
+            return
 
     def _worn_dark(self) -> bool:
         from desktop.native.material.host import appearance_of
@@ -250,8 +253,11 @@ class SettingsBridge(QObject):
         mode = resolved_mode(choice["mode"], self._worn_dark())
         try:
             return scheme(choice["preset"], mode, choice["contrast"])
-        except KeyError:
-            return scheme(DEFAULT_PRESET, "light", DEFAULT_CONTRAST)
+        except (KeyError, ValueError, OSError):
+            try:
+                return scheme(DEFAULT_PRESET, "light", DEFAULT_CONTRAST)
+            except (KeyError, ValueError, OSError):
+                return {}
 
     def _mark_draft(self) -> None:
         self._dirty = True
@@ -266,6 +272,8 @@ class SettingsBridge(QObject):
 
     def _make_theme(self, choice: dict[str, str], advanced: dict[str, Any]) -> dict[str, Any]:
         colours = self._colours(choice)
+        if not colours:
+            return dict(self._draft_theme or {})
         reduced = advanced.get("motion") == "Off" or bool(self._bridge.reduceMotion)  # type: ignore[attr-defined]
         base = theme_object(colours, choice["density"], reduced, choice["contrast"] == "high")
         return dress_theme(base, advanced)

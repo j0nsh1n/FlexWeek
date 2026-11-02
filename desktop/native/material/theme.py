@@ -63,7 +63,10 @@ def qml_path() -> Path:
 
 @lru_cache(maxsize=1)
 def _schemes() -> dict[str, dict[str, str]]:
-    loaded = json.loads(tokens_path().read_text(encoding="utf-8"))
+    try:
+        loaded = json.loads(tokens_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
     if not isinstance(loaded, dict):
         raise ValueError("Material tokens must be a JSON object of schemes")
     return loaded
@@ -509,9 +512,9 @@ def import_document(text: str) -> tuple[dict[str, Any] | None, str]:
     try:
         raw = json.loads(text)
     except ValueError:
-        return None, "That file is not a FlexWeek material look."
+        return None, "That file isn't a FlexWeek material look."
     if not isinstance(raw, dict) or raw.get("kind") != LOOK_KIND or raw.get("version") != LOOK_VERSION:
-        return None, "That file is not a FlexWeek material look."
+        return None, "That file isn't a FlexWeek material look."
     choice = read_material_choice({"material": raw})
     advanced = read_advanced({"material": {"advanced": raw.get("advanced")}})
     return {"choice": choice, "advanced": advanced}, ""
