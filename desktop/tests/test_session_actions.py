@@ -1,7 +1,8 @@
 """Session actions a surface can call with no widgets on screen.
 
 A move let go while a save is in flight has to survive that save's reply, which replaces the week
-with what was already on its way.
+with what was already on its way. Setup's answers leave one write at a time: preferences, then
+study hours, then the week.
 """
 
 from __future__ import annotations
@@ -97,3 +98,68 @@ def test_a_move_during_a_save_is_not_lost(qapp: QApplication, server: LocalServe
     kept = _soccer(session)
     assert kept["days"] == [1]
     assert kept["start"] == "10:00"
+
+
+def test_setup_writes_stay_in_order(qapp: QApplication, server: LocalServer) -> None:
+    """Preferences, then study hours, then the week. A second request would replace the first."""
+    session = signed_in(qapp, server.origin, "setup_order", create=True)
+    assert session.preferences is not None
+    real = session.client.request
+    order: list[str] = []
+    availability: list[object] = []
+    inflight = 0
+    peak = 0
+
+    def request(
+        method: str,
+        path: str,
+        payload: dict | None,
+        on_success: Callable[[dict], None],
+        on_error: Callable[[ApiError], None],
+    ) -> None:
+        nonlocal inflight, peak
+        counted = (method == "PUT" and path.startswith("/api/preferences")) or (
+            method == "POST" and path.startswith("/api/changes")
+        )
+        if not counted:
+            real(method, path, payload, on_success, on_error)
+            return
+        inflight += 1
+        peak = max(peak, inflight)
+        order.append(session.message)
+        if session.message == "Saving availability…":
+            availability.append((payload or {}).get("work_windows"))
+
+        def done(data: dict, then: Callable[[dict], None] = on_success) -> None:
+            nonlocal inflight
+            inflight -= 1
+            then(data)
+
+        def failed(error: ApiError, then: Callable[[ApiError], None] = on_error) -> None:
+            nonlocal inflight
+            inflight -= 1
+            then(error)
+
+        real(method, path, payload, done, failed)
+
+    session.client.request = request  # type: ignore[method-assign, assignment]
+    window = [{"days": [0, 1, 2, 3, 4], "start": "15:00", "end": "18:00"}]
+    session.keep_setup(
+        {"planning_style": "auto", "clock_24h": True},
+        work_windows=window,
+        save_week=True,
+    )
+    wait_until(
+        qapp,
+        lambda: not session.setup_prefs
+        and session.setup_work_windows is None
+        and not session.setup_week
+        and not session.busy
+        and inflight == 0,
+    )
+    settled(qapp, session)
+    assert peak == 1, order
+    assert order == ["Saving preferences…", "Saving availability…", "Saving…"]
+    assert availability == [window]
+    assert session.preferences["planning_style"] == "auto"
+    assert session.preferences["clock_24h"] is True

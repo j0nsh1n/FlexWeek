@@ -325,6 +325,11 @@ class NativeSession(QObject):
         # One block let go while a save is in flight. The save's reply replaces the week, so the move
         # is applied on the next turn after that reply, not during it. A later let-go replaces it.
         self._hand_waiting: tuple[str, int, int, int, int] | None = None
+        # What setup has kept and not yet written, one request at a time: preferences, then study
+        # hours, then the week. A second request would replace the first on this session.
+        self.setup_prefs: dict = {}
+        self.setup_work_windows: list[dict] | None = None
+        self.setup_week = False
         self.busy_changed.connect(self._resume_pending)
         self._reminder_ticket = 0
         self._reminder_fetching: str | None = None
@@ -1097,10 +1102,50 @@ class NativeSession(QObject):
         self.hand_placed.emit(words)
 
     def _resume_pending(self, busy: bool) -> None:
-        if busy or self._hand_waiting is None:
+        if busy:
             return
-        waiting, self._hand_waiting = self._hand_waiting, None
-        QTimer.singleShot(0, lambda waiting=waiting: self.place_block(*waiting))
+        if self._hand_waiting is not None:
+            waiting, self._hand_waiting = self._hand_waiting, None
+            QTimer.singleShot(0, lambda waiting=waiting: self.place_block(*waiting))
+        if self.setup_prefs or self.setup_work_windows is not None or self.setup_week:
+            # After this turn, so a save that just landed finishes putting its week in place first.
+            QTimer.singleShot(0, self, self.flush_setup)
+
+    def keep_setup(
+        self,
+        updates: dict,
+        *,
+        work_windows: list[dict] | None = None,
+        save_week: bool = False,
+    ) -> None:
+        """Remember what a setup page answered. The write goes out one request at a time."""
+        self.setup_prefs.update(updates)
+        if work_windows is not None:
+            self.setup_work_windows = deepcopy(work_windows)
+        if save_week:
+            self.setup_week = True
+        if self.preferences is not None:
+            # Seen at once, as Settings does: the save that follows stores them.
+            self.preferences = {**self.preferences, **self.setup_prefs}
+        self.flush_setup()
+
+    def flush_setup(self) -> None:
+        """Write what setup kept. Preferences go first: the week's save can start a plan. While a
+        request is out, this waits, and the next idle turn sends whatever is still kept."""
+        if self.account is None or self.busy:
+            return
+        if self.setup_prefs and self.preferences is not None:
+            updates, self.setup_prefs = self.setup_prefs, {}
+            self.save_preferences(updates)
+            return
+        if self.setup_work_windows is not None and self.preferences is not None:
+            windows, self.setup_work_windows = self.setup_work_windows, None
+            prefs = self.preferences
+            self.save_availability(prefs.get("protected") or [], prefs.get("day_cutoff"), windows)
+            return
+        if self.setup_week:
+            self.setup_week = False
+            self.save()
 
     def set_setup_blocks(self, blocks: list[dict]) -> None:
         """Replace the school and activities setup made with `blocks`, as one Undo step. Anything the

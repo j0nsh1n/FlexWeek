@@ -7,7 +7,6 @@ import json
 import time
 import weakref
 from collections.abc import Callable
-from copy import deepcopy
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -611,13 +610,10 @@ class NativeWindow(QMainWindow):
         self._updater.progress.connect(self._on_update_progress)
         self._updater.failed.connect(self._on_update_problem)
         self._updater.ready.connect(self._on_update_ready)
-        # Setup is on screen; this sign-in has decided whether it should be; and what setup has kept
-        # that is still to be written, one request at a time.
+        # Setup is on screen, and this sign-in has decided whether it should be. What setup has kept
+        # to write lives on the session.
         self._setup_active = False
         self._setup_checked = False
-        self._setup_prefs: dict = {}
-        self._setup_work_windows: list[dict] | None = None
-        self._setup_week = False
         # Settings while it is on screen, and what closing it has to save.
         self._settings: SettingsPage | None = None
         self._settings_finish: Callable[[bool], None] | None = None
@@ -2393,9 +2389,35 @@ class NativeWindow(QMainWindow):
         self.setup_page.motion = self._motion
         fade_away(picture, self._motion)
 
+    @property
+    def _setup_prefs(self) -> dict:
+        return self.session.setup_prefs
+
+    @_setup_prefs.setter
+    def _setup_prefs(self, value: dict) -> None:
+        self.session.setup_prefs = value
+
+    @property
+    def _setup_work_windows(self) -> list[dict] | None:
+        return self.session.setup_work_windows
+
+    @_setup_work_windows.setter
+    def _setup_work_windows(self, value: list[dict] | None) -> None:
+        self.session.setup_work_windows = value
+
+    @property
+    def _setup_week(self) -> bool:
+        return self.session.setup_week
+
+    @_setup_week.setter
+    def _setup_week(self, value: bool) -> None:
+        self.session.setup_week = value
+
     def _setup_step_left(self, _step: int, destination: int, answer: object) -> None:
         """Keep what a page answered, and where the student went, so a quit resumes there."""
         updates: dict = {"setup": {"version": SETUP_VERSION, "step": destination}}
+        work_windows = None
+        save_week = False
         if isinstance(answer, dict):
             if "layout" in answer:
                 self._look = answer["look"]
@@ -2406,14 +2428,14 @@ class NativeWindow(QMainWindow):
             if "blocks" in answer:
                 self.session.set_setup_blocks(answer["blocks"])
                 updates["day_cutoff"] = answer["day_cutoff"]
-                self._setup_week = True
+                save_week = True
             if "homework" in answer:
                 auto = (self.session.preferences or {}).get("planning_style") == "auto"
                 for item in answer["homework"]:
                     self.session.add_homework(item)
                     if auto:
                         self.session.plan_after_save(item["id"])
-                self._setup_week = True
+                save_week = True
             for key in (
                 "planning_style",
                 "drag_step_min",
@@ -2426,44 +2448,20 @@ class NativeWindow(QMainWindow):
                 if key in answer:
                     updates[key] = answer[key]
             if "work_windows" in answer:
-                self._setup_work_windows = deepcopy(answer["work_windows"])
-        self._setup_prefs.update(updates)
-        if self.session.preferences is not None:
-            # Seen at once, as Settings does: the save that follows stores them.
-            self.session.preferences = {**self.session.preferences, **self._setup_prefs}
-        self._flush_setup()
+                work_windows = answer["work_windows"]
+        self.session.keep_setup(updates, work_windows=work_windows, save_week=save_week)
 
     def _flush_setup(self) -> None:
-        """Write what setup kept, one request at a time. A second request replaces the first on the
-        session, so two at once would drop the first one's reply, and an answer typed a moment
-        before a quit would be lost. The preferences go first: the week's save can start a plan."""
-        session = self.session
-        if session.account is None or session.busy:
-            return
-        if self._setup_prefs and session.preferences is not None:
-            updates, self._setup_prefs = self._setup_prefs, {}
-            session.save_preferences(updates)
-            return
-        if self._setup_work_windows is not None and session.preferences is not None:
-            windows, self._setup_work_windows = self._setup_work_windows, None
-            prefs = session.preferences
-            session.save_availability(prefs.get("protected") or [], prefs.get("day_cutoff"), windows)
-            return
-        if self._setup_week:
-            self._setup_week = False
-            session.save()
+        self.session.flush_setup()
 
     def _finish_setup(self) -> None:
         stamp = datetime.now().strftime("%Y-%m-%dT%H:%M")
         progress = {"version": SETUP_VERSION, "step": self.setup_page.step, "finished_at": stamp}
-        self._setup_prefs["setup"] = progress
         if self.session.new_account and self.session.account is not None:
             self._new_look_notice_exempt.add(str(self.session.account["id"]))
             self._save_look()
-        if self.session.preferences is not None:
-            self.session.preferences = {**self.session.preferences, **self._setup_prefs}
         self._setup_active = False
-        self._flush_setup()
+        self.session.keep_setup({"setup": progress})
         self._sync_chrome()
         self._on_week()
 
