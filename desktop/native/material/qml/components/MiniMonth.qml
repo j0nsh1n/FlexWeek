@@ -24,7 +24,15 @@ Item {
     readonly property color dayInk: palette.inkSurface
     readonly property color todayFill: palette.primary
     readonly property color todayInk: palette.inkPrimary
+    readonly property color focusRing: palette.primary
     property int cursor: today
+
+    onTodayChanged: if (!activeFocus)
+        cursor = today
+    onYearChanged: if (!activeFocus)
+        cursor = today
+    onMonthChanged: if (!activeFocus)
+        cursor = today
 
     function monthName() {
         var names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
@@ -88,6 +96,7 @@ Item {
             width: root.cell
             height: root.cell
             opacity: inside ? 1 : 0.4
+            readonly property bool isCursor: cell.inside && cell.day === root.cursor && root.activeFocus
             Rectangle {
                 objectName: cell.isToday ? "todayDisc" : ""
                 visible: cell.isToday
@@ -96,6 +105,14 @@ Item {
                 radius: 14
                 anchors.centerIn: parent
                 color: root.todayFill
+            }
+            M3FocusRing {
+                objectName: cell.isCursor ? "cursorRing" : ""
+                anchors.fill: parent
+                anchors.margins: -2
+                shown: cell.isCursor
+                ring: root.focusRing
+                ringRadius: 16
             }
             Text {
                 objectName: "cell" + index
@@ -111,6 +128,9 @@ Item {
                 font.family: M3Font.family
                 font.pixelSize: 12
                 font.weight: cell.isToday ? 500 : 400
+                Accessible.role: Accessible.StaticText
+                Accessible.name: cell.inside ? String(cell.day) : ""
+                Accessible.ignored: !cell.inside
             }
             TapHandler {
                 enabled: cell.inside
@@ -133,7 +153,7 @@ Item {
 
     activeFocusOnTab: true
     Accessible.role: Accessible.Table
-    Accessible.name: accessName !== "" ? accessName : monthName()
+    Accessible.name: (accessName !== "" ? accessName : monthName()) + ", " + cursor
     Keys.onPressed: (event) => {
         if (event.key === Qt.Key_Right)
             root.move(1)

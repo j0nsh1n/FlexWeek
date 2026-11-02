@@ -31,7 +31,7 @@ Icons are the rounded Material Symbols, weight 400, copied into `desktop/native/
 
 ## Public types
 
-`NavRail` (width 80, surface container low), `NavDestination` (pill 56 by 32), `NavBar` (height 80, surface container), `Fab` (56, radius 16, primary container), `ExtendedFab`, `Button` (`kind`: `filled`, `tonal`, `outlined`, `text`), `IconButton`, `SegmentedButton` (height 40, radius 20, 18 px check), `Switch` (52 by 32; thumb 16 off, 24 on), `PresetSwatch` (disc 48, badge 22), `SettingsGroup` (radius 16), `SettingsRow`, `ListRow`, `Tag` (`kind`: `plain`, `tight`, `plenty`, `cutting`), `EventBlock` (`category`: `school`, `sports`, `study`, `homework`), `OutlinedField`, `Dialog` (radius 28, width 440), `BottomSheet`, `Menu` (width 260), `Snackbar` (height 48; the parent anchors it 24 px from the bottom, 96 px on a phone), `MiniMonth`.
+`NavRail` (width 80, surface container low), `NavDestination` (pill 56 by 32), `NavBar` (height 80, surface container), `Fab` (56, radius 16, primary container), `ExtendedFab`, `Button` (`kind`: `filled`, `tonal`, `outlined`, `text`), `IconButton`, `SegmentedButton` (height 40, radius 20, 18 px check), `Switch` (52 by 32; thumb 16 off, 24 on), `PresetSwatch` (disc 48, badge 22), `SettingsGroup` (radius 16), `SettingsRow`, `ListRow` (optional `fill`, `ink`, `trail`), `Tag` (`kind`: `plain`, `tight`, `plenty`, `cutting`), `EventBlock` (`category`: `school`, `sports`, `study`, `homework`), `OutlinedField`, `Dialog` (radius 28, width 440), `BottomSheet`, `Menu` (width 260), `Snackbar` (height 48; the parent anchors it 24 px from the bottom, 96 px on a phone), `MiniMonth`.
 
 `Gallery` draws every control in every state. Set `scheme` to `light`, `dark`, or `high`.
 

@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol, cast
 
-from PySide6.QtCore import Property, QObject, Signal, Slot
+from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from desktop.native.material.bridge_account import AccountBridge
 from desktop.native.material.bridge_day import DayBridge
@@ -40,6 +40,7 @@ from desktop.native.weekmodel import clock_label
 
 # Keys 1–5, and the StackLayout order. Week is the screen a new shell opens on.
 SCREENS = ("day", "week", "month", "myday", "settings")
+SNACK_MS = 6000
 
 
 class _Session(Protocol):
@@ -91,13 +92,19 @@ class MaterialBridge(QObject):
         self._colours = scheme(DEFAULT_PRESET, "light", DEFAULT_CONTRAST)
         self._theme = theme_object(self._colours, self._density, False, False)
         self._week = WeekBridge(window, self)
-        self._day = DayBridge(self)
+        self._day = DayBridge(window, self)
         self._month = MonthBridge(self)
-        self._myday = MyDayBridge(self)
+        self._myday = MyDayBridge(window, self)
         self._settings_bridge = SettingsBridge(self)
         self._account = AccountBridge(window)
         self._account.setParent(self)
         self._focus = FocusBridge(window, self)
+        self._following = False
+        # Save finishes on this signal. The day lists and the Undo button read it then,
+        # rather than waiting for the 20s clock tick.
+        changed = getattr(self._window.session, "week_changed", None)
+        if changed is not None and hasattr(changed, "connect"):
+            changed.connect(self._follow_week)
 
     def set_appearance(self, mode: str, _worn_contrast: str) -> None:
         """Apply the saved Material look. `mode` is the worn light or dark axis.
@@ -127,9 +134,21 @@ class MaterialBridge(QObject):
         """Read the session again. Does not consume a Widgets prompt."""
         self._publish_theme()
         self._week.reload(self._mode)
+        self._day.reload(self._mode)
+        self._myday.reload(self._mode)
         self.blocksChanged.emit()
         self.homeworkChanged.emit()
         self.changed.emit()
+
+    @Slot()
+    def _follow_week(self) -> None:
+        if self._following:
+            return
+        self._following = True
+        try:
+            self.refresh()
+        finally:
+            self._following = False
 
     def _publish_theme(self) -> None:
         self._reduce_motion = self._motion_reduced()
@@ -327,9 +346,24 @@ class MaterialBridge(QObject):
     def nowMinute(self) -> int:
         return self._week.nowMinute
 
+    def note(self, text: str) -> None:
+        """One snackbar line. Day uses it after a homework check."""
+        self._snack = text
+        self.changed.emit()
+        QTimer.singleShot(SNACK_MS, self, lambda: self._clear_snack(text))
+
+    def _clear_snack(self, text: str) -> None:
+        # A newer line, or Undo, has already replaced this one.
+        if self._snack == text:
+            self._snack = ""
+            self.changed.emit()
+
     @Slot()
     def undo(self) -> None:
+        if self._snack:
+            self._snack = ""
         self._window.session.undo()
+        self.refresh()
 
     @Slot()
     def redo(self) -> None:

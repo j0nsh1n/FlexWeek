@@ -11,7 +11,13 @@ Item {
     property string icon: ""
     property color bar: "transparent"
     property bool showBar: false
+    // A tinted row (Day's category rows) sets both. Left alone, the row is the neutral one.
+    property color fill: palette.surfaceContainerLow
+    property color ink: "transparent"
+    readonly property bool tinted: ink.a > 0
     property string accessName: ""
+    // Room on the right for a tag or a check that sits on the row.
+    property int trail: 0
     signal clicked()
 
     implicitHeight: Math.max(56, words.implicitHeight + 16)
@@ -26,7 +32,7 @@ Item {
         objectName: "shape"
         anchors.fill: parent
         radius: 12
-        color: palette.surfaceContainerLow
+        color: root.fill
         border.width: root.highContrast ? 1.5 : 0
         border.color: palette.outline
     }
@@ -44,19 +50,19 @@ Item {
         name: root.icon
         width: 24
         height: 24
-        color: palette.inkMuted
+        color: root.tinted ? root.ink : palette.inkMuted
     }
     Column {
         id: words
         x: root.icon !== "" ? 48 : 12
         y: Math.max(8, (root.height - implicitHeight) / 2)
-        width: Math.max(0, root.width - x - 12)
+        width: Math.max(0, root.width - x - 12 - root.trail)
         spacing: 0
         Text {
             objectName: "title"
             width: parent.width
             text: root.title
-            color: palette.inkSurface
+            color: root.tinted ? root.ink : palette.inkSurface
             font.family: M3Font.family
             font.pixelSize: 16
             font.weight: 500
@@ -67,7 +73,7 @@ Item {
             width: parent.width
             visible: root.subtitle !== ""
             text: root.subtitle
-            color: palette.inkMuted
+            color: root.tinted ? root.ink : palette.inkMuted
             font.family: M3Font.family
             font.pixelSize: 12
             font.weight: 400
