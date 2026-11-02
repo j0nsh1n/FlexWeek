@@ -100,6 +100,7 @@ from desktop.native.motion import switch_page
 from desktop.native.remind import ALARM_SNOOZE_MIN, reminder_lead_min
 from desktop.native.sound import Bell
 from desktop.native.spotify import SpotifyPlayer, open_in_app
+from desktop.native.style_preview import StylePreview
 from desktop.native.tokens import SPACING
 from desktop.native.tones import FALLBACK, SOUNDS
 from desktop.native.version import VERSION
@@ -1269,8 +1270,24 @@ class SettingsPage(QWidget):
         stage = QWidget()
         stage_grid = QGridLayout(stage)
         stage_grid.setContentsMargins(0, 0, 0, 0)
-        stage_grid.addWidget(self.stack, 0, 0)
-        stage_grid.addWidget(footer, 0, 0, Qt.AlignmentFlag.AlignBottom)
+        stage_grid.setSpacing(0)
+        # Above the cards, only while Look is showing, so the column keeps the width the look grid
+        # and an 800-wide window already use. The picture follows the controls. Saving stays with
+        # the window.
+        self.style_preview = StylePreview(
+            self.layout_sections,
+            pack=lambda: self._pack,
+            look=self.look_choice,
+            accent=lambda: self._accent_chosen,
+        )
+        self.style_preview.setMaximumHeight(260)
+        stage_grid.addWidget(self.style_preview, 0, 0)
+        stage_grid.addWidget(self.stack, 1, 0)
+        stage_grid.addWidget(footer, 1, 0, Qt.AlignmentFlag.AlignBottom)
+        stage_grid.setRowStretch(1, 1)
+        self.style_preview.setVisible(self.nav.currentRow() == 0)
+        for box in (self.look, self.accent, *self.knobs.values()):
+            box.currentIndexChanged.connect(self.style_preview.refresh)
         QApplication.instance().focusChanged.connect(self._follow_focus)
         footer.raise_()
         self._clear_footer()
@@ -1493,6 +1510,9 @@ class SettingsPage(QWidget):
         page = self.stack.widget(row)
         if page is None:
             return
+        preview = getattr(self, "style_preview", None)
+        if preview is not None:
+            preview.setVisible(row == 0)
         switch_page(self.stack, page, self.motion_level, 1 if row > self.stack.currentIndex() else -1)
 
     def _announce(self, *_value: object) -> None:
