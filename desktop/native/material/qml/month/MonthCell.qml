@@ -42,7 +42,8 @@ Item {
         } catch (e) {
             all = []
         }
-        var room = all.length <= Math.min(3, rowsFit) ? all.length : rowsFit - 1
+        // One line still keeps a chip; "and N more" sits by the day number, as Widgets month does.
+        var room = all.length <= rowsFit ? all.length : Math.max(1, rowsFit - 1)
         var chips = []
         var dots = []
         for (var i = 0; i < all.length; i++) {
@@ -122,6 +123,22 @@ Item {
         font.weight: 500
     }
 
+    Text {
+        objectName: "monthMore"
+        visible: !root.narrow && root.extra > 0 && root.rowsFit === 1
+        x: 32
+        y: 4
+        height: 24
+        width: Math.max(0, parent.width - 36)
+        text: "and " + root.extra + " more"
+        elide: Text.ElideRight
+        verticalAlignment: Text.AlignVCenter
+        color: tones.inkMuted
+        font.family: "Roboto Flex"
+        font.pixelSize: 11
+        font.weight: 500
+    }
+
     Item {
         objectName: "monthStudyBar"
         visible: root.showStudy && (root.plannedShare > 0 || root.completedShare > 0)
@@ -197,7 +214,7 @@ Item {
 
         Text {
             objectName: "monthMore"
-            visible: root.extra > 0
+            visible: root.extra > 0 && root.rowsFit > 1
             width: parent.width
             text: "and " + root.extra + " more"
             color: tones.inkMuted

@@ -11,7 +11,7 @@ Item {
     readonly property string density: bridge ? bridge.density : "comfortable"
     readonly property bool reduceMotion: bridge ? bridge.reduceMotion : false
     readonly property bool highContrast: bridge ? bridge.highContrast : false
-    readonly property bool narrow: width < 768
+    readonly property bool narrow: phone
     readonly property var month: bridge ? bridge.month : null
     Keys.onPressed: (event) => {
         if (event.key === Qt.Key_Escape && root.month && root.month.barOpen) {
@@ -79,7 +79,12 @@ Item {
                 highContrast: root.highContrast
                 checked: root.month ? root.month.showStudyTime : false
                 accessName: root.month ? root.month.studyLabel : "Show study time per date"
-                onToggled: (on) => { if (root.month) root.month.setShowStudyTime(on) }
+                onToggled: (on) => {
+                    if (root.month)
+                        root.month.setShowStudyTime(on)
+                    // Switch.toggle writes `checked`, which drops the binding; put it back.
+                    checked = Qt.binding(function() { return root.month ? root.month.showStudyTime : false })
+                }
             }
 
             Text {
