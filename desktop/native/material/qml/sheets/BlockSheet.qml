@@ -307,6 +307,7 @@ SheetFrame {
             kind: "filled"
             text: root.f.primary ? root.f.primary : "Next"
             accessName: text
+            enabled: root.f.primary === "Next" || (root.sheets && root.sheets.canSave)
             onClicked: root.sheets.next()
         }
     ]

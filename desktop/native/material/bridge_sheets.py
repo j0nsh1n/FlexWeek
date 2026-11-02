@@ -29,6 +29,8 @@ from desktop.native.widgets import LATE_WAIT, _late_move, _late_summary
 
 NOTHING_UNFINISHED = "None left"
 NOTICE_MS = 6000
+WAIT_SAVE = "Saving your last change… Save will work in a moment."
+WAIT_DELETE = "Saving your last change… Delete will work in a moment."
 DISCARD = {
     "id": "discard",
     "title": "Discard what you typed?",
@@ -92,6 +94,9 @@ class SheetsBridge(QObject):
         if session is not None:
             session.status.connect(self._on_status)
             session.save_finished.connect(self._on_saved)
+            busy = getattr(session, "busy_changed", None)
+            if busy is not None:
+                busy.connect(self._on_busy)
 
     @property
     def _session(self) -> Any:
@@ -118,6 +123,24 @@ class SheetsBridge(QObject):
     @Property(bool, notify=changed)
     def active(self) -> bool:
         return bool(self._kind) or self._more
+
+    @Property(bool, notify=changed)
+    def canSave(self) -> bool:
+        session = self._session
+        return (
+            session is not None
+            and not session.busy
+            and session.pending_save is None
+            and not session.conflict
+        )
+
+    def _hold_for_save(self, words: str = WAIT_SAVE) -> bool:
+        """True when a write is still in flight. The draft stays; Save stays off."""
+        if self.canSave:
+            return False
+        self._say(words)
+        self._publish()
+        return True
 
     @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
     def moreEntries(self) -> list:
@@ -324,6 +347,8 @@ class SheetsBridge(QObject):
         draft, session = self._homework, self._session
         if draft is None or session is None:
             return
+        if self._hold_for_save():
+            return
         made = draft.candidate()
         if made is None:
             self._publish()
@@ -353,6 +378,8 @@ class SheetsBridge(QObject):
         draft, session = self._block, self._session
         if draft is None or session is None:
             return
+        if self._hold_for_save():
+            return
         made = draft.candidate()
         if made is None:
             self._publish()
@@ -380,6 +407,8 @@ class SheetsBridge(QObject):
     def unpin(self) -> None:
         draft, session = self._homework, self._session
         if draft is None or session is None or not draft.existing:
+            return
+        if self._hold_for_save():
             return
         if session.unpin_assignment(draft.original["id"]):
             session.save()
@@ -445,6 +474,8 @@ class SheetsBridge(QObject):
     def _delete_block(self, choice: str) -> None:
         draft, session = self._block, self._session
         if draft is None or session is None:
+            return
+        if self._hold_for_save(WAIT_DELETE):
             return
         block = draft.original
         title = block.get("title") or "this fixed time"
@@ -604,7 +635,13 @@ class SheetsBridge(QObject):
         self._late_error = "" if text == "Replanning…" or (preview and text == summary) else text
         self._publish()
 
+    def _on_busy(self, _busy: bool) -> None:
+        if self._kind in ("homework", "block"):
+            self._publish()
+
     def _on_saved(self, stored: bool, _said: str) -> None:
+        if self._kind in ("homework", "block"):
+            self._publish()
         waiting = self._late_waiting
         if waiting is None:
             return
@@ -961,9 +998,9 @@ class SheetsBridge(QObject):
     def _publish(self) -> None:
         kind = self._kind
         if kind == "homework" and self._homework is not None:
-            self._form = self._homework.form()
+            self._form = {**self._homework.form(), "canSave": self.canSave}
         elif kind == "block" and self._block is not None:
-            self._form = self._block.form()
+            self._form = {**self._block.form(), "canSave": self.canSave}
         elif kind == "late":
             self._form = self._late_form()
         elif kind == "unfinished":

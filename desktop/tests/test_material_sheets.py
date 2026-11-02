@@ -20,6 +20,8 @@ from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication, QDialog, QPushButton  # noqa: E402
 
+from desktop.native.client import ApiError  # noqa: E402
+from desktop.native.material.bridge_sheets import WAIT_DELETE, WAIT_SAVE  # noqa: E402
 from desktop.native.widgets import PreviewDialog  # noqa: E402
 from desktop.native.window import WINDOW_MIN_WIDTH, NativeWindow  # noqa: E402
 from desktop.tests.logic_support import past_setup  # noqa: E402,F401
@@ -773,3 +775,138 @@ def test_the_discard_prompt_shows_in_qml_and_esc_keeps_editing(
     _pump(qapp, 40)
     assert sheets.ask == {}
     assert sheets.kind == "homework"
+
+
+def _hold_changes(session, monkeypatch: pytest.MonkeyPatch) -> tuple[list, object]:
+    original = session.client.request
+    held: list = []
+
+    def delay(method, path, body, ok, fail):
+        if method == "POST" and path == "/api/changes":
+            held.append((method, path, body, ok, fail))
+        else:
+            original(method, path, body, ok, fail)
+
+    monkeypatch.setattr(session.client, "request", delay)
+    return held, original
+
+
+def _restore_essay(qapp: QApplication, shell: NativeWindow, sheets) -> None:
+    if shell.session.assignments.get("essay", {}).get("title") == "History essay":
+        return
+    sheets.editHomework("essay")
+    sheets.setText("title", "History essay")
+    sheets.save()
+    _settle(qapp, shell)
+
+
+def test_a_second_homework_save_keeps_the_draft_while_the_first_is_pending(
+    qapp: QApplication, shell: NativeWindow, sheets, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = shell.session
+    held, original = _hold_changes(session, monkeypatch)
+    try:
+        sheets.editHomework("essay")
+        sheets.setText("title", "First saved title")
+        sheets.save()
+        assert session.busy and len(held) == 1
+        assert held[0][2]["assignments"][0]["assignment"]["title"] == "First saved title"
+        sheets.editHomework("essay")
+        sheets.setText("title", "Second saved title")
+        sheets.save()
+        assert sheets.kind == "homework"
+        assert sheets.form["title"] == "Second saved title"
+        assert sheets.canSave is False
+        assert sheets.notice == WAIT_SAVE
+        assert session.assignments["essay"]["title"] == "First saved title"
+        monkeypatch.setattr(session.client, "request", original)
+        original(*held.pop())
+        _settle(qapp, shell)
+        assert session.assignments["essay"]["title"] == "First saved title"
+        assert session.pending_save is None
+        assert not session.dirty
+        assert sheets.kind == "homework"
+        assert sheets.form["title"] == "Second saved title"
+        assert sheets.canSave is True
+        sheets.save()
+        _settle(qapp, shell)
+        assert session.assignments["essay"]["title"] == "Second saved title"
+        assert not session.dirty and session.pending_save is None
+    finally:
+        monkeypatch.setattr(session.client, "request", original)
+        while held:
+            original(*held.pop(0))
+        _settle(qapp, shell)
+        sheets.forceClose()
+        _restore_essay(qapp, shell, sheets)
+
+
+def test_a_failed_first_save_leaves_the_second_draft_and_pending_first(
+    qapp: QApplication, shell: NativeWindow, sheets, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = shell.session
+    held, original = _hold_changes(session, monkeypatch)
+    try:
+        sheets.editHomework("essay")
+        sheets.setText("title", "First saved title")
+        sheets.save()
+        sheets.editHomework("essay")
+        sheets.setText("title", "Second saved title")
+        sheets.save()
+        assert sheets.form["title"] == "Second saved title"
+        _method, _path, _body, _ok, fail = held.pop()
+        fail(ApiError(503, "The planner is unavailable."))
+        _pump(qapp)
+        assert session.assignments["essay"]["title"] == "First saved title"
+        assert session.pending_save is not None
+        assert session.can_undo() is False
+        assert sheets.kind == "homework"
+        assert sheets.form["title"] == "Second saved title"
+        assert sheets.canSave is False
+        monkeypatch.setattr(session.client, "request", original)
+        session.retry_save()
+        _settle(qapp, shell)
+        assert session.assignments["essay"]["title"] == "First saved title"
+        assert session.pending_save is None
+        sheets.save()
+        _settle(qapp, shell)
+        assert session.assignments["essay"]["title"] == "Second saved title"
+    finally:
+        monkeypatch.setattr(session.client, "request", original)
+        while held:
+            original(*held.pop(0))
+        _settle(qapp, shell)
+        sheets.forceClose()
+        _restore_essay(qapp, shell, sheets)
+
+
+def test_a_block_save_and_delete_wait_while_a_save_is_pending(
+    qapp: QApplication, shell: NativeWindow, sheets, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = shell.session
+    held, original = _hold_changes(session, monkeypatch)
+    try:
+        sheets.editHomework("essay")
+        sheets.setText("title", "Pending essay")
+        sheets.save()
+        assert session.busy
+        sheets.editBlock("school", 0)
+        sheets.setText("title", "Homeroom")
+        sheets.save()
+        assert sheets.kind == "block"
+        assert sheets.form["title"] == "Homeroom"
+        assert sheets.notice == WAIT_SAVE
+        school = next(item for item in session.blocks if item["id"] == "school")
+        assert school["title"] == "School"
+        sheets.remove()
+        sheets.answer("week")
+        assert sheets.kind == "block"
+        assert sheets.notice == WAIT_DELETE
+        assert any(item["id"] == "school" for item in session.blocks)
+    finally:
+        monkeypatch.setattr(session.client, "request", original)
+        while held:
+            original(*held.pop(0))
+        _settle(qapp, shell)
+        sheets.forceClose()
+        _restore_essay(qapp, shell, sheets)
