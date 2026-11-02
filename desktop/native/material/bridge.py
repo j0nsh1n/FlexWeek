@@ -314,9 +314,17 @@ class MaterialBridge(QObject):
     def nowMinute(self) -> int:
         return self._week.nowMinute
 
+    def note(self, text: str) -> None:
+        """One snackbar line. Day uses it after a homework check."""
+        self._snack = text
+        self.changed.emit()
+
     @Slot()
     def undo(self) -> None:
+        if self._snack:
+            self._snack = ""
         self._window.session.undo()
+        self.refresh()
 
     @Slot()
     def redo(self) -> None:
