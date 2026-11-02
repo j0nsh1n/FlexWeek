@@ -85,6 +85,7 @@ class MaterialBridge(QObject):
         self._window = cast(_Window, window)
         self._screen = "week"
         self._snack = ""
+        self._snack_action = "UNDO"
         self._preset = DEFAULT_PRESET
         self._mode = "light"
         self._contrast = DEFAULT_CONTRAST
@@ -265,6 +266,10 @@ class MaterialBridge(QObject):
         return self._snack
 
     @Property(str, notify=changed)
+    def snackAction(self) -> str:
+        return self._snack_action
+
+    @Property(str, notify=changed)
     def title(self) -> str:
         if self._screen == "myday":
             return "My day"
@@ -366,9 +371,10 @@ class MaterialBridge(QObject):
     def nowMinute(self) -> int:
         return self._week.nowMinute
 
-    def note(self, text: str) -> None:
+    def note(self, text: str, *, action: str = "UNDO") -> None:
         """One snackbar line. Day uses it after a homework check."""
         self._snack = text
+        self._snack_action = action
         self.changed.emit()
         QTimer.singleShot(SNACK_MS, self, lambda: self._clear_snack(text))
 

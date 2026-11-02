@@ -219,6 +219,44 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 4
 
+                    IconButton {
+                        objectName: "weekPrevious"
+                        visible: bridge.screen === "week"
+                        theme: root.theme
+                        density: root.density
+                        reduceMotion: root.reduceMotion
+                        highContrast: root.highContrast
+                        icon: "chevron_left"
+                        accessName: "Previous week"
+                        onClicked: bridge.week.previous()
+                    }
+
+                    Button {
+                        objectName: "weekToday"
+                        visible: bridge.screen === "week"
+                        anchors.verticalCenter: parent.verticalCenter
+                        theme: root.theme
+                        density: root.density
+                        reduceMotion: root.reduceMotion
+                        highContrast: root.highContrast
+                        kind: "text"
+                        text: "Today"
+                        accessName: "Go to today"
+                        onClicked: bridge.week.today()
+                    }
+
+                    IconButton {
+                        objectName: "weekNext"
+                        visible: bridge.screen === "week"
+                        theme: root.theme
+                        density: root.density
+                        reduceMotion: root.reduceMotion
+                        highContrast: root.highContrast
+                        icon: "chevron_right"
+                        accessName: "Next week"
+                        onClicked: bridge.week.next()
+                    }
+
                     Text {
                         objectName: "materialClock"
                         height: 48
@@ -429,7 +467,8 @@ Item {
                 visible: bridge.snackText !== ""
                 z: 3
                 message: bridge.snackText
-                onActionClicked: bridge.undo()
+                actionText: bridge.snackAction
+                onActionClicked: if (bridge.snackAction !== "") bridge.undo()
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: root.phone ? 96 : 24

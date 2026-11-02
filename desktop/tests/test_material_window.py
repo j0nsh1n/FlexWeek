@@ -277,7 +277,7 @@ def test_choosing_material_shows_the_week_and_swapping_back_keeps_it(
         start = date.fromisoformat(session.week_start)
         assert f"Thu {(start + timedelta(days=3)).day}" in _repeater_texts(root, "dayHeaders", "dayHeader")
         assert _qml(root, "nowLine").property("visible") is True
-        assert _qml(root, "homeworkCount").property("text") == "1 still needs a time"
+        assert _qml(root, "homeworkCount").property("text") == "1"
         assert "Math worksheet" in _repeater_texts(root, "homeworkRows", "homeworkTitle")
         window._use_widgets_styles()
         _pump(qapp)

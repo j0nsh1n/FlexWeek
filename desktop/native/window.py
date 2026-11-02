@@ -4035,9 +4035,13 @@ class NativeWindow(QMainWindow):
             self._show_change()
 
     def _set_notice(self, text: str, button: str, callback) -> None:
-        """Words with one thing to do about them, such as Undo, in the toast."""
+        """Words with one thing to do about them, such as Undo, in the active surface's presenter."""
         self._notice_step = None
-        self.toast.show_message(text, button, callback)
+        if button == "Undo" and self._material_owns() and self._material_page is not None:
+            self.toast.hide()
+            self._material_page.bridge.note(text)
+        else:
+            self.toast.show_message(text, button, callback)
         if button == "Undo":
             self._undo_at = time.monotonic()
             focus = QApplication.focusWidget()
@@ -4083,6 +4087,9 @@ class NativeWindow(QMainWindow):
     def _on_planned(self, said: str) -> None:
         # The answer to Plan my homework, so no later status is taken for it.
         self._telling = False
+        if self._material_owns():
+            placed, waiting = self.session.plan_counts
+            said = f"Placed {placed} of {placed + waiting}"
         self._set_notice(said, "Undo", self._undo_from_notice)
         # Plan caused this Undo, even when the click has already moved the keyboard.
         self._undo_button = "solveButton"
