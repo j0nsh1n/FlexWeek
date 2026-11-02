@@ -202,6 +202,7 @@ class LayoutSection(QFrame):
     ) -> None:
         super().__init__()
         self.slot = slot
+        self._material: QPushButton | None = None
         self.setObjectName("settingsCard")
         stored_options = sanitize_layout(choice)["options"]
         self._options = {spec.id: options_for(choice, spec.id) for spec in layouts_for(role)}
@@ -223,6 +224,17 @@ class LayoutSection(QFrame):
             body.addWidget(intro)
         self.pick = DesignPicker(role, f"layout{slot.title()}", title, pack)
         self.pick.setCurrentIndex(max(self.pick.findData(choice[slot]), 0))
+        # Material 3 is a whole window, not a design card, so the six cards and their names stay as
+        # they are. It sits with them, and picking a design leaves it.
+        if slot == "main":
+            self._material = QPushButton("Material 3")
+            self._material.setObjectName("chooseMaterial")
+            self._material.setCheckable(True)
+            self._material.setProperty("outline", True)
+            self._material.toggled.connect(self._material_toggled)
+            for card in self.pick.cards:
+                card.chosen.connect(self._style_card_chosen)
+            body.addWidget(self._material)
         body.addWidget(self.pick)
         self._form_host = QWidget()
         self._form_host.setObjectName("settingsRow")
@@ -250,6 +262,59 @@ class LayoutSection(QFrame):
     def chosen(self) -> str:
         return str(self.pick.currentData())
 
+    def surface(self) -> str:
+        """`material` while Material 3 is the whole window. A day slot has no such choice."""
+        button = self._material
+        if button is not None and button.isChecked():
+            return "material"
+        return "widgets"
+
+    def show_surface(self, name: str) -> None:
+        """Restore the saved surface. Does not emit `changed`, so building Settings does not swap."""
+        button = self._material
+        if button is None:
+            return
+        on = name == "material"
+        button.blockSignals(True)
+        button.setChecked(on)
+        button.blockSignals(False)
+        self._show_material_choice(on)
+
+    def _show_material_choice(self, on: bool) -> None:
+        if on:
+            self._form_host.hide()
+            self.more.hide()
+            self.reset.hide()
+            return
+        self._form_host.show()
+        self._rebuild(True)
+
+    def _material_toggled(self, on: bool) -> None:
+        self._show_material_choice(on)
+        self.changed.emit()
+
+    def _leave_material_choice(self) -> None:
+        button = self._material
+        if button is None or not button.isChecked():
+            return
+        button.blockSignals(True)
+        button.setChecked(False)
+        button.blockSignals(False)
+        self._form_host.show()
+
+    def _style_card_chosen(self) -> None:
+        """A design card leaves Material. The card that is already selected does not change the index,
+        so this is the only signal that click produces."""
+        button = self._material
+        if button is None or not button.isChecked():
+            return
+        card = self.sender()
+        if card is None or int(card.property("index")) != self.pick.currentIndex():
+            return
+        self._leave_material_choice()
+        self._rebuild(True)
+        self.changed.emit()
+
     def sync(self, choice: dict) -> None:
         """Every design's options as kept now. Settings stays built between opens, and an option
         changed on a design's own page meanwhile, as Timeline's fold, would otherwise be written back
@@ -272,6 +337,7 @@ class LayoutSection(QFrame):
         self._rebuild(False)
 
     def _design_changed(self, _index: int) -> None:
+        self._leave_material_choice()
         layout_id = self.chosen()
         if layout_id not in self._look_explicit:
             self._options[layout_id]["look"] = DESIGN_LOOKS[layout_id][0][0]
@@ -303,6 +369,11 @@ class LayoutSection(QFrame):
         self.changed.emit()
 
     def _rebuild(self, fresh: bool) -> None:
+        if self.surface() == "material":
+            self._form_host.hide()
+            self.more.hide()
+            self.reset.hide()
+            return
         spec = LAYOUTS[self.chosen()]
         values = self._options[spec.id]
         detail = [option for option in spec.options if option.level == "detail"]
