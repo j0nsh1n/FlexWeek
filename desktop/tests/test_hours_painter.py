@@ -19,17 +19,20 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt
-    from PySide6.QtGui import QColor, QFont, QFontMetricsF, QImage, QPainter
+    from PySide6.QtGui import QColor, QFont, QFontMetricsF, QImage, QPainter, QPainterPath
     from PySide6.QtWidgets import QApplication, QVBoxLayout, QWidget
 
     from desktop.native.fonts import TABULAR, load_fonts
     from desktop.native.hours import canvas as canvas_module
-    from desktop.native.hours.canvas import BlockPainter, Drawn, HoursCanvas, fit_lines
+    from desktop.native.hours.canvas import RADIUS_BLOCK, BlockPainter, Drawn, HoursCanvas, fit_lines
     from desktop.native.hours.geometry import Axis, LinearTrack, Span
     from desktop.native.hours.hand import Hand, Verdict
     from desktop.native.hours.zoom import HoursScroll, Scale
     from desktop.native.look import mix, resolved_palette
     from desktop.native.weekmodel import build_week, minute_of
+
+    # A block stood clear of the image edge, so a one-pixel cast under it has room to show.
+    SHADOW_RECT = QRectF(24, 24, 120, 80)
 
 DETAIL = "16:00–17:30 · 1 h 30 min · Missed · Pinned"
 
@@ -754,3 +757,133 @@ def test_a_paint_that_raises_still_ends_its_painter(
         for painter in seen:
             if painter.isActive():
                 painter.end()
+
+
+def _shadow_block() -> Drawn:
+    return Drawn("essay", "History essay", "class", False, Span(1, 9 * 60, 10 * 60), 0, 1)
+
+
+def _body_image(look: dict, palette: dict | None = None, clip: QRectF | None = None) -> QImage:
+    colours = palette if palette is not None else resolved_palette("light-frost", False, look)
+    image = QImage(180, 140, QImage.Format.Format_ARGB32)
+    image.fill(QColor("white"))
+    painter = QPainter(image)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    if clip is not None:
+        painter.setClipRect(clip)
+    try:
+        BlockPainter(colours, look).body(painter, SHADOW_RECT, _shadow_block())
+    finally:
+        painter.end()
+    return image
+
+
+def _coverage(image: QImage) -> set[tuple[int, int]]:
+    page = QColor("white")
+    return {
+        (x, y)
+        for y in range(image.height())
+        for x in range(image.width())
+        if image.pixelColor(x, y) != page
+    }
+
+
+def _rounded_coverage() -> set[tuple[int, int]]:
+    """Pixels a rounded rect of RADIUS_BLOCK covers, drawn here rather than by the block painter."""
+    image = QImage(180, 140, QImage.Format.Format_ARGB32)
+    image.fill(QColor("white"))
+    painter = QPainter(image)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(Qt.PenStyle.NoPen)
+    shape = QPainterPath()
+    shape.addRoundedRect(SHADOW_RECT, RADIUS_BLOCK, RADIUS_BLOCK)
+    try:
+        painter.fillPath(shape, QColor("black"))
+    finally:
+        painter.end()
+    return _coverage(image)
+
+
+def _ink_drop(colour: QColor) -> int:
+    """How far `colour` sits from white, summed over the three channels."""
+    return (255 - colour.red()) + (255 - colour.green()) + (255 - colour.blue())
+
+
+def test_a_block_casts_a_shadow_only_when_the_look_has_depth(qapp: QApplication) -> None:
+    """Depth none and High contrast add nothing under a block. Soft adds a faint cast one pixel
+    under it, and bold a darker cast in that same pixel. The rounded shape stays RADIUS_BLOCK."""
+    reference = _rounded_coverage()
+    left, top = int(SHADOW_RECT.left()), int(SHADOW_RECT.top())
+    bottom = int(SHADOW_RECT.bottom())
+    width = int(SHADOW_RECT.width())
+    centre = int(SHADOW_RECT.center().x())
+    page = QColor("white")
+    contrast = {"preset": "high-contrast", "knobs": {}}
+    none = _body_image({"preset": "default", "knobs": {"depth": "none"}})
+    paper = _body_image({"preset": "paper", "knobs": {}})
+    soft = _body_image({"preset": "default", "knobs": {"depth": "soft"}})
+    bold = _body_image({"preset": "default", "knobs": {"depth": "bold"}})
+    high = _body_image(contrast, resolved_palette("system", False, contrast))
+    # The palette is High contrast even though the knobs ask for a soft cast.
+    forced = _body_image(
+        {"preset": "default", "knobs": {"depth": "soft"}},
+        resolved_palette("system", False, contrast),
+    )
+    dark_look = {"preset": "default", "knobs": {"depth": "soft"}}
+    dark = _body_image(dark_look, resolved_palette("dark-frost", True, dark_look))
+
+    soft_drop = _ink_drop(soft.pixelColor(centre, bottom))
+    bold_drop = _ink_drop(bold.pixelColor(centre, bottom))
+    assert _ink_drop(none.pixelColor(centre, bottom)) == 0
+    assert _ink_drop(paper.pixelColor(centre, bottom)) == 0
+    assert _ink_drop(high.pixelColor(centre, bottom)) == 0
+    assert _ink_drop(forced.pixelColor(centre, bottom)) == 0
+    assert 24 <= soft_drop <= 120, soft_drop
+    assert bold_drop > soft_drop
+    assert bold_drop <= 240, bold_drop
+    assert _ink_drop(dark.pixelColor(centre, bottom)) > soft_drop
+    for image in (none, paper, soft, bold, high, forced, dark):
+        assert image.pixelColor(centre, bottom + 1) == page
+        assert image.pixelColor(left - 2, int(SHADOW_RECT.center().y())) == page
+        assert image.pixelColor(left, top) == page, "the corner outside the radius stays clear"
+        assert image.pixelColor(left + 3, top + 3) != page
+
+    for image in (none, paper, high, forced):
+        covered = _coverage(image)
+        assert covered - reference == set()
+        assert len(reference - covered) <= 8
+    soft_extra = _coverage(soft) - reference
+    bold_extra = _coverage(bold) - reference
+    assert soft_extra
+    assert soft_extra == bold_extra, "bold is darker, not a larger cast"
+    for x, y in soft_extra:
+        assert left <= x < left + width
+        assert bottom - 1 <= y <= bottom
+
+    clipped = _body_image(
+        {"preset": "default", "knobs": {"depth": "soft"}},
+        clip=QRectF(0, 0, 180, SHADOW_RECT.bottom()),
+    )
+    assert clipped.pixelColor(centre, bottom) == page, "a clip already set cuts the cast off"
+    assert clipped.pixelColor(left + 3, top + 3) != page
+
+
+def test_a_block_shadow_does_not_change_its_words(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The cast is paint under the fill. The words on the block stay the ones depth none draws."""
+    monkeypatch.setattr(canvas_module, "QPainter", Said)
+
+    def written(depth: str) -> list[str]:
+        look = {"preset": "default", "knobs": {"depth": depth}}
+        palette = resolved_palette("light-frost", False, look)
+        canvas = three_days(palette=palette)
+        canvas.set_painter(BlockPainter(palette, look))
+        Said.words = []
+        canvas.grab()
+        return [text for text, _where in Said.words]
+
+    flat = written("none")
+    assert flat
+    assert written("soft") == flat
+    assert written("bold") == flat

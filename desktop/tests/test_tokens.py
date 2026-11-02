@@ -29,11 +29,16 @@ from desktop.native.look import (
     resolved_palette,
 )
 from desktop.native.tokens import (
+    FILL,
+    HOMEWORK_DARKER,
+    SHADOW_LARGE,
+    SHADOW_SMALL,
     TEXT_SCALE,
     TYPE_PT,
     WEIGHT_NUMBER,
     WEIGHT_REGULAR,
     WEIGHT_STRONG,
+    Shadow,
     family_colours,
     linear_rgb,
     oklab,
@@ -100,6 +105,45 @@ def test_the_category_colours_are_the_family_worked_out_from_their_hues() -> Non
         )
         held = {"light": (info["color"], info["mark"]), "dark": info["dark"], "contrast": info["contrast"]}
         assert held == worked, key
+
+
+def test_the_small_shadow_is_deep_enough_to_read_and_the_large_one_stays() -> None:
+    """A faint shadow reads as a dirty edge. The small one stays small: one pixel down, a short blur,
+    and a light opacity a student can see. The large shadow, and the darker opacity a dark look
+    already uses, do not move."""
+    assert Shadow(12, 32, 0.16, 0.50) == SHADOW_LARGE
+    assert SHADOW_SMALL.y == 1
+    assert SHADOW_SMALL.dark_opacity == 0.40
+    assert 2 <= SHADOW_SMALL.blur <= 6
+    assert 0.12 <= SHADOW_SMALL.opacity <= 0.18
+    assert round(255 * SHADOW_SMALL.opacity) >= 30
+
+
+def test_a_computed_fill_is_richer_than_the_saved_family() -> None:
+    """A hue the student chooses sits a little deeper and richer than the family the engine still
+    returns. Light still paints that saved family, homework's mark stays the darker one, and the hue
+    does not move."""
+    light, chroma = FILL
+    assert 0.88 <= light < 0.92
+    assert 0.05 < chroma < 0.07
+    stock = resolved_palette("light-frost", False, {"preset": "default", "knobs": {}})
+    for key in ("class", "study", "assignments", "sleep"):
+        assert category_paint(key, stock) == (CATEGORIES[key]["color"], CATEGORIES[key]["mark"]), key
+    chosen = resolved_palette("system", False, {
+        "preset": "default",
+        "knobs": {},
+        "custom": {"base": "light", "categories": {
+            "class": {"hue": 140}, "assignments": {"hue": 140},
+        }},
+    })
+    fill, mark = category_paint("class", chosen)
+    saved_fill, saved_mark = family_colours(140)["light"]
+    assert oklch_of(fill)[0] < oklch_of(saved_fill)[0]
+    assert oklch_of(fill)[1] > oklch_of(saved_fill)[1]
+    assert oklch_of(fill)[2] == pytest.approx(oklch_of(saved_fill)[2], abs=1)
+    assert oklch_of(mark)[2] == pytest.approx(oklch_of(saved_mark)[2], abs=1)
+    homework = category_paint("assignments", chosen)[1]
+    assert oklch_of(mark)[0] - oklch_of(homework)[0] == pytest.approx(HOMEWORK_DARKER, abs=0.01)
 
 
 @pytest.mark.parametrize("name", ["Dark", "Nocturne", "Ink", "Terminal"])

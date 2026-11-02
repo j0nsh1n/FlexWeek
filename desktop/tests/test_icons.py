@@ -99,8 +99,8 @@ def test_a_lifted_card_casts_the_small_shadow_and_stronger_on_a_dark_look(qapp: 
     card = QWidget()
     effect = lift(card, SHADOW_SMALL)
     assert card.graphicsEffect() is effect
-    assert (effect.offset().y(), effect.blurRadius()) == (1, 3)
-    assert effect.color() == QColor(0, 0, 0, 20)
+    assert (effect.offset().y(), effect.blurRadius()) == (1, 4)
+    assert effect.color() == QColor(0, 0, 0, 36)
     dark = lift(card, SHADOW_LARGE, dark=True)
     assert card.graphicsEffect() is dark
     assert (dark.offset().y(), dark.blurRadius(), dark.color().alpha()) == (12, 32, 128)

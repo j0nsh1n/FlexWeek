@@ -18,6 +18,7 @@ from PySide6.QtGui import QColor, QHoverEvent, QImage, QPainter
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
     QApplication,
+    QGraphicsDropShadowEffect,
     QLabel,
     QPushButton,
     QRadioButton,
@@ -31,6 +32,7 @@ from desktop.native.calendar import monday_of
 from desktop.native.feel import (
     BevelPane,
     Context,
+    PaperEdge,
     Win98Chrome,
     Win98TitleBar,
     apply_feel,
@@ -56,6 +58,7 @@ from desktop.native.setup import STYLES, SetupPage, SetupState, style_layout, st
 from desktop.native.tokens import (
     RADIUS_CARD,
     RADIUS_SHEET,
+    SHADOW_SMALL,
     TEXT_SCALE,
     TYPE_PT,
     WEIGHT_REGULAR,
@@ -790,6 +793,81 @@ def test_setup_style_page_wears_the_style_being_picked(
     still(window)
     qapp.processEvents()
     assert page_feel().key == "plain"
+
+
+def test_card_depth_follows_the_feel_and_the_shared_small_shadow(qapp: QApplication) -> None:  # noqa: F811
+    """Depth is the feel's own shadow, using the shared small shadow. Radii stay the design's."""
+    names = ("settingsCard", "dialogCard", "setupGroup", "sheetCard", "authCard")
+    assert (feel_for("bento").shape.card, feel_for("bento").shape.sheet, feel_for("bento").shape.shadow) == (
+        RADIUS_SHEET,
+        RADIUS_SHEET,
+        "small",
+    )
+    assert (feel_for("classic").shape.card, feel_for("classic").shape.shadow) == (None, "keep")
+    assert (feel_for("timeline").shape.card, feel_for("timeline").shape.shadow) == (RADIUS_CARD, "keep")
+    assert (feel_for("retro").shape.card, feel_for("retro").shape.sheet, feel_for("retro").shape.shadow) == (
+        0,
+        0,
+        "none",
+    )
+
+    def cards_for(style_key: str) -> tuple[Context, QWidget, dict[str, QWidget]]:
+        _pack, look, palette, tokens, feel, base, _layout = _dressed(style_key)
+        host = QWidget()
+        made = {}
+        for name in (*names, "notACard"):
+            widget = QWidget(host)
+            widget.setObjectName(name)
+            made[name] = widget
+        ctx = Context(feel, look, palette, tokens, base)
+        set_current(ctx)
+        apply_feel(host, ctx)
+        qapp.processEvents()
+        return ctx, host, made
+
+    hosts: list[QWidget] = []
+    try:
+        ctx, host, made = cards_for("dashboard")
+        hosts.append(host)
+        dark = ctx.palette.get("axis") == "dark"
+        opacity = SHADOW_SMALL.dark_opacity if dark else SHADOW_SMALL.opacity
+        for name in names:
+            effect = made[name].graphicsEffect()
+            assert isinstance(effect, QGraphicsDropShadowEffect), name
+            assert (effect.xOffset(), effect.yOffset(), effect.blurRadius()) == (
+                0,
+                SHADOW_SMALL.y,
+                SHADOW_SMALL.blur,
+            )
+            assert effect.color().alpha() == round(255 * opacity), name
+        assert made["notACard"].graphicsEffect() is None
+
+        _ctx, host, made = cards_for("plain")
+        hosts.append(host)
+        assert all(made[name].graphicsEffect() is None for name in (*names, "notACard"))
+
+        _ctx, host, made = cards_for("retro")
+        hosts.append(host)
+        assert all(made[name].graphicsEffect() is None for name in (*names, "notACard"))
+
+        _ctx, host, made = cards_for("night")
+        hosts.append(host)
+        for name in names:
+            assert isinstance(made[name].graphicsEffect(), PaperEdge), name
+        assert made["notACard"].graphicsEffect() is None
+
+        ctx, host, made = cards_for("dashboard")
+        hosts.append(host)
+        assert isinstance(made["settingsCard"].graphicsEffect(), QGraphicsDropShadowEffect)
+        plain = Context(feel_for("classic"), ctx.look, ctx.palette, ctx.tokens, ctx.base_sheet)
+        set_current(plain)
+        apply_feel(host, plain)
+        assert made["settingsCard"].graphicsEffect() is None
+        assert made["notACard"].graphicsEffect() is None
+    finally:
+        set_current(None)
+        for host in hosts:
+            free(host)
 
 
 def test_window_imports_current_once() -> None:

@@ -310,10 +310,14 @@ def test_system_follows_the_device_between_light_and_dark() -> None:
 def test_light_and_dark_are_the_neutral_surfaces_of_decision_2() -> None:
     light = resolved_palette("light-frost", False, None)
     dark = resolved_palette("dark-frost", True, None)
-    assert (light["window"], light["panel"], light["hairline"]) == ("#f7f8fa", "#ffffff", "#e4e7ec")
+    assert (light["window"], light["panel"]) == ("#f7f8fa", "#ffffff")
     assert (light["text"], light["muted"]) == ("#111827", "#5b6474")
-    assert (dark["window"], dark["panel"], dark["hairline"]) == ("#111315", "#1a1d21", "#2a2e34")
+    assert (dark["window"], dark["panel"]) == ("#111315", "#1a1d21")
     assert (dark["text"], dark["muted"]) == ("#e8eaed", "#9aa1ab")
+    for palette in (light, dark):
+        surfaces = [palette[key] for key in ("panel", "card_2", "field", "grid")]
+        assert len(set(surfaces)) == 4
+        assert contrast(palette["hairline"], palette["panel"]) >= 1.55
 
 
 def test_every_look_but_high_contrast_wears_flexweeks_blue_by_default() -> None:
@@ -325,6 +329,9 @@ def test_every_look_but_high_contrast_wears_flexweeks_blue_by_default() -> None:
         palette = resolved_palette(pack, system_dark, look_of(preset))
         if preset == "high-contrast":
             assert (palette["accent"], palette["accent_ink"]) == ("#ffd400", "#000000")
+            sheet = pack_stylesheet(pack, system_dark, look_of(preset))
+            assert "qproperty-shade: 0;" in sheet
+            assert "border-bottom: 4px solid" in sheet
             continue
         if preset == "paper":
             assert palette["accent"] == "#1f3a68"
@@ -785,23 +792,48 @@ def test_paper_and_pastel_are_light_looks_on_any_pack_and_close_the_menu() -> No
         assert (chosen["accent"], chosen["accent_ink"]) == ("#0f766e", "#ffffff")
 
 
-def test_the_seven_looks_wear_looks_css_colours() -> None:
-    """Each look's page, card, raised card, text, muted text and hairlines as the mock-up draws them
-    (look-017, with the approved polish-0172 Paper and Pastel changes)."""
-    drawn = {
-        ("slate", "default"): ("#eef1f5", "#ffffff", "#e7ebf1", "#0f172a", "#475569", "#dbe1ea", "#c3ccd9"),
-        ("nocturne", "default"): ("#0a0e27", "#121633", "#1a1f42", "#e0e4f0", "#9aa3c0", "#262b4d",
-                                  "#343a63"),
-        ("system", "paper"): ("#f7f0e1", "#fbf6ea", "#f6f1e8", "#1a1a1a", "#5c5750", "#e6e0d6", "#cfc7b9"),
-        ("system", "ink"): ("#1c1b19", "#242320", "#2c2a26", "#f3eee3", "#b3ab9c", "#3a3833", "#4a4740"),
-        ("system", "terminal"): ("#0d1117", "#161b22", "#1c2129", "#c9d1d9", "#8b949e", "#30363d", "#484f58"),
-        ("system", "poster"): ("#fff8e7", "#ffffff", "#fff1cc", "#111111", "#3d3d3d", "#111111", "#111111"),
-        ("system", "pastel"): ("#f3ecff", "#fbf8ff", "#ece7ff", "#1e1b2e", "#4b4763", "#e4ddfb", "#cfc5f5"),
+def test_the_seven_looks_keep_their_pages_and_separate_their_surfaces() -> None:
+    """Each look keeps the page and ink that name it. Cards, fields and the grid are no longer one
+    colour, and a hairline can be seen without becoming the loudest thing on the page. Poster keeps
+    its black rules. High contrast is not one of these seven."""
+    identity = {
+        ("slate", "default"): {"window": "#eef1f5", "panel": "#ffffff", "grid": "#ffffff", "text": "#0f172a"},
+        ("nocturne", "default"): {"window": "#0a0e27", "text": "#e0e4f0"},
+        ("system", "paper"): {"window": "#f7f0e1", "panel": "#fbf6ea", "text": "#1a1a1a"},
+        ("system", "ink"): {"window": "#1c1b19", "text": "#f3eee3"},
+        ("system", "terminal"): {"window": "#0d1117", "text": "#c9d1d9"},
+        ("system", "poster"): {"window": "#fff8e7", "text": "#111111", "hairline": "#111111"},
+        ("system", "pastel"): {"window": "#f3ecff", "text": "#1e1b2e"},
     }
-    keys = ("window", "panel", "card_2", "text", "muted", "hairline", "hairline_strong")
-    for (pack, preset), colours in drawn.items():
+    for (pack, preset), anchors in identity.items():
         palette = resolved_palette(pack, False, look_of(preset))
-        assert tuple(palette[key] for key in keys) == colours, (pack, preset)
+        assert {key: palette[key] for key in anchors} == anchors, (pack, preset)
+        surfaces = [palette[key] for key in ("panel", "card_2", "field", "grid")]
+        assert len(set(surfaces)) >= 3, (pack, preset)
+        if preset == "poster":
+            continue
+        edge = contrast(palette["hairline"], palette["panel"])
+        assert edge >= 1.55, (pack, preset, edge)
+        marks = [contrast(category_paint(key, palette)[1], palette["panel"]) for key in CATEGORIES]
+        assert edge < min(marks), (pack, preset, edge)
+
+
+def test_design_palettes_separate_the_card_the_field_and_the_grid() -> None:
+    """A design keeps its page. The card, the nested card, the field and the grid are not one
+    surface, and a quiet hairline stays quieter than the category marks. Retro keeps its heavy
+    rules and one white for the field and the grid."""
+    for preset in sorted(DESIGN_PALETTE_PRESETS):
+        palette = resolved_palette("system", False, look_of(preset))
+        if preset == "retro-teal":
+            assert palette["field"] == palette["grid"]
+            assert contrast(palette["hairline"], palette["panel"]) > 1.55
+            continue
+        surfaces = [palette[key] for key in ("panel", "card_2", "field", "grid")]
+        assert len(set(surfaces)) == 4, preset
+        edge = contrast(palette["hairline"], palette["panel"])
+        assert edge >= 1.55, (preset, edge)
+        marks = [contrast(category_paint(key, palette)[1], palette["panel"]) for key in CATEGORIES]
+        assert edge < min(marks), (preset, edge, min(marks))
 
 
 def test_paper_draws_the_family_quieter_and_poster_bolder() -> None:

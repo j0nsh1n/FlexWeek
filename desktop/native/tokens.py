@@ -31,7 +31,9 @@ class Shadow:
     dark_opacity: float
 
 
-SHADOW_SMALL = Shadow(1, 3, 0.08, 0.40)
+# Eight percent on a light page reads as a dirty edge, not depth. Fourteen percent at a slightly wider
+# blur is still the small shadow: the large one, and the darker opacity a dark look already needs, stay.
+SHADOW_SMALL = Shadow(1, 4, 0.14, 0.40)
 SHADOW_LARGE = Shadow(12, 32, 0.16, 0.50)
 
 # Decision 4: five sizes in points at Normal text, which Small and Large scale together, and two
@@ -119,7 +121,9 @@ def mix_oklab(top: str, bottom: str, amount: float) -> str:
 
 # Decision 9: one family of category colours, each category at its own hue. A light look fills a block
 # with the pale colour and edges it with the mark; a dark look sinks the tone into its own card.
-FILL = (0.92, 0.045)
+# A fill this module computes (a student's hue, or a look that names `fill`) is a little deeper and
+# richer than the saved family the engine still returns. The hue, and homework's darker mark, stay.
+FILL = (0.905, 0.058)
 MARK = {"light": (0.62, 0.14), "dark": (0.72, 0.14), "contrast": (0.78, 0.16)}
 GREY_CHROMA = 0.01
 SINK = 0.34

@@ -51,7 +51,7 @@ def test_hours_settle_keeps_easing_and_its_final_rectangle(qapp, level):
         assert canvas._shown_rect(key, target) == target
         assert not canvas._slides and not canvas._fresh
     else:
-        clock_at(canvas._settling, motion.duration(180, level))
+        clock_at(canvas._settling, motion.duration(motion.EASE_MS, level))
         assert canvas._progress == pytest.approx(0.875)
         assert canvas._shown_rect(key, target).x() == (70 if level != "reduce" else 80)
         canvas._settling.setCurrentTime(canvas._settling.duration())
@@ -82,7 +82,7 @@ def test_zoom_glide_keeps_its_scroll_path_and_end(qapp, level):
         clocks = [clock for clock in scroll.findChildren(motion.Clock) if clock.parent() is scroll]
         assert len(clocks) == 1, "one reveal has one screen-rate clock"
         clock = clocks[0]
-        clock_at(clock, motion.duration(240, level))
+        clock_at(clock, motion.duration(motion.EASE_MS + 60, level))
         assert bar.value() == round(start + (end - start) * 0.875)
         clock.setCurrentTime(clock.duration())
         assert bar.value() == end
